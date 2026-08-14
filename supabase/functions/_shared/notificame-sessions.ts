@@ -13,6 +13,12 @@
  * que a subconta por org, sozinha, NÃO resolve. Com a foto, o órfão está nela e
  * sai da conta.
  *
+ * A sessão carrega TAMBÉM o TIPO pedido no clique (`requested_channel_type`). O
+ * `postMessage` do Seamless é byte-a-byte idêntico para WhatsApp e para Instagram
+ * — `{status:"channel-success"}`, sem id e sem tipo —, então o diff sozinho não
+ * distingue os dois. É o tipo guardado aqui que estreita os candidatos no finish e
+ * impede um canal de WhatsApp nascido em paralelo ser vinculado como Instagram.
+ *
  * ⚠️ A SESSÃO NÃO É BEARER. O `session_id` sozinho não autoriza nada: a org e o
  * usuário vêm SEMPRE do contexto de auth, e entram no predicado de TODA leitura e
  * de TODA escrita daqui. E o `session_id` NUNCA trafega pelo payload do terceiro;
@@ -61,6 +67,23 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SeamlessChannelType } from "./notificame.ts";
+import {
+  isMissingColumnError,
+  type PostgrestErrorLike,
+} from "./notificame-schema-guard.ts";
+
+/**
+ * A coluna da fatia 1.1. Nomeada uma vez porque ela aparece em TRÊS lugares que
+ * precisam concordar: o SELECT, o INSERT e a guarda que reconhece a ausência dela.
+ *
+ * ⚠️ ELA NÃO EXISTE EM PROD NO MOMENTO EM QUE ISTO É ESCRITO. A fatia 1 está no
+ * ar; a migration `20270814093000_notificame_instagram_channel` não foi aplicada.
+ * Toda leitura e toda escrita desta coluna aqui degrada sozinha enquanto o schema
+ * estiver velho — ver `notificame-schema-guard.ts`. A ordem certa continua sendo
+ * MIGRATION PRIMEIRO, FUNÇÕES DEPOIS; a degradação é rede, não permissão.
+ */
+const REQUESTED_TYPE_COLUMN = "requested_channel_type";
 
 /**
  * TTL da sessão: o teto de vida do popup (5 min, `SEAMLESS_TIMEOUT_MS` no hook)
@@ -98,6 +121,13 @@ export async function openConnectSession(
     organizationId: string;
     userId: string;
     baselineChannelIds: string[];
+    /**
+     * O tipo PEDIDO no clique. Vai para a coluna e volta no finish, onde estreita
+     * os candidatos do diff ANTES da contagem — é o que impede um canal de
+     * WhatsApp nascido em paralelo ser vinculado como Instagram. Já veio pela
+     * allowlist de `readSeamlessChannelType`; nunca é string livre do cliente.
+     */
+    requestedChannelType: SeamlessChannelType;
     ttlMs?: number;
   },
 ): Promise<string | null> {
@@ -116,18 +146,42 @@ export async function openConnectSession(
     // Higiene nunca derruba o caminho quente.
   }
 
-  const { data, error } = await admin
-    .from("notificame_connect_sessions")
-    .insert({
-      organization_id: params.organizationId,
-      created_by: params.userId,
-      // Verbatim: a foto é o que foi listado, sem normalização nem ordenação.
-      baseline_channel_ids: params.baselineChannelIds,
-      status: "open",
-      expires_at: new Date(Date.now() + ttl).toISOString(),
-    })
-    .select("id")
-    .single();
+  const base = {
+    organization_id: params.organizationId,
+    created_by: params.userId,
+    // Verbatim: a foto é o que foi listado, sem normalização nem ordenação.
+    baseline_channel_ids: params.baselineChannelIds,
+    status: "open",
+    expires_at: new Date(Date.now() + ttl).toISOString(),
+  };
+
+  const insert = (payload: Record<string, unknown>) =>
+    admin
+      .from("notificame_connect_sessions")
+      .insert(payload)
+      .select("id")
+      .single();
+
+  let { data, error } = await insert({
+    ...base,
+    [REQUESTED_TYPE_COLUMN]: params.requestedChannelType,
+  });
+
+  // ⚠️ SCHEMA VELHO (migration …093000 ainda não aplicada). Sem este retry, o
+  // INSERT inteiro morre e a sessão NÃO ABRE — e sessão que não abre é BASELINE
+  // PERDIDA, que é o defeito que trava a org em `ambiguous_channel` sem saída
+  // pela UI. Repetir SEM a coluna preserva a foto, que é o que a fatia 1 precisa;
+  // o tipo é a única coisa que se perde, e ele é irrelevante num schema onde
+  // Instagram sequer pode ser pedido (a flag `notificame_instagram` é ligada pela
+  // MESMA migration que cria a coluna).
+  if (isMissingColumnError(error, REQUESTED_TYPE_COLUMN)) {
+    console.warn(
+      `[notificame] ${REQUESTED_TYPE_COLUMN} ausente — sessão aberta sem tipo. ` +
+        "Apliquem a migration 20270814093000_notificame_instagram_channel: " +
+        "MIGRATION PRIMEIRO, FUNÇÕES DEPOIS.",
+    );
+    ({ data, error } = await insert(base));
+  }
 
   if (error || !data?.id) {
     console.warn("[notificame] failed to open connect session:", error?.message);
@@ -150,8 +204,8 @@ export async function openConnectSession(
  *                pode ALARGAR a regra que decide qual canal é vinculado.
  */
 export type ConnectSessionState =
-  | { state: "open"; baselineChannelIds: string[] }
-  | { state: "finished"; baselineChannelIds: string[] }
+  | { state: "open"; baselineChannelIds: string[]; requestedChannelType: SeamlessChannelType }
+  | { state: "finished"; baselineChannelIds: string[]; requestedChannelType: SeamlessChannelType }
   | { state: "invalid" };
 
 /**
@@ -175,22 +229,66 @@ export async function readConnectSession(
 ): Promise<ConnectSessionState> {
   if (!UUID_RE.test(params.sessionId)) return { state: "invalid" };
 
-  const { data, error } = await admin
-    .from("notificame_connect_sessions")
-    .select("status, baseline_channel_ids, expires_at")
-    .eq("id", params.sessionId)
-    .eq("organization_id", params.organizationId)
-    .eq("created_by", params.userId)
-    .maybeSingle();
+  // A lista de colunas deixa de ser literal (são DUAS listas possíveis), então o
+  // shape é declarado aqui e afirmado UMA vez, na fronteira. Todo campo é
+  // opcional de propósito: o parse abaixo já é fail-closed campo a campo, e num
+  // schema velho `requested_channel_type` simplesmente não vem.
+  interface SessionRow {
+    status?: string | null;
+    baseline_channel_ids?: string[] | null;
+    expires_at?: string | null;
+    requested_channel_type?: string | null;
+  }
+
+  const select = async (
+    columns: string,
+  ): Promise<{ data: SessionRow | null; error: PostgrestErrorLike | null }> => {
+    const res = await admin
+      .from("notificame_connect_sessions")
+      .select(columns)
+      .eq("id", params.sessionId)
+      .eq("organization_id", params.organizationId)
+      .eq("created_by", params.userId)
+      .maybeSingle();
+    return {
+      data: (res.data as unknown as SessionRow | null) ?? null,
+      error: (res.error as PostgrestErrorLike | null) ?? null,
+    };
+  };
+
+  const LEGACY_COLUMNS = "status, baseline_channel_ids, expires_at";
+
+  let { data, error } = await select(`${LEGACY_COLUMNS}, ${REQUESTED_TYPE_COLUMN}`);
+
+  // ⚠️ ESTA É A LINHA COM DANO EM PROD. A fatia 1 está NO AR e a migration
+  // …093000 NÃO está aplicada: pedir a coluna nova num schema velho faz o
+  // PostgREST devolver ERRO — não linha vazia —, e um erro aqui vira
+  // `{state:'invalid'}`, que vira 403 `session_invalid` no finish, que vira canal
+  // FATURÁVEL e IRREMOVÍVEL nascido no fornecedor e vinculado a NINGUÉM. Para
+  // TODA conexão de WhatsApp da org, não só para Instagram.
+  //
+  // POR QUE ESTE FORMATO (e não `select('*')`): o retry é disparado por UM erro
+  // nomeado sobre UMA coluna nomeada, então qualquer outra falha — RLS, permissão,
+  // outra coluna ausente — continua derrubando a leitura como hoje. `select('*')`
+  // resolveria a janela em uma ida ao banco, mas toleraria PARA SEMPRE e EM
+  // SILÊNCIO qualquer coluna que sumisse ou fosse renomeada, e o filtro de tipo do
+  // diff cairia sem ninguém ficar sabendo. Aqui a degradação é ruidosa, some
+  // sozinha assim que a migration entra, e custa a ida extra só na janela.
+  if (isMissingColumnError(error, REQUESTED_TYPE_COLUMN)) {
+    console.warn(
+      `[notificame] ${REQUESTED_TYPE_COLUMN} ausente — sessão lida como whatsapp. ` +
+        "Apliquem a migration 20270814093000_notificame_instagram_channel: " +
+        "MIGRATION PRIMEIRO, FUNÇÕES DEPOIS.",
+    );
+    ({ data, error } = await select(LEGACY_COLUMNS));
+  }
 
   if (error) {
     console.warn("[notificame] failed to read connect session:", error.message);
     return { state: "invalid" };
   }
 
-  const row = data as
-    | { status?: string | null; baseline_channel_ids?: string[] | null; expires_at?: string | null }
-    | null;
+  const row = data;
   if (!row) return { state: "invalid" };
 
   // 'expired' (marcada pelo prune) é terminal e NÃO é 'finished': nada foi
@@ -204,10 +302,21 @@ export async function readConnectSession(
 
   const baselineChannelIds = row.baseline_channel_ids ?? [];
 
-  if (row.status === "consumed") return { state: "finished", baselineChannelIds };
+  // Sessão anterior à migration `…093000` (coluna ausente/nula) é, por
+  // definição, de WhatsApp: era o único tipo que existia quando ela foi aberta —
+  // Instagram só é PEDÍVEL com a flag `notificame_instagram`, que a MESMA
+  // migration liga. 'whatsapp' aqui é FATO, não chute. Degradar para `null`
+  // tiraria o filtro de tipo de uma sessão viva sem ganho nenhum — o default do
+  // banco já é 'whatsapp'.
+  const requestedChannelType: SeamlessChannelType =
+    row.requested_channel_type === "instagram" ? "instagram" : "whatsapp";
+
+  if (row.status === "consumed") {
+    return { state: "finished", baselineChannelIds, requestedChannelType };
+  }
 
   await armFinishDeadline(admin, params);
-  return { state: "open", baselineChannelIds };
+  return { state: "open", baselineChannelIds, requestedChannelType };
 }
 
 /**

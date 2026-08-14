@@ -56,6 +56,15 @@
  * devolve `error.message` CRU no corpo do 500 para o browser, então qualquer
  * interpolação de corpo do fornecedor aqui viraria vazamento lá.
  *
+ * ⚠️ MAS ESSA REGRA TEM DOIS LADOS, E APLICÁ-LA LARGA DEMAIS JÁ CUSTOU CARO. Ela
+ * vale para o que CHEGA AO CLIENTE. Para o LOG DE SERVIDOR ela é o contrário do
+ * certo: o `code` e a `message` de erro do fornecedor não são segredo, e sem eles
+ * uma falha de provisionamento em produção deixou em `runtime_logs` apenas
+ * `{"code":"subaccount_provision_failed"}` — o nosso código, nada do que eles
+ * disseram — e uma hora de diagnóstico. Por isso o detalhe do fornecedor viaja
+ * SEPARADO da `message` da exceção, em `NotificameError.vendor` / no campo
+ * `vendor` dos vereditos-como-dado, e vira log por `vendorLogFields()`.
+ *
  * PUREZA — tudo aqui é puro e testável sem rede, exceto `listChannels` e
  * `createSubaccount` (I/O via `fetchImpl` injetável) e `isNotificameEnabledForOrg`
  * (uma leitura no banco), todos marcados como tal.
@@ -76,16 +85,109 @@ export type FetchImpl = (
 // ─── Erros ───────────────────────────────────────────────────────────────────
 
 /**
+ * O QUE O FORNECEDOR DISSE quando recusou. Existe para o LOG DE SERVIDOR e para
+ * mais nada.
+ *
+ * ⚠️ POR QUE ISTO EXISTE (defeito real, custou uma hora de diagnóstico): quando o
+ * provisionamento da subconta falhou em produção, `runtime_logs` guardou
+ * `{"code":"subaccount_provision_failed"}` e MAIS NADA — só o nosso código. O
+ * `code` e a `message` do fornecedor, que eram exatamente o que faltava para
+ * saber O QUE tinha acontecido, morriam dentro de `parseNotificameBody`.
+ *
+ * A regra "nunca o corpo do fornecedor" estava sendo aplicada larga demais. Ela
+ * tem DOIS lados, e eles não são o mesmo:
+ *
+ *   • O QUE VOLTA PARA O CLIENTE  — continua sendo SÓ o nosso código estável.
+ *     `withErrorBoundary` devolve `error.message` CRU no corpo do 500, então
+ *     texto de terceiro numa `Error` daqui vira vazamento lá. Isso não muda.
+ *   • O LOG DE SERVIDOR           — o código e a mensagem de erro deles NÃO são
+ *     segredo. São a informação. Suprimi-los não protegeu nada e apagou o
+ *     diagnóstico.
+ *
+ * Daí esta estrutura viajar SEPARADA da `Error`: o campo `message` da exceção
+ * continua nosso e continua sendo o único que alcança o browser; o detalhe do
+ * fornecedor anda em `NotificameError.vendor`, que só quem loga lê.
+ */
+export interface NotificameVendorDetail {
+  /** `code` do envelope do fornecedor (`Hub404`, `AUTHENTICATION_ERROR`, `ERROR`, …). */
+  code: string | null;
+  /** `message` do envelope do fornecedor, já truncada. Prosa livre deles. */
+  message: string | null;
+}
+
+/**
+ * Teto do texto do fornecedor que entra num log. A prosa é livre e o campo cai
+ * numa tabela que humanos leem: 400 chars cobrem qualquer mensagem de validação
+ * observada e impedem que um corpo inteiro entre por esta porta.
+ *
+ * ⚠️ O QUE PODE APARECER NESSE TEXTO, para ninguém se assustar depois: mensagens
+ * de validação do fornecedor citam os campos que NÓS mandamos — e o que mandamos
+ * é dado da MILENNIALS (`NOTIFICAME_SUBACCOUNT_DEFAULTS`: telefone, cpf_cnpj,
+ * endereço) mais o NOME da org. Do cliente final não sai nada além disso — é
+ * invariante de `SubaccountDefaults`, não coincidência.
+ *
+ * E CREDENCIAL NÃO CABE AQUI: os dois tokens viajam no header `X-Api-Token` e
+ * nunca em corpo de requisição, então não há corpo de resposta que possa ecoá-los.
+ * Se um dia algum endpoint passar a receber token no BODY, esta garantia morre
+ * junto — e o lugar de reavaliar é este comentário.
+ */
+export const VENDOR_MESSAGE_MAX = 400;
+
+/**
+ * Normaliza o detalhe do fornecedor. `null` = ele não disse nada utilizável
+ * (transporte quebrado, timeout, corpo não-JSON sem envelope) — e essa ausência é
+ * ela própria um diagnóstico, por isso não se inventa um placeholder.
+ */
+export function vendorDetail(
+  code?: string | null,
+  message?: string | null,
+): NotificameVendorDetail | null {
+  const c = typeof code === "string" && code.trim() ? code.trim() : null;
+  const raw = typeof message === "string" ? message.replace(/\s+/g, " ").trim() : "";
+  const m = raw ? raw.slice(0, VENDOR_MESSAGE_MAX) : null;
+  return c || m ? { code: c, message: m } : null;
+}
+
+/**
+ * Achata o detalhe do fornecedor em CAMPOS ESCALARES NOSSOS, prontos para
+ * `payloadSnapshot`. Use SEMPRE por spread: `{ code: nosso, ...vendorLogFields(v) }`.
+ *
+ * ⚠️ É ASSIM E NÃO `JSON.stringify(body)` SOB UMA CHAVE GENÉRICA, e a diferença é
+ * de segurança, não de estilo. `redactSecrets` (`_shared/logger.ts`) redige por
+ * NOME DE CHAVE: um payload serializado dentro de uma string atravessa a redação
+ * inteiro — token incluso — para uma tabela que humanos leem. Dois escalares com
+ * nome nosso é o formato que a redação consegue enxergar.
+ *
+ * Detalhe ausente ⇒ `{}`: nenhuma chave nula polui a linha, e "não há
+ * `vendor_code`" significa "o fornecedor não respondeu nada legível", que é o que
+ * o código estável ao lado já está dizendo.
+ */
+export function vendorLogFields(
+  detail: NotificameVendorDetail | null | undefined,
+): { vendor_code?: string | null; vendor_message?: string | null } {
+  if (!detail) return {};
+  return { vendor_code: detail.code, vendor_message: detail.message };
+}
+
+/**
  * Erro tipado com um `code` estável de máquina. A edge function mapeia
  * `code` → HTTP status e devolve `{ error, code }` para o cliente decidir sem
  * casar string. A `message` é NOSSA — nunca o corpo do fornecedor, nunca o token.
+ *
+ * `vendor` é a EXCEÇÃO QUE CONFIRMA A REGRA: ele carrega o que o fornecedor disse,
+ * fora da `message`, para que o log de servidor tenha o diagnóstico sem que nada
+ * disso possa vazar pelo `error.message` cru que o `withErrorBoundary` devolve.
+ * Quem responde ao cliente lê `code`/`message`; quem loga lê `vendor`.
  */
 export class NotificameError extends Error {
   code: string;
-  constructor(code: string, message: string) {
+  /** ⚠️ SERVER-ONLY. Nunca interpole em resposta HTTP — só em log de servidor. */
+  vendor: NotificameVendorDetail | null;
+  constructor(code: string, message: string, vendor: NotificameVendorDetail | null = null) {
     super(message);
     this.name = "NotificameError";
     this.code = code;
+    this.vendor = vendor;
   }
 }
 
@@ -143,9 +245,24 @@ export function orgConfigFrom(
   return { baseUrl: stripTrailingSlash(baseUrl), subaccountToken };
 }
 
-function readBaseUrl(env: { get(key: string): string | undefined }): string {
+/**
+ * A base do fornecedor, SOZINHA — sem exigir o token da conta-mãe junto.
+ *
+ * `readNotificameParentConfig` devolve `null` quando falta `NOTIFICAME_API_TOKEN`,
+ * e isso está certo para o caminho que PROVISIONA subconta. Quem só fala em nome
+ * de uma org (envio, listagem de canais) não precisa — nem deve tocar — o token do
+ * pai: ele lê o token da SUBCONTA do cofre e precisa daqui apenas do host. Sem
+ * este export, esse caminho copiaria a leitura da env e as duas derivariam.
+ */
+export function readNotificameBaseUrl(
+  env: { get(key: string): string | undefined },
+): string {
   const baseUrl = (env.get("NOTIFICAME_BASE_URL") ?? "").trim() || NOTIFICAME_DEFAULT_BASE_URL;
   return stripTrailingSlash(baseUrl);
+}
+
+function readBaseUrl(env: { get(key: string): string | undefined }): string {
+  return readNotificameBaseUrl(env);
 }
 
 function stripTrailingSlash(url: string): string {
@@ -265,6 +382,37 @@ export function buildCreateAccountBody(params: {
 export type SeamlessChannelType = "whatsapp" | "instagram" | "facebook";
 
 /**
+ * ALLOWLIST FECHADA dos tipos que o CLIENTE pode pedir. `facebook` existe no tipo
+ * — o fornecedor o aceita e `messaging_channels` já o comporta — e está FORA
+ * desta lista de propósito: nenhum caminho o liga nesta fatia, e allowlist é o
+ * lugar onde "existe" e "está habilitado" precisam ser coisas diferentes.
+ */
+export const SEAMLESS_CHANNEL_TYPES = ["whatsapp", "instagram"] as const;
+
+/**
+ * O ÚNICO ponto onde um valor vindo do cliente vira `type`. PURO.
+ *
+ * Este `type` termina interpolado numa URL que NÓS abrimos no browser do usuário,
+ * ao lado do token da subconta. `encodeURIComponent` em `buildSeamlessStartUrl` já
+ * impede a injeção de parâmetro, mas escapar não é autorizar: string livre do
+ * cliente chegando ao fornecedor é superfície que ninguém revisa depois. Daí a
+ * allowlist, e daí ela ser por IGUALDADE ESTRITA — sem trim, sem lowercase, sem
+ * alias. O cliente é NOSSO front; caixa errada é bug nosso, não tolerância a
+ * conceder.
+ *
+ * Devolve `null` para tudo que não seja exatamente um dos valores habilitados —
+ * inclusive `'facebook'`, `'WhatsApp'`, `'whatsapp&type=evil'`, número, objeto e
+ * array. Quem chama decide o que fazer com o `null`; no start, ele vira o default
+ * inócuo `'whatsapp'`, que é o comportamento que já está em prod.
+ */
+export function readSeamlessChannelType(raw: unknown): SeamlessChannelType | null {
+  if (typeof raw !== "string") return null;
+  return (SEAMLESS_CHANNEL_TYPES as readonly string[]).includes(raw)
+    ? (raw as SeamlessChannelType)
+    : null;
+}
+
+/**
  * Monta a URL do popup do Seamless (seção "Seamless" da doc).
  *
  * ⚠️ O `companyUuid` daqui é o TOKEN DA SUBCONTA daquela org, e a URL abre no
@@ -349,6 +497,28 @@ export function parseNotificameBody(rawText: string): NotificameBodyResult {
   return { ok: true, value: parsed };
 }
 
+/**
+ * Extrai o detalhe DO FORNECEDOR de um veredito de `parseNotificameBody`.
+ *
+ * ⚠️ EXISTE PARA NÃO CARIMBAR CÓDIGO NOSSO COMO SE FOSSE DELES. `parseNotificameBody`
+ * devolve um `code` que às vezes é do fornecedor (`Hub404`, `AUTHENTICATION_ERROR`,
+ * `ERROR`) e às vezes é NOSSO — `non_json_response` é nosso, o corpo era texto puro
+ * do ServeMux do Go e não havia envelope algum. Um `vendor_code:"non_json_response"`
+ * no log mandaria alguém procurar esse código na doc do fornecedor, onde ele não
+ * existe. Sem envelope ⇒ `null`, e o nosso código estável ao lado já conta a
+ * história inteira.
+ *
+ * `upstream_error` é o meio-termo e FICA: houve envelope `error`, ele é que não
+ * trouxe `code`. Saber que o fornecedor recusou sem se nomear é diagnóstico.
+ */
+export function vendorDetailFromParse(
+  parsed: NotificameBodyResult,
+): NotificameVendorDetail | null {
+  if (parsed.ok) return null;
+  if (parsed.code === "non_json_response") return null;
+  return vendorDetail(parsed.code, parsed.message);
+}
+
 // ─── Criação da subconta (puro na decisão, I/O isolado) ──────────────────────
 
 export type CreateAccountRead =
@@ -361,6 +531,19 @@ export type CreateAccountRead =
       | "create_account_rejected"
       | "create_account_no_company_id";
   };
+
+/**
+ * ⚠️ ESTE VEREDITO NÃO CARREGA NADA DO CORPO DO FORNECEDOR, e é regra, não
+ * omissão: ele é a decisão "nasceu ou não nasceu uma subconta faturável", e
+ * decisão anda por caminhos que terminam em resposta HTTP. `tests/unit/
+ * notificame-subaccount-contract.test.ts` guarda essa forma.
+ *
+ * O DIAGNÓSTICO do fornecedor — que é obrigatório no log de servidor, ver o
+ * cabeçalho — é derivado SEPARADAMENTE em `createSubaccount`, que tem o corpo cru
+ * em mãos, e viaja em `NotificameError.vendor`. Duas perguntas diferentes sobre a
+ * mesma resposta: "posso criar?" e "o que eles disseram?". Misturá-las num objeto
+ * só é como o texto de terceiro encontra o caminho para o browser.
+ */
 
 /**
  * Lê a resposta de `POST /v2/accounts` e decide se uma subconta NASCEU. PURO.
@@ -447,7 +630,24 @@ export async function createSubaccount(
   const raw = await res.text();
   const read = readCompanyIdFromCreateAccount(raw);
   if (!read.ok) {
-    throw new NotificameError(read.code, "NotificaMe recusou a criação da conta oficial");
+    // A `message` continua NOSSA e fixa — é ela que o `withErrorBoundary` pode
+    // devolver crua ao browser. O que o fornecedor disse entra na TERCEIRA
+    // posição, `vendor`, que só o log de servidor lê.
+    //
+    // O detalhe é derivado AQUI, do corpo cru, e não vem do veredito acima: o
+    // veredito é a decisão "nasceu uma subconta faturável?" e precisa continuar
+    // livre de texto de terceiro (ver a nota em `CreateAccountRead`). Este é o
+    // ponto onde as duas leituras se separam.
+    //
+    // ⚠️ Sem esta linha, a única resposta à pergunta "por que a subconta não
+    // provisionou?" era o nosso `create_account_rejected` — o mesmo código para
+    // token expirado, rota mudada e recusa de contrato ("company não é revenda").
+    // Foi exatamente isso que custou uma hora de diagnóstico em produção.
+    throw new NotificameError(
+      read.code,
+      "NotificaMe recusou a criação da conta oficial",
+      vendorDetailFromParse(parseNotificameBody(raw)),
+    );
   }
   return read.companyId;
 }
@@ -488,6 +688,8 @@ export type ResaleLookup =
       | "resale_unreadable"
       | "resale_rejected"
       | "resale_unexpected_shape";
+    /** ⚠️ SERVER-ONLY — só para log. Ver `NotificameVendorDetail`. */
+    vendor?: NotificameVendorDetail | null;
   };
 
 /**
@@ -536,18 +738,23 @@ function readResaleAccountToken(item: Record<string, unknown>): string | null {
 export function findResaleAccountByEmail(rawText: string, email: string): ResaleLookup {
   const wanted = email.trim().toLowerCase();
   // Email vazio casaria com qualquer item sem email. Fail-closed.
-  if (!wanted) return { ok: false, code: "resale_unexpected_shape" };
+  if (!wanted) return { ok: false, code: "resale_unexpected_shape", vendor: null };
 
   const parsed = parseNotificameBody(rawText);
   if (!parsed.ok) {
     return {
       ok: false,
       code: parsed.code === "non_json_response" ? "resale_unreadable" : "resale_rejected",
+      // `resale_rejected` sozinho não diz se o token da conta-mãe expirou, se a
+      // rota mudou ou se a revenda foi desabilitada — três consertos diferentes.
+      // E este caminho BLOQUEIA a criação (fail-closed), então ele é exatamente o
+      // que trava a org: precisa ser diagnosticável de primeira.
+      vendor: vendorDetailFromParse(parsed),
     };
   }
 
   const list = extractResaleList(parsed.value);
-  if (!list) return { ok: false, code: "resale_unexpected_shape" };
+  if (!list) return { ok: false, code: "resale_unexpected_shape", vendor: null };
 
   const matches: Array<Record<string, unknown>> = [];
   for (const item of list) {
@@ -589,9 +796,19 @@ export async function lookupResaleAccountByEmail(
       },
     });
     raw = await res.text();
-  } catch {
+  } catch (err) {
     // Sem corpo não há veredito. `resale_transport_error` é "não sei", nunca "não existe".
-    return { ok: false, code: "resale_transport_error" };
+    //
+    // Não há detalhe DO FORNECEDOR aqui — ele não chegou a responder —, e por isso
+    // `vendor` é null em vez de receber a mensagem do `fetch`: `vendor_code` tem
+    // que significar "o fornecedor disse isto", sempre. O motivo do transporte vai
+    // para o console da função, que é onde ele é lido.
+    console.warn(
+      "[notificame] GET /v1/resale/ nao respondeu:",
+      (err as Error)?.name ?? "erro",
+      (err as Error)?.message ?? "",
+    );
+    return { ok: false, code: "resale_transport_error", vendor: null };
   }
   return findResaleAccountByEmail(raw, email);
 }
@@ -626,6 +843,39 @@ export function normalizeChannel(raw: unknown): NotificameChannel | null {
     type: firstString(r.type, r.channel_type) ?? null,
     status: firstString(r.status) ?? null,
   };
+}
+
+/**
+ * Traduz o `type`/`channel_type` que `normalizeChannel` tira de `GET /v1/channels`
+ * para o nosso vocabulário. PURO.
+ *
+ * ⚠️ ESTA É A ROTA INDOCUMENTADA. O contrato de `/v1/channels` veio do SDK, não da
+ * doc do fornecedor (ver o comentário de `normalizeChannel`) — e é ela que decide
+ * se o canal recém-nascido é Instagram ou WhatsApp. Se o fornecedor mudar o
+ * vocabulário, esta função devolve `null` e o `notificame-channel-finish` RECUSA
+ * o vínculo (`channel_type_undetermined`, 409 retentável) em vez de escolher uma
+ * tabela. `null` aqui é "ninguém confirmou o tipo", e nada é gravado sem tipo
+ * confirmado — nem pelo tipo PEDIDO no clique, que é intenção e não observação.
+ *
+ * TOLERANTE em alias e caixa, INTOLERANTE em desconhecido. A assimetria é
+ * deliberada: aceitar 'IG' e 'ig' custa nada e cobre a variação que o SDK já
+ * mostra; adivinhar o que 'reels' significa custaria um canal vinculado ao tipo
+ * errado. Desconhecido ⇒ `null`, para o chamador recusar em vez de chutar.
+ *
+ * ⚠️ `null` NUNCA pode virar "descarte o canal": um canal descartado fica órfão,
+ * vivo e FATURÁVEL no fornecedor, alcançável por nenhuma tela. Recusar o VÍNCULO
+ * não é descartar o canal: ele continua livre no fornecedor e a tentativa
+ * seguinte o reivindica — e o `channel_id` fica na trilha para o operador.
+ */
+export function normalizeSeamlessType(
+  raw: string | null | undefined,
+): SeamlessChannelType | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim().toLowerCase();
+  if (v === "whatsapp" || v === "wa") return "whatsapp";
+  if (v === "instagram" || v === "ig") return "instagram";
+  if (v === "facebook" || v === "fb" || v === "messenger") return "facebook";
+  return null;
 }
 
 function firstString(...candidates: unknown[]): string | null {
@@ -666,12 +916,24 @@ export async function listChannels(
   const parsed = parseNotificameBody(raw);
 
   if (!parsed.ok) {
-    throw new NotificameError(parsed.code, "NotificaMe recusou a listagem de canais");
+    // `parsed.code` já era o código do fornecedor na maioria dos ramos — mas ele
+    // vira `code` de MÁQUINA na resposta HTTP, e a `message` deles não ia a lugar
+    // nenhum. `vendor` é o que dá ao log a frase que explica a recusa.
+    throw new NotificameError(
+      parsed.code,
+      "NotificaMe recusou a listagem de canais",
+      vendorDetailFromParse(parsed),
+    );
   }
   if (!Array.isArray(parsed.value)) {
+    // Corpo bem-formado que não é lista: o fornecedor não recusou nada, então não
+    // há `code`/`message` DELE para citar e `vendor` fica null — carimbar o nosso
+    // `unexpected_shape` como `vendor_code` mandaria alguém procurá-lo na doc
+    // deles. O nosso código já diz o que houve.
     throw new NotificameError(
       "unexpected_shape",
       "NotificaMe devolveu um formato inesperado na listagem de canais",
+      null,
     );
   }
 
@@ -681,6 +943,151 @@ export async function listChannels(
     if (channel) channels.push(channel);
   }
   return channels;
+}
+
+// ─── Webhook de entrada: URL, redação e registro ─────────────────────────────
+
+/**
+ * A URL que registramos no fornecedor para receber eventos daquela subconta.
+ *
+ * ⚠️ ELA CARREGA DUAS COISAS QUE FAZEM O PAPEL QUE UM HMAC FARIA — e faz porque o
+ * fornecedor, pela doc corrente, NÃO ASSINA O CORPO:
+ *
+ *   `secret`          — credencial de portador, `NOTIFICAME_WEBHOOK_SECRET`.
+ *                       Secret PRÓPRIO, jamais o `UAZAPI_WEBHOOK_SECRET`:
+ *                       compartilhar o secret compartilharia o raio de explosão
+ *                       com o WhatsApp de ~30 orgs.
+ *   `subaccountRowId` — o uuid da linha de `notificame_subaccounts`, que é 1:1 com
+ *                       org. É daqui que o TENANT sai — nunca do corpo. Mesmo com
+ *                       o secret vazado, o atacante precisa TAMBÉM do uuid daquela
+ *                       subconta, e o dano fica confinado a UMA org.
+ *
+ * Por isso a URL inteira é CREDENCIAL. Nunca a logue crua: use `redactWebhookUrl`.
+ */
+export function buildInboundWebhookUrl(params: {
+  supabaseUrl: string;
+  secret: string;
+  subaccountRowId: string;
+}): string {
+  const base = stripTrailingSlash(params.supabaseUrl);
+  return `${base}/functions/v1/notificame-webhook/` +
+    `${encodeURIComponent(params.secret)}/${encodeURIComponent(params.subaccountRowId)}`;
+}
+
+/**
+ * Troca o segmento do secret por `<redacted>`.
+ *
+ * URL de webhook vaza com facilidade: log de proxy, `url_path` da fila de parking,
+ * mensagem de erro, print de tela do suporte. O uuid da subconta permanece — ele é
+ * referência nossa e é o que torna a linha diagnosticável.
+ *
+ * Recorte por POSIÇÃO e não por igualdade com o secret: quem redige raramente tem
+ * o secret em mãos (a fila e o log não têm), e uma redação que dependesse dele
+ * falharia justamente onde importa.
+ */
+export function redactWebhookUrl(url: string): string {
+  return url.replace(
+    /(\/notificame-webhook\/)([^/?#]+)/,
+    (_m, prefix: string) => `${prefix}<redacted>`,
+  );
+}
+
+export type SubscriptionRegistration =
+  | { ok: true; raw: unknown }
+  | {
+    ok: false;
+    /** Código estável: o do fornecedor quando houve envelope, o nosso quando não. */
+    code: string;
+    /**
+     * ⚠️ SERVER-ONLY — só para log. Aqui ele vale mais do que em qualquer outro
+     * ponto: o sintoma de uma subscription que nunca existiu é indistinguível de
+     * "ninguém mandou mensagem ainda", e quem for investigar semanas depois só tem
+     * a trilha para ler.
+     */
+    vendor?: NotificameVendorDetail | null;
+  };
+
+/**
+ * `POST /v1/subscriptions` com o `X-Api-Token` DA SUBCONTA — logo, escopado àquela
+ * org por construção, e nunca com o token da conta-mãe.
+ *
+ * ⚠️ O VEREDITO SAI DO CORPO, JAMAIS DE `res.ok`/`res.status`. Esta API devolve
+ * HTTP 200 com `{"error":{"code":"Hub404"}}` para rota desconhecida e HTTP 404
+ * para falha de AUTENTICAÇÃO (ver o cabeçalho deste arquivo). Ler o status leva à
+ * conclusão errada nas duas direções — e aqui o preço é alto de um jeito
+ * particular: o sintoma de uma subscription que NUNCA existiu é indistinguível de
+ * "ninguém mandou mensagem ainda". Um falso "registrado" some por semanas.
+ *
+ * ⚠️ RETRY SEM `criteria.direction`. O literal de direção (`IN`) é DERIVADO DE DOC
+ * e nunca foi exercido contra a conta viva. Se o fornecedor recusar o critério, a
+ * segunda tentativa manda a subscription sem ele: receber os dois sentidos e
+ * parkar o que não é entrada é estritamente melhor do que não receber nada. O
+ * retry NÃO acontece em falha de autenticação nem em rota desconhecida — nesses
+ * casos o corpo já disse qual é o problema e insistir só duplica o efeito.
+ *
+ * NÃO LANÇA: devolve o veredito como DADO, com CÓDIGO NOSSO. A prosa do fornecedor
+ * não atravessa — o `withErrorBoundary` devolve `error.message` cru no corpo do
+ * 500, então texto de terceiro aqui viraria vazamento lá.
+ */
+export async function registerInboundSubscription(
+  cfg: NotificameOrgConfig,
+  params: { webhookUrl: string; channelKind: "instagram" },
+  fetchImpl: FetchImpl = fetch,
+): Promise<SubscriptionRegistration> {
+  const endpoint = `${stripTrailingSlash(cfg.baseUrl)}/v1/subscriptions`;
+
+  const attempt = async (withDirection: boolean): Promise<SubscriptionRegistration> => {
+    const body = {
+      eventType: "MESSAGE",
+      criteria: withDirection
+        ? { channel: params.channelKind, direction: "IN" }
+        : { channel: params.channelKind },
+      webhook: { url: params.webhookUrl },
+    };
+
+    let raw: string;
+    try {
+      const res = await fetchImpl(endpoint, {
+        method: "POST",
+        headers: {
+          "X-Api-Token": cfg.subaccountToken,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      raw = await res.text();
+    } catch (err) {
+      // Transporte quebrado. "Não sei" — nunca "registrado". Sem resposta não há
+      // detalhe do fornecedor; o motivo do socket vai para o console da função.
+      console.warn(
+        "[notificame] POST /v1/subscriptions nao respondeu:",
+        (err as Error)?.name ?? "erro",
+        (err as Error)?.message ?? "",
+      );
+      return { ok: false, code: "subscription_transport_error", vendor: null };
+    }
+
+    const parsed = parseNotificameBody(raw);
+    return parsed.ok
+      ? { ok: true, raw: parsed.value }
+      : { ok: false, code: parsed.code, vendor: vendorDetailFromParse(parsed) };
+  };
+
+  const first = await attempt(true);
+  if (first.ok) return first;
+
+  // Autenticação e rota desconhecida não melhoram sem o critério: repetir só
+  // gastaria uma chamada e, se por azar a primeira tiver sido aceita, criaria uma
+  // segunda subscription — o caso "duplicou" que a UNIQUE de `channel_messages`
+  // absorve como reentrega, mas que ainda assim é sujeira no fornecedor.
+  const hopeless = first.code === "AUTHENTICATION_ERROR" ||
+    first.code === "Hub404" ||
+    first.code === "non_json_response" ||
+    first.code === "subscription_transport_error";
+  if (hopeless) return first;
+
+  return await attempt(false);
 }
 
 // ─── Escolha do canal recém-nascido (puro) ───────────────────────────────────
@@ -714,15 +1121,37 @@ export type PickChannelResult =
  *                  entregar mensagens de uma empresa a outra. COM baseline, 2+ só
  *                  acontece sob concorrência real (dois canais nascidos depois da
  *                  foto), e aí esperar resolve — é o cliente que decide retentar.
+ *
+ * `requestedType` é o TIPO pedido no clique, lido da sessão. Quando não-nulo, ele
+ * estreita os candidatos ANTES da contagem, e é o que impede um canal de WhatsApp
+ * nascido em paralelo na mesma subconta ser vinculado como Instagram — o
+ * `postMessage` do Seamless é IDÊNTICO para os dois tipos e não carrega id, então
+ * o diff sozinho não os distingue. Sem o filtro, o caso "um canal de cada tipo
+ * nasceu depois da foto" morreria em `ambiguous_channel` mesmo sendo decidível.
+ *
+ * ⚠️ Canal cujo tipo o normalizador NÃO reconhece permanece candidato — e continua
+ * assim mesmo agora que o `finish` RECUSA vincular sem tipo confirmado. O que se
+ * ganha em mantê-lo é a IDENTIDADE do canal: recusar com o `channel_id` na trilha
+ * é o que permite ao operador achar o objeto órfão do lado do fornecedor. Filtrá-lo
+ * aqui devolveria `no_channel_found` para sempre, sem nunca dizer QUAL canal ficou
+ * de fora. Quem chama recusa com `channel_type_undetermined` (409 retentável).
+ *
+ * `requestedType === null` (sessão ausente) = sem filtro, o comportamento de hoje.
  */
 export function pickNewChannel(
   listed: NotificameChannel[],
   baselineIds: Set<string> | null,
   claimedIds: Set<string>,
+  requestedType: SeamlessChannelType | null = null,
 ): PickChannelResult {
-  const candidates = listed.filter(
-    (c) => !claimedIds.has(c.id) && !(baselineIds?.has(c.id) ?? false),
-  );
+  const candidates = listed.filter((c) => {
+    if (claimedIds.has(c.id)) return false;
+    if (baselineIds?.has(c.id) ?? false) return false;
+    if (!requestedType) return true;
+    const type = normalizeSeamlessType(c.type);
+    // `null` = tipo que não reconhecemos. Passa; ver o ⚠️ acima.
+    return type === null || type === requestedType;
+  });
   if (candidates.length === 0) {
     return { ok: false, code: "no_channel_found", candidates: 0 };
   }
@@ -779,6 +1208,14 @@ export interface NotificameInstanceRow {
  *
  * `organizationId` vem SEMPRE do contexto de auth validado — nunca do body.
  * `subaccountId` vem SEMPRE do `id` da linha do cofre — nunca do token dela.
+ *
+ * ⚠️ LANÇA para canal SOCIAL (instagram/facebook). Não é validação de entrada: é a
+ * rede contra um bug futuro no ramo de escrita do finish. Sem ela, um canal de
+ * Instagram que escapasse para cá viraria uma linha de `whatsapp_instances`
+ * chamada `WhatsApp Oficial 3f2a1b9c`, com `phone_number` NULL, visível em 13
+ * superfícies de front que só sabem falar de número — e comendo uma vaga PAGA de
+ * `max_whatsapp_instances`, que a quota conta sem filtrar provider. Canal social
+ * mora em `messaging_channels`; use `buildMessagingChannelRow`.
  */
 export function buildNotificameInstanceRow(params: {
   organizationId: string;
@@ -787,6 +1224,15 @@ export function buildNotificameInstanceRow(params: {
   now?: Date;
 }): NotificameInstanceRow {
   const { organizationId, subaccountId, channel } = params;
+
+  const socialType = normalizeSeamlessType(channel.type);
+  if (socialType === "instagram" || socialType === "facebook") {
+    throw new NotificameError(
+      "channel_type_mismatch",
+      "Canal social não pode virar instância de WhatsApp",
+    );
+  }
+
   const digits = (channel.phone ?? "").replace(/\D/g, "");
   const phoneNumber = digits.length > 0 ? digits : null;
   const name = (channel.name ?? "").trim();
@@ -811,6 +1257,81 @@ export function buildNotificameInstanceRow(params: {
       connected_via: "seamless_v2",
       connected_at: (params.now ?? new Date()).toISOString(),
     },
+  };
+}
+
+// ─── Linha de `messaging_channels` (puro) ────────────────────────────────────
+
+export interface MessagingChannelProviderConfig {
+  vendor: "notificame";
+  connected_via: "seamless_v2";
+  connected_at: string;
+  [key: string]: unknown;
+}
+
+export interface MessagingChannelRow {
+  organization_id: string;
+  provider: "notificame";
+  channel_type: "instagram" | "facebook";
+  external_channel_id: string;
+  subaccount_id: string;
+  display_name: string;
+  handle: string | null;
+  status: "connected";
+  provider_config: MessagingChannelProviderConfig;
+  connected_at: string;
+}
+
+/**
+ * Monta a linha de `messaging_channels` do canal SOCIAL conectado. PURO.
+ *
+ * ⚠️ O RÓTULO É O PONTO. Nada aqui pode conter a palavra "WhatsApp" nem a palavra
+ * "número": este é o defeito exato que gravar o canal em `whatsapp_instances`
+ * produziria (`buildNotificameInstanceRow` chumba `WhatsApp Oficial ${…}`), e é
+ * por isso que esta função existe separada em vez de um parâmetro a mais lá.
+ *
+ * ⚠️ `provider_config` NÃO carrega `subaccount_id` — diferente do irmão de
+ * WhatsApp, onde ele mora dentro do jsonb. Aqui a referência ao cofre é COLUNA,
+ * com FK e `ON DELETE RESTRICT`; duplicá-la no jsonb criaria dois estados que
+ * divergem. E, nos dois casos, o que NUNCA entra é o `company_uuid`/token: esta
+ * tabela é lida sob RLS por qualquer membro da org.
+ *
+ * `handle` (@usuário do Instagram) fica NULL: `GET /v1/channels` não o devolve, e
+ * inventar um a partir de `name` seria exibir como identidade verificada um texto
+ * que o dono da conta escolheu. A fatia 2-IG resolve com o payload de entrada.
+ *
+ * `organizationId` vem SEMPRE do contexto de auth validado — nunca do body.
+ * `subaccountId` vem SEMPRE do `id` da linha do cofre — nunca do token dela.
+ */
+export function buildMessagingChannelRow(params: {
+  organizationId: string;
+  subaccountId: string;
+  channel: NotificameChannel;
+  channelType: "instagram" | "facebook";
+  now?: Date;
+}): MessagingChannelRow {
+  const { organizationId, subaccountId, channel, channelType } = params;
+  const connectedAt = (params.now ?? new Date()).toISOString();
+
+  const name = (channel.name ?? "").trim();
+  const label = channelType === "instagram" ? "Instagram" : "Facebook";
+  const displayName = name ? name : `${label} ${channel.id.slice(0, 8)}`;
+
+  return {
+    organization_id: organizationId,
+    provider: "notificame",
+    channel_type: channelType,
+    external_channel_id: channel.id,
+    subaccount_id: subaccountId,
+    display_name: displayName,
+    handle: null,
+    status: "connected",
+    provider_config: {
+      vendor: "notificame",
+      connected_via: "seamless_v2",
+      connected_at: connectedAt,
+    },
+    connected_at: connectedAt,
   };
 }
 
@@ -844,6 +1365,28 @@ export async function isNotificameEnabledForOrg(
   admin: SupabaseClient,
   organizationId: string,
 ): Promise<boolean> {
+  return (await readNotificameFlags(admin, organizationId)).enabled;
+}
+
+/**
+ * As DUAS flags numa leitura só.
+ *
+ * `notificame` habilita o WhatsApp Oficial; `notificame_instagram` habilita o
+ * Instagram. São SEPARADAS de propósito: ligar o inbox de Instagram numa org é
+ * decisão distinta de ligar um número oficial, e uma org pode querer uma sem a
+ * outra. `notificame` continua sendo o portão de cima — sem ele nem o Instagram
+ * entra, porque é ele que autoriza o provisionamento da subconta.
+ *
+ * Uma ida ao banco para as duas: o start precisa das duas no mesmo request (o
+ * gate e a montagem de `start_urls`), e duas leituras dariam a chance de elas
+ * divergirem no meio do caminho.
+ *
+ * `=== true` ESTRITO nas duas, fail-closed também no erro.
+ */
+export async function readNotificameFlags(
+  admin: SupabaseClient,
+  organizationId: string,
+): Promise<{ enabled: boolean; instagramEnabled: boolean }> {
   try {
     const { data } = await admin
       .from("organizations")
@@ -854,9 +1397,12 @@ export async function isNotificameEnabledForOrg(
       string,
       unknown
     >;
-    return flags.notificame === true;
+    return {
+      enabled: flags.notificame === true,
+      instagramEnabled: flags.notificame_instagram === true,
+    };
   } catch (err) {
     console.warn("[notificame] feature flag lookup failed:", (err as Error)?.message);
-    return false;
+    return { enabled: false, instagramEnabled: false };
   }
 }

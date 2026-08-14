@@ -1,0 +1,102 @@
+/**
+ * useSocialContacts — lista de conversas de um canal social (Instagram).
+ *
+ * Irmão de `useWhatsAppContacts`, e deliberadamente MUITO menor.
+ *
+ * FONTE: a RPC `get_social_conversation_list`, que faz `DISTINCT ON
+ * (contact_external_id)` direto em `channel_messages`. Não há tabela-resumo:
+ * `whatsapp_conversation_summary` é alimentada por trigger em
+ * `whatsapp_messages` e nunca verá uma linha de `channel_messages`. Com zero
+ * mensagens de Instagram em produção hoje, montar resumo + trigger seria
+ * mecanismo caro que precisa estar CERTO antes de existir tráfego que o ensine.
+ *
+ * SEM ENRIQUECIMENTO. O irmão de WhatsApp busca nome de lead e etiqueta em
+ * lotes; aqui `lead_id` é NULL por decisão desta fatia (não existe
+ * `lead_social_identities`), então o fanout seria garantidamente vazio — uma
+ * requisição por lista para não trazer nada.
+ */
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useCurrentTeamMember } from "@/modules/identity";
+import { chatQueryKeys } from "./shared/queryKeys";
+import { buildSocialConversationKey, type SocialContact } from "./types";
+
+/** Linha crua da RPC. Espelha o RETURNS TABLE da função. */
+interface SocialConversationRow {
+  contact_external_id: string;
+  sender_name: string | null;
+  sender_profile_pic: string | null;
+  last_message: string | null;
+  last_message_time: string;
+  last_message_direction: string | null;
+  unread_count: number | null;
+  lead_id: string | null;
+}
+
+function toSocialContact(
+  row: SocialConversationRow,
+  messagingChannelId: string,
+): SocialContact {
+  return {
+    channel: "instagram",
+    conversation_key: buildSocialConversationKey(
+      messagingChannelId,
+      row.contact_external_id,
+    ),
+    messaging_channel_id: messagingChannelId,
+    external_user_id: row.contact_external_id,
+    // `channel_messages` não guarda o @handle do INTERLOCUTOR — só o nome de
+    // exibição que o payload trouxer. O handle que a fatia 1.1 backfilla é o da
+    // NOSSA conta e mora em `messaging_channels.handle`, que é outra coisa.
+    // Deixar null aqui é honesto; inventá-lo a partir do nome seria mentira
+    // renderizada com "@" na frente.
+    handle: null,
+    display_name: row.sender_name ?? null,
+    avatar_url: row.sender_profile_pic ?? null,
+    last_message: row.last_message ?? null,
+    last_message_time: row.last_message_time,
+    // O CHECK do banco só aceita incoming|outgoing; qualquer outra coisa é dado
+    // que não sabemos ler, e "não sei" é null — nunca "incoming" por default.
+    last_message_direction:
+      row.last_message_direction === "incoming" ||
+      row.last_message_direction === "outgoing"
+        ? row.last_message_direction
+        : null,
+    unread_count: row.unread_count ?? 0,
+    lead_id: row.lead_id ?? null,
+    tags: [],
+  };
+}
+
+export function useSocialContacts(messagingChannelId: string | null) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id ?? null;
+
+  return useQuery({
+    queryKey: chatQueryKeys.socialContacts(organizationId, messagingChannelId),
+    queryFn: async (): Promise<SocialContact[]> => {
+      if (!organizationId || !messagingChannelId) return [];
+
+      // A RPC ainda não está em `src/integrations/supabase/types.ts` — o arquivo
+      // é gerado do banco e só é regenerado depois do apply. O cast é do
+      // CLIENTE; o shape devolvido continua declarado em `SocialConversationRow`
+      // para que uma coluna renomeada apareça como erro de tipo aqui e não como
+      // `undefined` na tela. Mesmo precedente de `useMessagingChannels.ts`.
+      const { data, error } = await (supabase as any).rpc(
+        "get_social_conversation_list",
+        {
+          p_org: organizationId,
+          p_channel: messagingChannelId,
+          p_limit: 200,
+        },
+      );
+      if (error) throw error;
+
+      return ((data ?? []) as SocialConversationRow[]).map((row) =>
+        toSocialContact(row, messagingChannelId),
+      );
+    },
+    enabled: !!organizationId && !!messagingChannelId,
+    staleTime: 30_000,
+  });
+}

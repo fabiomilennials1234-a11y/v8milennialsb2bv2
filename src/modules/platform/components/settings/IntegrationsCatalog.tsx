@@ -20,13 +20,18 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // Componentes de configuração existentes (reaproveitados integralmente)
-import { FacebookSettings, InstagramSettings } from "./MetaSettings";
+// `InstagramSettings` (Graph) SAIU do catálogo — decisão do CTO em 14/08/2026.
+// O Instagram passa a ter UM caminho só: `InstagramChannelSettings`, pelo
+// NotificaMe. O componente continua exportado por MetaSettings porque compartilha
+// corpo com o Facebook, que fica; só a porta de entrada dele deixa de existir.
+import { FacebookSettings } from "./MetaSettings";
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import { TinyErpSettings } from "./TinyErpSettings";
 import { OmieSettings } from "./OmieSettings";
 import { ElevenLabsSettings } from "./ElevenLabsSettings";
 import { WhatsAppSettings } from "./WhatsAppSettings";
 import { TorqueCallsSettings } from "./TorqueCallsSettings";
+import { InstagramChannelSettings } from "./InstagramChannelSettings";
 
 // Hooks de status
 import { useMetaConnectionStatusByType } from "@/modules/communication/hooks/useMetaConnection";
@@ -34,10 +39,20 @@ import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleC
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useOmieStatus } from "@/modules/integrations";
 import { useWhatsAppInstances, useVoipSessions } from "@/modules/communication";
+// Import direto do módulo do hook, e não do barrel, pelo MESMO motivo do
+// `useMetaConnection` logo acima: a suíte deste arquivo mocka
+// `@/modules/communication` de forma exaustiva, e um export a mais no barrel
+// deixaria o CI vermelho por um símbolo que o mock não conhece — não por
+// defeito. Aqui não entra hook nenhum: só a função de leitura e a chave.
+import {
+  fetchMessagingChannels,
+  messagingChannelsQueryKey,
+} from "@/modules/communication/hooks/useMessagingChannels";
 import { useOrganization } from "@/modules/identity";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { useFeatureFlag } from "@/modules/platform/hooks/useFeatureFlag";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 
 // ─── Brand Logos (SVG inline para visual premium) ───────
@@ -162,6 +177,17 @@ interface IntegrationDef {
   settingsId: string;
   /** Quando presente, o cartão só aparece se a organização tiver a feature. */
   featureKey?: FeatureKey;
+  /**
+   * Quando presente, o cartão só aparece se a flag jsonb homônima estiver
+   * ligada em `organizations.feature_flags`.
+   *
+   * DIFERENTE de `featureKey`, e de propósito: `featureKey` é PLANO (o que a org
+   * paga, tipado no catálogo de features), esta é ROLLOUT (o que já está pronto
+   * para esta org, ligado por UPDATE direto). Um canal em rollout não vira item
+   * de plano até existir de verdade — e enquanto não vira, não aparece no
+   * BillingOverrideModal. Aceito conscientemente.
+   */
+  flagKey?: string;
 }
 
 const CATEGORY_LABELS: Record<IntegrationCategory, string> = {
@@ -199,6 +225,23 @@ const INTEGRATIONS: IntegrationDef[] = [
     featureKey: "voice_calls",
   },
   {
+    // Instagram como CANAL DE ATENDIMENTO, pelo NotificaMe — prateleira
+    // diferente do card "Instagram" de marketing, que é o caminho antigo pela
+    // Graph API e continua existindo por mais uma fatia (é ele que tem caixa de
+    // entrada hoje). Dois caminhos, dois rótulos, nunca "Instagram" duas vezes
+    // com o mesmo nome na mesma prateleira.
+    id: "instagram_oficial",
+    name: "Instagram (oficial)",
+    description: "Conecte a conta profissional com verificação da Meta.",
+    longDescription:
+      "Conecte a conta profissional do Instagram pelo login da Meta, sem depender de um app próprio. Esta etapa entrega a conexão da conta; o recebimento de mensagens diretas no Torque entra em seguida.",
+    category: "messaging",
+    logo: <InstagramLogo />,
+    features: ["Conta profissional", "Login pela Meta", "Direct — em breve"],
+    settingsId: "instagram_oficial",
+    flagKey: "notificame_instagram",
+  },
+  {
     id: "facebook",
     name: "Facebook",
     description: "Capture leads de anúncios e converse pelo Messenger.",
@@ -208,16 +251,14 @@ const INTEGRATIONS: IntegrationDef[] = [
     features: ["Lead Ads automático", "Messenger", "Múltiplas páginas", "Formulários"],
     settingsId: "facebook",
   },
-  {
-    id: "instagram",
-    name: "Instagram",
-    description: "Receba mensagens do Instagram Direct e conecte seu perfil comercial.",
-    longDescription: "Conecte sua conta do Instagram para receber e responder mensagens do Instagram Direct diretamente pelo Torque, mantendo o atendimento centralizado.",
-    category: "marketing",
-    logo: <InstagramLogo />,
-    features: ["Instagram Direct", "Perfil comercial", "Mensagens centralizadas"],
-    settingsId: "instagram",
-  },
+  // O card "Instagram" do caminho Graph foi REMOVIDO em 14/08/2026 (decisão do
+  // CTO). Ele levava ao OAuth do nosso próprio app Meta, que não tem App Review:
+  // a Meta respondia "esse app não está disponível" e o fluxo morria ali. Instagram
+  // agora tem uma porta só, `instagram_oficial`, pelo NotificaMe.
+  //
+  // `meta_connections` e `meta_pages` NÃO foram tocadas: os mesmos registros
+  // alimentam Lead Ads e o card de Facebook, que continuam de pé. O que saiu é a
+  // porta de entrada, não o dado.
   {
     id: "google_calendar",
     name: "Google Calendar",
@@ -264,13 +305,33 @@ const INTEGRATIONS: IntegrationDef[] = [
 
 function useIntegrationStatuses() {
   const { isConnected: fbConnected } = useMetaConnectionStatusByType("facebook");
-  const { isConnected: igConnected } = useMetaConnectionStatusByType("instagram");
+  // Sem consulta de status de Instagram pelo Graph: o card que a consumia saiu.
+  // O status do Instagram agora vem de `messaging_channels` (connectedInstagram).
   const { data: calendarStatus } = useGoogleCalendarStatus();
   const { data: tinyStatus } = useTinyErpStatus();
   const { data: omieStatus } = useOmieStatus();
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
   const { data: voipSessions = [] } = useVoipSessions();
   const { organizationId } = useOrganization();
+
+  // Estado REAL do canal novo. Antes era `connected: false` chumbado: o cartão
+  // de uma org COM Instagram conectado dizia "não conectado" e não entrava na
+  // contagem — um número errado no lugar mais visível da tela.
+  //
+  // A queryKey é a MESMA de `useMessagingChannels`, de propósito: o
+  // `invalidateQueries` que roda no fim da conexão atualiza este selo sem
+  // precisar saber que ele existe. Duas chaves diferentes deixariam o badge
+  // parado até o próximo F5.
+  //
+  // `enabled` pela flag pelo mesmo motivo do card: a tabela só existe depois da
+  // migration desta fatia, e a flag desligada é exatamente o período em que ela
+  // pode não existir no ambiente.
+  const notificameInstagramFlag = useFeatureFlag("notificame_instagram");
+  const { data: messagingChannels = [] } = useQuery({
+    queryKey: messagingChannelsQueryKey(organizationId),
+    enabled: notificameInstagramFlag.enabled && !!organizationId,
+    queryFn: () => fetchMessagingChannels(organizationId as string),
+  });
 
   const { data: orgData } = useQuery({
     queryKey: ["org-elevenlabs-key", organizationId],
@@ -301,6 +362,13 @@ function useIntegrationStatuses() {
   // o comentário longo lá.
   const activeVoiceSessions = voipSessions.filter((s) => s.status === "open");
 
+  // `status === "connected"` e não "existe uma linha": um perfil que caiu
+  // continua na tabela como `disconnected`, e chamar isso de conectado é a mesma
+  // mentira que o badge do TorqueCalls contava com sessão `pending`.
+  const connectedInstagram = messagingChannels.filter(
+    (c) => c.channel_type === "instagram" && c.status === "connected",
+  );
+
   return {
     whatsapp: {
       connected: connectedInstances.length > 0,
@@ -318,9 +386,19 @@ function useIntegrationStatuses() {
       connected: !!fbConnected,
       detail: fbConnected ? "Páginas conectadas" : undefined,
     },
-    instagram: {
-      connected: !!igConnected,
-      detail: igConnected ? "Perfil conectado" : undefined,
+    instagram_oficial: {
+      connected: connectedInstagram.length > 0,
+      // O @ da conta quando é uma só — é o que o usuário reconhece. Sem handle
+      // (o fornecedor nem sempre manda), o nome do perfil; nunca um telefone,
+      // porque perfil de Instagram não tem um.
+      detail:
+        connectedInstagram.length === 1
+          ? connectedInstagram[0].handle
+            ? `@${connectedInstagram[0].handle}`
+            : connectedInstagram[0].display_name
+          : connectedInstagram.length > 1
+            ? `${connectedInstagram.length} contas`
+            : undefined,
     },
     google_calendar: {
       connected: !!calendarStatus?.connected,
@@ -492,8 +570,10 @@ function getSettingsComponent(settingsId: string): React.FC | null {
       return TorqueCallsSettings;
     case "facebook":
       return FacebookSettings;
-    case "instagram":
-      return InstagramSettings;
+    // `case "instagram"` (Graph) foi removido junto com o card. Não existe mais
+    // porta para ele: Instagram tem um caminho só, e é este.
+    case "instagram_oficial":
+      return InstagramChannelSettings;
     case "google_calendar":
       return GoogleCalendarSettings;
     case "tinyerp":
@@ -515,11 +595,20 @@ export default function IntegrationsCatalog() {
   const [filterCategory, setFilterCategory] = useState<IntegrationCategory | "all">("all");
   const statuses = useIntegrationStatuses();
   const { hasFeature } = useOrgFeatures();
+  // Rollout por org, jsonb `organizations.feature_flags`. Fail-closed: enquanto
+  // carrega, o cartão não aparece — nunca piscar uma porta que pode não existir.
+  const notificameInstagramFlag = useFeatureFlag("notificame_instagram");
+  const ROLLOUT_FLAGS: Record<string, boolean> = {
+    notificame_instagram: notificameInstagramFlag.enabled,
+  };
 
   // Gate de interface — o servidor já checa a mesma feature em torquecalls-control;
-  // isto só evita mostrar um cartão que o plano da organização não paga.
+  // isto só evita mostrar um cartão que o plano da organização não paga. O gate
+  // de `flagKey` é outra pergunta (rollout, não plano) e some junto com a flag.
   const visibleIntegrations = INTEGRATIONS.filter(
-    (i) => !i.featureKey || hasFeature(i.featureKey),
+    (i) =>
+      (!i.featureKey || hasFeature(i.featureKey)) &&
+      (!i.flagKey || ROLLOUT_FLAGS[i.flagKey] === true),
   );
 
   const connectedCount = visibleIntegrations.filter(

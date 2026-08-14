@@ -35,7 +35,37 @@ export type { UseConnectWhatsAppCloudResult } from "./hooks/useConnectWhatsAppCl
 // (NOTIFICAME_COMPANY_UUID foi eliminado nesta branch: sob subconta por org não
 // há um uuid nosso e único; há um por org, e ele é credencial no cofre.)
 export { useConnectNotificame } from "./hooks/useConnectNotificame";
-export type { UseConnectNotificameResult } from "./hooks/useConnectNotificame";
+export type {
+  UseConnectNotificameResult,
+  SeamlessChannelType,
+} from "./hooks/useConnectNotificame";
+// Canais SOCIAIS conectados pelo mesmo Seamless (Instagram na 1.1). Tabela
+// própria — `messaging_channels` —, porque perfil de rede social não é número de
+// WhatsApp: não disparia, não tem telefone e não come vaga paga de instância.
+export { useMessagingChannels } from "./hooks/useMessagingChannels";
+export type { MessagingChannel, MessagingChannelType } from "./hooks/useMessagingChannels";
+// ── Inbox multicanal ──────────────────────────────────────────────────────
+// O seletor do chat deixou de ser "lista de números de WhatsApp" e passou a ser
+// uma união discriminada de CAIXAS. Estes são os tipos e helpers que qualquer
+// consumidor cross-module precisa para falar de uma conversa sem presumir que
+// ela tem telefone. Cross-module só entra por este barrel (ESLint
+// `boundaries/element-types` em modo error).
+export { useInboxBoxes } from "./hooks/chat/useInboxBoxes";
+export { useSocialContacts } from "./hooks/chat/useSocialContacts";
+export { useSocialMessages } from "./hooks/chat/useSocialMessages";
+export {
+  contactKey,
+  contactLabel,
+  contactAvatarSeed,
+  buildSocialConversationKey,
+  isWhatsAppContact,
+  isSocialContact,
+} from "./hooks/chat/types";
+export type {
+  SocialContact,
+  InboxContact,
+  InboxBox,
+} from "./hooks/chat/types";
 // Regra de origem do postMessage do Seamless, pura e testável (igualdade estrita).
 // `seamlessOriginFromStartUrl` é a ÚNICA derivação correta no cliente — a origem
 // esperada e a URL do popup precisam sair da MESMA fonte.

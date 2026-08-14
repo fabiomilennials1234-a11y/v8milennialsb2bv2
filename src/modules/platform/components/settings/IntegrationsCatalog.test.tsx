@@ -91,16 +91,27 @@ beforeEach(() => {
 describe("IntegrationsCatalog — gate por feature", () => {
   it("integrações sem featureKey continuam visíveis mesmo com a org sem nenhuma feature paga", () => {
     // hasFeature nega tudo (só "voice_calls" é controlado pelo teste, e aqui
-    // está false) — WhatsApp, Facebook, Instagram, Google Calendar, TinyERP,
-    // Omie e ElevenLabs não têm featureKey nenhum, então o gate não se aplica.
+    // está false) — WhatsApp, Facebook, Google Calendar, TinyERP, Omie e
+    // ElevenLabs não têm featureKey nenhum, então o gate não se aplica.
     render();
     expect(screen.getByText("WhatsApp Business")).toBeInTheDocument();
     expect(screen.getByText("Facebook")).toBeInTheDocument();
-    expect(screen.getByText("Instagram")).toBeInTheDocument();
     expect(screen.getByText("Google Calendar")).toBeInTheDocument();
     expect(screen.getByText("TinyERP")).toBeInTheDocument();
     expect(screen.getByText("Omie")).toBeInTheDocument();
     expect(screen.getByText("ElevenLabs")).toBeInTheDocument();
+  });
+
+  // O card "Instagram" do caminho Graph foi REMOVIDO (decisão do CTO, 14/08/2026):
+  // ele levava ao OAuth do nosso app Meta, que não tem App Review, e a Meta
+  // respondia "esse app não está disponível". Instagram tem UMA porta agora, e ela
+  // é gated por `notificame_instagram` — com a org sem features, não aparece
+  // nenhuma. Este caso trava a remoção: sem ele, o card legado volta por descuido
+  // num merge e ninguém percebe até um cliente clicar e cair na tela de erro.
+  it("o Instagram do Graph não tem mais porta de entrada", () => {
+    render();
+    expect(screen.queryByText("Instagram")).not.toBeInTheDocument();
+    expect(screen.queryByText("Instagram (oficial)")).not.toBeInTheDocument();
   });
 
   it("TorqueCalls não aparece sem a feature voice_calls", () => {
@@ -121,13 +132,13 @@ describe("IntegrationsCatalog — gate por feature", () => {
     // conectadas quanto no total.
     voiceCallsEnabled = false;
     render();
-    expect(screen.getByText(/0\/7 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/0\/6 conectadas/)).toBeInTheDocument();
   });
 
   it("o badge de conectadas soma o TorqueCalls assim que ele fica visível", () => {
     voiceCallsEnabled = true;
     render();
-    expect(screen.getByText(/1\/8 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/1\/7 conectadas/)).toBeInTheDocument();
   });
 
   // Mesmo defeito da tela de settings, na outra superfície: o badge dizia
@@ -141,6 +152,6 @@ describe("IntegrationsCatalog — gate por feature", () => {
     ];
     render();
     expect(screen.getByText("TorqueCalls")).toBeInTheDocument();
-    expect(screen.getByText(/0\/8 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/0\/7 conectadas/)).toBeInTheDocument();
   });
 });

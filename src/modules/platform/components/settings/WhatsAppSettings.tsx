@@ -901,7 +901,14 @@ export function WhatsAppSettings() {
           void connectWhatsAppCloud();
         }}
         // Handler ausente ⇒ o card do NotificaMe nem renderiza (flag OFF).
-        onChooseNotificame={notificameFlag.enabled ? connectNotificame : undefined}
+        //
+        // O `"whatsapp"` é EXPLÍCITO, não default. O mesmo hook agora conecta
+        // Instagram, e passar `connectNotificame` cru aqui deixaria o canal ser
+        // decidido por omissão — além de entregar o evento de clique como
+        // primeiro argumento se algum dia este handler for ligado direto a um
+        // `onClick`. Este diálogo é sobre número de WhatsApp e diz isso na
+        // chamada.
+        onChooseNotificame={notificameFlag.enabled ? () => connectNotificame("whatsapp") : undefined}
         // Motivo preenchido ⇒ card visível, desabilitado e explicando por quê.
         // Três esperas distintas, três frases distintas: sonda em voo; subconta
         // sendo criada no fornecedor (o popup JÁ abriu — é o clique que
