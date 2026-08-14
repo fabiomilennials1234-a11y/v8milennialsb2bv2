@@ -20,7 +20,11 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 // Componentes de configuração existentes (reaproveitados integralmente)
-import { FacebookSettings, InstagramSettings } from "./MetaSettings";
+// `InstagramSettings` (Graph) SAIU do catálogo — decisão do CTO em 14/08/2026.
+// O Instagram passa a ter UM caminho só: `InstagramChannelSettings`, pelo
+// NotificaMe. O componente continua exportado por MetaSettings porque compartilha
+// corpo com o Facebook, que fica; só a porta de entrada dele deixa de existir.
+import { FacebookSettings } from "./MetaSettings";
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import { TinyErpSettings } from "./TinyErpSettings";
 import { OmieSettings } from "./OmieSettings";
@@ -247,16 +251,14 @@ const INTEGRATIONS: IntegrationDef[] = [
     features: ["Lead Ads automático", "Messenger", "Múltiplas páginas", "Formulários"],
     settingsId: "facebook",
   },
-  {
-    id: "instagram",
-    name: "Instagram",
-    description: "Receba mensagens do Instagram Direct e conecte seu perfil comercial.",
-    longDescription: "Conecte sua conta do Instagram para receber e responder mensagens do Instagram Direct diretamente pelo Torque, mantendo o atendimento centralizado.",
-    category: "marketing",
-    logo: <InstagramLogo />,
-    features: ["Instagram Direct", "Perfil comercial", "Mensagens centralizadas"],
-    settingsId: "instagram",
-  },
+  // O card "Instagram" do caminho Graph foi REMOVIDO em 14/08/2026 (decisão do
+  // CTO). Ele levava ao OAuth do nosso próprio app Meta, que não tem App Review:
+  // a Meta respondia "esse app não está disponível" e o fluxo morria ali. Instagram
+  // agora tem uma porta só, `instagram_oficial`, pelo NotificaMe.
+  //
+  // `meta_connections` e `meta_pages` NÃO foram tocadas: os mesmos registros
+  // alimentam Lead Ads e o card de Facebook, que continuam de pé. O que saiu é a
+  // porta de entrada, não o dado.
   {
     id: "google_calendar",
     name: "Google Calendar",
@@ -303,7 +305,8 @@ const INTEGRATIONS: IntegrationDef[] = [
 
 function useIntegrationStatuses() {
   const { isConnected: fbConnected } = useMetaConnectionStatusByType("facebook");
-  const { isConnected: igConnected } = useMetaConnectionStatusByType("instagram");
+  // Sem consulta de status de Instagram pelo Graph: o card que a consumia saiu.
+  // O status do Instagram agora vem de `messaging_channels` (connectedInstagram).
   const { data: calendarStatus } = useGoogleCalendarStatus();
   const { data: tinyStatus } = useTinyErpStatus();
   const { data: omieStatus } = useOmieStatus();
@@ -382,10 +385,6 @@ function useIntegrationStatuses() {
     facebook: {
       connected: !!fbConnected,
       detail: fbConnected ? "Páginas conectadas" : undefined,
-    },
-    instagram: {
-      connected: !!igConnected,
-      detail: igConnected ? "Perfil conectado" : undefined,
     },
     instagram_oficial: {
       connected: connectedInstagram.length > 0,
@@ -571,11 +570,8 @@ function getSettingsComponent(settingsId: string): React.FC | null {
       return TorqueCallsSettings;
     case "facebook":
       return FacebookSettings;
-    case "instagram":
-      return InstagramSettings;
-    // Canal novo, componente próprio. `InstagramSettings` (Graph) NÃO sai nesta
-    // fatia: ela é o único caminho de Instagram que já recebe mensagem, e tirá-la
-    // antes de a nova entregar inbox seria regressão, não simplificação.
+    // `case "instagram"` (Graph) foi removido junto com o card. Não existe mais
+    // porta para ele: Instagram tem um caminho só, e é este.
     case "instagram_oficial":
       return InstagramChannelSettings;
     case "google_calendar":
