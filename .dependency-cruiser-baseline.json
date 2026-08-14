@@ -2293,6 +2293,7 @@
         "src/modules/pipelines/components/shared/ManagePipelineStagesModal.tsx",
         "src/modules/communication/components/chat/list/ConversationListItem.tsx",
         "src/modules/communication/components/chat/actions/DeleteMessageConfirm.tsx",
+        "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
         "src/modules/workflows/pages/AutomacoesExecucoes.tsx",
         "src/modules/analytics/pages/Performance.tsx",
         "src/modules/campaigns/components/BlastPlanCard.tsx",
@@ -2459,6 +2460,9 @@
         "src/modules/communication/components/chat/actions/EditMessageInline.tsx",
         "src/modules/communication/components/chat/actions/EmojiPickerPopover.tsx",
         "src/modules/communication/components/chat/actions/MessageBubbleActions.tsx",
+        "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
         "src/modules/communication/components/chat/view/ChatHeader.tsx",
         "src/modules/communication/components/chat/HumanPauseBadge.tsx",
         "src/modules/communication/components/chat/history-sync/SyncChatButton.tsx",
@@ -2826,6 +2830,8 @@
         "src/modules/communication/components/chat/ScrollToBottomFab.tsx",
         "src/modules/communication/components/chat/view/CallMarker.tsx",
         "src/modules/communication/components/chat/view/CallRecordingStrip.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
         "src/modules/communication/components/chat/view/ChatHeader.tsx",
         "src/modules/communication/components/chat/RealtimeStatusBadge.tsx",
         "src/modules/communication/components/chat/takeover/TakeoverControls.tsx",
@@ -3415,6 +3421,7 @@
         "src/modules/leads/components/lead-detail/modal/body/LeadInfoColumn.tsx",
         "src/modules/leads/components/lead/create/LeadCreateForm.tsx",
         "src/modules/pipelines/components/kanban/KanbanFilterPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
         "src/modules/carteira/components/upsell/TinyErpUpsellConfirmDialog.tsx",
         "src/modules/copilot/components/playground/PlaygroundFunis.tsx",
         "src/modules/identity/master/components/MasterSidebar.tsx",
@@ -3842,6 +3849,9 @@
         "src/modules/communication/hooks/useMessageActions.ts",
         "src/modules/communication/hooks/chat/useInboxFunnelOptions.ts",
         "src/modules/communication/hooks/chat/useSocialMessages.ts",
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+        "src/modules/communication/hooks/chat/useSocialLeadLink.ts",
         "src/modules/communication/hooks/chat/useTakeover.ts",
         "src/modules/communication/hooks/useIncomingVoiceCalls.ts",
         "src/modules/communication/hooks/useVoipSession.ts",
@@ -4559,6 +4569,7 @@
         "src/modules/communication/lib/callRecording.ts",
         "src/modules/communication/lib/conversationCallsQuery.ts",
         "src/modules/communication/hooks/chat/useSocialMessages.ts",
+        "src/modules/communication/hooks/chat/useSocialLeadLink.ts",
         "src/modules/communication/hooks/chat/useTakeover.ts",
         "src/modules/communication/hooks/useIncomingVoiceCalls.ts",
         "src/modules/communication/hooks/useVoipSession.ts",
@@ -8539,6 +8550,8 @@
         "src/shared/components/DispatchQueueSheet.tsx",
         "src/modules/pipelines/components/shared/PipeSettingsDialog.tsx",
         "src/modules/communication/components/chat/LeadContactModal.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
         "src/modules/communication/components/chat-meta/LinkLeadDialog.tsx",
         "src/modules/communication/components/voice/VoicePairingDialog.tsx",
         "src/modules/communication/components/whatsapp-migration/RepairingWizard.tsx",
@@ -8647,6 +8660,7 @@
         "src/modules/communication/components/chat/list/ConversationList.tsx",
         "src/modules/communication/components/chat/list/InboxFilterBar.tsx",
         "src/modules/communication/components/chat/view/MessageList.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
         "src/modules/analytics/components/dashboard/OraculoChat.tsx",
         "src/modules/carteira/components/upsell/ImportUpsellClientsContent.tsx",
         "src/modules/identity/master/pages/CopilotReasoning.tsx",
@@ -9042,6 +9056,8 @@
         "src/modules/pipelines/components/shared/PipeDispatchRulesSection.tsx",
         "src/modules/pipelines/components/kanban/MergedMeetingEditor.tsx",
         "src/modules/communication/components/chat/list/ConversationList.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
         "src/modules/communication/components/chat-meta/LinkLeadDialog.tsx",
         "src/modules/workflows/components/action-configs/MenuNodeConfig.tsx",
         "src/modules/workflows/components/action-configs/PixButtonNodeConfig.tsx",
@@ -11623,6 +11639,7 @@
         "src/modules/pipelines/components/kanban/DraggableKanbanBoard.tsx",
         "src/modules/pipelines/components/legacy/confirmacao/ConfirmacaoCard.tsx",
         "src/modules/communication/components/chat/list/ConversationListItem.tsx",
+        "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
         "src/modules/communication/components/chat/view/ChatHeader.tsx",
         "src/modules/communication/components/chat/takeover/TakeoverControls.tsx",
         "src/modules/communication/components/voice/VoiceCallButton.tsx",
@@ -13573,6 +13590,7 @@
         "src/modules/pipelines/components/shared/PipeDispatchRulesSection.tsx",
         "src/modules/pipelines/components/shared/PipeDistributionSection.tsx",
         "src/modules/pipelines/components/kanban/MergedMeetingEditor.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
         "src/modules/workflows/components/action-configs/MenuNodeConfig.tsx",
         "src/modules/workflows/components/action-configs/PixButtonNodeConfig.tsx",
         "src/modules/workflows/components/sidebar-panels/AssignResponsiblePanel.tsx",
@@ -15508,6 +15526,7 @@
         "src/modules/pipelines/components/shared/PipeDistributionSection.tsx",
         "src/modules/communication/components/chat/list/ConversationList.tsx",
         "src/modules/communication/components/chat/list/MobileChatListHeader.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
         "src/modules/communication/components/chat-meta/MetaChatHeader.tsx",
         "src/modules/workflows/components/action-configs/MenuNodeConfig.tsx",
         "src/modules/workflows/components/action-configs/PixButtonNodeConfig.tsx",
@@ -22236,6 +22255,174 @@
         },
         {
           "dynamic": false,
+          "module": "@/modules/communication/components/chat/social/SocialContextPanel",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": true,
+          "cycle": [
+            {
+              "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/components/custom/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/whatsapp.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/chatPrefetch.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            }
+          ],
+          "valid": false,
+          "rules": [
+            {
+              "severity": "warn",
+              "name": "no-circular-dynamic"
+            }
+          ]
+        },
+        {
+          "dynamic": false,
           "module": "@/modules/communication/components/chat/view/ChatHeader",
           "moduleSystem": "es6",
           "exoticallyRequired": false,
@@ -24431,6 +24618,8 @@
         "src/modules/communication/hooks/chat/useWhatsAppRealtime.ts",
         "src/modules/communication/components/chat/list/MobileConversationRow.tsx",
         "src/modules/communication/components/chat/social/SocialChatView.tsx",
+        "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
         "src/modules/communication/hooks/chat/useInboxBoxes.ts",
         "src/modules/communication/hooks/chat/useResolveChatDeepLink.ts",
         "src/modules/communication/hooks/chat/useSocialContacts.ts",
@@ -24595,6 +24784,7 @@
         "src/modules/communication/hooks/chat/useWhatsAppMessages.ts",
         "src/modules/communication/hooks/chat/useWhatsAppRealtime.ts",
         "src/modules/communication/hooks/chat/useSocialMessages.ts",
+        "src/modules/communication/hooks/chat/useSocialLeadLink.ts",
         "src/modules/communication/hooks/chat/useConversationCalls.ts",
         "src/modules/communication/hooks/chat/useSocialContacts.ts",
         "src/modules/communication/hooks/chat/useSocialRealtime.ts",
@@ -27213,10 +27403,141 @@
           "matchesDoNotFollow": false,
           "circular": false,
           "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/leads",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/leads/index.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": true,
+          "cycle": [
+            {
+              "name": "src/modules/leads/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/whatsapp.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/chatPrefetch.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            }
+          ],
+          "valid": false,
+          "rules": [
+            {
+              "severity": "warn",
+              "name": "no-circular-dynamic"
+            }
+          ]
         }
       ],
       "dependents": [
-        "src/modules/communication/components/chat/ChatShellWithContext.tsx"
+        "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+        "src/modules/communication/components/chat/social/SocialContextPanel.tsx"
       ],
       "orphan": false,
       "valid": true
@@ -27674,13 +27995,6 @@
               ]
             },
             {
-              "name": "src/modules/communication/components/chat/context-panel/ContextPanelTabHistory.tsx",
-              "dependencyTypes": [
-                "local",
-                "import"
-              ]
-            },
-            {
               "name": "src/modules/leads/index.ts",
               "dependencyTypes": [
                 "aliased",
@@ -28097,13 +28411,6 @@
               ]
             },
             {
-              "name": "src/modules/communication/components/chat/context-panel/ContextPanelTabHistory.tsx",
-              "dependencyTypes": [
-                "local",
-                "import"
-              ]
-            },
-            {
               "name": "src/modules/leads/index.ts",
               "dependencyTypes": [
                 "aliased",
@@ -28197,13 +28504,6 @@
               ]
             },
             {
-              "name": "src/modules/communication/components/chat/context-panel/ContextPanelTabHistory.tsx",
-              "dependencyTypes": [
-                "local",
-                "import"
-              ]
-            },
-            {
               "name": "src/modules/leads/index.ts",
               "dependencyTypes": [
                 "aliased",
@@ -28291,13 +28591,6 @@
                 "aliased",
                 "aliased-tsconfig",
                 "aliased-tsconfig-paths",
-                "local",
-                "import"
-              ]
-            },
-            {
-              "name": "src/modules/communication/components/chat/context-panel/ContextPanelTabHistory.tsx",
-              "dependencyTypes": [
                 "local",
                 "import"
               ]
@@ -29055,6 +29348,7 @@
         }
       ],
       "dependents": [
+        "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
         "src/modules/communication/components/chat/context-panel/ContextPanelTabHistory.tsx",
         "src/lib/lead/pipeline-adapters.ts",
         "src/modules/communication/components/chat/context-panel/ContextPanelTabInfo.tsx",
@@ -29080,6 +29374,7 @@
         "src/modules/pipelines/components/kanban/MergedMeetingEditor.tsx",
         "src/modules/communication/components/chat/context-panel/contextPanelInfoHelpers.ts",
         "src/modules/communication/components/chat/LeadDetailContent.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
         "src/modules/communication/components/chat-meta/LinkLeadDialog.tsx",
         "src/modules/workflows/components/VariableInserter.tsx",
         "src/modules/workflows/components/sidebar-panels/ConditionPanel.tsx",
@@ -34868,6 +35163,7 @@
         "src/modules/leads/components/leads/LeadScoreBadge.tsx",
         "src/modules/pipelines/components/shared/AutoCreateLeadToggle.tsx",
         "src/modules/communication/components/chat/actions/MessageBubbleActions.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
         "src/modules/communication/components/chat/view/ChatHeader.tsx",
         "src/modules/communication/components/chat/history-sync/SyncChatButton.tsx",
         "src/modules/communication/components/chat/RealtimeStatusBadge.tsx",
@@ -45751,6 +46047,8 @@
         "src/modules/leads/components/lead/LeadDetailContent.tsx",
         "src/modules/leads/hooks/lead/useLeadCreateHandler.ts",
         "src/modules/leads/components/lead/create/LeadCreateForm.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+        "src/modules/communication/hooks/chat/useSocialLeadLink.ts",
         "src/modules/communication/components/chat/bubble/ChatBubbleThread.tsx",
         "src/modules/communication/components/chat/context-panel/ContextPanelHistory.tsx",
         "src/modules/communication/components/chat/context-panel/ContextPanelInfo.tsx",
@@ -52187,6 +52485,7 @@
         "src/modules/communication/components/chat/context-panel/ContextPanelFunnels.tsx",
         "src/modules/carteira/hooks/useAutoMoveUpsellClients.ts",
         "src/modules/communication/hooks/chat/useInboxFunnelOptions.ts",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
         "src/modules/workflows/components/sidebar-panels/TriggerPanel.tsx",
         "src/modules/analytics/hooks/useTVDashboardData.ts",
         "src/modules/analytics/hooks/useTVKPIs.ts",
@@ -53521,6 +53820,7 @@
       "dependents": [
         "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
         "src/modules/pipelines/components/disparo/useBlastPreview.ts",
+        "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
         "src/modules/billing/hooks/useBillingQuote.ts"
       ],
       "orphan": false,
@@ -74284,6 +74584,9 @@
         "src/modules/communication/components/chat/list/MobileChatListHeader.tsx",
         "src/modules/communication/components/chat/list/MobileConversationRow.tsx",
         "src/modules/communication/components/chat/social/SocialChatView.tsx",
+        "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
         "src/modules/communication/components/chat/view/ChatHeader.tsx",
         "src/modules/communication/components/chat-meta/MetaConversationListItem.tsx"
       ],
@@ -74548,6 +74851,7 @@
       "dependents": [
         "src/modules/communication/components/chat/list/ConversationListItem.tsx",
         "src/modules/communication/components/chat/social/SocialChatView.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
         "src/modules/communication/components/chat/view/ChatHeader.tsx"
       ],
       "orphan": false,
@@ -78335,6 +78639,1648 @@
       "dependents": [
         "src/modules/communication/index.ts",
         "src/modules/communication/components/chat/social/SocialChatView.tsx"
+      ],
+      "orphan": false,
+      "valid": true
+    },
+    {
+      "source": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+      "dependencies": [
+        {
+          "dynamic": false,
+          "module": "./SocialLeadLinkPanel",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": true,
+          "cycle": [
+            {
+              "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/components/custom/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/whatsapp.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/chatPrefetch.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            }
+          ],
+          "valid": false,
+          "rules": [
+            {
+              "severity": "warn",
+              "name": "no-circular-dynamic"
+            }
+          ]
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/alert-dialog",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/alert-dialog.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/button",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/button.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/dropdown-menu",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/dropdown-menu.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/components/chat/ChannelBadge",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/ChannelBadge.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/components/chat/context-panel/ContextPanel",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": true,
+          "cycle": [
+            {
+              "name": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/context-panel/ContextPanelTabHistory.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/whatsapp.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/chatPrefetch.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            }
+          ],
+          "valid": false,
+          "rules": [
+            {
+              "severity": "warn",
+              "name": "no-circular-dynamic"
+            }
+          ]
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/hooks/chat/types",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/hooks/chat/types.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/hooks/chat/useSocialLeadLink",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/hooks/chat/useSocialLeadLink.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        }
+      ],
+      "dependents": [
+        "src/modules/communication/components/chat/ChatShellWithContext.tsx"
+      ],
+      "orphan": false,
+      "valid": true
+    },
+    {
+      "source": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+      "dependencies": [
+        {
+          "dynamic": false,
+          "module": "./SocialCreateLeadDialog",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": true,
+          "cycle": [
+            {
+              "name": "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/components/custom/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/whatsapp.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/chatPrefetch.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            }
+          ],
+          "valid": false,
+          "rules": [
+            {
+              "severity": "warn",
+              "name": "no-circular-dynamic"
+            }
+          ]
+        },
+        {
+          "dynamic": false,
+          "module": "./SocialLeadPicker",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": true,
+          "cycle": [
+            {
+              "name": "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/whatsapp.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/chatPrefetch.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            }
+          ],
+          "valid": false,
+          "rules": [
+            {
+              "severity": "warn",
+              "name": "no-circular-dynamic"
+            }
+          ]
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/button",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/button.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/tooltip",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/tooltip.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/lib/utils",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/lib/utils.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/components/chat/ChannelBadge",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/ChannelBadge.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/components/chat/list/avatarGradient",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/list/avatarGradient.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/hooks/chat/types",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/hooks/chat/types.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/hooks/chat/useSocialLeadLink",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/hooks/chat/useSocialLeadLink.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/identity",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/identity/index.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        }
+      ],
+      "dependents": [
+        "src/modules/communication/components/chat/social/SocialContextPanel.tsx"
+      ],
+      "orphan": false,
+      "valid": true
+    },
+    {
+      "source": "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+      "dependencies": [
+        {
+          "dynamic": false,
+          "module": "@/components/ui/button",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/button.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/dialog",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/dialog.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/input",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/input.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/label",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/label.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/select",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/select.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/separator",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/separator.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/components/chat/ChannelBadge",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/components/chat/ChannelBadge.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/hooks/chat/useSocialLeadLink",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "type-only",
+            "import"
+          ],
+          "resolved": "src/modules/communication/hooks/chat/useSocialLeadLink.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/hooks/useWhatsAppLeadIntegration",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "type-only",
+            "import"
+          ],
+          "resolved": "src/modules/communication/hooks/useWhatsAppLeadIntegration.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/identity",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/identity/index.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/pipelines",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/pipelines/index.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": true,
+          "cycle": [
+            {
+              "name": "src/modules/pipelines/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/components/custom/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/whatsapp.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/chatPrefetch.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            }
+          ],
+          "valid": false,
+          "rules": [
+            {
+              "severity": "warn",
+              "name": "no-circular-dynamic"
+            }
+          ]
+        }
+      ],
+      "dependents": [
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx"
+      ],
+      "orphan": false,
+      "valid": true
+    },
+    {
+      "source": "src/modules/communication/hooks/chat/useSocialLeadLink.ts",
+      "dependencies": [
+        {
+          "dynamic": false,
+          "module": "./shared/queryKeys",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/communication/hooks/chat/shared/queryKeys.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/integrations/supabase/client",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/integrations/supabase/client.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/communication/hooks/useWhatsAppLeadIntegration",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "type-only",
+            "import"
+          ],
+          "resolved": "src/modules/communication/hooks/useWhatsAppLeadIntegration.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/identity",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/identity/index.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        }
+      ],
+      "dependents": [
+        "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+        "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx"
+      ],
+      "orphan": false,
+      "valid": true
+    },
+    {
+      "source": "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
+      "dependencies": [
+        {
+          "dynamic": false,
+          "module": "@/components/ui/dialog",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/dialog.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/input",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/input.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/components/ui/scroll-area",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/components/ui/scroll-area.tsx",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/lib/utils",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/lib/utils.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        },
+        {
+          "dynamic": false,
+          "module": "@/modules/leads",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/modules/leads/index.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": true,
+          "cycle": [
+            {
+              "name": "src/modules/leads/index.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/index.ts",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+              "dependencyTypes": [
+                "local",
+                "export"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+              "dependencyTypes": [
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/whatsapp.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/lib/chatPrefetch.ts",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "dynamic-import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+              "dependencyTypes": [
+                "aliased",
+                "aliased-tsconfig",
+                "aliased-tsconfig-paths",
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            },
+            {
+              "name": "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
+              "dependencyTypes": [
+                "local",
+                "import"
+              ]
+            }
+          ],
+          "valid": false,
+          "rules": [
+            {
+              "severity": "warn",
+              "name": "no-circular-dynamic"
+            }
+          ]
+        },
+        {
+          "dynamic": false,
+          "module": "@/shared/hooks/useDebounce",
+          "moduleSystem": "es6",
+          "exoticallyRequired": false,
+          "dependencyTypes": [
+            "aliased",
+            "aliased-tsconfig",
+            "aliased-tsconfig-paths",
+            "local",
+            "import"
+          ],
+          "resolved": "src/shared/hooks/useDebounce.ts",
+          "coreModule": false,
+          "followable": true,
+          "couldNotResolve": false,
+          "matchesDoNotFollow": false,
+          "circular": false,
+          "valid": true
+        }
+      ],
+      "dependents": [
+        "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx"
       ],
       "orphan": false,
       "valid": true
@@ -164361,6 +166307,165 @@
       {
         "type": "cycle",
         "from": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+        "to": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+        "unresolvedTo": "@/modules/communication/components/chat/social/SocialContextPanel",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/social/SocialCreateLeadDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/custom/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/whatsapp.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/chatPrefetch.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
         "to": "src/modules/communication/components/chat/view/MessageList.tsx",
         "unresolvedTo": "@/modules/communication/components/chat/view/MessageList",
         "dependencyTypes": [
@@ -164864,6 +166969,127 @@
               "aliased-tsconfig-paths",
               "local",
               "type-only",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/whatsapp.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/chatPrefetch.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+        "to": "src/modules/leads/index.ts",
+        "unresolvedTo": "@/modules/leads",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
               "import"
             ]
           },
@@ -166386,6 +168612,276 @@
       },
       {
         "type": "cycle",
+        "from": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+        "to": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+        "unresolvedTo": "@/modules/communication/components/chat/context-panel/ContextPanel",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanelTabHistory.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/whatsapp.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/chatPrefetch.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+        "to": "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
+        "unresolvedTo": "./SocialLeadPicker",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/communication/components/chat/social/SocialLeadPicker.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV1.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/LeadDetailSheet.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/LeadDetailFunnelContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/leads/funnel-contexts/WhatsAppContext.tsx",
+            "dependencyTypes": [
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/whatsapp.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/chatPrefetch.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/social/SocialContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/social/SocialLeadLinkPanel.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
         "from": "src/modules/communication/components/chat/view/MessageList.tsx",
         "to": "src/modules/communication/hooks/useWhatsAppChat.ts",
         "unresolvedTo": "@/modules/communication/hooks/useWhatsAppChat",
@@ -167742,6 +170238,172 @@
             "dependencyTypes": [
               "local",
               "export"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/leads/index.ts",
+        "to": "src/modules/leads/components/leads/LeadCard.tsx",
+        "unresolvedTo": "./components/leads/LeadCard",
+        "dependencyTypes": [
+          "local",
+          "export"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/leads/components/leads/LeadCard.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/whatsapp.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/chatPrefetch.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/leads/index.ts",
+        "to": "src/modules/leads/components/leads/LeadModal.tsx",
+        "unresolvedTo": "./components/leads/LeadModal",
+        "dependencyTypes": [
+          "local",
+          "export"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/leads/components/leads/LeadModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/whatsapp.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/lib/chatPrefetch.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/pages/ChatWhatsApp.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/ChatShellWithContext.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/communication/components/chat/context-panel/ContextPanel.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
             ]
           }
         ]
@@ -171592,11 +174254,11 @@
       }
     ],
     "error": 4,
-    "warn": 84,
+    "warn": 90,
     "info": 0,
     "ignore": 0,
-    "totalCruised": 1609,
-    "totalDependenciesCruised": 6456,
+    "totalCruised": 1614,
+    "totalDependenciesCruised": 6497,
     "optionsUsed": {
       "baseDir": "/Users/gabrielaureliogipp/Dev/v8milennials-notificame",
       "combinedDependencies": false,

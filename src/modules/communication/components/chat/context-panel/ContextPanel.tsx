@@ -9,13 +9,14 @@
  *
  * Header persistente acima das abas: avatar, nome, empresa, score.
  */
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Building2, Flame, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
+import { useLeadById } from "@/modules/leads";
 import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
 import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
 import { ContextPanelTabAI } from "./ContextPanelTabAI";
@@ -26,15 +27,23 @@ export interface ContextPanelProps {
   pushName?: string | null;
   onClose?: () => void;
   /**
-   * O que dizer quando não há telefone para resolver o lead.
+   * O que dizer quando não há NEM telefone NEM lead para abrir o painel.
    *
    * O default ("selecione uma conversa") pressupõe que a ausência de telefone
-   * significa ausência de conversa aberta. Com um segundo canal no inbox isso
-   * deixou de ser verdade: uma conversa de Instagram está aberta, tem mensagens
-   * na tela, e simplesmente não tem telefone — nem lead, nesta fatia. Repetir o
-   * texto antigo ali seria contradizer a coluna do meio.
+   * significa ausência de conversa aberta — o que deixou de ser verdade com um
+   * segundo canal no inbox. Hoje uma conversa de Instagram sem lead nem chega
+   * aqui: quem ocupa a coluna nesse caso é o `SocialLeadLinkPanel`, que oferece
+   * a ação em vez de descrever a ausência.
    */
   placeholder?: string;
+  /**
+   * Linha de identidade do canal, logo abaixo do header.
+   *
+   * Existe porque um lead vindo do Instagram precisa dizer, na própria ficha, de
+   * qual conta ele veio e como desfazer o vínculo. No WhatsApp fica `undefined`
+   * e o painel é byte a byte o de sempre.
+   */
+  identitySlot?: ReactNode;
 }
 
 export type ContextPanelTab = "info" | "history" | "ai";
@@ -66,12 +75,24 @@ export function ContextPanel({
   phoneNumber,
   pushName,
   placeholder,
+  identitySlot,
 }: ContextPanelProps) {
   const [activeTab, setActiveTab] = useState<ContextPanelTab>("info");
-  const { data: lead, isLoading: leadLoading } = useLeadByPhone(phoneNumber ?? null);
+  const { data: leadByPhone, isLoading: loadingByPhone } = useLeadByPhone(
+    phoneNumber ?? null,
+  );
+  // Duas resoluções, jamais simultâneas: com telefone o caminho é o de sempre
+  // (WhatsApp), e o hook por id fica DESABILITADO — nenhuma query a mais no
+  // caminho quente de 30 orgs. Sem telefone, o id é a única identidade que
+  // existe: é o caso de uma conversa de Instagram já vinculada a um lead.
+  const { data: leadById, isLoading: loadingById } = useLeadById(
+    phoneNumber ? null : leadId ?? null,
+  );
+  const lead = leadByPhone ?? leadById ?? null;
+  const leadLoading = loadingByPhone || loadingById;
   const activeLeadId = lead?.id ?? leadId ?? null;
 
-  if (!phoneNumber) {
+  if (!phoneNumber && !leadId) {
     return (
       <div className="flex flex-col h-full bg-background border-l border-border/60">
         <div className="flex flex-col items-center justify-center h-full gap-3 p-6 text-center">
@@ -96,7 +117,9 @@ export function ContextPanel({
     );
   }
 
-  const displayName = lead?.name || pushName || phoneNumber;
+  // `phoneNumber` deixou de ser o último recurso garantido — uma conversa de
+  // Instagram não tem nenhum. "Contato" é o fim da fila.
+  const displayName = lead?.name || pushName || phoneNumber || "Contato";
   const initials = displayName.slice(0, 2).toUpperCase();
   const score =
     typeof lead?.qualification_score === "number" ? lead.qualification_score : 0;
@@ -140,6 +163,8 @@ export function ContextPanel({
           )}
         </div>
       </div>
+
+      {identitySlot}
 
       {/* Tabs */}
       <Tabs

@@ -338,12 +338,24 @@ export function ConversationListItem({
                   onRemoveTag={onRemoveTag}
                 />
               )}
-              {/* "Sem lead ainda" só é informação onde o vínculo é possível.
-                  Conversa de Instagram tem `lead_id` NULL por decisão desta
-                  fatia — o ponto ficaria aceso em TODAS as linhas, para sempre,
-                  dizendo o que não dá para agir. */}
-              {isWhatsApp && !contact.lead_id && (
+              {/* "Sem lead ainda" é informação onde o vínculo é possível — e
+                  desde que a conversa de Instagram pode virar lead pelo painel,
+                  isso passou a valer para os dois canais. O ponto some assim que
+                  alguém vincula, nos dois. */}
+              {!contact.lead_id && (
                 <span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" title="Novo" />
+              )}
+              {/* No WhatsApp o nome do lead JÁ é o título da linha
+                  (`contactDisplayName`). No Instagram o título é o @handle —
+                  que é o que a pessoa vê no app — então o lead vinculado só
+                  aparece se ganhar espaço próprio. */}
+              {!isWhatsApp && contact.lead_name && (
+                <span
+                  className="text-[10px] leading-none px-1.5 py-0.5 rounded shrink-0 max-w-[104px] truncate bg-muted text-muted-foreground/90 whitespace-nowrap"
+                  title={`Lead: ${contact.lead_name}`}
+                >
+                  {contact.lead_name}
+                </span>
               )}
               {contact.tags.slice(0, 2).map((tag) => (
                 <span

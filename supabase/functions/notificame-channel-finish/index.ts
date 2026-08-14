@@ -1317,7 +1317,10 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
 
       const registration = await registerInboundSubscription(
         orgCfg,
-        { webhookUrl, channelKind: "instagram" },
+        // O id do canal NO FORNECEDOR é o que a doc corrente pede em
+        // `criteria.channel` — a palavra "instagram" fica só como degrau de
+        // fallback dentro da própria função.
+        { webhookUrl, channelKind: "instagram", channelId: pick.channel.id },
         fetch,
       );
       subscriptionPending = !registration.ok;
