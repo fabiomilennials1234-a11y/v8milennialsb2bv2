@@ -65,7 +65,7 @@ import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSe
 import { useTeamMembers, useResponsibleMembers } from "@/modules/identity";
 import { CreateProposalModal } from "@/modules/carteira/components/proposal/CreateProposalModal";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
-import { LeadCard, type LeadCardData } from "@/modules/leads";
+import { LeadCard, useBatchedLeadMetrics, type LeadCardData } from "@/modules/leads";
 import {
   DealPanelProvider,
   useDealSheet,
@@ -449,7 +449,40 @@ function PipePropostasInner() {
   }, []);
 
   // Transform pipe data to LeadCardData format
-  const transformToCard = (item: any): LeadCardData => {
+  /**
+   * Desfecho da etapa em que o card está, pelo PAPEL declarado
+   * (`is_final_positive`/`is_final_negative`) — nunca por `stage_key`.
+   * Filtrar por 'vendido'/'perdido' cegaria os funis customizados, que é o
+   * mesmo anti-padrão que o lint de métricas reprova em migration.
+   */
+  const desfechoDaEtapa = useMemo(() => {
+    const mapa = new Map<string, "won" | "lost">();
+    for (const st of pipelineStages) {
+      if (st.is_final_positive) mapa.set(st.stage_key, "won");
+      else if (st.is_final_negative) mapa.set(st.stage_key, "lost");
+    }
+    return mapa;
+  }, [pipelineStages]);
+
+  /**
+   * Contadores de comentário e checklist dos cards visíveis, em duas queries
+   * para o board inteiro (não uma por card).
+   *
+   * Sem isto o rodapé do card imprimiria `0` para todo mundo — número falso é
+   * pior que número ausente: ensina o vendedor a ignorar o indicador. O funil
+   * de WhatsApp já fazia isso; Propostas ficou sem por omissão.
+   */
+  const idsDosLeadsVisiveis = useMemo(() => {
+    if (!pipeData) return [] as string[];
+    return [...new Set(
+      pipeData
+        .map((it: any) => (it.lead_id ?? it.lead?.id) as string | undefined)
+        .filter((id): id is string => !!id),
+    )];
+  }, [pipeData]);
+  const { data: metricsMap = {} } = useBatchedLeadMetrics(idsDosLeadsVisiveis);
+
+  const transformToCard = useCallback((item: any): LeadCardData => {
     const lead = item.lead;
     const items = item.items || [];
     const hasItemsFromDb = items.length > 0;
@@ -481,6 +514,12 @@ function PipePropostasInner() {
       assignees: [...new Set([item.responsible?.name, item.closer?.name, item.pre_sale_responsible?.name, item.sale_responsible?.name, lead?.responsible?.name, lead?.closer?.name, lead?.pre_sale_responsible?.name, lead?.sale_responsible?.name].filter(Boolean))] as string[],
       value: totalValue,
       valueLabel: new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0 }).format(totalValue),
+      outcome: desfechoDaEtapa.get(item.status) ?? null,
+      // `loss_reason` só existe em `pipe_propostas`; nos outros funis fica nulo
+      // e o card simplesmente não mostra a linha. O `_id` é resolvido contra o
+      // catálogo em `columns`, não aqui: capturar `lossReasons` dentro desta
+      // função a tornaria reativa e obrigaria a memoizá-la inteira.
+      lossReason: item.loss_reason ?? null,
       contractDuration: item.contract_duration || 0,
       tags: lead?.lead_tags?.map((lt: any) => ({ name: lt.tag?.name, color: lt.tag?.color || "#888" })).filter((t: any) => t.name) || [],
       date: item.commitment_date ? new Date(item.commitment_date) : null,
@@ -494,6 +533,7 @@ function PipePropostasInner() {
       preQualTier: lead?.pre_qualification_tier ?? null,
       qualTier:    lead?.qualification_tier    ?? null,
       avatarUrl:   lead?.avatar_url ?? null,
+      metrics:     metricsMap[(item.lead_id ?? lead?.id) as string],
       preSaleResponsible: (item.pre_sale_responsible ?? lead?.pre_sale_responsible)
         ? { name: (item.pre_sale_responsible ?? lead?.pre_sale_responsible)?.name, avatar_url: (item.pre_sale_responsible ?? lead?.pre_sale_responsible)?.avatar_url }
         : null,
@@ -501,7 +541,7 @@ function PipePropostasInner() {
         ? { name: (item.sale_responsible ?? lead?.sale_responsible)?.name, avatar_url: (item.sale_responsible ?? lead?.sale_responsible)?.avatar_url }
         : null,
     };
-  };
+  }, [desfechoDaEtapa, metricsMap]);
 
   // Converte etapas do banco para o formato do Kanban (com fallback)
   const statusColumns = useMemo(() => {
@@ -528,7 +568,17 @@ function PipePropostasInner() {
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
     return statusColumns.map(col => {
       const sd = stageData[col.id];
-      const items = sd ? sd.items.map(transformToCard) : [];
+      // O motivo da perda pode vir como id: vira texto aqui, contra o catálogo
+      // da org. Cru, o card imprimiria um uuid.
+      const items = sd
+        ? sd.items.map((item: any) => {
+            const card = transformToCard(item);
+            if (!card.lossReason && item.loss_reason_id) {
+              card.lossReason = lossReasons.find((r) => r.value === item.loss_reason_id)?.label ?? null;
+            }
+            return card;
+          })
+        : [];
       return {
         ...col,
         items,
@@ -538,7 +588,7 @@ function PipePropostasInner() {
         onLoadMore: sd?.fetchMore,
       };
     });
-  }, [stageData, statusColumns]);
+  }, [stageData, statusColumns, lossReasons, transformToCard]);
 
   // Count ghost leads — rows visíveis no pipe cujo join com leads é null.
   // Indica divergência entre RLS do pipe e de leads (ver GhostLeadsBanner).

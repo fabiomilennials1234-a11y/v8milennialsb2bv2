@@ -1,7 +1,7 @@
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
-  Building2, Clock, MoreVertical, Trash2, MessageCircle, Target, Video, Check,
+  Building2, Clock, MoreVertical, Phone, Trash2, MessageCircle, Target, Video, Check,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
+import { VoiceCallButton, useVoiceCallContext } from "@/modules/communication";
 import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -88,6 +89,17 @@ export interface LeadCardData extends DraggableItem {
   faturamento?: string | number | null;
   value?: number | null;
   valueLabel?: string | null;
+  /**
+   * Desfecho do negócio, quando a etapa é terminal. Governado por
+   * `pipeline_stages.is_final_positive`/`is_final_negative` — nunca por
+   * `stage_key`, que cegaria os funis customizados.
+   *
+   * Card ganho/perdido não é card aberto: ele para de competir por atenção com
+   * o que ainda pode ser trabalhado.
+   */
+  outcome?: "won" | "lost" | null;
+  /** Só faz sentido com `outcome === "lost"`. */
+  lossReason?: string | null;
   // Date fields
   date?: Date | string | null;
   dateLabel?: string | null;
@@ -351,6 +363,36 @@ export const LeadCard = memo(function LeadCard({
     </>
   );
 
+  /**
+   * O botão de ligar do card, em dois caminhos.
+   *
+   * Com voz pareada na org, é a discagem de verdade (`VoiceCallButton`), que
+   * ainda esconde a si mesmo se o lead for de outro vendedor — o servidor
+   * recusaria com `not_lead_owner`, e botão que sempre falha ensina a
+   * desconfiar da tela.
+   *
+   * Sem voz pareada — o caso de quase toda a base hoje — cai em `tel:`, que
+   * entrega a ligação ao discador do aparelho. Não é a mesma feature (não
+   * grava, não registra, não passa pelo teto por número), mas é uma ligação de
+   * verdade, e o vendedor no celular vive disso. `voice.selected` é leitura de
+   * contexto: não custa consulta nenhuma nas orgs sem voz.
+   */
+  const voice = useVoiceCallContext();
+  const callSlot = voice.selected ? (
+    <VoiceCallButton leadId={lead.leadId} leadName={lead.name} iconOnly />
+  ) : hasPhone ? (
+    <a
+      href={`tel:${(lead.phone ?? "").replace(/[^\d+]/g, "")}`}
+      aria-label={`Ligar para ${lead.name}`}
+      title={`Ligar para ${lead.phone}`}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      className="grid size-[22px] shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+    >
+      <Phone className="size-[12px]" />
+    </a>
+  ) : null;
+
   const modais = (
     <>
       {scheduleOpen && (
@@ -388,6 +430,14 @@ export const LeadCard = memo(function LeadCard({
           onClick={onClick}
           menuItems={itensDoMenu}
           extraActions={extraActions}
+          // As duas ações do rodapé chegam prontas: quem sabe abrir conversa é
+          // o módulo `communication`, e o card não vai aprender isso.
+          onWhatsApp={hasPhone
+            ? (e) => openWhatsApp(lead.phone ?? undefined, e, lead.primaryInstanceId ?? undefined)
+            : undefined}
+          onWhatsAppHover={openWhatsApp.prefetchRoute}
+          onWhatsAppPress={() => openWhatsApp.prefetchData(lead.phone ?? undefined, lead.primaryInstanceId ?? undefined)}
+          callSlot={callSlot}
         />
         {modais}
       </>
@@ -403,6 +453,9 @@ export const LeadCard = memo(function LeadCard({
         className={cn(
           "kanban-card group cursor-pointer relative",
           lead.isInactive && "opacity-60",
+          // Negócio fechado para de competir por atenção: dessatura e recua.
+          // Continua legível e clicável — recolher não é esconder.
+          lead.outcome && "bg-muted/40 opacity-[0.78] hover:opacity-100 transition-opacity",
           selected && "ring-2 ring-primary/50",
           !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "confirmado" && "ring-1 ring-green-500/50",
           !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "pre_confirmado" && "ring-1 ring-amber-500/50",
@@ -499,7 +552,23 @@ export const LeadCard = memo(function LeadCard({
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              {lead.rating != null && lead.rating > 0 && (
+              {/* Selo de desfecho. Fica onde o olho já vai (topo direito) e
+                  dispensa o leitor de deduzir o estado pela coluna — card
+                  arrastado para fora da tela, exportado ou visto na Lista
+                  perde o contexto da coluna, o selo não. */}
+              {lead.outcome && (
+                <span
+                  className={cn(
+                    "rounded px-1.5 py-[1px] text-[9px] font-bold uppercase tracking-[0.06em]",
+                    lead.outcome === "won"
+                      ? "bg-success/15 text-success"
+                      : "bg-muted-foreground/15 text-muted-foreground",
+                  )}
+                >
+                  {lead.outcome === "won" ? "Ganho" : "Perdida"}
+                </span>
+              )}
+              {lead.rating != null && lead.rating > 0 && !lead.outcome && (
                 <LeadCardCalor calor={lead.rating} onChange={onCalorChange} />
               )}
               <DropdownMenu>
@@ -551,7 +620,7 @@ export const LeadCard = memo(function LeadCard({
               >
                 {origin.label}
               </Badge>
-              {urgency && (
+              {urgency && !lead.outcome && (
                 <Badge variant="outline" className={cn("text-[9px] px-1.5 py-0 h-[16px] font-medium", urgency.className)}>
                   {urgency.label}
                 </Badge>
@@ -566,7 +635,7 @@ export const LeadCard = memo(function LeadCard({
                   Inativo
                 </Badge>
               )}
-              {lead.stageEnteredAt && (() => {
+              {lead.stageEnteredAt && !lead.outcome && (() => {
                 const days = Math.floor((Date.now() - new Date(lead.stageEnteredAt).getTime()) / 86400000);
                 if (days < 3) return null;
                 const cls = days >= 14 ? "bg-red-500/10 text-red-500 border-red-500/30"
@@ -586,6 +655,42 @@ export const LeadCard = memo(function LeadCard({
             </div>
           )}
 
+          {/* ── VALOR ──────────────────────────────────────────────────
+              Num funil de vendas o dinheiro é o segundo dado mais importante,
+              depois do nome. Ele vivia dentro do bloco de contato, com rótulo
+              cinza do mesmo tamanho de "Telefone" — diagramado como se fosse
+              o e-mail. Aqui ganha linha própria: rótulo miúdo em cima, número
+              grande embaixo, que é como o olho encontra valor numa coluna de
+              vinte cards. */}
+          {config.showValue && (lead.value != null || lead.faturamento) && (
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground/70">
+                {lead.value != null ? "Valor da oportunidade" : "Faturamento"}
+              </span>
+              <span
+                className={cn(
+                  "text-[15px] font-bold tabular-nums tracking-[-0.02em]",
+                  lead.outcome === "won" ? "text-success" : "text-foreground",
+                )}
+              >
+                {lead.value != null ? formatCurrency(lead.value) : formatFaturamento(lead.faturamento)}
+              </span>
+            </div>
+          )}
+
+          {/* Motivo da perda: a única informação que um card perdido ainda
+              precisa dar. Sem ela, "perdido" não ensina nada a quem revisa. */}
+          {lead.outcome === "lost" && lead.lossReason && (
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-[0.06em] text-muted-foreground/70">
+                Motivo da perda
+              </span>
+              <span className="truncate text-[12px] font-medium text-muted-foreground">
+                {lead.lossReason}
+              </span>
+            </div>
+          )}
+
           {/* ── Contact data with left accent ── */}
           {hasContactData && (
             <div className="border-l-2 border-primary/50 pl-3 py-0.5 space-y-0.5">
@@ -599,16 +704,6 @@ export const LeadCard = memo(function LeadCard({
                 <div className="flex items-center justify-between gap-2 text-xs">
                   <span className="text-muted-foreground">Email</span>
                   <span className="font-medium truncate max-w-[160px]">{lead.email}</span>
-                </div>
-              )}
-              {config.showValue && (lead.faturamento || lead.value != null) && (
-                <div className="flex items-center justify-between gap-2 text-xs">
-                  <span className="text-muted-foreground">{lead.value != null ? "Valor" : "Faturamento"}</span>
-                  <span className="font-semibold text-emerald-500 text-right">
-                    {lead.value != null
-                      ? formatCurrency(lead.value)
-                      : formatFaturamento(lead.faturamento)}
-                  </span>
                 </div>
               )}
               {config.showDate && parsedDate && (
@@ -673,7 +768,7 @@ export const LeadCard = memo(function LeadCard({
           )}
 
           {/* ── Quick Actions Row ── */}
-          {(hasPhone || !!onQuickAction) && (
+          {(hasPhone || !!onQuickAction) && !lead.outcome && (
             <div className="flex items-center gap-1.5">
               {hasPhone && (
                 <button

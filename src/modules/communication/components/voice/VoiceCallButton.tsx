@@ -41,9 +41,18 @@ interface VoiceCallButtonProps {
   leadId?: string | null;
   leadName?: string | null;
   className?: string;
+  /**
+   * Só o ícone, sem a palavra "Ligar" e sem a metade de trocar número.
+   *
+   * É o formato do card no funil, onde o botão divide um rodapé de 22px com o
+   * WhatsApp: a palavra não caberia, e a troca de número — decisão que o
+   * vendedor toma uma vez por dia — continua onde ela já mora, no cabeçalho do
+   * chat. Aqui o clique disca pelo número selecionado, que o `title` nomeia.
+   */
+  iconOnly?: boolean;
 }
 
-export function VoiceCallButton({ leadId, leadName, className }: VoiceCallButtonProps) {
+export function VoiceCallButton({ leadId, leadName, className, iconOnly = false }: VoiceCallButtonProps) {
   const voice = useVoiceCallContext();
 
   // A pergunta só é feita quando JÁ existe número ao alcance. Sem esta condição,
@@ -71,6 +80,26 @@ export function VoiceCallButton({ leadId, leadName, className }: VoiceCallButton
   // O cabeçalho do chat é clicável inteiro; sem isto, ligar também abriria a
   // conversa por baixo.
   const naoVazar = (e: React.PointerEvent) => e.stopPropagation();
+
+  if (iconOnly) {
+    return (
+      <button
+        type="button"
+        disabled={voice.busy}
+        aria-label={leadName ? `Ligar para ${leadName}` : "Ligar"}
+        title={voice.numbers.length > 1 ? `${titulo} · ${voice.selected.instanceName}` : titulo}
+        onClick={discar}
+        onPointerDown={naoVazar}
+        className={cn(
+          "grid size-[22px] shrink-0 place-items-center rounded-full text-muted-foreground",
+          "transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40",
+          className,
+        )}
+      >
+        <PhoneCall className="size-[12px]" />
+      </button>
+    );
+  }
 
   if (voice.numbers.length < 2) {
     return (

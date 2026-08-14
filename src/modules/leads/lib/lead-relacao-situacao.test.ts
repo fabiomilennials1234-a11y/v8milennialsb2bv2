@@ -8,6 +8,10 @@ import type { LeadSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 function negocio(over: Partial<LeadDeal> = {}): LeadDeal {
   return {
     id: over.id ?? "entry-1",
+    // `dealId` é nulo enquanto a entrada de funil não tem `deals` por trás —
+    // é o estado da maioria das linhas hoje, e o default certo pro fixture.
+    dealId: null,
+    qualificationTier: null,
     leadId: "lead-1",
     title: "Negócio de ago/2026",
     funnelName: "Qualificação",
