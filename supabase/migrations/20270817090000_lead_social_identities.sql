@@ -882,7 +882,7 @@ BEGIN
       -- do histórico e trilha. Duas escritas do mesmo vínculo em lugares
       -- diferentes divergiriam.
       RETURN public.link_social_conversation_to_lead(
-        p_org, p_channel, p_contact_external_id, v_lead_id
+        p_org, p_channel, p_external_user_id, v_lead_id
       );
     END IF;
   END IF;
