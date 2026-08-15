@@ -12,13 +12,24 @@
  *   É a patologia mais cara deste repo — o difícil construído, a última milha
  *   não. Esta função é a última milha da leitura.
  *
- * ─── ESCOPO: SÓ LEITURA, DE PROPÓSITO ───────────────────────────────────────
+ * ─── DUAS AÇÕES: `list` E `create`. `delete` FICA DE FORA ───────────────────
  *
- *   `createTemplate` e `deleteTemplate` ficam de fora desta fatia. Criar um
- *   template não é escrever no nosso banco: é SUBMETER À META para aprovação,
- *   com efeito na conta do cliente e sem desfazer barato. Isso merece fatia
- *   própria, com a tela do editor que dá contexto ao que está sendo submetido —
- *   não um endpoint solto que a UI ainda não sabe usar.
+ *   `list` é leitura. `create` SUBMETE À META para aprovação — não escreve no
+ *   nosso banco, escreve na conta do cliente, e o resultado demora horas.
+ *
+ *   `deleteTemplate` existe no módulo e NÃO é exposto aqui, por dois motivos:
+ *   (a) a rota que usamos (`DELETE /v2/channels/whatsapp/templates/…`) é a única
+ *   da fatia sem segunda fonte — o node do fornecedor não implementa apagar, e
+ *   não há com o que confrontar; (b) apagar um template que uma campanha usa
+ *   quebra a campanha em silêncio, e essa conversa precisa da tela que mostre
+ *   quem depende dele. Endpoint destrutivo sem essa tela é armadilha.
+ *
+ * ─── POR QUE `create` EXIGE ADMIN E `list` NÃO ──────────────────────────────
+ *
+ *   Ler a lista é informação operacional. Submeter um template é um ato na
+ *   conta do cliente na Meta, que entra na fila de revisão dela e cuja recusa
+ *   conta contra a reputação daquele número. Não é a mesma gravidade, e o gate
+ *   acompanha: `create` soma `auth.isAdmin` à feature permission.
  *
  * ─── GATES ──────────────────────────────────────────────────────────────────
  *
@@ -72,11 +83,19 @@ import { logRuntime } from "../_shared/logger.ts";
 import { getTraceContext } from "../_shared/request-trace.ts";
 import { orgConfigFrom, readNotificameBaseUrl, readNotificameFlags } from "../_shared/notificame.ts";
 import { loadNotificameSubaccount } from "../_shared/notificame-credentials.ts";
-import { listTemplates } from "../_shared/notificame-templates.ts";
+import {
+  createTemplate,
+  listTemplates,
+  type CreateTemplateInput,
+} from "../_shared/notificame-templates.ts";
 import {
   resolveTemplateChannel,
   type TemplateInstanceRow,
 } from "../_shared/notificame-template-access.ts";
+import {
+  validateTemplateDraft,
+  type TemplateDraft,
+} from "../_shared/notificame-template-validate.ts";
 
 const FUNCTION_NAME = "notificame-templates";
 const MANAGE_INSTANCES_FEATURE = "whatsapp.manage_instances";
@@ -85,6 +104,36 @@ const MANAGE_INSTANCES_FEATURE = "whatsapp.manage_instances";
 function readInstanceId(body: Record<string, unknown>): string {
   const raw = body.instance_id ?? body.instanceId;
   return typeof raw === "string" ? raw.trim() : "";
+}
+
+/** Ação ausente é `list` — a leitura é o caminho inócuo, e default tem que ser o inócuo. */
+function readAction(body: Record<string, unknown>): "list" | "create" | "unknown" {
+  const raw = typeof body.action === "string" ? body.action.trim().toLowerCase() : "list";
+  if (raw === "" || raw === "list") return "list";
+  if (raw === "create") return "create";
+  return "unknown";
+}
+
+/** Lê o rascunho SEM confiar em nada: o validador decide o que presta. */
+function readDraft(body: Record<string, unknown>): TemplateDraft {
+  const raw = (body.template ?? {}) as Record<string, unknown>;
+  const components = Array.isArray(raw.components) ? raw.components : [];
+  return {
+    name: typeof raw.name === "string" ? raw.name.trim() : "",
+    language: typeof raw.language === "string" ? raw.language.trim() : "",
+    category: (typeof raw.category === "string"
+      ? raw.category.trim().toUpperCase()
+      : "") as TemplateDraft["category"],
+    components: components.map((c) => {
+      const comp = (c ?? {}) as Record<string, unknown>;
+      return {
+        type: typeof comp.type === "string" ? comp.type.trim().toUpperCase() : "",
+        format: typeof comp.format === "string" ? comp.format.trim().toUpperCase() : undefined,
+        text: typeof comp.text === "string" ? comp.text : undefined,
+        buttons: Array.isArray(comp.buttons) ? comp.buttons : undefined,
+      };
+    }),
+  };
 }
 
 Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
@@ -135,6 +184,14 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
     );
   }
 
+  const action = readAction(body);
+  if (action === "unknown") {
+    return new Response(
+      JSON.stringify({ error: "Ação desconhecida", code: "unknown_action" }),
+      { status: 400, headers },
+    );
+  }
+
   const trace = getTraceContext(req);
   const admin = createAdminClient(FUNCTION_NAME);
 
@@ -164,6 +221,31 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
     return new Response(
       JSON.stringify({
         error: "Você não tem permissão para ver os templates desta organização",
+        code: "permission_denied",
+      }),
+      { status: 403, headers },
+    );
+  }
+
+  // Submeter é ato na conta do cliente na Meta, entra na fila de revisão dela e
+  // a recusa conta contra a reputação do número. Ler não é nada disso — por isso
+  // o admin é exigido só aqui, e não no gate de cima.
+  if (action === "create" && !auth.isAdmin) {
+    await logRuntime({
+      organizationId: orgId,
+      module: "permission",
+      action: "notificame.template_create_admin_denied",
+      status: "error",
+      errorMessage:
+        `User ${auth.userId} (role: ${auth.role}) tentou criar template — exige admin ou master`,
+      entityType: "whatsapp_instance",
+      triggeredBy: auth.userId,
+      payloadSnapshot: { instance_id: instanceId },
+      ...trace,
+    });
+    return new Response(
+      JSON.stringify({
+        error: "Apenas administradores podem criar templates",
         code: "permission_denied",
       }),
       { status: 403, headers },
@@ -215,6 +297,70 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
 
   const cfg = orgConfigFrom(readNotificameBaseUrl(Deno.env), subaccount.companyUuid);
 
+  // ── Submeter ───────────────────────────────────────────────────────────────
+  if (action === "create") {
+    // Valida ANTES da rede. A recusa da Meta é assíncrona e genérica: o template
+    // entra PENDING e volta REJECTED horas depois, sem dizer qual regra quebrou.
+    // Todo problema que dá para ver daqui tem que ser visto daqui.
+    const draft = readDraft(body);
+    const problems = validateTemplateDraft(draft);
+    if (problems.length > 0) {
+      return new Response(
+        JSON.stringify({
+          error: "O template tem problemas que a Meta recusaria",
+          code: "template_invalid",
+          problems,
+        }),
+        { status: 422, headers },
+      );
+    }
+
+    try {
+      const created = await createTemplate(cfg, resolution.channelId, draft as CreateTemplateInput);
+
+      // Trilha do ato externo: a submissão sai do nosso alcance depois daqui, e
+      // sem esta linha "quem submeteu este template, e quando?" fica sem resposta.
+      await logRuntime({
+        organizationId: orgId,
+        module: "channel",
+        action: "notificame.template_created",
+        status: "success",
+        entityType: "whatsapp_instance",
+        triggeredBy: auth.userId,
+        payloadSnapshot: {
+          instance_id: instanceId,
+          template_name: draft.name,
+          category: draft.category,
+          language: draft.language,
+          vendor_status: created.status,
+        },
+        ...trace,
+      });
+
+      // `PENDING` é o SUCESSO NORMAL — a Meta ainda vai revisar. A tela precisa
+      // dizer isso, senão o usuário lê "criado" e tenta enviar em seguida.
+      return new Response(JSON.stringify({ template: created }), { status: 201, headers });
+    } catch (e) {
+      const detail = e instanceof Error ? e.message : String(e);
+      await logRuntime({
+        organizationId: orgId,
+        module: "channel",
+        action: "notificame.template_create_failed",
+        status: "error",
+        errorMessage: detail,
+        entityType: "whatsapp_instance",
+        triggeredBy: auth.userId,
+        payloadSnapshot: { instance_id: instanceId, template_name: draft.name },
+        ...trace,
+      });
+      return new Response(
+        JSON.stringify({ error: "Não foi possível criar o template", code: "upstream_failed" }),
+        { status: 502, headers },
+      );
+    }
+  }
+
+  // ── Listar ─────────────────────────────────────────────────────────────────
   try {
     const templates = await listTemplates(cfg, resolution.channelId);
     return new Response(
