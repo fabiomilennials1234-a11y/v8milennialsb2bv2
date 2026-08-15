@@ -51,6 +51,7 @@ import {
   getProviderProfile,
   useConnectWhatsAppCloud,
   useConnectNotificame,
+  NotificameTemplatesCard,
 } from "@/modules/communication";
 import { useFeatureFlag } from "../../hooks/useFeatureFlag";
 import { useCanManageWhatsApp } from "@/modules/identity";
@@ -884,6 +885,13 @@ export function WhatsAppSettings() {
                 <div className="mt-4 space-y-4 pt-4 border-t border-border/40">
                   <MessageLimitsCard instanceId={instance.id} organizationId={instance.organization_id} />
                   <HistorySyncPanel instanceId={instance.id} />
+                  {/* Só o canal oficial tem template HSM — o QR não tem o
+                      conceito, e pedir a lista dele devolveria 422. O card
+                      também se apaga sozinho quando o servidor diz que o canal
+                      não usa templates. */}
+                  {instance.provider === "notificame" && (
+                    <NotificameTemplatesCard instanceId={instance.id} />
+                  )}
                 </div>
               )}
             </motion.div>

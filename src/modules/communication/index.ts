@@ -44,6 +44,9 @@ export type {
 // WhatsApp: não disparia, não tem telefone e não come vaga paga de instância.
 export { useMessagingChannels } from "./hooks/useMessagingChannels";
 export type { MessagingChannel, MessagingChannelType } from "./hooks/useMessagingChannels";
+export { useNotificameTemplates, notificameTemplatesQueryKey } from "./hooks/useNotificameTemplates";
+export type { NotificameTemplate, NotificameTemplateStatus } from "./hooks/useNotificameTemplates";
+export { NotificameTemplatesCard } from "./components/whatsapp/NotificameTemplatesCard";
 // ── Inbox multicanal ──────────────────────────────────────────────────────
 // O seletor do chat deixou de ser "lista de números de WhatsApp" e passou a ser
 // uma união discriminada de CAIXAS. Estes são os tipos e helpers que qualquer
