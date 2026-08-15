@@ -1356,6 +1356,18 @@ COMMENT ON FUNCTION public.get_social_conversation_list(uuid, uuid, integer, tim
 --    cria é o humano" fechou pela frente. A lista continua com `service_role`
 --    (leitura, e ela já tinha).
 -- ─────────────────────────────────────────────────────────────────────────────
+-- ⚠️ `can_link_or_read_lead` É A QUINTA FUNÇÃO, e ela NÃO tem grant nenhum de
+--    propósito. Quem a chama são as DEFINER deste arquivo, que rodam como owner —
+--    nenhum papel do PostgREST precisa executá-la. Sem este REVOKE ela nasceria
+--    executável por PUBLIC, `anon` e `service_role` (o mesmo default privilege
+--    descrito acima) e viraria um ORÁCULO: `can_link_or_read_lead(<lead>, <org>)`
+--    responde, com um booleano, se aquele lead existe naquela org e está fora da
+--    lixeira — fora de qualquer gate, e para um id que outras RPCs já entregam.
+--    É a família de furo já catalogada neste repo em RPC DEFINER que recorta por
+--    parâmetro do cliente.
+REVOKE ALL ON FUNCTION public.can_link_or_read_lead(uuid, uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+
 REVOKE ALL ON FUNCTION public.link_social_conversation_to_lead(uuid, uuid, text, uuid)
   FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.link_social_conversation_to_lead(uuid, uuid, text, uuid)
