@@ -47,6 +47,8 @@ export type { MessagingChannel, MessagingChannelType } from "./hooks/useMessagin
 export { useNotificameTemplates, notificameTemplatesQueryKey } from "./hooks/useNotificameTemplates";
 export type { NotificameTemplate, NotificameTemplateStatus } from "./hooks/useNotificameTemplates";
 export { NotificameTemplatesCard } from "./components/whatsapp/NotificameTemplatesCard";
+export { NotificameTemplateEditor } from "./components/whatsapp/NotificameTemplateEditor";
+export { useCreateNotificameTemplate } from "./hooks/useNotificameTemplates";
 // ── Inbox multicanal ──────────────────────────────────────────────────────
 // O seletor do chat deixou de ser "lista de números de WhatsApp" e passou a ser
 // uma união discriminada de CAIXAS. Estes são os tipos e helpers que qualquer

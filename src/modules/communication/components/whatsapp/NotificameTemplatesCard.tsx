@@ -14,7 +14,8 @@
  *   - O CORPO, para o humano reconhecer o template pelo texto e não pelo nome
  *     técnico que alguém escolheu meses atrás.
  */
-import { AlertCircle, FileText, RefreshCw } from "lucide-react";
+import { useState } from "react";
+import { AlertCircle, FileText, Plus, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import {
   type NotificameTemplate,
   type NotificameTemplateStatus,
 } from "../../hooks/useNotificameTemplates";
+import { NotificameTemplateEditor } from "./NotificameTemplateEditor";
 
 /** Só APPROVED é enviável. O resto é informação, não opção. */
 const STATUS_LABEL: Record<NotificameTemplateStatus, string> = {
@@ -110,6 +112,7 @@ function TemplateRow({ template }: { template: NotificameTemplate }) {
 }
 
 export function NotificameTemplatesCard({ instanceId }: { instanceId: string }) {
+  const [editorOpen, setEditorOpen] = useState(false);
   const { data: templates, isLoading, error, refetch, isFetching } = useNotificameTemplates({
     instanceId,
   });
@@ -131,17 +134,34 @@ export function NotificameTemplatesCard({ instanceId }: { instanceId: string }) 
           )}
         </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => refetch()}
-          disabled={isFetching}
-          className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className={cn("mr-1.5 h-3 w-3", isFetching && "animate-spin")} />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <RefreshCw className={cn("mr-1.5 h-3 w-3", isFetching && "animate-spin")} />
+            Atualizar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setEditorOpen(true)}
+            className="h-7 px-2 text-xs"
+          >
+            <Plus className="mr-1.5 h-3 w-3" />
+            Novo
+          </Button>
+        </div>
       </div>
+
+      <NotificameTemplateEditor
+        instanceId={instanceId}
+        open={editorOpen}
+        onOpenChange={setEditorOpen}
+      />
 
       {isLoading && (
         <div className="space-y-2">

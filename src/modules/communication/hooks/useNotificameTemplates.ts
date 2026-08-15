@@ -8,7 +8,7 @@
  * muda na Meta de forma assíncrona e uma cópia local nasceria desatualizada sem
  * ninguém saber quando.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
@@ -63,15 +63,25 @@ export const notificameTemplatesQueryKey = (
  * consegue distinguir "sem permissão" de "canal de outra org" de "o fornecedor
  * caiu". Os três pedem reações diferentes do usuário.
  */
-async function readInvokeError(error: unknown): Promise<{ code: string; message: string }> {
+async function readInvokeError(
+  error: unknown,
+): Promise<{ code: string; message: string; problems: TemplateProblem[] }> {
   const ctx = (error as { context?: unknown })?.context;
   if (ctx && typeof (ctx as Response).json === "function") {
     try {
       const body = await (ctx as Response).json();
       if (body && typeof body === "object") {
-        const { code, error: msg } = body as { code?: string; error?: string };
+        const { code, error: msg, problems } = body as {
+          code?: string;
+          error?: string;
+          problems?: TemplateProblem[];
+        };
         if (code || msg) {
-          return { code: code ?? "unknown", message: msg ?? "Falha ao ler os templates" };
+          return {
+            code: code ?? "unknown",
+            message: msg ?? "Falha ao ler os templates",
+            problems: Array.isArray(problems) ? problems : [],
+          };
         }
       }
     } catch {
@@ -79,16 +89,65 @@ async function readInvokeError(error: unknown): Promise<{ code: string; message:
     }
   }
   const message = error instanceof Error ? error.message : "Falha ao ler os templates";
-  return { code: "unknown", message };
+  return { code: "unknown", message, problems: [] };
+}
+
+/** Um problema que a Meta recusaria, apontado ANTES da submissão. */
+export interface TemplateProblem {
+  code: string;
+  message: string;
+  field?: string;
 }
 
 export class NotificameTemplatesError extends Error {
   readonly code: string;
-  constructor(code: string, message: string) {
+  /** Preenchido quando o servidor recusou o rascunho (`template_invalid`). */
+  readonly problems: TemplateProblem[];
+  constructor(code: string, message: string, problems: TemplateProblem[] = []) {
     super(message);
     this.name = "NotificameTemplatesError";
     this.code = code;
+    this.problems = problems;
   }
+}
+
+export interface TemplateDraftInput {
+  name: string;
+  language: string;
+  category: "MARKETING" | "UTILITY" | "AUTHENTICATION";
+  components: { type: string; format?: string; text?: string }[];
+}
+
+/**
+ * Submete um template à Meta.
+ *
+ * ⚠️ O sucesso aqui é `PENDING`, não "pronto para usar": a Meta ainda vai
+ * revisar, e isso leva horas. Quem chama tem que dizer isso na tela, senão o
+ * usuário lê "criado" e tenta enviar em seguida — e o envio falha.
+ */
+export function useCreateNotificameTemplate(instanceId: string) {
+  const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
+  return useMutation({
+    mutationFn: async (draft: TemplateDraftInput) => {
+      const { data, error } = await supabase.functions.invoke("notificame-templates", {
+        body: { action: "create", instance_id: instanceId, template: draft },
+      });
+
+      if (error) {
+        const { code, message, problems } = await readInvokeError(error);
+        throw new NotificameTemplatesError(code, message, problems);
+      }
+      return data as { template: { id: string | null; status: string | null } };
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: notificameTemplatesQueryKey(organizationId, instanceId),
+      });
+    },
+  });
 }
 
 export function useNotificameTemplates({
