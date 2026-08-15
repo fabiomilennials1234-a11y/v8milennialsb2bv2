@@ -147,6 +147,39 @@ permissão da conta, não de caminho.
 
 ---
 
+## Validação cruzada: o node do fornecedor CONFIRMA a nossa implementação de templates
+
+Nosso `_shared/notificame-templates.ts` foi escrito a partir da documentação, sem nunca
+tocar uma conta viva — e a documentação do fornecedor existe em duas versões divergentes.
+O node que eles encomendaram é uma segunda fonte independente, e as duas batem:
+
+| | Node do fornecedor (`transport/whatsapp/*.ts`) | Nosso módulo |
+|---|---|---|
+| Listar | `GET /templates/{channelToken}` + `X-Api-Token` | `GET /v1/templates/{channel_id}` + `X-Api-Token` ✅ |
+| Criar | `POST /templates/{channelToken}` | `POST /v1/templates/{channel_id}` ✅ |
+| Corpo do criar | `{ from, contents: [ { template: { name, language, category, components } } ] }` | idêntico, inclusive a repetição do canal em `from` ✅ |
+
+A redundância do `from` — que no nosso código está marcada como "as duas redundâncias do
+fornecedor que parecem engano" — **é real**: o node oficial repete o mesmo valor na URL e
+no corpo. E o `channelToken` do node é o mesmo valor que nós guardamos em
+`provider_config.channel_id`: nos envios ele vai no campo `from`, exatamente como no nosso
+`buildNotificameEnvelope`.
+
+**Duas divergências que sobram:**
+
+1. **Envio.** O node usa `/v1/channels/{kind}/messages`; nós usamos
+   `/v2/channels/{kind}/messages`. Não é necessariamente erro — o cabeçalho do nosso módulo
+   registra que `/v2/channels` responde (em texto puro, não JSON), então a v2 existe. Mas
+   são versões diferentes da mesma operação, e ninguém verificou qual o fornecedor mantém.
+2. **Apagar template.** Nós usamos `DELETE /v2/channels/whatsapp/templates/{canal}/{nome}`.
+   O node não implementa apagar — não há segunda fonte para essa rota.
+
+**O que isso muda:** a leitura de templates deixa de ser fé em documentação e passa a ter
+confirmação independente. O envio continua sem confirmação, e é o caminho que mais dói se
+estiver errado (`Hub404` chega como HTTP 200 com erro dentro).
+
+---
+
 ## O que ainda não foi observado — e por que isso limita todo o resto
 
 Medido em prod (`jsjsmuncfkbsbzqzqhfq`) em 2026-08-15:
