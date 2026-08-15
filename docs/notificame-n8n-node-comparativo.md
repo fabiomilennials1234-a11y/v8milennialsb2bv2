@@ -165,10 +165,18 @@ de um exemplo observado.
 Consequência prática: os zeros da tabela **não provam** que o fornecedor omite o handle.
 Provam que ninguém nunca viu o payload real. É verde por ausência.
 
-**O teste que falta é barato:** uma mensagem real, de uma conta de Instagram qualquer, para
-o canal conectado da Milennials. O `raw_payload` já é gravado inteiro — uma única mensagem
-responde de uma vez se vêm `username`, telefone, e-mail, e em que formato. Isso deveria
-preceder qualquer decisão de cortar ou manter o intermediário.
+**E não existe canal real para receber essa mensagem.** Medido no mesmo dia: o único canal
+em toda a base é o sintético `TESTE-ch-sintetico-001` (`inbound=not_applicable`), e há
+**zero** canais em qualquer outra org. Conectar um canal passa pelo Embedded Signup, que
+depende de `GET /v2/oauth/meta/start` — hoje `401 "Invalid company"` porque a revenda está
+desativada.
+
+**Logo o teste que falta tem um pré-requisito operacional, não técnico:** ou a revenda
+volta, ou conecta-se um canal **pelo painel web do NotificaMe** (a conta-mãe é uma conta
+comum; a revenda só governa a criação de subcontas) e adota-se esse canal na
+`messaging_channels` — o mesmo contorno já usado para a subconta `Torque Teste 01`. Com um
+canal real ligado, uma única mensagem responde de uma vez se vêm `username`, telefone,
+e-mail, e em que formato: o `raw_payload` já é gravado inteiro.
 
 No mesmo espírito: o Torque **ainda não envia nada** pelo NotificaMe. As funções exportadas
 cobrem provisionar subconta, listar canais, registrar webhook e receber — não há uma única
@@ -186,9 +194,11 @@ nuances da janela de 24h. Nenhum node carrega isso — sai de doc oficial e de c
 
 ## Decisões que este levantamento coloca na mesa
 
-0. **Mandar uma mensagem real de Instagram para o canal da Milennials.** É o pré-requisito
+0. **Conseguir um canal real ligado, e então mandar uma mensagem real.** É o pré-requisito
    dos outros três: uma única mensagem revela o payload verdadeiro e substitui documentação
-   bifurcada por fato. Custa minutos e hoje bloqueia qualquer conclusão sobre o que falta.
+   bifurcada por fato. Não depende de esperar a revenda **se** o canal for conectado pelo
+   painel do fornecedor e adotado na `messaging_channels` — o contorno já usado na subconta.
+   Enquanto não houver canal real, toda conclusão sobre campos faltantes é leitura de doc.
 1. **Pedir HMAC ao NotificaMe** — com um concorrente direto oferecendo segredo por canal, o
    pedido deixa de ser teórico. Enquanto não houver, o webhook segue proibido de criar lead.
 2. **Puxar o `username` do Instagram** — se a mensagem real mostrar que ele não vem, restam
