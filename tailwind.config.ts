@@ -41,6 +41,9 @@ export default {
         warning: {
           DEFAULT: "hsl(var(--warning))",
           foreground: "hsl(var(--warning-foreground))",
+          // Par legível do âmbar: texto/ícone. `DEFAULT` é preenchimento/borda —
+          // `text-warning` reprova AA sobre --card em light (~2.6:1).
+          strong: "hsl(var(--warning-strong))",
         },
         silver: {
           DEFAULT: "hsl(var(--silver))",
