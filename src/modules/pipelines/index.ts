@@ -111,6 +111,7 @@ export {
   useStageLeadIds,
   useFilteredLeadIds,
   useCustomFilteredLeadIds,
+  useAllFunnelsLeadIds,
 } from "./hooks/model";
 export type {
   Pipeline,
@@ -120,6 +121,7 @@ export type {
   PipelineStageInsert,
   FilteredLeadIdsParams,
   CustomFilteredLeadIdsParams,
+  AllFunnelsLeadIdsParams,
 } from "./hooks/model";
 
 // ── Hooks: display config + metrics + dispatch + distribution ─────────────
