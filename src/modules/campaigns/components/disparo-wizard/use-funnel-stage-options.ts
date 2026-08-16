@@ -13,7 +13,12 @@ import {
   usePipelineStages,
   type SystemPipelineType,
 } from "@/modules/pipelines";
-import { SYSTEM_FUNNELS, type FunnelKind } from "./audience-resolve";
+import {
+  ALL_FUNNELS_LABEL,
+  SYSTEM_FUNNELS,
+  type FunnelKind,
+  type StageScope,
+} from "./audience-resolve";
 
 export interface FunnelStageSelection {
   funnelKind: FunnelKind;
@@ -29,18 +34,52 @@ export interface FunnelStageOption {
   name: string;
 }
 
-/** Funnel Select value encoding — keeps system pipes and custom ids in one
- *  Select ("system:whatsapp" | "custom:<uuid>"). Empty = nothing chosen. */
+/** Funnel Select value encoding — keeps every funnel option in one Select
+ *  ("all" | "system:whatsapp" | "custom:<uuid>"). Empty = nothing chosen. */
+export const ALL_FUNNELS_VALUE = "all";
+
 export function funnelSelectValue(sel: FunnelStageSelection): string {
+  if (sel.funnelKind === "all") return ALL_FUNNELS_VALUE;
   if (sel.funnelKind === "system") {
     return sel.pipelineType ? `system:${sel.pipelineType}` : "";
   }
   return sel.pipelineId ? `custom:${sel.pipelineId}` : "";
 }
 
+/**
+ * Stage Select value encoding. Namespaced exactly like the funnel Select rather
+ * than using a sentinel stageKey: `stage_key` is an org-controlled slug, so ANY
+ * bare sentinel ("all", "__todas__", …) could collide with a real stage the
+ * customer named. `"all"` vs `"stage:<key>"` cannot collide by construction.
+ */
+export const ALL_STAGES_VALUE = "all";
+
+export function stageSelectValue(sel: {
+  stageScope: StageScope;
+  stageKey: string;
+}): string {
+  if (sel.stageScope === "all") return ALL_STAGES_VALUE;
+  return sel.stageKey ? `stage:${sel.stageKey}` : "";
+}
+
+export function parseStageSelectValue(value: string): {
+  stageScope: StageScope;
+  stageKey: string;
+} {
+  if (value === ALL_STAGES_VALUE) return { stageScope: "all", stageKey: "" };
+  return { stageScope: "one", stageKey: value.replace(/^stage:/, "") };
+}
+
 export function useFunnelStageOptions(sel: FunnelStageSelection) {
+  const isAll = sel.funnelKind === "all";
   const isSystem = sel.funnelKind === "system";
-  const hasFunnel = isSystem ? sel.pipelineType !== null : sel.pipelineId !== null;
+  // "Todos os funis" is a complete target on its own — no funnel to pick, and
+  // no stage list to load (the two funnel models share no stage vocabulary).
+  const hasFunnel = isAll
+    ? true
+    : isSystem
+      ? sel.pipelineType !== null
+      : sel.pipelineId !== null;
 
   const { data: customPipelines = [] } = useCustomPipelines();
   const { data: systemStages = [], isLoading: systemStagesLoading } = usePipelineStages(
@@ -50,18 +89,22 @@ export function useFunnelStageOptions(sel: FunnelStageSelection) {
     !isSystem ? (sel.pipelineId ?? undefined) : undefined,
   );
 
-  // Unified stage list for the picker; empty until a funnel is chosen.
+  // Unified stage list for the picker; empty until a funnel is chosen, and
+  // empty by definition for "Todos os funis" (cross-model union has no stages).
   const stages = useMemo<FunnelStageOption[]>(() => {
-    if (!hasFunnel) return [];
+    if (isAll || !hasFunnel) return [];
     if (isSystem) return systemStages.map((s) => ({ key: s.stage_key, name: s.name }));
     return customStages.map((s) => ({ key: s.id, name: s.name }));
-  }, [hasFunnel, isSystem, systemStages, customStages]);
+  }, [isAll, hasFunnel, isSystem, systemStages, customStages]);
 
-  const stagesLoading = hasFunnel && (isSystem ? systemStagesLoading : customStagesLoading);
+  const stagesLoading =
+    !isAll && hasFunnel && (isSystem ? systemStagesLoading : customStagesLoading);
 
-  const funnelLabel = isSystem
-    ? SYSTEM_FUNNELS.find((f) => f.value === sel.pipelineType)?.label ?? "Funil"
-    : customPipelines.find((p) => p.id === sel.pipelineId)?.name ?? "Funil";
+  const funnelLabel = isAll
+    ? ALL_FUNNELS_LABEL
+    : isSystem
+      ? SYSTEM_FUNNELS.find((f) => f.value === sel.pipelineType)?.label ?? "Funil"
+      : customPipelines.find((p) => p.id === sel.pipelineId)?.name ?? "Funil";
 
   return { customPipelines, stages, stagesLoading, funnelLabel, hasFunnel };
 }
