@@ -423,9 +423,9 @@ export default function SeletorConversaPreview() {
           Seletor de Conversa do Lead
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Dados reais da sua org. Digite um telefone de lead para ver as caixas com
-          e sem conversa. A consulta aqui é client-side de propósito — a forma
-          final é o #1610.
+          <b className="text-foreground">São três conceitos diferentes.</b> Troque
+          entre eles nos botões logo abaixo — a diferença entre os três é o que
+          domina cada linha: a caixa, a conversa, ou a busca.
         </p>
         {!usandoFixture && (
           <Input
@@ -436,6 +436,41 @@ export default function SeletorConversaPreview() {
           />
         )}
       </header>
+
+      {/* Alternador — no topo, não no rodapé. A primeira versão pôs o controle
+          mais importante do protótipo numa barra flutuante que saiu do
+          enquadramento e o CTO nunca viu as outras duas variantes. */}
+      <div className="mb-5 flex flex-wrap items-center gap-2">
+        {[
+          ["1", "Lista densa", "a caixa domina"],
+          ["2", "Cards", "a conversa domina"],
+          ["3", "Comando", "a busca domina"],
+        ].map(([v, label, hint]) => (
+          <button
+            key={v}
+            onClick={() => {
+              params.set("v", v);
+              setParams(params, { replace: true });
+            }}
+            className={cn(
+              "rounded-xl border px-4 py-2 text-left transition-colors",
+              variante === v
+                ? "border-primary bg-primary/10"
+                : "border-border hover:border-primary/40 hover:bg-muted/50",
+            )}
+          >
+            <span
+              className={cn(
+                "block text-sm font-medium",
+                variante === v ? "text-primary" : "text-foreground",
+              )}
+            >
+              {label}
+            </span>
+            <span className="block text-[11px] text-muted-foreground">{hint}</span>
+          </button>
+        ))}
+      </div>
 
       {/* Estado, à vista. Protótipo que esconde por que está vazio não serve. */}
       <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-card/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">
@@ -475,29 +510,6 @@ export default function SeletorConversaPreview() {
         )}
       </div>
 
-      <nav className="fixed bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border bg-card/95 p-1 shadow-2xl backdrop-blur">
-        {[
-          ["1", "Lista densa"],
-          ["2", "Cards"],
-          ["3", "Comando"],
-        ].map(([v, label]) => (
-          <button
-            key={v}
-            onClick={() => {
-              params.set("v", v);
-              setParams(params, { replace: true });
-            }}
-            className={cn(
-              "rounded-full px-4 py-1.5 text-sm transition-colors",
-              variante === v
-                ? "bg-primary font-medium text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
     </div>
   );
 }
