@@ -62,6 +62,8 @@ const Configuracoes = lazy(() => lazyRetry(() => import("@/modules/platform/page
 const TVDashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TVDashboard")));
 const TvRenderersDemo = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvRenderersDemo")));
 const TvWallPreview = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvWallPreview")));
+// ⚠️ PROTÓTIPO DESCARTÁVEL — #1607. Apagar junto com a rota.
+const SeletorConversaPreview = lazy(() => lazyRetry(() => import("@/modules/communication/pages/SeletorConversaPreview")));
 const DisparosPanel = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/DisparosPanel")));
 const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages/NovoDisparo")));
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
@@ -265,6 +267,10 @@ function AppRoutes() {
           snapshot-fixture (grid+WidgetFrame+buildEyebrow reais). Dev-only (nega em
           prod). Prova os 3 defeitos de parede que as demos de renderer perdiam. */}
       <Route path="/tv-wall-preview" element={<TvWallPreview />} />
+      {/* ⚠️ PROTÓTIPO DESCARTÁVEL — #1607, seletor de Conversa do Lead.
+          Três conceitos em ?v=1|2|3, dados reais. Apagar junto com a página
+          quando o conceito for escolhido e dobrado no componente real. */}
+      <Route path="/seletor-conversa-preview" element={<SeletorConversaPreview />} />
       {/* Área do Gestor (ADR-0021 §5): hub do Gestor de Portfólio. GestorRoute
           nega não-gestor; requireOrganization=false porque o Gestor não tem
           team_member/org ao chegar no hub. */}
