@@ -1031,19 +1031,49 @@ export type SubscriptionRegistration =
  */
 export async function registerInboundSubscription(
   cfg: NotificameOrgConfig,
-  params: { webhookUrl: string; channelKind: "instagram" },
+  params: { webhookUrl: string; channelKind: "instagram"; channelId?: string | null },
   fetchImpl: FetchImpl = fetch,
 ): Promise<SubscriptionRegistration> {
   const endpoint = `${stripTrailingSlash(cfg.baseUrl)}/v1/subscriptions`;
 
-  const attempt = async (withDirection: boolean): Promise<SubscriptionRegistration> => {
-    const body = {
-      eventType: "MESSAGE",
-      criteria: withDirection
-        ? { channel: params.channelKind, direction: "IN" }
-        : { channel: params.channelKind },
-      webhook: { url: params.webhookUrl },
-    };
+  // ⚠️ `criteria.channel` É O TOKEN DO CANAL, não a palavra do canal.
+  //
+  // A doc CORRENTE (app.notificame.com.br/docs/api.md, seção Webhook) mostra
+  // `"criteria": { "channel": {{token_do_canal}} }`. A engenharia reversa que
+  // originou esta função assumiu a PALAVRA ("instagram"), e as duas leituras são
+  // indistinguíveis num corpo que o fornecedor aceita calado: uma subscription
+  // registrada no critério errado assina NADA, e o sintoma disso é idêntico a
+  // "ninguém mandou mensagem ainda" — some por semanas.
+  //
+  // Ordem das tentativas: token primeiro (o que a doc diz), palavra depois. O
+  // fallback existe porque NADA disto foi exercido contra a conta viva — a
+  // revenda está desativada do lado deles — e receber assinando de um jeito
+  // menos provável é melhor que não receber.
+  const channelCriteria = params.channelId?.trim() || params.channelKind;
+
+  const attempt = async (
+    enriched: boolean,
+    channel: string,
+  ): Promise<SubscriptionRegistration> => {
+    // FORMA CANÔNICA (`enriched: false`): exatamente o que a doc corrente mostra
+    // E o que o node oficial do n8n (`n8n-nodes-notificame-hub@0.3.3`,
+    // `DefinirWebhook.transport.js`) envia em produção — duas fontes
+    // independentes, sem `eventType` e sem `criteria.direction`.
+    //
+    // FORMA ENRIQUECIDA (`enriched: true`): o que a engenharia reversa do SDK
+    // sugeria. Fica como degrau de fallback, nunca como primeira tentativa:
+    // mandar campo que nenhuma integração conhecida manda é apostar contra as
+    // duas fontes que temos.
+    const body = enriched
+      ? {
+        eventType: "MESSAGE",
+        criteria: { channel, direction: "IN" },
+        webhook: { url: params.webhookUrl },
+      }
+      : {
+        criteria: { channel },
+        webhook: { url: params.webhookUrl },
+      };
 
     let raw: string;
     try {
@@ -1074,20 +1104,41 @@ export async function registerInboundSubscription(
       : { ok: false, code: parsed.code, vendor: vendorDetailFromParse(parsed) };
   };
 
-  const first = await attempt(true);
-  if (first.ok) return first;
+  // Autenticação, rota desconhecida e transporte não melhoram mudando o critério:
+  // repetir só gastaria chamada e, se por azar a primeira tiver sido aceita,
+  // criaria uma segunda subscription — sujeira no fornecedor.
+  const hopeless = (r: SubscriptionRegistration) =>
+    r.ok === false && (
+      r.code === "AUTHENTICATION_ERROR" ||
+      r.code === "Hub404" ||
+      r.code === "non_json_response" ||
+      r.code === "subscription_transport_error"
+    );
 
-  // Autenticação e rota desconhecida não melhoram sem o critério: repetir só
-  // gastaria uma chamada e, se por azar a primeira tiver sido aceita, criaria uma
-  // segunda subscription — o caso "duplicou" que a UNIQUE de `channel_messages`
-  // absorve como reentrega, mas que ainda assim é sujeira no fornecedor.
-  const hopeless = first.code === "AUTHENTICATION_ERROR" ||
-    first.code === "Hub404" ||
-    first.code === "non_json_response" ||
-    first.code === "subscription_transport_error";
-  if (hopeless) return first;
+  // Escada, da forma MAIS corroborada para a menos. Só desce um degrau quando a
+  // recusa foi de CRITÉRIO — nunca quando o corpo já disse que o problema é outro.
+  const ladder: Array<{ enriched: boolean; channel: string }> = [
+    // 1. doc corrente + node oficial do n8n concordam. É a aposta certa.
+    { enriched: false, channel: channelCriteria },
+    // 2. a forma da engenharia reversa, caso o fornecedor exija os campos extras.
+    { enriched: true, channel: channelCriteria },
+  ];
+  // A palavra do canal só entra quando ela NÃO é o que já tentamos — sem canal
+  // conhecido, `channelCriteria` já é a palavra e repetir gastaria chamadas
+  // idênticas.
+  if (channelCriteria !== params.channelKind) {
+    ladder.push({ enriched: false, channel: params.channelKind });
+    ladder.push({ enriched: true, channel: params.channelKind });
+  }
 
-  return await attempt(false);
+  let last: SubscriptionRegistration | null = null;
+  for (const step of ladder) {
+    const r = await attempt(step.enriched, step.channel);
+    if (r.ok) return r;
+    if (hopeless(r)) return r;
+    last = r;
+  }
+  return last!;
 }
 
 // ─── Escolha do canal recém-nascido (puro) ───────────────────────────────────

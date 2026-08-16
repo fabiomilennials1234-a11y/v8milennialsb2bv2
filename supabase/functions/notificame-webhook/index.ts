@@ -192,6 +192,7 @@ import {
   readEventType,
   type InboundEventType,
 } from "../_shared/notificame-inbound.ts";
+import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
 
 const FUNCTION_NAME = "notificame-webhook";
 
@@ -1341,6 +1342,54 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       return { kind: "park", reason: "missing_contact_id" };
     }
 
+    // (c2) VÍNCULO COM O LEAD — **RESOLVE, JAMAIS CRIA**.
+    //
+    // A fonte da verdade é `lead_social_identities`, escrita SÓ por RPC SECURITY
+    // DEFINER no clique de um humano autenticado no chat. Aqui é um SELECT: se a
+    // identidade já foi vinculada, a mensagem nova nasce com `lead_id` preenchido
+    // e entra direto na ficha do lead; se não, entra como hoje, com nulo.
+    //
+    // ⚠️ NÃO EXISTE CAMINHO DE CRIAÇÃO NESTE ENDPOINT, E NÃO PODE PASSAR A
+    // EXISTIR. O fornecedor confirmou por escrito que NÃO ASSINA o corpo — quem
+    // descobrir o secret do path e o uuid da subconta consegue POSTAR mensagem
+    // forjada nesta org. Um `getOrCreateLead` aqui viraria um botão de inflar a
+    // base de leads de qualquer cliente, uma requisição por lead. O molde é o do
+    // WhatsApp: `whatsapp-webhook` não cria lead nenhum; quem cria é o front, no
+    // clique de uma pessoa.
+    //
+    // BEST-EFFORT, e o formato do best-effort importa: a tabela pode ainda não
+    // existir (função deployada antes do apply da 20270817090000), e nesse caso o
+    // silêncio é CORRETO — a mensagem entra sem vínculo, como antes da fatia.
+    // Qualquer OUTRO erro (RLS, timeout, coluna renomeada) vira `console.warn`,
+    // porque tolerância larga aqui viraria "verde por ausência": o inbox ficaria
+    // sem vínculo por semanas e ninguém saberia por quê.
+    let linkedLeadId: string | null = null;
+    try {
+      const { data: identity, error: identityError } = await admin
+        .from("lead_social_identities")
+        .select("lead_id")
+        .eq("organization_id", organizationId)
+        .eq("channel_type", channel!.channelType)
+        .eq("external_user_id", contact.externalId)
+        .maybeSingle();
+
+      if (identityError) {
+        if (!isMissingTableError(identityError, "lead_social_identities")) {
+          console.warn(
+            `[${FUNCTION_NAME}] resolve de lead_social_identities falhou:`,
+            identityError.message,
+          );
+        }
+      } else {
+        linkedLeadId = (identity as { lead_id: string } | null)?.lead_id ?? null;
+      }
+    } catch (err) {
+      console.warn(
+        `[${FUNCTION_NAME}] resolve de lead_social_identities falhou:`,
+        (err as Error)?.message,
+      );
+    }
+
     const row = buildInboundChannelMessageRow({
       organizationId,
       messagingChannelId: channel!.id,
@@ -1348,6 +1397,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       contact,
       contactExternalId: contact.externalId,
       content: pickContent(payload),
+      leadId: linkedLeadId,
       // O relógio mora AQUI, e não no módulo puro: é o que permite asserir por
       // grep que nenhum caminho de identidade toca `Date.now()`.
       timestampIso: pickTimestampIso(payload) ?? new Date().toISOString(),

@@ -360,9 +360,21 @@ describe("0. CONTROLE POSITIVO — o caminho feliz escreve, e escreve o que se e
     // Sem assinatura do fornecedor não há autenticidade de CONTEÚDO: quem tiver
     // secret+uuid injeta uma mensagem falsa naquela org. Se esta rota acordasse
     // Copilot/workflow, um corpo forjado faria um agente IA RESPONDER.
-    // Só quatro tabelas podem ser tocadas neste caminho.
+    //
+    // ⚠️ `lead_social_identities` ENTROU nesta lista com a fatia do vínculo
+    // (20270817090000), e entrou como LEITURA: o handler RESOLVE a identidade
+    // (SELECT) para que a mensagem nova já nasça com `lead_id` preenchido. Criar
+    // lead aqui continua PROIBIDO — é o vetor que esta rota não pode ter, e o que
+    // o proíbe agora é uma asserção por OPERAÇÃO (nenhuma escrita em tabela de
+    // lead), em `notificame-lead-link-inbound.test.ts`. Conjunto fechado por
+    // TABELA não distingue ler de escrever; ficou aqui como cerca de perímetro.
     expect(new Set(db.touched)).toEqual(
-      new Set(["notificame_subaccounts", "messaging_channels", "channel_messages"]),
+      new Set([
+        "notificame_subaccounts",
+        "messaging_channels",
+        "channel_messages",
+        "lead_social_identities",
+      ]),
     );
   });
 });

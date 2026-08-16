@@ -45,6 +45,7 @@ import { ContextPanel } from "@/modules/communication/components/chat/context-pa
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { SocialChatView } from "@/modules/communication/components/chat/social/SocialChatView";
+import { SocialContextPanel } from "@/modules/communication/components/chat/social/SocialContextPanel";
 import { useInboxBoxes } from "@/modules/communication/hooks/chat/useInboxBoxes";
 import { useWhatsAppContacts } from "@/modules/communication/hooks/chat/useWhatsAppContacts";
 import { useSocialContacts } from "@/modules/communication/hooks/chat/useSocialContacts";
@@ -1017,20 +1018,22 @@ export function ChatShellWithContext() {
         }
         context={
           selectedKey ? (
-            // Sem telefone o painel não tem por onde resolver lead — e nesta
-            // fatia conversa de Instagram não vira lead nenhum. O painel entra
-            // dizendo isso em vez de dizer "selecione uma conversa", que seria
-            // falso com uma conversa aberta na tela.
-            <ContextPanel
-              leadId={isSocialBox ? undefined : selectedContact?.lead_id ?? undefined}
-              phoneNumber={isSocialBox ? undefined : selectedKey}
-              pushName={isSocialBox ? null : selectedContact?.push_name ?? null}
-              placeholder={
-                isSocialBox
-                  ? "Conversas do Instagram ainda não são vinculadas a um lead."
-                  : undefined
-              }
-            />
+            // Duas colunas de contexto, e não uma com ramos: a de WhatsApp
+            // resolve o lead pelo TELEFONE e é o caminho quente de 30 orgs; a
+            // social resolve pelo vínculo em `lead_social_identities` e, quando
+            // ele ainda não existe, oferece a ação de criá-lo em vez de exibir
+            // uma frase sobre o que não dá para fazer.
+            isSocialBox ? (
+              selectedSocialContact ? (
+                <SocialContextPanel contact={selectedSocialContact} />
+              ) : undefined
+            ) : (
+              <ContextPanel
+                leadId={selectedContact?.lead_id ?? undefined}
+                phoneNumber={selectedKey}
+                pushName={selectedContact?.push_name ?? null}
+              />
+            )
           ) : undefined
         }
         selectedPhone={selectedKey}

@@ -10,10 +10,15 @@
  * mensagens de Instagram em produção hoje, montar resumo + trigger seria
  * mecanismo caro que precisa estar CERTO antes de existir tráfego que o ensine.
  *
- * SEM ENRIQUECIMENTO. O irmão de WhatsApp busca nome de lead e etiqueta em
- * lotes; aqui `lead_id` é NULL por decisão desta fatia (não existe
- * `lead_social_identities`), então o fanout seria garantidamente vazio — uma
- * requisição por lista para não trazer nada.
+ * SEM FANOUT DE ENRIQUECIMENTO. O irmão de WhatsApp dispara uma segunda leva de
+ * queries para descobrir nome de lead e etiqueta; aqui o lead vem JUNTO, no
+ * mesmo `RETURNS TABLE` — a RPC faz LEFT JOIN em `lead_social_identities` (a
+ * fonte da verdade do vínculo) e devolve `lead_id` + `lead_name`. É por isso
+ * que `lead_name` mora na linha da RPC em vez de virar uma segunda query: o
+ * enriquecimento em lote é justamente o que produz a janela em que a lista
+ * aparece sem nome.
+ *
+ * Etiqueta continua `[]`: hoje ela pendura em lead ou em conversa de WhatsApp.
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -31,6 +36,7 @@ interface SocialConversationRow {
   last_message_direction: string | null;
   unread_count: number | null;
   lead_id: string | null;
+  lead_name: string | null;
 }
 
 function toSocialContact(
@@ -64,6 +70,7 @@ function toSocialContact(
         : null,
     unread_count: row.unread_count ?? 0,
     lead_id: row.lead_id ?? null,
+    lead_name: row.lead_name ?? null,
     tags: [],
   };
 }

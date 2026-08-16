@@ -127,6 +127,57 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
 export { LEADS_PAGE_SIZE };
 
 /**
+ * Busca UM lead pelo id, com os mesmos joins que `useLeadByPhone` traz.
+ *
+ * POR QUE EXISTE. O painel de contexto do chat sempre resolveu o lead a partir
+ * do TELEFONE (`useLeadByPhone`) — o que bastava enquanto todo canal do inbox
+ * era WhatsApp. Uma conversa de Instagram não tem telefone e mesmo assim pode
+ * ter lead: o vínculo vive em `lead_social_identities` e chega ao front já
+ * resolvido como `lead_id`. Sem este hook o painel teria o id e nenhuma forma
+ * de carregar a ficha.
+ *
+ * O shape devolvido é DELIBERADAMENTE o mesmo de `useLeadByPhone`, porque os
+ * dois alimentam exatamente os mesmos consumidores (`ContextPanelTabInfo`,
+ * header do painel). Dois shapes para o mesmo painel seria a próxima
+ * divergência.
+ *
+ * SECURITY: filtra por `organization_id` — id de lead é adivinhável o bastante
+ * para não ser credencial. `deleted_at` fora: lead na lixeira não é lead.
+ */
+export function useLeadById(leadId: string | null) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["lead_by_id", leadId, organizationId],
+    queryFn: async () => {
+      if (!leadId || !organizationId) return null;
+
+      const { data, error } = await supabase
+        .from("leads")
+        .select(`
+          *,
+          responsible:team_members!leads_responsible_id_fkey(id, name),
+          sdr:team_members!leads_sdr_id_fkey(id, name),
+          closer:team_members!leads_closer_id_fkey(id, name),
+          lead_tags(tag:tags(id, name, color))
+        `)
+        .eq("id", leadId)
+        .eq("organization_id", organizationId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erro ao buscar lead por id:", error);
+        return null;
+      }
+
+      return data;
+    },
+    enabled: !!leadId && !!organizationId && isReady,
+  });
+}
+
+/**
  * Create a new lead
  * SECURITY: Automatically sets organization_id from current user's context
  * Never trust organization_id from client input

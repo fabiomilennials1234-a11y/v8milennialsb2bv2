@@ -77,6 +77,7 @@ export const mockSocialContact: SocialContact = {
   last_message_direction: "incoming",
   unread_count: 1,
   lead_id: null,
+  lead_name: null,
   tags: [],
 };
 

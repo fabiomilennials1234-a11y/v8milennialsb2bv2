@@ -545,7 +545,12 @@ export interface InboundChannelMessageRow {
   phone_number: null;
   instance_id: null;
   page_id: null;
-  lead_id: null;
+  /**
+   * CACHE do vínculo, RESOLVIDO — nunca criado. `null` quando esta identidade
+   * ainda não foi vinculada por um humano. Ver o ⚠️ de
+   * `buildInboundChannelMessageRow`.
+   */
+  lead_id: string | null;
   timestamp: string;
   raw_payload: unknown;
 }
@@ -563,11 +568,23 @@ export interface InboundChannelMessageRow {
  * ⚠️ `direction: 'incoming'` é literal, não parâmetro. `'inbound'` violaria o
  * CHECK, e esta fatia é inbound-only por decisão.
  *
- * ⚠️ `lead_id: null` por decisão de escopo: `leads` não tem NENHUMA coluna de
- * identidade social (só `phone`/`normalized_phone`/`email`/`phone_digits`), então
- * um lead nascido daqui seria um lead sem telefone — invisível para dispatch e
- * funil — criado por um endpoint SEM autenticidade de conteúdo. Vínculo de lead é
- * fatia própria e precisa de `lead_social_identities`.
+ * ⚠️ `lead_id` é CACHE DERIVADO, e este caminho RESOLVE — NUNCA CRIA.
+ *
+ * A FONTE DA VERDADE do vínculo é `public.lead_social_identities`
+ * (20270817090000): lá mora a linha `(organization_id, channel_type,
+ * external_user_id) → lead_id`, escrita EXCLUSIVAMENTE por RPC SECURITY DEFINER
+ * no clique de um humano autenticado no chat. O chamador desta função consulta
+ * essa tabela pelo `contact_external_id` e passa o resultado em `leadId`; ausência
+ * de vínculo (o caso comum) é `null`, e a mensagem entra igual.
+ *
+ * Por que esta função nunca poderia CRIAR o lead: o fornecedor confirmou POR
+ * ESCRITO que não assina o corpo do webhook. Quem descobrir o secret do path e o
+ * uuid da subconta consegue POSTAR mensagem forjada numa org — e se este caminho
+ * criasse lead, ele seria um botão de INFLAR A BASE de qualquer org, uma
+ * requisição por lead. É o mesmo molde do WhatsApp: `whatsapp-webhook` não tem
+ * uma única chamada a `getOrCreateLead`; quem cria é `useCreateLeadFromWhatsApp`.
+ * Qualquer PR que faça este arquivo escrever em `leads` ou em
+ * `lead_social_identities` está fora do desenho.
  *
  * ⚠️ `raw_payload` recebe o corpo INTEGRAL, sempre. É ele que ensina o formato
  * quando a doc do fornecedor estiver errada de novo.
@@ -581,6 +598,15 @@ export function buildInboundChannelMessageRow(params: {
   content: InboundContent;
   timestampIso: string;
   rawPayload: unknown;
+  /**
+   * `lead_id` já RESOLVIDO pelo chamador (SELECT em `lead_social_identities`).
+   *
+   * OPCIONAL e com default `null` de propósito: o módulo é PURO e não conhece
+   * banco, e omitir o campo tem de significar exatamente o que significava antes
+   * desta fatia — linha sem vínculo. Um parâmetro obrigatório aqui só moveria a
+   * decisão para o chamador sem mudar o resultado do caminho não-vinculado.
+   */
+  leadId?: string | null;
 }): InboundChannelMessageRow {
   return {
     organization_id: params.organizationId,
@@ -603,7 +629,7 @@ export function buildInboundChannelMessageRow(params: {
     phone_number: null,
     instance_id: null,
     page_id: null,
-    lead_id: null,
+    lead_id: params.leadId ?? null,
     timestamp: params.timestampIso,
     raw_payload: params.rawPayload,
   };

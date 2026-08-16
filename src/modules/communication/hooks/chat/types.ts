@@ -133,11 +133,22 @@ export interface SocialContact {
   last_message_direction: "incoming" | "outgoing" | null;
   unread_count: number;
   /**
-   * NULL nesta fatia, sempre. `leads` não tem nenhuma coluna de identidade
-   * social — vincular exigiria `lead_social_identities`, que é fatia própria.
-   * O campo existe para o dia em que existir, não para ser preenchido no chute.
+   * Lead vinculado a esta identidade de Instagram, quando alguém vinculou.
+   *
+   * A fonte da verdade é `lead_social_identities` — NÃO
+   * `channel_messages.lead_id`, que é cache derivado e nasce nulo em toda
+   * mensagem que chega antes do vínculo existir. Quem preenche este campo é o
+   * LEFT JOIN da RPC da lista; o vínculo em si só é criado por humano
+   * autenticado no chat (o webhook de entrada não é assinado e por isso não
+   * cria nada).
    */
   lead_id: string | null;
+  /**
+   * Nome do lead vinculado. Vem JUNTO na RPC, não de um segundo fetch: a lista
+   * do WhatsApp paga um fanout de enriquecimento por lote e é ele que produz a
+   * janela em que a linha aparece sem nome.
+   */
+  lead_name: string | null;
   /** Sempre `[]` nesta fatia: etiqueta hoje pendura em lead ou em conversa de WhatsApp. */
   tags: ChatContactTag[];
 }
