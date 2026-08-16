@@ -56,6 +56,52 @@ interface BoxConversation {
   readOnlyReason: string | null;
 }
 
+// ─── Fixture — para julgar o DESENHO sem depender de sessão ──────────────────
+// Formas tiradas de prod: uma org com muitas caixas, algumas com conversa,
+// uma desconectada, uma de Instagram (que hoje nunca tem conversa ligada a
+// lead, porque `lead_social_identities` está vazia).
+
+const FIXTURE: BoxConversation[] = [
+  {
+    boxId: "f1", boxName: "Comercial · 48 99147-0458", channel: "whatsapp",
+    status: "connected", lastAt: new Date(Date.now() - 2 * 3600_000).toISOString(),
+    lastText: "Perfeito, me manda o orçamento com o prazo de entrega que eu levo pro financeiro hoje ainda",
+    lastDirection: "incoming", unread: 3, readOnlyReason: null,
+  },
+  {
+    boxId: "f2", boxName: "Pós-venda · 48 99189-2653", channel: "whatsapp",
+    status: "connected", lastAt: new Date(Date.now() - 9 * 86_400_000).toISOString(),
+    lastText: "Bom dia! Passando pra confirmar que a nota saiu certinha.",
+    lastDirection: "outgoing", unread: 0, readOnlyReason: null,
+  },
+  {
+    boxId: "f3", boxName: "SDR 2 · 48 98433-4050", channel: "whatsapp",
+    status: "disconnected", lastAt: new Date(Date.now() - 74 * 86_400_000).toISOString(),
+    lastText: "Show, qualquer coisa me chama por aqui",
+    lastDirection: "incoming", unread: 0, readOnlyReason: "Número desconectado",
+  },
+  {
+    boxId: "f4", boxName: "@milennials.b2b", channel: "instagram",
+    status: "connected", lastAt: null, lastText: null, lastDirection: null,
+    unread: 0, readOnlyReason: null,
+  },
+  {
+    boxId: "f5", boxName: "Prospecção · 48 99905-3409", channel: "whatsapp",
+    status: "connected", lastAt: null, lastText: null, lastDirection: null,
+    unread: 0, readOnlyReason: null,
+  },
+  {
+    boxId: "f6", boxName: "Suporte · 48 99119-8142", channel: "whatsapp",
+    status: "connected", lastAt: null, lastText: null, lastDirection: null,
+    unread: 0, readOnlyReason: null,
+  },
+  {
+    boxId: "f7", boxName: "Marketing · 11 97788-1200", channel: "whatsapp",
+    status: "connected", lastAt: null, lastText: null, lastDirection: null,
+    unread: 0, readOnlyReason: "Você não tem acesso a este número",
+  },
+];
+
 /** Agrega, por caixa, a conversa que o lead tem. Client-side — ver #1610. */
 function useLeadConversationsByBox(leadPhone: string | null) {
   const { data: teamMember } = useCurrentTeamMember();
@@ -344,7 +390,15 @@ export default function SeletorConversaPreview() {
   const [params, setParams] = useSearchParams();
   const variante = params.get("v") ?? "1";
   const [phone, setPhone] = useState(params.get("phone") ?? "");
-  const { data: rows = [], isLoading } = useLeadConversationsByBox(phone || null);
+  const { data: reais = [], isLoading } = useLeadConversationsByBox(phone || null);
+
+  // Diagnóstico: sem isso a tela mentia — dizia "digite um telefone" quando o
+  // problema real era não ter sessão nesta origem.
+  const { data: teamMember, isLoading: authLoading } = useCurrentTeamMember();
+  const { boxes } = useInboxBoxes();
+  const semSessao = !authLoading && !teamMember?.organization_id;
+  const usandoFixture = params.get("real") !== "1" || semSessao;
+  const rows = usandoFixture ? FIXTURE : reais;
 
   return (
     <div className="min-h-screen bg-background p-8 text-foreground">
@@ -373,22 +427,46 @@ export default function SeletorConversaPreview() {
           e sem conversa. A consulta aqui é client-side de propósito — a forma
           final é o #1610.
         </p>
-        <Input
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="Telefone do lead — ex.: 48999887766"
-          className="mt-4 max-w-xs"
-        />
+        {!usandoFixture && (
+          <Input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="Telefone do lead — ex.: 48991470458"
+            className="mt-4 max-w-xs"
+          />
+        )}
       </header>
 
-      <div className="flex min-h-[400px] items-start">
-        {isLoading && <p className="text-sm text-muted-foreground">Carregando…</p>}
-        {!isLoading && rows.length === 0 && (
+      {/* Estado, à vista. Protótipo que esconde por que está vazio não serve. */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-border bg-card/60 px-3 py-2 font-mono text-[11px] text-muted-foreground">
+        <span>fonte: <b className="text-foreground">{usandoFixture ? "exemplo" : "prod, ao vivo"}</b></span>
+        <span>sessão: <b className="text-foreground">{authLoading ? "…" : teamMember?.organization_id ? "ok" : "ausente"}</b></span>
+        <span>caixas da org: <b className="text-foreground">{boxes.length}</b></span>
+        <span>linhas: <b className="text-foreground">{rows.length}</b></span>
+        {!usandoFixture && <span>consulta: <b className="text-foreground">{isLoading ? "carregando" : "pronta"}</b></span>}
+      </div>
+
+      {semSessao && (
+        <p className="mb-5 max-w-2xl text-sm text-muted-foreground">
+          Sem sessão nesta origem — seu login vive no domínio de produção, não em
+          <code className="mx-1 rounded bg-muted px-1">localhost</code>. Então estes
+          são <b className="text-foreground">dados de exemplo</b>, com as formas que
+          medi em prod. Serve para julgar o desenho. Para ver dados ao vivo, faça
+          login em <code className="mx-1 rounded bg-muted px-1">localhost:8081/auth</code>
+          e volte com <code className="mx-1 rounded bg-muted px-1">?real=1</code>.
+        </p>
+      )}
+
+      <div className="flex min-h-[420px] items-start">
+        {!usandoFixture && isLoading && (
+          <p className="text-sm text-muted-foreground">Carregando…</p>
+        )}
+        {!usandoFixture && !isLoading && !phone && (
           <p className="text-sm text-muted-foreground">
             Digite um telefone acima. Sem telefone não há o que resolver.
           </p>
         )}
-        {!isLoading && rows.length > 0 && (
+        {rows.length > 0 && (
           <>
             {variante === "1" && <VarianteLista rows={rows} />}
             {variante === "2" && <VarianteCards rows={rows} />}
