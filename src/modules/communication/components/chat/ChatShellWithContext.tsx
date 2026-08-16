@@ -35,7 +35,7 @@ import {
   computeChatDeepLinkPlan,
   type ChatDeepLinkPlan,
 } from "@/modules/communication/lib/computeChatDeepLinkPlan";
-import { useLeadPhone } from "@/modules/leads";
+import { useLeadPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useCopilotToggle } from "@/modules/copilot/hooks/useCopilotToggle";
 import { useCopilotPause } from "@/modules/copilot/hooks/useCopilotPause";
 import { ChatShell } from "@/modules/communication/components/chat/layout/ChatShell";

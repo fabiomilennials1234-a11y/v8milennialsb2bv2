@@ -97,7 +97,6 @@ export type { QualificationTier } from "./components/lead-detail/modal/types";
 // ── Hooks: WhatsApp write-instance resolution ──────────────────────────────
 export { useLeadWriteInstance } from "./hooks/useLeadWriteInstance";
 export type { LeadWriteInstanceState } from "./hooks/useLeadWriteInstance";
-export { useLeadPhone } from "./hooks/useLeadPhone";
 
 // ── Hooks: timeline / history / field changelog (consolidados em slice 4) ──
 // Antes da slice 4 estavam em 4 arquivos: useLeadHistory + useLeadTimeline +
