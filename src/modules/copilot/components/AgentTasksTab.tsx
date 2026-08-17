@@ -29,6 +29,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAgentPendingTasks } from "@/modules/copilot/hooks/useAgentMetrics";
@@ -170,15 +171,16 @@ function TaskCard({ task, onAction }: { task: Task; onAction: (task: Task, actio
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {leadPhone && (
-            <Button
+          {leadPhone && lead && (
+            <AbrirConversaButton
+              leadId={lead.id}
+              phone={leadPhone}
               variant="outline"
               size="sm"
-              onClick={() => window.open(`https://wa.me/${leadPhone.replace(/\D/g, '')}`, '_blank')}
             >
               <MessageSquare className="w-4 h-4 mr-1" />
               WhatsApp
-            </Button>
+            </AbrirConversaButton>
           )}
           <Button
             variant="outline"

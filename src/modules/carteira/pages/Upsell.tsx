@@ -308,16 +308,6 @@ export default function Upsell() {
                 <CarteiraClientTable
                   selectedClientId={selectedClient?.id ?? null}
                   onSelectClient={(client) => setSelectedClient(client)}
-                  onWhatsApp={(client) => {
-                    if (client.lead_id) {
-                      navigate(`/chat?lead=${client.lead_id}`);
-                    } else if (client.phone) {
-                      window.open(
-                        `https://wa.me/${client.phone.replace(/\D/g, "")}`,
-                        "_blank",
-                      );
-                    }
-                  }}
                   onNewOrder={(id) => {
                     setQuickOrderClientId(id);
                     setNovaVendaOpen(true);

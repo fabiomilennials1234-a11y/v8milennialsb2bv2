@@ -3,6 +3,7 @@ import { Copy, MessageCircle, Sparkles, Loader2, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { formatDateLong } from "@/lib/format";
 import { toast } from "@/components/ui/use-toast";
 import { useRetentionSuggestion, useGenerateRetentionSuggestion } from "@/modules/carteira/hooks/useRetentionSuggestion";
@@ -10,6 +11,8 @@ import type { Tables } from "@/integrations/supabase/types";
 
 interface ClienteCopilotSuggestionProps {
   clientId?: string;
+  /** Lead vinculado ao cliente. Sem ele não há Conversa do Lead a abrir. */
+  leadId?: string | null;
   clientName: string;
   phone: string | null;
   alerts: Tables<"client_alerts">[];
@@ -57,6 +60,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 export function ClienteCopilotSuggestion({
   clientId,
+  leadId,
   clientName,
   phone,
   alerts,
@@ -74,13 +78,6 @@ export function ClienteCopilotSuggestion({
   const handleCopy = () => {
     navigator.clipboard.writeText(message);
     toast({ title: "Mensagem copiada!", description: "Cole no WhatsApp ou onde preferir." });
-  };
-
-  const handleWhatsApp = () => {
-    if (!phone) return;
-    const clean = phone.replace(/\D/g, "");
-    const encoded = encodeURIComponent(message);
-    window.open(`https://wa.me/${clean}?text=${encoded}`, "_blank");
   };
 
   const handleGenerate = () => {
@@ -174,20 +171,29 @@ export function ClienteCopilotSuggestion({
             <Copy size={12} />
             Copiar
           </Button>
-          <Button
-            size="sm"
-            className={cn(
-              "flex-1 gap-1.5 text-xs h-8 font-semibold",
-              phone && !generating
-                ? "bg-primary hover:bg-primary/90 text-primary-foreground"
-                : "bg-muted text-muted-foreground cursor-not-allowed",
-            )}
-            onClick={handleWhatsApp}
-            disabled={!phone || generating}
-          >
-            <MessageCircle size={12} />
-            Enviar via WhatsApp
-          </Button>
+          {/* A sugestão vai como DRAFT no composer, nunca como mensagem enviada
+              (decisão 10 da spec): texto de IA que sai sem o vendedor reler é
+              como sugestão vira erro em cliente real.
+              Exige `leadId`: cliente de carteira sem lead vinculado não tem
+              Conversa do Lead, e aí o botão não aparece. */}
+          {leadId && (
+            <AbrirConversaButton
+              leadId={leadId}
+              phone={phone}
+              draft={message}
+              size="sm"
+              disabled={!phone || generating}
+              className={cn(
+                "flex-1 gap-1.5 text-xs h-8 font-semibold",
+                phone && !generating
+                  ? "bg-primary hover:bg-primary/90 text-primary-foreground"
+                  : "bg-muted text-muted-foreground cursor-not-allowed",
+              )}
+            >
+              <MessageCircle size={12} />
+              Abrir com a sugestão
+            </AbrirConversaButton>
+          )}
         </div>
       </CardContent>
     </Card>
