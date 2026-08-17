@@ -340,8 +340,69 @@ export function readSubaccountDefaults(
  * uma subconta do painel de revenda: se a linha do cofre se perder, é por ele que
  * a órfã é reconciliada em `GET /v1/resale/`.
  */
+/**
+ * Teto de e-mail do fornecedor, MEDIDO — não documentado.
+ *
+ * Em 2026-08-17 criamos duas subcontas com o e-mail canônico de 61 caracteres.
+ * A API respondeu `HTTP 200 {"Status":"Sucesso"}` e guardou o valor CORTADO em
+ * 45, no meio do domínio:
+ *
+ *   enviado : torque-38f3bea4-44c6-4732-bb20-065f547a7ed8@milennials.com.br
+ *   guardado: torque-38f3bea4-44c6-4732-bb20-065f547a7ed8@m
+ *
+ * ⚠️ E o e-mail NÃO tem conserto depois: o `PUT /v2/accounts` não aceita o campo
+ * e a API não tem exclusão de subconta. O que nasce torto fica torto.
+ */
+export const SUBACCOUNT_EMAIL_MAX = 45;
+
+/**
+ * O e-mail canônico da subconta — CURTO o bastante para sobreviver ao teto.
+ *
+ * O formato anterior (`torque-{uuid}@{domínio}`) dava 61 caracteres para
+ * QUALQUER organização. Não era um problema daquelas duas contas: toda subconta
+ * criada pelo caminho automático nasceria truncada, `lookupResaleAccountByEmail`
+ * procuraria o e-mail inteiro, não acharia, e provisionaria uma SEGUNDA subconta
+ * para o mesmo cliente — em silêncio, porque o fornecedor responde "Sucesso".
+ *
+ * Aqui a parte local usa os 12 primeiros dígitos hex do uuid (sem hífens): 4,7e14
+ * combinações, contra ~30 orgs hoje e ordens de grandeza de folga. Determinístico
+ * é requisito, não conveniência — é ele que permite reencontrar a subconta órfã.
+ */
 export function buildSubaccountEmail(organizationId: string, emailDomain: string): string {
+  const hex = organizationId.replace(/-/g, "");
+  // O espaço da parte local é o que SOBRA depois do domínio — que vem de secret
+  // e pode mudar sem ninguém revisar este arquivo. Um prefixo fixo estouraria o
+  // teto justamente no dia em que o domínio crescesse, e o estouro é silencioso.
+  const disponivel = SUBACCOUNT_EMAIL_MAX - emailDomain.length - 1 - "torque-".length;
+  // Piso de 8: abaixo disso a colisão entre orgs deixa de ser desprezível, e
+  // duas orgs com o mesmo e-mail é a subconta de um cliente adotada por outro.
+  const tamanho = Math.max(8, Math.min(12, disponivel));
+  const compacto = hex.slice(0, tamanho) || "semid";
+  return `torque-${compacto}@${emailDomain}`;
+}
+
+/**
+ * O formato ANTIGO, que gerou as subcontas criadas até 2026-08-17.
+ *
+ * Continua existindo porque aquelas contas existem, não podem ser renomeadas e
+ * precisam ser reconhecidas — senão o provisionamento cria uma duplicata para
+ * cada uma delas no primeiro clique em conectar.
+ */
+export function legacySubaccountEmail(organizationId: string, emailDomain: string): string {
   return `torque-${organizationId}@${emailDomain}`;
+}
+
+/**
+ * Todos os e-mails sob os quais a subconta de uma org pode estar registrada.
+ * Ordem = preferência: o canônico primeiro, o legado como reconhecimento.
+ */
+export function subaccountEmailCandidates(
+  organizationId: string,
+  emailDomain: string,
+): string[] {
+  const canonico = buildSubaccountEmail(organizationId, emailDomain);
+  const legado = legacySubaccountEmail(organizationId, emailDomain);
+  return legado === canonico ? [canonico] : [canonico, legado];
 }
 
 /**
@@ -761,7 +822,15 @@ export function findResaleAccountByEmail(rawText: string, email: string): Resale
     if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
     const r = item as Record<string, unknown>;
     const itemEmail = typeof r.email === "string" ? r.email.trim().toLowerCase() : "";
-    if (itemEmail && itemEmail === wanted) matches.push(r);
+    // Igualdade OU truncamento no teto do fornecedor — ver SUBACCOUNT_EMAIL_MAX.
+    //
+    // ⚠️ O prefixo só vale quando o e-mail guardado está EXATAMENTE no limite.
+    // Sem essa condição, um `torque-3@m` casaria com toda org que começasse com
+    // 3 — e adotar a subconta de outro cliente é o pior desfecho deste arquivo,
+    // porque entrega a caixa de mensagens de um tenant a outro.
+    const truncadoNoTeto = itemEmail.length === SUBACCOUNT_EMAIL_MAX &&
+      wanted.startsWith(itemEmail);
+    if (itemEmail && (itemEmail === wanted || truncadoNoTeto)) matches.push(r);
   }
 
   if (matches.length === 0) return { ok: true, status: "absent" };

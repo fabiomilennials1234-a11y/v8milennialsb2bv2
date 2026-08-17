@@ -76,6 +76,7 @@ import { encryptSecret, decryptSecret } from "./crypto.ts";
 import {
   createSubaccount,
   buildSubaccountEmail,
+  subaccountEmailCandidates,
   lookupResaleAccountByEmail,
   NotificameError,
   type FetchImpl,
@@ -527,8 +528,33 @@ export async function ensureNotificameSubaccount(
 
   let lookup: ResaleLookup | { ok: false; code: string };
   try {
-    lookup = await withDeadline(RESALE_LOOKUP_TIMEOUT_MS, fetchImpl, (f) =>
-      lookupResaleAccountByEmail(parent, vendorEmail, f));
+    // ⚠️ PROCURA POR TODOS OS FORMATOS DE E-MAIL QUE A ORG PODE TER.
+    //
+    // O formato canônico encurtou em 2026-08-17, quando se descobriu que o
+    // fornecedor TRUNCA o e-mail em 45 caracteres sem avisar (responde
+    // "Sucesso"). As subcontas criadas antes disso estão registradas sob o
+    // formato antigo — e o e-mail não é editável nem a subconta é excluível.
+    //
+    // Procurar só pelo canônico deixaria aquelas contas invisíveis, e a
+    // consequência não é um erro: é uma SEGUNDA subconta provisionada para o
+    // mesmo cliente, em silêncio.
+    lookup = { ok: true, status: "absent" } as ResaleLookup;
+    // O e-mail GRAVADO vem primeiro e sempre: é a trilha da linha, e trocar
+    // `email_domain` no secret não pode apagá-la. Os recalculados entram DEPOIS,
+    // como reconhecimento — nunca como substituição.
+    const candidatos = [
+      vendorEmail,
+      ...subaccountEmailCandidates(organizationId, defaults.email_domain),
+    ].filter((e, i, todos) => e && todos.indexOf(e) === i);
+
+    for (const candidato of candidatos) {
+      const tentativa = await withDeadline(RESALE_LOOKUP_TIMEOUT_MS, fetchImpl, (f) =>
+        lookupResaleAccountByEmail(parent, candidato, f));
+      lookup = tentativa;
+      // Para no primeiro desfecho CONCLUSIVO: achou, achou demais, ou a consulta
+      // falhou. Só "não existe sob este e-mail" justifica tentar o próximo.
+      if (!tentativa.ok || tentativa.status !== "absent") break;
+    }
   } catch {
     lookup = { ok: false, code: "resale_timeout" };
   }
