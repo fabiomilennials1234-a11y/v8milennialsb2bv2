@@ -905,9 +905,17 @@ export function WhatsAppSettings() {
         open={isChooserOpen}
         onOpenChange={setIsChooserOpen}
         onChooseUazapi={() => setIsCreateDialogOpen(true)}
-        onChooseMeta={() => {
-          void connectWhatsAppCloud();
-        }}
+        // MESMA REGRA DO NOTIFICAME, e ela estava faltando aqui: handler ausente
+        // ⇒ o card da Meta nem renderiza. Antes o card era incondicional e a flag
+        // `meta_cloud` decidia só se o diálogo abria — então uma org só-NotificaMe
+        // via o Embedded Signup oferecido e clicava num caminho que ela não tem.
+        onChooseMeta={
+          metaCloudFlag.enabled
+            ? () => {
+                void connectWhatsAppCloud();
+              }
+            : undefined
+        }
         // Handler ausente ⇒ o card do NotificaMe nem renderiza (flag OFF).
         //
         // O `"whatsapp"` é EXPLÍCITO, não default. O mesmo hook agora conecta

@@ -7,6 +7,13 @@
  * pela janela de 24h; WhatsApp Oficial (NotificaMe) = login Meta pelo Seamless,
  * número oficial sem risco de ban. Honesto sobre o trade nos três casos.
  *
+ * OS DOIS CAMINHOS OFICIAIS SÃO OPCIONAIS, E PELA MESMA REGRA: o card existe se, e
+ * somente se, o handler dele chegar. Até 2026-08-17 o card da Meta renderizava
+ * INCONDICIONALMENTE — a flag `meta_cloud` decidia só se o diálogo abria, não se
+ * aquele card aparecia. Efeito: uma org com `meta_cloud` desligada e `notificame`
+ * ligada via o Embedded Signup oferecido, clicava, e caía num caminho que a org
+ * não tem. Quem manda no card é o handler; a flag mora no chamador, um lugar só.
+ *
  * Card DESABILITADO COM MOTIVO: quando a configuração do fornecedor ainda não
  * existe, o card nasce inerte e diz por quê ANTES do clique. O precedente
  * (`meta_cloud`) só avisa por toast depois — o usuário clica, nada acontece
@@ -39,8 +46,11 @@ interface WhatsAppProviderChooserProps {
   onOpenChange: (open: boolean) => void;
   /** Uazapi QR path → opens the existing create-instance flow. */
   onChooseUazapi: () => void;
-  /** Meta Cloud path → launches Embedded Signup. */
-  onChooseMeta: () => void;
+  /**
+   * Meta Cloud path → launches Embedded Signup. O card só existe quando este
+   * handler é passado (flag `meta_cloud` ligada) — mesma regra do NotificaMe.
+   */
+  onChooseMeta?: () => void;
   /**
    * NotificaMe Seamless path → abre o popup do fornecedor. O card só existe
    * quando este handler é passado (flag `notificame` ligada).
@@ -155,11 +165,17 @@ export function WhatsAppProviderChooser({
   onChooseNotificame,
   notificameDisabledReason,
 }: WhatsAppProviderChooserProps) {
+  const hasMeta = typeof onChooseMeta === "function";
   const hasNotificame = typeof onChooseNotificame === "function";
+  // A largura e as colunas saem da CONTAGEM de cards, não de qual deles existe.
+  // Com o card da Meta agora opcional, amarrar o grid a `hasNotificame` deixaria
+  // uma coluna vazia no caso Uazapi + NotificaMe — o mais comum depois desta
+  // mudança.
+  const cardCount = 1 + (hasMeta ? 1 : 0) + (hasNotificame ? 1 : 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn("max-w-2xl", hasNotificame && "lg:max-w-4xl")}>
+      <DialogContent className={cn("max-w-2xl", cardCount === 3 && "lg:max-w-4xl")}>
         <DialogHeader>
           <DialogTitle>Conectar WhatsApp</DialogTitle>
           <DialogDescription>
@@ -167,7 +183,7 @@ export function WhatsAppProviderChooser({
           </DialogDescription>
         </DialogHeader>
 
-        <div className={cn("grid gap-4 py-2 sm:grid-cols-2", hasNotificame && "lg:grid-cols-3")}>
+        <div className={cn("grid gap-4 py-2 sm:grid-cols-2", cardCount === 3 && "lg:grid-cols-3")}>
           <ProviderCard
             icon={<QrCode className="h-5 w-5" />}
             label={UAZAPI.label}
@@ -179,21 +195,23 @@ export function WhatsAppProviderChooser({
               onChooseUazapi();
             }}
           />
-          <ProviderCard
-            icon={<ShieldCheck className="h-5 w-5" />}
-            label={META.label}
-            tagline={META.tagline}
-            features={META_FEATURES}
-            caveat="Janela 24h · sem Pix/menu/disparo Uazapi"
-            // O destaque migra para o NotificaMe quando ele existe: é o caminho
-            // oficial que já está ao alcance, enquanto o Embedded Signup segue
-            // esperando App Review.
-            highlight={!hasNotificame}
-            onChoose={() => {
-              onOpenChange(false);
-              onChooseMeta();
-            }}
-          />
+          {hasMeta && (
+            <ProviderCard
+              icon={<ShieldCheck className="h-5 w-5" />}
+              label={META.label}
+              tagline={META.tagline}
+              features={META_FEATURES}
+              caveat="Janela 24h · sem Pix/menu/disparo Uazapi"
+              // O destaque migra para o NotificaMe quando ele existe: é o caminho
+              // oficial que já está ao alcance, enquanto o Embedded Signup segue
+              // esperando App Review.
+              highlight={!hasNotificame}
+              onChoose={() => {
+                onOpenChange(false);
+                onChooseMeta?.();
+              }}
+            />
+          )}
           {hasNotificame && (
             <ProviderCard
               icon={<BadgeCheck className="h-5 w-5" />}
