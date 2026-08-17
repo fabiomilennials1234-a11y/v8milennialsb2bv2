@@ -779,6 +779,10 @@ describe("buildInboundChannelMessageRow — a linha de channel_messages", () => 
       sender_id: "igsid-777",
       sender_name: "Fulana",
       sender_profile_pic: "https://x/y.jpg",
+      // Campo novo (2026-08-17): o @ do interlocutor virou coluna. Este teste
+      // fixa a forma INTEIRA de propósito — é ele que obriga a decisão a ser
+      // consciente quando alguém acrescenta campo à linha.
+      contact_handle: "fulana",
       remote_jid: null,
       phone_number: null,
       instance_id: null,
@@ -962,5 +966,47 @@ describe("pickContact — contra o primeiro payload REAL", () => {
 
   it("lê o avatar de visitor.picture", () => {
     expect(pickContact(PAYLOAD_REAL_IG).avatarUrl).toContain("cdninstagram.com");
+  });
+});
+
+describe("buildInboundChannelMessageRow — o @ do contato vira COLUNA", () => {
+  /**
+   * O handle chegava no corpo e morria no `raw_payload`. Preso lá dentro ele não
+   * é pesquisável nem casável: o detector de duplicatas precisa comparar o @ do
+   * Instagram com o que o vendedor anotou no lead, e ninguém faz isso varrendo
+   * jsonb de dez mil linhas.
+   */
+  it("grava contact_handle a partir do contato lido", () => {
+    const row = buildInboundChannelMessageRow({
+      organizationId: "org-1",
+      messagingChannelId: "canal-1",
+      externalId: "msg-1",
+      contact: pickContact(PAYLOAD_REAL_IG),
+      contactExternalId: "1527557648673564",
+      content: pickContent(PAYLOAD_REAL_IG),
+      timestampIso: "2026-08-17T17:25:02.000Z",
+      rawPayload: PAYLOAD_REAL_IG,
+    });
+
+    expect(row.contact_handle).toBe("m.montemezzo");
+    // O nome humano continua no seu lugar — a inversão do fornecedor não vaza.
+    expect(row.sender_name).toBe("Marcelo Montemezzo");
+    expect(row.content).toBe("Fala Gipp");
+  });
+
+  it("corpo sem handle grava null, e não string vazia", () => {
+    const semHandle = { message: { from: "999", contents: [{ text: "oi", type: "text" }] } };
+    const row = buildInboundChannelMessageRow({
+      organizationId: "org-1",
+      messagingChannelId: "canal-1",
+      externalId: "msg-2",
+      contact: pickContact(semHandle),
+      contactExternalId: "999",
+      content: pickContent(semHandle),
+      timestampIso: "2026-08-17T17:25:02.000Z",
+      rawPayload: semHandle,
+    });
+
+    expect(row.contact_handle).toBeNull();
   });
 });

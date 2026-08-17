@@ -558,6 +558,12 @@ export interface InboundChannelMessageRow {
   sender_id: string | null;
   sender_name: string | null;
   sender_profile_pic: string | null;
+  /**
+   * O @usuário do INTERLOCUTOR. Coluna, e não só `raw_payload`, porque é o
+   * segundo sinal de identidade do detector de duplicatas — e sinal preso em
+   * jsonb não é pesquisável. `null` quando o corpo não traz.
+   */
+  contact_handle: string | null;
   /** Conceito de WhatsApp. Instagram não tem JID. */
   remote_jid: null;
   /** Instagram não tem telefone. Ver o ⚠️ abaixo — NUNCA `''`. */
@@ -644,6 +650,14 @@ export function buildInboundChannelMessageRow(params: {
     sender_id: params.contact.externalId,
     sender_name: params.contact.name,
     sender_profile_pic: params.contact.avatarUrl,
+    // O @ do interlocutor, em COLUNA e não só no `raw_payload`. Preso no jsonb
+    // ele não é pesquisável nem casável, e é justamente o segundo sinal do
+    // detector de duplicatas: comparar o @ do Instagram com o que o vendedor
+    // anotou no lead. Ninguém faz isso varrendo jsonb linha a linha.
+    //
+    // ⚠️ Vem de `message.visitor.name`, que é o @ — NÃO o nome humano, que mora
+    // em `firstName`. A inversão é do fornecedor; ver `pickContact`.
+    contact_handle: params.contact.handle,
     remote_jid: null,
     phone_number: null,
     instance_id: null,

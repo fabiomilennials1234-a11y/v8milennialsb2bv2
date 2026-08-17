@@ -31,6 +31,8 @@ interface SocialConversationRow {
   contact_external_id: string;
   sender_name: string | null;
   sender_profile_pic: string | null;
+  /** @ do interlocutor — entra no RETURNS a partir de 20270818090000. */
+  contact_handle: string | null;
   last_message: string | null;
   last_message_time: string;
   last_message_direction: string | null;
@@ -51,12 +53,14 @@ function toSocialContact(
     ),
     messaging_channel_id: messagingChannelId,
     external_user_id: row.contact_external_id,
-    // `channel_messages` não guarda o @handle do INTERLOCUTOR — só o nome de
-    // exibição que o payload trouxer. O handle que a fatia 1.1 backfilla é o da
-    // NOSSA conta e mora em `messaging_channels.handle`, que é outra coisa.
-    // Deixar null aqui é honesto; inventá-lo a partir do nome seria mentira
-    // renderizada com "@" na frente.
-    handle: null,
+    // O @ do INTERLOCUTOR, agora em coluna própria (`contact_handle`, migration
+    // 20270818090000). Até a primeira mensagem real chegar, este campo era `null`
+    // com um comentário dizendo que o payload não trazia o handle — o corpo
+    // provou o contrário: ele vem em `message.visitor.name`.
+    //
+    // ⚠️ NÃO confundir com `messaging_channels.handle`, que é o @ da NOSSA conta.
+    // São entidades diferentes, e trocá-las poria o nosso @ no lugar do cliente.
+    handle: row.contact_handle ?? null,
     display_name: row.sender_name ?? null,
     avatar_url: row.sender_profile_pic ?? null,
     last_message: row.last_message ?? null,
