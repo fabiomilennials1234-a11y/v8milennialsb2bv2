@@ -571,8 +571,17 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/* /chat — alias legado consolidado em /chat-whatsapp (canônico: deep-links ?phone/?instance, sidebar, prefetch/skeleton) */}
-      <Route path="/chat" element={<Navigate to="/chat-whatsapp" replace />} />
+      {/* /chat — alias legado consolidado em /chat-whatsapp (canônico: deep-links
+          ?phone/?instance, sidebar, prefetch/skeleton).
+
+          ⚠️ `to` PRECISA repassar a query string. `<Navigate to="/chat-whatsapp">`
+          sem ela descartava TODOS os params, e isso quebrava em silêncio todo
+          deep-link que passasse por aqui: o `?lead=` da carteira nunca chegava
+          ao ChatShell, e o seletor de Conversa do Lead abria na caixa errada
+          porque `?instance=` era comido no caminho. Achado só rodando o app
+          (validação ponta a ponta do mapa #1605) — nenhum teste de unidade vê
+          um redirect de rota. */}
+      <Route path="/chat" element={<NavigateComQuery to="/chat-whatsapp" />} />
       <Route
         path="/chat-whatsapp"
         element={
@@ -778,6 +787,19 @@ function AppRoutes() {
     </Routes>
     </Suspense>
   );
+}
+
+/**
+ * `NavigateComQuery` — redirect que PRESERVA a query string.
+ *
+ * `<Navigate to="/x" />` descarta `?a=b`. Num alias de rota isso quebra todo
+ * deep-link em silêncio: nenhum erro aparece, a tela só abre sem contexto.
+ * Foi assim que `?lead=` da carteira e `?instance=` do seletor de Conversa do
+ * Lead morriam antes de chegar ao ChatShell (mapa #1605).
+ */
+function NavigateComQuery({ to }: { to: string }) {
+  const { search, hash } = useLocation();
+  return <Navigate to={`${to}${search}${hash}`} replace />;
 }
 
 const App = () => {
