@@ -15,10 +15,34 @@ const UpsellContext = lazy(() =>
   import("../leads/funnel-contexts/UpsellContext").then((m) => ({ default: m.UpsellClientContext }))
 );
 
+/**
+ * Este componente só encaminha — mas era aqui que a tipagem morria.
+ *
+ * `any` é atribuível a qualquer tipo, então enquanto estas props fossem `any`
+ * o compilador aceitaria qualquer coisa nos filhos, por mais bem tipados que
+ * eles estivessem. Tipar a folha e deixar o encaminhador `any` não protege
+ * nada — o buraco fica na fronteira, não no destino.
+ *
+ * O tipo já existia na origem: `useLeadDetail` infere de `supabase.from("leads")`.
+ */
+interface FunnelContextLead {
+  id: string;
+  phone: string | null;
+}
+
+interface FunnelContextPipeData {
+  id: string;
+  lead_id: string;
+  sdr_id: string | null;
+  status: string | null;
+  responsible?: { name: string | null } | null;
+  sdr?: { name: string | null } | null;
+}
+
 interface LeadDetailFunnelContextProps {
-  lead: any;
+  lead: FunnelContextLead | null;
   variant: DrawerVariant;
-  pipeData: any;
+  pipeData: FunnelContextPipeData | null;
   onSuccess?: () => void;
 }
 
