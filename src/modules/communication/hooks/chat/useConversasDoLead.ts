@@ -44,10 +44,16 @@ export function useConversasDoLead(phone: string | null | undefined) {
     queryFn: async () => {
       if (!target) return [];
 
+      // `p_organization_id` é OBRIGATÓRIO e vem daqui, não do servidor: só o
+      // cliente sabe qual org o shadow do master selecionou. A primeira versão
+      // derivava no servidor com `get_my_organization_ids()` e por isso listava
+      // caixa de TODAS as orgs do usuário — em produção, 14 orgs e 69 caixas.
+      //
       // `as any` no nome da RPC: `types.ts` é gerado e ainda não conhece esta
       // função. Some quando alguém rodar `supabase gen types`.
       const { data, error } = await (supabase as any).rpc("get_conversas_do_lead", {
         p_phone: target,
+        p_organization_id: organizationId,
       });
       if (error) throw error;
 

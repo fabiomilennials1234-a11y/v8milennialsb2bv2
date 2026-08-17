@@ -26,7 +26,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(14);
+SELECT plan(16);
 
 -- ---------------------------------------------------------------------------
 -- Fixture — duas orgs, um membro em cada
@@ -100,8 +100,8 @@ VALUES
 -- (a) Estrutura
 -- ---------------------------------------------------------------------------
 SELECT has_function(
-  'public', 'get_conversas_do_lead', ARRAY['text'],
-  '(a) get_conversas_do_lead(text) existe');
+  'public', 'get_conversas_do_lead', ARRAY['text','uuid'],
+  '(a) get_conversas_do_lead(text, uuid) existe');
 
 SELECT is(
   (SELECT prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -119,11 +119,11 @@ SELECT ok(
 -- (b) Grants
 -- ---------------------------------------------------------------------------
 SELECT ok(
-  has_function_privilege('authenticated', 'public.get_conversas_do_lead(text)', 'EXECUTE'),
+  has_function_privilege('authenticated', 'public.get_conversas_do_lead(text, uuid)', 'EXECUTE'),
   '(b) authenticated pode executar');
 
 SELECT ok(
-  NOT has_function_privilege('anon', 'public.get_conversas_do_lead(text)', 'EXECUTE'),
+  NOT has_function_privilege('anon', 'public.get_conversas_do_lead(text, uuid)', 'EXECUTE'),
   '(b) anon NÃO pode executar');
 
 -- ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ SELECT set_config('request.jwt.claims',
   '{"sub":"c0d21605-0001-0000-0000-000000001605","role":"authenticated"}', true);
 
 SELECT is(
-  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766')),
+  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')),
   2::bigint,
   '(c) CONTROLE POSITIVO: membro A vê as 2 caixas ativas da própria org');
 
@@ -143,13 +143,13 @@ SELECT is(
 -- (d) Última mensagem por caixa
 -- ---------------------------------------------------------------------------
 SELECT is(
-  (SELECT last_message_content FROM public.get_conversas_do_lead('5548999887766')
+  (SELECT last_message_content FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')
     WHERE instance_id = 'c0d21605-a001-0000-0000-000000001605'),
   'mensagem recente',
   '(d) devolve a mensagem MAIS RECENTE da caixa, não a primeira');
 
 SELECT is(
-  (SELECT last_message_direction FROM public.get_conversas_do_lead('5548999887766')
+  (SELECT last_message_direction FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')
     WHERE instance_id = 'c0d21605-a001-0000-0000-000000001605'),
   'incoming',
   '(d) devolve a direção da última mensagem');
@@ -158,13 +158,13 @@ SELECT is(
 -- (e) Caixa sem conversa aparece, com campos nulos
 -- ---------------------------------------------------------------------------
 SELECT is(
-  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766')
+  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')
     WHERE instance_id = 'c0d21605-a002-0000-0000-000000001605'),
   1::bigint,
   '(e) caixa SEM conversa continua na lista — é o grupo "iniciar conversa por"');
 
 SELECT ok(
-  (SELECT last_message_at IS NULL FROM public.get_conversas_do_lead('5548999887766')
+  (SELECT last_message_at IS NULL FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')
     WHERE instance_id = 'c0d21605-a002-0000-0000-000000001605'),
   '(e) caixa sem conversa vem com last_message_at nulo');
 
@@ -172,7 +172,7 @@ SELECT ok(
 -- (f) Mensagem apagada não vira "a última"
 -- ---------------------------------------------------------------------------
 SELECT isnt(
-  (SELECT last_message_content FROM public.get_conversas_do_lead('5548999887766')
+  (SELECT last_message_content FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')
     WHERE instance_id = 'c0d21605-a001-0000-0000-000000001605'),
   'mensagem apagada',
   '(f) mensagem com deleted_at não conta, mesmo sendo a mais recente');
@@ -181,13 +181,13 @@ SELECT isnt(
 -- (g) CROSS-TENANT — o assert que justifica rodar como authenticated
 -- ---------------------------------------------------------------------------
 SELECT is(
-  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766')
+  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')
     WHERE instance_id = 'c0d21605-b001-0000-0000-000000001605'),
   0::bigint,
   '(g) membro A NÃO enxerga a caixa da org B');
 
 SELECT is(
-  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766')
+  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')
     WHERE last_message_content = 'conversa da org B'),
   0::bigint,
   '(g) membro A NÃO enxerga a conversa da org B com o mesmo telefone');
@@ -196,10 +196,25 @@ SELECT is(
 -- (h) Caixa em erro fica fora
 -- ---------------------------------------------------------------------------
 SELECT is(
-  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766')
+  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')
     WHERE instance_id = 'c0d21605-a003-0000-0000-000000001605'),
   0::bigint,
   '(h) caixa com status = error não aparece');
+
+-- ---------------------------------------------------------------------------
+-- (i) O GATE DA ORG — o defeito que esta assinatura corrige
+--     A versão anterior derivava a org no servidor e devolvia a união de TODAS
+--     as orgs do usuário. Em produção isso deu 14 orgs / 69 caixas no seletor.
+-- ---------------------------------------------------------------------------
+SELECT throws_ok(
+  $$ SELECT * FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-bbbb-0000-0000-000000001605') $$,
+  'P0001', 'access_denied',
+  '(i) pedir org ALHEIA é recusado com access_denied, não devolve lista vazia');
+
+SELECT throws_ok(
+  $$ SELECT * FROM public.get_conversas_do_lead('5548999887766', NULL) $$,
+  'P0001', 'access_denied',
+  '(i) org nula é recusada — sem org não há recorte, e recorte é o ponto');
 
 SELECT * FROM finish();
 ROLLBACK;
