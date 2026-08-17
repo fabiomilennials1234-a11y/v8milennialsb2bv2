@@ -71,15 +71,21 @@ async function readInvokeError(
     try {
       const body = await (ctx as Response).json();
       if (body && typeof body === "object") {
-        const { code, error: msg, problems } = body as {
+        // Dois formatos no servidor: as nossas recusas trazem `{ error: <frase>,
+        // code }`, e `authErrorResponse` traz `{ error: "Forbidden", message: <frase> }`
+        // — ali `error` é a CATEGORIA. Ler só `error` põe a palavra "Forbidden"
+        // na tela e esconde o motivo; foi o que aconteceu no envio pelo Direct.
+        const { code, error: rotulo, message, problems } = body as {
           code?: string;
           error?: string;
+          message?: string;
           problems?: TemplateProblem[];
         };
-        if (code || msg) {
+        const humana = code ? rotulo : (message ?? rotulo);
+        if (code || humana) {
           return {
-            code: code ?? "unknown",
-            message: msg ?? "Falha ao ler os templates",
+            code: code ?? (rotulo ? rotulo.toLowerCase() : "unknown"),
+            message: humana ?? "Falha ao ler os templates",
             problems: Array.isArray(problems) ? problems : [],
           };
         }
@@ -132,8 +138,21 @@ export function useCreateNotificameTemplate(instanceId: string) {
 
   return useMutation({
     mutationFn: async (draft: TemplateDraftInput) => {
+      // `notificame-templates` é org-scoped (`requireOrganization: true`) e
+      // recusa com 400 sem a org no corpo. Mesmo defeito que matou o envio pelo
+      // Direct; aqui ainda não tinha aparecido só porque a tela nunca foi usada
+      // em produção (zero chamadas em `function_edge_logs`).
+      if (!organizationId) {
+        throw new NotificameTemplatesError("no_org", "Sua organização ainda está carregando");
+      }
+
       const { data, error } = await supabase.functions.invoke("notificame-templates", {
-        body: { action: "create", instance_id: instanceId, template: draft },
+        body: {
+          organization_id: organizationId,
+          action: "create",
+          instance_id: instanceId,
+          template: draft,
+        },
       });
 
       if (error) {
@@ -169,7 +188,8 @@ export function useNotificameTemplates({
     retry: false,
     queryFn: async (): Promise<NotificameTemplate[]> => {
       const { data, error } = await supabase.functions.invoke("notificame-templates", {
-        body: { instance_id: instanceId },
+        // `enabled` já exige a org; mandá-la no corpo é o que a função pede.
+        body: { organization_id: organizationId, instance_id: instanceId },
       });
 
       if (error) {
