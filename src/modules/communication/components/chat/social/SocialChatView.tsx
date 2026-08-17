@@ -38,6 +38,10 @@ import {
   type SocialSendError,
 } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import { socialReplyWindow } from "@/modules/communication/lib/social-window";
+import {
+  audioExtensionForMime,
+  pickAudioRecordingMime,
+} from "@/modules/communication/lib/social-attachment";
 import { uploadSocialAttachment, type UploadedAttachment } from "@/modules/communication/lib/social-attachment-upload";
 import { useCurrentTeamMember } from "@/modules/identity";
 import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
@@ -201,7 +205,11 @@ function SocialComposer({
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const rec = new MediaRecorder(stream);
+      // Sem esta escolha, o Chrome grava `audio/webm;codecs=opus` — o único
+      // formato de áudio que a Meta NÃO lista para o Instagram (ela documenta
+      // aac, m4a, wav, mp4). Pedimos o mais compatível que este navegador tenha.
+      const mime = pickAudioRecordingMime((t) => MediaRecorder.isTypeSupported(t));
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       const pedacos: BlobPart[] = [];
 
       rec.ondataavailable = (e) => pedacos.push(e.data);
@@ -210,8 +218,16 @@ function SocialComposer({
         // fica aceso e o usuário acha que continua sendo ouvido.
         stream.getTracks().forEach((t) => t.stop());
         setGravando(false);
-        const blob = new Blob(pedacos, { type: rec.mimeType || "audio/webm" });
-        await publicar(new File([blob], `audio-${Date.now()}.webm`, { type: blob.type }));
+        // `rec.mimeType` é a VERDADE do que saiu do gravador — o pedido acima
+        // pode não ter sido atendido. A extensão sai dele, nunca de um literal:
+        // um mp4 chamado `.webm` faz o classificador cair na regra errada.
+        const tipo = rec.mimeType || mime || "audio/webm";
+        const blob = new Blob(pedacos, { type: tipo });
+        await publicar(
+          new File([blob], `audio-${Date.now()}.${audioExtensionForMime(tipo)}`, {
+            type: blob.type,
+          }),
+        );
       };
 
       gravadorRef.current = rec;

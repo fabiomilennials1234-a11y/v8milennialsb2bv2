@@ -26,7 +26,10 @@ export async function uploadSocialAttachment(
   file: File,
   organizationId: string,
 ): Promise<UploadedAttachment> {
-  const check = classifyAttachment(file.type, file.name, file.size);
+  // `allowDocument: false` porque este caminho é SÓ do Direct, e o canal não
+  // aceita documento — recusar antes do upload poupa o storage e devolve a razão
+  // na hora, em vez da recusa muda do fornecedor depois do envio.
+  const check = classifyAttachment(file.type, file.name, file.size, { allowDocument: false });
   if (!check.ok) throw new Error(check.error);
 
   const seguro = file.name.replace(/[^\w.-]/g, "_").slice(-80) || "anexo";
