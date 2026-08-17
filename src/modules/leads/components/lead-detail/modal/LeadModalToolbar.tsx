@@ -11,7 +11,8 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { useLeadActionGates } from "../hooks/useLeadActionGates";
 import { cn } from "@/lib/utils";
 
@@ -39,7 +40,6 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
   onOpenCallModal, onOpenEmailComposer, onOpenEmailWriter,
   onOpenScheduleModal, onOpenSmsDialog, onDelete, onClose,
 }: LeadModalToolbarProps) {
-  const openWhatsApp = useOpenWhatsAppChat();
   const gates = useLeadActionGates(lead.id);
   // "Send message" gate (granular key pending) — for now derive from canEditField:
   // an active member who can edit a lead can also send outbound messages.
@@ -49,14 +49,15 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
   return (
     <div className="flex items-center gap-1.5 px-6 py-2.5 border-b border-border/40 bg-card/20">
       {lead.phone && canSendMessage && (
-        <Button
+        <AbrirConversaButton
+          leadId={lead.id}
+          phone={lead.phone}
           variant="outline"
           size="sm"
           className="h-8 gap-1.5 text-xs bg-emerald-500/5 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/15"
-          onClick={() => openWhatsApp(formatPhoneForWhatsApp(lead.phone!) ?? lead.phone!)}
         >
           <MessageSquare className="w-3.5 h-3.5" /> WhatsApp
-        </Button>
+        </AbrirConversaButton>
       )}
       {lead.phone && canSendMessage && (
         <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" asChild>

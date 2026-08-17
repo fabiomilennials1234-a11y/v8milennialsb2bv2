@@ -21,6 +21,16 @@ vi.mock("@/modules/communication/lib/whatsapp", () => ({
 }));
 
 // Mock child modals to avoid their deep dependency tree
+// Migração do #1620: o botão de WhatsApp virou <AbrirConversaButton>, que traz
+// hooks de query e router. Este teste cobre OUTRAS ações do componente, então o
+// botão entra como dublê — o comportamento dele tem teste próprio em
+// tests/unit/abrir-conversa-button.test.tsx.
+vi.mock("@/modules/communication/components/chat/AbrirConversaButton", () => ({
+  AbrirConversaButton: ({ children }: { children?: React.ReactNode }) => (
+    <button>{children}</button>
+  ),
+}));
+
 vi.mock("@/modules/communication/components/chat/ScheduleMessageModal", () => ({
   ScheduleMessageModal: () => null,
 }));

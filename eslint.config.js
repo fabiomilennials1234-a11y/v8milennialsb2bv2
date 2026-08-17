@@ -138,4 +138,44 @@ export default tseslint.config(
       "custom/no-brittle-supabase-mocks": "off",
     },
   },
+
+  // ── Conversa do Lead: um caminho só ───────────────────────────────────────
+  //
+  // `useOpenWhatsAppChat` era chamado em 9 lugares, cada card com a sua regra.
+  // Foi assim que a prop `primaryInstanceId` ficou sem um único produtor no
+  // repo inteiro, e assim que um dos botões passou a lançar `ReferenceError`
+  // sem ninguém notar por meses.
+  //
+  // Hoje o caminho é `AbrirConversaButton` / `AbrirConversaMenuItem`, que
+  // perguntam por qual caixa falar. Esta regra existe para que o 10º caminho
+  // não nasça — documentação sozinha não segura: neste repo já houve defeito em
+  // produção nascido de doc desatualizada.
+  //
+  // Os `wa.me` diretos ainda NÃO entram aqui: 6 call sites de carteira,
+  // analytics e agenda seguem abrindo o WhatsApp pessoal do vendedor, e matar
+  // esse caminho muda comportamento visível. É a próxima fatia; quando ela
+  // migrar, `wa.me` entra nesta mesma lista.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: [
+      "src/modules/communication/components/chat/AbrirConversaButton.tsx",
+      "src/modules/communication/components/chat/AbrirConversaMenuItem.tsx",
+      "src/modules/communication/lib/whatsapp.ts",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/modules/communication/lib/whatsapp",
+              importNames: ["useOpenWhatsAppChat", "openWhatsApp"],
+              message:
+                "Use <AbrirConversaButton> (ou <AbrirConversaMenuItem> dentro de menu) de @/modules/communication/components/chat. Abrir conversa sem perguntar a caixa é o defeito que a spec .specs/features/conversa-do-lead/SPEC.md existe para matar.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 );
