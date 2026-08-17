@@ -889,3 +889,78 @@ describe("buildPayloadSnapshot — o que pode ir para o log", () => {
     expect(Object.keys(snap)).toHaveLength(7);
   });
 });
+
+/**
+ * ─── O PRIMEIRO PAYLOAD REAL DE MENSAGEM (2026-08-17, 17:25 UTC) ─────────────
+ *
+ * Até aqui, TODOS os aliases deste módulo vieram de documentação e do SDK.
+ * Quando a primeira mensagem de verdade chegou, ela entrou com `content` e
+ * `sender_name` VAZIOS — o chat mostrou "[Mensagem não suportada]" — e só o
+ * IGSID foi lido, porque `message.from` por acaso já estava na lista.
+ *
+ * O fornecedor aninha tudo sob `message`, e os aliases paravam um nível acima.
+ *
+ * ⚠️ A INVERSÃO QUE CUSTA CARO: em `visitor`, o campo `name` é o @ do
+ * Instagram (`m.montemezzo`) e `firstName` é o nome humano (`Marcelo
+ * Montemezzo`). Ler `visitor.name` como nome faria o CRM chamar o cliente pelo
+ * @ em toda tela, e-mail e disparo. Os dois testes abaixo fixam a direção certa.
+ *
+ * Cópia FIEL do corpo recebido, com o avatar encurtado.
+ */
+const PAYLOAD_REAL_IG = {
+  id: "55500cf5-ac1a-424c-acfa-4e67dcbed893",
+  type: "MESSAGE",
+  channel: "instagram",
+  direction: "IN",
+  timestamp: "2026-08-17 05:25:02 pm",
+  subscriptionId: "3cff29b0-7c9c-4d10-9001-0d1597f55aaf",
+  message: {
+    id: "55500cf5-ac1a-424c-acfa-4e67dcbed893",
+    to: "3cff29b0-7c9c-4d10-9001-0d1597f55aaf",
+    from: "1527557648673564",
+    channel: "instagram",
+    visitor: {
+      name: "m.montemezzo",
+      picture: "https://scontent-iad6-1.cdninstagram.com/v/t51.82787-19/685923097.jpg",
+      lastName: "",
+      firstName: "Marcelo Montemezzo",
+    },
+    contents: [{ text: "Fala Gipp", type: "text" }],
+    direction: "IN",
+    timestamp: "2026-08-17 05:25:02 pm",
+  },
+};
+
+describe("pickContent — contra o primeiro payload REAL", () => {
+  it("lê o texto de message.contents[0].text", () => {
+    // Era `contents.0.text` na lista, sem o prefixo `message.` — um nível acima
+    // de onde o fornecedor põe. Resultado: mensagem sem texto na tela.
+    expect(pickContent(PAYLOAD_REAL_IG).content).toBe("Fala Gipp");
+  });
+
+  it("classifica como texto, e não cai no fallback de mídia", () => {
+    expect(pickContent(PAYLOAD_REAL_IG).messageType).toBe("text");
+    expect(pickContent(PAYLOAD_REAL_IG).mediaUrl).toBeNull();
+  });
+});
+
+describe("pickContact — contra o primeiro payload REAL", () => {
+  it("lê o IGSID de message.from", () => {
+    expect(pickContact(PAYLOAD_REAL_IG).externalId).toBe("1527557648673564");
+  });
+
+  it("o NOME humano vem de visitor.firstName — nunca de visitor.name", () => {
+    expect(pickContact(PAYLOAD_REAL_IG).name).toBe("Marcelo Montemezzo");
+  });
+
+  it("o @ vem de visitor.name — e é ele que o detector de duplicatas usa", () => {
+    // Este campo é o segundo sinal de identidade entre um lead de Instagram e um
+    // de WhatsApp. O handoff desta fatia afirmava que o payload NÃO trazia o
+    // handle do interlocutor; a primeira mensagem real provou o contrário.
+    expect(pickContact(PAYLOAD_REAL_IG).handle).toBe("m.montemezzo");
+  });
+
+  it("lê o avatar de visitor.picture", () => {
+    expect(pickContact(PAYLOAD_REAL_IG).avatarUrl).toContain("cdninstagram.com");
+  });
+});
