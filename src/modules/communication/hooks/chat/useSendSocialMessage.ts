@@ -46,22 +46,36 @@ export class SocialSendError extends Error {
   }
 }
 
-/** Desembrulha o corpo de erro de `functions.invoke` — sem isto todo erro vira "non-2xx". */
+/**
+ * Desembrulha o corpo de erro de `functions.invoke` — sem isto todo erro vira "non-2xx".
+ *
+ * Há DOIS formatos de erro no servidor, e ler só um deles foi o que pôs a palavra
+ * "Forbidden" na cara do vendedor:
+ *
+ *   • as nossas recusas:  `{ error: <frase humana>, code, detail? }`
+ *   • `authErrorResponse`: `{ success: false, error: "Forbidden" | "Unauthorized",
+ *                             message: <frase humana> }`
+ *
+ * No segundo, `error` é a CATEGORIA e o motivo está em `message` — daí a regra:
+ * sem `code`, quem manda na tela é `message`.
+ */
 async function readInvokeError(error: unknown): Promise<SocialSendError> {
   const ctx = (error as { context?: unknown })?.context;
   if (ctx && typeof (ctx as Response).json === "function") {
     try {
       const body = await (ctx as Response).json();
       if (body && typeof body === "object") {
-        const { code, error: msg, detail } = body as {
+        const { code, error: rotulo, message, detail } = body as {
           code?: string;
           error?: string;
+          message?: string;
           detail?: string;
         };
-        if (code || msg) {
+        const humana = code ? rotulo : (message ?? rotulo);
+        if (code || humana) {
           return new SocialSendError(
-            code ?? "unknown",
-            msg ?? "Não foi possível enviar",
+            code ?? (rotulo ? rotulo.toLowerCase() : "unknown"),
+            humana ?? "Não foi possível enviar",
             typeof detail === "string" ? detail : null,
           );
         }
@@ -89,9 +103,19 @@ export function useSendSocialMessage(messagingChannelId: string | null) {
       if (!text?.trim() && !media) {
         throw new SocialSendError("empty_message", "Escreva a mensagem ou anexe um arquivo");
       }
+      // A função é org-scoped (`requireAuth({ requireOrganization: true })`) e
+      // recusa com 400 quando a org não vem no corpo. Invocar sem ela devolveria
+      // a mesma tela de erro que este guarda evita — só que sem dizer por quê.
+      if (!organizationId) {
+        throw new SocialSendError("no_org", "Sua organização ainda está carregando");
+      }
 
       const { data, error } = await supabase.functions.invoke("notificame-send-social", {
         body: {
+          // O corpo PROPÕE a org; o servidor CONFIRMA contra `team_members`.
+          // Sem isto o envio morria em 400 antes de qualquer gate — medido em
+          // prod: 2 POST, 2× 400, zero 200.
+          organization_id: organizationId,
           messaging_channel_id: messagingChannelId,
           to: contactExternalId,
           // Com anexo, o texto vira LEGENDA no servidor — mandar os dois
