@@ -391,6 +391,12 @@ export function pickContact(payload: unknown): InboundContact {
       "sender_name",
       "user.name",
       "profile.name",
+      // ⚠️ `visitor.firstName` e NUNCA `visitor.name`: no corpo do fornecedor o
+      // campo `name` do visitante é o @ do Instagram (`m.montemezzo`) e
+      // `firstName` é o nome humano (`Marcelo Montemezzo`). A troca faria o CRM
+      // chamar o cliente pelo @ em toda tela, e-mail e disparo. Medido no
+      // primeiro payload real, 2026-08-17.
+      "message.visitor.firstName",
     ]),
     avatarUrl: firstNonEmpty(payload, [
       "contact.picture",
@@ -400,6 +406,7 @@ export function pickContact(payload: unknown): InboundContact {
       "sender.picture",
       "sender.avatar",
       "profile.picture",
+      "message.visitor.picture",
     ]),
     handle: firstNonEmpty(payload, [
       "contact.username",
@@ -407,6 +414,11 @@ export function pickContact(payload: unknown): InboundContact {
       "from.username",
       "sender.username",
       "profile.username",
+      // O @ do interlocutor — o SEGUNDO sinal de identidade do detector de
+      // duplicatas, ao lado do telefone digitado no texto. O handoff desta fatia
+      // afirmava que o payload não trazia o handle; a primeira mensagem real
+      // provou o contrário, e é aqui que ele vem.
+      "message.visitor.name",
     ]),
   };
 }
@@ -464,6 +476,11 @@ export function pickContent(payload: unknown): InboundContent {
     "message.content",
     "data.text",
     "contents.0.text",
+    // ⚠️ O CAMINHO REAL, medido no primeiro payload de mensagem (2026-08-17).
+    // `contents.0.text` já estava na lista, mas UM NÍVEL ACIMA de onde o
+    // fornecedor põe: ele aninha tudo sob `message`. Sem este alias a mensagem
+    // entrava com texto vazio e o chat renderizava "[Mensagem não suportada]".
+    "message.contents.0.text",
   ]);
 
   const mediaUrl = firstNonEmpty(payload, [
@@ -473,6 +490,7 @@ export function pickContent(payload: unknown): InboundContent {
     "attachments.0.url",
     "message.media_url",
     "contents.0.url",
+    "message.contents.0.url",
     "url",
   ]);
 
@@ -481,6 +499,7 @@ export function pickContent(payload: unknown): InboundContent {
     "messageType",
     "message.type",
     "contents.0.type",
+    "message.contents.0.type",
   ]);
 
   return {
@@ -539,6 +558,12 @@ export interface InboundChannelMessageRow {
   sender_id: string | null;
   sender_name: string | null;
   sender_profile_pic: string | null;
+  /**
+   * O @usuário do INTERLOCUTOR. Coluna, e não só `raw_payload`, porque é o
+   * segundo sinal de identidade do detector de duplicatas — e sinal preso em
+   * jsonb não é pesquisável. `null` quando o corpo não traz.
+   */
+  contact_handle: string | null;
   /** Conceito de WhatsApp. Instagram não tem JID. */
   remote_jid: null;
   /** Instagram não tem telefone. Ver o ⚠️ abaixo — NUNCA `''`. */
@@ -625,6 +650,14 @@ export function buildInboundChannelMessageRow(params: {
     sender_id: params.contact.externalId,
     sender_name: params.contact.name,
     sender_profile_pic: params.contact.avatarUrl,
+    // O @ do interlocutor, em COLUNA e não só no `raw_payload`. Preso no jsonb
+    // ele não é pesquisável nem casável, e é justamente o segundo sinal do
+    // detector de duplicatas: comparar o @ do Instagram com o que o vendedor
+    // anotou no lead. Ninguém faz isso varrendo jsonb linha a linha.
+    //
+    // ⚠️ Vem de `message.visitor.name`, que é o @ — NÃO o nome humano, que mora
+    // em `firstName`. A inversão é do fornecedor; ver `pickContact`.
+    contact_handle: params.contact.handle,
     remote_jid: null,
     phone_number: null,
     instance_id: null,

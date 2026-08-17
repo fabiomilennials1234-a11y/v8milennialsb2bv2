@@ -81,6 +81,10 @@ verify_jwt = false
 [functions.notificame-templates]
 verify_jwt = false
 
+# notificame-send-social: RESPONDER pelo Direct (Instagram/Facebook). Contrato confirmado em DUAS fontes do fornecedor (doc app.notificame.com.br + node oficial n8n): POST /v2/channels/{kind}/messages com {from,to,contents[]}. NÃO monta envelope nem grava a linha — delega ao NotificameProvider, que já persiste em channel_messages; reimplementar criaria uma segunda verdade sobre o formato. JWT (requireAuth com requireOrganization) inside fn + flag `notificame` + whatsapp.manage_instances. O canal vem por parâmetro do CLIENTE e é conferido em _shared/notificame-social-send.ts — aqui o gate é ESCRITA: canal alheio aceito manda mensagem pela conta de outro tenant. WhatsApp é RECUSADO por modelo (mora em whatsapp_instances e tem governor/janela/templates próprios). NÃO bloqueia por janela de 24h: a doc do fornecedor a declara, mas quem decide tentar é o operador — a tela mostra o tempo restante e a recusa sobe legível.
+[functions.notificame-send-social]
+verify_jwt = false
+
 # api: public REST API router /api/v1/* (ADR-0008); auth via API key inside fn
 [functions.api]
 verify_jwt = false

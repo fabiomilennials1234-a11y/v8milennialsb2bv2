@@ -193,6 +193,7 @@ import {
   type InboundEventType,
 } from "../_shared/notificame-inbound.ts";
 import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
+import { mirrorContactAvatar } from "../_shared/notificame-avatar.ts";
 
 const FUNCTION_NAME = "notificame-webhook";
 
@@ -1390,11 +1391,29 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       );
     }
 
+    // ── Avatar: espelhado ANTES de gravar, e best-effort ──────────────────
+    //
+    // A URL que a Meta manda é ASSINADA E TEMPORÁRIA (~104h, medido no primeiro
+    // payload real). Guardar a URL não é guardar a foto: sem esta cópia, todo
+    // avatar do inbox vira ícone quebrado em quatro dias, e o banco continua
+    // parecendo correto — a coluna preenchida, apontando para o nada.
+    //
+    // `null` aqui NÃO é erro: significa "siga com a URL da Meta", que ao menos
+    // funciona pelos próximos dias. Avatar é decoração; a mensagem é o produto,
+    // e um webhook que falha por causa de uma imagem perde a mensagem.
+    const avatarEspelhado = await mirrorContactAvatar({
+      supabase: admin,
+      organizationId,
+      channelType: "instagram",
+      externalUserId: contact.externalId,
+      sourceUrl: contact.avatarUrl,
+    });
+
     const row = buildInboundChannelMessageRow({
       organizationId,
       messagingChannelId: channel!.id,
       externalId,
-      contact,
+      contact: avatarEspelhado ? { ...contact, avatarUrl: avatarEspelhado } : contact,
       contactExternalId: contact.externalId,
       content: pickContent(payload),
       leadId: linkedLeadId,

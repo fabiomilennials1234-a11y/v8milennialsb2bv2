@@ -360,7 +360,23 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
 
     const registration = await registerInboundSubscription(
       orgConfigFrom(parent!.baseUrl, token),
-      { webhookUrl, channelKind: "instagram" },
+      {
+        webhookUrl,
+        channelKind: "instagram",
+        // ⚠️ `channelId` NÃO É OPCIONAL NA PRÁTICA, e omiti-lo aqui foi o defeito
+        // que segurou o inbound por um dia inteiro (2026-08-17).
+        //
+        // Sem ele, `registerInboundSubscription` cai no fallback e assina a
+        // PALAVRA 'instagram' como se fosse o token do canal. O fornecedor
+        // ACEITA CALADO — responde sucesso, carimbamos `active` — e a
+        // subscription não assina canal nenhum: a "URL de retorno" do canal
+        // continua VAZIA no painel dele e nenhum evento é entregue.
+        //
+        // O sintoma é indistinguível de "ninguém mandou mensagem ainda", que é
+        // exatamente o que o comentário daquela função previa. A coluna já vinha
+        // selecionada em STATE_COLUMNS desde sempre — só não era usada.
+        channelId: channel.external_channel_id,
+      },
       fetchWithDeadline,
     );
 

@@ -546,7 +546,15 @@ describe("buildCreateAccountBody — os dados da subconta são NOSSOS", () => {
       password: "p4ssw0rd-aleatoria",
     });
     const company = (body.company ?? body) as Record<string, unknown>;
-    expect(company.email).toBe("torque-6030520a-2ca7-477d-be89-55758e2cd808@milennials.com.br");
+    // ⚠️ O formato ENCURTOU em 2026-08-17. O anterior
+    // (`torque-{uuid}@{domínio}`) dava 61 caracteres, e o fornecedor TRUNCA em
+    // 45 sem avisar — responde "Sucesso" e guarda o e-mail cortado no meio do
+    // domínio. Como o e-mail não é editável nem a subconta excluível, toda
+    // subconta nasceria com um endereço que a reconciliação nunca encontraria,
+    // e o próximo clique em conectar provisionaria uma SEGUNDA para o mesmo
+    // cliente. Ver `SUBACCOUNT_EMAIL_MAX` e notificame-subaccount-email.test.ts.
+    expect(company.email).toBe("torque-6030520a2ca7@milennials.com.br");
+    expect((company.email as string).length).toBeLessThanOrEqual(45);
     expect(company.name).toBe("Milennials");
     expect(company.resale).toBe(false);
     expect(company.active).toBe(true);

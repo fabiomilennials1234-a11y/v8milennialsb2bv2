@@ -779,6 +779,10 @@ describe("buildInboundChannelMessageRow — a linha de channel_messages", () => 
       sender_id: "igsid-777",
       sender_name: "Fulana",
       sender_profile_pic: "https://x/y.jpg",
+      // Campo novo (2026-08-17): o @ do interlocutor virou coluna. Este teste
+      // fixa a forma INTEIRA de propósito — é ele que obriga a decisão a ser
+      // consciente quando alguém acrescenta campo à linha.
+      contact_handle: "fulana",
       remote_jid: null,
       phone_number: null,
       instance_id: null,
@@ -887,5 +891,122 @@ describe("buildPayloadSnapshot — o que pode ir para o log", () => {
     const snap = buildPayloadSnapshot({ sourceIp: "1.2.3.4" });
     expect(JSON.stringify(snap)).not.toContain("payload");
     expect(Object.keys(snap)).toHaveLength(7);
+  });
+});
+
+/**
+ * ─── O PRIMEIRO PAYLOAD REAL DE MENSAGEM (2026-08-17, 17:25 UTC) ─────────────
+ *
+ * Até aqui, TODOS os aliases deste módulo vieram de documentação e do SDK.
+ * Quando a primeira mensagem de verdade chegou, ela entrou com `content` e
+ * `sender_name` VAZIOS — o chat mostrou "[Mensagem não suportada]" — e só o
+ * IGSID foi lido, porque `message.from` por acaso já estava na lista.
+ *
+ * O fornecedor aninha tudo sob `message`, e os aliases paravam um nível acima.
+ *
+ * ⚠️ A INVERSÃO QUE CUSTA CARO: em `visitor`, o campo `name` é o @ do
+ * Instagram (`m.montemezzo`) e `firstName` é o nome humano (`Marcelo
+ * Montemezzo`). Ler `visitor.name` como nome faria o CRM chamar o cliente pelo
+ * @ em toda tela, e-mail e disparo. Os dois testes abaixo fixam a direção certa.
+ *
+ * Cópia FIEL do corpo recebido, com o avatar encurtado.
+ */
+const PAYLOAD_REAL_IG = {
+  id: "55500cf5-ac1a-424c-acfa-4e67dcbed893",
+  type: "MESSAGE",
+  channel: "instagram",
+  direction: "IN",
+  timestamp: "2026-08-17 05:25:02 pm",
+  subscriptionId: "3cff29b0-7c9c-4d10-9001-0d1597f55aaf",
+  message: {
+    id: "55500cf5-ac1a-424c-acfa-4e67dcbed893",
+    to: "3cff29b0-7c9c-4d10-9001-0d1597f55aaf",
+    from: "1527557648673564",
+    channel: "instagram",
+    visitor: {
+      name: "m.montemezzo",
+      picture: "https://scontent-iad6-1.cdninstagram.com/v/t51.82787-19/685923097.jpg",
+      lastName: "",
+      firstName: "Marcelo Montemezzo",
+    },
+    contents: [{ text: "Fala Gipp", type: "text" }],
+    direction: "IN",
+    timestamp: "2026-08-17 05:25:02 pm",
+  },
+};
+
+describe("pickContent — contra o primeiro payload REAL", () => {
+  it("lê o texto de message.contents[0].text", () => {
+    // Era `contents.0.text` na lista, sem o prefixo `message.` — um nível acima
+    // de onde o fornecedor põe. Resultado: mensagem sem texto na tela.
+    expect(pickContent(PAYLOAD_REAL_IG).content).toBe("Fala Gipp");
+  });
+
+  it("classifica como texto, e não cai no fallback de mídia", () => {
+    expect(pickContent(PAYLOAD_REAL_IG).messageType).toBe("text");
+    expect(pickContent(PAYLOAD_REAL_IG).mediaUrl).toBeNull();
+  });
+});
+
+describe("pickContact — contra o primeiro payload REAL", () => {
+  it("lê o IGSID de message.from", () => {
+    expect(pickContact(PAYLOAD_REAL_IG).externalId).toBe("1527557648673564");
+  });
+
+  it("o NOME humano vem de visitor.firstName — nunca de visitor.name", () => {
+    expect(pickContact(PAYLOAD_REAL_IG).name).toBe("Marcelo Montemezzo");
+  });
+
+  it("o @ vem de visitor.name — e é ele que o detector de duplicatas usa", () => {
+    // Este campo é o segundo sinal de identidade entre um lead de Instagram e um
+    // de WhatsApp. O handoff desta fatia afirmava que o payload NÃO trazia o
+    // handle do interlocutor; a primeira mensagem real provou o contrário.
+    expect(pickContact(PAYLOAD_REAL_IG).handle).toBe("m.montemezzo");
+  });
+
+  it("lê o avatar de visitor.picture", () => {
+    expect(pickContact(PAYLOAD_REAL_IG).avatarUrl).toContain("cdninstagram.com");
+  });
+});
+
+describe("buildInboundChannelMessageRow — o @ do contato vira COLUNA", () => {
+  /**
+   * O handle chegava no corpo e morria no `raw_payload`. Preso lá dentro ele não
+   * é pesquisável nem casável: o detector de duplicatas precisa comparar o @ do
+   * Instagram com o que o vendedor anotou no lead, e ninguém faz isso varrendo
+   * jsonb de dez mil linhas.
+   */
+  it("grava contact_handle a partir do contato lido", () => {
+    const row = buildInboundChannelMessageRow({
+      organizationId: "org-1",
+      messagingChannelId: "canal-1",
+      externalId: "msg-1",
+      contact: pickContact(PAYLOAD_REAL_IG),
+      contactExternalId: "1527557648673564",
+      content: pickContent(PAYLOAD_REAL_IG),
+      timestampIso: "2026-08-17T17:25:02.000Z",
+      rawPayload: PAYLOAD_REAL_IG,
+    });
+
+    expect(row.contact_handle).toBe("m.montemezzo");
+    // O nome humano continua no seu lugar — a inversão do fornecedor não vaza.
+    expect(row.sender_name).toBe("Marcelo Montemezzo");
+    expect(row.content).toBe("Fala Gipp");
+  });
+
+  it("corpo sem handle grava null, e não string vazia", () => {
+    const semHandle = { message: { from: "999", contents: [{ text: "oi", type: "text" }] } };
+    const row = buildInboundChannelMessageRow({
+      organizationId: "org-1",
+      messagingChannelId: "canal-1",
+      externalId: "msg-2",
+      contact: pickContact(semHandle),
+      contactExternalId: "999",
+      content: pickContent(semHandle),
+      timestampIso: "2026-08-17T17:25:02.000Z",
+      rawPayload: semHandle,
+    });
+
+    expect(row.contact_handle).toBeNull();
   });
 });

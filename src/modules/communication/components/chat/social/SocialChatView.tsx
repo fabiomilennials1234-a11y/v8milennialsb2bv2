@@ -22,17 +22,30 @@
  * "o Instagram não deixa responder"; o que é verdade é "ainda não construímos o
  * envio". A microcopy diz qual das duas.
  */
-import { useMemo, useState } from "react";
-import { Loader2, Lock } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
+import { toast } from "sonner";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useSocialMessages } from "@/modules/communication/hooks/chat/useSocialMessages";
+import {
+  useSendSocialMessage,
+  type SocialSendError,
+} from "@/modules/communication/hooks/chat/useSendSocialMessage";
+import { socialReplyWindow } from "@/modules/communication/lib/social-window";
+import { uploadSocialAttachment, type UploadedAttachment } from "@/modules/communication/lib/social-attachment-upload";
+import { useCurrentTeamMember } from "@/modules/identity";
 import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
-import { contactLabel, type SocialContact } from "@/modules/communication/hooks/chat/types";
+import {
+  contactHandleLabel,
+  contactLabel,
+  type SocialContact,
+} from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import type { SocialMessage } from "@/modules/communication/hooks/chat/useSocialMessages";
 
@@ -84,6 +97,7 @@ function SocialChatHeader({
   isMobile: boolean;
 }) {
   const name = contactLabel(contact);
+  const handle = contactHandleLabel(contact);
   const gradient = getAvatarGradient(contact.external_user_id || name);
 
   return (
@@ -122,8 +136,10 @@ function SocialChatHeader({
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-display font-semibold truncate text-foreground">{name}</h3>
+        {/* O @ vem primeiro no subtítulo por ser o dado IDENTIFICADOR da pessoa —
+            o resto é contexto do canal, igual em toda conversa desta caixa. */}
         <p className="text-sm text-muted-foreground truncate">
-          Instagram Direct · {channelName}
+          {[handle, "Instagram Direct", channelName].filter(Boolean).join(" · ")}
         </p>
       </div>
     </header>
@@ -132,16 +148,204 @@ function SocialChatHeader({
 
 // ─── Composer inerte ─────────────────────────────────────────────────────────
 
-function ReadOnlyComposer() {
+/**
+ * Composer do Direct.
+ *
+ * ⚠️ A JANELA É INFORMAÇÃO, NÃO TRAVA. A doc do fornecedor declara 24h desde a
+ * última mensagem do cliente, mas o campo continua habilitado depois disso: o
+ * relógio é nosso, a regra é da Meta, e travar o vendedor por uma conta que pode
+ * estar errada é pior do que deixá-lo tentar e ver a recusa — que sobe com o
+ * texto do fornecedor junto, em vez de virar "erro ao enviar".
+ *
+ * O contador fica SEMPRE visível enquanto a janela está aberta. É a diferença
+ * entre "não consigo responder" e "tenho 3 horas para responder".
+ */
+function SocialComposer({
+  messagingChannelId,
+  contactExternalId,
+  lastIncomingAt,
+}: {
+  messagingChannelId: string;
+  contactExternalId: string;
+  lastIncomingAt: string | null;
+}) {
+  const [texto, setTexto] = useState("");
+  const [anexo, setAnexo] = useState<UploadedAttachment | null>(null);
+  const [subindo, setSubindo] = useState(false);
+  const [gravando, setGravando] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const gravadorRef = useRef<MediaRecorder | null>(null);
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id ?? null;
+
+  const enviar = useSendSocialMessage(messagingChannelId);
+  const janela = socialReplyWindow(lastIncomingAt);
+
+  /** Publica o arquivo e guarda a URL — o fornecedor BUSCA, não recebe bytes. */
+  const publicar = async (file: File) => {
+    if (!organizationId) return;
+    setSubindo(true);
+    try {
+      setAnexo(await uploadSocialAttachment(file, organizationId));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao anexar");
+    } finally {
+      setSubindo(false);
+    }
+  };
+
+  const gravar = async () => {
+    if (gravando) {
+      gravadorRef.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const rec = new MediaRecorder(stream);
+      const pedacos: BlobPart[] = [];
+
+      rec.ondataavailable = (e) => pedacos.push(e.data);
+      rec.onstop = async () => {
+        // Solta o microfone assim que para: sem isto o indicador do navegador
+        // fica aceso e o usuário acha que continua sendo ouvido.
+        stream.getTracks().forEach((t) => t.stop());
+        setGravando(false);
+        const blob = new Blob(pedacos, { type: rec.mimeType || "audio/webm" });
+        await publicar(new File([blob], `audio-${Date.now()}.webm`, { type: blob.type }));
+      };
+
+      gravadorRef.current = rec;
+      rec.start();
+      setGravando(true);
+    } catch {
+      toast.error("Não foi possível acessar o microfone", {
+        description: "Verifique a permissão do navegador.",
+      });
+    }
+  };
+
+  const submeter = async () => {
+    const conteudo = texto.trim();
+    if ((!conteudo && !anexo) || enviar.isPending || subindo) return;
+
+    try {
+      await enviar.mutateAsync({
+        contactExternalId,
+        text: conteudo || undefined,
+        ...(anexo
+          ? {
+            media: {
+              type: anexo.type,
+              url: anexo.url,
+              ...(conteudo ? { caption: conteudo } : {}),
+              filename: anexo.filename,
+            },
+          }
+          : {}),
+      });
+      setTexto("");
+      setAnexo(null);
+    } catch (e) {
+      const erro = e as SocialSendError;
+      toast.error(erro.message, {
+        // O texto cru do fornecedor é o que diz POR QUE não foi — inclusive
+        // quando a causa é a janela. Sem ele, o operador tentaria para sempre.
+        description: erro.detail ?? undefined,
+      });
+    }
+  };
+
   return (
     <div className="shrink-0 border-t border-border/60 bg-background px-4 py-3">
-      <div
-        className="flex items-center gap-2.5 rounded-xl border border-dashed border-border/70 bg-muted/30 px-3.5 py-3 text-sm text-muted-foreground"
-        role="note"
-      >
-        <Lock className="w-4 h-4 shrink-0 opacity-60" aria-hidden />
-        <span>Responder pelo Instagram chega na próxima fatia.</span>
+      {anexo && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+          <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <span className="min-w-0 flex-1 truncate text-xs text-foreground">{anexo.filename}</span>
+          <span className="shrink-0 text-[11px] text-muted-foreground">
+            {(anexo.sizeBytes / 1024 / 1024).toFixed(1)} MB
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 shrink-0 p-0"
+            onClick={() => setAnexo(null)}
+            aria-label="Remover anexo"
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
+      <div className="flex items-end gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            // Zera o input: sem isto, escolher o MESMO arquivo de novo depois de
+            // removê-lo não dispara `change` e o anexo nunca volta.
+            e.target.value = "";
+            if (file) void publicar(file);
+          }}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-[42px] w-9 shrink-0 p-0"
+          onClick={() => inputRef.current?.click()}
+          disabled={subindo || enviar.isPending || gravando}
+          aria-label="Anexar arquivo"
+        >
+          {subindo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+        </Button>
+        <Button
+          variant={gravando ? "destructive" : "ghost"}
+          size="sm"
+          className="h-[42px] w-9 shrink-0 p-0"
+          onClick={() => void gravar()}
+          disabled={subindo || enviar.isPending}
+          aria-label={gravando ? "Parar gravação" : "Gravar áudio"}
+        >
+          {gravando ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+        </Button>
+        <Textarea
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void submeter();
+            }
+          }}
+          placeholder={gravando ? "Gravando… toque no quadrado para parar" : "Responder no Direct…"}
+          rows={1}
+          className="min-h-[42px] max-h-32 resize-none"
+          disabled={enviar.isPending}
+        />
+        <Button
+          onClick={() => void submeter()}
+          disabled={(!texto.trim() && !anexo) || enviar.isPending || subindo}
+          size="sm"
+          className="h-[42px] px-3 shrink-0"
+          aria-label="Enviar"
+        >
+          {enviar.isPending
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <Send className="w-4 h-4" />}
+        </Button>
       </div>
+
+      {janela.open !== null && (
+        <p
+          className={cn(
+            "mt-1.5 text-[11px]",
+            janela.open ? "text-muted-foreground" : "text-amber-500",
+          )}
+        >
+          {janela.open ? janela.label : `${janela.label} — o envio pode ser recusado`}
+        </p>
+      )}
     </div>
   );
 }
@@ -179,6 +383,21 @@ export function SocialChatView({
     () => rawMessages.map((m) => toTimelineMessage(m, organizationId ?? "")),
     [rawMessages, organizationId],
   );
+
+  /**
+   * O marco da janela é a última mensagem RECEBIDA — nunca a última da thread.
+   * Responder não reabre prazo nenhum: quem reinicia a contagem é o cliente,
+   * e usar a nossa própria mensagem daria ao vendedor um contador que se renova
+   * sozinho a cada resposta, sempre otimista e sempre errado.
+   */
+  const ultimaRecebidaEm = useMemo(() => {
+    let ultima: string | null = null;
+    for (const m of rawMessages) {
+      if (m.direction !== "incoming") continue;
+      if (!ultima || new Date(m.timestamp) > new Date(ultima)) ultima = m.timestamp;
+    }
+    return ultima;
+  }, [rawMessages]);
 
   if (!selectedContact) {
     return (
@@ -226,7 +445,11 @@ export function SocialChatView({
         )}
       </div>
 
-      <ReadOnlyComposer />
+      <SocialComposer
+        messagingChannelId={selectedContact.messaging_channel_id}
+        contactExternalId={selectedContact.external_user_id}
+        lastIncomingAt={ultimaRecebidaEm}
+      />
 
       <ImagePreviewModal
         isOpen={!!previewUrl}
