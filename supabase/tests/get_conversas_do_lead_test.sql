@@ -26,7 +26,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(16);
+SELECT plan(18);
 
 -- ---------------------------------------------------------------------------
 -- Fixture — duas orgs, um membro em cada
@@ -64,6 +64,19 @@ VALUES
    'c0d21605-0001-0000-0000-000000001605', 'Membro A', 'member', true),
   ('c0d21605-2222-0000-0000-000000001605', 'c0d21605-bbbb-0000-0000-000000001605',
    'c0d21605-0002-0000-0000-000000001605', 'Membro B', 'member', true);
+
+-- Um MASTER, que NÃO é team_member de nenhuma das duas orgs. É a porta que a
+-- migration 20270817160000 fechou sem perceber.
+INSERT INTO auth.users (id, email, encrypted_password, email_confirmed_at,
+                        raw_app_meta_data, raw_user_meta_data,
+                        created_at, updated_at, aud, role)
+VALUES ('c0d21605-0003-0000-0000-000000001605', 'master@conversa.test', '', now(),
+        '{}'::jsonb, '{}'::jsonb, now(), now(), 'authenticated', 'authenticated')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO master_users (user_id, is_active)
+VALUES ('c0d21605-0003-0000-0000-000000001605', true)
+ON CONFLICT DO NOTHING;
 
 -- Org A: uma caixa com conversa, uma sem, uma em erro.
 INSERT INTO whatsapp_instances (id, organization_id, instance_name, status)
@@ -215,6 +228,25 @@ SELECT throws_ok(
   $$ SELECT * FROM public.get_conversas_do_lead('5548999887766', NULL) $$,
   'P0001', 'access_denied',
   '(i) org nula é recusada — sem org não há recorte, e recorte é o ponto');
+
+-- ---------------------------------------------------------------------------
+-- (j) MASTER EM SHADOW — a porta que o gate anterior fechou
+--     O master não é team_member da org que está olhando. Sem cláusula de
+--     master, o gate negava e o seletor dizia "nenhum número disponível" numa
+--     org que tem caixas.
+-- ---------------------------------------------------------------------------
+SELECT set_config('request.jwt.claims',
+  '{"sub":"c0d21605-0003-0000-0000-000000001605","role":"authenticated"}', true);
+
+SELECT is(
+  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-aaaa-0000-0000-000000001605')),
+  2::bigint,
+  '(j) master em shadow VÊ as caixas da org que está olhando');
+
+SELECT is(
+  (SELECT count(*) FROM public.get_conversas_do_lead('5548999887766', 'c0d21605-bbbb-0000-0000-000000001605')),
+  1::bigint,
+  '(j) master vê a org B quando pede a org B — e só ela, uma caixa');
 
 SELECT * FROM finish();
 ROLLBACK;
