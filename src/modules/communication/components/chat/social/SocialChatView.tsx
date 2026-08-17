@@ -23,14 +23,21 @@
  * envio". A microcopy diz qual das duas.
  */
 import { useMemo, useState } from "react";
-import { Loader2, Lock } from "lucide-react";
+import { Loader2, Send } from "lucide-react";
+import { toast } from "sonner";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useSocialMessages } from "@/modules/communication/hooks/chat/useSocialMessages";
+import {
+  useSendSocialMessage,
+  type SocialSendError,
+} from "@/modules/communication/hooks/chat/useSendSocialMessage";
+import { socialReplyWindow } from "@/modules/communication/lib/social-window";
 import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
 import {
   contactHandleLabel,
@@ -139,16 +146,88 @@ function SocialChatHeader({
 
 // ─── Composer inerte ─────────────────────────────────────────────────────────
 
-function ReadOnlyComposer() {
+/**
+ * Composer do Direct.
+ *
+ * ⚠️ A JANELA É INFORMAÇÃO, NÃO TRAVA. A doc do fornecedor declara 24h desde a
+ * última mensagem do cliente, mas o campo continua habilitado depois disso: o
+ * relógio é nosso, a regra é da Meta, e travar o vendedor por uma conta que pode
+ * estar errada é pior do que deixá-lo tentar e ver a recusa — que sobe com o
+ * texto do fornecedor junto, em vez de virar "erro ao enviar".
+ *
+ * O contador fica SEMPRE visível enquanto a janela está aberta. É a diferença
+ * entre "não consigo responder" e "tenho 3 horas para responder".
+ */
+function SocialComposer({
+  messagingChannelId,
+  contactExternalId,
+  lastIncomingAt,
+}: {
+  messagingChannelId: string;
+  contactExternalId: string;
+  lastIncomingAt: string | null;
+}) {
+  const [texto, setTexto] = useState("");
+  const enviar = useSendSocialMessage(messagingChannelId);
+  const janela = socialReplyWindow(lastIncomingAt);
+
+  const submeter = async () => {
+    const conteudo = texto.trim();
+    if (!conteudo || enviar.isPending) return;
+
+    try {
+      await enviar.mutateAsync({ contactExternalId, text: conteudo });
+      setTexto("");
+    } catch (e) {
+      const erro = e as SocialSendError;
+      toast.error(erro.message, {
+        // O texto cru do fornecedor é o que diz POR QUE não foi — inclusive
+        // quando a causa é a janela. Sem ele, o operador tentaria para sempre.
+        description: erro.detail ?? undefined,
+      });
+    }
+  };
+
   return (
     <div className="shrink-0 border-t border-border/60 bg-background px-4 py-3">
-      <div
-        className="flex items-center gap-2.5 rounded-xl border border-dashed border-border/70 bg-muted/30 px-3.5 py-3 text-sm text-muted-foreground"
-        role="note"
-      >
-        <Lock className="w-4 h-4 shrink-0 opacity-60" aria-hidden />
-        <span>Responder pelo Instagram chega na próxima fatia.</span>
+      <div className="flex items-end gap-2">
+        <Textarea
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void submeter();
+            }
+          }}
+          placeholder="Responder no Direct…"
+          rows={1}
+          className="min-h-[42px] max-h-32 resize-none"
+          disabled={enviar.isPending}
+        />
+        <Button
+          onClick={() => void submeter()}
+          disabled={!texto.trim() || enviar.isPending}
+          size="sm"
+          className="h-[42px] px-3 shrink-0"
+          aria-label="Enviar"
+        >
+          {enviar.isPending
+            ? <Loader2 className="w-4 h-4 animate-spin" />
+            : <Send className="w-4 h-4" />}
+        </Button>
       </div>
+
+      {janela.open !== null && (
+        <p
+          className={cn(
+            "mt-1.5 text-[11px]",
+            janela.open ? "text-muted-foreground" : "text-amber-500",
+          )}
+        >
+          {janela.open ? janela.label : `${janela.label} — o envio pode ser recusado`}
+        </p>
+      )}
     </div>
   );
 }
@@ -186,6 +265,21 @@ export function SocialChatView({
     () => rawMessages.map((m) => toTimelineMessage(m, organizationId ?? "")),
     [rawMessages, organizationId],
   );
+
+  /**
+   * O marco da janela é a última mensagem RECEBIDA — nunca a última da thread.
+   * Responder não reabre prazo nenhum: quem reinicia a contagem é o cliente,
+   * e usar a nossa própria mensagem daria ao vendedor um contador que se renova
+   * sozinho a cada resposta, sempre otimista e sempre errado.
+   */
+  const ultimaRecebidaEm = useMemo(() => {
+    let ultima: string | null = null;
+    for (const m of rawMessages) {
+      if (m.direction !== "incoming") continue;
+      if (!ultima || new Date(m.timestamp) > new Date(ultima)) ultima = m.timestamp;
+    }
+    return ultima;
+  }, [rawMessages]);
 
   if (!selectedContact) {
     return (
@@ -233,7 +327,11 @@ export function SocialChatView({
         )}
       </div>
 
-      <ReadOnlyComposer />
+      <SocialComposer
+        messagingChannelId={selectedContact.messaging_channel_id}
+        contactExternalId={selectedContact.external_user_id}
+        lastIncomingAt={ultimaRecebidaEm}
+      />
 
       <ImagePreviewModal
         isOpen={!!previewUrl}
