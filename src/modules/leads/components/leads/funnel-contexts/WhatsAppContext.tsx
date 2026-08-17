@@ -6,7 +6,6 @@
 
 import { useState } from "react";
 import { MessageSquare, Loader2, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,7 +19,8 @@ import { type PipeWhatsappStatus, stagesToColumns } from "@/contracts/pipe";
 import { usePipeOps } from "../../../pipe-ops";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -58,7 +58,6 @@ export function WhatsAppContext({ lead, pipeData, onSuccess }: WhatsAppContextPr
   const updatePipe = useUpdatePipeWhatsapp();
   const logAction = useLogLeadAction();
   const responsibleMembers = useResponsibleMembers();
-  const openWhatsApp = useOpenWhatsAppChat();
   const { data: stages = [] } = usePipelineStages("whatsapp");
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -155,15 +154,16 @@ export function WhatsAppContext({ lead, pipeData, onSuccess }: WhatsAppContextPr
 
       {/* WhatsApp quick action */}
       {hasPhone && (
-        <Button
+        <AbrirConversaButton
+          leadId={pipeData.lead_id}
+          phone={phoneDoLead}
           variant="outline"
           size="sm"
           className="w-full gap-2"
-          onClick={() => openWhatsApp(phoneDoLead)}
         >
           <MessageSquare className="w-4 h-4 text-[#25D366]" />
           Abrir WhatsApp
-        </Button>
+        </AbrirConversaButton>
       )}
 
       {/* Responsible */}
