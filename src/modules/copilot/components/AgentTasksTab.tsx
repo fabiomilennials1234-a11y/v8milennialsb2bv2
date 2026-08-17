@@ -40,13 +40,25 @@ interface AgentTasksTabProps {
 type TaskType = "followup" | "confirmation" | "reengage" | "all";
 type TaskPriority = "high" | "medium" | "low";
 
+/**
+ * Era `any`. A forma vem do join `lead:leads(id, name, phone, company)` em
+ * `useAgentPendingTasks` — o tipo existia e era descartado aqui. Com `any`,
+ * o compilador para de olhar: é assim que uma prop morre sem ninguém notar.
+ */
+interface TaskLead {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  company: string | null;
+}
+
 interface Task {
   id: string;
   type: TaskType;
   priority: TaskPriority;
   title: string;
   description: string;
-  lead: any;
+  lead: TaskLead | null;
   metadata: Record<string, any>;
 }
 
@@ -98,6 +110,9 @@ function TemperatureIcon({ temperature }: { temperature: string }) {
 
 function TaskCard({ task, onAction }: { task: Task; onAction: (task: Task, action: string) => void }) {
   const lead = task.lead;
+  // Capturado fora do JSX: `lead?.phone &&` guarda a renderização mas não
+  // estreita o tipo dentro do onClick, que roda depois.
+  const leadPhone = lead?.phone ?? null;
 
   return (
     <motion.div
@@ -155,11 +170,11 @@ function TaskCard({ task, onAction }: { task: Task; onAction: (task: Task, actio
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {lead?.phone && (
+          {leadPhone && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.open(`https://wa.me/${lead.phone.replace(/\D/g, '')}`, '_blank')}
+              onClick={() => window.open(`https://wa.me/${leadPhone.replace(/\D/g, '')}`, '_blank')}
             >
               <MessageSquare className="w-4 h-4 mr-1" />
               WhatsApp
