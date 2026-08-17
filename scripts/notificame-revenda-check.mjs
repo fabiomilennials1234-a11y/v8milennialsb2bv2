@@ -20,13 +20,38 @@
  * abaixo olha o CORPO, e o status é impresso só como informação.
  */
 
-const BASE = (process.env.NOTIFICAME_BASE_URL || "https://api.notificame.com.br").replace(/\/+$/, "");
-const TOKEN = (process.env.NOTIFICAME_API_TOKEN || "").trim();
+import { existsSync, readFileSync } from "node:fs";
+
+/**
+ * O token pode vir do ambiente ou de um `.env` local — nesta ordem. Ler do
+ * arquivo evita colar segredo em terminal (e em conversa), que foi como o valor
+ * vazou uma vez.
+ */
+function lerEnvDeArquivo(caminho) {
+  if (!existsSync(caminho)) return {};
+  const out = {};
+  for (const linha of readFileSync(caminho, "utf8").split("\n")) {
+    const m = linha.match(/^([A-Z_][A-Z0-9_]*)\s*=\s*(.*)$/);
+    if (m) out[m[1]] = m[2].trim().replace(/^["']|["']$/g, "");
+  }
+  return out;
+}
+
+const arquivo = process.env.NOTIFICAME_ENV_FILE || ".env";
+const doArquivo = lerEnvDeArquivo(arquivo);
+
+const BASE = (
+  process.env.NOTIFICAME_BASE_URL ||
+  doArquivo.NOTIFICAME_API_BASE ||
+  "https://api.notificame.com.br"
+).replace(/\/+$/, "");
+const TOKEN = (process.env.NOTIFICAME_API_TOKEN || doArquivo.NOTIFICAME_API_TOKEN || "").trim();
 const CRIAR = process.argv.includes("--criar");
 
 if (!TOKEN) {
-  console.error("Falta NOTIFICAME_API_TOKEN no ambiente.");
+  console.error("Falta NOTIFICAME_API_TOKEN — no ambiente ou no .env.");
   console.error("Uso: NOTIFICAME_API_TOKEN=<token> node scripts/notificame-revenda-check.mjs");
+  console.error("  ou: NOTIFICAME_ENV_FILE=/caminho/.env node scripts/notificame-revenda-check.mjs");
   process.exit(1);
 }
 
@@ -104,9 +129,25 @@ if (CRIAR) {
 }
 
 console.log("\n───────────────────────────────────────────");
+
+/**
+ * O CONTROLE DECIDE SE O RESTO SIGNIFICA ALGO.
+ *
+ * Medido em 2026-08-17: o token recusou no item 1, e o item 2 respondeu
+ * "Invalid company" — que é exatamente o sintoma do bloqueio de revenda. Ler o
+ * item 2 sozinho teria produzido o laudo errado ("continua bloqueado") quando o
+ * fato era outro ("a credencial não é aceita"). Por isso o veredito final é
+ * hierárquico: sem credencial, nada abaixo é conclusão.
+ */
+const credencialOk = !/AUTHENTICATION_ERROR|Invalid token/i.test(resale.corpo);
+
 if (resale.status === 0) {
-  console.log("Nem a leitura respondeu — verifique rede e token antes de concluir qualquer coisa.");
+  console.log("Nem a leitura respondeu — problema de rede. Nada aqui é conclusão.");
+} else if (!credencialOk) {
+  console.log("VEREDITO: INCONCLUSIVO sobre revenda — a CREDENCIAL foi recusada.");
+  console.log("O 'Invalid company' do item 2, se apareceu, NÃO prova bloqueio: com token");
+  console.log("inválido tudo falha. Renove o token no painel do fornecedor e rode de novo.");
 } else {
-  console.log("Leia os três vereditos acima. O item 2 é o que separa liberado de bloqueado");
-  console.log("sem criar nada; o item 3 é a prova final.");
+  console.log("Credencial aceita — agora sim o item 2 é leitura válida sobre a revenda.");
+  console.log("O item 3 (com --criar) é a prova final.");
 }
