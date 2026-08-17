@@ -44,7 +44,6 @@ export type { PortfolioClientRow };
 interface CarteiraClientTableProps {
   selectedClientId: string | null;
   onSelectClient: (client: PortfolioClientRow | null) => void;
-  onWhatsApp?: (client: PortfolioClientRow) => void;
   onNewOrder?: (clientId: string) => void;
   onViewDetail?: (clientId: string) => void;
   searchQuery: string;
@@ -188,7 +187,6 @@ const thBase =
 export function CarteiraClientTable({
   selectedClientId,
   onSelectClient,
-  onWhatsApp,
   onNewOrder,
   onViewDetail,
   searchQuery,
