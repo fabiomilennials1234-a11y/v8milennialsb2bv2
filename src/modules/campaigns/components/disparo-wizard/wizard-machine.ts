@@ -83,8 +83,11 @@ export interface DisparoDraft {
   /** Post-send destination: move each lead when ITS message goes out. Default
    *  "none" — the step is optional and passes untouched. */
   postSendMode: "none" | "move";
-  /** Destination funnel kind when moving (mirrors AudienceSelection encoding). */
-  postSendFunnelKind: FunnelKind;
+  /** Destination funnel kind when moving (mirrors AudienceSelection encoding).
+   *  `Exclude<…, "all">` on purpose: a move destination is always ONE concrete
+   *  funnel. `"all"` is an audience *read* scope ("todos os funis") — never a
+   *  write target, since a lead cannot be moved into "every funnel". */
+  postSendFunnelKind: Exclude<FunnelKind, "all">;
   /** Destination system pipe when funnelKind === "system"; null = not chosen. */
   postSendPipelineType: SystemPipelineType | null;
   /** Destination custom pipeline id when funnelKind === "custom" (else null). */

@@ -9,6 +9,8 @@ import {
   deriveSegment,
   deriveTrend,
   detectSignals,
+  groupOrdersByDay,
+  computeCycleDays,
 } from "../../supabase/functions/_shared/portfolio-health.ts";
 
 describe("calculateRecencyScore", () => {
@@ -251,5 +253,115 @@ describe("calculateEngagementScore — combo and fallbacks", () => {
   it("handles whatsapp=0 as valid (not null)", () => {
     // context=100 * 0.6 = 60, whatsapp(0d)=100 * 0.4 = 40 → 100
     expect(calculateEngagementScore(100, 0)).toBe(100);
+  });
+});
+
+describe("groupOrdersByDay", () => {
+  it("colapsa linhas de item do mesmo dia em 1 pedido, somando o valor", () => {
+    // caso real do PROD (Basic4u): venda de 2 itens no mesmo timestamp
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 3180.5 },
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 117.7 },
+    ]);
+    expect(grouped).toEqual([{ day: "2025-08-12", saleValue: 3298.2 }]);
+  });
+
+  it("agrupa linhas do mesmo dia mesmo em horas diferentes", () => {
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-08-12T09:15:00Z", sale_value: 100 },
+      { sold_at: "2025-08-12T18:40:00Z", sale_value: 50 },
+    ]);
+    expect(grouped).toHaveLength(1);
+    expect(grouped[0].saleValue).toBe(150);
+  });
+
+  it("mantém dias distintos separados e ordenados ASC", () => {
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-09-10T10:00:00Z", sale_value: 300 },
+      { sold_at: "2025-08-12T10:00:00Z", sale_value: 100 },
+      { sold_at: "2025-08-12T11:00:00Z", sale_value: 200 },
+    ]);
+    expect(grouped).toEqual([
+      { day: "2025-08-12", saleValue: 300 },
+      { day: "2025-09-10", saleValue: 300 },
+    ]);
+  });
+
+  it("aceita sale_value como string (numeric do Postgres via PostgREST)", () => {
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: "10.50" },
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: "4.50" },
+    ]);
+    expect(grouped[0].saleValue).toBe(15);
+  });
+
+  it("descarta sold_at inválido em vez de contaminar o ciclo com NaN", () => {
+    const grouped = groupOrdersByDay([
+      { sold_at: "not-a-date", sale_value: 999 },
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 100 },
+    ]);
+    expect(grouped).toEqual([{ day: "2025-08-12", saleValue: 100 }]);
+  });
+
+  it("retorna vazio pra lista vazia", () => {
+    expect(groupOrdersByDay([])).toEqual([]);
+  });
+});
+
+describe("computeCycleDays", () => {
+  it("cai no default da org quando o cliente só tem 1 pedido", () => {
+    const grouped = groupOrdersByDay([{ sold_at: "2025-08-12T12:00:00Z", sale_value: 100 }]);
+    expect(computeCycleDays(grouped, 45)).toBe(45);
+  });
+
+  it("usa 30 quando não há default da org", () => {
+    expect(computeCycleDays([], undefined)).toBe(30);
+  });
+
+  it("REGRESSÃO: pedido multi-item NÃO vira ciclo de 1 dia", () => {
+    // antes do fix: 2 linhas = "2 pedidos com gap 0" → ciclo 1 → KPI x30
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 3180.5 },
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 117.7 },
+    ]);
+    expect(computeCycleDays(grouped, 30)).toBe(30);
+  });
+
+  it("mede o gap entre dias distintos", () => {
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-07-13T12:00:00Z", sale_value: 100 },
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 100 },
+    ]);
+    expect(computeCycleDays(grouped, 45)).toBe(30);
+  });
+
+  it("tira a média dos gaps quando há vários pedidos", () => {
+    // 10/01 → 20/01 (10d) → 10/02 (21d) → média 15,5 → 16
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-01-10T12:00:00Z", sale_value: 100 },
+      { sold_at: "2025-01-20T12:00:00Z", sale_value: 100 },
+      { sold_at: "2025-02-10T12:00:00Z", sale_value: 100 },
+    ]);
+    expect(computeCycleDays(grouped, 30)).toBe(16);
+  });
+
+  it("ignora as linhas extras de cada pedido ao medir o gap", () => {
+    // 2 pedidos multi-item separados por 30 dias → ciclo 30, não 10
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-07-13T12:00:00Z", sale_value: 100 },
+      { sold_at: "2025-07-13T12:00:00Z", sale_value: 100 },
+      { sold_at: "2025-07-13T12:00:00Z", sale_value: 100 },
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 100 },
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 100 },
+    ]);
+    expect(computeCycleDays(grouped, 45)).toBe(30);
+  });
+
+  it("nunca retorna menos que 1 (dias consecutivos)", () => {
+    const grouped = groupOrdersByDay([
+      { sold_at: "2025-08-12T12:00:00Z", sale_value: 100 },
+      { sold_at: "2025-08-13T12:00:00Z", sale_value: 100 },
+    ]);
+    expect(computeCycleDays(grouped, 30)).toBe(1);
   });
 });

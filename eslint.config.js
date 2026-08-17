@@ -138,4 +138,65 @@ export default tseslint.config(
       "custom/no-brittle-supabase-mocks": "off",
     },
   },
+
+  // ── Conversa do Lead: um caminho só ───────────────────────────────────────
+  //
+  // `useOpenWhatsAppChat` era chamado em 9 lugares, cada card com a sua regra.
+  // Foi assim que a prop `primaryInstanceId` ficou sem um único produtor no
+  // repo inteiro, e assim que um dos botões passou a lançar `ReferenceError`
+  // sem ninguém notar por meses.
+  //
+  // Hoje o caminho é `AbrirConversaButton` / `AbrirConversaMenuItem`, que
+  // perguntam por qual caixa falar. Esta regra existe para que o 10º caminho
+  // não nasça — documentação sozinha não segura: neste repo já houve defeito em
+  // produção nascido de doc desatualizada.
+  //
+  // Os `wa.me` de lead também entram: os 7 call sites de carteira, analytics,
+  // copiloto e agenda migraram, então o número pessoal do vendedor deixou de
+  // ser caminho no produto (decisão 9 da spec). Mensagem que sai do celular
+  // pessoal não fica no CRM, não passa por copilot nem por dedup, e não conta
+  // no histórico do lead.
+  //
+  // Os `wa.me` de SUPORTE ao tenant continuam permitidos — são o cliente
+  // falando com o Torque, não o vendedor com o lead, e não têm caixa nem lead.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: [
+      "src/modules/communication/components/chat/AbrirConversaButton.tsx",
+      "src/modules/communication/components/chat/AbrirConversaMenuItem.tsx",
+      "src/modules/communication/lib/whatsapp.ts",
+      // Suporte ao tenant: número do Torque, não do lead.
+      "src/shared/components/UpgradeModal.tsx",
+      "src/modules/billing/components/subscription/SubscriptionBlockedPage.tsx",
+      "src/modules/platform/components/feature-lock/FeatureLockedScreen.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/modules/communication/lib/whatsapp",
+              importNames: ["useOpenWhatsAppChat", "openWhatsApp"],
+              message:
+                "Use <AbrirConversaButton> (ou <AbrirConversaMenuItem> dentro de menu) de @/modules/communication/components/chat. Abrir conversa sem perguntar a caixa é o defeito que a spec .specs/features/conversa-do-lead/SPEC.md existe para matar.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=/wa\\.me/]",
+          message:
+            "Link direto para wa.me abre o WhatsApp PESSOAL do vendedor: a mensagem não fica no CRM, não passa por copilot nem por dedup, e não conta no histórico do lead. Use <AbrirConversaButton>. Se for contato de SUPORTE ao tenant (número do Torque), acrescente o arquivo aos ignores desta regra, com o motivo.",
+        },
+        {
+          selector: "TemplateElement[value.raw=/wa\\.me/]",
+          message:
+            "Link direto para wa.me abre o WhatsApp PESSOAL do vendedor: a mensagem não fica no CRM, não passa por copilot nem por dedup, e não conta no histórico do lead. Use <AbrirConversaButton>. Se for contato de SUPORTE ao tenant (número do Torque), acrescente o arquivo aos ignores desta regra, com o motivo.",
+        },
+      ],
+    },
+  },
 );

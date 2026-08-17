@@ -23,6 +23,7 @@ owner: claude-agent
 - [[chat-bubble-instance-filter|Chat Bubble — Filtro de Instancia]]
 - [[chat-bubble|Chat Bubble Kanban]]
 - [[disparos-falha-entrega|Disparos — Falha na Entrega por Lead]]
+- [[disparos-publico-por-condicao|Disparos — Público por Condição (Todos os Funis / Todas as Etapas)]]
 - [[layout-onda-2b|Chat Onda 2b — contrato de layout]]
 - [[whatsapp-stability-plan|WhatsApp Stability — estado consolidado]]
 
@@ -43,6 +44,7 @@ owner: claude-agent
 ## Vendas
 
 - [[Agenda Interna|Agenda Interna]]
+- [[Carteira Pedidos|Carteira — aba Pedidos (listar e editar)]]
 - [[Export Stage Kanban|Export Stage (Kanban)]]
 - [[Filtros do Kanban|Filtros do Kanban]]
 - [[Lead Card|Lead Card (Kanban) — Trello-style]]

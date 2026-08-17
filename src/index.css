@@ -56,6 +56,10 @@
     /* Warning */
     --warning: 38 92% 50%;
     --warning-foreground: 30 18% 15%;
+    /* âmbar escurecido p/ texto e ícone sobre superfície tintada.
+       --warning (38 92% 50%) reprova AA sobre --card em light (~2.6:1).
+       Este é o par legível; --warning segue sendo o valor de PREENCHIMENTO. */
+    --warning-strong: 32 90% 34%;   /* ~6.5:1 sobre --card light */
 
     /* Silver — Ranking "2º lugar" / neutral accent */
     --silver: 220 9% 55%;
@@ -175,6 +179,7 @@
 
     --warning: 38 92% 55%;
     --warning-foreground: 30 18% 10%;
+    --warning-strong: 38 92% 62%;   /* ~9:1 sobre --card dark */
 
     --silver: 220 9% 70%;
     --silver-foreground: 30 18% 10%;

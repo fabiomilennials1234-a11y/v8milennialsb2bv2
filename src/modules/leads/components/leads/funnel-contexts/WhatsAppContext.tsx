@@ -6,7 +6,6 @@
 
 import { useState } from "react";
 import { MessageSquare, Loader2, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,13 +19,37 @@ import { type PipeWhatsappStatus, stagesToColumns } from "@/contracts/pipe";
 import { usePipeOps } from "../../../pipe-ops";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+/**
+ * Tipos estruturais — só o que este componente de fato lê.
+ *
+ * Eram `any`. O tipo já existia na origem (`useLeadDetail` infere de
+ * `supabase.from("leads")`) e era descartado nesta fronteira. `any` é
+ * atribuível a qualquer coisa, então o compilador parava de olhar daqui
+ * pra baixo — foi assim que `primaryInstanceId` virou prop morta sem
+ * ninguém notar.
+ */
+interface WhatsAppContextLead {
+  id: string;
+  phone: string | null;
+}
+
+interface WhatsAppContextPipeData {
+  id: string;
+  lead_id: string;
+  sdr_id: string | null;
+  status: string | null;
+  responsible?: { name: string | null } | null;
+  sdr?: { name: string | null } | null;
+}
+
 interface WhatsAppContextProps {
-  lead: any;
-  pipeData: any;
+  lead: WhatsAppContextLead | null;
+  pipeData: WhatsAppContextPipeData | null;
   onSuccess?: () => void;
 }
 
@@ -35,7 +58,6 @@ export function WhatsAppContext({ lead, pipeData, onSuccess }: WhatsAppContextPr
   const updatePipe = useUpdatePipeWhatsapp();
   const logAction = useLogLeadAction();
   const responsibleMembers = useResponsibleMembers();
-  const openWhatsApp = useOpenWhatsAppChat();
   const { data: stages = [] } = usePipelineStages("whatsapp");
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -67,7 +89,10 @@ export function WhatsAppContext({ lead, pipeData, onSuccess }: WhatsAppContextPr
     return <p className="text-sm text-muted-foreground">Dados do funil não disponíveis.</p>;
   }
 
-  const hasPhone = !!formatPhoneForWhatsApp(lead?.phone);
+  // Deriva o telefone, não só um booleano: `hasPhone` sozinho guarda em runtime
+  // mas não estreita o tipo, então o compilador continuaria cego no onClick.
+  const phoneDoLead = lead?.phone ?? undefined;
+  const hasPhone = !!formatPhoneForWhatsApp(phoneDoLead);
 
   return (
     <div className="space-y-4">
@@ -79,7 +104,7 @@ export function WhatsAppContext({ lead, pipeData, onSuccess }: WhatsAppContextPr
             <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: currentStage.color }} />
           )}
           <Select
-            value={pipeData.status}
+            value={pipeData.status ?? undefined}
             onValueChange={handleStageChange}
             disabled={isUpdating}
           >
@@ -129,15 +154,16 @@ export function WhatsAppContext({ lead, pipeData, onSuccess }: WhatsAppContextPr
 
       {/* WhatsApp quick action */}
       {hasPhone && (
-        <Button
+        <AbrirConversaButton
+          leadId={pipeData.lead_id}
+          phone={phoneDoLead}
           variant="outline"
           size="sm"
           className="w-full gap-2"
-          onClick={() => openWhatsApp(lead.phone)}
         >
           <MessageSquare className="w-4 h-4 text-[#25D366]" />
           Abrir WhatsApp
-        </Button>
+        </AbrirConversaButton>
       )}
 
       {/* Responsible */}

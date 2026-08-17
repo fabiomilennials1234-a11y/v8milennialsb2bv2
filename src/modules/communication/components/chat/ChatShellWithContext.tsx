@@ -30,6 +30,12 @@ import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
+import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
+import {
+  computeChatDeepLinkPlan,
+  type ChatDeepLinkPlan,
+} from "@/modules/communication/lib/computeChatDeepLinkPlan";
+import { useLeadPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useCopilotToggle } from "@/modules/copilot/hooks/useCopilotToggle";
 import { useCopilotPause } from "@/modules/copilot/hooks/useCopilotPause";
 import { ChatShell } from "@/modules/communication/components/chat/layout/ChatShell";
@@ -403,7 +409,7 @@ export function ChatShellWithContext() {
   const selectedInstanceId = isSocialBox ? null : selectedBoxId;
   const selectedChannelId = isSocialBox ? selectedBoxId : null;
 
-  // ── Deep-link (?phone=&instance=&box=) ──────────────────────────────────────
+  // ── Deep-link (?phone=&instance=&box=&lead=) ────────────────────────────────
   // Lê params uma vez no mount; estado pendente impede que o auto-select de
   // caixa sobrescreva a resolução do link, e impede também que múltiplos
   // re-renders re-disparem a lógica.
@@ -411,16 +417,41 @@ export function ChatShellWithContext() {
   // `?box=` é o param novo, e é o que o aviso de mensagem recebida usa para
   // levar à caixa onde a conversa existe. `?instance=` continua existindo e
   // continua significando WhatsApp — renomeá-lo quebraria todo link já enviado.
+  //
+  // `?lead=` existe porque a carteira navega conhecendo o lead, não o telefone
+  // (CarteiraClientPreview, ClienteDetailPage, Upsell). A tradução lead→telefone
+  // acontece aqui; daí pra frente o fluxo é idêntico ao de `?phone=`.
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialDeepLinkRef = useRef<{ phone: string | null; instance: string | null; box: string | null } | null>(null);
-  if (initialDeepLinkRef.current === null) {
-    initialDeepLinkRef.current = {
+  const initialPlanRef = useRef<ChatDeepLinkPlan | null>(null);
+  if (initialPlanRef.current === null) {
+    initialPlanRef.current = computeChatDeepLinkPlan({
       phone: searchParams.get("phone"),
       instance: searchParams.get("instance"),
       box: searchParams.get("box"),
-    };
+      lead: searchParams.get("lead"),
+    });
   }
-  const deepLink = initialDeepLinkRef.current;
+  const plan = initialPlanRef.current;
+
+  const { data: leadPhone, isLoading: leadPhoneLoading } = useLeadPhone(
+    plan.kind === "lead" ? plan.leadId : null,
+  );
+  // Lead sem telefone, fora da org, ou inexistente → não há conversa a abrir.
+  const leadPlanPending = plan.kind === "lead" && leadPhoneLoading;
+
+  const deepLink = useMemo(
+    () => ({
+      phone:
+        plan.kind === "phone"
+          ? plan.phone
+          : plan.kind === "lead"
+            ? (leadPhone ?? null)
+            : null,
+      instance: plan.instance,
+      box: plan.box,
+    }),
+    [plan, leadPhone],
+  );
   const hasDeepLinkPhone = !!deepLink.phone;
 
   // `?box=` sozinho: escolhe a caixa e sai da frente. Só aceita id que esteja na
@@ -513,7 +544,7 @@ export function ChatShellWithContext() {
     // grudado na URL até o próximo clique de navegação.
     if (hasDeepLinkPhone && !deepLinkProcessed) return;
     if (!boxDeepLinkProcessed) return;
-    if (!searchParams.get("phone") && !searchParams.get("instance") && !searchParams.get("box")) return;
+    if (!searchParams.get("phone") && !searchParams.get("instance") && !searchParams.get("box") && !searchParams.get("lead")) return;
     setSearchParams({}, { replace: true });
   }, [hasDeepLinkPhone, deepLinkProcessed, boxDeepLinkProcessed, searchParams, setSearchParams]);
 
@@ -527,6 +558,9 @@ export function ChatShellWithContext() {
     if (!boxes.length) return;
     if (hasDeepLinkPhone && !deepLinkProcessed) return;
     if (deepLink.box && !boxDeepLinkProcessed) return;
+    // Lead cujo telefone ainda está sendo buscado: escolher a caixa agora faria
+    // a seleção pular quando o telefone chegasse.
+    if (leadPlanPending) return;
 
     const preferredIsValid = preferredInstanceId
       ? instances.some((i) => i.id === preferredInstanceId)
@@ -548,6 +582,7 @@ export function ChatShellWithContext() {
     deepLink.box,
     boxDeepLinkProcessed,
     preferredInstanceId,
+    leadPlanPending,
   ]);
 
   // ── Filtro do inbox ─────────────────────────────────────────────────────────
@@ -620,20 +655,20 @@ export function ChatShellWithContext() {
   // Quando contatos carregam, casa pendingDeepLinkPhone pelo phone normalizado
   // e seta a chave com o phone_number canônico do contato. Deep-link por
   // telefone é, por construção, WhatsApp.
+  //
+  // Contato fora da janela de contatos abre pelo telefone mesmo assim — decisão
+  // em `resolvePendingDeepLink`, testada em tests/unit.
   useEffect(() => {
     if (!pendingDeepLinkPhone) return;
-    if (!contacts.length) return;
-    const target = normalizePhone(pendingDeepLinkPhone);
-    if (!target) {
-      setPendingDeepLinkPhone(null);
-      return;
-    }
-    const match = contacts.find((c) => normalizePhone(c.phone_number) === target);
-    if (match) {
-      setSelectedKey(match.phone_number);
-      setPendingDeepLinkPhone(null);
-    }
-  }, [contacts, pendingDeepLinkPhone]);
+    const outcome = resolvePendingDeepLink({
+      pendingPhone: pendingDeepLinkPhone,
+      contacts,
+      contactsLoading,
+    });
+    if (outcome.action === "wait") return;
+    if (outcome.action === "select") setSelectedKey(outcome.contactKey);
+    setPendingDeepLinkPhone(null);
+  }, [contacts, contactsLoading, pendingDeepLinkPhone]);
 
   const selectedContact = useMemo(
     () => contacts.find((c) => c.phone_number === selectedKey) ?? null,

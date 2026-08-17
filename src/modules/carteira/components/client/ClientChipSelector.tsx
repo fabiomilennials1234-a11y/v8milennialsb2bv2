@@ -28,7 +28,12 @@ export function ClientChipSelector({
   onChange,
 }: ClientChipSelectorProps) {
   const { data: clients = [] } = useUpsellClients();
-  const activeClients = clients.filter((c) => c.is_active);
+  // Inclui o cliente JÁ selecionado mesmo se estiver inativo: ao editar um
+  // pedido de cliente inativo, filtrar só por `is_active` fazia o seletor não
+  // encontrar o próprio cliente do pedido — o chip abria vazio e salvar movia a
+  // receita sem querer. Inativo não aparece para escolha nova, só se já é o
+  // selecionado.
+  const activeClients = clients.filter((c) => c.is_active || c.id === clientId);
 
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState(clientId ?? "");

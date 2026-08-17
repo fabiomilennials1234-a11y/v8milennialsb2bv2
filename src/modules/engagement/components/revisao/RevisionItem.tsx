@@ -24,7 +24,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { ScheduleFollowUpModal } from "@/modules/engagement/components/followups/ScheduleFollowUpModal";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { cn } from "@/lib/utils";
 
 // ─── Types ───────────────────────────────────────────────
@@ -109,7 +110,6 @@ export function RevisionItem({
   const [scheduleFollowUpOpen, setScheduleFollowUpOpen] = useState(false);
   const [completionNotes, setCompletionNotes] = useState("");
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
-  const openWhatsApp = useOpenWhatsAppChat();
 
   const isOverdue = !task.isCompleted && isPast(task.scheduledAt);
   const hasPhone = !!formatPhoneForWhatsApp(task.leadPhone ?? undefined);
@@ -302,18 +302,16 @@ export function RevisionItem({
               {isFollowUp && (
                 <div className="flex flex-wrap gap-1.5">
                   {hasPhone && (
-                    <Button
+                    <AbrirConversaButton
+                      leadId={task.leadId}
+                      phone={task.leadPhone}
                       size="sm"
                       variant="ghost"
                       className="h-7 gap-1.5 text-xs text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openWhatsApp(task.leadPhone, e);
-                      }}
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
                       WhatsApp
-                    </Button>
+                    </AbrirConversaButton>
                   )}
 
                   {onReschedule && (
@@ -408,15 +406,16 @@ export function RevisionItem({
               {task.type === "scheduled-message" && (
                 <div className="flex items-center gap-2">
                   {hasPhone && (
-                    <Button
+                    <AbrirConversaButton
+                      leadId={task.leadId}
+                      phone={task.leadPhone}
                       size="sm"
                       variant="ghost"
                       className="h-7 gap-1.5 text-xs text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10"
-                      onClick={(e) => { e.stopPropagation(); openWhatsApp(task.leadPhone, e); }}
                     >
                       <MessageCircle className="w-3.5 h-3.5" />
                       WhatsApp
-                    </Button>
+                    </AbrirConversaButton>
                   )}
                   {onCancel && (
                     <Button size="sm" variant="ghost" className="h-7 text-xs"

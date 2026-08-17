@@ -26,7 +26,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { format, isToday, isTomorrow, isPast, differenceInHours, differenceInDays, formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { isConfirmacaoOverdue } from "@/modules/identity";
@@ -150,7 +151,6 @@ function getMeetingIndicator(
 }
 
 export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, onDelete, variant = "default" }: ConfirmacaoCardProps) {
-  const openWhatsApp = useOpenWhatsAppChat();
   const origin = originConfig[card.origin] || originConfig.outro;
   const meetingDate = card.meetingDateTime || (card.meetingDate ? new Date(card.meetingDate) : null);
   const indicator = getMeetingIndicator(
@@ -532,13 +532,14 @@ export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, on
         </div>
         <div className="flex items-center gap-2">
           {formatPhoneForWhatsApp(card.phone) && (
-            <button
-              onClick={(e) => openWhatsApp(card.phone, e)}
-              className="p-1.5 rounded-md bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] transition-colors"
+            <AbrirConversaButton
+              leadId={card.leadId}
+              phone={card.phone}
+              className="p-1.5 h-auto rounded-md bg-[#25D366]/10 hover:bg-[#25D366]/20 text-[#25D366] transition-colors"
               title="Abrir WhatsApp"
             >
               <MessageCircle className="w-3.5 h-3.5" />
-            </button>
+            </AbrirConversaButton>
           )}
         </div>
       </div>
