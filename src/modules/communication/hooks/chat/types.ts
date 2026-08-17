@@ -201,9 +201,27 @@ export function contactLabel(c: InboxContact): string {
   if (c.channel === "whatsapp") {
     return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
   }
-  if (c.handle) return `@${c.handle}`;
-  if (c.display_name) return c.display_name;
+  // O NOME primeiro, e o @ como queda.
+  //
+  // A ordem era inversa até 2026-08-17, quando o @ e o nome passaram a chegar
+  // juntos no payload real. Com os dois em mãos, quem vai no título é o nome —
+  // é ele que o vendedor reconhece na lista. O @ não some: vira subtítulo, via
+  // `contactHandleLabel`, onde continua servindo de evidência citável.
+  if (c.display_name?.trim()) return c.display_name.trim();
+  if (c.handle?.trim()) return `@${c.handle.trim().replace(/^@+/, "")}`;
   return `Instagram ${c.external_user_id.slice(-6)}`;
+}
+
+/**
+ * O @ do interlocutor pronto para exibição, ou `null`.
+ *
+ * `null` e não string vazia: quem chama decide NÃO renderizar a linha, em vez de
+ * desenhar um subtítulo em branco ocupando altura na lista.
+ */
+export function contactHandleLabel(c: InboxContact): string | null {
+  if (c.channel === "whatsapp") return null;
+  const handle = c.handle?.trim().replace(/^@+/, "");
+  return handle ? `@${handle}` : null;
 }
 
 /** Semente estável do gradiente do avatar — nunca string vazia. */

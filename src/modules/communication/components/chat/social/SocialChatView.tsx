@@ -32,7 +32,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useSocialMessages } from "@/modules/communication/hooks/chat/useSocialMessages";
 import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
-import { contactLabel, type SocialContact } from "@/modules/communication/hooks/chat/types";
+import {
+  contactHandleLabel,
+  contactLabel,
+  type SocialContact,
+} from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 import type { SocialMessage } from "@/modules/communication/hooks/chat/useSocialMessages";
 
@@ -84,6 +88,7 @@ function SocialChatHeader({
   isMobile: boolean;
 }) {
   const name = contactLabel(contact);
+  const handle = contactHandleLabel(contact);
   const gradient = getAvatarGradient(contact.external_user_id || name);
 
   return (
@@ -122,8 +127,10 @@ function SocialChatHeader({
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-display font-semibold truncate text-foreground">{name}</h3>
+        {/* O @ vem primeiro no subtítulo por ser o dado IDENTIFICADOR da pessoa —
+            o resto é contexto do canal, igual em toda conversa desta caixa. */}
         <p className="text-sm text-muted-foreground truncate">
-          Instagram Direct · {channelName}
+          {[handle, "Instagram Direct", channelName].filter(Boolean).join(" · ")}
         </p>
       </div>
     </header>

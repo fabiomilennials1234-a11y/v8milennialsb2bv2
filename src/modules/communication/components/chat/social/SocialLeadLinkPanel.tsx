@@ -20,7 +20,11 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
-import { contactLabel, type SocialContact } from "@/modules/communication/hooks/chat/types";
+import {
+  contactHandleLabel,
+  contactLabel,
+  type SocialContact,
+} from "@/modules/communication/hooks/chat/types";
 import {
   parseAlreadyLinkedLeadId,
   useCreateLeadFromSocial,
@@ -34,10 +38,10 @@ import { SocialCreateLeadDialog } from "./SocialCreateLeadDialog";
 /**
  * Nome sugerido para o lead novo.
  *
- * Ordem inversa à de `contactLabel`: na LISTA o `@handle` ganha porque é o que a
- * pessoa vê no app do Instagram; no NOME DO LEAD o nome de exibição é o rótulo
- * humano, e o handle passa a ter campo próprio na identidade. O IGSID cru nunca
- * vira nome — só o sufixo, e só quando não há mais nada.
+ * MESMA ordem de `contactLabel` desde 2026-08-17, quando o nome humano passou a
+ * chegar junto do @: o rótulo do lead é o NOME, e o @ tem campo próprio na
+ * identidade social. Eram ordens inversas enquanto o nome quase nunca vinha.
+ * O IGSID cru nunca vira nome — só o sufixo, e só quando não há mais nada.
  */
 function suggestedLeadName(contact: SocialContact): string {
   if (contact.display_name?.trim()) return contact.display_name.trim();
@@ -61,6 +65,7 @@ export function SocialLeadLinkPanel({ contact }: SocialLeadLinkPanelProps) {
   const unlinkMutation = useUnlinkSocialConversation(contact.messaging_channel_id);
 
   const label = contactLabel(contact);
+  const handleLabel = contactHandleLabel(contact);
   const gradient = getAvatarGradient(contact.external_user_id || label);
 
   const handleLinkError = (error: unknown) => {
@@ -129,9 +134,11 @@ export function SocialLeadLinkPanel({ contact }: SocialLeadLinkPanelProps) {
           <span className="text-[15px] font-semibold text-foreground truncate max-w-full">
             {label}
           </span>
-          {contact.display_name && contact.handle && (
+          {/* O @ é o subtítulo. Só aparece quando NÃO é o próprio título — sem
+              handle, `contactLabel` já caiu para o @ e repeti-lo seria ruído. */}
+          {handleLabel && handleLabel !== label && (
             <span className="text-xs text-muted-foreground truncate max-w-full">
-              {contact.display_name}
+              {handleLabel}
             </span>
           )}
           <TooltipProvider delayDuration={200}>
