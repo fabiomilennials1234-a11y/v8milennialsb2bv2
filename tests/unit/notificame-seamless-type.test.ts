@@ -253,3 +253,77 @@ describe("normalizeSeamlessType — tolerante no alias, intolerante no desconhec
     }
   });
 });
+
+/**
+ * ─── O PRIMEIRO CANAL REAL, E OS DOIS DEFEITOS QUE ELE REVELOU ───────────────
+ *
+ * Em 2026-08-17, 13:31, o Seamless conectou o primeiro canal de verdade na
+ * subconta. O vínculo foi RECUSADO por `channel_type_undetermined`, e a trilha
+ * registrou `raw_type: null`.
+ *
+ * A causa: todo o contrato de `/v1/channels` tinha sido derivado do SDK e da
+ * doc — nunca de uma resposta observada. O fornecedor declara o tipo na chave
+ * `channel`, que não estava entre os aliases lidos, e nomeia o canal oficial de
+ * WhatsApp como `whatsapp_business_account`, que não estava entre os aliases
+ * reconhecidos.
+ *
+ * Os dois payloads abaixo são cópias FIÉIS do que a conta devolveu — é a
+ * primeira vez que este arquivo testa contra observação em vez de suposição.
+ */
+const CANAL_IG_REAL = {
+  id: "7cd4149f-a173-4eec-809c-03d10f98ad69",
+  name: "Gabriel Aurelio Gipp",
+  channel: "instagram",
+  profile_pic: null,
+  instagram: { name: "gabriel.gipp", profile_pic: "https://scontent.cdninstagram.com/..." },
+  createdAt: "2026-08-17 13:31:02",
+};
+
+const CANAL_WA_REAL = {
+  id: "0a8e2a03-9c86-480c-8b1f-98066f511e0c",
+  name: "WhatsApp",
+  channel: "whatsapp_business_account",
+  createdAt: "2026-08-17 12:24:16",
+};
+
+const normalizeChannel = () =>
+  fn<(raw: unknown) => { id: string; type: string | null } | null>("normalizeChannel");
+
+describe("normalizeChannel — contra o payload REAL do fornecedor", () => {
+  it("lê o tipo da chave `channel` — foi o null que abortou o primeiro vínculo", () => {
+    const canal = normalizeChannel()(CANAL_IG_REAL);
+
+    expect(canal?.id).toBe("7cd4149f-a173-4eec-809c-03d10f98ad69");
+    expect(canal?.type).toBe("instagram");
+  });
+
+  it("continua lendo `type` e `channel_type` — os aliases antigos não regridem", () => {
+    expect(normalizeChannel()({ id: "a", type: "instagram" })?.type).toBe("instagram");
+    expect(normalizeChannel()({ id: "b", channel_type: "whatsapp" })?.type).toBe("whatsapp");
+  });
+
+  it("o canal oficial de WhatsApp também declara o tipo em `channel`", () => {
+    expect(normalizeChannel()(CANAL_WA_REAL)?.type).toBe("whatsapp_business_account");
+  });
+});
+
+describe("normalizeSeamlessType — o vocabulário observado do canal oficial", () => {
+  it.each(["whatsapp_business_account", "WHATSAPP_BUSINESS_ACCOUNT", " whatsapp_business_account "])(
+    "%o ⇒ 'whatsapp' — é como o fornecedor nomeia o canal oficial",
+    (raw) => {
+      expect(normalizeSeamlessType()(raw)).toBe("whatsapp");
+    },
+  );
+
+  it("o par completo fecha: payload real de WhatsApp vira o nosso 'whatsapp'", () => {
+    // Controle de ponta a ponta das duas funções juntas — é esse encadeamento
+    // que o `notificame-channel-finish` executa, e foi ele que quebrou.
+    const canal = normalizeChannel()(CANAL_WA_REAL);
+    expect(normalizeSeamlessType()(canal?.type)).toBe("whatsapp");
+  });
+
+  it("o par completo fecha: payload real de Instagram vira o nosso 'instagram'", () => {
+    const canal = normalizeChannel()(CANAL_IG_REAL);
+    expect(normalizeSeamlessType()(canal?.type)).toBe("instagram");
+  });
+});

@@ -840,7 +840,13 @@ export function normalizeChannel(raw: unknown): NotificameChannel | null {
     id,
     name: firstString(r.name, r.title) ?? null,
     phone: firstString(r.phone, r.number, r.phone_number) ?? null,
-    type: firstString(r.type, r.channel_type) ?? null,
+    // ⚠️ `r.channel` é o alias que o fornecedor REALMENTE usa — observado no
+    // primeiro canal conectado de verdade (2026-08-17). `type` e `channel_type`
+    // vieram do SDK e da doc, e nenhum dos dois aparece na resposta real; sem
+    // este terceiro alias o tipo saía `null` e o `notificame-channel-finish`
+    // recusava o vínculo com `channel_type_undetermined`. Os antigos ficam
+    // porque custam nada e cobrem variação entre versões da API.
+    type: firstString(r.type, r.channel_type, r.channel) ?? null,
     status: firstString(r.status) ?? null,
   };
 }
@@ -872,7 +878,11 @@ export function normalizeSeamlessType(
 ): SeamlessChannelType | null {
   if (typeof raw !== "string") return null;
   const v = raw.trim().toLowerCase();
-  if (v === "whatsapp" || v === "wa") return "whatsapp";
+  // `whatsapp_business_account` é como o fornecedor nomeia o canal OFICIAL —
+  // observado na conta real, não na doc. Sem ele, um canal de WhatsApp oficial
+  // recém-conectado cairia em `null` e teria o vínculo recusado, exatamente
+  // como aconteceu com o primeiro Instagram.
+  if (v === "whatsapp" || v === "wa" || v === "whatsapp_business_account") return "whatsapp";
   if (v === "instagram" || v === "ig") return "instagram";
   if (v === "facebook" || v === "fb" || v === "messenger") return "facebook";
   return null;
