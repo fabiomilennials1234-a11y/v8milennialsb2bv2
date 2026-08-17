@@ -47,7 +47,11 @@ export function supabaseClientStore(admin: SupabaseClient, source: string): Clie
           company: lead.company,
           phone: lead.phone,
           email: lead.email,
-          origin: "erp_omie",
+          // Derivado do provider, não fixo: este store é compartilhado por todos
+          // os ERPs. Com `erp_omie` cravado, um lead criado pela sincronização do
+          // Toth nasceria rotulado como Omie e a origem deixaria de responder
+          // "de onde veio". Para `source = "omie"` o valor não muda.
+          origin: `erp_${source}`,
         })
         .select("id")
         .single();
