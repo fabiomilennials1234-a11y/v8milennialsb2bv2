@@ -86,6 +86,7 @@ import {
   NotificameError,
   orgConfigFrom,
   parseNotificameBody,
+  vendorDetailFromParse,
   readNotificameBaseUrl,
   type FetchImpl,
   type NotificameOrgConfig,
@@ -184,18 +185,49 @@ export function normalizeNotificameRecipient(
 /**
  * Traduz a mídia unificada para o `content` do hub. PURO.
  *
- * ⚠️ LANÇA `NotSupportedError` em dois casos, e os dois são deliberados:
+ * ─── O CONTRATO, E POR QUE ELE NÃO É O ÓBVIO ────────────────────────────────
+ *
+ * TODA mídia — áudio, imagem, vídeo, documento — viaja no MESMO formato, e o
+ * discriminador não é o `type`:
+ *
+ *     { "type": "file", "fileMimeType": "audio", "fileUrl": "…", "fileCaption": "…" }
+ *
+ * `type` é sempre `"file"`; quem diz o que é a mídia é `fileMimeType`. Duas
+ * fontes do fornecedor concordam byte a byte: a doc (`app.notificame.com.br/
+ * docs/api.md`) e o node oficial `n8n-nodes-notificame-hub@0.3.3`
+ * (`transport/{instagram,whatsapp}/Enviar{Arquivo,MensagemAudio}.transport.js`).
+ *
+ * A forma INTUITIVA — `{ type:"image", url, caption }` — é a que estava aqui, e
+ * ela não falha alto: o fornecedor aceita o corpo e recusa o ENVIO. Em produção
+ * (17/08/2026) isso apareceu como áudio e imagem recusados no Direct enquanto o
+ * texto passava, com a recusa chegando ao operador sem motivo.
+ *
+ * ─── AS DUAS ASSIMETRIAS ENTRE CANAIS ───────────────────────────────────────
+ *
+ *   • `voice: true` faz o áudio chegar como GRAVAÇÃO em vez de arquivo anexo —
+ *     e existe SÓ no WhatsApp. A doc não o traz em Instagram, Facebook, Telegram
+ *     nem Mercado Livre. No Direct, `fileMimeType:"audio"` é o mais nativo que o
+ *     contrato oferece; mandar `voice` ali seria inventar campo.
+ *
+ *   • `document` existe no WhatsApp e NÃO no Instagram (o node oferece
+ *     Documento/Imagem/Vídeo num, só Imagem/Vídeo no outro). Recusamos aqui pelo
+ *     mesmo motivo que `sendTemplate` recusa: erro nosso e legível, antes do I/O,
+ *     em vez da recusa opaca do fornecedor depois.
+ *
+ * ⚠️ LANÇA `NotSupportedError` também em dois casos antigos, ambos deliberados:
  *
  *   • **base64** — o hub referencia mídia por URL pública; não há rota de upload
- *     no contrato do canal. Aceitar base64 e mandar a string como `url` produziria
- *     uma mensagem que o fornecedor aceita e o destinatário nunca vê. Falhar com
- *     "does not support" faz o front dizer a verdade ("mande um link").
+ *     no contrato do canal. Aceitar base64 e mandar a string como URL produziria
+ *     uma mensagem que o fornecedor aceita e o destinatário nunca vê.
  *
  *   • **sticker** — o canal oficial não tem figurinha. Mapear para `image` seria
  *     ADIVINHAR: o destinatário receberia um quadrado estático no lugar do que o
  *     operador escolheu, sem ninguém saber por quê.
  */
-export function toNotificameMediaContent(opts: SendMediaOptions): NotificameContent {
+export function toNotificameMediaContent(
+  opts: SendMediaOptions,
+  kind: NotificameChannelKind,
+): NotificameContent {
   const file = String(opts.file ?? "").trim();
 
   if (!/^https?:\/\//i.test(file)) {
@@ -207,22 +239,41 @@ export function toNotificameMediaContent(opts: SendMediaOptions): NotificameCont
 
   const caption = opts.caption?.trim() ? opts.caption : undefined;
 
+  /** O envelope comum. `fileCaption` só entra quando há o que dizer. */
+  const arquivo = (
+    fileMimeType: "image" | "video" | "audio" | "document",
+    legenda?: string,
+  ): NotificameContent => ({
+    type: "file",
+    fileMimeType,
+    fileUrl: file,
+    ...(legenda ? { fileCaption: legenda } : {}),
+  });
+
   switch (opts.type) {
     case "image":
-      return { type: "image", url: file, ...(caption ? { caption } : {}) };
+      return arquivo("image", caption);
     case "video":
-      return { type: "video", url: file, ...(caption ? { caption } : {}) };
+      return arquivo("video", caption);
     case "audio":
-    case "ptt":
-      // `ptt` (push-to-talk) não tem discriminador próprio no hub: vira áudio.
-      return { type: "audio", url: file };
+    case "ptt": {
+      // `ptt` (push-to-talk) não tem discriminador próprio no hub: é áudio, e no
+      // WhatsApp é `voice` que carrega a intenção de "gravado agora".
+      // "Áudio" como legenda é literal do node oficial, nos dois canais.
+      const conteudo = arquivo("audio", caption ?? "Áudio");
+      return kind === "whatsapp" ? { ...conteudo, voice: true } : conteudo;
+    }
     case "document":
-      return {
-        type: "file",
-        url: file,
-        ...(opts.filename ? { fileName: opts.filename } : {}),
-        ...(caption ? { caption } : {}),
-      };
+      if (kind !== "whatsapp") {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          `sendMedia(document) — o canal ${kind} não aceita documento, só imagem, vídeo e áudio`,
+        );
+      }
+      // O contrato não tem campo para o NOME do arquivo. Sem legenda própria, o
+      // nome vira a legenda: é escolha nossa, e é melhor que o destinatário
+      // receber um anexo sem identificação nenhuma.
+      return arquivo("document", caption ?? opts.filename);
     case "sticker":
       throw new NotSupportedError(NOTIFICAME_PROVIDER, "sendMedia(sticker)");
     default:
@@ -613,9 +664,19 @@ export class NotificameProvider implements WhatsAppProvider {
 
     const parsed = parseNotificameBody(rawText);
     if (!parsed.ok) {
-      // A prosa do fornecedor NÃO atravessa: `withErrorBoundary` devolve
-      // `error.message` cru no corpo do 500, e texto de terceiro ali é vazamento.
-      throw new NotificameError(parsed.code, "O NotificaMe recusou o envio da mensagem");
+      // A prosa do fornecedor NÃO atravessa a MENSAGEM: `withErrorBoundary`
+      // devolve `error.message` cru no corpo do 500, e texto de terceiro ali é
+      // vazamento. Ela viaja no campo `vendor`, que é server-only e existe para
+      // exatamente isto — quem loga decide se grava.
+      //
+      // Sem este terceiro argumento, toda recusa do fornecedor chegava ao log
+      // como a mesma frase sem motivo, e foi assim que o envelope de mídia
+      // errado sobreviveu: o servidor sabia por que, e jogava fora.
+      throw new NotificameError(
+        parsed.code,
+        "O NotificaMe recusou o envio da mensagem",
+        vendorDetailFromParse(parsed),
+      );
     }
 
     const messageId = readSentMessageId(parsed.value);
@@ -744,14 +805,17 @@ export class NotificameProvider implements WhatsAppProvider {
   }
 
   async sendMedia(opts: SendMediaOptions): Promise<SendResult> {
-    // Lança NotSupportedError para base64 e sticker — ANTES de qualquer I/O.
-    const content = toNotificameMediaContent(opts);
+    // Lança NotSupportedError para base64, sticker e documento-no-Instagram —
+    // ANTES de qualquer I/O. O canal decide o envelope: `voice` é do WhatsApp.
+    const content = toNotificameMediaContent(opts, this.channelKind);
     return await this.send({
       to: opts.number,
       content,
       messageType: opts.type,
       text: opts.caption?.trim() ? opts.caption : null,
-      mediaUrl: String(content.url ?? "") || null,
+      // `fileUrl` é o campo do contrato; `url` era o nome que nunca existiu e
+      // deixava `media_url` nulo na linha gravada mesmo quando havia mídia.
+      mediaUrl: String(content.fileUrl ?? "") || null,
     });
   }
 

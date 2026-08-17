@@ -232,6 +232,11 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
     return new Response(JSON.stringify({ message: resultado }), { status: 201, headers });
   } catch (e) {
     const detalhe = e instanceof Error ? e.message : String(e);
+    // O CÓDIGO e o MOTIVO do fornecedor, que a mensagem não carrega. Sem eles o
+    // log dizia "recusou o envio" e mais nada — foi o que deixou um envelope de
+    // mídia errado sobreviver a uma fatia inteira. `vendor` é server-only: entra
+    // no log, nunca na resposta HTTP.
+    const falha = e as { code?: string; vendor?: unknown };
 
     await logRuntime({
       organizationId: orgId,
@@ -241,7 +246,14 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
       errorMessage: detalhe,
       entityType: "whatsapp_instance",
       triggeredBy: auth.userId,
-      payloadSnapshot: { messaging_channel_id: messagingChannelId, channel_kind: alvo.channelKind },
+      payloadSnapshot: {
+        messaging_channel_id: messagingChannelId,
+        channel_kind: alvo.channelKind,
+        // Qual conteúdo falhou: sem isto, texto e mídia são indistinguíveis no log.
+        conteudo: conteudo.kind === "media" ? conteudo.media.type : "text",
+        ...(typeof falha.code === "string" ? { error_code: falha.code } : {}),
+        ...(falha.vendor ? { vendor: falha.vendor } : {}),
+      },
       ...trace,
     });
 
