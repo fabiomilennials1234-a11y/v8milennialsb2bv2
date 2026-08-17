@@ -16,6 +16,7 @@ import { resolveActiveWindow, computeNextWindowStart as computeNextWindowStartLo
 import { logRuntime } from "./logger.ts";
 import { validateExternalUrl } from "./url-validator.ts";
 import { fetchWithTimeout } from "./fetch-utils.ts";
+import { personalizationName } from "./lead-name.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -759,7 +760,30 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           if (arMode === "manual") {
             arAssigneeId = node.data.assigneeId as string;
             arAssigneeName = node.data.assigneeName as string;
-          } else {
+          } else if (arMode === "triggering_user") {
+            // Assign to whoever moved the card (captured at trigger time in
+            // context.changed_by_member_id). Falls through to the eligible-pool
+            // block below (round-robin) when the mover is not a valid active
+            // member — e.g. the card was moved by automation / service_role.
+            // memberIds (arMemberFilter) scopes ONLY the round-robin fallback,
+            // not who may become owner: anyone who qualifies keeps the lead.
+            const actorMemberId = context.changed_by_member_id as string | undefined;
+            if (actorMemberId) {
+              const { data: actor } = await supabase
+                .from("team_members")
+                .select("id, name")
+                .eq("organization_id", organizationId)
+                .eq("is_active", true)
+                .eq("id", actorMemberId)
+                .maybeSingle();
+              if (actor) {
+                arAssigneeId = (actor as { id: string; name: string }).id;
+                arAssigneeName = (actor as { id: string; name: string }).name;
+              }
+            }
+          }
+
+          if (!arAssigneeId && arMode !== "manual") {
             // Get eligible members
             let eligibleMembers: { id: string; name: string }[];
 
@@ -824,11 +848,15 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           const arUpdateFields: Record<string, string> = { responsible_id: arAssigneeId };
           if (arTarget === "sdr") {
             arUpdateFields.sdr_id = arAssigneeId;
+            arUpdateFields.pre_sale_responsible_id = arAssigneeId;
           } else if (arTarget === "closer") {
             arUpdateFields.closer_id = arAssigneeId;
+            arUpdateFields.sale_responsible_id = arAssigneeId;
           } else {
             arUpdateFields.sdr_id = arAssigneeId;
             arUpdateFields.closer_id = arAssigneeId;
+            arUpdateFields.pre_sale_responsible_id = arAssigneeId;
+            arUpdateFields.sale_responsible_id = arAssigneeId;
           }
 
           await supabase.from("leads").update(arUpdateFields).eq("id", leadId);
@@ -994,7 +1022,7 @@ async function resolveWebhookBody(supabase: SupabaseClient, leadId: string, temp
 
   let result = template;
   const vars: Record<string, string> = {
-    nome: lead.name || "",
+    nome: personalizationName(lead.name),
     empresa: lead.company || "",
     email: lead.email || "",
     telefone: lead.phone || "",

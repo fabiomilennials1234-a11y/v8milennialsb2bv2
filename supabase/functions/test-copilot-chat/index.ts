@@ -414,6 +414,38 @@ Deno.serve(withSentry('test-copilot-chat', async (req) => {
     let messageParts = splitByDelimiter(sanitizedContent);
     let cleanMessage = messageParts.join(" ");
 
+    // Guard anti-repetição: se o modelo devolveu (quase) a mesma mensagem que a
+    // última resposta do agente no histórico, regenera uma vez pedindo pra NÃO
+    // repetir e avançar. O agent-message de produção já tem esse guard; aqui o
+    // preview ganha o equivalente (evita loops de mensagem idêntica no Simular).
+    const normMsg = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+    const lastAssistant = [...recentHistory].reverse().find((m: any) => m?.role === "assistant");
+    const lastAssistantText = typeof lastAssistant?.content === "string" ? lastAssistant.content : "";
+    if (cleanMessage.trim() && lastAssistantText && normMsg(cleanMessage) === normMsg(lastAssistantText)) {
+      try {
+        const anti = await callOpenRouter(
+          OPENROUTER_API_KEY,
+          model,
+          [
+            { role: "system", content: systemPrompt },
+            ...recentHistory,
+            { role: "user", content: userContent },
+            { role: "user", content: "[SISTEMA] Sua última resposta REPETIU uma mensagem que você já enviou. NÃO repita. Responda DIRETAMENTE à última mensagem do cliente AVANÇANDO a venda (próximo passo concreto: coletar um dado que falta, confirmar o pedido com subtotal, ou encaminhar pro consultor). Responda SOMENTE com a mensagem ao cliente." },
+          ],
+          400,
+          temperature,
+        );
+        const antiText = sanitizeAssistantMessage((anti as any).choices?.[0]?.message?.content || "", false).text;
+        const antiParts = splitByDelimiter(antiText);
+        if (antiParts.length > 0 && normMsg(antiParts.join(" ")) !== normMsg(lastAssistantText)) {
+          messageParts = antiParts;
+          cleanMessage = antiParts.join(" ");
+        }
+      } catch (antiErr) {
+        console.warn("[test-copilot-chat] Anti-repeat regen failed:", antiErr);
+      }
+    }
+
     // Guard anti-balão-vazio: se o modelo só devolveu tool_calls e nenhum texto
     // (mesmo após o follow-up), força uma última geração em português pedindo a
     // mensagem ao cliente. Se ainda assim vier vazio, usa um fallback neutro —
