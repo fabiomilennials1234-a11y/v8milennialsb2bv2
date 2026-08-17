@@ -50,6 +50,7 @@ import { getTraceContext } from "../_shared/request-trace.ts";
 import { readNotificameFlags } from "../_shared/notificame.ts";
 import { NotificameProvider } from "../_shared/whatsapp-providers/notificame-provider.ts";
 import {
+  readSocialSendPayload,
   resolveSocialSendChannel,
   type SocialChannelRow,
 } from "../_shared/notificame-social-send.ts";
@@ -108,7 +109,6 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
 
   const messagingChannelId = readString(body, "messaging_channel_id", "messagingChannelId");
   const to = readString(body, "to", "external_user_id", "externalUserId");
-  const text = typeof body.text === "string" ? body.text : "";
 
   if (!messagingChannelId || !to) {
     return new Response(
@@ -119,13 +119,17 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
       { status: 400, headers },
     );
   }
-  if (!text.trim()) {
+
+  // Texto ou mídia — e a URL do anexo é conferida aqui mesmo com o front já
+  // validando: ela chega do cliente, e quem vai BUSCAR o arquivo é o fornecedor.
+  const conteudo = readSocialSendPayload(body);
+  if (!conteudo.ok) {
     return new Response(
-      JSON.stringify({ error: "Escreva a mensagem", code: "empty_text" }),
+      JSON.stringify({ error: conteudo.error, code: conteudo.code }),
       { status: 400, headers },
     );
   }
-  if (text.length > TEXT_MAX) {
+  if (conteudo.kind === "text" && conteudo.text.length > TEXT_MAX) {
     return new Response(
       JSON.stringify({ error: `A mensagem passa de ${TEXT_MAX} caracteres`, code: "text_too_long" }),
       { status: 400, headers },
@@ -196,7 +200,18 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
     // `number` é o nome histórico do campo (nasceu no WhatsApp); para canal
     // social ele carrega o IGSID, e `normalizeNotificameRecipient` não o
     // deforma — só WhatsApp passa pelo filtro de dígitos.
-    const resultado = await provider.sendText({ number: to, text });
+    //
+    // O envio de mídia manda a URL, nunca os bytes: o fornecedor BUSCA o
+    // arquivo, e o provider recusa base64 explicitamente.
+    const resultado = conteudo.kind === "media"
+      ? await provider.sendMedia({
+        number: to,
+        type: conteudo.media.type === "document" ? "document" : conteudo.media.type,
+        file: conteudo.media.file,
+        ...(conteudo.media.caption ? { caption: conteudo.media.caption } : {}),
+        ...(conteudo.media.filename ? { filename: conteudo.media.filename } : {}),
+      })
+      : await provider.sendText({ number: to, text: conteudo.text });
 
     await logRuntime({
       organizationId: orgId,
@@ -208,6 +223,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
       payloadSnapshot: {
         messaging_channel_id: messagingChannelId,
         channel_kind: alvo.channelKind,
+        conteudo: conteudo.kind === "media" ? conteudo.media.type : "text",
         external_id: resultado.message_id,
       },
       ...trace,

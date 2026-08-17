@@ -21,7 +21,17 @@ import { chatQueryKeys } from "./shared/queryKeys";
 export interface SendSocialMessageInput {
   /** IGSID do interlocutor — o `to` do envelope. */
   contactExternalId: string;
-  text: string;
+  text?: string;
+  /**
+   * Anexo JÁ PUBLICADO. O fornecedor BUSCA o arquivo — não recebe bytes —,
+   * então aqui viaja a URL, nunca o `File`. Ver `lib/social-attachment-upload`.
+   */
+  media?: {
+    type: "image" | "video" | "audio" | "document";
+    url: string;
+    caption?: string;
+    filename?: string;
+  };
 }
 
 export class SocialSendError extends Error {
@@ -72,16 +82,22 @@ export function useSendSocialMessage(messagingChannelId: string | null) {
   const organizationId = teamMember?.organization_id ?? null;
 
   return useMutation({
-    mutationFn: async ({ contactExternalId, text }: SendSocialMessageInput) => {
+    mutationFn: async ({ contactExternalId, text, media }: SendSocialMessageInput) => {
       if (!messagingChannelId) {
         throw new SocialSendError("no_channel", "Nenhum canal selecionado");
+      }
+      if (!text?.trim() && !media) {
+        throw new SocialSendError("empty_message", "Escreva a mensagem ou anexe um arquivo");
       }
 
       const { data, error } = await supabase.functions.invoke("notificame-send-social", {
         body: {
           messaging_channel_id: messagingChannelId,
           to: contactExternalId,
-          text,
+          // Com anexo, o texto vira LEGENDA no servidor — mandar os dois
+          // separados entregaria a mesma frase duas vezes ao cliente.
+          ...(text?.trim() ? { text: text.trim() } : {}),
+          ...(media ? { media } : {}),
         },
       });
 
