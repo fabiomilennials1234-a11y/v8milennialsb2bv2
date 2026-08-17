@@ -151,16 +151,24 @@ export default tseslint.config(
   // não nasça — documentação sozinha não segura: neste repo já houve defeito em
   // produção nascido de doc desatualizada.
   //
-  // Os `wa.me` diretos ainda NÃO entram aqui: 6 call sites de carteira,
-  // analytics e agenda seguem abrindo o WhatsApp pessoal do vendedor, e matar
-  // esse caminho muda comportamento visível. É a próxima fatia; quando ela
-  // migrar, `wa.me` entra nesta mesma lista.
+  // Os `wa.me` de lead também entram: os 7 call sites de carteira, analytics,
+  // copiloto e agenda migraram, então o número pessoal do vendedor deixou de
+  // ser caminho no produto (decisão 9 da spec). Mensagem que sai do celular
+  // pessoal não fica no CRM, não passa por copilot nem por dedup, e não conta
+  // no histórico do lead.
+  //
+  // Os `wa.me` de SUPORTE ao tenant continuam permitidos — são o cliente
+  // falando com o Torque, não o vendedor com o lead, e não têm caixa nem lead.
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: [
       "src/modules/communication/components/chat/AbrirConversaButton.tsx",
       "src/modules/communication/components/chat/AbrirConversaMenuItem.tsx",
       "src/modules/communication/lib/whatsapp.ts",
+      // Suporte ao tenant: número do Torque, não do lead.
+      "src/shared/components/UpgradeModal.tsx",
+      "src/modules/billing/components/subscription/SubscriptionBlockedPage.tsx",
+      "src/modules/platform/components/feature-lock/FeatureLockedScreen.tsx",
     ],
     rules: {
       "no-restricted-imports": [
@@ -174,6 +182,19 @@ export default tseslint.config(
                 "Use <AbrirConversaButton> (ou <AbrirConversaMenuItem> dentro de menu) de @/modules/communication/components/chat. Abrir conversa sem perguntar a caixa é o defeito que a spec .specs/features/conversa-do-lead/SPEC.md existe para matar.",
             },
           ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "Literal[value=/wa\\.me/]",
+          message:
+            "Link direto para wa.me abre o WhatsApp PESSOAL do vendedor: a mensagem não fica no CRM, não passa por copilot nem por dedup, e não conta no histórico do lead. Use <AbrirConversaButton>. Se for contato de SUPORTE ao tenant (número do Torque), acrescente o arquivo aos ignores desta regra, com o motivo.",
+        },
+        {
+          selector: "TemplateElement[value.raw=/wa\\.me/]",
+          message:
+            "Link direto para wa.me abre o WhatsApp PESSOAL do vendedor: a mensagem não fica no CRM, não passa por copilot nem por dedup, e não conta no histórico do lead. Use <AbrirConversaButton>. Se for contato de SUPORTE ao tenant (número do Torque), acrescente o arquivo aos ignores desta regra, com o motivo.",
         },
       ],
     },
