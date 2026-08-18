@@ -75,6 +75,11 @@ const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION ===
 const PROXY_URL =
   process.env.PROXY_URL ?? 'http://127.0.0.1:54321/functions/v1/whatsapp-api-proxy';
 const INSTANCE_ID = '00000000-0000-0000-0000-0000000000f1';
+/**
+ * O bloco do proxy é um `describe` IRMÃO, não aninhado — o afterAll do de cima
+ * já apagou INSTANCE_ID quando ele começa. Instância própria, ciclo próprio.
+ */
+const PROXY_INSTANCE_ID = '00000000-0000-0000-0000-0000000000f2';
 const MSG_ALPHA = 'proxy-guard-alpha';
 const MSG_BETA = 'proxy-guard-beta';
 
@@ -97,7 +102,7 @@ async function call(token: string, action: string, payload: Record<string, unkno
   const res = await fetch(PROXY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ action, instance_id: INSTANCE_ID, payload }),
+    body: JSON.stringify({ action, instance_id: PROXY_INSTANCE_ID, payload }),
   });
   let body: Record<string, unknown> = {};
   try {
@@ -151,6 +156,26 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
     ]);
     service = createServiceClient();
 
+    // A instância vive no beforeAll EXTERNO porque toda mensagem precisa dela:
+    // o trigger que alimenta whatsapp_conversation_summary ignora linha com
+    // instance_id nulo, e é dessa tabela que a prévia (#1636) conta. Mensagem
+    // sem instância também não existe em produção.
+    //
+    // A cota é 0/0 no plano free e o trigger recusa o INSERT — daí o
+    // limit_overrides, que sai no afterAll.
+    await service
+      .from('organizations')
+      .update({ limit_overrides: { max_whatsapp_instances: 5, max_copilot_agents: 5 } })
+      .eq('id', TEST_ORG_ID);
+
+    const { error: instErr } = await service.from('whatsapp_instances').upsert({
+      id: INSTANCE_ID,
+      organization_id: TEST_ORG_ID,
+      instance_name: 'isolation-fixture',
+      status: 'connected',
+    });
+    if (instErr) throw new Error(`Falha ao semear a instância: ${instErr.message}`);
+
     // Member B passa a ser responsável do lead OrgB-1, sem nenhum override de
     // permissão — é o controle do caso "membro sem override".
     await service
@@ -161,6 +186,7 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
     const rows = [
       ...ALL_ORG_A_PHONES.map((phone) => ({
         organization_id: TEST_ORG_ID,
+        instance_id: INSTANCE_ID,
         message_id: `${MSG_PREFIX}a-${phone}`,
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: `+55${phone}`,
@@ -222,6 +248,7 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
     await service.from('conversation_messages').delete().like('content', `${MSG_PREFIX}%`);
     await service.from('conversations').delete().eq('agent_id', AGENT_ID);
     await service.from('copilot_agents').delete().eq('id', AGENT_ID);
+    await service.from('whatsapp_instances').delete().eq('id', INSTANCE_ID);
     await service.from('organizations').update({ limit_overrides: {} }).eq('id', TEST_ORG_ID);
     await service
       .from('leads')
@@ -521,6 +548,58 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
   });
 
   // ---------------------------------------------------------------
+  // A prévia que o admin vê ANTES de ligar (#1636)
+  //
+  // Os números saem de whatsapp_conversation_summary (uma linha por org+chip+
+  // telefone, 46.611 em produção) e não de whatsapp_messages (2.472.395). Uma
+  // prévia que varre a tabela de mensagens trava a tela justamente na org
+  // grande, que é onde a decisão importa.
+  // ---------------------------------------------------------------
+
+  describe('prévia da política', () => {
+    it('conta as conversas da org e quantas ficariam restritas', async () => {
+      // Fixture da Org A, 5 conversas individuais:
+      //   Alpha  — lead com dono (Member1)        → continua visível
+      //   Beta   — lead com dono (Member2)        → continua visível
+      //   Delta  — lead com dono (ambos)          → continua visível
+      //   Gamma  — lead SEM responsável           → restrita
+      //   órfã   — telefone sem lead nenhum       → restrita
+      const { data, error } = await admin.rpc('preview_chat_restriction', {
+        p_org_id: TEST_ORG_ID,
+      });
+
+      expect(error).toBeNull();
+      expect(data).toMatchObject({
+        conversas_total: 5,
+        conversas_restritas: 2,
+        leads_sem_responsavel: 1, // só o Gamma
+      });
+    });
+
+    it('master consulta qualquer org', async () => {
+      const { data, error } = await master.rpc('preview_chat_restriction', {
+        p_org_id: TEST_ORG_ID,
+      });
+      expect(error).toBeNull();
+      expect((data as any).conversas_total).toBe(5);
+    });
+
+    it('membro NÃO consulta a prévia', async () => {
+      const { error } = await member1.rpc('preview_chat_restriction', {
+        p_org_id: TEST_ORG_ID,
+      });
+      expect(error).not.toBeNull();
+    });
+
+    it('admin de uma org NÃO consulta a prévia de outra', async () => {
+      const { error } = await admin.rpc('preview_chat_restriction', {
+        p_org_id: TEST_ORG_B_ID,
+      });
+      expect(error).not.toBeNull();
+    });
+  });
+
+  // ---------------------------------------------------------------
   // O interruptor: quem escreve
   // ---------------------------------------------------------------
 
@@ -569,16 +648,13 @@ describe.skipIf(!proxyServed)('gate de escrita no whatsapp-api-proxy', () => {
     memberToken = await tokenOf(member1);
     adminToken = await tokenOf(admin);
 
-    // A cota de instâncias é 0/0 no plano free e o trigger recusa o INSERT.
-    // O override vive só enquanto este arquivo roda — outros testes mexem na
-    // cota da mesma org, então nada disso vai para a seed.
     await service
       .from('organizations')
       .update({ limit_overrides: { max_whatsapp_instances: 5 } })
       .eq('id', TEST_ORG_ID);
 
     const { error: instErr } = await service.from('whatsapp_instances').upsert({
-      id: INSTANCE_ID,
+      id: PROXY_INSTANCE_ID,
       organization_id: TEST_ORG_ID,
       instance_name: 'proxy-guard-fixture',
       status: 'connected',
@@ -591,7 +667,7 @@ describe.skipIf(!proxyServed)('gate de escrita no whatsapp-api-proxy', () => {
         { phone: PHONE_BETA, mid: MSG_BETA },
       ].map(({ phone, mid }) => ({
         organization_id: TEST_ORG_ID,
-        instance_id: INSTANCE_ID,
+        instance_id: PROXY_INSTANCE_ID,
         message_id: mid,
         remote_jid: `${phone}@s.whatsapp.net`,
         phone_number: `+55${phone}`,
@@ -610,7 +686,7 @@ describe.skipIf(!proxyServed)('gate de escrita no whatsapp-api-proxy', () => {
 
   afterAll(async () => {
     await service.from('whatsapp_messages').delete().in('message_id', [MSG_ALPHA, MSG_BETA]);
-    await service.from('whatsapp_instances').delete().eq('id', INSTANCE_ID);
+    await service.from('whatsapp_instances').delete().eq('id', PROXY_INSTANCE_ID);
     await service.from('organizations').update({ limit_overrides: {} }).eq('id', TEST_ORG_ID);
     await service
       .from('organizations')
