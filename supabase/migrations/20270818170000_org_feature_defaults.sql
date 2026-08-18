@@ -206,3 +206,12 @@ COMMENT ON FUNCTION public.has_feature_permission(text, uuid) IS
 
 REVOKE ALL ON FUNCTION public.has_feature_permission(text, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.has_feature_permission(text, uuid) TO authenticated, service_role;
+
+-- A sobrecarga de 1 argumento concede EXECUTE a `anon` em PRODUCAO hoje
+-- (medido 2026-08-18, antes desta migration). Nao vaza -- sem auth.uid() a
+-- funcao devolve false --, mas e grant desnecessario numa SECURITY DEFINER, e
+-- e o invólucro que a maioria dos chamadores usa. Fechado aqui porque esta
+-- migration ja reescreve a irmã dela; deixar so uma das duas fechada seria
+-- consertar pela metade.
+REVOKE ALL ON FUNCTION public.has_feature_permission(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.has_feature_permission(text) TO authenticated, service_role;
