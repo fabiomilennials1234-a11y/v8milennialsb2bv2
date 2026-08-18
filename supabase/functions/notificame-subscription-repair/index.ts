@@ -81,6 +81,7 @@ import { requireCronAuth } from "../_shared/auth.ts";
 import { createAdminClient } from "../_shared/supabase-admin.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import {
+  type SeamlessChannelType,
   buildInboundWebhookUrl,
   orgConfigFrom,
   readNotificameParentConfig,
@@ -145,7 +146,21 @@ interface DueChannel {
   subaccount_id: string;
   inbound_subscription_status: string;
   inbound_subscription_attempts: number;
+  /**
+   * De qual TABELA a linha veio. É o que decide onde o carimbo escreve — e um
+   * carimbo na tabela errada silencia a fila para sempre: a linha some do
+   * predicado sem nunca ter sido registrada.
+   */
+  source_table: "messaging_channels" | "whatsapp_instances";
+  /** `instagram` | `whatsapp`, já normalizado. Vai para `criteria.channel`. */
+  kind: SeamlessChannelType;
 }
+
+/** Colunas do estado em `whatsapp_instances` — não há `external_channel_id` nem
+ * `channel_type` ali; os dois moram no jsonb `provider_config`. */
+const WA_STATE_COLUMNS =
+  "id, organization_id, provider_config, " +
+  "inbound_subscription_status, inbound_subscription_attempts";
 
 /** `attempts` = quantas falhas já aconteceram INCLUINDO esta. */
 function backoffMs(attempts: number): number {
@@ -238,6 +253,8 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
   // subscription para ele contrariaria a única forma de kill-switch que existe.
   //
   // `channel_type='instagram'`: ver "o que esta função NÃO faz".
+  const agoraIso = new Date().toISOString();
+
   let query = admin
     .from(SOCIAL_TABLE)
     .select(STATE_COLUMNS)
@@ -245,7 +262,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     .eq("channel_type", "instagram")
     .eq("status", "connected")
     .in("inbound_subscription_status", ["pending", "failed"])
-    .lte("inbound_subscription_next_attempt_at", new Date().toISOString())
+    .lte("inbound_subscription_next_attempt_at", agoraIso)
     .order("inbound_subscription_next_attempt_at", { ascending: true })
     .limit(BATCH_LIMIT);
 
@@ -253,15 +270,70 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
 
   const { data, error } = await query;
 
-  if (error) {
+  // ── 2b. A MESMA fila, na tabela do WhatsApp oficial ──────────────────────
+  //
+  // Duas leituras e não um JOIN/VIEW: as tabelas têm colunas diferentes
+  // (`whatsapp_instances` guarda canal e tipo dentro de `provider_config`) e o
+  // custo é uma consulta a mais num cron de 5 em 5 minutos. O índice parcial
+  // gêmeo (`idx_whatsapp_instances_subscription_due`) atende esta query.
+  //
+  // O `BATCH_LIMIT` vale POR TABELA de propósito: uma fila social cheia não pode
+  // deixar o WhatsApp sem recebimento indefinidamente, que é o que um limite
+  // global compartilhado produziria.
+  let waQuery = admin
+    .from("whatsapp_instances")
+    .select(WA_STATE_COLUMNS)
+    .eq("provider", "notificame")
+    .eq("status", "connected")
+    .in("inbound_subscription_status", ["pending", "failed"])
+    .lte("inbound_subscription_next_attempt_at", agoraIso)
+    .order("inbound_subscription_next_attempt_at", { ascending: true })
+    .limit(BATCH_LIMIT);
+
+  if (onlyOrg) waQuery = waQuery.eq("organization_id", onlyOrg);
+
+  const { data: waData, error: waError } = await waQuery;
+
+  if (error || waError) {
     // Schema velho sob função nova cai aqui. 500 para que o erro apareça — este é
     // o único consumidor do estado, e um no-op silencioso reproduziria o defeito
     // que a função existe para fechar.
-    console.error(`[${FUNCTION_NAME}] leitura da fila falhou: ${error.message}`);
+    console.error(
+      `[${FUNCTION_NAME}] leitura da fila falhou: ` +
+        `social=${error?.message ?? "ok"} whatsapp=${waError?.message ?? "ok"}`,
+    );
     return json(500, { error: "queue_read_failed" });
   }
 
-  const due = (data ?? []) as unknown as DueChannel[];
+  const dueSocial: DueChannel[] = ((data ?? []) as unknown as DueChannel[]).map((c) => ({
+    ...c,
+    source_table: "messaging_channels",
+    kind: "instagram",
+  }));
+
+  // `provider_config` guarda o que a tabela social tem em coluna. `subaccount_id`
+  // dali é CONFERÊNCIA no envio, mas AQUI é o que compõe a URL do webhook — e
+  // uma referência errada entregaria os eventos desta org no path de outra.
+  const dueWhatsApp: DueChannel[] = ((waData ?? []) as unknown as Array<Record<string, unknown>>)
+    .map((raw) => {
+      const cfg = (raw.provider_config ?? {}) as Record<string, unknown>;
+      return {
+        id: String(raw.id),
+        organization_id: String(raw.organization_id),
+        external_channel_id: typeof cfg.channel_id === "string" ? cfg.channel_id : "",
+        channel_type: typeof cfg.channel_type === "string" ? cfg.channel_type : "whatsapp",
+        subaccount_id: typeof cfg.subaccount_id === "string" ? cfg.subaccount_id : "",
+        inbound_subscription_status: String(raw.inbound_subscription_status),
+        inbound_subscription_attempts: Number(raw.inbound_subscription_attempts ?? 0),
+        source_table: "whatsapp_instances" as const,
+        kind: "whatsapp" as const,
+      };
+    })
+    // Sem `channel_id` ou sem `subaccount_id` não há o que assinar, e tentar
+    // cairia no fallback que assina a PALAVRA — aceito calado, sem assinar nada.
+    .filter((c) => c.external_channel_id && c.subaccount_id);
+
+  const due = [...dueSocial, ...dueWhatsApp];
   if (due.length === 0) return json(200, { status: "idle", repaired: 0, failed: 0 });
 
   // ── 3. Um token de subconta por ORG, não por canal ───────────────────────
@@ -310,7 +382,7 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
         };
       })();
 
-    const { error: upErr } = await admin.from(SOCIAL_TABLE).update(patch).eq("id", channel.id);
+    const { error: upErr } = await admin.from(channel.source_table).update(patch).eq("id", channel.id);
     if (upErr) {
       // O registro pode ter acontecido e o carimbo não. O próximo ciclo tentaria
       // de novo e criaria uma SEGUNDA subscription — por isso isto é `error` e
@@ -362,7 +434,10 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       orgConfigFrom(parent!.baseUrl, token),
       {
         webhookUrl,
-        channelKind: "instagram",
+        // O kind REAL. Chumbar "instagram" mandaria o fallback assinar a palavra
+        // errada para o WhatsApp — e assinar a palavra é o defeito descrito logo
+        // abaixo, que custou um dia.
+        channelKind: channel.kind,
         // ⚠️ `channelId` NÃO É OPCIONAL NA PRÁTICA, e omiti-lo aqui foi o defeito
         // que segurou o inbound por um dia inteiro (2026-08-17).
         //

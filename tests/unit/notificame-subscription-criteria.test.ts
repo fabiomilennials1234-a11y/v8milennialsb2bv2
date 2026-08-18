@@ -131,3 +131,43 @@ describe("registerInboundSubscription — criteria.channel", () => {
     expect(f.bodies).toHaveLength(1);
   });
 });
+
+/**
+ * O CANAL DEIXA DE SER SÓ INSTAGRAM.
+ *
+ * `channelKind` era do tipo literal `"instagram"` — não por engano, mas porque só
+ * o Instagram assinava. A fatia de recebimento do WhatsApp generalizou o
+ * parâmetro, e ele importa num ponto específico: é o DEGRAU DE FALLBACK de
+ * `criteria.channel`, usado quando não conhecemos o id do canal.
+ *
+ * Chumbar "instagram" ali faria o WhatsApp assinar a palavra errada — e assinar a
+ * palavra é aceito CALADO pelo fornecedor: responde sucesso, carimbamos `active`,
+ * e a subscription não assina canal nenhum. O sintoma é indistinguível de
+ * "ninguém mandou mensagem", e foi o que segurou o inbound do Instagram por um
+ * dia inteiro (2026-08-17).
+ */
+describe("registerInboundSubscription — os dois canais", () => {
+  it("WhatsApp com id conhecido assina o TOKEN, igual ao Instagram", async () => {
+    const f = fetchSeq([[200, OK]]);
+    const r = await registerInboundSubscription(
+      CFG,
+      { webhookUrl: HOOK, channelKind: "whatsapp", channelId: CHANNEL_ID },
+      f.impl,
+    );
+    expect(r.ok).toBe(true);
+    expect((f.bodies[0].criteria as Record<string, unknown>).channel).toBe(CHANNEL_ID);
+  });
+
+  it("sem id, o fallback usa a palavra DO CANAL — não a do Instagram", async () => {
+    const f = fetchSeq([[200, OK]]);
+    await registerInboundSubscription(
+      CFG,
+      { webhookUrl: HOOK, channelKind: "whatsapp" },
+      f.impl,
+    );
+    const criteria = f.bodies[0].criteria as Record<string, unknown>;
+    expect(criteria.channel).toBe("whatsapp");
+    // CONTROLE: é este expect que pega a regressão de voltar a chumbar.
+    expect(criteria.channel).not.toBe("instagram");
+  });
+});
