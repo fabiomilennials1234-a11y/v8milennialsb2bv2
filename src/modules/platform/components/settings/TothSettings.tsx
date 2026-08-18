@@ -65,6 +65,7 @@ import {
   useUpdateTothSyncMode,
   readTothEndpoint,
   canSubmitTothConnection,
+  TOTH_CAPABILITIES,
   type TothSyncMode,
 } from "@/modules/integrations";
 import { formatDistanceToNow } from "date-fns";
@@ -86,6 +87,19 @@ const SYNC_MODE_LABELS: Record<TothSyncMode, { label: string; hint: string }> = 
 };
 
 const PLACEHOLDER = "https://erp.suaempresa.com.br/toth/services";
+
+/**
+ * A lista sai do manifesto, não de texto solto: quando o fornecedor entregar o
+ * endpoint de pedidos e `TOTH_CAPABILITIES.syncPedidos` virar `true`, a tela
+ * acompanha sozinha. Duas listas separadas divergem — e a que mente é sempre a
+ * da tela, porque ninguém a relê.
+ */
+const CAPABILITY_LINES = [
+  { text: "Clientes do ERP, casados por CNPJ", live: TOTH_CAPABILITIES.syncClientes },
+  { text: "Cobranças em aberto, pagas e atrasadas", live: TOTH_CAPABILITIES.receivables },
+  { text: "Pedidos de venda", live: TOTH_CAPABILITIES.syncPedidos },
+  { text: "Faturamento (NF-e)", live: TOTH_CAPABILITIES.fetchNfe },
+];
 
 export function TothSettings() {
   const [endpoint, setEndpoint] = useState("");
@@ -482,14 +496,19 @@ export function TothSettings() {
           <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg p-3 text-xs text-muted-foreground space-y-2">
             <p className="font-medium text-sky-500">O que o Toth traz para a Carteira:</p>
             <ul className="space-y-1">
-              <li className="flex items-start gap-1.5">
-                <span className="text-sky-500">•</span>
-                <span>Clientes do ERP, casados por CNPJ</span>
-              </li>
-              <li className="flex items-start gap-1.5">
-                <span className="text-sky-500">•</span>
-                <span>Cobranças em aberto, pagas e atrasadas</span>
-              </li>
+              {CAPABILITY_LINES.map((line) => (
+                <li key={line.text} className="flex items-start gap-1.5">
+                  <span className={line.live ? "text-sky-500" : "text-muted-foreground/40"}>•</span>
+                  <span className={line.live ? "" : "text-muted-foreground/60"}>
+                    {line.text}
+                    {!line.live && (
+                      <span className="ml-1 text-[10px] uppercase tracking-wide text-muted-foreground/50">
+                        · falta o endpoint no ERP
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
             </ul>
             <p className="text-[11px] leading-relaxed border-t border-sky-500/15 pt-2">
               <span className="text-foreground">Limitação atual do ERP:</span> o retorno de

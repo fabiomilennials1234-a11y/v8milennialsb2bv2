@@ -52,6 +52,7 @@ export {
   resolveErpProvider,
   TINY_CAPABILITIES,
   OMIE_CAPABILITIES,
+  TOTH_CAPABILITIES,
   type ErpCapabilities,
   type ErpProviderId,
   type ErpProviderManifest,
