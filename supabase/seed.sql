@@ -303,6 +303,27 @@ VALUES (
 ) ON CONFLICT (team_member_id, feature_key) DO NOTHING;
 
 -- ────────────────────────────────────────────────────────────
+-- 8d-bis. Member One (TM 140) é o membro RESTRITO das suítes de RLS
+-- ────────────────────────────────────────────────────────────
+-- Estas três linhas existem para que o teste DECLARE sua premissa em vez de
+-- herdá-la do catálogo global.
+--
+-- Antes de 2026-08-17 nenhuma delas existia: os testes de `rls-responsibility`
+-- e `rls-feature-permissions` diziam "Member1 sem leads.view_all" e se
+-- apoiavam no `default_value` da seed, que era `false`. Em produção esse
+-- default é `true` — ou seja, os testes validavam um comportamento que não
+-- existe em prod, e passavam pelo motivo errado. Ao alinhar o catálogo com
+-- produção (migration 20270818120000), 15 asserções caíram de uma vez.
+--
+-- Com override explícito, o teste sobrevive a qualquer mudança de default.
+INSERT INTO member_feature_permissions (team_member_id, organization_id, feature_key, enabled)
+VALUES
+  ('00000000-0000-0000-0000-000000000140', '00000000-0000-0000-0000-000000000001', 'leads.view_all',         false),
+  ('00000000-0000-0000-0000-000000000140', '00000000-0000-0000-0000-000000000001', 'leads.view_unassigned',  false),
+  ('00000000-0000-0000-0000-000000000140', '00000000-0000-0000-0000-000000000001', 'leads.view_subordinates', false)
+ON CONFLICT (team_member_id, feature_key) DO NOTHING;
+
+-- ────────────────────────────────────────────────────────────
 -- 8e. pipelines do sistema (pré-requisito do bloco 9)
 -- ────────────────────────────────────────────────────────────
 -- `pipe_whatsapp` é VIEW; o INSTEAD OF INSERT (pipe_whatsapp_insert_fn) exige
