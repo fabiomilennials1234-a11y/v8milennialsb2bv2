@@ -750,7 +750,7 @@ describe("pickTimestampIso — só o instante DECLARADO pelo corpo", () => {
 describe("buildInboundChannelMessageRow — a linha de channel_messages", () => {
   const params = () => ({
     organizationId: "org-1",
-    messagingChannelId: "ch-1",
+    target: { kind: "instagram" as const, messagingChannelId: "ch-1" },
     externalId: "mid-1",
     contact: {
       externalId: "igsid-777",
@@ -769,6 +769,7 @@ describe("buildInboundChannelMessageRow — a linha de channel_messages", () => 
       organization_id: "org-1",
       channel: "instagram",
       messaging_channel_id: "ch-1",
+      instance_id: null,
       contact_external_id: "igsid-777",
       external_id: "mid-1",
       direction: "incoming",
@@ -979,7 +980,7 @@ describe("buildInboundChannelMessageRow — o @ do contato vira COLUNA", () => {
   it("grava contact_handle a partir do contato lido", () => {
     const row = buildInboundChannelMessageRow({
       organizationId: "org-1",
-      messagingChannelId: "canal-1",
+      target: { kind: "instagram" as const, messagingChannelId: "canal-1" },
       externalId: "msg-1",
       contact: pickContact(PAYLOAD_REAL_IG),
       contactExternalId: "1527557648673564",
@@ -998,7 +999,7 @@ describe("buildInboundChannelMessageRow — o @ do contato vira COLUNA", () => {
     const semHandle = { message: { from: "999", contents: [{ text: "oi", type: "text" }] } };
     const row = buildInboundChannelMessageRow({
       organizationId: "org-1",
-      messagingChannelId: "canal-1",
+      target: { kind: "instagram" as const, messagingChannelId: "canal-1" },
       externalId: "msg-2",
       contact: pickContact(semHandle),
       contactExternalId: "999",
