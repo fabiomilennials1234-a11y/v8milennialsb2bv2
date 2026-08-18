@@ -98,3 +98,31 @@ mensagem de WhatsApp chega, e nenhuma de Instagram muda.
   Meta vem 200 com erro dentro.
 - Teste que copia o predicado em vez de importá-lo **passa verde com o bug vivo**.
   Aconteceu no #1640. Importar a função real e provar que fica vermelha antes.
+
+
+## Levantamento da doc (2026-08-18) — o que MUDA no plano
+
+Referência completa em `docs/notificame-whatsapp-oficial.md`, conferida em duas
+fontes. Três achados encurtam a fatia:
+
+1. **A subscription é a MESMA rota do Instagram**: `POST /v1/subscriptions/` com
+   `{criteria: {channel: "<TOKEN do canal>"}, webhook: {url}}`. Não há rota
+   separada por tipo de canal ⇒ `registerInboundSubscription` serve como está.
+   ⚠️ `criteria.channel` é o **token** do canal, nunca a palavra `"whatsapp"` —
+   assinar a palavra é aceito calado e não assina nada.
+
+2. **O payload de entrada é o MESMO formato**: `{from, to, contents, id,
+   direction:"IN", visitor}`, com `contents` serializado como string e
+   `visitor.name` = @ / `visitor.firstName` = nome humano. Ou seja: os pickers de
+   `notificame-inbound.ts` (`pickContent`, `pickContact`, `pickTimestampIso`)
+   valem para os dois canais **sem alteração**. Só o endereçamento da linha muda,
+   e isso a peça 1 já resolveu.
+
+3. **O fornecedor não tem realtime** (nem websocket nem SSE). O tempo real é
+   nosso: webhook → `channel_messages` → Supabase Realtime → front. Nada a fazer
+   nesta fatia.
+
+Consequência prática: a peça 3 vira **remover o gate `if (channelKind ===
+"instagram")`** e carimbar o estado nas colunas novas da tabela certa
+(`whatsapp_instances` para WhatsApp, `messaging_channels` para Instagram). Não há
+contrato novo a descobrir.
