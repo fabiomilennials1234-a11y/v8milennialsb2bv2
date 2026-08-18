@@ -112,3 +112,72 @@ describe("inbound — WhatsApp oficial (o que esta fatia acrescenta)", () => {
     expect(row.lead_id).toBeNull();
   });
 });
+
+/**
+ * O ID DO CANAL MUDA DE CAMPO CONFORME A DIREÇÃO.
+ *
+ * Medido em produção (2026-08-18), com eventos reais das duas famílias:
+ *
+ *   WhatsApp, direction IN:   message.to = "d1205fbe-…" (canal)
+ *                             message.from = "554884334050" (telefone)
+ *   Instagram, direction OUT: message.from = "ff596caa-…" (canal)
+ *                             message.to = "1585322436455913" (IGSID)
+ *
+ * A regra do fornecedor é coerente — o canal é sempre O NOSSO LADO — e
+ * `CHANNEL_ID_PATHS` não cobria nenhum dos dois: procurava `channelId`,
+ * `channel.id` e afins, que não existem no corpo real.
+ *
+ * Resultado: a primeira mensagem de WhatsApp que chegou de verdade foi PARKADA
+ * como `unresolved_channel`, com o id do canal visível em `message.to`.
+ *
+ * O DISCRIMINADOR É O FORMATO, não a direção declarada. O canal do NotificaMe é
+ * UUID; telefone e IGSID são numéricos puros. Ler o campo pela direção exigiria
+ * confiar num `direction` que o remetente declara — e o UUID resolve sem essa
+ * confiança: se casar com UUID, é canal; se não, é interlocutor.
+ */
+describe("pickChannelId — o canal é o UUID, venha de onde vier", () => {
+  it("acha o canal em message.to (WhatsApp entrando)", async () => {
+    const { pickChannelId } = await import(
+      "../../supabase/functions/_shared/notificame-inbound.ts"
+    );
+    expect(pickChannelId({
+      direction: "IN",
+      message: { to: "d1205fbe-99c7-4744-ac6b-899cfbf03179", from: "554884334050" },
+    })).toBe("d1205fbe-99c7-4744-ac6b-899cfbf03179");
+  });
+
+  it("acha o canal em message.from (Instagram saindo)", async () => {
+    const { pickChannelId } = await import(
+      "../../supabase/functions/_shared/notificame-inbound.ts"
+    );
+    expect(pickChannelId({
+      direction: "OUT",
+      message: { from: "ff596caa-2374-4591-8a51-3e8f27417c87", to: "1585322436455913" },
+    })).toBe("ff596caa-2374-4591-8a51-3e8f27417c87");
+  });
+
+  it("NÃO confunde telefone nem IGSID com canal", async () => {
+    const { pickChannelId } = await import(
+      "../../supabase/functions/_shared/notificame-inbound.ts"
+    );
+    expect(pickChannelId({ message: { to: "554884334050", from: "5551999999999" } })).toBeNull();
+    expect(pickChannelId({ message: { to: "1585322436455913", from: "17841400000" } })).toBeNull();
+  });
+
+  it("o caminho explícito continua ganhando — contrato antigo intocado", async () => {
+    const { pickChannelId } = await import(
+      "../../supabase/functions/_shared/notificame-inbound.ts"
+    );
+    expect(pickChannelId({
+      channelId: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+      message: { to: "d1205fbe-99c7-4744-ac6b-899cfbf03179" },
+    })).toBe("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+  });
+
+  it("a palavra do canal não vira id", async () => {
+    const { pickChannelId } = await import(
+      "../../supabase/functions/_shared/notificame-inbound.ts"
+    );
+    expect(pickChannelId({ channel: "whatsapp_business_account" })).toBeNull();
+  });
+});

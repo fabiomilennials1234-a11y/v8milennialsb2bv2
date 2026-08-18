@@ -190,9 +190,22 @@ describe("pickChannelId — id do canal no fornecedor", () => {
       },
     );
 
-    it("`channel` com valor FORA do vocabulário é tratado como id (último recurso)", () => {
-      // A partição é por VALOR: palavra conhecida ⇒ não é id; o resto ⇒ é id.
-      expect(pickChannelId({ channel: "ch_ig_org_a" })).toBe("ch_ig_org_a");
+    it("`channel` fora do vocabulário só vira id se for UUID", () => {
+      // ⚠️ ESTE TESTE MUDOU, e a produção é a razão. A partição era por VALOR
+      // ("palavra conhecida ⇒ não é id; o resto ⇒ é id") e isso pressupunha que
+      // qualquer coisa fora do nosso vocabulário fosse um identificador.
+      //
+      // O corpo real do fornecedor traz `channel: "whatsapp_business_account"` —
+      // uma PALAVRA que o vocabulário não listava. Pela regra antiga ela virava
+      // "id" e ia buscar um canal com esse nome, que não existe.
+      //
+      // Exigir UUID fecha a porta para qualquer palavra futura sem precisar
+      // catalogá-la uma a uma — que é o que a regra antiga exigiria, e o motivo
+      // pelo qual ela falhou na primeira palavra nova.
+      expect(pickChannelId({ channel: "ch_ig_org_a" })).toBeNull();
+      expect(pickChannelId({ channel: "whatsapp_business_account" })).toBeNull();
+      expect(pickChannelId({ channel: "d1205fbe-99c7-4744-ac6b-899cfbf03179" }))
+        .toBe("d1205fbe-99c7-4744-ac6b-899cfbf03179");
     });
 
     it("`channel` só é consultado DEPOIS dos aliases inequívocos", () => {
@@ -270,10 +283,11 @@ describe("pickChannelWord — a palavra de canal declarada pelo remetente", () =
     expect(pickChannelWord({ channel: 7 })).toBeNull();
   });
 
-  it("valor FORA do vocabulário ⇒ null (é id de canal, não palavra)", () => {
+  it("valor FORA do vocabulário ⇒ null (não é palavra de canal)", () => {
     expect(pickChannelWord({ channel: "ch_ig_org_a" })).toBeNull();
-    // …e o mesmo corpo, na outra pergunta, responde:
-    expect(pickChannelId({ channel: "ch_ig_org_a" })).toBe("ch_ig_org_a");
+    // …e na outra pergunta também é null desde que o id passou a exigir UUID:
+    // uma string arbitrária não é palavra NEM identificador.
+    expect(pickChannelId({ channel: "ch_ig_org_a" })).toBeNull();
   });
 });
 
