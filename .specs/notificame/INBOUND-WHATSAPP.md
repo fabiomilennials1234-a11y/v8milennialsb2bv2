@@ -81,7 +81,7 @@ uma falha de registro no WhatsApp fica órfã para sempre.
       `instagram || whatsapp`; `subscriptionTable` segue o canal; e o `channelKind`
       vai REAL para `registerInboundSubscription` (chumbar "instagram" faria o
       degrau de fallback assinar a palavra errada — aceito calado, não assina nada).
-- [ ] **Peça 2 — webhook** resolve canal em `whatsapp_instances`.
+- [x] **Peça 2 — webhook** resolve canal em `whatsapp_instances`.
       Ponto de entrada: `notificame-webhook/index.ts` ~1108, no ramo `channelHint`.
       Antes de parkar `unresolved_channel`, procurar
       `whatsapp_instances` por `(provider='notificame',
@@ -89,7 +89,12 @@ uma falha de registro no WhatsApp fica órfã para sempre.
       comparar a org depois — é o que faz forja virar `channel_org_mismatch`
       visível. O fallback SEM hint deve seguir só para Instagram: para WhatsApp,
       exigir o hint é o recorte seguro.
-- [ ] **Peça 5 — cron repair** varre as duas tabelas.
+- [ ] **Peça 5 — cron repair** varre as duas tabelas. ⚠️ ÚNICA PENDENTE.
+      `notificame-subscription-repair` só varre `messaging_channels`. Sem ela, um
+      registro de subscription de WhatsApp que falhe fica órfão: nasce
+      `pending`/`failed` na fila (a migration criou o índice) e ninguém consome.
+      O caminho feliz FUNCIONA sem ela — o finish registra na hora do vínculo.
+      É a rede de segurança, não o trilho.
 
 ⚠️ O chamador em `notificame-webhook` está com
 `target: { kind: "instagram", … }` FIXO e um comentário apontando para a peça 2.
