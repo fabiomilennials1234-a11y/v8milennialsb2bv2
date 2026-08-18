@@ -18,6 +18,10 @@
  *     (`MAX_CLIENTS_PER_RUN`), pausa entre chamadas e cursor para retomar.
  *
  * Auth dual: `x-cron-secret` (org no corpo) ou `Authorization` (org do JWT).
+ *
+ * Body opcional: `{ data_inicio, data_fim }` em `aaaa-mm-dd` — convertidos para
+ * o `dd/MM/yyyy` que o ERP espera. Ver o comentário da janela, abaixo, para por
+ * que não são default.
  */
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -31,6 +35,7 @@ import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth
 import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
 import {
   extractRows,
+  formatTothDate,
   mapTothCobrancaToCanonical,
   TothMappingError,
 } from "../_shared/erp/toth-mappers.ts";
@@ -133,6 +138,26 @@ Deno.serve(
 
     const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
     const store = supabaseTituloStore(admin);
+
+    // Janela opcional (`dataInicio`/`dataFim`, dd/MM/yyyy). Fica DESLIGADA por
+    // padrão de propósito: o fornecedor confirmou os parâmetros mas não disse
+    // qual campo eles filtram — emissão ou vencimento. Aplicar uma janela cujo
+    // significado não se conhece pode descartar títulos em silêncio, e título
+    // que some da inadimplência não gera erro, gera cobrança que não acontece.
+    // Quando a resposta vier, isto vira default incremental.
+    const body = await req.clone().json().catch(() => ({}));
+    const window: Record<string, string> = {};
+    for (const [param, raw] of [
+      ["dataInicio", body.data_inicio],
+      ["dataFim", body.data_fim],
+    ] as const) {
+      if (typeof raw !== "string" || !raw.trim()) continue;
+      const formatted = formatTothDate(raw);
+      if (!formatted) {
+        return json({ error: `${param} inválido: use aaaa-mm-dd (recebido "${raw}")` }, cors, 400);
+      }
+      window[param] = formatted;
+    }
     // Data de referência do atraso, fixada uma vez por execução: se cada linha
     // recalculasse "hoje", uma execução que cruzasse a meia-noite classificaria
     // dois títulos de mesmo vencimento de formas diferentes.
@@ -156,7 +181,7 @@ Deno.serve(
 
       let payload: unknown;
       try {
-        payload = await client.postForm("cobrancas", { cnpj });
+        payload = await client.postForm("cobrancas", { cnpj, ...window });
       } catch (err) {
         // Falha de auth aborta tudo: o token não vale e insistir só martela o
         // servidor. Falha de um CNPJ isolado não derruba os outros clientes.
