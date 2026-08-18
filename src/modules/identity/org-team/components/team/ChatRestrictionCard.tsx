@@ -183,13 +183,16 @@ export function ChatRestrictionCard() {
       </div>
 
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent className="sm:max-w-lg">
-          <AlertDialogHeader>
+        {/* min-w-0 na cadeia inteira: AlertDialogContent é um GRID, e item de
+            grid tem min-width:auto — sem isso o cabeçalho não encolhe, estoura a
+            faixa e corta o terceiro número. */}
+        <AlertDialogContent className="sm:max-w-xl">
+          <AlertDialogHeader className="min-w-0">
             <AlertDialogTitle>
               Parte do inbox some para o time
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-4 pt-1">
+              <div className="min-w-0 space-y-4 pt-1">
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   Conversa cujo telefone não bate com um lead — ou bate com um lead sem
                   responsável — passa a ser visível só para administradores.
@@ -202,7 +205,7 @@ export function ChatRestrictionCard() {
                   </div>
                 ) : (
                   <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid min-w-0 grid-cols-3 gap-3 sm:gap-4">
                       <Stat value={total} label="conversas no chat" />
                       <Stat value={restritas} label="ficam só para admin" tone="warning" />
                       <Stat

@@ -548,6 +548,62 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
   });
 
   // ---------------------------------------------------------------
+  // O caminho que a LISTA do chat usa de verdade.
+  //
+  // A tela não lê `whatsapp_messages` para montar a lista — ela chama
+  // get_whatsapp_conversation_list, que é SECURITY DEFINER e portanto NÃO
+  // passa pelo RLS. Gatear a tabela e esquecer o RPC deixa a feature inteira
+  // decorativa: o vendedor continua vendo tudo na tela.
+  //
+  // Encontrado com o Playwright contra o app rodando, depois de a suíte de
+  // integração inteira estar verde — os testes liam a tabela, o produto não.
+  // ---------------------------------------------------------------
+
+  describe('a lista do chat (RPC SECURITY DEFINER) respeita a política', () => {
+    beforeAll(async () => {
+      await setPolicy(service, TEST_ORG_ID, true);
+    });
+
+    async function listaDe(client: SupabaseClient): Promise<string[]> {
+      const { data, error } = await client.rpc('get_whatsapp_conversation_list', {
+        p_org: TEST_ORG_ID,
+        p_instance: INSTANCE_ID,
+        p_limit: 200,
+      });
+      if (error) throw new Error(`get_whatsapp_conversation_list falhou: ${error.message}`);
+      return [...new Set((data ?? []).map((r: any) => r.normalized_phone as string))].sort();
+    }
+
+    it('admin vê todas as conversas — controle positivo', async () => {
+      expect(await listaDe(admin)).toEqual([...ALL_ORG_A_PHONES].sort());
+    });
+
+    it('membro vê SÓ as conversas dos leads dele', async () => {
+      expect(await listaDe(member1)).toEqual([PHONE_ALPHA, PHONE_DELTA].sort());
+    });
+
+    it('membro não vê a conversa do lead do colega nem a órfã', async () => {
+      const vistas = await listaDe(member1);
+      expect(vistas).not.toContain(PHONE_BETA);
+      expect(vistas).not.toContain(PHONE_ORFA);
+      expect(vistas).not.toContain(PHONE_GAMMA);
+    });
+
+    it('membro com exceção nominal vê tudo', async () => {
+      expect(await listaDe(member2)).toEqual([...ALL_ORG_A_PHONES].sort());
+    });
+
+    it('com a política desligada a lista volta a ser da org inteira — no-op', async () => {
+      await setPolicy(service, TEST_ORG_ID, false);
+      try {
+        expect(await listaDe(member1)).toEqual([...ALL_ORG_A_PHONES].sort());
+      } finally {
+        await setPolicy(service, TEST_ORG_ID, true);
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------
   // A prévia que o admin vê ANTES de ligar (#1636)
   //
   // Os números saem de whatsapp_conversation_summary (uma linha por org+chip+
