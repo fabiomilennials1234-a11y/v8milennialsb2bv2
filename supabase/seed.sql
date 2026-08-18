@@ -377,9 +377,13 @@ DO $$ BEGIN
 EXCEPTION WHEN undefined_object OR undefined_table THEN NULL;
 END $$;
 
+-- O id NÃO pode ser ...a001: rls-multi-org-permissions.test.ts cria um agente
+-- com aquele id e o APAGA no afterAll. Rodando junto, ele levava esta fixture
+-- por CASCADE e derrubava 4 casos do isolamento — colisão de fixture entre
+-- arquivos, silenciosa até rodarem no mesmo processo.
 INSERT INTO copilot_agents (id, organization_id, created_by, name, main_objective)
 VALUES (
-  '00000000-0000-0000-0000-00000000a001',
+  '00000000-0000-0000-0000-00000000ca01',
   '00000000-0000-0000-0000-000000000001',
   '00000000-0000-0000-0000-000000000020',
   'Agente de teste',
@@ -393,16 +397,16 @@ END $$;
 
 INSERT INTO conversations (id, organization_id, lead_id, agent_id)
 VALUES
-  ('00000000-0000-0000-0000-00000000c001', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-00000000a001'),
-  ('00000000-0000-0000-0000-00000000c002', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0000-000000001002', '00000000-0000-0000-0000-00000000a001')
+  ('00000000-0000-0000-0000-00000000cb01', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-00000000ca01'),
+  ('00000000-0000-0000-0000-00000000cb02', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000001002', '00000000-0000-0000-0000-00000000ca01')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO conversation_messages (conversation_id, role, content)
 VALUES
-  ('00000000-0000-0000-0000-00000000c001', 'user', 'isolation-test-copilot-alpha'),
-  ('00000000-0000-0000-0000-00000000c002', 'user', 'isolation-test-copilot-beta')
+  ('00000000-0000-0000-0000-00000000cb01', 'user', 'isolation-test-copilot-alpha'),
+  ('00000000-0000-0000-0000-00000000cb02', 'user', 'isolation-test-copilot-beta')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO channel_messages (organization_id, external_id, direction, lead_id, phone_number)
