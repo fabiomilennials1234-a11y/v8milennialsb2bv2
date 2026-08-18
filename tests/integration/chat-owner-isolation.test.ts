@@ -51,6 +51,9 @@ const ALL_ORG_A_PHONES = [PHONE_ALPHA, PHONE_BETA, PHONE_GAMMA, PHONE_DELTA, PHO
 
 const LEAD_ALPHA = '00000000-0000-0000-0000-000000001001';
 const LEAD_BETA = '00000000-0000-0000-0000-000000001002';
+const AGENT_ID = '00000000-0000-0000-0000-00000000ca01';
+const CONV_ALPHA = '00000000-0000-0000-0000-00000000cb01';
+const CONV_BETA = '00000000-0000-0000-0000-00000000cb02';
 
 const MSG_PREFIX = 'isolation-test-';
 
@@ -178,12 +181,48 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
     const { error } = await service.from('whatsapp_messages').insert(rows);
     if (error) throw new Error(`Falha ao semear whatsapp_messages: ${error.message}`);
 
+    // O agente do Copilot e as conversas vivem AQUI, não na seed:
+    // rls-org-isolation afirma que `copilot_agents` da Org A tem 0 linhas, e um
+    // agente permanente na seed quebra essa asserção de isolamento cross-tenant.
+    //
+    // A cota de agentes é 0/0 no plano free e o trigger recusa o INSERT — daí o
+    // limit_overrides, que sai junto no afterAll.
+    await service
+      .from('organizations')
+      .update({ limit_overrides: { max_whatsapp_instances: 5, max_copilot_agents: 5 } })
+      .eq('id', TEST_ORG_ID);
+
+    const { error: agentErr } = await service.from('copilot_agents').upsert({
+      id: AGENT_ID,
+      organization_id: TEST_ORG_ID,
+      created_by: '00000000-0000-0000-0000-000000000020',
+      name: 'Agente de teste (isolamento)',
+      main_objective: 'fixture',
+    });
+    if (agentErr) throw new Error(`Falha ao semear copilot_agents: ${agentErr.message}`);
+
+    const { error: convErr } = await service.from('conversations').upsert([
+      { id: CONV_ALPHA, organization_id: TEST_ORG_ID, lead_id: LEAD_ALPHA, agent_id: AGENT_ID },
+      { id: CONV_BETA, organization_id: TEST_ORG_ID, lead_id: LEAD_BETA, agent_id: AGENT_ID },
+    ]);
+    if (convErr) throw new Error(`Falha ao semear conversations: ${convErr.message}`);
+
+    const { error: cmErr } = await service.from('conversation_messages').insert([
+      { conversation_id: CONV_ALPHA, role: 'user', content: `${MSG_PREFIX}copilot-alpha` },
+      { conversation_id: CONV_BETA, role: 'user', content: `${MSG_PREFIX}copilot-beta` },
+    ]);
+    if (cmErr) throw new Error(`Falha ao semear conversation_messages: ${cmErr.message}`);
+
     await setPolicy(service, TEST_ORG_ID, false);
     await setPolicy(service, TEST_ORG_B_ID, false);
   });
 
   afterAll(async () => {
     await service.from('whatsapp_messages').delete().like('message_id', `${MSG_PREFIX}%`);
+    await service.from('conversation_messages').delete().like('content', `${MSG_PREFIX}%`);
+    await service.from('conversations').delete().eq('agent_id', AGENT_ID);
+    await service.from('copilot_agents').delete().eq('id', AGENT_ID);
+    await service.from('organizations').update({ limit_overrides: {} }).eq('id', TEST_ORG_ID);
     await service
       .from('leads')
       .update({ pre_sale_responsible_id: null })
@@ -294,6 +333,40 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       });
       expect(data).toBe(true); // o default global continua true...
       // ...e ainda assim a conversa alheia não aparece:
+      expect(await visiblePhones(memberB, TEST_ORG_B_ID)).toEqual([PHONE_ORGB_1]);
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // Interação com a camada de default por org (#1630)
+  // ---------------------------------------------------------------
+
+  describe('default da org NÃO abre o chat restrito', () => {
+    beforeAll(async () => {
+      await setPolicy(service, TEST_ORG_B_ID, true);
+    });
+
+    afterAll(async () => {
+      await service
+        .from('organization_feature_defaults')
+        .delete()
+        .eq('organization_id', TEST_ORG_B_ID);
+    });
+
+    it('org default leads.view_all=true não faz o membro ver conversa alheia', async () => {
+      // Com a política de chat ligada, SÓ override explícito no membro abre a
+      // visão. Um default da ORG é um default — se ele abrisse, a política de
+      // isolamento seria desfeita pelo mesmo mecanismo que ela existe para
+      // corrigir, e ninguém perceberia.
+      expect(await visiblePhones(memberB, TEST_ORG_B_ID)).toEqual([PHONE_ORGB_1]); // controle positivo
+
+      await service
+        .from('organization_feature_defaults')
+        .upsert(
+          { organization_id: TEST_ORG_B_ID, feature_key: 'leads.view_all', enabled: true },
+          { onConflict: 'organization_id,feature_key' },
+        );
+
       expect(await visiblePhones(memberB, TEST_ORG_B_ID)).toEqual([PHONE_ORGB_1]);
     });
   });

@@ -10,6 +10,7 @@ import { useTeamMembers } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { buildPermissionMap } from "@/modules/identity/permissions/lib/resolvePermissionLayers";
 import { toast } from "sonner";
 
 interface FeaturePermission {
@@ -45,8 +46,19 @@ const MODULE_LABELS: Record<string, string> = {
   team: "Equipe",
 };
 
+/**
+ * `organization_feature_defaults` ainda não está em `src/integrations/supabase/types.ts`:
+ * aquele arquivo é gerado a partir de PRODUÇÃO, e a migration que cria a tabela
+ * (20270818170000) ainda não foi aplicada lá. Os casts abaixo são estritamente
+ * isso — some todos quando alguém rodar:
+ *
+ *   supabase gen types typescript --project-id <ref> > src/integrations/supabase/types.ts
+ *
+ * Não use este padrão para tabela que já existe em prod: ali o cast esconderia
+ * referência a objeto ausente, que é como se perde um deploy.
+ */
 export function MemberPermissions() {
-  const { isAdmin } = useIdentity();
+  const { isAdmin, organizationId } = useIdentity();
   const { data: members = [], isLoading: loadingMembers } = useTeamMembers();
   const queryClient = useQueryClient();
 
@@ -55,6 +67,15 @@ export function MemberPermissions() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [localOverrides, setLocalOverrides] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
+  /**
+   * `"org"` edita a POLÍTICA da organização (organization_feature_defaults);
+   * `"member"` edita a exceção de uma pessoa (member_feature_permissions).
+   *
+   * A política da org é o que faz contratado novo nascer com a configuração
+   * certa — sem ela o admin desligava membro a membro e a próxima contratação
+   * desfazia tudo em silêncio.
+   */
+  const [scope, setScope] = useState<"org" | "member">("org");
 
   // Fetch all feature_permissions from Supabase
   const { data: featurePermissions = [], isLoading: loadingFeatures } = useQuery({
@@ -94,23 +115,39 @@ export function MemberPermissions() {
     enabled: !!firstSelectedId,
   });
 
+  const { data: orgDefaultRows = [] } = useQuery({
+    queryKey: ["organization_feature_defaults", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [];
+      const { data, error } = await (supabase as any)
+        .from("organization_feature_defaults")
+        .select("feature_key, enabled")
+        .eq("organization_id", organizationId);
+
+      if (error) throw error;
+      return (data ?? []) as MemberFeaturePermission[];
+    },
+    enabled: !!organizationId && isAdmin,
+  });
+
+  const orgDefaults = useMemo(() => {
+    const m: Record<string, boolean> = {};
+    for (const r of orgDefaultRows) m[r.feature_key] = r.enabled;
+    return m;
+  }, [orgDefaultRows]);
+
   // Build a map of current permissions (DB values + local overrides)
   const permissionMap = useMemo(() => {
-    const map: Record<string, boolean> = {};
-    // Start with defaults from feature_permissions
-    for (const fp of featurePermissions) {
-      map[fp.key] = fp.default_value;
-    }
-    // Apply DB overrides for the selected member
-    for (const mp of memberPermissions) {
-      map[mp.feature_key] = mp.enabled;
-    }
-    // Apply local (unsaved) overrides
-    for (const [key, val] of Object.entries(localOverrides)) {
-      map[key] = val;
-    }
-    return map;
-  }, [featurePermissions, memberPermissions, localOverrides]);
+    // A cascata vive em resolvePermissionLayers, que espelha
+    // has_feature_permission() no banco. Se as duas discordarem, a tela mente.
+    const memberOverrides: Record<string, boolean> = {};
+    for (const mp of memberPermissions) memberOverrides[mp.feature_key] = mp.enabled;
+
+    return buildPermissionMap(
+      { catalog: featurePermissions, orgDefaults, memberOverrides, localOverrides },
+      { scope },
+    );
+  }, [featurePermissions, orgDefaults, memberPermissions, localOverrides, scope]);
 
   // Group features by module
   const groupedFeatures = useMemo(() => {
@@ -191,12 +228,48 @@ export function MemberPermissions() {
 
   // Save permissions
   const handleSave = async () => {
-    if (selectedList.length === 0) {
-      toast.error("Selecione ao menos um membro.");
-      return;
-    }
     if (Object.keys(localOverrides).length === 0) {
       toast.info("Nenhuma alteracao para salvar.");
+      return;
+    }
+
+    if (scope === "org") {
+      if (!organizationId) {
+        toast.error("Organizacao nao resolvida.");
+        return;
+      }
+      setIsSaving(true);
+      try {
+        // Grava a linha explícita mesmo quando o valor coincide com o catálogo
+        // global: a intenção do admin é explícita, e apagar a linha faria a
+        // política voltar a seguir o produto sem ninguém pedir. Quem quer
+        // voltar ao padrão usa "Restaurar padrao".
+        const rows = Object.entries(localOverrides).map(([feature_key, enabled]) => ({
+          organization_id: organizationId,
+          feature_key,
+          enabled,
+        }));
+
+        const { error } = await (supabase as any)
+          .from("organization_feature_defaults")
+          .upsert(rows, { onConflict: "organization_id,feature_key" });
+
+        if (error) throw error;
+
+        toast.success("Politica da organizacao salva!");
+        setLocalOverrides({});
+        queryClient.invalidateQueries({ queryKey: ["organization_feature_defaults"] });
+      } catch (err: any) {
+        toast.error(err?.message || "Erro ao salvar a politica da organizacao.");
+        console.error("[MemberPermissions] org save error:", err);
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    if (selectedList.length === 0) {
+      toast.error("Selecione ao menos um membro.");
       return;
     }
 
@@ -252,6 +325,32 @@ export function MemberPermissions() {
 
   // Reset to defaults
   const handleReset = async () => {
+    if (scope === "org") {
+      if (!organizationId) {
+        toast.error("Organizacao nao resolvida.");
+        return;
+      }
+      setIsSaving(true);
+      try {
+        const { error } = await (supabase as any)
+          .from("organization_feature_defaults")
+          .delete()
+          .eq("organization_id", organizationId);
+
+        if (error) throw error;
+
+        toast.success("Politica da organizacao restaurada ao padrao do produto.");
+        setLocalOverrides({});
+        queryClient.invalidateQueries({ queryKey: ["organization_feature_defaults"] });
+      } catch (err: any) {
+        toast.error(err?.message || "Erro ao restaurar a politica.");
+        console.error("[MemberPermissions] org reset error:", err);
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
     if (selectedList.length === 0) {
       toast.error("Selecione ao menos um membro.");
       return;
@@ -293,21 +392,45 @@ export function MemberPermissions() {
             <div>
               <CardTitle>Permissoes por Feature</CardTitle>
               <CardDescription>
-                Selecione membros e configure quais features cada um pode acessar.
-                Desative o modulo inteiro pelo toggle do cabecalho ou controle cada feature individualmente.
+                {scope === "org"
+                  ? "Politica da organizacao: vale para todo membro, inclusive quem for contratado depois. Excecoes individuais ficam na aba Por membro."
+                  : "Excecao individual: sobrepoe a politica da organizacao apenas para os membros selecionados."}
               </CardDescription>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* Duas coisas diferentes, nunca no mesmo toggle: a POLITICA da org
+                e a EXCECAO de uma pessoa. Misturar as duas foi o que fez a
+                permissao vazar na contratacao seguinte. */}
+            <div className="inline-flex rounded-md border border-border p-0.5 mr-2">
+              {(["org", "member"] as const).map((s0) => (
+                <button
+                  key={s0}
+                  type="button"
+                  onClick={() => {
+                    setScope(s0);
+                    setLocalOverrides({});
+                  }}
+                  className={
+                    "px-3 py-1 text-xs rounded-sm transition-colors " +
+                    (scope === s0
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground")
+                  }
+                >
+                  {s0 === "org" ? "Organizacao" : "Por membro"}
+                </button>
+              ))}
+            </div>
             <Button
               variant="outline"
               size="sm"
               onClick={handleReset}
-              disabled={isSaving || selectedList.length === 0}
+              disabled={isSaving || (scope === "member" && selectedList.length === 0)}
               className="gap-1"
             >
               <RotateCcw className="w-4 h-4" />
-              Resetar para padrao
+              {scope === "org" ? "Restaurar padrao" : "Resetar para padrao"}
             </Button>
             <Button
               size="sm"
@@ -321,8 +444,9 @@ export function MemberPermissions() {
       </CardHeader>
       <CardContent>
         <div className="flex gap-6 flex-col lg:flex-row">
-          {/* Left panel: member list */}
-          <div className="w-full lg:w-72 shrink-0 space-y-3">
+          {/* Left panel: member list — só no escopo por membro. Editando a
+              política da organização não há quem selecionar. */}
+          <div className={`w-full lg:w-72 shrink-0 space-y-3 ${scope === "org" ? "hidden" : ""}`}>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -381,7 +505,7 @@ export function MemberPermissions() {
 
           {/* Right panel: permissions matrix by module */}
           <div className="flex-1 min-w-0 space-y-4">
-            {selectedList.length === 0 ? (
+            {scope === "member" && selectedList.length === 0 ? (
               <div className="flex items-center justify-center h-48 rounded-lg border border-dashed text-muted-foreground text-sm">
                 Selecione um ou mais membros para editar as permissoes.
               </div>

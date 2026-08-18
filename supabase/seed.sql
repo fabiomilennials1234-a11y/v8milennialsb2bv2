@@ -360,55 +360,15 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- ────────────────────────────────────────────────────────────
--- 11. Copilot e canal Meta — fixture do isolamento de chat (#1634)
+-- 11. Canal Meta — fixture do isolamento de chat (#1634)
 -- ────────────────────────────────────────────────────────────
--- `conversation_messages` é o histórico do agente IA com o lead: mesmo
--- conteúdo do chat, outra tabela. `channel_messages` é o inbound de
--- Meta/Instagram. As três precisam do mesmo gate do inbox, senão a permissão
--- promete uma coisa e entrega outra.
+-- Alpha é do Member1 (pre_sale/sdr), Beta é do Member2 (sale/closer) — o par
+-- que distingue "vê o próprio" de "vê o do colega".
 --
--- Alpha é do Member1 (pre_sale/sdr), Beta é do Member2 (sale/closer) — é o
--- par que distingue "vê o próprio" de "vê o do colega".
---
--- enforce_copilot_agent_limit chama assert_org_access, que levanta
--- access_denied sem contexto de auth. Mesmo tratamento do trg_enforce_seat_limit.
-DO $$ BEGIN
-  ALTER TABLE copilot_agents DISABLE TRIGGER trg_enforce_copilot_agent_limit;
-EXCEPTION WHEN undefined_object OR undefined_table THEN NULL;
-END $$;
-
--- O id NÃO pode ser ...a001: rls-multi-org-permissions.test.ts cria um agente
--- com aquele id e o APAGA no afterAll. Rodando junto, ele levava esta fixture
--- por CASCADE e derrubava 4 casos do isolamento — colisão de fixture entre
--- arquivos, silenciosa até rodarem no mesmo processo.
-INSERT INTO copilot_agents (id, organization_id, created_by, name, main_objective)
-VALUES (
-  '00000000-0000-0000-0000-00000000ca01',
-  '00000000-0000-0000-0000-000000000001',
-  '00000000-0000-0000-0000-000000000020',
-  'Agente de teste',
-  'fixture de isolamento de chat'
-) ON CONFLICT (id) DO NOTHING;
-
-DO $$ BEGIN
-  ALTER TABLE copilot_agents ENABLE TRIGGER trg_enforce_copilot_agent_limit;
-EXCEPTION WHEN undefined_object OR undefined_table THEN NULL;
-END $$;
-
-INSERT INTO conversations (id, organization_id, lead_id, agent_id)
-VALUES
-  ('00000000-0000-0000-0000-00000000cb01', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-00000000ca01'),
-  ('00000000-0000-0000-0000-00000000cb02', '00000000-0000-0000-0000-000000000001',
-   '00000000-0000-0000-0000-000000001002', '00000000-0000-0000-0000-00000000ca01')
-ON CONFLICT (id) DO NOTHING;
-
-INSERT INTO conversation_messages (conversation_id, role, content)
-VALUES
-  ('00000000-0000-0000-0000-00000000cb01', 'user', 'isolation-test-copilot-alpha'),
-  ('00000000-0000-0000-0000-00000000cb02', 'user', 'isolation-test-copilot-beta')
-ON CONFLICT DO NOTHING;
-
+-- O agente do Copilot e as `conversations` NÃO vivem aqui: rls-org-isolation
+-- afirma que `copilot_agents` da Org A tem 0 linhas, e semear um agente
+-- permanente quebra essa asserção de isolamento cross-tenant. Eles são criados
+-- e removidos pelo próprio chat-owner-isolation.test.ts.
 INSERT INTO channel_messages (organization_id, external_id, direction, lead_id, phone_number)
 VALUES
   ('00000000-0000-0000-0000-000000000001', 'isolation-test-meta-alpha', 'incoming',
