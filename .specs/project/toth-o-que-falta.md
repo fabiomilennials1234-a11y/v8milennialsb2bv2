@@ -64,7 +64,20 @@ certificado válido.
 
 ## 🟠 Bloco 2 — Fornecedor do ERP Toth
 
-Ele já se ofereceu a construir o que for preciso. Três itens, em ordem de valor.
+**Respondido em 18/08, 15h31–15h48.** Os quatro pedidos enviados de manhã
+voltaram assim:
+
+| Pedido | Resposta |
+|---|---|
+| Data de pagamento em `/cobrancas` | "Daria pra colocar a última data de pagamento" — ofertado, sem prazo |
+| Filtro por data | "Pode usar esse parâmetro" → `dataInicio` / `dataFim` (`dd/MM/yyyy`) |
+| **Pedidos de venda** | **"Vamos solicitar para desenvolver"** — em desenvolvimento |
+| Paginação, volume, token em cabeçalho | "Vou passar para nossa equipe analisar" |
+
+Também confirmou que **não existe campo de situação** e que `valorDocumento` é o
+**saldo** — as duas informações que corrigiram o cálculo de inadimplência.
+
+O que segue aberto, em ordem de valor:
 
 ### 2.1 `dataUltimoPagamento` no retorno de `/cobrancas`
 
@@ -186,12 +199,21 @@ Ou seja: terminado o bloco 3, o Toth sincroniza e **ninguém vê o resultado**.
 Esta é a fatia que transforma dado em produto — receita em risco por cliente,
 lista de atrasados, e o alerta que faz o vendedor agir.
 
-### 4.2 Pedidos de venda (depende do bloco 2)
+### 4.2 Pedidos de venda — 🟢 em desenvolvimento no fornecedor
 
 Fecha o ciclo dos três momentos do dinheiro. Hoje temos o **quem** (clientes) e o
-**recebido** (cobranças); falta o **vendido**. O manifesto declara
-`syncPedidos: false` porque o endpoint não existe — quando existir, vira `true`
-depois de mapeado e testado.
+**recebido** (cobranças); falta o **vendido**.
+
+O fornecedor respondeu "vamos solicitar para desenvolver" em 18/08. Quando o
+endpoint existir, o trabalho do nosso lado é: mapeador → `toth-sync-pedidos` →
+`TOTH_CAPABILITIES.syncPedidos: true`. O manifesto declara `false` hoje, e a
+tela do Toth lê dele, então a linha "Pedidos de venda" acende sozinha na hora em
+que a capacidade virar — sem edição de texto.
+
+**Ao receber o endpoint:** rodar `toth-probe` contra ele antes de escrever
+mapeador. É para isso que a ferramenta existe — descreve a forma do retorno sem
+devolver dado de cliente, e evita repetir o erro de mapear por suposição (foi
+assim que `numeroInscricao` e o saldo passaram despercebidos na primeira volta).
 
 ---
 
