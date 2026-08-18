@@ -19,7 +19,7 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type MobileChatFilter = "all" | "unread" | "groups";
+export type MobileChatFilter = "all" | "unread";
 
 export interface MobileChatListHeaderProps {
   instanceName: string;
@@ -96,7 +96,6 @@ export function MobileChatListHeader({
   const chips: ChipDef[] = [
     { key: "all", label: "Todas" },
     { key: "unread", label: "Não lidas", count: unreadCount },
-    { key: "groups", label: "Grupos" },
   ];
 
   // Label curta pro chip de vendedor (o valor completo fica no dropdown).

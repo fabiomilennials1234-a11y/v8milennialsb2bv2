@@ -247,6 +247,11 @@ export function useWhatsAppContacts(
           .eq("organization_id", organizationId)
           .in("instance_id", [...instanceIds])
           .is("deleted_at", null)
+          // Grupo sai do produto (#1632). O recorte é no servidor, não depois
+          // do .limit(8000): grupo é 40% das mensagens, então baixá-lo para
+          // descartar no navegador gastava 40% do payload e ainda empurrava
+          // conversa individual para fora da janela.
+          .eq("is_group", false)
           .order("timestamp", { ascending: false })
           .limit(8000),
         // `whatsapp_conversations` fica na instância viva de propósito: a FK dela

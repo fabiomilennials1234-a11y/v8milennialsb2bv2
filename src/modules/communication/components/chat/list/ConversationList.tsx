@@ -232,9 +232,9 @@ export function ConversationList({
         else if (filter.vendor === "unassigned") { if (vendorId) return false; }
         else if (vendorId !== filter.vendor) return false;
       }
-      if (mobileFilter === "groups") { if (!c.is_group) return false; }
-      else if (mobileFilter === "unread") { if (c.is_group || c.unread_count <= 0) return false; }
-      else if (c.is_group) return false;
+      // Grupo não é exibido em caminho nenhum (#1632).
+      if (c.is_group) return false;
+      if (mobileFilter === "unread" && c.unread_count <= 0) return false;
       if (c.archived_at) return false;
       const name = contactDisplayName(c).toLowerCase();
       return c.phone_number.includes(searchQuery) || name.includes(search);

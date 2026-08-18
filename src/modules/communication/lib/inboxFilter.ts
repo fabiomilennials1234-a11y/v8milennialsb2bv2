@@ -55,12 +55,6 @@ export interface InboxFilterState {
   source: SourceFilter | null;
   /** Com ou sem lead vinculado. */
   lead: LeadPresenceFilter | null;
-  /**
-   * Mostrar conversas de grupo. `false` por padrão — o desktop escondia grupo
-   * incondicionalmente desde 6356ef92 (23/07/2026), então manter o default
-   * preserva a lista de quem já se acostumou; quem precisa liga o toggle.
-   */
-  showGroups: boolean;
 }
 
 export const DEFAULT_INBOX_FILTER: InboxFilterState = {
@@ -74,7 +68,6 @@ export const DEFAULT_INBOX_FILTER: InboxFilterState = {
   needsHuman: false,
   source: null,
   lead: null,
-  showGroups: false,
 };
 
 /** Contexto de resolução que o engine não deriva do próprio contato. */
@@ -156,12 +149,18 @@ export function applyInboxFilters(
   const tab = opts.tab ?? "active";
 
   return contacts.filter((c) => {
-    // Grupo é opt-in. Antes isto era `return false` incondicional — o desktop
-    // sumia com TODA conversa de grupo, sem toggle e sem deixar rastro (o
-    // contador de não-lidas também ignora grupo), e o cliente só via o grupo no
-    // celular. Regressão introduzida em 6356ef92 (23/07/2026), que centralizou
-    // os filtros aqui e perdeu o botão "Grupos" que existia antes.
-    if (c.is_group && !state.showGroups) return false;
+    // Grupo não é exibido, ponto. Não há toggle a consultar (#1632).
+    //
+    // Histórico: em 23/07/2026 (6356ef92) o desktop passou a esconder grupo
+    // incondicionalmente por acidente; em julho o toggle "Grupos" foi reposto
+    // para desfazer isso. Agora a exclusão é deliberada — `capture_groups`
+    // está `false` nas 104 orgs e o whatsapp-webhook dropa mensagem de grupo,
+    // então o que o toggle revelava era histórico congelado atrás de um
+    // controle que o próprio membro ligava.
+    //
+    // A recusa é incondicional de propósito: estado antigo persistido ou um
+    // chamador que ainda passe `showGroups` não podem ressuscitar a lista.
+    if (c.is_group) return false;
 
     if (tab === "active" && c.archived_at) return false;
     if (tab === "archived" && !c.archived_at) return false;
@@ -199,7 +198,6 @@ export function countActiveFilters(state: InboxFilterState): number {
   if (state.needsHuman) n++;
   if (state.source) n++;
   if (state.lead) n++;
-  if (state.showGroups) n++;
   return n;
 }
 
