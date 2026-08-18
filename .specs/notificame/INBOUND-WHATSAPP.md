@@ -73,8 +73,14 @@ uma falha de registro no WhatsApp fica órfã para sempre.
       Instagram (`messaging_channel_id`) de WhatsApp (`instance_id`);
       `phone_number` preenchido só no WhatsApp. 6 testes novos, 363 no conjunto
       tocado, ratchet 0.
-- [ ] **Peça 4 — migration** `inbound_subscription_*` em `whatsapp_instances`.
-- [ ] **Peça 3 — finish** registra subscription para WhatsApp (depende da 4).
+- [x] **Peça 4 — migration** `inbound_subscription_*` em `whatsapp_instances`
+      (`20270818150000`). Default `not_applicable` (diverge da irmã de propósito:
+      a tabela é majoritariamente Uazapi, que não tem subscription). Ensaiada
+      contra prod com ROLLBACK: 140 instâncias, 140 fora da fila. **NÃO APLICADA.**
+- [x] **Peça 3 — finish** registra subscription para WhatsApp. O gate virou
+      `instagram || whatsapp`; `subscriptionTable` segue o canal; e o `channelKind`
+      vai REAL para `registerInboundSubscription` (chumbar "instagram" faria o
+      degrau de fallback assinar a palavra errada — aceito calado, não assina nada).
 - [ ] **Peça 2 — webhook** resolve canal em `whatsapp_instances`.
       Ponto de entrada: `notificame-webhook/index.ts` ~1108, no ramo `channelHint`.
       Antes de parkar `unresolved_channel`, procurar
