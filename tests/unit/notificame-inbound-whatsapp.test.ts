@@ -181,3 +181,66 @@ describe("pickChannelId — o canal é o UUID, venha de onde vier", () => {
     expect(pickChannelId({ channel: "whatsapp_business_account" })).toBeNull();
   });
 });
+
+/**
+ * O NOME DO CONTATO TROCA DE CAMPO ENTRE OS CANAIS.
+ *
+ * `pickContact` lê `visitor.firstName` como nome humano e `visitor.name` como o
+ * @ — regra CERTA para o Instagram, medida no primeiro payload real
+ * (2026-08-17): ali `name` é `m.montemezzo` e `firstName` é `Marcelo`.
+ *
+ * No WhatsApp o fornecedor inverte. Payload real da Chique (2026-08-18):
+ *
+ *     "visitor": { "name": "Gabriel Gipp", "firstName": "", "lastName": "" }
+ *
+ * `name` é o nome humano e `firstName` vem VAZIO. Aplicando a regra do Instagram,
+ * a linha gravada saiu com `contact_handle="Gabriel Gipp"` e `sender_name=null` —
+ * o contato apareceria SEM NOME no chat, e o nome real ficaria guardado num campo
+ * que existe para o @ do detector de duplicatas.
+ *
+ * O canal decide, e a regra do Instagram fica intocada.
+ */
+describe("pickContact — o nome humano por canal", () => {
+  it("WhatsApp: visitor.name é o NOME, e não vira handle", async () => {
+    const { pickContact } = await import(
+      "../../supabase/functions/_shared/notificame-inbound.ts"
+    );
+    const contato = pickContact({
+      message: {
+        channel: "whatsapp_business_account",
+        from: "554884334050",
+        visitor: { name: "Gabriel Gipp", firstName: "", lastName: "" },
+      },
+    });
+    expect(contato.name).toBe("Gabriel Gipp");
+    expect(contato.handle).toBeNull();
+  });
+
+  it("Instagram: a regra antiga fica INTOCADA — name é o @, firstName é o nome", async () => {
+    const { pickContact } = await import(
+      "../../supabase/functions/_shared/notificame-inbound.ts"
+    );
+    const contato = pickContact({
+      message: {
+        channel: "instagram",
+        from: "17841400000000000",
+        visitor: { name: "m.montemezzo", firstName: "Marcelo" },
+      },
+    });
+    expect(contato.name).toBe("Marcelo");
+    expect(contato.handle).toBe("m.montemezzo");
+  });
+
+  it("corpo SEM canal declarado cai na regra do Instagram — o legado não muda", async () => {
+    const { pickContact } = await import(
+      "../../supabase/functions/_shared/notificame-inbound.ts"
+    );
+    // Todo evento processado até 18/08 era de Instagram; na ausência de canal, o
+    // comportamento tem de ser exatamente o de antes desta mudança.
+    const contato = pickContact({
+      message: { from: "17841400000000000", visitor: { name: "fulana", firstName: "Fulana" } },
+    });
+    expect(contato.name).toBe("Fulana");
+    expect(contato.handle).toBe("fulana");
+  });
+});
