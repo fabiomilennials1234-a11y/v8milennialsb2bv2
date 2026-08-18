@@ -194,13 +194,51 @@ const CHANNEL_ID_PATHS = [
  * `payload.channel` entra como ÚLTIMO recurso e só quando NÃO é palavra de canal
  * conhecida — ver `CHANNEL_WORDS`.
  */
+/** O canal do NotificaMe é UUID. Telefone e IGSID são numéricos puros. */
+const CHANNEL_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Os campos onde o canal REALMENTE aparece no corpo, medidos em produção
+ * (2026-08-18) com eventos das duas famílias:
+ *
+ *   WhatsApp,  direction IN:  `message.to`   = canal, `message.from` = telefone
+ *   Instagram, direction OUT: `message.from` = canal, `message.to`   = IGSID
+ *
+ * A regra do fornecedor é coerente — o canal é sempre O NOSSO LADO da conversa.
+ * Mas ler o campo PELA DIREÇÃO exigiria confiar num `direction` que o remetente
+ * declara; o FORMATO resolve sem essa confiança, e é por isso que a decisão é
+ * pelo UUID e não pelo sentido.
+ */
+const CHANNEL_SIDE_PATHS = [
+  "message.to",
+  "message.from",
+  "to",
+  "from",
+] as const;
+
 export function pickChannelId(payload: unknown): string | null {
   const direct = firstNonEmpty(payload, CHANNEL_ID_PATHS);
   if (direct) return direct;
 
+  // ⚠️ ESTE DEGRAU EXISTE PORQUE NENHUM DOS CAMINHOS ACIMA APARECE NO CORPO REAL.
+  // `channelId`, `channel.id` e afins vieram da doc e do SDK; o corpo que o
+  // fornecedor entrega traz o canal em `message.to`/`message.from`. Sem isto, a
+  // PRIMEIRA mensagem de WhatsApp que chegou de verdade foi parkada como
+  // `unresolved_channel` — com o id do canal visível no payload.
+  for (const path of CHANNEL_SIDE_PATHS) {
+    const value = firstNonEmpty(payload, [path]);
+    if (value && CHANNEL_UUID_RE.test(value)) return value;
+  }
+
   const loose = firstNonEmpty(payload, ["channel"]);
   if (!loose) return null;
-  return CHANNEL_WORDS.has(loose.toLowerCase()) ? null : loose;
+  // ⚠️ `CHANNEL_WORDS` cobre as palavras do nosso vocabulário; o fornecedor usa
+  // `whatsapp_business_account`, que passava por aqui como se fosse um ID e ia
+  // buscar um canal com esse nome. Exigir UUID fecha a porta para qualquer
+  // palavra futura sem precisar catalogá-la.
+  if (CHANNEL_WORDS.has(loose.toLowerCase())) return null;
+  return CHANNEL_UUID_RE.test(loose) ? loose : null;
 }
 
 // ─── A chave `type`, que responde a DUAS perguntas ───────────────────────────
