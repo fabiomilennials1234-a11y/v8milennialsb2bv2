@@ -1411,7 +1411,9 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
 
     const row = buildInboundChannelMessageRow({
       organizationId,
-      messagingChannelId: channel!.id,
+      // Instagram por ora: a resolução de canal de WhatsApp entra na peça 2
+      // desta fatia. O `target` já é o contrato bi-canal.
+      target: { kind: "instagram", messagingChannelId: channel!.id },
       externalId,
       contact: avatarEspelhado ? { ...contact, avatarUrl: avatarEspelhado } : contact,
       contactExternalId: contact.externalId,
