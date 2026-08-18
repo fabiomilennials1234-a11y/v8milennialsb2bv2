@@ -40,6 +40,7 @@ vi.mock("@/modules/carteira/hooks/useTinyErp", () => ({
 
 vi.mock("@/modules/integrations", () => ({
   useOmieStatus: () => ({ data: undefined }),
+  useTothStatus: () => ({ data: undefined }),
 }));
 
 vi.mock("@/modules/identity", () => ({
@@ -121,13 +122,13 @@ describe("IntegrationsCatalog — gate por feature", () => {
     // conectadas quanto no total.
     voiceCallsEnabled = false;
     render();
-    expect(screen.getByText(/0\/7 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/0\/8 conectadas/)).toBeInTheDocument();
   });
 
   it("o badge de conectadas soma o TorqueCalls assim que ele fica visível", () => {
     voiceCallsEnabled = true;
     render();
-    expect(screen.getByText(/1\/8 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/1\/9 conectadas/)).toBeInTheDocument();
   });
 
   // Mesmo defeito da tela de settings, na outra superfície: o badge dizia
@@ -141,6 +142,6 @@ describe("IntegrationsCatalog — gate por feature", () => {
     ];
     render();
     expect(screen.getByText("TorqueCalls")).toBeInTheDocument();
-    expect(screen.getByText(/0\/8 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/0\/9 conectadas/)).toBeInTheDocument();
   });
 });
