@@ -9,7 +9,11 @@
  */
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encryptSecret, decryptSecret } from "./crypto.ts";
+// `../crypto.ts`, não `./crypto.ts`: nesta base o módulo de cifra mora em
+// `_shared/crypto.ts` — é de onde `omie-credentials.ts` também o importa. Em
+// `develop` ele foi movido para `_shared/erp/crypto.ts`; quando as duas linhas
+// se encontrarem, este import muda junto. Mesma API dos dois lados.
+import { encryptSecret, decryptSecret } from "../crypto.ts";
 import type { TothTokenTransport } from "./toth-client.ts";
 import type { BaseUrlPolicy } from "./toth-url.ts";
 
