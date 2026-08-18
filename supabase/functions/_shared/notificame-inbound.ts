@@ -73,6 +73,12 @@ function readPath(source: unknown, path: string): unknown {
  * ⚠️ O `.trim()` e o teste de vazio são a regra 3 do cabeçalho, aplicada num lugar
  * só. Espalhá-los pelos pickers é como um deles fica de fora numa edição futura.
  */
+// Importado, e NÃO reescrito aqui: `normalizeSeamlessType` é a única fonte de
+// verdade sobre o vocabulário do fornecedor (`whatsapp_business_account`).
+// Duplicar a comparação seria a QUINTA ocorrência, no mesmo dia, do defeito de
+// comparar string crua enquanto a normalização existia a um import de distância.
+import { normalizeSeamlessType } from "./notificame.ts";
+
 function firstNonEmpty(source: unknown, paths: readonly string[]): string | null {
   for (const path of paths) {
     const value = readPath(source, path);
@@ -407,6 +413,24 @@ export interface InboundContact {
  * por isso que ele já está listado.
  */
 export function pickContact(payload: unknown): InboundContact {
+  // ⚠️ O CANAL DECIDE DE QUAL CAMPO SAI O NOME, e a inversão é do fornecedor.
+  //
+  //   Instagram (medido 2026-08-17): visitor.name = "m.montemezzo"  (o @)
+  //                                  visitor.firstName = "Marcelo"  (o nome)
+  //   WhatsApp  (medido 2026-08-18): visitor.name = "Gabriel Gipp"  (o nome)
+  //                                  visitor.firstName = ""         (vazio)
+  //
+  // Aplicar a regra do Instagram ao WhatsApp gravou `contact_handle="Gabriel
+  // Gipp"` e `sender_name=null`: o contato apareceria SEM NOME no chat, e o nome
+  // real ficaria num campo que existe para o @ do detector de duplicatas.
+  //
+  // Lido do CORPO e não de parâmetro: `pickContact` é chamado antes de o canal
+  // estar resolvido, e o corpo é a única fonte disponível ali. `normalizeSeamlessType`
+  // porque o fornecedor escreve `whatsapp_business_account`.
+  const ehWhatsApp = normalizeSeamlessType(
+    firstNonEmpty(payload, ["message.channel", "channel"]),
+  ) === "whatsapp";
+
   return {
     externalId: firstNonEmpty(payload, [
       "contact.id",
@@ -435,6 +459,10 @@ export function pickContact(payload: unknown): InboundContact {
       // chamar o cliente pelo @ em toda tela, e-mail e disparo. Medido no
       // primeiro payload real, 2026-08-17.
       "message.visitor.firstName",
+      // SÓ NO WHATSAPP: ali `name` é o nome humano e `firstName` vem vazio.
+      // No Instagram este caminho não entra — `name` é o @, e promovê-lo faria o
+      // CRM chamar o cliente pelo @ em toda tela, e-mail e disparo.
+      ...(ehWhatsApp ? ["message.visitor.name"] : []),
     ]),
     avatarUrl: firstNonEmpty(payload, [
       "contact.picture",
@@ -456,7 +484,11 @@ export function pickContact(payload: unknown): InboundContact {
       // duplicatas, ao lado do telefone digitado no texto. O handoff desta fatia
       // afirmava que o payload não trazia o handle; a primeira mensagem real
       // provou o contrário, e é aqui que ele vem.
-      "message.visitor.name",
+      //
+      // ⚠️ SÓ NO INSTAGRAM. No WhatsApp o mesmo campo carrega o NOME, e gravá-lo
+      // como handle põe o nome humano num campo de @ — além de deixar o contato
+      // sem nome. WhatsApp não tem @: o campo fica nulo, que é a verdade.
+      ...(ehWhatsApp ? [] : ["message.visitor.name"]),
     ]),
   };
 }
