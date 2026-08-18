@@ -436,11 +436,31 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
       expect(data!.enabled).toBe(true);
     });
 
-    it('member1 has no overrides in member_feature_permissions', async () => {
+    it('member1 lê os próprios overrides e todos são restritivos', async () => {
+      // Já falhava em origin/main: a seed dava a TM140 o override
+      // leads.delete=false, e a policy member_read_own_features deixa o membro
+      // ler os próprios. A asserção "0 overrides" nunca foi verdade.
+      const { data, error } = await member1Client
+        .from('member_feature_permissions')
+        .select('feature_key, enabled')
+        .eq('team_member_id', '00000000-0000-0000-0000-000000000140');
+
+      expect(error).toBeNull();
+      expect(data!.length).toBeGreaterThan(0); // controle positivo
+      expect(data!.every((r) => r.enabled === false)).toBe(true);
+      expect(data!.map((r) => r.feature_key).sort()).toEqual([
+        'leads.delete',
+        'leads.view_all',
+        'leads.view_subordinates',
+        'leads.view_unassigned',
+      ]);
+    });
+
+    it('member1 não lê os overrides de outro membro', async () => {
       const { data, error } = await member1Client
         .from('member_feature_permissions')
         .select('feature_key')
-        .eq('team_member_id', '00000000-0000-0000-0000-000000000140');
+        .eq('team_member_id', '00000000-0000-0000-0000-000000000150');
 
       expect(error).toBeNull();
       expect(data).toHaveLength(0);
