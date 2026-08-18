@@ -1236,11 +1236,18 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
   // particular — o sintoma de uma subscription que NUNCA existiu é indistinguível
   // de "ninguém mandou mensagem ainda", e some por semanas.
   //
-  // SÓ INSTAGRAM: o WhatsApp Oficial do NotificaMe não recebe por esta rota nesta
-  // fatia, e registrar uma subscription para ele mandaria eventos de WhatsApp para
-  // um endpoint que só sabe gravar `channel='instagram'` — todos parkados.
+  // OS DOIS CANAIS. Era só Instagram, e a razão estava no comentário original: o
+  // endpoint de entrada só sabia gravar `channel='instagram'`, então assinar o
+  // WhatsApp mandaria os eventos dele para um lugar que os parkaria todos. Isso
+  // deixou de valer — `buildInboundChannelMessageRow` passou a discriminar o
+  // canal e o alvo (peça 1 desta fatia).
+  //
+  // Levantamento da API (`docs/notificame-whatsapp-oficial.md`, duas fontes):
+  // a subscription é a MESMA rota para os dois (`POST /v1/subscriptions/`, com o
+  // TOKEN do canal em `criteria.channel`) e o payload de entrada é o MESMO
+  // formato. Não há contrato novo aqui — havia falta de destino.
   let subscriptionPending = false;
-  if (channelKind === "instagram") {
+  if (channelKind === "instagram" || channelKind === "whatsapp") {
     const webhookSecret = (Deno.env.get("NOTIFICAME_WEBHOOK_SECRET") ?? "").trim();
     const functionsBaseUrl = (Deno.env.get("SUPABASE_URL") ?? "").trim();
 
@@ -1260,11 +1267,17 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
      * mesmo motivo dos outros pontos de chamada: função nova sobre schema velho
      * degrada, não quebra.
      */
+    // A TABELA SEGUE O CANAL: Instagram é linha de `messaging_channels`, WhatsApp
+    // oficial é linha de `whatsapp_instances`. As colunas `inbound_subscription_*`
+    // são gêmeas nas duas (migration 20270818150000), de propósito — o cron de
+    // reparo varre ambas e uma divergência de forma viraria dois caminhos.
+    const subscriptionTable = channelKind === "whatsapp" ? "whatsapp_instances" : SOCIAL_TABLE;
+
     const stampSubscription = async (patch: Record<string, unknown>): Promise<void> => {
-      const { error: stampErr } = await admin.from(SOCIAL_TABLE).update(patch).eq("id", rowId);
+      const { error: stampErr } = await admin.from(subscriptionTable).update(patch).eq("id", rowId);
       if (!stampErr) return;
 
-      const knownGap = isMissingTableError(stampErr, SOCIAL_TABLE) ||
+      const knownGap = isMissingTableError(stampErr, subscriptionTable) ||
         Object.keys(patch).some((col) => isMissingColumnError(stampErr, col));
 
       if (!knownGap) {
@@ -1318,9 +1331,11 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
       const registration = await registerInboundSubscription(
         orgCfg,
         // O id do canal NO FORNECEDOR é o que a doc corrente pede em
-        // `criteria.channel` — a palavra "instagram" fica só como degrau de
-        // fallback dentro da própria função.
-        { webhookUrl, channelKind: "instagram", channelId: pick.channel.id },
+        // `criteria.channel` — a palavra do canal fica só como degrau de fallback
+        // dentro da própria função. O kind vai REAL: chumbar "instagram" aqui
+        // mandaria o degrau de fallback assinar a palavra errada para o WhatsApp,
+        // e assinar a palavra é aceito CALADO (não assina nada).
+        { webhookUrl, channelKind, channelId: pick.channel.id },
         fetch,
       );
       subscriptionPending = !registration.ok;

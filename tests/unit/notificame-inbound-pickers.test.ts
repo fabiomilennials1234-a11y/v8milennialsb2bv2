@@ -190,9 +190,22 @@ describe("pickChannelId — id do canal no fornecedor", () => {
       },
     );
 
-    it("`channel` com valor FORA do vocabulário é tratado como id (último recurso)", () => {
-      // A partição é por VALOR: palavra conhecida ⇒ não é id; o resto ⇒ é id.
-      expect(pickChannelId({ channel: "ch_ig_org_a" })).toBe("ch_ig_org_a");
+    it("`channel` fora do vocabulário só vira id se for UUID", () => {
+      // ⚠️ ESTE TESTE MUDOU, e a produção é a razão. A partição era por VALOR
+      // ("palavra conhecida ⇒ não é id; o resto ⇒ é id") e isso pressupunha que
+      // qualquer coisa fora do nosso vocabulário fosse um identificador.
+      //
+      // O corpo real do fornecedor traz `channel: "whatsapp_business_account"` —
+      // uma PALAVRA que o vocabulário não listava. Pela regra antiga ela virava
+      // "id" e ia buscar um canal com esse nome, que não existe.
+      //
+      // Exigir UUID fecha a porta para qualquer palavra futura sem precisar
+      // catalogá-la uma a uma — que é o que a regra antiga exigiria, e o motivo
+      // pelo qual ela falhou na primeira palavra nova.
+      expect(pickChannelId({ channel: "ch_ig_org_a" })).toBeNull();
+      expect(pickChannelId({ channel: "whatsapp_business_account" })).toBeNull();
+      expect(pickChannelId({ channel: "d1205fbe-99c7-4744-ac6b-899cfbf03179" }))
+        .toBe("d1205fbe-99c7-4744-ac6b-899cfbf03179");
     });
 
     it("`channel` só é consultado DEPOIS dos aliases inequívocos", () => {
@@ -270,10 +283,11 @@ describe("pickChannelWord — a palavra de canal declarada pelo remetente", () =
     expect(pickChannelWord({ channel: 7 })).toBeNull();
   });
 
-  it("valor FORA do vocabulário ⇒ null (é id de canal, não palavra)", () => {
+  it("valor FORA do vocabulário ⇒ null (não é palavra de canal)", () => {
     expect(pickChannelWord({ channel: "ch_ig_org_a" })).toBeNull();
-    // …e o mesmo corpo, na outra pergunta, responde:
-    expect(pickChannelId({ channel: "ch_ig_org_a" })).toBe("ch_ig_org_a");
+    // …e na outra pergunta também é null desde que o id passou a exigir UUID:
+    // uma string arbitrária não é palavra NEM identificador.
+    expect(pickChannelId({ channel: "ch_ig_org_a" })).toBeNull();
   });
 });
 
@@ -750,7 +764,7 @@ describe("pickTimestampIso — só o instante DECLARADO pelo corpo", () => {
 describe("buildInboundChannelMessageRow — a linha de channel_messages", () => {
   const params = () => ({
     organizationId: "org-1",
-    messagingChannelId: "ch-1",
+    target: { kind: "instagram" as const, messagingChannelId: "ch-1" },
     externalId: "mid-1",
     contact: {
       externalId: "igsid-777",
@@ -769,6 +783,7 @@ describe("buildInboundChannelMessageRow — a linha de channel_messages", () => 
       organization_id: "org-1",
       channel: "instagram",
       messaging_channel_id: "ch-1",
+      instance_id: null,
       contact_external_id: "igsid-777",
       external_id: "mid-1",
       direction: "incoming",
@@ -979,7 +994,7 @@ describe("buildInboundChannelMessageRow — o @ do contato vira COLUNA", () => {
   it("grava contact_handle a partir do contato lido", () => {
     const row = buildInboundChannelMessageRow({
       organizationId: "org-1",
-      messagingChannelId: "canal-1",
+      target: { kind: "instagram" as const, messagingChannelId: "canal-1" },
       externalId: "msg-1",
       contact: pickContact(PAYLOAD_REAL_IG),
       contactExternalId: "1527557648673564",
@@ -998,7 +1013,7 @@ describe("buildInboundChannelMessageRow — o @ do contato vira COLUNA", () => {
     const semHandle = { message: { from: "999", contents: [{ text: "oi", type: "text" }] } };
     const row = buildInboundChannelMessageRow({
       organizationId: "org-1",
-      messagingChannelId: "canal-1",
+      target: { kind: "instagram" as const, messagingChannelId: "canal-1" },
       externalId: "msg-2",
       contact: pickContact(semHandle),
       contactExternalId: "999",

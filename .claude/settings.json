@@ -24,5 +24,13 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(supabase functions deploy:*)",
+      "Bash(npx supabase functions deploy:*)",
+      "Bash(supabase functions list:*)",
+      "Bash(npx supabase functions list:*)"
+    ]
   }
 }

@@ -1110,7 +1110,17 @@ export type SubscriptionRegistration =
  */
 export async function registerInboundSubscription(
   cfg: NotificameOrgConfig,
-  params: { webhookUrl: string; channelKind: "instagram"; channelId?: string | null },
+  params: {
+    webhookUrl: string;
+    /**
+     * O canal REAL. Era fixo em `"instagram"` porque só ele assinava; hoje os
+     * dois assinam pela MESMA rota (`docs/notificame-whatsapp-oficial.md`).
+     * Importa para o degrau de fallback abaixo: assinar a palavra errada é
+     * aceito CALADO pelo fornecedor e não assina nada.
+     */
+    channelKind: SeamlessChannelType;
+    channelId?: string | null;
+  },
   fetchImpl: FetchImpl = fetch,
 ): Promise<SubscriptionRegistration> {
   const endpoint = `${stripTrailingSlash(cfg.baseUrl)}/v1/subscriptions`;

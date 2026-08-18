@@ -194,13 +194,51 @@ const CHANNEL_ID_PATHS = [
  * `payload.channel` entra como ÚLTIMO recurso e só quando NÃO é palavra de canal
  * conhecida — ver `CHANNEL_WORDS`.
  */
+/** O canal do NotificaMe é UUID. Telefone e IGSID são numéricos puros. */
+const CHANNEL_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Os campos onde o canal REALMENTE aparece no corpo, medidos em produção
+ * (2026-08-18) com eventos das duas famílias:
+ *
+ *   WhatsApp,  direction IN:  `message.to`   = canal, `message.from` = telefone
+ *   Instagram, direction OUT: `message.from` = canal, `message.to`   = IGSID
+ *
+ * A regra do fornecedor é coerente — o canal é sempre O NOSSO LADO da conversa.
+ * Mas ler o campo PELA DIREÇÃO exigiria confiar num `direction` que o remetente
+ * declara; o FORMATO resolve sem essa confiança, e é por isso que a decisão é
+ * pelo UUID e não pelo sentido.
+ */
+const CHANNEL_SIDE_PATHS = [
+  "message.to",
+  "message.from",
+  "to",
+  "from",
+] as const;
+
 export function pickChannelId(payload: unknown): string | null {
   const direct = firstNonEmpty(payload, CHANNEL_ID_PATHS);
   if (direct) return direct;
 
+  // ⚠️ ESTE DEGRAU EXISTE PORQUE NENHUM DOS CAMINHOS ACIMA APARECE NO CORPO REAL.
+  // `channelId`, `channel.id` e afins vieram da doc e do SDK; o corpo que o
+  // fornecedor entrega traz o canal em `message.to`/`message.from`. Sem isto, a
+  // PRIMEIRA mensagem de WhatsApp que chegou de verdade foi parkada como
+  // `unresolved_channel` — com o id do canal visível no payload.
+  for (const path of CHANNEL_SIDE_PATHS) {
+    const value = firstNonEmpty(payload, [path]);
+    if (value && CHANNEL_UUID_RE.test(value)) return value;
+  }
+
   const loose = firstNonEmpty(payload, ["channel"]);
   if (!loose) return null;
-  return CHANNEL_WORDS.has(loose.toLowerCase()) ? null : loose;
+  // ⚠️ `CHANNEL_WORDS` cobre as palavras do nosso vocabulário; o fornecedor usa
+  // `whatsapp_business_account`, que passava por aqui como se fosse um ID e ia
+  // buscar um canal com esse nome. Exigir UUID fecha a porta para qualquer
+  // palavra futura sem precisar catalogá-la.
+  if (CHANNEL_WORDS.has(loose.toLowerCase())) return null;
+  return CHANNEL_UUID_RE.test(loose) ? loose : null;
 }
 
 // ─── A chave `type`, que responde a DUAS perguntas ───────────────────────────
@@ -544,10 +582,24 @@ export function pickTimestampIso(payload: unknown): string | null {
  * enxerga `src/` — e porque as duas colunas novas (`messaging_channel_id`,
  * `contact_external_id`) só existem em types.ts depois do regen.
  */
+/**
+ * ONDE a linha aponta, e é a única diferença real entre os dois canais.
+ *
+ * Canal de Instagram é linha de `messaging_channels`; o de WhatsApp oficial é
+ * linha de `whatsapp_instances`. As duas colunas já são nullable em
+ * `channel_messages` — medido em produção, nenhuma migration para isto.
+ */
+export type InboundTarget =
+  | { kind: "instagram"; messagingChannelId: string }
+  | { kind: "whatsapp"; instanceId: string };
+
 export interface InboundChannelMessageRow {
   organization_id: string;
-  channel: "instagram";
-  messaging_channel_id: string;
+  channel: "instagram" | "whatsapp";
+  /** Preenchido só no Instagram. */
+  messaging_channel_id: string | null;
+  /** Preenchido só no WhatsApp. */
+  instance_id: string | null;
   contact_external_id: string;
   external_id: string;
   direction: "incoming";
@@ -564,11 +616,17 @@ export interface InboundChannelMessageRow {
    * jsonb não é pesquisável. `null` quando o corpo não traz.
    */
   contact_handle: string | null;
-  /** Conceito de WhatsApp. Instagram não tem JID. */
+  /**
+   * JID é conceito do WhatsApp NÃO-oficial (Uazapi). O canal oficial endereça
+   * por telefone puro, então segue nulo nos dois canais desta rota.
+   */
   remote_jid: null;
-  /** Instagram não tem telefone. Ver o ⚠️ abaixo — NUNCA `''`. */
-  phone_number: null;
-  instance_id: null;
+  /**
+   * Telefone do interlocutor — preenchido SÓ no WhatsApp, onde o
+   * `contact_external_id` é o próprio número. No Instagram fica nulo: o IGSID
+   * não é telefone. Ver o ⚠️ abaixo — NUNCA `''`.
+   */
+  phone_number: string | null;
   page_id: null;
   /**
    * CACHE do vínculo, RESOLVIDO — nunca criado. `null` quando esta identidade
@@ -616,7 +674,8 @@ export interface InboundChannelMessageRow {
  */
 export function buildInboundChannelMessageRow(params: {
   organizationId: string;
-  messagingChannelId: string;
+  /** Instagram aponta por `messaging_channel_id`; WhatsApp por `instance_id`. */
+  target: InboundTarget;
   externalId: string;
   contact: InboundContact;
   contactExternalId: string;
@@ -635,9 +694,16 @@ export function buildInboundChannelMessageRow(params: {
 }): InboundChannelMessageRow {
   return {
     organization_id: params.organizationId,
-    channel: "instagram",
-    messaging_channel_id: params.messagingChannelId,
+    channel: params.target.kind,
+    messaging_channel_id: params.target.kind === "instagram"
+      ? params.target.messagingChannelId
+      : null,
+    instance_id: params.target.kind === "whatsapp" ? params.target.instanceId : null,
     contact_external_id: params.contactExternalId,
+    // No WhatsApp o `contact_external_id` É o telefone, e a coluna existe para as
+    // telas que só sabem falar de número. No Instagram fica NULA de propósito: o
+    // IGSID não é telefone, e preenchê-la faria 13 superfícies mentirem.
+    phone_number: params.target.kind === "whatsapp" ? params.contactExternalId : null,
     external_id: params.externalId,
     direction: "incoming",
     message_type: params.content.messageType,
@@ -659,8 +725,6 @@ export function buildInboundChannelMessageRow(params: {
     // em `firstName`. A inversão é do fornecedor; ver `pickContact`.
     contact_handle: params.contact.handle,
     remote_jid: null,
-    phone_number: null,
-    instance_id: null,
     page_id: null,
     lead_id: params.leadId ?? null,
     timestamp: params.timestampIso,

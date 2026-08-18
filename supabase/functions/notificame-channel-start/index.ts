@@ -106,6 +106,11 @@ import {
   loadNotificameSubaccount,
 } from "../_shared/notificame-credentials.ts";
 import { openConnectSession } from "../_shared/notificame-sessions.ts";
+import {
+  baselineExcluindoAdotado,
+  pickAdoptableChannel,
+} from "../_shared/notificame-adopt.ts";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const FUNCTION_NAME = "notificame-channel-start";
 
@@ -133,6 +138,51 @@ function readMode(body: Record<string, unknown>): "status" | "connect" {
  * valor termina interpolado na URL do fornecedor que NÓS abrimos no browser do
  * usuário, ao lado do token da subconta.
  */
+/**
+ * Os `channel_id` do fornecedor que ESTA org já vinculou, nas duas tabelas.
+ *
+ * I/O de propósito FORA de `_shared/notificame-adopt.ts`: a decisão de adotar é
+ * pura e testável sem banco; só a leitura toca o Supabase.
+ *
+ * Falha lendo? Devolve conjunto VAZIO seria o erro clássico — um conjunto vazio
+ * diz "nada vinculado" e libera a adoção de um canal que JÁ tem dono. Por isso
+ * qualquer erro PROPAGA: sem saber o que já está vinculado, não se adota nada.
+ */
+async function readBoundChannelIds(
+  admin: SupabaseClient,
+  organizationId: string,
+): Promise<Set<string>> {
+  const ids = new Set<string>();
+
+  const instances = await admin
+    .from("whatsapp_instances")
+    .select("provider_config")
+    .eq("organization_id", organizationId)
+    .eq("provider", "notificame");
+  if (instances.error) throw new Error(`bound_lookup_failed: ${instances.error.message}`);
+
+  for (const row of (instances.data ?? []) as Array<{ provider_config?: unknown }>) {
+    const cfg = row.provider_config;
+    const id = cfg && typeof cfg === "object"
+      ? (cfg as Record<string, unknown>).channel_id
+      : null;
+    if (typeof id === "string" && id.trim()) ids.add(id.trim());
+  }
+
+  const social = await admin
+    .from("messaging_channels")
+    .select("external_channel_id")
+    .eq("organization_id", organizationId);
+  if (social.error) throw new Error(`bound_lookup_failed: ${social.error.message}`);
+
+  for (const row of (social.data ?? []) as Array<{ external_channel_id?: string | null }>) {
+    const id = (row.external_channel_id ?? "").trim();
+    if (id) ids.add(id);
+  }
+
+  return ids;
+}
+
 function readChannelType(body: Record<string, unknown>): SeamlessChannelType {
   return readSeamlessChannelType(body.channel_type) ?? "whatsapp";
 }
@@ -453,13 +503,31 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
   // `ambiguous_channel` para sempre: o canal órfão está na foto e sai da conta.
   // Numa subconta recém-criada a foto é vazia, e isso é o resultado correto.
   let sessionId: string | null = null;
+  // O canal que já existia e pode ser ADOTADO em vez de recriado. Vira resposta
+  // para o cliente: com ele, o front pula o popup — que, nesta situação, está
+  // condenado a `channel limit exceeded` e nunca emitiria o `postMessage` de que
+  // o finish depende.
+  let adoptChannelId: string | null = null;
   try {
     const orgCfg = orgConfigFrom(parent.baseUrl, subaccount.companyUuid);
     const existingChannels = await listChannels(orgCfg, fetch);
+
+    // Os canais que ESTA org já vinculou. Sem este recorte, a segunda conexão
+    // adotaria o canal da primeira e roubaria um vínculo que já funcionava.
+    const jaVinculados = await readBoundChannelIds(admin, orgId);
+    const adocao = pickAdoptableChannel(existingChannels, jaVinculados, channelType);
+    if (adocao.ok) adoptChannelId = adocao.channelId;
+
     sessionId = await openConnectSession(admin, {
       organizationId: orgId,
       userId: auth.userId,
-      baselineChannelIds: existingChannels.map((c) => c.id),
+      // A foto INTEIRA menos o adotado — nunca a foto vazia. Os demais canais
+      // seguem descartados pelo finish, que é o que impede um popup abandonado
+      // de ser reivindicado por engano.
+      baselineChannelIds: baselineExcluindoAdotado(
+        existingChannels.map((c) => c.id),
+        adoptChannelId,
+      ),
       // O tipo viaja com a foto: é ele que, no finish, estreita os candidatos
       // ANTES da contagem. Sem ele, um canal de WhatsApp nascido em paralelo na
       // mesma subconta seria vinculado como Instagram — o postMessage do Seamless
@@ -511,6 +579,10 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req) => {
       },
       channel_type: channelType,
       session_id: sessionId,
+      // Presente ⇒ existe canal do tipo pedido já conectado na subconta e ainda
+      // sem vínculo aqui. O cliente NÃO deve abrir o popup: deve chamar o
+      // `channel-finish` direto com `session_id`. Ausente ⇒ fluxo de sempre.
+      adopt_channel_id: adoptChannelId,
     }),
     { status: 200, headers },
   );
