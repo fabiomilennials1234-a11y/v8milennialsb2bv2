@@ -35,6 +35,17 @@ CREATE TABLE IF NOT EXISTS public.toth_connections (
   base_url TEXT NOT NULL
     CHECK (base_url ~ '^https?://[^[:space:]]+$'),
 
+  -- Aceite explícito de tráfego SEM TLS. Default false: o caminho normal exige
+  -- https. A Café Jurerê publicou o Toth em http://cafejurere.ddns.net:8080 (sem
+  -- certificado), então usuário, senha e token trafegam em claro pela internet.
+  -- Isso é decisão comercial consciente do admin, não default do produto — daí
+  -- ser uma coluna, e não uma variável de ambiente global. O CHECK garante que
+  -- base_url http só existe com o aceite marcado: sem ele, um UPDATE direto no
+  -- banco poderia rebaixar o transporte de uma conexão sem ninguém consentir.
+  allow_insecure_transport BOOLEAN NOT NULL DEFAULT false,
+  CONSTRAINT toth_http_requires_explicit_optin
+    CHECK (base_url LIKE 'https://%' OR allow_insecure_transport),
+
   -- Como o token viaja na requisição. `query` é o que a coleção Postman
   -- documenta; `header` é o que pedimos ao fornecedor (token em query string
   -- fica gravado em log de proxy e no cabeçalho Referer). Quando eles mudarem,
@@ -49,6 +60,7 @@ CREATE TABLE IF NOT EXISTS public.toth_connections (
   -- Cursor resumível + marcadores da última sincronização.
   clientes_cursor INTEGER,
   last_clientes_sync_at TIMESTAMPTZ,
+  last_cobrancas_sync_at TIMESTAMPTZ,
   last_error TEXT,
 
   connected_at TIMESTAMPTZ DEFAULT now(),

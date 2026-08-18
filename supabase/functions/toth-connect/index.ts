@@ -5,7 +5,12 @@
  * e só então persiste: a conexão em `toth_connections` e o par usuário/senha
  * cifrado no cofre deny-all. Admin da org apenas.
  *
- * Body: { base_url: string, user: string, password: string, token_transport?: "query" | "header" }
+ * Body: { base_url, user, password, token_transport?: "query"|"header",
+ *         allow_insecure_transport?: boolean }
+ *
+ * `allow_insecure_transport` é o aceite consciente de tráfego sem TLS. O ERP da
+ * Café Jurerê está publicado em http:// puro, então sem esse aceite a conexão é
+ * recusada com a explicação do risco — em vez de aceitar http em silêncio.
  *
  * Nada é gravado antes do login dar certo — conexão salva que não autentica é
  * pior que conexão ausente: a UI diz "conectado" e a sincronização falha calada.
@@ -19,11 +24,10 @@ import { logRuntime } from "../_shared/logger.ts";
 import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
 import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
 import { UnsafeErpUrlError } from "../_shared/erp/toth-url.ts";
-import { storeTothCredentials } from "../_shared/erp/toth-credentials.ts";
+import { storeTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ALLOW_INSECURE = Deno.env.get("TOTH_ALLOW_INSECURE") === "1";
 
 const json = (body: unknown, headers: Record<string, string>) =>
   new Response(JSON.stringify(body), {
@@ -49,6 +53,7 @@ Deno.serve(
     const user = typeof body.user === "string" ? body.user.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
     const tokenTransport = body.token_transport === "header" ? "header" : "query";
+    const allowInsecureTransport = body.allow_insecure_transport === true;
 
     if (!baseUrl || !user || !password) {
       return json({ error: "Endereço, usuário e senha são obrigatórios" }, cors);
@@ -58,7 +63,7 @@ Deno.serve(
     try {
       client = new TothClient(
         { baseUrl, user, password, tokenTransport },
-        { urlPolicy: { allowInsecure: ALLOW_INSECURE } },
+        { urlPolicy: tothUrlPolicy({ allowInsecureTransport }) },
       );
     } catch (err) {
       // Endereço recusado pela guarda anti-SSRF — a mensagem já é acionável.
@@ -88,6 +93,7 @@ Deno.serve(
           status: "connected",
           base_url: client.baseUrl,
           token_transport: tokenTransport,
+          allow_insecure_transport: allowInsecureTransport,
           connected_at: new Date().toISOString(),
           last_error: null,
         },
@@ -117,6 +123,16 @@ Deno.serve(
       status: "success",
     });
 
-    return json({ success: true, base_url: client.baseUrl }, cors);
+    return json(
+      {
+        success: true,
+        base_url: client.baseUrl,
+        // A UI mostra esse aviso ao lado do status "conectado": quem olha a tela
+        // precisa saber que a credencial vai em claro, não só quem marcou o
+        // aceite no dia da configuração.
+        insecure_transport: allowInsecureTransport && client.baseUrl.startsWith("http://"),
+      },
+      cors,
+    );
   }),
 );

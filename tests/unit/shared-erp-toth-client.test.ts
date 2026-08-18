@@ -124,6 +124,45 @@ describe("get", () => {
     expect(calls[3].url).toContain("token=T2");
   });
 
+  it("🔴 reautentica quando a expiração vem em HTTP 200 com erro no CORPO", async () => {
+    // Este é o comportamento REAL do Toth: token vencido devolve
+    // [{"error":"Acesso nao autorizado! "}]. Checar só o status deixaria a
+    // reautenticação nunca disparar — e o sync devolveria zero cliente com cara
+    // de sucesso, que é o modo de falha caro.
+    const { impl, calls } = fakeFetch([
+      res({ token: "T1" }),
+      res([{ error: "Acesso nao autorizado! " }], 200),
+      res({ token: "T2" }),
+      res([{ codigoCliente: 293 }], 200),
+    ]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    const out = await client.get<Array<{ codigoCliente: number }>>("clientes");
+
+    expect(out).toHaveLength(1);
+    expect(calls).toHaveLength(4);
+    expect(calls[2].url).toBe(`${BASE}/users/login`);
+    expect(calls[3].url).toContain("token=T2");
+  });
+
+  it("erro de negócio em 200 NÃO vira reautenticação — não martela o login", async () => {
+    const { impl, calls } = fakeFetch([
+      res({ token: "T1" }),
+      res([{ error: "CNPJ nao encontrado" }], 200),
+    ]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    await expect(client.get("clientes")).rejects.toThrow(/CNPJ nao encontrado/);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("desiste se a expiração no corpo persiste após reautenticar", async () => {
+    const expired = () => res([{ error: "Acesso nao autorizado! " }], 200);
+    const { impl } = fakeFetch([res({ token: "T1" }), expired(), res({ token: "T2" }), expired()]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+    await expect(client.get("clientes")).rejects.toThrow(TothAuthError);
+  });
+
   it("desiste se o token continua recusado depois de reautenticar", async () => {
     const { impl } = fakeFetch([
       res({ token: "T1" }),
@@ -162,9 +201,48 @@ describe("falha de rede", () => {
   });
 });
 
+describe("postForm — /cobrancas é POST com cnpj no corpo e token na query", () => {
+  it("manda o corpo urlencoded e mantém o token na query", async () => {
+    const { impl, calls } = fakeFetch([res({ token: "T1" }), res([{ id: 107554 }])]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    const out = await client.postForm<Array<{ id: number }>>("cobrancas", {
+      cnpj: "11222333000144",
+    });
+
+    expect(out[0].id).toBe(107554);
+    expect(calls[1].init.method).toBe("POST");
+    expect(calls[1].url).toBe(`${BASE}/cobrancas?token=T1`);
+    expect(String(calls[1].init.body)).toBe("cnpj=11222333000144");
+  });
+
+  it("reautentica também no POST quando o token expira no corpo", async () => {
+    const { impl, calls } = fakeFetch([
+      res({ token: "T1" }),
+      res([{ error: "Acesso nao autorizado! " }]),
+      res({ token: "T2" }),
+      res([]),
+    ]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    await client.postForm("cobrancas", { cnpj: "11222333000144" });
+
+    expect(calls).toHaveLength(4);
+    expect(String(calls[3].init.body)).toBe("cnpj=11222333000144");
+  });
+});
+
 describe("base_url", () => {
   it("recusa endereço interno já na construção", () => {
     expect(() => new TothClient({ ...CREDS, baseUrl: "http://localhost:8080/toth" })).toThrow();
+  });
+
+  it("aceita http em host público só com allowHttp — o caso da Café Jurerê", () => {
+    const insecure = { ...CREDS, baseUrl: "http://cafejurere.ddns.net:8080/toth/services" };
+    expect(() => new TothClient(insecure)).toThrow();
+    expect(
+      new TothClient(insecure, { urlPolicy: { allowHttp: true } }).baseUrl,
+    ).toBe("http://cafejurere.ddns.net:8080/toth/services");
   });
 
   it("normaliza e expõe a base para diagnóstico", () => {

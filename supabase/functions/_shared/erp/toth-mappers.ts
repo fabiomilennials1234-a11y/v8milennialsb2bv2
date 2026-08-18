@@ -1,21 +1,23 @@
 /**
  * Toth → canônico.
  *
- * 🟠 ARQUIVO PROVISÓRIO — TODO o palpite sobre o formato do Toth mora aqui, de
- * propósito. A coleção Postman que recebemos (2026-08-17) traz os endpoints mas
- * NENHUM exemplo de resposta, então os nomes de campo abaixo são hipótese, não
- * contrato. `toth-probe` existe para trocar hipótese por fato: ele grava o
- * payload cru da primeira chamada real.
+ * ✅ FIXADO CONTRA PAYLOAD REAL (2026-08-18). A versão anterior deste arquivo era
+ * hipótese; o fornecedor mandou exemplos de resposta de `/clientes` e
+ * `/cobrancas`, e os nomes abaixo agora são o contrato observado. Os candidatos
+ * alternativos que sobraram são rede de segurança para variação entre
+ * instalações — o PRIMEIRO de cada lista é o campo real.
  *
- * Quando o payload real aparecer:
- *   1. salvar como fixture em tests/fixtures/toth-clientes.json;
- *   2. fixar os nomes reais no topo de cada lista de candidatos;
- *   3. apagar os candidatos que não existirem.
- * Nada fora deste arquivo muda. É essa a razão de ele existir separado do
- * client e do sync.
+ * Três coisas que o payload real ensinou e que não dava para adivinhar:
+ *
+ *  1. O CNPJ chama `numeroInscricao`, não `cnpj`. Já vem só com dígitos.
+ *  2. E-mail e telefone **não são campos escalares** — são listas de contato
+ *     (`emails[]`, `telefones[]`), e o telefone vem partido em `prefixoArea` +
+ *     `numero`. Há ainda `isWhatsApp`, que decide qual número o CRM quer.
+ *  3. Datas vêm em `dd/mm/aaaa` no financeiro e em `aaaa-mm-dd` no cadastro.
+ *     A mesma API usa os dois formatos.
  */
 
-import { CanonicalClient } from "./types.ts";
+import { CanonicalClient, CanonicalTitulo, TituloStatus } from "./types.ts";
 
 /** Normaliza chave para comparação: minúscula, sem acento, sem separador. */
 function normalizeKey(key: string): string {
@@ -35,8 +37,6 @@ export function pickField(row: Record<string, unknown>, candidates: string[]): u
   const index = new Map<string, unknown>();
   for (const [key, value] of Object.entries(row)) {
     const norm = normalizeKey(key);
-    // Primeira ocorrência vence — objeto JSON não deveria ter chave duplicada,
-    // mas normalização pode colidir (`cnpj_cpf` e `cnpjCpf`).
     if (!index.has(norm)) index.set(norm, value);
   }
   for (const candidate of candidates) {
@@ -56,7 +56,19 @@ function asString(value: unknown): string | null {
   return null;
 }
 
-/** Só dígitos. CNPJ/CPF chega formatado em quase todo ERP brasileiro. */
+function asNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    // O financeiro do Toth manda number puro, mas instalação com locale pt-BR
+    // pode mandar "1.234,56". Normaliza as duas grafias.
+    const normalized = value.trim().replace(/\./g, "").replace(",", ".");
+    const n = Number(normalized);
+    if (Number.isFinite(n)) return n;
+  }
+  return null;
+}
+
+/** Só dígitos. */
 export function digitsOnly(value: unknown): string | null {
   const str = asString(value);
   if (!str) return null;
@@ -64,25 +76,87 @@ export function digitsOnly(value: unknown): string | null {
   return digits.length === 0 ? null : digits;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Candidatos de campo — a parte que vira fato quando o payload real chegar.
-// ─────────────────────────────────────────────────────────────────────────────
-
-const ID_FIELDS = ["id", "codigo", "codigoCliente", "idCliente", "clienteId", "cod"];
-const CNPJ_FIELDS = ["cnpj", "cpf", "cnpjCpf", "cpfCnpj", "documento", "nrDocumento"];
-const NAME_FIELDS = ["nome", "razaoSocial", "nomeCliente", "nomeFantasia", "descricao"];
-const COMPANY_FIELDS = ["razaoSocial", "nomeFantasia", "empresa", "fantasia"];
-const EMAIL_FIELDS = ["email", "eMail", "emailPrincipal", "emailContato"];
-const PHONE_FIELDS = ["telefone", "fone", "celular", "telefonePrincipal", "whatsapp", "contato"];
-
-/** Envelopes prováveis de uma listagem. A raiz também pode ser o próprio array. */
-const LIST_ENVELOPES = ["clientes", "data", "content", "rows", "items", "result", "registros", "lista"];
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 /**
- * Extrai o array de registros de uma resposta de listagem, seja ela um array
- * cru ou um envelope. Devolve `[]` quando não reconhece — o chamador decide se
- * isso é fim de paginação ou formato inesperado.
+ * Converte data do Toth em ISO (`aaaa-mm-dd`). Aceita os DOIS formatos que a
+ * mesma API usa: `dd/mm/aaaa` no financeiro, `aaaa-mm-dd` no cadastro. Devolve
+ * null para vazio ou formato desconhecido — data inválida aceita em silêncio
+ * viraria título vencido em 1970, e daí receita-em-risco fantasma.
  */
+export function parseTothDate(value: unknown): string | null {
+  const str = asString(value);
+  if (!str) return null;
+
+  const br = str.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (br) {
+    const [, dd, mm, yyyy] = br;
+    return isRealDate(+yyyy, +mm, +dd) ? `${yyyy}-${mm}-${dd}` : null;
+  }
+
+  const iso = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    const [, yyyy, mm, dd] = iso;
+    return isRealDate(+yyyy, +mm, +dd) ? `${yyyy}-${mm}-${dd}` : null;
+  }
+  return null;
+}
+
+function isRealDate(year: number, month: number, day: number): boolean {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Erro da API — vem no CORPO, não (só) no status
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Extrai a mensagem de erro do corpo do Toth, que sinaliza falha com
+ * `[{"error":"Acesso nao autorizado! "}]`.
+ *
+ * O status HTTP que acompanha esse corpo não está documentado e não pode ser
+ * presumido. Tratar o CORPO como fonte da verdade é o que faz a expiração de
+ * token ser detectada mesmo se ela vier em HTTP 200 — e o fornecedor avisou que
+ * o token "expira em tempo aleatório", então esse caminho é rotina, não exceção.
+ */
+export function extractApiError(payload: unknown): string | null {
+  const first = Array.isArray(payload) ? payload[0] : payload;
+  if (!isRecord(first)) return null;
+  return asString(pickField(first, ["error", "erro", "mensagem", "message"]));
+}
+
+/** Verdadeiro quando a mensagem de erro do Toth indica token inválido/expirado. */
+export function isAuthErrorMessage(message: string): boolean {
+  return /n[ãa]o autorizado|unauthorized|token|sess[ãa]o/i.test(message);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Clientes
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ID_FIELDS = ["codigoCliente", "id", "codigo"];
+const CNPJ_FIELDS = ["numeroInscricao", "cnpj", "cpf", "cnpjCpf", "documento"];
+const NAME_FIELDS = ["razaoSocial", "nomeFantasia", "nome"];
+const COMPANY_FIELDS = ["nomeFantasia", "razaoSocial"];
+/** E-mail escalar de topo — usado só quando a lista `emails[]` não resolve. */
+const EMAIL_FALLBACK_FIELDS = ["emailNfe", "email"];
+
+/** Envelopes prováveis. A resposta real de `/clientes` é um array cru na raiz. */
+const LIST_ENVELOPES = [
+  "clientes",
+  "data",
+  "content",
+  "rows",
+  "items",
+  "result",
+  "registros",
+  "lista",
+];
+
 export function extractRows(payload: unknown): Record<string, unknown>[] {
   if (Array.isArray(payload)) return payload.filter(isRecord);
   if (!isRecord(payload)) return [];
@@ -94,21 +168,12 @@ export function extractRows(payload: unknown): Record<string, unknown>[] {
   return [];
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+/** Campo do token na resposta do login — real: `{login, user, token}`. */
+const TOKEN_FIELDS = ["token", "accessToken", "authToken", "jwt"];
 
-/** Candidatos de campo do token na resposta do login. */
-const TOKEN_FIELDS = ["token", "accessToken", "authToken", "jwt", "sessionToken", "chave"];
-
-/**
- * Extrai o token da resposta de `POST /users/login`. Aceita o token como corpo
- * cru (string), no objeto raiz, ou um nível abaixo em `data`/`result`.
- */
 export function extractLoginToken(payload: unknown): string | null {
   if (typeof payload === "string") {
     const trimmed = payload.trim();
-    // Um corpo de erro em texto não é token; token não tem espaço.
     return trimmed && !/\s/.test(trimmed) ? trimmed : null;
   }
   if (!isRecord(payload)) return null;
@@ -126,6 +191,57 @@ export function extractLoginToken(payload: unknown): string | null {
   return null;
 }
 
+/**
+ * Escolhe o e-mail do cliente na lista `emails[]`, caindo para o escalar de topo
+ * (`emailNfe`). A lista traz `{tipo, endereco, nomeContato, idContato}`.
+ */
+export function pickEmail(row: Record<string, unknown>): string | null {
+  const list = pickField(row, ["emails"]);
+  if (Array.isArray(list)) {
+    for (const entry of list) {
+      if (!isRecord(entry)) continue;
+      const address = asString(pickField(entry, ["endereco", "email", "enderecoEmail"]));
+      if (address) return address.toLowerCase();
+    }
+  }
+  const fallback = asString(pickField(row, EMAIL_FALLBACK_FIELDS));
+  return fallback ? fallback.toLowerCase() : null;
+}
+
+/**
+ * Escolhe o telefone do cliente na lista `telefones[]`, montando
+ * `prefixoArea + numero`.
+ *
+ * **Prefere o marcado como WhatsApp.** O Torque é uma ferramenta de WhatsApp: o
+ * número que conversa vale mais que o primeiro da lista, que no exemplo real é
+ * o fixo da recepção (`isWhatsApp: "N"`).
+ */
+export function pickPhone(row: Record<string, unknown>): string | null {
+  const list = pickField(row, ["telefones"]);
+  if (!Array.isArray(list)) return digitsOnly(pickField(row, ["telefone", "fone", "celular"]));
+
+  const entries = list.filter(isRecord);
+  const compose = (entry: Record<string, unknown>): string | null => {
+    const area = digitsOnly(pickField(entry, ["prefixoArea", "ddd"])) ?? "";
+    const number = digitsOnly(pickField(entry, ["numero", "telefone", "fone"]));
+    if (!number) return null;
+    return `${area}${number}`;
+  };
+
+  const whatsapp = entries.find(
+    (e) => String(pickField(e, ["isWhatsApp", "whatsapp"]) ?? "").toUpperCase() === "S",
+  );
+  if (whatsapp) {
+    const composed = compose(whatsapp);
+    if (composed) return composed;
+  }
+  for (const entry of entries) {
+    const composed = compose(entry);
+    if (composed) return composed;
+  }
+  return null;
+}
+
 export class TothMappingError extends Error {
   constructor(message: string) {
     super(message);
@@ -136,9 +252,8 @@ export class TothMappingError extends Error {
 /**
  * Traduz um cliente do Toth para `CanonicalClient`.
  *
- * Lança `TothMappingError` quando não encontra identificador — um cliente sem
- * id imutável não tem chave de idempotência, e importá-lo assim duplicaria o
- * registro a cada sincronização. Falhar alto aqui é melhor que sujar a carteira.
+ * Lança `TothMappingError` sem identificador: cliente sem id imutável não tem
+ * chave de idempotência, e importá-lo duplicaria o registro a cada execução.
  */
 export function mapTothClienteToCanonical(row: Record<string, unknown>): CanonicalClient {
   const externalId = asString(pickField(row, ID_FIELDS));
@@ -153,14 +268,82 @@ export function mapTothClienteToCanonical(row: Record<string, unknown>): Canonic
 
   return {
     externalId,
-    // O Toth não conhece o nosso uuid (não há upsert de volta nesta fase).
     externalRef: null,
     cnpj: digitsOnly(pickField(row, CNPJ_FIELDS)),
-    // `name` é NOT NULL do lado da carteira; sem nome, o id serve de rótulo até
-    // a próxima sincronização trazer algo melhor.
+    // `name` é NOT NULL na carteira; sem nome, o id serve de rótulo.
     name: name ?? company ?? `Cliente ${externalId}`,
     company: company ?? null,
-    email: asString(pickField(row, EMAIL_FIELDS)),
-    phone: digitsOnly(pickField(row, PHONE_FIELDS)),
+    email: pickEmail(row),
+    phone: pickPhone(row),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cobranças → Título a receber
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TITULO_ID_FIELDS = ["id", "codigoTitulo", "idTitulo"];
+const TITULO_CLIENT_FIELDS = ["codigoCliente", "codCliente"];
+const TITULO_VALOR_FIELDS = ["valorDocumento", "valorDocumentoOriginal", "valor"];
+const TITULO_PAGO_FIELDS = ["valorPago", "valorRecebido"];
+const TITULO_VENCIMENTO_FIELDS = ["dataVencimento", "vencimento"];
+
+/**
+ * Deriva a situação do título.
+ *
+ * ⚠️ O Toth **não manda status nem data de pagamento** — manda `valorPago`.
+ * Então `pago` é inferido de `valorPago >= valorDocumento`, e `atrasado` de
+ * vencimento no passado. Duas consequências que mudam a leitura do número na
+ * tela e precisam ser conhecidas por quem olhar a Inadimplência:
+ *   - pagamento PARCIAL fica `aberto` (ou `atrasado`), nunca `pago`;
+ *   - `pagoEm` é sempre null, então não dá para medir prazo médio de recebimento.
+ *
+ * Fechar isso depende de o fornecedor acrescentar `dataPagamento` ao retorno.
+ * Ele se ofereceu a criar endpoint sob medida — é o pedido de maior valor.
+ */
+export function deriveTituloStatus(
+  valor: number,
+  valorPago: number,
+  vencimentoIso: string | null,
+  todayIso: string,
+): TituloStatus {
+  if (valorPago > 0 && valorPago >= valor) return "pago";
+  if (vencimentoIso && vencimentoIso < todayIso) return "atrasado";
+  return "aberto";
+}
+
+/**
+ * Traduz uma cobrança do Toth para `CanonicalTitulo`.
+ *
+ * `todayIso` entra por parâmetro (em vez de `new Date()` aqui dentro) para que
+ * o cálculo de atraso seja determinístico em teste.
+ */
+export function mapTothCobrancaToCanonical(
+  row: Record<string, unknown>,
+  todayIso: string,
+): CanonicalTitulo {
+  const externalId = asString(pickField(row, TITULO_ID_FIELDS));
+  if (!externalId) {
+    throw new TothMappingError(
+      `Cobrança do Toth sem identificador. Campos recebidos: ${Object.keys(row).join(", ")}`,
+    );
+  }
+
+  const valor = asNumber(pickField(row, TITULO_VALOR_FIELDS)) ?? 0;
+  const valorPago = asNumber(pickField(row, TITULO_PAGO_FIELDS)) ?? 0;
+  const vencimento = parseTothDate(pickField(row, TITULO_VENCIMENTO_FIELDS));
+
+  return {
+    externalId,
+    externalRef: null,
+    clientExternalId: asString(pickField(row, TITULO_CLIENT_FIELDS)),
+    // O Toth liga a cobrança à NOTA (`numeronota`), não ao pedido. Sem endpoint
+    // de pedidos não existe external_id de pedido para casar — fica null, em vez
+    // de apontar para um id que pertence a outro domínio.
+    orderExternalId: null,
+    valor,
+    vencimento,
+    status: deriveTituloStatus(valor, valorPago, vencimento, todayIso),
+    pagoEm: null,
   };
 }

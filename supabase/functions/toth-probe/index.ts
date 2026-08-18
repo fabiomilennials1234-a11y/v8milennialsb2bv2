@@ -23,13 +23,12 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
 import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
-import { loadTothCredentials } from "../_shared/erp/toth-credentials.ts";
+import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
 import { extractRows } from "../_shared/erp/toth-mappers.ts";
 import { describePayload, describeEnvelope } from "../_shared/erp/toth-probe-shape.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-const ALLOW_INSECURE = Deno.env.get("TOTH_ALLOW_INSECURE") === "1";
 
 /** Caminhos prováveis sob /toth/services, na ordem em que interessam. */
 const CANDIDATE_PATHS = [
@@ -64,7 +63,7 @@ Deno.serve(
     const creds = await loadTothCredentials(admin, auth.organizationId);
     if (!creds) return json({ error: "Nenhuma conexão ativa com o ERP Toth" }, cors);
 
-    const client = new TothClient(creds, { urlPolicy: { allowInsecure: ALLOW_INSECURE } });
+    const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
     const body = await req.json().catch(() => ({}));
 
     // ── Modo varredura: quais endpoints respondem? ───────────────────────────

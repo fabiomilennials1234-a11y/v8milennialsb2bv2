@@ -187,6 +187,10 @@ verify_jwt = false
 [functions.toth-sync-clientes]
 verify_jwt = false
 
+# toth-sync-cobrancas: consulta por CNPJ; exige toth-sync-clientes antes.
+[functions.toth-sync-cobrancas]
+verify_jwt = false
+
 [functions.tinyerp-proxy]
 verify_jwt = false
 

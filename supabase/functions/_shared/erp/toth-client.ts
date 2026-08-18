@@ -4,13 +4,18 @@
  * Diferenças de forma em relação a Omie e Tiny, que moldam este arquivo:
  *  - **Host por organização.** O Toth roda na rede do cliente; não há URL
  *    constante. A base_url entra validada por `assertSafeErpBaseUrl`.
- *  - **Sessão, não chave estática.** `POST /users/login` devolve um token de
- *    validade desconhecida (não documentada). O client faz login preguiçoso, e
- *    quando a chamada volta 401/403 refaz o login UMA vez e repete. É assim que
- *    se sobrevive a um TTL que ninguém sabe qual é.
- *  - **Token na query string.** É o que a coleção Postman mostra. Aceitamos
- *    também header (`token_transport: "header"`) porque pedimos ao fornecedor
- *    que mude — quando mudar, é trocar uma coluna, não reescrever isto.
+ *  - **Sessão com TTL aleatório.** Palavras do fornecedor: o token "não tem
+ *    tempo definido (aleatório), mas ele expira". O client faz login preguiçoso
+ *    e, ao ver a expiração, reautentica UMA vez e repete. Expirar é rotina do
+ *    fluxo, não exceção.
+ *  - **🔴 Falha vem no CORPO, não no status.** Token vencido responde
+ *    `[{"error":"Acesso nao autorizado! "}]`, e o status HTTP que acompanha isso
+ *    não está documentado. Por isso o corpo é a fonte da verdade: checar só
+ *    401/403 deixaria a reautenticação nunca disparar, e o sync devolveria
+ *    "0 clientes" com ar de sucesso — o modo de falha silencioso que custa caro.
+ *  - **Token na query string.** É o que o fornecedor expõe hoje. Aceitamos
+ *    também header (`token_transport: "header"`) porque pedimos que mude —
+ *    quando mudar, é trocar uma coluna, não reescrever isto.
  *
  * O que NÃO está aqui: rate limit elaborado tipo Omie. O Toth é um servidor
  * único de um cliente só; o risco não é cota de API, é derrubar a máquina dele.
@@ -19,7 +24,7 @@
  */
 
 import { assertSafeErpBaseUrl, type BaseUrlPolicy } from "./toth-url.ts";
-import { extractLoginToken } from "./toth-mappers.ts";
+import { extractLoginToken, extractApiError, isAuthErrorMessage } from "./toth-mappers.ts";
 
 export type TothTokenTransport = "query" | "header";
 
@@ -160,6 +165,10 @@ export class TothClient {
       // Corpo não-JSON: pode ser o token em texto puro. `extractLoginToken` trata.
     }
 
+    // Credencial errada também pode voltar como 200 com erro no corpo.
+    const apiError = extractApiError(parsed);
+    if (apiError) throw new TothAuthError(`O ERP recusou o login: ${apiError}`);
+
     const token = extractLoginToken(parsed);
     if (!token) {
       throw new TothAuthError(
@@ -171,45 +180,62 @@ export class TothClient {
     return token;
   }
 
-  /**
-   * GET autenticado. Faz login se ainda não houver token e, num 401/403,
-   * reautentica uma vez e repete — o TTL do token não é documentado, então a
-   * expiração precisa ser tratada como evento normal, não como erro.
-   */
+  /** GET autenticado. */
   async get<T = unknown>(path: string, params: Record<string, string> = {}): Promise<T> {
-    if (!this.token) await this.login();
-
-    let res = await this.authedGet(path, params);
-    if (res.status === 401 || res.status === 403) {
-      this.token = null;
-      await this.login();
-      res = await this.authedGet(path, params);
-    }
-
-    const text = await res.text();
-    if (res.status === 401 || res.status === 403) {
-      throw new TothAuthError("O ERP recusou o token mesmo após reautenticar.");
-    }
-    if (!res.ok) {
-      throw new TothRequestError(
-        `O ERP respondeu HTTP ${res.status} em /${path}.`,
-        res.status,
-        preview(text),
-      );
-    }
-
-    try {
-      return JSON.parse(text) as T;
-    } catch {
-      throw new TothRequestError(
-        `Resposta de /${path} não é JSON. Corpo: ${preview(text)}`,
-        res.status,
-        preview(text),
-      );
-    }
+    return this.authedRequest<T>("GET", path, params);
   }
 
-  private authedGet(path: string, params: Record<string, string>): Promise<Response> {
+  /**
+   * POST autenticado com corpo `x-www-form-urlencoded`.
+   *
+   * `/cobrancas` é POST e recebe o `cnpj` no corpo, com o token ainda na query —
+   * mistura que não dava para prever a partir de `/clientes`.
+   */
+  async postForm<T = unknown>(
+    path: string,
+    fields: Record<string, string>,
+    params: Record<string, string> = {},
+  ): Promise<T> {
+    return this.authedRequest<T>("POST", path, params, fields);
+  }
+
+  /**
+   * Executa a chamada e, se o ERP disser que o token não vale, reautentica uma
+   * vez e repete. A decisão de "não vale" olha o corpo E o status — ver o
+   * cabeçalho deste arquivo.
+   */
+  private async authedRequest<T>(
+    method: "GET" | "POST",
+    path: string,
+    params: Record<string, string>,
+    fields?: Record<string, string>,
+  ): Promise<T> {
+    if (!this.token) await this.login();
+
+    let outcome = await this.attempt(method, path, params, fields);
+    if (outcome.kind === "auth") {
+      this.token = null;
+      await this.login();
+      outcome = await this.attempt(method, path, params, fields);
+    }
+
+    if (outcome.kind === "auth") {
+      throw new TothAuthError(
+        `O ERP recusou o token mesmo após reautenticar: ${outcome.message}`,
+      );
+    }
+    if (outcome.kind === "error") {
+      throw new TothRequestError(outcome.message, outcome.status, outcome.bodyPreview);
+    }
+    return outcome.data as T;
+  }
+
+  private async attempt(
+    method: "GET" | "POST",
+    path: string,
+    params: Record<string, string>,
+    fields?: Record<string, string>,
+  ): Promise<TothAttempt> {
     const url = this.url(path);
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
 
@@ -219,6 +245,60 @@ export class TothClient {
     } else {
       url.searchParams.set("token", this.token ?? "");
     }
-    return this.send(url, { method: "GET", headers });
+
+    const init: RequestInit = { method, headers };
+    if (fields) {
+      headers["Content-Type"] = "application/x-www-form-urlencoded";
+      init.body = new URLSearchParams(fields).toString();
+    }
+
+    const res = await this.send(url, init);
+    const text = await res.text();
+
+    // Status ainda conta — se o ERP um dia passar a devolver 401 de verdade,
+    // este ramo pega antes de a análise do corpo precisar existir.
+    if (res.status === 401 || res.status === 403) {
+      return { kind: "auth", message: `HTTP ${res.status}` };
+    }
+    if (!res.ok) {
+      return {
+        kind: "error",
+        message: `O ERP respondeu HTTP ${res.status} em /${path}.`,
+        status: res.status,
+        bodyPreview: preview(text),
+      };
+    }
+
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      return {
+        kind: "error",
+        message: `Resposta de /${path} não é JSON.`,
+        status: res.status,
+        bodyPreview: preview(text),
+      };
+    }
+
+    // 200 com erro no corpo: o caso real do token expirado.
+    const apiError = extractApiError(data);
+    if (apiError) {
+      return isAuthErrorMessage(apiError)
+        ? { kind: "auth", message: apiError }
+        : {
+            kind: "error",
+            message: `O ERP recusou a chamada a /${path}: ${apiError}`,
+            status: res.status,
+            bodyPreview: "",
+          };
+    }
+
+    return { kind: "ok", data };
   }
 }
+
+type TothAttempt =
+  | { kind: "ok"; data: unknown }
+  | { kind: "auth"; message: string }
+  | { kind: "error"; message: string; status: number | null; bodyPreview: string };
