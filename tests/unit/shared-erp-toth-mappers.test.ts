@@ -11,6 +11,7 @@ import {
   pickField,
   digitsOnly,
   parseTothDate,
+  formatTothDate,
   extractRows,
   extractLoginToken,
   extractApiError,
@@ -238,29 +239,41 @@ describe("mapTothClienteToCanonical", () => {
   });
 });
 
-describe("deriveTituloStatus", () => {
+describe("deriveTituloStatus — decide pelo SALDO", () => {
   const HOJE = "2026-08-18";
 
-  it("aberto quando não pago e ainda no prazo", () => {
-    expect(deriveTituloStatus(378, 0, "2026-08-31", HOJE)).toBe("aberto");
+  it("aberto quando há saldo e ainda está no prazo", () => {
+    expect(deriveTituloStatus(378, "2026-08-31", HOJE)).toBe("aberto");
   });
 
-  it("atrasado quando venceu e não foi pago", () => {
-    expect(deriveTituloStatus(378, 0, "2026-08-17", HOJE)).toBe("atrasado");
+  it("atrasado quando há saldo e o vencimento passou", () => {
+    expect(deriveTituloStatus(378, "2026-08-17", HOJE)).toBe("atrasado");
   });
 
-  it("pago quando o valor pago cobre o documento, mesmo vencido", () => {
-    expect(deriveTituloStatus(378, 378, "2026-01-01", HOJE)).toBe("pago");
+  it("🔴 saldo zero é pago MESMO vencido — o bug que isso conserta", () => {
+    // A regra antiga inferia pagamento de `valorPago >= valorDocumento`. Um
+    // título quitado cujo valorPago não venha populado tem saldo 0 e pago 0:
+    // a regra antiga dizia "não pago" e, vencido, marcava atrasado. Dívida já
+    // paga entrando na receita em risco.
+    expect(deriveTituloStatus(0, "2026-01-01", HOJE)).toBe("pago");
   });
 
-  it("pagamento PARCIAL não vira pago — limitação conhecida do retorno", () => {
-    // O Toth manda valorPago, não status. Meio pagamento segue cobrável.
-    expect(deriveTituloStatus(378, 100, "2026-08-31", HOJE)).toBe("aberto");
-    expect(deriveTituloStatus(378, 100, "2026-08-01", HOJE)).toBe("atrasado");
+  it("saldo negativo (pagamento a maior) também é pago", () => {
+    expect(deriveTituloStatus(-12.5, "2026-01-01", HOJE)).toBe("pago");
+  });
+
+  it("pagamento PARCIAL segue cobrável, pelo que falta", () => {
+    // Original 378, pago 100 → saldo 278. Continua devendo.
+    expect(deriveTituloStatus(278, "2026-08-31", HOJE)).toBe("aberto");
+    expect(deriveTituloStatus(278, "2026-08-01", HOJE)).toBe("atrasado");
+  });
+
+  it("vence hoje ainda não está atrasado", () => {
+    expect(deriveTituloStatus(378, HOJE, HOJE)).toBe("aberto");
   });
 
   it("sem vencimento legível fica aberto, nunca atrasado", () => {
-    expect(deriveTituloStatus(378, 0, null, HOJE)).toBe("aberto");
+    expect(deriveTituloStatus(378, null, HOJE)).toBe("aberto");
   });
 });
 
@@ -274,15 +287,42 @@ describe("mapTothCobrancaToCanonical", () => {
     expect(t.status).toBe("aberto");
   });
 
+  it("`valor` recebe o SALDO, não o valor de face", () => {
+    // `valorDocumento` é o saldo (confirmado pelo fornecedor); o valor de face é
+    // `valorDocumentoOriginal`. Somar face inflaria a receita em risco de todo
+    // título parcialmente pago.
+    const parcial = { ...COBRANCA_REAL, valorDocumento: 128, valorDocumentoOriginal: 378 };
+    const t = mapTothCobrancaToCanonical(parcial, "2026-08-18");
+    expect(t.valor).toBe(128);
+    expect(t.status).toBe("aberto");
+  });
+
+  it("título quitado entra como pago, com valor zero", () => {
+    const quitado = { ...COBRANCA_REAL, valorDocumento: 0, dataVencimento: "01/01/2026" };
+    const t = mapTothCobrancaToCanonical(quitado, "2026-08-18");
+    expect(t.status).toBe("pago");
+    expect(t.valor).toBe(0);
+  });
+
+  it("sem saldo reconhecível, cai para o valor original em vez de zerar", () => {
+    // Zerar sumiria o título da inadimplência sem erro nenhum. Superestimar
+    // aparece na tela e alguém corrige.
+    const { valorDocumento, ...semSaldo } = COBRANCA_REAL;
+    expect(valorDocumento).toBeTruthy();
+    const t = mapTothCobrancaToCanonical(semSaldo, "2026-08-18");
+    expect(t.valor).toBe(378);
+    expect(t.status).toBe("aberto");
+  });
+
   it("não inventa vínculo com pedido — o Toth liga à nota, não ao pedido", () => {
     expect(mapTothCobrancaToCanonical(COBRANCA_REAL, "2026-08-18").orderExternalId).toBeNull();
   });
 
-  it("pagoEm é sempre null: o retorno não traz data de pagamento", () => {
-    const pago = { ...COBRANCA_REAL, valorPago: 378 };
-    const t = mapTothCobrancaToCanonical(pago, "2026-09-30");
-    expect(t.status).toBe("pago");
-    expect(t.pagoEm).toBeNull();
+  it("pagoEm segue null hoje, e preenche sozinho quando o campo chegar", () => {
+    expect(mapTothCobrancaToCanonical(COBRANCA_REAL, "2026-08-18").pagoEm).toBeNull();
+
+    const comData = { ...COBRANCA_REAL, valorDocumento: 0, dataUltimoPagamento: "15/08/2026" };
+    expect(mapTothCobrancaToCanonical(comData, "2026-08-18").pagoEm).toBe("2026-08-15");
   });
 
   it("aceita valor com vírgula decimal, caso a instalação use locale pt-BR", () => {
@@ -297,5 +337,24 @@ describe("mapTothCobrancaToCanonical", () => {
     expect(() => mapTothCobrancaToCanonical({ valorDocumento: 10 }, "2026-08-18")).toThrow(
       TothMappingError,
     );
+  });
+});
+
+describe("formatTothDate", () => {
+  it("converte ISO para o dd/MM/aaaa que /cobrancas exige", () => {
+    expect(formatTothDate("2026-08-18")).toBe("18/08/2026");
+    expect(formatTothDate("2026-12-01")).toBe("01/12/2026");
+  });
+
+  it("recusa entrada malformada em vez de mandar lixo no filtro", () => {
+    // Filtro com string inválida devolve vazio e parece "não há cobranças".
+    expect(formatTothDate("18/08/2026")).toBeNull();
+    expect(formatTothDate("2026-02-31")).toBeNull();
+    expect(formatTothDate("2026-8-1")).toBeNull();
+    expect(formatTothDate("")).toBeNull();
+  });
+
+  it("faz ida e volta com parseTothDate", () => {
+    expect(parseTothDate(formatTothDate("2026-08-31")!)).toBe("2026-08-31");
   });
 });

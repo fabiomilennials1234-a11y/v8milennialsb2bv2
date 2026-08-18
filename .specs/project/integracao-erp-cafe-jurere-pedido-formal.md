@@ -261,17 +261,68 @@ O fornecedor ofereceu construir endpoints sob medida: *"outros endpoint eu posso
 estar solicitando pra fazer, como será especial para vocês pode passar os
 parâmetros e o retorno desejado."* Os pedidos abaixo estão em ordem de valor.
 
-### A.2.1 🔴 `dataPagamento` no retorno de `/cobrancas`
+### A.2.0 Respondido em 18/08 (tarde) — e uma premissa corrigida
 
-O retorno traz `valorPago`, mas **não traz quando foi pago nem um campo de
-situação**. Consequências diretas na tela de Inadimplência:
+**`valorDocumento` é o SALDO, não o valor de face.** O fornecedor confirmou:
+*"apesar do campo ser valorDocumento, esse campo é o saldo"*. O valor de face é
+`valorDocumentoOriginal`.
 
-- pagamento **parcial** não tem como ser distinguido de "não pago";
-- **não é possível medir prazo médio de recebimento** — o indicador que responde
-  "meu cliente paga em dia?" não pode ser calculado.
+Isso invalidou a derivação de situação que estava escrita. A regra anterior
+inferia pagamento de `valorPago >= valorDocumento`; nos exemplos disponíveis
+(nada pago, saldo igual ao original) ela acertava por coincidência. O caso que
+quebrava é o pior: um título **quitado** cujo `valorPago` não venha populado tem
+saldo `0` e pago `0` — a regra dizia "não pago" e, com vencimento no passado,
+marcava **atrasado**. Dívida já paga entrando na receita em risco, ou seja, o
+número que o cliente usa para cobrar quem não deve nada.
 
-Pedido: acrescentar `dataPagamento` (vazio quando em aberto) e, se existir no
-Toth, o campo de situação do título com a lista de valores possíveis.
+Regra corrigida: **saldo zero é pago**. Com isso, pagamento parcial passa a ser
+tratado corretamente — o saldo cai sem zerar, e o título segue cobrável pelo que
+falta.
+
+**Não existe campo de situação** no Toth. Não é necessário: o saldo responde.
+
+**`/cobrancas` aceita `dataInicio` e `dataFim`** (formato `dd/MM/yyyy`).
+Implementado, porém **desligado por padrão** — ver A.2.2.
+
+### A.2.1 🔴 `dataUltimoPagamento` no retorno de `/cobrancas`
+
+O fornecedor já ofereceu ("daria pra colocar a última data de pagamento para não
+duplicar dados"). É o único item que ainda falta para fechar a camada financeira:
+sem ele não há **prazo médio de recebimento**, que é o indicador que responde
+"meu cliente paga em dia?".
+
+O mapeamento já procura o campo — quando ele passar a vir, o valor aparece sem
+mudança de código.
+
+### A.2.1-bis 🔴 Qual campo `dataInicio`/`dataFim` filtram?
+
+Os parâmetros existem, mas não sabemos se a janela recorta por **data de
+emissão** ou por **data de vencimento**. A diferença é material: filtrar por
+emissão numa janela recente **perde títulos antigos ainda em aberto** — exatamente
+os inadimplentes, que são o motivo de a integração existir.
+
+Por isso a janela está implementada mas **não é aplicada por padrão**: aplicar um
+filtro cujo significado não se conhece descarta linhas em silêncio, e título que
+some da inadimplência não gera erro — gera cobrança que não acontece. Assim que a
+resposta vier, vira sincronização incremental.
+
+### A.2.1-ter 🟡 `cnpj` é obrigatório em `/cobrancas`?
+
+Hoje consultamos cliente a cliente, uma requisição por CNPJ. Se o endpoint
+aceitar `cnpj` vazio e devolver o período inteiro, trocamos centenas de chamadas
+por uma — menos carga no servidor de vocês e sincronização muito mais rápida.
+
+### A.2.1-quater — pedido superado ✅
+
+> ~~O retorno traz `valorPago`, mas não traz quando foi pago nem um campo de
+> situação. Pagamento parcial não tem como ser distinguido de "não pago".~~
+>
+> **Superado em 18/08.** A parte de situação caiu: o saldo responde, e não há
+> campo de situação a pedir. A parte de pagamento parcial caiu junto — com saldo,
+> ele é distinguível. Restou só a data, promovida para A.2.1.
+>
+> Fica registrado porque a premissa errada (`valorDocumento` = valor de face) foi
+> nossa, não do fornecedor, e o custo dela era silencioso.
 
 ### A.2.2 🟠 Filtro por data de alteração
 

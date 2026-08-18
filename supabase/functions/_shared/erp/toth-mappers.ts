@@ -104,6 +104,20 @@ export function parseTothDate(value: unknown): string | null {
   return null;
 }
 
+/**
+ * ISO (`aaaa-mm-dd`) → `dd/MM/aaaa`, o formato que `/cobrancas` exige em
+ * `dataInicio` e `dataFim`. Devolve null para entrada que não seja uma data ISO
+ * completa — mandar string malformada num filtro de período é pior que não
+ * filtrar: a resposta volta vazia e parece "não há cobranças".
+ */
+export function formatTothDate(iso: string): string | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) return null;
+  const [, yyyy, mm, dd] = m;
+  if (!isRealDate(+yyyy, +mm, +dd)) return null;
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 function isRealDate(year: number, month: number, day: number): boolean {
   if (month < 1 || month > 12 || day < 1 || day > 31) return false;
   const d = new Date(Date.UTC(year, month - 1, day));
@@ -284,30 +298,52 @@ export function mapTothClienteToCanonical(row: Record<string, unknown>): Canonic
 
 const TITULO_ID_FIELDS = ["id", "codigoTitulo", "idTitulo"];
 const TITULO_CLIENT_FIELDS = ["codigoCliente", "codCliente"];
-const TITULO_VALOR_FIELDS = ["valorDocumento", "valorDocumentoOriginal", "valor"];
-const TITULO_PAGO_FIELDS = ["valorPago", "valorRecebido"];
+/**
+ * 🔴 `valorDocumento` é o **SALDO** — o que falta receber —, não o valor do
+ * título. Confirmado pelo fornecedor em 2026-08-18. O nome do campo engana:
+ * "documento" sugere valor de face, e o valor de face é `valorDocumentoOriginal`.
+ */
+const TITULO_SALDO_FIELDS = ["valorDocumento", "saldo", "valorSaldo"];
+const TITULO_ORIGINAL_FIELDS = ["valorDocumentoOriginal", "valorOriginal"];
 const TITULO_VENCIMENTO_FIELDS = ["dataVencimento", "vencimento"];
+/**
+ * Data do último pagamento. Ainda NÃO vem no retorno — o fornecedor se ofereceu
+ * a acrescentá-la ("daria pra colocar a última data de pagamento"). Os
+ * candidatos ficam prontos para que a chegada do campo seja deploy, não código.
+ */
+const TITULO_PAGAMENTO_FIELDS = [
+  "dataUltimoPagamento",
+  "dataPagamento",
+  "ultimoPagamento",
+  "dtPagamento",
+];
 
 /**
- * Deriva a situação do título.
+ * Deriva a situação do título a partir do SALDO.
  *
- * ⚠️ O Toth **não manda status nem data de pagamento** — manda `valorPago`.
- * Então `pago` é inferido de `valorPago >= valorDocumento`, e `atrasado` de
- * vencimento no passado. Duas consequências que mudam a leitura do número na
- * tela e precisam ser conhecidas por quem olhar a Inadimplência:
- *   - pagamento PARCIAL fica `aberto` (ou `atrasado`), nunca `pago`;
- *   - `pagoEm` é sempre null, então não dá para medir prazo médio de recebimento.
+ * O Toth não tem campo de situação (confirmado pelo fornecedor). O sinal
+ * confiável é o saldo: quitado zera.
  *
- * Fechar isso depende de o fornecedor acrescentar `dataPagamento` ao retorno.
- * Ele se ofereceu a criar endpoint sob medida — é o pedido de maior valor.
+ * 🔴 Por que não usar `valorPago`: a versão anterior desta função inferia
+ * `pago` de `valorPago >= valorDocumento`, sob a premissa — errada — de que
+ * `valorDocumento` era o valor de face. Nos exemplos disponíveis (nada pago,
+ * saldo igual ao original) o resultado saía certo por coincidência. O caso que
+ * quebrava é o pior possível: título **quitado** cujo `valorPago` não venha
+ * populado tem saldo 0 e pago 0, a regra antiga dizia "não pago", e um
+ * vencimento no passado o marcava **atrasado**. Ou seja, dívida já paga entrando
+ * na receita em risco — o número que o cliente usa para cobrar gente que não
+ * deve nada.
+ *
+ * Com saldo, pagamento PARCIAL passa a ser distinguível: o saldo cai mas não
+ * zera, então o título segue `aberto`/`atrasado` pelo valor que realmente falta.
  */
 export function deriveTituloStatus(
-  valor: number,
-  valorPago: number,
+  saldo: number,
   vencimentoIso: string | null,
   todayIso: string,
 ): TituloStatus {
-  if (valorPago > 0 && valorPago >= valor) return "pago";
+  // Saldo zerado (ou negativo, em caso de pagamento a maior) = quitado.
+  if (saldo <= 0) return "pago";
   if (vencimentoIso && vencimentoIso < todayIso) return "atrasado";
   return "aberto";
 }
@@ -317,6 +353,12 @@ export function deriveTituloStatus(
  *
  * `todayIso` entra por parâmetro (em vez de `new Date()` aqui dentro) para que
  * o cálculo de atraso seja determinístico em teste.
+ *
+ * **`valor` recebe o SALDO, não o valor de face.** A pergunta que a Carteira faz
+ * a esta tabela é "quanto ainda falta receber" — somar valor de face inflaria a
+ * receita em risco de todo título parcialmente pago. O valor original não tem
+ * coluna em `titulos_receber`; se um dia for preciso, entra como campo novo, e
+ * não trocando o significado deste.
  */
 export function mapTothCobrancaToCanonical(
   row: Record<string, unknown>,
@@ -329,8 +371,12 @@ export function mapTothCobrancaToCanonical(
     );
   }
 
-  const valor = asNumber(pickField(row, TITULO_VALOR_FIELDS)) ?? 0;
-  const valorPago = asNumber(pickField(row, TITULO_PAGO_FIELDS)) ?? 0;
+  // Sem saldo reconhecível, cai para o valor de face: melhor superestimar o que
+  // falta receber do que zerar e sumir da inadimplência sem ninguém notar.
+  const saldo =
+    asNumber(pickField(row, TITULO_SALDO_FIELDS)) ??
+    asNumber(pickField(row, TITULO_ORIGINAL_FIELDS)) ??
+    0;
   const vencimento = parseTothDate(pickField(row, TITULO_VENCIMENTO_FIELDS));
 
   return {
@@ -341,9 +387,10 @@ export function mapTothCobrancaToCanonical(
     // de pedidos não existe external_id de pedido para casar — fica null, em vez
     // de apontar para um id que pertence a outro domínio.
     orderExternalId: null,
-    valor,
+    valor: saldo,
     vencimento,
-    status: deriveTituloStatus(valor, valorPago, vencimento, todayIso),
-    pagoEm: null,
+    status: deriveTituloStatus(saldo, vencimento, todayIso),
+    // Preenchido assim que o fornecedor acrescentar a data do último pagamento.
+    pagoEm: parseTothDate(pickField(row, TITULO_PAGAMENTO_FIELDS)),
   };
 }

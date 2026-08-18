@@ -511,10 +511,10 @@ export function TothSettings() {
               ))}
             </ul>
             <p className="text-[11px] leading-relaxed border-t border-sky-500/15 pt-2">
-              <span className="text-foreground">Limitação atual do ERP:</span> o retorno de
-              cobranças não informa a data do pagamento, só o valor pago. Por isso um pagamento
-              parcial continua aparecendo como em aberto, e ainda não é possível medir prazo médio
-              de recebimento.
+              <span className="text-foreground">Limitação atual do ERP:</span> as cobranças chegam
+              sem a data do pagamento, então ainda não é possível medir prazo médio de recebimento.
+              O saldo em aberto e o atraso são confiáveis — um pagamento parcial reduz o valor
+              devido em vez de sumir da lista.
             </p>
           </div>
         </motion.div>
