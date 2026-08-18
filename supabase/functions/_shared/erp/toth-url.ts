@@ -28,12 +28,22 @@ export class UnsafeErpUrlError extends Error {
   }
 }
 
+/**
+ * As duas permissões são SEPARADAS de propósito.
+ *
+ * São riscos diferentes e a Café Jurerê precisa exatamente de uma: o ERP dela
+ * está publicado num host público de DDNS **sem TLS**, então `allowHttp` é uma
+ * decisão comercial consciente (a credencial trafega em claro). Já
+ * `allowPrivateHosts` é a guarda de SSRF, e continua fechada — o host ser
+ * público não autoriza ninguém a apontar a integração para `10.x` ou para o
+ * endpoint de metadata. Um flag único faria a concessão de transporte abrir a
+ * porta de rede junto, sem que ninguém tivesse pedido.
+ */
 export interface BaseUrlPolicy {
-  /**
-   * Permite `http://` e hosts privados. SOMENTE para desenvolvimento local
-   * (env TOTH_ALLOW_INSECURE=1). Em produção o default fecha os dois.
-   */
-  allowInsecure?: boolean;
+  /** Aceita `http://`. Por conexão, com aceite explícito do admin. */
+  allowHttp?: boolean;
+  /** Aceita loopback e faixas privadas. SOMENTE desenvolvimento local. */
+  allowPrivateHosts?: boolean;
 }
 
 /** Hostnames que nunca podem ser alvo, mesmo com DNS público. */
@@ -132,9 +142,10 @@ export function assertSafeErpBaseUrl(raw: string, policy: BaseUrlPolicy = {}): U
     );
   }
 
-  if (url.protocol !== "https:" && !(policy.allowInsecure && url.protocol === "http:")) {
+  if (url.protocol !== "https:" && !(policy.allowHttp && url.protocol === "http:")) {
     throw new UnsafeErpUrlError(
-      "O endereço precisa começar com https:// — em http:// a senha e o token trafegam em texto claro.",
+      "O endereço precisa começar com https:// — em http:// a senha e o token trafegam em texto claro. " +
+        "Se o ERP ainda não tem certificado, marque explicitamente a conexão como sem criptografia.",
     );
   }
 
@@ -145,7 +156,7 @@ export function assertSafeErpBaseUrl(raw: string, policy: BaseUrlPolicy = {}): U
 
   const host = url.hostname.toLowerCase();
 
-  if (!policy.allowInsecure) {
+  if (!policy.allowPrivateHosts) {
     if (BLOCKED_HOSTNAMES.has(host) || BLOCKED_SUFFIXES.some((s) => host.endsWith(s))) {
       throw new UnsafeErpUrlError(
         `"${url.hostname}" só existe dentro da rede do ERP. Informe o endereço público publicado para a integração.`,

@@ -32,7 +32,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
 import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
-import { loadTothCredentials } from "../_shared/erp/toth-credentials.ts";
+import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
 import { extractRows, mapTothClienteToCanonical, TothMappingError } from "../_shared/erp/toth-mappers.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
@@ -41,7 +41,6 @@ import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/ups
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
-const ALLOW_INSECURE = Deno.env.get("TOTH_ALLOW_INSECURE") === "1";
 
 const PAGE_SIZE = 100;
 const MAX_PAGES_PER_RUN = 20;
@@ -109,7 +108,7 @@ Deno.serve(
       return json({ error: "Credenciais do ERP indisponíveis. Reconecte a integração." }, cors);
     }
 
-    const client = new TothClient(creds, { urlPolicy: { allowInsecure: ALLOW_INSECURE } });
+    const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
     const store = supabaseClientStore(admin, TOTH_PROVIDER_ID);
 
     const seenIds = new Set<string>();

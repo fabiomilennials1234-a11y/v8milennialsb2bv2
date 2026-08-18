@@ -11,9 +11,26 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { encryptSecret, decryptSecret } from "./crypto.ts";
 import type { TothTokenTransport } from "./toth-client.ts";
+import type { BaseUrlPolicy } from "./toth-url.ts";
 
 export const TOTH_ENCRYPTION_KEY_HEX = Deno.env.get("TOTH_ENCRYPTION_KEY") ?? "";
 export const TOTH_ENCRYPTION_KEY_ID = "v1";
+
+/**
+ * Monta a política de URL a partir do aceite gravado na conexão.
+ *
+ * A permissão de `http://` vem do **banco** (decisão por organização, com aceite
+ * do admin); a de host privado vem do **ambiente**, e só existe em máquina de
+ * desenvolvimento. As duas nunca se misturam: uma org que aceitou tráfego em
+ * claro não ganha, de brinde, o direito de apontar a integração para a rede
+ * interna do provedor.
+ */
+export function tothUrlPolicy(conn: { allowInsecureTransport?: boolean }): BaseUrlPolicy {
+  return {
+    allowHttp: conn.allowInsecureTransport === true,
+    allowPrivateHosts: Deno.env.get("TOTH_ALLOW_PRIVATE_HOSTS") === "1",
+  };
+}
 
 export interface TothStoredCredentials {
   connectionId: string;
@@ -21,6 +38,8 @@ export interface TothStoredCredentials {
   user: string;
   password: string;
   tokenTransport: TothTokenTransport;
+  /** Aceite explícito de http:// gravado na conexão pelo admin. */
+  allowInsecureTransport: boolean;
 }
 
 /** Cifra e persiste usuário + senha do Toth contra a conexão da org. */
@@ -59,7 +78,7 @@ export async function loadTothCredentials(
 ): Promise<TothStoredCredentials | null> {
   const { data: conn, error: connErr } = await admin
     .from("toth_connections")
-    .select("id, base_url, token_transport")
+    .select("id, base_url, token_transport, allow_insecure_transport")
     .eq("organization_id", organizationId)
     .eq("status", "connected")
     .maybeSingle();
@@ -85,6 +104,7 @@ export async function loadTothCredentials(
       user,
       password,
       tokenTransport: (conn.token_transport as TothTokenTransport) ?? "query",
+      allowInsecureTransport: conn.allow_insecure_transport === true,
     };
   } catch {
     return null;

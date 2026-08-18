@@ -224,6 +224,100 @@ Registrado para evitar mal-entendido sobre o que **não** estamos pedindo agora:
 
 **Divisão de responsabilidade:** os itens 1 e 2 (rede e exposição) são da **GON Informática**, que responde pela infraestrutura da Café Jurerê. Os demais são do fornecedor do ERP Toth. Os dois caminhos correm em paralelo — nenhum depende do outro para começar.
 
+---
+
+# Adendo — resposta do fornecedor, 18/08/2026
+
+O fornecedor respondeu e entregou a maior parte do que foi pedido. Esta seção
+registra o que ficou resolvido, o que mudou de entendimento e o que segue aberto.
+**Em conflito, vale este adendo, não as seções acima.**
+
+## A.1 Resolvido
+
+| # | Item | Como ficou |
+|---|---|---|
+| 1 | Endereço público | ✅ `http://cafejurere.ddns.net:8080/toth/services` |
+| 3 | Contrato do login | ✅ `{"login":"…","user":"…","token":"…"}` |
+| 4 | Estrutura de `/clientes` | ✅ Exemplo real recebido |
+| 5 | Identificador imutável | ✅ `codigoCliente`; CNPJ em **`numeroInscricao`** |
+| 9 | Títulos a receber | ✅ `POST /cobrancas` criado |
+
+Três coisas do retorno real que corrigiram suposições nossas:
+
+- **O CNPJ chama `numeroInscricao`.** Não existe campo `cnpj` no cadastro.
+- **Contato vem em lista, não em campo.** `emails[]` e `telefones[]`, com o
+  telefone partido em `prefixoArea` + `numero` e um marcador `isWhatsApp`.
+- **A mesma API usa dois formatos de data.** `aaaa-mm-dd` no cadastro,
+  `dd/mm/aaaa` no financeiro.
+
+E um comportamento que muda o desenho do cliente HTTP: **a expiração do token é
+sinalizada no corpo** (`[{"error":"Acesso nao autorizado! "}]`), com status HTTP
+não especificado. O token, nas palavras do fornecedor, "não tem tempo definido
+(aleatório), mas expira". Nosso client trata o corpo como fonte da verdade.
+
+## A.2 Aberto — e agora com uma via para resolver
+
+O fornecedor ofereceu construir endpoints sob medida: *"outros endpoint eu posso
+estar solicitando pra fazer, como será especial para vocês pode passar os
+parâmetros e o retorno desejado."* Os pedidos abaixo estão em ordem de valor.
+
+### A.2.1 🔴 `dataPagamento` no retorno de `/cobrancas`
+
+O retorno traz `valorPago`, mas **não traz quando foi pago nem um campo de
+situação**. Consequências diretas na tela de Inadimplência:
+
+- pagamento **parcial** não tem como ser distinguido de "não pago";
+- **não é possível medir prazo médio de recebimento** — o indicador que responde
+  "meu cliente paga em dia?" não pode ser calculado.
+
+Pedido: acrescentar `dataPagamento` (vazio quando em aberto) e, se existir no
+Toth, o campo de situação do título com a lista de valores possíveis.
+
+### A.2.2 🟠 Filtro por data de alteração
+
+Um parâmetro `alteradoApos=aaaa-mm-dd` em `/clientes` e `/cobrancas`. Sem ele,
+toda sincronização relê a base inteira. Com ele, lê dezenas de registros em vez
+de milhares — menos carga no servidor de vocês, e sincronização mais frequente.
+
+### A.2.3 🟠 Pedidos de venda
+
+Cabeçalho (número, data, cliente, valor total, situação) e itens (produto,
+quantidade, valor unitário). É o que fecha os três momentos do dinheiro:
+`/clientes` dá o **quem**, `/cobrancas` dá o **recebido**, e falta o **vendido**.
+
+### A.2.4 🟡 Paginação em `/clientes`
+
+Confirmar se o endpoint aceita paginação e qual o volume total da base. Hoje
+assumimos varredura completa com parada por página repetida.
+
+### A.2.5 🟡 Token em cabeçalho
+
+Segue valendo o pedido da seção 3.3: `Authorization: Bearer` ou `X-Auth-Token`,
+em vez de `?token=`. Na query, a credencial fica gravada em log de proxy e no
+cabeçalho `Referer`.
+
+## A.3 🔴 O que NÃO foi resolvido: HTTPS
+
+O endereço entregue é `http://` puro. Usuário, senha e token trafegam **em texto
+claro pela internet aberta**, e o token vai na query string, que é o lugar mais
+registrado de uma requisição. Não é uma questão de conformidade abstrata: quem
+estiver no caminho de rede lê a senha do ERP e passa a conseguir tudo que ela
+consegue.
+
+Isso é assunto da **GON Informática**, não do fornecedor do ERP, e continua sendo
+o único item verdadeiramente bloqueante do ponto de vista de segurança. Duas
+saídas, ambas de baixo custo:
+
+- **Cloudflare Tunnel** na frente do serviço — entrega HTTPS válido, dispensa
+  abrir porta no firewall e permite exigir token de serviço na borda;
+- **proxy reverso com Let's Encrypt** no mesmo servidor, publicando apenas o
+  path `/toth/services`.
+
+Enquanto isso não existe, a integração do Torque só aceita esse endereço com um
+**aceite explícito de tráfego sem criptografia**, registrado por organização —
+não é o comportamento padrão do produto, e a tela de configuração exibe o aviso
+de forma permanente, não só no momento da configuração.
+
 ## 9. Próximo passo
 
 Os itens 1 a 5 são suficientes para iniciarmos o desenvolvimento da primeira fase (sincronização de clientes). Os demais podem chegar em paralelo, sem travar o início.

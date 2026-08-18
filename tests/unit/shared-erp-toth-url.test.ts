@@ -85,10 +85,39 @@ describe("assertSafeErpBaseUrl — normalização", () => {
   });
 });
 
-describe("assertSafeErpBaseUrl — escape de desenvolvimento", () => {
-  it("allowInsecure libera http e host local", () => {
+describe("assertSafeErpBaseUrl — as duas permissões são independentes", () => {
+  // É o caso REAL da Café Jurerê: host público de DDNS, sem TLS. Ceder o
+  // transporte não pode ceder a rede junto.
+  it("allowHttp aceita http em host público", () => {
+    const url = assertSafeErpBaseUrl("http://cafejurere.ddns.net:8080/toth/services", {
+      allowHttp: true,
+    });
+    expect(url.toString()).toBe("http://cafejurere.ddns.net:8080/toth/services");
+  });
+
+  it("allowHttp NÃO abre host interno — a guarda de SSRF continua fechada", () => {
+    const insecure = { allowHttp: true };
+    expect(() => assertSafeErpBaseUrl("http://169.254.169.254/", insecure)).toThrow(
+      UnsafeErpUrlError,
+    );
+    expect(() => assertSafeErpBaseUrl("http://10.0.0.5/toth", insecure)).toThrow(
+      UnsafeErpUrlError,
+    );
+    expect(() => assertSafeErpBaseUrl("http://localhost:8080/toth", insecure)).toThrow(
+      UnsafeErpUrlError,
+    );
+  });
+
+  it("allowPrivateHosts sozinho NÃO libera http", () => {
+    expect(() =>
+      assertSafeErpBaseUrl("http://localhost:8080/toth", { allowPrivateHosts: true }),
+    ).toThrow(/https:\/\//);
+  });
+
+  it("as duas juntas cobrem o desenvolvimento local", () => {
     const url = assertSafeErpBaseUrl("http://localhost:8080/toth/services", {
-      allowInsecure: true,
+      allowHttp: true,
+      allowPrivateHosts: true,
     });
     expect(url.toString()).toBe("http://localhost:8080/toth/services");
   });
