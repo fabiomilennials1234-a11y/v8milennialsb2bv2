@@ -89,12 +89,27 @@ uma falha de registro no WhatsApp fica órfã para sempre.
       comparar a org depois — é o que faz forja virar `channel_org_mismatch`
       visível. O fallback SEM hint deve seguir só para Instagram: para WhatsApp,
       exigir o hint é o recorte seguro.
-- [ ] **Peça 5 — cron repair** varre as duas tabelas. ⚠️ ÚNICA PENDENTE.
-      `notificame-subscription-repair` só varre `messaging_channels`. Sem ela, um
-      registro de subscription de WhatsApp que falhe fica órfão: nasce
-      `pending`/`failed` na fila (a migration criou o índice) e ninguém consome.
-      O caminho feliz FUNCIONA sem ela — o finish registra na hora do vínculo.
-      É a rede de segurança, não o trilho.
+- [x] **Peça 5 — cron repair** varre as duas tabelas. Duas leituras (não JOIN:
+      as colunas diferem, `whatsapp_instances` guarda canal e tipo no jsonb), com
+      `BATCH_LIMIT` POR TABELA — limite global compartilhado deixaria uma fila
+      social cheia sem recebimento no WhatsApp. O carimbo escreve em
+      `channel.source_table`: carimbar na tabela errada silenciaria a fila para
+      sempre (a linha sai do predicado sem ter sido registrada).
+
+## AS 5 PEÇAS ESTÃO ESCRITAS — o que falta é EXERCITAR
+
+Nada disso rodou ponta a ponta. Para valer:
+
+1. aplicar a migration `20270818150000`;
+2. deployar `notificame-channel-finish`, `notificame-webhook` e
+   `notificame-subscription-repair`;
+3. carimbar a instância da Chique como `pending` para o cron pegá-la (ela foi
+   vinculada ANTES desta fatia e está `not_applicable`):
+   `UPDATE whatsapp_instances SET inbound_subscription_status='pending'
+    WHERE provider='notificame' AND id='7312692e-b9b4-4f90-aba3-09cff992bbfc';`
+4. esperar o cron (5 min) e conferir `inbound_subscription_status='active'`;
+5. mandar uma mensagem PARA o número deles e ver se aparece em
+   `channel_messages` com `channel='whatsapp'` e `instance_id` preenchido.
 
 ⚠️ O chamador em `notificame-webhook` está com
 `target: { kind: "instagram", … }` FIXO e um comentário apontando para a peça 2.
