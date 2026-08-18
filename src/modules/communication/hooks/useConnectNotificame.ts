@@ -305,7 +305,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
 
 /** Desfecho normalizado do `mode:"connect"` — o único que provisiona. */
 type ConnectOutcome =
-  | { ok: true; startUrl: string; sessionId: string | null }
+  | { ok: true; startUrl: string; sessionId: string | null; adoptChannelId: string | null }
   | { ok: false; code: string | null };
 
 export interface UseConnectNotificameResult {
@@ -672,7 +672,13 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
       .then(async ({ data, error }): Promise<ConnectOutcome> => {
         if (error) return { ok: false, code: (await readFnError(error)).code ?? null };
         const result = data as
-          | { configured?: boolean; start_url?: unknown; session_id?: unknown; code?: unknown }
+          | {
+            configured?: boolean;
+            start_url?: unknown;
+            session_id?: unknown;
+            code?: unknown;
+            adopt_channel_id?: unknown;
+          }
           | null;
         if (result?.configured !== true || typeof result.start_url !== "string") {
           return { ok: false, code: typeof result?.code === "string" ? result.code : null };
@@ -681,6 +687,9 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
           ok: true,
           startUrl: result.start_url,
           sessionId: typeof result.session_id === "string" ? result.session_id : null,
+          adoptChannelId: typeof result.adopt_channel_id === "string"
+            ? result.adopt_channel_id
+            : null,
         };
       })
       .catch((): ConnectOutcome => ({ ok: false, code: null }));
@@ -700,6 +709,31 @@ export function useConnectNotificame({ enabled }: { enabled: boolean }): UseConn
         if (needsProvisioning) {
           settleWith(messageForCode(r.code ?? undefined, configReasonFor(channelType), channelLabel));
         }
+        return;
+      }
+
+      // ── ADOÇÃO: o canal JÁ existe na subconta ────────────────────────────
+      // Não navegamos o popup, e não é otimização: a subconta com canal já
+      // conectado está com a cota gasta, então o Seamless responderia
+      // `channel limit exceeded` e a janela morreria sem emitir `postMessage` —
+      // o único gatilho do finish. O usuário via "Conexão cancelada" com o canal
+      // certo conectado do outro lado, e a mensagem do fornecedor o mandava
+      // cobrar um suporte que não tinha culpa.
+      //
+      // O servidor já tirou este canal (e só ele) da foto, então o finish o
+      // enxerga como candidato único e vincula pelo caminho normal.
+      if (r.adoptChannelId) {
+        settledRef.current = true;
+        runCleanup();
+        try {
+          popup.close();
+        } catch {
+          // Já fechado ou cross-origin — irrelevante para o desfecho.
+        }
+        void finish(channelType).finally(() => {
+          setIsConnecting(false);
+          setIsProvisioning(false);
+        });
         return;
       }
 
