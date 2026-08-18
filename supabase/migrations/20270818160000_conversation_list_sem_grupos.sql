@@ -206,6 +206,8 @@ BEGIN
   WHERE conv.deleted_at IS NULL
   ORDER BY p.last_message_time DESC;
 END;
-$function$
+$function$;
 
-
+-- Terminador explícito: `pg_get_functiondef` não emite `;`. Sem ele o
+-- arquivo funciona sozinho e QUEBRA quando concatenado com o próximo — foi
+-- assim que o ensaio transacional contra prod falhou na primeira tentativa.
