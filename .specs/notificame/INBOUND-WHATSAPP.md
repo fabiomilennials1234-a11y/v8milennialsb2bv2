@@ -73,9 +73,15 @@ uma falha de registro no WhatsApp fica órfã para sempre.
       Instagram (`messaging_channel_id`) de WhatsApp (`instance_id`);
       `phone_number` preenchido só no WhatsApp. 6 testes novos, 363 no conjunto
       tocado, ratchet 0.
-- [ ] **Peça 4 — migration** `inbound_subscription_*` em `whatsapp_instances`.
-- [ ] **Peça 3 — finish** registra subscription para WhatsApp (depende da 4).
-- [ ] **Peça 2 — webhook** resolve canal em `whatsapp_instances`.
+- [x] **Peça 4 — migration** `inbound_subscription_*` em `whatsapp_instances`
+      (`20270818150000`). Default `not_applicable` (diverge da irmã de propósito:
+      a tabela é majoritariamente Uazapi, que não tem subscription). Ensaiada
+      contra prod com ROLLBACK: 140 instâncias, 140 fora da fila. **NÃO APLICADA.**
+- [x] **Peça 3 — finish** registra subscription para WhatsApp. O gate virou
+      `instagram || whatsapp`; `subscriptionTable` segue o canal; e o `channelKind`
+      vai REAL para `registerInboundSubscription` (chumbar "instagram" faria o
+      degrau de fallback assinar a palavra errada — aceito calado, não assina nada).
+- [x] **Peça 2 — webhook** resolve canal em `whatsapp_instances`.
       Ponto de entrada: `notificame-webhook/index.ts` ~1108, no ramo `channelHint`.
       Antes de parkar `unresolved_channel`, procurar
       `whatsapp_instances` por `(provider='notificame',
@@ -83,7 +89,12 @@ uma falha de registro no WhatsApp fica órfã para sempre.
       comparar a org depois — é o que faz forja virar `channel_org_mismatch`
       visível. O fallback SEM hint deve seguir só para Instagram: para WhatsApp,
       exigir o hint é o recorte seguro.
-- [ ] **Peça 5 — cron repair** varre as duas tabelas.
+- [ ] **Peça 5 — cron repair** varre as duas tabelas. ⚠️ ÚNICA PENDENTE.
+      `notificame-subscription-repair` só varre `messaging_channels`. Sem ela, um
+      registro de subscription de WhatsApp que falhe fica órfão: nasce
+      `pending`/`failed` na fila (a migration criou o índice) e ninguém consome.
+      O caminho feliz FUNCIONA sem ela — o finish registra na hora do vínculo.
+      É a rede de segurança, não o trilho.
 
 ⚠️ O chamador em `notificame-webhook` está com
 `target: { kind: "instagram", … }` FIXO e um comentário apontando para a peça 2.
@@ -98,3 +109,31 @@ mensagem de WhatsApp chega, e nenhuma de Instagram muda.
   Meta vem 200 com erro dentro.
 - Teste que copia o predicado em vez de importá-lo **passa verde com o bug vivo**.
   Aconteceu no #1640. Importar a função real e provar que fica vermelha antes.
+
+
+## Levantamento da doc (2026-08-18) — o que MUDA no plano
+
+Referência completa em `docs/notificame-whatsapp-oficial.md`, conferida em duas
+fontes. Três achados encurtam a fatia:
+
+1. **A subscription é a MESMA rota do Instagram**: `POST /v1/subscriptions/` com
+   `{criteria: {channel: "<TOKEN do canal>"}, webhook: {url}}`. Não há rota
+   separada por tipo de canal ⇒ `registerInboundSubscription` serve como está.
+   ⚠️ `criteria.channel` é o **token** do canal, nunca a palavra `"whatsapp"` —
+   assinar a palavra é aceito calado e não assina nada.
+
+2. **O payload de entrada é o MESMO formato**: `{from, to, contents, id,
+   direction:"IN", visitor}`, com `contents` serializado como string e
+   `visitor.name` = @ / `visitor.firstName` = nome humano. Ou seja: os pickers de
+   `notificame-inbound.ts` (`pickContent`, `pickContact`, `pickTimestampIso`)
+   valem para os dois canais **sem alteração**. Só o endereçamento da linha muda,
+   e isso a peça 1 já resolveu.
+
+3. **O fornecedor não tem realtime** (nem websocket nem SSE). O tempo real é
+   nosso: webhook → `channel_messages` → Supabase Realtime → front. Nada a fazer
+   nesta fatia.
+
+Consequência prática: a peça 3 vira **remover o gate `if (channelKind ===
+"instagram")`** e carimbar o estado nas colunas novas da tabela certa
+(`whatsapp_instances` para WhatsApp, `messaging_channels` para Instagram). Não há
+contrato novo a descobrir.

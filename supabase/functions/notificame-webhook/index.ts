@@ -1086,6 +1086,12 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     organizationId: string;
     channelType: string;
     handle: string | null;
+    /**
+     * De qual TABELA a linha veio, e é o que decide o endereçamento da mensagem:
+     * canal social é `messaging_channels` → `messaging_channel_id`; WhatsApp
+     * oficial é `whatsapp_instances` → `instance_id`.
+     */
+    kind: "instagram" | "whatsapp";
   }
 
   const readChannelRow = (raw: Record<string, unknown>): ResolvedChannel => ({
@@ -1093,7 +1099,44 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     organizationId: String(raw.organization_id),
     channelType: String(raw.channel_type),
     handle: (raw.handle as string | null) ?? null,
+    kind: "instagram",
   });
+
+  /**
+   * O canal de WhatsApp oficial, procurado por `provider_config->>'channel_id'`.
+   *
+   * Busca GLOBAL pelo mesmo motivo da irmã em `messaging_channels`: encontrar a
+   * linha e COMPARAR a org com a do path é o que transforma uma forja em
+   * `channel_org_mismatch` VISÍVEL. Filtrar por org aqui devolveria "não achei" e
+   * a forja viraria indistinguível de um canal desconhecido.
+   *
+   * `channel_type` sai de `provider_config`, onde o `channel-finish` gravou o que
+   * o FORNECEDOR declarou — tipicamente `whatsapp_business_account`. O gate 11b
+   * normaliza antes de comparar; comparar cru recusaria o canal oficial, que foi
+   * exatamente o defeito do PR #1640.
+   */
+  const findWhatsAppInstanceByChannelId = async (
+    channelIdHint: string,
+  ): Promise<ResolvedChannel | null> => {
+    const res = await admin
+      .from("whatsapp_instances")
+      .select("id, organization_id, provider_config")
+      .eq("provider", "notificame")
+      .eq("provider_config->>channel_id", channelIdHint)
+      .maybeSingle();
+
+    if (res.error || !res.data) return null;
+
+    const row = res.data as Record<string, unknown>;
+    const cfg = (row.provider_config ?? {}) as Record<string, unknown>;
+    return {
+      id: String(row.id),
+      organizationId: String(row.organization_id),
+      channelType: typeof cfg.channel_type === "string" ? cfg.channel_type : "whatsapp",
+      handle: null,
+      kind: "whatsapp",
+    };
+  };
 
   let channel: ResolvedChannel | null = null;
 
@@ -1111,7 +1154,17 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       .eq("external_channel_id", channelHint)
       .maybeSingle();
 
-    if (res.error || !res.data) {
+    // Não é canal social? Pode ser WhatsApp oficial, que mora em outra tabela.
+    // A ordem é social→whatsapp e não o contrário porque o volume é social; o
+    // desfecho não depende dela (um `channel_id` tem um dono só, garantido pelo
+    // UNIQUE global e pelo índice único parcial).
+    const comoWhatsApp = (res.error || !res.data)
+      ? await findWhatsAppInstanceByChannelId(channelHint)
+      : null;
+
+    if (comoWhatsApp) {
+      channel = comoWhatsApp;
+    } else if (res.error || !res.data) {
       // O remetente NOMEOU um canal que não conhecemos. Cair no canal único da org
       // aqui seria adivinhar por cima de uma declaração explícita — e é justamente
       // o caso em que o picker pode estar lendo o campo errado. Parka e ensina.
@@ -1281,14 +1334,20 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
   const declaredWord = pickChannelWord(payload);
   const declaredType = normalizeSeamlessType(declaredWord);
 
-  if (channel.channelType !== "instagram" || (declaredType && declaredType !== channel.channelType)) {
+  // ⚠️ NORMALIZADO dos dois lados. O `channel_type` do WhatsApp oficial vem do
+  // fornecedor como `whatsapp_business_account`; comparar cru recusaria o canal
+  // que acabamos de vincular — o defeito do PR #1640, terceira ocorrência do
+  // mesmo padrão nesta fatia.
+  const nossoType = normalizeSeamlessType(channel.channelType) ?? channel.channelType;
+
+  if (nossoType !== channel.kind || (declaredType && declaredType !== nossoType)) {
     const stored = await park({
       reason: "channel_type_mismatch",
       payload,
       organizationId,
       messagingChannelId: channel.id,
       eventType,
-      error: `nosso=${channel.channelType} declarado=${declaredType ?? "null"}`,
+      error: `nosso=${channel.channelType} (${nossoType}) declarado=${declaredType ?? "null"}`,
     });
     return await parkResponse(stored, "channel_type_mismatch");
   }
@@ -1411,9 +1470,9 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
 
     const row = buildInboundChannelMessageRow({
       organizationId,
-      // Instagram por ora: a resolução de canal de WhatsApp entra na peça 2
-      // desta fatia. O `target` já é o contrato bi-canal.
-      target: { kind: "instagram", messagingChannelId: channel!.id },
+      target: channel!.kind === "whatsapp"
+        ? { kind: "whatsapp", instanceId: channel!.id }
+        : { kind: "instagram", messagingChannelId: channel!.id },
       externalId,
       contact: avatarEspelhado ? { ...contact, avatarUrl: avatarEspelhado } : contact,
       contactExternalId: contact.externalId,
