@@ -52,9 +52,59 @@ describe("evaluateSeatQuota", () => {
     expect(d.allowed).toBe(true);
   });
 
-  it("master bypassa sem consultar quota", () => {
+  // 🔴 Regressão DAFINI-ORFA (Bolivar, 17/08/2026). Antes existia
+  // `if (isMaster) return { allowed: true }` no topo, onde `isMaster` é quem
+  // CHAMA. O trigger trg_enforce_seat_limit isenta outra coisa —
+  // `is_master_user(NEW.user_id)`, quem NASCE. Master criando pessoa comum em
+  // org no teto passava pelo pre-check, criava auth.users, e o trigger
+  // derrubava o INSERT em team_members: usuário órfão.
+  it("master NÃO bypassa a quota: org no teto devolve 403 igual a qualquer um", () => {
+    const d = evaluateSeatQuota({
+      isMaster: true,
+      quota: quota({ current_usage: 5, can_add: false, remaining: 0 }),
+      quotaError: null,
+    });
+    expect(d.allowed).toBe(false);
+    expect(d.status).toBe(403);
+  });
+
+  it("403 para master aponta o painel de quotas, não uma coluna que não existe", () => {
+    const d = evaluateSeatQuota({
+      isMaster: true,
+      quota: quota({ can_add: false }),
+      quotaError: null,
+    });
+    expect(d.message).toMatch(/painel de quotas/i);
+    // `max_users` é VALOR de resource_key e `effective_limit` é GENERATED
+    // ALWAYS: citar "org_quotas.<x>" manda o operador escrever onde não dá.
+    expect(d.message).not.toMatch(/org_quotas\./);
+    // Não-master não recebe instrução de painel interno.
+    const comum = evaluateSeatQuota({
+      isMaster: false,
+      quota: quota({ can_add: false }),
+      quotaError: null,
+    });
+    expect(comum.message).not.toMatch(/painel de quotas/i);
+  });
+
+  it("master com vaga continua permitido", () => {
+    const d = evaluateSeatQuota({ isMaster: true, quota: quota(), quotaError: null });
+    expect(d.allowed).toBe(true);
+  });
+
+  it("master com quota ausente continua permitido (backstop no DB decide)", () => {
     const d = evaluateSeatQuota({ isMaster: true, quota: null, quotaError: null });
     expect(d.allowed).toBe(true);
+  });
+
+  it("erro na RPC nega até para master — não cria conta às cegas", () => {
+    const d = evaluateSeatQuota({
+      isMaster: true,
+      quota: null,
+      quotaError: { message: "connection refused" },
+    });
+    expect(d.allowed).toBe(false);
+    expect(d.status).toBe(500);
   });
 
   it("erro na RPC → 500 explícito (não no-op)", () => {

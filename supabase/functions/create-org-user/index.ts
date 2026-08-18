@@ -187,8 +187,11 @@ serve(withErrorBoundary('create-org-user', async (req) => {
 
     // ----- Seat check via RPC canônica (org_resolve_quota) -----
     // O bloco antigo lia subscription_plans.limits.users — key inexistente
-    // (correta: max_users) → no-op silencioso. Master cria à vontade;
-    // trigger trg_enforce_seat_limit continua como backstop no DB.
+    // (correta: max_users) → no-op silencioso.
+    // ⚠️ O pre-check vale PARA TODOS, master inclusive: o trigger
+    // trg_enforce_seat_limit isenta `is_master_user(NEW.user_id)` (quem nasce),
+    // não quem chama. Isentar o chamador aqui criava usuário órfão — ver o
+    // cabeçalho de _shared/seat-quota.ts.
     const { data: seatQuota, error: seatQuotaErr } = await supabase.rpc("org_resolve_quota", {
       p_org_id: organizationId,
       p_resource_key: "max_users",
@@ -239,7 +242,10 @@ serve(withErrorBoundary('create-org-user', async (req) => {
         corsHeaders
       );
     }
-    await supabase.from("profiles").upsert(
+    // `upsert` RESOLVE com { error } em vez de lançar. Não muda o fluxo (o
+    // INSERT em team_members abaixo é o que define sucesso), mas o erro entra
+    // na telemetria: sem isso, um profile ausente vira mistério em produção.
+    const { error: profileErr } = await supabase.from("profiles").upsert(
       { id: newUserId, full_name: name || email.split("@")[0] },
       { onConflict: "id" }
     );
@@ -258,9 +264,46 @@ serve(withErrorBoundary('create-org-user', async (req) => {
       ...(jobTitle ? { job_title: jobTitle } : {}),
     });
     if (tmErr) {
-      await supabase.auth.admin.deleteUser(newUserId);
+      // ROLLBACK — `deleteUser` NÃO lança: resolve com { data, error }, igual ao
+      // resto do supabase-js. Descartar esse retorno era o que transformava uma
+      // falha de vínculo em usuário ÓRFÃO invisível (auth.users + profiles sem
+      // team_members). `profiles` cai junto: profiles_id_fkey é ON DELETE CASCADE.
+      // O jeito certo já existia no repo — remove-org-member/index.ts.
+      const { error: rollbackErr } = await supabase.auth.admin.deleteUser(newUserId);
+      const orphaned = !!rollbackErr;
+
+      // Este ramo não chamava logRuntime — nem success, nem error. A falha ficava
+      // sem NENHUM rastro e só aparecia varrendo auth.users sem team_members
+      // (foi assim que a Dafini/Bolivar apareceu, um dia depois).
+      await logRuntime({
+        organizationId,
+        module: "auth",
+        action: "create_user",
+        status: "error",
+        entityType: "user",
+        entityId: newUserId,
+        triggeredBy: authCtx.userId,
+        errorMessage: `team_members insert falhou: ${tmErr.message}`,
+        payloadSnapshot: {
+          stage: "team_members_insert",
+          role: roleForInsert,
+          rollback: orphaned ? "failed" : "ok",
+          rollback_error: rollbackErr?.message ?? null,
+          orphaned_user_id: orphaned ? newUserId : null,
+          profile_upsert_error: profileErr?.message ?? null,
+        },
+      });
+
       return jsonResponse(
-        { success: false, error: "Insert failed", message: tmErr.message },
+        {
+          success: false,
+          error: "Insert failed",
+          message: orphaned
+            ? "Não foi possível vincular o usuário à organização e a conta de login criada não pôde ser desfeita. A conta ficou sem vínculo — remova-a manualmente antes de tentar de novo."
+            : tmErr.message,
+          detail: tmErr.message,
+          ...(orphaned ? { orphaned_user_id: newUserId } : {}),
+        },
         500,
         corsHeaders
       );
@@ -275,6 +318,11 @@ serve(withErrorBoundary('create-org-user', async (req) => {
       entityType: "user",
       entityId: newUserId,
       triggeredBy: authCtx.userId,
+      // Vínculo criado, mas o profile pode ter falhado antes: o usuário entra
+      // sem nome. Sucesso com ressalva registrada é melhor que sucesso mudo.
+      ...(profileErr
+        ? { payloadSnapshot: { profile_upsert_error: profileErr.message } }
+        : {}),
     });
 
     return jsonResponse(
