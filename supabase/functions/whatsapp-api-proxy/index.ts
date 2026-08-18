@@ -27,6 +27,10 @@ import {
 } from "../_shared/whatsapp-client.ts";
 import { isActiveGestorForOrg } from "../_shared/gestor-auth.ts";
 import {
+  extractChatTarget,
+  isChatTargetAllowed,
+} from "../_shared/chat-owner-guard.ts";
+import {
   nullifyInBatches,
   type BatchNullifyIO,
 } from "../_shared/whatsapp-instance-teardown.ts";
@@ -497,6 +501,54 @@ Deno.serve(
           },
         });
         return jsonResponse(403, { error: "Forbidden" }, corsHeaders);
+      }
+
+      // -----------------------------------------------------------------------
+      // 4.7 Gate de escrita por responsável (#1635)
+      //
+      // A checagem acima é de ORG. Esta é de RESPONSÁVEL: com a política
+      // chat_restrict_to_owner ligada, o membro não-admin só age sobre a
+      // conversa dos leads de que é responsável.
+      //
+      // Fica AQUI, num choke único depois da fronteira de org e antes do
+      // switch, e não replicado ação a ação — as 13 ações com alvo estão
+      // enumeradas em _shared/chat-owner-guard.ts. O veredito é do banco:
+      // normalização de telefone e leitura do message_id moram junto do
+      // predicado.
+      //
+      // Master já é liberado pelo próprio predicado; a chamada usa o client do
+      // USUÁRIO porque can_see_chat_scope depende de auth.uid().
+      // -----------------------------------------------------------------------
+      {
+        const target = extractChatTarget(action, payload);
+        if (target) {
+          const allowed = await isChatTargetAllowed(
+            supabaseUser,
+            callerOrgId,
+            instanceId,
+            target,
+          );
+          if (!allowed) {
+            await logRuntime({
+              organizationId: callerOrgId,
+              module: "whatsapp",
+              action: "chat_owner_denied",
+              status: "error",
+              payloadSnapshot: {
+                user_id: user.id,
+                action,
+                instance_id: instanceId,
+                lead_id: target.leadId,
+                message_id: target.messageId,
+              },
+            });
+            return jsonResponse(
+              403,
+              { error: "Forbidden", reason: "chat_owner" },
+              corsHeaders,
+            );
+          }
+        }
       }
 
       // -----------------------------------------------------------------------

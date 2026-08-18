@@ -56,6 +56,61 @@ const MSG_PREFIX = 'isolation-test-';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
+// ---------------------------------------------------------------------------
+// Gate de escrita do proxy (#1635)
+//
+// Vive NESTE arquivo, e não num separado, porque compartilha a mesma política
+// de org: dois arquivos ligando e desligando chat_restrict_to_owner na Org A
+// em paralelo corrompem um ao outro — o vitest roda arquivos concorrentes.
+//
+// `supabase start` já sobe o edge runtime montando supabase/functions, então
+// na prática a função está servida e o código local vale sem passo extra.
+// A sonda existe para CI ou ambiente onde o runtime não esteja de pé: ali este
+// bloco se pula sozinho em vez de falhar por indisponibilidade.
+// ---------------------------------------------------------------------------
+
+const PROXY_URL =
+  process.env.PROXY_URL ?? 'http://127.0.0.1:54321/functions/v1/whatsapp-api-proxy';
+const INSTANCE_ID = '00000000-0000-0000-0000-0000000000f1';
+const MSG_ALPHA = 'proxy-guard-alpha';
+const MSG_BETA = 'proxy-guard-beta';
+
+let proxyServed = false;
+try {
+  const probe = await fetch(PROXY_URL, { method: 'POST', body: '{}' });
+  proxyServed = probe.status !== 404;
+} catch {
+  proxyServed = false;
+}
+
+async function tokenOf(client: SupabaseClient): Promise<string> {
+  const { data } = await client.auth.getSession();
+  const t = data.session?.access_token;
+  if (!t) throw new Error('sem access_token — cliente não autenticado');
+  return t;
+}
+
+async function call(token: string, action: string, payload: Record<string, unknown>) {
+  const res = await fetch(PROXY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ action, instance_id: INSTANCE_ID, payload }),
+  });
+  let body: Record<string, unknown> = {};
+  try {
+    body = await res.json();
+  } catch {
+    /* corpo não-JSON: o que importa é o status */
+  }
+  return { status: res.status, body };
+}
+
+/** O gate recusou? Distinto do 403 de fronteira de org e do 403 de plano. */
+function blockedByGuard(r: { status: number; body: Record<string, unknown> }): boolean {
+  return r.status === 403 && r.body.reason === 'chat_owner';
+}
+
+
 /** Telefones que este cliente consegue ler em whatsapp_messages. */
 async function visiblePhones(client: SupabaseClient, orgId: string): Promise<string[]> {
   const { data, error } = await client
@@ -427,5 +482,144 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       });
       expect(error).not.toBeNull();
     });
+  });
+});
+
+describe.skipIf(!proxyServed)('gate de escrita no whatsapp-api-proxy', () => {
+  let service: SupabaseClient;
+  let memberToken: string;
+  let adminToken: string;
+
+  beforeAll(async () => {
+    service = createServiceClient();
+    const [member1, admin] = await Promise.all([getOrgAMember1(), getOrgAAdmin()]);
+    memberToken = await tokenOf(member1);
+    adminToken = await tokenOf(admin);
+
+    // A cota de instâncias é 0/0 no plano free e o trigger recusa o INSERT.
+    // O override vive só enquanto este arquivo roda — outros testes mexem na
+    // cota da mesma org, então nada disso vai para a seed.
+    await service
+      .from('organizations')
+      .update({ limit_overrides: { max_whatsapp_instances: 5 } })
+      .eq('id', TEST_ORG_ID);
+
+    const { error: instErr } = await service.from('whatsapp_instances').upsert({
+      id: INSTANCE_ID,
+      organization_id: TEST_ORG_ID,
+      instance_name: 'proxy-guard-fixture',
+      status: 'connected',
+    });
+    if (instErr) throw new Error(`Falha ao semear a instância: ${instErr.message}`);
+
+    await service.from('whatsapp_messages').upsert(
+      [
+        { phone: PHONE_ALPHA, mid: MSG_ALPHA },
+        { phone: PHONE_BETA, mid: MSG_BETA },
+      ].map(({ phone, mid }) => ({
+        organization_id: TEST_ORG_ID,
+        instance_id: INSTANCE_ID,
+        message_id: mid,
+        remote_jid: `${phone}@s.whatsapp.net`,
+        phone_number: `+55${phone}`,
+        normalized_phone: phone,
+        direction: 'incoming',
+        content: mid,
+      })),
+      { onConflict: 'message_id,instance_id' },
+    );
+
+    await service
+      .from('organizations')
+      .update({ chat_restrict_to_owner: true })
+      .eq('id', TEST_ORG_ID);
+  });
+
+  afterAll(async () => {
+    await service.from('whatsapp_messages').delete().in('message_id', [MSG_ALPHA, MSG_BETA]);
+    await service.from('whatsapp_instances').delete().eq('id', INSTANCE_ID);
+    await service.from('organizations').update({ limit_overrides: {} }).eq('id', TEST_ORG_ID);
+    await service
+      .from('organizations')
+      .update({ chat_restrict_to_owner: false })
+      .eq('id', TEST_ORG_ID);
+    await clearClients();
+  });
+
+  it('membro envia para o telefone do próprio lead — controle positivo', async () => {
+    const r = await call(memberToken, 'sendText', { number: PHONE_ALPHA, text: 'oi' });
+    // "não foi bloqueado pelo gate" sozinho é fraco: passaria também se a
+    // chamada morresse no gate de plano ou na fronteira de org, que também
+    // devolvem 403. Exigir NENHUM 403 prova a travessia.
+    //
+    // Medido: com o lead próprio a chamada chega ao provider e devolve 500
+    // "EVOLUTION_API_URL env not set" — a Uazapi não está configurada no
+    // ambiente de teste, e é esse erro que prova que o gate deixou passar.
+    expect(r.status).not.toBe(403);
+  });
+
+  it('membro NÃO envia para o telefone do lead alheio', async () => {
+    const r = await call(memberToken, 'sendText', { number: PHONE_BETA, text: 'oi' });
+    expect(blockedByGuard(r)).toBe(true);
+  });
+
+  it('membro NÃO reage a mensagem do lead alheio', async () => {
+    const r = await call(memberToken, 'react', {
+      message_id: MSG_BETA,
+      number: PHONE_BETA,
+      emoji: '👍',
+    });
+    expect(blockedByGuard(r)).toBe(true);
+  });
+
+  it('membro NÃO marca como lida mensagem do lead alheio (só message_id, sem number)', async () => {
+    const r = await call(memberToken, 'markRead', { message_id: MSG_BETA });
+    expect(blockedByGuard(r)).toBe(true);
+  });
+
+  it('membro NÃO baixa mídia de mensagem do lead alheio (só message_id)', async () => {
+    const r = await call(memberToken, 'downloadMedia', { message_id: MSG_BETA });
+    expect(blockedByGuard(r)).toBe(true);
+  });
+
+  it('membro NÃO sincroniza histórico do lead alheio (chat_jid)', async () => {
+    const r = await call(memberToken, 'historySync', {
+      chat_jid: `${PHONE_BETA}@s.whatsapp.net`,
+    });
+    expect(blockedByGuard(r)).toBe(true);
+  });
+
+  it('membro NÃO apaga mensagem do lead alheio', async () => {
+    const r = await call(memberToken, 'deleteMessage', {
+      message_id: MSG_BETA,
+      number: PHONE_BETA,
+    });
+    expect(blockedByGuard(r)).toBe(true);
+  });
+
+  it('admin age em qualquer conversa da org', async () => {
+    const r = await call(adminToken, 'sendText', { number: PHONE_BETA, text: 'oi' });
+    expect(r.status).not.toBe(403);
+  });
+
+  it('ação que não toca conversa passa sem o gate', async () => {
+    const r = await call(memberToken, 'getStatus', {});
+    expect(r.status).not.toBe(403);
+  });
+
+  it('com a política desligada nada é bloqueado — no-op', async () => {
+    await service
+      .from('organizations')
+      .update({ chat_restrict_to_owner: false })
+      .eq('id', TEST_ORG_ID);
+    try {
+      const r = await call(memberToken, 'sendText', { number: PHONE_BETA, text: 'oi' });
+      expect(r.status).not.toBe(403);
+    } finally {
+      await service
+        .from('organizations')
+        .update({ chat_restrict_to_owner: true })
+        .eq('id', TEST_ORG_ID);
+    }
   });
 });
