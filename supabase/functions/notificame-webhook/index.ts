@@ -1176,9 +1176,15 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
         error: res.error?.message ?? null,
       });
       return await parkResponse(stored, "unresolved_channel");
+    } else {
+      // ⚠️ ESTE `else` É LOAD-BEARING. Sem ele, o caminho do WhatsApp — que já
+      // resolveu `channel` acima — cai aqui com `res.data` NULO e
+      // `readChannelRow(null)` estoura em `String(raw.id)`, devolvendo 500 e
+      // perdendo o evento. Foi exatamente o que aconteceu na primeira reinjeção
+      // do payload real (2026-08-18): a peça 2 encontrava a instância e a linha
+      // seguinte a sobrescrevia com lixo.
+      channel = readChannelRow(res.data as Record<string, unknown>);
     }
-
-    channel = readChannelRow(res.data as Record<string, unknown>);
 
     if (channel.organizationId !== organizationId) {
       // FORJA, ou bug grave de registro de subscription. ZERO escrita em
