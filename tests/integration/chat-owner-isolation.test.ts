@@ -49,6 +49,9 @@ const PHONE_ORGB_1 = '11999990101';
 
 const ALL_ORG_A_PHONES = [PHONE_ALPHA, PHONE_BETA, PHONE_GAMMA, PHONE_DELTA, PHONE_ORFA];
 
+const LEAD_ALPHA = '00000000-0000-0000-0000-000000001001';
+const LEAD_BETA = '00000000-0000-0000-0000-000000001002';
+
 const MSG_PREFIX = 'isolation-test-';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
@@ -315,6 +318,77 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
         .eq('message_id', `${MSG_PREFIX}a-${PHONE_BETA}`)
         .single();
       expect(check!.content).not.toBe('invasao');
+    });
+  });
+
+  // ---------------------------------------------------------------
+  // As outras três portas para o mesmo conteúdo.
+  //
+  // conversation_messages é o histórico do Copilot com o lead — mesmo
+  // conteúdo do chat, outra tabela. channel_messages é o inbound de
+  // Meta/Instagram. Fechar o inbox e deixar essas abertas é vender uma
+  // permissão que não cumpre o que promete.
+  // ---------------------------------------------------------------
+
+  describe('Copilot e Meta seguem a mesma regra', () => {
+    beforeAll(async () => {
+      await setPolicy(service, TEST_ORG_ID, true);
+    });
+
+    it('membro lê a conversa do Copilot do próprio lead — controle positivo', async () => {
+      const { data, error } = await member1.from('conversations').select('lead_id');
+      expect(error).toBeNull();
+      expect(data!.map((r) => r.lead_id)).toContain(LEAD_ALPHA);
+    });
+
+    it('membro NÃO lê a conversa do Copilot de lead alheio', async () => {
+      const { data } = await member1.from('conversations').select('lead_id');
+      expect(data!.map((r) => r.lead_id)).not.toContain(LEAD_BETA);
+    });
+
+    it('membro NÃO lê as mensagens do Copilot de lead alheio', async () => {
+      const { data } = await member1
+        .from('conversation_messages')
+        .select('content')
+        .like('content', `${MSG_PREFIX}%`);
+      expect(data!.map((r) => r.content)).toContain(`${MSG_PREFIX}copilot-alpha`);
+      expect(data!.map((r) => r.content)).not.toContain(`${MSG_PREFIX}copilot-beta`);
+    });
+
+    it('membro NÃO lê o canal Meta de lead alheio', async () => {
+      const { data } = await member1
+        .from('channel_messages')
+        .select('external_id')
+        .like('external_id', `${MSG_PREFIX}%`);
+      expect(data!.map((r) => r.external_id)).toContain(`${MSG_PREFIX}meta-alpha`);
+      expect(data!.map((r) => r.external_id)).not.toContain(`${MSG_PREFIX}meta-beta`);
+    });
+
+    it('admin lê as três tabelas por inteiro', async () => {
+      const [c, cm, ch] = await Promise.all([
+        admin.from('conversations').select('lead_id'),
+        admin.from('conversation_messages').select('content').like('content', `${MSG_PREFIX}%`),
+        admin.from('channel_messages').select('external_id').like('external_id', `${MSG_PREFIX}%`),
+      ]);
+      expect(c.data!.map((r) => r.lead_id).sort()).toEqual([LEAD_ALPHA, LEAD_BETA].sort());
+      expect(cm.data).toHaveLength(2);
+      expect(ch.data).toHaveLength(2);
+    });
+
+    it('com a política desligada as três voltam a ser org-wide — no-op', async () => {
+      await setPolicy(service, TEST_ORG_ID, false);
+      try {
+        const [c, cm, ch] = await Promise.all([
+          member1.from('conversations').select('lead_id'),
+          member1.from('conversation_messages').select('content').like('content', `${MSG_PREFIX}%`),
+          member1.from('channel_messages').select('external_id').like('external_id', `${MSG_PREFIX}%`),
+        ]);
+        expect(c.data!.map((r) => r.lead_id).sort()).toEqual([LEAD_ALPHA, LEAD_BETA].sort());
+        expect(cm.data).toHaveLength(2);
+        expect(ch.data).toHaveLength(2);
+      } finally {
+        await setPolicy(service, TEST_ORG_ID, true);
+      }
     });
   });
 
