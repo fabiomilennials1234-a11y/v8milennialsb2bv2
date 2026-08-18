@@ -22,6 +22,7 @@ import type {
   UazapiSenderResponse,
 } from "./uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { normalizeSeamlessType } from "./notificame.ts";
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -255,6 +256,28 @@ export interface WhatsAppProvider {
  *
  * Throws if credentials are missing or RPC fails — never swallows errors.
  */
+/**
+ * O canal declarado NÃO é WhatsApp? PURO, e exportado para ser testável — o
+ * `getWhatsAppProvider` faz import dinâmico e precisa de Supabase, então o
+ * predicado ficaria fora do alcance de qualquer teste se morasse embutido nele.
+ *
+ * ⚠️ A COMPARAÇÃO PASSA POR `normalizeSeamlessType`, e essa é a correção: quem
+ * grava `provider_config.channel_type` é o `channel-finish`, com o valor que o
+ * FORNECEDOR declara em `/v1/channels` — e o canal oficial chega como
+ * `whatsapp_business_account`. A versão anterior comparava com as strings cruas
+ * `"whatsapp"`/`"wa"` e recusava justamente o caso que devia deixar passar: todo
+ * envio da primeira instância oficial de produção morreria em
+ * `is not a whatsapp channel (channel_type="whatsapp_business_account")`.
+ *
+ * Campo VAZIO devolve `false` (aceita): linha antiga, gravada antes de o campo
+ * existir, não pode parar de enviar por causa de um backstop novo.
+ */
+export function isNonWhatsAppChannelType(declaredType: string): boolean {
+  const v = (declaredType ?? "").trim();
+  if (!v) return false;
+  return normalizeSeamlessType(v) !== "whatsapp";
+}
+
 export async function getWhatsAppProvider(
   instance: WhatsAppInstance,
   supabaseAdmin: SupabaseClient,
@@ -299,12 +322,8 @@ export async function getWhatsAppProvider(
     // (bug de escrita, linha editada à mão), este caminho o entregaria a 13
     // superfícies de front que só sabem falar de número — e o mandaria pela rota
     // `/v2/channels/whatsapp/messages`, errada para ele. Recusa explícita.
-    const declaredType = typeof cfg.channel_type === "string"
-      ? cfg.channel_type.trim().toLowerCase()
-      : "";
-    if (
-      declaredType && declaredType !== "whatsapp" && declaredType !== "wa"
-    ) {
+    const declaredType = typeof cfg.channel_type === "string" ? cfg.channel_type : "";
+    if (isNonWhatsAppChannelType(declaredType)) {
       throw new Error(
         `notificame instance ${instance.id} is not a whatsapp channel (channel_type="${declaredType}")`,
       );
