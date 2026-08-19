@@ -265,6 +265,21 @@ describe("base_url", () => {
     expect(calls[0].url).toBe("https://erp.exemplo.com.br/users/login");
   });
 
+  it("🔴 NÃO pede application/json — o ERP devolve 406 se pedir", async () => {
+    // Medido em 19/08: GET /clientes com Accept: application/json → 406.
+    // Com */* ou sem header → 200. O recurso não declara que produz JSON.
+    const { impl, calls } = fakeFetch([res({ token: "T1" }), res([])]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    await client.get("clientes");
+
+    for (const call of calls) {
+      const accept = (call.init.headers as Record<string, string>).Accept;
+      expect(accept).toBe("*/*");
+      expect(accept).not.toContain("application/json");
+    }
+  });
+
   it("404 no login diz QUAL caminho foi chamado", async () => {
     // Sem isso, "HTTP 404" é indistinguível de "o ERP não tem esse endpoint".
     const { impl } = fakeFetch([res("nao encontrado", 404)]);

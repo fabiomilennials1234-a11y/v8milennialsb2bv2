@@ -26,6 +26,21 @@
 import { assertSafeErpBaseUrl, type BaseUrlPolicy } from "./toth-url.ts";
 import { extractLoginToken, extractApiError, isAuthErrorMessage } from "./toth-mappers.ts";
 
+/**
+ * Accept curinga, e NÃO `application/json`.
+ *
+ * Medido contra o ERP em 19/08: `GET /clientes` pedindo `application/json`
+ * devolve **406 Not Acceptable**; com curinga, ou sem o header, devolve 200. O
+ * recurso não declara que produz JSON (omissão de `@Produces`, clássica em app
+ * JAX-RS), então Accept estrito é recusado antes de qualquer lógica de negócio.
+ *
+ * Pedir JSON explicitamente não comprava nada: o corpo é parseado por nós de
+ * qualquer forma, e o servidor não muda de formato por causa do header. Era
+ * rigor sem contrapartida, e custou compatibilidade. Postman e curl mandam o
+ * curinga — é exatamente por isso que funcionavam enquanto a integração não.
+ */
+const ACCEPT = "*/*";
+
 export type TothTokenTransport = "query" | "header";
 
 export interface TothCredentials {
@@ -151,7 +166,7 @@ export class TothClient {
     const url = this.url("users/login");
     const res = await this.send(url, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: ACCEPT },
       body: body.toString(),
     });
 
@@ -258,7 +273,7 @@ export class TothClient {
     const url = this.url(path);
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
 
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: ACCEPT };
     if (this.transport === "header") {
       headers[this.headerName] = this.token ?? "";
     } else {
