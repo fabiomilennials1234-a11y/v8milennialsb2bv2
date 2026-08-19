@@ -48,5 +48,9 @@ export function readTemplateRequest(payload: unknown): TemplateRequest {
 
   const components = Array.isArray(p.components) ? p.components : undefined;
 
-  return { ok: true, value: { number, templateName, language, components } };
+  // O texto renderizado é OPCIONAL: quem dispara por automação não o tem, e a
+  // ausência dele não pode impedir o envio — só deixa a linha sem prévia.
+  const previewText = texto(p.previewText) ?? texto(p.preview_text) ?? undefined;
+
+  return { ok: true, value: { number, templateName, language, components, previewText } };
 }

@@ -111,6 +111,16 @@ export type SendTemplateOptions = {
   language: string;
   /** Graph template components (header/body/button params). Provider passes through. */
   components?: unknown[];
+  /**
+   * O texto RENDERIZADO do template — o que o cliente vai ler.
+   *
+   * Opcional e informado por quem envia, porque só ele tem as duas metades: o
+   * corpo APROVADO (que veio da listagem do fornecedor) e os parâmetros que
+   * acabou de preencher. O provider recebe só nome e parâmetros, e sem isto a
+   * linha nasce sem texto — a conversa mostra "Mensagem interativa" no lugar da
+   * mensagem que saiu.
+   */
+  previewText?: string;
 };
 
 export type SendMenuOptions = {

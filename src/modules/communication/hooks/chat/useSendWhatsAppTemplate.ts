@@ -32,6 +32,13 @@ export interface SendWhatsAppTemplateInput {
   language: string;
   /** Componentes no formato da Graph. Ver `lib/template-send.ts`. */
   components?: unknown[];
+  /**
+   * O texto renderizado — corpo aprovado com os parâmetros aplicados.
+   *
+   * Vai junto porque só o cliente tem as duas metades. Sem ele a linha nasce sem
+   * texto e a conversa exibe "Mensagem interativa" no lugar da mensagem.
+   */
+  previewText?: string;
 }
 
 export class SendWhatsAppTemplateError extends Error {
@@ -76,6 +83,7 @@ export function useSendWhatsAppTemplate(instanceId: string | null) {
             templateName: input.templateName,
             language: input.language,
             ...(input.components?.length ? { components: input.components } : {}),
+            ...(input.previewText?.trim() ? { previewText: input.previewText.trim() } : {}),
           },
         },
       });

@@ -21,6 +21,7 @@ import {
   MapPin,
   Contact,
   BarChart3,
+  FileText,
   LayoutList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -157,7 +158,8 @@ export function MessageBubble({
   const isReaction = messageType === "reaction" || messageType === "ReactionMessage";
   const isPoll = messageType === "poll";
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
-  const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || messageType === "template" || messageType === "url";
+  const isTemplate = messageType === "template";
+  const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || isTemplate || messageType === "url";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
   const meta = message as unknown as {
@@ -391,8 +393,29 @@ export function MessageBubble({
               </p>
             )}
 
-            {/* Interactive / catalog / list / template */}
-            {isInteractive && !message.content && (
+            {/* TEMPLATE — mensagem aprovada pela Meta.
+                O selo fica ACIMA do texto, e não no lugar dele: quem lê a
+                conversa precisa ver o que o cliente recebeu, e saber que aquilo
+                saiu por template é contexto (explica por que foi possível enviar
+                fora da janela de 24h), não a informação principal. */}
+            {isTemplate && (
+              <div className="mb-1 flex items-center gap-1.5 text-[10px] uppercase tracking-wide opacity-70">
+                <FileText className="h-3 w-3 shrink-0" />
+                <span>Template</span>
+              </div>
+            )}
+
+            {/* Template SEM texto: as linhas gravadas antes de o texto
+                renderizado passar a viajar junto. Dizer "template" é honesto;
+                "Mensagem interativa" não era nem isso. */}
+            {isTemplate && !message.content && (
+              <p className="text-sm italic text-muted-foreground">
+                Template enviado
+              </p>
+            )}
+
+            {/* Interactive / catalog / list */}
+            {isInteractive && !isTemplate && !message.content && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <LayoutList className="w-4 h-4 shrink-0" />
                 <span className="italic">Mensagem interativa</span>
