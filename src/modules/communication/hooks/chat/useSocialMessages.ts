@@ -35,6 +35,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { chatQueryKeys } from "./shared/queryKeys";
+import type { SocialContact } from "./types";
 
 /** Teto de linhas por thread. Paginação para trás é fatia própria. */
 const THREAD_LIMIT = 500;
@@ -53,21 +54,37 @@ export interface SocialMessage {
   created_at: string | null;
 }
 
-export function useSocialMessages(
-  messagingChannelId: string | null,
-  contactExternalId: string | null,
-) {
+/**
+ * A thread de uma conversa de caixa que lê `channel_messages`.
+ *
+ * ⚠️ RECEBE O CONTATO, e não o par (id da caixa, interlocutor). O eixo de leitura
+ * depende de QUAL caixa é: Instagram grava `messaging_channel_id`, o canal oficial
+ * grava `instance_id` e deixa aquela coluna NULA. Com dois argumentos soltos, a
+ * escolha da coluna sobraria para cada call-site — e foi exatamente uma escolha
+ * dessas, feita uma vez e no lugar errado, que deixou a mensagem do canal oficial
+ * invisível em 18/08.
+ */
+export function useSocialMessages(contact: SocialContact | null) {
+  const boxId = contact?.messaging_channel_id ?? null;
+  const contactExternalId = contact?.external_user_id ?? null;
+  /**
+   * A coluna do eixo. `instance_id` no canal oficial, `messaging_channel_id` no
+   * resto — e o `resto` é o default de propósito: caixa que este hook não conheça
+   * cai no comportamento de antes desta fatia.
+   */
+  const colunaDoEixo =
+    contact?.channel === "whatsapp_oficial" ? "instance_id" : "messaging_channel_id";
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
 
   return useQuery({
     queryKey: chatQueryKeys.socialMessages(
       organizationId,
-      messagingChannelId,
+      boxId,
       contactExternalId,
     ),
     queryFn: async (): Promise<SocialMessage[]> => {
-      if (!organizationId || !messagingChannelId || !contactExternalId) return [];
+      if (!organizationId || !boxId || !contactExternalId) return [];
 
       // Cast do CLIENTE: `messaging_channel_id` e `contact_external_id` são
       // colunas novas e `types.ts` só as conhece depois do regen contra o banco
@@ -78,7 +95,7 @@ export function useSocialMessages(
           "id, external_id, direction, message_type, content, media_url, status, sender_name, sender_profile_pic, timestamp, created_at",
         )
         .eq("organization_id", organizationId)
-        .eq("messaging_channel_id", messagingChannelId)
+        .eq(colunaDoEixo, boxId)
         .eq("contact_external_id", contactExternalId)
         .order("timestamp", { ascending: true })
         .limit(THREAD_LIMIT);
@@ -86,6 +103,6 @@ export function useSocialMessages(
       if (error) throw error;
       return (data ?? []) as SocialMessage[];
     },
-    enabled: !!organizationId && !!messagingChannelId && !!contactExternalId,
+    enabled: !!organizationId && !!boxId && !!contactExternalId,
   });
 }

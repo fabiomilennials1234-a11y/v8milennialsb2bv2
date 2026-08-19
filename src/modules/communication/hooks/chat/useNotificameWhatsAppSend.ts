@@ -27,10 +27,25 @@ import { useCurrentTeamMember } from "@/modules/identity";
 
 import { SOCIAL_CONTACTS_KEY_ROOT, SOCIAL_MESSAGES_KEY_ROOT } from "./shared/queryKeys";
 
+/**
+ * Mídia do canal oficial.
+ *
+ * ⚠️ `url` PÚBLICA, nunca base64: o provider recusa arquivo embutido com
+ * `NotSupportedError` ("o canal oficial exige URL pública"). O composer já
+ * publica no bucket antes de enviar, então a URL é o que ele tem em mãos.
+ */
+export interface NotificameWhatsAppMedia {
+  type: "image" | "video" | "document" | "audio";
+  url: string;
+  filename?: string;
+  caption?: string;
+}
+
 export interface NotificameWhatsAppSendInput {
   /** Telefone do interlocutor — é ele que agrupa a conversa. */
   to: string;
-  text: string;
+  text?: string;
+  media?: NotificameWhatsAppMedia;
 }
 
 export class NotificameWhatsAppSendError extends Error {
@@ -48,7 +63,7 @@ export function useNotificameWhatsAppSend(instanceId: string | null) {
   const organizationId = teamMember?.organization_id ?? null;
 
   return useMutation({
-    mutationFn: async ({ to, text }: NotificameWhatsAppSendInput) => {
+    mutationFn: async ({ to, text, media }: NotificameWhatsAppSendInput) => {
       if (!instanceId) {
         throw new NotificameWhatsAppSendError("no_instance", "Nenhum canal selecionado");
       }
@@ -61,16 +76,49 @@ export function useNotificameWhatsAppSend(instanceId: string | null) {
           "Sua organização ainda está carregando",
         );
       }
-      if (!text.trim()) {
-        throw new NotificameWhatsAppSendError("empty_message", "Escreva a mensagem");
+      const texto = text?.trim() ?? "";
+      if (!texto && !media) {
+        throw new NotificameWhatsAppSendError(
+          "empty_message",
+          "Escreva a mensagem ou anexe um arquivo",
+        );
       }
+
+      // ─── A AÇÃO ────────────────────────────────────────────────────────────
+      //
+      // Áudio vai por `sendAudio` e NÃO por `sendMedia({type:'audio'})`: é a
+      // ação que o proxy traduz para `type: 'ptt'`, a mensagem de voz. Com
+      // `sendMedia(audio)` o cliente recebe um anexo de arquivo — outro objeto,
+      // sem o balão de voz e sem a forma de onda.
+      const body = !media
+        ? {
+          action: "sendText",
+          payload: { number: to, text: texto },
+        }
+        : media.type === "audio"
+          ? {
+            action: "sendAudio",
+            payload: { number: to, file: media.url },
+          }
+          : {
+            action: "sendMedia",
+            payload: {
+              number: to,
+              type: media.type,
+              file: media.url,
+              ...(media.filename ? { filename: media.filename } : {}),
+              // A legenda é o texto do composer quando há anexo: é assim que o
+              // envio pelo Direct já se comporta, e duas regras diferentes fariam
+              // a mesma tela mandar coisas distintas conforme a caixa.
+              ...(media.caption ?? texto ? { caption: media.caption ?? texto } : {}),
+            },
+          };
 
       const { data, error } = await supabase.functions.invoke("whatsapp-api-proxy", {
         body: {
-          action: "sendText",
+          ...body,
           instance_id: instanceId,
           organization_id: organizationId,
-          payload: { number: to, text: text.trim() },
         },
       });
 

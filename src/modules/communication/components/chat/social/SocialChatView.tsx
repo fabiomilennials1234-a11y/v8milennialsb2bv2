@@ -34,9 +34,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useSocialMessages } from "@/modules/communication/hooks/chat/useSocialMessages";
 import {
-  useSendSocialMessage,
   type SocialSendError,
 } from "@/modules/communication/hooks/chat/useSendSocialMessage";
+import type { SocialSender } from "@/modules/communication/hooks/chat/social-sender";
 import { socialReplyWindow } from "@/modules/communication/lib/social-window";
 import {
   audioExtensionForMime,
@@ -165,11 +165,16 @@ function SocialChatHeader({
  * entre "não consigo responder" e "tenho 3 horas para responder".
  */
 function SocialComposer({
-  messagingChannelId,
+  sender,
   contactExternalId,
   lastIncomingAt,
 }: {
-  messagingChannelId: string;
+  /**
+   * O enviador JÁ PRONTO, montado pelo shell. Não é um hook, e isso é o ponto:
+   * chamar um hook vindo por prop muda a ordem dos hooks quando a caixa troca —
+   * "Rendered more hooks than during the previous render", com o chat aberto.
+   */
+  sender: SocialSender;
   contactExternalId: string;
   lastIncomingAt: string | null;
 }) {
@@ -182,7 +187,7 @@ function SocialComposer({
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
 
-  const enviar = useSendSocialMessage(messagingChannelId);
+  const enviar = sender;
   const janela = socialReplyWindow(lastIncomingAt);
 
   /** Publica o arquivo e guarda a URL — o fornecedor BUSCA, não recebe bytes. */
@@ -245,7 +250,7 @@ function SocialComposer({
     if ((!conteudo && !anexo) || enviar.isPending || subindo) return;
 
     try {
-      await enviar.mutateAsync({
+      await enviar.send({
         contactExternalId,
         text: conteudo || undefined,
         ...(anexo
@@ -370,6 +375,12 @@ function SocialComposer({
 
 export interface SocialChatViewProps {
   selectedContact: SocialContact | null;
+  /**
+   * Como esta caixa envia. Injetado porque a view é a MESMA para o Direct e para
+   * o WhatsApp oficial, e só o envio difere: `notificame-send-social` recusa
+   * WhatsApp por modelo, então o canal oficial sai pelo proxy de WhatsApp.
+   */
+  sender: SocialSender;
   /** Nome da caixa (conta) — vai para o subtítulo do header e para o empty state. */
   channelName: string;
   organizationId: string | null;
@@ -381,6 +392,7 @@ export interface SocialChatViewProps {
 
 export function SocialChatView({
   selectedContact,
+  sender,
   channelName,
   organizationId,
   mountTime,
@@ -390,10 +402,7 @@ export function SocialChatView({
 }: SocialChatViewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const { data: rawMessages = [], isLoading } = useSocialMessages(
-    selectedContact?.messaging_channel_id ?? null,
-    selectedContact?.external_user_id ?? null,
-  );
+  const { data: rawMessages = [], isLoading } = useSocialMessages(selectedContact);
 
   const messages = useMemo(
     () => rawMessages.map((m) => toTimelineMessage(m, organizationId ?? "")),
@@ -462,7 +471,7 @@ export function SocialChatView({
       </div>
 
       <SocialComposer
-        messagingChannelId={selectedContact.messaging_channel_id}
+        sender={sender}
         contactExternalId={selectedContact.external_user_id}
         lastIncomingAt={ultimaRecebidaEm}
       />

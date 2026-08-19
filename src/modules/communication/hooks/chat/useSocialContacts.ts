@@ -24,60 +24,11 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { chatQueryKeys } from "./shared/queryKeys";
-import { buildSocialConversationKey, type SocialContact } from "./types";
-
-/** Linha crua da RPC. Espelha o RETURNS TABLE da função. */
-interface SocialConversationRow {
-  contact_external_id: string;
-  sender_name: string | null;
-  sender_profile_pic: string | null;
-  /** @ do interlocutor — entra no RETURNS a partir de 20270818090000. */
-  contact_handle: string | null;
-  last_message: string | null;
-  last_message_time: string;
-  last_message_direction: string | null;
-  unread_count: number | null;
-  lead_id: string | null;
-  lead_name: string | null;
-}
-
-function toSocialContact(
-  row: SocialConversationRow,
-  messagingChannelId: string,
-): SocialContact {
-  return {
-    channel: "instagram",
-    conversation_key: buildSocialConversationKey(
-      messagingChannelId,
-      row.contact_external_id,
-    ),
-    messaging_channel_id: messagingChannelId,
-    external_user_id: row.contact_external_id,
-    // O @ do INTERLOCUTOR, agora em coluna própria (`contact_handle`, migration
-    // 20270818090000). Até a primeira mensagem real chegar, este campo era `null`
-    // com um comentário dizendo que o payload não trazia o handle — o corpo
-    // provou o contrário: ele vem em `message.visitor.name`.
-    //
-    // ⚠️ NÃO confundir com `messaging_channels.handle`, que é o @ da NOSSA conta.
-    // São entidades diferentes, e trocá-las poria o nosso @ no lugar do cliente.
-    handle: row.contact_handle ?? null,
-    display_name: row.sender_name ?? null,
-    avatar_url: row.sender_profile_pic ?? null,
-    last_message: row.last_message ?? null,
-    last_message_time: row.last_message_time,
-    // O CHECK do banco só aceita incoming|outgoing; qualquer outra coisa é dado
-    // que não sabemos ler, e "não sei" é null — nunca "incoming" por default.
-    last_message_direction:
-      row.last_message_direction === "incoming" ||
-      row.last_message_direction === "outgoing"
-        ? row.last_message_direction
-        : null,
-    unread_count: row.unread_count ?? 0,
-    lead_id: row.lead_id ?? null,
-    lead_name: row.lead_name ?? null,
-    tags: [],
-  };
-}
+import {
+  toSocialContact,
+  type SocialConversationRow,
+} from "./social-conversation-row";
+import type { SocialContact } from "./types";
 
 export function useSocialContacts(messagingChannelId: string | null) {
   const { data: teamMember } = useCurrentTeamMember();
@@ -104,7 +55,7 @@ export function useSocialContacts(messagingChannelId: string | null) {
       if (error) throw error;
 
       return ((data ?? []) as SocialConversationRow[]).map((row) =>
-        toSocialContact(row, messagingChannelId),
+        toSocialContact(row, "instagram", messagingChannelId),
       );
     },
     enabled: !!organizationId && !!messagingChannelId,

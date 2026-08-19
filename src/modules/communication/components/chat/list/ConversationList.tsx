@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import type { ChatContact } from "@/modules/communication/hooks/useWhatsAppChat";
 import {
@@ -164,7 +165,7 @@ export function ConversationList({
    * aplica nenhum deles. Mostrá-los inertes seria mentir sobre o recorte —
    * o usuário clicaria num chip e a lista não mudaria.
    */
-  const isSocialBox = selectedBox?.kind === "instagram";
+  const isSocialBox = selectedBox ? boxUsesChannelMessages(selectedBox) : false;
 
   /**
    * A metade de WhatsApp da lista. O engine de filtro, os contadores e o
@@ -346,7 +347,14 @@ export function ConversationList({
                       {/* O selo do canal, e não só a bolinha de status: é ele
                           que faz a caixa nova ser lida como Instagram em vez de
                           "mais um número de WhatsApp". */}
-                      <ChannelBadge channel={box.kind} size={14} />
+                      <ChannelBadge
+                        channel={
+                          boxUsesChannelMessages(box) && box.kind === "whatsapp"
+                            ? "whatsapp_oficial"
+                            : box.kind
+                        }
+                        size={14}
+                      />
                       <span
                         className={cn(
                           "w-1.5 h-1.5 rounded-full shrink-0",
@@ -358,6 +366,16 @@ export function ConversationList({
                         )}
                       />
                       {box.name}
+                      {/* O selo "Oficial" separa o canal da API da Meta do
+                          WhatsApp por QR na MESMA lista. O telefone não serve
+                          para isso: `phone_number` é NULL no canal oficial — o
+                          `/v1/channels` do fornecedor não o devolve — e o campo
+                          apareceria vazio (decisão Q11 do spec). */}
+                      {boxUsesChannelMessages(box) && box.kind === "whatsapp" && (
+                        <span className="ml-1 rounded-sm border border-border/60 px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Oficial
+                        </span>
+                      )}
                     </span>
                   </SelectItem>
                 ))}
@@ -462,7 +480,9 @@ export function ConversationList({
                   {searchQuery
                     ? "Nenhuma conversa encontrada"
                     : isSocialBox
-                      ? "Nenhuma mensagem no Instagram ainda"
+                      ? selectedBox?.kind === "instagram"
+                        ? "Nenhuma mensagem no Instagram ainda"
+                        : "Nenhuma mensagem neste número ainda"
                       : "Nenhuma conversa ainda"}
                 </p>
               </>

@@ -118,9 +118,24 @@ export interface WhatsAppInstanceForUser {
  * dia zero para nunca colidir com o recorte `whatsapp:%` da RPC de WhatsApp.
  */
 export interface SocialContact {
-  channel: "instagram";
-  /** `instagram:${messaging_channel_id}:${external_user_id}` — chave de leitura e de cache. */
+  /**
+   * A CAIXA de origem, que é também o namespace da `conversation_key`.
+   *
+   * `whatsapp_oficial` é o canal da API oficial da Meta via NotificaMe. Ele mora
+   * em `whatsapp_instances` (não em `messaging_channels`) e ainda assim é um
+   * `SocialContact`, porque o que define este tipo é a TABELA DE MENSAGENS —
+   * `channel_messages` — e não a rede do outro lado.
+   */
+  channel: "instagram" | "whatsapp_oficial";
+  /** `${channel}:${messaging_channel_id}:${external_user_id}` — chave de leitura e de cache. */
   conversation_key: string;
+  /**
+   * O id da CAIXA, qualquer que seja a tabela em que ela mora: um
+   * `messaging_channels.id` no Instagram, um `whatsapp_instances.id` no canal
+   * oficial. O nome ficou do primeiro caso (decisão Q10 do spec — documentar em
+   * vez de renomear: são 25 usos em 12 arquivos, e o caminho de Instagram já
+   * roda em produção).
+   */
   messaging_channel_id: string;
   /** IGSID do INTERLOCUTOR (nunca da nossa conta). */
   external_user_id: string;
@@ -172,9 +187,16 @@ export function isWhatsAppContact(c: InboxContact): c is ChatContact {
   return c.channel === "whatsapp";
 }
 
-/** True quando o contato é de um canal social. */
+/**
+ * True quando o contato vem de uma caixa que lê `channel_messages`.
+ *
+ * A negação de `isWhatsAppContact`, e escrita assim de propósito: enumerar os
+ * canais sociais faria cada canal novo precisar de uma edição aqui, e o esquecimento
+ * apareceria como contato que não renderiza — foi assim que a mensagem do canal
+ * oficial ficou invisível em 18/08.
+ */
 export function isSocialContact(c: InboxContact): c is SocialContact {
-  return c.channel === "instagram";
+  return c.channel !== "whatsapp";
 }
 
 /**
@@ -231,10 +253,26 @@ export function contactAvatarSeed(c: InboxContact): string {
     : c.external_user_id || c.conversation_key;
 }
 
-/** Monta a `conversation_key` de um contato social. Único produtor da string. */
+/**
+ * Monta a `conversation_key` de um contato de caixa que lê `channel_messages`.
+ * Único produtor da string.
+ *
+ * ⚠️ O NAMESPACE É UMA FRONTEIRA, NÃO UM RÓTULO. A chave vai para
+ * `conversation_read_state.conversation_key`, e `get_whatsapp_conversation_list`
+ * lê aquela tabela com `split_part(conversation_key, ':', 3)` sob o recorte
+ * `LIKE 'whatsapp:%'`. Uma chave da caixa oficial gravada em `whatsapp:` seria
+ * lida por aquela função como se o `contact_external_id` fosse telefone, e o
+ * contador de não lidas do inbox de ~30 organizações passaria a somar conversa
+ * alheia. Daí `whatsapp_oficial:` — e o teste que prova que nada aqui emite
+ * `whatsapp:`.
+ *
+ * O terceiro segmento NÃO pode ser recuperado por fatiamento: id de rede social
+ * é opaco e pode conter ':'. Quem consome compara a chave inteira.
+ */
 export function buildSocialConversationKey(
-  messagingChannelId: string,
+  channel: SocialContact["channel"],
+  boxId: string,
   externalUserId: string,
 ): string {
-  return `instagram:${messagingChannelId}:${externalUserId}`;
+  return `${channel}:${boxId}:${externalUserId}`;
 }
