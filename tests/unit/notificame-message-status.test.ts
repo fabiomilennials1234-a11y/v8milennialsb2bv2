@@ -38,6 +38,7 @@ describe("readMessageStatus", () => {
   it("lê a recusa REAL da Meta: id da mensagem, status, código e o texto", () => {
     expect(readMessageStatus(recusaReal)).toEqual({
       messageId: "d7370d65-7893-4989-9f09-d82fa86fa542",
+      providerMessageId: null,
       status: "failed",
       providerCode: "131053",
       detail:
@@ -75,6 +76,17 @@ describe("readMessageStatus", () => {
     ).toBeNull();
   });
 
+  it("lê o providerMessageId — a ÚNICA chave estável entre callbacks", () => {
+    // Medido em prod: SENT e ERROR da mesma mensagem chegaram com `messageId`
+    // DIFERENTES e este campo IDÊNTICO. Casar pelo `messageId` fez a recusa não
+    // achar linha nenhuma.
+    const lido = readMessageStatus({
+      ...recusaReal,
+      messageStatus: { ...recusaReal.messageStatus, providerMessageId: "U2hTM01Z==" },
+    });
+    expect(lido?.providerMessageId).toBe("U2hTM01Z==");
+  });
+
   it("sem status legível devolve null — para o handler parkar, não adivinhar", () => {
     expect(readMessageStatus({ messageId: "m1" })).toBeNull();
     expect(readMessageStatus({})).toBeNull();
@@ -83,6 +95,7 @@ describe("readMessageStatus", () => {
   it("recusa sem detalhe ainda é recusa", () => {
     expect(readMessageStatus({ messageId: "m1", messageStatus: { code: "ERROR" } })).toEqual({
       messageId: "m1",
+      providerMessageId: null,
       status: "failed",
       providerCode: null,
       detail: null,

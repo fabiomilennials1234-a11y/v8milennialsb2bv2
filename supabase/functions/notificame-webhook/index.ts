@@ -1113,71 +1113,119 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       return await parkResponse(stored, "unreadable_status");
     }
 
-    // A linha é lida ANTES de escrever por dois motivos, e nenhum é conveniência:
+    // ─── ACHAR A LINHA ────────────────────────────────────────────────────
     //
-    //   1. `raw_payload` guarda a REQUISIÇÃO e a RESPOSTA do envio. Um update com
-    //      objeto novo apagaria as duas — o PostgREST substitui a coluna jsonb, não
-    //      a mescla. Perder isso seria destruir justamente a evidência que fez
-    //      este bloco existir.
-    //   2. o rank do status atual decide se o callback progride ou é ruído.
-    const atual = await admin
+    // DUAS chaves, e a ordem importa. O `messageId` do evento NÃO é estável por
+    // mensagem: medido em prod (19/08), o `SENT` veio com o id que está em
+    // `external_id` e o `ERROR` da MESMA mensagem, 0,4s depois, veio com outro.
+    // O que os liga é o `providerMessageId` — idêntico nos dois.
+    //
+    // Por isso o primeiro evento que casar GRAVA esse id na linha, e os
+    // seguintes o usam como chave. Sem isso a recusa da Meta cai em
+    // `status_no_match` e o defeito volta a ser invisível — foi o que aconteceu
+    // com a primeira versão deste bloco.
+    const colunas = "id, status, raw_payload, provider_message_id";
+    const porExternalId = await admin
       .from("channel_messages")
-      .select("id, status, raw_payload")
+      .select(colunas)
       .eq("organization_id", organizationId)
       .eq("external_id", st.messageId)
       .limit(1);
 
-    const linha = (atual.data as
-      | Array<{ id: string; status: string | null; raw_payload: unknown }>
-      | null)?.[0] ?? null;
+    type Linha = {
+      id: string;
+      status: string | null;
+      raw_payload: unknown;
+      provider_message_id: string | null;
+    };
+    let linha = (porExternalId.data as Linha[] | null)?.[0] ?? null;
 
-    // NÃO REBAIXAR. Callbacks chegam fora de ordem, e um DELIVERED atrasado não
-    // pode apagar um READ que já chegou. `failed` fica FORA da escala de
-    // propósito: recusa vale sempre, inclusive depois de "entregue" — foi
-    // exatamente essa a sequência do 131053 (SENT e, 2s depois, ERROR).
-    const progride = st.status === "failed" ||
-      (OUTBOUND_STATUS_RANK[st.status] ?? 99) >
-        (OUTBOUND_STATUS_RANK[linha?.status ?? "pending"] ?? 0);
-
-    const upd = linha && progride
-      ? await admin
+    if (!linha && st.providerMessageId) {
+      const porProvider = await admin
         .from("channel_messages")
-        .update({
-          status: st.status,
-          raw_payload: {
-            ...(typeof linha.raw_payload === "object" && linha.raw_payload
-              ? linha.raw_payload as Record<string, unknown>
-              : {}),
-            status_event: {
-              code: st.status,
-              provider_code: st.providerCode,
-              detail: st.detail,
-              at: new Date().toISOString(),
-            },
-          },
-        })
-        .eq("id", linha.id)
-        .select("id")
-      : null;
+        .select(colunas)
+        .eq("organization_id", organizationId)
+        .eq("provider_message_id", st.providerMessageId)
+        .limit(1);
+      linha = (porProvider.data as Linha[] | null)?.[0] ?? null;
+    }
 
-    if (!linha || !progride || upd?.error) {
-      // Guardar, e não descartar: pode ser status de mensagem enviada por outro
-      // caminho, ou callback fora de ordem que a guarda acima recusou. Nos dois
-      // casos o corpo é a única evidência que sobra.
+    if (!linha) {
       const stored = await park({
         reason: "status_no_match",
         payload,
         organizationId,
         eventType,
-        error: upd?.error?.message ??
-          (linha
-            ? `fora de ordem: atual=${linha.status} recebido=${st.status}`
-            : `external_id=${st.messageId} não encontrado nesta org`),
+        error: `nem external_id=${st.messageId} nem provider=${st.providerMessageId ?? "null"} nesta org`,
       });
       return await parkResponse(stored, "status_no_match");
     }
 
-    return json(200, { status: "updated", message_status: st.status });
+    // ─── O QUE ESCREVER ───────────────────────────────────────────────────
+    //
+    // O `status_event` é SEMPRE atualizado, inclusive quando o status não
+    // progride: é ele que carrega o `provider_message_id`, e é essa gravação que
+    // permite ao evento SEGUINTE (a recusa) achar esta linha. Tratar "mesmo
+    // status" como ruído e sair sem escrever foi o defeito da primeira versão.
+    //
+    // O STATUS, esse sim, só avança. Callbacks chegam fora de ordem e um
+    // DELIVERED atrasado não pode apagar um READ. `failed` fica FORA da escala de
+    // propósito: recusa vale sempre, inclusive depois de "entregue" — foi
+    // exatamente a sequência que a Meta produziu (SENT e, 2s depois, ERROR).
+    const progride = st.status === "failed" ||
+      (OUTBOUND_STATUS_RANK[st.status] ?? 99) >
+        (OUTBOUND_STATUS_RANK[linha.status ?? "pending"] ?? 0);
+
+    const anterior = (typeof linha.raw_payload === "object" && linha.raw_payload
+      ? linha.raw_payload as Record<string, unknown>
+      : {});
+
+    const eventoAnterior = (typeof anterior.status_event === "object" && anterior.status_event
+      ? anterior.status_event as Record<string, unknown>
+      : {});
+
+    const upd = await admin
+      .from("channel_messages")
+      .update({
+        // `raw_payload` é MESCLADO: a coluna guarda a requisição e a resposta do
+        // envio, e o PostgREST substitui o jsonb inteiro. Escrever só o
+        // `status_event` apagaria a evidência que motivou esta fatia.
+        ...(progride ? { status: st.status } : {}),
+        // A chave de correlação, gravada pelo PRIMEIRO callback que casar. Um
+        // evento sem ela não pode apagar o que o anterior guardou.
+        ...(st.providerMessageId ? { provider_message_id: st.providerMessageId } : {}),
+        raw_payload: {
+          ...anterior,
+          status_event: {
+            ...eventoAnterior,
+            code: st.status,
+            provider_code: st.providerCode,
+            detail: st.detail,
+            // Só grava se veio; um evento sem ele não pode apagar o que o
+            // anterior guardou — é a chave de correlação.
+            at: new Date().toISOString(),
+          },
+        },
+      })
+      .eq("id", linha.id)
+      .select("id");
+
+    if (upd.error) {
+      const stored = await park({
+        reason: "status_no_match",
+        payload,
+        organizationId,
+        eventType,
+        error: upd.error.message,
+      });
+      return await parkResponse(stored, "status_no_match");
+    }
+
+    return json(200, {
+      status: "updated",
+      message_status: st.status,
+      advanced: progride,
+    });
   }
 
   // ── 11. Resolução do CANAL ───────────────────────────────────────────────

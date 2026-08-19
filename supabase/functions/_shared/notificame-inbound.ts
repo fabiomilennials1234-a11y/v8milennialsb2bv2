@@ -374,8 +374,21 @@ export const OUTBOUND_STATUS_RANK: Record<string, number> = {
 };
 
 export interface MessageStatusUpdate {
-  /** O id que o fornecedor deu à MENSAGEM — casa com `channel_messages.external_id`. */
+  /**
+   * O id que o fornecedor deu a ESTE EVENTO.
+   *
+   * ⚠️ NÃO é estável por mensagem. Medido em produção (2026-08-19): o `SENT`
+   * chegou com o id que está em `channel_messages.external_id`, e o `ERROR` da
+   * MESMA mensagem, 0,4s depois, veio com OUTRO id. Casar só por aqui faz a
+   * recusa não achar linha nenhuma — foi exatamente o que aconteceu.
+   */
   messageId: string;
+  /**
+   * O id do lado do fornecedor/Meta. **ESTE é estável por mensagem**: os dois
+   * eventos acima trouxeram o mesmo valor. É a chave de correlação entre
+   * callbacks, e é por isso que ele é gravado no primeiro evento que casar.
+   */
+  providerMessageId: string | null;
   status: OutboundStatus;
   /** Código do erro da Meta (ex.: `131053`), quando houver. */
   providerCode: string | null;
@@ -438,6 +451,10 @@ export function readMessageStatus(payload: unknown): MessageStatusUpdate | null 
   const status = word ? classifyStatusWord(word) : null;
   if (!status) return null;
 
+  const providerMessageId = firstNonEmpty(payload, [
+    "messageStatus.providerMessageId",
+    "providerMessageId",
+  ]);
   const providerCode = firstNonEmpty(payload, [
     "messageStatus.error.code",
     "error.code",
@@ -452,6 +469,7 @@ export function readMessageStatus(payload: unknown): MessageStatusUpdate | null 
 
   return {
     messageId,
+    providerMessageId: providerMessageId ?? null,
     status,
     providerCode: providerCode ?? null,
     detail: detail ?? null,

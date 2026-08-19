@@ -188,6 +188,7 @@ describe("MESSAGE_STATUS — a recusa da Meta chega até a linha", () => {
       external_id: ID_MENSAGEM,
       direction: "outgoing",
       status: "sent",
+      provider_message_id: null,
       raw_payload: { request: { to: "554884334050" }, response: { id: ID_MENSAGEM } },
     }]);
   });
@@ -219,7 +220,7 @@ describe("MESSAGE_STATUS — a recusa da Meta chega até a linha", () => {
     expect(raw.response).toMatchObject({ id: ID_MENSAGEM });
   });
 
-  it("NÃO rebaixa: DELIVERED atrasado não apaga um READ que já chegou", async () => {
+  it("NÃO rebaixa o STATUS, mas registra o evento (é onde mora a chave de correlação)", async () => {
     state.mock!.mockTable("channel_messages", [{
       id: "linha-1",
       organization_id: ORG,
@@ -236,9 +237,18 @@ describe("MESSAGE_STATUS — a recusa da Meta chega até a linha", () => {
     });
 
     expect(res.status).toBe(200);
-    expect(state.mock!.getUpdated("channel_messages")).toHaveLength(0);
-    // Guardado, não descartado: o corpo é a única evidência que sobra.
-    expect(state.mock!.getInserted("notificame_webhook_events")).toHaveLength(1);
+
+    // A linha É tocada — mas o `status` NÃO retrocede. Sair sem escrever foi o
+    // defeito da primeira versão: o `provider_message_id` mora no `status_event`,
+    // e sem gravá-lo a RECUSA seguinte não acha a linha.
+    const atualizadas = state.mock!.getUpdated("channel_messages");
+    expect(atualizadas).toHaveLength(1);
+    // Continua `read`: o DELIVERED atrasado NÃO retrocedeu o status.
+    expect(atualizadas[0]).toMatchObject({ status: "read" });
+    expect(
+      (atualizadas[0] as { raw_payload: Record<string, unknown> })
+        .raw_payload.status_event,
+    ).toMatchObject({ code: "delivered" });
   });
 
   it("mas uma RECUSA depois de entregue vale — foi a ordem que a Meta produziu", async () => {
@@ -253,6 +263,50 @@ describe("MESSAGE_STATUS — a recusa da Meta chega até a linha", () => {
 
     await post(payloadRecusa());
     expect(state.mock!.getUpdated("channel_messages")[0]).toMatchObject({ status: "failed" });
+  });
+
+
+  /**
+   * O DEFEITO DE 13:41 — e o motivo de existir uma segunda chave.
+   *
+   * Medido em produção: o `SENT` chegou com o id que está em `external_id`, e o
+   * `ERROR` da MESMA mensagem, 376ms depois, veio com um `messageId` DIFERENTE.
+   * O que os liga é o `providerMessageId`, idêntico nos dois. A primeira versão
+   * deste bloco casava só pelo `messageId` — e a recusa caiu em
+   * `status_no_match`, com o áudio seguindo "enviado" na tela.
+   */
+  it("a recusa chega com OUTRO messageId e ainda assim acha a linha", async () => {
+    const PROVIDER_ID = "U2hTM01ZaXNNL0VhWk5tWG9uTFBPMkdxcnFoN1psZGtHcnd0M0g2NW92MThzNTRm";
+
+    // 1º callback: SENT, com o id que casa por `external_id`. É ele que grava a
+    // chave de correlação na linha.
+    await post({
+      type: "MESSAGE_STATUS",
+      messageId: ID_MENSAGEM,
+      messageStatus: { code: "SENT", providerMessageId: PROVIDER_ID },
+    });
+
+    const depoisDoSent = state.mock!.getUpdated("channel_messages");
+    expect(depoisDoSent).toHaveLength(1);
+    // A chave vai para COLUNA, não para dentro do jsonb: é por ela que o
+    // callback seguinte procura, e busca dentro de `raw_payload` custaria um
+    // índice de expressão para o mesmo fim.
+    expect(depoisDoSent[0]).toMatchObject({ provider_message_id: PROVIDER_ID });
+
+    // 2º callback: a RECUSA, com messageId que não existe em lugar nenhum.
+    const res = await post({
+      type: "MESSAGE_STATUS",
+      messageId: "403807e5-e6d6-439a-afe1-7bedf4fd4e50",
+      messageStatus: {
+        code: "ERROR",
+        providerMessageId: PROVIDER_ID,
+        error: { code: 131053, details: "Media upload error" },
+      },
+    });
+
+    expect(res.status).toBe(200);
+    const atualizadas = state.mock!.getUpdated("channel_messages");
+    expect(atualizadas[atualizadas.length - 1]).toMatchObject({ status: "failed" });
   });
 
   it("status de mensagem que não é desta org é GUARDADO, nunca aplicado", async () => {
