@@ -32,6 +32,10 @@ import {
 } from "../_shared/chat-owner-guard.ts";
 import { readTemplateRequest } from "../_shared/whatsapp-template-request.ts";
 import {
+  espelharMidiaDeTemplate,
+  precisaEspelhar,
+} from "../_shared/mirror-template-media.ts";
+import {
   nullifyInBatches,
   type BatchNullifyIO,
 } from "../_shared/whatsapp-instance-teardown.ts";
@@ -1030,7 +1034,49 @@ Deno.serve(
             return jsonResponse(400, { error: pedido.error }, corsHeaders);
           }
 
-          result = await provider.sendTemplate(pedido.value);
+          // ─── ESPELHAR A MÍDIA DO CABEÇALHO ────────────────────────────────
+          //
+          // A URL que a listagem devolve para a imagem aprovada é do CDN da Meta,
+          // assinada. NÓS baixamos com 200; o pipeline de envio DELA recebe 403:
+          //
+          //   131053 ... Downloading media from weblink failed with http code 403
+          //
+          // Espelhar aqui, e não no navegador, porque o CDN não manda cabeçalho de
+          // CORS — o front não consegue ler os bytes. Falha no espelhamento devolve
+          // a URL original: um envio que talvez funcione é melhor que um erro
+          // nosso no lugar da tentativa.
+          const componentesEspelhados = await Promise.all(
+            (pedido.value.components ?? []).map(async (c) => {
+              const comp = (c ?? {}) as Record<string, unknown>;
+              if (!Array.isArray(comp.parameters)) return c;
+
+              const parametros = await Promise.all(
+                (comp.parameters as unknown[]).map(async (p) => {
+                  const par = (p ?? {}) as Record<string, unknown>;
+                  const tipo = String(par.type ?? "").toLowerCase();
+                  if (tipo !== "image" && tipo !== "video" && tipo !== "document") return p;
+
+                  const aninhado = (par[tipo] ?? {}) as Record<string, unknown>;
+                  const link = typeof par.link === "string" && par.link
+                    ? par.link
+                    : typeof aninhado.link === "string" ? aninhado.link : "";
+                  if (!precisaEspelhar(link)) return p;
+
+                  const espelhada = await espelharMidiaDeTemplate(link, callerOrgId, {
+                    storage: supabaseAdmin.storage,
+                  });
+                  return { ...par, [tipo]: { ...aninhado, link: espelhada }, link: espelhada };
+                }),
+              );
+
+              return { ...comp, parameters: parametros };
+            }),
+          );
+
+          result = await provider.sendTemplate({
+            ...pedido.value,
+            components: componentesEspelhados,
+          });
           break;
         }
 
