@@ -195,6 +195,26 @@ verify_jwt = false
 [functions.omie-webhook]
 verify_jwt = false
 
+# ERP Toth (Café Jurerê, SCRUM-229). Auth por JWT de admin dentro do handler,
+# como as demais funções de ERP — o verify_jwt do gateway fica desligado porque
+# toth-sync-clientes também aceita x-cron-secret.
+[functions.toth-connect]
+verify_jwt = false
+
+[functions.toth-disconnect]
+verify_jwt = false
+
+# toth-probe: ferramenta de descoberta de contrato. Devolve FORMA, não dado.
+[functions.toth-probe]
+verify_jwt = false
+
+[functions.toth-sync-clientes]
+verify_jwt = false
+
+# toth-sync-cobrancas: consulta por CNPJ; exige toth-sync-clientes antes.
+[functions.toth-sync-cobrancas]
+verify_jwt = false
+
 [functions.tinyerp-proxy]
 verify_jwt = false
 

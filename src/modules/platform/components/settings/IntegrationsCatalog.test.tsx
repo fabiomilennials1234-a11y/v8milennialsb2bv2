@@ -38,8 +38,27 @@ vi.mock("@/modules/carteira/hooks/useTinyErp", () => ({
   useTinyErpStatus: () => ({ data: undefined }),
 }));
 
+// O catálogo importa TothSettings no topo, então o mock precisa cobrir tudo o
+// que aquela tela consome do barrel — não só o que o catálogo usa direto.
 vi.mock("@/modules/integrations", () => ({
   useOmieStatus: () => ({ data: undefined }),
+  useTothStatus: () => ({ data: undefined }),
+  useConnectToth: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDisconnectToth: () => ({ mutate: vi.fn() }),
+  useSyncTothClientes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useSyncTothCobrancas: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useUpdateTothSyncMode: () => ({ mutate: vi.fn(), isPending: false }),
+  readTothEndpoint: () => ({ verdict: "vazio", host: null, insecure: false, message: "" }),
+  canSubmitTothConnection: () => false,
+  TOTH_CAPABILITIES: {
+    pushOrder: false,
+    syncProducts: false,
+    fetchNfe: false,
+    syncClientes: true,
+    syncPedidos: false,
+    canonicalMode: false,
+    receivables: true,
+  },
 }));
 
 vi.mock("@/modules/identity", () => ({
@@ -132,13 +151,13 @@ describe("IntegrationsCatalog — gate por feature", () => {
     // conectadas quanto no total.
     voiceCallsEnabled = false;
     render();
-    expect(screen.getByText(/0\/6 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/0\/7 conectadas/)).toBeInTheDocument();
   });
 
   it("o badge de conectadas soma o TorqueCalls assim que ele fica visível", () => {
     voiceCallsEnabled = true;
     render();
-    expect(screen.getByText(/1\/7 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/1\/8 conectadas/)).toBeInTheDocument();
   });
 
   // Mesmo defeito da tela de settings, na outra superfície: o badge dizia
@@ -152,6 +171,6 @@ describe("IntegrationsCatalog — gate por feature", () => {
     ];
     render();
     expect(screen.getByText("TorqueCalls")).toBeInTheDocument();
-    expect(screen.getByText(/0\/7 conectadas/)).toBeInTheDocument();
+    expect(screen.getByText(/0\/8 conectadas/)).toBeInTheDocument();
   });
 });
