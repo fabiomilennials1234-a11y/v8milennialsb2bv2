@@ -118,6 +118,60 @@ export function formatTothDate(iso: string): string | null {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+/** Desloca uma data ISO em N dias (negativo anda para trás). */
+export function shiftIsoDate(iso: string, days: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  if (!m) throw new TothMappingError(`Data ISO inválida: "${iso}"`);
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/**
+ * Janela de consulta de `/cobrancas`, já no formato do ERP.
+ *
+ * Semântica confirmada pelo fornecedor em 18/08: a janela casa a parcela que foi
+ * **emitida OU vence OU teve alteração** no período — um OU entre três datas, não
+ * um campo só. Isso é o que torna a janela utilizável:
+ *
+ *  - **pagamento é alteração**, então título que muda de saldo entra na janela e
+ *    é reconciliado;
+ *  - **`vence no período`** é o que captura a virada aberto → atrasado. Um título
+ *    que vence hoje aparece hoje; a janela para trás garante que ele reapareça
+ *    nos dias seguintes até ser reprocessado com o status novo.
+ *
+ * A folga para trás existe por causa dessa virada, não por capricho: com janela
+ * só do dia, um título que vence numa sexta e não é tocado no fim de semana só
+ * seria reavaliado se algo o alterasse. Com folga, ele é revisitado.
+ */
+export function buildCobrancaWindow(
+  todayIso: string,
+  opts: { backDays: number; forwardDays: number },
+): { dataInicio: string; dataFim: string } {
+  const inicio = formatTothDate(shiftIsoDate(todayIso, -Math.abs(opts.backDays)));
+  const fim = formatTothDate(shiftIsoDate(todayIso, Math.abs(opts.forwardDays)));
+  if (!inicio || !fim) throw new TothMappingError(`Não foi possível montar a janela de ${todayIso}`);
+  return { dataInicio: inicio, dataFim: fim };
+}
+
+/**
+ * Agrupa CNPJs em lotes para o parâmetro multi-valor de `/cobrancas`.
+ *
+ * O fornecedor indicou que `cnpj=a,b,c` devolve os três — o que troca uma
+ * requisição por cliente por uma requisição por lote. Ele disse "pelo que vi",
+ * ou seja, não é contrato firmado: por isso o lote é conservador e o chamador
+ * trata falha de lote sem derrubar os outros.
+ */
+export function chunkCnpjs(cnpjs: string[], size: number): string[][] {
+  const clean = cnpjs.map((c) => c.replace(/\D/g, "")).filter((c) => c.length > 0);
+  const unique = [...new Set(clean)];
+  if (size < 1) return unique.length ? [unique] : [];
+
+  const out: string[][] = [];
+  for (let i = 0; i < unique.length; i += size) out.push(unique.slice(i, i + size));
+  return out;
+}
+
 function isRealDate(year: number, month: number, day: number): boolean {
   if (month < 1 || month > 12 || day < 1 || day > 31) return false;
   const d = new Date(Date.UTC(year, month - 1, day));

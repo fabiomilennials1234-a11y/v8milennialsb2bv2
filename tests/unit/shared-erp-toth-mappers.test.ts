@@ -12,6 +12,9 @@ import {
   digitsOnly,
   parseTothDate,
   formatTothDate,
+  shiftIsoDate,
+  buildCobrancaWindow,
+  chunkCnpjs,
   extractRows,
   extractLoginToken,
   extractApiError,
@@ -337,6 +340,64 @@ describe("mapTothCobrancaToCanonical", () => {
     expect(() => mapTothCobrancaToCanonical({ valorDocumento: 10 }, "2026-08-18")).toThrow(
       TothMappingError,
     );
+  });
+});
+
+describe("shiftIsoDate", () => {
+  it("anda para frente e para trás", () => {
+    expect(shiftIsoDate("2026-08-18", 1)).toBe("2026-08-19");
+    expect(shiftIsoDate("2026-08-18", -1)).toBe("2026-08-17");
+  });
+
+  it("cruza mês, ano e fevereiro bissexto sem tropeçar", () => {
+    expect(shiftIsoDate("2026-08-31", 1)).toBe("2026-09-01");
+    expect(shiftIsoDate("2026-01-01", -1)).toBe("2025-12-31");
+    expect(shiftIsoDate("2028-02-28", 1)).toBe("2028-02-29");
+  });
+});
+
+describe("buildCobrancaWindow", () => {
+  it("monta a janela no formato do ERP, já em dd/MM/aaaa", () => {
+    const w = buildCobrancaWindow("2026-08-18", { backDays: 45, forwardDays: 45 });
+    expect(w.dataInicio).toBe("04/07/2026");
+    expect(w.dataFim).toBe("02/10/2026");
+  });
+
+  it("a folga para trás existe para capturar a virada aberto → atrasado", () => {
+    // A janela casa por "vence no período": sem folga, um título que venceu
+    // ontem não reapareceria e ficaria congelado como aberto.
+    const w = buildCobrancaWindow("2026-08-18", { backDays: 1, forwardDays: 0 });
+    expect(w.dataInicio).toBe("17/08/2026");
+    expect(w.dataFim).toBe("18/08/2026");
+  });
+
+  it("trata folga negativa como magnitude — nunca inverte a janela", () => {
+    const w = buildCobrancaWindow("2026-08-18", { backDays: -10, forwardDays: -10 });
+    expect(w.dataInicio).toBe("08/08/2026");
+    expect(w.dataFim).toBe("28/08/2026");
+  });
+});
+
+describe("chunkCnpjs", () => {
+  it("agrupa no tamanho pedido", () => {
+    const cnpjs = ["1", "2", "3", "4", "5"];
+    expect(chunkCnpjs(cnpjs, 2)).toEqual([["1", "2"], ["3", "4"], ["5"]]);
+  });
+
+  it("tira máscara e remove duplicado — CNPJ repetido é chamada desperdiçada", () => {
+    expect(chunkCnpjs(["11.222.333/0001-44", "11222333000144", "99"], 10)).toEqual([
+      ["11222333000144", "99"],
+    ]);
+  });
+
+  it("descarta entrada vazia ou sem dígito", () => {
+    expect(chunkCnpjs(["", "  ", "---", "12"], 10)).toEqual([["12"]]);
+    expect(chunkCnpjs([], 10)).toEqual([]);
+  });
+
+  it("tamanho inválido vira lote único em vez de laço infinito", () => {
+    expect(chunkCnpjs(["1", "2"], 0)).toEqual([["1", "2"]]);
+    expect(chunkCnpjs([], 0)).toEqual([]);
   });
 });
 
