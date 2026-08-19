@@ -230,7 +230,19 @@ export function contactLabel(c: InboxContact): string {
   // é ele que o vendedor reconhece na lista. O @ não some: vira subtítulo, via
   // `contactHandleLabel`, onde continua servindo de evidência citável.
   if (c.display_name?.trim()) return c.display_name.trim();
+
+  // O NOME DO LEAD é melhor queda que qualquer id. No WhatsApp oficial o
+  // interlocutor pode ser conhecido do CRM sem nunca ter mandado mensagem — é o
+  // caso de quem foi chamado a partir do funil.
+  if (c.lead_name?.trim()) return c.lead_name.trim();
+
   if (c.handle?.trim()) return `@${c.handle.trim().replace(/^@+/, "")}`;
+
+  // ⚠️ "Instagram" É SÓ DO INSTAGRAM. No canal oficial o interlocutor é um
+  // TELEFONE, e chamá-lo de Instagram foi o que a tela fez ao abrir a primeira
+  // conversa vinda do funil: "Instagram 176628" no lugar do nome do lead.
+  if (c.channel === "whatsapp_oficial") return c.external_user_id;
+
   return `Instagram ${c.external_user_id.slice(-6)}`;
 }
 

@@ -761,6 +761,25 @@ export function ChatShellWithContext() {
     [contacts, selectedKey],
   );
 
+  /**
+   * O telefone de uma conversa oficial que ainda não existe na lista.
+   *
+   * Serve para descobrir o LEAD antes da primeira mensagem: quem foi chamado a
+   * partir do funil é conhecido do CRM, e a tela precisa mostrar o nome dele em
+   * vez de um identificador. `null` fora desse caso — e o hook abaixo é chamado
+   * sempre, com `null`, para a ordem dos hooks não mudar entre renders.
+   */
+  const telefoneDeConversaNova = useMemo(() => {
+    if (!isOfficialBox || !selectedKey || !selectedBoxId) return null;
+    const prefixo = `whatsapp_oficial:${selectedBoxId}:`;
+    if (!selectedKey.startsWith(prefixo)) return null;
+    const jaExiste = socialContacts.some((c) => c.conversation_key === selectedKey);
+    return jaExiste ? null : selectedKey.slice(prefixo.length) || null;
+  }, [isOfficialBox, selectedKey, selectedBoxId, socialContacts]);
+
+  // Mesma queryKey do painel de contexto ⇒ o TanStack dedupa, sem rede extra.
+  const { data: leadDeConversaNova } = useLeadByPhone(telefoneDeConversaNova);
+
   const selectedSocialContact = useMemo(() => {
     const existente = socialContacts.find((c) => c.conversation_key === selectedKey) ?? null;
     if (existente || !isOfficialBox) return existente;
@@ -769,8 +788,16 @@ export function ChatShellWithContext() {
     // só devolve quem já trocou mensagem — o primeiro contato, vindo do funil,
     // não tem linha em lugar nenhum. O contato sintético existe só na tela, até a
     // primeira mensagem sair; depois o real toma o lugar, com a mesma chave.
-    return contatoDeConversaNova(selectedKey, selectedBoxId);
-  }, [socialContacts, selectedKey, isOfficialBox, selectedBoxId]);
+    //
+    // O NOME DO LEAD entra aqui. Sem ele a conversa nascia rotulada por um
+    // identificador — e, pior, pelo fallback de Instagram, num canal que é
+    // WhatsApp.
+    return contatoDeConversaNova(
+      selectedKey,
+      selectedBoxId,
+      leadDeConversaNova?.name ?? null,
+    );
+  }, [socialContacts, selectedKey, isOfficialBox, selectedBoxId, leadDeConversaNova]);
 
   /**
    * A lista da caixa social, com a conversa NOVA no topo quando ela existe só na
