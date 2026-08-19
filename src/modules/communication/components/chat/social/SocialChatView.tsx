@@ -193,8 +193,8 @@ function SocialChatHeader({
 function SocialComposer({
   sender,
   canal,
-  instanceId,
   contactExternalId,
+  onAbrirTemplates,
   lastIncomingAt,
 }: {
   /**
@@ -205,16 +205,19 @@ function SocialComposer({
   sender: SocialSender;
   /** O canal da caixa — decide microcopy. O envio já vem resolvido no `sender`. */
   canal: SocialContact["channel"];
-  /** O id da caixa. No canal oficial é a instância, e é dela que vêm os templates. */
-  instanceId: string;
   contactExternalId: string;
+  /**
+   * Abre o seletor de template. O estado mora na VIEW, e não aqui, porque o
+   * botão de "tentar novamente" de uma mensagem recusada também precisa abri-lo
+   * — e ele vive na lista de mensagens, não no composer.
+   */
+  onAbrirTemplates: () => void;
   lastIncomingAt: string | null;
 }) {
   const [texto, setTexto] = useState("");
   const [anexo, setAnexo] = useState<UploadedAttachment | null>(null);
   const [subindo, setSubindo] = useState(false);
   const [gravando, setGravando] = useState(false);
-  const [templatesAberto, setTemplatesAberto] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const gravadorRef = useRef<MediaRecorder | null>(null);
   const { data: teamMember } = useCurrentTeamMember();
@@ -401,7 +404,7 @@ function SocialComposer({
             variant={janela.open === false ? "default" : "ghost"}
             size="sm"
             className="h-[42px] w-9 shrink-0 p-0"
-            onClick={() => setTemplatesAberto(true)}
+            onClick={onAbrirTemplates}
             disabled={subindo || enviar.isPending || gravando}
             aria-label="Enviar template aprovado"
             title="Enviar template aprovado"
@@ -441,15 +444,6 @@ function SocialComposer({
             : <Send className="w-4 h-4" />}
         </Button>
       </div>
-
-      {canal === "whatsapp_oficial" && (
-        <TemplatePicker
-          instanceId={instanceId}
-          contactExternalId={contactExternalId}
-          open={templatesAberto}
-          onOpenChange={setTemplatesAberto}
-        />
-      )}
 
       {janela.open !== null && (
         <p
@@ -511,6 +505,7 @@ export function SocialChatView({
   isMobile,
 }: SocialChatViewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [templatesAberto, setTemplatesAberto] = useState(false);
 
   const { data: rawMessages = [], isLoading } = useSocialMessages(selectedContact);
 
@@ -569,8 +564,40 @@ export function SocialChatView({
             lastReadAt={0}
             mountTime={mountTime}
             onImagePreview={(url) => setPreviewUrl(url)}
-            onRetry={() => {
-              /* não há envio nesta fatia — nada para reenviar */
+            onRetry={(falha) => {
+              // ⚠️ ESTE BOTÃO ERA DECORATIVO. O comentário anterior — "não há
+              // envio nesta fatia" — descrevia a fatia de recebimento e ficou
+              // para trás quando o envio entrou. Resultado: mensagem recusada
+              // pela Meta exibia "Tentar novamente" e o clique não fazia NADA.
+              const m = falha as unknown as {
+                message_type?: string | null;
+                content?: string | null;
+              };
+
+              // TEMPLATE não se reenvia igual: a recusa costuma ser de FORMA —
+              // faltou a imagem do cabeçalho, faltou parâmetro. Repetir o mesmo
+              // envelope repete o mesmo erro. Abrir o seletor é o caminho de
+              // conserto: lá o que falta é exigido antes de liberar o botão.
+              if (m.message_type === "template") {
+                setTemplatesAberto(true);
+                return;
+              }
+
+              const texto = (m.content ?? "").trim();
+              if (!texto) {
+                // Mídia não é reenviável daqui: o arquivo não está em mãos, só a
+                // URL do que foi recusado. Mandar o vendedor anexar de novo é
+                // honesto; fingir que reenviou não é.
+                toast.error("Reenvie o arquivo pelo composer");
+                return;
+              }
+
+              void sender
+                .send({ contactExternalId: selectedContact.external_user_id, text: texto })
+                .then(() => toast.success("Mensagem reenviada"))
+                .catch((e) =>
+                  toast.error(e instanceof Error ? e.message : "Não foi possível reenviar"),
+                );
             }}
             onOpenTemplates={() => {
               /* templates de Instagram são fatia própria (janela de 24h) */
@@ -581,11 +608,20 @@ export function SocialChatView({
         )}
       </div>
 
+      {selectedContact.channel === "whatsapp_oficial" && (
+        <TemplatePicker
+          instanceId={selectedContact.messaging_channel_id}
+          contactExternalId={selectedContact.external_user_id}
+          open={templatesAberto}
+          onOpenChange={setTemplatesAberto}
+        />
+      )}
+
       <SocialComposer
         sender={sender}
         canal={selectedContact.channel}
-        instanceId={selectedContact.messaging_channel_id}
         contactExternalId={selectedContact.external_user_id}
+        onAbrirTemplates={() => setTemplatesAberto(true)}
         lastIncomingAt={ultimaRecebidaEm}
       />
 
