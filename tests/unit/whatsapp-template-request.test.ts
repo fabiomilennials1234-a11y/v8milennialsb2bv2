@@ -101,3 +101,38 @@ describe("readTemplateRequest", () => {
     expect(readTemplateRequest({})).toEqual({ ok: false, error: "Missing number" });
   });
 });
+
+/**
+ * O TEXTO RENDERIZADO — o que faz a conversa mostrar a mensagem em vez de
+ * "Mensagem interativa".
+ *
+ * Medido no primeiro template enviado em produção (19/08): a linha nasceu com
+ * `message_type: "template"` e `content` NULO, e a bolha caiu no fallback
+ * genérico. O provider não tem como renderizar o corpo — a Meta é que monta —,
+ * mas quem clica em enviar tem as duas metades: o corpo aprovado e os parâmetros.
+ */
+describe("readTemplateRequest — texto renderizado", () => {
+  const base = { number: "554884334050", templateName: "boas_vindas", language: "pt_BR" };
+
+  it("aceita o texto e o entrega ao provider", () => {
+    const r = readTemplateRequest({ ...base, previewText: "Olá Maria, tudo bem?" });
+    expect(r.ok && r.value.previewText).toBe("Olá Maria, tudo bem?");
+  });
+
+  it("aceita snake_case, como o resto do contrato", () => {
+    const r = readTemplateRequest({ ...base, preview_text: "Olá Maria" });
+    expect(r.ok && r.value.previewText).toBe("Olá Maria");
+  });
+
+  it("é OPCIONAL — quem dispara por automação não tem o corpo aprovado em mãos", () => {
+    // Exigir travaria o envio automático por causa de um campo de exibição.
+    const r = readTemplateRequest(base);
+    expect(r.ok).toBe(true);
+    expect(r.ok && r.value.previewText).toBeUndefined();
+  });
+
+  it("texto em branco não vira texto", () => {
+    const r = readTemplateRequest({ ...base, previewText: "   " });
+    expect(r.ok && r.value.previewText).toBeUndefined();
+  });
+});

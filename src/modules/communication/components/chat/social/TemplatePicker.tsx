@@ -95,6 +95,9 @@ export function TemplatePicker({
         templateName: escolhido.name,
         language: escolhido.language ?? "pt_BR",
         components: montarComponentesDeEnvio(escolhido, valores),
+        // O que o cliente vai ler, para a conversa mostrar a mensagem em vez de
+        // "Mensagem interativa". É a mesma substituição que a Meta faz.
+        previewText: previewDoTemplate(escolhido, valores),
       });
       toast.success("Template enviado");
       fechar();

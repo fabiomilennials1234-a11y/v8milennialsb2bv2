@@ -806,10 +806,18 @@ export class NotificameProvider implements WhatsAppProvider {
       to: opts.number,
       content,
       messageType: "template",
-      // O corpo renderizado do template é montado pela Meta a partir do nome e
-      // dos parâmetros — não existe deste lado. Gravar um texto inventado aqui
-      // faria o histórico do chat mentir sobre o que o cliente recebeu.
-      text: null,
+      // ⚠️ O TEXTO VEM DE QUEM ENVIA, e essa distinção é a única que importa aqui.
+      //
+      // A Meta monta o corpo final a partir do nome e dos parâmetros; deste lado
+      // não há como INVENTÁ-LO — e inventar faria o histórico mentir sobre o que
+      // o cliente recebeu. Mas quem clicou em enviar tem as duas metades: o corpo
+      // APROVADO, que veio da listagem do fornecedor, e os parâmetros que ele
+      // mesmo preencheu. Substituir um no outro reproduz o que a Meta renderiza —
+      // não é chute, é a mesma conta.
+      //
+      // Sem isto a linha nasce sem texto e a conversa exibe "Mensagem interativa"
+      // no lugar da mensagem — medido em produção no primeiro template enviado.
+      text: opts.previewText?.trim() || null,
       mediaUrl: null,
     });
   }
