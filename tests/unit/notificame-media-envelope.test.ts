@@ -35,6 +35,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  graphComponentsToTemplateComponents,
   toNotificameMediaContent,
 } from "../../supabase/functions/_shared/whatsapp-providers/notificame-provider.ts";
 
@@ -70,7 +71,17 @@ describe("WhatsApp — envelope de mídia", () => {
     expect(c).toMatchObject({ type: "file", fileMimeType: "document", fileUrl: URL_OK });
   });
 
-  it("áudio carrega voice:true — sem ele o WhatsApp entrega como ARQUIVO, não como gravação", () => {
+  /**
+   * ⚠️ CONTRATO REVISTO em 2026-08-19. Este teste afirmava que `audio` também
+   * carrega `voice: true`, e era o comportamento — até a Meta recusar um m4a
+   * marcado como nota de voz com `131053 Media upload error`.
+   *
+   * `voice: true` EXIGE .ogg/OPUS. Quem sabe o formato do arquivo é quem envia,
+   * não este montador: `ptt` significa "é nota de voz, o chamador conferiu";
+   * `audio` significa áudio comum. Ver `useNotificameWhatsAppSend`, que decide
+   * entre os dois pelo MIME real.
+   */
+  it("áudio comum NÃO carrega voice — é anexo, não gravação", () => {
     const c = toNotificameMediaContent(
       { number: "5511999999999", type: "audio", file: URL_OK },
       "whatsapp",
@@ -80,11 +91,10 @@ describe("WhatsApp — envelope de mídia", () => {
       fileMimeType: "audio",
       fileUrl: URL_OK,
       fileCaption: "Áudio",
-      voice: true,
     });
   });
 
-  it("ptt (push-to-talk) é o mesmo caso do áudio", () => {
+  it("ptt carrega voice:true — sem ele o WhatsApp entrega como ARQUIVO, não como gravação", () => {
     const c = toNotificameMediaContent(
       { number: "5511999999999", type: "ptt", file: URL_OK },
       "whatsapp",
@@ -160,5 +170,64 @@ describe("recusas que já valiam e seguem valendo", () => {
     // `fileUrl` e `fileCaption`. O fornecedor aceita o corpo e recusa o envio.
     expect(c.url).toBeUndefined();
     expect(c.caption).toBeUndefined();
+  });
+});
+
+/**
+ * O LINK DA MÍDIA NO TEMPLATE — o defeito 132018.
+ *
+ * Na Graph o link vem ANINHADO sob a chave do tipo; o nosso
+ * `TemplateSendParameter` o quer PLANO, e `buildSendParameter` lê `p.link`. O
+ * repasse cru fazia esse campo chegar `undefined` — o JSON some com a chave e o
+ * envelope sai assim:
+ *
+ *   {"type":"image","image":{}}
+ *
+ * Medido em produção (2026-08-19), como SEGUNDO erro do mesmo template: o
+ * primeiro (132012) era o componente ausente, já corrigido, e este só apareceu
+ * depois — a Meta valida uma coisa de cada vez.
+ */
+describe("graphComponentsToTemplateComponents — link da mídia", () => {
+  it("achata o formato da Graph (aninhado) para o interno (plano)", () => {
+    const [header] = graphComponentsToTemplateComponents([
+      { type: "header", parameters: [{ type: "image", image: { link: "https://x/y.jpg" } }] },
+    ]);
+
+    expect(header.parameters?.[0]).toEqual({ type: "image", link: "https://x/y.jpg" });
+  });
+
+  it("aceita o formato plano de quem já mandava assim", () => {
+    const [header] = graphComponentsToTemplateComponents([
+      { type: "header", parameters: [{ type: "video", link: "https://x/y.mp4" }] },
+    ]);
+
+    expect(header.parameters?.[0]).toEqual({ type: "video", link: "https://x/y.mp4" });
+  });
+
+  it("documento também — os três tipos de mídia seguem a mesma regra", () => {
+    const [header] = graphComponentsToTemplateComponents([
+      { type: "header", parameters: [{ type: "document", document: { link: "https://x/y.pdf" } }] },
+    ]);
+
+    expect(header.parameters?.[0]).toEqual({ type: "document", link: "https://x/y.pdf" });
+  });
+
+  it("sem link em lugar nenhum, o campo fica VAZIO e não undefined", () => {
+    // String vazia sobrevive ao JSON; `undefined` some, e some justamente a
+    // chave que a Meta procura — foi assim que o erro apareceu como
+    // "Either one of media ID or link must be present".
+    const [header] = graphComponentsToTemplateComponents([
+      { type: "header", parameters: [{ type: "image", image: {} }] },
+    ]);
+
+    expect(header.parameters?.[0]).toEqual({ type: "image", link: "" });
+  });
+
+  it("parâmetro de TEXTO passa intocado", () => {
+    const [body] = graphComponentsToTemplateComponents([
+      { type: "body", parameters: [{ type: "text", text: "Maria" }] },
+    ]);
+
+    expect(body.parameters?.[0]).toEqual({ type: "text", text: "Maria" });
   });
 });

@@ -90,8 +90,18 @@ describe("classifyAttachment — tamanho", () => {
  * extensão que mente é exatamente onde ele erra.
  */
 describe("pickAudioRecordingMime — preferir o que o destino aceita", () => {
-  it("escolhe audio/mp4 quando o navegador suporta (o par aac/m4a das duas listas)", () => {
-    expect(pickAudioRecordingMime(() => true)).toBe("audio/mp4");
+  /**
+   * ⚠️ CONTRATO REVISTO em 2026-08-19: o mp4 agora é pedido COM O CODEC.
+   *
+   * `audio/mp4` cru não pede AAC — pede "mp4 com o que o navegador quiser
+   * dentro", e o Chromium põe Opus. A Meta recusou o arquivo resultante com
+   * `131053 ... on processing it is of type application/octet-stream`.
+   *
+   * Este teste segue medindo a MESMA coisa (a preferência do Instagram por
+   * mp4/aac); mudou só a forma de pedi-la.
+   */
+  it("escolhe mp4 com codec AAC explícito quando o navegador suporta", () => {
+    expect(pickAudioRecordingMime(() => true)).toBe("audio/mp4;codecs=mp4a.40.2");
   });
 
   it("cai para ogg quando só ogg e webm existem", () => {

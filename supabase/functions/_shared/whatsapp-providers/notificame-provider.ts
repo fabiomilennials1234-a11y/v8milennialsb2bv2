@@ -322,6 +322,43 @@ export function toNotificameMediaContent(
  * explícito, porque template com componente faltando é recusado pela Meta e a
  * mensagem some — falha tardia e cara, no lugar de uma falha aqui.
  */
+/**
+ * Um parâmetro da Graph no formato INTERNO.
+ *
+ * ⚠️ MÍDIA MUDA DE FORMA ENTRE OS DOIS. Na Graph o link vem ANINHADO sob a chave
+ * do tipo — `{type:"image", image:{link}}` —, e o nosso `TemplateSendParameter`
+ * o quer PLANO — `{type:"image", link}`. `buildSendParameter` lê `p.link`, e o
+ * repasse cru fazia esse campo chegar `undefined`: o JSON some com a chave e o
+ * envelope sai como `{"type":"image","image":{}}`.
+ *
+ * A Meta responde a isso com
+ *
+ *   132018 There's an issue with the parameters in your template
+ *   details: Either one of media ID or link must be present
+ *
+ * medido em produção 2026-08-19 — o segundo erro do mesmo template, depois de o
+ * primeiro (132012, componente ausente) já ter sido corrigido.
+ *
+ * Aceita as DUAS formas: quem já manda plano continua funcionando, e quem manda
+ * no formato documentado pela Meta passa a funcionar.
+ */
+function normalizarParametro(bruto: unknown): TemplateSendParameter {
+  const p = (bruto ?? {}) as Record<string, unknown>;
+  const tipo = String(p.type ?? "").toLowerCase();
+
+  if (tipo === "image" || tipo === "video" || tipo === "document") {
+    const aninhado = (p[tipo] ?? {}) as Record<string, unknown>;
+    const link = typeof p.link === "string" && p.link
+      ? p.link
+      : typeof aninhado.link === "string"
+        ? aninhado.link
+        : "";
+    return { type: tipo, link } as TemplateSendParameter;
+  }
+
+  return p as TemplateSendParameter;
+}
+
 export function graphComponentsToTemplateComponents(
   components: unknown[] | undefined,
 ): TemplateSendComponent[] {
@@ -354,9 +391,7 @@ export function graphComponentsToTemplateComponents(
     // `parameters: []` é LEGÍTIMO (template sem variável) e diferente de ausente:
     // o builder emite a chave nos dois casos, e a Meta espera isso.
     if (Array.isArray(c.parameters)) {
-      out.parameters = (c.parameters as unknown[]).map(
-        (p) => (p ?? {}) as TemplateSendParameter,
-      );
+      out.parameters = (c.parameters as unknown[]).map(normalizarParametro);
     }
 
     return out;
