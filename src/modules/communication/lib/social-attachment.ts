@@ -69,11 +69,22 @@ export const AUDIO_RECORDING_CANDIDATES_INSTAGRAM = [
   "audio/webm",
 ] as const;
 
+/**
+ * ⚠️ SEM MP4 AQUI, e o motivo é medido.
+ *
+ * O `MediaRecorder` do Chromium grava MP4 **fragmentado** (`moof`/`traf`), e o
+ * processador da Meta o recusa com `131053 ... on processing it is of type
+ * application/octet-stream` — com Opus E com AAC dentro. O container é o
+ * problema, não o codec, e nenhuma escolha de codec o resolve.
+ *
+ * O que sobra é Opus: `audio/ogg` direto quando o navegador escreve Ogg, ou
+ * `audio/webm` REMUXADO para Ogg antes de subir (`webm-opus-to-ogg.ts`) — os
+ * mesmos pacotes, outro container, sem recodificar.
+ */
 export const AUDIO_RECORDING_CANDIDATES_WHATSAPP = [
   "audio/ogg;codecs=opus",
-  "audio/mp4;codecs=mp4a.40.2",
-  "audio/aac",
-  "audio/mpeg",
+  "audio/webm;codecs=opus",
+  "audio/webm",
 ] as const;
 
 /** Mantida para quem já importava a lista única (Instagram é o caso legado). */
