@@ -71,10 +71,24 @@ Deno.serve(
       throw err;
     }
 
-    // Prova de vida: autentica e lê uma página mínima de clientes. Só então grava.
+    // Prova de vida: SÓ o login. Não lê clientes.
+    //
+    // A versão anterior fazia `GET /clientes?limit=1` para "provar acesso a
+    // dado", e isso estava errado por dois motivos que só apareceram contra o
+    // ERP real (19/08, HTTP 500):
+    //
+    //  1. `limit` não existe na lista de parâmetros do fornecedor (`token`,
+    //     `cnpj`, `diasCompras`, `marcas`). Mandar parâmetro inventado para um
+    //     endpoint que não o conhece é pedir exceção do outro lado.
+    //  2. Sem filtro, `/clientes` devolve a BASE INTEIRA. Validar uma conexão
+    //     puxando todo o cadastro do cliente é caro e, num servidor on-premise
+    //     de uma empresa só, potencialmente danoso.
+    //
+    // O login já prova o que a conexão precisa provar: endereço alcançável e
+    // credencial aceita. Se o dado está acessível é pergunta do `toth-probe` e
+    // do dry-run, que existem para isso e não gravam nada.
     try {
       await client.login();
-      await client.get("clientes", { limit: "1" });
     } catch (err) {
       if (err instanceof TothAuthError) return json({ error: err.message }, cors);
       if (err instanceof TothRequestError) {

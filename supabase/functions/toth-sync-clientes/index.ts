@@ -169,6 +169,7 @@ Deno.serve(
     // prática: dá para apagar depois, mas já terá criado lead e adotado conversa.
     const body = await req.clone().json().catch(() => ({}));
     const dryRun = body.dry_run === true;
+    const paginated = body.paginated === true;
     const maxClients =
       typeof body.max_clients === "number" && body.max_clients > 0
         ? Math.floor(body.max_clients)
@@ -184,10 +185,18 @@ Deno.serve(
 
     try {
       for (let i = 0; i < MAX_PAGES_PER_RUN; i++) {
-        const payload = await client.get("clientes", {
-          page: String(page),
-          limit: String(PAGE_SIZE),
-        });
+        // 🔴 Sem parâmetro de paginação por padrão. `page`/`limit` eram invenção
+        // nossa: a lista que o fornecedor documentou para `/clientes` é `token`,
+        // `cnpj`, `diasCompras` e `marcas`. Mandar parâmetro que o endpoint não
+        // conhece provocou HTTP 500 no ERP real (19/08), e "sem paginação" é a
+        // hipótese que os exemplos dele sustentam — a resposta vem inteira.
+        //
+        // `paginated: true` no corpo reativa, para quando o fornecedor
+        // confirmar os nomes (está em análise com a equipe dele).
+        const payload = await client.get(
+          "clientes",
+          paginated ? { page: String(page), limit: String(PAGE_SIZE) } : {},
+        );
         const rows = extractRows(payload);
         stats.pages++;
 
@@ -259,6 +268,14 @@ Deno.serve(
         }
 
         if (stopReason === "max_clients") break;
+
+        // Sem paginação, a resposta é a base inteira: pedir de novo traria o
+        // mesmo bloco. O guard de "nenhum id novo" abaixo pegaria, mas só depois
+        // de gastar uma requisição à toa contra o servidor de uma empresa só.
+        if (!paginated) {
+          stopReason = "single_page";
+          break;
+        }
 
         // A API ignorou a paginação e repetiu o bloco anterior.
         if (newInThisPage === 0) {
