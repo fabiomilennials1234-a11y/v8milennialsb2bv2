@@ -95,11 +95,17 @@ function SocialChatHeader({
   channelName,
   onBack,
   isMobile,
+  onOpenLead,
 }: {
   contact: SocialContact;
   channelName: string;
   onBack: () => void;
   isMobile: boolean;
+  /**
+   * Abre a ficha do lead a partir do contato. Só existe onde há TELEFONE — no
+   * Instagram o interlocutor é IGSID e a ficha é montada por telefone.
+   */
+  onOpenLead?: () => void;
 }) {
   const name = contactLabel(contact);
   const handle = contactHandleLabel(contact);
@@ -143,7 +149,18 @@ function SocialChatHeader({
         <ChannelBadge channel={contact.channel} size={16} overlay />
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-display font-semibold truncate text-foreground">{name}</h3>
+        {onOpenLead ? (
+          <button
+            type="button"
+            onClick={onOpenLead}
+            className="font-display font-semibold truncate text-foreground hover:underline text-left w-full"
+            title="Abrir ficha do contato"
+          >
+            {name}
+          </button>
+        ) : (
+          <h3 className="font-display font-semibold truncate text-foreground">{name}</h3>
+        )}
         {/* O @ vem primeiro no subtítulo por ser o dado IDENTIFICADOR da pessoa —
             o resto é contexto do canal, igual em toda conversa desta caixa. */}
         <p className="text-sm text-muted-foreground truncate">
@@ -172,6 +189,7 @@ function SocialChatHeader({
  */
 function SocialComposer({
   sender,
+  canal,
   contactExternalId,
   lastIncomingAt,
 }: {
@@ -181,6 +199,8 @@ function SocialComposer({
    * "Rendered more hooks than during the previous render", com o chat aberto.
    */
   sender: SocialSender;
+  /** O canal da caixa — decide microcopy. O envio já vem resolvido no `sender`. */
+  canal: SocialContact["channel"];
   contactExternalId: string;
   lastIncomingAt: string | null;
 }) {
@@ -345,7 +365,13 @@ function SocialComposer({
               void submeter();
             }
           }}
-          placeholder={gravando ? "Gravando… toque no quadrado para parar" : "Responder no Direct…"}
+          placeholder={
+            gravando
+              ? "Gravando… toque no quadrado para parar"
+              : canal === "whatsapp_oficial"
+                ? "Responder no WhatsApp…"
+                : "Responder no Direct…"
+          }
           rows={1}
           className="min-h-[42px] max-h-32 resize-none"
           disabled={enviar.isPending}
@@ -387,6 +413,8 @@ export interface SocialChatViewProps {
    * ficaria chumbado num canal que pode não ser o desta caixa.
    */
   boxChannel: SocialContact["channel"];
+  /** Abre a ficha do lead pelo telefone. Ausente na caixa social, que não tem telefone. */
+  onOpenLead?: () => void;
   /**
    * Como esta caixa envia. Injetado porque a view é a MESMA para o Direct e para
    * o WhatsApp oficial, e só o envio difere: `notificame-send-social` recusa
@@ -405,6 +433,7 @@ export interface SocialChatViewProps {
 export function SocialChatView({
   selectedContact,
   boxChannel,
+  onOpenLead,
   sender,
   channelName,
   organizationId,
@@ -453,6 +482,7 @@ export function SocialChatView({
         channelName={channelName}
         onBack={onBack}
         isMobile={isMobile}
+        onOpenLead={onOpenLead}
       />
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
@@ -485,6 +515,7 @@ export function SocialChatView({
 
       <SocialComposer
         sender={sender}
+        canal={selectedContact.channel}
         contactExternalId={selectedContact.external_user_id}
         lastIncomingAt={ultimaRecebidaEm}
       />

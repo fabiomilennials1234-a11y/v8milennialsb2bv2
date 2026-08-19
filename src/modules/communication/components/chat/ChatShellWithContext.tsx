@@ -1088,6 +1088,9 @@ export function ChatShellWithContext() {
             <SocialChatView
               selectedContact={selectedSocialContact}
               boxChannel={isOfficialBox ? "whatsapp_oficial" : "instagram"}
+              // Só a caixa oficial abre ficha de lead: lá o interlocutor É um
+              // telefone. No Instagram é IGSID, e a ficha é montada por telefone.
+              onOpenLead={isOfficialBox ? handleOpenLeadModal : undefined}
               sender={socialSender}
               channelName={selectedBox?.name ?? "Instagram"}
               organizationId={organizationId}
@@ -1161,6 +1164,20 @@ export function ChatShellWithContext() {
           onClose={handleCloseLeadModal}
           phoneNumber={selectedContact.phone_number}
           pushName={selectedContact.push_name ?? undefined}
+        />
+      )}
+
+      {/* A caixa OFICIAL tem telefone — então tem ficha de lead, criação e
+          vínculo, exatamente como o WhatsApp por QR. O `contact_external_id` é o
+          telefone do interlocutor; `LeadDetailContent` normaliza por dentro e é
+          o mesmo componente das outras conversas. Sem isto o vendedor via
+          "Nenhum lead vinculado" sem nenhuma ação possível. */}
+      {isOfficialBox && selectedSocialContact && (
+        <LeadContactModal
+          isOpen={leadModalOpen}
+          onClose={handleCloseLeadModal}
+          phoneNumber={selectedSocialContact.external_user_id}
+          pushName={selectedSocialContact.display_name ?? undefined}
         />
       )}
     </>
