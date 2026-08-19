@@ -24,6 +24,15 @@ export interface TemplateDraftComponent {
   format?: string | null;
   text?: string | null;
   buttons?: unknown[] | null;
+  /**
+   * O exemplo que a Meta EXIGE quando o texto tem `{{n}}`.
+   *
+   * Formato dela, e não nosso: `{ body_text: [["Maria", "1234"]] }` — repare na
+   * lista DENTRO da lista, uma linha de exemplos — e `{ header_text: ["Maria"] }`,
+   * lista simples. Submeter variável sem isto é recusa certa, assíncrona e
+   * genérica: exatamente o que este validador existe para evitar.
+   */
+  example?: unknown;
 }
 
 export interface TemplateDraft {
@@ -141,6 +150,55 @@ export function validateTemplateDraft(draft: TemplateDraft): TemplateProblem[] {
     const vars = readVariables(text);
     if (vars.positional.length + vars.named.length > 0) {
       add("footer_no_variables", "O rodapé não pode conter variáveis", "footer");
+    }
+  }
+
+  // ── Exemplo das variáveis ──────────────────────────────────────────────────
+  //
+  // A Meta exige um valor de exemplo por variável, e recusa sem ele. A recusa
+  // chega HORAS depois e não diz qual regra caiu — o template fica morto e quem
+  // escreveu não tem pista. Esta regra troca isso por um campo vermelho.
+  //
+  // Vale só para TEXTO: cabeçalho de mídia usa `header_handle`, que esta fatia
+  // não cobre.
+  const contaExemplos = (exemplo: unknown, chave: "body_text" | "header_text"): number => {
+    const e = (exemplo ?? {}) as Record<string, unknown>;
+    const bruto = e[chave];
+    if (!Array.isArray(bruto)) return 0;
+    // `body_text` é lista de LINHAS de exemplo; contamos a primeira linha.
+    // `header_text` é lista simples.
+    const linha = chave === "body_text"
+      ? (Array.isArray(bruto[0]) ? bruto[0] : [])
+      : bruto;
+    return linha.filter((v) => typeof v === "string" && v.trim()).length;
+  };
+
+  if (body) {
+    const vars = readVariables((body.text ?? ""));
+    const quantas = vars.positional.length + vars.named.length;
+    if (quantas > 0) {
+      const exemplos = contaExemplos(body.example, "body_text");
+      if (exemplos < quantas) {
+        add(
+          "body_example_required",
+          exemplos === 0
+            ? "Dê um exemplo para cada variável do corpo — a Meta recusa sem isso"
+            : `Faltam exemplos: ${quantas} variáveis no corpo, ${exemplos} exemplo(s)`,
+          "body",
+        );
+      }
+    }
+  }
+
+  if (header && (header.format ?? "TEXT").trim().toUpperCase() === "TEXT") {
+    const vars = readVariables((header.text ?? ""));
+    const quantas = vars.positional.length + vars.named.length;
+    if (quantas > 0 && contaExemplos(header.example, "header_text") < quantas) {
+      add(
+        "header_example_required",
+        "Dê um exemplo para a variável do cabeçalho — a Meta recusa sem isso",
+        "header",
+      );
     }
   }
 

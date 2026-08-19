@@ -86,8 +86,16 @@ describe("validateTemplateDraft — o nome, que a Meta recusa em silêncio", () 
 
 describe("validateTemplateDraft — variáveis", () => {
   it("aceita posicionais em sequência a partir de 1", () => {
-    expect(codes(draft({ components: [{ type: "BODY", text: "Oi {{1}}, seu pedido {{2}} saiu" }] })))
-      .toEqual([]);
+    // O `example` entra aqui porque a Meta o EXIGE junto com a variável — este
+    // teste é sobre a SEQUÊNCIA, e sem o exemplo ele passaria a medir a regra
+    // errada. Ver o bloco "exemplo das variáveis" no fim do arquivo.
+    expect(codes(draft({
+      components: [{
+        type: "BODY",
+        text: "Oi {{1}}, seu pedido {{2}} saiu",
+        example: { body_text: [["Maria", "1234"]] },
+      }],
+    }))).toEqual([]);
   });
 
   /**
@@ -105,8 +113,13 @@ describe("validateTemplateDraft — variáveis", () => {
   });
 
   it("aceita variáveis nomeadas", () => {
-    expect(codes(draft({ components: [{ type: "BODY", text: "Oi {{nome}}, bem-vindo" }] })))
-      .toEqual([]);
+    expect(codes(draft({
+      components: [{
+        type: "BODY",
+        text: "Oi {{nome}}, bem-vindo",
+        example: { body_text: [["Maria"]] },
+      }],
+    }))).toEqual([]);
   });
 
   it("recusa misturar posicional com nomeada — o formato é um só por template", () => {
@@ -180,5 +193,102 @@ describe("validateTemplateDraft — limites e duplicidade", () => {
     expect(problemas).toContain("language_required");
     expect(problemas).toContain("body_required");
     expect(problemas.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/**
+ * O EXEMPLO DAS VARIÁVEIS — o campo que morria no meio do caminho.
+ *
+ * `buildCreateTemplateBody` sempre soube emitir `example`, e o `readDraft` da
+ * edge function não lia o campo. Resultado: todo template com `{{1}}` era
+ * submetido sem exemplo e recusado pela Meta HORAS depois, com motivo genérico.
+ * A tela ainda por cima empurrava para lá — o placeholder do corpo é
+ * "Olá {{1}}, seu pedido {{2}}…".
+ */
+describe("validateTemplateDraft — exemplo das variáveis", () => {
+  const base = {
+    name: "boas_vindas",
+    language: "pt_BR",
+    category: "UTILITY" as const,
+  };
+
+  it("corpo com variável e SEM exemplo é recusado aqui, não pela Meta", () => {
+    const problemas = validateTemplateDraft({
+      ...base,
+      components: [{ type: "BODY", text: "Olá {{1}}, tudo bem?" }],
+    });
+
+    const p = problemas.find((x) => x.code === "body_example_required");
+    expect(p).toBeDefined();
+    expect(p?.field).toBe("body");
+  });
+
+  it("corpo com variável e exemplo passa", () => {
+    const problemas = validateTemplateDraft({
+      ...base,
+      components: [{
+        type: "BODY",
+        text: "Olá {{1}}, tudo bem?",
+        example: { body_text: [["Maria"]] },
+      }],
+    });
+
+    expect(problemas.filter((x) => x.code.includes("example"))).toEqual([]);
+  });
+
+  it("conta os exemplos: duas variáveis com um exemplo só ainda falta", () => {
+    const problemas = validateTemplateDraft({
+      ...base,
+      components: [{
+        type: "BODY",
+        text: "Olá {{1}}, pedido {{2}}",
+        example: { body_text: [["Maria"]] },
+      }],
+    });
+
+    const p = problemas.find((x) => x.code === "body_example_required");
+    expect(p?.message).toContain("2 variáveis");
+  });
+
+  it("exemplo em branco não conta como exemplo", () => {
+    const problemas = validateTemplateDraft({
+      ...base,
+      components: [{
+        type: "BODY",
+        text: "Olá {{1}}",
+        example: { body_text: [["   "]] },
+      }],
+    });
+
+    expect(problemas.some((x) => x.code === "body_example_required")).toBe(true);
+  });
+
+  it("o cabeçalho tem a própria chave — header_text, lista simples", () => {
+    const comHeaderErrado = validateTemplateDraft({
+      ...base,
+      components: [
+        { type: "HEADER", format: "TEXT", text: "Pedido {{1}}", example: { body_text: [["123"]] } },
+        { type: "BODY", text: "Corpo sem variável" },
+      ],
+    });
+    expect(comHeaderErrado.some((x) => x.code === "header_example_required")).toBe(true);
+
+    const comHeaderCerto = validateTemplateDraft({
+      ...base,
+      components: [
+        { type: "HEADER", format: "TEXT", text: "Pedido {{1}}", example: { header_text: ["123"] } },
+        { type: "BODY", text: "Corpo sem variável" },
+      ],
+    });
+    expect(comHeaderCerto.some((x) => x.code === "header_example_required")).toBe(false);
+  });
+
+  it("template SEM variável não exige exemplo nenhum", () => {
+    const problemas = validateTemplateDraft({
+      ...base,
+      components: [{ type: "BODY", text: "Olá! Podemos continuar por aqui?" }],
+    });
+
+    expect(problemas.filter((x) => x.code.includes("example"))).toEqual([]);
   });
 });
