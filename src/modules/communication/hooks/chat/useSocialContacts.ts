@@ -48,6 +48,7 @@ function toSocialContact(
   return {
     channel: "instagram",
     conversation_key: buildSocialConversationKey(
+      "instagram",
       messagingChannelId,
       row.contact_external_id,
     ),
