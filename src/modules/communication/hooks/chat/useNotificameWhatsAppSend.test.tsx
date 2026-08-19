@@ -112,3 +112,93 @@ describe("useNotificameWhatsAppSend — as guardas", () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * MÍDIA (decisão Q7 do spec: entra na v1).
+ *
+ * O provider do canal oficial exige URL PÚBLICA e recusa base64 com
+ * `NotSupportedError` — e é justamente URL pública o que o composer já produz,
+ * porque `uploadSocialAttachment` publica no bucket antes de enviar.
+ *
+ * Áudio vai por `sendAudio` e não por `sendMedia(type:'audio')`: é a ação que o
+ * proxy traduz para `type: 'ptt'`, a mensagem de voz. `sendMedia(audio)` produz
+ * anexo de arquivo — some do balão de voz e o cliente recebe outro objeto.
+ */
+describe("useNotificameWhatsAppSend — mídia", () => {
+  const corpoDe = (i: number) => invokeMock.mock.calls[i][1].body;
+
+  it("imagem vai por sendMedia, com a URL pública e a legenda", async () => {
+    const { result } = renderHook(() => useNotificameWhatsAppSend(INSTANCIA), {
+      wrapper: wrap(newQc()),
+    });
+
+    await result.current.mutateAsync({
+      to: TELEFONE,
+      text: "olha o catálogo",
+      media: {
+        type: "image",
+        url: "https://storage.example/cat.jpg",
+        filename: "cat.jpg",
+      },
+    });
+
+    expect(corpoDe(0)).toMatchObject({
+      action: "sendMedia",
+      instance_id: INSTANCIA,
+      payload: {
+        number: TELEFONE,
+        type: "image",
+        file: "https://storage.example/cat.jpg",
+        filename: "cat.jpg",
+        caption: "olha o catálogo",
+      },
+    });
+  });
+
+  it("áudio vai por sendAudio — é o que vira mensagem de voz (ptt)", async () => {
+    const { result } = renderHook(() => useNotificameWhatsAppSend(INSTANCIA), {
+      wrapper: wrap(newQc()),
+    });
+
+    await result.current.mutateAsync({
+      to: TELEFONE,
+      media: { type: "audio", url: "https://storage.example/voz.ogg" },
+    });
+
+    expect(corpoDe(0)).toMatchObject({
+      action: "sendAudio",
+      payload: { number: TELEFONE, file: "https://storage.example/voz.ogg" },
+    });
+  });
+
+  it("documento é aceito no WhatsApp — o veto do provider é só no Instagram", async () => {
+    const { result } = renderHook(() => useNotificameWhatsAppSend(INSTANCIA), {
+      wrapper: wrap(newQc()),
+    });
+
+    await result.current.mutateAsync({
+      to: TELEFONE,
+      media: {
+        type: "document",
+        url: "https://storage.example/tabela.pdf",
+        filename: "tabela.pdf",
+      },
+    });
+
+    expect(corpoDe(0)).toMatchObject({
+      action: "sendMedia",
+      payload: { type: "document", filename: "tabela.pdf" },
+    });
+  });
+
+  it("sem texto e sem mídia continua sendo recusado antes da rede", async () => {
+    const { result } = renderHook(() => useNotificameWhatsAppSend(INSTANCIA), {
+      wrapper: wrap(newQc()),
+    });
+
+    await expect(
+      result.current.mutateAsync({ to: TELEFONE, text: "   " }),
+    ).rejects.toMatchObject({ code: "empty_message" });
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+});

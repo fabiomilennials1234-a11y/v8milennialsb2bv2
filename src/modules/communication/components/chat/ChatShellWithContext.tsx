@@ -55,6 +55,14 @@ import { SocialContextPanel } from "@/modules/communication/components/chat/soci
 import { useInboxBoxes } from "@/modules/communication/hooks/chat/useInboxBoxes";
 import { useWhatsAppContacts } from "@/modules/communication/hooks/chat/useWhatsAppContacts";
 import { useSocialContacts } from "@/modules/communication/hooks/chat/useSocialContacts";
+import { useOfficialWhatsAppContacts } from "@/modules/communication/hooks/chat/useOfficialWhatsAppContacts";
+import { useSendSocialMessage } from "@/modules/communication/hooks/chat/useSendSocialMessage";
+import { useNotificameWhatsAppSend } from "@/modules/communication/hooks/chat/useNotificameWhatsAppSend";
+import {
+  directSender,
+  officialWhatsAppSender,
+} from "@/modules/communication/hooks/chat/social-sender";
+import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
 import { useSocialRealtime } from "@/modules/communication/hooks/chat/useSocialRealtime";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
 import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
@@ -398,7 +406,16 @@ export function ChatShellWithContext() {
     () => boxes.find((b) => b.id === selectedBoxId) ?? null,
     [boxes, selectedBoxId],
   );
-  const isSocialBox = selectedBox?.kind === "instagram";
+  /**
+   * A caixa aberta lê `channel_messages`? O discriminador decide pelo PROVIDER, e
+   * não pelo `kind`: o canal oficial é `kind: "whatsapp"` (mora em
+   * `whatsapp_instances`) e mesmo assim recebe em `channel_messages`. Ausência de
+   * provider significa o comportamento antigo — são ~30 orgs com instâncias
+   * gravadas antes da coluna existir.
+   */
+  const isSocialBox = selectedBox ? boxUsesChannelMessages(selectedBox) : false;
+  /** Dentro dessas, qual é a do canal oficial (a que envia por outra rota). */
+  const isOfficialBox = isSocialBox && selectedBox?.kind === "whatsapp";
 
   /**
    * O id da caixa, desdobrado por canal. Os dois hooks de lista recebem `null`
@@ -407,7 +424,19 @@ export function ChatShellWithContext() {
    * canal social (ela levantaria 22023/42501) e vice-versa.
    */
   const selectedInstanceId = isSocialBox ? null : selectedBoxId;
-  const selectedChannelId = isSocialBox ? selectedBoxId : null;
+  /**
+   * Três eixos, e não dois, desde a caixa oficial:
+   *   `selectedInstanceId`      → WhatsApp por QR, lê `whatsapp_messages`
+   *   `selectedChannelId`       → Instagram, lê `channel_messages` por canal
+   *   `selectedOfficialInstance`→ canal oficial, lê `channel_messages` por instância
+   *
+   * Cada hook recebe `null` quando não é a vez dele e já tem `enabled: !!id` — é
+   * isso que garante que nenhuma das três RPCs seja chamada com o uuid do eixo
+   * errado (as duas de lista levantam 42501 nesse caso, por desenho).
+   */
+  const selectedChannelId =
+    selectedBox?.kind === "instagram" ? selectedBoxId : null;
+  const selectedOfficialInstanceId = isOfficialBox ? selectedBoxId : null;
 
   // ── Deep-link (?phone=&instance=&box=&lead=) ────────────────────────────────
   // Lê params uma vez no mount; estado pendente impede que o auto-select de
@@ -615,10 +644,40 @@ export function ChatShellWithContext() {
     isError: contactsError,
   } = useWhatsAppContacts(selectedInstanceId, serverFilter);
 
+  // ── As duas listas de `channel_messages`, SEMPRE montadas ──────────────────
+  //
+  // Os dois hooks são chamados incondicionalmente e um deles recebe `null`.
+  // Montar só o "da vez" mudaria a quantidade de hooks entre renders ao trocar
+  // de caixa — o erro que derrubou a primeira tentativa desta fatia.
   const {
-    data: socialContacts = [],
-    isLoading: socialContactsLoading,
+    data: directContacts = [],
+    isLoading: directContactsLoading,
   } = useSocialContacts(selectedChannelId);
+
+  const {
+    data: officialContacts = [],
+    isLoading: officialContactsLoading,
+  } = useOfficialWhatsAppContacts(selectedOfficialInstanceId);
+
+  const socialContacts = isOfficialBox ? officialContacts : directContacts;
+  const socialContactsLoading = isOfficialBox
+    ? officialContactsLoading
+    : directContactsLoading;
+
+  // ── As duas rotas de envio, também SEMPRE montadas ─────────────────────────
+  //
+  // `notificame-send-social` recusa WhatsApp por modelo (`channel_not_social`),
+  // então o canal oficial sai pelo proxy de WhatsApp — que já resolve provider,
+  // governor, janela e templates a partir da instância (#1640).
+  const directMutation = useSendSocialMessage(selectedChannelId);
+  const officialMutation = useNotificameWhatsAppSend(selectedOfficialInstanceId);
+  const socialSender = useMemo(
+    () =>
+      isOfficialBox
+        ? officialWhatsAppSender(officialMutation)
+        : directSender(directMutation),
+    [isOfficialBox, officialMutation, directMutation],
+  );
 
   const contactsLoading = isSocialBox ? socialContactsLoading : whatsappContactsLoading;
 
@@ -1028,6 +1087,7 @@ export function ChatShellWithContext() {
           isSocialBox ? (
             <SocialChatView
               selectedContact={selectedSocialContact}
+              sender={socialSender}
               channelName={selectedBox?.name ?? "Instagram"}
               organizationId={organizationId}
               mountTime={mountTimeRef.current}
@@ -1058,7 +1118,22 @@ export function ChatShellWithContext() {
             // social resolve pelo vínculo em `lead_social_identities` e, quando
             // ele ainda não existe, oferece a ação de criá-lo em vez de exibir
             // uma frase sobre o que não dá para fazer.
-            isSocialBox ? (
+            isOfficialBox ? (
+              // O canal oficial usa a coluna de WhatsApp, e não a social: o
+              // interlocutor É um telefone, que é o identificador forte do lead
+              // neste produto (decisão Q8 do spec). A coluna social resolve por
+              // `lead_social_identities`, chaveada por IGSID — vincular ali
+              // gravaria o telefone num campo de id de rede social, e a lista,
+              // que procura o lead POR TELEFONE, continuaria mostrando a conversa
+              // sem ficha. O botão pareceria funcionar e não faria nada.
+              selectedSocialContact ? (
+                <ContextPanel
+                  leadId={selectedSocialContact.lead_id ?? undefined}
+                  phoneNumber={selectedSocialContact.external_user_id}
+                  pushName={selectedSocialContact.display_name}
+                />
+              ) : undefined
+            ) : isSocialBox ? (
               selectedSocialContact ? (
                 <SocialContextPanel contact={selectedSocialContact} />
               ) : undefined
