@@ -24,6 +24,7 @@ import { FacebookSettings, InstagramSettings } from "./MetaSettings";
 import { GoogleCalendarSettings } from "./GoogleCalendarSettings";
 import { TinyErpSettings } from "./TinyErpSettings";
 import { OmieSettings } from "./OmieSettings";
+import { TothSettings } from "./TothSettings";
 import { ElevenLabsSettings } from "./ElevenLabsSettings";
 import { WhatsAppSettings } from "./WhatsAppSettings";
 import { TorqueCallsSettings } from "./TorqueCallsSettings";
@@ -32,7 +33,7 @@ import { TorqueCallsSettings } from "./TorqueCallsSettings";
 import { useMetaConnectionStatusByType } from "@/modules/communication/hooks/useMetaConnection";
 import { useGoogleCalendarStatus } from "@/modules/integrations/hooks/useGoogleCalendar";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
-import { useOmieStatus } from "@/modules/integrations";
+import { useOmieStatus, useTothStatus } from "@/modules/integrations";
 import { useWhatsAppInstances, useVoipSessions } from "@/modules/communication";
 import { useOrganization } from "@/modules/identity";
 import { useQuery } from "@tanstack/react-query";
@@ -120,6 +121,19 @@ function OmieLogo() {
       <rect width="48" height="48" rx="12" fill="#00A868" />
       <circle cx="24" cy="24" r="10" stroke="white" strokeWidth="3" fill="none" />
       <circle cx="24" cy="24" r="3.5" fill="white" />
+    </svg>
+  );
+}
+
+function TothLogo() {
+  // ERP on-premise: a marca visual é o servidor da própria empresa, não uma nuvem.
+  return (
+    <svg viewBox="0 0 48 48" className="w-full h-full">
+      <rect width="48" height="48" rx="12" fill="#0EA5E9" />
+      <rect x="13" y="13" width="22" height="8" rx="2" fill="white" opacity="0.95" />
+      <rect x="13" y="27" width="22" height="8" rx="2" fill="white" opacity="0.7" />
+      <circle cx="17.5" cy="17" r="1.5" fill="#0EA5E9" />
+      <circle cx="17.5" cy="31" r="1.5" fill="#0EA5E9" />
     </svg>
   );
 }
@@ -249,6 +263,16 @@ const INTEGRATIONS: IntegrationDef[] = [
     settingsId: "omie",
   },
   {
+    id: "toth",
+    name: "Toth",
+    description: "Conecte o Toth instalado no servidor da sua empresa.",
+    longDescription: "O Toth roda dentro da rede da sua empresa, então a conexão é feita apontando o Torque para o endereço do seu servidor. Traz o cadastro de clientes, casado por CNPJ, e as cobranças em aberto, pagas e atrasadas — o que alimenta inadimplência e receita em risco na Carteira.",
+    category: "crm",
+    logo: <TothLogo />,
+    features: ["Clientes por CNPJ", "Cobranças", "Pedidos — em breve"],
+    settingsId: "toth",
+  },
+  {
     id: "elevenlabs",
     name: "ElevenLabs",
     description: "Habilite voz com IA para o Copilot enviar áudios naturais.",
@@ -268,6 +292,7 @@ function useIntegrationStatuses() {
   const { data: calendarStatus } = useGoogleCalendarStatus();
   const { data: tinyStatus } = useTinyErpStatus();
   const { data: omieStatus } = useOmieStatus();
+  const { data: tothStatus } = useTothStatus();
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
   const { data: voipSessions = [] } = useVoipSessions();
   const { organizationId } = useOrganization();
@@ -333,6 +358,16 @@ function useIntegrationStatuses() {
     omie: {
       connected: !!omieStatus?.connected,
       detail: omieStatus?.connected ? "Conectado" : undefined,
+    },
+    toth: {
+      connected: !!tothStatus?.connected,
+      // O card do catálogo já denuncia a falta de TLS — quem varre a lista de
+      // integrações vê o risco sem precisar abrir a tela de configuração.
+      detail: tothStatus?.connected
+        ? tothStatus.insecure_transport
+          ? "Conectado · sem criptografia"
+          : "Conectado"
+        : undefined,
     },
     elevenlabs: {
       connected: !!orgData?.elevenlabs_api_key,
@@ -500,6 +535,8 @@ function getSettingsComponent(settingsId: string): React.FC | null {
       return TinyErpSettings;
     case "omie":
       return OmieSettings;
+    case "toth":
+      return TothSettings;
     case "elevenlabs":
       return ElevenLabsSettings;
     default:
