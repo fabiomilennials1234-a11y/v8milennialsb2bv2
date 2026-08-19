@@ -83,6 +83,28 @@ describe("assertSafeErpBaseUrl — normalização", () => {
     const url = assertSafeErpBaseUrl("https://erp.exemplo.com.br:8443/toth/services");
     expect(url.port).toBe("8443");
   });
+
+  it("🔴 remove endpoint colado junto — a causa do 404 de 19/08", () => {
+    // O campo pede a base, mas o que se tem à mão é a URL do Postman. Colar o
+    // endpoint inteiro fazia o client montar /users/login/users/login → 404.
+    const esperado = "https://erp.exemplo.com.br/toth/services";
+    for (const colado of [
+      "https://erp.exemplo.com.br/toth/services/users/login",
+      "https://erp.exemplo.com.br/toth/services/clientes",
+      "https://erp.exemplo.com.br/toth/services/cobrancas/",
+      "https://erp.exemplo.com.br/toth/services/CLIENTES",
+      "https://erp.exemplo.com.br/toth/services/clientes/?token=abc",
+    ]) {
+      expect(assertSafeErpBaseUrl(colado).toString(), colado).toBe(esperado);
+    }
+  });
+
+  it("não come segmento legítimo que apenas contém o nome", () => {
+    // `/clientes-api` não é o endpoint `/clientes`.
+    expect(assertSafeErpBaseUrl("https://erp.exemplo.com.br/clientes-api").pathname).toBe(
+      "/clientes-api",
+    );
+  });
 });
 
 describe("assertSafeErpBaseUrl — as duas permissões são independentes", () => {

@@ -115,7 +115,13 @@ export class TothClient {
 
   private url(path: string): URL {
     const clean = path.replace(/^\/+/, "");
-    return new URL(`${this.base.pathname}/${clean}`, this.base);
+    // `replace(/\/+$/)` importa: com base na raiz, `pathname` é "/" e a
+    // concatenação vira "//users/login" — que a URL interpreta como referência
+    // de rede (protocol-relative) e resolve para o host "users", não para o ERP.
+    // O sintoma seria "não foi possível alcançar", apontando para a rede quando
+    // o defeito é de montagem de path.
+    const prefix = this.base.pathname.replace(/\/+$/, "");
+    return new URL(`${prefix}/${clean}`, this.base);
   }
 
   private async send(url: URL, init: RequestInit): Promise<Response> {
@@ -142,7 +148,8 @@ export class TothClient {
    */
   async login(): Promise<string> {
     const body = new URLSearchParams({ user: this.user, password: this.password });
-    const res = await this.send(this.url("users/login"), {
+    const url = this.url("users/login");
+    const res = await this.send(url, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
       body: body.toString(),
@@ -155,7 +162,19 @@ export class TothClient {
     if (!res.ok) {
       // Sem `preview` aqui: o corpo do login é a única resposta que sabidamente
       // carrega credencial, e um 5xx pode ecoar o que foi enviado.
-      throw new TothRequestError(`Login no ERP falhou (HTTP ${res.status}).`, res.status);
+      //
+      // O PATH vai na mensagem (nunca a query, que carrega token). Sem ele, um
+      // 404 por endereço mal digitado é indistinguível de "o ERP não tem esse
+      // endpoint" — e a pessoa vai procurar defeito no servidor do cliente em
+      // vez de conferir o campo que ela mesma preencheu.
+      const hint =
+        res.status === 404
+          ? ` O endereço configurado aponta para ${url.pathname} — confira se o campo termina em /toth/services, sem incluir /users/login.`
+          : "";
+      throw new TothRequestError(
+        `Login no ERP falhou (HTTP ${res.status}).${hint}`,
+        res.status,
+      );
     }
 
     let parsed: unknown = text;

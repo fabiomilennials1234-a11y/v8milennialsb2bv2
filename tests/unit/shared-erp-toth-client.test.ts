@@ -249,4 +249,30 @@ describe("base_url", () => {
     const client = new TothClient({ ...CREDS, baseUrl: `${BASE}/` });
     expect(client.baseUrl).toBe(BASE);
   });
+
+  it("base na RAIZ não vira referência de rede", async () => {
+    // `${"/"}/users/login` = "//users/login", que a URL resolve como
+    // protocol-relative e manda para o host "users". O sintoma seria erro de
+    // rede apontando para o lugar errado.
+    const { impl, calls } = fakeFetch([res({ token: "T1" })]);
+    const client = new TothClient(
+      { ...CREDS, baseUrl: "https://erp.exemplo.com.br" },
+      { fetchImpl: impl },
+    );
+
+    await client.login();
+
+    expect(calls[0].url).toBe("https://erp.exemplo.com.br/users/login");
+  });
+
+  it("404 no login diz QUAL caminho foi chamado", async () => {
+    // Sem isso, "HTTP 404" é indistinguível de "o ERP não tem esse endpoint".
+    const { impl } = fakeFetch([res("nao encontrado", 404)]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    const err = (await client.login().catch((e: Error) => e)) as Error;
+
+    expect(err.message).toContain("/toth/services/users/login");
+    expect(err.message).toMatch(/confira se o campo termina/i);
+  });
 });
