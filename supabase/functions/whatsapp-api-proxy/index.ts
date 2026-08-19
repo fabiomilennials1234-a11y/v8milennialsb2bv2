@@ -30,6 +30,7 @@ import {
   extractChatTarget,
   isChatTargetAllowed,
 } from "../_shared/chat-owner-guard.ts";
+import { readTemplateRequest } from "../_shared/whatsapp-template-request.ts";
 import {
   nullifyInBatches,
   type BatchNullifyIO,
@@ -767,7 +768,7 @@ Deno.serve(
       // -----------------------------------------------------------------------
       // Etapa B — vínculo user-instância (flag user_write_instance_strict).
       //
-      // Para ações de envio (sendText/sendMedia/sendAudio) que carregam
+      // Para ações de envio (sendText/sendMedia/sendAudio/sendTemplate) que carregam
       // `payload.lead_id` opcional: se a flag está ON na org, exigir
       //   (a) responsible_user_id do lead → instância vinculada == instance_id
       //   (b) caller pode escrever via instância (owner / admin / master)
@@ -775,7 +776,7 @@ Deno.serve(
       // Quando lead_id ausente, comportamento legado é preservado.
       // Frontend (Etapa C) passa a anexar lead_id no composer humano.
       // -----------------------------------------------------------------------
-      const SEND_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio"]);
+      const SEND_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio", "sendTemplate"]);
       const leadIdPayload = (payload?.lead_id ?? null) as string | null;
       if (SEND_ACTIONS.has(action) && leadIdPayload) {
         const {
@@ -861,7 +862,13 @@ Deno.serve(
       // actionable message instead. Defense-in-depth: the frontend already
       // blocks these in formatPhoneForWhatsApp, but mass send / workflow /
       // followup paths reach this proxy too.
-      const NUMBER_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio", "setPresence"]);
+      const NUMBER_ACTIONS = new Set([
+        "sendText",
+        "sendMedia",
+        "sendAudio",
+        "sendTemplate",
+        "setPresence",
+      ]);
       if (NUMBER_ACTIONS.has(action)) {
         const rawNumber = (payload?.number ?? "") as string;
         const digits = String(rawNumber).replace(/\D/g, "");
@@ -992,6 +999,38 @@ Deno.serve(
             delay,
             trackSource: "whatsapp-api-proxy",
           });
+          break;
+        }
+
+        // -------------------------------------------------------------------
+        // Template — a ÚNICA saída fora da janela de 24 horas.
+        //
+        // Passadas 24h da última mensagem do cliente, a Meta recusa texto livre.
+        // Até aqui o proxy não expunha esta ação: o provider a implementa desde
+        // sempre, o front lista templates, e o fio estava cortado no meio.
+        // -------------------------------------------------------------------
+        case "sendTemplate": {
+          // 422 e não `throw`, ao contrário dos vizinhos Uazapi-only: este
+          // caminho é clicado por um VENDEDOR, e um 500 genérico viraria "não foi
+          // possível enviar" numa hora em que ele precisa saber que este canal
+          // não tem template — não que o sistema quebrou.
+          if (!provider.sendTemplate) {
+            return jsonResponse(
+              422,
+              {
+                error: "Este canal não envia template",
+                code: "template_not_supported",
+              },
+              corsHeaders,
+            );
+          }
+
+          const pedido = readTemplateRequest(payload);
+          if (!pedido.ok) {
+            return jsonResponse(400, { error: pedido.error }, corsHeaders);
+          }
+
+          result = await provider.sendTemplate(pedido.value);
           break;
         }
 
