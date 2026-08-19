@@ -26,6 +26,11 @@ export interface WhatsAppMessage {
   /** Whether this message was sent by the Copilot AI agent */
   sent_by_ai: boolean | null;
   sent_source: "manual" | "copilot" | "workflow" | null;
+  /**
+   * Por que o envio falhou, quando o provider soube dizer. Opcional: só o canal
+   * oficial preenche hoje, a partir do callback da Meta.
+   */
+  failure_reason?: string | null;
 }
 
 /** Mensagem que falhou ao ser enviada — armazenada em cache paralelo para retry. */

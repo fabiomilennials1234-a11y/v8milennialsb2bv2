@@ -18,7 +18,7 @@
  *    relógio ensina que a ferramenta é instável. O que muda com a janela é o
  *    DESTAQUE, não a existência.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AlertCircle, FileText, Loader2, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -42,11 +42,14 @@ import {
 } from "@/modules/communication/hooks/useNotificameTemplates";
 import { useSendWhatsAppTemplate } from "@/modules/communication/hooks/chat/useSendWhatsAppTemplate";
 import {
+  formatoDeMidiaDoCabecalho,
   montarComponentesDeEnvio,
+  pendenciasDeEnvio,
   previewDoTemplate,
   variaveisDoTemplate,
-  variaveisFaltando,
 } from "@/modules/communication/lib/template-send";
+import { uploadSocialAttachment } from "@/modules/communication/lib/social-attachment-upload";
+import { useCurrentTeamMember } from "@/modules/identity";
 
 export interface TemplatePickerProps {
   /** A instância do canal oficial — é ela que tem os templates. */
@@ -71,6 +74,11 @@ export function TemplatePicker({
 
   const [escolhido, setEscolhido] = useState<NotificameTemplate | null>(null);
   const [valores, setValores] = useState<Record<string, string>>({});
+  /** URL pública do arquivo do cabeçalho, quando o template exige mídia. */
+  const [midia, setMidia] = useState<string | null>(null);
+  const [subindo, setSubindo] = useState(false);
+  const arquivoRef = useRef<HTMLInputElement>(null);
+  const { data: teamMember } = useCurrentTeamMember();
 
   const aprovados = useMemo(
     () => (todos ?? []).filter((t) => t.status === "APPROVED"),
@@ -78,12 +86,32 @@ export function TemplatePicker({
   );
 
   const vars = escolhido ? variaveisDoTemplate(escolhido) : null;
-  const faltando = escolhido ? variaveisFaltando(escolhido, valores) : [];
+  const formatoMidia = escolhido ? formatoDeMidiaDoCabecalho(escolhido) : null;
+  const faltando = escolhido ? pendenciasDeEnvio(escolhido, valores, midia) : [];
 
   function fechar() {
     setEscolhido(null);
     setValores({});
+    setMidia(null);
     onOpenChange(false);
+  }
+
+  /**
+   * Publica o arquivo do cabeçalho. O fornecedor BUSCA a URL — não recebe bytes —,
+   * e `uploadSocialAttachment` já aplica os limites da Meta para o canal oficial
+   * (JPEG/PNG até 5 MB), recusando ANTES de subir.
+   */
+  async function publicarCabecalho(file: File) {
+    if (!teamMember?.organization_id) return;
+    setSubindo(true);
+    try {
+      const anexo = await uploadSocialAttachment(file, teamMember.organization_id, "whatsapp_oficial");
+      setMidia(anexo.url);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao anexar");
+    } finally {
+      setSubindo(false);
+    }
   }
 
   async function submeter() {
@@ -94,7 +122,7 @@ export function TemplatePicker({
         to: contactExternalId,
         templateName: escolhido.name,
         language: escolhido.language ?? "pt_BR",
-        components: montarComponentesDeEnvio(escolhido, valores),
+        components: montarComponentesDeEnvio(escolhido, valores, midia),
         // O que o cliente vai ler, para a conversa mostrar a mensagem em vez de
         // "Mensagem interativa". É a mesma substituição que a Meta faz.
         previewText: previewDoTemplate(escolhido, valores),
@@ -149,6 +177,7 @@ export function TemplatePicker({
                 onClick={() => {
                   setEscolhido(t);
                   setValores({});
+                  setMidia(null);
                 }}
                 className="flex w-full flex-col gap-1 rounded-lg border border-border/60 p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/40"
               >
@@ -182,6 +211,57 @@ export function TemplatePicker({
                 Trocar
               </Button>
             </div>
+
+            {/*
+              O ARQUIVO DO CABEÇALHO. Aparece só quando o template o exige — e
+              exigir é literal: sem ele a Meta recusa com 132012, por callback,
+              depois de o vendedor achar que mandou.
+            */}
+            {formatoMidia && (
+              <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">
+                    {formatoMidia === "IMAGE" ? "Imagem do cabeçalho"
+                      : formatoMidia === "VIDEO" ? "Vídeo do cabeçalho"
+                        : "Documento do cabeçalho"}
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Este template foi aprovado com mídia no topo. A Meta recusa o
+                    envio sem ela.
+                  </p>
+                </div>
+
+                <input
+                  ref={arquivoRef}
+                  type="file"
+                  className="hidden"
+                  accept={formatoMidia === "IMAGE" ? "image/jpeg,image/png" : undefined}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void publicarCabecalho(file);
+                  }}
+                />
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => arquivoRef.current?.click()}
+                    disabled={subindo}
+                  >
+                    {subindo ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : null}
+                    {midia ? "Trocar arquivo" : "Escolher arquivo"}
+                  </Button>
+                  {midia && (
+                    <span className="truncate text-[11px] text-emerald-400">
+                      arquivo pronto
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {vars && vars.todas.length > 0 && (
               <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
@@ -230,9 +310,7 @@ export function TemplatePicker({
             ) : (
               <Send className="mr-2 h-4 w-4" />
             )}
-            {faltando.length > 0
-              ? `Faltam ${faltando.length} valor(es)`
-              : "Enviar"}
+            {faltando.length > 0 ? `Falta: ${faltando.join(", ")}` : "Enviar"}
           </Button>
         </DialogFooter>
       </DialogContent>

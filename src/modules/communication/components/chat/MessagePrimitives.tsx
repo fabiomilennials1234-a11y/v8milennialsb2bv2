@@ -422,6 +422,17 @@ export function MessageBubble({
               </div>
             )}
 
+            {/* O MOTIVO DA RECUSA, quando ele existe.
+                "Tentar novamente" sozinho não diz o que consertar: a Meta recusa
+                por formato de parâmetro, janela fechada, template inexistente —
+                cada um pede uma ação diferente, e o texto dela é o que
+                distingue. */}
+            {isFailed && (message as { failure_reason?: string | null }).failure_reason && (
+              <p className="mt-1 text-[11px] leading-snug text-destructive/90">
+                {(message as { failure_reason?: string | null }).failure_reason}
+              </p>
+            )}
+
             {/* Media without media_url — empty bubble guard (expired handled above) */}
             {hasMedia && !mediaUrl && !message.content && !isMediaExpired && (
               <p className="text-sm italic text-muted-foreground">

@@ -87,6 +87,7 @@ function toTimelineMessage(m: SocialMessage, organizationId: string): WhatsAppMe
     created_at: m.created_at ?? m.timestamp,
     sent_by_ai: false,
     sent_source: null,
+    failure_reason: m.failure_reason ?? null,
   };
 }
 

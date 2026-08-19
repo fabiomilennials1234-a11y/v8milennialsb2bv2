@@ -41,6 +41,12 @@ import type { SocialContact } from "./types";
 const THREAD_LIMIT = 500;
 
 export interface SocialMessage {
+  /**
+   * Por que a Meta recusou, quando recusou. Vem de `raw_payload.status_event`,
+   * já montado com o código — "132012: header: Format mismatch…". `null` quando
+   * não houve recusa, ou quando ela chegou sem explicação.
+   */
+  failure_reason?: string | null;
   id: string;
   external_id: string;
   direction: "incoming" | "outgoing";
@@ -92,7 +98,7 @@ export function useSocialMessages(contact: SocialContact | null) {
       const { data, error } = await (supabase as any)
         .from("channel_messages")
         .select(
-          "id, external_id, direction, message_type, content, media_url, status, sender_name, sender_profile_pic, timestamp, created_at",
+          "id, external_id, direction, message_type, content, media_url, status, sender_name, sender_profile_pic, timestamp, created_at, raw_payload",
         )
         .eq("organization_id", organizationId)
         .eq(colunaDoEixo, boxId)
@@ -101,7 +107,22 @@ export function useSocialMessages(contact: SocialContact | null) {
         .limit(THREAD_LIMIT);
 
       if (error) throw error;
-      return (data ?? []) as SocialMessage[];
+      // O MOTIVO DA RECUSA sai de `raw_payload.status_event`, gravado pelo
+      // webhook quando a Meta responde. Ele é extraído AQUI para o componente não
+      // precisar conhecer o formato do fornecedor — e porque sem isso a bolha só
+      // mostra "Tentar novamente", que não diz o que consertar.
+      return ((data ?? []) as Array<SocialMessage & { raw_payload?: unknown }>).map((m) => {
+        const raw = (m.raw_payload ?? {}) as Record<string, unknown>;
+        const evento = (raw.status_event ?? {}) as Record<string, unknown>;
+        const detalhe = typeof evento.detail === "string" ? evento.detail.trim() : "";
+        const codigo = typeof evento.provider_code === "string" ? evento.provider_code : null;
+        return {
+          ...m,
+          failure_reason: detalhe
+            ? (codigo ? `${codigo}: ${detalhe}` : detalhe)
+            : null,
+        };
+      });
     },
     enabled: !!organizationId && !!boxId && !!contactExternalId,
   });
