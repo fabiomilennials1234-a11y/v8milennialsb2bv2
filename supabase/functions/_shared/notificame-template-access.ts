@@ -18,6 +18,8 @@
  * mesmo vocabulário nos dois lugares, ou o envio aceita o que a listagem recusa.
  */
 
+import { isNonWhatsAppChannelType } from "./whatsapp-client.ts";
+
 export interface TemplateInstanceRow {
   id: string;
   organization_id: string;
@@ -62,13 +64,21 @@ export function resolveTemplateChannel(
 
   const cfg = row.provider_config ?? {};
 
-  // Backstop de isolamento social — espelha o throw de `whatsapp-client`. Um
-  // canal de Instagram que tenha escapado para `whatsapp_instances` não tem
-  // template HSM; pedir a lista dele ao fornecedor é pedir algo que não existe.
-  // Tipo AUSENTE é aceito (a maioria das linhas não declara), tipo DECLARADO
-  // diferente de whatsapp é recusado — a mesma assimetria do canônico.
-  const declaredType = readString(cfg.channel_type).toLowerCase();
-  if (declaredType && declaredType !== "whatsapp" && declaredType !== "wa") {
+  // Backstop de isolamento social — um canal de Instagram que tenha escapado para
+  // `whatsapp_instances` não tem template HSM; pedir a lista dele ao fornecedor é
+  // pedir algo que não existe. Tipo AUSENTE é aceito (linha antiga, gravada antes
+  // de o campo existir, não pode parar de funcionar por um backstop novo).
+  //
+  // ⚠️ O PREDICADO É IMPORTADO, não reescrito. A versão anterior comparava com as
+  // strings cruas "whatsapp"/"wa" — e o fornecedor declara
+  // `whatsapp_business_account`. Medido em produção (19/08): a ÚNICA instância
+  // oficial recebia 422 `templates_not_supported`, e o card de templates sumia da
+  // tela de Ajustes em silêncio.
+  //
+  // O gêmeo em `whatsapp-client.ts` já tinha sido corrigido (3f60999f, "backstop
+  // recusava o próprio WhatsApp oficial") e ESTE ficou para trás — exatamente o
+  // que uma segunda cópia da regra produz. Agora existe uma só.
+  if (isNonWhatsAppChannelType(readString(cfg.channel_type))) {
     return {
       ok: false,
       code: "templates_not_supported",

@@ -118,8 +118,37 @@ describe("resolveTemplateChannel — a instância serve para templates?", () => 
     }
   });
 
+  /**
+   * O DEFEITO VIVO EM PRODUÇÃO (19/08).
+   *
+   * Quem grava `provider_config.channel_type` é o `channel-finish`, com o valor
+   * que o FORNECEDOR declara em `/v1/channels` — e o canal oficial chega como
+   * `whatsapp_business_account`. A comparação com as strings cruas recusava
+   * exatamente o caso que devia deixar passar: a ÚNICA instância oficial de
+   * produção (Chique) recebia 422 `templates_not_supported`, e o card de
+   * templates sumia da tela de Ajustes em silêncio.
+   *
+   * O gêmeo em `whatsapp-client.ts` já tinha sido corrigido (commit 3f60999f,
+   * "backstop recusava o próprio WhatsApp oficial") — e este arquivo ficou para
+   * trás porque o teste só exercitava "whatsapp" e "wa". Um valor real na lista
+   * teria pego.
+   */
+  it("aceita o tipo REAL que o fornecedor declara — whatsapp_business_account", () => {
+    const r = resolveTemplateChannel(
+      instancia({
+        provider_config: {
+          channel_id: "d1205fbe-99c7-4744-ac6b-899cfbf03179",
+          channel_type: "whatsapp_business_account",
+        },
+      }),
+      ORG,
+    );
+
+    expect(r.ok).toBe(true);
+  });
+
   it("aceita quando o tipo declarado é whatsapp (ou o apelido wa)", () => {
-    for (const tipo of ["whatsapp", "WhatsApp", "wa"]) {
+    for (const tipo of ["whatsapp", "WhatsApp", "wa", "whatsapp_business_account", "WHATSAPP_BUSINESS_ACCOUNT"]) {
       const r = resolveTemplateChannel(
         instancia({ provider_config: { channel_id: "ch-1", channel_type: tipo } }),
         ORG,
