@@ -65,6 +65,46 @@ const VARIABLE_RE = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
  * dele — "o que isso vira?". Com o exemplo, ele lê a mensagem pronta, e o trecho
  * variável fica destacado para não sumir a ideia de que aquilo muda a cada envio.
  */
+/**
+ * O que dizer depois de submeter, a partir do que o FORNECEDOR devolveu.
+ *
+ * Função pura e exportada porque isto é uma decisão, não um enfeite: medido em
+ * produção (19/08), um template voltou `REJECTED` no mesmo instante da criação e
+ * a tela disse "a Meta responde em algumas horas". O usuário esperaria por um
+ * veredito que já havia chegado, e a recusa só apareceria se ele voltasse à lista
+ * e clicasse Atualizar.
+ */
+export function mensagemDaCriacao(status: string | null | undefined): {
+  title: string;
+  description: string;
+  variant?: "destructive";
+} {
+  switch ((status ?? "").trim().toUpperCase()) {
+    case "REJECTED":
+      return {
+        title: "A Meta recusou este template",
+        description:
+          "A recusa veio na hora. Revise o texto — promessa comercial, erro de escrita e " +
+          "categoria trocada são os motivos mais comuns — e crie de novo com outro nome.",
+        variant: "destructive",
+      };
+    case "APPROVED":
+      return {
+        title: "Template aprovado",
+        description: "Já pode ser enviado, inclusive fora da janela de 24 horas.",
+      };
+    default:
+      // PENDING, vazio ou palavra que não conhecemos. O default é o caminho
+      // comum, e tratar desconhecido como "em análise" é o erro barato: o
+      // usuário confere na lista. O caro seria afirmar aprovação.
+      return {
+        title: "Template enviado para análise",
+        description:
+          "A Meta revisa e responde em algumas horas. Acompanhe pelo botão Atualizar na lista.",
+      };
+  }
+}
+
 function PreviewText({
   text,
   exemplos = {},
@@ -195,13 +235,17 @@ export function NotificameTemplateEditor({
     if (footer.trim()) components.push({ type: "FOOTER", text: footer.trim() });
 
     try {
-      await createTemplate.mutateAsync({ name: name.trim(), language, category, components });
-      toast({
-        title: "Template enviado para análise",
-        // "Em análise" e não "criado": a Meta ainda vai revisar, e só depois ele
-        // pode ser enviado. Dizer "criado" faria o usuário tentar usar agora.
-        description: "A Meta revisa e responde em algumas horas. Só depois ele pode ser enviado.",
+      const criado = await createTemplate.mutateAsync({
+        name: name.trim(),
+        language,
+        category,
+        components,
       });
+
+      // O status vem na resposta da criação e pode já ser REJECTED — a decisão
+      // de o que dizer mora em `mensagemDaCriacao`, com teste.
+      toast(mensagemDaCriacao(criado?.template?.status));
+
       reset();
       onOpenChange(false);
     } catch (e) {
