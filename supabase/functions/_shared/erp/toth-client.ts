@@ -81,9 +81,28 @@ export class TothRequestError extends Error {
   }
 }
 
-/** Corta o corpo pra caber em log sem virar despejo de PII. */
-function preview(body: string): string {
-  return body.length > 300 ? `${body.slice(0, 300)}…` : body;
+/**
+ * Corta o corpo pra caber em log sem virar despejo de PII.
+ *
+ * Quando o corpo é a página de erro do servidor de aplicação, o texto útil é
+ * extraído antes de cortar. O ERP roda JBossWeb, cuja página de 500 começa com
+ * ~2 KB de CSS embutido: truncar em 300 caracteres devolvia só `<style>` e
+ * escondia a exceção, que é a única coisa que interessa. Tirar as tags e
+ * colapsar espaço faz caber `type Exception report ... message ... exception
+ * java.lang.X` na mesma janela.
+ */
+export function preview(body: string, maxLen = 300): string {
+  const isHtml = /<html|<!doctype html/i.test(body.slice(0, 400));
+  const cleaned = isHtml
+    ? body
+        .replace(/<style[\s\S]*?<\/style>/gi, " ")
+        .replace(/<script[\s\S]*?<\/script>/gi, " ")
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+    : body.trim();
+  return cleaned.length > maxLen ? `${cleaned.slice(0, maxLen)}…` : cleaned;
 }
 
 /**
@@ -304,7 +323,10 @@ export class TothClient {
       //
       // Só 5xx: um 4xx pode ecoar o que foi enviado, e o que enviamos inclui
       // token. Erro do servidor não carrega credencial nossa.
-      const detail = res.status >= 500 && text.trim() ? ` Resposta do ERP: ${preview(text)}` : "";
+      // Janela maior no 5xx: a exceção do JBoss vem depois do cabeçalho da
+      // página, e 300 caracteres cortavam justamente antes dela.
+      const detail =
+        res.status >= 500 && text.trim() ? ` Resposta do ERP: ${preview(text, 700)}` : "";
       return {
         kind: "error",
         message: `O ERP respondeu HTTP ${res.status} em /${path}.${detail}`,

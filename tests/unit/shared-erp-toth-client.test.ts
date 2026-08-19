@@ -8,6 +8,7 @@ import {
   TothClient,
   TothAuthError,
   TothRequestError,
+  preview,
 } from "../../supabase/functions/_shared/erp/toth-client";
 
 const BASE = "https://erp.exemplo.com.br/toth/services";
@@ -198,6 +199,33 @@ describe("falha de rede", () => {
 
     await expect(client.login()).rejects.toThrow(TothRequestError);
     await expect(client.login()).rejects.toThrow(/não foi possível alcançar o erp/i);
+  });
+});
+
+describe("preview — página de erro do JBoss vira texto legível", () => {
+  const jbossErro = `<html><head><title>JBossWeb/2.0.1.GA - Error report</title>
+    <style><!--H1 {font-family:Tahoma,Arial,sans-serif;color:white;background-color:#525D76;font-size:22px;}
+    H2 {font-family:Tahoma,Arial,sans-serif;color:white;background-color:#525D76;font-size:16px;}
+    H3 {font-family:Tahoma,Arial,sans-serif;color:white;background-color:#525D76;font-size:14px;}--></style>
+    </head><body><h1>HTTP Status 500 - </h1><p><b>type</b> Exception report</p>
+    <p><b>message</b></p><p><b>description</b> The server encountered an internal error</p>
+    <p><b>exception</b> java.lang.NullPointerException</p></body></html>`;
+
+  it("descarta o CSS e revela a exceção — o CSS comia a janela inteira", () => {
+    const out = preview(jbossErro, 700);
+    expect(out).toContain("Exception report");
+    expect(out).toContain("java.lang.NullPointerException");
+    expect(out).not.toContain("font-family");
+    expect(out).not.toContain("<style>");
+  });
+
+  it("corpo que não é HTML passa intacto", () => {
+    expect(preview("erro simples")).toBe("erro simples");
+  });
+
+  it("respeita o limite e marca o corte", () => {
+    expect(preview("x".repeat(500), 100)).toHaveLength(101); // 100 + reticências
+    expect(preview("x".repeat(500), 100).endsWith("…")).toBe(true);
   });
 });
 
