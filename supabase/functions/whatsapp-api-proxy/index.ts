@@ -42,6 +42,11 @@ import {
 import "../_shared/whatsapp-providers/evolution-provider.ts";
 import "../_shared/whatsapp-providers/uazapi-provider.ts";
 import "../_shared/whatsapp-providers/meta-cloud-provider.ts";
+// notificame idem: o canal OFICIAL (API da Meta via NotificaMe) é resolvido em
+// `whatsapp-client.ts:336` pelo mesmo `await import()` dinâmico. Sem esta linha o
+// eszip não carrega o módulo e o envio da caixa oficial morre em runtime — a
+// mesma classe de incidente que pôs o meta-cloud nesta lista.
+import "../_shared/whatsapp-providers/notificame-provider.ts";
 
 // ---------------------------------------------------------------------------
 // Rate limit state (in-memory, per org)
