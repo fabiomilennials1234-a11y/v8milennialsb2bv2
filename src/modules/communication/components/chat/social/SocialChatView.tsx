@@ -27,6 +27,7 @@ import { Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
+import { getChannelLabel } from "@/modules/communication/components/chat/ChannelBadge";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 import { Button } from "@/components/ui/button";
@@ -136,14 +137,19 @@ function SocialChatHeader({
             {(name.replace("@", "").charAt(0) || "?").toUpperCase()}
           </div>
         )}
-        <ChannelBadge channel="instagram" size={16} overlay />
+        {/* O canal SAI DO CONTATO. Chumbado em "instagram", o cabeçalho da caixa
+            oficial anunciava Instagram Direct numa conversa de WhatsApp — a
+            lista acertava (badge verde) e o header contradizia, na mesma tela. */}
+        <ChannelBadge channel={contact.channel} size={16} overlay />
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="font-display font-semibold truncate text-foreground">{name}</h3>
         {/* O @ vem primeiro no subtítulo por ser o dado IDENTIFICADOR da pessoa —
             o resto é contexto do canal, igual em toda conversa desta caixa. */}
         <p className="text-sm text-muted-foreground truncate">
-          {[handle, "Instagram Direct", channelName].filter(Boolean).join(" · ")}
+          {[handle, getChannelLabel(contact.channel), channelName]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
       </div>
     </header>
@@ -376,6 +382,12 @@ function SocialComposer({
 export interface SocialChatViewProps {
   selectedContact: SocialContact | null;
   /**
+   * O canal da CAIXA aberta. Existe para o estado vazio, que é desenhado antes
+   * de haver contato selecionado — sem ele, o ícone de "Selecione uma conversa"
+   * ficaria chumbado num canal que pode não ser o desta caixa.
+   */
+  boxChannel: SocialContact["channel"];
+  /**
    * Como esta caixa envia. Injetado porque a view é a MESMA para o Direct e para
    * o WhatsApp oficial, e só o envio difere: `notificame-send-social` recusa
    * WhatsApp por modelo, então o canal oficial sai pelo proxy de WhatsApp.
@@ -392,6 +404,7 @@ export interface SocialChatViewProps {
 
 export function SocialChatView({
   selectedContact,
+  boxChannel,
   sender,
   channelName,
   organizationId,
@@ -427,7 +440,7 @@ export function SocialChatView({
   if (!selectedContact) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-3 text-muted-foreground bg-muted/10">
-        <ChannelBadge channel="instagram" size={40} className="opacity-40" />
+        <ChannelBadge channel={boxChannel} size={40} className="opacity-40" />
         <p className="text-sm">Selecione uma conversa</p>
       </div>
     );

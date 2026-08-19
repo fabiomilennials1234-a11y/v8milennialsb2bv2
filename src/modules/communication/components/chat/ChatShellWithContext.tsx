@@ -1087,6 +1087,7 @@ export function ChatShellWithContext() {
           isSocialBox ? (
             <SocialChatView
               selectedContact={selectedSocialContact}
+              boxChannel={isOfficialBox ? "whatsapp_oficial" : "instagram"}
               sender={socialSender}
               channelName={selectedBox?.name ?? "Instagram"}
               organizationId={organizationId}
