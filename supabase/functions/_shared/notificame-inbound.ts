@@ -788,6 +788,14 @@ export interface InboundChannelMessageRow {
   lead_id: string | null;
   timestamp: string;
   raw_payload: unknown;
+  /**
+   * A leitura NORMALIZADA do corpo — a forma nossa, que a tela lê.
+   *
+   * `null` significa "ainda não normalizada", e não "normalizada e vazia". A
+   * distinção é o que permite ao backfill saber o que falta reprocessar; um
+   * `{}` no lugar diria que já olhamos e não achamos nada.
+   */
+  metadata: unknown | null;
 }
 
 /**
@@ -843,6 +851,8 @@ export function buildInboundChannelMessageRow(params: {
    * decisão para o chamador sem mudar o resultado do caminho não-vinculado.
    */
   leadId?: string | null;
+  /** Ver `metadata` em `InboundChannelMessageRow`. Omitir = coluna NULA. */
+  metadata?: unknown;
 }): InboundChannelMessageRow {
   return {
     organization_id: params.organizationId,
@@ -881,6 +891,7 @@ export function buildInboundChannelMessageRow(params: {
     lead_id: params.leadId ?? null,
     timestamp: params.timestampIso,
     raw_payload: params.rawPayload,
+    metadata: params.metadata ?? null,
   };
 }
 

@@ -185,7 +185,6 @@ import {
   pickChannelId,
   pickChannelWord,
   pickContact,
-  pickContent,
   pickExternalId,
   pickTimestampIso,
   readDirection,
@@ -196,6 +195,8 @@ import {
 } from "../_shared/notificame-inbound.ts";
 import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
 import { mirrorContactAvatar } from "../_shared/notificame-avatar.ts";
+import { normalizarConteudo } from "../_shared/notificame-content.ts";
+import { espelharMidiaRecebida } from "../_shared/mirror-inbound-media.ts";
 
 const FUNCTION_NAME = "notificame-webhook";
 
@@ -1624,6 +1625,40 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       sourceUrl: contact.avatarUrl,
     });
 
+    // ── Conteúdo: normalizado, e com o arquivo trazido para casa ──────────
+    //
+    // `normalizarConteudo` CHAMA `pickContent` e acrescenta — o texto continua
+    // saindo da mesma função de sempre. O que entra novo é `metadata`, a forma
+    // NOSSA do corpo, e a URL da mídia, que o parser antigo nunca achava porque
+    // procurava `url` e o fornecedor manda `fileUrl`.
+    const conteudo = normalizarConteudo(payload);
+
+    // Espelhar é best-effort e NUNCA decide se a mensagem existe: falha devolve
+    // a URL original, que ao menos funciona pelos próximos dias. Um webhook que
+    // falha por causa de um arquivo perde a mensagem, e a mensagem é o produto.
+    let midiaFinal = conteudo.mediaUrl;
+    let metadataFinal = conteudo.metadata;
+    if (conteudo.metadata.midia) {
+      const espelho = await espelharMidiaRecebida(conteudo.metadata.midia.url, {
+        organizationId,
+        especie: conteudo.metadata.midia.especie,
+        mimeDeclarado: conteudo.metadata.midia.mime,
+        storage: admin.storage,
+      });
+      midiaFinal = espelho.url;
+      metadataFinal = {
+        ...conteudo.metadata,
+        midia: {
+          ...conteudo.metadata.midia,
+          url: espelho.url,
+          // O content-type da RESPOSTA é a verdade — o declarado pelo
+          // fornecedor foi `"text/html"` em todo arquivo real medido.
+          mime: espelho.mime ?? conteudo.metadata.midia.mime,
+          espelhada: espelho.espelhada,
+        },
+      };
+    }
+
     const row = buildInboundChannelMessageRow({
       organizationId,
       target: channel!.kind === "whatsapp"
@@ -1632,7 +1667,8 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       externalId,
       contact: avatarEspelhado ? { ...contact, avatarUrl: avatarEspelhado } : contact,
       contactExternalId: contact.externalId,
-      content: pickContent(payload),
+      content: { ...conteudo, mediaUrl: midiaFinal },
+      metadata: metadataFinal,
       leadId: linkedLeadId,
       // O relógio mora AQUI, e não no módulo puro: é o que permite asserir por
       // grep que nenhum caminho de identidade toca `Date.now()`.

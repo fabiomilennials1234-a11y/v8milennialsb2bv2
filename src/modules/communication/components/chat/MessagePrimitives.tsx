@@ -25,6 +25,8 @@ import {
   LayoutList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { lerBolha, TIPOS_NORMALIZADOS } from "@/modules/communication/lib/inbound-metadata";
+import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
@@ -159,6 +161,22 @@ export function MessageBubble({
   const isPoll = messageType === "poll";
   const isSystem = messageType === "system" || messageType === "PinInChatMessage";
   const isTemplate = messageType === "template";
+  // A LEITURA NORMALIZADA, quando a linha tem uma.
+  //
+  // `metadata` só existe em `channel_messages` — o chat da Uazapi lê
+  // `whatsapp_messages`, que não tem a coluna, e portanto NUNCA entra por aqui.
+  // A guarda é estrutural, não um cuidado: não há como este caminho alcançar as
+  // ~30 orgs que usam o outro eixo.
+  const bolhaNormalizada = lerBolha({
+    content: message.content ?? null,
+    media_url: message.media_url ?? null,
+    message_type: messageType,
+    metadata: (message as { metadata?: unknown }).metadata ?? null,
+  });
+  // Só assume os quatro casos que o caminho antigo desenha errado ou não
+  // desenha. Áudio, imagem, vídeo e documento seguem nos ramos de sempre.
+  const usaBolhaNormalizada = TIPOS_NORMALIZADOS.has(bolhaNormalizada.tipo);
+
   const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || isTemplate || messageType === "url";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
 
@@ -302,6 +320,10 @@ export function MessageBubble({
           />
         ) : (
           <>
+{usaBolhaNormalizada ? (
+              <BolhaNormalizada bolha={bolhaNormalizada} />
+            ) : (
+              <>
             {/* Texto / Legenda */}
             {message.content && (
               <p className={cn(
@@ -421,6 +443,8 @@ export function MessageBubble({
                 <span className="italic">Mensagem interativa</span>
               </div>
             )}
+              </>
+            )}
 
             {/* O MOTIVO DA RECUSA, quando ele existe.
                 "Tentar novamente" sozinho não diz o que consertar: a Meta recusa
@@ -440,6 +464,8 @@ export function MessageBubble({
               </p>
             )}
 
+{!usaBolhaNormalizada && (
+              <>
             {/* Media without media_url — empty bubble guard (expired handled above) */}
             {hasMedia && !mediaUrl && !message.content && !isMediaExpired && (
               <p className="text-sm italic text-muted-foreground">
@@ -467,8 +493,10 @@ export function MessageBubble({
                 [Mensagem não suportada]
               </p>
             )}
+              </>
+            )}
 
-            <MessageMetaBadges
+                        <MessageMetaBadges
               edited={meta.edited}
               pinnedAt={meta.pinned_at}
               deletedAt={meta.deleted_at}

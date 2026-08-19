@@ -89,7 +89,11 @@ function toTimelineMessage(m: SocialMessage, organizationId: string): WhatsAppMe
     sent_source: null,
     failure_reason: m.failure_reason ?? null,
     failure_code: m.failure_code ?? null,
-  };
+    // A leitura normalizada viaja junto. `WhatsAppMessage` não a declara — ela
+    // não existe naquele eixo —, e a bolha a lê por acesso opcional: linha sem
+    // metadata cai no caminho de sempre.
+    metadata: m.metadata ?? null,
+  } as WhatsAppMessage;
 }
 
 // ─── Header ──────────────────────────────────────────────────────────────────
