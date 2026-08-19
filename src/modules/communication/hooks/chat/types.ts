@@ -31,6 +31,8 @@ export interface WhatsAppMessage {
    * oficial preenche hoje, a partir do callback da Meta.
    */
   failure_reason?: string | null;
+  /** Código da Meta (ex.: "132012"). Serve para investigação, não para a frase. */
+  failure_code?: string | null;
 }
 
 /** Mensagem que falhou ao ser enviada — armazenada em cache paralelo para retry. */

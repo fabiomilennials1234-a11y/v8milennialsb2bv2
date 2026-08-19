@@ -43,6 +43,7 @@ import {
 import { useSendWhatsAppTemplate } from "@/modules/communication/hooks/chat/useSendWhatsAppTemplate";
 import {
   formatoDeMidiaDoCabecalho,
+  midiaDeExemploDoCabecalho,
   montarComponentesDeEnvio,
   pendenciasDeEnvio,
   previewDoTemplate,
@@ -177,7 +178,11 @@ export function TemplatePicker({
                 onClick={() => {
                   setEscolhido(t);
                   setValores({});
-                  setMidia(null);
+                  // A imagem APROVADA junto do template entra como padrão. Pedir
+                  // upload de um arquivo que a Meta já guarda é retrabalho — e
+                  // era o que acontecia porque o tipo do front descartava o
+                  // campo `example`.
+                  setMidia(midiaDeExemploDoCabecalho(t));
                 }}
                 className="flex w-full flex-col gap-1 rounded-lg border border-border/60 p-3 text-left transition-colors hover:border-primary/40 hover:bg-muted/40"
               >
@@ -256,7 +261,9 @@ export function TemplatePicker({
                   </Button>
                   {midia && (
                     <span className="truncate text-[11px] text-emerald-400">
-                      arquivo pronto
+                      {midia === midiaDeExemploDoCabecalho(escolhido)
+                        ? "usando a imagem do template"
+                        : "arquivo pronto"}
                     </span>
                   )}
                 </div>

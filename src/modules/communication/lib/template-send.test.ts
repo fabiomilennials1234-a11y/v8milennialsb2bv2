@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import type { NotificameTemplate } from "../hooks/useNotificameTemplates";
 import {
   formatoDeMidiaDoCabecalho,
+  midiaDeExemploDoCabecalho,
   montarComponentesDeEnvio,
   pendenciasDeEnvio,
   previewDoTemplate,
@@ -210,5 +211,44 @@ describe("cabeçalho de mídia", () => {
     const c = montarComponentesDeEnvio(soTexto, { "1": "Maria" }, "https://x/y.jpg");
 
     expect(c.map((x) => x.type)).toEqual(["body"]);
+  });
+});
+
+
+/**
+ * A IMAGEM QUE JÁ VEM COM O TEMPLATE.
+ *
+ * A Meta guarda o arquivo do cabeçalho junto do template aprovado e o devolve na
+ * listagem, em `example.header_handle`. O backend sempre repassou; o tipo do
+ * front descartava — e o seletor pedia upload de um arquivo que já existia.
+ */
+describe("midiaDeExemploDoCabecalho", () => {
+  it("lê o header_handle da listagem", () => {
+    const t = tpl([
+      {
+        type: "HEADER",
+        format: "IMAGE",
+        example: { header_handle: ["https://scontent.example/capa.jpg"] },
+      },
+      { type: "BODY", text: "Olá" },
+    ]);
+
+    expect(midiaDeExemploDoCabecalho(t)).toBe("https://scontent.example/capa.jpg");
+  });
+
+  it("aceita as variações que intermediários usam", () => {
+    const comUrl = tpl([{ type: "HEADER", format: "IMAGE", example: { header_url: "https://x/y.jpg" } }]);
+    expect(midiaDeExemploDoCabecalho(comUrl)).toBe("https://x/y.jpg");
+  });
+
+  it("sem exemplo devolve null — e aí o seletor PEDE o arquivo", () => {
+    // Isto não é erro: é o estado em que o vendedor precisa escolher a imagem.
+    expect(midiaDeExemploDoCabecalho(tpl([{ type: "HEADER", format: "IMAGE" }]))).toBeNull();
+    expect(midiaDeExemploDoCabecalho(tpl([{ type: "BODY", text: "Olá" }]))).toBeNull();
+  });
+
+  it("ignora exemplo que não é URL — não vira link quebrado no envelope", () => {
+    const t = tpl([{ type: "HEADER", format: "IMAGE", example: { header_handle: ["4::aWzhY2U="] } }]);
+    expect(midiaDeExemploDoCabecalho(t)).toBeNull();
   });
 });

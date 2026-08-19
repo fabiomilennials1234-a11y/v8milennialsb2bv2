@@ -71,6 +71,36 @@ export function formatoDeMidiaDoCabecalho(
 }
 
 /**
+ * A mídia de exemplo que veio APROVADA com o template.
+ *
+ * A Meta guarda o arquivo do cabeçalho junto do template e o devolve na
+ * listagem, em `example.header_handle`. Usá-lo como padrão é a diferença entre
+ * "escolha a imagem toda vez" e "manda". Quem quiser outra troca no seletor.
+ *
+ * `null` quando o template não tem cabeçalho de mídia ou quando o fornecedor não
+ * devolveu o exemplo — e aí o seletor pede o arquivo, que é o comportamento
+ * correto, não um erro.
+ */
+export function midiaDeExemploDoCabecalho(
+  template: NotificameTemplate,
+): string | null {
+  const header = componenteDe(template, "HEADER");
+  const exemplo = (header?.example ?? {}) as Record<string, unknown>;
+
+  // `header_handle` é o nome na Graph. Os outros dois aparecem em respostas de
+  // intermediários; aceitar os três custa uma linha e evita depender de qual
+  // deles o fornecedor escolheu repassar.
+  for (const chave of ["header_handle", "header_url", "header_image"]) {
+    const bruto = exemplo[chave];
+    const valor = Array.isArray(bruto) ? bruto[0] : bruto;
+    if (typeof valor === "string" && valor.trim().startsWith("http")) {
+      return valor.trim();
+    }
+  }
+  return null;
+}
+
+/**
  * As variáveis que o vendedor precisa preencher.
  *
  * O RODAPÉ fica de fora de propósito: a Meta não aceita variável nele, e a nossa

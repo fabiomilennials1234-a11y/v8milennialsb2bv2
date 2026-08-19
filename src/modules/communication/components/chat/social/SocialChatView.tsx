@@ -88,6 +88,7 @@ function toTimelineMessage(m: SocialMessage, organizationId: string): WhatsAppMe
     sent_by_ai: false,
     sent_source: null,
     failure_reason: m.failure_reason ?? null,
+    failure_code: m.failure_code ?? null,
   };
 }
 

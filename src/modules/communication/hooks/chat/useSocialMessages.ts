@@ -34,6 +34,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { traduzirRecusaDaMeta } from "@/modules/communication/lib/meta-send-errors";
+
 import { chatQueryKeys } from "./shared/queryKeys";
 import type { SocialContact } from "./types";
 
@@ -47,6 +49,8 @@ export interface SocialMessage {
    * não houve recusa, ou quando ela chegou sem explicação.
    */
   failure_reason?: string | null;
+  /** O código da Meta, mantido para investigação — some da frase, não do dado. */
+  failure_code?: string | null;
   id: string;
   external_id: string;
   direction: "incoming" | "outgoing";
@@ -116,11 +120,13 @@ export function useSocialMessages(contact: SocialContact | null) {
         const evento = (raw.status_event ?? {}) as Record<string, unknown>;
         const detalhe = typeof evento.detail === "string" ? evento.detail.trim() : "";
         const codigo = typeof evento.provider_code === "string" ? evento.provider_code : null;
+        const recusa = traduzirRecusaDaMeta(codigo, detalhe);
         return {
           ...m,
-          failure_reason: detalhe
-            ? (codigo ? `${codigo}: ${detalhe}` : detalhe)
+          failure_reason: recusa
+            ? [recusa.mensagem, recusa.acao].filter(Boolean).join(" ")
             : null,
+          failure_code: recusa?.codigo ?? null,
         };
       });
     },

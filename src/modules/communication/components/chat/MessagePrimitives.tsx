@@ -430,6 +430,13 @@ export function MessageBubble({
             {isFailed && (message as { failure_reason?: string | null }).failure_reason && (
               <p className="mt-1 text-[11px] leading-snug text-destructive/90">
                 {(message as { failure_reason?: string | null }).failure_reason}
+                {/* O código fica, pequeno: é ele que encontra a mensagem nos
+                    eventos do fornecedor quando alguém for investigar. */}
+                {(message as { failure_code?: string | null }).failure_code && (
+                  <span className="ml-1 opacity-60">
+                    ({(message as { failure_code?: string | null }).failure_code})
+                  </span>
+                )}
               </p>
             )}
 
