@@ -190,6 +190,8 @@ import {
   pickTimestampIso,
   readDirection,
   readEventType,
+  readMessageStatus,
+  OUTBOUND_STATUS_RANK,
   type InboundEventType,
 } from "../_shared/notificame-inbound.ts";
 import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
@@ -319,6 +321,10 @@ type ParkReason =
   | "missing_contact_id"
   | "unreadable_direction"
   | "unhandled_event"
+  /** `MESSAGE_STATUS` cujo corpo não diz id da mensagem ou status legível. */
+  | "unreadable_status"
+  /** `MESSAGE_STATUS` de uma mensagem que não é nossa (ou já superada). */
+  | "status_no_match"
   | "insert_failed";
 
 // ─── Allowlist de IP (puro) ──────────────────────────────────────────────────
@@ -1077,8 +1083,104 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
   }
   const payload = body.value;
 
-  // ── 11. Resolução do CANAL ───────────────────────────────────────────────
   const eventType = readEventType(payload);
+
+  // ── 10.5. STATUS DE ENVIO ────────────────────────────────────────────────
+  //
+  // ⚠️ ANTES da resolução de canal, e é o ponto inteiro deste bloco. O evento de
+  // status não traz canal social: em produção (2026-08-19) os seis
+  // `MESSAGE_STATUS` da Chique foram parkados como `unresolved_channel`, porque a
+  // resolução procura em `messaging_channels` e a caixa oficial mora em
+  // `whatsapp_instances`. O resultado é que a recusa da Meta
+  //
+  //   131053 — "Audio file uploaded with mimetype as audio/mp4, however on
+  //   processing it is of type application/octet-stream"
+  //
+  // chegou 2s depois do envio e foi descartada. A tela seguiu dizendo "enviado", e
+  // achar a causa exigiu ler a tabela de eventos à mão.
+  //
+  // O eixo aqui não é o canal — é a MENSAGEM: `external_id` já identifica a linha,
+  // e `organization_id` (que veio da subconta, autenticada) fecha o tenant.
+  if (eventType === "message_status") {
+    const st = readMessageStatus(payload);
+    if (!st) {
+      const stored = await park({
+        reason: "unreadable_status",
+        payload,
+        organizationId,
+        eventType,
+      });
+      return await parkResponse(stored, "unreadable_status");
+    }
+
+    // A linha é lida ANTES de escrever por dois motivos, e nenhum é conveniência:
+    //
+    //   1. `raw_payload` guarda a REQUISIÇÃO e a RESPOSTA do envio. Um update com
+    //      objeto novo apagaria as duas — o PostgREST substitui a coluna jsonb, não
+    //      a mescla. Perder isso seria destruir justamente a evidência que fez
+    //      este bloco existir.
+    //   2. o rank do status atual decide se o callback progride ou é ruído.
+    const atual = await admin
+      .from("channel_messages")
+      .select("id, status, raw_payload")
+      .eq("organization_id", organizationId)
+      .eq("external_id", st.messageId)
+      .limit(1);
+
+    const linha = (atual.data as
+      | Array<{ id: string; status: string | null; raw_payload: unknown }>
+      | null)?.[0] ?? null;
+
+    // NÃO REBAIXAR. Callbacks chegam fora de ordem, e um DELIVERED atrasado não
+    // pode apagar um READ que já chegou. `failed` fica FORA da escala de
+    // propósito: recusa vale sempre, inclusive depois de "entregue" — foi
+    // exatamente essa a sequência do 131053 (SENT e, 2s depois, ERROR).
+    const progride = st.status === "failed" ||
+      (OUTBOUND_STATUS_RANK[st.status] ?? 99) >
+        (OUTBOUND_STATUS_RANK[linha?.status ?? "pending"] ?? 0);
+
+    const upd = linha && progride
+      ? await admin
+        .from("channel_messages")
+        .update({
+          status: st.status,
+          raw_payload: {
+            ...(typeof linha.raw_payload === "object" && linha.raw_payload
+              ? linha.raw_payload as Record<string, unknown>
+              : {}),
+            status_event: {
+              code: st.status,
+              provider_code: st.providerCode,
+              detail: st.detail,
+              at: new Date().toISOString(),
+            },
+          },
+        })
+        .eq("id", linha.id)
+        .select("id")
+      : null;
+
+    if (!linha || !progride || upd?.error) {
+      // Guardar, e não descartar: pode ser status de mensagem enviada por outro
+      // caminho, ou callback fora de ordem que a guarda acima recusou. Nos dois
+      // casos o corpo é a única evidência que sobra.
+      const stored = await park({
+        reason: "status_no_match",
+        payload,
+        organizationId,
+        eventType,
+        error: upd?.error?.message ??
+          (linha
+            ? `fora de ordem: atual=${linha.status} recebido=${st.status}`
+            : `external_id=${st.messageId} não encontrado nesta org`),
+      });
+      return await parkResponse(stored, "status_no_match");
+    }
+
+    return json(200, { status: "updated", message_status: st.status });
+  }
+
+  // ── 11. Resolução do CANAL ───────────────────────────────────────────────
   const channelHint = pickChannelId(payload);
 
   interface ResolvedChannel {

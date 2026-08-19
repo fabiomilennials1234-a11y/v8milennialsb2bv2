@@ -356,6 +356,108 @@ export function readEventType(payload: unknown): InboundEventType {
   return classifyEventWord(ambiguous) ?? "unknown";
 }
 
+// ─── Status de mensagem ENVIADA ──────────────────────────────────────────────
+
+/** O vocabulário da coluna `channel_messages.status` que este caminho escreve. */
+export type OutboundStatus = "sent" | "delivered" | "read" | "failed";
+
+/**
+ * A ordem em que um envio progride. Serve para NÃO REBAIXAR: callbacks chegam
+ * fora de ordem, e um `DELIVERED` atrasado não pode apagar um `READ` que já
+ * chegou. `failed` fica fora da escala de propósito — recusa vale sempre.
+ */
+export const OUTBOUND_STATUS_RANK: Record<string, number> = {
+  pending: 0,
+  sent: 1,
+  delivered: 2,
+  read: 3,
+};
+
+export interface MessageStatusUpdate {
+  /** O id que o fornecedor deu à MENSAGEM — casa com `channel_messages.external_id`. */
+  messageId: string;
+  status: OutboundStatus;
+  /** Código do erro da Meta (ex.: `131053`), quando houver. */
+  providerCode: string | null;
+  /** O texto que explica a recusa. É ele que vira a frase da tela. */
+  detail: string | null;
+}
+
+/** Palavra do fornecedor → vocabulário do banco. */
+function classifyStatusWord(raw: string): OutboundStatus | null {
+  switch (raw.trim().toUpperCase()) {
+    case "SENT":
+    case "ACCEPTED":
+    case "QUEUED":
+      return "sent";
+    case "DELIVERED":
+      return "delivered";
+    case "READ":
+      return "read";
+    case "ERROR":
+    case "FAILED":
+    case "REJECTED":
+    case "UNDELIVERED":
+      return "failed";
+    default:
+      return null;
+  }
+}
+
+/**
+ * Lê um evento `MESSAGE_STATUS`. `null` quando o corpo não diz o suficiente.
+ *
+ * ⚠️ O id da MENSAGEM não é o `id` do topo — ali mora o id do EVENTO. Confundir
+ * os dois faria o update procurar uma linha que nunca existiu, e a recusa
+ * continuaria invisível com a aparência de "não achei". Os aliases abaixo são
+ * deliberadamente restritos.
+ *
+ * Corpo real medido em produção (2026-08-19), o que motivou esta função:
+ *
+ *   {"type":"MESSAGE_STATUS","messageId":"d7370d65-…",
+ *    "messageStatus":{"code":"ERROR",
+ *      "error":{"code":131053,"details":"Audio file uploaded with mimetype as
+ *               audio/mp4, however on processing it is of type
+ *               application/octet-stream.","message":"Media upload error"}}}
+ */
+export function readMessageStatus(payload: unknown): MessageStatusUpdate | null {
+  const messageId = firstNonEmpty(payload, [
+    "messageStatus.messageId",
+    "messageId",
+    "message.id",
+    "message_id",
+  ]);
+  if (!messageId) return null;
+
+  const word = firstNonEmpty(payload, [
+    "messageStatus.code",
+    "messageStatus.status",
+    "status.code",
+    "status",
+  ]);
+  const status = word ? classifyStatusWord(word) : null;
+  if (!status) return null;
+
+  const providerCode = firstNonEmpty(payload, [
+    "messageStatus.error.code",
+    "error.code",
+  ]);
+  const detail = firstNonEmpty(payload, [
+    "messageStatus.error.details",
+    "messageStatus.error.message",
+    "messageStatus.message",
+    "error.details",
+    "error.message",
+  ]);
+
+  return {
+    messageId,
+    status,
+    providerCode: providerCode ?? null,
+    detail: detail ?? null,
+  };
+}
+
 // ─── Direção ─────────────────────────────────────────────────────────────────
 
 export type InboundDirection = "incoming" | "outgoing";
