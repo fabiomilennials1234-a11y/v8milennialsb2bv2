@@ -28,20 +28,26 @@ describe("pickAudioRecordingMime — por canal de destino", () => {
     ).toBe("audio/ogg;codecs=opus");
   });
 
-  it("sem ogg, o WhatsApp pede mp4 com CODEC EXPLÍCITO (AAC), nunca mp4 cru", () => {
-    const escolhido = pickAudioRecordingMime(
-      suporta("audio/mp4;codecs=mp4a.40.2", "audio/mp4", "audio/webm;codecs=opus"),
-      "whatsapp_oficial",
-    );
-
-    expect(escolhido).toBe("audio/mp4;codecs=mp4a.40.2");
-    // `audio/mp4` cru é exatamente o pedido que produziu MP4 com Opus dentro.
-    expect(escolhido).not.toBe("audio/mp4");
+  it("sem ogg, cai em webm/opus — que é REMUXADO para ogg antes de subir", () => {
+    // O Chromium não escreve Ogg, mas escreve WebM/Opus, e os pacotes são os
+    // mesmos. Ver `webm-opus-to-ogg.ts`.
+    expect(
+      pickAudioRecordingMime(
+        suporta("audio/webm;codecs=opus", "audio/mp4"),
+        "whatsapp_oficial",
+      ),
+    ).toBe("audio/webm;codecs=opus");
   });
 
-  it("o WhatsApp NUNCA grava webm — não está em lista nenhuma da Meta", () => {
+  it("o WhatsApp NUNCA grava MP4 — o do navegador é fragmentado e a Meta recusa", () => {
+    // Medido duas vezes em produção, com Opus e com AAC dentro: `131053 ... on
+    // processing it is of type application/octet-stream`. O container é o
+    // problema; nenhum codec resolve.
     expect(
-      pickAudioRecordingMime(suporta("audio/webm;codecs=opus", "audio/webm"), "whatsapp_oficial"),
+      pickAudioRecordingMime(
+        suporta("audio/mp4;codecs=mp4a.40.2", "audio/mp4", "audio/aac"),
+        "whatsapp_oficial",
+      ),
     ).toBeUndefined();
   });
 

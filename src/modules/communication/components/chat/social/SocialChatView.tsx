@@ -38,6 +38,7 @@ import {
   type SocialSendError,
 } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import type { SocialSender } from "@/modules/communication/hooks/chat/social-sender";
+import { webmOpusToOgg } from "@/modules/communication/lib/webm-opus-to-ogg";
 import { socialReplyWindow } from "@/modules/communication/lib/social-window";
 import {
   audioExtensionForMime,
@@ -256,11 +257,32 @@ function SocialComposer({
         // pode não ter sido atendido. A extensão sai dele, nunca de um literal:
         // um mp4 chamado `.webm` faz o classificador cair na regra errada.
         const tipo = rec.mimeType || mime || "audio/webm";
-        const blob = new Blob(pedacos, { type: tipo });
+        let blob = new Blob(pedacos, { type: tipo });
+        let extensao = audioExtensionForMime(tipo);
+
+        // ─── REMUX PARA OGG, SÓ NO CANAL OFICIAL ─────────────────────────────
+        //
+        // A Meta recusa o MP4 fragmentado do navegador e exige .ogg/OPUS para
+        // nota de voz. O Chromium não escreve Ogg, mas escreve WebM/Opus — e os
+        // pacotes são os mesmos. Reempacotar aqui é o que transforma o anexo
+        // recusado numa nota de voz de verdade, sem recodificar.
+        if (canal === "whatsapp_oficial" && /webm/i.test(tipo)) {
+          try {
+            const ogg = webmOpusToOgg(new Uint8Array(await blob.arrayBuffer()));
+            blob = new Blob([ogg], { type: "audio/ogg;codecs=opus" });
+            extensao = "ogg";
+          } catch (e) {
+            // Falhar aqui é melhor que subir o que a Meta recusa em silêncio: o
+            // vendedor fica sabendo na hora, com o áudio ainda na mão.
+            toast.error("Não foi possível preparar o áudio para o WhatsApp", {
+              description: e instanceof Error ? e.message : undefined,
+            });
+            return;
+          }
+        }
+
         await publicar(
-          new File([blob], `audio-${Date.now()}.${audioExtensionForMime(tipo)}`, {
-            type: blob.type,
-          }),
+          new File([blob], `audio-${Date.now()}.${extensao}`, { type: blob.type }),
         );
       };
 
