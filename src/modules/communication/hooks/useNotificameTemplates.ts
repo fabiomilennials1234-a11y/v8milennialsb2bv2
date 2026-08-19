@@ -37,6 +37,16 @@ export interface NotificameTemplateComponent {
   format?: string | null;
   text?: string | null;
   buttons?: unknown[] | null;
+  /**
+   * O exemplo que a Meta guarda junto do template APROVADO.
+   *
+   * `{ header_handle: ["https://…"] }` para cabeçalho de mídia, `{ body_text:
+   * [["Maria"]] }` para variáveis. O backend sempre repassou este campo
+   * (`_shared/notificame-templates.ts:226`) e o tipo do front o descartava — é
+   * por isso que o seletor pedia upload da imagem a cada envio de um template
+   * que JÁ TEM imagem.
+   */
+  example?: unknown;
 }
 
 export interface NotificameTemplate {
