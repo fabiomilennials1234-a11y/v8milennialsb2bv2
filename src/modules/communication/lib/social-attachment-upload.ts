@@ -31,11 +31,15 @@ export interface UploadedAttachment {
 export async function uploadSocialAttachment(
   file: File,
   organizationId: string,
+  canal: "instagram" | "whatsapp_oficial" = "instagram",
 ): Promise<UploadedAttachment> {
-  // `allowDocument: false` porque este caminho é SÓ do Direct, e o canal não
-  // aceita documento — recusar antes do upload poupa o storage e devolve a razão
-  // na hora, em vez da recusa muda do fornecedor depois do envio.
-  const check = classifyAttachment(file.type, file.name, file.size, { allowDocument: false });
+  // O Direct não aceita documento; o WhatsApp oficial aceita — e usa o MESMO
+  // composer. Recusar antes do upload poupa o storage e devolve a razão na hora,
+  // em vez da recusa muda do fornecedor (ou da Meta, por callback) depois.
+  const check = classifyAttachment(file.type, file.name, file.size, {
+    allowDocument: canal === "whatsapp_oficial",
+    canal,
+  });
   if (!check.ok) throw new Error(check.error);
 
   const seguro = file.name.replace(/[^\w.-]/g, "_").slice(-80) || "anexo";

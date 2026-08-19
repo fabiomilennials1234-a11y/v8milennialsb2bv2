@@ -221,7 +221,7 @@ function SocialComposer({
     if (!organizationId) return;
     setSubindo(true);
     try {
-      setAnexo(await uploadSocialAttachment(file, organizationId));
+      setAnexo(await uploadSocialAttachment(file, organizationId, canal));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao anexar");
     } finally {

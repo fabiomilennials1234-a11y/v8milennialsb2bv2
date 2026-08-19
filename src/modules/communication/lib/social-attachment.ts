@@ -149,11 +149,46 @@ export function audioExtensionForMime(mime: string): string {
  * `application/octet-stream`, e aí a extensão é a única pista. Sem essa queda, a
  * tabela de preço em PDF do cliente seria recusada sem motivo visível na tela.
  */
+/**
+ * Os limites da Cloud API do WhatsApp, por tipo.
+ *
+ * Fonte: developers.facebook.com/docs/whatsapp/cloud-api/reference/media —
+ * "Supported Media Types". Eles são MAIS DUROS que os nossos em imagem (5 MB, e
+ * só JPEG/PNG) e mais frouxos em documento (100 MB).
+ *
+ * Existe porque o teto único de 16 MB e o `image/*` aberto foram calibrados para
+ * o Direct. Mandar um `.webp` ou um JPEG de 8 MB pelo canal oficial repetiria o
+ * sumiço silencioso do áudio de 19/08: nós aceitamos, o fornecedor aceita, a Meta
+ * recusa por callback, e a tela segue dizendo "enviado".
+ */
+const LIMITES_WHATSAPP: Record<
+  SocialAttachmentType,
+  { mb: number; mimes?: RegExp; comoDizer: string }
+> = {
+  image: {
+    mb: 5,
+    mimes: /^image\/(jpeg|jpg|png)$/,
+    comoDizer: "O WhatsApp aceita imagem só em JPEG ou PNG, até 5 MB",
+  },
+  video: {
+    mb: 16,
+    mimes: /^video\/(mp4|3gpp)$/,
+    comoDizer: "O WhatsApp aceita vídeo só em MP4 ou 3GPP, até 16 MB",
+  },
+  audio: { mb: 16, comoDizer: "O áudio passa de 16 MB" },
+  document: { mb: 100, comoDizer: "O documento passa de 100 MB" },
+};
+
 export function classifyAttachment(
   mime: string,
   nome: string,
   sizeBytes: number,
-  opcoes: { sticker?: boolean; allowDocument?: boolean } = {},
+  opcoes: {
+    sticker?: boolean;
+    allowDocument?: boolean;
+    /** O canal de destino. Só o oficial aplica os limites da Meta. */
+    canal?: "instagram" | "whatsapp_oficial";
+  } = {},
 ): AttachmentCheck {
   if (opcoes.sticker) {
     return { ok: false, error: "O Instagram não aceita figurinhas por aqui" };
@@ -161,22 +196,40 @@ export function classifyAttachment(
   if (!sizeBytes || sizeBytes <= 0) {
     return { ok: false, error: "O arquivo está vazio" };
   }
-  if (sizeBytes > SOCIAL_ATTACHMENT_MAX_MB * 1024 * 1024) {
+  const oficial = opcoes.canal === "whatsapp_oficial";
+
+  // O teto genérico continua valendo onde a Meta não impõe o dela. No canal
+  // oficial cada tipo tem o seu, conferido logo abaixo.
+  if (!oficial && sizeBytes > SOCIAL_ATTACHMENT_MAX_MB * 1024 * 1024) {
     return { ok: false, error: `O arquivo passa de ${SOCIAL_ATTACHMENT_MAX_MB} MB` };
   }
 
   const m = (mime || "").toLowerCase();
-  if (m.startsWith("image/")) return { ok: true, type: "image" };
-  if (m.startsWith("video/")) return { ok: true, type: "video" };
-  if (m.startsWith("audio/")) return { ok: true, type: "audio" };
+
+  /** Aplica o limite do canal oficial ao tipo já decidido. */
+  const conferirLimite = (tipo: SocialAttachmentType): AttachmentCheck => {
+    if (!oficial) return { ok: true, type: tipo };
+    const lim = LIMITES_WHATSAPP[tipo];
+    if (lim.mimes && !lim.mimes.test(m)) return { ok: false, error: lim.comoDizer };
+    if (sizeBytes > lim.mb * 1024 * 1024) return { ok: false, error: lim.comoDizer };
+    return { ok: true, type: tipo };
+  };
+
+  if (m.startsWith("image/")) return conferirLimite("image");
+  if (m.startsWith("video/")) return conferirLimite("video");
+  if (m.startsWith("audio/")) return conferirLimite("audio");
 
   const porExt = POR_EXTENSAO[extensao(nome)];
-  if (porExt) return documentoOuRecusa(porExt, opcoes.allowDocument);
+  if (porExt) {
+    const decidido = documentoOuRecusa(porExt, opcoes.allowDocument);
+    return decidido.ok ? conferirLimite(decidido.type) : decidido;
+  }
 
   // Desconhecido vira DOCUMENTO em vez de recusa: o fornecedor aceita arquivo
   // genérico, e barrar um .xlsx por não estar numa lista seria pior para o
   // vendedor do que mandá-lo como anexo.
-  return documentoOuRecusa("document", opcoes.allowDocument);
+  const generico = documentoOuRecusa("document", opcoes.allowDocument);
+  return generico.ok ? conferirLimite("document") : generico;
 }
 
 /**
