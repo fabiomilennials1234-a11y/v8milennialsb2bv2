@@ -28,6 +28,28 @@ export function useLeadCreateHandler({ pushName, onSuccess }: UseLeadCreateHandl
   const logAction = useLogLeadAction();
 
   const create = async (payload: CreateLeadPayload) => {
+    try {
+      await criar(payload);
+    } catch (e) {
+      // ⚠️ SEM ISTO, O BOTÃO NÃO DIZ NADA.
+      //
+      // Este handler não tratava erro, e nenhum chamador tratava por ele: a
+      // promessa rejeitava e a tela ficava exatamente como estava. Medido em
+      // produção (19/08): um master em shadow clicava "Criar Lead" e nada
+      // acontecia — o insert era recusado porque o id do membro virtual não
+      // existe em `team_members`, e a recusa morria no vazio.
+      //
+      // Falha visível é o mínimo. A mensagem do servidor entra na descrição
+      // porque "violação de chave estrangeira" e "sem permissão" pedem reações
+      // diferentes, e um texto genérico as achataria numa só.
+      toast.error("Não foi possível criar o lead", {
+        description: e instanceof Error ? e.message : undefined,
+      });
+      throw e;
+    }
+  };
+
+  const criar = async (payload: CreateLeadPayload) => {
     const result = await createLead.mutateAsync({
       phone: payload.phone,
       pushName: payload.name || pushName,
