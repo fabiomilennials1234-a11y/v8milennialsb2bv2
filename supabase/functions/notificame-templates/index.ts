@@ -131,6 +131,10 @@ function readDraft(body: Record<string, unknown>): TemplateDraft {
         format: typeof comp.format === "string" ? comp.format.trim().toUpperCase() : undefined,
         text: typeof comp.text === "string" ? comp.text : undefined,
         buttons: Array.isArray(comp.buttons) ? comp.buttons : undefined,
+        // O exemplo das variáveis. Sem esta linha o campo morria AQUI:
+        // `buildCreateTemplateBody` sabe emiti-lo e nunca recebia, então todo
+        // template com `{{n}}` era recusado pela Meta horas depois.
+        example: comp.example,
       };
     }),
   };

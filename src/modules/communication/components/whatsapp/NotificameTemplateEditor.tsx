@@ -54,22 +54,38 @@ const CATEGORIES = [
   { value: "AUTHENTICATION", label: "Autenticação", hint: "Códigos de verificação" },
 ];
 
-const VARIABLE_RE = /\{\{\s*[A-Za-z0-9_]+\s*\}\}/g;
+const VARIABLE_RE = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 
 /** O texto como vai chegar, com as variáveis destacadas. */
-function PreviewText({ text }: { text: string }) {
+/**
+ * O texto como o CLIENTE vai ler.
+ *
+ * ⚠️ Substitui `{{1}}` pelo exemplo quando ele existe, e é esse o ponto: um
+ * preview que mostra o símbolo não responde a pergunta que o usuário faz diante
+ * dele — "o que isso vira?". Com o exemplo, ele lê a mensagem pronta, e o trecho
+ * variável fica destacado para não sumir a ideia de que aquilo muda a cada envio.
+ */
+function PreviewText({
+  text,
+  exemplos = {},
+}: {
+  text: string;
+  exemplos?: Record<string, string>;
+}) {
   const parts = useMemo(() => {
     const out: { value: string; isVar: boolean }[] = [];
     let last = 0;
     for (const m of text.matchAll(VARIABLE_RE)) {
       const start = m.index ?? 0;
       if (start > last) out.push({ value: text.slice(last, start), isVar: false });
-      out.push({ value: m[0], isVar: true });
+      const token = (m[1] ?? "").trim();
+      const exemplo = (exemplos[token] ?? "").trim();
+      out.push({ value: exemplo || m[0], isVar: true });
       last = start + m[0].length;
     }
     if (last < text.length) out.push({ value: text.slice(last), isVar: false });
     return out;
-  }, [text]);
+  }, [text, exemplos]);
 
   return (
     <>
@@ -104,7 +120,33 @@ export function NotificameTemplateEditor({
   const [header, setHeader] = useState("");
   const [body, setBody] = useState("");
   const [footer, setFooter] = useState("");
+  /**
+   * Um exemplo por variável, chaveado pelo token (`"1"`, `"nome"`).
+   *
+   * A Meta EXIGE isso e recusa sem — horas depois, com motivo genérico. Aqui ele
+   * tem um segundo papel, que é o que resolve a pergunta "para que serve o
+   * {{1}}?": o exemplo entra no preview, e o usuário vê a mensagem PRONTA em vez
+   * de um símbolo.
+   */
+  const [exemplos, setExemplos] = useState<Record<string, string>>({});
   const [problems, setProblems] = useState<TemplateProblem[]>([]);
+
+  /** Os tokens de `{{…}}` de um texto, na ordem em que aparecem, sem repetir. */
+  const variaveisDe = (texto: string): string[] => {
+    const vistos: string[] = [];
+    for (const m of texto.matchAll(VARIABLE_RE)) {
+      const token = (m[1] ?? "").trim();
+      if (token && !vistos.includes(token)) vistos.push(token);
+    }
+    return vistos;
+  };
+
+  const varsBody = useMemo(() => variaveisDe(body), [body]);
+  const varsHeader = useMemo(() => variaveisDe(header), [header]);
+  const todasVars = useMemo(
+    () => [...varsHeader, ...varsBody.filter((v) => !varsHeader.includes(v))],
+    [varsHeader, varsBody],
+  );
 
   const problemsOf = (field: string) => problems.filter((p) => p.field === field);
   const hasProblem = (field: string) => problemsOf(field).length > 0;
@@ -114,15 +156,42 @@ export function NotificameTemplateEditor({
     setHeader("");
     setBody("");
     setFooter("");
+    setExemplos({});
     setProblems([]);
   }
 
   async function handleSubmit() {
     setProblems([]);
 
-    const components: { type: string; format?: string; text?: string }[] = [];
-    if (header.trim()) components.push({ type: "HEADER", format: "TEXT", text: header.trim() });
-    components.push({ type: "BODY", text: body });
+    // O `example` viaja no formato DA META, não no nosso: `header_text` é lista
+    // simples, `body_text` é lista DENTRO de lista (uma linha de exemplos).
+    // Trocar os dois é recusa certa, e o validador do servidor confere.
+    const exemploDe = (tokens: string[]) => tokens.map((t) => (exemplos[t] ?? "").trim());
+
+    const components: {
+      type: string;
+      format?: string;
+      text?: string;
+      example?: unknown;
+    }[] = [];
+
+    if (header.trim()) {
+      components.push({
+        type: "HEADER",
+        format: "TEXT",
+        text: header.trim(),
+        ...(varsHeader.length
+          ? { example: { header_text: exemploDe(varsHeader) } }
+          : {}),
+      });
+    }
+
+    components.push({
+      type: "BODY",
+      text: body,
+      ...(varsBody.length ? { example: { body_text: [exemploDe(varsBody)] } } : {}),
+    });
+
     if (footer.trim()) components.push({ type: "FOOTER", text: footer.trim() });
 
     try {
@@ -233,6 +302,10 @@ export function NotificameTemplateEditor({
                 maxLength={60}
                 className={cn(hasProblem("header") && "border-destructive")}
               />
+              <p className="text-[11px] text-muted-foreground">
+                Uma linha em negrito acima da mensagem, como um assunto. Até 60
+                caracteres.
+              </p>
               {problemsOf("header").map((p) => (
                 <p key={p.code} className="text-[11px] text-destructive">
                   {p.message}
@@ -251,9 +324,9 @@ export function NotificameTemplateEditor({
                 className={cn(hasProblem("body") && "border-destructive")}
               />
               <p className="text-[11px] text-muted-foreground">
-                Use <code className="text-primary">{"{{1}}"}</code>,{" "}
-                <code className="text-primary">{"{{2}}"}</code> para os trechos que mudam a cada
-                envio — em sequência, sem pular número.
+                Escreva <code className="text-primary">{"{{1}}"}</code> onde o texto muda a cada
+                envio — o nome do cliente, o número do pedido. Numere em sequência,
+                sem pular. Cada um vira um campo de exemplo aqui embaixo.
               </p>
               {problemsOf("body").map((p) => (
                 <p key={p.code} className="text-[11px] text-destructive">
@@ -261,6 +334,44 @@ export function NotificameTemplateEditor({
                 </p>
               ))}
             </div>
+
+            {/*
+              OS EXEMPLOS.
+              Só aparece quando há variável — um formulário que mostra campos
+              vazios "por precaução" ensina que eles são opcionais, e estes não
+              são: a Meta RECUSA o template sem eles, horas depois, com motivo
+              genérico. Antes desta fatia o campo nem era enviado.
+            */}
+            {todasVars.length > 0 && (
+              <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
+                <div className="space-y-0.5">
+                  <Label className="text-xs">O que entra em cada variável</Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    A Meta exige um exemplo de cada uma para aprovar. Ele não é
+                    enviado ao cliente — serve para a análise, e para você ver a
+                    mensagem pronta aqui ao lado.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {todasVars.map((token) => (
+                    <div key={token} className="flex items-center gap-2">
+                      <code className="shrink-0 rounded bg-primary/15 px-1.5 py-0.5 text-[11px] text-primary">
+                        {`{{${token}}}`}
+                      </code>
+                      <Input
+                        value={exemplos[token] ?? ""}
+                        onChange={(e) =>
+                          setExemplos((atual) => ({ ...atual, [token]: e.target.value }))
+                        }
+                        placeholder={/^\d+$/.test(token) ? "Maria" : token}
+                        className="h-8 text-sm"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="space-y-1.5">
               <Label htmlFor="tpl-footer">Rodapé (opcional)</Label>
@@ -273,7 +384,8 @@ export function NotificameTemplateEditor({
                 className={cn(hasProblem("footer") && "border-destructive")}
               />
               <p className="text-[11px] text-muted-foreground">
-                O rodapé não aceita variáveis.
+                Linha pequena e apagada no fim da mensagem, tipo assinatura. Não
+                aceita variáveis.
               </p>
               {problemsOf("footer").map((p) => (
                 <p key={p.code} className="text-[11px] text-destructive">
@@ -303,19 +415,19 @@ export function NotificameTemplateEditor({
               <div className="ml-auto max-w-full rounded-xl rounded-tr-sm bg-emerald-600/15 p-3 text-sm">
                 {header.trim() && (
                   <p className="mb-1 font-semibold text-foreground">
-                    <PreviewText text={header} />
+                    <PreviewText text={header} exemplos={exemplos} />
                   </p>
                 )}
                 <p className="whitespace-pre-wrap text-foreground/90">
                   {body.trim() ? (
-                    <PreviewText text={body} />
+                    <PreviewText text={body} exemplos={exemplos} />
                   ) : (
                     <span className="text-muted-foreground">A mensagem aparece aqui…</span>
                   )}
                 </p>
                 {footer.trim() && (
                   <p className="mt-2 text-[11px] text-muted-foreground">
-                    <PreviewText text={footer} />
+                    <PreviewText text={footer} exemplos={exemplos} />
                   </p>
                 )}
               </div>

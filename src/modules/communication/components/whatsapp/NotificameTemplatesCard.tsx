@@ -128,7 +128,7 @@ export function NotificameTemplatesCard({ instanceId }: { instanceId: string }) 
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <FileText className="h-4 w-4 text-muted-foreground" />
-          <h4 className="text-sm font-medium text-foreground">Templates aprovados</h4>
+          <h4 className="text-sm font-medium text-foreground">Templates</h4>
           {templates && templates.length > 0 && (
             <span className="text-xs text-muted-foreground">{templates.length}</span>
           )}
@@ -189,8 +189,8 @@ export function NotificameTemplatesCard({ instanceId }: { instanceId: string }) 
 
       {!isLoading && !error && templates?.length === 0 && (
         <p className="rounded-lg border border-dashed border-border/60 p-4 text-center text-xs text-muted-foreground">
-          Nenhum template neste canal ainda. Eles são criados e aprovados pela Meta antes de
-          poderem ser enviados.
+          Nenhum template neste canal ainda. Crie um aqui e a Meta analisa — só
+          depois de aprovado ele pode ser enviado fora da janela de 24 horas.
         </p>
       )}
 
