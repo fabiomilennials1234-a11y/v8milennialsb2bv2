@@ -645,9 +645,24 @@ describe("4. corpo que não bate com o formato — GRAVA, nunca descarta", () =>
     expect(messages()).toHaveLength(0);
   });
 
-  it("MESSAGE_STATUS também parka (fatia inbound-only, sem linha de saída)", async () => {
+  /**
+   * ⚠️ DECISÃO REVISTA em 2026-08-19, e a razão está em produção.
+   *
+   * Este teste afirmava que `MESSAGE_STATUS` parka como `unhandled_event`,
+   * porque a fatia era inbound-only e "não há linha de saída para atualizar".
+   * Passou a haver: a caixa oficial envia, e a Meta recusou um áudio com
+   * `131053`. O callback chegou 2s depois e foi descartado por esta regra — a
+   * tela seguiu dizendo "enviado".
+   *
+   * O evento agora é PROCESSADO, e continua parkando quando não dá para agir —
+   * mas com a razão CERTA em vez de "não sei o que fazer". Este corpo não traz
+   * `messageStatus`, então a razão é `unreadable_status`: o handler não inventa
+   * um status a partir do nada. O caso de mensagem inexistente
+   * (`status_no_match`) e o caminho feliz estão no harness do handler.
+   */
+  it("MESSAGE_STATUS sem status legível parka como unreadable_status", async () => {
     const res = await invoke(post(happyBody({ eventType: "MESSAGE_STATUS" })));
-    expect(await res.json()).toEqual({ status: "parked", reason: "unhandled_event" });
+    expect(await res.json()).toEqual({ status: "parked", reason: "unreadable_status" });
     expect(parked()[0].event_type).toBe("message_status");
   });
 

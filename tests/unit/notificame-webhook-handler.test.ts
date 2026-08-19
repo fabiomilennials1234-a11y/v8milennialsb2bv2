@@ -148,3 +148,120 @@ describe("resolução de canal — o ramo do WhatsApp oficial", () => {
     });
   });
 });
+
+/**
+ * O CALLBACK DE STATUS — o silêncio que fez o áudio parecer entregue.
+ *
+ * Em 19/08 a Meta recusou um áudio da Chique com `131053`. O callback chegou 2s
+ * depois do envio e foi PARKADO como `unresolved_channel`: a resolução procura em
+ * `messaging_channels`, e a caixa oficial mora em `whatsapp_instances`. A linha
+ * ficou `status='sent'` para sempre, e a tela disse "enviado".
+ *
+ * Estes testes exercitam o handler pela REQUISIÇÃO, que é onde o defeito morava —
+ * entre a resolução de canal e o despacho por tipo de evento, não dentro de
+ * nenhuma das duas.
+ */
+const ID_MENSAGEM = "d7370d65-7893-4989-9f09-d82fa86fa542";
+
+/** O corpo REAL da recusa (evento `60390bfa` em produção), reduzido. */
+const payloadRecusa = () => ({
+  type: "MESSAGE_STATUS",
+  channel: "whatsapp_business_account",
+  messageId: ID_MENSAGEM,
+  messageStatus: {
+    code: "ERROR",
+    error: {
+      code: 131053,
+      details:
+        "Audio file uploaded with mimetype as audio/mp4, however on processing it is of type application/octet-stream.",
+      message: "Media upload error",
+    },
+  },
+  subscriptionId: CANAL_WA,
+});
+
+describe("MESSAGE_STATUS — a recusa da Meta chega até a linha", () => {
+  beforeEach(() => {
+    state.mock!.mockTable("channel_messages", [{
+      id: "linha-1",
+      organization_id: ORG,
+      external_id: ID_MENSAGEM,
+      direction: "outgoing",
+      status: "sent",
+      raw_payload: { request: { to: "554884334050" }, response: { id: ID_MENSAGEM } },
+    }]);
+  });
+
+  it("marca a mensagem como `failed` e guarda o motivo da Meta", async () => {
+    const res = await post(payloadRecusa());
+    expect(res.status).toBe(200);
+
+    const atualizadas = state.mock!.getUpdated("channel_messages");
+    expect(atualizadas).toHaveLength(1);
+    expect(atualizadas[0]).toMatchObject({ status: "failed" });
+
+    const evento = (atualizadas[0] as { raw_payload: Record<string, unknown> })
+      .raw_payload.status_event as Record<string, unknown>;
+    expect(evento).toMatchObject({ code: "failed", provider_code: "131053" });
+    expect(String(evento.detail)).toContain("application/octet-stream");
+  });
+
+  it("PRESERVA a requisição e a resposta do envio no mesmo campo", async () => {
+    // O PostgREST substitui a coluna jsonb inteira. Escrever só o status_event
+    // apagaria a evidência que fez este bloco existir.
+    await post(payloadRecusa());
+
+    const raw = (state.mock!.getUpdated("channel_messages")[0] as {
+      raw_payload: Record<string, unknown>;
+    }).raw_payload;
+
+    expect(raw.request).toMatchObject({ to: "554884334050" });
+    expect(raw.response).toMatchObject({ id: ID_MENSAGEM });
+  });
+
+  it("NÃO rebaixa: DELIVERED atrasado não apaga um READ que já chegou", async () => {
+    state.mock!.mockTable("channel_messages", [{
+      id: "linha-1",
+      organization_id: ORG,
+      external_id: ID_MENSAGEM,
+      direction: "outgoing",
+      status: "read",
+      raw_payload: {},
+    }]);
+
+    const res = await post({
+      type: "MESSAGE_STATUS",
+      messageId: ID_MENSAGEM,
+      messageStatus: { code: "DELIVERED" },
+    });
+
+    expect(res.status).toBe(200);
+    expect(state.mock!.getUpdated("channel_messages")).toHaveLength(0);
+    // Guardado, não descartado: o corpo é a única evidência que sobra.
+    expect(state.mock!.getInserted("notificame_webhook_events")).toHaveLength(1);
+  });
+
+  it("mas uma RECUSA depois de entregue vale — foi a ordem que a Meta produziu", async () => {
+    state.mock!.mockTable("channel_messages", [{
+      id: "linha-1",
+      organization_id: ORG,
+      external_id: ID_MENSAGEM,
+      direction: "outgoing",
+      status: "delivered",
+      raw_payload: {},
+    }]);
+
+    await post(payloadRecusa());
+    expect(state.mock!.getUpdated("channel_messages")[0]).toMatchObject({ status: "failed" });
+  });
+
+  it("status de mensagem que não é desta org é GUARDADO, nunca aplicado", async () => {
+    state.mock!.mockTable("channel_messages", []);
+
+    const res = await post(payloadRecusa());
+
+    expect(res.status).toBe(200);
+    expect(state.mock!.getUpdated("channel_messages")).toHaveLength(0);
+    expect(state.mock!.getInserted("notificame_webhook_events")).toHaveLength(1);
+  });
+});
