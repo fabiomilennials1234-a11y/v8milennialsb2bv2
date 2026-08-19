@@ -41,6 +41,35 @@ export interface VariaveisDoTemplate {
   todas: string[];
 }
 
+/** Os formatos de cabeçalho que exigem um ARQUIVO, não texto. */
+export type FormatoDeMidia = "IMAGE" | "VIDEO" | "DOCUMENT";
+
+/**
+ * O formato de mídia do cabeçalho, quando ele é mídia. `null` para cabeçalho de
+ * texto ou ausente.
+ *
+ * ⚠️ Template com cabeçalho de mídia EXIGE o componente de header no envio, com o
+ * arquivo. Sem ele a Meta recusa — medido em produção (19/08):
+ *
+ *   132012 Parameter format does not match format in the created template
+ *   details: header: Format mismatch, expected IMAGE, received UNKNOWN
+ *
+ * O seletor listava esses templates e mandava só o corpo. A recusa chegava por
+ * callback, depois do vendedor achar que tinha mandado.
+ */
+export function formatoDeMidiaDoCabecalho(
+  template: NotificameTemplate,
+): FormatoDeMidia | null {
+  const header = template.components?.find(
+    (c) => (c.type ?? "").toUpperCase() === "HEADER",
+  );
+  if (!header) return null;
+  const formato = (header.format ?? "TEXT").toUpperCase();
+  return formato === "IMAGE" || formato === "VIDEO" || formato === "DOCUMENT"
+    ? formato
+    : null;
+}
+
 /**
  * As variáveis que o vendedor precisa preencher.
  *
@@ -59,9 +88,25 @@ export function templateSemVariaveis(template: NotificameTemplate): boolean {
   return variaveisDoTemplate(template).todas.length === 0;
 }
 
+/** Parâmetro de texto — o `{{n}}` do corpo ou de um cabeçalho de texto. */
+export interface ParametroDeTexto {
+  type: "text";
+  text: string;
+}
+
+/**
+ * Parâmetro de MÍDIA do cabeçalho. A chave repete o tipo, e dentro dela vai um
+ * `link` — formato da Graph, não escolha nossa. `url` no lugar de `link` produz o
+ * mesmo 132012 de quando não se manda nada.
+ */
+export type ParametroDeMidia =
+  | { type: "image"; image: { link: string } }
+  | { type: "video"; video: { link: string } }
+  | { type: "document"; document: { link: string } };
+
 export interface ComponenteDeEnvio {
   type: "header" | "body";
-  parameters: Array<{ type: "text"; text: string }>;
+  parameters: Array<ParametroDeTexto | ParametroDeMidia>;
 }
 
 /**
@@ -79,6 +124,8 @@ export interface ComponenteDeEnvio {
 export function montarComponentesDeEnvio(
   template: NotificameTemplate,
   valores: Record<string, string>,
+  /** URL pública do arquivo, quando o cabeçalho é de mídia. */
+  midiaDoCabecalho?: string | null,
 ): ComponenteDeEnvio[] {
   const vars = variaveisDoTemplate(template);
   const out: ComponenteDeEnvio[] = [];
@@ -86,7 +133,18 @@ export function montarComponentesDeEnvio(
   const parametrosDe = (tokens: string[]) =>
     tokens.map((t) => ({ type: "text" as const, text: (valores[t] ?? "").trim() }));
 
-  if (vars.header.length > 0) {
+  // CABEÇALHO DE MÍDIA. O formato do parâmetro segue o da Graph: a chave é o
+  // próprio tipo em minúscula, e dentro dela um `link`. Trocar por `url` faz a
+  // Meta responder o mesmo 132012 de quando não se manda nada.
+  const formatoMidia = formatoDeMidiaDoCabecalho(template);
+  const url = midiaDoCabecalho?.trim();
+  if (formatoMidia && url) {
+    const parametro: ParametroDeMidia =
+      formatoMidia === "IMAGE" ? { type: "image", image: { link: url } }
+        : formatoMidia === "VIDEO" ? { type: "video", video: { link: url } }
+          : { type: "document", document: { link: url } };
+    out.push({ type: "header", parameters: [parametro] });
+  } else if (vars.header.length > 0) {
     out.push({ type: "header", parameters: parametrosDe(vars.header) });
   }
   if (vars.body.length > 0) {
@@ -102,6 +160,30 @@ export function variaveisFaltando(
   valores: Record<string, string>,
 ): string[] {
   return variaveisDoTemplate(template).todas.filter((t) => !(valores[t] ?? "").trim());
+}
+
+/**
+ * O que ainda impede o envio. Lista vazia = pode mandar.
+ *
+ * Existe separado de `variaveisFaltando` porque a mídia do cabeçalho não é uma
+ * variável: ela não aparece como `{{n}}` em texto nenhum, e mesmo assim a Meta a
+ * exige. Foi exatamente por isso que o seletor deixou passar.
+ */
+export function pendenciasDeEnvio(
+  template: NotificameTemplate,
+  valores: Record<string, string>,
+  midiaDoCabecalho?: string | null,
+): string[] {
+  const faltas = variaveisFaltando(template, valores).map((t) => `{{${t}}}`);
+  const formato = formatoDeMidiaDoCabecalho(template);
+  if (formato && !midiaDoCabecalho?.trim()) {
+    faltas.unshift(
+      formato === "IMAGE" ? "imagem do cabeçalho"
+        : formato === "VIDEO" ? "vídeo do cabeçalho"
+          : "documento do cabeçalho",
+    );
+  }
+  return faltas;
 }
 
 /**

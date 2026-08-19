@@ -10,7 +10,9 @@ import { describe, expect, it } from "vitest";
 
 import type { NotificameTemplate } from "../hooks/useNotificameTemplates";
 import {
+  formatoDeMidiaDoCabecalho,
   montarComponentesDeEnvio,
+  pendenciasDeEnvio,
   previewDoTemplate,
   templateSemVariaveis,
   tokensDoTexto,
@@ -98,7 +100,8 @@ describe("montarComponentesDeEnvio", () => {
     );
 
     expect(componentes.map((c) => c.type)).toEqual(["header", "body"]);
-    expect(componentes[0].parameters[0].text).toBe("1234");
+    const p = componentes[0].parameters[0];
+    expect(p.type === "text" && p.text).toBe("1234");
   });
 
   it("template SEM variável não manda componente nenhum", () => {
@@ -109,7 +112,8 @@ describe("montarComponentesDeEnvio", () => {
 
   it("apara espaços do valor digitado", () => {
     const c = montarComponentesDeEnvio(tpl([{ type: "BODY", text: "Olá {{1}}" }]), { "1": "  Maria  " });
-    expect(c[0].parameters[0].text).toBe("Maria");
+    const p = c[0].parameters[0];
+    expect(p.type === "text" && p.text).toBe("Maria");
   });
 });
 
@@ -141,5 +145,70 @@ describe("previewDoTemplate", () => {
     // Apagar o token faria a frase parecer completa e errada — "Olá , tudo bem?".
     expect(previewDoTemplate(tpl([{ type: "BODY", text: "Olá {{1}}, tudo bem?" }]), {}))
       .toBe("Olá {{1}}, tudo bem?");
+  });
+});
+
+
+/**
+ * CABEÇALHO DE MÍDIA — o defeito 132012.
+ *
+ * Medido em produção (19/08), enviando `confirmacao_responsavel_utilidade_v2`:
+ *
+ *   132012 Parameter format does not match format in the created template
+ *   details: header: Format mismatch, expected IMAGE, received UNKNOWN
+ *
+ * O template tem cabeçalho de IMAGEM. O seletor o listava como enviável, montava
+ * só o componente de corpo, e a Meta recusava por callback — depois de o vendedor
+ * achar que tinha mandado.
+ */
+describe("cabeçalho de mídia", () => {
+  const comImagem = tpl([
+    { type: "HEADER", format: "IMAGE" },
+    { type: "BODY", text: "Olá {{1}}, tudo bem?" },
+  ]);
+
+  it("reconhece o formato que exige arquivo", () => {
+    expect(formatoDeMidiaDoCabecalho(comImagem)).toBe("IMAGE");
+    expect(formatoDeMidiaDoCabecalho(tpl([{ type: "HEADER", format: "TEXT", text: "Oi" }]))).toBeNull();
+    expect(formatoDeMidiaDoCabecalho(tpl([{ type: "BODY", text: "Oi" }]))).toBeNull();
+  });
+
+  it("monta o parâmetro no formato da Graph — chave repetindo o tipo, com `link`", () => {
+    const componentes = montarComponentesDeEnvio(
+      comImagem,
+      { "1": "Samuel" },
+      "https://storage.example/capa.jpg",
+    );
+
+    expect(componentes[0]).toEqual({
+      type: "header",
+      parameters: [{ type: "image", image: { link: "https://storage.example/capa.jpg" } }],
+    });
+    // O corpo continua vindo depois, com as variáveis dele.
+    expect(componentes[1]).toMatchObject({ type: "body" });
+  });
+
+  it("PENDÊNCIA: sem o arquivo, o envio não sai — e diz o que falta", () => {
+    // É a tranca que faltava. A mídia não é `{{n}}`, não aparece em texto nenhum,
+    // e mesmo assim a Meta a exige: por isso `variaveisFaltando` sozinha deixava
+    // passar.
+    expect(pendenciasDeEnvio(comImagem, { "1": "Samuel" })).toEqual(["imagem do cabeçalho"]);
+    expect(pendenciasDeEnvio(comImagem, {}, "https://x/y.jpg")).toEqual(["{{1}}"]);
+    expect(pendenciasDeEnvio(comImagem, { "1": "Samuel" }, "https://x/y.jpg")).toEqual([]);
+  });
+
+  it("nomeia o arquivo pelo tipo — vídeo e documento também", () => {
+    const comVideo = tpl([{ type: "HEADER", format: "VIDEO" }, { type: "BODY", text: "Oi" }]);
+    const comDoc = tpl([{ type: "HEADER", format: "DOCUMENT" }, { type: "BODY", text: "Oi" }]);
+
+    expect(pendenciasDeEnvio(comVideo, {})).toEqual(["vídeo do cabeçalho"]);
+    expect(pendenciasDeEnvio(comDoc, {})).toEqual(["documento do cabeçalho"]);
+  });
+
+  it("template de texto não ganha componente de mídia nem se mandarem URL", () => {
+    const soTexto = tpl([{ type: "BODY", text: "Olá {{1}}" }]);
+    const c = montarComponentesDeEnvio(soTexto, { "1": "Maria" }, "https://x/y.jpg");
+
+    expect(c.map((x) => x.type)).toEqual(["body"]);
   });
 });
