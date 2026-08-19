@@ -170,6 +170,20 @@ Deno.serve(
     const body = await req.clone().json().catch(() => ({}));
     const dryRun = body.dry_run === true;
     const paginated = body.paginated === true;
+
+    // Filtros repassados ao ERP (`cnpj`, `diasCompras`, `marcas` — a lista que o
+    // fornecedor documentou). Existe porque `/clientes` SEM filtro devolveu
+    // HTTP 500 no ERP real, e todos os exemplos que ele mandou levavam filtro.
+    // Repassar em vez de cravar no código permite descobrir a combinação que o
+    // servidor aceita sem um redeploy por tentativa.
+    const filtros: Record<string, string> = {};
+    if (body.filtros && typeof body.filtros === "object") {
+      for (const [k, v] of Object.entries(body.filtros as Record<string, unknown>)) {
+        // Só a lista conhecida: parâmetro inventado já provocou 500 uma vez.
+        if (!["cnpj", "diasCompras", "marcas"].includes(k)) continue;
+        if (typeof v === "string" || typeof v === "number") filtros[k] = String(v);
+      }
+    }
     const maxClients =
       typeof body.max_clients === "number" && body.max_clients > 0
         ? Math.floor(body.max_clients)
@@ -193,10 +207,10 @@ Deno.serve(
         //
         // `paginated: true` no corpo reativa, para quando o fornecedor
         // confirmar os nomes (está em análise com a equipe dele).
-        const payload = await client.get(
-          "clientes",
-          paginated ? { page: String(page), limit: String(PAGE_SIZE) } : {},
-        );
+        const payload = await client.get("clientes", {
+          ...filtros,
+          ...(paginated ? { page: String(page), limit: String(PAGE_SIZE) } : {}),
+        });
         const rows = extractRows(payload);
         stats.pages++;
 

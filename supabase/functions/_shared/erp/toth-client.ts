@@ -295,9 +295,19 @@ export class TothClient {
       return { kind: "auth", message: `HTTP ${res.status}` };
     }
     if (!res.ok) {
+      // O corpo do erro sobe NA MENSAGEM quando é falha do servidor (5xx).
+      //
+      // Foi jogado fora até agora, e cada 500 custou uma rodada de adivinhação:
+      // "HTTP 500 em /clientes" não diz se faltou parâmetro, se estourou
+      // memória ou se a consulta quebrou. O corpo de um 5xx de app Java
+      // costuma trazer a exceção, que é a resposta pronta.
+      //
+      // Só 5xx: um 4xx pode ecoar o que foi enviado, e o que enviamos inclui
+      // token. Erro do servidor não carrega credencial nossa.
+      const detail = res.status >= 500 && text.trim() ? ` Resposta do ERP: ${preview(text)}` : "";
       return {
         kind: "error",
-        message: `O ERP respondeu HTTP ${res.status} em /${path}.`,
+        message: `O ERP respondeu HTTP ${res.status} em /${path}.${detail}`,
         status: res.status,
         bodyPreview: preview(text),
       };
