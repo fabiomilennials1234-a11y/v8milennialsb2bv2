@@ -390,10 +390,7 @@ export function SocialChatView({
 }: SocialChatViewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  const { data: rawMessages = [], isLoading } = useSocialMessages(
-    selectedContact?.messaging_channel_id ?? null,
-    selectedContact?.external_user_id ?? null,
-  );
+  const { data: rawMessages = [], isLoading } = useSocialMessages(selectedContact);
 
   const messages = useMemo(
     () => rawMessages.map((m) => toTimelineMessage(m, organizationId ?? "")),
