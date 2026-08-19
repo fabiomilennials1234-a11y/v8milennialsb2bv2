@@ -260,8 +260,18 @@ export function toNotificameMediaContent(
       // `ptt` (push-to-talk) não tem discriminador próprio no hub: é áudio, e no
       // WhatsApp é `voice` que carrega a intenção de "gravado agora".
       // "Áudio" como legenda é literal do node oficial, nos dois canais.
+      //
+      // ⚠️ `voice: true` SÓ EM `ptt`. A Cloud API exige .ogg/OPUS para nota de
+      // voz; marcar `voice` sobre um m4a fez a Meta recusar em produção
+      // (2026-08-19) com `131053 Media upload error — uploaded with mimetype as
+      // audio/mp4, however on processing it is of type application/octet-stream`.
+      // O envio síncrono devolveu `queued` e o Torque exibiu "enviado": a recusa
+      // veio 2s depois, por callback. Quem escolhe entre os dois é o chamador,
+      // que conhece o MIME real do arquivo — aqui `audio` significa áudio comum.
       const conteudo = arquivo("audio", caption ?? "Áudio");
-      return kind === "whatsapp" ? { ...conteudo, voice: true } : conteudo;
+      return kind === "whatsapp" && opts.type === "ptt"
+        ? { ...conteudo, voice: true }
+        : conteudo;
     }
     case "document":
       if (kind !== "whatsapp") {

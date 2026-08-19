@@ -14,6 +14,12 @@ export interface UploadedAttachment {
   type: SocialAttachmentType;
   filename: string;
   sizeBytes: number;
+  /**
+   * O MIME REAL do que subiu. Existe porque `type` ("audio") não distingue nota
+   * de voz de áudio comum, e essa distinção decide um campo do envelope
+   * (`voice`) que a Meta valida contra o codec do arquivo.
+   */
+  mime: string;
 }
 
 /**
@@ -45,5 +51,11 @@ export async function uploadSocialAttachment(
   const url = data?.publicUrl;
   if (!url) throw new Error("O arquivo subiu mas não recebeu URL pública");
 
-  return { url, type: check.type, filename: file.name, sizeBytes: file.size };
+  return {
+    url,
+    type: check.type,
+    filename: file.name,
+    sizeBytes: file.size,
+    mime: file.type || "application/octet-stream",
+  };
 }

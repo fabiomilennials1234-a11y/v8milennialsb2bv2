@@ -239,7 +239,10 @@ function SocialComposer({
       // Sem esta escolha, o Chrome grava `audio/webm;codecs=opus` — o único
       // formato de áudio que a Meta NÃO lista para o Instagram (ela documenta
       // aac, m4a, wav, mp4). Pedimos o mais compatível que este navegador tenha.
-      const mime = pickAudioRecordingMime((t) => MediaRecorder.isTypeSupported(t));
+      const mime = pickAudioRecordingMime(
+        (t) => MediaRecorder.isTypeSupported(t),
+        canal,
+      );
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       const pedacos: BlobPart[] = [];
 
@@ -284,6 +287,7 @@ function SocialComposer({
             media: {
               type: anexo.type,
               url: anexo.url,
+              mime: anexo.mime,
               ...(conteudo ? { caption: conteudo } : {}),
               filename: anexo.filename,
             },

@@ -33,26 +33,65 @@ function extensao(nome: string): string {
 }
 
 /**
- * Formatos de gravação, do mais compatível para o menos.
+ * Formatos de gravação, POR CANAL DE DESTINO.
  *
- * A ORDEM é o conteúdo desta lista. O `MediaRecorder` sem argumento entrega o
- * default do navegador, que no Chrome é `audio/webm;codecs=opus` — e a Meta
- * documenta, para áudio no Instagram, `aac, m4a, wav, mp4`. **webm não está
- * lá.** Gravar no default é escolher o único formato que a plataforma de destino
- * não lista.
+ * ─── POR QUE DUAS LISTAS ────────────────────────────────────────────────────
  *
- * `audio/mp4` primeiro porque é o que cai em `.m4a`/AAC, o par que aparece nas
- * duas listas. O webm fica no fim como último recurso: melhor mandar algo que
- * talvez seja recusado do que não deixar gravar.
+ * A lista única era calibrada pela doc do INSTAGRAM (`aac, m4a, wav, mp4`) e
+ * mandava `audio/mp4` primeiro. No WhatsApp isso produziu, em produção
+ * (2026-08-19, org Chique), uma recusa da Meta:
+ *
+ *   131053 Media upload error — "Audio file uploaded with mimetype as audio/mp4,
+ *   however on processing it is of type application/octet-stream."
+ *
+ * `ffprobe` sobre os bytes reais: container MP4 com codec **Opus**. O Chromium
+ * atende o CONTAINER pedido e escolhe o codec sozinho — pedir `audio/mp4` sem
+ * codec não pede AAC, pede "mp4 com o que eu quiser dentro". A mistura não é
+ * reconhecida pelo sniffer da Meta.
+ *
+ * Daí duas mudanças:
+ *   1. no WhatsApp, `audio/ogg;codecs=opus` vem PRIMEIRO — é o único formato que
+ *      a Cloud API aceita para NOTA DE VOZ ("Voice messages require .ogg files
+ *      encoded with the OPUS codec");
+ *   2. o mp4 só aparece com o CODEC EXPLÍCITO (`mp4a.40.2` = AAC-LC). Sem o
+ *      codec, o navegador repete o defeito acima.
+ *
+ * `audio/webm` não está em nenhuma das listas da Meta e some daqui para o
+ * WhatsApp: mandar o que a plataforma não lista é escolher a recusa.
  */
-export const AUDIO_RECORDING_CANDIDATES = [
-  "audio/mp4",
+export const AUDIO_RECORDING_CANDIDATES_INSTAGRAM = [
+  "audio/mp4;codecs=mp4a.40.2",
   "audio/aac",
   "audio/mpeg",
+  "audio/mp4",
   "audio/ogg;codecs=opus",
   "audio/webm;codecs=opus",
   "audio/webm",
 ] as const;
+
+export const AUDIO_RECORDING_CANDIDATES_WHATSAPP = [
+  "audio/ogg;codecs=opus",
+  "audio/mp4;codecs=mp4a.40.2",
+  "audio/aac",
+  "audio/mpeg",
+] as const;
+
+/** Mantida para quem já importava a lista única (Instagram é o caso legado). */
+export const AUDIO_RECORDING_CANDIDATES = AUDIO_RECORDING_CANDIDATES_INSTAGRAM;
+
+/**
+ * É NOTA DE VOZ? Só `.ogg` com OPUS é.
+ *
+ * O provider marca `voice: true` para o WhatsApp, e a Meta documenta que esse
+ * campo EXIGE ogg/opus. Marcar `voice` sobre m4a é prometer uma coisa e entregar
+ * outra — daí este predicado decidir entre nota de voz e áudio comum, em vez de
+ * o canal decidir sozinho.
+ */
+export function isVoiceNoteMime(mime: string | null | undefined): boolean {
+  if (!mime) return false;
+  const m = mime.toLowerCase();
+  return m.startsWith("audio/ogg") && m.includes("opus");
+}
 
 const EXTENSAO_POR_MIME: Array<[RegExp, string]> = [
   [/^audio\/mp4/, "m4a"],
@@ -72,8 +111,13 @@ const EXTENSAO_POR_MIME: Array<[RegExp, string]> = [
  */
 export function pickAudioRecordingMime(
   isSupported: (mime: string) => boolean,
+  canal: "instagram" | "whatsapp_oficial" = "instagram",
 ): string | undefined {
-  return AUDIO_RECORDING_CANDIDATES.find((m) => {
+  const candidatos =
+    canal === "whatsapp_oficial"
+      ? AUDIO_RECORDING_CANDIDATES_WHATSAPP
+      : AUDIO_RECORDING_CANDIDATES_INSTAGRAM;
+  return (candidatos as readonly string[]).find((m) => {
     try {
       return isSupported(m);
     } catch {
