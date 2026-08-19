@@ -14,6 +14,12 @@ export interface UploadedAttachment {
   type: SocialAttachmentType;
   filename: string;
   sizeBytes: number;
+  /**
+   * O MIME REAL do que subiu. Existe porque `type` ("audio") não distingue nota
+   * de voz de áudio comum, e essa distinção decide um campo do envelope
+   * (`voice`) que a Meta valida contra o codec do arquivo.
+   */
+  mime: string;
 }
 
 /**
@@ -25,11 +31,15 @@ export interface UploadedAttachment {
 export async function uploadSocialAttachment(
   file: File,
   organizationId: string,
+  canal: "instagram" | "whatsapp_oficial" = "instagram",
 ): Promise<UploadedAttachment> {
-  // `allowDocument: false` porque este caminho é SÓ do Direct, e o canal não
-  // aceita documento — recusar antes do upload poupa o storage e devolve a razão
-  // na hora, em vez da recusa muda do fornecedor depois do envio.
-  const check = classifyAttachment(file.type, file.name, file.size, { allowDocument: false });
+  // O Direct não aceita documento; o WhatsApp oficial aceita — e usa o MESMO
+  // composer. Recusar antes do upload poupa o storage e devolve a razão na hora,
+  // em vez da recusa muda do fornecedor (ou da Meta, por callback) depois.
+  const check = classifyAttachment(file.type, file.name, file.size, {
+    allowDocument: canal === "whatsapp_oficial",
+    canal,
+  });
   if (!check.ok) throw new Error(check.error);
 
   const seguro = file.name.replace(/[^\w.-]/g, "_").slice(-80) || "anexo";
@@ -45,5 +55,11 @@ export async function uploadSocialAttachment(
   const url = data?.publicUrl;
   if (!url) throw new Error("O arquivo subiu mas não recebeu URL pública");
 
-  return { url, type: check.type, filename: file.name, sizeBytes: file.size };
+  return {
+    url,
+    type: check.type,
+    filename: file.name,
+    sizeBytes: file.size,
+    mime: file.type || "application/octet-stream",
+  };
 }

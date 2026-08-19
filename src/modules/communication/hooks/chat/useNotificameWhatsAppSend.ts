@@ -25,6 +25,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 
+import { isVoiceNoteMime } from "@/modules/communication/lib/social-attachment";
+
 import { SOCIAL_CONTACTS_KEY_ROOT, SOCIAL_MESSAGES_KEY_ROOT } from "./shared/queryKeys";
 
 /**
@@ -39,6 +41,12 @@ export interface NotificameWhatsAppMedia {
   url: string;
   filename?: string;
   caption?: string;
+  /**
+   * O MIME real do arquivo. Só o áudio o usa, e para uma decisão só: nota de voz
+   * (`sendAudio` → `ptt` → `voice: true`) exige ogg/opus. Marcar `voice` sobre
+   * m4a fez a Meta recusar com 131053 em produção.
+   */
+  mime?: string;
 }
 
 export interface NotificameWhatsAppSendInput {
@@ -90,12 +98,24 @@ export function useNotificameWhatsAppSend(instanceId: string | null) {
       // ação que o proxy traduz para `type: 'ptt'`, a mensagem de voz. Com
       // `sendMedia(audio)` o cliente recebe um anexo de arquivo — outro objeto,
       // sem o balão de voz e sem a forma de onda.
+      // ─── NOTA DE VOZ vs ÁUDIO COMUM ───────────────────────────────────────
+      //
+      // `sendAudio` vira `type: 'ptt'` no proxy e `voice: true` no provider — e a
+      // Cloud API documenta que `voice` EXIGE .ogg/OPUS ("Voice messages require
+      // .ogg files encoded with the OPUS codec"). Um m4a marcado como voz é o que
+      // produziu, em prod, o 131053 "Media upload error".
+      //
+      // Quando o navegador não deu ogg/opus, o arquivo vai como ÁUDIO COMUM. O
+      // destinatário recebe um anexo de áudio em vez de um balão de voz — que é a
+      // degradação honesta, e infinitamente melhor que a mensagem sumir.
+      const ehNotaDeVoz = media?.type === "audio" && isVoiceNoteMime(media.mime);
+
       const body = !media
         ? {
           action: "sendText",
           payload: { number: to, text: texto },
         }
-        : media.type === "audio"
+        : ehNotaDeVoz
           ? {
             action: "sendAudio",
             payload: { number: to, file: media.url },

@@ -31,6 +31,12 @@ export interface SendSocialMessageInput {
     url: string;
     caption?: string;
     filename?: string;
+    /**
+     * MIME real do arquivo. A rota social IGNORA — o Direct não tem nota de voz.
+     * Viaja aqui porque o composer é o MESMO das duas caixas, e na oficial este
+     * campo decide entre `voice: true` e áudio comum.
+     */
+    mime?: string;
   };
 }
 

@@ -33,26 +33,65 @@ function extensao(nome: string): string {
 }
 
 /**
- * Formatos de gravação, do mais compatível para o menos.
+ * Formatos de gravação, POR CANAL DE DESTINO.
  *
- * A ORDEM é o conteúdo desta lista. O `MediaRecorder` sem argumento entrega o
- * default do navegador, que no Chrome é `audio/webm;codecs=opus` — e a Meta
- * documenta, para áudio no Instagram, `aac, m4a, wav, mp4`. **webm não está
- * lá.** Gravar no default é escolher o único formato que a plataforma de destino
- * não lista.
+ * ─── POR QUE DUAS LISTAS ────────────────────────────────────────────────────
  *
- * `audio/mp4` primeiro porque é o que cai em `.m4a`/AAC, o par que aparece nas
- * duas listas. O webm fica no fim como último recurso: melhor mandar algo que
- * talvez seja recusado do que não deixar gravar.
+ * A lista única era calibrada pela doc do INSTAGRAM (`aac, m4a, wav, mp4`) e
+ * mandava `audio/mp4` primeiro. No WhatsApp isso produziu, em produção
+ * (2026-08-19, org Chique), uma recusa da Meta:
+ *
+ *   131053 Media upload error — "Audio file uploaded with mimetype as audio/mp4,
+ *   however on processing it is of type application/octet-stream."
+ *
+ * `ffprobe` sobre os bytes reais: container MP4 com codec **Opus**. O Chromium
+ * atende o CONTAINER pedido e escolhe o codec sozinho — pedir `audio/mp4` sem
+ * codec não pede AAC, pede "mp4 com o que eu quiser dentro". A mistura não é
+ * reconhecida pelo sniffer da Meta.
+ *
+ * Daí duas mudanças:
+ *   1. no WhatsApp, `audio/ogg;codecs=opus` vem PRIMEIRO — é o único formato que
+ *      a Cloud API aceita para NOTA DE VOZ ("Voice messages require .ogg files
+ *      encoded with the OPUS codec");
+ *   2. o mp4 só aparece com o CODEC EXPLÍCITO (`mp4a.40.2` = AAC-LC). Sem o
+ *      codec, o navegador repete o defeito acima.
+ *
+ * `audio/webm` não está em nenhuma das listas da Meta e some daqui para o
+ * WhatsApp: mandar o que a plataforma não lista é escolher a recusa.
  */
-export const AUDIO_RECORDING_CANDIDATES = [
-  "audio/mp4",
+export const AUDIO_RECORDING_CANDIDATES_INSTAGRAM = [
+  "audio/mp4;codecs=mp4a.40.2",
   "audio/aac",
   "audio/mpeg",
+  "audio/mp4",
   "audio/ogg;codecs=opus",
   "audio/webm;codecs=opus",
   "audio/webm",
 ] as const;
+
+export const AUDIO_RECORDING_CANDIDATES_WHATSAPP = [
+  "audio/ogg;codecs=opus",
+  "audio/mp4;codecs=mp4a.40.2",
+  "audio/aac",
+  "audio/mpeg",
+] as const;
+
+/** Mantida para quem já importava a lista única (Instagram é o caso legado). */
+export const AUDIO_RECORDING_CANDIDATES = AUDIO_RECORDING_CANDIDATES_INSTAGRAM;
+
+/**
+ * É NOTA DE VOZ? Só `.ogg` com OPUS é.
+ *
+ * O provider marca `voice: true` para o WhatsApp, e a Meta documenta que esse
+ * campo EXIGE ogg/opus. Marcar `voice` sobre m4a é prometer uma coisa e entregar
+ * outra — daí este predicado decidir entre nota de voz e áudio comum, em vez de
+ * o canal decidir sozinho.
+ */
+export function isVoiceNoteMime(mime: string | null | undefined): boolean {
+  if (!mime) return false;
+  const m = mime.toLowerCase();
+  return m.startsWith("audio/ogg") && m.includes("opus");
+}
 
 const EXTENSAO_POR_MIME: Array<[RegExp, string]> = [
   [/^audio\/mp4/, "m4a"],
@@ -72,8 +111,13 @@ const EXTENSAO_POR_MIME: Array<[RegExp, string]> = [
  */
 export function pickAudioRecordingMime(
   isSupported: (mime: string) => boolean,
+  canal: "instagram" | "whatsapp_oficial" = "instagram",
 ): string | undefined {
-  return AUDIO_RECORDING_CANDIDATES.find((m) => {
+  const candidatos =
+    canal === "whatsapp_oficial"
+      ? AUDIO_RECORDING_CANDIDATES_WHATSAPP
+      : AUDIO_RECORDING_CANDIDATES_INSTAGRAM;
+  return (candidatos as readonly string[]).find((m) => {
     try {
       return isSupported(m);
     } catch {
@@ -105,11 +149,46 @@ export function audioExtensionForMime(mime: string): string {
  * `application/octet-stream`, e aí a extensão é a única pista. Sem essa queda, a
  * tabela de preço em PDF do cliente seria recusada sem motivo visível na tela.
  */
+/**
+ * Os limites da Cloud API do WhatsApp, por tipo.
+ *
+ * Fonte: developers.facebook.com/docs/whatsapp/cloud-api/reference/media —
+ * "Supported Media Types". Eles são MAIS DUROS que os nossos em imagem (5 MB, e
+ * só JPEG/PNG) e mais frouxos em documento (100 MB).
+ *
+ * Existe porque o teto único de 16 MB e o `image/*` aberto foram calibrados para
+ * o Direct. Mandar um `.webp` ou um JPEG de 8 MB pelo canal oficial repetiria o
+ * sumiço silencioso do áudio de 19/08: nós aceitamos, o fornecedor aceita, a Meta
+ * recusa por callback, e a tela segue dizendo "enviado".
+ */
+const LIMITES_WHATSAPP: Record<
+  SocialAttachmentType,
+  { mb: number; mimes?: RegExp; comoDizer: string }
+> = {
+  image: {
+    mb: 5,
+    mimes: /^image\/(jpeg|jpg|png)$/,
+    comoDizer: "O WhatsApp aceita imagem só em JPEG ou PNG, até 5 MB",
+  },
+  video: {
+    mb: 16,
+    mimes: /^video\/(mp4|3gpp)$/,
+    comoDizer: "O WhatsApp aceita vídeo só em MP4 ou 3GPP, até 16 MB",
+  },
+  audio: { mb: 16, comoDizer: "O áudio passa de 16 MB" },
+  document: { mb: 100, comoDizer: "O documento passa de 100 MB" },
+};
+
 export function classifyAttachment(
   mime: string,
   nome: string,
   sizeBytes: number,
-  opcoes: { sticker?: boolean; allowDocument?: boolean } = {},
+  opcoes: {
+    sticker?: boolean;
+    allowDocument?: boolean;
+    /** O canal de destino. Só o oficial aplica os limites da Meta. */
+    canal?: "instagram" | "whatsapp_oficial";
+  } = {},
 ): AttachmentCheck {
   if (opcoes.sticker) {
     return { ok: false, error: "O Instagram não aceita figurinhas por aqui" };
@@ -117,22 +196,40 @@ export function classifyAttachment(
   if (!sizeBytes || sizeBytes <= 0) {
     return { ok: false, error: "O arquivo está vazio" };
   }
-  if (sizeBytes > SOCIAL_ATTACHMENT_MAX_MB * 1024 * 1024) {
+  const oficial = opcoes.canal === "whatsapp_oficial";
+
+  // O teto genérico continua valendo onde a Meta não impõe o dela. No canal
+  // oficial cada tipo tem o seu, conferido logo abaixo.
+  if (!oficial && sizeBytes > SOCIAL_ATTACHMENT_MAX_MB * 1024 * 1024) {
     return { ok: false, error: `O arquivo passa de ${SOCIAL_ATTACHMENT_MAX_MB} MB` };
   }
 
   const m = (mime || "").toLowerCase();
-  if (m.startsWith("image/")) return { ok: true, type: "image" };
-  if (m.startsWith("video/")) return { ok: true, type: "video" };
-  if (m.startsWith("audio/")) return { ok: true, type: "audio" };
+
+  /** Aplica o limite do canal oficial ao tipo já decidido. */
+  const conferirLimite = (tipo: SocialAttachmentType): AttachmentCheck => {
+    if (!oficial) return { ok: true, type: tipo };
+    const lim = LIMITES_WHATSAPP[tipo];
+    if (lim.mimes && !lim.mimes.test(m)) return { ok: false, error: lim.comoDizer };
+    if (sizeBytes > lim.mb * 1024 * 1024) return { ok: false, error: lim.comoDizer };
+    return { ok: true, type: tipo };
+  };
+
+  if (m.startsWith("image/")) return conferirLimite("image");
+  if (m.startsWith("video/")) return conferirLimite("video");
+  if (m.startsWith("audio/")) return conferirLimite("audio");
 
   const porExt = POR_EXTENSAO[extensao(nome)];
-  if (porExt) return documentoOuRecusa(porExt, opcoes.allowDocument);
+  if (porExt) {
+    const decidido = documentoOuRecusa(porExt, opcoes.allowDocument);
+    return decidido.ok ? conferirLimite(decidido.type) : decidido;
+  }
 
   // Desconhecido vira DOCUMENTO em vez de recusa: o fornecedor aceita arquivo
   // genérico, e barrar um .xlsx por não estar numa lista seria pior para o
   // vendedor do que mandá-lo como anexo.
-  return documentoOuRecusa("document", opcoes.allowDocument);
+  const generico = documentoOuRecusa("document", opcoes.allowDocument);
+  return generico.ok ? conferirLimite("document") : generico;
 }
 
 /**

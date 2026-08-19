@@ -57,6 +57,36 @@ function isChatRoute(pathname: string): boolean {
   return CHAT_ROUTE_PATTERNS.some((p) => p.test(pathname));
 }
 
+/**
+ * A CAIXA que este aviso deve abrir — ou `null` quando a linha não tem caixa.
+ *
+ * Função pura, e fora do callback do Realtime de propósito: era aqui que morava
+ * a regra que descartava, em silêncio, a caixa de WhatsApp oficial. Dentro do
+ * callback ela não tinha como ser testada.
+ *
+ * Cada exclusão tem motivo:
+ *   - rota META/GRAPH (`meta-webhook`): grava `channel='instagram'` com
+ *     `messaging_channel_id` NULL, e não tem caixa no inbox. Fica de fora.
+ *   - canal social futuro sem caixa: idem — exigir o par (canal, id) faz o aviso
+ *     ESPERAR o inbox em vez de anunciar conversa que não abre.
+ *   - WhatsApp por QR: o inbound dele NÃO passa por `channel_messages` (vai para
+ *     `whatsapp_messages`), então não chega aqui.
+ *
+ * O canal OFICIAL grava `channel='whatsapp'` com `instance_id` e
+ * `messaging_channel_id` NULO — o eixo dele é a instância. Sem este ramo, toda
+ * mensagem dessa caixa entrava na lista sem nunca avisar ninguém.
+ */
+export function toastBoxId(row: {
+  channel?: unknown;
+  messaging_channel_id?: unknown;
+  instance_id?: unknown;
+}): string | null {
+  const canal = row.channel;
+  if (canal === "instagram") return (row.messaging_channel_id as string) || null;
+  if (canal === "whatsapp") return (row.instance_id as string) || null;
+  return null;
+}
+
 export function useIncomingMessageToast() {
   const { user } = useAuth();
   const { organizationId } = useOrganization();
@@ -89,16 +119,8 @@ export function useIncomingMessageToast() {
           // `channel_messages_direction_check` aceita — ver o cabeçalho.
           if (row.direction !== "incoming") return;
 
-          /**
-           * Só a caixa social do NotificaMe, que é a única que este aviso sabe
-           * abrir. As DUAS condições são necessárias: `channel` sozinho deixaria
-           * passar a rota Meta/Graph (que também grava `'instagram'`, com
-           * `messaging_channel_id` NULL) e `messaging_channel_id` sozinho
-           * deixaria passar um canal social futuro que ainda não tem caixa no
-           * inbox. Ver a decisão no cabeçalho.
-           */
-          const messagingChannelId = row.messaging_channel_id as string | null;
-          if (row.channel !== "instagram" || !messagingChannelId) return;
+          const boxId = toastBoxId(row);
+          if (!boxId) return;
 
           // Suprime se user está em rota de chat
           if (isChatRoute(locationRef.current.pathname)) return;
@@ -122,7 +144,7 @@ export function useIncomingMessageToast() {
           // número de WhatsApp — e a conversa anunciada não estaria lá. Aviso
           // que leva a lugar nenhum é pior que aviso nenhum. O id está sempre
           // presente aqui: o guard acima já descartou a linha sem ele.
-          const target = `/chat-whatsapp?box=${messagingChannelId}`;
+          const target = `/chat-whatsapp?box=${boxId}`;
 
           toast(title, {
             action: {

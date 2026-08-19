@@ -27,6 +27,7 @@ import { Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
+import { getChannelLabel } from "@/modules/communication/components/chat/ChannelBadge";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 import { Button } from "@/components/ui/button";
@@ -94,11 +95,17 @@ function SocialChatHeader({
   channelName,
   onBack,
   isMobile,
+  onOpenLead,
 }: {
   contact: SocialContact;
   channelName: string;
   onBack: () => void;
   isMobile: boolean;
+  /**
+   * Abre a ficha do lead a partir do contato. Só existe onde há TELEFONE — no
+   * Instagram o interlocutor é IGSID e a ficha é montada por telefone.
+   */
+  onOpenLead?: () => void;
 }) {
   const name = contactLabel(contact);
   const handle = contactHandleLabel(contact);
@@ -136,14 +143,30 @@ function SocialChatHeader({
             {(name.replace("@", "").charAt(0) || "?").toUpperCase()}
           </div>
         )}
-        <ChannelBadge channel="instagram" size={16} overlay />
+        {/* O canal SAI DO CONTATO. Chumbado em "instagram", o cabeçalho da caixa
+            oficial anunciava Instagram Direct numa conversa de WhatsApp — a
+            lista acertava (badge verde) e o header contradizia, na mesma tela. */}
+        <ChannelBadge channel={contact.channel} size={16} overlay />
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-display font-semibold truncate text-foreground">{name}</h3>
+        {onOpenLead ? (
+          <button
+            type="button"
+            onClick={onOpenLead}
+            className="font-display font-semibold truncate text-foreground hover:underline text-left w-full"
+            title="Abrir ficha do contato"
+          >
+            {name}
+          </button>
+        ) : (
+          <h3 className="font-display font-semibold truncate text-foreground">{name}</h3>
+        )}
         {/* O @ vem primeiro no subtítulo por ser o dado IDENTIFICADOR da pessoa —
             o resto é contexto do canal, igual em toda conversa desta caixa. */}
         <p className="text-sm text-muted-foreground truncate">
-          {[handle, "Instagram Direct", channelName].filter(Boolean).join(" · ")}
+          {[handle, getChannelLabel(contact.channel), channelName]
+            .filter(Boolean)
+            .join(" · ")}
         </p>
       </div>
     </header>
@@ -166,6 +189,7 @@ function SocialChatHeader({
  */
 function SocialComposer({
   sender,
+  canal,
   contactExternalId,
   lastIncomingAt,
 }: {
@@ -175,6 +199,8 @@ function SocialComposer({
    * "Rendered more hooks than during the previous render", com o chat aberto.
    */
   sender: SocialSender;
+  /** O canal da caixa — decide microcopy. O envio já vem resolvido no `sender`. */
+  canal: SocialContact["channel"];
   contactExternalId: string;
   lastIncomingAt: string | null;
 }) {
@@ -195,7 +221,7 @@ function SocialComposer({
     if (!organizationId) return;
     setSubindo(true);
     try {
-      setAnexo(await uploadSocialAttachment(file, organizationId));
+      setAnexo(await uploadSocialAttachment(file, organizationId, canal));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao anexar");
     } finally {
@@ -213,7 +239,10 @@ function SocialComposer({
       // Sem esta escolha, o Chrome grava `audio/webm;codecs=opus` — o único
       // formato de áudio que a Meta NÃO lista para o Instagram (ela documenta
       // aac, m4a, wav, mp4). Pedimos o mais compatível que este navegador tenha.
-      const mime = pickAudioRecordingMime((t) => MediaRecorder.isTypeSupported(t));
+      const mime = pickAudioRecordingMime(
+        (t) => MediaRecorder.isTypeSupported(t),
+        canal,
+      );
       const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
       const pedacos: BlobPart[] = [];
 
@@ -258,6 +287,7 @@ function SocialComposer({
             media: {
               type: anexo.type,
               url: anexo.url,
+              mime: anexo.mime,
               ...(conteudo ? { caption: conteudo } : {}),
               filename: anexo.filename,
             },
@@ -339,7 +369,13 @@ function SocialComposer({
               void submeter();
             }
           }}
-          placeholder={gravando ? "Gravando… toque no quadrado para parar" : "Responder no Direct…"}
+          placeholder={
+            gravando
+              ? "Gravando… toque no quadrado para parar"
+              : canal === "whatsapp_oficial"
+                ? "Responder no WhatsApp…"
+                : "Responder no Direct…"
+          }
           rows={1}
           className="min-h-[42px] max-h-32 resize-none"
           disabled={enviar.isPending}
@@ -376,6 +412,14 @@ function SocialComposer({
 export interface SocialChatViewProps {
   selectedContact: SocialContact | null;
   /**
+   * O canal da CAIXA aberta. Existe para o estado vazio, que é desenhado antes
+   * de haver contato selecionado — sem ele, o ícone de "Selecione uma conversa"
+   * ficaria chumbado num canal que pode não ser o desta caixa.
+   */
+  boxChannel: SocialContact["channel"];
+  /** Abre a ficha do lead pelo telefone. Ausente na caixa social, que não tem telefone. */
+  onOpenLead?: () => void;
+  /**
    * Como esta caixa envia. Injetado porque a view é a MESMA para o Direct e para
    * o WhatsApp oficial, e só o envio difere: `notificame-send-social` recusa
    * WhatsApp por modelo, então o canal oficial sai pelo proxy de WhatsApp.
@@ -392,6 +436,8 @@ export interface SocialChatViewProps {
 
 export function SocialChatView({
   selectedContact,
+  boxChannel,
+  onOpenLead,
   sender,
   channelName,
   organizationId,
@@ -427,7 +473,7 @@ export function SocialChatView({
   if (!selectedContact) {
     return (
       <div className="flex flex-col h-full items-center justify-center gap-3 text-muted-foreground bg-muted/10">
-        <ChannelBadge channel="instagram" size={40} className="opacity-40" />
+        <ChannelBadge channel={boxChannel} size={40} className="opacity-40" />
         <p className="text-sm">Selecione uma conversa</p>
       </div>
     );
@@ -440,6 +486,7 @@ export function SocialChatView({
         channelName={channelName}
         onBack={onBack}
         isMobile={isMobile}
+        onOpenLead={onOpenLead}
       />
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
@@ -472,6 +519,7 @@ export function SocialChatView({
 
       <SocialComposer
         sender={sender}
+        canal={selectedContact.channel}
         contactExternalId={selectedContact.external_user_id}
         lastIncomingAt={ultimaRecebidaEm}
       />

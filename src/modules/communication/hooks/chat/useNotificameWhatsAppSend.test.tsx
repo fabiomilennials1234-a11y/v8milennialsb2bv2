@@ -155,14 +155,20 @@ describe("useNotificameWhatsAppSend — mídia", () => {
     });
   });
 
-  it("áudio vai por sendAudio — é o que vira mensagem de voz (ptt)", async () => {
+  it("áudio gravado em ogg/opus vai por sendAudio — é o que vira mensagem de voz (ptt)", async () => {
     const { result } = renderHook(() => useNotificameWhatsAppSend(INSTANCIA), {
       wrapper: wrap(newQc()),
     });
 
     await result.current.mutateAsync({
       to: TELEFONE,
-      media: { type: "audio", url: "https://storage.example/voz.ogg" },
+      media: {
+        type: "audio",
+        url: "https://storage.example/voz.ogg",
+        // O MIME é o que decide. Sem ele o envio degrada para áudio comum — ver
+        // o bloco "nota de voz exige ogg/opus" no fim deste arquivo.
+        mime: "audio/ogg;codecs=opus",
+      },
     });
 
     expect(corpoDe(0)).toMatchObject({
@@ -200,5 +206,68 @@ describe("useNotificameWhatsAppSend — mídia", () => {
       result.current.mutateAsync({ to: TELEFONE, text: "   " }),
     ).rejects.toMatchObject({ code: "empty_message" });
     expect(invokeMock).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * NOTA DE VOZ vs ÁUDIO COMUM — o defeito 131053, medido em produção.
+ *
+ * `sendAudio` vira `ptt` no proxy e `voice: true` no provider, e a Cloud API
+ * exige .ogg/OPUS para nota de voz. Um m4a marcado como voz foi aceito pelo
+ * fornecedor (`queued`, id real, "enviado" na tela) e recusado pela Meta 2s
+ * depois, por callback que o Torque descartava.
+ */
+describe("useNotificameWhatsAppSend — nota de voz exige ogg/opus", () => {
+  const corpoDe = (i: number) => invokeMock.mock.calls[i][1].body;
+
+  it("ogg/opus vai como nota de voz (sendAudio)", async () => {
+    const { result } = renderHook(() => useNotificameWhatsAppSend(INSTANCIA), {
+      wrapper: wrap(newQc()),
+    });
+
+    await result.current.mutateAsync({
+      to: TELEFONE,
+      media: {
+        type: "audio",
+        url: "https://storage.example/voz.ogg",
+        mime: "audio/ogg;codecs=opus",
+      },
+    });
+
+    expect(corpoDe(0)).toMatchObject({ action: "sendAudio" });
+  });
+
+  it("m4a vai como ÁUDIO COMUM — nunca marcado como voz", async () => {
+    const { result } = renderHook(() => useNotificameWhatsAppSend(INSTANCIA), {
+      wrapper: wrap(newQc()),
+    });
+
+    await result.current.mutateAsync({
+      to: TELEFONE,
+      media: {
+        type: "audio",
+        url: "https://storage.example/audio.m4a",
+        mime: "audio/mp4",
+      },
+    });
+
+    expect(corpoDe(0)).toMatchObject({
+      action: "sendMedia",
+      payload: { type: "audio", file: "https://storage.example/audio.m4a" },
+    });
+    expect(corpoDe(0).action).not.toBe("sendAudio");
+  });
+
+  it("sem mime conhecido, degrada para áudio comum em vez de prometer voz", async () => {
+    const { result } = renderHook(() => useNotificameWhatsAppSend(INSTANCIA), {
+      wrapper: wrap(newQc()),
+    });
+
+    await result.current.mutateAsync({
+      to: TELEFONE,
+      media: { type: "audio", url: "https://storage.example/x.bin" },
+    });
+
+    expect(corpoDe(0)).toMatchObject({ action: "sendMedia" });
   });
 });
