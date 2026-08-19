@@ -37,6 +37,15 @@ import { extractRows, mapTothClienteToCanonical, TothMappingError } from "../_sh
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
+import type { CanonicalClient } from "../_shared/erp/types.ts";
+import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
+import {
+  previewAction,
+  summarize,
+  phonesAtRisk,
+  sampleForReview,
+  type PreviewedClient,
+} from "../_shared/erp/toth-dry-run.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -54,6 +63,49 @@ const json = (body: unknown, headers: Record<string, string>, status = 200) =>
   });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Telefones por consulta — o filtro `in` do PostgREST vai na query string. */
+const PHONE_LOOKUP_BATCH = 100;
+
+/**
+ * Quantas conversas órfãs seriam adotadas se estes leads fossem criados.
+ *
+ * É o número que decide se o piloto pode rodar: `tg_leads_adopt_orphan_messages`
+ * pendura toda mensagem sem dono cujo telefone bata. Aqui é só `count`, com
+ * `head: true` — nenhuma linha de mensagem trafega, só o número.
+ */
+async function countOrphanAdoption(
+  admin: SupabaseClient,
+  organizationId: string,
+  phones: string[],
+): Promise<{ mensagens: number; conversas: number }> {
+  if (phones.length === 0) return { mensagens: 0, conversas: 0 };
+
+  let mensagens = 0;
+  let conversas = 0;
+
+  for (let i = 0; i < phones.length; i += PHONE_LOOKUP_BATCH) {
+    const batch = phones.slice(i, i + PHONE_LOOKUP_BATCH);
+
+    const { count: msgCount } = await admin
+      .from("whatsapp_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .is("lead_id", null)
+      .in("normalized_phone", batch);
+    mensagens += msgCount ?? 0;
+
+    const { count: convCount } = await admin
+      .from("whatsapp_conversation_summary")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .is("lead_id", null)
+      .in("normalized_phone", batch);
+    conversas += convCount ?? 0;
+  }
+
+  return { mensagens, conversas };
+}
 
 async function resolveOrganization(
   req: Request,
@@ -111,9 +163,22 @@ Deno.serve(
     const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
     const store = supabaseClientStore(admin, TOTH_PROVIDER_ID);
 
+    // ── Modo prévia ─────────────────────────────────────────────────────────
+    // `dry_run` lê, mapeia e RELATA sem escrever. `max_clients` limita o piloto.
+    // Sem os dois, a primeira execução numa org de cliente é irreversível na
+    // prática: dá para apagar depois, mas já terá criado lead e adotado conversa.
+    const body = await req.clone().json().catch(() => ({}));
+    const dryRun = body.dry_run === true;
+    const maxClients =
+      typeof body.max_clients === "number" && body.max_clients > 0
+        ? Math.floor(body.max_clients)
+        : null;
+
     const seenIds = new Set<string>();
     const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
     const mappingErrors: string[] = [];
+    const previews: PreviewedClient[] = [];
+    const mappedClients: CanonicalClient[] = [];
     let page = conn.clientes_cursor ?? 1;
     let stopReason = "max_pages";
 
@@ -149,16 +214,51 @@ Deno.serve(
           seenIds.add(canonical.externalId);
           newInThisPage++;
 
-          const result = await upsertCanonicalClient(store, {
-            organizationId,
-            source: TOTH_PROVIDER_ID,
-            client: canonical,
-            syncMode,
-          });
-          if (result.action === "created") stats.created++;
-          else if (result.action === "enriched") stats.enriched++;
-          else stats.skipped++;
+          if (dryRun) {
+            // Só LEITURA: as duas buscas do store são SELECT. A decisão espelha
+            // `upsertCanonicalClient` em vez de chamá-lo — chamar escreveria.
+            const byExternalId = await store.findByExternalId(
+              organizationId,
+              canonical.externalId,
+            );
+            const byCnpj =
+              !byExternalId && canonical.cnpj
+                ? await store.findByCnpj(organizationId, canonical.cnpj)
+                : null;
+
+            const { action, reason } = previewAction({
+              client: canonical,
+              syncMode,
+              matchedByExternalId: !!byExternalId,
+              matchedByCnpj: !!byCnpj,
+            });
+
+            previews.push({
+              externalId: canonical.externalId,
+              action,
+              reason,
+              normalizedPhone: normalizePhoneForSearch(canonical.phone),
+            });
+            mappedClients.push(canonical);
+          } else {
+            const result = await upsertCanonicalClient(store, {
+              organizationId,
+              source: TOTH_PROVIDER_ID,
+              client: canonical,
+              syncMode,
+            });
+            if (result.action === "created") stats.created++;
+            else if (result.action === "enriched") stats.enriched++;
+            else stats.skipped++;
+          }
+
+          if (maxClients !== null && seenIds.size >= maxClients) {
+            stopReason = "max_clients";
+            break;
+          }
         }
+
+        if (stopReason === "max_clients") break;
 
         // A API ignorou a paginação e repetiu o bloco anterior.
         if (newInThisPage === 0) {
@@ -203,6 +303,45 @@ Deno.serve(
       });
 
       return json({ error: message, stats }, cors);
+    }
+
+    // ── Prévia: relata e sai. NÃO grava cursor nem last_sync ────────────────
+    // Um ensaio não pode mover o cursor: se movesse, a execução real começaria
+    // da página seguinte e puraria clientes em silêncio.
+    if (dryRun) {
+      const totals = summarize(mappedClients, previews);
+      const phones = phonesAtRisk(previews);
+      const orphans = await countOrphanAdoption(admin, organizationId, phones);
+
+      await logRuntime({
+        organizationId,
+        module: "general",
+        action: "toth_sync_clientes_dry_run",
+        status: "success",
+        // Sem amostra aqui: o log não é lugar de dado de cliente.
+        payloadSnapshot: { ...totals, ...orphans, stop_reason: stopReason },
+      });
+
+      return json(
+        {
+          dry_run: true,
+          escreveu: false,
+          stop_reason: stopReason,
+          paginas_lidas: stats.pages,
+          linhas_recebidas: stats.rows,
+          sem_identificador: stats.failed,
+          totais: totals,
+          adocao_de_conversas: {
+            ...orphans,
+            telefones_que_casariam: phones.length,
+            explicacao:
+              "Ao criar o lead, o trigger tg_leads_adopt_orphan_messages vincula as mensagens sem dono cujo telefone bate. Não envia nada — é vínculo de dado, e é reversível.",
+          },
+          amostra: sampleForReview(mappedClients, previews),
+          erros_de_mapeamento: mappingErrors,
+        },
+        cors,
+      );
     }
 
     await admin
