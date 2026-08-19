@@ -29,9 +29,26 @@ entre "código pronto" e "cliente usando".
 
 ---
 
-## 🔴 Bloco 1 — GON Informática (rede)
+## ⬜ Bloco 1 — HTTPS: DECISÃO DO CTO — seguir em http
 
-### 1.1 HTTPS no endereço do Toth
+**Decidido em 18/08: fica em `http://` mesmo.** O bloco abaixo deixa de ser
+pendência e passa a ser risco aceito, registrado. Não reabrir sem fato novo.
+
+O que isso significa na prática, para quem ler depois:
+
+- Usuário, senha e token do ERP trafegam **em texto claro** pela internet, e o
+  token vai na query string (log de servidor, log de proxy, `Referer`).
+- Quem estiver no caminho de rede lê a credencial e consegue o que ela consegue —
+  hoje, leitura do cadastro de clientes e das cobranças da Café Jurerê.
+- Mitigação em vigor: usuário da integração deve ser **somente leitura**, e a
+  senha compartilhada por canal aberto **precisa ser trocada** (§3.6).
+- O produto não normaliza isso: a conexão exige aceite explícito por organização,
+  a tela mantém o aviso permanente e o card do catálogo mostra
+  "Conectado · sem criptografia". Se um dia houver `https://`, é reconectar com o
+  endereço novo — nada no código muda.
+
+<details>
+<summary>Pedido original à GON (arquivado)</summary>
 
 **Hoje:** `http://cafejurere.ddns.net:8080/toth/services` — sem certificado.
 
@@ -55,10 +72,7 @@ ser por credencial (token no cabeçalho ou mTLS).
 **Pronto quando:** `curl https://<host>/toth/services/users/login` responde com
 certificado válido.
 
-> Enquanto isso não existir, a integração só conecta com **aceite explícito de
-> tráfego sem criptografia**, marcado por organização. Funciona, mas a tela
-> mantém o aviso permanente e o card do catálogo mostra "Conectado · sem
-> criptografia".
+</details>
 
 ---
 
@@ -94,30 +108,53 @@ sem mudança de código — é deploy, não desenvolvimento.
 **Pronto quando:** o campo vem preenchido nos títulos quitados e vazio nos em
 aberto.
 
-### 2.2 Qual campo `dataInicio` / `dataFim` filtram?
+### 2.2 ✅ RESOLVIDO — semântica da janela
 
-**Hoje:** os parâmetros existem e estão implementados, mas **desligados**.
+**Resposta (18/08, 17h38):** *"A data ele filtra se a parcela foi emitida ou vence
+ou teve alteração daquele período."*
 
-**Por que:** não sabemos se a janela recorta por **data de emissão** ou por **data
-de vencimento**. A diferença é material — filtrar por emissão numa janela recente
-**perde títulos antigos ainda em aberto**, que são exatamente os inadimplentes,
-ou seja, o motivo de a integração existir. Aplicar um filtro cujo significado não
-se conhece descarta linhas em silêncio, e título que some da inadimplência não
-gera erro: gera cobrança que não acontece.
+É um **OU entre três datas**, e é isso que torna a janela utilizável — a
+preocupação era filtrar por um campo só e perder títulos antigos em aberto:
 
-**Pronto quando:** houver resposta por escrito. Aí a janela vira sincronização
-incremental por padrão, e a carga no servidor deles cai.
+- **alteração** cobre o pagamento: título que muda de saldo entra na janela e é
+  reconciliado;
+- **vence no período** cobre a virada aberto → atrasado.
 
-### 2.3 O `cnpj` é obrigatório em `/cobrancas`?
+**Implementado:** janela ligada por padrão, ±45 dias. A folga para trás não é
+capricho — é ela que garante que um título vencido ontem reapareça para ser
+reavaliado. Override por `{ data_inicio, data_fim }`; `{ full: true }` desliga a
+janela para reconciliação completa.
 
-**Hoje:** consultamos cliente a cliente — uma requisição por CNPJ.
+### 2.3 ✅ RESOLVIDO — lote de CNPJs
 
-**Por que importa:** se o endpoint aceitar `cnpj` vazio e devolver o período
-inteiro, trocamos centenas de chamadas por uma. Menos carga no servidor deles,
-sincronização muito mais rápida, e some o teto de clientes por execução.
+**Resposta (18/08, 17h40):** *"cnpj tá obrigatório mas pelo que vi se vc passar o
+parâmetro assim cnpj,cnpj,cnpj vai retornar dos 3."*
 
-**Pronto quando:** houver resposta. Se for sim, a função de sync muda de laço
-para chamada única.
+**Implementado:** CNPJs em lote de 50 por requisição. Com 600 clientes, 12
+chamadas em vez de 600. Cada linha da resposta traz o seu `codigoCliente`, então
+o lote não precisa saber de quem é cada título — quem resolve o dono é o upsert.
+
+⚠️ Ele disse **"pelo que vi"** — não é contrato firmado. Por isso o lote é
+conservador e falha de lote não derruba a execução: erra num, perde 50 clientes
+naquela rodada, não os 600. **Conferir na primeira execução real** que a
+contagem de títulos bate com a soma por cliente.
+
+### 2.4 🟠 Conferir com o cliente — recomendação do próprio fornecedor
+
+**Palavras dele (18/08, 17h42):** *"Até esses ws que já existe sempre bom orientar
+o cliente a conferir, porque pode ter particularidades neles que pode atrapalhar,
+vamos ajustando."*
+
+Ou seja: os endpoints que já existiam não foram feitos para esta integração e
+podem ter comportamento específico da instalação da Café Jurerê. Isso vira um
+passo de aceite, não uma suposição de que está tudo certo:
+
+- na primeira sincronização real, **comparar o total de clientes e de títulos em
+  aberto com o que o ERP mostra na tela** para alguém da Café Jurerê;
+- checar um cliente com pagamento parcial e um com título quitado — são os dois
+  casos onde a semântica de saldo foi corrigida;
+- divergência não é motivo para desligar a integração; é insumo para o
+  "vamos ajustando" que ele ofereceu.
 
 ---
 

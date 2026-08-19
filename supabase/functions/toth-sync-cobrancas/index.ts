@@ -5,23 +5,24 @@
  * do ADR-0020: o momento **recebido**, que alimenta inadimplência e receita em
  * risco na Carteira.
  *
- * ⚠️ **O endpoint é por CNPJ, não por página.** `POST /cobrancas` recebe um
- * `cnpj` no corpo e devolve os títulos daquele cliente. Não existe listagem
- * geral. Consequências que moldam esta função:
+ * ⚠️ **O endpoint é por CNPJ, não por página.** `POST /cobrancas` recebe `cnpj`
+ * no corpo e devolve os títulos daqueles clientes. Não existe listagem geral.
+ * Consequências que moldam esta função:
  *
  *  1. O laço é sobre os CLIENTES da carteira já sincronizados com
  *     `external_source = 'toth'` e CNPJ preenchido — ou seja,
  *     `toth-sync-clientes` roda ANTES. Sem cliente casado, não há de quem
  *     cobrar, e a função devolve zero em vez de varrer o ERP.
- *  2. O custo é uma requisição por cliente. Com centenas de clientes isso é uma
- *     rajada contra o servidor do cliente, então há teto por execução
- *     (`MAX_CLIENTS_PER_RUN`), pausa entre chamadas e cursor para retomar.
+ *  2. **CNPJs vão em lote** (`cnpj=a,b,c`), conforme o fornecedor confirmou em
+ *     18/08. Isso troca uma requisição por cliente por uma por lote — com 600
+ *     clientes, 12 chamadas em vez de 600. Ainda há teto por execução e pausa
+ *     entre lotes: o alvo é o servidor de uma empresa só.
  *
  * Auth dual: `x-cron-secret` (org no corpo) ou `Authorization` (org do JWT).
  *
- * Body opcional: `{ data_inicio, data_fim }` em `aaaa-mm-dd` — convertidos para
- * o `dd/MM/yyyy` que o ERP espera. Ver o comentário da janela, abaixo, para por
- * que não são default.
+ * Body opcional:
+ *   - `{ data_inicio, data_fim }` em `aaaa-mm-dd` — sobrepõe a janela padrão;
+ *   - `{ full: true }` — desliga a janela e varre tudo (reconciliação).
  */
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -34,6 +35,8 @@ import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
 import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
 import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
 import {
+  buildCobrancaWindow,
+  chunkCnpjs,
   extractRows,
   formatTothDate,
   mapTothCobrancaToCanonical,
@@ -47,10 +50,26 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
-/** Teto de clientes consultados por execução — uma requisição cada. */
-const MAX_CLIENTS_PER_RUN = 150;
-/** Pausa entre clientes: o alvo é o servidor de UM cliente, não uma nuvem. */
-const CLIENT_DELAY_MS = 250;
+/** Teto de clientes consultados por execução. */
+const MAX_CLIENTS_PER_RUN = 600;
+/**
+ * CNPJs por requisição. O fornecedor indicou que `cnpj=a,b,c` devolve os três,
+ * mas disse "pelo que vi" — não é contrato firmado. Lote conservador: erra num
+ * lote, perde 50 clientes naquela execução, não a execução inteira.
+ */
+const CNPJ_BATCH_SIZE = 50;
+/** Pausa entre lotes: o alvo é o servidor de UMA empresa, não uma nuvem. */
+const BATCH_DELAY_MS = 400;
+
+/**
+ * Folga da janela padrão, em dias.
+ *
+ * Para trás cobre a virada aberto → atrasado: um título que venceu ontem precisa
+ * reaparecer para ser reavaliado, e a janela casa por `vence no período`. Para
+ * frente cobre o que está por vencer, que é o que alimenta a previsão de caixa.
+ */
+const WINDOW_BACK_DAYS = 45;
+const WINDOW_FORWARD_DAYS = 45;
 
 const json = (body: unknown, headers: Record<string, string>, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -139,52 +158,75 @@ Deno.serve(
     const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
     const store = supabaseTituloStore(admin);
 
-    // Janela opcional (`dataInicio`/`dataFim`, dd/MM/yyyy). Fica DESLIGADA por
-    // padrão de propósito: o fornecedor confirmou os parâmetros mas não disse
-    // qual campo eles filtram — emissão ou vencimento. Aplicar uma janela cujo
-    // significado não se conhece pode descartar títulos em silêncio, e título
-    // que some da inadimplência não gera erro, gera cobrança que não acontece.
-    // Quando a resposta vier, isto vira default incremental.
-    const body = await req.clone().json().catch(() => ({}));
-    const window: Record<string, string> = {};
-    for (const [param, raw] of [
-      ["dataInicio", body.data_inicio],
-      ["dataFim", body.data_fim],
-    ] as const) {
-      if (typeof raw !== "string" || !raw.trim()) continue;
-      const formatted = formatTothDate(raw);
-      if (!formatted) {
-        return json({ error: `${param} inválido: use aaaa-mm-dd (recebido "${raw}")` }, cors, 400);
-      }
-      window[param] = formatted;
-    }
     // Data de referência do atraso, fixada uma vez por execução: se cada linha
     // recalculasse "hoje", uma execução que cruzasse a meia-noite classificaria
     // dois títulos de mesmo vencimento de formas diferentes.
     const todayIso = new Date().toISOString().slice(0, 10);
+    const body = await req.clone().json().catch(() => ({}));
+
+    // Janela LIGADA por padrão desde 18/08, quando o fornecedor esclareceu a
+    // semântica: casa a parcela emitida OU que vence OU que teve alteração no
+    // período. É um OU entre três datas, e é isso que a torna segura — pagamento
+    // conta como alteração, então título que muda entra; e `vence no período` é
+    // o que captura a virada aberto → atrasado.
+    //
+    // Overrides: `{ data_inicio, data_fim }` em aaaa-mm-dd, ou `{ full: true }`
+    // para varrer sem janela (reconciliação completa, mais cara).
+    const window: Record<string, string> = {};
+    if (body.full !== true) {
+      const custom: Record<string, string> = {};
+      for (const [param, raw] of [
+        ["dataInicio", body.data_inicio],
+        ["dataFim", body.data_fim],
+      ] as const) {
+        if (typeof raw !== "string" || !raw.trim()) continue;
+        const formatted = formatTothDate(raw);
+        if (!formatted) {
+          return json({ error: `${param} inválido: use aaaa-mm-dd (recebido "${raw}")` }, cors, 400);
+        }
+        custom[param] = formatted;
+      }
+      Object.assign(
+        window,
+        Object.keys(custom).length > 0
+          ? custom
+          : buildCobrancaWindow(todayIso, {
+              backDays: WINDOW_BACK_DAYS,
+              forwardDays: WINDOW_FORWARD_DAYS,
+            }),
+      );
+    }
+
+    const batches = chunkCnpjs(
+      clients.map((c) => String(c.cnpj ?? "")),
+      CNPJ_BATCH_SIZE,
+    );
 
     const stats = {
       clients: 0,
+      batches: 0,
       titulos: 0,
       created: 0,
       updated: 0,
       skipped: 0,
       failed: 0,
-      clientsFailed: 0,
+      batchesFailed: 0,
     };
     const errors: string[] = [];
 
-    for (const row of clients) {
-      const cnpj = String(row.cnpj ?? "").replace(/\D/g, "");
-      if (!cnpj) continue;
-      stats.clients++;
+    for (const batch of batches) {
+      stats.batches++;
+      stats.clients += batch.length;
 
       let payload: unknown;
       try {
-        payload = await client.postForm("cobrancas", { cnpj, ...window });
+        // `cnpj=a,b,c` devolve os três. Cada linha da resposta carrega o seu
+        // `codigoCliente`, e é por ele que `upsertCanonicalTitulo` resolve o
+        // dono — o lote não precisa saber de quem é cada título.
+        payload = await client.postForm("cobrancas", { cnpj: batch.join(","), ...window });
       } catch (err) {
         // Falha de auth aborta tudo: o token não vale e insistir só martela o
-        // servidor. Falha de um CNPJ isolado não derruba os outros clientes.
+        // servidor. Falha de um lote não derruba os outros.
         if (err instanceof TothAuthError) {
           await admin
             .from("toth_connections")
@@ -200,11 +242,11 @@ Deno.serve(
           });
           return json({ error: err.message, stats }, cors);
         }
-        stats.clientsFailed++;
+        stats.batchesFailed++;
         if (errors.length < 3) {
           errors.push(err instanceof TothRequestError ? err.message : String(err));
         }
-        await sleep(CLIENT_DELAY_MS);
+        await sleep(BATCH_DELAY_MS);
         continue;
       }
 
@@ -226,7 +268,7 @@ Deno.serve(
         }
       }
 
-      await sleep(CLIENT_DELAY_MS);
+      await sleep(BATCH_DELAY_MS);
     }
 
     await admin
