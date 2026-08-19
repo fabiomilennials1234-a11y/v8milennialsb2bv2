@@ -99,6 +99,24 @@ describe("assertSafeErpBaseUrl — normalização", () => {
     }
   });
 
+  it("🔴 tira pontuação colada — o ponto final que produziu o 2º 404", () => {
+    // O endereço chegou como `.../users/login.` e o ponto impediu o casamento
+    // do sufixo, virando `/users/login./users/login`.
+    const esperado = "http://cafejurere.ddns.net:8080/toth/services";
+    for (const colado of [
+      "http://cafejurere.ddns.net:8080/toth/services/users/login.",
+      "http://cafejurere.ddns.net:8080/toth/services.",
+      "  http://cafejurere.ddns.net:8080/toth/services  ",
+      '"http://cafejurere.ddns.net:8080/toth/services"',
+      "(http://cafejurere.ddns.net:8080/toth/services)",
+    ]) {
+      expect(
+        assertSafeErpBaseUrl(colado, { allowHttp: true }).toString(),
+        colado,
+      ).toBe(esperado);
+    }
+  });
+
   it("não come segmento legítimo que apenas contém o nome", () => {
     // `/clientes-api` não é o endpoint `/clientes`.
     expect(assertSafeErpBaseUrl("https://erp.exemplo.com.br/clientes-api").pathname).toBe(

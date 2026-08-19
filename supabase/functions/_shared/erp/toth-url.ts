@@ -129,8 +129,23 @@ function isBlockedIPv6(host: string): boolean {
  * `UnsafeErpUrlError` com motivo legível — a mensagem sobe pra UI de conexão,
  * então precisa explicar o que o admin deve corrigir.
  */
+/**
+ * Tira o que vem grudado quando se cola um endereço de uma mensagem.
+ *
+ * Aspas, parênteses e — o caso que apareceu na conexão real de 19/08 — o ponto
+ * final da frase. O endereço chegou como `.../users/login.`, e o ponto sozinho
+ * impediu o casamento do sufixo, produzindo `/users/login./users/login` e um 404
+ * que parecia defeito do servidor do cliente.
+ */
+function sanitizePastedUrl(raw: string): string {
+  return (raw ?? "")
+    .trim()
+    .replace(/^[<("'\s]+/, "")
+    .replace(/[>)"'\s.,;:]+$/, "");
+}
+
 export function assertSafeErpBaseUrl(raw: string, policy: BaseUrlPolicy = {}): URL {
-  const trimmed = (raw ?? "").trim();
+  const trimmed = sanitizePastedUrl(raw);
   if (!trimmed) throw new UnsafeErpUrlError("Informe o endereço da API do ERP.");
 
   let url: URL;
