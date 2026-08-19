@@ -23,7 +23,7 @@
  * envio". A microcopy diz qual das duas.
  */
 import { useMemo, useRef, useState } from "react";
-import { Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
+import { FileText, Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { toast } from "sonner";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
@@ -38,6 +38,7 @@ import {
   type SocialSendError,
 } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import type { SocialSender } from "@/modules/communication/hooks/chat/social-sender";
+import { TemplatePicker } from "@/modules/communication/components/chat/social/TemplatePicker";
 import { webmOpusToOgg } from "@/modules/communication/lib/webm-opus-to-ogg";
 import { socialReplyWindow } from "@/modules/communication/lib/social-window";
 import {
@@ -191,6 +192,7 @@ function SocialChatHeader({
 function SocialComposer({
   sender,
   canal,
+  instanceId,
   contactExternalId,
   lastIncomingAt,
 }: {
@@ -202,6 +204,8 @@ function SocialComposer({
   sender: SocialSender;
   /** O canal da caixa — decide microcopy. O envio já vem resolvido no `sender`. */
   canal: SocialContact["channel"];
+  /** O id da caixa. No canal oficial é a instância, e é dela que vêm os templates. */
+  instanceId: string;
   contactExternalId: string;
   lastIncomingAt: string | null;
 }) {
@@ -209,6 +213,7 @@ function SocialComposer({
   const [anexo, setAnexo] = useState<UploadedAttachment | null>(null);
   const [subindo, setSubindo] = useState(false);
   const [gravando, setGravando] = useState(false);
+  const [templatesAberto, setTemplatesAberto] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const gravadorRef = useRef<MediaRecorder | null>(null);
   const { data: teamMember } = useCurrentTeamMember();
@@ -382,6 +387,27 @@ function SocialComposer({
         >
           {gravando ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
         </Button>
+        {/*
+          TEMPLATE — a única saída fora da janela de 24 horas.
+
+          Só na caixa oficial: o Direct não tem template aprovado pela Meta.
+          Sempre visível, e não só com a janela fechada — template é legítimo
+          dentro dela também, e um botão que aparece e some conforme o relógio
+          ensina que a ferramenta é instável. O que muda é o DESTAQUE.
+        */}
+        {canal === "whatsapp_oficial" && (
+          <Button
+            variant={janela.open === false ? "default" : "ghost"}
+            size="sm"
+            className="h-[42px] w-9 shrink-0 p-0"
+            onClick={() => setTemplatesAberto(true)}
+            disabled={subindo || enviar.isPending || gravando}
+            aria-label="Enviar template aprovado"
+            title="Enviar template aprovado"
+          >
+            <FileText className="h-4 w-4" />
+          </Button>
+        )}
         <Textarea
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
@@ -415,6 +441,15 @@ function SocialComposer({
         </Button>
       </div>
 
+      {canal === "whatsapp_oficial" && (
+        <TemplatePicker
+          instanceId={instanceId}
+          contactExternalId={contactExternalId}
+          open={templatesAberto}
+          onOpenChange={setTemplatesAberto}
+        />
+      )}
+
       {janela.open !== null && (
         <p
           className={cn(
@@ -422,7 +457,13 @@ function SocialComposer({
             janela.open ? "text-muted-foreground" : "text-amber-500",
           )}
         >
-          {janela.open ? janela.label : `${janela.label} — o envio pode ser recusado`}
+          {janela.open
+            ? janela.label
+            : canal === "whatsapp_oficial"
+              // Com saída disponível, o aviso deixa de ser só aviso: ele diz o
+              // que fazer. Antes ele anunciava a recusa e parava aí.
+              ? `${janela.label} — texto livre pode ser recusado. Use um template.`
+              : `${janela.label} — o envio pode ser recusado`}
         </p>
       )}
     </div>
@@ -542,6 +583,7 @@ export function SocialChatView({
       <SocialComposer
         sender={sender}
         canal={selectedContact.channel}
+        instanceId={selectedContact.messaging_channel_id}
         contactExternalId={selectedContact.external_user_id}
         lastIncomingAt={ultimaRecebidaEm}
       />
