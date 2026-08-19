@@ -63,6 +63,10 @@ import {
   officialWhatsAppSender,
 } from "@/modules/communication/hooks/chat/social-sender";
 import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
+import {
+  chaveDeConversaOficial,
+  contatoDeConversaNova,
+} from "@/modules/communication/lib/official-conversation";
 import { useSocialRealtime } from "@/modules/communication/hooks/chat/useSocialRealtime";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
 import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
@@ -537,6 +541,19 @@ export function ChatShellWithContext() {
     // Caminho A: instance da URL já foi setada acima — só precisamos achar o
     // phone real dentro dos contatos quando carregarem (handler abaixo).
     if (deepLink.instance && instances.some((i) => i.id === deepLink.instance)) {
+      // ⚠️ A CAIXA OFICIAL NÃO PASSA PELO `pendingDeepLinkPhone`. Aquele
+      // caminho procura o telefone entre os contatos de `whatsapp_messages`, e
+      // esta caixa lê `channel_messages` — quem nunca trocou mensagem não tem
+      // linha em NENHUMA das duas, e o lead do funil é justamente esse caso.
+      // Aqui a chave é montada a partir do telefone, e a conversa nasce na tela.
+      const alvo = instances.find((i) => i.id === deepLink.instance);
+      if (alvo?.provider === "notificame") {
+        const chave = chaveDeConversaOficial(alvo.id, deepLink.phone);
+        if (chave) setSelectedKey(chave);
+        setDeepLinkProcessed(true);
+        return;
+      }
+
       setPendingDeepLinkPhone(deepLink.phone);
       setDeepLinkProcessed(true);
       return;
@@ -551,9 +568,19 @@ export function ChatShellWithContext() {
     } else {
       // Lead sem mensagens — selecionar instância padrão e abrir chat vazio
       const connected = instances.find((i) => i.status === "connected");
-      setSelectedBoxId(connected?.id ?? instances[0].id);
-      const normalized = normalizePhone(deepLink.phone);
-      if (normalized) setSelectedKey(normalized);
+      const escolhida = connected ?? instances[0];
+      setSelectedBoxId(escolhida.id);
+
+      // A caixa oficial identifica a conversa por `(instância, interlocutor)`, e
+      // não por telefone solto: guardar o telefone cru aqui deixaria a tela sem
+      // conversa nenhuma para abrir.
+      if (escolhida.provider === "notificame") {
+        const chave = chaveDeConversaOficial(escolhida.id, deepLink.phone);
+        if (chave) setSelectedKey(chave);
+      } else {
+        const normalized = normalizePhone(deepLink.phone);
+        if (normalized) setSelectedKey(normalized);
+      }
     }
     setDeepLinkProcessed(true);
   }, [
@@ -734,10 +761,30 @@ export function ChatShellWithContext() {
     [contacts, selectedKey],
   );
 
-  const selectedSocialContact = useMemo(
-    () => socialContacts.find((c) => c.conversation_key === selectedKey) ?? null,
-    [socialContacts, selectedKey],
-  );
+  const selectedSocialContact = useMemo(() => {
+    const existente = socialContacts.find((c) => c.conversation_key === selectedKey) ?? null;
+    if (existente || !isOfficialBox) return existente;
+
+    // CONVERSA QUE AINDA NÃO EXISTE. A lista da caixa oficial vem de uma RPC que
+    // só devolve quem já trocou mensagem — o primeiro contato, vindo do funil,
+    // não tem linha em lugar nenhum. O contato sintético existe só na tela, até a
+    // primeira mensagem sair; depois o real toma o lugar, com a mesma chave.
+    return contatoDeConversaNova(selectedKey, selectedBoxId);
+  }, [socialContacts, selectedKey, isOfficialBox, selectedBoxId]);
+
+  /**
+   * A lista da caixa social, com a conversa NOVA no topo quando ela existe só na
+   * tela. Sem isto o chat abriria a conversa e a lista lateral não a mostraria —
+   * o vendedor veria o composer aberto e nenhuma linha selecionada, que se lê
+   * como tela quebrada.
+   */
+  const socialContactsComNova = useMemo(() => {
+    if (!selectedSocialContact) return socialContacts;
+    const jaEstaNaLista = socialContacts.some(
+      (c) => c.conversation_key === selectedSocialContact.conversation_key,
+    );
+    return jaEstaNaLista ? socialContacts : [selectedSocialContact, ...socialContacts];
+  }, [socialContacts, selectedSocialContact]);
 
   const handleSelectContact = useCallback((key: string) => {
     setSelectedKey(key);
@@ -1042,7 +1089,7 @@ export function ChatShellWithContext() {
       <ShellComponent
         list={
           <ConversationList
-            contacts={isSocialBox ? socialContacts : enrichedContacts}
+            contacts={isSocialBox ? socialContactsComNova : enrichedContacts}
             selectedKey={selectedKey}
             onSelectContact={handleSelectContact}
             searchQuery={searchQuery}
