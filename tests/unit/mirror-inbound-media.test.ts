@@ -15,7 +15,10 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { espelharMidiaRecebida } from "../../supabase/functions/_shared/mirror-inbound-media.ts";
+import {
+  espelharMidiaRecebida,
+  mimeUtilizavel,
+} from "../../supabase/functions/_shared/mirror-inbound-media.ts";
 
 const CDN_IG =
   "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=2578845579236720&signature=Ab1H_F4";
@@ -111,5 +114,158 @@ describe("falha nunca troca a mensagem por um erro nosso", () => {
 
     expect(r.url).toBe(CDN_IG);
     expect(r.espelhada).toBe(false);
+  });
+});
+
+/**
+ * O CDN DO WHATSAPP OFICIAL NÃO É ABERTO.
+ *
+ * Medido em 2026-08-20, com o primeiro áudio real recebido na Chique:
+ *
+ *   GET https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=… → 401
+ *
+ * O do Instagram (`ig_messaging_cdn`) entregava com 206 sem token nenhum, e foi
+ * com ele que este módulo nasceu. O do WhatsApp Business exige credencial — e o
+ * comentário deste arquivo chamava o endpoint de download do fornecedor de
+ * "plano B para o caso do WhatsApp, que ainda não recebeu arquivo nenhum".
+ *
+ * Recebeu. O plano B é o único caminho, e sem ele a bolha fica quebrada: foi o
+ * que apareceu na tela como "Não foi possível reproduzir o áudio".
+ */
+describe("CDN que exige credencial", () => {
+  it("401 no acesso direto cai para o download do fornecedor", async () => {
+    const fake = storageFake();
+    const direto = vi.fn().mockResolvedValue(new Response("", { status: 401 }));
+    const peloFornecedor = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array(2048), {
+        status: 200,
+        headers: { "content-type": "audio/ogg" },
+      }),
+    );
+
+    const r = await espelharMidiaRecebida(
+      "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=123",
+      {
+        organizationId: "org-1",
+        especie: "audio",
+        storage: fake.storage,
+        fetchImpl: direto,
+        baixarPeloFornecedor: peloFornecedor,
+      },
+    );
+
+    expect(direto, "tentou o caminho barato primeiro").toHaveBeenCalled();
+    expect(peloFornecedor, "não usou o endpoint autenticado").toHaveBeenCalled();
+    expect(r.espelhada).toBe(true);
+    expect(fake.uploads[0].bytes).toBe(2048);
+  });
+
+  it("acesso direto que FUNCIONA não gasta o endpoint autenticado", async () => {
+    // O do Instagram entrega aberto. Chamar o endpoint do fornecedor ali seria
+    // uma chamada paga por arquivo, sem motivo.
+    const peloFornecedor = vi.fn();
+    await espelharMidiaRecebida(CDN_IG, {
+      organizationId: "org-1",
+      especie: "imagem",
+      storage: storageFake().storage,
+      fetchImpl: vi.fn().mockResolvedValue(resposta(64)),
+      baixarPeloFornecedor: peloFornecedor,
+    });
+
+    expect(peloFornecedor).not.toHaveBeenCalled();
+  });
+
+  it("sem o baixador injetado, 401 devolve a original — não inventa caminho", async () => {
+    const r = await espelharMidiaRecebida("https://lookaside.fbsbx.com/x?mid=1", {
+      organizationId: "org-1",
+      especie: "audio",
+      storage: storageFake().storage,
+      fetchImpl: vi.fn().mockResolvedValue(new Response("", { status: 401 })),
+    });
+
+    expect(r.espelhada).toBe(false);
+  });
+});
+
+/**
+ * O CONTENT-TYPE MALFORMADO DO ENDPOINT DE DOWNLOAD.
+ *
+ * Medido em produção 2026-08-20, logo depois de o download autenticado entrar:
+ * a mídia continuou quebrada, e a linha gravada trazia
+ *
+ *   mime: "application/image/jpeg"
+ *   mime: "application/audio/ogg; codecs=opus"
+ *
+ * O corpo do webhook traz o mime CERTO (`image/jpeg`). O prefixo veio da
+ * resposta do endpoint de download do fornecedor, que responde com um
+ * content-type de DUAS barras — que não é mime válido. O storage recusa o
+ * upload, o espelhamento devolve a URL original, e a bolha segue quebrada.
+ *
+ * O sintoma é cruel: parece que o download falhou, quando na verdade ele
+ * funcionou e quem recusou foi o nosso próprio armazenamento.
+ */
+describe("content-type malformado", () => {
+  it("duas barras não vão para o storage — cai para o mime do envelope", async () => {
+    const fake = storageFake();
+    const r = await espelharMidiaRecebida(CDN_IG, {
+      organizationId: "org-1",
+      especie: "imagem",
+      mimeDeclarado: "image/jpeg",
+      storage: fake.storage,
+      fetchImpl: vi.fn().mockResolvedValue(
+        new Response(new Uint8Array(512), {
+          status: 200,
+          headers: { "content-type": "application/image/jpeg" },
+        }),
+      ),
+    });
+
+    expect(r.espelhada, "o upload foi recusado por um mime inválido").toBe(true);
+    expect(fake.uploads[0].contentType).toBe("image/jpeg");
+    expect(fake.uploads[0].path).toMatch(/\.jpg$/);
+    expect(r.mime).toBe("image/jpeg");
+  });
+
+  it("sem mime no envelope, o inválido vira octet-stream — nunca vai cru", async () => {
+    const fake = storageFake();
+    await espelharMidiaRecebida(CDN_IG, {
+      organizationId: "org-1",
+      especie: "indefinida",
+      storage: fake.storage,
+      fetchImpl: vi.fn().mockResolvedValue(
+        new Response(new Uint8Array(64), {
+          status: 200,
+          headers: { "content-type": "application/audio/ogg; codecs=opus" },
+        }),
+      ),
+    });
+
+    expect(fake.uploads[0].contentType).toBe("application/octet-stream");
+  });
+
+  /**
+   * ⚠️ ESTE TESTE JÁ AFIRMOU O CONTRÁRIO, e estava errado.
+   *
+   * Eu escrevi que `audio/ogg; codecs=opus` devia passar inteiro, "porque o
+   * codec importa para tocar o áudio". Medido contra o storage de produção:
+   *
+   *   Content-Type: audio/ogg; codecs=opus  → 400 invalid_mime_type (415)
+   *   Content-Type: audio/ogg               → 200
+   *
+   * O parâmetro depois do `;` é RECUSADO. E o codec não fazia falta: o container
+   * Ogg já diz ao navegador o que tocar. Foi por isso que a imagem passou a
+   * funcionar e o áudio não — a única diferença entre os dois era esse sufixo.
+   */
+  it("parâmetro depois do `;` é PODADO — o storage o recusa", () => {
+    expect(mimeUtilizavel("audio/ogg; codecs=opus", null)).toBe("audio/ogg");
+    expect(mimeUtilizavel("image/jpeg", null)).toBe("image/jpeg");
+    expect(mimeUtilizavel("text/plain;charset=utf-8", null)).toBe("text/plain");
+  });
+
+  it("reconhece o inválido de várias formas", () => {
+    expect(mimeUtilizavel("application/image/jpeg", "image/jpeg")).toBe("image/jpeg");
+    expect(mimeUtilizavel("", "image/png")).toBe("image/png");
+    expect(mimeUtilizavel("lixo", "image/png")).toBe("image/png");
+    expect(mimeUtilizavel(null, null)).toBe("application/octet-stream");
   });
 });
