@@ -32,8 +32,7 @@ import {
 } from "../_shared/chat-owner-guard.ts";
 import { readTemplateRequest } from "../_shared/whatsapp-template-request.ts";
 import {
-  espelharMidiaDeTemplate,
-  precisaEspelhar,
+  espelharMidiaDosComponentes,
 } from "../_shared/mirror-template-media.ts";
 import {
   nullifyInBatches,
@@ -1063,32 +1062,14 @@ Deno.serve(
           // CORS — o front não consegue ler os bytes. Falha no espelhamento devolve
           // a URL original: um envio que talvez funcione é melhor que um erro
           // nosso no lugar da tentativa.
-          const componentesEspelhados = await Promise.all(
-            (pedido.value.components ?? []).map(async (c) => {
-              const comp = (c ?? {}) as Record<string, unknown>;
-              if (!Array.isArray(comp.parameters)) return c;
-
-              const parametros = await Promise.all(
-                (comp.parameters as unknown[]).map(async (p) => {
-                  const par = (p ?? {}) as Record<string, unknown>;
-                  const tipo = String(par.type ?? "").toLowerCase();
-                  if (tipo !== "image" && tipo !== "video" && tipo !== "document") return p;
-
-                  const aninhado = (par[tipo] ?? {}) as Record<string, unknown>;
-                  const link = typeof par.link === "string" && par.link
-                    ? par.link
-                    : typeof aninhado.link === "string" ? aninhado.link : "";
-                  if (!precisaEspelhar(link)) return p;
-
-                  const espelhada = await espelharMidiaDeTemplate(link, callerOrgId, {
-                    storage: supabaseAdmin.storage,
-                  });
-                  return { ...par, [tipo]: { ...aninhado, link: espelhada }, link: espelhada };
-                }),
-              );
-
-              return { ...comp, parameters: parametros };
-            }),
+          // A caminhada até o link estava escrita aqui à mão, e o caminho da
+          // AUTOMAÇÃO não tinha nenhuma (#1706). Agora os dois chamam a mesma
+          // função: um lugar só onde a decisão mora. Comportamento idêntico ao
+          // que este bloco fazia.
+          const componentesEspelhados = await espelharMidiaDosComponentes(
+            pedido.value.components ?? [],
+            callerOrgId,
+            { storage: supabaseAdmin.storage },
           );
 
           result = await provider.sendTemplate({

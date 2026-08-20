@@ -16,6 +16,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   espelharMidiaDeTemplate,
+  espelharMidiaDosComponentes,
   precisaEspelhar,
 } from "../../supabase/functions/_shared/mirror-template-media.ts";
 
@@ -131,5 +132,75 @@ describe("espelharMidiaDeTemplate", () => {
     });
 
     expect(url).toBe(CDN_META);
+  });
+});
+
+/**
+ * A caminhada pelo envelope da Graph.
+ *
+ * Ela existia escrita à mão dentro do `whatsapp-api-proxy` — o caminho do CHAT —
+ * e o caminho da AUTOMAÇÃO não tinha nenhuma (#1706). Estes casos fixam o
+ * contrato que os DOIS passaram a usar, para que o conserto de um não seja a
+ * regressão silenciosa do outro.
+ */
+describe("espelharMidiaDosComponentes", () => {
+  const cabecalhoDeImagem = (link: string) => [
+    { type: "header", parameters: [{ type: "image", image: { link } }] },
+    { type: "body", parameters: [{ type: "text", text: "Filipe" }] },
+  ];
+
+  it("troca o link do cabeçalho e deixa o corpo intacto", async () => {
+    const fake = storageFake();
+    const out = await espelharMidiaDosComponentes(cabecalhoDeImagem(CDN_META), "org-1", {
+      storage: fake.storage,
+      fetchImpl: vi.fn().mockResolvedValue(respostaOk()),
+    });
+
+    const header = out[0] as any;
+    expect(header.parameters[0].image.link).toMatch(/^https:\/\/nosso\.storage\//);
+    // O link vai NOS DOIS lugares: é o que o proxy já entregava e o que os
+    // providers leem. Escrever só num deles mudaria o chat em silêncio.
+    expect(header.parameters[0].link).toBe(header.parameters[0].image.link);
+    expect(out[1]).toEqual({ type: "body", parameters: [{ type: "text", text: "Filipe" }] });
+  });
+
+  it("sem nada a espelhar devolve O MESMO array — nenhum I/O, nenhuma remontagem", async () => {
+    const buscar = vi.fn();
+    const entrada = cabecalhoDeImagem("https://cliente.com.br/banner.jpg");
+    const out = await espelharMidiaDosComponentes(entrada, "org-1", {
+      storage: storageFake().storage,
+      fetchImpl: buscar,
+    });
+
+    expect(out).toBe(entrada);
+    expect(buscar).not.toHaveBeenCalled();
+  });
+
+  it("vídeo e documento também viajam pelo CDN — e também são espelhados", async () => {
+    for (const tipo of ["video", "document"] as const) {
+      const out = await espelharMidiaDosComponentes(
+        [{ type: "header", parameters: [{ type: tipo, [tipo]: { link: CDN_META } }] }],
+        "org-1",
+        { storage: storageFake().storage, fetchImpl: vi.fn().mockResolvedValue(respostaOk()) },
+      );
+      expect((out[0] as any).parameters[0][tipo].link).toMatch(/^https:\/\/nosso\.storage\//);
+    }
+  });
+
+  it("aceita o link na RAIZ do parâmetro, não só aninhado", async () => {
+    const out = await espelharMidiaDosComponentes(
+      [{ type: "header", parameters: [{ type: "image", link: CDN_META }] }],
+      "org-1",
+      { storage: storageFake().storage, fetchImpl: vi.fn().mockResolvedValue(respostaOk()) },
+    );
+    expect((out[0] as any).parameters[0].link).toMatch(/^https:\/\/nosso\.storage\//);
+  });
+
+  it("componente sem parâmetros e lista vazia não quebram", async () => {
+    const deps = { storage: storageFake().storage, fetchImpl: vi.fn() };
+    await expect(espelharMidiaDosComponentes([], "org-1", deps)).resolves.toEqual([]);
+    await expect(espelharMidiaDosComponentes(null, "org-1", deps)).resolves.toEqual([]);
+    const so = [{ type: "body" }];
+    await expect(espelharMidiaDosComponentes(so, "org-1", deps)).resolves.toBe(so);
   });
 });
