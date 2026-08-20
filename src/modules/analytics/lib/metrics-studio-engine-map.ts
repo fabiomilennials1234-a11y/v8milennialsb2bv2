@@ -348,6 +348,19 @@ export const ENGINE_METRICS: EngineMetric[] = [
     cortes: ["total"],
     formatId: "percent_1",
   },
+  // ⚠ `conversao_entre_etapas` (SCRUM-316, migration 20270820100000) EXISTE no
+  // motor e está DELIBERADAMENTE FORA desta lista. Não adicione.
+  //
+  // Ela exige os filtros `from_stage_key` e `to_stage_key`, e esta lista só sabe
+  // declarar `filtrosFixos` ESTÁTICOS — mas `stage_key` é slug do funil de CADA
+  // org, então não existe valor que sirva para todas. Listada aqui, apareceria
+  // na barra lateral e levantaria 22023 ao ser solta no painel: pior que
+  // ausente, porque promete um número e entrega erro.
+  //
+  // O caminho dela é a MÉTRICA PERSONALIZADA, cuja folha já aceita `filters`
+  // (`MetricTreeNode`) e cujo validador já os confere (`CHAVES_DE_FILTRO`). O
+  // que falta é o `MetricComposer` expor a escolha das duas etapas — fatia
+  // própria, porque precisa listar as etapas do funil escolhido.
 ];
 
 export const ENGINE_BY_ID = new Map(ENGINE_METRICS.map((m) => [m.id, m]));

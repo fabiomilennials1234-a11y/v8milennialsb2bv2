@@ -63,6 +63,13 @@ export const PROFUNDIDADE_MAXIMA = 3;
 /** |literal| ≤ 1e12 — mesmo teto do banco. */
 export const LITERAL_MAXIMO = 1e12;
 
+/**
+ * Espelho EXATO da allowlist de `_metric_tree_unit` no banco. Divergir aqui não
+ * abre brecha — o banco valida de novo e recusa — mas faz o compositor prometer
+ * o que o servidor nega, ou negar o que ele aceita.
+ *
+ * `from_stage_key`/`to_stage_key` entraram na 20270820100000 (SCRUM-316).
+ */
 export const CHAVES_DE_FILTRO = [
   "pipeline_id",
   "member_id",
@@ -70,6 +77,8 @@ export const CHAVES_DE_FILTRO = [
   "tag_id",
   "product_id",
   "stream",
+  "from_stage_key",
+  "to_stage_key",
 ] as const;
 
 /**
