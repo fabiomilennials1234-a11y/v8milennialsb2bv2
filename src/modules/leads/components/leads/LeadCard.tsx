@@ -428,8 +428,6 @@ export const LeadCard = memo(function LeadCard({
         onClick={onClick}
       >
         {/* ── Color stripes (Trello-style) ── */}
-        <LeadCardLabels tags={lead.tags} />
-
         <div className="p-3 pt-2.5 flex flex-col gap-2">
           {/* ── Selection checkbox ── */}
           {onSelect && (
@@ -672,6 +670,11 @@ export const LeadCard = memo(function LeadCard({
 
           {/* ── Extra actions slot (ex: confirmação de reunião) ── */}
           {extraActions}
+
+          {/* ── Etiquetas, ABAIXO do negócio ──
+               Saíram do topo do card (onde eram riscos de 1,5px sem rótulo) e
+               vieram para cá, com o nome legível, como no card do DataCrazy. */}
+          <LeadCardLabels tags={lead.tags} />
 
           {/* ── Footer: Inline metrics (Trello-style) ── */}
           <div className="flex items-center justify-between pt-2 mt-auto border-t border-border/40">

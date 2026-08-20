@@ -174,8 +174,11 @@ function ChecklistPopoverBody({
             </button>
           </div>
         ) : checklists.length === 0 ? (
+          /* Copy corrigida: o que está vazio aqui é a LISTA de checklists do
+             lead, não os itens de um checklist. A frase antiga descrevia o
+             outro estado vazio (o de dentro de um grupo, linha ~350). */
           <p className="px-2 py-3 text-[11px] text-muted-foreground text-center">
-            Nenhum item neste checklist
+            Nenhum checklist neste lead
           </p>
         ) : single ? (
           <SingleChecklist checklist={checklists[0]} leadId={leadId} />

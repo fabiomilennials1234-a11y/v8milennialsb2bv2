@@ -110,13 +110,17 @@ describe("LeadCardMetrics checklist badge gating", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders a passive (non-button) chip when total===0", () => {
+  // Contrato INVERTIDO de propósito. Antes, total===0 renderizava um chip
+  // passivo — e isso criava um ponto cego: lead sem checklist não tinha por
+  // onde abrir o painel, logo não tinha por onde APLICAR um. Pior, checklist
+  // criado com zero itens conta 0/0, então existia no banco e era invisível.
+  it("abre mesmo com total===0 — é por onde se aplica o primeiro checklist", () => {
     renderWithClient(
       <LeadCardMetrics leadId="lead-1" checklistsCompleted={0} checklistsTotal={0} />,
     );
     expect(
-      screen.queryByRole("button", { name: /Checklists:/ }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Checklists: 0 de 0 itens concluídos" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("0/0")).toBeInTheDocument();
   });
 

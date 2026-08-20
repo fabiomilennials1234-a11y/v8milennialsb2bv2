@@ -41,6 +41,39 @@ function colorFromName(name?: string | null): string {
   return `hsl(${hash % 360}, 60%, 45%)`;
 }
 
+/** Primeiro nome + sobrenome abreviado, para caber na largura da coluna. */
+function nomeCurto(nome?: string | null): string {
+  if (!nome) return "";
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length <= 1) return partes[0] ?? "";
+  return `${partes[0]} ${partes[partes.length - 1][0].toUpperCase()}.`;
+}
+
+function NomeResponsavel({ member, label }: { member: ResponsibleMini | null | undefined; label: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            "flex min-w-0 items-center gap-1",
+            member ? "text-foreground/80" : "text-muted-foreground/50",
+          )}
+        >
+          <i
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: member ? colorFromName(member.name) : "hsl(var(--muted-foreground) / 0.4)" }}
+            aria-hidden
+          />
+          <span className="truncate">{member ? nomeCurto(member.name) : "—"}</span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="text-[10px]">
+        {label}{member?.name ? `: ${member.name}` : ": —"}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function MiniResponsible({ member, label }: { member: ResponsibleMini | null | undefined; label: string }) {
   return (
     <Tooltip>
@@ -82,8 +115,11 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
   const checklistDone = checklistsTotal > 0 && checklistsCompleted === checklistsTotal;
   const hasComments = commentsCount > 0;
   const hasChecklists = checklistsTotal > 0;
-  // Badge vira popover clicável só quando há lead + checklists. Senão, chip passivo.
-  const checklistInteractive = !!leadId && hasChecklists;
+  // Basta ter lead. Antes exigia `checklistsTotal > 0`, e isso criava um ponto
+  // cego real: lead SEM checklist não tinha por onde abrir o painel — logo não
+  // tinha por onde APLICAR um. Pior, checklist criado com zero itens conta 0/0,
+  // então ele existia no banco e era invisível na tela.
+  const checklistInteractive = !!leadId;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -135,10 +171,15 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
           </Tooltip>
         )}
 
-        {/* Responsibles — empilhados levemente */}
-        <div className="flex items-center -space-x-1.5 ml-auto">
-          <MiniResponsible member={preSaleResponsible ?? null} label="Pré-Venda" />
-          <MiniResponsible member={saleResponsible ?? null} label="Venda" />
+        {/* Responsáveis — os DOIS nomes, escritos.
+            Eram dois avatares de 20px empilhados, com o nome só no tooltip: em
+            um board com 30 cards ninguém passa o mouse, então na prática o card
+            não dizia de quem era o lead. O dado (`name`) já chegava aqui.
+            Quem estiver vazio vira um traço discreto, sem ocupar espaço. */}
+        <div className="flex min-w-0 items-center gap-1 ml-auto">
+          <NomeResponsavel member={preSaleResponsible ?? null} label="Pré-Venda" />
+          <span className="text-muted-foreground/40" aria-hidden>·</span>
+          <NomeResponsavel member={saleResponsible ?? null} label="Venda" />
         </div>
       </div>
     </TooltipProvider>
