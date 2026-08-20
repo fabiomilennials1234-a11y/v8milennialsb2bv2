@@ -15,20 +15,19 @@
  *    nó NOMEIE o canal oficial em "Número de saída" antes de listar qualquer
  *    coisa: sem instância não há de quem perguntar.
  *
- *    Nomear é a única forma. O canal oficial não entra nos degraus automáticos
- *    do roteamento — `conversation` e `responsible` nunca o resolvem, então um
- *    nó de template em política automática falharia sempre.
+ *    Nomear NÃO é mais a única forma. O #1690 (PR #1699) fez o canal oficial
+ *    ser nomeável no degrau `fixed`, e o #1700 (PR #1708) o colocou também nos
+ *    degraus em que a regra escolhe sozinha: `conversation` e `responsible`
+ *    podem resolvê-lo, e o atalho de "uma instância viva só" o conta. Um nó de
+ *    template em política automática falha apenas quando a regra não resolve —
+ *    e falha com código legível, que é o invariante do ADR-0025: a máquina
+ *    nunca escolhe sozinha.
  *
- *    ⚠️ ESTE PAINEL NASCE INERTE, e é uma dependência de SEQUÊNCIA, não de
- *    código. Poder NOMEAR o canal oficial no "Número de saída" é o #1690
- *    (PR #1699), que ainda não está na main. Sem ele o canal oficial não
- *    aparece no seletor (`isRoutableInstance` filtra por uazapi/evolution) e
- *    o executor também não o carregaria (`loadInstance` filtra pelos mesmos
- *    provedores). Enquanto o #1699 não entrar, o operador chega no primeiro
- *    aviso e não tem opção válida para escolher — o que ainda é melhor que o
- *    campo de texto livre que este painel substitui, que prometia envio de
- *    template e não mandava nada. Quando o #1699 entrar, isto passa a
- *    funcionar sem uma linha a mais aqui.
+ *    O que continua valendo é a exigência deste painel: para LISTAR templates
+ *    é preciso saber de qual conta da Meta perguntar, e isso vem da instância.
+ *    Por isso, na prática, montar o nó pede o número nomeado — a listagem
+ *    acontece no editor, antes de qualquer execução, quando a política ainda
+ *    não resolveu nada.
  *
  * 2. A FORMA DO TEMPLATE. Não há catálogo local, e isso é decisão registrada na
  *    spec (#1684). O nó guarda o nome, o idioma e os `components` como vieram
