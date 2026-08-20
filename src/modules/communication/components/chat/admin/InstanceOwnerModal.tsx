@@ -107,7 +107,10 @@ export function InstanceOwnerModal({
       // RPC `set_instance_owner` adicionada na migration 20260930000000.
       // Types.ts ainda não regen (bloqueio MCP) — cast explícito é seguro
       // porque o contrato é validado no backend (Etapa A).
-      const rpc = supabase.rpc as unknown as (
+      // `.bind(supabase)` é obrigatório: `const rpc = supabase.rpc` destaca o
+      // método e supabase-js lê `this.rest` — sem receiver estoura
+      // `Cannot read properties of undefined (reading 'rest')` antes da rede.
+      const rpc = supabase.rpc.bind(supabase) as unknown as (
         fn: string,
         args: Record<string, unknown>,
       ) => Promise<{ data: unknown; error: unknown }>;

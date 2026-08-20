@@ -100,7 +100,13 @@ async function fetchChipInstanceIds(
   organizationId: string,
   instanceId: string,
 ): Promise<readonly string[]> {
-  const rpc = supabase.rpc as unknown as ChipInstanceIdsRpc;
+  // `.bind(supabase)` NÃO é cerimônia: `const rpc = supabase.rpc` DESTACA o
+  // método, e supabase-js lê `this.rest` lá dentro. Sem receiver isso estoura
+  // `TypeError: Cannot read properties of undefined (reading 'rest')` ANTES de
+  // qualquer rede — e como esta resolução engole o próprio erro, o sintoma não
+  // era exceção nenhuma: era a thread degradar em silêncio para a instância
+  // viva. Medido em produção (2026-08-20) no console de /chat.
+  const rpc = supabase.rpc.bind(supabase) as unknown as ChipInstanceIdsRpc;
   const { data, error } = await rpc("whatsapp_chip_instance_ids", {
     p_org: organizationId,
     p_instance: instanceId,

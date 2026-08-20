@@ -11,7 +11,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const rpc = vi.fn();
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { rpc: (...args: unknown[]) => rpc(...args) },
+  supabase: {
+    // `rest` e o método (não arrow property) existem por um motivo: supabase-js
+    // lê `this.rest` dentro de `rpc()`. Um mock com arrow property PASSA mesmo
+    // com o método destacado — foi exatamente assim que o bug de receiver
+    // chegou em produção com teste verde. Aqui, destacar estoura igual ao real.
+    rest: { marker: true },
+    rpc(this: unknown, fn: string, args: unknown) {
+      if (!(this as { rest?: unknown } | undefined)?.rest) {
+        throw new TypeError(
+          "Cannot read properties of undefined (reading 'rest')",
+        );
+      }
+      return rpc(fn, args);
+    },
+  },
 }));
 
 const { resolveChipInstanceIds, invalidateChipInstanceIds, clearChipInstanceIdsCache } =
@@ -60,6 +74,18 @@ describe("invalidateChipInstanceIds", () => {
 
     await resolveChipInstanceIds(ORG, LIVE);
     expect(rpc).toHaveBeenCalledTimes(3);
+  });
+
+  it("chama a RPC COM receiver — método destacado estourava antes da rede", async () => {
+    rpc.mockResolvedValue({ data: [LAPIDE], error: null });
+
+    // Com `const rpc = supabase.rpc` (sem bind) isto devolvia [LIVE]: o
+    // TypeError caía no catch e degradava em silêncio. Era o bug de produção.
+    expect(await resolveChipInstanceIds(ORG, LIVE)).toEqual([LIVE, LAPIDE]);
+    expect(rpc).toHaveBeenCalledWith("whatsapp_chip_instance_ids", {
+      p_org: ORG,
+      p_instance: LIVE,
+    });
   });
 
   it("argumento nulo é no-op, não estoura", () => {
