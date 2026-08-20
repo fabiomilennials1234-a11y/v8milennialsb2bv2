@@ -121,14 +121,17 @@ export function ChatComposer({
       // mensagem duplicada no inbox.
       if (!orgId || !messageId) return;
 
-      const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
       const optionsText = menu.opcoes.map((c) => `• ${c.title}`).join("\n");
 
       await supabase.from("whatsapp_messages").upsert({
         organization_id: orgId,
         instance_id: instanceId,
         message_id: messageId,
-        remote_jid: `${formattedNumber}@s.whatsapp.net`,
+        // ⚠️ `formatPhoneForWhatsApp` e NÃO um `replace` de não-dígitos: ela
+        // normaliza DDI e o nono dígito. Trocá-la por algo mais simples só para
+        // evitar uma aresta no dep-cruiser produziria JID errado — e mensagem
+        // gravada na conversa errada.
+        remote_jid: `${formatPhoneForWhatsApp(phoneNumber)}@s.whatsapp.net`,
         phone_number: phoneNumber,
         direction: "outgoing",
         message_type: menu.tipo === "button" ? "button" : "list",
