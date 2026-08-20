@@ -5,6 +5,7 @@ import {
   periodoAnterior,
   periodoAtual,
   type StudioPeriod,
+  type StudioRange,
 } from "@/modules/analytics/lib/metrics-studio-period";
 import { headValueFromMeasure, type MetricSeriesPoint } from "@/modules/analytics/lib/tv-series";
 
@@ -44,12 +45,19 @@ export function useMetricWindowData(
   metric: EngineMetric,
   corte: MetricRecorte,
   period: StudioPeriod,
+  range?: StudioRange | null,
 ): MetricWindowData {
   // `hoje` fica fora do useMemo de propósito: recalcular a cada render é
   // barato, e congelar a data numa aba aberta o dia inteiro faria a janela
   // continuar mostrando ontem.
-  const atual = periodoAtual(period);
-  const anterior = periodoAnterior(period);
+  //
+  // `custom` sem intervalo levanta erro nas duas funções (SCRUM-313). A página
+  // só troca para `custom` depois que as duas pontas foram escolhidas, então o
+  // caminho não é alcançável pela UI — mas se alguém chamar este hook direto
+  // sem o intervalo, é melhor estourar aqui do que medir um período que o
+  // usuário não pediu.
+  const atual = periodoAtual(period, undefined, range);
+  const anterior = periodoAnterior(period, undefined, range);
 
   const principal = useMetricMeasure({
     measureRef: metric.measureRef,

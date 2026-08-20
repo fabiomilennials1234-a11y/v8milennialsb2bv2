@@ -21,14 +21,38 @@
 
 import type { MetricPeriod } from "@/modules/analytics/hooks/useMetricMeasure";
 
-export type StudioPeriod = "today" | "week" | "month" | "quarter";
+export type StudioPeriod = "today" | "week" | "month" | "quarter" | "custom";
 
 export const STUDIO_PERIODS: { key: StudioPeriod; label: string }[] = [
   { key: "today", label: "Hoje" },
   { key: "week", label: "Semana" },
   { key: "month", label: "Mês" },
   { key: "quarter", label: "Trim." },
+  { key: "custom", label: "Escolher" },
 ];
+
+/**
+ * Intervalo escolhido pelo usuário (SCRUM-313).
+ *
+ * São DATAS DE CALENDÁRIO em `YYYY-MM-DD`, não instantes — mesma disciplina do
+ * resto do arquivo. O componente de seleção trabalha com `Date`; converta na
+ * borda com `isoDaData`, e nunca passe um instante adiante.
+ *
+ * 🔴 POR QUE NÃO COPIAMOS O COMANDO. `useCommandMetrics` monta o intervalo com
+ * `startOfUTCDay`/`endOfUTCDay` — fronteira calculada NO CLIENTE, em UTC. Para
+ * uma org em BRT isso desloca a virada do dia em 3 horas, que é exatamente o
+ * defeito já observado no "Hoje" do dashboard (contava por dia-UTC enquanto a
+ * lista mostrava BRT). Aqui as datas viajam cruas e `metric_period_bounds`
+ * recorta no servidor, na timezone da ORG. As duas telas devem parecer iguais
+ * ao usuário — não devem calcular igual.
+ */
+export interface StudioRange {
+  from: string;
+  to: string;
+}
+
+/** `Date` do seletor → data de calendário, sem passar por instante. */
+export const isoDaData = (d: Date): string => iso(d);
 
 /** O que os hooks precisam para chamar `fn_metric_measure`. */
 export interface EnginePeriod {
@@ -57,8 +81,35 @@ function menosMeses(d: Date, n: number): Date {
   return new Date(alvo.getFullYear(), alvo.getMonth(), Math.min(d.getDate(), ultimoDia));
 }
 
+/**
+ * Falha ALTA quando `custom` chega sem intervalo.
+ *
+ * Cair para "mês" seria pior que o erro: a janela mostraria um número plausível
+ * de um período que o usuário não pediu, e nada denunciaria. Quem chama garante
+ * o intervalo antes — a página só oferece `custom` com as duas pontas escolhidas.
+ */
+function exigeRange(range: StudioRange | null | undefined): StudioRange {
+  if (!range?.from || !range?.to) {
+    throw new Error(
+      "período personalizado sem intervalo: escolha as duas datas antes de medir",
+    );
+  }
+  return range;
+}
+
+/** Dias inteiros entre duas datas de calendário, inclusivo nas duas pontas. */
+function diasNoIntervalo(de: string, ate: string): number {
+  const a = new Date(`${de}T00:00:00`);
+  const b = new Date(`${ate}T00:00:00`);
+  return Math.round((b.getTime() - a.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+}
+
 /** Janela atual. `hoje` é injetável para o teste não depender do relógio. */
-export function periodoAtual(studio: StudioPeriod, hoje = new Date()): EnginePeriod {
+export function periodoAtual(
+  studio: StudioPeriod,
+  hoje = new Date(),
+  range?: StudioRange | null,
+): EnginePeriod {
   switch (studio) {
     case "today":
       return { period: "day", ref: iso(hoje), start: null, end: null };
@@ -73,6 +124,12 @@ export function periodoAtual(studio: StudioPeriod, hoje = new Date()): EnginePer
         start: iso(inicioDoTrimestre(hoje)),
         end: iso(hoje),
       };
+    case "custom": {
+      const r = exigeRange(range);
+      // As datas seguem CRUAS. Nenhum `startOf`/`endOf` aqui — ver o comentário
+      // de `StudioRange` sobre por que o Comando não serve de modelo neste ponto.
+      return { period: "range", ref: null, start: r.from, end: r.to };
+    }
   }
 }
 
@@ -84,7 +141,11 @@ export function periodoAtual(studio: StudioPeriod, hoje = new Date()): EnginePer
  * dias decorridos, para comparar "trimestre até aqui" com "trimestre anterior
  * até o mesmo ponto" — comparar 40 dias contra 90 diria que despencou.
  */
-export function periodoAnterior(studio: StudioPeriod, hoje = new Date()): EnginePeriod {
+export function periodoAnterior(
+  studio: StudioPeriod,
+  hoje = new Date(),
+  range?: StudioRange | null,
+): EnginePeriod {
   switch (studio) {
     case "today": {
       const ontem = new Date(hoje);
@@ -110,6 +171,25 @@ export function periodoAnterior(studio: StudioPeriod, hoje = new Date()): Engine
       );
       const fimAnterior = new Date(inicioAnterior);
       fimAnterior.setDate(fimAnterior.getDate() + decorridos);
+      return {
+        period: "range",
+        ref: null,
+        start: iso(inicioAnterior),
+        end: iso(fimAnterior),
+      };
+    }
+    case "custom": {
+      const r = exigeRange(range);
+      const dias = diasNoIntervalo(r.from, r.to);
+      // O anterior equivalente são os MESMOS N dias imediatamente antes do
+      // início — encostado, sem sobrepor. Um intervalo de 1 a 10 de agosto
+      // compara com 22 a 31 de julho, não com julho inteiro: comparar 10 dias
+      // contra 31 diria que despencou.
+      const inicio = new Date(`${r.from}T00:00:00`);
+      const fimAnterior = new Date(inicio);
+      fimAnterior.setDate(fimAnterior.getDate() - 1);
+      const inicioAnterior = new Date(fimAnterior);
+      inicioAnterior.setDate(inicioAnterior.getDate() - (dias - 1));
       return {
         period: "range",
         ref: null,
