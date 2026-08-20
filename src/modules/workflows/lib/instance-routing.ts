@@ -109,6 +109,22 @@ export function instanceRoutingLabel(policy: InstanceRoutingPolicy): string {
 const LEGACY_PROVIDERS = ["uazapi", "evolution"];
 
 /**
+ * Os provedores que o operador pode NOMEAR no nó (issue #1690). Espelha
+ * `PINNABLE_PROVIDERS` do backend.
+ *
+ * A diferença entre esta lista e `LEGACY_PROVIDERS` é o assunto inteiro do
+ * #1690: o canal oficial pode ser escolhido à mão, e não pode ser escolhido
+ * pela regra. Por isso são dois predicados e não um com parâmetro — um
+ * predicado só convidaria a usar o mesmo nos dois lugares.
+ */
+const PINNABLE_PROVIDERS = [...LEGACY_PROVIDERS, "notificame"];
+
+/** Canal oficial (Meta via NotificaMe). Só para rotular a opção na tela. */
+export function isOfficialChannel(inst: { provider?: string | null }): boolean {
+  return String(inst.provider) === "notificame";
+}
+
+/**
  * Uma Instance é elegível ao roteamento quando está conectada, sem sessão
  * morta e não é Meta. Mesma definição de `isInstanceLive` em
  * `supabase/functions/_shared/instance-routing.ts`: se o painel e o envio
@@ -120,11 +136,35 @@ export function isRoutableInstance(inst: {
   session_dead_since?: string | null;
   provider?: string | null;
 }): boolean {
+  return isLive(inst) && LEGACY_PROVIDERS.includes(String(inst.provider));
+}
+
+/** Vivacidade pura — saúde de sessão, sem opinião sobre provedor. */
+function isLive(inst: { status?: string | null; session_dead_since?: string | null }): boolean {
   return (
     (inst.status === "connected" || inst.status === "open") &&
-    inst.session_dead_since == null &&
-    LEGACY_PROVIDERS.includes(String(inst.provider))
+    inst.session_dead_since == null
   );
+}
+
+/**
+ * **Nomeável** = viva e de provedor que o degrau 1 do backend aceita.
+ *
+ * Mais larga que `isRoutableInstance` de propósito: o canal oficial aparece na
+ * lista de "Número de saída" e NÃO conta para o atalho de "uma Instance viva
+ * só" nem pode ser recuo. Espelha o degrau 1 de `resolveRoutedInstance`, que é
+ * o único que chama `loadInstance` com `PINNABLE_PROVIDERS`.
+ *
+ * ⚠️ Não troque `isRoutableInstance` por esta nos contadores. Na Chique isso
+ * levaria a contagem de 1 para 2, o atalho deixaria de disparar e os 18 nós de
+ * pin morto dela parariam de enviar.
+ */
+export function isPinnableInstance(inst: {
+  status?: string | null;
+  session_dead_since?: string | null;
+  provider?: string | null;
+}): boolean {
+  return isLive(inst) && PINNABLE_PROVIDERS.includes(String(inst.provider));
 }
 
 function isPolicy(value: unknown): value is InstanceRoutingPolicy {

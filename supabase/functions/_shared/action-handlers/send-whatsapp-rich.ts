@@ -207,6 +207,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
       phone,
       messageType: menuType,
@@ -301,6 +302,7 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
       phone,
       messageType: "pix_button",

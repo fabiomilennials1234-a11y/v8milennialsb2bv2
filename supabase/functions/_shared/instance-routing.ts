@@ -12,6 +12,7 @@
  *
  * Ordem:
  *   1. `fixed`        → a Instance nomeada no nó. Fim, sem substituição.
+ *                       Único degrau que alcança o canal oficial (#1690).
  *   2. org com uma Instance viva só → é ela, antes de resolver qualquer coisa.
  *      Não é substituição: não existe outro número para o qual trocar.
  *   3. `responsible`  → a Instance vinculada ao responsável pelo Lead.
@@ -43,6 +44,17 @@ const CONNECTED = ["open", "connected"];
 export const LEGACY_PROVIDERS = ["uazapi", "evolution"];
 
 /**
+ * Os provedores que um nó pode **nomear** (issue #1690).
+ *
+ * Maior que `LEGACY_PROVIDERS` em exatamente um degrau — o primeiro, onde o
+ * operador escreveu o id do número no nó. Nos degraus em que a REGRA escolhe
+ * (o atalho de uma Instance viva só, `conversation`, `responsible` e o recuo
+ * declarado) vale `LEGACY_PROVIDERS`, e a diferença é deliberada: ver o bloco
+ * "Por que o canal oficial só entra no degrau 1" em `resolveRoutedInstance`.
+ */
+export const PINNABLE_PROVIDERS = [...LEGACY_PROVIDERS, "notificame"];
+
+/**
  * A linha de `whatsapp_instances` que o provider precisa, mais o que a regra lê.
  *
  * `organization_id` e o estreitamento de `provider` estão aqui porque a Instance
@@ -53,6 +65,13 @@ export const LEGACY_PROVIDERS = ["uazapi", "evolution"];
  * `select("*")` filtrado por `organization_id` e por `provider IN (LEGACY_PROVIDERS)`,
  * então a coluna sempre veio preenchida e o provedor sempre foi um dos legados.
  * O tipo é que omitia.
+ *
+ * ⚠️ ESTE ESTREITAMENTO NÃO É O PORTÃO, e a issue #1690 o leu como se fosse.
+ * Alargá-lo não produz um único erro de compilação: os onze pontos de envio
+ * entregam a linha a helpers tipados como `WhatsAppInstance`, cujo `provider`
+ * já inclui `notificame`, e ninguém faz `switch` exaustivo sobre este campo.
+ * O portão é o filtro `.in("provider", …)` nas duas consultas abaixo. Mexer no
+ * tipo é descrever; mexer no filtro é decidir — e o compilador fica calado.
  */
 export interface RoutedInstance {
   id: string;
@@ -60,7 +79,7 @@ export interface RoutedInstance {
   instance_name: string;
   status: string | null;
   session_dead_since: string | null;
-  provider: "evolution" | "uazapi";
+  provider: "evolution" | "uazapi" | "notificame";
   [column: string]: unknown;
 }
 
@@ -166,9 +185,32 @@ export async function resolveRoutedInstance(
   // número vivo só apontavam para instâncias inexistentes — Basic4u (35),
   // Itatex (6), SC Beauty (3). Falhar todas por causa de um id obsoleto é pior
   // do que usar o único número que a organização tem.
+  //
+  // ── Por que o canal oficial só entra no degrau 1 (issue #1690) ───────────
+  // Aqui o número foi NOMEADO por uma pessoa, e é o único degrau em que isso é
+  // verdade. Nos outros a regra escolhe sozinha, e deixar o canal oficial ser
+  // escolhido sozinho quebraria duas coisas de uma vez:
+  //
+  //  1. A janela de 24 horas. Fora dela a Meta recusa texto livre, e a recusa
+  //     chega por callback — depois de o operador ver "enviado". A válvula de
+  //     escape (o nó de template) ainda não está ligada: enquanto não estiver,
+  //     uma escolha automática pelo oficial é uma mensagem que some.
+  //  2. Os nós de pin morto. Medido em 2026-08-20: 63 nós ativos em 9
+  //     organizações apontam para instâncias que não existem mais, e NENHUM
+  //     declara recuo — todos sobrevivem só pelo degrau 2. A Chique é a única
+  //     org com canal oficial e tem 18 deles. Se o oficial entrasse em
+  //     `listRoutable`, ela passaria de uma Instance viva para duas, o atalho
+  //     deixaria de disparar, e os 18 parariam de enviar no dia do deploy.
+  //
+  // Por isso `PINNABLE_PROVIDERS` aqui e `LEGACY_PROVIDERS` em todo o resto.
   const pinnedId = str(node.whatsappInstanceId);
   if (policy === "fixed") {
-    const declared = await loadInstance(supabase, organizationId, pinnedId);
+    const declared = await loadInstance(
+      supabase,
+      organizationId,
+      pinnedId,
+      PINNABLE_PROVIDERS,
+    );
     if (declared) return checkLive(declared);
   }
 
@@ -299,6 +341,11 @@ async function loadInstance(
   supabase: SupabaseClient,
   organizationId: string,
   instanceId: string | null | undefined,
+  /**
+   * Quais provedores este degrau aceita. O default é o estreito de propósito:
+   * quem quiser alcançar o canal oficial precisa dizer, e só o degrau 1 diz.
+   */
+  providers: readonly string[] = LEGACY_PROVIDERS,
 ): Promise<RoutedInstance | null> {
   if (!instanceId) return null;
   const { data } = await supabase
@@ -306,7 +353,7 @@ async function loadInstance(
     .select("*")
     .eq("id", instanceId)
     .eq("organization_id", organizationId)
-    .in("provider", LEGACY_PROVIDERS)
+    .in("provider", providers)
     .maybeSingle();
   return (data as RoutedInstance) ?? null;
 }
