@@ -116,6 +116,55 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/** Todos os dígitos iguais: `00000000000000`, `11111111111`, etc. */
+function allSameDigit(digits: string): boolean {
+  return digits.length > 0 && digits.split("").every((d) => d === digits[0]);
+}
+
+/**
+ * CNPJ/CPF só quando é documento de verdade; caso contrário, null.
+ *
+ * 🔴 O cadastro do Toth usa `00000000000000` como preenchimento para cliente sem
+ * documento — dois dos quatro registros da primeira amostra vieram assim. E o
+ * CNPJ é a **chave de casamento** da carteira: aceitar o zerado faria o primeiro
+ * cliente sem documento ser criado e todos os outros serem "enriquecidos" nele,
+ * colapsando centenas de clientes distintos num só, cada um sobrescrevendo o
+ * anterior. Perda de dado sem erro nenhum na tela.
+ *
+ * Exige 11 (CPF) ou 14 (CNPJ) dígitos e recusa repetição uniforme. Não valida
+ * dígito verificador de propósito: o objetivo é impedir que placeholder vire
+ * chave, não auditar a Receita — e um documento com DV errado ainda identifica o
+ * cliente de forma única, que é o que a carteira precisa.
+ */
+export function sanitizeDocument(value: unknown): string | null {
+  const digits = digitsOnly(value);
+  if (!digits) return null;
+  if (digits.length !== 11 && digits.length !== 14) return null;
+  if (allSameDigit(digits)) return null;
+  return digits;
+}
+
+/**
+ * Telefone só quando não é preenchimento.
+ *
+ * `48900000000` apareceu na primeira amostra: DDD real seguido de zeros. Importa
+ * porque o telefone decide a **adoção de conversas órfãs** — um número
+ * placeholder repetido em vários clientes puxaria as mesmas mensagens para todos
+ * eles.
+ */
+export function sanitizePhone(value: unknown): string | null {
+  const digits = digitsOnly(value);
+  if (!digits) return null;
+  if (digits.length < 10) return null;
+
+  // Julga os ÚLTIMOS 8 dígitos — o número base, sem DDD e sem o 9 de celular.
+  // Uma primeira versão olhava tudo depois do DDD e deixava `48900000000`
+  // passar: o "9" de celular quebra a repetição e o zero fica escondido atrás
+  // dele. Telefone real com oito dígitos idênticos no fim não existe na prática.
+  if (allSameDigit(digits.slice(-8))) return null;
+  return digits;
+}
+
 /**
  * Converte data do Toth em ISO (`aaaa-mm-dd`). Aceita os DOIS formatos que a
  * mesma API usa: `dd/mm/aaaa` no financeiro, `aaaa-mm-dd` no cadastro. Devolve
@@ -322,14 +371,16 @@ export function pickEmail(row: Record<string, unknown>): string | null {
  */
 export function pickPhone(row: Record<string, unknown>): string | null {
   const list = pickField(row, ["telefones"]);
-  if (!Array.isArray(list)) return digitsOnly(pickField(row, ["telefone", "fone", "celular"]));
+  if (!Array.isArray(list)) return sanitizePhone(pickField(row, ["telefone", "fone", "celular"]));
 
   const entries = list.filter(isRecord);
   const compose = (entry: Record<string, unknown>): string | null => {
     const area = digitsOnly(pickField(entry, ["prefixoArea", "ddd"])) ?? "";
     const number = digitsOnly(pickField(entry, ["numero", "telefone", "fone"]));
     if (!number) return null;
-    return `${area}${number}`;
+    // Valida o número JÁ MONTADO: o preenchimento do ERP (`0000-0000`) só se
+    // revela depois de juntar DDD e número.
+    return sanitizePhone(`${area}${number}`);
   };
 
   const whatsapp = entries.find(
@@ -373,7 +424,7 @@ export function mapTothClienteToCanonical(row: Record<string, unknown>): Canonic
   return {
     externalId,
     externalRef: null,
-    cnpj: digitsOnly(pickField(row, CNPJ_FIELDS)),
+    cnpj: sanitizeDocument(pickField(row, CNPJ_FIELDS)),
     // `name` é NOT NULL na carteira; sem nome, o id serve de rótulo.
     name: name ?? company ?? `Cliente ${externalId}`,
     company: company ?? null,

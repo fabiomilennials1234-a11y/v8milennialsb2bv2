@@ -439,7 +439,10 @@ export function TothSettings() {
                 className="h-8 w-24"
                 value={janela}
                 onChange={(e) => setJanela(e.target.value)}
-                placeholder="150"
+                // Sem número no placeholder. `placeholder="150"` fez a janela
+                // parecer configurada quando estava vazia, e a primeira carga
+                // rodou sem filtro nenhum sem que ninguém notasse.
+                placeholder="—"
               />
               <span className="text-xs text-muted-foreground">dias</span>
               <Button
@@ -452,10 +455,17 @@ export function TothSettings() {
                 {updateJanela.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
               </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Sem recorte, a carga traz o cadastro inteiro do ERP — histórico incluído. A janela é
-              o que separa carteira de lista de nomes.
-            </p>
+            {status?.clientes_dias_compras == null ? (
+              <p className="text-[11px] text-amber-500 leading-relaxed flex items-start gap-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                Sem janela definida: a carga traz o cadastro inteiro do ERP, histórico incluído.
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Só entra na carteira quem comprou nesse período. É o que separa carteira de lista
+                de nomes.
+              </p>
+            )}
           </div>
 
           {/* Sincronização — a ordem é parte da informação */}
