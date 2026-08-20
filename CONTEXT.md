@@ -122,6 +122,17 @@ Canonical terms used across the system. No implementation details here — this 
 
 ## Automation
 
+- **Workflow Execution**: One passage of a Lead through a Workflow. Carries the pointer to the node it is stopped at and survives restarts and deploys — a Workflow spanning days exists only as this persisted row, never as a live process. Distinct from the Workflow (the DAG definition, shared by all Leads) as an instance is from its class.
+
+- **Due**: The instant a Workflow Execution becomes eligible to run again (`next_run_at`). Distinct from **Started** (when the Execution was born) and from **Claimed** (when a worker took it). These three drift far apart: an Execution parked in a 7-day delay is Started long before it is Due. Ordering the queue by Started rather than Due is the classic error — it measures age, not need.
+
+- **Wait**: A Workflow Execution sleeping inside a delay or wait_response node, by design. **A Wait is not lateness.** Its duration is authored by the Organization and carries no signal about system health.
+
+- **Lag**: The elapsed time between **Due** and **Claimed** — how long an Execution that was ready to run sat unattended. **This is the only measure of customer-visible pain in the automation engine**, and the only one a Team Member perceives as "the automation didn't fire". Deliberately distinct from Wait (authored, healthy) and from total Execution duration (dominated by authored delays).
+
+- **Claim**: The act of a worker taking ownership of a batch of Due Executions, marking them so no other worker takes the same ones. A claim that is never released — because the worker died — must be reclaimable by timeout, or the Executions are stranded.
+
+
 - **Action Handler**: A function that executes a specific domain operation (move_stage, send_whatsapp, update_lead, etc.). Registered in a handler map and dispatched by the Workflow engine or Copilot.
 
 - **Template Variable**: A `{{...}}` placeholder in an outbound message template, resolved per-Lead at send time by the Workflow message resolver. Three families: **built-in** (`{{nome}}`, `{{empresa}}`, `{{ai_resumo}}`, …) mapped to Lead/Pipeline/AI attributes; **Custom Field** (`{{custom.<field_name>}}`) → the Lead's answer for that field, empty if unanswered; **Tag** (`{{tag.<tag_name>}}`) → the tag name itself **if the Lead carries that tag, else empty** (a conditional echo, not a value lookup). All unresolved/absent values render as empty string (no fallback). The authoring UI offers a picker that lists the Organization's real Custom Fields and Tags so the author clicks instead of typing the key.

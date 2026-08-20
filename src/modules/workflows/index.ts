@@ -101,6 +101,15 @@ export {
   type AuditLogFilter,
 } from "./hooks/useAutomationHealth";
 
+export {
+  useWorkflowLagByOrg,
+  useWorkflowLagByWorkflow,
+  useWorkflowPoolState,
+  formatLag,
+  lagSeverity,
+} from "./hooks/useWorkflowLag";
+export type { LagByOrg, LagByWorkflow, PoolState } from "./hooks/useWorkflowLag";
+
 // ────────────────────────────────────────────────────────────────────────
 // Server-side trigger (follow-up automation — chamada de pipelines/campaigns)
 // ────────────────────────────────────────────────────────────────────────
