@@ -378,3 +378,122 @@ describe("perna de volta", () => {
     expect(res.status).toBe(200);
     expect(state.mock!.getInserted("leads")).toHaveLength(0);
   });
+
+/**
+ * A PERNA DE VOLTA NO INSTAGRAM — issue #1692.
+ *
+ * Mesma perna, OUTRA CHAVE. Lá não existe telefone: o interlocutor é um
+ * identificador da plataforma, e quem destrava é a variante da RPC que recebe o
+ * LEAD direto. Ela só tem o que receber quando um humano já vinculou a conversa
+ * pelo botão que existe no chat.
+ *
+ * ⚠️ MEDIDO: 562 mensagens de Instagram recebidas em produção, ZERO com lead
+ * vinculado. Enquanto ninguém vincular, este caminho fica OCIOSO — e isso é o
+ * estado esperado, não defeito. É por isso que o caso do meio existe: ele fixa
+ * que a ausência de vínculo não aciona nada e não vira erro.
+ *
+ * O efeito observável É a chamada: destravar uma execução não deixa rastro em
+ * nenhuma tabela que este dublê veja.
+ */
+describe("perna de volta — Instagram", () => {
+  const CANAL_IG = "ig-channel-0001";
+  const IGSID = "igsid-cliente-777";
+  const LEAD = "11111111-2222-3333-4444-555555555555";
+
+  /** O corpo no formato que a doc do fornecedor sugere — nenhum evento real de
+   *  Instagram foi observado, então esta é a hipótese corrente, a mesma que
+   *  `notificame-webhook-inbound.test.ts` usa. */
+  const payloadInstagram = (over: Record<string, unknown> = {}) => ({
+    eventType: "MESSAGE",
+    direction: "IN",
+    channelId: CANAL_IG,
+    id: "mid-ig-001",
+    from: { id: IGSID, name: "Fulana", username: "@fulana" },
+    contents: [{ type: "text", text: "oi, tem em estoque?" }],
+    timestamp: "2026-08-20T18:04:00.000Z",
+    ...over,
+  });
+
+  const semearCanal = () => {
+    state.mock!.mockTable("messaging_channels", [{
+      id: "0f6a1f7e-2c11-4c2f-9a4a-8b7f6a1c3d21",
+      organization_id: ORG,
+      provider: "notificame",
+      channel_type: "instagram",
+      external_channel_id: CANAL_IG,
+      status: "connected",
+      handle: null,
+    }]);
+  };
+
+  const vincular = () => {
+    state.mock!.mockTable("lead_social_identities", [{
+      id: "aaaa1111-bbbb-2222-cccc-333344445555",
+      organization_id: ORG,
+      lead_id: LEAD,
+      channel_type: "instagram",
+      external_user_id: IGSID,
+    }]);
+  };
+
+  it("resposta em conversa VINCULADA destrava a espera, PELO LEAD", async () => {
+    semearCanal();
+    vincular();
+
+    const res = await post(payloadInstagram());
+    expect(res.status).toBe(200);
+
+    const chamada = state.mock!.getRpcCalls()
+      .find((c) => c.name === "resolve_wait_response");
+
+    expect(chamada, "o workflow nunca soube que o cliente respondeu no Direct").toBeDefined();
+    expect((chamada!.params as { p_lead_id?: string }).p_lead_id).toBe(LEAD);
+    expect((chamada!.params as { p_organization_id?: string }).p_organization_id).toBe(ORG);
+  });
+
+  it("conversa SEM lead vinculado não aciona NADA — e isso não é erro", async () => {
+    // O estado das 562 mensagens medidas em produção. O vínculo é manual e é
+    // pré-requisito; sem ele não há por qual chave resolver. A mensagem entra
+    // normalmente — o que não pode acontecer é o workflow ser acionado por uma
+    // conversa que ninguém disse a quem pertence.
+    semearCanal();
+    state.mock!.mockTable("lead_social_identities", []);
+
+    const res = await post(payloadInstagram());
+    expect(res.status).toBe(200);
+
+    const chamadas = state.mock!.getRpcCalls().map((c) => c.name);
+    expect(chamadas).not.toContain("resolve_wait_response");
+    // ⚠️ E MUITO MENOS pela chave de telefone: o identificador do Instagram tem
+    // 15 a 17 dígitos e `normalize_brazilian_phone` o devolve intacto — ele
+    // casaria com `leads.normalized_phone` e viraria alvo de disparo.
+    expect(chamadas).not.toContain("resolve_wait_response_by_phone");
+  });
+
+  it("mensagem de SAÍDA não aciona nada, mesmo em conversa vinculada", async () => {
+    // O que o vendedor responde pelo aplicativo do fornecedor entra como
+    // `outgoing`. Tratá-la como resposta do cliente destravaria o workflow com
+    // a NOSSA própria mensagem, e o prazo de espera se renovaria sozinho.
+    semearCanal();
+    vincular();
+
+    const res = await post(payloadInstagram({
+      direction: "OUT",
+      to: { id: IGSID },
+      from: { id: CANAL_IG },
+    }));
+    expect(res.status).toBe(200);
+
+    expect(state.mock!.getRpcCalls().map((c) => c.name))
+      .not.toContain("resolve_wait_response");
+  });
+
+  it("uma falha ao destravar NÃO derruba a gravação nem o 200", async () => {
+    semearCanal();
+    vincular();
+    state.mock!.mockRpc("resolve_wait_response", undefined);
+
+    const res = await post(payloadInstagram());
+    expect(res.status).toBe(200);
+  });
+});

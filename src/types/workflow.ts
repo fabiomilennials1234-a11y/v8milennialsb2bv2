@@ -413,9 +413,19 @@ export interface ActionNodeData {
   pixAmount?: number;
   pixMerchantName?: string;
   pixText?: string;
-  // Send Meta
-  metaChannel?: "instagram" | "facebook";
+  // Instagram Direct (`send_meta_message`)
+  //
+  // ⚠️ `metaChannel` é LEGADO da rota da Meta direta, que oferecia Messenger. O
+  // nó é do Instagram e só; a tela não o oferece mais e o executor recusa
+  // qualquer outro valor em vez de silenciosamente mandar pela caixa errada.
+  /** @deprecated O nó é Instagram-only. Ver `_shared/instagram-node.ts`. */
+  metaChannel?: "instagram";
   metaMessage?: string;
+  /** Texto, imagem, vídeo ou áudio. Documento e figurinha não existem no Direct. */
+  metaMessageType?: "texto" | "imagem" | "video" | "audio";
+  /** URL https PÚBLICA — quem baixa o arquivo é o fornecedor, não nós. */
+  metaMediaUrl?: string;
+  metaCaption?: string;
   // Semi-automático
   semiAutoMessage?: string;
   semiAutoApprover?: string;
@@ -840,7 +850,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_whatsapp_template: "Enviar Template WhatsApp",
   send_whatsapp_menu: "Enviar Menu Interativo (Uazapi)",
   send_whatsapp_pix_button: "Enviar Botão PIX (Uazapi)",
-  send_meta_message: "Enviar Mensagem Meta",
+  send_meta_message: "Enviar Mensagem no Instagram",
   send_semi_automatic: "Envio Semi-Automático",
   send_to_number: "Enviar p/ número fixo",
   // Lead Management

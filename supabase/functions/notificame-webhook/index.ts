@@ -1851,6 +1851,41 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       }
     }
 
+    // ── A MESMA PERNA, PELA OUTRA CHAVE — issue #1692 ─────────────────────
+    //
+    // No Instagram não existe telefone: o interlocutor é um identificador da
+    // plataforma. Quem destrava aqui é a variante da RPC que recebe o LEAD
+    // direto, e ela só tem o que receber quando um humano já vinculou a
+    // conversa pelo botão do chat.
+    //
+    // ⚠️ SEM VÍNCULO, NADA ACONTECE — e isso NÃO é erro. Medido: 562 mensagens
+    // de Instagram recebidas em produção, ZERO com lead vinculado. Enquanto
+    // ninguém vincular, este caminho fica ocioso, que é o estado esperado; um
+    // `console.warn` aqui encheria o log de ruído sobre uma conversa que só
+    // ainda não tem dono. Quem decide isso é `notificame-reacoes.ts`, que
+    // devolve `resolverEsperaPorLead: null` nesse caso.
+    //
+    // ⚠️ E o identificador do Instagram NUNCA chega como telefone: a regra pura
+    // o descarta, porque `normalize_brazilian_phone` devolve 16 dígitos
+    // INTACTOS e ele casaria com `leads.normalized_phone`.
+    //
+    // BEST-EFFORT como a irmã de cima: falhar ao acionar não pode custar a
+    // gravação da mensagem nem o 200 que o fornecedor espera.
+    if (reacoes.resolverEsperaPorLead) {
+      try {
+        await admin.rpc("resolve_wait_response", {
+          p_lead_id: reacoes.resolverEsperaPorLead,
+          p_organization_id: organizationId,
+          p_channel: "instagram",
+        });
+      } catch (err) {
+        console.warn(
+          `[${FUNCTION_NAME}] resolve_wait_response falhou:`,
+          (err as Error)?.message,
+        );
+      }
+    }
+
     // (d) BACKFILL do handle da NOSSA conta. BEST-EFFORT: `buildMessagingChannelRow`
     // deixou a coluna NULL porque `GET /v1/channels` não devolve o @usuário, e o
     // evento de entrada é a primeira chance de saber. `handle IS NULL` no predicado
