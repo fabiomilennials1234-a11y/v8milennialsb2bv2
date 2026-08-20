@@ -96,7 +96,7 @@ Deno.serve(
       }
 
       // ── Mode: default — process pending executions ──
-      const stats = { claimed: 0, completed: 0, failed: 0, paused: 0, skipped_plan: 0 };
+      const stats = { claimed: 0, completed: 0, failed: 0, paused: 0, cancelled: 0, skipped_plan: 0 };
 
       // 1. Claim batch
       const { data: executions, error: claimError } = await supabase.rpc("claim_workflow_executions", {
@@ -186,7 +186,7 @@ async function orgAutomationsAllowed(
 async function processExecution(
   supabase: ReturnType<typeof createClient>,
   execution: Record<string, unknown>,
-  stats: { claimed: number; completed: number; failed: number; paused: number; skipped_plan: number },
+  stats: { claimed: number; completed: number; failed: number; paused: number; cancelled: number; skipped_plan: number },
   planGateCache: Map<string, boolean>,
 ): Promise<void> {
   const executionId = execution.id as string;
@@ -283,12 +283,45 @@ async function processExecution(
       context,
       currentNodeId,
       loopCounters,
+      // Agendamento ORIGINAL da linha (a RPC de claim faz RETURNING pós-UPDATE
+      // e não toca next_run_at). O nó de janela usa isto para saber se o resume
+      // está vencido e expirar em vez de enviar fora de contexto.
+      nextRunAt: execution.next_run_at as string | null,
     });
 
     if (result.success) {
       if (result.status === "paused" || result.status === "waiting_response") {
         stats.paused++;
         if (jobId) await finishJob(supabase, jobId);
+      } else if (result.status === "cancelled") {
+        // Expiração deliberada: a execução terminou SEM enviar. Contar isso como
+        // `completed` era mentira em duas superfícies ao mesmo tempo — a stat do
+        // batch e o `automation_jobs`, que viraria "success". Como
+        // `useAutomationHealth` só alerta em `failed`, um backlog inteiro
+        // expirando ficaria invisível em todo lugar.
+        //
+        // `failJob` também não serve: aplica backoff e incrementa `retry_count`,
+        // e ao estourar `max_retries` manda para `dead_letter` — retentar uma
+        // expiração deliberada é justamente o que não pode acontecer. Por isso
+        // `finishJob` (o job de fato rodou até o fim, sem erro) mais uma stat
+        // própria, que é o sinal honesto para quem observa o batch.
+        stats.cancelled++;
+        if (jobId) await finishJob(supabase, jobId);
+        console.log(
+          `[process-workflow-executions] Execution ${executionId} expirou sem enviar: ${result.error}`,
+        );
+        await logRuntime({
+          organizationId,
+          module: "workflow",
+          action: `expire:${workflow.name || workflowId}`,
+          // `logRuntime` aceita success|error|skipped. `skipped` é o honesto: a
+          // execução não falhou, ela deliberadamente não enviou.
+          status: "skipped",
+          errorMessage: result.error,
+          entityType: "lead",
+          entityId: leadId,
+          payloadSnapshot: { execution_id: executionId, status: result.status },
+        });
       } else {
         stats.completed++;
         if (jobId) await finishJob(supabase, jobId);
@@ -322,6 +355,26 @@ async function processExecution(
       });
 
       checkWorkflowFailureAlert(supabase, workflowId, organizationId, workflow.name || workflowId).catch(() => {});
+
+      // ── Backstop de estado ────────────────────────────────────────────────
+      // Impede que QUALQUER `success:false` — deste nó ou de um nó futuro —
+      // volte a deixar a linha em `processing` para sempre. Foi assim que 77
+      // execuções da Chique consumiram as 5 vagas de `per_org_cap` por ciclo e
+      // mataram de fome a org inteira.
+      //
+      // `.eq("status","processing")` é a guarda de idempotência: a RPC de claim
+      // carimba a linha como `processing`, e qualquer escrita do executor tira
+      // a linha desse estado. Logo o backstop só dispara quando ninguém
+      // escreveu; se o executor já gravou (com current_node_id, loop_counters e
+      // erro específico), o predicado erra e a linha mais rica dele sobrevive.
+      // Uma statement, sem read-then-write, sem TOCTOU.
+      await supabase.from("workflow_executions").update({
+        status: "failed",
+        error: result.error || "Executor returned failure without writing a terminal row",
+        completed_at: new Date().toISOString(),
+      })
+        .eq("id", executionId)
+        .eq("status", "processing");
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
