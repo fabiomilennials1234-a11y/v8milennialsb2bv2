@@ -29,20 +29,39 @@ import { AddToFunilMenuItem, AddToFunilDialog } from "./AddToFunilDialog";
 
 // ─── Origin Colors (unified across all funnels) ──────────
 
+/**
+ * Cor da pílula de origem.
+ *
+ * 🔴 Era um mapa de 12 pastéis de TEMA CLARO em hex (#E1F5EE, #EEEDFE, …)
+ * aplicado por `style` inline. Inline vence qualquer `dark:`, então no tema
+ * escuro cada pílula virava uma ilha quase branca dentro do card — e este é
+ * o card do funil, a tela em obra.
+ *
+ * Agora cada origem guarda só o MATIZ. O fundo é uma tinta translúcida (14%),
+ * que assenta sobre qualquer superfície; a tinta do texto sai de
+ * `--origin-ink-l`, um token que vale ~34% no claro e ~74% no escuro. Um
+ * token, dois temas, e cada origem mantém a identidade de cor que tinha.
+ */
+const origem = (h: number, s: number, label: string) => ({
+  bg: `hsl(${h} ${s}% 50% / 0.14)`,
+  text: `hsl(${h} ${s}% var(--origin-ink-l))`,
+  label,
+});
+
 export const ORIGIN_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  whatsapp:        { bg: "#E1F5EE", text: "#0F6E56", label: "WhatsApp" },
-  meta_ads:        { bg: "#EEEDFE", text: "#534AB7", label: "Meta Ads" },
-  instagram:       { bg: "#FDEEF4", text: "#C2185B", label: "Instagram" },
+  whatsapp:        origem(162, 60, "WhatsApp"),
+  meta_ads:        origem(246, 48, "Meta Ads"),
+  instagram:       origem(333, 62, "Instagram"),
   tiktok:          { bg: "hsl(var(--muted))", text: "hsl(var(--muted-foreground))", label: "Tiktok" },
-  google_ads:      { bg: "#FCEBEB", text: "#A32D2D", label: "Google Ads" },
-  site:            { bg: "#E6F1FB", text: "#185FA5", label: "Site" },
-  landing_page:    { bg: "#E0F2FE", text: "#0369A1", label: "Landing Page" },
-  remarketing:     { bg: "#FFF3E0", text: "#B35C00", label: "Remarketing" },
-  indicacao:       { bg: "#EAF3DE", text: "#3B6D11", label: "Indicação" },
-  evento:          { bg: "#F3E8FF", text: "#6D28D9", label: "Evento" },
-  prospeccao_ativa:{ bg: "#FFF7ED", text: "#C2410C", label: "Prospecção Ativa" },
-  cal:             { bg: "#F3E8FF", text: "#7C3AED", label: "Cal.com" },
-  outro:           { bg: "#F1EFE8", text: "#5F5E5A", label: "Outros" },
+  google_ads:      origem(0, 55, "Google Ads"),
+  site:            origem(209, 62, "Site"),
+  landing_page:    origem(201, 70, "Landing Page"),
+  remarketing:     origem(31, 75, "Remarketing"),
+  indicacao:       origem(89, 58, "Indicação"),
+  evento:          origem(263, 62, "Evento"),
+  prospeccao_ativa:origem(20, 72, "Prospecção Ativa"),
+  cal:             origem(263, 70, "Cal.com"),
+  outro:           origem(45, 6, "Outros"),
 };
 
 const URGENCY_COLORS: Record<string, { label: string; className: string }> = {
