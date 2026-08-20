@@ -135,8 +135,51 @@ export type ParametroDeMidia =
   | { type: "document"; document: { link: string } };
 
 export interface ComponenteDeEnvio {
-  type: "header" | "body";
+  type: "header" | "body" | "button";
+  /** Só em `button`: qual espécie de botão recebe o parâmetro. */
+  sub_type?: "url" | "quick_reply";
+  /** Só em `button`: a POSIÇÃO do botão dentro do componente BUTTONS, em texto. */
+  index?: string;
   parameters: Array<ParametroDeTexto | ParametroDeMidia>;
+}
+
+/**
+ * Os botões de um template que carregam parte variável.
+ *
+ * ⚠️ Os `{{n}}` de um botão são INDEPENDENTES dos do corpo — cada botão recomeça
+ * em `{{1}}`. É por isso que o valor vem num mapa próprio, indexado pela POSIÇÃO
+ * do botão: reaproveitar o mapa do corpo entregaria o nome do cliente como
+ * número de pedido, e a Meta aceitaria sem reclamar.
+ */
+/** Os botões do template, na ordem — para mostrar antes de enviar. */
+export function rotulosDosBotoes(template: NotificameTemplate): string[] {
+  const componente = template.components?.find(
+    (c) => (c.type ?? "").toUpperCase() === "BUTTONS",
+  );
+  const botoes = Array.isArray(componente?.buttons) ? componente!.buttons : [];
+
+  return botoes
+    .map((b) => ((b ?? {}) as { text?: string }).text?.trim() ?? "")
+    .filter((t) => t !== "");
+}
+
+export function botoesComVariavel(
+  template: NotificameTemplate,
+): Array<{ index: number; texto: string }> {
+  const componente = template.components?.find(
+    (c) => (c.type ?? "").toUpperCase() === "BUTTONS",
+  );
+  const botoes = Array.isArray(componente?.buttons) ? componente!.buttons : [];
+
+  return botoes
+    .map((b, index) => {
+      const x = (b ?? {}) as { type?: string; text?: string; url?: string };
+      const temVariavel = /\{\{\s*\d+\s*\}\}/.test(x.url ?? "");
+      return (x.type ?? "").toUpperCase() === "URL" && temVariavel
+        ? { index, texto: (x.text ?? "").trim() }
+        : null;
+    })
+    .filter((x): x is { index: number; texto: string } => x !== null);
 }
 
 /**
@@ -156,6 +199,8 @@ export function montarComponentesDeEnvio(
   valores: Record<string, string>,
   /** URL pública do arquivo, quando o cabeçalho é de mídia. */
   midiaDoCabecalho?: string | null,
+  /** Valor da parte variável de cada botão de link, pela POSIÇÃO do botão. */
+  valoresDosBotoes?: Record<number, string>,
 ): ComponenteDeEnvio[] {
   const vars = variaveisDoTemplate(template);
   const out: ComponenteDeEnvio[] = [];
@@ -181,6 +226,22 @@ export function montarComponentesDeEnvio(
     out.push({ type: "body", parameters: parametrosDe(vars.body) });
   }
 
+
+  // BOTÕES. Só o que tem variável viaja — um componente para um botão estático
+  // é parâmetro a mais, e a Meta recusa por contagem.
+  for (const botao of botoesComVariavel(template)) {
+    const valor = (valoresDosBotoes?.[botao.index] ?? "").trim();
+    if (!valor) continue;
+    out.push({
+      type: "button",
+      sub_type: "url",
+      // `index` é STRING no envelope da Meta, e é a posição dentro de BUTTONS —
+      // não a ordem em que a tela desenhou.
+      index: String(botao.index),
+      parameters: [{ type: "text", text: valor }],
+    });
+  }
+
   return out;
 }
 
@@ -203,8 +264,19 @@ export function pendenciasDeEnvio(
   template: NotificameTemplate,
   valores: Record<string, string>,
   midiaDoCabecalho?: string | null,
+  valoresDosBotoes?: Record<number, string>,
 ): string[] {
   const faltas = variaveisFaltando(template, valores).map((t) => `{{${t}}}`);
+
+  // A parte variável do link não é `{{n}}` de texto nenhum — não aparece no
+  // corpo nem no cabeçalho —, então `variaveisFaltando` sozinha a deixa passar.
+  // É a mesma armadilha da mídia de cabeçalho, e o mesmo desfecho: recusa por
+  // callback, depois de o vendedor achar que mandou.
+  for (const botao of botoesComVariavel(template)) {
+    if (!(valoresDosBotoes?.[botao.index] ?? "").trim()) {
+      faltas.push(`link do botão "${botao.texto}"`);
+    }
+  }
   const formato = formatoDeMidiaDoCabecalho(template);
   if (formato && !midiaDoCabecalho?.trim()) {
     faltas.unshift(

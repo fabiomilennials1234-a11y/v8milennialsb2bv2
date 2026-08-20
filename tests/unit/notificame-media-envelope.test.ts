@@ -152,11 +152,39 @@ describe("recusas que já valiam e seguem valendo", () => {
     ).toThrow();
   });
 
-  it("sticker não é suportado", () => {
-    expect(() =>
+  /**
+   * STICKER — o `NotSupportedError` aqui nasceu de uma afirmação FALSA.
+   *
+   * O comentário do provider dizia "o canal oficial não tem figurinha" e que
+   * mapeá-la seria adivinhar. A doc corrente do fornecedor tem uma seção inteira
+   * chamada "Enviar um sticker", com envelope próprio:
+   *
+   *   { type:"file", fileMimeType:"sticker", fileUrl, fileCaption:"Sticker" }
+   *
+   * Não há nada a adivinhar: o campo existe e tem nome. É a mesma armadilha de
+   * 2026-08-13, quando uma leitura do host desatualizado declarou inexistente o
+   * endpoint de criação de subconta — ausência de evidência virou evidência de
+   * ausência, e a asserção negativa entrou no código com ar de fato.
+   */
+  it("sticker vai no envelope de arquivo, com o mime que o fornecedor nomeia", () => {
+    expect(
       toNotificameMediaContent(
         { number: "5511999999999", type: "sticker", file: URL_OK },
         "whatsapp",
+      ),
+    ).toEqual({
+      type: "file",
+      fileMimeType: "sticker",
+      fileUrl: URL_OK,
+      fileCaption: "Sticker",
+    });
+  });
+
+  it("sticker continua fora do Instagram — lá a doc não o traz", () => {
+    expect(() =>
+      toNotificameMediaContent(
+        { number: "17841400000000000", type: "sticker", file: URL_OK },
+        "instagram",
       )
     ).toThrow();
   });

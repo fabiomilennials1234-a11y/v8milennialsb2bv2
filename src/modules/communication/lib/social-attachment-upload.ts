@@ -36,8 +36,15 @@ export async function uploadSocialAttachment(
   // O Direct não aceita documento; o WhatsApp oficial aceita — e usa o MESMO
   // composer. Recusar antes do upload poupa o storage e devolve a razão na hora,
   // em vez da recusa muda do fornecedor (ou da Meta, por callback) depois.
+  // WebP no canal oficial é FIGURINHA. É o formato exclusivo de figurinha do
+  // WhatsApp — quem manda um .webp está mandando uma, e tratá-lo como imagem
+  // comum entregaria um quadrado com fundo branco no lugar do que o vendedor
+  // escolheu. No Instagram continua sendo imagem: lá figurinha não existe.
+  const ehFigurinha = canal === "whatsapp_oficial" && /^image\/webp$/i.test(file.type);
+
   const check = classifyAttachment(file.type, file.name, file.size, {
     allowDocument: canal === "whatsapp_oficial",
+    sticker: ehFigurinha,
     canal,
   });
   if (!check.ok) throw new Error(check.error);

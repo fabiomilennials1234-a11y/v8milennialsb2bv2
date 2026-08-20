@@ -441,3 +441,63 @@ describe("graphComponentsToTemplateComponents", () => {
     expect(fn(undefined)).toEqual([]);
   });
 });
+
+/**
+ * O BALÃO DE DIGITANDO NÃO É UMA MENSAGEM.
+ *
+ * Ele passa pelo mesmo caminho de envio de todo o resto — e o caminho GRAVA em
+ * `channel_messages`. Sem uma exceção explícita, cada tecla digitada pelo
+ * vendedor poria uma linha vazia na conversa, e a thread viraria uma escada de
+ * nada entre as mensagens de verdade.
+ *
+ * ⚠️ E ele NUNCA pode derrubar um envio: o Copilot chama `setPresence` antes de
+ * toda mensagem. Uma falha de rede no indicador não pode custar a conversa.
+ */
+describe("digitando", () => {
+  it("manda o envelope de typing e NÃO grava linha nenhuma", async () => {
+    const { provider, admin, f } = await makeProvider();
+    await provider.setPresence("5511999999999", "composing");
+
+    expect(f.calls, "não falou com o fornecedor").toHaveLength(1);
+    expect(JSON.parse(String(f.calls[0].init.body)).contents[0]).toEqual({ type: "typing" });
+    expect(admin.written, "escreveu uma linha para um indicador").toHaveLength(0);
+  });
+
+  it("`available` não gasta chamada — não existe envelope de 'parou de digitar'", async () => {
+    const { provider, f } = await makeProvider();
+    await provider.setPresence("5511999999999", "available");
+
+    expect(f.calls).toHaveLength(0);
+  });
+
+  it("falha no fornecedor NÃO propaga — o Copilot chama isto antes de todo envio", async () => {
+    const { provider } = await makeProvider({ fetchImpl: () => Promise.reject(new Error("ECONNRESET")) });
+
+    await expect(provider.setPresence("5511999999999", "composing")).resolves.toBeUndefined();
+  });
+});
+
+/**
+ * BLOQUEAR NÃO É MENSAGEM.
+ *
+ * As três ações de bloqueio viajam pela mesma rota das mensagens — e aquele
+ * caminho GRAVA em `channel_messages`. Sem exceção explícita, bloquear um
+ * cliente poria uma bolha vazia na conversa dele, algo que ele nunca recebeu.
+ */
+describe("bloqueio de contato", () => {
+  it("bloquear manda o envelope e NÃO grava linha", async () => {
+    const { provider, admin, f } = await makeProvider();
+    await provider.blockUser("5511999999999");
+
+    expect(JSON.parse(String(f.calls[0].init.body)).contents[0]).toEqual({ type: "block_user" });
+    expect(admin.written, "escreveu uma bolha para um bloqueio").toHaveLength(0);
+  });
+
+  it("desbloquear idem, com o tipo próprio", async () => {
+    const { provider, admin, f } = await makeProvider();
+    await provider.unblockUser("5511999999999");
+
+    expect(JSON.parse(String(f.calls[0].init.body)).contents[0]).toEqual({ type: "unblock_user" });
+    expect(admin.written).toHaveLength(0);
+  });
+});

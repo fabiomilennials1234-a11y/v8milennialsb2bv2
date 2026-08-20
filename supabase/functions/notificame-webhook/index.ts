@@ -185,8 +185,9 @@ import {
   pickChannelId,
   pickChannelWord,
   pickContact,
-  pickContent,
   pickExternalId,
+  pickInterlocutorDeSaida,
+  pickProviderMessageId,
   pickTimestampIso,
   readDirection,
   readEventType,
@@ -196,6 +197,8 @@ import {
 } from "../_shared/notificame-inbound.ts";
 import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
 import { mirrorContactAvatar } from "../_shared/notificame-avatar.ts";
+import { normalizarConteudo } from "../_shared/notificame-content.ts";
+import { espelharMidiaRecebida } from "../_shared/mirror-inbound-media.ts";
 
 const FUNCTION_NAME = "notificame-webhook";
 
@@ -1538,11 +1541,22 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     const externalId = pickExternalId(payload);
     if (!externalId) return { kind: "park", reason: "missing_external_id" };
 
-    // (b) DIREÇÃO. `null` (ilegível) e `outgoing` parkam igual: nesta fatia
-    // inbound-only, guardar é o desfecho certo — não é perda, é adiamento.
-    if (readDirection(payload) !== "incoming") {
+    // (b) DIREÇÃO.
+    //
+    // ⚠️ ISTO JÁ PARKOU AS RESPOSTAS DO VENDEDOR. Até 2026-08-20, tudo que não
+    // fosse `incoming` era guardado sob o rótulo `unreadable_direction` — que
+    // MENTIA: `readDirection` lê `"OUT"` perfeitamente. Foram 193 eventos em 51
+    // conversas, entre 17 e 19/08, e o efeito na tela era o cliente aparecendo a
+    // falar sozinho: o vendedor respondia pelo aplicativo do fornecedor e o
+    // Torque descartava.
+    //
+    // Agora a saída ENTRA, como linha `outgoing`. Só a direção de fato ilegível
+    // parka, e aí o rótulo passa a dizer a verdade.
+    const direcao = readDirection(payload);
+    if (direcao === null) {
       return { kind: "park", reason: "unreadable_direction" };
     }
+    const ehSaida = direcao === "outgoing";
 
     // (c) INTERLOCUTOR. Sem ele não há conversa para agrupar, e uma linha sem
     // `contact_external_id` seria invisível na lista (a RPC agrupa por essa
@@ -1553,7 +1567,13 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     // `pickContact`; a de (a), os de `pickExternalId`. Um rótulo só faria o
     // operador — que vai AGRUPAR por `reason` ao abrir a fila — editar o alias
     // errado e continuar sem entender por que nada entra.
-    const contact = pickContact(payload);
+    // ⚠️ NA SAÍDA O INTERLOCUTOR TROCA DE LADO: `message.to` é o cliente,
+    // `message.from` é o id do CANAL e `visitor` descreve QUEM MANDOU — o
+    // vendedor. Reusar `pickContact` aqui criaria uma conversa endereçada à
+    // própria caixa e batizada com o nome de quem respondeu.
+    const contact = ehSaida
+      ? (pickInterlocutorDeSaida(payload) ?? { externalId: "", name: null, avatarUrl: null, handle: null })
+      : pickContact(payload);
     if (!contact.externalId) {
       return { kind: "park", reason: "missing_contact_id" };
     }
@@ -1624,6 +1644,40 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       sourceUrl: contact.avatarUrl,
     });
 
+    // ── Conteúdo: normalizado, e com o arquivo trazido para casa ──────────
+    //
+    // `normalizarConteudo` CHAMA `pickContent` e acrescenta — o texto continua
+    // saindo da mesma função de sempre. O que entra novo é `metadata`, a forma
+    // NOSSA do corpo, e a URL da mídia, que o parser antigo nunca achava porque
+    // procurava `url` e o fornecedor manda `fileUrl`.
+    const conteudo = normalizarConteudo(payload);
+
+    // Espelhar é best-effort e NUNCA decide se a mensagem existe: falha devolve
+    // a URL original, que ao menos funciona pelos próximos dias. Um webhook que
+    // falha por causa de um arquivo perde a mensagem, e a mensagem é o produto.
+    let midiaFinal = conteudo.mediaUrl;
+    let metadataFinal = conteudo.metadata;
+    if (conteudo.metadata.midia) {
+      const espelho = await espelharMidiaRecebida(conteudo.metadata.midia.url, {
+        organizationId,
+        especie: conteudo.metadata.midia.especie,
+        mimeDeclarado: conteudo.metadata.midia.mime,
+        storage: admin.storage,
+      });
+      midiaFinal = espelho.url;
+      metadataFinal = {
+        ...conteudo.metadata,
+        midia: {
+          ...conteudo.metadata.midia,
+          url: espelho.url,
+          // O content-type da RESPOSTA é a verdade — o declarado pelo
+          // fornecedor foi `"text/html"` em todo arquivo real medido.
+          mime: espelho.mime ?? conteudo.metadata.midia.mime,
+          espelhada: espelho.espelhada,
+        },
+      };
+    }
+
     const row = buildInboundChannelMessageRow({
       organizationId,
       target: channel!.kind === "whatsapp"
@@ -1632,13 +1686,42 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       externalId,
       contact: avatarEspelhado ? { ...contact, avatarUrl: avatarEspelhado } : contact,
       contactExternalId: contact.externalId,
-      content: pickContent(payload),
+      content: { ...conteudo, mediaUrl: midiaFinal },
+      metadata: metadataFinal,
+      // O id ESTÁVEL. É ele que uma reação aponta e que uma resposta citada
+      // carrega — sem isto gravado, reagir a uma mensagem do cliente é apontar
+      // para o nada.
+      providerMessageId: pickProviderMessageId(payload),
+      direction: ehSaida ? "outgoing" : "incoming",
       leadId: linkedLeadId,
       // O relógio mora AQUI, e não no módulo puro: é o que permite asserir por
       // grep que nenhum caminho de identidade toca `Date.now()`.
       timestampIso: pickTimestampIso(payload) ?? new Date().toISOString(),
       rawPayload: payload,
     });
+
+    // ⚠️ GUARDA CONTRA ECO. As mensagens que saem DAQUI já são gravadas pelo
+    // provider, no mesmo instante do envio. Se o fornecedor devolver um evento
+    // de saída para elas, o `external_id` será outro — a UNIQUE não protege — e
+    // a mesma mensagem apareceria duas vezes na conversa.
+    //
+    // O `provider_message_id` é a segunda chave, e é estável nos dois lados.
+    // Medido em 2026-08-20: dos 193 eventos de saída existentes, ZERO casavam
+    // com linha já gravada — ou seja, o fornecedor não ecoa o que mandamos hoje.
+    // A guarda existe para o dia em que passar a ecoar, que é justamente o dia
+    // em que ninguém estaria olhando.
+    if (ehSaida && row.provider_message_id) {
+      const { data: jaExiste } = await admin
+        .from("channel_messages")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("provider_message_id", row.provider_message_id)
+        .limit(1);
+
+      if ((jaExiste as Array<{ id: string }> | null)?.length) {
+        return { kind: "duplicate" };
+      }
+    }
 
     const { data, error } = await admin
       .from("channel_messages")

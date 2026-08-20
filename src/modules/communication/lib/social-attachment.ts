@@ -10,7 +10,13 @@
  * WhatsApp — o caminho leva uuid, não nome adivinhável.
  */
 /** Tipos que o fornecedor entende. Figurinha não está aqui: ele recusa. */
-export type SocialAttachmentType = "image" | "video" | "audio" | "document";
+export type SocialAttachmentType =
+  | "image"
+  | "video"
+  | "audio"
+  | "document"
+  /** Só no canal oficial. O Instagram não tem figurinha. */
+  | "sticker";
 
 /** Teto do anexo. O fornecedor não documenta limite; este é o nosso. */
 export const SOCIAL_ATTACHMENT_MAX_MB = 16;
@@ -188,6 +194,10 @@ const LIMITES_WHATSAPP: Record<
   },
   audio: { mb: 16, comoDizer: "O áudio passa de 16 MB" },
   document: { mb: 100, comoDizer: "O documento passa de 100 MB" },
+  // O teto da Meta para figurinha estática é 100 KB; animada, 500 KB. O valor
+  // aqui é o maior dos dois — distinguir os dois exigiria abrir o arquivo, e o
+  // erro da Meta neste caso é legível ("sticker too large").
+  sticker: { mb: 0.5, mimes: /^image\/webp$/, comoDizer: "A figurinha passa de 500 KB" },
 };
 
 export function classifyAttachment(
@@ -202,7 +212,18 @@ export function classifyAttachment(
   } = {},
 ): AttachmentCheck {
   if (opcoes.sticker) {
-    return { ok: false, error: "O Instagram não aceita figurinhas por aqui" };
+    // ⚠️ Isto recusava TUDO, com o motivo "o fornecedor não suporta". A doc
+    // corrente dele tem uma seção "Enviar um sticker", com envelope próprio. O
+    // que é verdade é mais estreito: o INSTAGRAM não a traz.
+    if (opcoes.canal !== "whatsapp_oficial") {
+      return { ok: false, error: "O Instagram não aceita figurinhas por aqui" };
+    }
+    // A Meta só aceita WebP em figurinha. Um PNG mandado como sticker é recusado
+    // por ela depois, e a recusa chega sem motivo legível.
+    if (!/^image\/webp$/i.test(mime)) {
+      return { ok: false, error: "Figurinha precisa ser um arquivo .webp" };
+    }
+    return { ok: true, type: "sticker" };
   }
   if (!sizeBytes || sizeBytes <= 0) {
     return { ok: false, error: "O arquivo está vazio" };

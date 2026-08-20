@@ -121,13 +121,28 @@ export type SendTemplateOptions = {
    * mensagem que saiu.
    */
   previewText?: string;
+  /** Rótulos dos botões do template, na ordem — só para exibir na conversa. */
+  buttonLabels?: string[];
 };
 
 export type SendMenuOptions = {
   number: string;
-  type: "button" | "list" | "poll" | "carousel";
+  type: "button" | "list" | "poll" | "carousel" | "cta";
   text: string;
+  /** Só os títulos — é o que a Uazapi aceita. */
   choices: string[];
+  /**
+   * As mesmas opções COM descrição.
+   *
+   * A Uazapi só quer título, e o proxy achatava tudo para `string[]`; a lista da
+   * Meta tem uma linha de descrição por item, e achatar a jogava fora. Campo
+   * separado para o caminho antigo continuar exatamente como era.
+   */
+  richChoices?: Array<{ title: string; description?: string }>;
+  /** Só em `list`: o texto do botão que ABRE a lista. Sem ele ela não abre. */
+  listButtonLabel?: string;
+  /** Só em `cta`: o endereço que o botão abre. */
+  ctaUrl?: string;
   footer?: string;
   selectableCount?: number;
   delay?: number;
@@ -217,6 +232,19 @@ export interface WhatsAppProvider {
 
   // Uazapi-only (Evolution throws NotSupportedError)
   sendMenu?(opts: SendMenuOptions): Promise<SendResult>;
+  /** Canal oficial (Meta) — ponto no mapa. */
+  sendLocation?(opts: {
+    number: string;
+    latitude: number;
+    longitude: number;
+    name?: string;
+    address?: string;
+  }): Promise<SendResult>;
+  /** Canal oficial (Meta) — cartão de contato. */
+  sendContact?(opts: {
+    number: string;
+    contacts: Array<{ nome: string; telefones: Array<{ numero: string; waId?: string }>; emails?: string[] }>;
+  }): Promise<SendResult>;
   sendPixButton?(opts: SendPixButtonOptions): Promise<SendResult>;
   react?(messageId: string, number: string, emoji: string): Promise<void>;
   edit?(messageId: string, number: string, newText: string): Promise<void>;
@@ -224,6 +252,35 @@ export interface WhatsAppProvider {
   deleteForAll?(messageId: string, number: string): Promise<void>;
   /** Marca mensagens como lidas. Aceita lote — o endpoint da Uazapi é por array. */
   markRead?(messageIds: string | string[]): Promise<void>;
+  /**
+   * Canal oficial (Meta) — bloqueio de contato.
+   *
+   * Bloquear impede o cliente de escrever para este número. Não é mensagem:
+   * quem implementa NÃO grava linha na conversa.
+   */
+  blockUser?(number: string): Promise<void>;
+  unblockUser?(number: string): Promise<void>;
+  /** Quem está bloqueado. A resposta É o resultado. */
+  listBlocked?(): Promise<unknown>;
+  /**
+   * A saúde do número do lado da Meta — verde, amarelo ou vermelho. Determinada
+   * pelo feedback dos clientes; vermelho é o degrau antes da limitação.
+   */
+  numberHealth?(): Promise<unknown>;
+  /**
+   * Convite de opt-in — o deep link em que o cliente ACEITA receber mensagens.
+   * O aceite fica registrado do lado da Meta: é consentimento formal, e a defesa
+   * mais direta contra os vetores de ban.
+   */
+  createSignupInvite?(convite: {
+    mensagem: string;
+    confirmacao: string;
+    nome: string;
+    politicaDePrivacidade: string;
+    site: string;
+    codigoPromocional?: string;
+  }): Promise<unknown>;
+  listSignupInvites?(limite?: number): Promise<unknown>;
   listChats?(type?: "all" | "individual" | "group"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>>;
   historySync?(opts: {
     chat_jid?: string;

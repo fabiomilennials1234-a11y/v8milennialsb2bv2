@@ -1,10 +1,26 @@
+/**
+ * SendMenuDialog — o construtor de mensagem interativa, para os DOIS canais.
+ *
+ * ─── O QUE MUDOU, E POR QUÊ ─────────────────────────────────────────────────
+ *
+ * Ele nasceu falando só com a Uazapi: chamava a API dela, gravava a linha em
+ * `whatsapp_messages` pelo NAVEGADOR e inventava um id com `Date.now()` quando o
+ * provedor não devolvia um — o id sintético que derrota a idempotência, o mesmo
+ * defeito que `notificame-inbound` documenta em letras garrafais.
+ *
+ * Agora ele só COLETA. Quem envia é o `enviador`, um OBJETO montado pelo shell —
+ * nunca um hook por prop: hook por prop faz a ordem dos hooks mudar quando o pai
+ * troca de canal, e o React aborta com "Rendered more hooks than during the
+ * previous render". Já aconteceu neste chat.
+ *
+ * Os tipos oferecidos saem do enviador, e não de uma lista fixa: o canal oficial
+ * tem botão de link (`cta`), a Uazapi não.
+ */
 import { useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +29,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -20,29 +38,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/modules/identity";
-import { sendMenu } from "@/modules/communication/lib/whatsappApi";
-import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { Textarea } from "@/components/ui/textarea";
+import type { EnviadorDeMenu, TipoDeMenu } from "@/modules/communication/lib/menu-sender";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  instanceId: string;
-  phoneNumber: string;
+  /** Quem envia. Objeto pronto, montado pelo shell. Ver `menu-sender.ts`. */
+  enviador: EnviadorDeMenu;
 }
 
-export function SendMenuDialog({ open, onOpenChange, instanceId, phoneNumber }: Props) {
-  const [type, setType] = useState<"list" | "button">("button");
+const ROTULO_DO_TIPO: Record<TipoDeMenu, string> = {
+  button: "Botões (máx 3)",
+  list: "Lista (máx 10)",
+  cta: "Botão com link",
+};
+
+const TETO_POR_TIPO: Record<TipoDeMenu, number> = { button: 3, list: 10, cta: 1 };
+
+export function SendMenuDialog({ open, onOpenChange, enviador }: Props) {
+  const [type, setType] = useState<TipoDeMenu>(enviador.tipos[0] ?? "button");
   const [text, setText] = useState("");
   const [choices, setChoices] = useState([{ title: "", description: "" }]);
+  const [rotuloDaLista, setRotuloDaLista] = useState("");
+  const [ctaUrl, setCtaUrl] = useState("");
   const [sending, setSending] = useState(false);
-  const { data: teamMember } = useCurrentTeamMember();
-  const queryClient = useQueryClient();
+
+  const maxChoices = TETO_POR_TIPO[type];
 
   const addChoice = () => {
-    if (choices.length >= (type === "button" ? 3 : 10)) return;
+    if (choices.length >= maxChoices) return;
     setChoices([...choices, { title: "", description: "" }]);
   };
 
@@ -58,33 +83,35 @@ export function SendMenuDialog({ open, onOpenChange, instanceId, phoneNumber }: 
     if (!text.trim()) { toast.error("Texto obrigatório"); return; }
     const valid = choices.filter((c) => c.title.trim());
     if (valid.length === 0) { toast.error("Pelo menos 1 opção"); return; }
+    // A lista SÓ ABRE com o rótulo do botão. Sem ele a Meta recusa, e a recusa
+    // chega ao vendedor como falha genérica.
+    if (type === "list" && !rotuloDaLista.trim()) {
+      toast.error("Escreva o texto do botão que abre a lista");
+      return;
+    }
+    if (type === "cta" && !/^https?:\/\//i.test(ctaUrl.trim())) {
+      toast.error("O botão de link precisa de um endereço começando com https://");
+      return;
+    }
+
     setSending(true);
     try {
-      const result = await sendMenu(instanceId, phoneNumber, type, text.trim(), valid);
-      const orgId = teamMember?.organization_id;
-      if (orgId) {
-        const formattedNumber = formatPhoneForWhatsApp(phoneNumber);
-        const optionsText = valid.map((c) => `• ${c.title}`).join("\n");
-        const content = `${text.trim()}\n\n${optionsText}`;
-        await supabase.from("whatsapp_messages").upsert({
-          organization_id: orgId,
-          instance_id: instanceId,
-          message_id: result.message_id || `menu_${Date.now()}`,
-          remote_jid: `${formattedNumber}@s.whatsapp.net`,
-          phone_number: phoneNumber,
-          direction: "outgoing",
-          message_type: type === "button" ? "button" : "list",
-          content,
-          status: "sent",
-          timestamp: new Date().toISOString(),
-        }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
-        queryClient.invalidateQueries({
-          queryKey: ["whatsapp_messages", orgId, phoneNumber, instanceId],
-        });
-      }
+      await enviador.enviar({
+        tipo: type,
+        texto: text.trim(),
+        opcoes: valid.map((c) => ({
+          title: c.title.trim(),
+          ...(c.description.trim() ? { description: c.description.trim() } : {}),
+        })),
+        rotuloDaLista: rotuloDaLista.trim() || undefined,
+        ctaUrl: ctaUrl.trim() || undefined,
+      });
+
       toast.success("Menu enviado");
       onOpenChange(false);
       setText("");
+      setRotuloDaLista("");
+      setCtaUrl("");
       setChoices([{ title: "", description: "" }]);
     } catch (e) {
       toast.error((e as Error).message);
@@ -93,24 +120,28 @@ export function SendMenuDialog({ open, onOpenChange, instanceId, phoneNumber }: 
     }
   };
 
-  const maxChoices = type === "button" ? 3 : 10;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Menu Interativo</DialogTitle>
-          <DialogDescription>Envie botões ou lista de opções para o contato.</DialogDescription>
+          <DialogDescription>
+            Envie botões ou lista de opções para o contato.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Tipo</Label>
-            <Select value={type} onValueChange={(v) => setType(v as "list" | "button")}>
+            <Select value={type} onValueChange={(v) => setType(v as TipoDeMenu)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="button">Botões (máx 3)</SelectItem>
-                <SelectItem value="list">Lista (máx 10)</SelectItem>
+                {/* Os tipos vêm do CANAL, não de uma lista fixa: oferecer botão
+                    de link onde ele não existe é um erro que só aparece depois
+                    do envio, para o cliente. */}
+                {enviador.tipos.map((t) => (
+                  <SelectItem key={t} value={t}>{ROTULO_DO_TIPO[t]}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -125,13 +156,35 @@ export function SendMenuDialog({ open, onOpenChange, instanceId, phoneNumber }: 
             />
           </div>
 
+          {type === "list" && (
+            <div className="space-y-2">
+              <Label>Texto do botão que abre a lista</Label>
+              <Input
+                value={rotuloDaLista}
+                onChange={(e) => setRotuloDaLista(e.target.value)}
+                placeholder="Ver opções"
+              />
+            </div>
+          )}
+
+          {type === "cta" && (
+            <div className="space-y-2">
+              <Label>Endereço do botão</Label>
+              <Input
+                value={ctaUrl}
+                onChange={(e) => setCtaUrl(e.target.value)}
+                placeholder="https://sualoja.com.br/orcamento/4471"
+              />
+            </div>
+          )}
+
           <div className="space-y-2">
-            <Label>Opções</Label>
-            {choices.map((c, i) => (
+            <Label>{type === "cta" ? "Texto do botão" : "Opções"}</Label>
+            {choices.slice(0, maxChoices).map((c, i) => (
               <div key={i} className="flex items-start gap-2">
                 <div className="flex-1 space-y-1">
                   <Input
-                    placeholder={`Opção ${i + 1}`}
+                    placeholder={type === "cta" ? "Abrir orçamento" : `Opção ${i + 1}`}
                     value={c.title}
                     onChange={(e) => updateChoice(i, "title", e.target.value)}
                   />
@@ -144,8 +197,13 @@ export function SendMenuDialog({ open, onOpenChange, instanceId, phoneNumber }: 
                     />
                   )}
                 </div>
-                {choices.length > 1 && (
-                  <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => removeChoice(i)}>
+                {choices.length > 1 && type !== "cta" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => removeChoice(i)}
+                  >
                     <Trash2 className="h-3.5 w-3.5 text-destructive" />
                   </Button>
                 )}

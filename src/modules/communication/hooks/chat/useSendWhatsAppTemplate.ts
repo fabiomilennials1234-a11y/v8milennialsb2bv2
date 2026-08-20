@@ -39,6 +39,8 @@ export interface SendWhatsAppTemplateInput {
    * texto e a conversa exibe "Mensagem interativa" no lugar da mensagem.
    */
   previewText?: string;
+  /** Rótulos dos botões, na ordem — só para a conversa poder exibi-los. */
+  buttonLabels?: string[];
 }
 
 export class SendWhatsAppTemplateError extends Error {
@@ -84,6 +86,7 @@ export function useSendWhatsAppTemplate(instanceId: string | null) {
             language: input.language,
             ...(input.components?.length ? { components: input.components } : {}),
             ...(input.previewText?.trim() ? { previewText: input.previewText.trim() } : {}),
+            ...(input.buttonLabels?.length ? { buttonLabels: input.buttonLabels } : {}),
           },
         },
       });

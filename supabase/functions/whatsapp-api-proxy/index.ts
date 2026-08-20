@@ -780,7 +780,19 @@ Deno.serve(
       // Quando lead_id ausente, comportamento legado é preservado.
       // Frontend (Etapa C) passa a anexar lead_id no composer humano.
       // -----------------------------------------------------------------------
-      const SEND_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio", "sendTemplate"]);
+      const SEND_ACTIONS = new Set([
+        "sendText",
+        "sendMedia",
+        "sendAudio",
+        "sendTemplate",
+        "sendMenu",
+        "sendLocation",
+        "sendContact",
+        // Bloquear e desbloquear endereçam um contato — mesmo crivo. `listBlocked`
+        // e `numberHealth` NÃO entram: eles não têm destinatário nenhum.
+        "blockUser",
+        "unblockUser",
+      ]);
       const leadIdPayload = (payload?.lead_id ?? null) as string | null;
       if (SEND_ACTIONS.has(action) && leadIdPayload) {
         const {
@@ -872,6 +884,12 @@ Deno.serve(
         "sendAudio",
         "sendTemplate",
         "setPresence",
+        // As três novas do canal oficial passam pelo mesmo crivo: um telefone
+        // que limpa para menos de 10 dígitos faz o fornecedor devolver um 500
+        // que chega à tela como "Edge Function returned a non-2xx status code".
+        "sendMenu",
+        "sendLocation",
+        "sendContact",
       ]);
       if (NUMBER_ACTIONS.has(action)) {
         const rawNumber = (payload?.number ?? "") as string;
@@ -1090,7 +1108,10 @@ Deno.serve(
             number?: string;
             emoji?: string;
           };
-          if (!message_id || !number || !emoji) {
+          // ⚠️ `emoji` VAZIO É VÁLIDO: é o comando de REMOVER a reação, e é assim
+          // que a Meta desfaz. Exigi-lo aqui deixava o vendedor sem como tirar
+          // uma reação que ele mesmo pôs — a ação existia só de ida.
+          if (!message_id || !number || emoji === undefined) {
             return jsonResponse(400, { error: "Missing message_id/number/emoji" }, corsHeaders);
           }
           await provider.react(message_id, number, emoji);
@@ -1185,14 +1206,17 @@ Deno.serve(
         // -------------------------------------------------------------------
         case "sendMenu": {
           if (!provider.sendMenu) throw new Error("Provider does not support sendMenu");
-          const { number, type, text, choices, footer, selectableCount } = payload as {
-            number?: string;
-            type?: "button" | "list" | "poll" | "carousel";
-            text?: string;
-            choices?: Array<string | { title: string; description?: string }>;
-            footer?: string;
-            selectableCount?: number;
-          };
+          const { number, type, text, choices, footer, selectableCount, listButtonLabel, ctaUrl } =
+            payload as {
+              number?: string;
+              type?: "button" | "list" | "poll" | "carousel" | "cta";
+              text?: string;
+              choices?: Array<string | { title: string; description?: string }>;
+              footer?: string;
+              selectableCount?: number;
+              listButtonLabel?: string;
+              ctaUrl?: string;
+            };
           if (!number || !type || !text || !choices?.length) {
             return jsonResponse(400, { error: "Missing number/type/text/choices" }, corsHeaders);
           }
@@ -1200,7 +1224,179 @@ Deno.serve(
           const flatChoices = choices.map((c) =>
             typeof c === "string" ? c : c.title
           );
-          result = await provider.sendMenu({ number, type, text, choices: flatChoices, footer, selectableCount });
+          // ⚠️ A DESCRIÇÃO SOBREVIVE, em campo separado. O achatamento acima é o
+          // que a Uazapi aceita, e por anos foi tudo que existia; a lista da Meta
+          // tem uma linha de descrição por item, e jogá-la fora aqui deixava o
+          // cliente com uma lista de títulos soltos. Campo novo para o caminho
+          // antigo continuar byte a byte o mesmo.
+          const richChoices = choices
+            .map((c) => (typeof c === "string" ? { title: c } : c))
+            .filter((c) => (c.title ?? "").trim() !== "");
+          result = await provider.sendMenu({
+            number,
+            type,
+            text,
+            choices: flatChoices,
+            richChoices,
+            footer,
+            selectableCount,
+            listButtonLabel,
+            ctaUrl,
+          });
+          break;
+        }
+
+        case "blockUser":
+        case "unblockUser": {
+          const fn = action === "blockUser" ? provider.blockUser : provider.unblockUser;
+          if (!fn) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não bloqueia contatos", code: "block_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number } = payload as { number?: string };
+          if (!number) return jsonResponse(400, { error: "Missing number" }, corsHeaders);
+          await fn.call(provider, number);
+          result = { ok: true };
+          break;
+        }
+
+        case "listBlocked": {
+          if (!provider.listBlocked) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não lista bloqueados", code: "block_not_supported" },
+              corsHeaders,
+            );
+          }
+          result = { blocked: await provider.listBlocked() };
+          break;
+        }
+
+        case "createSignupInvite": {
+          if (!provider.createSignupInvite) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não cria convite de cadastro", code: "signup_not_supported" },
+              corsHeaders,
+            );
+          }
+          const c = payload as {
+            mensagem?: string;
+            confirmacao?: string;
+            nome?: string;
+            politicaDePrivacidade?: string;
+            site?: string;
+            codigoPromocional?: string;
+          };
+          if (!c.mensagem || !c.confirmacao || !c.nome || !c.politicaDePrivacidade || !c.site) {
+            return jsonResponse(
+              400,
+              { error: "Missing mensagem/confirmacao/nome/politicaDePrivacidade/site" },
+              corsHeaders,
+            );
+          }
+          result = {
+            invite: await provider.createSignupInvite({
+              mensagem: c.mensagem,
+              confirmacao: c.confirmacao,
+              nome: c.nome,
+              politicaDePrivacidade: c.politicaDePrivacidade,
+              site: c.site,
+              codigoPromocional: c.codigoPromocional,
+            }),
+          };
+          break;
+        }
+
+        case "listSignupInvites": {
+          if (!provider.listSignupInvites) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não lista convites", code: "signup_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { limite } = payload as { limite?: number };
+          result = { invites: await provider.listSignupInvites(limite) };
+          break;
+        }
+
+        case "numberHealth": {
+          if (!provider.numberHealth) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não informa saúde do número", code: "health_not_supported" },
+              corsHeaders,
+            );
+          }
+          result = { health: await provider.numberHealth() };
+          break;
+        }
+
+        case "sendLocation": {
+          // 422 e não `throw`: quem clica é um VENDEDOR, e um 500 genérico viraria
+          // "não foi possível enviar" numa hora em que ele precisa saber que este
+          // canal não manda localização — não que o sistema quebrou.
+          if (!provider.sendLocation) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não envia localização", code: "location_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number, latitude, longitude, name, address } = payload as {
+            number?: string;
+            latitude?: number;
+            longitude?: number;
+            name?: string;
+            address?: string;
+          };
+          // `0` é coordenada — a checagem é de finitude, não de verdade.
+          if (!number || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            return jsonResponse(400, { error: "Missing number/latitude/longitude" }, corsHeaders);
+          }
+          result = await provider.sendLocation({
+            number,
+            latitude: latitude as number,
+            longitude: longitude as number,
+            name,
+            address,
+          });
+          break;
+        }
+
+        case "sendContact": {
+          if (!provider.sendContact) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não envia contato", code: "contact_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number, contacts } = payload as {
+            number?: string;
+            contacts?: Array<{
+              nome?: string;
+              telefones?: Array<{ numero?: string; waId?: string }>;
+              emails?: string[];
+            }>;
+          };
+          if (!number || !contacts?.length) {
+            return jsonResponse(400, { error: "Missing number/contacts" }, corsHeaders);
+          }
+          result = await provider.sendContact({
+            number,
+            contacts: contacts.map((c) => ({
+              nome: String(c.nome ?? "").trim(),
+              telefones: (c.telefones ?? [])
+                .map((t) => ({ numero: String(t.numero ?? "").trim(), waId: t.waId }))
+                .filter((t) => t.numero !== ""),
+              emails: c.emails,
+            })),
+          });
           break;
         }
 

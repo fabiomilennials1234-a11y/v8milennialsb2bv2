@@ -46,6 +46,7 @@ export { useMessagingChannels } from "./hooks/useMessagingChannels";
 export type { MessagingChannel, MessagingChannelType } from "./hooks/useMessagingChannels";
 export { useNotificameTemplates, notificameTemplatesQueryKey } from "./hooks/useNotificameTemplates";
 export type { NotificameTemplate, NotificameTemplateStatus } from "./hooks/useNotificameTemplates";
+export { NotificameOperacaoCard } from "./components/whatsapp/NotificameOperacaoCard";
 export { NotificameTemplatesCard } from "./components/whatsapp/NotificameTemplatesCard";
 export { NotificameTemplateEditor } from "./components/whatsapp/NotificameTemplateEditor";
 export { useCreateNotificameTemplate } from "./hooks/useNotificameTemplates";

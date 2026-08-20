@@ -47,6 +47,8 @@ import {
   montarComponentesDeEnvio,
   pendenciasDeEnvio,
   previewDoTemplate,
+  botoesComVariavel,
+  rotulosDosBotoes,
   variaveisDoTemplate,
 } from "@/modules/communication/lib/template-send";
 import { uploadSocialAttachment } from "@/modules/communication/lib/social-attachment-upload";
@@ -77,6 +79,14 @@ export function TemplatePicker({
   const [valores, setValores] = useState<Record<string, string>>({});
   /** URL pública do arquivo do cabeçalho, quando o template exige mídia. */
   const [midia, setMidia] = useState<string | null>(null);
+  /**
+   * O valor da parte variável de cada botão de link, pela POSIÇÃO do botão.
+   *
+   * Mapa próprio, e não o mesmo `valores` do corpo: os `{{n}}` de um botão
+   * recomeçam em `{{1}}`, então compartilhar entregaria o nome do cliente como
+   * número de pedido — e a Meta aceitaria sem reclamar.
+   */
+  const [valoresDosBotoes, setValoresDosBotoes] = useState<Record<number, string>>({});
   const [subindo, setSubindo] = useState(false);
   const arquivoRef = useRef<HTMLInputElement>(null);
   const { data: teamMember } = useCurrentTeamMember();
@@ -88,11 +98,16 @@ export function TemplatePicker({
 
   const vars = escolhido ? variaveisDoTemplate(escolhido) : null;
   const formatoMidia = escolhido ? formatoDeMidiaDoCabecalho(escolhido) : null;
-  const faltando = escolhido ? pendenciasDeEnvio(escolhido, valores, midia) : [];
+  const faltando = escolhido
+    ? pendenciasDeEnvio(escolhido, valores, midia, valoresDosBotoes)
+    : [];
+  const botoes = escolhido ? rotulosDosBotoes(escolhido) : [];
+  const botoesVariaveis = escolhido ? botoesComVariavel(escolhido) : [];
 
   function fechar() {
     setEscolhido(null);
     setValores({});
+    setValoresDosBotoes({});
     setMidia(null);
     onOpenChange(false);
   }
@@ -123,10 +138,14 @@ export function TemplatePicker({
         to: contactExternalId,
         templateName: escolhido.name,
         language: escolhido.language ?? "pt_BR",
-        components: montarComponentesDeEnvio(escolhido, valores, midia),
+        components: montarComponentesDeEnvio(escolhido, valores, midia, valoresDosBotoes),
         // O que o cliente vai ler, para a conversa mostrar a mensagem em vez de
         // "Mensagem interativa". É a mesma substituição que a Meta faz.
         previewText: previewDoTemplate(escolhido, valores),
+        // Os rótulos viajam junto pelo mesmo motivo do texto: a Meta desenha a
+        // faixa de botões do lado dela, e sem isto a conversa mostraria a
+        // mensagem sem as opções que o cliente está vendo.
+        buttonLabels: botoes,
       });
       toast.success("Template enviado");
       fechar();
@@ -178,6 +197,10 @@ export function TemplatePicker({
                 onClick={() => {
                   setEscolhido(t);
                   setValores({});
+                  // Limpa junto: o valor do botão é indexado por POSIÇÃO, e a
+                  // posição 0 de um template é a posição 0 de outro. Sem isto o
+                  // link do template anterior sairia no envio deste.
+                  setValoresDosBotoes({});
                   // A imagem APROVADA junto do template entra como padrão. Pedir
                   // upload de um arquivo que a Meta já guarda é retrabalho — e
                   // era o que acontecia porque o tipo do front descartava o
@@ -291,14 +314,50 @@ export function TemplatePicker({
               </div>
             )}
 
+            {/* A parte variável do link. Não é `{{n}}` de texto nenhum — não
+                aparece no corpo nem no cabeçalho —, e por isso precisa de campo
+                próprio: sem ele a Meta recusa por callback, depois de o vendedor
+                achar que mandou. */}
+            {botoesVariaveis.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Link dos botões</p>
+                {botoesVariaveis.map((b) => (
+                  <div key={b.index} className="space-y-1">
+                    <label className="text-[11px] text-muted-foreground">{b.texto}</label>
+                    <Input
+                      value={valoresDosBotoes[b.index] ?? ""}
+                      onChange={(e) =>
+                        setValoresDosBotoes((v) => ({ ...v, [b.index]: e.target.value }))}
+                      placeholder="4471"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* O que o cliente vai ler. Mandar sem ver é o caminho curto para o
                 cliente receber "Olá {{1}}". */}
             <div className="space-y-1">
               <p className="text-xs font-medium text-muted-foreground">Como o cliente vê</p>
               <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
-                <p className="whitespace-pre-wrap rounded-xl rounded-tr-sm bg-emerald-600/15 p-3 text-sm text-foreground/90">
-                  {previewDoTemplate(escolhido, valores)}
-                </p>
+                <div className="overflow-hidden rounded-xl rounded-tr-sm bg-emerald-600/15">
+                  <p className="whitespace-pre-wrap p-3 text-sm text-foreground/90">
+                    {previewDoTemplate(escolhido, valores)}
+                  </p>
+                  {/* No WhatsApp os botões são uma faixa clicável ABAIXO da
+                      mensagem, não parte do texto. Desenhá-los dentro da bolha
+                      daria a impressão errada do que o cliente vê. */}
+                  {botoes.length > 0 && (
+                    <div className="divide-y divide-border/40 border-t border-border/40">
+                      {botoes.map((rotulo, i) => (
+                        <p key={i} className="py-2 text-center text-[13px] text-sky-500">
+                          {rotulo}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

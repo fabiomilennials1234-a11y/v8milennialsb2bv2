@@ -19,6 +19,13 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { chatQueryKeys } from "./shared/queryKeys";
 
 export interface SendSocialMessageInput {
+  /**
+   * O id ESTÁVEL da mensagem citada, quando esta responde a outra.
+   *
+   * Só o canal oficial o usa — no Direct não há citação no contrato. `null` ou
+   * ausente manda uma mensagem comum.
+   */
+  citandoProviderMessageId?: string | null;
   /** IGSID do interlocutor — o `to` do envelope. */
   contactExternalId: string;
   text?: string;
@@ -27,7 +34,8 @@ export interface SendSocialMessageInput {
    * então aqui viaja a URL, nunca o `File`. Ver `lib/social-attachment-upload`.
    */
   media?: {
-    type: "image" | "video" | "audio" | "document";
+    /** `sticker` só no canal oficial — o Instagram não tem figurinha. */
+    type: "image" | "video" | "audio" | "document" | "sticker";
     url: string;
     caption?: string;
     filename?: string;

@@ -40,8 +40,37 @@ describe("classifyAttachment — o que o fornecedor entende", () => {
     if (r.ok) expect(r.type).toBe("document");
   });
 
-  it("recusa figurinha — o fornecedor não suporta", () => {
-    const r = classifyAttachment("image/webp", "figura.webp", 1024, { sticker: true });
+  /**
+   * FIGURINHA — a recusa aqui vinha de uma afirmação FALSA.
+   *
+   * "O fornecedor não suporta" era o motivo escrito, e a doc corrente dele tem
+   * uma seção "Enviar um sticker" com envelope próprio. O que é verdade é mais
+   * estreito: o INSTAGRAM não a traz.
+   */
+  it("aceita figurinha no canal oficial", () => {
+    const r = classifyAttachment("image/webp", "figura.webp", 1024, {
+      sticker: true,
+      canal: "whatsapp_oficial",
+    });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.type).toBe("sticker");
+  });
+
+  it("recusa figurinha no Instagram — lá a doc não a traz", () => {
+    const r = classifyAttachment("image/webp", "figura.webp", 1024, {
+      sticker: true,
+      canal: "instagram",
+    });
+
+    expect(r.ok).toBe(false);
+  });
+
+  it("figurinha só aceita webp — a Meta recusa outros formatos", () => {
+    const r = classifyAttachment("image/png", "figura.png", 1024, {
+      sticker: true,
+      canal: "whatsapp_oficial",
+    });
 
     expect(r.ok).toBe(false);
   });

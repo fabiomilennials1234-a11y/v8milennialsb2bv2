@@ -805,6 +805,15 @@ describe("buildInboundChannelMessageRow — a linha de channel_messages", () => 
       lead_id: null,
       timestamp: "2026-08-13T18:04:00.000Z",
       raw_payload: { qualquer: "coisa", nested: [{ a: 1 }] },
+      // Campo novo (2026-08-19): a leitura normalizada do corpo. NULO aqui
+      // porque quem chamou não passou nenhuma — e nulo significa "ainda não
+      // normalizada", que é o que o backfill procura.
+      metadata: null,
+      // Campo novo (2026-08-19): o id ESTÁVEL do fornecedor, que uma reação
+      // aponta e uma resposta citada carrega. NULO aqui porque quem chamou não
+      // o passou — e `null` é diferente de `''`, que casaria com qualquer outra
+      // linha vazia da org e colaria a reação na mensagem errada.
+      provider_message_id: null,
     });
   });
 

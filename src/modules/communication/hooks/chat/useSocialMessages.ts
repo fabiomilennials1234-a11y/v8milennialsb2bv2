@@ -62,6 +62,23 @@ export interface SocialMessage {
   sender_profile_pic: string | null;
   timestamp: string;
   created_at: string | null;
+  /**
+   * A leitura NORMALIZADA do corpo — quem monta é o webhook, contra corpos
+   * reais. É o que permite à bolha desenhar coordenada, cartão de contato,
+   * link de reel e clique de botão sem conhecer o formato do fornecedor.
+   *
+   * `null` em toda linha gravada antes de 2026-08-19, e é assim que o backfill
+   * sabe o que ainda falta reprocessar.
+   */
+  metadata?: unknown;
+  /**
+   * O id ESTÁVEL do fornecedor — o alvo de uma reação e de uma resposta citada.
+   *
+   * ⚠️ NÃO é o `external_id`: aquele é o id do EVENTO e muda a cada callback do
+   * mesmo envio. `null` nas mensagens que o fornecedor entregou sem ele, e nas
+   * nossas que ainda não receberam o primeiro callback de status.
+   */
+  provider_message_id?: string | null;
 }
 
 /**
@@ -102,7 +119,7 @@ export function useSocialMessages(contact: SocialContact | null) {
       const { data, error } = await (supabase as any)
         .from("channel_messages")
         .select(
-          "id, external_id, direction, message_type, content, media_url, status, sender_name, sender_profile_pic, timestamp, created_at, raw_payload",
+          "id, external_id, direction, message_type, content, media_url, status, sender_name, sender_profile_pic, timestamp, created_at, raw_payload, metadata, provider_message_id",
         )
         .eq("organization_id", organizationId)
         .eq(colunaDoEixo, boxId)

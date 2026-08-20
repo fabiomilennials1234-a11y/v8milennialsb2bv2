@@ -56,7 +56,7 @@ export function officialWhatsAppSender(
 ): SocialSender {
   return {
     isPending: m.isPending,
-    send: ({ contactExternalId, text, media }) =>
-      m.mutateAsync({ to: contactExternalId, text, media }),
+    send: ({ contactExternalId, text, media, citandoProviderMessageId }) =>
+      m.mutateAsync({ to: contactExternalId, text, media, citandoProviderMessageId }),
   };
 }

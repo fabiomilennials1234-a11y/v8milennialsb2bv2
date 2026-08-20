@@ -614,6 +614,35 @@ export function pickContact(payload: unknown): InboundContact {
 }
 
 /**
+ * O INTERLOCUTOR de um evento de SAÍDA — a resposta que o vendedor deu pelo
+ * aplicativo do fornecedor.
+ *
+ * ─── POR QUE NÃO DÁ PARA REUSAR `pickContact` ───────────────────────────────
+ *
+ * No evento de saída tudo troca de lado, e nada disso é óbvio pelo corpo:
+ *
+ *   `message.to`   — o CLIENTE. É ele o interlocutor da conversa.
+ *   `message.from` — o id do CANAL. Não é uma pessoa, e aceitá-lo como contato
+ *                    criaria uma conversa da caixa com ela mesma.
+ *   `visitor`      — QUEM MANDOU, ou seja o VENDEDOR. Gravá-lo como contato
+ *                    renomearia o cliente com o nome de quem respondeu, em toda
+ *                    tela do CRM.
+ *
+ * Por isso o nome e o avatar saem NULOS aqui: o evento de saída não descreve o
+ * cliente, e inventar um nome a partir do que ele traz seria gravar o vendedor
+ * no lugar do comprador. O nome verdadeiro já veio — ou virá — pela entrada.
+ *
+ * Medido: 193 eventos assim foram descartados entre 17 e 19/08/2026, em 51
+ * conversas, sob um rótulo que dizia que a direção era ilegível.
+ */
+export function pickInterlocutorDeSaida(payload: unknown): InboundContact | null {
+  const externalId = firstNonEmpty(payload, ["message.to", "to"]);
+  if (!externalId) return null;
+
+  return { externalId, name: null, avatarUrl: null, handle: null };
+}
+
+/**
  * O handle da NOSSA conta (a que recebeu), quando o corpo o traz.
  *
  * Existe para o backfill de `messaging_channels.handle`, que
@@ -639,6 +668,28 @@ export function pickAccountHandle(payload: unknown): string | null {
 }
 
 // ─── Conteúdo ────────────────────────────────────────────────────────────────
+
+/**
+ * O id ESTÁVEL da mensagem, do lado do fornecedor.
+ *
+ * ⚠️ NÃO CONFUNDIR COM `external_id`. Aquele é o id do EVENTO (`message.id`), e
+ * ele MUDA a cada callback do mesmo envio — foi por isso que os status de
+ * entrega se perderam antes de a coluna `provider_message_id` existir.
+ *
+ * É este id que uma REAÇÃO aponta (`reaction.message_id`) e que uma RESPOSTA
+ * CITADA carrega (`messageId`, na raiz do corpo). Sem ele gravado, reagir ou
+ * citar uma mensagem recebida é impossível: não há o que apontar.
+ *
+ * String vazia vira `null`, e não `''`: `''` casaria com qualquer outra linha
+ * vazia da org num JOIN por id, e colaria a reação na mensagem errada.
+ */
+export function pickProviderMessageId(payload: unknown): string | null {
+  return firstNonEmpty(payload, [
+    "providerMessageId",
+    "message.providerMessageId",
+    "messageStatus.providerMessageId",
+  ]);
+}
 
 export interface InboundContent {
   content: string | null;
@@ -754,11 +805,11 @@ export interface InboundChannelMessageRow {
   instance_id: string | null;
   contact_external_id: string;
   external_id: string;
-  direction: "incoming";
+  direction: "incoming" | "outgoing";
   message_type: string;
   content: string | null;
   media_url: string | null;
-  status: "received";
+  status: "received" | "sent";
   sender_id: string | null;
   sender_name: string | null;
   sender_profile_pic: string | null;
@@ -788,6 +839,19 @@ export interface InboundChannelMessageRow {
   lead_id: string | null;
   timestamp: string;
   raw_payload: unknown;
+  /**
+   * A leitura NORMALIZADA do corpo — a forma nossa, que a tela lê.
+   *
+   * `null` significa "ainda não normalizada", e não "normalizada e vazia". A
+   * distinção é o que permite ao backfill saber o que falta reprocessar; um
+   * `{}` no lugar diria que já olhamos e não achamos nada.
+   */
+  metadata: unknown | null;
+  /**
+   * O id ESTÁVEL do fornecedor — ver `pickProviderMessageId`. `null` quando o
+   * corpo não o traz.
+   */
+  provider_message_id: string | null;
 }
 
 /**
@@ -843,6 +907,23 @@ export function buildInboundChannelMessageRow(params: {
    * decisão para o chamador sem mudar o resultado do caminho não-vinculado.
    */
   leadId?: string | null;
+  /** Ver `metadata` em `InboundChannelMessageRow`. Omitir = coluna NULA. */
+  metadata?: unknown;
+  /** Ver `pickProviderMessageId`. Omitir = coluna NULA. */
+  providerMessageId?: string | null;
+  /**
+   * O sentido da mensagem. Omitir = `"incoming"`, que era o único caso quando
+   * esta função nasceu.
+   *
+   * `"outgoing"` é a RESPOSTA QUE O VENDEDOR DEU PELO APLICATIVO do fornecedor —
+   * 193 delas foram descartadas entre 17 e 19/08/2026, em 51 conversas, e o
+   * efeito na tela era o cliente aparecer falando sozinho.
+   *
+   * ⚠️ LITERAL, e nunca `'out'`: o CHECK `channel_messages_direction_check`
+   * aceita só `('incoming','outgoing')`, e a palavra do fornecedor derrubaria a
+   * gravação depois de a mensagem já ter sido enviada de verdade.
+   */
+  direction?: "incoming" | "outgoing";
 }): InboundChannelMessageRow {
   return {
     organization_id: params.organizationId,
@@ -857,17 +938,23 @@ export function buildInboundChannelMessageRow(params: {
     // IGSID não é telefone, e preenchê-la faria 13 superfícies mentirem.
     phone_number: params.target.kind === "whatsapp" ? params.contactExternalId : null,
     external_id: params.externalId,
-    direction: "incoming",
+    direction: params.direction ?? "incoming",
     message_type: params.content.messageType,
     content: params.content.content,
     media_url: params.content.mediaUrl,
-    status: "received",
+    // Uma mensagem que já saiu não está "recebida". O status alimenta o ícone da
+    // bolha, e `received` numa linha de saída desenharia o cheque de entrega
+    // errado.
+    status: params.direction === "outgoing" ? "sent" : "received",
     // No inbound, quem enviou É o interlocutor. A coluna fica preenchida para o
     // histórico; QUEM AGRUPA é `contact_external_id`, e é essa a diferença que
     // `useMetaMessages` não fez.
-    sender_id: params.contact.externalId,
-    sender_name: params.contact.name,
-    sender_profile_pic: params.contact.avatarUrl,
+    // ⚠️ SÓ NA ENTRADA. Numa linha de SAÍDA quem enviou fomos nós, e o
+    // `visitor` do corpo descreve o VENDEDOR — copiá-lo para cá poria o nome de
+    // quem respondeu no lugar do cliente, no cabeçalho e na lista de conversas.
+    sender_id: params.direction === "outgoing" ? null : params.contact.externalId,
+    sender_name: params.direction === "outgoing" ? null : params.contact.name,
+    sender_profile_pic: params.direction === "outgoing" ? null : params.contact.avatarUrl,
     // O @ do interlocutor, em COLUNA e não só no `raw_payload`. Preso no jsonb
     // ele não é pesquisável nem casável, e é justamente o segundo sinal do
     // detector de duplicatas: comparar o @ do Instagram com o que o vendedor
@@ -881,6 +968,8 @@ export function buildInboundChannelMessageRow(params: {
     lead_id: params.leadId ?? null,
     timestamp: params.timestampIso,
     raw_payload: params.rawPayload,
+    metadata: params.metadata ?? null,
+    provider_message_id: params.providerMessageId ?? null,
   };
 }
 

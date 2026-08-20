@@ -51,6 +51,15 @@ export function readTemplateRequest(payload: unknown): TemplateRequest {
   // O texto renderizado é OPCIONAL: quem dispara por automação não o tem, e a
   // ausência dele não pode impedir o envio — só deixa a linha sem prévia.
   const previewText = texto(p.previewText) ?? texto(p.preview_text) ?? undefined;
+  // Os rótulos dos botões, para a conversa mostrar o que o cliente vê. Lista de
+  // texto e nada mais: tudo que não for string cai fora em silêncio, porque um
+  // rótulo inválido não pode impedir o envio de um template válido.
+  const buttonLabels = Array.isArray(p.buttonLabels)
+    ? p.buttonLabels.map((x) => texto(x)).filter((x): x is string => !!x)
+    : undefined;
 
-  return { ok: true, value: { number, templateName, language, components, previewText } };
+  return {
+    ok: true,
+    value: { number, templateName, language, components, previewText, buttonLabels },
+  };
 }

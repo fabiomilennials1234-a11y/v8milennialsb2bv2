@@ -22,8 +22,29 @@
  * "o Instagram não deixa responder"; o que é verdade é "ainda não construímos o
  * envio". A microcopy diz qual das duas.
  */
-import { useMemo, useRef, useState } from "react";
-import { FileText, Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  Ban,
+  Contact,
+  FileText,
+  MoreVertical,
+  Reply,
+  LayoutList,
+  Loader2,
+  MapPin,
+  Mic,
+  Paperclip,
+  Plus,
+  Send,
+  Square,
+  X,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
@@ -39,6 +60,20 @@ import {
 } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import type { SocialSender } from "@/modules/communication/hooks/chat/social-sender";
 import { TemplatePicker } from "@/modules/communication/components/chat/social/TemplatePicker";
+import { SendMenuDialog } from "@/modules/communication/components/chat/composer/SendMenuDialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { criarEnviadorOficial } from "@/modules/communication/lib/menu-sender";
+import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
+import {
+  blockUser as bloquearNoProxy,
+  setPresence as setPresenceNoProxy,
+  reactToMessage as reagirNoProxy,
+  sendContact as enviarContatoNoProxy,
+  sendLocation as enviarLocalizacaoNoProxy,
+  sendMenu as enviarMenuNoProxy,
+} from "@/modules/communication/lib/whatsappApi";
+import { SendContactDialog } from "@/modules/communication/components/chat/social/SendContactDialog";
+import { SendLocationDialog } from "@/modules/communication/components/chat/social/SendLocationDialog";
 import { webmOpusToOgg } from "@/modules/communication/lib/webm-opus-to-ogg";
 import { socialReplyWindow } from "@/modules/communication/lib/social-window";
 import {
@@ -89,7 +124,13 @@ function toTimelineMessage(m: SocialMessage, organizationId: string): WhatsAppMe
     sent_source: null,
     failure_reason: m.failure_reason ?? null,
     failure_code: m.failure_code ?? null,
-  };
+    // A leitura normalizada viaja junto. `WhatsAppMessage` não a declara — ela
+    // não existe naquele eixo —, e a bolha a lê por acesso opcional: linha sem
+    // metadata cai no caminho de sempre.
+    metadata: m.metadata ?? null,
+    // O alvo de uma reação e de uma resposta citada. Ver `SocialMessage`.
+    provider_message_id: m.provider_message_id ?? null,
+  } as WhatsAppMessage;
 }
 
 // ─── Header ──────────────────────────────────────────────────────────────────
@@ -100,6 +141,7 @@ function SocialChatHeader({
   onBack,
   isMobile,
   onOpenLead,
+  onBloquear,
 }: {
   contact: SocialContact;
   channelName: string;
@@ -110,6 +152,11 @@ function SocialChatHeader({
    * Instagram o interlocutor é IGSID e a ficha é montada por telefone.
    */
   onOpenLead?: () => void;
+  /**
+   * Bloqueia o contato. Só no canal oficial — a ação vem da doc da Meta e o
+   * Instagram não a traz.
+   */
+  onBloquear?: () => void;
 }) {
   const name = contactLabel(contact);
   const handle = contactHandleLabel(contact);
@@ -173,6 +220,25 @@ function SocialChatHeader({
             .join(" · ")}
         </p>
       </div>
+
+      {/* BLOQUEAR fica AQUI, e não numa tela de configuração: a vontade de
+          bloquear nasce lendo a conversa. A lista de bloqueados é que mora nas
+          configurações, porque é lá que se procura quem foi bloqueado. */}
+      {onBloquear && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Mais ações">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onBloquear} className="gap-2 text-destructive">
+              <Ban className="h-4 w-4" />
+              Bloquear contato
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </header>
   );
 }
@@ -196,7 +262,13 @@ function SocialComposer({
   canal,
   contactExternalId,
   onAbrirTemplates,
+  onAbrirMenu,
+  onAbrirLocalizacao,
+  onAbrirContato,
   lastIncomingAt,
+  respondendoA,
+  onCancelarResposta,
+  instanceIdDoCanal,
 }: {
   /**
    * O enviador JÁ PRONTO, montado pelo shell. Não é um hook, e isso é o ponto:
@@ -213,10 +285,44 @@ function SocialComposer({
    * — e ele vive na lista de mensagens, não no composer.
    */
   onAbrirTemplates: () => void;
+  onAbrirMenu: () => void;
+  onAbrirLocalizacao: () => void;
+  onAbrirContato: () => void;
   lastIncomingAt: string | null;
+  /**
+   * A mensagem que esta vai citar, se houver. O estado mora na VIEW porque quem
+   * o cria é a barra de ações da BOLHA, que não é filha do composer.
+   */
+  respondendoA: { providerMessageId: string; texto: string | null } | null;
+  onCancelarResposta: () => void;
+  /** O id da caixa — só para o balão de digitando, que não passa pelo `sender`. */
+  instanceIdDoCanal: string | null;
 }) {
   const [texto, setTexto] = useState("");
   const [anexo, setAnexo] = useState<UploadedAttachment | null>(null);
+
+  /**
+   * O BALÃO DE "DIGITANDO".
+   *
+   * Mandado no máximo uma vez a cada 4 segundos: o balão dura poucos segundos do
+   * lado da Meta e um envio por tecla seria uma chamada por caractere — custo e
+   * ruído por um indicador cosmético.
+   *
+   * Não existe envelope de "parou de digitar": o balão some sozinho. Por isso
+   * não há nada a fazer no cleanup, ao contrário do eixo da Uazapi, que precisa
+   * mandar `available`.
+   *
+   * ⚠️ Falha é engolida de propósito, aqui e no provider. Um indicador nunca
+   * pode custar a conversa.
+   */
+  const ultimoTyping = useRef(0);
+  const avisarQueEstaDigitando = useCallback(() => {
+    if (canal !== "whatsapp_oficial" || !instanceIdDoCanal) return;
+    const agora = Date.now();
+    if (agora - ultimoTyping.current < 4000) return;
+    ultimoTyping.current = agora;
+    setPresenceNoProxy(instanceIdDoCanal, contactExternalId, "composing").catch(() => {});
+  }, [canal, instanceIdDoCanal, contactExternalId]);
   const [subindo, setSubindo] = useState(false);
   const [gravando, setGravando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -314,6 +420,7 @@ function SocialComposer({
       await enviar.send({
         contactExternalId,
         text: conteudo || undefined,
+        citandoProviderMessageId: respondendoA?.providerMessageId ?? null,
         ...(anexo
           ? {
             media: {
@@ -328,6 +435,7 @@ function SocialComposer({
       });
       setTexto("");
       setAnexo(null);
+      onCancelarResposta();
     } catch (e) {
       const erro = e as SocialSendError;
       toast.error(erro.message, {
@@ -355,6 +463,27 @@ function SocialComposer({
             aria-label="Remover anexo"
           >
             <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
+      {/* A MENSAGEM CITADA, acima do campo — como no próprio WhatsApp.
+          Mostrar o trecho, e não só "respondendo", é o que evita citar a
+          mensagem errada num histórico longo. */}
+      {respondendoA && (
+        <div className="mb-2 flex items-start gap-2 rounded-lg border-l-2 border-primary/60 bg-muted/40 px-2.5 py-1.5">
+          <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            {respondendoA.texto?.trim() || "Mensagem sem texto"}
+          </p>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 shrink-0"
+            onClick={onCancelarResposta}
+            aria-label="Cancelar resposta"
+          >
+            <X className="h-3 w-3" />
           </Button>
         </div>
       )}
@@ -413,9 +542,55 @@ function SocialComposer({
             <FileText className="h-4 w-4" />
           </Button>
         )}
+        {/*
+          O QUE MAIS ESTE CANAL MANDA — botões, lista, link, localização, contato.
+
+          Agrupados atrás de um só gatilho: são cinco coisas raras, e cinco
+          botões permanentes no composer roubariam o espaço do que se usa toda
+          hora, que é escrever.
+
+          Tudo aqui só vale DENTRO da janela de 24 horas — fora dela a Meta
+          recusa qualquer mensagem livre. Desabilitado em vez de escondido: sumir
+          ensinaria que a ferramenta é instável, enquanto o aviso explica.
+        */}
+        {canal === "whatsapp_oficial" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-[42px] w-9 shrink-0 p-0"
+                disabled={subindo || enviar.isPending || gravando || janela.open === false}
+                aria-label="Enviar botões, lista, localização ou contato"
+                title={janela.open === false
+                  ? "A janela de 24 horas fechou — só template é aceito agora"
+                  : "Enviar botões, lista, localização ou contato"}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem onClick={onAbrirMenu} className="gap-2">
+                <LayoutList className="h-4 w-4" />
+                Botões, lista ou link
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onAbrirLocalizacao} className="gap-2">
+                <MapPin className="h-4 w-4" />
+                Localização
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onAbrirContato} className="gap-2">
+                <Contact className="h-4 w-4" />
+                Contato
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Textarea
           value={texto}
-          onChange={(e) => setTexto(e.target.value)}
+          onChange={(e) => {
+            setTexto(e.target.value);
+            avisarQueEstaDigitando();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -507,6 +682,20 @@ export function SocialChatView({
 }: SocialChatViewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [templatesAberto, setTemplatesAberto] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [localizacaoAberta, setLocalizacaoAberta] = useState(false);
+  const [contatoAberto, setContatoAberto] = useState(false);
+  /**
+   * A mensagem que a próxima resposta vai citar.
+   *
+   * Mora AQUI, e não no composer, porque quem a escolhe é a barra de ações da
+   * BOLHA — que é filha da lista, irmã do composer. O estado tem de viver no
+   * ancestral comum.
+   */
+  const [respondendoA, setRespondendoA] = useState<
+    { providerMessageId: string; texto: string | null } | null
+  >(null);
+  const queryClient = useQueryClient();
 
   const { data: rawMessages = [], isLoading } = useSocialMessages(selectedContact);
 
@@ -547,6 +736,22 @@ export function SocialChatView({
         onBack={onBack}
         isMobile={isMobile}
         onOpenLead={onOpenLead}
+        onBloquear={selectedContact.channel === "whatsapp_oficial"
+          ? () => {
+            // Confirmação nativa e não um diálogo próprio: bloquear é
+            // reversível pela tela de configurações, e o que se perde ao
+            // errar é um clique — não vale uma peça de UI a mais.
+            if (!confirm("Bloquear este contato? Ele deixa de conseguir escrever para este número.")) {
+              return;
+            }
+            bloquearNoProxy(
+              selectedContact.messaging_channel_id,
+              selectedContact.external_user_id,
+            )
+              .then(() => toast.success("Contato bloqueado"))
+              .catch((e: Error) => toast.error(e.message));
+          }
+          : undefined}
       />
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
@@ -605,17 +810,121 @@ export function SocialChatView({
             }}
             density={density}
             enableActions={false}
+            {...(selectedContact.channel === "whatsapp_oficial"
+              ? {
+                // O texto da mensagem citada sai da PRÓPRIA thread já carregada:
+                // nenhuma consulta nova, e o que não estiver na janela em memória
+                // cai no rótulo genérico — degradação honesta.
+                textoCitado: (id: string) =>
+                  rawMessages.find((m) => m.provider_message_id === id)?.content ?? null,
+                onReagir: (m, emoji) => {
+                  if (!m.providerMessageId) return;
+                  // ⚠️ O `number` VAI JUNTO, e não é redundância: sem ele o gate
+                  // de responsável (`can_see_chat_target`) tenta resolver o alvo
+                  // pelo id em `whatsapp_messages` — outra tabela — e devolve
+                  // 403 fail-closed. Com o telefone, ele resolve pelo caminho
+                  // normal e nunca chega no lookup.
+                  reagirNoProxy(
+                    selectedContact.messaging_channel_id,
+                    m.providerMessageId,
+                    selectedContact.external_user_id,
+                    emoji,
+                  )
+                    .then(() =>
+                      queryClient.invalidateQueries({
+                        queryKey: chatQueryKeys.socialMessages(
+                          organizationId ?? null,
+                          selectedContact.messaging_channel_id,
+                          selectedContact.external_user_id,
+                        ),
+                      }))
+                    .catch((e: Error) => toast.error(e.message));
+                },
+                onResponder: (m) => {
+                  if (!m.providerMessageId) return;
+                  setRespondendoA({
+                    providerMessageId: m.providerMessageId,
+                    texto: m.texto,
+                  });
+                },
+              }
+              : {})}
           />
         )}
       </div>
 
       {selectedContact.channel === "whatsapp_oficial" && (
-        <TemplatePicker
-          instanceId={selectedContact.messaging_channel_id}
-          contactExternalId={selectedContact.external_user_id}
-          open={templatesAberto}
-          onOpenChange={setTemplatesAberto}
-        />
+        <>
+          <TemplatePicker
+            instanceId={selectedContact.messaging_channel_id}
+            contactExternalId={selectedContact.external_user_id}
+            open={templatesAberto}
+            onOpenChange={setTemplatesAberto}
+          />
+          {/*
+            O enviador é um OBJETO montado aqui, e não um hook passado por prop:
+            hook por prop faz a ordem dos hooks mudar quando o pai troca de
+            canal, e o React aborta com "Rendered more hooks than during the
+            previous render" — nenhum gate de tipo ou de lint pega isso.
+
+            Ele não grava a linha: o provider já a escreveu no servidor, na mesma
+            chamada. Gravar de novo duplicaria a mensagem na conversa.
+          */}
+          <SendLocationDialog
+            open={localizacaoAberta}
+            onOpenChange={setLocalizacaoAberta}
+            enviar={async (l) => {
+              await enviarLocalizacaoNoProxy(
+                selectedContact.messaging_channel_id,
+                selectedContact.external_user_id,
+                l,
+              );
+              queryClient.invalidateQueries({
+                queryKey: chatQueryKeys.socialMessages(
+                  organizationId ?? null,
+                  selectedContact.messaging_channel_id,
+                  selectedContact.external_user_id,
+                ),
+              });
+            }}
+          />
+          <SendContactDialog
+            open={contatoAberto}
+            onOpenChange={setContatoAberto}
+            enviar={async (contatos) => {
+              await enviarContatoNoProxy(
+                selectedContact.messaging_channel_id,
+                selectedContact.external_user_id,
+                contatos,
+              );
+              queryClient.invalidateQueries({
+                queryKey: chatQueryKeys.socialMessages(
+                  organizationId ?? null,
+                  selectedContact.messaging_channel_id,
+                  selectedContact.external_user_id,
+                ),
+              });
+            }}
+          />
+          <SendMenuDialog
+            open={menuAberto}
+            onOpenChange={setMenuAberto}
+            enviador={criarEnviadorOficial({
+              instanceId: selectedContact.messaging_channel_id,
+              numero: selectedContact.external_user_id,
+              aoEnviar: (inst, numero, tipo, texto, opcoes, extras) =>
+                enviarMenuNoProxy(inst, numero, tipo, texto, opcoes, extras),
+              depois: () =>
+                queryClient.invalidateQueries({
+                  queryKey: chatQueryKeys.socialMessages(
+                    organizationId ?? null,
+                    selectedContact.messaging_channel_id,
+                    selectedContact.external_user_id,
+                  ),
+                }),
+            })}
+          />
+        </>
       )}
 
       <SocialComposer
@@ -623,6 +932,12 @@ export function SocialChatView({
         canal={selectedContact.channel}
         contactExternalId={selectedContact.external_user_id}
         onAbrirTemplates={() => setTemplatesAberto(true)}
+        onAbrirMenu={() => setMenuAberto(true)}
+        onAbrirLocalizacao={() => setLocalizacaoAberta(true)}
+        onAbrirContato={() => setContatoAberto(true)}
+        respondendoA={respondendoA}
+        onCancelarResposta={() => setRespondendoA(null)}
+        instanceIdDoCanal={selectedContact.messaging_channel_id}
         lastIncomingAt={ultimaRecebidaEm}
       />
 

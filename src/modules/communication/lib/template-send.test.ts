@@ -15,6 +15,7 @@ import {
   montarComponentesDeEnvio,
   pendenciasDeEnvio,
   previewDoTemplate,
+  rotulosDosBotoes,
   templateSemVariaveis,
   tokensDoTexto,
   variaveisDoTemplate,
@@ -250,5 +251,88 @@ describe("midiaDeExemploDoCabecalho", () => {
   it("ignora exemplo que não é URL — não vira link quebrado no envelope", () => {
     const t = tpl([{ type: "HEADER", format: "IMAGE", example: { header_handle: ["4::aWzhY2U="] } }]);
     expect(midiaDeExemploDoCabecalho(t)).toBeNull();
+  });
+});
+
+/**
+ * BOTÕES NO ENVIO.
+ *
+ * Um botão de link com parte variável (`https://loja.com/p/{{1}}`) exige um
+ * componente PRÓPRIO no envio — `sub_type: "url"` e o `index` do botão dentro do
+ * componente BUTTONS. Sem ele a Meta recusa com o mesmo 132000 de parâmetro
+ * faltando, e a mensagem não chega.
+ *
+ * ⚠️ Os `{{n}}` do botão são INDEPENDENTES dos do corpo: cada botão recomeça em
+ * `{{1}}`. Reaproveitar o mapa de variáveis do corpo entregaria o nome do
+ * cliente como número de pedido.
+ */
+describe("botões no envio", () => {
+  const comLink = tpl([
+    { type: "BODY", text: "Olá {{1}}, seu pedido saiu." },
+    {
+      type: "BUTTONS",
+      buttons: [
+        { type: "QUICK_REPLY", text: "Recebi" },
+        { type: "URL", text: "Ver pedido", url: "https://loja.com/p/{{1}}" },
+      ],
+    },
+  ]);
+
+  it("o botão de link variável vira componente próprio, com sub_type e index", () => {
+    const componentes = montarComponentesDeEnvio(comLink, { "1": "Maria" }, null, { 1: "4471" });
+
+    expect(componentes).toEqual([
+      { type: "body", parameters: [{ type: "text", text: "Maria" }] },
+      { type: "button", sub_type: "url", index: "1", parameters: [{ type: "text", text: "4471" }] },
+    ]);
+  });
+
+  it("botão de resposta rápida e link FIXO não geram componente nenhum", () => {
+    // Só o que tem variável viaja no envio. Mandar componente para um botão
+    // estático é parâmetro a mais, e a Meta recusa por contagem.
+    const semVariavel = tpl([
+      { type: "BODY", text: "Olá!" },
+      {
+        type: "BUTTONS",
+        buttons: [
+          { type: "QUICK_REPLY", text: "Sim" },
+          { type: "URL", text: "Site", url: "https://loja.com" },
+        ],
+      },
+    ]);
+
+    expect(montarComponentesDeEnvio(semVariavel, {})).toEqual([]);
+  });
+
+  it("PENDÊNCIA: link variável sem valor não deixa enviar", () => {
+    // Igual à mídia de cabeçalho: não é `{{n}}` de texto nenhum, então
+    // `variaveisFaltando` sozinha deixaria passar — e a recusa chegaria por
+    // callback, depois de o vendedor achar que mandou.
+    expect(pendenciasDeEnvio(comLink, { "1": "Maria" })).toEqual(['link do botão "Ver pedido"']);
+    expect(pendenciasDeEnvio(comLink, { "1": "Maria" }, null, { 1: "4471" })).toEqual([]);
+  });
+});
+
+describe("rotulosDosBotoes", () => {
+  it("lê os rótulos na ordem em que aparecem", () => {
+    // O seletor precisa MOSTRAR os botões antes do envio: um template aprovado
+    // com botão é diferente de um sem, e quem manda não tem outro lugar para
+    // descobrir isso.
+    const t = tpl([
+      { type: "BODY", text: "Olá" },
+      {
+        type: "BUTTONS",
+        buttons: [
+          { type: "QUICK_REPLY", text: "Recebi" },
+          { type: "URL", text: "Ver pedido", url: "https://loja.com/p/{{1}}" },
+        ],
+      },
+    ]);
+
+    expect(rotulosDosBotoes(t)).toEqual(["Recebi", "Ver pedido"]);
+  });
+
+  it("template sem botão devolve lista vazia", () => {
+    expect(rotulosDosBotoes(tpl([{ type: "BODY", text: "Olá" }]))).toEqual([]);
   });
 });

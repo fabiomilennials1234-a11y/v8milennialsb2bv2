@@ -37,7 +37,11 @@ import { SOCIAL_CONTACTS_KEY_ROOT, SOCIAL_MESSAGES_KEY_ROOT } from "./shared/que
  * publica no bucket antes de enviar, então a URL é o que ele tem em mãos.
  */
 export interface NotificameWhatsAppMedia {
-  type: "image" | "video" | "document" | "audio";
+  /**
+   * `sticker` só existe no canal oficial, e só em WebP — é o formato exclusivo
+   * de figurinha do WhatsApp.
+   */
+  type: "image" | "video" | "document" | "audio" | "sticker";
   url: string;
   filename?: string;
   caption?: string;
@@ -50,6 +54,12 @@ export interface NotificameWhatsAppMedia {
 }
 
 export interface NotificameWhatsAppSendInput {
+  /**
+   * O id ESTÁVEL da mensagem citada. Vai como `replyid` — o nome que o contrato
+   * já usa no eixo da Uazapi —, e o provider o põe na RAIZ do envelope, que é
+   * onde o fornecedor espera a citação.
+   */
+  citandoProviderMessageId?: string | null;
   /** Telefone do interlocutor — é ele que agrupa a conversa. */
   to: string;
   text?: string;
@@ -71,7 +81,7 @@ export function useNotificameWhatsAppSend(instanceId: string | null) {
   const organizationId = teamMember?.organization_id ?? null;
 
   return useMutation({
-    mutationFn: async ({ to, text, media }: NotificameWhatsAppSendInput) => {
+    mutationFn: async ({ to, text, media, citandoProviderMessageId }: NotificameWhatsAppSendInput) => {
       if (!instanceId) {
         throw new NotificameWhatsAppSendError("no_instance", "Nenhum canal selecionado");
       }
@@ -113,7 +123,13 @@ export function useNotificameWhatsAppSend(instanceId: string | null) {
       const body = !media
         ? {
           action: "sendText",
-          payload: { number: to, text: texto },
+          payload: {
+            number: to,
+            text: texto,
+            // Citação só quando há alvo: `reply: true` sem `messageId` é um
+            // corpo que a Meta recusa.
+            ...(citandoProviderMessageId ? { replyid: citandoProviderMessageId } : {}),
+          },
         }
         : ehNotaDeVoz
           ? {

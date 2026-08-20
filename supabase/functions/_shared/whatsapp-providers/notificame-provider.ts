@@ -75,6 +75,7 @@ import {
   type CreateInstanceResult,
   type InstanceStatus,
   type SendMediaOptions,
+  type SendMenuOptions,
   type SendResult,
   type SendTemplateOptions,
   type SendTextOptions,
@@ -144,6 +145,14 @@ export interface NotificameEnvelope {
   from: string;
   to: string;
   contents: NotificameContent[];
+  /**
+   * A mensagem CITADA, quando esta responde a outra.
+   *
+   * ⚠️ Mora na RAIZ, ao lado de `from`/`to`, e não dentro de `contents` — é a
+   * única exceção ao padrão do contrato. Ver `montarEnvelopeDeResposta`.
+   */
+  messageId?: string;
+  reply?: boolean;
 }
 
 /**
@@ -224,6 +233,426 @@ export function normalizeNotificameRecipient(
  *     ADIVINHAR: o destinatário receberia um quadrado estático no lugar do que o
  *     operador escolheu, sem ninguém saber por quê.
  */
+/** Uma mensagem interativa, na forma NOSSA — antes de virar envelope. */
+export interface NotificameInterativa {
+  tipo: "button" | "list" | "cta" | "poll" | "carousel";
+  texto: string;
+  rodape?: string;
+  opcoes: Array<{ titulo: string; descricao?: string }>;
+  /** Só em `list`: o texto do botão que ABRE a lista. Sem ele ela não abre. */
+  rotuloDaLista?: string;
+  /** Só em `cta`: o endereço que o botão abre. */
+  ctaUrl?: string;
+}
+
+/** Tetos da Meta. Ela recusa a mensagem inteira, não corta o excedente. */
+const MAX_BOTOES_INTERATIVOS = 3;
+const MAX_LINHAS_DA_LISTA = 10;
+
+/**
+ * O envelope de uma mensagem interativa. PURO.
+ *
+ * ⚠️ ESTE CAMINHO SÓ EXISTE DENTRO DA JANELA DE 24 HORAS. Fora dela a Meta
+ * recusa qualquer mensagem livre, interativa ou não — o que passa ali é template
+ * aprovado, e template tem botão próprio (`lib/template-buttons.ts`).
+ *
+ * ⚠️ RECUSA ALTO, ANTES DO I/O. A forma intuitiva não falha: o fornecedor aceita
+ * o corpo e a Meta recusa o envio depois, e a recusa chega ao vendedor sem
+ * motivo legível. Um erro nosso, aqui, diz o que fazer.
+ *
+ * ⚠️ Os ids são a POSIÇÃO. É o que volta no `postback`/`button_reply` quando o
+ * cliente toca — e é por isso que o título vai junto: o id sozinho não diz nada
+ * a quem lê a conversa depois.
+ */
+export function toNotificameInteractiveContent(
+  i: NotificameInterativa,
+  kind: NotificameChannelKind,
+): NotificameContent {
+  if (kind !== "whatsapp") {
+    // A doc traz Quick Reply para Instagram, com envelope PRÓPRIO. Mandar o do
+    // WhatsApp ali seria inventar campo — e o fornecedor aceitaria o corpo antes
+    // de a Meta recusar o envio.
+    throw new NotSupportedError(
+      NOTIFICAME_PROVIDER,
+      `mensagem interativa — o canal ${kind} tem envelope próprio, ainda não implementado`,
+    );
+  }
+
+  const texto = (i.texto ?? "").trim();
+  if (!texto) {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "mensagem interativa sem texto");
+  }
+
+  const opcoes = (i.opcoes ?? []).filter((o) => (o.titulo ?? "").trim() !== "");
+  if (opcoes.length === 0) {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "mensagem interativa sem opção");
+  }
+
+  const rodape = (i.rodape ?? "").trim();
+
+  switch (i.tipo) {
+    case "button": {
+      if (opcoes.length > MAX_BOTOES_INTERATIVOS) {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          `mensagem com botões aceita no máximo ${MAX_BOTOES_INTERATIVOS} opções`,
+        );
+      }
+      return {
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: texto },
+          ...(rodape ? { footer: { text: rodape } } : {}),
+          action: {
+            buttons: opcoes.map((o, n) => ({
+              type: "reply",
+              reply: { id: String(n + 1), title: o.titulo.trim() },
+            })),
+          },
+        },
+      };
+    }
+
+    case "list": {
+      const rotulo = (i.rotuloDaLista ?? "").trim();
+      if (!rotulo) {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          "lista sem o texto do botão que a abre",
+        );
+      }
+      if (opcoes.length > MAX_LINHAS_DA_LISTA) {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          `lista aceita no máximo ${MAX_LINHAS_DA_LISTA} opções`,
+        );
+      }
+      return {
+        type: "interactive",
+        interactive: {
+          type: "list",
+          body: { text: texto },
+          ...(rodape ? { footer: { text: rodape } } : {}),
+          action: {
+            button: rotulo,
+            // Uma seção só: o envelope aceita várias, e agrupar exigiria uma
+            // decisão de produto que ninguém pediu. "Opções" é rótulo neutro.
+            sections: [
+              {
+                title: "Opções",
+                rows: opcoes.map((o, n) => ({
+                  id: String(n + 1),
+                  title: o.titulo.trim(),
+                  ...(o.descricao?.trim() ? { description: o.descricao.trim() } : {}),
+                })),
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    case "cta": {
+      const url = (i.ctaUrl ?? "").trim();
+      if (!/^https?:\/\//i.test(url)) {
+        throw new NotSupportedError(NOTIFICAME_PROVIDER, "botão de link sem endereço válido");
+      }
+      return {
+        type: "interactive",
+        interactive: {
+          type: "cta_url",
+          body: { text: texto },
+          ...(rodape ? { footer: { text: rodape } } : {}),
+          action: {
+            name: "cta_url",
+            parameters: { display_text: opcoes[0].titulo.trim(), url },
+          },
+        },
+      };
+    }
+
+    default:
+      // Enquete e carrossel são vocabulário da Uazapi. A Meta não os tem, e
+      // mapeá-los para lista entregaria ao cliente uma coisa no lugar de outra.
+      throw new NotSupportedError(
+        NOTIFICAME_PROVIDER,
+        `mensagem interativa do tipo ${String(i.tipo)} não existe no canal oficial`,
+      );
+  }
+}
+
+/**
+ * Uma localização, na forma nossa. `nome` e `endereco` são opcionais no
+ * envelope, e mandá-los vazios põe uma linha em branco no cartão do aparelho.
+ */
+export interface NotificameLocalizacao {
+  latitude: number;
+  longitude: number;
+  nome?: string;
+  endereco?: string;
+}
+
+/**
+ * O envelope de localização. PURO.
+ *
+ * ⚠️ OS CAMPOS FICAM NO NÍVEL DO CONTENT. A Graph aninha sob `location`, e a doc
+ * do fornecedor NÃO — a forma aninhada é aceita por ele e recusada pela Meta
+ * depois, com a recusa chegando ao vendedor sem motivo.
+ */
+export function toNotificameLocationContent(
+  l: NotificameLocalizacao,
+  kind: NotificameChannelKind,
+): NotificameContent {
+  if (kind !== "whatsapp") {
+    throw new NotSupportedError(
+      NOTIFICAME_PROVIDER,
+      `localização — o canal ${kind} não a traz na doc`,
+    );
+  }
+  // `0` é coordenada: a checagem é de finitude, e não um `!lat` que apagaria o
+  // equador e o meridiano de Greenwich.
+  if (!Number.isFinite(l.latitude) || !Number.isFinite(l.longitude)) {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "localização sem coordenada");
+  }
+
+  const nome = (l.nome ?? "").trim();
+  const endereco = (l.endereco ?? "").trim();
+
+  return {
+    type: "location",
+    latitude: l.latitude,
+    longitude: l.longitude,
+    ...(nome ? { name: nome } : {}),
+    ...(endereco ? { address: endereco } : {}),
+  };
+}
+
+/** Um cartão de contato, na forma nossa. */
+export interface NotificameContato {
+  nome: string;
+  telefones: Array<{ numero: string; waId?: string }>;
+  emails?: string[];
+}
+
+/**
+ * O envelope de contato. PURO.
+ *
+ * ⚠️ `formatted_name` é o que o aparelho EXIBE, e a Meta o exige. `first_name` e
+ * `last_name` saem da primeira e da última palavra — e `last_name` só entra
+ * quando existe: um campo vazio no cartão aparece como linha em branco no
+ * aparelho do destinatário.
+ */
+export function toNotificameContactContent(
+  contatos: NotificameContato[],
+  kind: NotificameChannelKind,
+): NotificameContent {
+  if (kind !== "whatsapp") {
+    throw new NotSupportedError(
+      NOTIFICAME_PROVIDER,
+      `contato — o canal ${kind} não o traz na doc`,
+    );
+  }
+
+  const usaveis = contatos.filter((c) =>
+    (c.nome ?? "").trim() !== "" &&
+    (c.telefones ?? []).some((t) => (t.numero ?? "").trim() !== "")
+  );
+  if (usaveis.length === 0) {
+    // Um cartão sem telefone é um contato que não serve para nada: o
+    // destinatário recebe um nome que não dá para chamar.
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "contato sem nome ou sem telefone");
+  }
+
+  return {
+    type: "contacts",
+    contacts: usaveis.map((c) => {
+      const nome = c.nome.trim();
+      const partes = nome.split(/\s+/);
+      const sobrenome = partes.length > 1 ? partes[partes.length - 1] : "";
+      const emails = (c.emails ?? []).map((e) => e.trim()).filter(Boolean);
+
+      return {
+        name: {
+          formatted_name: nome,
+          first_name: partes[0],
+          ...(sobrenome ? { last_name: sobrenome } : {}),
+        },
+        phones: c.telefones
+          .filter((t) => (t.numero ?? "").trim() !== "")
+          .map((t) => ({
+            phone: t.numero.trim(),
+            ...(t.waId?.trim() ? { wa_id: t.waId.trim() } : {}),
+          })),
+        ...(emails.length ? { emails: emails.map((email) => ({ email })) } : {}),
+      };
+    }),
+  };
+}
+
+/**
+ * O envelope de uma REAÇÃO. PURO.
+ *
+ * ⚠️ `message_id` é o `providerMessageId` — o id ESTÁVEL —, e não o
+ * `external_id`. Aquele é o id do EVENTO e muda a cada callback do mesmo envio:
+ * apontar para ele colaria a reação em nada.
+ *
+ * ⚠️ EMOJI VAZIO NÃO É ENTRADA INVÁLIDA: é o comando de REMOVER a reação, e é
+ * assim que a Meta desfaz. Recusar aqui deixaria o vendedor sem como tirar uma
+ * reação que ele mesmo pôs.
+ */
+export function toNotificameReactionContent(
+  r: { providerMessageId: string; emoji: string },
+  kind: NotificameChannelKind,
+): NotificameContent {
+  const id = (r.providerMessageId ?? "").trim();
+  if (!id) {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "reação sem o id da mensagem");
+  }
+  if (kind !== "whatsapp" && kind !== "instagram") {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, `reação — canal ${kind}`);
+  }
+
+  return { type: "reaction", reaction: { message_id: id, emoji: r.emoji ?? "" } };
+}
+
+/**
+ * O envelope do balão de "digitando". PURO — e não leva nada além do tipo.
+ *
+ * Some sozinho do lado da Meta depois de alguns segundos; não há envelope de
+ * "parou de digitar", e inventar um seria adivinhar.
+ *
+ * ⚠️ O exemplo da doc traz um `messageId` no corpo do digitando, comentado como
+ * "id da mensagem que você ira responder" — texto claramente copiado da seção de
+ * resposta citada logo acima. Um balão de digitando não responde a nada, e
+ * mandar o campo seria propagar o erro de copiar-e-colar do fornecedor para
+ * dentro do nosso envelope.
+ */
+export function toNotificameTypingContent(kind: NotificameChannelKind): NotificameContent {
+  if (kind !== "whatsapp") {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, `digitando — canal ${kind}`);
+  }
+  return { type: "typing" };
+}
+
+/**
+ * Acrescenta a CITAÇÃO ao envelope. PURO.
+ *
+ * ⚠️ `messageId` e `reply` vão na RAIZ do corpo, ao lado de `from` e `to` — e
+ * NÃO dentro de `contents`, que é onde todo o resto mora. Aninhar produz uma
+ * mensagem comum: o fornecedor aceita calado e a citação some sem erro nenhum,
+ * que é o pior desfecho possível — parece que funcionou.
+ *
+ * Sem id, o envelope sai INTACTO: `reply: true` sozinho é um corpo que a Meta
+ * recusa, e uma mensagem sem citação ainda é uma mensagem.
+ *
+ * ─── DIVERGÊNCIA CONSCIENTE DA DOC ──────────────────────────────────────────
+ *
+ * O exemplo da doc para resposta citada traz `"to": "whatsapp"` — a palavra, não
+ * o número. Ele é o ÚNICO envelope de mensagem do documento inteiro com essa
+ * forma, ao lado do endpoint de download de arquivo criptografado, que é de onde
+ * ela provavelmente foi copiada. Todos os outros — texto, mídia, reação,
+ * digitando, contato, interativa — mandam o destinatário.
+ *
+ * Mandamos o NÚMERO, e não a palavra. `normalizeNotificameRecipient` derruba
+ * qualquer não-dígito antes do envio: `"whatsapp"` viraria string vazia e o
+ * envio morreria com `invalid_recipient` sem sequer sair. Seguir a doc aqui
+ * seria garantir a falha; divergir dela é a única forma de a mensagem existir.
+ */
+export function montarEnvelopeDeResposta(
+  envelope: NotificameEnvelope,
+  providerMessageId: string | null | undefined,
+): NotificameEnvelope {
+  const id = (providerMessageId ?? "").trim();
+  if (!id) return envelope;
+
+  return { ...envelope, messageId: id, reply: true } as NotificameEnvelope;
+}
+
+/** As três ações de bloqueio, na forma nossa. */
+export type AcaoDeBloqueio = "bloquear" | "desbloquear" | "listar";
+
+const TIPO_POR_ACAO: Record<AcaoDeBloqueio, string> = {
+  bloquear: "block_user",
+  desbloquear: "unblock_user",
+  listar: "list_blocked",
+};
+
+/**
+ * O envelope de bloqueio. PURO.
+ *
+ * As três viajam pela MESMA rota das mensagens, com um `contents` de um item só
+ * e sem carga nenhuma. O destinatário vai no `to` do envelope, como em qualquer
+ * mensagem — inclusive no `list_blocked`, onde ele não significa nada e a doc o
+ * manda assim mesmo.
+ *
+ * ⚠️ NENHUMA delas é mensagem. Quem chama tem de gravar NADA na conversa: um
+ * "bloqueado" no meio da thread seria uma bolha que o cliente nunca recebeu.
+ */
+export function toNotificameBlockContent(
+  acao: AcaoDeBloqueio,
+  kind: NotificameChannelKind,
+): NotificameContent {
+  if (kind !== "whatsapp") {
+    throw new NotSupportedError(
+      NOTIFICAME_PROVIDER,
+      `bloqueio de contato — o canal ${kind} não o traz na doc`,
+    );
+  }
+  return { type: TIPO_POR_ACAO[acao] };
+}
+
+/** O convite de opt-in, na forma nossa. */
+export interface ConviteDeOptIn {
+  /** O que a pessoa lê na tela de aceite. 1 a 300 caracteres. */
+  mensagem: string;
+  /** O que ela recebe logo após aceitar. 1 a 300 caracteres. */
+  confirmacao: string;
+  /** Apelido interno do convite. NÃO é exibido a ninguém. 1 a 256. */
+  nome: string;
+  /** Imutável depois da criação, segundo a doc. */
+  politicaDePrivacidade: string;
+  site: string;
+  /** Substitui `{{promo_code}}` na confirmação. Alfanumérico, até 50. */
+  codigoPromocional?: string;
+}
+
+/**
+ * O envelope de CRIAÇÃO de um convite de opt-in.
+ *
+ * ⚠️ ARMADILHA DO FORNECEDOR: criar e listar usam o MESMO `type: "list"`. O que
+ * distingue os dois é a presença de `signup_content` — um corpo de criação sem
+ * ele vira, em silêncio, uma listagem, e o operador fica achando que criou.
+ */
+export function toNotificameSignupContent(c: ConviteDeOptIn): NotificameContent {
+  return {
+    type: "list",
+    signup_content: {
+      signup_message: c.mensagem.trim(),
+      confirmation_message: c.confirmacao.trim(),
+      display_name: c.nome.trim(),
+      privacy_policy_url: c.politicaDePrivacidade.trim(),
+      website_url: c.site.trim(),
+      ...(c.codigoPromocional?.trim() ? { promo_code: c.codigoPromocional.trim() } : {}),
+    },
+  };
+}
+
+/** O envelope de LISTAGEM. Ver a armadilha em `toNotificameSignupContent`. */
+export function toNotificameSignupListContent(limite: number): NotificameContent {
+  return { type: "list", limit: limite };
+}
+
+/**
+ * O deep link que se manda ao cliente. Formato da Meta:
+ * `wa.me/<numero>/signup/<id>`, com o número em formato internacional e SEM
+ * símbolo nenhum — `+`, espaço ou traço quebram o link.
+ */
+export function linkDeOptIn(numeroDaEmpresa: string, signupId: string): string {
+  const digitos = String(numeroDaEmpresa ?? "").replace(/\D/g, "");
+  return `https://wa.me/${digitos}/signup/${String(signupId ?? "").trim()}`;
+}
+
 export function toNotificameMediaContent(
   opts: SendMediaOptions,
   kind: NotificameChannelKind,
@@ -285,7 +714,27 @@ export function toNotificameMediaContent(
       // receber um anexo sem identificação nenhuma.
       return arquivo("document", caption ?? opts.filename);
     case "sticker":
-      throw new NotSupportedError(NOTIFICAME_PROVIDER, "sendMedia(sticker)");
+      // ⚠️ Isto já foi um `NotSupportedError` justificado por "o canal oficial
+      // não tem figurinha, e mapeá-la seria adivinhar". A afirmação era FALSA: a
+      // doc corrente do fornecedor tem uma seção "Enviar um sticker", e o
+      // envelope é este, com nome próprio. Não havia o que adivinhar.
+      //
+      // Fica fora do Instagram porque LÁ a doc não o traz — a diferença entre as
+      // duas frases é que esta foi conferida.
+      if (kind !== "whatsapp") {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          `sendMedia(sticker) — o canal ${kind} não aceita figurinha`,
+        );
+      }
+      return {
+        type: "file",
+        fileMimeType: "sticker",
+        fileUrl: file,
+        // O contrato pede legenda; o WhatsApp não a exibe em figurinha. É o
+        // valor que a própria doc usa no exemplo.
+        fileCaption: "Sticker",
+      };
     default:
       throw new NotSupportedError(
         NOTIFICAME_PROVIDER,
@@ -464,6 +913,15 @@ export interface OutboundChannelMessageRow {
   lead_id: null;
   timestamp: string;
   raw_payload: unknown;
+  /**
+   * A forma NOSSA do que foi enviado. Hoje só carrega os rótulos dos botões de
+   * um template — que a Meta renderiza do lado dela e que, sem isto, não
+   * aparecem em lugar nenhum da conversa.
+   *
+   * `null` quando não há nada a dizer: um `{}` faria a bolha desenhar uma faixa
+   * vazia debaixo da mensagem.
+   */
+  metadata: unknown | null;
 }
 
 /**
@@ -509,6 +967,14 @@ export function buildOutboundChannelMessageRow(params: {
   mediaUrl: string | null;
   timestampIso: string;
   rawPayload: unknown;
+  /**
+   * Os rótulos dos botões do template, na ordem — vindos de QUEM ENVIA.
+   *
+   * Mesmo motivo do `previewText`: a Meta monta a mensagem do lado dela, e só
+   * quem clicou em enviar tem o template aprovado em mãos. Inventar aqui faria
+   * o histórico mentir sobre o que o cliente viu.
+   */
+  botoes?: string[];
 }): OutboundChannelMessageRow {
   return {
     organization_id: params.organizationId,
@@ -531,6 +997,9 @@ export function buildOutboundChannelMessageRow(params: {
     lead_id: null,
     timestamp: params.timestampIso,
     raw_payload: params.rawPayload,
+    metadata: params.botoes?.length
+      ? { tipo: "template", botoes: params.botoes }
+      : null,
   };
 }
 
@@ -652,12 +1121,60 @@ export class NotificameProvider implements WhatsAppProvider {
    *   5. `readSentMessageId`      → sem id, ERRO. Nada é gravado;
    *   6. `channel_messages`       → best-effort, DEPOIS de o envio ser fato.
    */
+  /**
+   * Uma chamada que PERGUNTA em vez de mandar — devolve o corpo parseado.
+   *
+   * `send()` devolve só o id da mensagem, porque é isso que um envio produz.
+   * Listar bloqueados e consultar a saúde do número não produzem mensagem
+   * nenhuma: a resposta É o resultado, e jogá-la fora deixaria a tela sem o que
+   * mostrar.
+   *
+   * ⚠️ NÃO GRAVA NADA. Nenhuma destas ações é mensagem da conversa.
+   */
+  private async perguntar(
+    caminho: string,
+    corpo: Record<string, unknown>,
+  ): Promise<unknown> {
+    const cfg = await this.resolveOrgConfig();
+
+    const r = await this.fetchImpl(`${cfg.baseUrl}${caminho}`, {
+      method: "POST",
+      headers: {
+        "X-Api-Token": cfg.subaccountToken,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(corpo),
+    });
+
+    const texto = await r.text();
+    if (!r.ok) {
+      throw new NotificameError(
+        "consulta_recusada",
+        `O NotificaMe recusou a consulta (HTTP ${r.status})`,
+      );
+    }
+
+    const parsed = parseNotificameBody(texto);
+    return parsed.ok ? parsed.value : null;
+  }
+
   private async send(params: {
     to: string;
     content: NotificameContent;
     messageType: string;
     text: string | null;
     mediaUrl: string | null;
+    /** Só em template: os rótulos dos botões, para a conversa poder exibi-los. */
+    botoes?: string[];
+    /** O id ESTÁVEL da mensagem citada, quando esta responde a outra. */
+    citandoProviderMessageId?: string | null;
+    /**
+     * `true` para o que NÃO é mensagem da conversa — hoje só o balão de
+     * digitando. Sem isto, cada indicador viraria uma linha vazia na thread, e a
+     * conversa ficaria uma escada de nada entre as mensagens de verdade.
+     */
+    naoGravar?: boolean;
   }): Promise<SendResult> {
     const to = normalizeNotificameRecipient(this.channelKind, params.to);
     if (!to) {
@@ -668,11 +1185,17 @@ export class NotificameProvider implements WhatsAppProvider {
     }
 
     const cfg = await this.resolveOrgConfig();
-    const envelope = buildNotificameEnvelope({
-      from: this.channelId,
-      to,
-      content: params.content,
-    });
+    // A citação entra na RAIZ do envelope — ver `montarEnvelopeDeResposta`. Ela
+    // é a única exceção ao padrão do contrato, e aninhá-la em `contents` faria a
+    // citação sumir sem erro nenhum.
+    const envelope = montarEnvelopeDeResposta(
+      buildNotificameEnvelope({
+        from: this.channelId,
+        to,
+        content: params.content,
+      }),
+      params.citandoProviderMessageId,
+    );
 
     const url = `${cfg.baseUrl}${notificameSendPath(this.channelKind)}`;
     const controller = new AbortController();
@@ -732,12 +1255,17 @@ export class NotificameProvider implements WhatsAppProvider {
       );
     }
 
+    if (params.naoGravar) {
+      return { message_id: messageId, status: "sent", timestamp: this.now().getTime() };
+    }
+
     await this.persist({
       to,
       externalId: messageId,
       messageType: params.messageType,
       content: params.text,
       mediaUrl: params.mediaUrl,
+      botoes: params.botoes,
       rawPayload: { request: envelope, response: parsed.value },
     });
 
@@ -764,6 +1292,7 @@ export class NotificameProvider implements WhatsAppProvider {
     content: string | null;
     mediaUrl: string | null;
     rawPayload: unknown;
+    botoes?: string[];
   }): Promise<void> {
     const row = buildOutboundChannelMessageRow({
       organizationId: this.organizationId,
@@ -775,6 +1304,7 @@ export class NotificameProvider implements WhatsAppProvider {
       messageType: params.messageType,
       content: params.content,
       mediaUrl: params.mediaUrl,
+      botoes: params.botoes,
       // O relógio mora AQUI, fora dos módulos puros.
       timestampIso: this.now().toISOString(),
       rawPayload: params.rawPayload,
@@ -807,6 +1337,9 @@ export class NotificameProvider implements WhatsAppProvider {
       messageType: "text",
       text,
       mediaUrl: null,
+      // `replyid` é o nome que o contrato já usa no eixo da Uazapi. Aqui o valor
+      // tem de ser o `providerMessageId` — o id ESTÁVEL —, e não o `external_id`.
+      citandoProviderMessageId: opts.replyid,
     });
   }
 
@@ -854,6 +1387,10 @@ export class NotificameProvider implements WhatsAppProvider {
       // no lugar da mensagem — medido em produção no primeiro template enviado.
       text: opts.previewText?.trim() || null,
       mediaUrl: null,
+      // Os rótulos dos botões, pelo MESMO motivo do texto acima: a Meta desenha
+      // a faixa de botões do lado dela, e sem isto a conversa mostra o texto e
+      // esconde as opções que o cliente está vendo.
+      botoes: opts.buttonLabels?.map((r) => r.trim()).filter(Boolean),
     });
   }
 
@@ -905,14 +1442,41 @@ export class NotificameProvider implements WhatsAppProvider {
     }
   }
 
-  // ── setPresence — NO-OP ───────────────────────────────────────────────────
+  // ── setPresence ───────────────────────────────────────────────────────────
   /**
-   * O canal oficial não tem "digitando…". NÃO LANÇA de propósito: o Copilot chama
-   * `setPresence` ANTES de todo envio, e um throw aqui mataria o envio inteiro por
-   * causa de um indicador cosmético. Mesmo desfecho do `MetaCloudProvider`.
+   * O balão de "digitando…".
+   *
+   * ⚠️ Isto era um no-op justificado por "o canal oficial não tem digitando". A
+   * afirmação era FALSA: a doc do fornecedor tem uma seção "Balão de digitando",
+   * com envelope próprio (`{type:"typing"}`). É a terceira asserção negativa
+   * errada encontrada neste arquivo — junto com figurinha e mensagem interativa.
+   *
+   * ⚠️ NÃO LANÇA, e isso continua valendo: o Copilot chama `setPresence` ANTES de
+   * todo envio, e um throw aqui mataria a mensagem por causa de um indicador
+   * cosmético. Falha de rede no balão não pode custar a conversa.
+   *
+   * `available` segue no-op: não existe envelope de "parou de digitar", e o
+   * balão some sozinho do lado da Meta depois de alguns segundos. Inventar um
+   * seria adivinhar.
    */
-  setPresence(_number: string, _state: "composing" | "available"): Promise<void> {
-    return Promise.resolve();
+  async setPresence(number: string, state: "composing" | "available"): Promise<void> {
+    if (state !== "composing") return;
+
+    try {
+      await this.send({
+        to: number,
+        content: toNotificameTypingContent(this.channelKind),
+        messageType: "typing",
+        // Indicador não é mensagem: não entra na conversa.
+        naoGravar: true,
+        // Sem texto e sem mídia: o balão não é uma mensagem da conversa, e
+        // gravá-lo com conteúdo poria uma linha vazia na thread.
+        text: null,
+        mediaUrl: null,
+      });
+    } catch {
+      // Engolido de propósito. Ver o ⚠️ acima.
+    }
   }
 
   // ── Ciclo de vida da conexão ──────────────────────────────────────────────
@@ -947,16 +1511,110 @@ export class NotificameProvider implements WhatsAppProvider {
   // Cada mensagem contém "does not support" — a string que `isFeatureUnavailable()`
   // casa para mostrar o toast certo em vez de um 500 cru.
 
-  sendMenu(): Promise<SendResult> {
-    throw new NotSupportedError(NOTIFICAME_PROVIDER, "sendMenu");
+  async sendMenu(opts: SendMenuOptions): Promise<SendResult> {
+    // Recusa alto e ANTES do I/O: quem decide é o envelope, e a mensagem dele
+    // diz o que fazer. Enquete e carrossel morrem ali, com nome.
+    const opcoes = opts.richChoices?.length
+      ? opts.richChoices.map((c) => ({ titulo: c.title, descricao: c.description }))
+      : opts.choices.map((c) => ({ titulo: c }));
+
+    const content = toNotificameInteractiveContent(
+      {
+        tipo: opts.type,
+        texto: opts.text,
+        rodape: opts.footer,
+        opcoes,
+        rotuloDaLista: opts.listButtonLabel,
+        ctaUrl: opts.ctaUrl,
+      },
+      this.channelKind,
+    );
+
+    return await this.send({
+      to: opts.number,
+      content,
+      messageType: opts.type === "list" ? "list" : "interactive",
+      // O corpo é o que a conversa mostra; as opções vão para o metadata, pelo
+      // mesmo motivo dos botões de template — a Meta desenha a faixa do lado
+      // dela, e deste lado não há como saber o que o cliente está vendo.
+      text: opts.text.trim() || null,
+      mediaUrl: null,
+      botoes: opcoes.map((o) => o.titulo.trim()).filter(Boolean),
+    });
+  }
+
+  async sendLocation(opts: {
+    number: string;
+    latitude: number;
+    longitude: number;
+    name?: string;
+    address?: string;
+  }): Promise<SendResult> {
+    const content = toNotificameLocationContent(
+      {
+        latitude: opts.latitude,
+        longitude: opts.longitude,
+        nome: opts.name,
+        endereco: opts.address,
+      },
+      this.channelKind,
+    );
+
+    return await this.send({
+      to: opts.number,
+      content,
+      messageType: "location",
+      // O nome do lugar é o que a LISTA DE CONVERSAS mostra: sem ele a conversa
+      // aparece em branco na lateral depois de uma localização.
+      text: opts.name?.trim() || opts.address?.trim() || null,
+      mediaUrl: null,
+    });
+  }
+
+  async sendContact(opts: {
+    number: string;
+    contacts: Array<{
+      nome: string;
+      telefones: Array<{ numero: string; waId?: string }>;
+      emails?: string[];
+    }>;
+  }): Promise<SendResult> {
+    const content = toNotificameContactContent(opts.contacts, this.channelKind);
+
+    return await this.send({
+      to: opts.number,
+      content,
+      messageType: "contacts",
+      text: opts.contacts.map((c) => c.nome.trim()).filter(Boolean).join(", ") || null,
+      mediaUrl: null,
+    });
   }
 
   sendPixButton(): Promise<SendResult> {
     throw new NotSupportedError(NOTIFICAME_PROVIDER, "sendPixButton");
   }
 
-  react(): Promise<void> {
-    throw new NotSupportedError(NOTIFICAME_PROVIDER, "react");
+  /**
+   * ⚠️ `messageId` AQUI É O `providerMessageId`, o id ESTÁVEL — e não o
+   * `external_id`, que é o id do evento e muda a cada callback do mesmo envio.
+   * Quem chama é responsável por mandar o certo; apontar para o id do evento
+   * cola a reação em nada, e o fornecedor aceita calado.
+   */
+  async react(messageId: string, number: string, emoji: string): Promise<void> {
+    const content = toNotificameReactionContent(
+      { providerMessageId: messageId, emoji },
+      this.channelKind,
+    );
+
+    await this.send({
+      to: number,
+      content,
+      messageType: "reaction",
+      // O emoji é o texto da linha — é o que a conversa mostra. Vazio significa
+      // REMOVER a reação, e aí não há o que exibir.
+      text: emoji?.trim() || null,
+      mediaUrl: null,
+    });
   }
 
   edit(): Promise<void> {
@@ -971,8 +1629,87 @@ export class NotificameProvider implements WhatsAppProvider {
     throw new NotSupportedError(NOTIFICAME_PROVIDER, "deleteForAll");
   }
 
+  /**
+   * ⚠️ `markRead` CONTINUA FORA, e a ausência foi procurada antes de afirmada:
+   * não há seção no índice da doc do fornecedor nem ocorrência no corpo da parte
+   * de WhatsApp. Ele não expõe a confirmação de leitura.
+   */
   markRead(): Promise<void> {
     throw new NotSupportedError(NOTIFICAME_PROVIDER, "markRead");
+  }
+
+  /**
+   * Bloqueia o contato. O cliente deixa de conseguir escrever para este número.
+   *
+   * ⚠️ NÃO GRAVA LINHA. Bloquear não é mensagem, e uma bolha "bloqueado" no meio
+   * da thread seria algo que o cliente nunca recebeu.
+   */
+  async blockUser(number: string): Promise<void> {
+    await this.send({
+      to: number,
+      content: toNotificameBlockContent("bloquear", this.channelKind),
+      messageType: "block_user",
+      text: null,
+      mediaUrl: null,
+      naoGravar: true,
+    });
+  }
+
+  async unblockUser(number: string): Promise<void> {
+    await this.send({
+      to: number,
+      content: toNotificameBlockContent("desbloquear", this.channelKind),
+      messageType: "unblock_user",
+      text: null,
+      mediaUrl: null,
+      naoGravar: true,
+    });
+  }
+
+  /**
+   * Quem está bloqueado. A resposta É o resultado — por isso não passa pelo
+   * `send`, que devolveria só um id de mensagem.
+   */
+  async listBlocked(): Promise<unknown> {
+    return await this.perguntar(notificameSendPath(this.channelKind), {
+      from: this.channelId,
+      // O `to` não significa nada aqui, e a doc o manda assim mesmo. Vai o
+      // próprio canal para não inventar um destinatário.
+      to: this.channelId,
+      contents: [toNotificameBlockContent("listar", this.channelKind)],
+    });
+  }
+
+  /**
+   * A saúde do número, do lado da Meta — verde, amarelo ou vermelho.
+   *
+   * É determinada pelo feedback dos clientes: bloqueios e denúncias derrubam a
+   * nota, e nota vermelha é o degrau antes de o número ser limitado. Rota
+   * PRÓPRIA, fora do caminho de mensagens.
+   */
+  /**
+   * Cria um convite de opt-in e devolve o corpo do fornecedor — de onde sai o
+   * `id` que vira o deep link.
+   *
+   * O `from` é o `channelId`: a doc o chama de "token do canal", que é o mesmo
+   * valor que a criação de template já manda e que funciona em produção.
+   */
+  async createSignupInvite(convite: ConviteDeOptIn): Promise<unknown> {
+    return await this.perguntar("/v2/channels/whatsapp/app", {
+      from: this.channelId,
+      contents: [toNotificameSignupContent(convite)],
+    });
+  }
+
+  async listSignupInvites(limite = 20): Promise<unknown> {
+    return await this.perguntar("/v2/channels/whatsapp/app", {
+      from: this.channelId,
+      contents: [toNotificameSignupListContent(limite)],
+    });
+  }
+
+  async numberHealth(): Promise<unknown> {
+    return await this.perguntar("/v2/meta/health_status", { from: this.channelId });
   }
 
   listChats(): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>> {
