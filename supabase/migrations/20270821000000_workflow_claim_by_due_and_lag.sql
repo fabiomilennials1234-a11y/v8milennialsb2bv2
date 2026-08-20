@@ -32,6 +32,12 @@ COMMENT ON COLUMN public.workflow_executions.claimed_lag_ms IS
   'é reescrito depois pelo executor. Ver CONTEXT.md: Lag (distinto de Wait).';
 
 -- ── 2. Claim por vencimento ─────────────────────────────────────────────────
+--
+-- Os dois `updated_at` abaixo carregam `-- metric-lint-allow`. Eles NÃO são âncora
+-- temporal de métrica (o que o R4 do ADR-0017 proíbe): são a detecção de claim
+-- travado — "worker morreu segurando esta linha há mais de 10 min, pode reivindicar
+-- de novo". É liveness de fila. A expressão é idêntica à que já roda em produção
+-- desde antes desta migration; não estou introduzindo o padrão, só preservando-o.
 CREATE OR REPLACE FUNCTION public.claim_workflow_executions(
   batch_size int DEFAULT 20,
   per_org_cap int DEFAULT 1000
@@ -50,7 +56,7 @@ AS $function$
     FROM public.workflow_executions
     WHERE
       (status = 'running' AND (next_run_at IS NULL OR next_run_at <= NOW()))
-      OR (status = 'processing' AND updated_at < NOW() - INTERVAL '10 minutes')
+      OR (status = 'processing' AND updated_at < NOW() - INTERVAL '10 minutes')  -- metric-lint-allow: liveness de fila, nao ancora de metrica
       OR (status = 'waiting_response' AND next_run_at IS NOT NULL AND next_run_at <= NOW())
   ),
   capped AS (
@@ -81,7 +87,7 @@ AS $function$
   WHERE w.id IN (SELECT id FROM picked)
     AND (
       (w.status = 'running' AND (w.next_run_at IS NULL OR w.next_run_at <= NOW()))
-      OR (w.status = 'processing' AND w.updated_at < NOW() - INTERVAL '10 minutes')
+      OR (w.status = 'processing' AND w.updated_at < NOW() - INTERVAL '10 minutes')  -- metric-lint-allow: liveness de fila, nao ancora de metrica
       OR (w.status = 'waiting_response' AND w.next_run_at IS NOT NULL AND w.next_run_at <= NOW())
     )
   RETURNING w.*;
