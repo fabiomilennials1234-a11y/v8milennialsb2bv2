@@ -41,6 +41,7 @@ import {
   resolveVariables,
   buildTrackId,
   recipientGate,
+  providerPersistsOwnMessages,
 } from "./whatsapp-helpers.ts";
 import { sendTextViaInstance, normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import { summarizeConversation } from "./ai-operations.ts";
@@ -87,11 +88,14 @@ function resolveDestinations(raw: unknown): { valid: string[]; invalid: string[]
 async function persistChatHistory(
   supabase: ActionInput["supabase"],
   organizationId: string,
-  instance: { id: string },
+  instance: { id: string; provider?: string | null },
   phone: string,
   content: string,
   messageId?: string,
 ): Promise<void> {
+  // Ver `providerPersistsOwnMessages`: o canal oficial já gravou a linha.
+  if (providerPersistsOwnMessages(instance.provider)) return;
+
   try {
     const { error } = await supabase
       .from("whatsapp_messages")

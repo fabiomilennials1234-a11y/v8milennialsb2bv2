@@ -21,6 +21,8 @@ const INST_MORTA = { ...base, id: "inst-morta", organization_id: ORG, instance_n
 const INST_DESLOGADA = { ...base, id: "inst-deslogada", organization_id: ORG, instance_name: "Deslogada", status: "connected", session_dead_since: "2026-08-01T09:00:00Z" };
 const INST_META = { ...base, id: "inst-meta", organization_id: ORG, instance_name: "Meta Oficial", status: "connected", provider: "meta" };
 const INST_ALHEIA = { ...base, id: "inst-alheia", organization_id: OUTRA_ORG, instance_name: "De outro cliente", status: "connected" };
+/** Canal oficial (Meta via NotificaMe). Vivo — e ainda assim fora dos degraus automáticos. */
+const INST_OFICIAL = { ...base, id: "inst-oficial", organization_id: ORG, instance_name: "Chique Oficial", status: "connected", provider: "notificame" };
 
 const LEAD = { id: "lead-1", organization_id: ORG, normalized_phone: "48999053409", responsible_id: null };
 
@@ -346,6 +348,71 @@ describe("contrato do erro", () => {
   it("org que nunca conectou um número reporta ausência de número", async () => {
     mockTable("whatsapp_instances", []);
     const r = await resolve({ instanceRoutingPolicy: "conversation" });
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+});
+
+
+// ─── Canal oficial (#1690) ─────────────────────────────────────────────────
+
+/**
+ * O canal oficial é NOMEÁVEL e não é ESCOLHÍVEL.
+ *
+ * Um degrau só o alcança — o primeiro, onde uma pessoa escreveu o id no nó.
+ * Nos outros quatro a regra escolhe sozinha, e deixá-lo entrar ali quebraria
+ * duas coisas: a janela de 24h (fora dela a Meta recusa texto livre, por
+ * callback, depois de a tela dizer "enviado") e os nós de pin morto, que
+ * sobrevivem exatamente porque o atalho do degrau 2 não conta a oficial.
+ */
+describe("canal oficial", () => {
+  it("fixed nomeando o canal oficial resolve nele", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_OFICIAL]);
+    const inst = await resolved({
+      instanceRoutingPolicy: "fixed",
+      whatsappInstanceId: INST_OFICIAL.id,
+    });
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  /**
+   * A regressão que o #1690 quase introduziu, medida na Chique em 2026-08-20:
+   * 18 nós ativos com pin morto e sem recuo, vivos só pelo atalho do degrau 2.
+   * Se a oficial contasse ali, a org iria de uma Instance viva para duas, o
+   * atalho pararia de disparar e os 18 falhariam no dia do deploy.
+   */
+  it("pin morto numa org com chip e canal oficial ainda sai pelo chip", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_OFICIAL]);
+    const inst = await resolved({
+      instanceRoutingPolicy: "fixed",
+      whatsappInstanceId: "inst-que-nao-existe-mais",
+    });
+    expect(inst.id).toBe(INST_1.id);
+  });
+
+  it("conversation não escolhe o canal oficial, mesmo com a thread nele", async () => {
+    // Duas legadas de propósito: com uma só, o atalho do degrau 2 responderia
+    // antes da política e o teste passaria sem provar nada.
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL]);
+    mockTable("whatsapp_messages", [msg({ instance_id: INST_OFICIAL.id })]);
+    const r = await resolve({ instanceRoutingPolicy: "conversation" });
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("o canal oficial não serve de recuo declarado", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL]);
+    const r = await resolve({
+      instanceRoutingPolicy: "conversation",
+      fallbackInstanceId: INST_OFICIAL.id,
+    });
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("responsible não escolhe o canal oficial", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL]);
+    // O nome do RPC importa: com o nome errado o mock devolve vazio, a regra
+    // nunca chega ao canal oficial e o teste ficaria verde sem provar nada.
+    mockRpc("get_lead_write_instance", { instance_id: INST_OFICIAL.id, error_code: null });
+    const r = await resolve({ instanceRoutingPolicy: "responsible" });
     expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
   });
 });

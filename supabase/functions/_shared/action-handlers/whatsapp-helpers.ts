@@ -252,10 +252,40 @@ export async function enforceWhatsAppRateLimit(
 
 // ─── Persistência da mensagem de saída ─────────────────────────────────────
 
+/**
+ * O provedor já grava sozinho a linha da mensagem que acabou de enviar?
+ *
+ * O canal oficial grava: `NotificameProvider.persist()` escreve em
+ * `channel_messages` no mesmo instante do envio, porque é de lá que a caixa
+ * oficial lê. Os legados não gravam nada — quem envia é que escreve a linha de
+ * `whatsapp_messages`, e é o que os handlers fazem.
+ *
+ * ⚠️ Gravar dos dois lados NÃO é redundância inofensiva. A linha de
+ * `whatsapp_messages` nasce com `remote_jid` no formato da Uazapi, à espera de
+ * um eco `fromMe` que nunca vem, e nunca recebe o `status_event` que o callback
+ * do canal oficial escreve em `channel_messages`. Ela fica órfã: a conversa
+ * mostra a mensagem duas vezes, e a cópia órfã mente sobre o status para sempre.
+ *
+ * O nó de template já tomava essa decisão à mão (`send-whatsapp-rich.ts`).
+ * Aqui ela vira regra nomeada, porque a partir do #1690 QUALQUER nó pode nomear
+ * o canal oficial e cair neste mesmo caminho.
+ */
+export function providerPersistsOwnMessages(
+  provider: string | null | undefined,
+): boolean {
+  return provider === "notificame";
+}
+
 /** Uma mensagem que a automação ACABOU de entregar, pronta para virar linha. */
 export type OutboundMessage = {
   organizationId: string;
   instanceId: string;
+  /**
+   * Provedor da Instance que enviou. Obrigatório de propósito: é o que decide
+   * se esta linha deve existir, e um campo opcional deixaria um ponto de envio
+   * novo duplicar em silêncio. `deno check _shared/` cobre os sete pontos.
+   */
+  provider: string | null | undefined;
   /** O id devolvido pelo provider no `/send`. Ver `persistOutboundMessage`. */
   providerMessageId?: string | null;
   /** Telefone do destinatário; normalizado aqui antes de virar `remote_jid`. */
@@ -322,6 +352,9 @@ export async function persistOutboundMessage(
   supabase: SupabaseClient,
   msg: OutboundMessage,
 ): Promise<void> {
+  // Ver `providerPersistsOwnMessages`: gravar aqui duplicaria a mensagem.
+  if (providerPersistsOwnMessages(msg.provider)) return;
+
   // `remote_jid` alimenta as ações de mensagem da UI (reagir, editar, apagar),
   // que devolvem esse número ao Uazapi — um jid sem o 55 produz ação que falha.
   // (`normalized_phone` é preenchida por gatilho; isto aqui é só sobre o jid.)

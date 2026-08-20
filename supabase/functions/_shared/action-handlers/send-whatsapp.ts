@@ -14,6 +14,7 @@ import {
   buildTrackId,
   recipientGate,
   isRetryableSendFailure,
+  providerPersistsOwnMessages,
 } from "./whatsapp-helpers.ts";
 
 export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
@@ -78,20 +79,24 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
 
     const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
 
-    await supabase.from("whatsapp_messages").upsert({
-      organization_id: organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: phone + "@s.whatsapp.net",
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: "conversation",
-      content: message,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    // Ver `providerPersistsOwnMessages`: o canal oficial já gravou a linha em
+    // `channel_messages`, e uma segunda cópia aqui nasceria órfã.
+    if (!providerPersistsOwnMessages(wa.instance.provider)) {
+      await supabase.from("whatsapp_messages").upsert({
+        organization_id: organizationId,
+        instance_id: wa.instanceId,
+        message_id: messageId,
+        remote_jid: phone + "@s.whatsapp.net",
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: "conversation",
+        content: message,
+        timestamp: new Date().toISOString(),
+        status: "sent",
+        sent_by_ai: true,
+        sent_source: "workflow",
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    }
   } else if (!gwResult.success) {
     console.error("[send-whatsapp] Gateway send failed:", gwResult.error);
     const error = `WhatsApp send failed: ${gwResult.error}`;
