@@ -31,6 +31,7 @@ export interface TothConnectionRow {
   connected_at: string | null;
   status: string | null;
   erp_sync_mode: string | null;
+  clientes_dias_compras: number | null;
   last_clientes_sync_at: string | null;
   last_cobrancas_sync_at: string | null;
   last_error: string | null;

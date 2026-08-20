@@ -15,7 +15,7 @@
  *     não é necessariamente quem configurou.
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import {
   Server,
@@ -31,6 +31,7 @@ import {
   Lock,
   Users,
   Receipt,
+  FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -63,10 +64,13 @@ import {
   useSyncTothClientes,
   useSyncTothCobrancas,
   useUpdateTothSyncMode,
+  useSimulateTothClientes,
+  useUpdateTothActiveWindow,
   readTothEndpoint,
   canSubmitTothConnection,
   TOTH_CAPABILITIES,
   type TothSyncMode,
+  type TothDryRunResult,
 } from "@/modules/integrations";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -107,6 +111,8 @@ export function TothSettings() {
   const [password, setPassword] = useState("");
   const [acceptedInsecure, setAcceptedInsecure] = useState(false);
   const [confirmCanonical, setConfirmCanonical] = useState(false);
+  const [janela, setJanela] = useState("");
+  const [simulacao, setSimulacao] = useState<TothDryRunResult | null>(null);
 
   const { data: status, isLoading } = useTothStatus();
   const connect = useConnectToth();
@@ -114,6 +120,31 @@ export function TothSettings() {
   const syncClientes = useSyncTothClientes();
   const syncCobrancas = useSyncTothCobrancas();
   const updateSyncMode = useUpdateTothSyncMode();
+  const simular = useSimulateTothClientes();
+  const updateJanela = useUpdateTothActiveWindow();
+
+  // A janela vem do servidor; o input só assume o controle depois que o valor
+  // salvo chega, senão o campo pisca vazio e parece que não havia configuração.
+  const janelaSalva = status?.clientes_dias_compras != null
+    ? String(status.clientes_dias_compras)
+    : "";
+  useEffect(() => {
+    setJanela(janelaSalva);
+  }, [janelaSalva]);
+
+  const handleSaveJanela = async () => {
+    const parsed = janela.trim() === "" ? null : Number(janela);
+    if (parsed !== null && (!Number.isFinite(parsed) || parsed <= 0)) return;
+    await updateJanela.mutateAsync(parsed);
+    // A simulação anterior descreve outro recorte — mantê-la na tela seria
+    // mostrar um número que não corresponde mais à configuração.
+    setSimulacao(null);
+  };
+
+  const handleSimular = async () => {
+    setSimulacao(null);
+    setSimulacao(await simular.mutateAsync({}));
+  };
 
   const reading = readTothEndpoint(endpoint);
   const canSubmit = canSubmitTothConnection({ endpoint, user, password, acceptedInsecure });
@@ -393,16 +424,69 @@ export function TothSettings() {
             )}
           </div>
 
+          {/* Quem entra na carteira */}
+          <div className="rounded-lg border bg-card/40 p-3 space-y-2">
+            <Label htmlFor="toth-janela" className="text-xs">
+              Considerar cliente ativo
+            </Label>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">comprou nos últimos</span>
+              <Input
+                id="toth-janela"
+                type="number"
+                min={1}
+                inputMode="numeric"
+                className="h-8 w-24"
+                value={janela}
+                onChange={(e) => setJanela(e.target.value)}
+                placeholder="150"
+              />
+              <span className="text-xs text-muted-foreground">dias</span>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-[11px] ml-auto"
+                onClick={handleSaveJanela}
+                disabled={updateJanela.isPending || janela === janelaSalva}
+              >
+                {updateJanela.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Sem recorte, a carga traz o cadastro inteiro do ERP — histórico incluído. A janela é
+              o que separa carteira de lista de nomes.
+            </p>
+          </div>
+
           {/* Sincronização — a ordem é parte da informação */}
           <div className="space-y-3">
-            <Button variant="outline" className="w-full" onClick={handleSyncAll} disabled={isSyncing}>
-              {isSyncing ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : (
-                <RefreshCw className="w-4 h-4 mr-2" />
-              )}
-              Sincronizar agora
-            </Button>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                variant="outline"
+                onClick={handleSimular}
+                disabled={isSyncing || simular.isPending}
+              >
+                {simular.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <FlaskConical className="w-4 h-4 mr-2" />
+                )}
+                Simular
+              </Button>
+              <Button variant="outline" onClick={handleSyncAll} disabled={isSyncing || simular.isPending}>
+                {isSyncing ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                )}
+                Sincronizar agora
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Simular lê do ERP e mostra o que aconteceria, sem gravar nada.
+            </p>
+
+            {simulacao && <DryRunReport data={simulacao} />}
 
             <div className="grid gap-2 sm:grid-cols-2">
               <SyncRow
@@ -519,6 +603,102 @@ export function TothSettings() {
           </div>
         </motion.div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Relatório do ensaio.
+ *
+ * A ordem das informações é deliberada: primeiro o que ENTRARIA (é o que se
+ * quer saber), depois o efeito colateral sobre conversas (é o que ninguém
+ * lembra de perguntar), e por último a amostra para conferência humana.
+ *
+ * O aviso de "nada foi gravado" fica no topo porque um painel cheio de números
+ * grandes é lido como "aconteceu".
+ */
+function DryRunReport({ data }: { data: TothDryRunResult }) {
+  const t = data.totais;
+  const adocao = data.adocao_de_conversas;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-lg border bg-muted/20 p-3 space-y-3"
+    >
+      <div className="flex items-center gap-2">
+        <FlaskConical className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+        <span className="text-xs font-medium">Simulação — nada foi gravado</span>
+        {data.janela_dias_compras && (
+          <Badge variant="secondary" className="ml-auto text-[10px]">
+            últimos {data.janela_dias_compras} dias
+          </Badge>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <Stat label="Recebidos do ERP" value={data.linhas_recebidas} />
+        <Stat label="Seriam criados" value={t.wouldCreate} accent={t.wouldCreate > 0} />
+        <Stat label="Seriam enriquecidos" value={t.wouldEnrich} />
+      </div>
+
+      {t.wouldCreate === 0 && t.wouldEnrich === 0 && (
+        <p className="text-[11px] text-amber-500 leading-relaxed">
+          Nada entraria. No modo <strong>{data.modo}</strong> o ERP só preenche cliente que já
+          existe na carteira — e ela está vazia. Para popular, troque para “ERP canônico”.
+        </p>
+      )}
+
+      <div className="grid grid-cols-3 gap-2 text-center border-t pt-2">
+        <Stat label="Com CNPJ" value={t.withCnpj} />
+        <Stat label="Com telefone" value={t.withPhone} />
+        <Stat label="Com e-mail" value={t.withEmail} />
+      </div>
+
+      {adocao.mensagens > 0 && (
+        <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2 space-y-1">
+          <p className="text-[11px] font-medium text-amber-500">
+            {adocao.mensagens} mensagem(ns) de WhatsApp seriam vinculadas
+          </p>
+          <p className="text-[11px] text-muted-foreground leading-relaxed">
+            Conversas hoje sem dono, em {adocao.telefones_que_casariam} telefone(s) que batem com
+            clientes do ERP. Não envia nada — é vínculo de dado, e é reversível.
+          </p>
+        </div>
+      )}
+
+      {data.sem_identificador > 0 && (
+        <p className="text-[11px] text-destructive">
+          {data.sem_identificador} registro(s) sem identificador seriam ignorados.
+        </p>
+      )}
+
+      {data.amostra.length > 0 && (
+        <div className="space-y-1 border-t pt-2">
+          <p className="text-[11px] font-medium">Amostra para conferência</p>
+          <div className="space-y-1">
+            {data.amostra.map((c, i) => (
+              <div key={i} className="text-[11px] text-muted-foreground truncate">
+                <span className="text-foreground">{String(c.nome ?? "—")}</span>
+                {c.cnpj ? ` · ${String(c.cnpj)}` : ""}
+                {c.telefone_normalizado ? ` · ${String(c.telefone_normalizado)}` : ""}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function Stat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+  return (
+    <div className="rounded bg-card/60 py-2">
+      <p className={cn("text-base font-semibold", accent && "text-sky-500")}>
+        {value.toLocaleString("pt-BR")}
+      </p>
+      <p className="text-[10px] text-muted-foreground leading-tight">{label}</p>
     </div>
   );
 }

@@ -143,7 +143,7 @@ Deno.serve(
 
     const { data: conn } = await admin
       .from("toth_connections")
-      .select("id, erp_sync_mode, clientes_cursor, status")
+      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -186,9 +186,20 @@ Deno.serve(
     // Repassar em vez de cravar no código permite descobrir a combinação que o
     // servidor aceita sem um redeploy por tentativa.
     const filtros: Record<string, string> = {};
+
+    // A janela de "cliente ativo" vem da CONEXÃO, não do corpo: é decisão de
+    // negócio da organização e precisa valer igual no botão e no cron. Sem ela,
+    // a carga traz a base inteira — 12.605 registros na Café Jurerê, quase todos
+    // histórico, o que enche a carteira de nome sem relevância comercial.
+    const diasCompras = conn.clientes_dias_compras as number | null;
+    if (typeof diasCompras === "number" && diasCompras > 0) {
+      filtros.diasCompras = String(diasCompras);
+    }
+
+    // Override pontual, para diagnóstico. Allowlist estrita: parâmetro inventado
+    // já provocou HTTP 500 uma vez.
     if (body.filtros && typeof body.filtros === "object") {
       for (const [k, v] of Object.entries(body.filtros as Record<string, unknown>)) {
-        // Só a lista conhecida: parâmetro inventado já provocou 500 uma vez.
         if (!["cnpj", "diasCompras", "marcas"].includes(k)) continue;
         if (typeof v === "string" || typeof v === "number") filtros[k] = String(v);
       }
@@ -366,6 +377,8 @@ Deno.serve(
         {
           dry_run: true,
           escreveu: false,
+          modo: syncMode,
+          janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
           stop_reason: stopReason,
           paginas_lidas: stats.pages,
           linhas_recebidas: stats.rows,
