@@ -25,6 +25,10 @@ import {
   toNotificameReactionContent,
   toNotificameTypingContent,
   montarEnvelopeDeResposta,
+  toNotificameBlockContent,
+  toNotificameSignupContent,
+  toNotificameSignupListContent,
+  linkDeOptIn,
 } from "../../supabase/functions/_shared/whatsapp-providers/notificame-provider.ts";
 
 describe("botões", () => {
@@ -316,5 +320,69 @@ describe("resposta citada", () => {
     // a Meta recusa. Sem citação, a mensagem ainda é uma mensagem válida.
     const base = { from: "c", to: "n", contents: [{ type: "text", text: "oi" }] };
     expect(montarEnvelopeDeResposta(base, null)).toEqual(base);
+  });
+});
+
+/**
+ * BLOQUEAR, DESBLOQUEAR E LISTAR BLOQUEADOS.
+ *
+ * As três viajam pela MESMA rota de mensagens, com um `contents` de um item só e
+ * sem carga. Não são mensagens — e é por isso que nenhuma delas pode virar linha
+ * na conversa: um "bloqueado" no meio da thread seria uma bolha que o cliente
+ * nunca recebeu.
+ */
+describe("bloqueio de contato", () => {
+  it("cada ação tem seu tipo, e nenhuma leva carga", () => {
+    expect(toNotificameBlockContent("bloquear", "whatsapp")).toEqual({ type: "block_user" });
+    expect(toNotificameBlockContent("desbloquear", "whatsapp")).toEqual({ type: "unblock_user" });
+    expect(toNotificameBlockContent("listar", "whatsapp")).toEqual({ type: "list_blocked" });
+  });
+
+  it("não existe fora do WhatsApp", () => {
+    // A doc traz as três só na seção de WhatsApp. Mandar para o Instagram seria
+    // inventar — e o fornecedor aceitaria o corpo antes de a Meta recusar.
+    expect(() => toNotificameBlockContent("bloquear", "instagram")).toThrow();
+  });
+});
+
+/**
+ * CONVITE DE OPT-IN.
+ *
+ * Gera o deep link `wa.me/<numero>/signup/<id>`. Quem abre confirma que aceita
+ * receber mensagens da empresa, e o aceite fica registrado DO LADO DA META —
+ * consentimento formal, que é a defesa direta contra os vetores de ban.
+ *
+ * ⚠️ ARMADILHA DO FORNECEDOR: criar e listar usam o MESMO `type: "list"`. O que
+ * distingue é a presença de `signup_content`. Um corpo de criação sem ele vira,
+ * em silêncio, uma listagem.
+ */
+describe("convite de opt-in", () => {
+  it("criar leva o `signup_content` — é ele que distingue de uma listagem", () => {
+    const c = toNotificameSignupContent({
+      mensagem: "Receba nossas ofertas",
+      confirmacao: "Pronto! Você vai receber novidades aqui.",
+      nome: "Ofertas Chique",
+      politicaDePrivacidade: "https://chique.com.br/privacidade",
+      site: "https://chique.com.br",
+    });
+
+    expect(c.type).toBe("list");
+    expect(c.signup_content).toMatchObject({
+      signup_message: "Receba nossas ofertas",
+      confirmation_message: "Pronto! Você vai receber novidades aqui.",
+      display_name: "Ofertas Chique",
+      privacy_policy_url: "https://chique.com.br/privacidade",
+      website_url: "https://chique.com.br",
+    });
+  });
+
+  it("listar leva `limit` e NENHUM signup_content", () => {
+    expect(toNotificameSignupListContent(20)).toEqual({ type: "list", limit: 20 });
+  });
+
+  it("o deep link é montado a partir do número e do id devolvido", () => {
+    // O formato é da Meta: wa.me/<numero sem + nem símbolo>/signup/<id>.
+    expect(linkDeOptIn("+55 44 99999-9999", "98765432101"))
+      .toBe("https://wa.me/5544999999999/signup/98765432101");
   });
 });

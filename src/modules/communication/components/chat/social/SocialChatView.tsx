@@ -24,8 +24,10 @@
  */
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
+  Ban,
   Contact,
   FileText,
+  MoreVertical,
   Reply,
   LayoutList,
   Loader2,
@@ -63,6 +65,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { criarEnviadorOficial } from "@/modules/communication/lib/menu-sender";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import {
+  blockUser as bloquearNoProxy,
   setPresence as setPresenceNoProxy,
   reactToMessage as reagirNoProxy,
   sendContact as enviarContatoNoProxy,
@@ -138,6 +141,7 @@ function SocialChatHeader({
   onBack,
   isMobile,
   onOpenLead,
+  onBloquear,
 }: {
   contact: SocialContact;
   channelName: string;
@@ -148,6 +152,11 @@ function SocialChatHeader({
    * Instagram o interlocutor é IGSID e a ficha é montada por telefone.
    */
   onOpenLead?: () => void;
+  /**
+   * Bloqueia o contato. Só no canal oficial — a ação vem da doc da Meta e o
+   * Instagram não a traz.
+   */
+  onBloquear?: () => void;
 }) {
   const name = contactLabel(contact);
   const handle = contactHandleLabel(contact);
@@ -211,6 +220,25 @@ function SocialChatHeader({
             .join(" · ")}
         </p>
       </div>
+
+      {/* BLOQUEAR fica AQUI, e não numa tela de configuração: a vontade de
+          bloquear nasce lendo a conversa. A lista de bloqueados é que mora nas
+          configurações, porque é lá que se procura quem foi bloqueado. */}
+      {onBloquear && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Mais ações">
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={onBloquear} className="gap-2 text-destructive">
+              <Ban className="h-4 w-4" />
+              Bloquear contato
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
     </header>
   );
 }
@@ -708,6 +736,22 @@ export function SocialChatView({
         onBack={onBack}
         isMobile={isMobile}
         onOpenLead={onOpenLead}
+        onBloquear={selectedContact.channel === "whatsapp_oficial"
+          ? () => {
+            // Confirmação nativa e não um diálogo próprio: bloquear é
+            // reversível pela tela de configurações, e o que se perde ao
+            // errar é um clique — não vale uma peça de UI a mais.
+            if (!confirm("Bloquear este contato? Ele deixa de conseguir escrever para este número.")) {
+              return;
+            }
+            bloquearNoProxy(
+              selectedContact.messaging_channel_id,
+              selectedContact.external_user_id,
+            )
+              .then(() => toast.success("Contato bloqueado"))
+              .catch((e: Error) => toast.error(e.message));
+          }
+          : undefined}
       />
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">

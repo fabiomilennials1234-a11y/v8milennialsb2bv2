@@ -315,3 +315,61 @@ export async function getMessageLimits(
     organization_id: organizationId,
   });
 }
+
+// ─── Operação do canal oficial (Meta) ────────────────────────────────────────
+//
+// As quatro abaixo devolvem 422 em canal que não as tem — nunca 500. Quem clica
+// é um vendedor ou um admin, e um erro genérico viraria "não foi possível" numa
+// hora em que ele precisa saber que ESTE canal não faz isso.
+
+/** Bloqueia o contato: ele deixa de conseguir escrever para este número. */
+export async function blockUser(instanceId: string, number: string): Promise<void> {
+  await callProxy("blockUser", { instance_id: instanceId, payload: { number } });
+}
+
+export async function unblockUser(instanceId: string, number: string): Promise<void> {
+  await callProxy("unblockUser", { instance_id: instanceId, payload: { number } });
+}
+
+export async function listBlocked(instanceId: string): Promise<unknown> {
+  const r = await callProxy<{ blocked: unknown }>("listBlocked", { instance_id: instanceId, payload: {} });
+  return r.blocked;
+}
+
+/**
+ * Saúde do número, do lado da Meta — verde, amarelo ou vermelho.
+ *
+ * É o feedback dos clientes que a determina: bloqueios e denúncias derrubam a
+ * nota, e vermelho é o degrau antes de a Meta limitar o número.
+ */
+export async function numberHealth(instanceId: string): Promise<unknown> {
+  const r = await callProxy<{ health: unknown }>("numberHealth", { instance_id: instanceId, payload: {} });
+  return r.health;
+}
+
+/** Cria o convite de opt-in. O corpo devolvido traz o `id` que vira o link. */
+export async function createSignupInvite(
+  instanceId: string,
+  convite: {
+    mensagem: string;
+    confirmacao: string;
+    nome: string;
+    politicaDePrivacidade: string;
+    site: string;
+    codigoPromocional?: string;
+  },
+): Promise<unknown> {
+  const r = await callProxy<{ invite: unknown }>("createSignupInvite", {
+    instance_id: instanceId,
+    payload: convite,
+  });
+  return r.invite;
+}
+
+export async function listSignupInvites(instanceId: string, limite = 20): Promise<unknown> {
+  const r = await callProxy<{ invites: unknown }>("listSignupInvites", {
+    instance_id: instanceId,
+    payload: { limite },
+  });
+  return r.invites;
+}

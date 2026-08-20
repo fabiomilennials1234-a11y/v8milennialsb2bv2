@@ -788,6 +788,10 @@ Deno.serve(
         "sendMenu",
         "sendLocation",
         "sendContact",
+        // Bloquear e desbloquear endereçam um contato — mesmo crivo. `listBlocked`
+        // e `numberHealth` NÃO entram: eles não têm destinatário nenhum.
+        "blockUser",
+        "unblockUser",
       ]);
       const leadIdPayload = (payload?.lead_id ?? null) as string | null;
       if (SEND_ACTIONS.has(action) && leadIdPayload) {
@@ -1239,6 +1243,96 @@ Deno.serve(
             listButtonLabel,
             ctaUrl,
           });
+          break;
+        }
+
+        case "blockUser":
+        case "unblockUser": {
+          const fn = action === "blockUser" ? provider.blockUser : provider.unblockUser;
+          if (!fn) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não bloqueia contatos", code: "block_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number } = payload as { number?: string };
+          if (!number) return jsonResponse(400, { error: "Missing number" }, corsHeaders);
+          await fn.call(provider, number);
+          result = { ok: true };
+          break;
+        }
+
+        case "listBlocked": {
+          if (!provider.listBlocked) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não lista bloqueados", code: "block_not_supported" },
+              corsHeaders,
+            );
+          }
+          result = { blocked: await provider.listBlocked() };
+          break;
+        }
+
+        case "createSignupInvite": {
+          if (!provider.createSignupInvite) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não cria convite de cadastro", code: "signup_not_supported" },
+              corsHeaders,
+            );
+          }
+          const c = payload as {
+            mensagem?: string;
+            confirmacao?: string;
+            nome?: string;
+            politicaDePrivacidade?: string;
+            site?: string;
+            codigoPromocional?: string;
+          };
+          if (!c.mensagem || !c.confirmacao || !c.nome || !c.politicaDePrivacidade || !c.site) {
+            return jsonResponse(
+              400,
+              { error: "Missing mensagem/confirmacao/nome/politicaDePrivacidade/site" },
+              corsHeaders,
+            );
+          }
+          result = {
+            invite: await provider.createSignupInvite({
+              mensagem: c.mensagem,
+              confirmacao: c.confirmacao,
+              nome: c.nome,
+              politicaDePrivacidade: c.politicaDePrivacidade,
+              site: c.site,
+              codigoPromocional: c.codigoPromocional,
+            }),
+          };
+          break;
+        }
+
+        case "listSignupInvites": {
+          if (!provider.listSignupInvites) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não lista convites", code: "signup_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { limite } = payload as { limite?: number };
+          result = { invites: await provider.listSignupInvites(limite) };
+          break;
+        }
+
+        case "numberHealth": {
+          if (!provider.numberHealth) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não informa saúde do número", code: "health_not_supported" },
+              corsHeaders,
+            );
+          }
+          result = { health: await provider.numberHealth() };
           break;
         }
 

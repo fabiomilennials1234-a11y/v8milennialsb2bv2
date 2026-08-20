@@ -252,6 +252,35 @@ export interface WhatsAppProvider {
   deleteForAll?(messageId: string, number: string): Promise<void>;
   /** Marca mensagens como lidas. Aceita lote — o endpoint da Uazapi é por array. */
   markRead?(messageIds: string | string[]): Promise<void>;
+  /**
+   * Canal oficial (Meta) — bloqueio de contato.
+   *
+   * Bloquear impede o cliente de escrever para este número. Não é mensagem:
+   * quem implementa NÃO grava linha na conversa.
+   */
+  blockUser?(number: string): Promise<void>;
+  unblockUser?(number: string): Promise<void>;
+  /** Quem está bloqueado. A resposta É o resultado. */
+  listBlocked?(): Promise<unknown>;
+  /**
+   * A saúde do número do lado da Meta — verde, amarelo ou vermelho. Determinada
+   * pelo feedback dos clientes; vermelho é o degrau antes da limitação.
+   */
+  numberHealth?(): Promise<unknown>;
+  /**
+   * Convite de opt-in — o deep link em que o cliente ACEITA receber mensagens.
+   * O aceite fica registrado do lado da Meta: é consentimento formal, e a defesa
+   * mais direta contra os vetores de ban.
+   */
+  createSignupInvite?(convite: {
+    mensagem: string;
+    confirmacao: string;
+    nome: string;
+    politicaDePrivacidade: string;
+    site: string;
+    codigoPromocional?: string;
+  }): Promise<unknown>;
+  listSignupInvites?(limite?: number): Promise<unknown>;
   listChats?(type?: "all" | "individual" | "group"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>>;
   historySync?(opts: {
     chat_jid?: string;

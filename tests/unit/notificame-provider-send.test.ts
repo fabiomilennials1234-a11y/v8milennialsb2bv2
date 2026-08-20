@@ -476,3 +476,28 @@ describe("digitando", () => {
     await expect(provider.setPresence("5511999999999", "composing")).resolves.toBeUndefined();
   });
 });
+
+/**
+ * BLOQUEAR NÃO É MENSAGEM.
+ *
+ * As três ações de bloqueio viajam pela mesma rota das mensagens — e aquele
+ * caminho GRAVA em `channel_messages`. Sem exceção explícita, bloquear um
+ * cliente poria uma bolha vazia na conversa dele, algo que ele nunca recebeu.
+ */
+describe("bloqueio de contato", () => {
+  it("bloquear manda o envelope e NÃO grava linha", async () => {
+    const { provider, admin, f } = await makeProvider();
+    await provider.blockUser("5511999999999");
+
+    expect(JSON.parse(String(f.calls[0].init.body)).contents[0]).toEqual({ type: "block_user" });
+    expect(admin.written, "escreveu uma bolha para um bloqueio").toHaveLength(0);
+  });
+
+  it("desbloquear idem, com o tipo próprio", async () => {
+    const { provider, admin, f } = await makeProvider();
+    await provider.unblockUser("5511999999999");
+
+    expect(JSON.parse(String(f.calls[0].init.body)).contents[0]).toEqual({ type: "unblock_user" });
+    expect(admin.written).toHaveLength(0);
+  });
+});

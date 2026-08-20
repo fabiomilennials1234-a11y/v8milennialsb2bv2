@@ -569,6 +569,90 @@ export function montarEnvelopeDeResposta(
   return { ...envelope, messageId: id, reply: true } as NotificameEnvelope;
 }
 
+/** As três ações de bloqueio, na forma nossa. */
+export type AcaoDeBloqueio = "bloquear" | "desbloquear" | "listar";
+
+const TIPO_POR_ACAO: Record<AcaoDeBloqueio, string> = {
+  bloquear: "block_user",
+  desbloquear: "unblock_user",
+  listar: "list_blocked",
+};
+
+/**
+ * O envelope de bloqueio. PURO.
+ *
+ * As três viajam pela MESMA rota das mensagens, com um `contents` de um item só
+ * e sem carga nenhuma. O destinatário vai no `to` do envelope, como em qualquer
+ * mensagem — inclusive no `list_blocked`, onde ele não significa nada e a doc o
+ * manda assim mesmo.
+ *
+ * ⚠️ NENHUMA delas é mensagem. Quem chama tem de gravar NADA na conversa: um
+ * "bloqueado" no meio da thread seria uma bolha que o cliente nunca recebeu.
+ */
+export function toNotificameBlockContent(
+  acao: AcaoDeBloqueio,
+  kind: NotificameChannelKind,
+): NotificameContent {
+  if (kind !== "whatsapp") {
+    throw new NotSupportedError(
+      NOTIFICAME_PROVIDER,
+      `bloqueio de contato — o canal ${kind} não o traz na doc`,
+    );
+  }
+  return { type: TIPO_POR_ACAO[acao] };
+}
+
+/** O convite de opt-in, na forma nossa. */
+export interface ConviteDeOptIn {
+  /** O que a pessoa lê na tela de aceite. 1 a 300 caracteres. */
+  mensagem: string;
+  /** O que ela recebe logo após aceitar. 1 a 300 caracteres. */
+  confirmacao: string;
+  /** Apelido interno do convite. NÃO é exibido a ninguém. 1 a 256. */
+  nome: string;
+  /** Imutável depois da criação, segundo a doc. */
+  politicaDePrivacidade: string;
+  site: string;
+  /** Substitui `{{promo_code}}` na confirmação. Alfanumérico, até 50. */
+  codigoPromocional?: string;
+}
+
+/**
+ * O envelope de CRIAÇÃO de um convite de opt-in.
+ *
+ * ⚠️ ARMADILHA DO FORNECEDOR: criar e listar usam o MESMO `type: "list"`. O que
+ * distingue os dois é a presença de `signup_content` — um corpo de criação sem
+ * ele vira, em silêncio, uma listagem, e o operador fica achando que criou.
+ */
+export function toNotificameSignupContent(c: ConviteDeOptIn): NotificameContent {
+  return {
+    type: "list",
+    signup_content: {
+      signup_message: c.mensagem.trim(),
+      confirmation_message: c.confirmacao.trim(),
+      display_name: c.nome.trim(),
+      privacy_policy_url: c.politicaDePrivacidade.trim(),
+      website_url: c.site.trim(),
+      ...(c.codigoPromocional?.trim() ? { promo_code: c.codigoPromocional.trim() } : {}),
+    },
+  };
+}
+
+/** O envelope de LISTAGEM. Ver a armadilha em `toNotificameSignupContent`. */
+export function toNotificameSignupListContent(limite: number): NotificameContent {
+  return { type: "list", limit: limite };
+}
+
+/**
+ * O deep link que se manda ao cliente. Formato da Meta:
+ * `wa.me/<numero>/signup/<id>`, com o número em formato internacional e SEM
+ * símbolo nenhum — `+`, espaço ou traço quebram o link.
+ */
+export function linkDeOptIn(numeroDaEmpresa: string, signupId: string): string {
+  const digitos = String(numeroDaEmpresa ?? "").replace(/\D/g, "");
+  return `https://wa.me/${digitos}/signup/${String(signupId ?? "").trim()}`;
+}
+
 export function toNotificameMediaContent(
   opts: SendMediaOptions,
   kind: NotificameChannelKind,
@@ -1037,6 +1121,44 @@ export class NotificameProvider implements WhatsAppProvider {
    *   5. `readSentMessageId`      → sem id, ERRO. Nada é gravado;
    *   6. `channel_messages`       → best-effort, DEPOIS de o envio ser fato.
    */
+  /**
+   * Uma chamada que PERGUNTA em vez de mandar — devolve o corpo parseado.
+   *
+   * `send()` devolve só o id da mensagem, porque é isso que um envio produz.
+   * Listar bloqueados e consultar a saúde do número não produzem mensagem
+   * nenhuma: a resposta É o resultado, e jogá-la fora deixaria a tela sem o que
+   * mostrar.
+   *
+   * ⚠️ NÃO GRAVA NADA. Nenhuma destas ações é mensagem da conversa.
+   */
+  private async perguntar(
+    caminho: string,
+    corpo: Record<string, unknown>,
+  ): Promise<unknown> {
+    const cfg = await this.resolveOrgConfig();
+
+    const r = await this.fetchImpl(`${cfg.baseUrl}${caminho}`, {
+      method: "POST",
+      headers: {
+        "X-Api-Token": cfg.subaccountToken,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(corpo),
+    });
+
+    const texto = await r.text();
+    if (!r.ok) {
+      throw new NotificameError(
+        "consulta_recusada",
+        `O NotificaMe recusou a consulta (HTTP ${r.status})`,
+      );
+    }
+
+    const parsed = parseNotificameBody(texto);
+    return parsed.ok ? parsed.value : null;
+  }
+
   private async send(params: {
     to: string;
     content: NotificameContent;
@@ -1507,8 +1629,87 @@ export class NotificameProvider implements WhatsAppProvider {
     throw new NotSupportedError(NOTIFICAME_PROVIDER, "deleteForAll");
   }
 
+  /**
+   * ⚠️ `markRead` CONTINUA FORA, e a ausência foi procurada antes de afirmada:
+   * não há seção no índice da doc do fornecedor nem ocorrência no corpo da parte
+   * de WhatsApp. Ele não expõe a confirmação de leitura.
+   */
   markRead(): Promise<void> {
     throw new NotSupportedError(NOTIFICAME_PROVIDER, "markRead");
+  }
+
+  /**
+   * Bloqueia o contato. O cliente deixa de conseguir escrever para este número.
+   *
+   * ⚠️ NÃO GRAVA LINHA. Bloquear não é mensagem, e uma bolha "bloqueado" no meio
+   * da thread seria algo que o cliente nunca recebeu.
+   */
+  async blockUser(number: string): Promise<void> {
+    await this.send({
+      to: number,
+      content: toNotificameBlockContent("bloquear", this.channelKind),
+      messageType: "block_user",
+      text: null,
+      mediaUrl: null,
+      naoGravar: true,
+    });
+  }
+
+  async unblockUser(number: string): Promise<void> {
+    await this.send({
+      to: number,
+      content: toNotificameBlockContent("desbloquear", this.channelKind),
+      messageType: "unblock_user",
+      text: null,
+      mediaUrl: null,
+      naoGravar: true,
+    });
+  }
+
+  /**
+   * Quem está bloqueado. A resposta É o resultado — por isso não passa pelo
+   * `send`, que devolveria só um id de mensagem.
+   */
+  async listBlocked(): Promise<unknown> {
+    return await this.perguntar(notificameSendPath(this.channelKind), {
+      from: this.channelId,
+      // O `to` não significa nada aqui, e a doc o manda assim mesmo. Vai o
+      // próprio canal para não inventar um destinatário.
+      to: this.channelId,
+      contents: [toNotificameBlockContent("listar", this.channelKind)],
+    });
+  }
+
+  /**
+   * A saúde do número, do lado da Meta — verde, amarelo ou vermelho.
+   *
+   * É determinada pelo feedback dos clientes: bloqueios e denúncias derrubam a
+   * nota, e nota vermelha é o degrau antes de o número ser limitado. Rota
+   * PRÓPRIA, fora do caminho de mensagens.
+   */
+  /**
+   * Cria um convite de opt-in e devolve o corpo do fornecedor — de onde sai o
+   * `id` que vira o deep link.
+   *
+   * O `from` é o `channelId`: a doc o chama de "token do canal", que é o mesmo
+   * valor que a criação de template já manda e que funciona em produção.
+   */
+  async createSignupInvite(convite: ConviteDeOptIn): Promise<unknown> {
+    return await this.perguntar("/v2/channels/whatsapp/app", {
+      from: this.channelId,
+      contents: [toNotificameSignupContent(convite)],
+    });
+  }
+
+  async listSignupInvites(limite = 20): Promise<unknown> {
+    return await this.perguntar("/v2/channels/whatsapp/app", {
+      from: this.channelId,
+      contents: [toNotificameSignupListContent(limite)],
+    });
+  }
+
+  async numberHealth(): Promise<unknown> {
+    return await this.perguntar("/v2/meta/health_status", { from: this.channelId });
   }
 
   listChats(): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>> {

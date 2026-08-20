@@ -51,6 +51,7 @@ import {
   getProviderProfile,
   useConnectWhatsAppCloud,
   useConnectNotificame,
+  NotificameOperacaoCard,
   NotificameTemplatesCard,
 } from "@/modules/communication";
 import { useFeatureFlag } from "../../hooks/useFeatureFlag";
@@ -890,7 +891,13 @@ export function WhatsAppSettings() {
                       também se apaga sozinho quando o servidor diz que o canal
                       não usa templates. */}
                   {instance.provider === "notificame" && (
-                    <NotificameTemplatesCard instanceId={instance.id} />
+                    <>
+                      <NotificameTemplatesCard instanceId={instance.id} />
+                      {/* Saúde do número, bloqueados e o link de consentimento —
+                          as três coisas que se operam no número e não têm lugar
+                          dentro de uma conversa. */}
+                      <NotificameOperacaoCard instanceId={instance.id} />
+                    </>
                   )}
                 </div>
               )}
