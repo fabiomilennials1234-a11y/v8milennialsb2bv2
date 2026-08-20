@@ -26,6 +26,21 @@
 import { assertSafeErpBaseUrl, type BaseUrlPolicy } from "./toth-url.ts";
 import { extractLoginToken, extractApiError, isAuthErrorMessage } from "./toth-mappers.ts";
 
+/**
+ * Accept curinga, e NÃO `application/json`.
+ *
+ * Medido contra o ERP em 19/08: `GET /clientes` pedindo `application/json`
+ * devolve **406 Not Acceptable**; com curinga, ou sem o header, devolve 200. O
+ * recurso não declara que produz JSON (omissão de `@Produces`, clássica em app
+ * JAX-RS), então Accept estrito é recusado antes de qualquer lógica de negócio.
+ *
+ * Pedir JSON explicitamente não comprava nada: o corpo é parseado por nós de
+ * qualquer forma, e o servidor não muda de formato por causa do header. Era
+ * rigor sem contrapartida, e custou compatibilidade. Postman e curl mandam o
+ * curinga — é exatamente por isso que funcionavam enquanto a integração não.
+ */
+const ACCEPT = "*/*";
+
 export type TothTokenTransport = "query" | "header";
 
 export interface TothCredentials {
@@ -66,9 +81,88 @@ export class TothRequestError extends Error {
   }
 }
 
-/** Corta o corpo pra caber em log sem virar despejo de PII. */
-function preview(body: string): string {
-  return body.length > 300 ? `${body.slice(0, 300)}…` : body;
+/**
+ * Corta o corpo pra caber em log sem virar despejo de PII.
+ *
+ * Quando o corpo é a página de erro do servidor de aplicação, o texto útil é
+ * extraído antes de cortar. O ERP roda JBossWeb, cuja página de 500 começa com
+ * ~2 KB de CSS embutido: truncar em 300 caracteres devolvia só `<style>` e
+ * escondia a exceção, que é a única coisa que interessa. Tirar as tags e
+ * colapsar espaço faz caber `type Exception report ... message ... exception
+ * java.lang.X` na mesma janela.
+ */
+export function preview(body: string, maxLen = 300): string {
+  // Limita a ENTRADA antes de processar. Uma página de erro pode vir com stack
+  // trace de centenas de KB, e varrer isso inteiro para depois jogar fora 99%
+  // queima CPU num runtime que a mede. O útil do JBoss está no começo.
+  const source = body.length > 8000 ? body.slice(0, 8000) : body;
+  const head = source.slice(0, 400).toLowerCase();
+  const isHtml = head.includes("<html") || head.includes("<!doctype html");
+  const cleaned = isHtml ? htmlToText(source) : source.trim();
+  return cleaned.length > maxLen ? `${cleaned.slice(0, maxLen)}…` : cleaned;
+}
+
+/** Conteúdo destas tags é descartado inteiro, não só a marcação. */
+const OPAQUE_TAGS = ["style", "script"];
+/** Caracteres que encerram o nome de uma tag. */
+const NAME_END = new Set([" ", "\t", "\n", "\r", "\f", "/", ">"]);
+
+/**
+ * Extrai texto de HTML com uma varredura, não com regex.
+ *
+ * 🔴 A versão anterior usava `replace(/<[^>]*>/g)` e companhia, e o CodeQL
+ * reprovou com `js/bad-tag-filter` (severidade alta) — com razão: filtro de HTML
+ * por expressão regular é furado por construção. `<style >` com espaço, tag em
+ * caixa alta, comentário `<!-- -->` e tag não fechada escapam de padrões assim,
+ * cada um por um motivo diferente.
+ *
+ * Aqui não havia risco de XSS — o destino é uma string de erro que o React
+ * escapa —, mas o extrator ficava **incorreto** justamente na entrada que
+ * importa: a página de erro real, cheia de CSS. Trocar regex por varredura
+ * resolve a correção e o alerta ao mesmo tempo; suprimir o alerta resolveria só
+ * o alerta.
+ *
+ * A varredura é linear e sem retrocesso, então também não tem o risco de
+ * backtracking catastrófico que uma regex sobre entrada grande carrega.
+ */
+function htmlToText(html: string): string {
+  const lower = html.toLowerCase();
+  const parts: string[] = [];
+  let i = 0;
+
+  while (i < html.length) {
+    const open = html.indexOf("<", i);
+    if (open === -1) {
+      parts.push(html.slice(i));
+      break;
+    }
+    parts.push(html.slice(i, open));
+
+    const close = html.indexOf(">", open);
+    // Tag sem fechamento: o resto não é texto confiável, descarta.
+    if (close === -1) break;
+
+    // Nome da tag, sem contar a barra de fechamento.
+    let cursor = open + 1;
+    if (html[cursor] === "/") cursor++;
+    let end = cursor;
+    while (end < close && !NAME_END.has(html[end])) end++;
+    const name = lower.slice(cursor, end);
+
+    if (OPAQUE_TAGS.includes(name) && html[open + 1] !== "/") {
+      // Pula até o fechamento correspondente; sem ele, descarta o resto.
+      const endTag = lower.indexOf(`</${name}`, close);
+      if (endTag === -1) break;
+      const endTagClose = html.indexOf(">", endTag);
+      if (endTagClose === -1) break;
+      i = endTagClose + 1;
+    } else {
+      i = close + 1;
+    }
+    parts.push(" ");
+  }
+
+  return parts.join("").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -115,7 +209,13 @@ export class TothClient {
 
   private url(path: string): URL {
     const clean = path.replace(/^\/+/, "");
-    return new URL(`${this.base.pathname}/${clean}`, this.base);
+    // `replace(/\/+$/)` importa: com base na raiz, `pathname` é "/" e a
+    // concatenação vira "//users/login" — que a URL interpreta como referência
+    // de rede (protocol-relative) e resolve para o host "users", não para o ERP.
+    // O sintoma seria "não foi possível alcançar", apontando para a rede quando
+    // o defeito é de montagem de path.
+    const prefix = this.base.pathname.replace(/\/+$/, "");
+    return new URL(`${prefix}/${clean}`, this.base);
   }
 
   private async send(url: URL, init: RequestInit): Promise<Response> {
@@ -142,9 +242,10 @@ export class TothClient {
    */
   async login(): Promise<string> {
     const body = new URLSearchParams({ user: this.user, password: this.password });
-    const res = await this.send(this.url("users/login"), {
+    const url = this.url("users/login");
+    const res = await this.send(url, {
       method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
+      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: ACCEPT },
       body: body.toString(),
     });
 
@@ -155,7 +256,19 @@ export class TothClient {
     if (!res.ok) {
       // Sem `preview` aqui: o corpo do login é a única resposta que sabidamente
       // carrega credencial, e um 5xx pode ecoar o que foi enviado.
-      throw new TothRequestError(`Login no ERP falhou (HTTP ${res.status}).`, res.status);
+      //
+      // O PATH vai na mensagem (nunca a query, que carrega token). Sem ele, um
+      // 404 por endereço mal digitado é indistinguível de "o ERP não tem esse
+      // endpoint" — e a pessoa vai procurar defeito no servidor do cliente em
+      // vez de conferir o campo que ela mesma preencheu.
+      const hint =
+        res.status === 404
+          ? ` O endereço configurado aponta para ${url.pathname} — confira se o campo termina em /toth/services, sem incluir /users/login.`
+          : "";
+      throw new TothRequestError(
+        `Login no ERP falhou (HTTP ${res.status}).${hint}`,
+        res.status,
+      );
     }
 
     let parsed: unknown = text;
@@ -239,7 +352,7 @@ export class TothClient {
     const url = this.url(path);
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
 
-    const headers: Record<string, string> = { Accept: "application/json" };
+    const headers: Record<string, string> = { Accept: ACCEPT };
     if (this.transport === "header") {
       headers[this.headerName] = this.token ?? "";
     } else {
@@ -261,9 +374,22 @@ export class TothClient {
       return { kind: "auth", message: `HTTP ${res.status}` };
     }
     if (!res.ok) {
+      // O corpo do erro sobe NA MENSAGEM quando é falha do servidor (5xx).
+      //
+      // Foi jogado fora até agora, e cada 500 custou uma rodada de adivinhação:
+      // "HTTP 500 em /clientes" não diz se faltou parâmetro, se estourou
+      // memória ou se a consulta quebrou. O corpo de um 5xx de app Java
+      // costuma trazer a exceção, que é a resposta pronta.
+      //
+      // Só 5xx: um 4xx pode ecoar o que foi enviado, e o que enviamos inclui
+      // token. Erro do servidor não carrega credencial nossa.
+      // Janela maior no 5xx: a exceção do JBoss vem depois do cabeçalho da
+      // página, e 300 caracteres cortavam justamente antes dela.
+      const detail =
+        res.status >= 500 && text.trim() ? ` Resposta do ERP: ${preview(text, 700)}` : "";
       return {
         kind: "error",
-        message: `O ERP respondeu HTTP ${res.status} em /${path}.`,
+        message: `O ERP respondeu HTTP ${res.status} em /${path}.${detail}`,
         status: res.status,
         bodyPreview: preview(text),
       };

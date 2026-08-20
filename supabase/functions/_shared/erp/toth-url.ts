@@ -129,8 +129,23 @@ function isBlockedIPv6(host: string): boolean {
  * `UnsafeErpUrlError` com motivo legível — a mensagem sobe pra UI de conexão,
  * então precisa explicar o que o admin deve corrigir.
  */
+/**
+ * Tira o que vem grudado quando se cola um endereço de uma mensagem.
+ *
+ * Aspas, parênteses e — o caso que apareceu na conexão real de 19/08 — o ponto
+ * final da frase. O endereço chegou como `.../users/login.`, e o ponto sozinho
+ * impediu o casamento do sufixo, produzindo `/users/login./users/login` e um 404
+ * que parecia defeito do servidor do cliente.
+ */
+function sanitizePastedUrl(raw: string): string {
+  return (raw ?? "")
+    .trim()
+    .replace(/^[<("'\s]+/, "")
+    .replace(/[>)"'\s.,;:]+$/, "");
+}
+
 export function assertSafeErpBaseUrl(raw: string, policy: BaseUrlPolicy = {}): URL {
-  const trimmed = (raw ?? "").trim();
+  const trimmed = sanitizePastedUrl(raw);
   if (!trimmed) throw new UnsafeErpUrlError("Informe o endereço da API do ERP.");
 
   let url: URL;
@@ -179,6 +194,29 @@ export function assertSafeErpBaseUrl(raw: string, policy: BaseUrlPolicy = {}): U
   // `${base}/users/login` e uma barra duplicada quebra roteador de path.
   url.search = "";
   url.hash = "";
-  url.pathname = url.pathname.replace(/\/+$/, "");
+  url.pathname = stripEndpointSuffix(url.pathname.replace(/\/+$/, ""));
   return url;
+}
+
+/**
+ * Endpoints que a pessoa pode colar junto sem perceber.
+ *
+ * O campo pede a BASE (`/toth/services`), mas o que se tem à mão é a URL de um
+ * endpoint, copiada do Postman. Colar `.../toth/services/users/login` fazia o
+ * client montar `.../users/login/users/login` e o ERP devolver 404 — erro que
+ * parece "o endpoint não existe" quando é só um sufixo sobrando.
+ *
+ * Aconteceu na primeira tentativa real de conexão (19/08). Tolerar aqui é mais
+ * barato que explicar na mensagem de erro, e cada sufixo removido é um caminho
+ * a menos para um 404 sem causa aparente.
+ */
+const ENDPOINT_SUFFIXES = ["/users/login", "/clientes", "/cobrancas"];
+
+function stripEndpointSuffix(pathname: string): string {
+  for (const suffix of ENDPOINT_SUFFIXES) {
+    if (pathname.toLowerCase().endsWith(suffix)) {
+      return pathname.slice(0, -suffix.length);
+    }
+  }
+  return pathname;
 }

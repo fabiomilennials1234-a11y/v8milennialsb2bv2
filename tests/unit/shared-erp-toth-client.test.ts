@@ -8,6 +8,7 @@ import {
   TothClient,
   TothAuthError,
   TothRequestError,
+  preview,
 } from "../../supabase/functions/_shared/erp/toth-client";
 
 const BASE = "https://erp.exemplo.com.br/toth/services";
@@ -201,6 +202,55 @@ describe("falha de rede", () => {
   });
 });
 
+describe("preview — página de erro do JBoss vira texto legível", () => {
+  const jbossErro = `<html><head><title>JBossWeb/2.0.1.GA - Error report</title>
+    <style><!--H1 {font-family:Tahoma,Arial,sans-serif;color:white;background-color:#525D76;font-size:22px;}
+    H2 {font-family:Tahoma,Arial,sans-serif;color:white;background-color:#525D76;font-size:16px;}
+    H3 {font-family:Tahoma,Arial,sans-serif;color:white;background-color:#525D76;font-size:14px;}--></style>
+    </head><body><h1>HTTP Status 500 - </h1><p><b>type</b> Exception report</p>
+    <p><b>message</b></p><p><b>description</b> The server encountered an internal error</p>
+    <p><b>exception</b> java.lang.NullPointerException</p></body></html>`;
+
+  it("descarta o CSS e revela a exceção — o CSS comia a janela inteira", () => {
+    const out = preview(jbossErro, 700);
+    expect(out).toContain("Exception report");
+    expect(out).toContain("java.lang.NullPointerException");
+    expect(out).not.toContain("font-family");
+    expect(out).not.toContain("<style>");
+  });
+
+  it("corpo que não é HTML passa intacto", () => {
+    expect(preview("erro simples")).toBe("erro simples");
+  });
+
+  it("🔴 fecha os furos que derrubaram o filtro por regex (js/bad-tag-filter)", () => {
+    // Cada caso escapava de `replace(/<style[\s\S]*?<\/style>/gi)` por um
+    // motivo diferente. O varredor trata todos pela mesma lógica.
+    const comEspaco = "<html><style >.x{color:red}</style ><p>visivel</p></html>";
+    expect(preview(comEspaco)).toContain("visivel");
+    expect(preview(comEspaco)).not.toContain("color:red");
+
+    const caixaAlta = "<html><SCRIPT>alert(1)</SCRIPT><p>visivel</p></html>";
+    expect(preview(caixaAlta)).toContain("visivel");
+    expect(preview(caixaAlta)).not.toContain("alert(1)");
+
+    // Tag aberta e nunca fechada: o resto não é texto confiável.
+    const semFechar = "<html><style>.x{color:red}<p>nunca</p>";
+    expect(preview(semFechar)).not.toContain("color:red");
+    expect(preview(semFechar)).not.toContain("nunca");
+  });
+
+  it("não confunde tag cujo nome apenas começa igual", () => {
+    // `<styled>` não é `<style>`: o conteúdo dela é texto.
+    expect(preview("<html><styled>conteudo</styled></html>")).toContain("conteudo");
+  });
+
+  it("respeita o limite e marca o corte", () => {
+    expect(preview("x".repeat(500), 100)).toHaveLength(101); // 100 + reticências
+    expect(preview("x".repeat(500), 100).endsWith("…")).toBe(true);
+  });
+});
+
 describe("postForm — /cobrancas é POST com cnpj no corpo e token na query", () => {
   it("manda o corpo urlencoded e mantém o token na query", async () => {
     const { impl, calls } = fakeFetch([res({ token: "T1" }), res([{ id: 107554 }])]);
@@ -248,5 +298,46 @@ describe("base_url", () => {
   it("normaliza e expõe a base para diagnóstico", () => {
     const client = new TothClient({ ...CREDS, baseUrl: `${BASE}/` });
     expect(client.baseUrl).toBe(BASE);
+  });
+
+  it("base na RAIZ não vira referência de rede", async () => {
+    // `${"/"}/users/login` = "//users/login", que a URL resolve como
+    // protocol-relative e manda para o host "users". O sintoma seria erro de
+    // rede apontando para o lugar errado.
+    const { impl, calls } = fakeFetch([res({ token: "T1" })]);
+    const client = new TothClient(
+      { ...CREDS, baseUrl: "https://erp.exemplo.com.br" },
+      { fetchImpl: impl },
+    );
+
+    await client.login();
+
+    expect(calls[0].url).toBe("https://erp.exemplo.com.br/users/login");
+  });
+
+  it("🔴 NÃO pede application/json — o ERP devolve 406 se pedir", async () => {
+    // Medido em 19/08: GET /clientes com Accept: application/json → 406.
+    // Com */* ou sem header → 200. O recurso não declara que produz JSON.
+    const { impl, calls } = fakeFetch([res({ token: "T1" }), res([])]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    await client.get("clientes");
+
+    for (const call of calls) {
+      const accept = (call.init.headers as Record<string, string>).Accept;
+      expect(accept).toBe("*/*");
+      expect(accept).not.toContain("application/json");
+    }
+  });
+
+  it("404 no login diz QUAL caminho foi chamado", async () => {
+    // Sem isso, "HTTP 404" é indistinguível de "o ERP não tem esse endpoint".
+    const { impl } = fakeFetch([res("nao encontrado", 404)]);
+    const client = new TothClient(CREDS, { fetchImpl: impl });
+
+    const err = (await client.login().catch((e: Error) => e)) as Error;
+
+    expect(err.message).toContain("/toth/services/users/login");
+    expect(err.message).toMatch(/confira se o campo termina/i);
   });
 });

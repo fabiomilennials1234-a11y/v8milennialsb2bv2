@@ -71,7 +71,9 @@ Deno.serve(
       const found: Array<{ path: string; ok: boolean; detail: string; rows?: number }> = [];
       for (const path of CANDIDATE_PATHS) {
         try {
-          const payload = await client.get(path, { limit: "1" });
+          // Sem `limit`: não está na lista de parâmetros do fornecedor, e
+          // parâmetro inventado provocou HTTP 500 no ERP real (19/08).
+          const payload = await client.get(path);
           found.push({ path, ok: true, detail: "respondeu", rows: extractRows(payload).length });
         } catch (err) {
           if (err instanceof TothAuthError) {

@@ -51,6 +51,8 @@ export interface TothConnectionStatus {
   insecure_transport: boolean;
   connected_at: string | null;
   erp_sync_mode: TothSyncMode;
+  /** Janela em dias que define cliente ativo. null = base inteira. */
+  clientes_dias_compras: number | null;
   last_clientes_sync_at: string | null;
   last_cobrancas_sync_at: string | null;
   last_error: string | null;
@@ -63,6 +65,7 @@ const DISCONNECTED: TothConnectionStatus = {
   insecure_transport: false,
   connected_at: null,
   erp_sync_mode: "enrich_only",
+  clientes_dias_compras: null,
   last_clientes_sync_at: null,
   last_cobrancas_sync_at: null,
   last_error: null,
@@ -80,7 +83,7 @@ export function useTothStatus() {
 
       const { data, error } = await tothConnectionsTable()
         .select(
-          "base_url, token_transport, allow_insecure_transport, connected_at, status, erp_sync_mode, last_clientes_sync_at, last_cobrancas_sync_at, last_error",
+          "base_url, token_transport, allow_insecure_transport, connected_at, status, erp_sync_mode, clientes_dias_compras, last_clientes_sync_at, last_cobrancas_sync_at, last_error",
         )
         .eq("organization_id", organizationId)
         .maybeSingle();
@@ -99,6 +102,7 @@ export function useTothStatus() {
         insecure_transport: !!baseUrl && baseUrl.startsWith("http://"),
         connected_at: row.connected_at,
         erp_sync_mode: (row.erp_sync_mode as TothSyncMode) ?? "enrich_only",
+        clientes_dias_compras: row.clientes_dias_compras ?? null,
         last_clientes_sync_at: row.last_clientes_sync_at,
         last_cobrancas_sync_at: row.last_cobrancas_sync_at,
         last_error: row.last_error,
@@ -255,6 +259,87 @@ export function useSyncTothCobrancas() {
     },
     onError: (error: Error) => {
       toast.error("Erro ao sincronizar cobranças", { description: error.message });
+    },
+  });
+}
+
+// ─── Simulação (dry-run) ────────────────────────────────────────────────────
+
+export interface TothDryRunResult {
+  dry_run: true;
+  escreveu: false;
+  modo: TothSyncMode;
+  janela_dias_compras: number | null;
+  linhas_recebidas: number;
+  sem_identificador: number;
+  totais: {
+    mapped: number;
+    wouldCreate: number;
+    wouldEnrich: number;
+    wouldSkip: number;
+    withCnpj: number;
+    withPhone: number;
+    withEmail: number;
+  };
+  adocao_de_conversas: {
+    mensagens: number;
+    conversas: number;
+    telefones_que_casariam: number;
+  };
+  amostra: Array<Record<string, unknown>>;
+  erros_de_mapeamento: string[];
+}
+
+/**
+ * Ensaio: lê do ERP, mapeia e relata **sem escrever nada**.
+ *
+ * Não invalida query alguma de propósito — nada mudou no banco, e invalidar
+ * daria a impressão de que mudou.
+ */
+export function useSimulateTothClientes() {
+  return useMutation({
+    mutationFn: async (params?: { maxClients?: number }) => {
+      const { data, error } = await supabase.functions.invoke("toth-sync-clientes", {
+        body: {
+          dry_run: true,
+          ...(params?.maxClients ? { max_clients: params.maxClients } : {}),
+        },
+      });
+      if (error) throw await extractFunctionError(error);
+      if (data?.error) throw new Error(data.error);
+      return data as TothDryRunResult;
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao simular", { description: error.message });
+    },
+  });
+}
+
+// ─── Janela de cliente ativo ────────────────────────────────────────────────
+
+/**
+ * Grava a janela que define "cliente ativo" (vira `diasCompras` no ERP).
+ *
+ * Fica na conexão porque é regra de negócio da organização: precisa valer igual
+ * no botão da tela e no cron. `null` traz a base inteira.
+ */
+export function useUpdateTothActiveWindow() {
+  const { organizationId } = useOrganization();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (dias: number | null) => {
+      if (!organizationId) throw new Error("Sem organização");
+      const { error } = await tothConnectionsTable()
+        .update({ clientes_dias_compras: dias })
+        .eq("organization_id", organizationId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["toth-status"] });
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao salvar a janela de cliente ativo", { description: error.message });
     },
   });
 }

@@ -48,6 +48,8 @@ vi.mock("@/modules/integrations", () => ({
   useSyncTothClientes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useSyncTothCobrancas: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
   useUpdateTothSyncMode: () => ({ mutate: vi.fn(), isPending: false }),
+  useSimulateTothClientes: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateTothActiveWindow: () => ({ mutateAsync: vi.fn(), isPending: false }),
   readTothEndpoint: () => ({ verdict: "vazio", host: null, insecure: false, message: "" }),
   canSubmitTothConnection: () => false,
   TOTH_CAPABILITIES: {

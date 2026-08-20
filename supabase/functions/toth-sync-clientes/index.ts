@@ -36,7 +36,17 @@ import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credenti
 import { extractRows, mapTothClienteToCanonical, TothMappingError } from "../_shared/erp/toth-mappers.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
+import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
+import type { CanonicalClient } from "../_shared/erp/types.ts";
+import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
+import {
+  previewAction,
+  summarize,
+  phonesAtRisk,
+  sampleForReview,
+  type PreviewedClient,
+} from "../_shared/erp/toth-dry-run.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -54,6 +64,49 @@ const json = (body: unknown, headers: Record<string, string>, status = 200) =>
   });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Telefones por consulta — o filtro `in` do PostgREST vai na query string. */
+const PHONE_LOOKUP_BATCH = 100;
+
+/**
+ * Quantas conversas órfãs seriam adotadas se estes leads fossem criados.
+ *
+ * É o número que decide se o piloto pode rodar: `tg_leads_adopt_orphan_messages`
+ * pendura toda mensagem sem dono cujo telefone bata. Aqui é só `count`, com
+ * `head: true` — nenhuma linha de mensagem trafega, só o número.
+ */
+async function countOrphanAdoption(
+  admin: SupabaseClient,
+  organizationId: string,
+  phones: string[],
+): Promise<{ mensagens: number; conversas: number }> {
+  if (phones.length === 0) return { mensagens: 0, conversas: 0 };
+
+  let mensagens = 0;
+  let conversas = 0;
+
+  for (let i = 0; i < phones.length; i += PHONE_LOOKUP_BATCH) {
+    const batch = phones.slice(i, i + PHONE_LOOKUP_BATCH);
+
+    const { count: msgCount } = await admin
+      .from("whatsapp_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .is("lead_id", null)
+      .in("normalized_phone", batch);
+    mensagens += msgCount ?? 0;
+
+    const { count: convCount } = await admin
+      .from("whatsapp_conversation_summary")
+      .select("id", { count: "exact", head: true })
+      .eq("organization_id", organizationId)
+      .is("lead_id", null)
+      .in("normalized_phone", batch);
+    conversas += convCount ?? 0;
+  }
+
+  return { mensagens, conversas };
+}
 
 async function resolveOrganization(
   req: Request,
@@ -90,7 +143,7 @@ Deno.serve(
 
     const { data: conn } = await admin
       .from("toth_connections")
-      .select("id, erp_sync_mode, clientes_cursor, status")
+      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -109,19 +162,74 @@ Deno.serve(
     }
 
     const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
-    const store = supabaseClientStore(admin, TOTH_PROVIDER_ID);
+    // Carteira pré-carregada: o store direto faria duas consultas por cliente do
+    // ERP, sequenciais. Numa carga inicial isso são dezenas de milhares de idas
+    // ao banco, e foi parte do "CPU Time exceeded" de 20/08.
+    const store = await cachedClientStore(
+      admin,
+      organizationId,
+      TOTH_PROVIDER_ID,
+      supabaseClientStore(admin, TOTH_PROVIDER_ID),
+    );
+
+    // ── Modo prévia ─────────────────────────────────────────────────────────
+    // `dry_run` lê, mapeia e RELATA sem escrever. `max_clients` limita o piloto.
+    // Sem os dois, a primeira execução numa org de cliente é irreversível na
+    // prática: dá para apagar depois, mas já terá criado lead e adotado conversa.
+    const body = await req.clone().json().catch(() => ({}));
+    const dryRun = body.dry_run === true;
+    const paginated = body.paginated === true;
+
+    // Filtros repassados ao ERP (`cnpj`, `diasCompras`, `marcas` — a lista que o
+    // fornecedor documentou). Existe porque `/clientes` SEM filtro devolveu
+    // HTTP 500 no ERP real, e todos os exemplos que ele mandou levavam filtro.
+    // Repassar em vez de cravar no código permite descobrir a combinação que o
+    // servidor aceita sem um redeploy por tentativa.
+    const filtros: Record<string, string> = {};
+
+    // A janela de "cliente ativo" vem da CONEXÃO, não do corpo: é decisão de
+    // negócio da organização e precisa valer igual no botão e no cron. Sem ela,
+    // a carga traz a base inteira — 12.605 registros na Café Jurerê, quase todos
+    // histórico, o que enche a carteira de nome sem relevância comercial.
+    const diasCompras = conn.clientes_dias_compras as number | null;
+    if (typeof diasCompras === "number" && diasCompras > 0) {
+      filtros.diasCompras = String(diasCompras);
+    }
+
+    // Override pontual, para diagnóstico. Allowlist estrita: parâmetro inventado
+    // já provocou HTTP 500 uma vez.
+    if (body.filtros && typeof body.filtros === "object") {
+      for (const [k, v] of Object.entries(body.filtros as Record<string, unknown>)) {
+        if (!["cnpj", "diasCompras", "marcas"].includes(k)) continue;
+        if (typeof v === "string" || typeof v === "number") filtros[k] = String(v);
+      }
+    }
+    const maxClients =
+      typeof body.max_clients === "number" && body.max_clients > 0
+        ? Math.floor(body.max_clients)
+        : null;
 
     const seenIds = new Set<string>();
     const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
     const mappingErrors: string[] = [];
+    const previews: PreviewedClient[] = [];
+    const mappedClients: CanonicalClient[] = [];
     let page = conn.clientes_cursor ?? 1;
     let stopReason = "max_pages";
 
     try {
       for (let i = 0; i < MAX_PAGES_PER_RUN; i++) {
+        // 🔴 Sem parâmetro de paginação por padrão. `page`/`limit` eram invenção
+        // nossa: a lista que o fornecedor documentou para `/clientes` é `token`,
+        // `cnpj`, `diasCompras` e `marcas`. Mandar parâmetro que o endpoint não
+        // conhece provocou HTTP 500 no ERP real (19/08), e "sem paginação" é a
+        // hipótese que os exemplos dele sustentam — a resposta vem inteira.
+        //
+        // `paginated: true` no corpo reativa, para quando o fornecedor
+        // confirmar os nomes (está em análise com a equipe dele).
         const payload = await client.get("clientes", {
-          page: String(page),
-          limit: String(PAGE_SIZE),
+          ...filtros,
+          ...(paginated ? { page: String(page), limit: String(PAGE_SIZE) } : {}),
         });
         const rows = extractRows(payload);
         stats.pages++;
@@ -149,15 +257,58 @@ Deno.serve(
           seenIds.add(canonical.externalId);
           newInThisPage++;
 
-          const result = await upsertCanonicalClient(store, {
-            organizationId,
-            source: TOTH_PROVIDER_ID,
-            client: canonical,
-            syncMode,
-          });
-          if (result.action === "created") stats.created++;
-          else if (result.action === "enriched") stats.enriched++;
-          else stats.skipped++;
+          if (dryRun) {
+            // Só LEITURA: as duas buscas do store são SELECT. A decisão espelha
+            // `upsertCanonicalClient` em vez de chamá-lo — chamar escreveria.
+            const byExternalId = await store.findByExternalId(
+              organizationId,
+              canonical.externalId,
+            );
+            const byCnpj =
+              !byExternalId && canonical.cnpj
+                ? await store.findByCnpj(organizationId, canonical.cnpj)
+                : null;
+
+            const { action, reason } = previewAction({
+              client: canonical,
+              syncMode,
+              matchedByExternalId: !!byExternalId,
+              matchedByCnpj: !!byCnpj,
+            });
+
+            previews.push({
+              externalId: canonical.externalId,
+              action,
+              reason,
+              normalizedPhone: normalizePhoneForSearch(canonical.phone),
+            });
+            mappedClients.push(canonical);
+          } else {
+            const result = await upsertCanonicalClient(store, {
+              organizationId,
+              source: TOTH_PROVIDER_ID,
+              client: canonical,
+              syncMode,
+            });
+            if (result.action === "created") stats.created++;
+            else if (result.action === "enriched") stats.enriched++;
+            else stats.skipped++;
+          }
+
+          if (maxClients !== null && seenIds.size >= maxClients) {
+            stopReason = "max_clients";
+            break;
+          }
+        }
+
+        if (stopReason === "max_clients") break;
+
+        // Sem paginação, a resposta é a base inteira: pedir de novo traria o
+        // mesmo bloco. O guard de "nenhum id novo" abaixo pegaria, mas só depois
+        // de gastar uma requisição à toa contra o servidor de uma empresa só.
+        if (!paginated) {
+          stopReason = "single_page";
+          break;
         }
 
         // A API ignorou a paginação e repetiu o bloco anterior.
@@ -203,6 +354,47 @@ Deno.serve(
       });
 
       return json({ error: message, stats }, cors);
+    }
+
+    // ── Prévia: relata e sai. NÃO grava cursor nem last_sync ────────────────
+    // Um ensaio não pode mover o cursor: se movesse, a execução real começaria
+    // da página seguinte e puraria clientes em silêncio.
+    if (dryRun) {
+      const totals = summarize(mappedClients, previews);
+      const phones = phonesAtRisk(previews);
+      const orphans = await countOrphanAdoption(admin, organizationId, phones);
+
+      await logRuntime({
+        organizationId,
+        module: "general",
+        action: "toth_sync_clientes_dry_run",
+        status: "success",
+        // Sem amostra aqui: o log não é lugar de dado de cliente.
+        payloadSnapshot: { ...totals, ...orphans, stop_reason: stopReason },
+      });
+
+      return json(
+        {
+          dry_run: true,
+          escreveu: false,
+          modo: syncMode,
+          janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+          stop_reason: stopReason,
+          paginas_lidas: stats.pages,
+          linhas_recebidas: stats.rows,
+          sem_identificador: stats.failed,
+          totais: totals,
+          adocao_de_conversas: {
+            ...orphans,
+            telefones_que_casariam: phones.length,
+            explicacao:
+              "Ao criar o lead, o trigger tg_leads_adopt_orphan_messages vincula as mensagens sem dono cujo telefone bate. Não envia nada — é vínculo de dado, e é reversível.",
+          },
+          amostra: sampleForReview(mappedClients, previews),
+          erros_de_mapeamento: mappingErrors,
+        },
+        cors,
+      );
     }
 
     await admin
