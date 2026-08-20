@@ -16,6 +16,12 @@ import {
   isRetryableSendFailure,
   providerPersistsOwnMessages,
 } from "./whatsapp-helpers.ts";
+import { enviarTemplateAprovado } from "./enviar-template.ts";
+import {
+  decidirEnvioDoNoDeTexto,
+  escapeDoNo,
+  janelaPeloErroDoTransporte,
+} from "../decisao-de-envio.ts";
 
 export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
   const { supabase, organizationId, leadId, params, executionContext } = input;
@@ -64,6 +70,11 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     triggered_by: "workflow",
   });
 
+  // A falha CRUA do transporte, quando houve. Os dois caminhos convergem nela em
+  // vez de cada um devolver a sua: é essa string que carrega o motivo do
+  // governor, e a decisão de janela precisa ver os dois caminhos igualmente.
+  let erroDoTransporte: string | null = null;
+
   if (!gwResult.delegated) {
     // Legacy path
     const { sendTextViaInstance } = await import("../whatsapp-dispatch.ts");
@@ -73,35 +84,90 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
     });
 
     if (!sendResult.success) {
-      const error = `WhatsApp send failed: ${sendResult.error}`;
-      return { success: false, error, retryable: isRetryableSendFailure(error) };
-    }
+      erroDoTransporte = sendResult.error ?? "unknown";
+    } else {
+      const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
 
-    const messageId = sendResult.messageId || `wf_${crypto.randomUUID()}`;
-
-    // Ver `providerPersistsOwnMessages`: o canal oficial já gravou a linha em
-    // `channel_messages`, e uma segunda cópia aqui nasceria órfã.
-    if (!providerPersistsOwnMessages(wa.instance.provider)) {
-      await supabase.from("whatsapp_messages").upsert({
-        organization_id: organizationId,
-        instance_id: wa.instanceId,
-        message_id: messageId,
-        remote_jid: phone + "@s.whatsapp.net",
-        phone_number: phone,
-        direction: "outgoing",
-        message_type: "conversation",
-        content: message,
-        timestamp: new Date().toISOString(),
-        status: "sent",
-        sent_by_ai: true,
-        sent_source: "workflow",
-      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+      // Ver `providerPersistsOwnMessages`: o canal oficial já gravou a linha em
+      // `channel_messages`, e uma segunda cópia aqui nasceria órfã.
+      if (!providerPersistsOwnMessages(wa.instance.provider)) {
+        await supabase.from("whatsapp_messages").upsert({
+          organization_id: organizationId,
+          instance_id: wa.instanceId,
+          message_id: messageId,
+          remote_jid: phone + "@s.whatsapp.net",
+          phone_number: phone,
+          direction: "outgoing",
+          message_type: "conversation",
+          content: message,
+          timestamp: new Date().toISOString(),
+          status: "sent",
+          sent_by_ai: true,
+          sent_source: "workflow",
+        }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+      }
     }
   } else if (!gwResult.success) {
     console.error("[send-whatsapp] Gateway send failed:", gwResult.error);
-    const error = `WhatsApp send failed: ${gwResult.error}`;
+    erroDoTransporte = gwResult.error ?? "unknown";
+  }
+
+  if (!erroDoTransporte) return { success: true, message: "WhatsApp text sent" };
+
+  // ─── A DECISÃO — texto, template ou falha ────────────────────────────────
+  //
+  // Ela mora INTEIRA em `decisao-de-envio.ts`; aqui só se lê o veredito e se
+  // age. Fora do canal oficial o governor nunca emite motivo de janela, então o
+  // chip Uazapi cai sempre no ramo `texto` e sai daqui com exatamente a falha
+  // que já devolvia antes desta issue.
+  const decisao = decidirEnvioDoNoDeTexto({
+    janela: janelaPeloErroDoTransporte(erroDoTransporte),
+    escape: escapeDoNo(params),
+  });
+
+  if (decisao.acao === "texto") {
+    const error = `WhatsApp send failed: ${erroDoTransporte}`;
     return { success: false, error, retryable: isRetryableSendFailure(error) };
   }
 
-  return { success: true, message: "WhatsApp text sent" };
+  if (decisao.acao === "falhar") {
+    // Não-retentável de propósito: a janela não reabre com o tempo, reabre com
+    // uma mensagem do contato. Três retentativas em ~8 min só adiariam a mesma
+    // falha e atrasariam a leitura do motivo por quem opera.
+    return {
+      success: false,
+      error: decisao.motivo,
+      retryable: false,
+      data: { motivo: "janela_fechada_sem_escape" },
+    };
+  }
+
+  const envio = await enviarTemplateAprovado({
+    supabase,
+    leadId,
+    executionContext,
+    instance: wa.instance,
+    phone,
+    template: decisao.escape,
+    trackSource: "workflow-action-escape-janela",
+    trackId: params._executionId as string | undefined,
+  });
+
+  if (!envio.ok) {
+    // Terminal mesmo quando a falha do template seria retentável: retentar este
+    // nó refaz o texto, que volta a ser barrado, e reenvia o template — e um
+    // template é justamente o envio que não pode sair duas vezes.
+    return {
+      success: false,
+      error: `Janela de 24h fechada e o template de escape não saiu: ${envio.erro}`,
+      retryable: false,
+      data: { motivo: "janela_fechada_escape_falhou" },
+    };
+  }
+
+  return {
+    success: true,
+    message: `Janela de 24h fechada — template de escape "${envio.nome}" enviado`,
+    data: { motivo: "janela_fechada_escape_enviado", template: envio.nome },
+  };
 }

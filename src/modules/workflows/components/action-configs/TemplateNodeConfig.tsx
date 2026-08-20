@@ -68,9 +68,16 @@ import {
 import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
 import type { ActionNodeData } from "@/types/workflow";
 
+import {
+  CAMPOS_DO_NO_DE_TEMPLATE,
+  type CamposDeTemplate,
+} from "./campos-de-template";
+
 interface Props {
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
+  /** Default: os campos do nó de template. */
+  campos?: CamposDeTemplate;
 }
 
 /** Um bloco de aviso — o painel tem quatro estados que não são "pronto". */
@@ -82,8 +89,23 @@ function Aviso({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function TemplateNodeConfig({ data, onUpdate }: Props) {
+export function TemplateNodeConfig({
+  data,
+  onUpdate,
+  campos = CAMPOS_DO_NO_DE_TEMPLATE,
+}: Props) {
   const { data: instancias } = useWhatsAppInstances();
+
+  // Chave computada não é atribuível a `Partial<ActionNodeData>` sem asserção —
+  // o TypeScript perde o literal ao indexar. As cinco chaves possíveis são as da
+  // interface acima, e é ela quem prende a lista.
+  const gravar = (updates: Record<string, unknown>) =>
+    onUpdate(updates as Partial<ActionNodeData>);
+
+  const nomeEscolhido = data[campos.name];
+  const idiomaEscolhido = data[campos.language];
+  const componentesEscolhidos = data[campos.components];
+  const midiaEscolhida = data[campos.headerMediaUrl];
 
   const instanciaDoNo = (instancias || []).find((i) => i.id === data.whatsappInstanceId);
 
@@ -115,43 +137,43 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
   // depende da listagem para renderizar o que já foi escolhido: se a conta ficar
   // fora do ar, o operador ainda vê a configuração que existe.
   const escolhido: NotificameTemplate | null = useMemo(() => {
-    if (!data.templateName) return null;
-    const daLista = aprovados.find((t) => t.name === data.templateName);
+    if (!nomeEscolhido) return null;
+    const daLista = aprovados.find((t) => t.name === nomeEscolhido);
     if (daLista) return daLista;
     return {
-      name: data.templateName,
+      name: nomeEscolhido,
       id: null,
-      language: data.templateLanguage ?? null,
+      language: idiomaEscolhido ?? null,
       status: "APPROVED",
       category: null,
       parameterFormat: null,
-      components: data.templateComponents ?? [],
+      components: componentesEscolhidos ?? [],
     };
-  }, [data.templateName, data.templateLanguage, data.templateComponents, aprovados]);
+  }, [nomeEscolhido, idiomaEscolhido, componentesEscolhidos, aprovados]);
 
   const variaveis = escolhido ? variaveisDoTemplate(escolhido).todas : [];
   const formatoDeMidia = escolhido ? formatoDeMidiaDoCabecalho(escolhido) : null;
   const botoesVariaveis = escolhido ? botoesComVariavel(escolhido) : [];
-  const mapa = data.templateVariables ?? {};
+  const mapa = data[campos.variables] ?? {};
 
   function escolher(nome: string) {
     const t = aprovados.find((x) => x.name === nome);
     if (!t) return;
-    onUpdate({
-      templateName: t.name,
-      templateLanguage: t.language ?? "pt_BR",
-      templateComponents: t.components,
+    gravar({
+      [campos.name]: t.name,
+      [campos.language]: t.language ?? "pt_BR",
+      [campos.components]: t.components,
       // Mapa zerado: os tokens do template anterior não têm relação com os
       // deste, e aproveitá-los mandaria o valor de `{{1}}` de outro template.
-      templateVariables: {},
+      [campos.variables]: {},
       // A Meta guarda o arquivo do cabeçalho junto do template aprovado. Pedir
       // upload de algo que ela já tem seria retrabalho.
-      templateHeaderMediaUrl: midiaDeExemploDoCabecalho(t) ?? "",
+      [campos.headerMediaUrl]: midiaDeExemploDoCabecalho(t) ?? "",
     });
   }
 
   function definirVariavel(token: string, valor: string) {
-    onUpdate({ templateVariables: { ...mapa, [token]: valor } });
+    gravar({ [campos.variables]: { ...mapa, [token]: valor } });
   }
 
   if (!data.whatsappInstanceId) {
@@ -195,7 +217,7 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
             Meta em Configurações &gt; WhatsApp.
           </Aviso>
         ) : (
-          <Select value={data.templateName || ""} onValueChange={escolher}>
+          <Select value={nomeEscolhido || ""} onValueChange={escolher}>
             <SelectTrigger aria-label="Template aprovado">
               <SelectValue placeholder="Selecione o template" />
             </SelectTrigger>
@@ -209,9 +231,9 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
             </SelectContent>
           </Select>
         )}
-        {data.templateName && !isLoading && !aprovados.some((t) => t.name === data.templateName) && (
+        {nomeEscolhido && !isLoading && !aprovados.some((t) => t.name === nomeEscolhido) && (
           <Aviso>
-            O template “{data.templateName}” não está mais aprovado nesta conta.
+            O template “{nomeEscolhido}” não está mais aprovado nesta conta.
             O envio vai falhar com o motivo da Meta. Escolha outro.
           </Aviso>
         )}
@@ -241,8 +263,8 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
                 : "Documento do cabeçalho"}
           </Label>
           <Input
-            value={data.templateHeaderMediaUrl ?? ""}
-            onChange={(e) => onUpdate({ templateHeaderMediaUrl: e.target.value })}
+            value={midiaEscolhida ?? ""}
+            onChange={(e) => gravar({ [campos.headerMediaUrl]: e.target.value })}
             placeholder="https://..."
           />
           <p className="text-xs text-muted-foreground">
@@ -280,13 +302,13 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
         </div>
       )}
 
-      {escolhido && variaveis.length === 0 && data.templateName && (
+      {escolhido && variaveis.length === 0 && nomeEscolhido && (
         <p className="text-xs text-muted-foreground">
           Este template não tem variáveis — sai como foi aprovado.
         </p>
       )}
 
-      {escolhido && data.templateName && (
+      {escolhido && nomeEscolhido && (
         <div className="space-y-1">
           <Label className="text-xs">Prévia</Label>
           <div className="p-3 rounded-lg bg-muted/50 border text-xs whitespace-pre-wrap">

@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
 import {
+  EscapeDeJanelaConfig,
   MenuNodeConfig,
   PixButtonNodeConfig,
   TemplateNodeConfig,
@@ -1475,6 +1476,9 @@ function WhatsAppTextPanel({
           />
         </div>
       )}
+
+      {/* Escape de janela — só aparece quando o nó nomeia o canal oficial (#1689) */}
+      <EscapeDeJanelaConfig data={data} onUpdate={onUpdate} />
     </>
   );
 }
