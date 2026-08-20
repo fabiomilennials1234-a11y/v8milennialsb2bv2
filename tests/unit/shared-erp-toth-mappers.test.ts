@@ -10,6 +10,8 @@ import { describe, it, expect } from "vitest";
 import {
   pickField,
   digitsOnly,
+  sanitizeDocument,
+  sanitizePhone,
   parseTothDate,
   formatTothDate,
   shiftIsoDate,
@@ -97,6 +99,50 @@ describe("pickField", () => {
       "Oficial",
     );
     expect(pickField({ email: "", emailNfe: "a@b.com" }, ["email", "emailNfe"])).toBe("a@b.com");
+  });
+});
+
+describe("sanitizeDocument — placeholder NÃO pode virar chave de casamento", () => {
+  it("🔴 recusa o CNPJ zerado que o Toth usa como preenchimento", () => {
+    // Dois dos quatro da primeira amostra real vieram assim. Aceitar faria
+    // centenas de clientes distintos colapsarem num só pelo casamento por CNPJ.
+    expect(sanitizeDocument("00000000000000")).toBeNull();
+    expect(sanitizeDocument("00.000.000/0000-00")).toBeNull();
+    expect(sanitizeDocument("00000000000")).toBeNull();
+    expect(sanitizeDocument("11111111111111")).toBeNull();
+  });
+
+  it("aceita CNPJ e CPF de verdade, sem máscara", () => {
+    expect(sanitizeDocument("12.345.678/0001-90")).toBe("12345678000190");
+    expect(sanitizeDocument("15069793000172")).toBe("15069793000172");
+    expect(sanitizeDocument("12345678901")).toBe("12345678901");
+  });
+
+  it("recusa comprimento que não é de documento", () => {
+    // Não é auditoria da Receita — é garantir que só documento vire chave.
+    expect(sanitizeDocument("123")).toBeNull();
+    expect(sanitizeDocument("123456789012")).toBeNull();
+    expect(sanitizeDocument("")).toBeNull();
+    expect(sanitizeDocument(null)).toBeNull();
+  });
+});
+
+describe("sanitizePhone — preenchimento não pode puxar conversa alheia", () => {
+  it("🔴 recusa DDD real seguido de zeros", () => {
+    // `48900000000` apareceu na amostra real. Se virasse telefone do cliente,
+    // adotaria as conversas órfãs de qualquer outro com o mesmo placeholder.
+    expect(sanitizePhone("48900000000")).toBeNull();
+    expect(sanitizePhone("4800000000")).toBeNull();
+  });
+
+  it("aceita telefone real", () => {
+    expect(sanitizePhone("67991560000")).toBe("67991560000");
+    expect(sanitizePhone("(48) 3263-1404")).toBe("4832631404");
+  });
+
+  it("recusa curto demais para ter DDD", () => {
+    expect(sanitizePhone("32631404")).toBeNull();
+    expect(sanitizePhone("")).toBeNull();
   });
 });
 

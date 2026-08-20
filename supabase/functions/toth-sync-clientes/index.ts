@@ -37,6 +37,7 @@ import { extractRows, mapTothClienteToCanonical, TothMappingError } from "../_sh
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
 import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
+import { bulkCreateClients } from "../_shared/erp/sync/bulk-create-clients.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
 import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
@@ -214,6 +215,8 @@ Deno.serve(
     const mappingErrors: string[] = [];
     const previews: PreviewedClient[] = [];
     const mappedClients: CanonicalClient[] = [];
+    /** Fila da criação em lote — ver bulk-create-clients.ts. */
+    const toCreate: CanonicalClient[] = [];
     let page = conn.clientes_cursor ?? 1;
     let stopReason = "max_pages";
 
@@ -284,15 +287,33 @@ Deno.serve(
             });
             mappedClients.push(canonical);
           } else {
-            const result = await upsertCanonicalClient(store, {
+            // Casados enriquecem AGORA, um a um: são poucos, e a regra de qual
+            // campo pode ser sobrescrito não vale duplicar. Novos vão para a
+            // fila do lote — criar é o que era caro (dois INSERT por registro,
+            // 25.216 idas ao banco numa carga inicial).
+            const byExternalId = await store.findByExternalId(
               organizationId,
-              source: TOTH_PROVIDER_ID,
-              client: canonical,
-              syncMode,
-            });
-            if (result.action === "created") stats.created++;
-            else if (result.action === "enriched") stats.enriched++;
-            else stats.skipped++;
+              canonical.externalId,
+            );
+            const byCnpj =
+              !byExternalId && canonical.cnpj
+                ? await store.findByCnpj(organizationId, canonical.cnpj)
+                : null;
+
+            if (byExternalId || byCnpj) {
+              const result = await upsertCanonicalClient(store, {
+                organizationId,
+                source: TOTH_PROVIDER_ID,
+                client: canonical,
+                syncMode,
+              });
+              if (result.action === "enriched") stats.enriched++;
+              else stats.skipped++;
+            } else if (syncMode === "canonical") {
+              toCreate.push(canonical);
+            } else {
+              stats.skipped++;
+            }
           }
 
           if (maxClients !== null && seenIds.size >= maxClients) {
@@ -395,6 +416,23 @@ Deno.serve(
         },
         cors,
       );
+    }
+
+    // ── Criação em lote ─────────────────────────────────────────────────────
+    // Fora do laço de propósito: um statement com 500 leads e outro com 500
+    // clientes, em vez de dois por registro. É o que faz a carga inicial caber
+    // numa execução.
+    if (toCreate.length > 0) {
+      const bulk = await bulkCreateClients(admin, {
+        organizationId,
+        source: TOTH_PROVIDER_ID,
+        clients: toCreate,
+      });
+      stats.created = bulk.created;
+      stats.failed += bulk.failed;
+      for (const e of bulk.errors) {
+        if (mappingErrors.length < 3) mappingErrors.push(e);
+      }
     }
 
     await admin
