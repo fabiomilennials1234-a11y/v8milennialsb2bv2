@@ -20,7 +20,11 @@ import { Mic, MicOff, Upload, Trash2, Play, Square, Plus, FileText } from "lucid
 import { cn } from "@/lib/utils";
 import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
-import { MenuNodeConfig, PixButtonNodeConfig } from "@/modules/workflows/components/action-configs";
+import {
+  MenuNodeConfig,
+  PixButtonNodeConfig,
+  TemplateNodeConfig,
+} from "@/modules/workflows/components/action-configs";
 import { useFeatureFlag } from "@/modules/platform";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
 import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
@@ -460,19 +464,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         <WhatsAppDocumentPanel data={data} onUpdate={onUpdate} />
       )}
 
-      {/* Send WhatsApp Template */}
+      {/* Send WhatsApp Template — canal oficial (#1688) */}
       {at === "send_whatsapp_template" && (
-        <div className="space-y-2">
-          <Label>ID do Template</Label>
-          <Input
-            value={data.templateId || ""}
-            onChange={(e) => onUpdate({ templateId: e.target.value })}
-            placeholder="ID do template aprovado"
-          />
-          <p className="text-xs text-muted-foreground">
-            Templates aprovados pela Meta para envio em massa
-          </p>
-        </div>
+        <TemplateNodeConfig data={data} onUpdate={onUpdate} />
       )}
 
       {/* Send Meta Message */}
