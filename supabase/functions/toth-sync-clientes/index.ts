@@ -36,6 +36,7 @@ import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credenti
 import { extractRows, mapTothClienteToCanonical, TothMappingError } from "../_shared/erp/toth-mappers.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
+import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
 import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
@@ -161,7 +162,15 @@ Deno.serve(
     }
 
     const client = new TothClient(creds, { urlPolicy: tothUrlPolicy(creds) });
-    const store = supabaseClientStore(admin, TOTH_PROVIDER_ID);
+    // Carteira pré-carregada: o store direto faria duas consultas por cliente do
+    // ERP, sequenciais. Numa carga inicial isso são dezenas de milhares de idas
+    // ao banco, e foi parte do "CPU Time exceeded" de 20/08.
+    const store = await cachedClientStore(
+      admin,
+      organizationId,
+      TOTH_PROVIDER_ID,
+      supabaseClientStore(admin, TOTH_PROVIDER_ID),
+    );
 
     // ── Modo prévia ─────────────────────────────────────────────────────────
     // `dry_run` lê, mapeia e RELATA sem escrever. `max_clients` limita o piloto.

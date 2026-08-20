@@ -92,16 +92,20 @@ export class TothRequestError extends Error {
  * java.lang.X` na mesma janela.
  */
 export function preview(body: string, maxLen = 300): string {
-  const isHtml = /<html|<!doctype html/i.test(body.slice(0, 400));
+  // Limita a ENTRADA antes de qualquer regex. Uma página de erro pode vir com
+  // stack trace de centenas de KB, e varrer isso inteiro para depois jogar fora
+  // 99% queima CPU num runtime que a mede. O útil do JBoss está no começo.
+  const source = body.length > 8000 ? body.slice(0, 8000) : body;
+  const isHtml = /<html|<!doctype html/i.test(source.slice(0, 400));
   const cleaned = isHtml
-    ? body
+    ? source
         .replace(/<style[\s\S]*?<\/style>/gi, " ")
         .replace(/<script[\s\S]*?<\/script>/gi, " ")
         .replace(/<[^>]*>/g, " ")
         .replace(/&nbsp;/gi, " ")
         .replace(/\s+/g, " ")
         .trim()
-    : body.trim();
+    : source.trim();
   return cleaned.length > maxLen ? `${cleaned.slice(0, maxLen)}…` : cleaned;
 }
 

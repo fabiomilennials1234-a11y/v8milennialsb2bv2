@@ -19,13 +19,53 @@
 
 import { CanonicalClient, CanonicalTitulo, TituloStatus } from "./types.ts";
 
-/** Normaliza chave para comparação: minúscula, sem acento, sem separador. */
+/**
+ * Normaliza chave para comparação: minúscula, sem acento, sem separador.
+ *
+ * Memoizada: os nomes de campo se repetem em TODA linha da resposta, e
+ * `normalize("NFD")` mais duas regex por chave fica caro multiplicado por
+ * milhares de clientes. O conjunto de chaves distintas é pequeno e limitado ao
+ * schema do ERP, então o cache não cresce sem controle.
+ */
+const keyCache = new Map<string, string>();
+
 function normalizeKey(key: string): string {
-  return key
+  const hit = keyCache.get(key);
+  if (hit !== undefined) return hit;
+  const norm = key
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
+  keyCache.set(key, norm);
+  return norm;
+}
+
+/**
+ * Índice normalizado por LINHA, construído uma vez e reaproveitado.
+ *
+ * 🔴 A versão anterior reconstruía o índice A CADA consulta de campo. Como
+ * `mapTothClienteToCanonical` consulta ~6 campos e cada cliente do Toth traz
+ * ~40 chaves, davam ~240 normalizações por cliente — mais de um milhão numa
+ * base de alguns milhares. O sync real morreu com "CPU Time exceeded" aos 60
+ * segundos por causa disso (20/08).
+ *
+ * O WeakMap faz o reaproveitamento sem mudar a assinatura de `pickField`, então
+ * todos os chamadores ganham sem saber. Some junto com a linha.
+ */
+const rowIndexCache = new WeakMap<object, Map<string, unknown>>();
+
+function fieldIndex(row: Record<string, unknown>): Map<string, unknown> {
+  const cached = rowIndexCache.get(row);
+  if (cached) return cached;
+
+  const index = new Map<string, unknown>();
+  for (const [key, value] of Object.entries(row)) {
+    const norm = normalizeKey(key);
+    if (!index.has(norm)) index.set(norm, value);
+  }
+  rowIndexCache.set(row, index);
+  return index;
 }
 
 /**
@@ -34,11 +74,7 @@ function normalizeKey(key: string): string {
  * `RAZÃO SOCIAL` casam com o candidato `razaosocial`.
  */
 export function pickField(row: Record<string, unknown>, candidates: string[]): unknown {
-  const index = new Map<string, unknown>();
-  for (const [key, value] of Object.entries(row)) {
-    const norm = normalizeKey(key);
-    if (!index.has(norm)) index.set(norm, value);
-  }
+  const index = fieldIndex(row);
   for (const candidate of candidates) {
     const value = index.get(normalizeKey(candidate));
     if (value !== undefined && value !== null && value !== "") return value;
