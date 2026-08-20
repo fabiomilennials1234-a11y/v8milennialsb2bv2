@@ -1,3 +1,12 @@
+/**
+ * @deprecated Substituída pela navegação lateral (`Sidebar`).
+ *
+ * Desde a troca da top bar pela lateral, nada monta este componente — o
+ * `MainLayout` renderiza `Sidebar` no desktop e `SidebarMobileDrawer` no
+ * celular. O arquivo segue no repositório apenas como caminho de volta durante
+ * o rollout; assim que a lateral estiver estável em produção, deve ser
+ * removido junto com este comentário.
+ */
 import { useState, useRef, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {

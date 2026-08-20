@@ -1,6 +1,7 @@
 import { ReactNode, useState, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { TopNavigation } from "./TopNavigation";
+import { Sidebar } from "./Sidebar";
+import { SidebarMobileDrawer } from "./SidebarMobileDrawer";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { OnboardingChecklist } from "@/modules/platform/components/onboarding/OnboardingChecklist";
 import { KeyboardShortcutsHelp } from "@/shared/components/KeyboardShortcutsHelp";
@@ -107,45 +108,52 @@ function MainLayoutInner({ children }: MainLayoutProps) {
   const hideNavbar = isMobile && isChatRoute;
   const hideBottomNav = isChatThreadOpen;
 
+  // A lateral é uma coluna irmã do conteúdo, não uma faixa acima dele: por isso
+  // o eixo do layout virou horizontal no desktop. No celular não há lateral —
+  // a gaveta cobre a navegação e o eixo continua vertical.
   const layout = (
-    <div className="flex flex-col h-screen bg-background" data-layout="main">
-      {!hideNavbar && <TopNavigation />}
+    <div className="flex h-screen bg-background md:flex-row flex-col" data-layout="main">
+      {!isMobile && <Sidebar />}
 
-      <SessionDeadBanner />
+      <div className="flex min-w-0 flex-1 flex-col">
+        {isMobile && !hideNavbar && <SidebarMobileDrawer />}
 
-      {showChecklist && !isFullBleed && (
-        <div
-          className="fixed top-[3.75rem] right-4 z-40 hidden sm:block"
-          aria-label="Onboarding"
-        >
-          <OnboardingChecklist />
-        </div>
-      )}
+        <SessionDeadBanner />
 
-      <main
-        className={cn(
-          "flex-1 min-h-0",
+        {showChecklist && !isFullBleed && (
+          <div
+            className="fixed right-4 top-4 z-40 hidden sm:block"
+            aria-label="Onboarding"
+          >
+            <OnboardingChecklist />
+          </div>
+        )}
+
+        <main
+          className={cn(
+            "flex-1 min-h-0",
           // Mobile guard: clip horizontal overflow no eixo X (mata scroll lateral
           // da página inteira); desktop mantém overflow-x auto p/ kanban/tabelas largas.
-          isFullBleed
-            ? "overflow-hidden"
-            : "overflow-y-auto overflow-x-hidden md:overflow-x-auto",
-          isMobile && !hideBottomNav && "pb-16",
-        )}
-      >
-        <div
-          className={cn(
-            "w-full flex flex-col min-w-0 max-w-full",
             isFullBleed
-              ? "h-full px-0 py-0"
-              : isWide
-              ? "px-4 lg:px-6 py-5 lg:py-6 min-h-full"
-              : "px-4 sm:px-6 lg:px-10 xl:px-12 py-5 sm:py-6 lg:py-8 max-w-[1600px] mx-auto min-h-full",
+              ? "overflow-hidden"
+              : "overflow-y-auto overflow-x-hidden md:overflow-x-auto",
+            isMobile && !hideBottomNav && "pb-16",
           )}
         >
-          {children}
-        </div>
-      </main>
+          <div
+            className={cn(
+              "w-full flex flex-col min-w-0 max-w-full",
+              isFullBleed
+                ? "h-full px-0 py-0"
+                : isWide
+                ? "px-4 lg:px-6 py-5 lg:py-6 min-h-full"
+                : "px-4 sm:px-6 lg:px-10 xl:px-12 py-5 sm:py-6 lg:py-8 max-w-[1600px] mx-auto min-h-full",
+            )}
+          >
+            {children}
+          </div>
+        </main>
+      </div>
 
       <KeyboardShortcutsHelp
         open={shortcutsHelpOpen}

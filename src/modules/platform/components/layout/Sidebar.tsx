@@ -1,0 +1,275 @@
+/**
+ * Navegação lateral — substitui a top bar.
+ *
+ * Seis portas na lateral e quatro no rodapé (Agenda, Notificações, Ajuda,
+ * Pitstop). O menu "Mais" deixou de existir: o que vivia nele mora agora dentro
+ * do Pitstop, que abre como coluna aninhada ao lado da lateral.
+ *
+ * O componente não decide visibilidade — isso é `useNavigationModel`. Aqui só
+ * se decide forma: recolhida ou não, expandida ou não, tooltip ou rótulo.
+ */
+
+import { useCallback, useEffect, useState } from "react";
+import { NavLink } from "react-router-dom";
+import { ChevronLeft, ChevronRight, HelpCircle, Settings } from "lucide-react";
+
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
+import { UpgradeModal } from "@/shared/components/UpgradeModal";
+import { usePrefetchPipes } from "@/modules/pipelines";
+import { AlertsDropdown } from "@/modules/platform/components/notifications/AlertsDropdown";
+import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
+import { useSidebarCollapsed } from "@/modules/platform/hooks/useSidebarCollapsed";
+import {
+  SIDEBAR_WIDTH,
+  SIDEBAR_WIDTH_COLLAPSED,
+} from "@/modules/platform/lib/navigation-model";
+import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
+import { OrgSwitcher } from "./OrgSwitcher";
+import { PitstopPanel } from "./PitstopPanel";
+import { SidebarNavItem } from "./SidebarNavItem";
+import { SidebarUserMenu } from "./SidebarUserMenu";
+
+/** Dia de hoje dentro do ícone da Agenda — mesmo gesto do calendário nativo. */
+function AgendaDateChip() {
+  const now = new Date();
+  const dia = now.getDate();
+  const mes = now.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "");
+  return (
+    <span className="flex h-[26px] w-[26px] shrink-0 flex-col items-center justify-center rounded-md border-[1.5px] border-primary font-mono leading-none text-primary">
+      <span className="text-[11px] tabular-nums">{dia}</span>
+      <span className="mt-px text-[6.5px] uppercase tracking-wider">{mes}</span>
+    </span>
+  );
+}
+
+export function Sidebar() {
+  const model = useNavigationModel();
+  const prefetchPipes = usePrefetchPipes();
+  const [collapsed, toggleCollapsed] = useSidebarCollapsed();
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [pitstopOpen, setPitstopOpen] = useState(false);
+  const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
+
+  // Entrar numa rota do Pitstop abre o painel — vindo do teclado, de um link
+  // ou de um deep link, o usuário precisa ver onde está.
+  useEffect(() => {
+    if (model.isPitstopRoute) setPitstopOpen(true);
+  }, [model.isPitstopRoute]);
+
+  const toggleExpand = useCallback((label: string) => {
+    setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
+  }, []);
+
+  const openUpgrade = useCallback(
+    (path: string) => {
+      const key = model.featureKeyFor(path);
+      if (key) setUpgradeFeature(key);
+    },
+    [model],
+  );
+
+  const width = collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH;
+
+  return (
+    <>
+      <aside
+        data-testid="sidebar"
+        aria-label="Navegação principal"
+        style={{ width }}
+        className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200"
+      >
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+          className="absolute -right-[11px] top-5 z-40 grid h-[22px] w-[22px] place-items-center rounded-full border border-sidebar-border bg-card text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+        </button>
+
+        <div className="flex flex-col gap-3 px-3 pb-2 pt-4">
+          <NavLink
+            to="/dashboard"
+            className="flex h-7 items-center gap-2.5 px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md bg-primary text-[14px] font-extrabold text-primary-foreground">
+              T
+            </span>
+            {!collapsed && (
+              <span className="truncate text-base font-bold tracking-tight text-sidebar-foreground">
+                Torque
+              </span>
+            )}
+          </NavLink>
+
+          {!collapsed && <OrgSwitcher />}
+        </div>
+
+        <ScrollArea className="flex-1">
+          <nav className="flex flex-col gap-0.5 px-2.5 pb-3 pt-1">
+            {model.primary.map((item) => {
+              const hasChildren = (item.children?.length ?? 0) > 0;
+              const isOpen = !collapsed && hasChildren && !!expanded[item.label];
+              const locked = model.isLocked(item.path);
+
+              return (
+                <div key={item.path}>
+                  <SidebarNavItem
+                    item={item}
+                    active={model.isActive(item.path)}
+                    collapsed={collapsed}
+                    locked={locked}
+                    expanded={hasChildren ? !!expanded[item.label] : undefined}
+                    onToggleExpand={hasChildren ? () => toggleExpand(item.label) : undefined}
+                    onLockedClick={() => openUpgrade(item.path)}
+                    onHoverPrefetch={item.path === "/funis" ? prefetchPipes : undefined}
+                  />
+
+                  {isOpen && (
+                    <div className="ml-[19px] mt-0.5 flex flex-col gap-px border-l border-sidebar-border pl-2">
+                      {item.children?.map((child) => {
+                        const childLocked = model.isLocked(child.path);
+                        return (
+                          <div key={child.path} className={cn(child.startsGroup && "mt-1 border-t border-sidebar-border/60 pt-1")}>
+                            <SidebarNavItem
+                              item={child}
+                              active={model.isActive(child.path)}
+                              collapsed={false}
+                              locked={childLocked}
+                              onLockedClick={() => openUpgrade(child.path)}
+                              compact
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        </ScrollArea>
+
+        <div className="flex flex-col gap-0.5 border-t border-sidebar-border p-2.5">
+          {model.agenda && (
+            <SidebarNavItem
+              item={model.agenda}
+              active={model.isActive(model.agenda.path)}
+              collapsed={collapsed}
+              leading={<AgendaDateChip />}
+            />
+          )}
+
+          <div className={cn("flex items-center", collapsed ? "justify-center" : "px-1")}>
+            <AlertsDropdown />
+            {!collapsed && (
+              <span className="ml-2 text-sm text-sidebar-foreground/70">Notificações</span>
+            )}
+          </div>
+
+          {collapsed ? (
+            <Tooltip delayDuration={120}>
+              <TooltipTrigger asChild>
+                <NavLink
+                  to="/faq"
+                  className="flex items-center justify-center rounded-lg py-2 text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                >
+                  <HelpCircle className="h-[17px] w-[17px]" />
+                </NavLink>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={10}>
+                Ajuda
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <NavLink
+              to="/faq"
+              className="flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
+            >
+              <HelpCircle className="h-[17px] w-[17px] shrink-0" />
+              <span className="flex-1 truncate">Ajuda</span>
+            </NavLink>
+          )}
+
+          {model.pitstop && model.pitstopGroups.length > 0 && (
+            <PitstopTrigger
+              collapsed={collapsed}
+              open={pitstopOpen}
+              active={pitstopOpen || model.isPitstopRoute}
+              onToggle={() => setPitstopOpen((v) => !v)}
+            />
+          )}
+
+          <div className="pt-1">
+            <SidebarUserMenu collapsed={collapsed} />
+          </div>
+        </div>
+      </aside>
+
+      <PitstopPanel
+        open={pitstopOpen}
+        onClose={() => setPitstopOpen(false)}
+        groups={model.pitstopGroups}
+        isActive={model.isActive}
+      />
+
+      {upgradeFeature && (
+        <UpgradeModal
+          open
+          onOpenChange={(open) => !open && setUpgradeFeature(null)}
+          featureKey={upgradeFeature}
+        />
+      )}
+    </>
+  );
+}
+
+function PitstopTrigger({
+  collapsed,
+  open,
+  active,
+  onToggle,
+}: {
+  collapsed: boolean;
+  open: boolean;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  const button = (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className={cn(
+        "group relative flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left text-sm transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        active
+          ? "bg-primary/10 font-semibold text-primary"
+          : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+        collapsed && "justify-center px-0",
+      )}
+    >
+      <Settings className="h-[17px] w-[17px] shrink-0" />
+      {!collapsed && <span className="flex-1 truncate">Pitstop</span>}
+      {!collapsed && (
+        <ChevronRight
+          className={cn("h-3.5 w-3.5 shrink-0 opacity-40 transition-transform", open && "rotate-90")}
+        />
+      )}
+    </button>
+  );
+
+  if (!collapsed) return button;
+
+  return (
+    <Tooltip delayDuration={120}>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent side="right" sideOffset={10}>
+        Pitstop
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+

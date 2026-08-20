@@ -46,7 +46,7 @@ export function MobileBottomNav() {
 
   const isAnyTabActive = TABS.some((t) => isTabActive(t, location.pathname));
 
-  // "Mais" abre o Sheet de navegação full do TopNavigation (fonte única,
+  // "Mais" abre a gaveta de navegação (SidebarMobileDrawer) — fonte única,
   // já filtrada por permissão + OrgSwitcher p/ master).
   const openFullNav = () =>
     window.dispatchEvent(new CustomEvent("v8:open-mobile-nav"));
@@ -85,7 +85,7 @@ export function MobileBottomNav() {
           );
         })}
 
-        {/* Mais -- abre o Sheet de nav full do TopNavigation */}
+        {/* Mais — abre a gaveta de nav full (SidebarMobileDrawer) */}
         <button
           data-testid="tab-mais"
           data-active={!isAnyTabActive}
