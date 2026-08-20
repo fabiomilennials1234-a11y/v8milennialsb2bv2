@@ -283,45 +283,28 @@ describe("documento — o nome do arquivo é o que o cliente vê no WhatsApp", (
   });
 });
 
-describe("template (send-whatsapp-rich) — texto de workflow, tipo `conversation`", () => {
-  it("grava message_type 'conversation' (o que o chat renderiza), não o 'text' do gateway", async () => {
+/**
+ * ⚠️ O NÓ DE TEMPLATE DEIXOU DE GRAVAR A LINHA (#1688), e isso é o contrato
+ * novo, não um esquecimento.
+ *
+ * Antes ele mandava TEXTO PURO pelo chip — que não grava nada sozinho — e por
+ * isso o handler gravava. Agora ele manda template de verdade, e template só
+ * existe no canal oficial: `sendTemplateViaInstance` recusa, antes de qualquer
+ * I/O, provider que não o implemente (Uazapi e Evolution não implementam).
+ *
+ * O provider do canal oficial grava a linha por conta própria, no mesmo instante
+ * do envio. Gravar de novo aqui duplicaria a mensagem na conversa — que é
+ * exatamente o critério que este bloco passa a proteger.
+ */
+describe("template (send-whatsapp-rich) — quem grava é o provider", () => {
+  it("não grava linha: o provider do canal oficial já a escreveu", async () => {
     const { input, getInserted } = cenario();
 
-    const result = await sendWhatsAppTemplate(input);
+    await sendWhatsAppTemplate(input);
 
-    expect(result.success).toBe(true);
-    const rows = getInserted("whatsapp_messages");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({
-      message_id: ID_PROVIDER_TEXTO,
-      message_type: "conversation",
-      content: "Oi Test Lead, sua proposta da Acme saiu!",
-      lead_id: "lead-1",
-      sent_source: "workflow",
-      sent_by_ai: true,
-    });
-    // Texto não carrega mídia: coluna omitida preserva o que o eco tiver gravado.
-    expect(rows[0]).not.toHaveProperty("media_url");
-  });
-
-  it("template que falhou no envio não vira linha", async () => {
-    const { input, getInserted } = cenario();
-    textMock.mockResolvedValueOnce({ success: false, error: "session closed" });
-
-    const result = await sendWhatsAppTemplate(input);
-
-    expect(result.success).toBe(false);
-    expect(getInserted("whatsapp_messages")).toHaveLength(0);
-  });
-
-  it("template delegado ao gateway não é gravado duas vezes", async () => {
-    const { input, getInserted } = cenario();
-    gatewayMock.mockResolvedValueOnce({ delegated: true, success: true });
-
-    const result = await sendWhatsAppTemplate(input);
-
-    expect(result.success).toBe(true);
-    expect(textMock).not.toHaveBeenCalled();
-    expect(getInserted("whatsapp_messages")).toHaveLength(0);
+    expect(
+      getInserted("whatsapp_messages"),
+      "gravar aqui duplicaria a mensagem na conversa",
+    ).toHaveLength(0);
   });
 });
