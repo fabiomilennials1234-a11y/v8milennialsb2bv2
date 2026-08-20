@@ -1,5 +1,23 @@
 import type { Node, Edge } from "@xyflow/react";
 
+/**
+ * A forma de um componente de template aprovado, como a listagem da Meta a
+ * devolve (#1688).
+ *
+ * Declarada aqui, estruturalmente idêntica a `NotificameTemplateComponent` de
+ * `modules/communication`, em vez de importada: `src/types/` é cross-cutting e
+ * puxar o barrel de um módulo de domínio daqui cruzaria fronteira e convidaria
+ * um ciclo. Sendo estrutural, os dois lados continuam atribuíveis um ao outro —
+ * e um campo novo lá que este tipo não tenha simplesmente não é lido aqui.
+ */
+export interface WorkflowTemplateComponent {
+  type: string;
+  format?: string | null;
+  text?: string | null;
+  buttons?: unknown[] | null;
+  example?: unknown;
+}
+
 // =====================================================
 // ENUMS
 // =====================================================
@@ -342,7 +360,22 @@ export interface ActionNodeData {
   semiAutomatic?: boolean;
   // Send WhatsApp (texto)
   messageTemplate?: string;
+  /** @deprecated Legado do nó de template antigo. Ver `templateName` (#1688). */
   templateId?: string;
+  // Send WhatsApp Template (canal oficial, #1688) — o nó guarda a FORMA do
+  // template aprovado, não uma referência a catálogo local. Ver
+  // `action-configs/TemplateNodeConfig.tsx`.
+  templateName?: string;
+  templateLanguage?: string;
+  /** Os `components` como vieram da listagem da Meta — a forma, para o executor remontar. */
+  templateComponents?: WorkflowTemplateComponent[];
+  /**
+   * Token do template → expressão do Torque. `{ "1": "{{nome}}" }`.
+   * ⚠️ Dois namespaces: a chave é da Meta, o valor é nosso.
+   */
+  templateVariables?: Record<string, string>;
+  /** Vazio significa "use o arquivo que veio aprovado com o template". */
+  templateHeaderMediaUrl?: string;
   useTemplate?: boolean;
   templateMode?: "free" | "campaign_template" | "meta_template" | "ai";
   templateSourceId?: string;

@@ -22,7 +22,14 @@ const CURATED_ACTION_CHECK: Record<string, (c: Record<string, unknown>) => strin
       : "send_whatsapp requires messageTemplate or templateId",
   send_whatsapp_template: (
     c,
-  ) => (c.templateId ? null : "send_whatsapp_template requires templateId"),
+    // `templateName` desde o #1688: o nó passou a guardar o NOME do template
+    // aprovado, que é o que a Meta referencia, e não um id de catálogo local
+    // (que apontava para uma tabela inexistente em produção). `templateId` é
+    // aceito para não invalidar definição antiga em trânsito — nenhum nó em
+    // produção o usa, e o handler já não o lê.
+  ) => (c.templateName || c.templateId
+    ? null
+    : "send_whatsapp_template requires templateName"),
   send_whatsapp_document: (c) =>
     c.documentUrl ? null : "send_whatsapp_document requires documentUrl",
   send_whatsapp_video: (c) =>

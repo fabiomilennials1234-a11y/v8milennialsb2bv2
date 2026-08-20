@@ -50,6 +50,17 @@ export { NotificameOperacaoCard } from "./components/whatsapp/NotificameOperacao
 export { NotificameTemplatesCard } from "./components/whatsapp/NotificameTemplatesCard";
 export { NotificameTemplateEditor } from "./components/whatsapp/NotificameTemplateEditor";
 export { useCreateNotificameTemplate } from "./hooks/useNotificameTemplates";
+
+// A montagem de template aprovado — usada pelo seletor do chat e pelo painel do
+// nó de workflow (#1688). Gêmea da cópia do executor em
+// `supabase/functions/_shared/template-send.ts`, presa por `template-send-twin`.
+export {
+  botoesComVariavel,
+  formatoDeMidiaDoCabecalho,
+  midiaDeExemploDoCabecalho,
+  previewDoTemplate,
+  variaveisDoTemplate,
+} from "./lib/template-send";
 // ── Inbox multicanal ──────────────────────────────────────────────────────
 // O seletor do chat deixou de ser "lista de números de WhatsApp" e passou a ser
 // uma união discriminada de CAIXAS. Estes são os tipos e helpers que qualquer
