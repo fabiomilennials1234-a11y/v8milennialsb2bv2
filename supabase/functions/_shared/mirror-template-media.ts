@@ -104,3 +104,87 @@ export async function espelharMidiaDeTemplate(
     return url;
   }
 }
+
+// ─── O envelope inteiro ──────────────────────────────────────────────────────
+
+/** Os tipos de parâmetro que carregam ARQUIVO — os únicos com link a espelhar. */
+const TIPOS_DE_MIDIA = ["image", "video", "document"];
+
+/** O link de um parâmetro de mídia, esteja ele na raiz ou no objeto aninhado. */
+function linkDoParametro(par: Record<string, unknown>, tipo: string): string {
+  const aninhado = (par[tipo] ?? {}) as Record<string, unknown>;
+  if (typeof par.link === "string" && par.link) return par.link;
+  return typeof aninhado.link === "string" ? aninhado.link : "";
+}
+
+function tipoDeMidiaDe(p: unknown): string | null {
+  const par = (p ?? {}) as Record<string, unknown>;
+  const tipo = String(par.type ?? "").toLowerCase();
+  return TIPOS_DE_MIDIA.includes(tipo) ? tipo : null;
+}
+
+/**
+ * Espelha o que precisar dentro dos componentes de envio de um template.
+ *
+ * ─── POR QUE ESTA FUNÇÃO EXISTE, E NÃO SÓ A DE CIMA ─────────────────────────
+ *
+ * O que os dois caminhos de envio têm em mãos não é uma URL solta: é o envelope
+ * da Graph já montado, com o link enterrado em `components[].parameters[].image.link`.
+ * A caminhada até ele estava ESCRITA À MÃO dentro do proxy — o caminho do chat —
+ * e o caminho da automação não tinha nenhuma (#1706). Duplicá-la seria criar o
+ * segundo lugar onde a mesma decisão mora, e o sintoma de uma divergência é uma
+ * mensagem que some sem rastro.
+ *
+ * ⚠️ QUANDO NADA PRECISA ESPELHAR, DEVOLVE O MESMO ARRAY. Não é micro-otimização:
+ * é a garantia de que template sem cabeçalho de mídia — a maioria — não paga um
+ * download, um upload, nem uma remontagem do envelope que a Meta valida campo a
+ * campo.
+ *
+ * ⚠️ O link é gravado NOS DOIS LUGARES (raiz e aninhado) porque é assim que o
+ * proxy já o entregava e é o que os providers leem. Escrever só num deles
+ * mudaria, em silêncio, o que o canal do chat manda hoje.
+ */
+export async function espelharMidiaDosComponentes(
+  components: unknown[] | null | undefined,
+  organizationId: string,
+  deps: EspelhoDeps,
+): Promise<unknown[]> {
+  const lista = components ?? [];
+
+  // Varredura PURA primeiro. Decidir antes de tocar em I/O é o que deixa o
+  // caminho comum sair por aqui sem custo nenhum.
+  const temAlgoAEspelhar = lista.some((c) => {
+    const comp = (c ?? {}) as Record<string, unknown>;
+    if (!Array.isArray(comp.parameters)) return false;
+    return (comp.parameters as unknown[]).some((p) => {
+      const tipo = tipoDeMidiaDe(p);
+      return tipo !== null &&
+        precisaEspelhar(linkDoParametro((p ?? {}) as Record<string, unknown>, tipo));
+    });
+  });
+  if (!temAlgoAEspelhar) return lista;
+
+  return await Promise.all(
+    lista.map(async (c) => {
+      const comp = (c ?? {}) as Record<string, unknown>;
+      if (!Array.isArray(comp.parameters)) return c;
+
+      const parametros = await Promise.all(
+        (comp.parameters as unknown[]).map(async (p) => {
+          const tipo = tipoDeMidiaDe(p);
+          if (!tipo) return p;
+
+          const par = (p ?? {}) as Record<string, unknown>;
+          const link = linkDoParametro(par, tipo);
+          if (!precisaEspelhar(link)) return p;
+
+          const espelhada = await espelharMidiaDeTemplate(link, organizationId, deps);
+          const aninhado = (par[tipo] ?? {}) as Record<string, unknown>;
+          return { ...par, [tipo]: { ...aninhado, link: espelhada }, link: espelhada };
+        }),
+      );
+
+      return { ...comp, parameters: parametros };
+    }),
+  );
+}
