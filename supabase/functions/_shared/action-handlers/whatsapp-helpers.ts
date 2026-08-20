@@ -52,11 +52,18 @@ export async function getWhatsAppInstance(
   organizationId: string,
   node: RoutingNodeConfig | undefined,
   leadId?: string | null,
+  /**
+   * O universo de provedores que ESTE nó aceita. Omitido = todos os que o
+   * roteamento alcança, chips e canal oficial (issue #1700). Só
+   * `send_to_number` estreita, e o porquê está lá.
+   */
+  providers?: readonly string[],
 ): Promise<InstanceResolution> {
   const resolved = await resolveRoutedInstance(supabase, {
     organizationId,
     leadId: leadId ?? null,
     node: node ?? {},
+    providers,
   });
 
   if (!resolved.ok) {
