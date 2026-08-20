@@ -376,6 +376,17 @@ export interface ActionNodeData {
   templateVariables?: Record<string, string>;
   /** Vazio significa "use o arquivo que veio aprovado com o template". */
   templateHeaderMediaUrl?: string;
+  // ── Escape de janela do nó de TEXTO (canal oficial, #1689) ────────────────
+  // Qual template usar quando a janela de 24h estiver fechada e a Meta recusar
+  // mensagem livre. Campos SEPARADOS dos do nó de template de propósito: um nó
+  // de texto pode ter os dois assuntos (o texto e o escape) e reaproveitar as
+  // mesmas chaves faria um sobrescrever o outro. Sem `escapeTemplateName` o nó
+  // falha com motivo legível — ver `_shared/decisao-de-envio.ts`.
+  escapeTemplateName?: string;
+  escapeTemplateLanguage?: string;
+  escapeTemplateComponents?: WorkflowTemplateComponent[];
+  escapeTemplateVariables?: Record<string, string>;
+  escapeTemplateHeaderMediaUrl?: string;
   useTemplate?: boolean;
   templateMode?: "free" | "campaign_template" | "meta_template" | "ai";
   templateSourceId?: string;
