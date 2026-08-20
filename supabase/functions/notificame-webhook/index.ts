@@ -186,6 +186,7 @@ import {
   pickChannelWord,
   pickContact,
   pickExternalId,
+  pickProviderMessageId,
   pickTimestampIso,
   readDirection,
   readEventType,
@@ -1669,6 +1670,10 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
       contactExternalId: contact.externalId,
       content: { ...conteudo, mediaUrl: midiaFinal },
       metadata: metadataFinal,
+      // O id ESTÁVEL. É ele que uma reação aponta e que uma resposta citada
+      // carrega — sem isto gravado, reagir a uma mensagem do cliente é apontar
+      // para o nada.
+      providerMessageId: pickProviderMessageId(payload),
       leadId: linkedLeadId,
       // O relógio mora AQUI, e não no módulo puro: é o que permite asserir por
       // grep que nenhum caminho de identidade toca `Date.now()`.

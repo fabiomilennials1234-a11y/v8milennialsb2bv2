@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { botoesDaMensagem, lerBolha } from "./inbound-metadata";
+import { botoesDaMensagem, citacaoDaMensagem, lerBolha } from "./inbound-metadata";
 
 describe("lerBolha", () => {
   it("clique de botão vira resposta, com o texto que o cliente viu", () => {
@@ -144,5 +144,32 @@ describe("botoesDaMensagem", () => {
     for (const m of [null, undefined, {}, { tipo: "texto" }, { tipo: "template" }, "x"]) {
       expect(botoesDaMensagem(m)).toEqual([]);
     }
+  });
+});
+
+describe("citacaoDaMensagem", () => {
+  it("devolve o alvo de uma mensagem que responde a outra", () => {
+    // O parser de entrada grava `citacao` desde a fatia do recebimento, e a tela
+    // nunca a desenhou: o clique de botão do cliente aparecia solto, sem dizer a
+    // QUE ele respondeu. O dado estava no banco o tempo todo.
+    expect(
+      citacaoDaMensagem({
+        tipo: "resposta",
+        citacao: { providerMessageId: "U2hTM01ZaXNN", de: "5555924815238" },
+      }),
+    ).toEqual({ providerMessageId: "U2hTM01ZaXNN", de: "5555924815238" });
+  });
+
+  it("mensagem sem citação devolve nulo", () => {
+    for (const m of [null, undefined, {}, { tipo: "texto" }, { tipo: "resposta" }]) {
+      expect(citacaoDaMensagem(m)).toBeNull();
+    }
+  });
+
+  it("citação sem id é como não ter citação", () => {
+    // Desenhar uma barra de citação vazia diria ao vendedor que a mensagem
+    // responde a algo, sem dizer a quê — pior que não desenhar nada.
+    expect(citacaoDaMensagem({ tipo: "resposta", citacao: { providerMessageId: "", de: null } }))
+      .toBeNull();
   });
 });

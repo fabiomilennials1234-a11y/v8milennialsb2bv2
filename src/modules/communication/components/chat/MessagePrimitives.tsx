@@ -25,12 +25,20 @@ import {
   LayoutList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { botoesDaMensagem, lerBolha, TIPOS_NORMALIZADOS } from "@/modules/communication/lib/inbound-metadata";
+import {
+  botoesDaMensagem,
+  citacaoDaMensagem,
+  lerBolha,
+  TIPOS_NORMALIZADOS,
+} from "@/modules/communication/lib/inbound-metadata";
 import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
 import { MessageImage, MessageVideo, MessageDocument, ExpiredMedia, resolveExpiredMediaKind } from "./media/MessageMedia";
+import { Button } from "@/components/ui/button";
+import { Reply } from "lucide-react";
 import {
+  EmojiPickerPopover,
   MessageBubbleActions,
   MessageMetaBadges,
   DeletedPlaceholder,
@@ -127,6 +135,9 @@ export function MessageBubble({
   onRetry,
   instanceId,
   enableActions = false,
+  onReagir,
+  onResponder,
+  textoCitado,
 }: {
   message: WhatsAppMessage | FailedMessage;
   onImagePreview: (url: string) => void;
@@ -137,6 +148,10 @@ export function MessageBubble({
   /** When set + enableActions=true, reveals S1 action bar on hover */
   instanceId?: string;
   enableActions?: boolean;
+  /** Ver `MessageListProps`. Só o canal oficial as passa. */
+  onReagir?: (mensagem: { id: string; providerMessageId: string | null }, emoji: string) => void;
+  onResponder?: (mensagem: { id: string; providerMessageId: string | null; texto: string | null }) => void;
+  textoCitado?: (providerMessageId: string) => string | null;
 }) {
   const isOutgoing = message.direction === "outgoing";
   const isFailed = message.status === "failed";
@@ -179,6 +194,8 @@ export function MessageBubble({
   // Os botões de um template ENVIADO. Acréscimo à bolha, não um tipo dela: o
   // selo e o texto continuam vindo do caminho de sempre.
   const botoesDoTemplate = botoesDaMensagem((message as { metadata?: unknown }).metadata ?? null);
+  const citacao = citacaoDaMensagem((message as { metadata?: unknown }).metadata ?? null);
+
 
   const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || isTemplate || messageType === "url";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
@@ -191,6 +208,22 @@ export function MessageBubble({
     remote_jid?: string | null;
   };
   const isDeleted = !!meta.deleted_at;
+
+  /**
+   * A barra do canal OFICIAL — reagir e responder, e nada mais.
+   *
+   * Separada da `MessageBubbleActions` de propósito: aquela é do eixo da Uazapi,
+   * exige `instanceId` de `whatsapp_instances`, oferece editar/fixar/apagar (que
+   * a Cloud API não tem) e é fechada por `canUseUazapiActions`. Reaproveitá-la
+   * daria uma barra com metade dos botões inertes.
+   *
+   * ⚠️ O ALVO É O `provider_message_id`, o id ESTÁVEL. O `message_id` daqui é o
+   * `external_id` — o id do EVENTO, que muda a cada callback do mesmo envio.
+   * Sem o estável, a reação cola em nada e o fornecedor aceita calado.
+   */
+  const alvoDaAcao = (message as { metadata?: unknown; provider_message_id?: string | null });
+  const idEstavel = alvoDaAcao.provider_message_id ?? null;
+  const mostrarBarraOficial = (!!onReagir || !!onResponder) && !isDeleted && !!idEstavel;
   const [isEditing, setIsEditing] = useState(false);
   const editMut = useEditMessage();
 
@@ -269,6 +302,38 @@ export function MessageBubble({
         isFirstInGroup ? "mt-3" : "mt-0.5"
       )}
     >
+      {/* Barra do canal oficial — some quando não há id estável: reagir a uma
+          mensagem sem alvo apontaria para o nada. */}
+      {mostrarBarraOficial && (
+        <div className="self-center shrink-0 opacity-0 transition-opacity group-hover:opacity-100">
+          <div className="flex items-center gap-0.5">
+            {onReagir && (
+              <EmojiPickerPopover
+                onSelect={(emoji) =>
+                  onReagir({ id: message.id, providerMessageId: idEstavel }, emoji)}
+              />
+            )}
+            {onResponder && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                onClick={() =>
+                  onResponder({
+                    id: message.id,
+                    providerMessageId: idEstavel,
+                    texto: message.content ?? null,
+                  })}
+                aria-label="Responder citando"
+                title="Responder citando"
+              >
+                <Reply className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Action bar — hover reveal, outgoing only appears on left; incoming on right */}
       {showActions && isOutgoing && !isEditing && (
         <div className="self-center shrink-0">
@@ -323,7 +388,18 @@ export function MessageBubble({
           />
         ) : (
           <>
-{usaBolhaNormalizada ? (
+{/* A MENSAGEM CITADA, dentro da bolha e acima do conteúdo — como no
+                próprio WhatsApp. Sem ela, um "Sim" clicado num botão aparece
+                solto na thread, sem dizer a que ele responde. */}
+            {citacao && (
+              <div className="mb-1.5 border-l-2 border-current/30 pl-2 opacity-70">
+                <p className="truncate text-xs">
+                  {textoCitado?.(citacao.providerMessageId)?.trim() || "Mensagem citada"}
+                </p>
+              </div>
+            )}
+
+            {usaBolhaNormalizada ? (
               <BolhaNormalizada bolha={bolhaNormalizada} />
             ) : (
               <>

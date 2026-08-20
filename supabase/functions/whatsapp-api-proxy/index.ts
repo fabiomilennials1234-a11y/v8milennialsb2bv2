@@ -1104,7 +1104,10 @@ Deno.serve(
             number?: string;
             emoji?: string;
           };
-          if (!message_id || !number || !emoji) {
+          // ⚠️ `emoji` VAZIO É VÁLIDO: é o comando de REMOVER a reação, e é assim
+          // que a Meta desfaz. Exigi-lo aqui deixava o vendedor sem como tirar
+          // uma reação que ele mesmo pôs — a ação existia só de ida.
+          if (!message_id || !number || emoji === undefined) {
             return jsonResponse(400, { error: "Missing message_id/number/emoji" }, corsHeaders);
           }
           await provider.react(message_id, number, emoji);

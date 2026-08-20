@@ -9,7 +9,10 @@
 import { describe, expect, it } from "vitest";
 
 import { normalizarConteudo } from "../../supabase/functions/_shared/notificame-content.ts";
-import { buildInboundChannelMessageRow } from "../../supabase/functions/_shared/notificame-inbound.ts";
+import {
+  buildInboundChannelMessageRow,
+  pickProviderMessageId,
+} from "../../supabase/functions/_shared/notificame-inbound.ts";
 import { AMOSTRAS_INSTAGRAM, CLIQUE_DE_BOTAO, CONVERSA_CHIQUE } from "./__fixtures__/notificame-inbound-real.ts";
 import { CONTATO_DOC, ESCOLHA_DE_LISTA_DOC, LOCALIZACAO_DOC } from "./__fixtures__/notificame-inbound-doc.ts";
 
@@ -269,5 +272,47 @@ describe("a linha gravada carrega o metadata", () => {
     });
 
     expect(row.metadata).toBeNull();
+  });
+});
+
+/**
+ * O ID ESTÁVEL DA MENSAGEM RECEBIDA.
+ *
+ * Medido em produção: 6 de 6 mensagens de entrada da Chique têm
+ * `providerMessageId` no corpo, e 0 de 6 o têm na coluna. O dado chega e é
+ * descartado.
+ *
+ * Isso não é cosmético: é ele que identifica a mensagem numa REAÇÃO
+ * (`reaction.message_id`) e numa RESPOSTA CITADA (`messageId` na raiz do
+ * corpo). Sem ele, reagir ou citar uma mensagem que o cliente mandou é
+ * impossível — não há o que apontar.
+ *
+ * ⚠️ NÃO é o `external_id`. Aquele é o id do EVENTO (`message.id`), e ele MUDA a
+ * cada callback do mesmo envio — foi por isso que os status de entrega se
+ * perderam antes de a coluna existir.
+ */
+describe("provider_message_id no inbound", () => {
+  it("a linha carrega o id estável do fornecedor", () => {
+    const row = buildInboundChannelMessageRow({
+      organizationId: "org-1",
+      target: { kind: "whatsapp", instanceId: "inst-1" },
+      externalId: "38c2bfb2-1b12-464d-accd-50caf8b90903",
+      contact: { externalId: "554884334050", name: null, avatarUrl: null, handle: null },
+      contactExternalId: "554884334050",
+      content: { content: "Sim", mediaUrl: null, messageType: "button" },
+      providerMessageId: pickProviderMessageId(CLIQUE_DE_BOTAO),
+      timestampIso: "2026-08-19T22:27:33.000Z",
+      rawPayload: CLIQUE_DE_BOTAO,
+    });
+
+    expect(row.provider_message_id).toMatch(/^U2hTM01ZaXNNL0VhWk5tWG9uTFBPMmM3/);
+    // E continua DIFERENTE do id do evento — os dois vivem em colunas próprias.
+    expect(row.provider_message_id).not.toBe(row.external_id);
+  });
+
+  it("corpo sem o campo deixa a coluna nula — nunca uma string vazia", () => {
+    // `''` casaria com qualquer outra linha vazia da org num JOIN por id, e
+    // colaria reações na mensagem errada.
+    expect(pickProviderMessageId({ message: { id: "x" } })).toBeNull();
   });
 });

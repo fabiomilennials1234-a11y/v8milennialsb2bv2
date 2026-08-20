@@ -145,6 +145,14 @@ export interface NotificameEnvelope {
   from: string;
   to: string;
   contents: NotificameContent[];
+  /**
+   * A mensagem CITADA, quando esta responde a outra.
+   *
+   * ⚠️ Mora na RAIZ, ao lado de `from`/`to`, e não dentro de `contents` — é a
+   * única exceção ao padrão do contrato. Ver `montarEnvelopeDeResposta`.
+   */
+  messageId?: string;
+  reply?: boolean;
 }
 
 /**
@@ -480,6 +488,85 @@ export function toNotificameContactContent(
       };
     }),
   };
+}
+
+/**
+ * O envelope de uma REAÇÃO. PURO.
+ *
+ * ⚠️ `message_id` é o `providerMessageId` — o id ESTÁVEL —, e não o
+ * `external_id`. Aquele é o id do EVENTO e muda a cada callback do mesmo envio:
+ * apontar para ele colaria a reação em nada.
+ *
+ * ⚠️ EMOJI VAZIO NÃO É ENTRADA INVÁLIDA: é o comando de REMOVER a reação, e é
+ * assim que a Meta desfaz. Recusar aqui deixaria o vendedor sem como tirar uma
+ * reação que ele mesmo pôs.
+ */
+export function toNotificameReactionContent(
+  r: { providerMessageId: string; emoji: string },
+  kind: NotificameChannelKind,
+): NotificameContent {
+  const id = (r.providerMessageId ?? "").trim();
+  if (!id) {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "reação sem o id da mensagem");
+  }
+  if (kind !== "whatsapp" && kind !== "instagram") {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, `reação — canal ${kind}`);
+  }
+
+  return { type: "reaction", reaction: { message_id: id, emoji: r.emoji ?? "" } };
+}
+
+/**
+ * O envelope do balão de "digitando". PURO — e não leva nada além do tipo.
+ *
+ * Some sozinho do lado da Meta depois de alguns segundos; não há envelope de
+ * "parou de digitar", e inventar um seria adivinhar.
+ *
+ * ⚠️ O exemplo da doc traz um `messageId` no corpo do digitando, comentado como
+ * "id da mensagem que você ira responder" — texto claramente copiado da seção de
+ * resposta citada logo acima. Um balão de digitando não responde a nada, e
+ * mandar o campo seria propagar o erro de copiar-e-colar do fornecedor para
+ * dentro do nosso envelope.
+ */
+export function toNotificameTypingContent(kind: NotificameChannelKind): NotificameContent {
+  if (kind !== "whatsapp") {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, `digitando — canal ${kind}`);
+  }
+  return { type: "typing" };
+}
+
+/**
+ * Acrescenta a CITAÇÃO ao envelope. PURO.
+ *
+ * ⚠️ `messageId` e `reply` vão na RAIZ do corpo, ao lado de `from` e `to` — e
+ * NÃO dentro de `contents`, que é onde todo o resto mora. Aninhar produz uma
+ * mensagem comum: o fornecedor aceita calado e a citação some sem erro nenhum,
+ * que é o pior desfecho possível — parece que funcionou.
+ *
+ * Sem id, o envelope sai INTACTO: `reply: true` sozinho é um corpo que a Meta
+ * recusa, e uma mensagem sem citação ainda é uma mensagem.
+ *
+ * ─── DIVERGÊNCIA CONSCIENTE DA DOC ──────────────────────────────────────────
+ *
+ * O exemplo da doc para resposta citada traz `"to": "whatsapp"` — a palavra, não
+ * o número. Ele é o ÚNICO envelope de mensagem do documento inteiro com essa
+ * forma, ao lado do endpoint de download de arquivo criptografado, que é de onde
+ * ela provavelmente foi copiada. Todos os outros — texto, mídia, reação,
+ * digitando, contato, interativa — mandam o destinatário.
+ *
+ * Mandamos o NÚMERO, e não a palavra. `normalizeNotificameRecipient` derruba
+ * qualquer não-dígito antes do envio: `"whatsapp"` viraria string vazia e o
+ * envio morreria com `invalid_recipient` sem sequer sair. Seguir a doc aqui
+ * seria garantir a falha; divergir dela é a única forma de a mensagem existir.
+ */
+export function montarEnvelopeDeResposta(
+  envelope: NotificameEnvelope,
+  providerMessageId: string | null | undefined,
+): NotificameEnvelope {
+  const id = (providerMessageId ?? "").trim();
+  if (!id) return envelope;
+
+  return { ...envelope, messageId: id, reply: true } as NotificameEnvelope;
 }
 
 export function toNotificameMediaContent(
@@ -958,6 +1045,14 @@ export class NotificameProvider implements WhatsAppProvider {
     mediaUrl: string | null;
     /** Só em template: os rótulos dos botões, para a conversa poder exibi-los. */
     botoes?: string[];
+    /** O id ESTÁVEL da mensagem citada, quando esta responde a outra. */
+    citandoProviderMessageId?: string | null;
+    /**
+     * `true` para o que NÃO é mensagem da conversa — hoje só o balão de
+     * digitando. Sem isto, cada indicador viraria uma linha vazia na thread, e a
+     * conversa ficaria uma escada de nada entre as mensagens de verdade.
+     */
+    naoGravar?: boolean;
   }): Promise<SendResult> {
     const to = normalizeNotificameRecipient(this.channelKind, params.to);
     if (!to) {
@@ -968,11 +1063,17 @@ export class NotificameProvider implements WhatsAppProvider {
     }
 
     const cfg = await this.resolveOrgConfig();
-    const envelope = buildNotificameEnvelope({
-      from: this.channelId,
-      to,
-      content: params.content,
-    });
+    // A citação entra na RAIZ do envelope — ver `montarEnvelopeDeResposta`. Ela
+    // é a única exceção ao padrão do contrato, e aninhá-la em `contents` faria a
+    // citação sumir sem erro nenhum.
+    const envelope = montarEnvelopeDeResposta(
+      buildNotificameEnvelope({
+        from: this.channelId,
+        to,
+        content: params.content,
+      }),
+      params.citandoProviderMessageId,
+    );
 
     const url = `${cfg.baseUrl}${notificameSendPath(this.channelKind)}`;
     const controller = new AbortController();
@@ -1030,6 +1131,10 @@ export class NotificameProvider implements WhatsAppProvider {
         "send_no_message_id",
         "O NotificaMe respondeu sem id da mensagem — o envio não pôde ser confirmado",
       );
+    }
+
+    if (params.naoGravar) {
+      return { message_id: messageId, status: "sent", timestamp: this.now().getTime() };
     }
 
     await this.persist({
@@ -1110,6 +1215,9 @@ export class NotificameProvider implements WhatsAppProvider {
       messageType: "text",
       text,
       mediaUrl: null,
+      // `replyid` é o nome que o contrato já usa no eixo da Uazapi. Aqui o valor
+      // tem de ser o `providerMessageId` — o id ESTÁVEL —, e não o `external_id`.
+      citandoProviderMessageId: opts.replyid,
     });
   }
 
@@ -1212,14 +1320,41 @@ export class NotificameProvider implements WhatsAppProvider {
     }
   }
 
-  // ── setPresence — NO-OP ───────────────────────────────────────────────────
+  // ── setPresence ───────────────────────────────────────────────────────────
   /**
-   * O canal oficial não tem "digitando…". NÃO LANÇA de propósito: o Copilot chama
-   * `setPresence` ANTES de todo envio, e um throw aqui mataria o envio inteiro por
-   * causa de um indicador cosmético. Mesmo desfecho do `MetaCloudProvider`.
+   * O balão de "digitando…".
+   *
+   * ⚠️ Isto era um no-op justificado por "o canal oficial não tem digitando". A
+   * afirmação era FALSA: a doc do fornecedor tem uma seção "Balão de digitando",
+   * com envelope próprio (`{type:"typing"}`). É a terceira asserção negativa
+   * errada encontrada neste arquivo — junto com figurinha e mensagem interativa.
+   *
+   * ⚠️ NÃO LANÇA, e isso continua valendo: o Copilot chama `setPresence` ANTES de
+   * todo envio, e um throw aqui mataria a mensagem por causa de um indicador
+   * cosmético. Falha de rede no balão não pode custar a conversa.
+   *
+   * `available` segue no-op: não existe envelope de "parou de digitar", e o
+   * balão some sozinho do lado da Meta depois de alguns segundos. Inventar um
+   * seria adivinhar.
    */
-  setPresence(_number: string, _state: "composing" | "available"): Promise<void> {
-    return Promise.resolve();
+  async setPresence(number: string, state: "composing" | "available"): Promise<void> {
+    if (state !== "composing") return;
+
+    try {
+      await this.send({
+        to: number,
+        content: toNotificameTypingContent(this.channelKind),
+        messageType: "typing",
+        // Indicador não é mensagem: não entra na conversa.
+        naoGravar: true,
+        // Sem texto e sem mídia: o balão não é uma mensagem da conversa, e
+        // gravá-lo com conteúdo poria uma linha vazia na thread.
+        text: null,
+        mediaUrl: null,
+      });
+    } catch {
+      // Engolido de propósito. Ver o ⚠️ acima.
+    }
   }
 
   // ── Ciclo de vida da conexão ──────────────────────────────────────────────
@@ -1337,8 +1472,27 @@ export class NotificameProvider implements WhatsAppProvider {
     throw new NotSupportedError(NOTIFICAME_PROVIDER, "sendPixButton");
   }
 
-  react(): Promise<void> {
-    throw new NotSupportedError(NOTIFICAME_PROVIDER, "react");
+  /**
+   * ⚠️ `messageId` AQUI É O `providerMessageId`, o id ESTÁVEL — e não o
+   * `external_id`, que é o id do evento e muda a cada callback do mesmo envio.
+   * Quem chama é responsável por mandar o certo; apontar para o id do evento
+   * cola a reação em nada, e o fornecedor aceita calado.
+   */
+  async react(messageId: string, number: string, emoji: string): Promise<void> {
+    const content = toNotificameReactionContent(
+      { providerMessageId: messageId, emoji },
+      this.channelKind,
+    );
+
+    await this.send({
+      to: number,
+      content,
+      messageType: "reaction",
+      // O emoji é o texto da linha — é o que a conversa mostra. Vazio significa
+      // REMOVER a reação, e aí não há o que exibir.
+      text: emoji?.trim() || null,
+      mediaUrl: null,
+    });
   }
 
   edit(): Promise<void> {

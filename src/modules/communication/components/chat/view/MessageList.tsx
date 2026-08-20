@@ -75,6 +75,25 @@ export interface MessageListProps {
    * comportamento em mockups e contextos sem instância real.
    */
   enableActions?: boolean;
+  /**
+   * As duas ações do canal OFICIAL: reagir e responder-citando.
+   *
+   * Vêm por callback e não por `enableActions` porque aquele caminho é do eixo
+   * da Uazapi — ele exige `instanceId` de `whatsapp_instances`, monta a barra
+   * com editar/fixar/apagar (que a Cloud API não tem) e é fechado por
+   * `canUseUazapiActions`. Duas barras diferentes para dois canais diferentes é
+   * mais honesto que uma barra com metade dos botões inertes.
+   */
+  onReagir?: (mensagem: { id: string; providerMessageId: string | null }, emoji: string) => void;
+  onResponder?: (mensagem: { id: string; providerMessageId: string | null; texto: string | null }) => void;
+  /**
+   * O texto da mensagem CITADA, pelo id estável.
+   *
+   * Vem de fora porque a bolha não conhece a thread — ela só tem a própria
+   * linha. Sem isto, a barra de citação diria "respondendo a uma mensagem" sem
+   * dizer a qual, que é o que o vendedor precisa saber para não citar errado.
+   */
+  textoCitado?: (providerMessageId: string) => string | null;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -196,6 +215,9 @@ export function MessageList({
   density = "comfortable",
   instanceId,
   enableActions = false,
+  onReagir,
+  onResponder,
+  textoCitado,
 }: MessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
@@ -394,10 +416,13 @@ export function MessageList({
           onRetry={message.status === "failed" ? onRetry : undefined}
           instanceId={instanceId}
           enableActions={enableActions}
+          onReagir={onReagir}
+          onResponder={onResponder}
+          textoCitado={textoCitado}
         />
       </div>
     );
-  }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions]);
+  }, [timeline, firstUnreadIndex, unreadCount, mountTime, onImagePreview, onRetry, instanceId, enableActions, onReagir, onResponder, textoCitado]);
 
   return (
     <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col relative">

@@ -640,6 +640,28 @@ export function pickAccountHandle(payload: unknown): string | null {
 
 // ─── Conteúdo ────────────────────────────────────────────────────────────────
 
+/**
+ * O id ESTÁVEL da mensagem, do lado do fornecedor.
+ *
+ * ⚠️ NÃO CONFUNDIR COM `external_id`. Aquele é o id do EVENTO (`message.id`), e
+ * ele MUDA a cada callback do mesmo envio — foi por isso que os status de
+ * entrega se perderam antes de a coluna `provider_message_id` existir.
+ *
+ * É este id que uma REAÇÃO aponta (`reaction.message_id`) e que uma RESPOSTA
+ * CITADA carrega (`messageId`, na raiz do corpo). Sem ele gravado, reagir ou
+ * citar uma mensagem recebida é impossível: não há o que apontar.
+ *
+ * String vazia vira `null`, e não `''`: `''` casaria com qualquer outra linha
+ * vazia da org num JOIN por id, e colaria a reação na mensagem errada.
+ */
+export function pickProviderMessageId(payload: unknown): string | null {
+  return firstNonEmpty(payload, [
+    "providerMessageId",
+    "message.providerMessageId",
+    "messageStatus.providerMessageId",
+  ]);
+}
+
 export interface InboundContent {
   content: string | null;
   mediaUrl: string | null;
@@ -796,6 +818,11 @@ export interface InboundChannelMessageRow {
    * `{}` no lugar diria que já olhamos e não achamos nada.
    */
   metadata: unknown | null;
+  /**
+   * O id ESTÁVEL do fornecedor — ver `pickProviderMessageId`. `null` quando o
+   * corpo não o traz.
+   */
+  provider_message_id: string | null;
 }
 
 /**
@@ -853,6 +880,8 @@ export function buildInboundChannelMessageRow(params: {
   leadId?: string | null;
   /** Ver `metadata` em `InboundChannelMessageRow`. Omitir = coluna NULA. */
   metadata?: unknown;
+  /** Ver `pickProviderMessageId`. Omitir = coluna NULA. */
+  providerMessageId?: string | null;
 }): InboundChannelMessageRow {
   return {
     organization_id: params.organizationId,
@@ -892,6 +921,7 @@ export function buildInboundChannelMessageRow(params: {
     timestamp: params.timestampIso,
     raw_payload: params.rawPayload,
     metadata: params.metadata ?? null,
+    provider_message_id: params.providerMessageId ?? null,
   };
 }
 

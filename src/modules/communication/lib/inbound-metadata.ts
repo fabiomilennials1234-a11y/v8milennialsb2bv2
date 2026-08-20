@@ -152,3 +152,27 @@ export function botoesDaMensagem(metadata: unknown): string[] {
   if (!Array.isArray(m.botoes)) return [];
   return m.botoes.filter((x): x is string => typeof x === "string" && x.trim() !== "");
 }
+
+/**
+ * A mensagem que esta responde, quando responde alguma.
+ *
+ * O parser de entrada grava `citacao` desde a fatia do recebimento, e nenhuma
+ * tela a lia: o clique de botão do cliente aparecia solto na thread, sem dizer a
+ * QUE ele respondeu. O dado estava no banco o tempo todo.
+ *
+ * `null` também quando a citação existe mas está sem id — desenhar uma barra
+ * vazia diria que a mensagem responde a algo sem dizer a quê, o que é pior que
+ * não desenhar nada.
+ */
+export function citacaoDaMensagem(
+  metadata: unknown,
+): { providerMessageId: string; de: string | null } | null {
+  const m = (metadata ?? null) as { citacao?: unknown } | null;
+  if (!m || typeof m !== "object") return null;
+
+  const c = m.citacao as { providerMessageId?: unknown; de?: unknown } | undefined;
+  const id = typeof c?.providerMessageId === "string" ? c.providerMessageId.trim() : "";
+  if (!id) return null;
+
+  return { providerMessageId: id, de: typeof c?.de === "string" ? c.de : null };
+}

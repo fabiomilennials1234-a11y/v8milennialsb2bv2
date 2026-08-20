@@ -22,6 +22,9 @@ import {
   toNotificameContactContent,
   toNotificameInteractiveContent,
   toNotificameLocationContent,
+  toNotificameReactionContent,
+  toNotificameTypingContent,
+  montarEnvelopeDeResposta,
 } from "../../supabase/functions/_shared/whatsapp-providers/notificame-provider.ts";
 
 describe("botões", () => {
@@ -242,5 +245,76 @@ describe("contato", () => {
   it("cartão sem telefone não vai — é um contato que não serve para nada", () => {
     expect(() => toNotificameContactContent([{ nome: "Maria", telefones: [] }], "whatsapp"))
       .toThrow();
+  });
+});
+
+/**
+ * REAÇÃO, DIGITANDO E RESPOSTA CITADA.
+ *
+ * A resposta citada é a que quebra o padrão: `messageId` e `reply` NÃO ficam
+ * dentro de `contents` — vão na RAIZ do corpo, ao lado de `from` e `to`. Pôr
+ * dentro produz uma mensagem comum, sem citação nenhuma, e o fornecedor aceita
+ * calado: o sintoma é a citação sumir sem erro.
+ */
+describe("reação", () => {
+  it("aponta a mensagem pelo id ESTÁVEL do fornecedor", () => {
+    // `message_id` aqui é o `providerMessageId`, e não o `external_id`: aquele é
+    // o id do EVENTO e muda a cada callback do mesmo envio. Apontar para o id do
+    // evento colaria a reação em nada.
+    expect(
+      toNotificameReactionContent(
+        { providerMessageId: "U2hTM01ZaXNN", emoji: "👍" },
+        "whatsapp",
+      ),
+    ).toEqual({
+      type: "reaction",
+      reaction: { message_id: "U2hTM01ZaXNN", emoji: "👍" },
+    });
+  });
+
+  it("emoji vazio REMOVE a reação — é assim que a Meta desfaz", () => {
+    // Não é entrada inválida: string vazia é o comando de remover. Recusar aqui
+    // deixaria o vendedor sem como tirar uma reação que ele mesmo pôs.
+    expect(
+      toNotificameReactionContent({ providerMessageId: "x", emoji: "" }, "whatsapp"),
+    ).toEqual({ type: "reaction", reaction: { message_id: "x", emoji: "" } });
+  });
+
+  it("sem id da mensagem não há reação", () => {
+    expect(() =>
+      toNotificameReactionContent({ providerMessageId: "", emoji: "👍" }, "whatsapp")
+    ).toThrow();
+  });
+});
+
+describe("digitando", () => {
+  it("é um envelope sem nada além do tipo", () => {
+    expect(toNotificameTypingContent("whatsapp")).toEqual({ type: "typing" });
+  });
+});
+
+describe("resposta citada", () => {
+  it("põe `messageId` e `reply` na RAIZ, não dentro de contents", () => {
+    // O erro que isto impede: aninhar em `contents` produz uma mensagem comum,
+    // aceita pelo fornecedor, e a citação some sem erro nenhum.
+    expect(
+      montarEnvelopeDeResposta(
+        { from: "canal-1", to: "554884334050", contents: [{ type: "text", text: "Sim, temos" }] },
+        "U2hTM01ZaXNN",
+      ),
+    ).toEqual({
+      from: "canal-1",
+      to: "554884334050",
+      messageId: "U2hTM01ZaXNN",
+      reply: true,
+      contents: [{ type: "text", text: "Sim, temos" }],
+    });
+  });
+
+  it("sem id da mensagem citada o envelope sai INTACTO", () => {
+    // Mandar `reply: true` sem `messageId` é um corpo que o fornecedor aceita e
+    // a Meta recusa. Sem citação, a mensagem ainda é uma mensagem válida.
+    const base = { from: "c", to: "n", contents: [{ type: "text", text: "oi" }] };
+    expect(montarEnvelopeDeResposta(base, null)).toEqual(base);
   });
 });

@@ -19,6 +19,13 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { chatQueryKeys } from "./shared/queryKeys";
 
 export interface SendSocialMessageInput {
+  /**
+   * O id ESTÁVEL da mensagem citada, quando esta responde a outra.
+   *
+   * Só o canal oficial o usa — no Direct não há citação no contrato. `null` ou
+   * ausente manda uma mensagem comum.
+   */
+  citandoProviderMessageId?: string | null;
   /** IGSID do interlocutor — o `to` do envelope. */
   contactExternalId: string;
   text?: string;

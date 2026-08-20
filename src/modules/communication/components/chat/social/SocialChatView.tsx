@@ -22,10 +22,11 @@
  * "o Instagram não deixa responder"; o que é verdade é "ainda não construímos o
  * envio". A microcopy diz qual das duas.
  */
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   Contact,
   FileText,
+  Reply,
   LayoutList,
   Loader2,
   MapPin,
@@ -62,6 +63,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { criarEnviadorOficial } from "@/modules/communication/lib/menu-sender";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
 import {
+  setPresence as setPresenceNoProxy,
+  reactToMessage as reagirNoProxy,
   sendContact as enviarContatoNoProxy,
   sendLocation as enviarLocalizacaoNoProxy,
   sendMenu as enviarMenuNoProxy,
@@ -122,6 +125,8 @@ function toTimelineMessage(m: SocialMessage, organizationId: string): WhatsAppMe
     // não existe naquele eixo —, e a bolha a lê por acesso opcional: linha sem
     // metadata cai no caminho de sempre.
     metadata: m.metadata ?? null,
+    // O alvo de uma reação e de uma resposta citada. Ver `SocialMessage`.
+    provider_message_id: m.provider_message_id ?? null,
   } as WhatsAppMessage;
 }
 
@@ -233,6 +238,9 @@ function SocialComposer({
   onAbrirLocalizacao,
   onAbrirContato,
   lastIncomingAt,
+  respondendoA,
+  onCancelarResposta,
+  instanceIdDoCanal,
 }: {
   /**
    * O enviador JÁ PRONTO, montado pelo shell. Não é um hook, e isso é o ponto:
@@ -253,9 +261,40 @@ function SocialComposer({
   onAbrirLocalizacao: () => void;
   onAbrirContato: () => void;
   lastIncomingAt: string | null;
+  /**
+   * A mensagem que esta vai citar, se houver. O estado mora na VIEW porque quem
+   * o cria é a barra de ações da BOLHA, que não é filha do composer.
+   */
+  respondendoA: { providerMessageId: string; texto: string | null } | null;
+  onCancelarResposta: () => void;
+  /** O id da caixa — só para o balão de digitando, que não passa pelo `sender`. */
+  instanceIdDoCanal: string | null;
 }) {
   const [texto, setTexto] = useState("");
   const [anexo, setAnexo] = useState<UploadedAttachment | null>(null);
+
+  /**
+   * O BALÃO DE "DIGITANDO".
+   *
+   * Mandado no máximo uma vez a cada 4 segundos: o balão dura poucos segundos do
+   * lado da Meta e um envio por tecla seria uma chamada por caractere — custo e
+   * ruído por um indicador cosmético.
+   *
+   * Não existe envelope de "parou de digitar": o balão some sozinho. Por isso
+   * não há nada a fazer no cleanup, ao contrário do eixo da Uazapi, que precisa
+   * mandar `available`.
+   *
+   * ⚠️ Falha é engolida de propósito, aqui e no provider. Um indicador nunca
+   * pode custar a conversa.
+   */
+  const ultimoTyping = useRef(0);
+  const avisarQueEstaDigitando = useCallback(() => {
+    if (canal !== "whatsapp_oficial" || !instanceIdDoCanal) return;
+    const agora = Date.now();
+    if (agora - ultimoTyping.current < 4000) return;
+    ultimoTyping.current = agora;
+    setPresenceNoProxy(instanceIdDoCanal, contactExternalId, "composing").catch(() => {});
+  }, [canal, instanceIdDoCanal, contactExternalId]);
   const [subindo, setSubindo] = useState(false);
   const [gravando, setGravando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -353,6 +392,7 @@ function SocialComposer({
       await enviar.send({
         contactExternalId,
         text: conteudo || undefined,
+        citandoProviderMessageId: respondendoA?.providerMessageId ?? null,
         ...(anexo
           ? {
             media: {
@@ -367,6 +407,7 @@ function SocialComposer({
       });
       setTexto("");
       setAnexo(null);
+      onCancelarResposta();
     } catch (e) {
       const erro = e as SocialSendError;
       toast.error(erro.message, {
@@ -394,6 +435,27 @@ function SocialComposer({
             aria-label="Remover anexo"
           >
             <X className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
+      {/* A MENSAGEM CITADA, acima do campo — como no próprio WhatsApp.
+          Mostrar o trecho, e não só "respondendo", é o que evita citar a
+          mensagem errada num histórico longo. */}
+      {respondendoA && (
+        <div className="mb-2 flex items-start gap-2 rounded-lg border-l-2 border-primary/60 bg-muted/40 px-2.5 py-1.5">
+          <Reply className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+            {respondendoA.texto?.trim() || "Mensagem sem texto"}
+          </p>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5 shrink-0"
+            onClick={onCancelarResposta}
+            aria-label="Cancelar resposta"
+          >
+            <X className="h-3 w-3" />
           </Button>
         </div>
       )}
@@ -497,7 +559,10 @@ function SocialComposer({
         )}
         <Textarea
           value={texto}
-          onChange={(e) => setTexto(e.target.value)}
+          onChange={(e) => {
+            setTexto(e.target.value);
+            avisarQueEstaDigitando();
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -592,6 +657,16 @@ export function SocialChatView({
   const [menuAberto, setMenuAberto] = useState(false);
   const [localizacaoAberta, setLocalizacaoAberta] = useState(false);
   const [contatoAberto, setContatoAberto] = useState(false);
+  /**
+   * A mensagem que a próxima resposta vai citar.
+   *
+   * Mora AQUI, e não no composer, porque quem a escolhe é a barra de ações da
+   * BOLHA — que é filha da lista, irmã do composer. O estado tem de viver no
+   * ancestral comum.
+   */
+  const [respondendoA, setRespondendoA] = useState<
+    { providerMessageId: string; texto: string | null } | null
+  >(null);
   const queryClient = useQueryClient();
 
   const { data: rawMessages = [], isLoading } = useSocialMessages(selectedContact);
@@ -691,6 +766,45 @@ export function SocialChatView({
             }}
             density={density}
             enableActions={false}
+            {...(selectedContact.channel === "whatsapp_oficial"
+              ? {
+                // O texto da mensagem citada sai da PRÓPRIA thread já carregada:
+                // nenhuma consulta nova, e o que não estiver na janela em memória
+                // cai no rótulo genérico — degradação honesta.
+                textoCitado: (id: string) =>
+                  rawMessages.find((m) => m.provider_message_id === id)?.content ?? null,
+                onReagir: (m, emoji) => {
+                  if (!m.providerMessageId) return;
+                  // ⚠️ O `number` VAI JUNTO, e não é redundância: sem ele o gate
+                  // de responsável (`can_see_chat_target`) tenta resolver o alvo
+                  // pelo id em `whatsapp_messages` — outra tabela — e devolve
+                  // 403 fail-closed. Com o telefone, ele resolve pelo caminho
+                  // normal e nunca chega no lookup.
+                  reagirNoProxy(
+                    selectedContact.messaging_channel_id,
+                    m.providerMessageId,
+                    selectedContact.external_user_id,
+                    emoji,
+                  )
+                    .then(() =>
+                      queryClient.invalidateQueries({
+                        queryKey: chatQueryKeys.socialMessages(
+                          organizationId ?? null,
+                          selectedContact.messaging_channel_id,
+                          selectedContact.external_user_id,
+                        ),
+                      }))
+                    .catch((e: Error) => toast.error(e.message));
+                },
+                onResponder: (m) => {
+                  if (!m.providerMessageId) return;
+                  setRespondendoA({
+                    providerMessageId: m.providerMessageId,
+                    texto: m.texto,
+                  });
+                },
+              }
+              : {})}
           />
         )}
       </div>
@@ -777,6 +891,9 @@ export function SocialChatView({
         onAbrirMenu={() => setMenuAberto(true)}
         onAbrirLocalizacao={() => setLocalizacaoAberta(true)}
         onAbrirContato={() => setContatoAberto(true)}
+        respondendoA={respondendoA}
+        onCancelarResposta={() => setRespondendoA(null)}
+        instanceIdDoCanal={selectedContact.messaging_channel_id}
         lastIncomingAt={ultimaRecebidaEm}
       />
 
