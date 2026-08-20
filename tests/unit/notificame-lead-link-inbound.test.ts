@@ -477,13 +477,27 @@ describe("3. estrutural — nenhum caminho de criação existe no código do ing
   it.each([
     ["notificame-webhook/index.ts", WEBHOOK_SRC],
     ["_shared/notificame-inbound.ts", INBOUND_SRC],
-  ])("%s não chama getOrCreateLead nem importa lead-service", (_nome, src) => {
+  ])("%s não CRIA lead — só a leitura resolve-only é permitida", (_nome, src) => {
     // O criador canônico tem o guard `if (!phone && !email) return null`, que
     // protege 8 call sites — inclusive o caminho quente de `agent-message`.
     // Chamá-lo daqui exigiria afrouxar aquele guard, e afrouxá-lo derrubaria a
     // barreira estrutural dos outros sete.
     expect(src).not.toMatch(/getOrCreateLead/);
-    expect(src).not.toMatch(/lead-service/);
+
+    // ⚠️ A PROIBIÇÃO ERA DE IMPORTAR O MÓDULO INTEIRO, e isso era mais largo que
+    // a intenção: o que não pode acontecer aqui é CRIAR lead. Ler para resolver
+    // um vínculo que já existe é o oposto disso — foi o que o #1686 precisou
+    // para disparar o gatilho de "lead respondeu", que exige o id do lead.
+    //
+    // A guarda passou a nomear o que é permitido, em vez de proibir o pacote:
+    // qualquer OUTRO símbolo de `lead-service` continua barrado, e um import
+    // novo cai aqui em vermelho — que é o efeito que a regra original queria.
+    const importsDeLeadService = [...src.matchAll(/import\s*\{([^}]*)\}\s*from\s*["'][^"']*lead-service/g)];
+    for (const m of importsDeLeadService) {
+      const simbolos = m[1].split(",").map((x) => x.trim()).filter(Boolean);
+      expect(simbolos, "só a leitura resolve-only é permitida no ingress")
+        .toEqual(["findLeadByPhoneOrEmail"]);
+    }
   });
 
   it.each([

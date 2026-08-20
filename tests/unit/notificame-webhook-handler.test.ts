@@ -319,3 +319,62 @@ describe("MESSAGE_STATUS — a recusa da Meta chega até a linha", () => {
     expect(state.mock!.getInserted("notificame_webhook_events")).toHaveLength(1);
   });
 });
+
+/**
+ * A PERNA DE VOLTA — issue #1686.
+ *
+ * O segundo nó mais executado do produto é o "esperar resposta": 11.653
+ * execuções em 7 dias. Ele destrava porque o webhook do chip chama uma RPC
+ * quando chega mensagem do cliente. Este webhook não chamava nada, e uma
+ * execução que esperasse resposta no canal oficial esperava para sempre.
+ *
+ * O efeito observável É a chamada: destravar uma execução não deixa rastro em
+ * nenhuma tabela que este dublê veja.
+ */
+describe("perna de volta", () => {
+  it("resposta do cliente no canal oficial destrava a espera, por telefone", async () => {
+    const res = await post(payloadWhatsApp());
+    expect(res.status).toBe(200);
+
+    const chamada = state.mock!.getRpcCalls()
+      .find((c) => c.name === "resolve_wait_response_by_phone");
+
+    expect(chamada, "o workflow nunca soube que o cliente respondeu").toBeDefined();
+    expect((chamada!.params as { p_phone?: string }).p_phone).toBe("554884334050");
+    expect((chamada!.params as { p_organization_id?: string }).p_organization_id).toBe(ORG);
+  });
+
+  it("uma falha ao destravar NÃO derruba a gravação nem o 200", async () => {
+    // O contrato do webhook é devolver 200 e guardar o corpo. Uma reação que
+    // falha não pode custar a mensagem — o fornecedor desiste depois das
+    // tentativas dele e o dado morre sem uma linha em lugar nenhum.
+    state.mock!.mockRpc("resolve_wait_response_by_phone", undefined);
+
+    const res = await post(payloadWhatsApp());
+    expect(res.status).toBe(200);
+  });
+});
+
+  /**
+   * ⚠️ O GATILHO "lead respondeu" NÃO é asserido aqui, e é decisão, não desistência.
+   *
+   * Prová-lo neste seam exigiria encenar três camadas alheias: um lead cujo
+   * telefone normalize exatamente como o serviço de lead normaliza, um workflow
+   * ativo com aquele gatilho, e uma configuração que case. Estaria testando o
+   * disparador de gatilhos e o serviço de lead — ambos com testes próprios — e
+   * quebraria quando qualquer um deles mudasse de forma interna.
+   *
+   * O que ESTE seam prova é o que só ele pode provar: que a entrada aciona, que
+   * a saída não aciona, e que ninguém é criado. A decisão de disparar mora na
+   * regra pura (`notificame-reacoes.test.ts`), onde é exercitada sem banco.
+   */
+  it("sem lead com aquele telefone, o gatilho NÃO dispara — e não cria ninguém", async () => {
+    // ⚠️ Resolve-only, nunca criar. Um lead nascido de cada mensagem recebida
+    // encheria a base com quem só perguntou preço, e no eixo social o
+    // identificador da plataforma entraria como se fosse telefone.
+    state.mock!.mockTable("leads", []);
+
+    const res = await post(payloadWhatsApp());
+    expect(res.status).toBe(200);
+    expect(state.mock!.getInserted("leads")).toHaveLength(0);
+  });

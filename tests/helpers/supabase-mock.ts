@@ -21,6 +21,12 @@ export function createMockSupabase() {
   const updatedRows: Record<string, MockData> = {};
   const upsertOpts: Record<string, unknown[]> = {};
   const rpcResults: Record<string, unknown> = {};
+  /**
+   * As chamadas de RPC, na ordem. Existe porque há caminhos cujo efeito
+   * observável É a chamada — destravar uma execução de workflow, por exemplo,
+   * não deixa rastro em nenhuma tabela que o dublê veja.
+   */
+  const rpcCalls: Array<{ name: string; params: unknown }> = [];
   const insertErrors: Record<string, { code: string; message: string }> = {};
 
   function mockTable(name: string, data: MockData) {
@@ -332,7 +338,8 @@ export function createMockSupabase() {
 
   const sb = {
     from: (table: string) => createChain(table),
-    rpc: (name: string, _params?: unknown) => {
+    rpc: (name: string, params?: unknown) => {
+      rpcCalls.push({ name, params });
       return Promise.resolve({
         data: rpcResults[name] ?? null,
         error: rpcResults[name] !== undefined ? null : { message: 'RPC not mocked' },
@@ -352,5 +359,5 @@ export function createMockSupabase() {
     channel: (name: string) => createChannel(name),
   };
 
-  return { sb: sb as any, mockTable, mockRpc, mockInsertError, getInserted, getUpdated, getUpsertOpts, emitEvent };
+  return { sb: sb as any, mockTable, mockRpc, mockInsertError, getInserted, getUpdated, getUpsertOpts, emitEvent, getRpcCalls: () => rpcCalls };
 }

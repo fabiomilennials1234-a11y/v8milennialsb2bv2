@@ -203,6 +203,9 @@ import {
 import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
 import { mirrorContactAvatar } from "../_shared/notificame-avatar.ts";
 import { normalizarConteudo } from "../_shared/notificame-content.ts";
+import { reacoesDoEvento } from "../_shared/notificame-reacoes.ts";
+import { findLeadByPhoneOrEmail } from "../_shared/lead-service.ts";
+import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { espelharMidiaRecebida } from "../_shared/mirror-inbound-media.ts";
 import { baixarMidiaPeloFornecedor } from "../_shared/notificame-media-download.ts";
 
@@ -1777,6 +1780,76 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
     const inserted = (data as Array<{ id: string }> | null)?.[0]?.id;
     // ZERO linhas = a UNIQUE absorveu. É REENTREGA, e reentrega é o caminho FELIZ.
     if (!inserted) return { kind: "duplicate" };
+
+    // ── (c-bis) A PERNA DE VOLTA ──────────────────────────────────────────
+    //
+    // O segundo nó mais executado do produto é o "esperar resposta": 11.653
+    // execuções em 7 dias. Ele destrava porque o webhook do chip chama esta RPC
+    // quando chega mensagem do cliente. Enquanto isto não existiu, uma execução
+    // que esperasse resposta no canal oficial esperava PARA SEMPRE — automação
+    // de mão única, que envia e fica surda.
+    //
+    // ⚠️ BEST-EFFORT, como todo o resto das reações: uma falha aqui não pode
+    // custar a mensagem. O contrato desta função é devolver 200 e guardar o
+    // corpo; recusar faz o fornecedor desistir e o dado morre sem uma linha em
+    // lugar nenhum.
+    //
+    // A REGRA de o que disparar mora em `notificame-reacoes.ts`, puro: é lá que
+    // se decide que saída não conta como resposta, e que o identificador do
+    // Instagram nunca vira telefone.
+    const reacoes = reacoesDoEvento({
+      direcao: ehSaida ? "outgoing" : "incoming",
+      canal: channel!.kind === "whatsapp" ? "whatsapp" : "instagram",
+      telefone: row.phone_number,
+      leadId: row.lead_id,
+    });
+
+    // O GATILHO "lead respondeu" exige o id do lead, e a linha do canal oficial
+    // nasce sem ele. Resolvemos por telefone — RESOLVE-ONLY, nunca criar: um
+    // lead nascido de cada mensagem recebida encheria a base com quem só
+    // perguntou preço, e no eixo social o identificador da plataforma entraria
+    // como se fosse telefone (a normalização o devolve intacto).
+    if (reacoes.dispararLeadRespondeu) {
+      try {
+        const lead = reacoes.resolverEsperaPorLead
+          ? { id: reacoes.resolverEsperaPorLead }
+          : await findLeadByPhoneOrEmail(
+            admin,
+            organizationId,
+            reacoes.resolverEsperaPorTelefone,
+          );
+
+        if (lead?.id) {
+          await fireTrigger({
+            supabase: admin,
+            organizationId,
+            triggerType: "lead_replied",
+            leadId: lead.id,
+            source: "webhook",
+          });
+        }
+      } catch (err) {
+        console.warn(
+          `[${FUNCTION_NAME}] fireTrigger(lead_replied) falhou:`,
+          (err as Error)?.message,
+        );
+      }
+    }
+
+    if (reacoes.resolverEsperaPorTelefone) {
+      try {
+        await admin.rpc("resolve_wait_response_by_phone", {
+          p_phone: reacoes.resolverEsperaPorTelefone,
+          p_organization_id: organizationId,
+          p_channel: "whatsapp",
+        });
+      } catch (err) {
+        console.warn(
+          `[${FUNCTION_NAME}] resolve_wait_response_by_phone falhou:`,
+          (err as Error)?.message,
+        );
+      }
+    }
 
     // (d) BACKFILL do handle da NOSSA conta. BEST-EFFORT: `buildMessagingChannelRow`
     // deixou a coluna NULL porque `GET /v1/channels` não devolve o @usuário, e o
