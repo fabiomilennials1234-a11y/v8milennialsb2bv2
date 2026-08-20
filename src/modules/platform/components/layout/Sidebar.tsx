@@ -80,29 +80,45 @@ export function Sidebar() {
         style={{ width }}
         className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200"
       >
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
-          className="absolute -right-[11px] top-5 z-40 grid h-[22px] w-[22px] place-items-center rounded-full border border-sidebar-border bg-card text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
-        </button>
-
         <div className="flex flex-col gap-3 px-3 pb-2 pt-4">
-          <NavLink
-            to="/dashboard"
-            className="flex h-7 items-center gap-2.5 px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md bg-primary text-[14px] font-extrabold text-primary-foreground">
-              T
-            </span>
-            {!collapsed && (
-              <span className="truncate text-base font-bold tracking-tight text-sidebar-foreground">
-                Torque
+          {/* O botão de recolher mora aqui dentro, e não flutuando na borda:
+              na borda ele cobria o título do Pitstop quando o painel abria. */}
+          <div className="flex h-7 items-center gap-2">
+            <NavLink
+              to="/dashboard"
+              className="flex min-w-0 flex-1 items-center gap-2.5 px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md bg-primary text-[14px] font-extrabold text-primary-foreground">
+                T
               </span>
+              {!collapsed && (
+                <span className="truncate text-base font-bold tracking-tight text-sidebar-foreground">
+                  Torque
+                </span>
+              )}
+            </NavLink>
+            {!collapsed && (
+              <button
+                type="button"
+                onClick={toggleCollapsed}
+                aria-label="Recolher menu"
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
             )}
-          </NavLink>
+          </div>
+
+          {collapsed && (
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label="Expandir menu"
+              className="grid h-7 w-full place-items-center rounded-md text-sidebar-foreground/50 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
 
           {!collapsed && <OrgSwitcher />}
         </div>
@@ -162,11 +178,17 @@ export function Sidebar() {
             />
           )}
 
-          <div className={cn("flex items-center", collapsed ? "justify-center" : "px-1")}>
-            <AlertsDropdown />
-            {!collapsed && (
-              <span className="ml-2 text-sm text-sidebar-foreground/70">Notificações</span>
+          {/* O AlertsDropdown traz botão e padding próprios; sem neutralizar,
+              o sino desalinha dos outros ícones do rodapé. */}
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-lg py-2 text-sm text-sidebar-foreground/70",
+              "[&_button]:h-auto [&_button]:w-auto [&_button]:p-0 [&_button]:hover:bg-transparent",
+              collapsed ? "justify-center" : "px-2.5",
             )}
+          >
+            <AlertsDropdown />
+            {!collapsed && <span className="flex-1 truncate">Notificações</span>}
           </div>
 
           {collapsed ? (
