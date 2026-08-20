@@ -33,6 +33,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  montarComponenteDeBotoes,
+  problemasDosBotoes,
+  type BotaoDoEditor,
+} from "@/modules/communication/lib/template-buttons";
+import { TemplateButtonsEditor } from "./TemplateButtonsEditor";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -161,6 +167,12 @@ export function NotificameTemplateEditor({
   const [body, setBody] = useState("");
   const [footer, setFooter] = useState("");
   /**
+   * Os botões. Ficam fora de `components` até o envio porque a Meta tem regras
+   * próprias para eles — teto por tipo, tamanho do rótulo, variável só no fim do
+   * link — e todas são silenciosas: ela aceita a criação e recusa horas depois.
+   */
+  const [botoes, setBotoes] = useState<BotaoDoEditor[]>([]);
+  /**
    * Um exemplo por variável, chaveado pelo token (`"1"`, `"nome"`).
    *
    * A Meta EXIGE isso e recusa sem — horas depois, com motivo genérico. Aqui ele
@@ -188,6 +200,8 @@ export function NotificameTemplateEditor({
     [varsHeader, varsBody],
   );
 
+  const problemasDeBotao = useMemo(() => problemasDosBotoes(botoes), [botoes]);
+
   const problemsOf = (field: string) => problems.filter((p) => p.field === field);
   const hasProblem = (field: string) => problemsOf(field).length > 0;
 
@@ -196,12 +210,17 @@ export function NotificameTemplateEditor({
     setHeader("");
     setBody("");
     setFooter("");
+    setBotoes([]);
     setExemplos({});
     setProblems([]);
   }
 
   async function handleSubmit() {
     setProblems([]);
+
+    // Barra AQUI e não depois: a recusa da Meta por regra de botão chega horas
+    // mais tarde, com mensagem genérica, e o template fica ocupando o nome.
+    if (problemasDeBotao.length > 0) return;
 
     // O `example` viaja no formato DA META, não no nosso: `header_text` é lista
     // simples, `body_text` é lista DENTRO de lista (uma linha de exemplos).
@@ -233,6 +252,11 @@ export function NotificameTemplateEditor({
     });
 
     if (footer.trim()) components.push({ type: "FOOTER", text: footer.trim() });
+
+    // BUTTONS vai por último — a Meta espera os componentes nesta ordem, e o
+    // componente é omitido quando não há botão: `buttons: []` é recusado.
+    const componenteDeBotoes = montarComponenteDeBotoes(botoes);
+    if (componenteDeBotoes) components.push(componenteDeBotoes);
 
     try {
       const criado = await createTemplate.mutateAsync({
@@ -438,6 +462,12 @@ export function NotificameTemplateEditor({
               ))}
             </div>
 
+            <TemplateButtonsEditor
+              botoes={botoes}
+              onChange={setBotoes}
+              problemas={problemasDeBotao}
+            />
+
             {semCampo.length > 0 && (
               <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
@@ -473,6 +503,20 @@ export function NotificameTemplateEditor({
                   <p className="mt-2 text-[11px] text-muted-foreground">
                     <PreviewText text={footer} exemplos={exemplos} />
                   </p>
+                )}
+                {/* Os botões aparecem SEPARADOS da bolha, como no WhatsApp: lá
+                    eles são uma faixa clicável abaixo da mensagem, e desenhá-los
+                    dentro do texto daria a impressão errada de tamanho. */}
+                {botoes.filter((b) => b.texto.trim()).length > 0 && (
+                  <div className="-mx-3 -mb-3 mt-2 divide-y divide-border/40 border-t border-border/40">
+                    {botoes
+                      .filter((b) => b.texto.trim())
+                      .map((b, i) => (
+                        <p key={i} className="py-2 text-center text-[13px] text-sky-500">
+                          {b.texto.trim()}
+                        </p>
+                      ))}
+                  </div>
                 )}
               </div>
             </div>

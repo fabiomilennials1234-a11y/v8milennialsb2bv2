@@ -121,6 +121,8 @@ export type SendTemplateOptions = {
    * mensagem que saiu.
    */
   previewText?: string;
+  /** Rótulos dos botões do template, na ordem — só para exibir na conversa. */
+  buttonLabels?: string[];
 };
 
 export type SendMenuOptions = {

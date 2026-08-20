@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { lerBolha } from "./inbound-metadata";
+import { botoesDaMensagem, lerBolha } from "./inbound-metadata";
 
 describe("lerBolha", () => {
   it("clique de botão vira resposta, com o texto que o cliente viu", () => {
@@ -128,5 +128,21 @@ describe("localização, contato, link e reação", () => {
     });
 
     expect(b).toEqual({ tipo: "reacao", emoji: "👍", alvo: "dGg3" });
+  });
+});
+
+describe("botoesDaMensagem", () => {
+  it("devolve os rótulos de um template enviado com botões", () => {
+    // Acréscimo, e não um tipo de bolha próprio: o template já tem selo e texto
+    // desenhados pelo caminho de sempre. Os botões entram COMO FAIXA embaixo,
+    // que é onde o WhatsApp os põe.
+    expect(botoesDaMensagem({ tipo: "template", botoes: ["Recebi", "Ver pedido"] }))
+      .toEqual(["Recebi", "Ver pedido"]);
+  });
+
+  it("qualquer outra coisa devolve lista vazia", () => {
+    for (const m of [null, undefined, {}, { tipo: "texto" }, { tipo: "template" }, "x"]) {
+      expect(botoesDaMensagem(m)).toEqual([]);
+    }
   });
 });

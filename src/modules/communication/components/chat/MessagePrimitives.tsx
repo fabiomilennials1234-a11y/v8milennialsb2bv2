@@ -25,7 +25,7 @@ import {
   LayoutList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { lerBolha, TIPOS_NORMALIZADOS } from "@/modules/communication/lib/inbound-metadata";
+import { botoesDaMensagem, lerBolha, TIPOS_NORMALIZADOS } from "@/modules/communication/lib/inbound-metadata";
 import { BolhaNormalizada } from "./bubbles/BolhaNormalizada";
 import { format, isToday, isYesterday } from "date-fns";
 import { AudioPlayer, getAudioPlaybackUrl } from "./media/AudioPlayer";
@@ -176,6 +176,9 @@ export function MessageBubble({
   // Só assume os quatro casos que o caminho antigo desenha errado ou não
   // desenha. Áudio, imagem, vídeo e documento seguem nos ramos de sempre.
   const usaBolhaNormalizada = TIPOS_NORMALIZADOS.has(bolhaNormalizada.tipo);
+  // Os botões de um template ENVIADO. Acréscimo à bolha, não um tipo dela: o
+  // selo e o texto continuam vindo do caminho de sempre.
+  const botoesDoTemplate = botoesDaMensagem((message as { metadata?: unknown }).metadata ?? null);
 
   const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || isTemplate || messageType === "url";
   const hasMedia = isAudio || isImage || isVideo || isDocument || isSticker;
@@ -496,7 +499,22 @@ export function MessageBubble({
               </>
             )}
 
-                        <MessageMetaBadges
+                        {/* A FAIXA DE BOTÕES do template enviado.
+                Fica FORA da bolha de texto e separada por uma borda, como no
+                WhatsApp: lá os botões são uma faixa clicável abaixo da mensagem.
+                Aqui eles são só leitura — quem toca é o cliente, no aparelho
+                dele —, e existem para o vendedor saber o que ele está vendo. */}
+            {botoesDoTemplate.length > 0 && (
+              <div className="-mx-3 -mb-2 mt-2 divide-y divide-border/30 border-t border-border/30">
+                {botoesDoTemplate.map((rotulo, i) => (
+                  <p key={i} className="py-1.5 text-center text-[13px] text-sky-500/90">
+                    {rotulo}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            <MessageMetaBadges
               edited={meta.edited}
               pinnedAt={meta.pinned_at}
               deletedAt={meta.deleted_at}

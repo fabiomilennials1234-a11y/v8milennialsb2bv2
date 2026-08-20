@@ -134,3 +134,21 @@ export function lerBolha(m: MensagemLida): Bolha {
   if (m.content) return { tipo: "texto", texto: m.content };
   return { tipo: "indisponivel" };
 }
+
+/**
+ * Os botões de um template ENVIADO, para a faixa embaixo da bolha.
+ *
+ * Não é um tipo de bolha: o template já tem selo e texto desenhados pelo caminho
+ * de sempre, e os botões são um acréscimo — no WhatsApp eles são uma faixa
+ * clicável ABAIXO da mensagem, não parte dela.
+ *
+ * Lista vazia para tudo que não for template com botão, inclusive para
+ * `{tipo:"template"}` sem rótulos: uma faixa vazia é uma borda solta que não
+ * existe no aplicativo.
+ */
+export function botoesDaMensagem(metadata: unknown): string[] {
+  const m = (metadata ?? null) as { tipo?: unknown; botoes?: unknown } | null;
+  if (!m || typeof m !== "object" || m.tipo !== "template") return [];
+  if (!Array.isArray(m.botoes)) return [];
+  return m.botoes.filter((x): x is string => typeof x === "string" && x.trim() !== "");
+}

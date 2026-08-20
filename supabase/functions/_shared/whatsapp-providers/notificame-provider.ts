@@ -464,6 +464,15 @@ export interface OutboundChannelMessageRow {
   lead_id: null;
   timestamp: string;
   raw_payload: unknown;
+  /**
+   * A forma NOSSA do que foi enviado. Hoje só carrega os rótulos dos botões de
+   * um template — que a Meta renderiza do lado dela e que, sem isto, não
+   * aparecem em lugar nenhum da conversa.
+   *
+   * `null` quando não há nada a dizer: um `{}` faria a bolha desenhar uma faixa
+   * vazia debaixo da mensagem.
+   */
+  metadata: unknown | null;
 }
 
 /**
@@ -509,6 +518,14 @@ export function buildOutboundChannelMessageRow(params: {
   mediaUrl: string | null;
   timestampIso: string;
   rawPayload: unknown;
+  /**
+   * Os rótulos dos botões do template, na ordem — vindos de QUEM ENVIA.
+   *
+   * Mesmo motivo do `previewText`: a Meta monta a mensagem do lado dela, e só
+   * quem clicou em enviar tem o template aprovado em mãos. Inventar aqui faria
+   * o histórico mentir sobre o que o cliente viu.
+   */
+  botoes?: string[];
 }): OutboundChannelMessageRow {
   return {
     organization_id: params.organizationId,
@@ -531,6 +548,9 @@ export function buildOutboundChannelMessageRow(params: {
     lead_id: null,
     timestamp: params.timestampIso,
     raw_payload: params.rawPayload,
+    metadata: params.botoes?.length
+      ? { tipo: "template", botoes: params.botoes }
+      : null,
   };
 }
 
@@ -658,6 +678,8 @@ export class NotificameProvider implements WhatsAppProvider {
     messageType: string;
     text: string | null;
     mediaUrl: string | null;
+    /** Só em template: os rótulos dos botões, para a conversa poder exibi-los. */
+    botoes?: string[];
   }): Promise<SendResult> {
     const to = normalizeNotificameRecipient(this.channelKind, params.to);
     if (!to) {
@@ -738,6 +760,7 @@ export class NotificameProvider implements WhatsAppProvider {
       messageType: params.messageType,
       content: params.text,
       mediaUrl: params.mediaUrl,
+      botoes: params.botoes,
       rawPayload: { request: envelope, response: parsed.value },
     });
 
@@ -764,6 +787,7 @@ export class NotificameProvider implements WhatsAppProvider {
     content: string | null;
     mediaUrl: string | null;
     rawPayload: unknown;
+    botoes?: string[];
   }): Promise<void> {
     const row = buildOutboundChannelMessageRow({
       organizationId: this.organizationId,
@@ -775,6 +799,7 @@ export class NotificameProvider implements WhatsAppProvider {
       messageType: params.messageType,
       content: params.content,
       mediaUrl: params.mediaUrl,
+      botoes: params.botoes,
       // O relógio mora AQUI, fora dos módulos puros.
       timestampIso: this.now().toISOString(),
       rawPayload: params.rawPayload,
@@ -854,6 +879,10 @@ export class NotificameProvider implements WhatsAppProvider {
       // no lugar da mensagem — medido em produção no primeiro template enviado.
       text: opts.previewText?.trim() || null,
       mediaUrl: null,
+      // Os rótulos dos botões, pelo MESMO motivo do texto acima: a Meta desenha
+      // a faixa de botões do lado dela, e sem isto a conversa mostra o texto e
+      // esconde as opções que o cliente está vendo.
+      botoes: opts.buttonLabels?.map((r) => r.trim()).filter(Boolean),
     });
   }
 

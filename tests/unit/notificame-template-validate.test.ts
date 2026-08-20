@@ -292,3 +292,66 @@ describe("validateTemplateDraft — exemplo das variáveis", () => {
     expect(problemas.filter((x) => x.code.includes("example"))).toEqual([]);
   });
 });
+
+/**
+ * BOTÕES — a última linha antes da Meta.
+ *
+ * O editor já barra o que está errado, mas ele não é o único caminho até aqui:
+ * a edge function aceita rascunho de qualquer origem. Uma regra que só mora na
+ * tela é uma regra que não existe para quem chama a API.
+ */
+describe("botões", () => {
+  const comBotoes = (buttons: unknown[]) =>
+    draft({
+      components: [
+        { type: "BODY", text: "Olá" },
+        { type: "BUTTONS", buttons },
+      ],
+    });
+
+  const codigos = (d: TemplateDraft) => validateTemplateDraft(d).map((p) => p.code);
+
+  it("aceita o conjunto correto", () => {
+    expect(codigos(comBotoes([
+      { type: "QUICK_REPLY", text: "Sim" },
+      { type: "URL", text: "Ver", url: "https://loja.com" },
+    ]))).toEqual([]);
+  });
+
+  it("recusa mais de 10 botões", () => {
+    const onze = Array.from({ length: 11 }, (_, i) => ({ type: "QUICK_REPLY", text: `Op ${i}` }));
+    expect(codigos(comBotoes(onze))).toContain("buttons_too_many");
+  });
+
+  it("recusa rótulo acima de 25 caracteres", () => {
+    expect(codigos(comBotoes([
+      { type: "QUICK_REPLY", text: "Quero falar com um vendedor agora" },
+    ]))).toContain("button_text_too_long");
+  });
+
+  it("recusa mais de 1 telefone e mais de 2 links", () => {
+    const c = codigos(comBotoes([
+      { type: "PHONE_NUMBER", text: "A", phone_number: "+551" },
+      { type: "PHONE_NUMBER", text: "B", phone_number: "+552" },
+      { type: "URL", text: "C", url: "https://a.com" },
+      { type: "URL", text: "D", url: "https://b.com" },
+      { type: "URL", text: "E", url: "https://c.com" },
+    ]));
+
+    expect(c).toContain("buttons_too_many_phone");
+    expect(c).toContain("buttons_too_many_url");
+  });
+
+  it("recusa link com variável fora do fim, e link variável sem exemplo", () => {
+    expect(codigos(comBotoes([{ type: "URL", text: "A", url: "https://a.com/{{1}}/x" }])))
+      .toContain("button_url_variable_position");
+    expect(codigos(comBotoes([{ type: "URL", text: "A", url: "https://a.com/{{1}}" }])))
+      .toContain("button_url_example_required");
+  });
+
+  it("link variável COM exemplo passa", () => {
+    expect(codigos(comBotoes([
+      { type: "URL", text: "A", url: "https://a.com/{{1}}", example: ["https://a.com/4471"] },
+    ]))).toEqual([]);
+  });
+});

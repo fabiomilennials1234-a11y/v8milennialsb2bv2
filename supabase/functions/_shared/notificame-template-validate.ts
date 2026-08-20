@@ -48,6 +48,14 @@ export interface TemplateProblem {
   field?: string;
 }
 
+/** Tetos da Meta para botões. Documentados, não medidos contra conta viva. */
+const BUTTONS_MAX = 10;
+const BUTTONS_PHONE_MAX = 1;
+const BUTTONS_URL_MAX = 2;
+const BUTTON_TEXT_MAX = 25;
+const BUTTON_URL_VARIABLE = /\{\{\s*\d+\s*\}\}/;
+const BUTTON_URL_VARIABLE_AT_END = /\{\{\s*\d+\s*\}\}$/;
+
 const CATEGORIES = new Set(["MARKETING", "UTILITY", "AUTHENTICATION"]);
 
 /** Nome aceito pela Meta: minúscula, número e underscore. Nada mais. */
@@ -128,6 +136,75 @@ export function validateTemplateDraft(draft: TemplateDraft): TemplateProblem[] {
   }
 
   // ── Cabeçalho ──────────────────────────────────────────────────────────────
+  // ── Botões ────────────────────────────────────────────────────────────────
+  //
+  // ⚠️ ESTAS REGRAS EXISTEM DUAS VEZES: aqui e em
+  // `src/modules/communication/lib/template-buttons.ts`, que é quem avisa o
+  // vendedor enquanto ele digita. Duplicar não é descuido — o editor não é o
+  // único caminho até esta função, e regra que só mora na tela não existe para
+  // quem chama a edge function direto. `tests/unit/notificame-template-buttons-twin.test.ts`
+  // roda os mesmos casos nas duas e fica vermelho se elas divergirem.
+  const blocoDeBotoes = componentsOfType(draft, "BUTTONS")[0];
+  if (blocoDeBotoes) {
+    const botoes = (Array.isArray(blocoDeBotoes.buttons) ? blocoDeBotoes.buttons : [])
+      .map((b) => (b ?? {}) as Record<string, unknown>);
+
+    if (botoes.length > BUTTONS_MAX) {
+      add("buttons_too_many", `No máximo ${BUTTONS_MAX} botões por template`, "buttons");
+    }
+
+    const tipo = (b: Record<string, unknown>) =>
+      typeof b.type === "string" ? b.type.trim().toUpperCase() : "";
+    const contar = (t: string) => botoes.filter((b) => tipo(b) === t).length;
+
+    if (contar("PHONE_NUMBER") > BUTTONS_PHONE_MAX) {
+      add("buttons_too_many_phone", `No máximo ${BUTTONS_PHONE_MAX} botão de telefone`, "buttons");
+    }
+    if (contar("URL") > BUTTONS_URL_MAX) {
+      add("buttons_too_many_url", `No máximo ${BUTTONS_URL_MAX} botões de link`, "buttons");
+    }
+
+    for (const b of botoes) {
+      const texto = typeof b.text === "string" ? b.text.trim() : "";
+      if (texto.length > BUTTON_TEXT_MAX) {
+        add(
+          "button_text_too_long",
+          `O botão "${texto}" passa de ${BUTTON_TEXT_MAX} caracteres`,
+          "buttons",
+        );
+      }
+
+      if (tipo(b) === "URL") {
+        const url = typeof b.url === "string" ? b.url.trim() : "";
+        if (!url) {
+          add("button_url_required", `O botão "${texto}" está sem endereço`, "buttons");
+        } else if (BUTTON_URL_VARIABLE.test(url)) {
+          // As duas regras da parte variável são SILENCIOSAS na Meta: ela aceita
+          // a criação e recusa horas depois, sem dizer qual foi.
+          if (!BUTTON_URL_VARIABLE_AT_END.test(url)) {
+            add(
+              "button_url_variable_position",
+              `No botão "${texto}", a parte variável do link só pode ficar no fim`,
+              "buttons",
+            );
+          }
+          const exemplo = Array.isArray(b.example) ? b.example : [];
+          if (exemplo.length === 0) {
+            add(
+              "button_url_example_required",
+              `O botão "${texto}" precisa de um exemplo para a parte variável do link`,
+              "buttons",
+            );
+          }
+        }
+      }
+
+      if (tipo(b) === "PHONE_NUMBER" && !(typeof b.phone_number === "string" && b.phone_number.trim())) {
+        add("button_phone_required", `O botão "${texto}" está sem número`, "buttons");
+      }
+    }
+  }
+
   const header = componentsOfType(draft, "HEADER")[0];
   if (header && (header.format ?? "TEXT").trim().toUpperCase() === "TEXT") {
     const text = (header.text ?? "").trim();
