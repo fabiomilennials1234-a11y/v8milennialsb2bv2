@@ -28,7 +28,10 @@ export const LeadCardAvatar = memo(function LeadCardAvatar({
   size = 32,
   className,
 }: LeadCardAvatarProps) {
-  const iconSize = Math.round(size * 0.42);
+  // 0,42 é a proporção original, calibrada para 32px. Abaixo de ~26px ela cai
+  // para 9px e o "meio a meio" (duas metades com ícone diferente) fica
+  // ilegível — a 22px, 0,46 dá 10px e a leitura volta.
+  const iconSize = Math.round(size * (size < 26 ? 0.46 : 0.42));
   const unifiedIconSize = Math.round(size * 0.6);
   const leftConfig  = preQualTier ? QUALIFICATION_TIER_CONFIG[preQualTier] : null;
   const rightConfig = qualTier    ? QUALIFICATION_TIER_CONFIG[qualTier]    : null;

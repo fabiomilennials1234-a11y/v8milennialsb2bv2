@@ -42,6 +42,17 @@ import { AddToFunilMenuItem, AddToFunilDialog } from "./AddToFunilDialog";
  * `--origin-ink-l`, um token que vale ~34% no claro e ~74% no escuro. Um
  * token, dois temas, e cada origem mantém a identidade de cor que tinha.
  */
+/**
+ * Cor da inicial do lead. Mesma função do resto do produto (colorFromName em
+ * LeadCardMetrics): soma os charCodes e gira o matiz, para que duas pessoas
+ * diferentes nunca caiam na mesma cor por acidente.
+ */
+const corDaInicial = (nome?: string | null): string => {
+  if (!nome) return "hsl(0 0% 45%)";
+  const h = Array.from(nome).reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return `hsl(${h % 360} 55% 55%)`;
+};
+
 const origem = (h: number, s: number, label: string) => ({
   bg: `hsl(${h} ${s}% 50% / 0.14)`,
   text: `hsl(${h} ${s}% var(--origin-ink-l))`,
@@ -444,15 +455,27 @@ export const LeadCard = memo(function LeadCard({
             </button>
           )}
 
-          {/* ── Header: Avatar + Name + Calor + Kebab ── */}
+          {/* ── Header: Avatar + Name + Calor + Kebab ──
+               Anatomia do DataCrazy: à esquerda o "símbolo do cara" (a
+               inicial, 32px); a QUALIFICAÇÃO sai daqui e vai para o canto
+               superior direito, menor (22px) — é o lugar onde o concorrente
+               põe o "#1".
+               Ganho de brinde: hoje, quando o lead tem `avatar_url`, a foto
+               COBRE as metades de qualificação e a leitura se perde. Separando
+               os dois, eles passam a conviver. */}
           <div className="flex items-start gap-2.5">
-            <LeadCardAvatar
-              preQualTier={lead.preQualTier}
-              qualTier={lead.qualTier}
-              avatarUrl={lead.avatarUrl}
-              name={lead.name}
-              size={32}
-            />
+            <div
+              className="w-8 h-8 shrink-0 rounded-full grid place-items-center text-[12px] font-semibold overflow-hidden"
+              style={{
+                color: corDaInicial(lead.name),
+                backgroundColor: `color-mix(in srgb, ${corDaInicial(lead.name)} 18%, transparent)`,
+              }}
+              aria-hidden
+            >
+              {lead.avatarUrl
+                ? <img src={lead.avatarUrl} alt="" className="w-full h-full object-cover" />
+                : (lead.name?.trim()?.[0]?.toUpperCase() ?? "?")}
+            </div>
             <div className="flex-1 min-w-0">
               {editingField === "name" ? (
                 <input
@@ -506,6 +529,14 @@ export const LeadCard = memo(function LeadCard({
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              {/* A qualificação, no lugar do "#1" do DataCrazy: 22px contra os
+                  32px do avatar — menor que o símbolo do cara, como pedido. */}
+              <LeadCardAvatar
+                preQualTier={lead.preQualTier}
+                qualTier={lead.qualTier}
+                name={lead.name}
+                size={22}
+              />
               {lead.rating != null && lead.rating > 0 && (
                 <LeadCardCalor calor={lead.rating} onChange={onCalorChange} />
               )}
