@@ -177,7 +177,12 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { timingSafeCompare, checkRateLimit, checkRateLimitPersistent } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
-import { normalizeSeamlessType } from "../_shared/notificame.ts";
+import {
+  NOTIFICAME_DEFAULT_BASE_URL,
+  normalizeSeamlessType,
+  orgConfigFrom,
+} from "../_shared/notificame.ts";
+import { loadNotificameSubaccount } from "../_shared/notificame-credentials.ts";
 import {
   buildInboundChannelMessageRow,
   buildPayloadSnapshot,
@@ -199,6 +204,7 @@ import { isMissingTableError } from "../_shared/notificame-schema-guard.ts";
 import { mirrorContactAvatar } from "../_shared/notificame-avatar.ts";
 import { normalizarConteudo } from "../_shared/notificame-content.ts";
 import { espelharMidiaRecebida } from "../_shared/mirror-inbound-media.ts";
+import { baixarMidiaPeloFornecedor } from "../_shared/notificame-media-download.ts";
 
 const FUNCTION_NAME = "notificame-webhook";
 
@@ -1663,6 +1669,41 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
         especie: conteudo.metadata.midia.especie,
         mimeDeclarado: conteudo.metadata.midia.mime,
         storage: admin.storage,
+        // ⚠️ O CDN DO WHATSAPP OFICIAL NÃO É ABERTO — 401 no acesso direto,
+        // medido em 2026-08-20 no primeiro áudio real da Chique. O do Instagram
+        // entrega 206 sem token, e por isso este caminho SÓ é acionado depois de
+        // o direto ser recusado: gastar a chamada autenticada onde o arquivo é
+        // público seria desperdício por mensagem.
+        //
+        // Best-effort como todo o resto do espelhamento: qualquer falha aqui
+        // devolve `null` e a linha fica com a URL original.
+        baixarPeloFornecedor: async (url, mime) => {
+          try {
+            const sub = await loadNotificameSubaccount(admin, organizationId);
+            if (!sub?.companyUuid) return null;
+
+            const canalDoFornecedor = typeof (payload as { subscriptionId?: unknown })
+                ?.subscriptionId === "string"
+              ? (payload as { subscriptionId: string }).subscriptionId
+              : null;
+            if (!canalDoFornecedor) return null;
+
+            // `orgConfigFrom` é a MESMA fábrica que o provider usa — a base e o
+            // token saem daqui, não de uma leitura de env reimplementada.
+            const cfg = orgConfigFrom(
+              (Deno.env.get("NOTIFICAME_BASE_URL") ?? "").trim() || NOTIFICAME_DEFAULT_BASE_URL,
+              sub.companyUuid,
+            );
+
+            return await baixarMidiaPeloFornecedor(url, mime, {
+              baseUrl: cfg.baseUrl,
+              subaccountToken: cfg.subaccountToken,
+              channelId: canalDoFornecedor,
+            });
+          } catch {
+            return null;
+          }
+        },
       });
       midiaFinal = espelho.url;
       metadataFinal = {

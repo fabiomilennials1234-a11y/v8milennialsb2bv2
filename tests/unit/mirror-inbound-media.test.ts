@@ -113,3 +113,73 @@ describe("falha nunca troca a mensagem por um erro nosso", () => {
     expect(r.espelhada).toBe(false);
   });
 });
+
+/**
+ * O CDN DO WHATSAPP OFICIAL NÃO É ABERTO.
+ *
+ * Medido em 2026-08-20, com o primeiro áudio real recebido na Chique:
+ *
+ *   GET https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=… → 401
+ *
+ * O do Instagram (`ig_messaging_cdn`) entregava com 206 sem token nenhum, e foi
+ * com ele que este módulo nasceu. O do WhatsApp Business exige credencial — e o
+ * comentário deste arquivo chamava o endpoint de download do fornecedor de
+ * "plano B para o caso do WhatsApp, que ainda não recebeu arquivo nenhum".
+ *
+ * Recebeu. O plano B é o único caminho, e sem ele a bolha fica quebrada: foi o
+ * que apareceu na tela como "Não foi possível reproduzir o áudio".
+ */
+describe("CDN que exige credencial", () => {
+  it("401 no acesso direto cai para o download do fornecedor", async () => {
+    const fake = storageFake();
+    const direto = vi.fn().mockResolvedValue(new Response("", { status: 401 }));
+    const peloFornecedor = vi.fn().mockResolvedValue(
+      new Response(new Uint8Array(2048), {
+        status: 200,
+        headers: { "content-type": "audio/ogg" },
+      }),
+    );
+
+    const r = await espelharMidiaRecebida(
+      "https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid=123",
+      {
+        organizationId: "org-1",
+        especie: "audio",
+        storage: fake.storage,
+        fetchImpl: direto,
+        baixarPeloFornecedor: peloFornecedor,
+      },
+    );
+
+    expect(direto, "tentou o caminho barato primeiro").toHaveBeenCalled();
+    expect(peloFornecedor, "não usou o endpoint autenticado").toHaveBeenCalled();
+    expect(r.espelhada).toBe(true);
+    expect(fake.uploads[0].bytes).toBe(2048);
+  });
+
+  it("acesso direto que FUNCIONA não gasta o endpoint autenticado", async () => {
+    // O do Instagram entrega aberto. Chamar o endpoint do fornecedor ali seria
+    // uma chamada paga por arquivo, sem motivo.
+    const peloFornecedor = vi.fn();
+    await espelharMidiaRecebida(CDN_IG, {
+      organizationId: "org-1",
+      especie: "imagem",
+      storage: storageFake().storage,
+      fetchImpl: vi.fn().mockResolvedValue(resposta(64)),
+      baixarPeloFornecedor: peloFornecedor,
+    });
+
+    expect(peloFornecedor).not.toHaveBeenCalled();
+  });
+
+  it("sem o baixador injetado, 401 devolve a original — não inventa caminho", async () => {
+    const r = await espelharMidiaRecebida("https://lookaside.fbsbx.com/x?mid=1", {
+      organizationId: "org-1",
+      especie: "audio",
+      storage: storageFake().storage,
+      fetchImpl: vi.fn().mockResolvedValue(new Response("", { status: 401 })),
+    });
+
+    expect(r.espelhada).toBe(false);
+  });
+});

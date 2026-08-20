@@ -43,6 +43,16 @@ export interface EspelhoRecebidoDeps {
     };
   };
   fetchImpl?: typeof fetch;
+  /**
+   * O download AUTENTICADO, pelo endpoint do fornecedor.
+   *
+   * Só é usado quando o acesso direto é RECUSADO — o CDN do Instagram entrega
+   * aberto, e gastar uma chamada paga ali seria desperdício por arquivo.
+   *
+   * Ausente = sem plano B: o 401 devolve a URL original em vez de inventar
+   * caminho.
+   */
+  baixarPeloFornecedor?: (url: string, mime: string | null) => Promise<Response | null>;
 }
 
 export interface ResultadoDoEspelho {
@@ -85,7 +95,21 @@ export async function espelharMidiaRecebida(
   const buscar = deps.fetchImpl ?? fetch;
 
   try {
-    const r = await buscar(url);
+    let r = await buscar(url);
+
+    // ⚠️ O CDN DO WHATSAPP OFICIAL NÃO É ABERTO. Medido em 2026-08-20, no
+    // primeiro áudio real recebido na Chique:
+    //
+    //   GET lookaside.fbsbx.com/whatsapp_business/attachments/?mid=… → 401
+    //
+    // O do Instagram entregava 206 sem token, e foi com ele que este módulo
+    // nasceu. Sem o download autenticado, a bolha fica quebrada — foi o que
+    // apareceu na tela como "Não foi possível reproduzir o áudio".
+    if ((r.status === 401 || r.status === 403) && deps.baixarPeloFornecedor) {
+      const alternativa = await deps.baixarPeloFornecedor(url, deps.mimeDeclarado ?? null);
+      if (alternativa?.ok) r = alternativa;
+    }
+
     if (!r.ok) return { url, espelhada: false, mime: null };
 
     // O content-type da RESPOSTA é a verdade. O declarado só entra se o CDN não
