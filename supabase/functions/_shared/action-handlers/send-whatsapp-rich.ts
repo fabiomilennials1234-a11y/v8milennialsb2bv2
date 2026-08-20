@@ -24,8 +24,22 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
     return { success: false, error: "leadId is required for sendWhatsAppTemplate" };
   }
 
-  const templateId = params.templateId as string;
-  if (!templateId) return { success: false, error: "No template configured", retryable: false };
+  // ⚠️ ESTE NÓ ERA UM CHAMARIZ. O menu o anunciava como "Templates aprovados
+  // pela Meta para envio em massa"; o handler lia `whatsapp_templates` — tabela
+  // que NUNCA existiu em produção (`to_regclass` devolve null, zero ocorrências
+  // em migrations) — e, se existisse, mandaria o conteúdo como TEXTO PURO por
+  // `sendTextViaInstance`. Não era HSM. Tinha 0 usos, então a reforma não
+  // quebra workflow nenhum.
+  //
+  // Agora o nó guarda o NOME e o IDIOMA do template aprovado, mais o mapeamento
+  // de variáveis. Não há catálogo local: o executor manda com esses dados, e a
+  // tela lista pela função que já existe, chamada com login de usuário.
+  const templateName = (params.templateName as string | undefined)?.trim();
+  const templateLanguage = (params.templateLanguage as string | undefined)?.trim() || "pt_BR";
+
+  if (!templateName) {
+    return { success: false, error: "No template configured", retryable: false };
+  }
 
   const wa = await getWhatsAppInstance(supabase, organizationId, params, leadId);
   if (!wa.ok) return wa.failure;
@@ -37,58 +51,77 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
   if (recipientBlock) return recipientBlock;
 
-  // Fetch template from DB
-  const { data: tpl } = await supabase
-    .from("whatsapp_templates")
-    .select("name, content")
-    .eq("id", templateId)
-    .maybeSingle();
+  // ⚠️ O EXECUTOR NÃO LISTA OS TEMPLATES, e isto é uma troca consciente.
+  //
+  // Listar exigiria refazer aqui todo o caminho de cofre — carregar a subconta,
+  // decifrar o token, montar a config — só para validar um nome. Em vez disso o
+  // envio referencia o template pelo nome e o fornecedor recusa na resposta do
+  // POST, de forma síncrona: o motivo dele chega ao passo da execução.
+  //
+  // O QUE NÃO FOI MEDIDO: se a recusa por template inexistente vem no corpo da
+  // resposta (síncrona, e então legível no passo) ou por callback de status
+  // (assíncrona, e então invisível para o executor). A primeira mensagem real
+  // com um nome errado decide — e se for a segunda, esta escolha precisa ser
+  // revista.
+  //
+  // A FORMA do template — quantas variáveis, se tem cabeçalho de mídia — vem do
+  // que o NÓ guardou quando alguém o escolheu na tela, que é onde a listagem
+  // acontece com login de usuário.
+  const template = {
+    name: templateName,
+    id: null,
+    language: templateLanguage,
+    status: "APPROVED" as const,
+    category: null,
+    parameterFormat: null,
+    components: (params.templateComponents as never) ?? [],
+  } as unknown as import("../notificame-templates.ts").NotificameTemplate;
 
-  if (!tpl) return { success: false, error: "Template not found" };
-
-  const message = await resolveVariables(supabase, leadId, tpl.content || "", executionContext);
-  const trackId = buildTrackId(params);
-
-  // Gateway dual-path
-  const gwResult = await sendMessage(supabase, {
-    organization_id: organizationId,
-    phone,
-    content: message,
-    message_type: "text",
-    source: "workflow",
-    instance_id: wa.instanceId,
-    lead_id: leadId,
-    track_id: trackId,
-    triggered_by: "workflow",
+  // A REGRA COMPOSTA decide tudo num lugar só: resolve os valores contra o lead,
+  // confere o que falta e monta os componentes. Pendência barra o envio — a Meta
+  // recusa parâmetro vazio, e a recusa dela chega depois de o vendedor achar
+  // que mandou.
+  const { prepararEnvioDeTemplate } = await import("../template-node-valores.ts");
+  const preparado = await prepararEnvioDeTemplate({
+    template,
+    mapeamento: (params.templateVariables as Record<string, string>) ?? {},
+    resolver: (texto) => resolveVariables(supabase, leadId, texto, executionContext),
+    headerMediaUrl: params.templateHeaderMediaUrl as string | undefined,
   });
 
-  if (!gwResult.delegated) {
-    // Legacy path
-    const { sendTextViaInstance } = await import("../whatsapp-dispatch.ts");
-    const sendResult = await sendTextViaInstance(supabase, wa.instance, phone, message, {
-      trackSource: "workflow-action-template",
-      trackId: params._executionId as string | undefined,
-    });
-
-    if (!sendResult.success) return { success: false, error: `Template send failed: ${sendResult.error}` };
-
-    // `conversation` é o tipo que o resto do envio de texto por workflow já grava
-    // (5.299 das 5.354 linhas `sent_source='workflow'` dos últimos 7 dias).
-    await persistOutboundMessage(supabase, {
-      organizationId,
-      instanceId: wa.instanceId,
-      providerMessageId: sendResult.messageId,
-      phone,
-      messageType: "conversation",
-      content: message,
-      leadId,
-    });
-  } else if (!gwResult.success) {
-    console.error("[send-whatsapp-rich] Gateway template send failed:", gwResult.error);
-    return { success: false, error: `Template send failed: ${gwResult.error}` };
+  if (!preparado.ok) {
+    return {
+      success: false,
+      error: `Template incompleto — falta: ${preparado.pendencias.join(", ")}`,
+      retryable: false,
+    };
   }
 
-  return { success: true, message: `Template "${tpl.name}" sent` };
+  const { sendTemplateViaInstance } = await import("../whatsapp-dispatch.ts");
+  const sendResult = await sendTemplateViaInstance(
+    supabase,
+    wa.instance,
+    phone,
+    {
+      name: template.name,
+      language: templateLanguage,
+      components: preparado.components,
+      previewText: preparado.previewText,
+      buttonLabels: preparado.buttonLabels,
+    },
+    {
+      trackSource: "workflow-action-template",
+      trackId: params._executionId as string | undefined,
+    },
+  );
+
+  if (!sendResult.success) {
+    return { success: false, error: `Template send failed: ${sendResult.error}` };
+  }
+
+  // ⚠️ NÃO grava a linha. O provider do canal oficial já a escreve, no mesmo
+  // instante do envio — gravar de novo aqui duplicaria a mensagem na conversa.
+  return { success: true, message: `Template "${template.name}" enviado` };
 }
 
 // ─── Menu (button/list/poll/carousel) ──────────────────────────────────────

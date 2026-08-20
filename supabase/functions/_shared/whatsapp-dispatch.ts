@@ -356,6 +356,88 @@ export async function sendTextViaInstance(
   }
 }
 
+/**
+ * Manda um TEMPLATE aprovado. É a única saída fora da janela de 24 horas.
+ *
+ * ─── POR QUE ELE PRECISA EXISTIR AQUI ───────────────────────────────────────
+ *
+ * Havia cinco remetentes neste arquivo e nenhum de template. Sem este, o nó de
+ * template ficaria fora da costura que todos os outros têm: a governança de
+ * envio, o dedup de conteúdo e a classificação de falha. Dois regimes para o
+ * mesmo produto.
+ *
+ * ⚠️ NEM TODO PROVIDER TEM TEMPLATE. Uazapi e Evolution não o implementam — é
+ * conceito da API oficial. O recurso ausente é recusado com mensagem legível,
+ * antes de qualquer I/O, e não com um erro de "propriedade indefinida".
+ *
+ * ⚠️ O `previewText` e os `buttonLabels` VIAJAM JUNTO, e isso não é enfeite: a
+ * Meta renderiza a mensagem do lado dela, então a linha gravada nasceria sem
+ * texto e a conversa exibiria "Mensagem interativa" no lugar do que o cliente
+ * recebeu. Só quem tem o corpo aprovado e os parâmetros consegue reproduzi-lo.
+ */
+export async function sendTemplateViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  phoneNumber: string,
+  template: {
+    name: string;
+    language: string;
+    components: unknown[];
+    previewText: string;
+    buttonLabels: string[];
+  },
+  opts: { trackSource?: string; trackId?: string; idempotencyKey?: string } = {}
+): Promise<SendResultSimple> {
+  const phone = normalizeBrazilianPhone(phoneNumber);
+  if (!phone) return { success: false, error: "Invalid phone" };
+
+  try {
+    const provider = await getWhatsAppProvider(instance, supabaseAdmin);
+
+    if (!provider.sendTemplate) {
+      return {
+        success: false,
+        error: `provider ${instance.provider} does not support sendTemplate`,
+      };
+    }
+
+    // Send Governor (SHADOW seam) — mesmo contrato de `sendTextViaInstance`.
+    // O conteúdo que alimenta o dedup é o texto RENDERIZADO: dois envios do
+    // mesmo template com parâmetros diferentes são mensagens diferentes.
+    const governed = await governSend(
+      supabaseAdmin,
+      {
+        orgId: instance.organization_id,
+        instanceId: instance.id,
+        category: deriveCategory(opts.trackSource),
+        recipientPhone: phone,
+        trackSource: opts.trackSource,
+        content: template.previewText,
+        idempotencyKey: opts.idempotencyKey,
+      },
+      () =>
+        provider.sendTemplate!({
+          number: phone,
+          templateName: template.name,
+          language: template.language,
+          components: template.components,
+          previewText: template.previewText,
+          buttonLabels: template.buttonLabels,
+        } as never),
+    );
+
+    if (isSkippedSend(governed)) {
+      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+    }
+    return { success: true, messageId: governed.message_id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
+    };
+  }
+}
+
 export async function sendAudioViaInstance(
   supabaseAdmin: any,
   instance: WhatsAppInstance,
