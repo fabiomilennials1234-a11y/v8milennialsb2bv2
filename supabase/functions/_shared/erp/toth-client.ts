@@ -92,21 +92,77 @@ export class TothRequestError extends Error {
  * java.lang.X` na mesma janela.
  */
 export function preview(body: string, maxLen = 300): string {
-  // Limita a ENTRADA antes de qualquer regex. Uma página de erro pode vir com
-  // stack trace de centenas de KB, e varrer isso inteiro para depois jogar fora
-  // 99% queima CPU num runtime que a mede. O útil do JBoss está no começo.
+  // Limita a ENTRADA antes de processar. Uma página de erro pode vir com stack
+  // trace de centenas de KB, e varrer isso inteiro para depois jogar fora 99%
+  // queima CPU num runtime que a mede. O útil do JBoss está no começo.
   const source = body.length > 8000 ? body.slice(0, 8000) : body;
-  const isHtml = /<html|<!doctype html/i.test(source.slice(0, 400));
-  const cleaned = isHtml
-    ? source
-        .replace(/<style[\s\S]*?<\/style>/gi, " ")
-        .replace(/<script[\s\S]*?<\/script>/gi, " ")
-        .replace(/<[^>]*>/g, " ")
-        .replace(/&nbsp;/gi, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-    : source.trim();
+  const head = source.slice(0, 400).toLowerCase();
+  const isHtml = head.includes("<html") || head.includes("<!doctype html");
+  const cleaned = isHtml ? htmlToText(source) : source.trim();
   return cleaned.length > maxLen ? `${cleaned.slice(0, maxLen)}…` : cleaned;
+}
+
+/** Conteúdo destas tags é descartado inteiro, não só a marcação. */
+const OPAQUE_TAGS = ["style", "script"];
+/** Caracteres que encerram o nome de uma tag. */
+const NAME_END = new Set([" ", "\t", "\n", "\r", "\f", "/", ">"]);
+
+/**
+ * Extrai texto de HTML com uma varredura, não com regex.
+ *
+ * 🔴 A versão anterior usava `replace(/<[^>]*>/g)` e companhia, e o CodeQL
+ * reprovou com `js/bad-tag-filter` (severidade alta) — com razão: filtro de HTML
+ * por expressão regular é furado por construção. `<style >` com espaço, tag em
+ * caixa alta, comentário `<!-- -->` e tag não fechada escapam de padrões assim,
+ * cada um por um motivo diferente.
+ *
+ * Aqui não havia risco de XSS — o destino é uma string de erro que o React
+ * escapa —, mas o extrator ficava **incorreto** justamente na entrada que
+ * importa: a página de erro real, cheia de CSS. Trocar regex por varredura
+ * resolve a correção e o alerta ao mesmo tempo; suprimir o alerta resolveria só
+ * o alerta.
+ *
+ * A varredura é linear e sem retrocesso, então também não tem o risco de
+ * backtracking catastrófico que uma regex sobre entrada grande carrega.
+ */
+function htmlToText(html: string): string {
+  const lower = html.toLowerCase();
+  const parts: string[] = [];
+  let i = 0;
+
+  while (i < html.length) {
+    const open = html.indexOf("<", i);
+    if (open === -1) {
+      parts.push(html.slice(i));
+      break;
+    }
+    parts.push(html.slice(i, open));
+
+    const close = html.indexOf(">", open);
+    // Tag sem fechamento: o resto não é texto confiável, descarta.
+    if (close === -1) break;
+
+    // Nome da tag, sem contar a barra de fechamento.
+    let cursor = open + 1;
+    if (html[cursor] === "/") cursor++;
+    let end = cursor;
+    while (end < close && !NAME_END.has(html[end])) end++;
+    const name = lower.slice(cursor, end);
+
+    if (OPAQUE_TAGS.includes(name) && html[open + 1] !== "/") {
+      // Pula até o fechamento correspondente; sem ele, descarta o resto.
+      const endTag = lower.indexOf(`</${name}`, close);
+      if (endTag === -1) break;
+      const endTagClose = html.indexOf(">", endTag);
+      if (endTagClose === -1) break;
+      i = endTagClose + 1;
+    } else {
+      i = close + 1;
+    }
+    parts.push(" ");
+  }
+
+  return parts.join("").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim();
 }
 
 /**

@@ -223,6 +223,28 @@ describe("preview — página de erro do JBoss vira texto legível", () => {
     expect(preview("erro simples")).toBe("erro simples");
   });
 
+  it("🔴 fecha os furos que derrubaram o filtro por regex (js/bad-tag-filter)", () => {
+    // Cada caso escapava de `replace(/<style[\s\S]*?<\/style>/gi)` por um
+    // motivo diferente. O varredor trata todos pela mesma lógica.
+    const comEspaco = "<html><style >.x{color:red}</style ><p>visivel</p></html>";
+    expect(preview(comEspaco)).toContain("visivel");
+    expect(preview(comEspaco)).not.toContain("color:red");
+
+    const caixaAlta = "<html><SCRIPT>alert(1)</SCRIPT><p>visivel</p></html>";
+    expect(preview(caixaAlta)).toContain("visivel");
+    expect(preview(caixaAlta)).not.toContain("alert(1)");
+
+    // Tag aberta e nunca fechada: o resto não é texto confiável.
+    const semFechar = "<html><style>.x{color:red}<p>nunca</p>";
+    expect(preview(semFechar)).not.toContain("color:red");
+    expect(preview(semFechar)).not.toContain("nunca");
+  });
+
+  it("não confunde tag cujo nome apenas começa igual", () => {
+    // `<styled>` não é `<style>`: o conteúdo dela é texto.
+    expect(preview("<html><styled>conteudo</styled></html>")).toContain("conteudo");
+  });
+
   it("respeita o limite e marca o corte", () => {
     expect(preview("x".repeat(500), 100)).toHaveLength(101); // 100 + reticências
     expect(preview("x".repeat(500), 100).endsWith("…")).toBe(true);
