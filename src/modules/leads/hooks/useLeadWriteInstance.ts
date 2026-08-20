@@ -83,7 +83,10 @@ export function useLeadWriteInstance(
       // RPC `get_lead_write_instance` adicionada na migration 20260930000000.
       // Types.ts ainda não regen — cast preservando contrato de
       // GetLeadWriteInstanceResult definido em src/types/user-write-instance.ts.
-      const rpc = supabase.rpc as unknown as (
+      // `.bind(supabase)` é obrigatório: `const rpc = supabase.rpc` destaca o
+      // método e supabase-js lê `this.rest` — sem receiver estoura
+      // `Cannot read properties of undefined (reading 'rest')` antes da rede.
+      const rpc = supabase.rpc.bind(supabase) as unknown as (
         fn: string,
         args: Record<string, unknown>,
       ) => Promise<{ data: unknown; error: unknown }>;
