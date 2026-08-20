@@ -191,12 +191,51 @@ O fornecedor **não** oferece websocket/SSE. O tempo real é: webhook dele →
 
 ## O que o Torque já implementa
 
+Atualizado em 2026-08-20, depois das fatias F1–F6.
+
 | Capacidade | Estado |
 |---|---|
-| Enviar texto e mídia (envelope `file`) | ✅ PR #1627 |
-| `voice: true` no áudio de WhatsApp | ✅ PR #1627 |
-| Enviar template | ✅ `sendTemplate` (só WhatsApp) |
-| Criar/listar templates | ✅ `notificame-templates` |
-| Receber Instagram | ✅ |
-| **Receber WhatsApp** | ❌ fatia em `.specs/notificame/INBOUND-WHATSAPP.md` |
-| Botões, listas, CTA, localização, contato, reação | ❌ `NotSupportedError` no provider |
+| Enviar texto e mídia (envelope `file`) | ✅ |
+| `voice: true` no áudio de WhatsApp | ✅ |
+| Enviar figurinha (`fileMimeType: "sticker"`) | ✅ WebP vira figurinha no canal oficial |
+| Enviar template, criar e listar | ✅ |
+| **Botões de template** (`QUICK_REPLY`/`URL`/`PHONE_NUMBER`) | ✅ — `URL` e `PHONE_NUMBER` **não medidos** contra a conta |
+| Botões, listas e CTA (mensagem interativa) | ✅ dentro da janela de 24h |
+| Localização e contato | ✅ |
+| Reagir a uma mensagem | ✅ |
+| Responder citando | ✅ |
+| Balão de digitando | ✅ |
+| Receber (texto, mídia, reação, localização, contato, botão, `postback`) | ✅ |
+| Download de arquivo do CDN | ✅ espelhado no nosso storage |
+| Saúde do número | ✅ formato da resposta **não medido** |
+| Bloquear / desbloquear / listar bloqueados | ✅ formato da resposta **não medido** |
+| Criar e listar convite de opt-in | ✅ formato da resposta **não medido** |
+| Marcar como lida | ❌ **não existe na doc do fornecedor** — procurado no índice e no corpo |
+| Editar, fixar e apagar mensagem | ❌ a Cloud API não expõe |
+
+### Três asserções falsas que estavam no código
+
+Valem como aviso: as três diziam que uma capacidade não existia, nenhuma tinha
+sido medida, e as três estavam erradas.
+
+- *"o canal oficial não tem figurinha, e mapeá-la seria adivinhar"* — a doc tem
+  a seção "Enviar um sticker", com o campo nomeado.
+- *"botões, listas, CTA — NotSupportedError"* — a doc traz os três envelopes.
+- *"o canal oficial não tem digitando…"* — a doc tem "Balão de digitando".
+
+### Duas divergências conscientes da doc
+
+- A seção de **resposta citada** manda `"to": "whatsapp"` — a palavra, não o
+  número. É o único envelope de mensagem do documento com essa forma, vizinho do
+  endpoint de download, de onde provavelmente foi copiada. Mandamos o número:
+  `normalizeNotificameRecipient` derruba não-dígitos, e seguir a doc garantiria
+  `invalid_recipient` antes do envio.
+- A seção do **balão de digitando** traz um `messageId` comentado como "id da
+  mensagem que você ira responder" — texto copiado da seção acima. Um balão não
+  responde a nada, e mandar o campo propagaria o erro do fornecedor.
+
+### Uma armadilha silenciosa
+
+Criar e listar **convite de opt-in** usam o mesmo `type: "list"`. O que distingue
+é a presença de `signup_content`: um corpo de criação sem ele vira uma listagem,
+sem erro nenhum.
