@@ -169,6 +169,27 @@ export async function resolveChipInstanceIdMap(
   return map;
 }
 
+/**
+ * Descarta a entrada de UM chip, pra próxima leitura re-resolver de verdade.
+ *
+ * Existe por causa do apagão: quando a resolução degrada pra `[instância viva]`
+ * e o chip acabou de ser recriado, a instância viva não tem NADA do histórico —
+ * a thread não fica pior, fica vazia. Medido na Chique (2026-08-19): das 65
+ * mensagens de um contato, 0 estavam na instância viva; as outras 65 em três
+ * lápides. O chip tinha sido excluído/recriado 3× em 7 dias.
+ *
+ * Sem isto, o "Tentar de novo" da tela seria decorativo: `refetch` chama esta
+ * resolução de volta e recebe o MESMO valor degradado do cache (até 60s), ou o
+ * mesmo valor bom mas incompleto (até 5min).
+ */
+export function invalidateChipInstanceIds(
+  organizationId: string | null | undefined,
+  instanceId: string | null | undefined,
+): void {
+  if (!organizationId || !instanceId) return;
+  cache.delete(cacheKey(organizationId, instanceId));
+}
+
 /** Só pra teste — o cache é de módulo e vaza entre casos. */
 export function clearChipInstanceIdsCache(): void {
   cache.clear();

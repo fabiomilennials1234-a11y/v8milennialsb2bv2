@@ -265,6 +265,7 @@ export {
   formatMessageTime,
   MessageStatusIcon,
   ChatEmptyState,
+  ChatThreadUnavailable,
   ScrollToBottomFab,
   UnreadDivider,
 } from "./components/chat";
