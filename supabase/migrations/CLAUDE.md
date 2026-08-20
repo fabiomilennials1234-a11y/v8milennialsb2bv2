@@ -5,6 +5,24 @@
 > Procedimento de apply: ver
 > [`Obsidian/.../05 — How-to/aplicar-migration-prod.md`](../../Obsidian/Segundo%20Cerebro/Claude%20Code%20—%20Torque%20CRM/05%20—%20How-to/aplicar-migration-prod.md).
 
+## Ambiente de validação — branch do Supabase
+
+**Criar com `./scripts/supabase-branch.sh criar <nome>`. Nunca `supabase branches create` puro.**
+
+Medido e reproduzido em duas branches independentes (2026-08-20): o provisionamento do Supabase roda a
+própria migração, **falha**, e deixa **3 linhas fantasma** em `supabase_migrations.schema_migrations` —
+migrations marcadas como aplicadas que não criaram objeto nenhum. É isso que produz o status
+`MIGRATIONS_FAILED` que a branch `main` carrega desde 2026-03-11.
+
+Um `db push` depois disso lê o ledger, conclui que o baseline já rodou, começa na 4ª migration e morre
+com `relation "public.sale_events" does not exist`. **Retry não resolve** — o ledger continua mentindo.
+
+O baseline e a cadeia estão **corretos**: com o ledger zerado, as 129 migrations aplicam de ponta a ponta
+(293 tabelas). O script apaga as linhas fantasma antes do push.
+
+Branch de preview é projeto separado e **custa por hora**. Derrubar ao terminar:
+`./scripts/supabase-branch.sh derrubar <ref>`.
+
 ## Regras invioláveis
 
 1. **Nunca editar migration que já rodou.** Criar nova de revert se precisa.
