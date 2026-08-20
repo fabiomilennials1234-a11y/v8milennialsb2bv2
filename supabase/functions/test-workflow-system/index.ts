@@ -1067,16 +1067,22 @@ function buildActionTests(
 
     // ── External service actions (validate they handle missing config) ──
     {
-      name: "send_meta_message — calls edge function (may fail in test env)",
+      name: "send_meta_message — lead sem Instagram vinculado não age (#1691)",
       fn: async () => {
         const leadId = await createTestLead(supabase, orgId);
         const result = await executeWorkflowAction({
           supabase, organizationId: orgId, leadId,
-          nodeData: { actionType: "send_meta_message", metaChannel: "instagram", metaMessage: "Test" },
+          nodeData: { actionType: "send_meta_message", metaMessage: "Test" },
           executionContext: {},
         });
-        // In test env, this may fail due to missing config — just verify it doesn't throw
-        assert(typeof result.success === "boolean", "Should return ActionResult");
+        // O lead de teste nasce sem vínculo em `lead_social_identities`, e é
+        // esse o desfecho esperado: o nó NÃO age, e isso não é erro. Nada de
+        // rede sai daqui — a rota da Meta direta deixou de ser o destino.
+        assert(result.success === true, "Deveria pular, não falhar");
+        assert(
+          (result.data as { skipped?: boolean } | undefined)?.skipped === true,
+          "Deveria marcar o passo como pulado",
+        );
       },
     },
     {
