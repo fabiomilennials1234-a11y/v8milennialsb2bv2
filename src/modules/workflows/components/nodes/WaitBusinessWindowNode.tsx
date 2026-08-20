@@ -29,12 +29,12 @@ function pickRouteHandles(windows: WorkflowBehaviorWindow[]): Array<{ key: strin
 function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as WaitBusinessWindowNodeData;
   const windows = (nodeData.windows ?? []) as WorkflowBehaviorWindow[];
-  const mode = nodeData.mode ?? "hold";
 
-  // Subtítulo: novo schema vs legacy
+  // Subtítulo: novo schema vs legacy. `mode` saiu — era decorativo (nunca lido
+  // em runtime) e anunciava um comportamento que o executor não consultava.
   let subtitle: string;
   if (windows.length > 0) {
-    subtitle = `${windows.length} janela(s) · modo ${mode}`;
+    subtitle = `${windows.length} janela(s)`;
   } else {
     const days = nodeData.days || [];
     const daysLabel = days.length === 7
@@ -72,9 +72,13 @@ function WaitBusinessWindowNodeComponent({ id, data, selected }: NodeProps) {
                 <span className="font-mono text-[10px] text-amber-500">{rh.key}</span>
               </div>
             ))}
-            {windows.some(w => w?.action === "pass" || (typeof w?.action === "string" && w.action.startsWith("hold_until:"))) && (
+            {/* Qualquer janela que não seja `route:` sai pela alça default.
+                Mesmo booleano que a enumeração antiga (`pass` ou `hold_until:`)
+                para toda definição viva em prod, mas sem depender de conhecer o
+                vocabulário inteiro — inclusive o que ainda não existe. */}
+            {windows.some(w => !(typeof w?.action === "string" && w.action.startsWith("route:"))) && (
               <div className="flex items-center justify-between text-xs pt-1 border-t border-border/30">
-                <span className="text-muted-foreground">Default (pass/hold)</span>
+                <span className="text-muted-foreground">Default (demais janelas)</span>
                 <span className="font-mono text-[10px] text-emerald-500">default</span>
               </div>
             )}

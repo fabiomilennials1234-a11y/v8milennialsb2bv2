@@ -56,6 +56,7 @@ owner: claude-agent
 ## automacoes
 
 - [[copy-paste-nodes|Automações — Copiar/Colar Nós]]
+- [[janela-comercial-wait-business-window|Automações — Nó Janela Comercial (`wait_business_window`)]]
 - [[rpc-consolidation|Automações — RPC Consolidation + Health Check]]
 
 ## modularizacao

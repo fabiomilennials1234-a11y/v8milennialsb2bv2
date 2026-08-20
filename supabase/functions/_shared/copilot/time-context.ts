@@ -67,26 +67,65 @@ const DAY_LABEL: Record<DayKey, string> = {
 
 const KEY_FROM_INDEX: DayKey[] = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
+/**
+ * Caches de `Intl.DateTimeFormat` por timezone.
+ *
+ * **Construir o formatter é o custo; formatar é barato.** Estas três funções são
+ * chamadas dentro de varreduras minuto-a-minuto (`computeNextWindowStart`,
+ * `computeNextSendWindowStart`), onde uma sonda por minuto × 14 dias = 20.160
+ * iterações. Construindo a cada chamada, uma varredura completa custava ~15 s de
+ * CPU bloqueante; com o cache cai para dezenas de milissegundos.
+ *
+ * O risco não era teórico: `process-workflow-executions` processa lote de 20
+ * execuções por invocação. Um lote inteiro varrendo levaria a edge function a
+ * ser morta pelo limitador — e isolate morto não roda o backstop em JS, então as
+ * linhas reclamadas ficariam em `processing` para sempre. Exatamente o zumbi que
+ * este módulo passou a existir para matar.
+ *
+ * As opções de formatação são **idênticas** às de antes; só a construção saiu do
+ * caminho quente. Chaveado por tz, que vem de config de org — conjunto finito
+ * (IANA); tz inválido lança em `new Intl.DateTimeFormat` antes de entrar no
+ * cache, como já lançava.
+ */
+const hourFormatters = new Map<string, Intl.DateTimeFormat>();
+const minuteFormatters = new Map<string, Intl.DateTimeFormat>();
+const weekdayFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getFormatter(
+  cache: Map<string, Intl.DateTimeFormat>,
+  tz: string,
+  options: Intl.DateTimeFormatOptions,
+): Intl.DateTimeFormat {
+  let fmt = cache.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-US", { timeZone: tz, ...options });
+    cache.set(tz, fmt);
+  }
+  return fmt;
+}
+
 /** Hora 0-23 em timezone, robusto a DST. */
 export function getHourMinutesInTimezone(now: Date, tz: string): { hour: number; minute: number } {
   const hour = parseInt(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "2-digit", hour12: false }).format(now),
+    getFormatter(hourFormatters, tz, { hour: "2-digit", hour12: false }).format(now),
     10,
   );
   const minute = parseInt(
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, minute: "2-digit" }).format(now),
+    getFormatter(minuteFormatters, tz, { minute: "2-digit" }).format(now),
     10,
   );
   return { hour, minute: isNaN(minute) ? 0 : minute };
 }
 
+const WEEKDAY_FROM_SHORT: Record<string, DayKey> = {
+  sun: "sun", mon: "mon", tue: "tue", wed: "wed", thu: "thu", fri: "fri", sat: "sat",
+};
+
 /** Dia da semana (DayKey) em timezone. */
 export function getDayKeyInTimezone(now: Date, tz: string): DayKey {
-  const weekdayShort = new Intl.DateTimeFormat("en-US", { timeZone: tz, weekday: "short" }).format(now).toLowerCase();
-  const map: Record<string, DayKey> = {
-    sun: "sun", mon: "mon", tue: "tue", wed: "wed", thu: "thu", fri: "fri", sat: "sat",
-  };
-  return map[weekdayShort] ?? "mon";
+  const weekdayShort = getFormatter(weekdayFormatters, tz, { weekday: "short" })
+    .format(now).toLowerCase();
+  return WEEKDAY_FROM_SHORT[weekdayShort] ?? "mon";
 }
 
 function parseHHMM(s: string): number {
@@ -295,6 +334,58 @@ export function computeNextWindowStart(
     }
   }
   return null;
+}
+
+/**
+ * Calcula a próxima abertura entre **um conjunto** de janelas — a primeira em
+ * que QUALQUER uma delas está ativa, a partir de `from`.
+ *
+ * Existe porque `computeNextWindowStart` responde por uma janela nomeada, e o
+ * nó `wait_business_window` precisa de "quando volto a poder enviar?", que é
+ * uma pergunta sobre o conjunto. Chamar aquela N vezes custaria N×20160 sondas,
+ * cada uma passando por **3** `Intl.DateTimeFormat` (hora, minuto e dia da
+ * semana). Aqui a varredura é **única**: uma sonda por minuto, testando todas as
+ * janelas — e os formatters vêm do cache por tz no topo do módulo, sem o qual
+ * uma varredura completa custa ~15 s de CPU bloqueante em vez de dezenas de ms.
+ *
+ * Janela sem `days` nunca abre — é filtrada antes da varredura para não gastar
+ * sonda com ela.
+ *
+ * Devolve `null` se nada abrir em 14 dias (ou se o conjunto está vazio). O
+ * caller deve tratar `null` e resultado `<= from` como contradição de config,
+ * nunca como agendamento.
+ */
+export function computeNextSendWindowStart(
+  windows: WindowSchedule[],
+  tz: string,
+  from: Date = new Date(),
+): Date | null {
+  const candidates = (Array.isArray(windows) ? windows : []).filter(
+    (w) => w && Array.isArray(w.days) && w.days.length > 0,
+  );
+  if (candidates.length === 0) return null;
+
+  for (let offset = 0; offset < 14 * 1440; offset++) {
+    const probe = new Date(from.getTime() + offset * 60_000);
+    const dayKey = getDayKeyInTimezone(probe, tz);
+    const { hour, minute } = getHourMinutesInTimezone(probe, tz);
+    const minutes = hour * 60 + minute;
+    if (candidates.some((w) => windowMatches(w, dayKey, minutes))) {
+      return probe;
+    }
+  }
+  return null;
+}
+
+/**
+ * Duração de uma janela em minutos, tratando wrap de meia-noite.
+ * Usada para limitar o jitter de release a metade da janela — jitter maior que
+ * isso vazaria pelo fim da janela e o envio cairia fora do horário desenhado.
+ */
+export function windowSpanMinutes(window: Pick<WindowSchedule, "start" | "end">): number {
+  const startMin = parseHHMM(window.start);
+  const endMin = parseHHMM(window.end);
+  return endMin > startMin ? endMin - startMin : 1440 - startMin + endMin;
 }
 
 /**

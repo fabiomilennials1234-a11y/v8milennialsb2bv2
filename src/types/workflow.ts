@@ -122,9 +122,19 @@ export type WorkflowActionType =
 
 export type WorkflowExecutionStatus =
   | "running"
+  /** Reclamada pelo worker — estado transitório entre o claim e a escrita do executor. */
+  | "processing"
   | "paused"
   | "completed"
   | "failed"
+  /**
+   * Terminal deliberado. Reusa o status que a UI já sabe exibir (badge + stat
+   * card em AutomacoesExecucoes) em vez de inventar `expired`: `STATUS_CONFIG`
+   * cai em `running` para status desconhecido, então um terminal novo
+   * apareceria como "Executando" com spinner — eterno na tela.
+   * O motivo específico vai no prefixo de `error` (`expired:*`).
+   */
+  | "cancelled"
   | "loop_limit_reached"
   | "waiting_response";
 
@@ -582,16 +592,35 @@ export type AssignMode = "round_robin" | "random" | "manual";
 export type AssignTarget = "responsible" | "sdr" | "closer" | "sale";
 
 /**
- * Onda 5 — Time-Aware Workflow Window.
- * Ação por janela:
- *   - "pass": continua fluxo pela edge default
- *   - "hold_until:WindowName": pausa execução até a janela de nome X abrir
- *   - "route:branchKey": sai pela edge cujo data.windowKey === branchKey (saída múltipla)
+ * Time-Aware Workflow Window.
+ *
+ * Semântica (CTO 2026-08-19): **a janela desenhada é o horário em que a
+ * mensagem dispara.** Dentro de uma janela de envio o fluxo segue; fora de toda
+ * janela, dorme até a próxima abrir.
+ *
+ * Ações que a UI grava HOJE:
+ *   - "pass": esta janela é horário de envio — o fluxo continua pela edge default
+ *   - "route:branchKey": sai pela edge cujo sourceHandle === branchKey
+ *
+ * O literal `"pass"` NÃO é renomeado por decisão: o rótulo na UI mudou
+ * ("Enviar nesta janela"), o valor gravado não. Renomear arriscaria 8 workflows
+ * vivos e não compraria nada.
  */
 export type WindowAction =
   | "pass"
-  | `hold_until:${string}`
   | `route:${string}`;
+
+/**
+ * Vocabulário legado, ainda presente em definições gravadas — **lido, nunca
+ * escrito**. `hold_until:` com alvo VAZIO é interpretado como janela de envio
+ * (a UI antiga oferecia o alvo e nunca o exigia); com alvo NOMEADO é bloqueio
+ * deliberado. O intérprete único vive em
+ * `supabase/functions/_shared/workflow-window-role.ts`.
+ */
+export type LegacyWindowAction = `hold_until:${string}`;
+
+/** O que pode aparecer numa definição salva: o vocabulário novo mais o legado. */
+export type StoredWindowAction = WindowAction | LegacyWindowAction;
 
 export interface WorkflowBehaviorWindow {
   id: string;
@@ -602,7 +631,7 @@ export interface WorkflowBehaviorWindow {
   start: string;
   /** "HH:MM" */
   end: string;
-  action: WindowAction;
+  action: StoredWindowAction;
 }
 
 export interface WaitBusinessWindowNodeData {
@@ -613,9 +642,14 @@ export interface WaitBusinessWindowNodeData {
   startTime?: string;
   endTime?: string;
   timezone?: string;
-  /** Onda 5: até 6 janelas customizáveis. First-match wins. */
+  /** Até 6 janelas customizáveis. First-match wins. */
   windows?: WorkflowBehaviorWindow[];
-  /** "hold" — comportamento legacy single-window; "route" — branching por janela; "hybrid" — mix. */
+  /**
+   * @deprecated Decorativo — **nunca lido em runtime**. O executor só o ecoava
+   * no payload do step; o comportamento sempre veio de `windows[].action`. O
+   * campo permanece no tipo para que definições antigas round-trippem intactas
+   * ao salvar, e sumiu da UI.
+   */
   mode?: "hold" | "route" | "hybrid";
   [key: string]: unknown;
 }
