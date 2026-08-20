@@ -93,6 +93,15 @@ const EXTENSAO_POR_MIME: Array<[RegExp, string]> = [
  *
  * Ordem: o da resposta se for válido, senão o que o envelope declarou, senão
  * `application/octet-stream` — que ao menos deixa o arquivo baixável.
+ *
+ * ⚠️ O PARÂMETRO DEPOIS DO `;` É PODADO, e isto também foi medido:
+ *
+ *   Content-Type: audio/ogg; codecs=opus  → 400 invalid_mime_type
+ *   Content-Type: audio/ogg               → 200
+ *
+ * Era a única diferença entre a foto, que passou a funcionar, e o áudio, que
+ * continuou quebrado. O codec não faz falta: o container Ogg já diz ao navegador
+ * o que tocar.
  */
 export function mimeUtilizavel(
   daResposta: string | null | undefined,
@@ -103,8 +112,11 @@ export function mimeUtilizavel(
   const valido = (m: string | null | undefined) =>
     !!m && /^[a-z]+\/[a-z0-9][a-z0-9.+-]*(\s*;.*)?$/i.test(m.trim());
 
-  if (valido(daResposta)) return daResposta!.trim();
-  if (valido(doEnvelope)) return doEnvelope!.trim();
+  // Poda o que vem depois do `;`. O storage recusa mime com parâmetro.
+  const podar = (m: string) => m.split(";")[0].trim();
+
+  if (valido(daResposta)) return podar(daResposta!);
+  if (valido(doEnvelope)) return podar(doEnvelope!);
   return "application/octet-stream";
 }
 

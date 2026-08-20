@@ -243,10 +243,23 @@ describe("content-type malformado", () => {
     expect(fake.uploads[0].contentType).toBe("application/octet-stream");
   });
 
-  it("content-type válido com parâmetro continua passando inteiro", () => {
-    // `audio/ogg; codecs=opus` é válido e o codec importa para tocar o áudio.
-    expect(mimeUtilizavel("audio/ogg; codecs=opus", null)).toBe("audio/ogg; codecs=opus");
+  /**
+   * ⚠️ ESTE TESTE JÁ AFIRMOU O CONTRÁRIO, e estava errado.
+   *
+   * Eu escrevi que `audio/ogg; codecs=opus` devia passar inteiro, "porque o
+   * codec importa para tocar o áudio". Medido contra o storage de produção:
+   *
+   *   Content-Type: audio/ogg; codecs=opus  → 400 invalid_mime_type (415)
+   *   Content-Type: audio/ogg               → 200
+   *
+   * O parâmetro depois do `;` é RECUSADO. E o codec não fazia falta: o container
+   * Ogg já diz ao navegador o que tocar. Foi por isso que a imagem passou a
+   * funcionar e o áudio não — a única diferença entre os dois era esse sufixo.
+   */
+  it("parâmetro depois do `;` é PODADO — o storage o recusa", () => {
+    expect(mimeUtilizavel("audio/ogg; codecs=opus", null)).toBe("audio/ogg");
     expect(mimeUtilizavel("image/jpeg", null)).toBe("image/jpeg");
+    expect(mimeUtilizavel("text/plain;charset=utf-8", null)).toBe("text/plain");
   });
 
   it("reconhece o inválido de várias formas", () => {
