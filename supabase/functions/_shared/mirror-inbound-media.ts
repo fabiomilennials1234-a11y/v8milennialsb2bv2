@@ -75,6 +75,39 @@ const EXTENSAO_POR_MIME: Array<[RegExp, string]> = [
   [/pdf/, "pdf"],
 ];
 
+/**
+ * Um content-type que o storage aceite.
+ *
+ * ⚠️ O ENDPOINT DE DOWNLOAD DO FORNECEDOR RESPONDE COM MIME INVÁLIDO. Medido em
+ * 2026-08-20:
+ *
+ *   Content-Type: application/image/jpeg
+ *   Content-Type: application/audio/ogg; codecs=opus
+ *
+ * Duas barras. Não é mime — e o corpo do webhook, no mesmo evento, traz o certo
+ * (`image/jpeg`). O storage recusa o upload, o espelhamento devolve a URL
+ * original e a bolha continua quebrada.
+ *
+ * O sintoma é cruel: parece que o download falhou, quando ele funcionou e quem
+ * recusou foi o nosso próprio armazenamento.
+ *
+ * Ordem: o da resposta se for válido, senão o que o envelope declarou, senão
+ * `application/octet-stream` — que ao menos deixa o arquivo baixável.
+ */
+export function mimeUtilizavel(
+  daResposta: string | null | undefined,
+  doEnvelope: string | null | undefined,
+): string {
+  // `tipo/subtipo`, com parâmetros opcionais depois de `;`. `audio/ogg;
+  // codecs=opus` é VÁLIDO e o codec importa para o áudio tocar.
+  const valido = (m: string | null | undefined) =>
+    !!m && /^[a-z]+\/[a-z0-9][a-z0-9.+-]*(\s*;.*)?$/i.test(m.trim());
+
+  if (valido(daResposta)) return daResposta!.trim();
+  if (valido(doEnvelope)) return doEnvelope!.trim();
+  return "application/octet-stream";
+}
+
 /** Extensão a partir do content-type REAL. Arquivo sem nome não abre em nada. */
 function extensaoDe(mime: string | null): string {
   const t = (mime ?? "").toLowerCase();
@@ -114,7 +147,9 @@ export async function espelharMidiaRecebida(
 
     // O content-type da RESPOSTA é a verdade. O declarado só entra se o CDN não
     // disser nada — e mesmo aí é suspeito.
-    const mime = r.headers.get("content-type") ?? deps.mimeDeclarado ?? null;
+    // ⚠️ SANEADO. O endpoint de download do fornecedor devolve mime de duas
+    // barras, que o storage recusa — ver `mimeUtilizavel`.
+    const mime = mimeUtilizavel(r.headers.get("content-type"), deps.mimeDeclarado);
     const bytes = new Uint8Array(await r.arrayBuffer());
     // Zero byte não vira link: seria uma bolha de mídia que nunca abre, o que é
     // pior que a URL original, que ao menos pode funcionar.
@@ -124,7 +159,7 @@ export async function espelharMidiaRecebida(
       `notificame/inbound/${deps.organizationId}/${deps.especie}-${crypto.randomUUID()}.${extensaoDe(mime)}`;
 
     const { error } = await deps.storage.from("media").upload(caminho, bytes, {
-      contentType: mime ?? "application/octet-stream",
+      contentType: mime,
       upsert: false,
     });
     if (error) return { url, espelhada: false, mime };

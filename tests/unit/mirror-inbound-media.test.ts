@@ -15,7 +15,10 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { espelharMidiaRecebida } from "../../supabase/functions/_shared/mirror-inbound-media.ts";
+import {
+  espelharMidiaRecebida,
+  mimeUtilizavel,
+} from "../../supabase/functions/_shared/mirror-inbound-media.ts";
 
 const CDN_IG =
   "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=2578845579236720&signature=Ab1H_F4";
@@ -181,5 +184,75 @@ describe("CDN que exige credencial", () => {
     });
 
     expect(r.espelhada).toBe(false);
+  });
+});
+
+/**
+ * O CONTENT-TYPE MALFORMADO DO ENDPOINT DE DOWNLOAD.
+ *
+ * Medido em produção 2026-08-20, logo depois de o download autenticado entrar:
+ * a mídia continuou quebrada, e a linha gravada trazia
+ *
+ *   mime: "application/image/jpeg"
+ *   mime: "application/audio/ogg; codecs=opus"
+ *
+ * O corpo do webhook traz o mime CERTO (`image/jpeg`). O prefixo veio da
+ * resposta do endpoint de download do fornecedor, que responde com um
+ * content-type de DUAS barras — que não é mime válido. O storage recusa o
+ * upload, o espelhamento devolve a URL original, e a bolha segue quebrada.
+ *
+ * O sintoma é cruel: parece que o download falhou, quando na verdade ele
+ * funcionou e quem recusou foi o nosso próprio armazenamento.
+ */
+describe("content-type malformado", () => {
+  it("duas barras não vão para o storage — cai para o mime do envelope", async () => {
+    const fake = storageFake();
+    const r = await espelharMidiaRecebida(CDN_IG, {
+      organizationId: "org-1",
+      especie: "imagem",
+      mimeDeclarado: "image/jpeg",
+      storage: fake.storage,
+      fetchImpl: vi.fn().mockResolvedValue(
+        new Response(new Uint8Array(512), {
+          status: 200,
+          headers: { "content-type": "application/image/jpeg" },
+        }),
+      ),
+    });
+
+    expect(r.espelhada, "o upload foi recusado por um mime inválido").toBe(true);
+    expect(fake.uploads[0].contentType).toBe("image/jpeg");
+    expect(fake.uploads[0].path).toMatch(/\.jpg$/);
+    expect(r.mime).toBe("image/jpeg");
+  });
+
+  it("sem mime no envelope, o inválido vira octet-stream — nunca vai cru", async () => {
+    const fake = storageFake();
+    await espelharMidiaRecebida(CDN_IG, {
+      organizationId: "org-1",
+      especie: "indefinida",
+      storage: fake.storage,
+      fetchImpl: vi.fn().mockResolvedValue(
+        new Response(new Uint8Array(64), {
+          status: 200,
+          headers: { "content-type": "application/audio/ogg; codecs=opus" },
+        }),
+      ),
+    });
+
+    expect(fake.uploads[0].contentType).toBe("application/octet-stream");
+  });
+
+  it("content-type válido com parâmetro continua passando inteiro", () => {
+    // `audio/ogg; codecs=opus` é válido e o codec importa para tocar o áudio.
+    expect(mimeUtilizavel("audio/ogg; codecs=opus", null)).toBe("audio/ogg; codecs=opus");
+    expect(mimeUtilizavel("image/jpeg", null)).toBe("image/jpeg");
+  });
+
+  it("reconhece o inválido de várias formas", () => {
+    expect(mimeUtilizavel("application/image/jpeg", "image/jpeg")).toBe("image/jpeg");
+    expect(mimeUtilizavel("", "image/png")).toBe("image/png");
+    expect(mimeUtilizavel("lixo", "image/png")).toBe("image/png");
+    expect(mimeUtilizavel(null, null)).toBe("application/octet-stream");
   });
 });
