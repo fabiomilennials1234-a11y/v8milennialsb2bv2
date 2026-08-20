@@ -1,11 +1,24 @@
 /**
- * O que preencher num template aprovado, e o corpo que sai daí. PURO.
+ * template-send (executor) — ESPELHO da regra que o chat já usa.
  *
- * ⚠️ TEM UM GÊMEO: `supabase/functions/_shared/template-send.ts`. O executor de
- * workflow roda em outro runtime e não enxerga `src/`, e este arquivo nunca é
- * importado de lá. MUDOU AQUI? MUDE LÁ —
- * `tests/unit/template-send-twin.test.ts` roda os mesmos casos nos dois e fica
- * vermelho quando divergem.
+ * ╔══════════════════════════════════════════════════════════════════════════╗
+ * ║  ⚠️ ESTE ARQUIVO É GÊMEO DE                                              ║
+ * ║  `src/modules/communication/lib/template-send.ts`.                       ║
+ * ║                                                                          ║
+ * ║  Existe porque o executor de workflow roda em outro runtime e não        ║
+ * ║  enxerga `src/` — e o front nunca importa de `supabase/functions`        ║
+ * ║  (busca exaustiva em `src/` devolve só menções em comentário).           ║
+ * ║                                                                          ║
+ * ║  MUDOU AQUI? MUDE LÁ. `tests/unit/template-send-twin.test.ts` roda os    ║
+ * ║  mesmos casos nos dois e fica VERMELHO quando divergem — é ele que faz   ║
+ * ║  a duplicação ser sustentável em vez de apodrecer.                       ║
+ * ║                                                                          ║
+ * ║  POR QUE UMA DIVERGÊNCIA É CARA: a Meta casa parâmetro por POSIÇÃO e     ║
+ * ║  não confere nome. Duas implementações que ordenem diferente entregam    ║
+ * ║  o número do pedido no lugar do nome, e ela aceita sem reclamar.         ║
+ * ╚══════════════════════════════════════════════════════════════════════════╝
+ *
+ * O que preencher num template aprovado, e o corpo que sai daí. PURO.
  *
  * ─── POR QUE ISTO NÃO MORA NO COMPONENTE ────────────────────────────────────
  *
@@ -19,7 +32,7 @@
 import type {
   NotificameTemplate,
   NotificameTemplateComponent,
-} from "../hooks/useNotificameTemplates";
+} from "./notificame-templates.ts";
 
 const VARIABLE_RE = /\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g;
 
