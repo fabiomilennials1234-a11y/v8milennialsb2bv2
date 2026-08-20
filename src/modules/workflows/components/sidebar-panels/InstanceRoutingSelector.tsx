@@ -22,10 +22,11 @@ import {
   buildFallbackChange,
   buildFixedInstanceChange,
   buildPolicyChange,
+  deadPinShortcut,
   describeRoutingPolicy,
   instanceRoutingLabel,
+  isChipInstance,
   isOfficialChannel,
-  isPinnableInstance,
   isRoutableInstance,
   policyUsesFallback,
   readRoutingPolicy,
@@ -69,7 +70,8 @@ function InstanceOptions({ instances }: { instances: ConnectedInstance[] }) {
  * viva só", até a organização ganhar um segundo número e parar.
  *
  * O aviso não bloqueia: descreve o que o executor vai fazer HOJE, que é o que
- * o operador precisa para decidir se age.
+ * o operador precisa para decidir se age. O nome vem de `deadPinShortcut`, a
+ * mesma função que o executor consulta — ver `nomeDoAtalho` abaixo.
  */
 function PinObsoleto({ fallbackName }: { fallbackName: string | null }) {
   return (
@@ -100,16 +102,20 @@ export function InstanceRoutingSelector({
 }) {
   const { data: instances, isLoading } = useWhatsAppInstances();
 
-  // Duas listas, e a diferença entre elas é o #1690.
+  // Duas listas. Até o #1690 a diferença entre elas era o canal oficial: ele
+  // podia ser NOMEADO e não podia ser ESCOLHIDO. O #1700 acabou com essa
+  // diferença nos degraus automáticos — o oficial conta no atalho, resolve em
+  // `conversation` e `responsible`, e pode ser recuo.
   //
-  // `connected` espelha `listRoutable` do backend: é o que CONTA para o atalho
-  // de "uma Instance viva só" e é o universo do recuo. O canal oficial fica de
-  // fora — nos degraus em que a regra escolhe sozinha ele não participa.
+  // `routable` espelha `listRoutable` do backend: o universo de tudo — a lista
+  // de "Número de saída", a lista do recuo, e a contagem de "uma Instance viva
+  // só".
   //
-  // `pinnable` espelha o degrau 1: o que o operador pode NOMEAR. Inclui o canal
-  // oficial. Contar com esta lista faria o painel prometer o que o envio não faz.
-  const connected = (instances || []).filter(isRoutableInstance);
-  const pinnable = (instances || []).filter(isPinnableInstance);
+  // `chips` espelha `LEGACY_PROVIDERS`, e sobrou em dois lugares, os dois
+  // porque o executor também os recorta assim: o nó `send_to_number` e o aviso
+  // de fixa obsoleta.
+  const routable = (instances || []).filter(isRoutableInstance);
+  const chips = (instances || []).filter(isChipInstance);
 
   if (isLoading) {
     return (
@@ -120,7 +126,7 @@ export function InstanceRoutingSelector({
     );
   }
 
-  if (pinnable.length === 0) {
+  if (routable.length === 0) {
     return (
       <div className="space-y-2">
         <Label>Enviar por</Label>
@@ -134,18 +140,27 @@ export function InstanceRoutingSelector({
     );
   }
 
-  const nameOf = (id: string) =>
-    pinnable.find((i) => i.id === id)?.instance_name || "";
+  // O universo DESTE nó — o mesmo que o executor recebe em `providers`:
+  // `LEGACY_PROVIDERS` para `send_to_number`, `ROUTABLE_PROVIDERS` para o resto.
+  const universo = fixedOnly ? chips : routable;
 
-  // O id gravado no nó sumiu da lista de nomeáveis: instância removida ou
-  // recriada. Ver `PinObsoleto`.
+  const nameOf = (id: string) =>
+    universo.find((i) => i.id === id)?.instance_name || "";
+
+  // O id gravado no nó sumiu do universo do nó: instância removida, recriada —
+  // ou de um provedor que este nó não aceita. Ver `PinObsoleto`.
   const pinObsoleto =
-    !!data.whatsappInstanceId && !pinnable.some((i) => i.id === data.whatsappInstanceId);
-  const recuoDoAtalho = connected.length === 1 ? connected[0].instance_name : null;
+    !!data.whatsappInstanceId && !universo.some((i) => i.id === data.whatsappInstanceId);
+
+  // Por onde o executor manda HOJE um nó de fixa morta: exatamente o recorte de
+  // `deadPinShortcut`, e um nome só quando ele resolve um número só.
+  const atalho = deadPinShortcut(universo);
+  const nomeDoAtalho = atalho.length === 1 ? atalho[0].instance_name : null;
 
   if (fixedOnly) {
-    // ⚠️ AQUI O CANAL OFICIAL NÃO ENTRA, e é o único lugar do painel onde a
-    // lista nomeável é recusada de propósito.
+    // ⚠️ AQUI O CANAL OFICIAL NÃO ENTRA, e depois do #1700 é o único lugar do
+    // painel onde ele é recusado. O executor recusa igual: o handler de
+    // `send_to_number` passa `LEGACY_PROVIDERS` como `providers`.
     //
     // `send_to_number` manda para números avulsos — vendedores, gestores — que
     // não são leads e não têm conversa de entrada. Pela regra da Meta, a janela
@@ -164,14 +179,14 @@ export function InstanceRoutingSelector({
             <SelectValue placeholder="Selecione a instância" />
           </SelectTrigger>
           <SelectContent>
-            <InstanceOptions instances={connected} />
+            <InstanceOptions instances={chips} />
           </SelectContent>
         </Select>
-        {pinObsoleto && <PinObsoleto fallbackName={recuoDoAtalho} />}
+        {pinObsoleto && <PinObsoleto fallbackName={nomeDoAtalho} />}
         <p className="text-xs text-muted-foreground">
-          {connected.length === 0
+          {chips.length === 0
             ? "Este nó envia para números avulsos, e o canal oficial não alcança quem nunca escreveu antes. Conecte um número de WhatsApp comum."
-            : connected.length === 1
+            : chips.length === 1
               ? "A organização tem um número conectado — a mensagem sai por ele."
               : "Sem número escolhido, o envio falha em vez de escolher um sozinho."}
         </p>
@@ -184,7 +199,13 @@ export function InstanceRoutingSelector({
   // Com um número conectado só não existe escolha errada a proteger: o recuo
   // seria sempre esse mesmo número. Esconder o campo evita pedir uma decisão
   // que não existe.
-  const single = connected.length === 1;
+  //
+  // ⚠️ Isto conta o canal oficial desde o #1700, e a mudança é visível: uma org
+  // com chip e oficial passa de "um número" para "dois", e o campo de recuo
+  // aparece onde não aparecia. É o correto — o executor também passou a contar
+  // dois ali, e esconder o campo tiraria do operador a única declaração que
+  // resolve o nó quando a política não resolve.
+  const single = routable.length === 1;
   const showFallback = policyUsesFallback(policy) && !single;
 
   return (
@@ -222,10 +243,10 @@ export function InstanceRoutingSelector({
               <SelectValue placeholder="Selecione a instância" />
             </SelectTrigger>
             <SelectContent>
-              <InstanceOptions instances={pinnable} />
+              <InstanceOptions instances={routable} />
             </SelectContent>
           </Select>
-          {pinObsoleto && <PinObsoleto fallbackName={recuoDoAtalho} />}
+          {pinObsoleto && <PinObsoleto fallbackName={nomeDoAtalho} />}
         </div>
       )}
 
@@ -247,7 +268,9 @@ export function InstanceRoutingSelector({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={SEM_RECUO}>Nenhum — falhar o envio</SelectItem>
-              <InstanceOptions instances={connected} />
+              {/* O canal oficial entra aqui desde o #1700: o degrau 4 do
+                  executor o aceita como recuo declarado. */}
+              <InstanceOptions instances={routable} />
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">

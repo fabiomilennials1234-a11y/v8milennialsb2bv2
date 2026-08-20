@@ -15,20 +15,19 @@
  *    nó NOMEIE o canal oficial em "Número de saída" antes de listar qualquer
  *    coisa: sem instância não há de quem perguntar.
  *
- *    Nomear é a única forma. O canal oficial não entra nos degraus automáticos
- *    do roteamento — `conversation` e `responsible` nunca o resolvem, então um
- *    nó de template em política automática falharia sempre.
+ *    Nomear NÃO é mais a única forma. O #1690 (PR #1699) fez o canal oficial
+ *    ser nomeável no degrau `fixed`, e o #1700 (PR #1708) o colocou também nos
+ *    degraus em que a regra escolhe sozinha: `conversation` e `responsible`
+ *    podem resolvê-lo, e o atalho de "uma instância viva só" o conta. Um nó de
+ *    template em política automática falha apenas quando a regra não resolve —
+ *    e falha com código legível, que é o invariante do ADR-0025: a máquina
+ *    nunca escolhe sozinha.
  *
- *    ⚠️ ESTE PAINEL NASCE INERTE, e é uma dependência de SEQUÊNCIA, não de
- *    código. Poder NOMEAR o canal oficial no "Número de saída" é o #1690
- *    (PR #1699), que ainda não está na main. Sem ele o canal oficial não
- *    aparece no seletor (`isRoutableInstance` filtra por uazapi/evolution) e
- *    o executor também não o carregaria (`loadInstance` filtra pelos mesmos
- *    provedores). Enquanto o #1699 não entrar, o operador chega no primeiro
- *    aviso e não tem opção válida para escolher — o que ainda é melhor que o
- *    campo de texto livre que este painel substitui, que prometia envio de
- *    template e não mandava nada. Quando o #1699 entrar, isto passa a
- *    funcionar sem uma linha a mais aqui.
+ *    O que continua valendo é a exigência deste painel: para LISTAR templates
+ *    é preciso saber de qual conta da Meta perguntar, e isso vem da instância.
+ *    Por isso, na prática, montar o nó pede o número nomeado — a listagem
+ *    acontece no editor, antes de qualquer execução, quando a política ainda
+ *    não resolveu nada.
  *
  * 2. A FORMA DO TEMPLATE. Não há catálogo local, e isso é decisão registrada na
  *    spec (#1684). O nó guarda o nome, o idioma e os `components` como vieram
@@ -68,9 +67,16 @@ import {
 import { VariableInserter } from "@/modules/workflows/components/VariableInserter";
 import type { ActionNodeData } from "@/types/workflow";
 
+import {
+  CAMPOS_DO_NO_DE_TEMPLATE,
+  type CamposDeTemplate,
+} from "./campos-de-template";
+
 interface Props {
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
+  /** Default: os campos do nó de template. */
+  campos?: CamposDeTemplate;
 }
 
 /** Um bloco de aviso — o painel tem quatro estados que não são "pronto". */
@@ -82,8 +88,23 @@ function Aviso({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function TemplateNodeConfig({ data, onUpdate }: Props) {
+export function TemplateNodeConfig({
+  data,
+  onUpdate,
+  campos = CAMPOS_DO_NO_DE_TEMPLATE,
+}: Props) {
   const { data: instancias } = useWhatsAppInstances();
+
+  // Chave computada não é atribuível a `Partial<ActionNodeData>` sem asserção —
+  // o TypeScript perde o literal ao indexar. As cinco chaves possíveis são as da
+  // interface acima, e é ela quem prende a lista.
+  const gravar = (updates: Record<string, unknown>) =>
+    onUpdate(updates as Partial<ActionNodeData>);
+
+  const nomeEscolhido = data[campos.name];
+  const idiomaEscolhido = data[campos.language];
+  const componentesEscolhidos = data[campos.components];
+  const midiaEscolhida = data[campos.headerMediaUrl];
 
   const instanciaDoNo = (instancias || []).find((i) => i.id === data.whatsappInstanceId);
 
@@ -115,43 +136,43 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
   // depende da listagem para renderizar o que já foi escolhido: se a conta ficar
   // fora do ar, o operador ainda vê a configuração que existe.
   const escolhido: NotificameTemplate | null = useMemo(() => {
-    if (!data.templateName) return null;
-    const daLista = aprovados.find((t) => t.name === data.templateName);
+    if (!nomeEscolhido) return null;
+    const daLista = aprovados.find((t) => t.name === nomeEscolhido);
     if (daLista) return daLista;
     return {
-      name: data.templateName,
+      name: nomeEscolhido,
       id: null,
-      language: data.templateLanguage ?? null,
+      language: idiomaEscolhido ?? null,
       status: "APPROVED",
       category: null,
       parameterFormat: null,
-      components: data.templateComponents ?? [],
+      components: componentesEscolhidos ?? [],
     };
-  }, [data.templateName, data.templateLanguage, data.templateComponents, aprovados]);
+  }, [nomeEscolhido, idiomaEscolhido, componentesEscolhidos, aprovados]);
 
   const variaveis = escolhido ? variaveisDoTemplate(escolhido).todas : [];
   const formatoDeMidia = escolhido ? formatoDeMidiaDoCabecalho(escolhido) : null;
   const botoesVariaveis = escolhido ? botoesComVariavel(escolhido) : [];
-  const mapa = data.templateVariables ?? {};
+  const mapa = data[campos.variables] ?? {};
 
   function escolher(nome: string) {
     const t = aprovados.find((x) => x.name === nome);
     if (!t) return;
-    onUpdate({
-      templateName: t.name,
-      templateLanguage: t.language ?? "pt_BR",
-      templateComponents: t.components,
+    gravar({
+      [campos.name]: t.name,
+      [campos.language]: t.language ?? "pt_BR",
+      [campos.components]: t.components,
       // Mapa zerado: os tokens do template anterior não têm relação com os
       // deste, e aproveitá-los mandaria o valor de `{{1}}` de outro template.
-      templateVariables: {},
+      [campos.variables]: {},
       // A Meta guarda o arquivo do cabeçalho junto do template aprovado. Pedir
       // upload de algo que ela já tem seria retrabalho.
-      templateHeaderMediaUrl: midiaDeExemploDoCabecalho(t) ?? "",
+      [campos.headerMediaUrl]: midiaDeExemploDoCabecalho(t) ?? "",
     });
   }
 
   function definirVariavel(token: string, valor: string) {
-    onUpdate({ templateVariables: { ...mapa, [token]: valor } });
+    gravar({ [campos.variables]: { ...mapa, [token]: valor } });
   }
 
   if (!data.whatsappInstanceId) {
@@ -195,7 +216,7 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
             Meta em Configurações &gt; WhatsApp.
           </Aviso>
         ) : (
-          <Select value={data.templateName || ""} onValueChange={escolher}>
+          <Select value={nomeEscolhido || ""} onValueChange={escolher}>
             <SelectTrigger aria-label="Template aprovado">
               <SelectValue placeholder="Selecione o template" />
             </SelectTrigger>
@@ -209,9 +230,9 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
             </SelectContent>
           </Select>
         )}
-        {data.templateName && !isLoading && !aprovados.some((t) => t.name === data.templateName) && (
+        {nomeEscolhido && !isLoading && !aprovados.some((t) => t.name === nomeEscolhido) && (
           <Aviso>
-            O template “{data.templateName}” não está mais aprovado nesta conta.
+            O template “{nomeEscolhido}” não está mais aprovado nesta conta.
             O envio vai falhar com o motivo da Meta. Escolha outro.
           </Aviso>
         )}
@@ -241,8 +262,8 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
                 : "Documento do cabeçalho"}
           </Label>
           <Input
-            value={data.templateHeaderMediaUrl ?? ""}
-            onChange={(e) => onUpdate({ templateHeaderMediaUrl: e.target.value })}
+            value={midiaEscolhida ?? ""}
+            onChange={(e) => gravar({ [campos.headerMediaUrl]: e.target.value })}
             placeholder="https://..."
           />
           <p className="text-xs text-muted-foreground">
@@ -280,13 +301,13 @@ export function TemplateNodeConfig({ data, onUpdate }: Props) {
         </div>
       )}
 
-      {escolhido && variaveis.length === 0 && data.templateName && (
+      {escolhido && variaveis.length === 0 && nomeEscolhido && (
         <p className="text-xs text-muted-foreground">
           Este template não tem variáveis — sai como foi aprovado.
         </p>
       )}
 
-      {escolhido && data.templateName && (
+      {escolhido && nomeEscolhido && (
         <div className="space-y-1">
           <Label className="text-xs">Prévia</Label>
           <div className="p-3 rounded-lg bg-muted/50 border text-xs whitespace-pre-wrap">
