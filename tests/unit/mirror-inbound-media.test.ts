@@ -3,7 +3,7 @@
  *
  * ─── O QUE ISTO CONSERTA ────────────────────────────────────────────────────
  *
- * Medido em produção (2026-08-19): as 4 caixas de Instagram têm 100% da mídia
+ * Medido em produção (2026-08-19): as 2 caixas de Instagram têm 100% da mídia
  * recebida com `media_url` NULO — 14 reels, 8 áudios, 2 imagens, 1 menção de
  * story. A conversa mostra "[Mídia indisponível]" para um áudio que o cliente
  * gravou, e ninguém percebeu porque o banco parece correto.

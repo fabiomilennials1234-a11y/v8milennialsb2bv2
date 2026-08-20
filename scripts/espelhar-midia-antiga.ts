@@ -42,7 +42,10 @@ const supabase = createClient(`https://${PROJECT_REF}.supabase.co`, SERVICE_KEY,
 const { data, error } = await supabase
   .from("channel_messages")
   .select("id, organization_id, media_url, metadata")
-  .eq("direction", "incoming")
+  // ⚠️ NÃO filtra por direção. O arquivo que o VENDEDOR mandou pelo aplicativo
+  // do fornecedor tem o mesmo problema do que o cliente mandou: mora numa URL
+  // assinada e temporária. Filtrar por `incoming` deixava 62 arquivos de fora —
+  // justamente os recuperados do descarte, que são metade do diálogo.
   .not("metadata->midia", "is", null);
 
 if (error) throw new Error(error.message);

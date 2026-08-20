@@ -11,9 +11,15 @@ import { describe, expect, it } from "vitest";
 import { normalizarConteudo } from "../../supabase/functions/_shared/notificame-content.ts";
 import {
   buildInboundChannelMessageRow,
+  pickInterlocutorDeSaida,
   pickProviderMessageId,
 } from "../../supabase/functions/_shared/notificame-inbound.ts";
-import { AMOSTRAS_INSTAGRAM, CLIQUE_DE_BOTAO, CONVERSA_CHIQUE } from "./__fixtures__/notificame-inbound-real.ts";
+import {
+  AMOSTRAS_INSTAGRAM,
+  CLIQUE_DE_BOTAO,
+  CONVERSA_CHIQUE,
+  SAIDAS_DO_APLICATIVO,
+} from "./__fixtures__/notificame-inbound-real.ts";
 import { CONTATO_DOC, ESCOLHA_DE_LISTA_DOC, LOCALIZACAO_DOC } from "./__fixtures__/notificame-inbound-doc.ts";
 
 describe("clique de botão", () => {
@@ -50,7 +56,7 @@ describe("mídia", () => {
   it("acha o arquivo em `fileUrl` — o campo que o fornecedor usa de verdade", () => {
     // A CAUSA-RAIZ da fatia. `pickContent` procura `contents[0].url`; o
     // fornecedor manda `fileUrl`. Resultado medido em produção: 100% das
-    // mensagens de mídia recebidas nas 4 caixas de Instagram têm `media_url`
+    // mensagens de mídia recebidas nas 2 caixas de Instagram têm `media_url`
     // NULO — 14 reels, 8 áudios, 2 imagens — e a conversa mostra
     // "[Mídia indisponível]" para um áudio que o cliente mandou.
     const r = normalizarConteudo(AMOSTRAS_INSTAGRAM["audio"]);
@@ -314,5 +320,108 @@ describe("provider_message_id no inbound", () => {
     // `''` casaria com qualquer outra linha vazia da org num JOIN por id, e
     // colaria reações na mensagem errada.
     expect(pickProviderMessageId({ message: { id: "x" } })).toBeNull();
+  });
+});
+
+/**
+ * AS RESPOSTAS QUE O VENDEDOR DEU PELO APLICATIVO.
+ *
+ * Medido em produção: 193 eventos descartados entre 17 e 19/08/2026, em 51
+ * conversas, sob o rótulo `unreadable_direction` — que MENTE. A direção é
+ * `"OUT"` e o parser a lê perfeitamente; o guard parkava tudo que não fosse
+ * `incoming`.
+ *
+ * O efeito na tela: em 51 conversas o cliente aparece falando sozinho. Metade do
+ * diálogo não existe.
+ *
+ * ⚠️ E o interlocutor TROCA DE LADO. No evento de saída `message.to` é o
+ * cliente, `message.from` é o id do CANAL — não uma pessoa — e `visitor`
+ * descreve QUEM MANDOU, o vendedor. Ler o contato como se fosse entrada criaria
+ * uma conversa fantasma, endereçada ao id do canal e batizada com o nome de quem
+ * respondeu.
+ */
+describe("evento de saída", () => {
+  it("o interlocutor é o DESTINATÁRIO, não o remetente", () => {
+    const contato = pickInterlocutorDeSaida(SAIDAS_DO_APLICATIVO["text"]);
+
+    // O IGSID do cliente, que está em `message.to`. O `message.from` deste
+    // mesmo corpo é `ff596caa-…`, o id da CAIXA — e é isso que `pickContact`
+    // devolveria se fosse reusado aqui.
+    expect(contato?.externalId).toBe("24613954364877163");
+  });
+
+  it("NÃO usa o `visitor` como contato — ali está quem respondeu", () => {
+    // `visitor.name` no evento de saída é o operador. Gravá-lo como contato
+    // renomearia o cliente com o nome do vendedor em toda tela do CRM.
+    const contato = pickInterlocutorDeSaida(SAIDAS_DO_APLICATIVO["text"]);
+
+    expect(contato?.name).toBeNull();
+    expect(contato?.avatarUrl).toBeNull();
+  });
+
+  it("corpo sem destinatário não vira contato — nunca o id do canal", () => {
+    // `message.from` no evento de saída é o id do CANAL. Aceitá-lo como
+    // interlocutor criaria uma conversa com a própria caixa.
+    expect(pickInterlocutorDeSaida({ message: { from: "3cff29b0-7c9c" } })).toBeNull();
+  });
+
+  it("o conteúdo é lido pelo MESMO parser da entrada", () => {
+    // Uma resposta do vendedor é uma mensagem como outra qualquer: texto, áudio,
+    // imagem. Só o endereçamento muda.
+    const r = normalizarConteudo(SAIDAS_DO_APLICATIVO["text"]);
+    // Uma frase de vendedor, de um corpo real — a prova mais direta do que
+    // estava sendo jogado fora.
+    expect(r.content).toBe("Claro, me fala seu número para te chamar pfv");
+  });
+});
+
+describe("a linha de uma resposta do aplicativo", () => {
+  const corpo = SAIDAS_DO_APLICATIVO["text"];
+
+  const linha = () => {
+    const conteudo = normalizarConteudo(corpo);
+    const contato = pickInterlocutorDeSaida(corpo)!;
+    return buildInboundChannelMessageRow({
+      organizationId: "org-1",
+      target: { kind: "instagram", messagingChannelId: "ch-1" },
+      externalId: "d067fe36-df12-48f5-b9a9-3480f4897ca3",
+      contact: contato,
+      contactExternalId: contato.externalId,
+      content: conteudo,
+      metadata: conteudo.metadata,
+      providerMessageId: pickProviderMessageId(corpo),
+      direction: "outgoing",
+      timestampIso: "2026-08-19T21:29:18.000Z",
+      rawPayload: corpo,
+    });
+  };
+
+  it("nasce como SAÍDA e com status de enviada", () => {
+    // ⚠️ `'outgoing'` LITERAL. O CHECK `channel_messages_direction_check` aceita
+    // só ('incoming','outgoing'); `'out'` — a palavra do fornecedor — derrubaria
+    // a gravação DEPOIS de a mensagem já ter sido enviada de verdade.
+    const r = linha();
+    expect(r.direction).toBe("outgoing");
+    expect(r.status).toBe("sent");
+  });
+
+  it("agrupa na conversa do CLIENTE, e não numa nova", () => {
+    // `contact_external_id` é o eixo da thread: se a saída entrar com outro
+    // valor, a resposta do vendedor abre uma segunda conversa e nenhuma das duas
+    // fica completa.
+    expect(linha().contact_external_id).toBe("24613954364877163");
+  });
+
+  it("não atribui remetente — quem mandou fomos nós", () => {
+    // `sender_name` alimenta o cabeçalho e a lista. Preenchê-lo com o `visitor`
+    // do corpo poria o nome do vendedor no lugar do cliente.
+    const r = linha();
+    expect(r.sender_id).toBeNull();
+    expect(r.sender_name).toBeNull();
+  });
+
+  it("continua idempotente pela mesma chave", () => {
+    expect(linha().external_id).toBe("d067fe36-df12-48f5-b9a9-3480f4897ca3");
+    expect(linha().provider_message_id).not.toBeNull();
   });
 });

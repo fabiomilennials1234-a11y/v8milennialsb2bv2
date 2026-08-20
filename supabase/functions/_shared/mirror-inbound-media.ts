@@ -3,7 +3,7 @@
  *
  * ─── O DEFEITO QUE ISTO FECHA ───────────────────────────────────────────────
  *
- * As 4 caixas de Instagram receberam 14 reels, 8 áudios, 2 imagens e 1 menção de
+ * As 2 caixas de Instagram receberam 14 reels, 8 áudios, 2 imagens e 1 menção de
  * story, e 100% delas ficaram com `media_url` NULO. A conversa mostra
  * "[Mídia indisponível]" e o banco parece correto — a linha existe, o tipo está
  * certo, só o arquivo não está em lugar nenhum.

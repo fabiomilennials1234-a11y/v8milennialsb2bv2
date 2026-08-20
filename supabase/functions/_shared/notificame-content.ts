@@ -3,7 +3,7 @@
  *
  * ─── POR QUE UM MÓDULO NOVO, E NÃO UMA EDIÇÃO EM `notificame-inbound` ───────
  *
- * `pickContent` decide texto, mídia e tipo para as 4 caixas de Instagram vivas e
+ * `pickContent` decide texto, mídia e tipo para as 2 caixas de Instagram vivas e
  * para a Chique. Alterá-lo é mexer no que já funciona; este módulo o CHAMA e
  * ACRESCENTA, de modo que o texto continua saindo exatamente da mesma função e
  * os testes dela seguem valendo.
