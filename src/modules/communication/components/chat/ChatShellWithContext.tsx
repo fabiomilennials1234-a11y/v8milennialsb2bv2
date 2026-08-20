@@ -69,6 +69,9 @@ import {
 } from "@/modules/communication/lib/official-conversation";
 import { useSocialRealtime } from "@/modules/communication/hooks/chat/useSocialRealtime";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
+import { ChatThreadUnavailable } from "@/modules/communication/components/chat/ChatThreadUnavailable";
+import { resolveThreadState } from "@/modules/communication/lib/resolveThreadState";
+import { invalidateChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
 import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
 import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
@@ -169,10 +172,13 @@ function ChatView({
   const { leadId: effectiveLeadId, leadName: effectiveLeadName } =
     resolveEffectiveLead(selectedContact, leadByPhone);
 
-  const { data: messages = [], isLoading: messagesLoading } = useWhatsAppMessages(
-    phoneNumber,
-    instanceId,
-  );
+  const {
+    data: messages = [],
+    isLoading: messagesLoading,
+    isError: messagesError,
+    isFetching: messagesFetching,
+    refetch: refetchMessages,
+  } = useWhatsAppMessages(phoneNumber, instanceId);
 
   // Tique azul para o contato. Complementa `markConversationRead` (que só zera o
   // badge interno do CRM e nunca falou com o WhatsApp).
@@ -239,6 +245,18 @@ function ChatView({
 
   const contactName =
     effectiveLeadName ?? selectedContact?.push_name ?? phoneNumber ?? "";
+
+  // A lista já afirmou que existe mensagem com este contato. Se a thread volta
+  // vazia mesmo assim, "Comece a conversa" seria uma afirmação falsa — ver
+  // `resolveThreadState`.
+  const threadState = resolveThreadState({
+    isLoading: messagesLoading,
+    isError: messagesError,
+    messageCount: messages.length,
+    failedCount: failedMessages.length,
+    callCount: calls.length,
+    lastMessageTime: selectedContact?.last_message_time,
+  });
 
   const conversationKey = `${instanceId}:${phoneNumber}`;
 
@@ -307,10 +325,22 @@ function ChatView({
       )}
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
-        {messagesLoading ? (
+        {threadState === "loading" ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
+        ) : threadState !== "list" ? (
+          <ChatThreadUnavailable
+            reason={threadState}
+            contactName={contactName}
+            onRetry={() => {
+              // Sem descartar o cache do chip, o retry devolveria o mesmo
+              // conjunto degradado — ver `invalidateChipInstanceIds`.
+              invalidateChipInstanceIds(organizationId, instanceId);
+              void refetchMessages();
+            }}
+            isRetrying={messagesFetching}
+          />
         ) : (
           <MessageList
             messages={messages}
