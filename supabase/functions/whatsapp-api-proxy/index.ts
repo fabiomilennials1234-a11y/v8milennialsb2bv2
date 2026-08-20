@@ -780,7 +780,15 @@ Deno.serve(
       // Quando lead_id ausente, comportamento legado é preservado.
       // Frontend (Etapa C) passa a anexar lead_id no composer humano.
       // -----------------------------------------------------------------------
-      const SEND_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio", "sendTemplate"]);
+      const SEND_ACTIONS = new Set([
+        "sendText",
+        "sendMedia",
+        "sendAudio",
+        "sendTemplate",
+        "sendMenu",
+        "sendLocation",
+        "sendContact",
+      ]);
       const leadIdPayload = (payload?.lead_id ?? null) as string | null;
       if (SEND_ACTIONS.has(action) && leadIdPayload) {
         const {
@@ -872,6 +880,12 @@ Deno.serve(
         "sendAudio",
         "sendTemplate",
         "setPresence",
+        // As três novas do canal oficial passam pelo mesmo crivo: um telefone
+        // que limpa para menos de 10 dígitos faz o fornecedor devolver um 500
+        // que chega à tela como "Edge Function returned a non-2xx status code".
+        "sendMenu",
+        "sendLocation",
+        "sendContact",
       ]);
       if (NUMBER_ACTIONS.has(action)) {
         const rawNumber = (payload?.number ?? "") as string;
@@ -1185,14 +1199,17 @@ Deno.serve(
         // -------------------------------------------------------------------
         case "sendMenu": {
           if (!provider.sendMenu) throw new Error("Provider does not support sendMenu");
-          const { number, type, text, choices, footer, selectableCount } = payload as {
-            number?: string;
-            type?: "button" | "list" | "poll" | "carousel";
-            text?: string;
-            choices?: Array<string | { title: string; description?: string }>;
-            footer?: string;
-            selectableCount?: number;
-          };
+          const { number, type, text, choices, footer, selectableCount, listButtonLabel, ctaUrl } =
+            payload as {
+              number?: string;
+              type?: "button" | "list" | "poll" | "carousel" | "cta";
+              text?: string;
+              choices?: Array<string | { title: string; description?: string }>;
+              footer?: string;
+              selectableCount?: number;
+              listButtonLabel?: string;
+              ctaUrl?: string;
+            };
           if (!number || !type || !text || !choices?.length) {
             return jsonResponse(400, { error: "Missing number/type/text/choices" }, corsHeaders);
           }
@@ -1200,7 +1217,89 @@ Deno.serve(
           const flatChoices = choices.map((c) =>
             typeof c === "string" ? c : c.title
           );
-          result = await provider.sendMenu({ number, type, text, choices: flatChoices, footer, selectableCount });
+          // ⚠️ A DESCRIÇÃO SOBREVIVE, em campo separado. O achatamento acima é o
+          // que a Uazapi aceita, e por anos foi tudo que existia; a lista da Meta
+          // tem uma linha de descrição por item, e jogá-la fora aqui deixava o
+          // cliente com uma lista de títulos soltos. Campo novo para o caminho
+          // antigo continuar byte a byte o mesmo.
+          const richChoices = choices
+            .map((c) => (typeof c === "string" ? { title: c } : c))
+            .filter((c) => (c.title ?? "").trim() !== "");
+          result = await provider.sendMenu({
+            number,
+            type,
+            text,
+            choices: flatChoices,
+            richChoices,
+            footer,
+            selectableCount,
+            listButtonLabel,
+            ctaUrl,
+          });
+          break;
+        }
+
+        case "sendLocation": {
+          // 422 e não `throw`: quem clica é um VENDEDOR, e um 500 genérico viraria
+          // "não foi possível enviar" numa hora em que ele precisa saber que este
+          // canal não manda localização — não que o sistema quebrou.
+          if (!provider.sendLocation) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não envia localização", code: "location_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number, latitude, longitude, name, address } = payload as {
+            number?: string;
+            latitude?: number;
+            longitude?: number;
+            name?: string;
+            address?: string;
+          };
+          // `0` é coordenada — a checagem é de finitude, não de verdade.
+          if (!number || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            return jsonResponse(400, { error: "Missing number/latitude/longitude" }, corsHeaders);
+          }
+          result = await provider.sendLocation({
+            number,
+            latitude: latitude as number,
+            longitude: longitude as number,
+            name,
+            address,
+          });
+          break;
+        }
+
+        case "sendContact": {
+          if (!provider.sendContact) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não envia contato", code: "contact_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number, contacts } = payload as {
+            number?: string;
+            contacts?: Array<{
+              nome?: string;
+              telefones?: Array<{ numero?: string; waId?: string }>;
+              emails?: string[];
+            }>;
+          };
+          if (!number || !contacts?.length) {
+            return jsonResponse(400, { error: "Missing number/contacts" }, corsHeaders);
+          }
+          result = await provider.sendContact({
+            number,
+            contacts: contacts.map((c) => ({
+              nome: String(c.nome ?? "").trim(),
+              telefones: (c.telefones ?? [])
+                .map((t) => ({ numero: String(t.numero ?? "").trim(), waId: t.waId }))
+                .filter((t) => t.numero !== ""),
+              emails: c.emails,
+            })),
+          });
           break;
         }
 

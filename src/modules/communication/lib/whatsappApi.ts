@@ -214,14 +214,43 @@ export type MenuChoice = { title: string; description?: string };
 export async function sendMenu(
   instanceId: string,
   number: string,
-  type: "list" | "button",
+  type: "list" | "button" | "cta",
   text: string,
-  choices: MenuChoice[]
+  choices: MenuChoice[],
+  extras?: {
+    /** Só em `list`: o texto do botão que ABRE a lista. Sem ele ela não abre. */
+    listButtonLabel?: string;
+    /** Só em `cta`: o endereço que o botão abre. */
+    ctaUrl?: string;
+    footer?: string;
+  },
 ): Promise<{ message_id: string; status: string; timestamp: number }> {
   return callProxy("sendMenu", {
     instance_id: instanceId,
-    payload: { number, type, text, choices },
+    payload: { number, type, text, choices, ...extras },
   });
+}
+
+/** Ponto no mapa. Canal oficial (Meta) — a Uazapi devolve 422. */
+export async function sendLocation(
+  instanceId: string,
+  number: string,
+  local: { latitude: number; longitude: number; name?: string; address?: string },
+): Promise<{ message_id: string; status: string; timestamp: number }> {
+  return callProxy("sendLocation", { instance_id: instanceId, payload: { number, ...local } });
+}
+
+/** Cartão de contato. Canal oficial (Meta) — a Uazapi devolve 422. */
+export async function sendContact(
+  instanceId: string,
+  number: string,
+  contacts: Array<{
+    nome: string;
+    telefones: Array<{ numero: string; waId?: string }>;
+    emails?: string[];
+  }>,
+): Promise<{ message_id: string; status: string; timestamp: number }> {
+  return callProxy("sendContact", { instance_id: instanceId, payload: { number, contacts } });
 }
 
 export async function sendPixButton(

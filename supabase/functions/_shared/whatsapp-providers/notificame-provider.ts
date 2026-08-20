@@ -75,6 +75,7 @@ import {
   type CreateInstanceResult,
   type InstanceStatus,
   type SendMediaOptions,
+  type SendMenuOptions,
   type SendResult,
   type SendTemplateOptions,
   type SendTextOptions,
@@ -224,6 +225,263 @@ export function normalizeNotificameRecipient(
  *     ADIVINHAR: o destinatário receberia um quadrado estático no lugar do que o
  *     operador escolheu, sem ninguém saber por quê.
  */
+/** Uma mensagem interativa, na forma NOSSA — antes de virar envelope. */
+export interface NotificameInterativa {
+  tipo: "button" | "list" | "cta" | "poll" | "carousel";
+  texto: string;
+  rodape?: string;
+  opcoes: Array<{ titulo: string; descricao?: string }>;
+  /** Só em `list`: o texto do botão que ABRE a lista. Sem ele ela não abre. */
+  rotuloDaLista?: string;
+  /** Só em `cta`: o endereço que o botão abre. */
+  ctaUrl?: string;
+}
+
+/** Tetos da Meta. Ela recusa a mensagem inteira, não corta o excedente. */
+const MAX_BOTOES_INTERATIVOS = 3;
+const MAX_LINHAS_DA_LISTA = 10;
+
+/**
+ * O envelope de uma mensagem interativa. PURO.
+ *
+ * ⚠️ ESTE CAMINHO SÓ EXISTE DENTRO DA JANELA DE 24 HORAS. Fora dela a Meta
+ * recusa qualquer mensagem livre, interativa ou não — o que passa ali é template
+ * aprovado, e template tem botão próprio (`lib/template-buttons.ts`).
+ *
+ * ⚠️ RECUSA ALTO, ANTES DO I/O. A forma intuitiva não falha: o fornecedor aceita
+ * o corpo e a Meta recusa o envio depois, e a recusa chega ao vendedor sem
+ * motivo legível. Um erro nosso, aqui, diz o que fazer.
+ *
+ * ⚠️ Os ids são a POSIÇÃO. É o que volta no `postback`/`button_reply` quando o
+ * cliente toca — e é por isso que o título vai junto: o id sozinho não diz nada
+ * a quem lê a conversa depois.
+ */
+export function toNotificameInteractiveContent(
+  i: NotificameInterativa,
+  kind: NotificameChannelKind,
+): NotificameContent {
+  if (kind !== "whatsapp") {
+    // A doc traz Quick Reply para Instagram, com envelope PRÓPRIO. Mandar o do
+    // WhatsApp ali seria inventar campo — e o fornecedor aceitaria o corpo antes
+    // de a Meta recusar o envio.
+    throw new NotSupportedError(
+      NOTIFICAME_PROVIDER,
+      `mensagem interativa — o canal ${kind} tem envelope próprio, ainda não implementado`,
+    );
+  }
+
+  const texto = (i.texto ?? "").trim();
+  if (!texto) {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "mensagem interativa sem texto");
+  }
+
+  const opcoes = (i.opcoes ?? []).filter((o) => (o.titulo ?? "").trim() !== "");
+  if (opcoes.length === 0) {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "mensagem interativa sem opção");
+  }
+
+  const rodape = (i.rodape ?? "").trim();
+
+  switch (i.tipo) {
+    case "button": {
+      if (opcoes.length > MAX_BOTOES_INTERATIVOS) {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          `mensagem com botões aceita no máximo ${MAX_BOTOES_INTERATIVOS} opções`,
+        );
+      }
+      return {
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: texto },
+          ...(rodape ? { footer: { text: rodape } } : {}),
+          action: {
+            buttons: opcoes.map((o, n) => ({
+              type: "reply",
+              reply: { id: String(n + 1), title: o.titulo.trim() },
+            })),
+          },
+        },
+      };
+    }
+
+    case "list": {
+      const rotulo = (i.rotuloDaLista ?? "").trim();
+      if (!rotulo) {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          "lista sem o texto do botão que a abre",
+        );
+      }
+      if (opcoes.length > MAX_LINHAS_DA_LISTA) {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          `lista aceita no máximo ${MAX_LINHAS_DA_LISTA} opções`,
+        );
+      }
+      return {
+        type: "interactive",
+        interactive: {
+          type: "list",
+          body: { text: texto },
+          ...(rodape ? { footer: { text: rodape } } : {}),
+          action: {
+            button: rotulo,
+            // Uma seção só: o envelope aceita várias, e agrupar exigiria uma
+            // decisão de produto que ninguém pediu. "Opções" é rótulo neutro.
+            sections: [
+              {
+                title: "Opções",
+                rows: opcoes.map((o, n) => ({
+                  id: String(n + 1),
+                  title: o.titulo.trim(),
+                  ...(o.descricao?.trim() ? { description: o.descricao.trim() } : {}),
+                })),
+              },
+            ],
+          },
+        },
+      };
+    }
+
+    case "cta": {
+      const url = (i.ctaUrl ?? "").trim();
+      if (!/^https?:\/\//i.test(url)) {
+        throw new NotSupportedError(NOTIFICAME_PROVIDER, "botão de link sem endereço válido");
+      }
+      return {
+        type: "interactive",
+        interactive: {
+          type: "cta_url",
+          body: { text: texto },
+          ...(rodape ? { footer: { text: rodape } } : {}),
+          action: {
+            name: "cta_url",
+            parameters: { display_text: opcoes[0].titulo.trim(), url },
+          },
+        },
+      };
+    }
+
+    default:
+      // Enquete e carrossel são vocabulário da Uazapi. A Meta não os tem, e
+      // mapeá-los para lista entregaria ao cliente uma coisa no lugar de outra.
+      throw new NotSupportedError(
+        NOTIFICAME_PROVIDER,
+        `mensagem interativa do tipo ${String(i.tipo)} não existe no canal oficial`,
+      );
+  }
+}
+
+/**
+ * Uma localização, na forma nossa. `nome` e `endereco` são opcionais no
+ * envelope, e mandá-los vazios põe uma linha em branco no cartão do aparelho.
+ */
+export interface NotificameLocalizacao {
+  latitude: number;
+  longitude: number;
+  nome?: string;
+  endereco?: string;
+}
+
+/**
+ * O envelope de localização. PURO.
+ *
+ * ⚠️ OS CAMPOS FICAM NO NÍVEL DO CONTENT. A Graph aninha sob `location`, e a doc
+ * do fornecedor NÃO — a forma aninhada é aceita por ele e recusada pela Meta
+ * depois, com a recusa chegando ao vendedor sem motivo.
+ */
+export function toNotificameLocationContent(
+  l: NotificameLocalizacao,
+  kind: NotificameChannelKind,
+): NotificameContent {
+  if (kind !== "whatsapp") {
+    throw new NotSupportedError(
+      NOTIFICAME_PROVIDER,
+      `localização — o canal ${kind} não a traz na doc`,
+    );
+  }
+  // `0` é coordenada: a checagem é de finitude, e não um `!lat` que apagaria o
+  // equador e o meridiano de Greenwich.
+  if (!Number.isFinite(l.latitude) || !Number.isFinite(l.longitude)) {
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "localização sem coordenada");
+  }
+
+  const nome = (l.nome ?? "").trim();
+  const endereco = (l.endereco ?? "").trim();
+
+  return {
+    type: "location",
+    latitude: l.latitude,
+    longitude: l.longitude,
+    ...(nome ? { name: nome } : {}),
+    ...(endereco ? { address: endereco } : {}),
+  };
+}
+
+/** Um cartão de contato, na forma nossa. */
+export interface NotificameContato {
+  nome: string;
+  telefones: Array<{ numero: string; waId?: string }>;
+  emails?: string[];
+}
+
+/**
+ * O envelope de contato. PURO.
+ *
+ * ⚠️ `formatted_name` é o que o aparelho EXIBE, e a Meta o exige. `first_name` e
+ * `last_name` saem da primeira e da última palavra — e `last_name` só entra
+ * quando existe: um campo vazio no cartão aparece como linha em branco no
+ * aparelho do destinatário.
+ */
+export function toNotificameContactContent(
+  contatos: NotificameContato[],
+  kind: NotificameChannelKind,
+): NotificameContent {
+  if (kind !== "whatsapp") {
+    throw new NotSupportedError(
+      NOTIFICAME_PROVIDER,
+      `contato — o canal ${kind} não o traz na doc`,
+    );
+  }
+
+  const usaveis = contatos.filter((c) =>
+    (c.nome ?? "").trim() !== "" &&
+    (c.telefones ?? []).some((t) => (t.numero ?? "").trim() !== "")
+  );
+  if (usaveis.length === 0) {
+    // Um cartão sem telefone é um contato que não serve para nada: o
+    // destinatário recebe um nome que não dá para chamar.
+    throw new NotSupportedError(NOTIFICAME_PROVIDER, "contato sem nome ou sem telefone");
+  }
+
+  return {
+    type: "contacts",
+    contacts: usaveis.map((c) => {
+      const nome = c.nome.trim();
+      const partes = nome.split(/\s+/);
+      const sobrenome = partes.length > 1 ? partes[partes.length - 1] : "";
+      const emails = (c.emails ?? []).map((e) => e.trim()).filter(Boolean);
+
+      return {
+        name: {
+          formatted_name: nome,
+          first_name: partes[0],
+          ...(sobrenome ? { last_name: sobrenome } : {}),
+        },
+        phones: c.telefones
+          .filter((t) => (t.numero ?? "").trim() !== "")
+          .map((t) => ({
+            phone: t.numero.trim(),
+            ...(t.waId?.trim() ? { wa_id: t.waId.trim() } : {}),
+          })),
+        ...(emails.length ? { emails: emails.map((email) => ({ email })) } : {}),
+      };
+    }),
+  };
+}
+
 export function toNotificameMediaContent(
   opts: SendMediaOptions,
   kind: NotificameChannelKind,
@@ -285,7 +543,27 @@ export function toNotificameMediaContent(
       // receber um anexo sem identificação nenhuma.
       return arquivo("document", caption ?? opts.filename);
     case "sticker":
-      throw new NotSupportedError(NOTIFICAME_PROVIDER, "sendMedia(sticker)");
+      // ⚠️ Isto já foi um `NotSupportedError` justificado por "o canal oficial
+      // não tem figurinha, e mapeá-la seria adivinhar". A afirmação era FALSA: a
+      // doc corrente do fornecedor tem uma seção "Enviar um sticker", e o
+      // envelope é este, com nome próprio. Não havia o que adivinhar.
+      //
+      // Fica fora do Instagram porque LÁ a doc não o traz — a diferença entre as
+      // duas frases é que esta foi conferida.
+      if (kind !== "whatsapp") {
+        throw new NotSupportedError(
+          NOTIFICAME_PROVIDER,
+          `sendMedia(sticker) — o canal ${kind} não aceita figurinha`,
+        );
+      }
+      return {
+        type: "file",
+        fileMimeType: "sticker",
+        fileUrl: file,
+        // O contrato pede legenda; o WhatsApp não a exibe em figurinha. É o
+        // valor que a própria doc usa no exemplo.
+        fileCaption: "Sticker",
+      };
     default:
       throw new NotSupportedError(
         NOTIFICAME_PROVIDER,
@@ -976,8 +1254,83 @@ export class NotificameProvider implements WhatsAppProvider {
   // Cada mensagem contém "does not support" — a string que `isFeatureUnavailable()`
   // casa para mostrar o toast certo em vez de um 500 cru.
 
-  sendMenu(): Promise<SendResult> {
-    throw new NotSupportedError(NOTIFICAME_PROVIDER, "sendMenu");
+  async sendMenu(opts: SendMenuOptions): Promise<SendResult> {
+    // Recusa alto e ANTES do I/O: quem decide é o envelope, e a mensagem dele
+    // diz o que fazer. Enquete e carrossel morrem ali, com nome.
+    const opcoes = opts.richChoices?.length
+      ? opts.richChoices.map((c) => ({ titulo: c.title, descricao: c.description }))
+      : opts.choices.map((c) => ({ titulo: c }));
+
+    const content = toNotificameInteractiveContent(
+      {
+        tipo: opts.type,
+        texto: opts.text,
+        rodape: opts.footer,
+        opcoes,
+        rotuloDaLista: opts.listButtonLabel,
+        ctaUrl: opts.ctaUrl,
+      },
+      this.channelKind,
+    );
+
+    return await this.send({
+      to: opts.number,
+      content,
+      messageType: opts.type === "list" ? "list" : "interactive",
+      // O corpo é o que a conversa mostra; as opções vão para o metadata, pelo
+      // mesmo motivo dos botões de template — a Meta desenha a faixa do lado
+      // dela, e deste lado não há como saber o que o cliente está vendo.
+      text: opts.text.trim() || null,
+      mediaUrl: null,
+      botoes: opcoes.map((o) => o.titulo.trim()).filter(Boolean),
+    });
+  }
+
+  async sendLocation(opts: {
+    number: string;
+    latitude: number;
+    longitude: number;
+    name?: string;
+    address?: string;
+  }): Promise<SendResult> {
+    const content = toNotificameLocationContent(
+      {
+        latitude: opts.latitude,
+        longitude: opts.longitude,
+        nome: opts.name,
+        endereco: opts.address,
+      },
+      this.channelKind,
+    );
+
+    return await this.send({
+      to: opts.number,
+      content,
+      messageType: "location",
+      // O nome do lugar é o que a LISTA DE CONVERSAS mostra: sem ele a conversa
+      // aparece em branco na lateral depois de uma localização.
+      text: opts.name?.trim() || opts.address?.trim() || null,
+      mediaUrl: null,
+    });
+  }
+
+  async sendContact(opts: {
+    number: string;
+    contacts: Array<{
+      nome: string;
+      telefones: Array<{ numero: string; waId?: string }>;
+      emails?: string[];
+    }>;
+  }): Promise<SendResult> {
+    const content = toNotificameContactContent(opts.contacts, this.channelKind);
+
+    return await this.send({
+      to: opts.number,
+      content,
+      messageType: "contacts",
+      text: opts.contacts.map((c) => c.nome.trim()).filter(Boolean).join(", ") || null,
+      mediaUrl: null,
+    });
   }
 
   sendPixButton(): Promise<SendResult> {

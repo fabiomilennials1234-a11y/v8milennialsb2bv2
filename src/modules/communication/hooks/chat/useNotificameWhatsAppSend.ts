@@ -37,7 +37,11 @@ import { SOCIAL_CONTACTS_KEY_ROOT, SOCIAL_MESSAGES_KEY_ROOT } from "./shared/que
  * publica no bucket antes de enviar, então a URL é o que ele tem em mãos.
  */
 export interface NotificameWhatsAppMedia {
-  type: "image" | "video" | "document" | "audio";
+  /**
+   * `sticker` só existe no canal oficial, e só em WebP — é o formato exclusivo
+   * de figurinha do WhatsApp.
+   */
+  type: "image" | "video" | "document" | "audio" | "sticker";
   url: string;
   filename?: string;
   caption?: string;

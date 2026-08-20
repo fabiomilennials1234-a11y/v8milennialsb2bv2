@@ -27,7 +27,8 @@ export interface SendSocialMessageInput {
    * então aqui viaja a URL, nunca o `File`. Ver `lib/social-attachment-upload`.
    */
   media?: {
-    type: "image" | "video" | "audio" | "document";
+    /** `sticker` só no canal oficial — o Instagram não tem figurinha. */
+    type: "image" | "video" | "audio" | "document" | "sticker";
     url: string;
     caption?: string;
     filename?: string;

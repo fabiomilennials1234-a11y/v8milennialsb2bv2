@@ -23,7 +23,25 @@
  * envio". A microcopy diz qual das duas.
  */
 import { useMemo, useRef, useState } from "react";
-import { FileText, Loader2, Mic, Paperclip, Send, Square, X } from "lucide-react";
+import {
+  Contact,
+  FileText,
+  LayoutList,
+  Loader2,
+  MapPin,
+  Mic,
+  Paperclip,
+  Plus,
+  Send,
+  Square,
+  X,
+} from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
@@ -39,6 +57,17 @@ import {
 } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import type { SocialSender } from "@/modules/communication/hooks/chat/social-sender";
 import { TemplatePicker } from "@/modules/communication/components/chat/social/TemplatePicker";
+import { SendMenuDialog } from "@/modules/communication/components/chat/composer/SendMenuDialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { criarEnviadorOficial } from "@/modules/communication/lib/menu-sender";
+import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
+import {
+  sendContact as enviarContatoNoProxy,
+  sendLocation as enviarLocalizacaoNoProxy,
+  sendMenu as enviarMenuNoProxy,
+} from "@/modules/communication/lib/whatsappApi";
+import { SendContactDialog } from "@/modules/communication/components/chat/social/SendContactDialog";
+import { SendLocationDialog } from "@/modules/communication/components/chat/social/SendLocationDialog";
 import { webmOpusToOgg } from "@/modules/communication/lib/webm-opus-to-ogg";
 import { socialReplyWindow } from "@/modules/communication/lib/social-window";
 import {
@@ -200,6 +229,9 @@ function SocialComposer({
   canal,
   contactExternalId,
   onAbrirTemplates,
+  onAbrirMenu,
+  onAbrirLocalizacao,
+  onAbrirContato,
   lastIncomingAt,
 }: {
   /**
@@ -217,6 +249,9 @@ function SocialComposer({
    * — e ele vive na lista de mensagens, não no composer.
    */
   onAbrirTemplates: () => void;
+  onAbrirMenu: () => void;
+  onAbrirLocalizacao: () => void;
+  onAbrirContato: () => void;
   lastIncomingAt: string | null;
 }) {
   const [texto, setTexto] = useState("");
@@ -417,6 +452,49 @@ function SocialComposer({
             <FileText className="h-4 w-4" />
           </Button>
         )}
+        {/*
+          O QUE MAIS ESTE CANAL MANDA — botões, lista, link, localização, contato.
+
+          Agrupados atrás de um só gatilho: são cinco coisas raras, e cinco
+          botões permanentes no composer roubariam o espaço do que se usa toda
+          hora, que é escrever.
+
+          Tudo aqui só vale DENTRO da janela de 24 horas — fora dela a Meta
+          recusa qualquer mensagem livre. Desabilitado em vez de escondido: sumir
+          ensinaria que a ferramenta é instável, enquanto o aviso explica.
+        */}
+        {canal === "whatsapp_oficial" && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-[42px] w-9 shrink-0 p-0"
+                disabled={subindo || enviar.isPending || gravando || janela.open === false}
+                aria-label="Enviar botões, lista, localização ou contato"
+                title={janela.open === false
+                  ? "A janela de 24 horas fechou — só template é aceito agora"
+                  : "Enviar botões, lista, localização ou contato"}
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <DropdownMenuItem onClick={onAbrirMenu} className="gap-2">
+                <LayoutList className="h-4 w-4" />
+                Botões, lista ou link
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onAbrirLocalizacao} className="gap-2">
+                <MapPin className="h-4 w-4" />
+                Localização
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onAbrirContato} className="gap-2">
+                <Contact className="h-4 w-4" />
+                Contato
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Textarea
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
@@ -511,6 +589,10 @@ export function SocialChatView({
 }: SocialChatViewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [templatesAberto, setTemplatesAberto] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const [localizacaoAberta, setLocalizacaoAberta] = useState(false);
+  const [contatoAberto, setContatoAberto] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: rawMessages = [], isLoading } = useSocialMessages(selectedContact);
 
@@ -614,12 +696,77 @@ export function SocialChatView({
       </div>
 
       {selectedContact.channel === "whatsapp_oficial" && (
-        <TemplatePicker
-          instanceId={selectedContact.messaging_channel_id}
-          contactExternalId={selectedContact.external_user_id}
-          open={templatesAberto}
-          onOpenChange={setTemplatesAberto}
-        />
+        <>
+          <TemplatePicker
+            instanceId={selectedContact.messaging_channel_id}
+            contactExternalId={selectedContact.external_user_id}
+            open={templatesAberto}
+            onOpenChange={setTemplatesAberto}
+          />
+          {/*
+            O enviador é um OBJETO montado aqui, e não um hook passado por prop:
+            hook por prop faz a ordem dos hooks mudar quando o pai troca de
+            canal, e o React aborta com "Rendered more hooks than during the
+            previous render" — nenhum gate de tipo ou de lint pega isso.
+
+            Ele não grava a linha: o provider já a escreveu no servidor, na mesma
+            chamada. Gravar de novo duplicaria a mensagem na conversa.
+          */}
+          <SendLocationDialog
+            open={localizacaoAberta}
+            onOpenChange={setLocalizacaoAberta}
+            enviar={async (l) => {
+              await enviarLocalizacaoNoProxy(
+                selectedContact.messaging_channel_id,
+                selectedContact.external_user_id,
+                l,
+              );
+              queryClient.invalidateQueries({
+                queryKey: chatQueryKeys.socialMessages(
+                  organizationId ?? null,
+                  selectedContact.messaging_channel_id,
+                  selectedContact.external_user_id,
+                ),
+              });
+            }}
+          />
+          <SendContactDialog
+            open={contatoAberto}
+            onOpenChange={setContatoAberto}
+            enviar={async (contatos) => {
+              await enviarContatoNoProxy(
+                selectedContact.messaging_channel_id,
+                selectedContact.external_user_id,
+                contatos,
+              );
+              queryClient.invalidateQueries({
+                queryKey: chatQueryKeys.socialMessages(
+                  organizationId ?? null,
+                  selectedContact.messaging_channel_id,
+                  selectedContact.external_user_id,
+                ),
+              });
+            }}
+          />
+          <SendMenuDialog
+            open={menuAberto}
+            onOpenChange={setMenuAberto}
+            enviador={criarEnviadorOficial({
+              instanceId: selectedContact.messaging_channel_id,
+              numero: selectedContact.external_user_id,
+              aoEnviar: (inst, numero, tipo, texto, opcoes, extras) =>
+                enviarMenuNoProxy(inst, numero, tipo, texto, opcoes, extras),
+              depois: () =>
+                queryClient.invalidateQueries({
+                  queryKey: chatQueryKeys.socialMessages(
+                    organizationId ?? null,
+                    selectedContact.messaging_channel_id,
+                    selectedContact.external_user_id,
+                  ),
+                }),
+            })}
+          />
+        </>
       )}
 
       <SocialComposer
@@ -627,6 +774,9 @@ export function SocialChatView({
         canal={selectedContact.channel}
         contactExternalId={selectedContact.external_user_id}
         onAbrirTemplates={() => setTemplatesAberto(true)}
+        onAbrirMenu={() => setMenuAberto(true)}
+        onAbrirLocalizacao={() => setLocalizacaoAberta(true)}
+        onAbrirContato={() => setContatoAberto(true)}
         lastIncomingAt={ultimaRecebidaEm}
       />
 

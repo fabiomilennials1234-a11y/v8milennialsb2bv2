@@ -127,9 +127,22 @@ export type SendTemplateOptions = {
 
 export type SendMenuOptions = {
   number: string;
-  type: "button" | "list" | "poll" | "carousel";
+  type: "button" | "list" | "poll" | "carousel" | "cta";
   text: string;
+  /** Só os títulos — é o que a Uazapi aceita. */
   choices: string[];
+  /**
+   * As mesmas opções COM descrição.
+   *
+   * A Uazapi só quer título, e o proxy achatava tudo para `string[]`; a lista da
+   * Meta tem uma linha de descrição por item, e achatar a jogava fora. Campo
+   * separado para o caminho antigo continuar exatamente como era.
+   */
+  richChoices?: Array<{ title: string; description?: string }>;
+  /** Só em `list`: o texto do botão que ABRE a lista. Sem ele ela não abre. */
+  listButtonLabel?: string;
+  /** Só em `cta`: o endereço que o botão abre. */
+  ctaUrl?: string;
   footer?: string;
   selectableCount?: number;
   delay?: number;
@@ -219,6 +232,19 @@ export interface WhatsAppProvider {
 
   // Uazapi-only (Evolution throws NotSupportedError)
   sendMenu?(opts: SendMenuOptions): Promise<SendResult>;
+  /** Canal oficial (Meta) — ponto no mapa. */
+  sendLocation?(opts: {
+    number: string;
+    latitude: number;
+    longitude: number;
+    name?: string;
+    address?: string;
+  }): Promise<SendResult>;
+  /** Canal oficial (Meta) — cartão de contato. */
+  sendContact?(opts: {
+    number: string;
+    contacts: Array<{ nome: string; telefones: Array<{ numero: string; waId?: string }>; emails?: string[] }>;
+  }): Promise<SendResult>;
   sendPixButton?(opts: SendPixButtonOptions): Promise<SendResult>;
   react?(messageId: string, number: string, emoji: string): Promise<void>;
   edit?(messageId: string, number: string, newText: string): Promise<void>;

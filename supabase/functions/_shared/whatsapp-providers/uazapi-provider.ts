@@ -381,6 +381,13 @@ export class UazapiProvider implements WhatsAppProvider {
   // =========================================================================
 
   async sendMenu(opts: SendMenuOptions): Promise<SendResult> {
+    // `cta` é da Meta — um botão que abre link, sem resposta de volta. A Uazapi
+    // não o tem, e mapeá-lo para `button` entregaria ao cliente um botão que
+    // devolve texto no lugar de um que abre o navegador.
+    if (opts.type === "cta") {
+      throw new Error("uazapi does not support sendMenu(cta)");
+    }
+
     const resp = await this.client.sendMenu({
       number: opts.number,
       type: opts.type,
