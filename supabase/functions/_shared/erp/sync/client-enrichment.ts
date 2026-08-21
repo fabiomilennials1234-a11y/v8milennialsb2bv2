@@ -45,17 +45,27 @@ export function clientEnrichmentColumns(client: CanonicalClient): Record<string,
  * territorialização.
  *
  * `uf_source` carimba a procedência para que um dado do ERP não seja confundido
- * com UF inferida de DDD.
+ * com UF inferida de DDD — o trigger `set_uf_from_ddd` só sobrescreve UF nula
+ * ou vinda de `'ddd'`.
+ *
+ * 🔴 O valor é `'erp'`, seco. `leads.uf_source` tem CHECK com vocabulário
+ * fechado (`manual | webhook | ddd | ai | erp`), e `erp_${source}` estourava a
+ * restrição: quatro criações de cliente falharam na carga da Café Jurerê antes
+ * disso ser percebido. Qual ERP é informação de `upsell_clients.external_source`,
+ * não desta coluna.
+ *
+ * `source` fica no parâmetro porque a assinatura é compartilhada com o resto da
+ * camada de sync — e para o dia em que o vocabulário distinguir integradores.
  */
 export function leadEnrichmentColumns(
   client: CanonicalClient,
-  source: string,
+  _source: string,
 ): Record<string, unknown> {
   const cols: Record<string, unknown> = {};
   if (client.segment !== undefined && client.segment !== null) cols.segment = client.segment;
   if (client.uf) {
     cols.uf = client.uf;
-    cols.uf_source = `erp_${source}`;
+    cols.uf_source = "erp";
   }
   return cols;
 }

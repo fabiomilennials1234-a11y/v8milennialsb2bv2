@@ -43,6 +43,7 @@ import {
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
 import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
+import { deferredEnrichStore } from "../_shared/erp/sync/deferred-enrich-store.ts";
 import { bulkCreateClients } from "../_shared/erp/sync/bulk-create-clients.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
@@ -61,6 +62,21 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
 const PAGE_SIZE = 100;
 const MAX_PAGES_PER_RUN = 20;
+
+/**
+ * Enriquecimentos por execução, e de quanto em quanto a fila é esvaziada.
+ *
+ * 🔴 Acumular a fila inteira derrubou o worker com `WORKER_RESOURCE_LIMIT`
+ * (546) — não é o teto de tempo, é memória: 12.613 registros do ERP mais a
+ * carteira pré-carregada mais 11.179 patches vivos ao mesmo tempo.
+ *
+ * O teto por execução NÃO precisa de cursor. A varredura lê a base inteira toda
+ * vez, e `upsertCanonicalClient` pula quem já está igual (`no_changes`) — então
+ * a execução seguinte atravessa de graça o que a anterior gravou e ataca o
+ * resto. A retomada é consequência da idempotência, não de estado guardado.
+ */
+const MAX_ENRICH_PER_RUN = 3000;
+const ENRICH_FLUSH_EVERY = 500;
 /** Pausa entre páginas: o alvo é o servidor de UM cliente, não uma nuvem. */
 const PAGE_DELAY_MS = 300;
 
@@ -175,12 +191,22 @@ Deno.serve(
     // Carteira pré-carregada: o store direto faria duas consultas por cliente do
     // ERP, sequenciais. Numa carga inicial isso são dezenas de milhares de idas
     // ao banco, e foi parte do "CPU Time exceeded" de 20/08.
-    const store = await cachedClientStore(
+    const cached = await cachedClientStore(
       admin,
       organizationId,
       TOTH_PROVIDER_ID,
       supabaseClientStore(admin, TOTH_PROVIDER_ID),
     );
+
+    // Enriquecimento vai para uma fila e é escrito em paralelo no fim.
+    //
+    // Enquanto os enriquecimentos eram poucos, escrever um a um no laço não
+    // incomodava. Deixou de ser pouco quando a carteira ganhou as colunas de
+    // ERP: elas nascem NULL, então TODO cliente já existente muda de fato —
+    // 11.179 UPDATEs sequenciais na Café Jurerê, e sequencial nesse volume é o
+    // mesmo HTTP 504 de 20/08.
+    const deferred = deferredEnrichStore(cached);
+    const store = deferred.store;
 
     // ── Modo prévia ─────────────────────────────────────────────────────────
     // `dry_run` lê, mapeia e RELATA sem escrever. `max_clients` limita o piloto.
@@ -239,6 +265,11 @@ Deno.serve(
         ? body.incluir_sem_empresa
         : conn.clientes_incluir_sem_empresa === true;
 
+    const maxEnrich =
+      typeof body.max_enrich === "number" && body.max_enrich > 0
+        ? Math.floor(body.max_enrich)
+        : MAX_ENRICH_PER_RUN;
+
     const seenIds = new Set<string>();
     const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
     /** Quantos o filtro de empresa deixou de fora, e de quem eram. */
@@ -250,6 +281,16 @@ Deno.serve(
     const toCreate: CanonicalClient[] = [];
     let page = conn.clientes_cursor ?? 1;
     let stopReason = "max_pages";
+
+    /** Esvazia a fila de enriquecimento e contabiliza o que falhou. */
+    const flushEnrich = async () => {
+      const flushed = await deferred.flush();
+      stats.failed += flushed.failed;
+      stats.enriched -= flushed.failed;
+      for (const e of flushed.errors) {
+        if (mappingErrors.length < 3) mappingErrors.push(e);
+      }
+    };
 
     try {
       for (let i = 0; i < MAX_PAGES_PER_RUN; i++) {
@@ -364,8 +405,20 @@ Deno.serve(
                 client: canonical,
                 syncMode,
               });
-              if (result.action === "enriched") stats.enriched++;
-              else stats.skipped++;
+              if (result.action === "enriched") {
+                stats.enriched++;
+                // Esvazia de tempos em tempos: é o que segura a memória do
+                // worker. Guardar tudo para o fim foi o que causou o 546.
+                if (deferred.pending() >= ENRICH_FLUSH_EVERY) {
+                  await flushEnrich();
+                }
+                if (stats.enriched >= maxEnrich) {
+                  stopReason = "max_enrich";
+                  break;
+                }
+              } else {
+                stats.skipped++;
+              }
             } else if (syncMode === "canonical") {
               toCreate.push(canonical);
             } else {
@@ -379,7 +432,7 @@ Deno.serve(
           }
         }
 
-        if (stopReason === "max_clients") break;
+        if (stopReason === "max_clients" || stopReason === "max_enrich") break;
 
         // Sem paginação, a resposta é a base inteira: pedir de novo traria o
         // mesmo bloco. O guard de "nenhum id novo" abaixo pegaria, mas só depois
@@ -484,6 +537,9 @@ Deno.serve(
       );
     }
 
+    // Resto da fila — o laço já esvaziou a cada ENRICH_FLUSH_EVERY.
+    if (deferred.pending() > 0) await flushEnrich();
+
     // ── Criação em lote ─────────────────────────────────────────────────────
     // Fora do laço de propósito: um statement com 500 leads e outro com 500
     // clientes, em vez de dois por registro. É o que faz a carga inicial caber
@@ -551,6 +607,10 @@ Deno.serve(
         success: true,
         stop_reason: stopReason,
         stats,
+        // Bateu o teto por execução: falta gente. A próxima execução atravessa
+        // de graça o que já está igual e continua daqui. Dizer isso evita ler
+        // um número parcial como se fosse o total.
+        incompleto: stopReason === "max_enrich",
         empresa: empresaFiltro,
         fora_do_filtro_de_empresa: foraDoFiltro,
         mapping_errors: mappingErrors,

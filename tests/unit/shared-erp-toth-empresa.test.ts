@@ -190,7 +190,9 @@ describe("colunas de escrita", () => {
     expect(leadEnrichmentColumns(c, "toth")).toEqual({
       segment: "TELEVENDAS-VAREJO",
       uf: "SC",
-      uf_source: "erp_toth",
+      // 🔴 `erp`, não `erp_toth`: `leads.uf_source` tem CHECK com vocabulário
+      // fechado, e o valor composto derrubou 4 criações de cliente em produção.
+      uf_source: "erp",
     });
   });
 
