@@ -7,7 +7,7 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { contactKey, type InboxContact } from "@/modules/communication/hooks/chat/types";
+import { contactKey, isWhatsAppContact, type InboxContact } from "@/modules/communication/hooks/chat/types";
 import { ChannelBadge } from "../ChannelBadge";
 import { contactDisplayName, formatContactTime } from "./ConversationListItem";
 
@@ -37,7 +37,10 @@ export function MobileConversationRow({
   const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
   const hasUnread = contact.unread_count > 0 && !isSelected;
   const key = contactKey(contact);
-  const isWhatsApp = contact.channel === "whatsapp";
+  // Predicado, nao comparacao inline: alem do default de canal ausente, ele
+  // ESTREITA a uniao — sem isso o TS perde `last_message_sent_source` e
+  // `avatar_url`. Ver o comentario de `isWhatsAppContact`.
+  const isWhatsApp = isWhatsAppContact(contact);
 
   const isOutgoingManual =
     contact.last_message_direction === "outgoing" &&

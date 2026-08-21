@@ -68,7 +68,13 @@ const channelConfig: Record<ChannelType, { bg: string; icon: typeof WhatsAppIcon
 };
 
 export function ChannelBadge({ channel, size = 20, className, overlay = false }: ChannelBadgeProps) {
+  // Contato sem `channel` derrubava a LINHA INTEIRA do inbox mobile com
+  // "Cannot read properties of undefined (reading 'icon')" — o tipo exige o
+  // campo, mas dado antigo (anterior ao NotificaMe) chega sem ele, e tipo nao
+  // roda em runtime. Um selo e enfeite: some quando nao sabe o que dizer, nao
+  // leva a conversa junto.
   const config = channelConfig[channel];
+  if (!config) return null;
   const Icon = config.icon;
   const iconSize = Math.round(size * 0.55);
 

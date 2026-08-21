@@ -189,9 +189,23 @@ export type InboxBox =
   | { kind: "whatsapp"; id: string; name: string; status: string; provider?: string }
   | { kind: "instagram"; id: string; name: string; status: string; handle: string | null };
 
-/** True quando o contato é de WhatsApp — narrowing para os caminhos legados. */
+/**
+ * True quando o contato é de WhatsApp — narrowing para os caminhos legados.
+ *
+ * Canal AUSENTE conta como WhatsApp, e isso não é leniência: toda conversa era
+ * WhatsApp antes do NotificaMe, e o tipo EXIGIR `channel` não faz dado antigo
+ * passar a tê-lo — tipo não roda em runtime. Sem o default, contato sem canal
+ * caía no ramo social e três coisas quebravam de uma vez: `contactKey` devolvia
+ * `conversation_key` inexistente (chave `undefined`, seleção e onPress mortos),
+ * e a linha do mobile pedia ao ChannelBadge um ícone que não existe, derrubando
+ * a conversa inteira com TypeError.
+ *
+ * Continua sendo PREDICADO e não `===` inline porque só o predicado estreita a
+ * união discriminada; comparar com `??` no call-site resolve o runtime e cega o
+ * TS para `phone_number`, `avatar_url` e companhia.
+ */
 export function isWhatsAppContact(c: InboxContact): c is ChatContact {
-  return c.channel === "whatsapp";
+  return (c.channel ?? "whatsapp") === "whatsapp";
 }
 
 /**
@@ -215,7 +229,7 @@ export function isSocialContact(c: InboxContact): c is SocialContact {
  * `chat-meta` casou thread por `sender_id` e fez toda mensagem de SAÍDA sumir.
  */
 export function contactKey(c: InboxContact): string {
-  return c.channel === "whatsapp" ? c.phone_number : c.conversation_key;
+  return isWhatsAppContact(c) ? c.phone_number : c.conversation_key;
 }
 
 /**
