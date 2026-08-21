@@ -31,6 +31,7 @@ import { ClienteReorderTimeline } from "./ClienteReorderTimeline";
 import { ClienteCopilotSuggestion } from "./ClienteCopilotSuggestion";
 import { ClienteProductsTable } from "./ClienteProductsTable";
 import { ClienteOrderHistory } from "./ClienteOrderHistory";
+import { ClienteTitulos } from "./ClienteTitulos";
 import { ClienteTimeline } from "./ClienteTimeline";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -390,6 +391,10 @@ export default function ClienteDetailPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Ao lado do histórico de pedidos de propósito: o que ele comprou e o
+            que ele deve são a mesma conversa na hora de ligar para o cliente. */}
+        <ClienteTitulos clientId={clientId} />
 
       </div>
 

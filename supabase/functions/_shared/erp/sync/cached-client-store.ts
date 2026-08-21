@@ -18,7 +18,7 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ClientStore, ExistingClient } from "./upsert-client.ts";
 
-const SELECT = "id, cnpj, phone, email, company, name, external_id";
+const SELECT = "id, cnpj, phone, email, company, name, external_source, external_id, external_ref";
 /** Teto por página da pré-carga — o PostgREST limita a resposta. */
 const PRELOAD_PAGE = 1000;
 
@@ -56,13 +56,14 @@ export async function cachedClientStore(
 
     for (const row of rows) {
       preloaded++;
-      const { external_id, ...client } = row;
-      // Só indexa por external_id do MESMO provider: um id do Omie não pode
-      // casar com um id do Toth só por coincidência numérica.
-      if (external_id) byExternalId.set(`${source}:${external_id}`, client);
-      if (client.cnpj) {
-        const digits = client.cnpj.replace(/\D/g, "");
-        if (digits && !byCnpj.has(digits)) byCnpj.set(digits, client);
+      // Guarda a linha INTEIRA, com `external_*`. Uma versão anterior removia o
+      // `external_id` por destructuring, e sem ele `upsertCanonicalClient` não
+      // consegue comparar o carimbo — voltaria a escrever em todo registro,
+      // que é justamente o que estoura o tempo na re-sincronização.
+      if (row.external_id) byExternalId.set(`${source}:${row.external_id}`, row);
+      if (row.cnpj) {
+        const digits = row.cnpj.replace(/\D/g, "");
+        if (digits && !byCnpj.has(digits)) byCnpj.set(digits, row);
       }
     }
 
@@ -100,6 +101,9 @@ export async function cachedClientStore(
         email: (row.email as string | null) ?? null,
         company: (row.company as string | null) ?? null,
         name: (row.name as string | null) ?? null,
+        external_source: (row.external_source as string | null) ?? null,
+        external_id: (row.external_id as string | null) ?? null,
+        external_ref: (row.external_ref as string | null) ?? null,
       };
       const externalId = row.external_id as string | null;
       if (externalId) byExternalId.set(`${source}:${externalId}`, created);

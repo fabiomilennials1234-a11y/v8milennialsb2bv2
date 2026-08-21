@@ -114,7 +114,7 @@ Deno.serve(
 
     const { data: conn } = await admin
       .from("toth_connections")
-      .select("id, erp_sync_mode, status")
+      .select("id, erp_sync_mode, status, cobrancas_cursor")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -130,20 +130,41 @@ Deno.serve(
       return json({ error: "Credenciais do ERP indisponíveis. Reconecte a integração." }, cors);
     }
 
-    // Alvos: clientes da carteira já casados com o Toth e com CNPJ.
-    const { data: clients, error: clientsErr } = await admin
+    // Alvos: clientes da carteira já casados com o Toth e com CNPJ, a partir do
+    // cursor.
+    //
+    // 🔴 Ordena por `id`, não por `updated_at`. A ordenação anterior por
+    // `updated_at` não servia de cursor porque a própria sincronização mexe na
+    // linha: os mesmos primeiros 600 clientes eram varridos a cada execução e a
+    // carga nunca passava deles — 600 de 12.609, indefinidamente. `id` é
+    // estável, então `> cursor` avança de verdade.
+    const cursor = conn.cobrancas_cursor as string | null;
+    let query = admin
       .from("upsell_clients")
       .select("id, cnpj")
       .eq("organization_id", organizationId)
       .eq("external_source", TOTH_PROVIDER_ID)
       .not("cnpj", "is", null)
-      .order("updated_at", { ascending: true })
+      .order("id", { ascending: true })
       .limit(MAX_CLIENTS_PER_RUN);
+
+    if (cursor) query = query.gt("id", cursor);
+
+    const { data: clients, error: clientsErr } = await query;
 
     if (clientsErr) {
       return json({ error: `Erro ao listar clientes: ${clientsErr.message}` }, cors);
     }
     if (!clients || clients.length === 0) {
+      // Fim da volta com cursor adiantado: zera e devolve, para que o próximo
+      // clique (ou o cron) recomece do início em vez de ficar preso no fim.
+      if (cursor) {
+        await admin
+          .from("toth_connections")
+          .update({ cobrancas_cursor: null, last_cobrancas_sync_at: new Date().toISOString() })
+          .eq("id", conn.id);
+        return json({ success: true, ciclo_completo: true, stats: null }, cors);
+      }
       return json(
         {
           success: true,
@@ -271,11 +292,23 @@ Deno.serve(
       await sleep(BATCH_DELAY_MS);
     }
 
+    // 🔴 NÃO limpa `last_error` quando dá certo.
+    //
+    // As duas funções de sync compartilham o campo, e o botão "Sincronizar
+    // agora" roda clientes → cobranças em sequência. Como cobranças terminava
+    // depois e gravava null, ela apagava o diagnóstico do sync de clientes: em
+    // 20/08 a carga falhou em 12.500 registros e o erro sumiu quatro segundos
+    // depois, obrigando a caçar a causa no log do Postgres.
     await admin
       .from("toth_connections")
       .update({
+        // Lote cheio → há mais adiante, guarda onde parou. Lote curto → a volta
+        // terminou, zera para o próximo ciclo reprocessar tudo (título muda de
+        // status com o tempo, então revisitar é o comportamento desejado).
+        cobrancas_cursor:
+          clients.length === MAX_CLIENTS_PER_RUN ? clients[clients.length - 1].id : null,
         last_cobrancas_sync_at: new Date().toISOString(),
-        last_error: errors.length > 0 ? errors[0] : null,
+        ...(errors.length > 0 ? { last_error: errors[0] } : {}),
       })
       .eq("id", conn.id);
 

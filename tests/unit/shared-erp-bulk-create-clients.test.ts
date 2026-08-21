@@ -175,6 +175,89 @@ describe("bulkCreateClients", () => {
     expect(r.errors[0]).toContain("leads");
   });
 
+  it("🔴 telefone repetido não vai para o lead — a constraint que derrubou a carga", async () => {
+    // idx_leads_org_phone_unique é UNIQUE em (org, normalized_phone). Como
+    // INSERT multi-linha é atômico, uma duplicata reprovava o lote inteiro.
+    const comTelefone = (id: string, phone: string): CanonicalClient => ({
+      ...cliente(id),
+      phone,
+    });
+    const { admin, calls } = fakeAdmin();
+
+    await bulkCreateClients(admin as never, {
+      organizationId: "org-1",
+      source: "toth",
+      clients: [comTelefone("1", "48999750303"), comTelefone("2", "48999750303")],
+      newId: ids(),
+      normalizePhone: (p) => p,
+    });
+
+    const leads = calls[0].rows as Array<Record<string, unknown>>;
+    expect(leads[0].phone).toBe("48999750303");
+    // O segundo perde o telefone NO LEAD...
+    expect(leads[1].phone).toBeNull();
+    // ...mas mantém no cliente da carteira, que não tem a restrição.
+    const carteira = calls[1].rows as Array<Record<string, unknown>>;
+    expect(carteira[1].phone).toBe("48999750303");
+  });
+
+  it("respeita telefone já usado por lead existente na org", async () => {
+    const { admin, calls } = fakeAdmin();
+    await bulkCreateClients(admin as never, {
+      organizationId: "org-1",
+      source: "toth",
+      clients: [{ ...cliente("1"), phone: "48999750303" }],
+      newId: ids(),
+      usedPhones: new Set(["48999750303"]),
+      normalizePhone: (p) => p,
+    });
+    expect((calls[0].rows as Array<Record<string, unknown>>)[0].phone).toBeNull();
+  });
+
+  it("🔴 lote que falha é dividido ao meio — um registro ruim não custa 500", async () => {
+    // Na carga real, 25 lotes cheios caíram por uma duplicata cada e só o
+    // último, de 108, passou. Dividir isola o culpado e salva o resto.
+    let n = 0;
+    const admin = {
+      from(table: string) {
+        return {
+          insert(rows: unknown[]) {
+            n++;
+            // Falha só quando o lote de leads tem mais de um registro.
+            const falha = table === "leads" && (rows as unknown[]).length > 1;
+            return Promise.resolve({ error: falha ? { message: "duplicate key" } : null });
+          },
+          delete: () => ({ in: () => Promise.resolve({ error: null }) }),
+        };
+      },
+    };
+
+    const r = await bulkCreateClients(admin as never, {
+      organizationId: "org-1",
+      source: "toth",
+      clients: [cliente("1"), cliente("2"), cliente("3"), cliente("4")],
+      batchSize: 4,
+      newId: ids(),
+    });
+
+    // Todos acabam entrando, um a um, em vez de perder os quatro.
+    expect(r.created).toBe(4);
+    expect(r.failed).toBe(0);
+    expect(n).toBeGreaterThan(2);
+  });
+
+  it("registro isolado que falha é reportado com o external_id", async () => {
+    const { admin } = fakeAdmin({ leads: { message: "duplicate key" } });
+    const r = await bulkCreateClients(admin as never, {
+      organizationId: "org-1",
+      source: "toth",
+      clients: [cliente("77")],
+      newId: ids(),
+    });
+    expect(r.failed).toBe(1);
+    expect(r.errors[0]).toContain("externalId 77");
+  });
+
   it("lista vazia não toca no banco", async () => {
     const { admin, calls } = fakeAdmin();
     const r = await bulkCreateClients(admin as never, {

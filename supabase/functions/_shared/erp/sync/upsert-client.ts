@@ -23,6 +23,14 @@ export interface ExistingClient {
   email: string | null;
   company: string | null;
   name: string | null;
+  /**
+   * Identidade externa já gravada. Opcional para não quebrar chamadores
+   * antigos; quando presente, permite detectar que NADA mudaria e pular a
+   * escrita — ver `upsertCanonicalClient`.
+   */
+  external_source?: string | null;
+  external_id?: string | null;
+  external_ref?: string | null;
 }
 
 export interface ClientStore {
@@ -82,7 +90,28 @@ export async function upsertCanonicalClient(
       if (!existing.email && client.email) patch.email = client.email;
       if (!existing.company && client.company) patch.company = client.company;
     }
-    await store.enrich(existing.id, patch);
+
+    // Escrita só quando algo muda de fato.
+    //
+    // Sem isto, RE-sincronizar é O(n) de UPDATEs inúteis: na segunda execução
+    // da carga da Café Jurerê, 12.608 clientes já existentes viraram 12.608
+    // updates idênticos e a função estourou o teto de 150s do gateway (HTTP
+    // 504). Cada update ainda dispara auditoria e evento de Realtime, então o
+    // custo não é só a ida ao banco.
+    //
+    // Quando o chamador não informa a identidade externa atual (`external_*`
+    // ausente no `ExistingClient`), a comparação do carimbo é pulada e o
+    // comportamento continua o de antes: escreve.
+    const changed = Object.entries(patch).filter(([key, value]) => {
+      const current = (existing as unknown as Record<string, unknown>)[key];
+      return current === undefined ? true : current !== value;
+    });
+
+    if (changed.length === 0) {
+      return { action: "skipped", reason: "no_changes" };
+    }
+
+    await store.enrich(existing.id, Object.fromEntries(changed));
     return { action: "enriched", clientId: existing.id };
   }
 
