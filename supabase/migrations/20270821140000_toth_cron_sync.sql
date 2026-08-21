@@ -1,4 +1,4 @@
--- 20270821110000_toth_cron_sync.sql
+-- 20270821140000_toth_cron_sync.sql
 --
 -- Cron da sincronização do Toth: clientes 1x/dia, cobranças a cada 2h.
 --

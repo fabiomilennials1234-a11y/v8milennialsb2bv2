@@ -1,4 +1,4 @@
--- 20270821100000_toth_cursor_cobrancas.sql
+-- 20270821130000_toth_cursor_cobrancas.sql
 --
 -- Cursor de retomada da sincronização de cobranças do Toth.
 --
