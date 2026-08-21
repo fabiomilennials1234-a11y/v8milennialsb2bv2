@@ -271,11 +271,18 @@ Deno.serve(
       await sleep(BATCH_DELAY_MS);
     }
 
+    // 🔴 NÃO limpa `last_error` quando dá certo.
+    //
+    // As duas funções de sync compartilham o campo, e o botão "Sincronizar
+    // agora" roda clientes → cobranças em sequência. Como cobranças terminava
+    // depois e gravava null, ela apagava o diagnóstico do sync de clientes: em
+    // 20/08 a carga falhou em 12.500 registros e o erro sumiu quatro segundos
+    // depois, obrigando a caçar a causa no log do Postgres.
     await admin
       .from("toth_connections")
       .update({
         last_cobrancas_sync_at: new Date().toISOString(),
-        last_error: errors.length > 0 ? errors[0] : null,
+        ...(errors.length > 0 ? { last_error: errors[0] } : {}),
       })
       .eq("id", conn.id);
 

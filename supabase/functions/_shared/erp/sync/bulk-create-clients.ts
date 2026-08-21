@@ -44,6 +44,23 @@ export function buildClientRows(
   source: string,
   client: CanonicalClient,
   leadId: string,
+  /**
+   * `false` quando o telefone já pertence a outro lead da organização.
+   *
+   * 🔴 `idx_leads_org_phone_unique` é UNIQUE em (org, normalized_phone), e o
+   * cadastro do Toth tem clientes distintos com o mesmo número. Como INSERT
+   * multi-linha é atômico, uma única duplicata derrubava o lote de 500 inteiro —
+   * foi o que fez 12.500 de 12.608 falharem na primeira carga.
+   *
+   * O telefone continua gravado no CLIENTE da carteira, que não tem essa
+   * restrição; só o lead nasce sem ele. Reusar o mesmo lead para os dois
+   * cadastros não é alternativa: `upsell_clients` é UNIQUE em (org, lead_id),
+   * então um lead comporta um cliente só.
+   *
+   * Efeito colateral desejável: apenas o primeiro lead adota as conversas
+   * órfãs daquele número, em vez de todos disputarem as mesmas mensagens.
+   */
+  phoneAvailable = true,
 ): { lead: Record<string, unknown>; carteira: Record<string, unknown> } {
   return {
     lead: {
@@ -51,7 +68,7 @@ export function buildClientRows(
       organization_id: organizationId,
       name: client.name,
       company: client.company,
-      phone: client.phone,
+      phone: phoneAvailable ? client.phone : null,
       email: client.email,
       origin: `erp_${source}`,
     },
@@ -86,22 +103,32 @@ export async function bulkCreateClients(
     clients: CanonicalClient[];
     batchSize?: number;
     newId?: () => string;
+    /**
+     * Telefones já pertencentes a leads da organização, normalizados como o
+     * banco normaliza. Cresce durante a execução.
+     */
+    usedPhones?: Set<string>;
+    /** Normalizador — espelho de `normalize_brazilian_phone`. */
+    normalizePhone?: (phone: string | null) => string | null;
   },
 ): Promise<BulkCreateResult> {
   const { organizationId, source, clients } = params;
   const newId = params.newId ?? (() => crypto.randomUUID());
+  const usedPhones = params.usedPhones ?? new Set<string>();
+  const normalize = params.normalizePhone ?? ((p) => p);
   const result: BulkCreateResult = { created: 0, failed: 0, errors: [] };
 
-  for (const batch of chunk(clients, params.batchSize ?? DEFAULT_BATCH_SIZE)) {
-    const rows = batch.map((c) => buildClientRows(organizationId, source, c, newId()));
+  const insertBatch = async (batch: CanonicalClient[]): Promise<void> => {
+    const rows = batch.map((c) => {
+      const norm = c.phone ? normalize(c.phone) : null;
+      const available = !norm || !usedPhones.has(norm);
+      if (norm && available) usedPhones.add(norm);
+      return buildClientRows(organizationId, source, c, newId(), available);
+    });
     const leadIds = rows.map((r) => r.lead.id as string);
 
     const { error: leadErr } = await admin.from("leads").insert(rows.map((r) => r.lead));
-    if (leadErr) {
-      result.failed += batch.length;
-      if (result.errors.length < 3) result.errors.push(`leads: ${leadErr.message}`);
-      continue;
-    }
+    if (leadErr) return fail(batch, `leads: ${leadErr.message}`);
 
     const { error: clientErr } = await admin
       .from("upsell_clients")
@@ -112,12 +139,36 @@ export async function bulkCreateClients(
       // na lista de Leads e já adotou conversas órfãs pelo gatilho. Desfaz o
       // lote para que a falha não deixe rastro pela metade.
       await admin.from("leads").delete().in("id", leadIds);
-      result.failed += batch.length;
-      if (result.errors.length < 3) result.errors.push(`upsell_clients: ${clientErr.message}`);
-      continue;
+      return fail(batch, `upsell_clients: ${clientErr.message}`);
     }
 
     result.created += batch.length;
+  };
+
+  /**
+   * Falhou: divide ao meio e tenta de novo, até isolar o registro problemático.
+   *
+   * INSERT multi-linha é atômico, então um registro ruim reprova o lote inteiro.
+   * Sem isso, um único cliente com dado inesperado custava 500 — foi exatamente
+   * o que aconteceu na primeira carga, onde 25 lotes cheios caíram e só o
+   * último, de 108, passou. Dividir isola o culpado em log2(N) tentativas e
+   * salva o resto.
+   */
+  const fail = async (batch: CanonicalClient[], message: string): Promise<void> => {
+    if (batch.length === 1) {
+      result.failed += 1;
+      if (result.errors.length < 3) {
+        result.errors.push(`${message} (externalId ${batch[0].externalId})`);
+      }
+      return;
+    }
+    const meio = Math.floor(batch.length / 2);
+    await insertBatch(batch.slice(0, meio));
+    await insertBatch(batch.slice(meio));
+  };
+
+  for (const batch of chunk(clients, params.batchSize ?? DEFAULT_BATCH_SIZE)) {
+    await insertBatch(batch);
   }
 
   return result;

@@ -423,10 +423,31 @@ Deno.serve(
     // clientes, em vez de dois por registro. É o que faz a carga inicial caber
     // numa execução.
     if (toCreate.length > 0) {
+      // Telefones já pertencentes a leads da org. `idx_leads_org_phone_unique` é
+      // UNIQUE em (org, normalized_phone), e o ERP tem clientes distintos com o
+      // mesmo número — sem esta carga prévia, a duplicata só apareceria como
+      // erro de lote, derrubando 500 registros de uma vez.
+      const usedPhones = new Set<string>();
+      for (let from = 0; ; from += 1000) {
+        const { data } = await admin
+          .from("leads")
+          .select("normalized_phone")
+          .eq("organization_id", organizationId)
+          .not("normalized_phone", "is", null)
+          .range(from, from + 999);
+        const rows = data ?? [];
+        for (const r of rows) {
+          if (r.normalized_phone) usedPhones.add(r.normalized_phone as string);
+        }
+        if (rows.length < 1000) break;
+      }
+
       const bulk = await bulkCreateClients(admin, {
         organizationId,
         source: TOTH_PROVIDER_ID,
         clients: toCreate,
+        usedPhones,
+        normalizePhone: normalizePhoneForSearch,
       });
       stats.created = bulk.created;
       stats.failed += bulk.failed;
