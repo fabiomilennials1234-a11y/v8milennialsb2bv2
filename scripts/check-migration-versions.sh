@@ -87,15 +87,62 @@ if git rev-parse --verify --quiet "${BASE_REF}" >/dev/null; then
     fail=1
   fi
 
+  # Nomes de arquivo presentes AQUI, em qualquer versão. É o que separa colisão
+  # de RENUMERAÇÃO, e a diferença entre as duas é o merge:
+  #
+  #   * COLISÃO — a base tem A@V, aqui tem B@V e A não existe aqui. A base
+  #     escreveu A depois do fork; o merge traz A de volta e sobram DOIS
+  #     arquivos na versão V. É a forma de 2026-08-11, e reprova.
+  #
+  #   * RENUMERAÇÃO — a base tem A@V, aqui tem B@V e A@V' (V' livre). Esta
+  #     branch já MOVEU o arquivo da base para outra versão; o merge aplica a
+  #     renomeação e cada arquivo fica com a sua versão. Nada é pulado, e
+  #     reprovar aqui é falso vermelho.
+  #
+  # Medido em 2026-08-21: `20270730000010` é `deals_rls_org_scope` em develop e
+  # `voip_webhook_ingest` em main porque o renumber do PR #1430 só chegou em
+  # develop — que carrega o voip em `20270730000011`. O guarda reprovava TODO
+  # push para develop por uma colisão que a própria develop já tinha resolvido.
+  # Compara pelo SLUG (nome sem os 14 dígitos), porque é ele que identifica a
+  # migration: renumerar muda o prefixo e mantém o slug. Comparar o arquivo
+  # inteiro nunca casaria — é exatamente o que a renumeração altera.
+  slug() { sed -E 's/^[0-9]{14}_?//'; }
+  here_slugs="$(printf '%s\n' "${here_pairs}" | awk '{print $2}' | slug | sort -u)"
+
   cross=""
+  renum=""
   while read -r ver nome; do
     [ -z "${ver:-}" ] && continue
     homonimos="$(printf '%s\n' "${base_pairs}" | awk -v v="$ver" '$1==v {print $2}')"
     [ -z "${homonimos}" ] && continue
     printf '%s\n' "${homonimos}" | grep -qxF "${nome}" && continue
-    cross="${cross}${ver}  ${nome}  <->  $(printf '%s\n' "${homonimos}" | paste -sd, -)
+
+    # Sobraram os homônimos da base que NÃO existem aqui sob nenhuma versão.
+    # Vazio = a base inteira foi renumerada aqui; não vazio = colisão de fato.
+    orfaos=""
+    while read -r homonimo; do
+      [ -z "${homonimo:-}" ] && continue
+      if ! printf '%s\n' "${here_slugs}" \
+           | grep -qxF "$(printf '%s\n' "${homonimo}" | slug)"; then
+        orfaos="${orfaos}${homonimo}
+"
+      fi
+    done <<< "${homonimos}"
+    orfaos="$(printf '%s' "${orfaos}" | grep -v '^$' || true)"
+    if [ -z "${orfaos}" ]; then
+      renum="${renum}${ver}  ${nome}  (a base tem $(printf '%s\n' "${homonimos}" | paste -sd, -), já renumerado aqui)
+"
+      continue
+    fi
+    cross="${cross}${ver}  ${nome}  <->  $(printf '%s\n' "${orfaos}" | paste -sd, -)
 "
   done <<< "${here_pairs}"
+
+  nrenum="$(printf '%s' "$renum" | grep -c . || true)"
+  if [ "${nrenum}" -gt 0 ]; then
+    echo "Versions renumbered relative to ${BASE_REF} (not a collision): ${nrenum}"
+    printf '%s' "${renum}" | sed 's/^/  · /'
+  fi
 
   ncross="$(printf '%s' "$cross" | grep -c . || true)"
   echo "Versions colliding with ${BASE_REF} under another name: ${ncross}"
