@@ -47,6 +47,22 @@ jobs:
       - name: Migration version guard — self-test (red + negative control)
         run: bash scripts/check-migration-versions.test.sh
       - name: Migration version guard (no duplicates here, none colliding with the base)
+        # A base tem que ser AQUELA EM QUE O PR VAI ENTRAR, não `main` sempre.
+        #
+        # Sem esta linha o script cai no default `origin/main`, e aí TODO PR que
+        # mira `develop` é comparado com main. Como develop legitimamente carrega
+        # migrations que main não tem, vira falso positivo por construção.
+        #
+        # Medido em 2026-08-21: o PR #1712 reprovou aqui por `20270730000010`,
+        # que em develop é `deals_rls_org_scope` e em main é `voip_webhook_ingest`
+        # — porque o renumber da PR #1430 (SCRUM-244) só chegou em develop. Nada
+        # estava errado no PR; a base é que era.
+        #
+        # `github.base_ref` só existe em pull_request. No push (main/develop) ele
+        # vem vazio e o default do script volta a valer — que é o certo: num push
+        # para develop, comparar com main é exatamente a pergunta útil.
+        env:
+          MIGRATION_BASE_REF: ${{ github.base_ref && format('origin/{0}', github.base_ref) || '' }}
         run: bash scripts/check-migration-versions.sh
       - name: Metric anti-pattern lint (ADR-0017 — no new metric root causes)
         run: bash scripts/check-metric-antipatterns.sh
