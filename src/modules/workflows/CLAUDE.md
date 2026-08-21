@@ -5,6 +5,30 @@
 **Entidade primária:** Workflow DAG + Trigger + Condition + Action Handler
 **Owner:** ops / automações
 
+## Nó incompleto não ativa
+
+Regra única em `src/contracts/workflows/node-requirements.ts`. Duas portas de ativação
+passam por ela — `AutomacoesEditor.handleSave` e `useToggleWorkflow` (lista). Fechar só
+uma tornaria o gate contornável por um clique.
+
+- **Salvar rascunho incompleto é permitido.** Só ATIVAR é bloqueado.
+- **Nó culpado é marcado no canvas** (anel âmbar + o que falta). Recusar sem apontar
+  qual nó entre vinte seria trocar um defeito por outro.
+- **`actionType` sem regra passa.** Gate que bloqueia o que não entende trava o produto
+  a cada feature nova, e o time aprende a contorná-lo.
+- **Falso positivo é pior que gate nenhum.** Por isso `assign_responsible` com rodízio
+  não exige responsável, e funil sem etapas cadastradas não acusa etapa inválida — os
+  dois espelham o que o executor faz.
+
+A fonte da verdade é o executor (`supabase/functions/_shared/`), onde cada regra é um
+`if (!x) return erro` inline em 6 arquivos. `tests/unit/workflow-node-requirements.test.ts`
+falha se a mensagem ou a chave sumir de lá — a âncora é teste, não comentário.
+
+**Referência podre** (etapa renomeada/apagada depois) é outra classe: o workflow era
+válido quando salvou. Gate de ativação não pega. Sai na aba Configuração de
+`/master/automation-health`, que roda as MESMAS funções sobre os dados vivos.
+
+
 ## Escopo
 
 Automações via DAG (Directed Acyclic Graph). Workflows reagem a eventos do produto e executam steps em sequência/paralelo.
