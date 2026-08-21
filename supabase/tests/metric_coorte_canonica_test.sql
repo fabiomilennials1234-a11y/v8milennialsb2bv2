@@ -71,7 +71,7 @@ INSERT INTO public.leads
    qualification_tier, is_shadow, deleted_at) VALUES
   ('3680ead1-0000-4000-8000-0000000000c1', '36800000-0000-4000-8000-00000000000c',
    'C1 conta e é avaliado', 'meta_ads', '2027-08-10T12:00:00Z', '2027-08-10T12:00:00Z',
-   'A', false, NULL),
+   'ouro', false, NULL),
   ('3680ead1-0000-4000-8000-0000000000c2', '36800000-0000-4000-8000-00000000000c',
    'C2 conta e não é avaliado', 'meta_ads', '2027-08-11T12:00:00Z', '2027-08-11T12:00:00Z',
    NULL, false, NULL),

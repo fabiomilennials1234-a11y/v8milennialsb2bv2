@@ -247,7 +247,9 @@ SELECT is(
   (SELECT (s->>'value')::numeric
      FROM jsonb_array_elements(
        public.fn_metric_measure('39130000-0000-4000-8000-00000000000a',
-         '{"kind":"leaf","id":"negocios_na_etapa"}'::jsonb, 'etapa') -> 'series') s
+         '{"kind":"leaf","id":"negocios_na_etapa"}'::jsonb, 'etapa',
+         NULL, NULL, NULL, NULL,
+         '{"pipeline_id":"39139191-0000-4000-8000-00000000000a"}'::jsonb) -> 'series') s
     WHERE s->>'key' = 'novo'),
   2::numeric,
   'SE1: por etapa, "novo" tem 2 NEGÓCIOS (um de cada lead)');
@@ -256,7 +258,9 @@ SELECT is(
   (SELECT (s->>'value')::numeric
      FROM jsonb_array_elements(
        public.fn_metric_measure('39130000-0000-4000-8000-00000000000a',
-         '{"kind":"leaf","id":"negocios_na_etapa"}'::jsonb, 'etapa') -> 'series') s
+         '{"kind":"leaf","id":"negocios_na_etapa"}'::jsonb, 'etapa',
+         NULL, NULL, NULL, NULL,
+         '{"pipeline_id":"39139191-0000-4000-8000-00000000000a"}'::jsonb) -> 'series') s
     WHERE s->>'key' = 'proposta'),
   1::numeric,
   'SE2: por etapa, "proposta" tem 1 negócio aberto — o fechado saiu');
