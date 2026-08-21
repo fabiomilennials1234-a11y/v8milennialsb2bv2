@@ -8,6 +8,7 @@ import { useConversasAguardando } from "@/modules/analytics/hooks/useConversasAg
 import { CardConversasAguardando } from "./CardConversasAguardando";
 import { CardProximasAgendas } from "./CardProximasAgendas";
 import { CardTarefasDoDia } from "./CardTarefasDoDia";
+import { CardMetas } from "./CardMetas";
 
 /**
  * Comando como CENTRAL DE TRABALHO — a primeira tela do dia.
@@ -94,12 +95,16 @@ export function TabProximosPassos() {
         </Link>
       </header>
 
-      {/* Desktop-first, como o produto é usado. O bloco 1 fica com a coluna
-          larga porque é o único que representa oportunidade perdida; agenda e
-          tarefas empilham na coluna estreita. Abaixo de lg tudo vira uma
-          coluna só, na mesma ordem de prioridade. */}
+      {/* Desktop-first, como o produto é usado.
+          Coluna LARGA: conversas (a única que representa oportunidade perdida)
+          e metas (que precisam de largura para a lista de vendedores).
+          Coluna ESTREITA: agenda e tarefas, que são listas curtas.
+          Abaixo de lg tudo vira uma coluna só, na mesma ordem de prioridade. */}
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
-        <CardConversasAguardando />
+        <div className="grid gap-4">
+          <CardConversasAguardando />
+          <CardMetas />
+        </div>
 
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
           <CardProximasAgendas />
