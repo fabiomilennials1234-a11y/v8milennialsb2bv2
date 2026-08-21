@@ -348,6 +348,20 @@ export const STUDIO_METRICS: StudioMetric[] = [
   },
 
   // ── Metas ────────────────────────────────────────────────────────────────
+  //
+  // ⚠ A família meta NÃO vira medida do catálogo, e isso é decisão, não
+  // pendência (SCRUM-389). O motor já devolve `target` no payload de TODA
+  // medida com `goal_type` (migration 20260727140000): soma de
+  // `goals.target_value` da org no mês do período. Portá-las como medidas
+  // criaria uma SEGUNDA verdade sobre meta, com o mesmo join reescrito.
+  //
+  // O que faltava era a UI ler o campo — feito: a janela do Estúdio mostra
+  // "Meta: X" e o percentual atingido quando `target` vem preenchido
+  // (`useMetricWindowData.percentualDaMeta`). Alvo ausente não vira barra em
+  // zero: a linha inteira some, porque "0% da meta" afirma que nada foi feito.
+  //
+  // `meta_atingimento` é `valor ÷ target × 100`. O ×100 mora no hook porque
+  // `percent_1` apenas sufixa "%": sem ele, meta 87% batida imprime "0,9%".
   {
     id: "meta_definida",
     label: "Meta definida",
