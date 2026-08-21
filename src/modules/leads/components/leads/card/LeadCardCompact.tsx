@@ -12,6 +12,8 @@ import { ptBR } from "date-fns/locale";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { LeadCardAvatar } from "./LeadCardAvatar";
 import { LeadCardLabels } from "./LeadCardLabels";
+import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
+import { LeadCardQualificationPopover } from "./LeadCardQualificationPopover";
 // Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
 import type { QualificationTier } from "../../lead-detail/modal/types";
 
@@ -219,9 +221,19 @@ export const LeadCardCompact = memo(function LeadCardCompact({
 
   const feitos = lead.metrics?.checklistsCompleted ?? 0;
   const totalCk = lead.metrics?.checklistsTotal ?? 0;
-  const atividades = totalCk > 0
-    ? `${feitos}/${totalCk} atividade${totalCk > 1 ? "s" : ""}`
-    : null;
+  const tudoFeito = totalCk > 0 && feitos === totalCk;
+  const emAberto = totalCk - feitos;
+  /**
+   * A copy do print é PROSA e muda de estado — "N atividade em aberto" contra
+   * "N atividades concluídas" — em vez da fração crua `N/M`. A diferença não é
+   * estética: quem varre a coluna quer saber se sobrou coisa para fazer, e
+   * `3/4` obriga a fazer a conta de cabeça.
+   */
+  const atividades = totalCk === 0
+    ? null
+    : tudoFeito
+    ? `${feitos} atividade${feitos > 1 ? "s" : ""} concluída${feitos > 1 ? "s" : ""}`
+    : `${emAberto} atividade${emAberto > 1 ? "s" : ""} em aberto`;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -284,13 +296,28 @@ export const LeadCardCompact = memo(function LeadCardCompact({
               )}
             </div>
 
-            {/* onde o DataCrazy põe o "#1": 20px, MENOR que a inicial de 26px */}
-            {(lead.preQualTier || lead.qualTier) && (
+            {/* Onde o DataCrazy põe o "#1": 22px, MENOR que a inicial de 26px.
+                Desenhado SEMPRE — sem a guarda `preQual || qual` de antes.
+                Duas razões: lead não qualificado é justamente quem precisa do
+                convite (o símbolo desenha `?` na metade vazia sozinho), e sem
+                render não há onde clicar para qualificar.
+                22 e não 20: abaixo de 26px o ícone cai para 0,46 do tamanho, e
+                a 20px isso dá 9px — ilegível no meio a meio. */}
+            {lead.leadId ? (
+              <LeadCardQualificationPopover
+                leadId={lead.leadId}
+                preQualTier={lead.preQualTier}
+                qualTier={lead.qualTier}
+                name={lead.name}
+                size={22}
+                className="mt-px"
+              />
+            ) : (
               <LeadCardAvatar
                 preQualTier={lead.preQualTier}
                 qualTier={lead.qualTier}
                 name={lead.name}
-                size={20}
+                size={22}
                 className="mt-px shrink-0"
               />
             )}
@@ -351,9 +378,28 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                 </Linha>
               )}
 
-              <Linha icone={<ClipboardList className="size-[13px]" />} vazio="Sem atividades">
-                {atividades}
-              </Linha>
+              {/* A linha de atividades ABRE o painel de checklists.
+                  Ela era texto morto: o `LeadCardChecklistPopover` existe
+                  completo (cabeçalho sticky, seções colapsáveis, itens
+                  marcáveis) mas só era montado pelo ramo confortável, que
+                  funil nenhum renderiza — ou seja, checklist não existia nos
+                  funis. Sem `leadId` ou sem checklist, volta a ser só texto. */}
+              {lead.leadId && totalCk > 0 ? (
+                <LeadCardChecklistPopover
+                  leadId={lead.leadId}
+                  completed={feitos}
+                  total={totalCk}
+                  triggerClassName="rounded hover:bg-muted/50"
+                >
+                  <Linha icone={<ClipboardList className="size-[13px]" />} vazio="Sem atividades">
+                    <span className={cn(tudoFeito && "text-emerald-500")}>{atividades}</span>
+                  </Linha>
+                </LeadCardChecklistPopover>
+              ) : (
+                <Linha icone={<ClipboardList className="size-[13px]" />} vazio="Sem atividades">
+                  {atividades}
+                </Linha>
+              )}
             </div>
 
             {/* No print os botões ficam no MEIO da lista, à direita — não no topo. */}

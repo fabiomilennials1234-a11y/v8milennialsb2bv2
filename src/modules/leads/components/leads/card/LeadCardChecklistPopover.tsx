@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { CheckCircle2, CheckSquare, ChevronDown, ChevronRight } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -45,12 +45,26 @@ interface LeadCardChecklistPopoverProps {
   leadId: string;
   completed: number;
   total: number;
+  /**
+   * Gatilho alternativo. Sem isto o gatilho é o badge `N/M` — que serve ao
+   * card confortável, onde ele vive no rodapé de métricas.
+   *
+   * O card do funil (compacto, na anatomia DataCrazy) precisa que o gatilho
+   * seja a LINHA de atividades inteira, com ícone e prosa. Só o conteúdo
+   * muda: o `<button>`, o `stopPropagation` do dnd-kit e o do clique do card
+   * continuam sendo deste componente, porque é onde o erro dói.
+   */
+  children?: ReactNode;
+  /** Classe do gatilho quando `children` é usado. */
+  triggerClassName?: string;
 }
 
 export const LeadCardChecklistPopover = memo(function LeadCardChecklistPopover({
   leadId,
   completed,
   total,
+  children,
+  triggerClassName,
 }: LeadCardChecklistPopoverProps) {
   const [open, setOpen] = useState(false);
   const done = total > 0 && completed === total;
@@ -68,18 +82,26 @@ export const LeadCardChecklistPopover = memo(function LeadCardChecklistPopover({
           onClick={(e) => e.stopPropagation()}
           aria-label={`Checklists: ${completed} de ${total} itens concluídos`}
           className={cn(
-            "flex items-center gap-1 px-1 py-px rounded cursor-pointer select-none transition-colors duration-150",
+            children
+              ? cn("w-full min-w-0 text-left", triggerClassName)
+              : cn(
+                  "flex items-center gap-1 px-1 py-px rounded cursor-pointer select-none transition-colors duration-150",
+                  "data-[state=open]:bg-muted/70 data-[state=open]:text-foreground",
+                  done
+                    ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
+                    : "text-foreground/70 hover:bg-muted/70 hover:text-foreground",
+                ),
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 focus-visible:ring-offset-card",
-            "data-[state=open]:bg-muted/70 data-[state=open]:text-foreground",
-            done
-              ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25"
-              : "text-foreground/70 hover:bg-muted/70 hover:text-foreground",
           )}
         >
-          <CheckSquare className="w-3 h-3 shrink-0" />
-          <span className="tabular-nums">
-            {completed}/{total}
-          </span>
+          {children ?? (
+            <>
+              <CheckSquare className="w-3 h-3 shrink-0" />
+              <span className="tabular-nums">
+                {completed}/{total}
+              </span>
+            </>
+          )}
         </button>
       </PopoverTrigger>
       <PopoverContent
