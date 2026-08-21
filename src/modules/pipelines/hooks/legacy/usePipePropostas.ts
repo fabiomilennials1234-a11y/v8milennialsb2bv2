@@ -135,6 +135,17 @@ export function useUpdatePipeProposta() {
       if (updates.product_id !== undefined) mergedMeta.product_id = updates.product_id;
       if (updates.calor !== undefined) mergedMeta.calor = updates.calor;
       if (updates.loss_reason_id !== undefined) mergedMeta.loss_reason_id = updates.loss_reason_id;
+      // 🔴 `loss_reason` FALTAVA nesta lista, e a ausência era invisível
+      // (SCRUM-369). A tela de Propostas escrevia `updates.loss_reason` desde
+      // sempre; a chave caía aqui e era descartada em silêncio, porque este
+      // merge é uma allowlist. Medido em produção em 2026-08-21: 72 negócios
+      // marcados como perdidos, ZERO com motivo — nem no id, nem no texto.
+      //
+      // O texto NÃO é redundante com o id: ele é o RÓTULO SNAPSHOTADO no
+      // momento da perda. `loss_reasons` é catálogo editável por org, e um
+      // motivo renomeado ou apagado depois deixaria o histórico ilegível se só
+      // o id fosse guardado.
+      if (updates.loss_reason !== undefined) mergedMeta.loss_reason = updates.loss_reason;
       if (updates.commitment_date !== undefined) mergedMeta.commitment_date = updates.commitment_date;
       if (updates.contract_duration !== undefined) mergedMeta.contract_duration = updates.contract_duration;
       if (updates.metrics_period_at !== undefined) mergedMeta.metrics_period_at = updates.metrics_period_at;
