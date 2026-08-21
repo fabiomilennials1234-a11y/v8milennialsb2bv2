@@ -48,7 +48,7 @@ export function CardConversasAguardando() {
           <p className="border-b border-border/50 bg-muted/40 px-4 py-2 text-[10px] leading-relaxed text-muted-foreground/80">
             Lista parcial: mostrando só as conversas sem nenhuma resposta. As que
             a IA respondeu entram depois que a migration
-            <span className="cmd-mono"> 20270821170000 </span>
+            <span className="cmd-mono"> 20270821250000 </span>
             for aplicada neste banco.
           </p>
         ) : null
