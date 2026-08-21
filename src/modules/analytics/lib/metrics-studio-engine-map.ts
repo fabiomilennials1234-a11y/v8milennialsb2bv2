@@ -132,6 +132,10 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // SCRUM-421. As duas metades da taxa de resposta por automação.
   disparos_entregues: ["total", "tempo", "origem"],
   disparos_respondidos: ["total", "tempo", "origem"],
+  // SCRUM-420. `closer` faz sentido aqui, ao contrário de
+  // `clientes_sem_resposta`: o cliente da carteira TEM dono declarado, e "a
+  // carteira de quem está parada" é a pergunta do gestor.
+  clientes_sem_atuacao: ["total", "closer"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -158,6 +162,7 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   clientes_sem_resposta: "integer",
   disparos_entregues: "integer",
   disparos_respondidos: "integer",
+  clientes_sem_atuacao: "integer",
 };
 
 /**
@@ -190,6 +195,7 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   clientes_sem_resposta: "count",
   disparos_entregues: "count",
   disparos_respondidos: "count",
+  clientes_sem_atuacao: "count",
 };
 
 /**
@@ -379,6 +385,15 @@ export const ENGINE_METRICS: EngineMetric[] = [
     measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
     cortes: ["total"],
     formatId: "percent_1",
+  },
+  {
+    // SCRUM-420 — o sujeito é o CLIENTE da carteira, não o lead. Contar leads
+    // daria outra pergunta ("prospect esquecido"), legítima e diferente.
+    id: "clientes_sem_atuacao",
+    label: "Clientes sem atuação",
+    measureRef: { kind: "leaf", id: "clientes_sem_atuacao" },
+    cortes: ["total", "closer"],
+    formatId: "integer",
   },
   {
     // SCRUM-421 — as duas metades aparecem como medida própria porque cada uma

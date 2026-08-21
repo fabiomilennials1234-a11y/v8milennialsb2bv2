@@ -68,6 +68,8 @@ const VOCABULARIO_DAS_MEDIDAS = [
   // SCRUM-421 — as duas metades da taxa por automação (20270821220000)
   "disparos_entregues",
   "disparos_respondidos",
+  // SCRUM-420 — clientes sem atuação (20270821230000)
+  "clientes_sem_atuacao",
 ];
 
 describe("engine map — integridade contra o catálogo do motor", () => {
@@ -230,13 +232,13 @@ describe("engine map — decisões do grill", () => {
   // Ele NÃO é a defesa contra oferecer medida que o banco não tem — essa é
   // `filtrarPeloCatalogo`, testada acima. Aqui só se afirma que ninguém
   // acrescentou entrada por acidente.
-  it("G1: a oferta de fábrica é 21 medidas + 7 razões + 1 árvore", () => {
+  it("G1: a oferta de fábrica é 22 medidas + 7 razões + 1 árvore", () => {
     // O número sobe a cada fatia do SCRUM-311, e é isso que ele serve para
     // dizer: medida nova sem passar por aqui é medida que ninguém contou.
     const leafs = ENGINE_METRICS.filter((m) => m.measureRef.kind === "leaf");
     const ratios = ENGINE_METRICS.filter((m) => m.measureRef.kind === "ratio");
     const trees = ENGINE_METRICS.filter((m) => m.measureRef.kind === "tree");
-    expect(leafs).toHaveLength(21);
+    expect(leafs).toHaveLength(22);
     expect(ratios).toHaveLength(7);
     expect(trees).toHaveLength(1);
   });
