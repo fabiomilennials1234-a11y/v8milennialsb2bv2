@@ -129,6 +129,9 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // falado com três pessoas, e atribuir a fila a uma delas seria escolha
   // arbitrária disfarçada de dado.
   clientes_sem_resposta: ["total", "origem", "tag"],
+  // SCRUM-421. As duas metades da taxa de resposta por automação.
+  disparos_entregues: ["total", "tempo", "origem"],
+  disparos_respondidos: ["total", "tempo", "origem"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -153,6 +156,8 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   num_vendas_pre_venda: "integer",
   ltv: "currency_brl",
   clientes_sem_resposta: "integer",
+  disparos_entregues: "integer",
+  disparos_respondidos: "integer",
 };
 
 /**
@@ -183,6 +188,8 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   num_vendas_pre_venda: "count",
   ltv: "currency",
   clientes_sem_resposta: "count",
+  disparos_entregues: "count",
+  disparos_respondidos: "count",
 };
 
 /**
@@ -370,6 +377,32 @@ export const ENGINE_METRICS: EngineMetric[] = [
     id: "taxa_qualidade",
     label: "Taxa de qualidade de leads",
     measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
+    cortes: ["total"],
+    formatId: "percent_1",
+  },
+  {
+    // SCRUM-421 — as duas metades aparecem como medida própria porque cada uma
+    // responde sozinha: "quantos chegaram" e "quantos voltaram".
+    id: "disparos_entregues",
+    label: "Disparos entregues",
+    measureRef: { kind: "leaf", id: "disparos_entregues" },
+    cortes: ["total", "tempo", "origem"],
+    formatId: "integer",
+  },
+  {
+    id: "disparos_respondidos",
+    label: "Disparos respondidos",
+    measureRef: { kind: "leaf", id: "disparos_respondidos" },
+    cortes: ["total", "tempo", "origem"],
+    formatId: "integer",
+  },
+  {
+    // SCRUM-421 — a taxa. Numerador é subconjunto do denominador por
+    // construção (o mesmo leaf, com um predicado a mais), então a razão vive em
+    // [0, 100] sem trava.
+    id: "taxa_resposta_automacao",
+    label: "Taxa de resposta por automação",
+    measureRef: { kind: "ratio", num: "disparos_respondidos", den: "disparos_entregues" },
     cortes: ["total"],
     formatId: "percent_1",
   },
