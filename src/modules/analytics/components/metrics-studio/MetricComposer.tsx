@@ -36,6 +36,12 @@ import {
   type StudioRange,
 } from "@/modules/analytics/lib/metrics-studio-period";
 import { EM_DASH, formatMetricValue } from "@/modules/analytics/lib/tv-metric-format";
+import {
+  MEDIDAS_COM_ETAPA,
+  exigeEtapas,
+  faltamEtapas,
+} from "@/modules/analytics/lib/metricas-com-etapa";
+import { usePipelines, useEtapasDoFunil } from "@/modules/pipelines";
 
 /**
  * Compositor de métrica personalizada — Emenda 1 do ADR-0023 (SCRUM-316..320).
@@ -63,7 +69,15 @@ const MEDIDAS_COMPONIVEIS = ENGINE_METRICS.filter(
   label: m.label,
 }));
 
-const ROTULO_DA_MEDIDA = new Map(MEDIDAS_COMPONIVEIS.map((m) => [m.id, m.label]));
+// As de coorte entram AQUI e não em `ENGINE_METRICS` (SCRUM-388): elas exigem
+// `from_stage_key`/`to_stage_key`, e a lista lateral só sabe declarar filtro
+// fixo. É o compositor que pergunta as etapas.
+const MEDIDAS_ESCOLHIVEIS = [
+  ...MEDIDAS_COMPONIVEIS,
+  ...MEDIDAS_COM_ETAPA.map((m) => ({ id: m.id, label: m.label })),
+];
+
+const ROTULO_DA_MEDIDA = new Map(MEDIDAS_ESCOLHIVEIS.map((m) => [m.id, m.label]));
 
 const ROTULO_DO_FORMATO: Record<MetricFormatId, string> = {
   currency_brl: "Moeda (R$)",
@@ -102,7 +116,12 @@ export function MetricComposer({
     () => validarArvore(arvore, (id) => UNIDADE_DA_MEDIDA[id]),
     [arvore],
   );
-  const unidade = ehErro(validacao) ? null : validacao.unit;
+  // Etapa faltando NÃO é erro de árvore — a árvore está bem formada. É escolha
+  // incompleta, e o efeito é o mesmo: não dá para medir. Sem esta trava a
+  // definição SALVA levantaria 22023 toda vez que alguém abrisse, com um erro
+  // que o cliente vê e não sabe consertar (SCRUM-388).
+  const semEtapas = useMemo(() => faltamEtapas(arvore), [arvore]);
+  const unidade = ehErro(validacao) || semEtapas ? null : validacao.unit;
   const formatosOk = unidade ? formatosDaUnidade(unidade) : [];
 
   // O formato escolhido pode deixar de ser coerente quando a árvore muda —
@@ -188,7 +207,7 @@ export function MetricComposer({
                   : descreverArvore(arvore, (id) => ROTULO_DA_MEDIDA.get(id) ?? id)}
               </span>
               <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.03em] tabular-nums">
-                {ehErro(validacao) ? EM_DASH
+                {ehErro(validacao) || semEtapas ? EM_DASH
                   : previa.isLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/40" />
                   : formatMetricValue(previa.data?.value ?? null, formatoEfetivo ?? "ratio_2")}
               </span>
@@ -198,6 +217,13 @@ export function MetricComposer({
               <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-destructive">
                 <AlertCircle className="mt-px h-3 w-3 shrink-0" />
                 {validacao.erro}
+              </p>
+            )}
+
+            {!ehErro(validacao) && semEtapas && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                <AlertCircle className="mt-px h-3 w-3 shrink-0" />
+                Escolha o funil e as duas etapas para ver o número.
               </p>
             )}
           </div>
@@ -323,8 +349,16 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
   }
 
   const ehLiteral = node.type === "literal";
+  const pedeEtapas = node.type === "measure" && exigeEtapas(node.id);
 
   return (
+    <div className="flex flex-col gap-1.5">
+    {pedeEtapas && node.type === "measure" && (
+      <EscolhaDeEtapas
+        node={node}
+        onChange={onChange}
+      />
+    )}
     <div className="flex items-center gap-1.5">
       <select
         value={ehLiteral ? VALOR_LITERAL : node.id}
@@ -337,7 +371,7 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
         aria-label="Métrica"
         className="h-8 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[12px] outline-none focus:border-primary/50"
       >
-        {MEDIDAS_COMPONIVEIS.map((m) => (
+        {MEDIDAS_ESCOLHIVEIS.map((m) => (
           <option key={m.id} value={m.id}>{m.label}</option>
         ))}
         <option value={VALOR_LITERAL}>Número fixo…</option>
@@ -376,6 +410,99 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
+      )}
+    </div>
+    </div>
+  );
+}
+
+interface EscolhaDeEtapasProps {
+  node: Extract<MetricTreeNode, { type: "measure" }>;
+  onChange: (n: MetricTreeNode) => void;
+}
+
+/**
+ * Funil + etapa de origem + etapa de destino (SCRUM-388).
+ *
+ * Três escolhas, e a ordem importa: sem funil não há lista de etapas, porque
+ * `stage_key` é slug POR ORGANIZAÇÃO e por funil. É por isso que estas medidas
+ * não podem morar na lista lateral com filtro fixo — não existe valor que sirva
+ * para todas as orgs.
+ *
+ * Trocar de funil LIMPA as duas etapas. Manter chaves do funil anterior
+ * produziria um filtro que casa com nada: a métrica salvaria, abriria, e
+ * devolveria vazio para sempre — sem erro nenhum para explicar.
+ */
+function EscolhaDeEtapas({ node, onChange }: EscolhaDeEtapasProps) {
+  const { data: funis = [] } = usePipelines();
+  const pipelineId = node.filters?.pipeline_id ?? "";
+  const { etapas, isLoading } = useEtapasDoFunil(pipelineId || null);
+
+  const trocarFunil = (id: string) => {
+    onChange({
+      ...node,
+      filters: id ? { pipeline_id: id } : undefined,
+    });
+  };
+
+  const trocarEtapa = (qual: "from_stage_key" | "to_stage_key", valor: string) => {
+    const filters = { ...(node.filters ?? {}) };
+    if (valor) filters[qual] = valor;
+    else delete filters[qual];
+    onChange({ ...node, filters });
+  };
+
+  const classe =
+    "h-8 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[12px] outline-none focus:border-primary/50";
+
+  return (
+    <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-primary/30 bg-primary/[0.03] p-1.5">
+      <select
+        value={pipelineId}
+        onChange={(e) => trocarFunil(e.target.value)}
+        aria-label="Funil"
+        className={classe}
+      >
+        <option value="">Escolha o funil…</option>
+        {funis.map((f) => (
+          <option key={f.id} value={f.id}>{f.name}</option>
+        ))}
+      </select>
+
+      <div className="flex items-center gap-1.5">
+        <select
+          value={node.filters?.from_stage_key ?? ""}
+          onChange={(e) => trocarEtapa("from_stage_key", e.target.value)}
+          aria-label="Etapa de origem"
+          disabled={!pipelineId || isLoading}
+          className={cn(classe, "disabled:opacity-50")}
+        >
+          <option value="">De…</option>
+          {etapas.map((e) => (
+            <option key={e.stageKey} value={e.stageKey}>{e.label}</option>
+          ))}
+        </select>
+
+        <span className="shrink-0 text-[12px] text-muted-foreground">→</span>
+
+        <select
+          value={node.filters?.to_stage_key ?? ""}
+          onChange={(e) => trocarEtapa("to_stage_key", e.target.value)}
+          aria-label="Etapa de destino"
+          disabled={!pipelineId || isLoading}
+          className={cn(classe, "disabled:opacity-50")}
+        >
+          <option value="">Para…</option>
+          {etapas.map((e) => (
+            <option key={e.stageKey} value={e.stageKey}>{e.label}</option>
+          ))}
+        </select>
+      </div>
+
+      {pipelineId && !isLoading && etapas.length === 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          Este funil não tem etapas ativas.
+        </p>
       )}
     </div>
   );
