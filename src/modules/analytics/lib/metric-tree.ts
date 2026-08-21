@@ -68,7 +68,7 @@ export const LITERAL_MAXIMO = 1e12;
  * abre brecha — o banco valida de novo e recusa — mas faz o compositor prometer
  * o que o servidor nega, ou negar o que ele aceita.
  *
- * `from_stage_key`/`to_stage_key` entraram na 20270820100000 (SCRUM-316).
+ * `from_stage_key`/`to_stage_key` entraram na 20270821120000 (SCRUM-316).
  */
 export const CHAVES_DE_FILTRO = [
   "pipeline_id",

@@ -1,5 +1,5 @@
 -- ===========================================================================
--- ROLLBACK — 20270820100000_metric_conversao_entre_etapas.sql (SCRUM-316)
+-- ROLLBACK — 20270821120000_metric_conversao_entre_etapas.sql (SCRUM-316)
 -- ===========================================================================
 -- Ordem: despachante PRIMEIRO (para de apontar), depois a função, depois o
 -- catálogo. Inverter isso deixaria o despachante chamando função inexistente
@@ -93,7 +93,7 @@ $$;
 -- 2 — Allowlist da árvore volta às 6 chaves.
 --
 -- 🔴 CÓPIA LITERAL do corpo de 20270813110000:129 — o estado ANTERIOR a esta
--- fatia. A única diferença para o corpo da 20270820100000 é o `NOT IN` da
+-- fatia. A única diferença para o corpo da 20270821120000 é o `NOT IN` da
 -- allowlist, sem as duas chaves de etapa. Tudo o mais (teto de literal 1e12,
 -- exigência de recorte `total` no operando, presença de left/right, tipo do
 -- literal) tem de continuar aqui: um rollback que "simplifica" o corpo desfaz

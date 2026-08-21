@@ -348,7 +348,7 @@ export const ENGINE_METRICS: EngineMetric[] = [
     cortes: ["total"],
     formatId: "percent_1",
   },
-  // ⚠ `conversao_entre_etapas` (SCRUM-316, migration 20270820100000) EXISTE no
+  // ⚠ `conversao_entre_etapas` (SCRUM-316, migration 20270821120000) EXISTE no
   // motor e está DELIBERADAMENTE FORA desta lista. Não adicione.
   //
   // Ela exige os filtros `from_stage_key` e `to_stage_key`, e esta lista só sabe
