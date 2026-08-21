@@ -6,7 +6,9 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ClientStore, ExistingClient } from "./upsert-client.ts";
 
-const SELECT = "id, cnpj, phone, email, company, name";
+// `external_*` entra no SELECT para que `upsertCanonicalClient` consiga
+// comparar o carimbo e PULAR a escrita quando nada muda.
+const SELECT = "id, cnpj, phone, email, company, name, external_source, external_id, external_ref";
 
 export function supabaseClientStore(admin: SupabaseClient, source: string): ClientStore {
   return {
