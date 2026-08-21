@@ -122,6 +122,9 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // SCRUM-422. Mesmos recortes de num_vendas: e a mesma consulta com um
   // predicado a mais.
   num_vendas_pre_venda: ["total", "closer", "sdr", "origem", "tag", "stream", "pipeline", "tempo"],
+  // SCRUM-417. Só `total`: recortar LTV dividiria a receita de um balde pelo
+  // denominador de outro — número plausível e errado.
+  ltv: ["total"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -144,6 +147,7 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   negocios_abertos: "integer",
   ganho_perda: "integer",
   num_vendas_pre_venda: "integer",
+  ltv: "currency_brl",
 };
 
 /**
@@ -172,6 +176,7 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   negocios_abertos: "count",
   ganho_perda: "count",
   num_vendas_pre_venda: "count",
+  ltv: "currency",
 };
 
 /**
@@ -361,6 +366,18 @@ export const ENGINE_METRICS: EngineMetric[] = [
     measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
     cortes: ["total"],
     formatId: "percent_1",
+  },
+  {
+    // SCRUM-417 — a decisão do SCRUM-365: receita REALIZADA por cliente, numa
+    // janela própria de 12 meses ancorada no fim do período escolhido.
+    //
+    // Trocar o seletor de "este mês" para "este ano" mexe pouco neste número, e
+    // é assim que tem que ser: LTV de um mês não existe.
+    id: "ltv",
+    label: "LTV do cliente",
+    measureRef: { kind: "leaf", id: "ltv" },
+    cortes: ["total"],
+    formatId: "currency_brl",
   },
   {
     // SCRUM-422 — a taxa que o SCRUM-393 definiu: venda com pré-venda sobre o
