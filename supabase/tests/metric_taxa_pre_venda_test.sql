@@ -122,10 +122,18 @@ SELECT is(
 -- ===========================================================================
 -- (X1) a de SEIS argumentos não existe mais
 -- ===========================================================================
-SELECT is(
-  to_regprocedure('public._metric_leaf_sales(uuid, text, text, tstzrange, text, jsonb)')::text,
-  'public._metric_leaf_sales(uuid,text,text,tstzrange,text,jsonb,boolean)',
-  '(X1) a chamada de 6 argumentos resolve para a de 7 — a antiga foi apagada');
+-- `to_regprocedure` casa a assinatura EXATA: ele não resolve default, ao
+-- contrário do resolvedor de chamadas. Então a de seis tem que devolver NULL
+-- (não existe mais) e a de sete tem que existir. Afirmar que a de seis
+-- "resolve para" a de sete era pedir do catálogo uma resposta que só o
+-- planejador dá.
+SELECT ok(
+  to_regprocedure('public._metric_leaf_sales(uuid, text, text, tstzrange, text, jsonb)') IS NULL,
+  '(X1) a de SEIS argumentos não existe mais — com as duas vivas, toda chamada de 6 seria ambígua');
+
+SELECT ok(
+  to_regprocedure('public._metric_leaf_sales(uuid, text, text, tstzrange, text, jsonb, boolean)') IS NOT NULL,
+  '(X1) e a de SETE existe');
 
 -- ===========================================================================
 -- (CT) catálogo: a medida existe e herdou os recortes de num_vendas
