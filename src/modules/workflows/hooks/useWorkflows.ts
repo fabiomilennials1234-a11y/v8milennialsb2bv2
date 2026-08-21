@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useAuth } from "@/modules/identity";
 import { assertPermission } from "@/modules/identity";
+import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
 import type {
   Workflow,
   WorkflowInsert,
@@ -141,6 +142,36 @@ export function useToggleWorkflow() {
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
       // PERMISSION: Apenas admin pode ativar/desativar workflows
       await assertPermission("edit_workflow");
+
+      // O gate do editor não alcança esta porta: daqui dá para ligar um workflow
+      // sem nunca abrir o editor. Sem esta checagem, o gate seria contornável por
+      // um clique — e o defeito que ele existe para impedir voltaria inteiro.
+      // Só a classe "campo nunca preenchido" bloqueia aqui: referência que
+      // apodreceu depois não é algo que o autor acabou de fazer, e sai na
+      // varredura de /master/automation-health em vez de travar o clique.
+      if (is_active) {
+        const { data: wf } = await supabase
+          .from("workflows")
+          .select("definition")
+          .eq("id", id)
+          .eq("organization_id", organizationId!)
+          .maybeSingle();
+
+        const nodes = ((wf?.definition as { nodes?: unknown[] } | null)?.nodes ?? []) as {
+          id: string;
+          data?: Record<string, unknown>;
+        }[];
+        const issues = findNodeConfigIssues(nodes);
+
+        if (issues.length > 0) {
+          const nomes = [...new Set(issues.map((i) => i.nodeLabel))].slice(0, 3).join(", ");
+          throw new Error(
+            issues.length === 1
+              ? `Não dá para ativar: "${nomes}" está incompleto — falta ${issues[0].missing}.`
+              : `Não dá para ativar: ${issues.length} nós incompletos (${nomes}). Abra a automação e complete.`,
+          );
+        }
+      }
 
       const { error } = await supabase
         .from("workflows")

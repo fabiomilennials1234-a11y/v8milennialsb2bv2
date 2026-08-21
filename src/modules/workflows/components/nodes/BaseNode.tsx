@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { Handle, Position, useReactFlow } from "@xyflow/react";
-import { X } from "lucide-react";
+import { X, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WorkflowNodeType } from "@/types/workflow";
 import { NODE_COLORS } from "@/types/workflow";
@@ -13,6 +13,8 @@ interface BaseNodeProps {
   subtitle?: string;
   detail?: string;
   selected?: boolean;
+  /** O que falta configurar neste nó. Presente = o nó impede a ativação. */
+  warning?: string;
   showSourceHandle?: boolean;
   showTargetHandle?: boolean;
   children?: React.ReactNode;
@@ -26,6 +28,7 @@ export function BaseNode({
   subtitle,
   detail,
   selected,
+  warning,
   showSourceHandle = true,
   showTargetHandle = true,
   children,
@@ -50,7 +53,10 @@ export function BaseNode({
         colors.border,
         colors.bgLight,
         colors.bgDark,
-        selected && "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg"
+        selected && "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-lg",
+        // Nó incompleto: o autor precisa achar ESTE nó entre vinte. Recusar sem
+        // apontar seria trocar um defeito por outro.
+        warning && "ring-2 ring-amber-500/70 ring-offset-2 ring-offset-background"
       )}
     >
       {nodeId && (
@@ -85,6 +91,12 @@ export function BaseNode({
         </div>
         {detail && (
           <p className="text-xs text-muted-foreground mt-2 truncate">{detail}</p>
+        )}
+        {warning && (
+          <p className="mt-2 flex items-start gap-1.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+            <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" />
+            <span>{warning}</span>
+          </p>
         )}
         {children}
       </div>

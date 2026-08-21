@@ -80,7 +80,11 @@ export default function Automacoes() {
         onSuccess: () => {
           toast.success(workflow.is_active ? "Workflow desativado" : "Workflow ativado");
         },
-        onError: () => toast.error("Erro ao alterar status"),
+        onError: (err: unknown) =>
+          toast.error(
+            err instanceof Error && err.message ? err.message : "Erro ao alterar status",
+            { duration: 8000 },
+          ),
       }
     );
   };

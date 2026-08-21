@@ -115,6 +115,7 @@ function ActionNodeComponent({ id, data, selected }: NodeProps) {
       title={nodeData.label || "Ação"}
       subtitle={subtitle}
       selected={selected}
+      warning={(data as Record<string, unknown>).__configIssue as string | undefined}
     />
   );
 }
