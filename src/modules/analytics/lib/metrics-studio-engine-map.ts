@@ -136,6 +136,10 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // `clientes_sem_resposta`: o cliente da carteira TEM dono declarado, e "a
   // carteira de quem está parada" é a pergunta do gestor.
   clientes_sem_atuacao: ["total", "closer"],
+  // SCRUM-418. Só `produto`: a curva É a série por produto. `total` daria a
+  // soma da receita de itens, que já é `receita` por um caminho líquido de
+  // estorno — este não é.
+  curva_abc: ["produto"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -163,6 +167,7 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   disparos_entregues: "integer",
   disparos_respondidos: "integer",
   clientes_sem_atuacao: "integer",
+  curva_abc: "currency_brl",
 };
 
 /**
@@ -196,6 +201,7 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   disparos_entregues: "count",
   disparos_respondidos: "count",
   clientes_sem_atuacao: "count",
+  curva_abc: "currency",
 };
 
 /**
@@ -385,6 +391,16 @@ export const ENGINE_METRICS: EngineMetric[] = [
     measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
     cortes: ["total"],
     formatId: "percent_1",
+  },
+  {
+    // SCRUM-418 — a curva responde "onde meu faturamento se concentra", não
+    // "quanto entrou". A fonte é `pipe_proposta_items`, a única com receita por
+    // ITEM, e ela NÃO é líquida de estorno — o cabeçalho da migration explica.
+    id: "curva_abc",
+    label: "Curva ABC de produtos",
+    measureRef: { kind: "leaf", id: "curva_abc" },
+    cortes: ["produto"],
+    formatId: "currency_brl",
   },
   {
     // SCRUM-420 — o sujeito é o CLIENTE da carteira, não o lead. Contar leads
