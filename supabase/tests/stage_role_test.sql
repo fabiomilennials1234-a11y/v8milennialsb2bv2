@@ -59,7 +59,7 @@ SELECT has_function('public', 'system_stage_role', ARRAY['text', 'text'],
 -- Fixture: uma org nova, seed default de stages COM triggers ativos
 -- (exercita o BEFORE INSERT + mapa exatamente como uma org nova real).
 -- ---------------------------------------------------------------------------
-SET LOCAL role postgres;  -- table owner / privileged seed context
+SET LOCAL role postgres;  -- dono da tabela: escreve fixture sem esbarrar em RLS
 SET LOCAL session_replication_role = replica;  -- org insert sem cascatas
 
 INSERT INTO public.organizations (id, name, slug)
@@ -68,6 +68,27 @@ VALUES ('99099099-0000-0000-0000-000000000990', 'Org #990 stage_role test',
 ON CONFLICT (id) DO NOTHING;
 
 SET LOCAL session_replication_role = origin;  -- triggers ON daqui em diante
+
+-- Contexto de BACKEND a partir daqui (SCRUM-361).
+--
+-- Sem isto a suíte morre na primeira escrita/leitura que passa por um gate:
+-- `fn_pipeline_stages_guard_money_role` recusa won/lost, e `assert_org_access`
+-- recusa a RPC — as duas com P0001, que aborta o arquivo inteiro e vira
+-- "Bad plan. You planned N tests but ran M".
+--
+-- O comentario antigo dizia "seed de sistema como superusuario". Isso NUNCA foi
+-- verdade: medido em producao, `postgres` tem rolsuper=false (so `supabase_admin`
+-- e superusuario). O ramo `rolsuper` do guard nunca disparou para esta suite, em
+-- lugar nenhum. O caminho privilegiado REAL e o backend — quem semeia funil em
+-- producao e a edge function de provisionamento, com service_role.
+--
+-- A autorizacao continua provada onde ela e o assunto: as secoes de membro e de
+-- cross-org trocam de papel explicitamente mais abaixo.
+SET LOCAL role service_role;
+-- E o CLAIM, nao so o papel do Postgres: `assert_org_access` decide por
+-- `auth.role()`, que le `request.jwt.claims`. Medido no CI — com SET ROLE
+-- sozinho a RPC continuava recusando com access_denied.
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 SELECT create_default_pipeline_stages('99099099-0000-0000-0000-000000000990');
 
