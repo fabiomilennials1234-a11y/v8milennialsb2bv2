@@ -323,13 +323,46 @@ describe("requireAuth — requireOrganization", () => {
     expect(ctx.isAdmin).toBe(false);
   });
 
-  it("master user bypasses requireOrganization (master is global)", async () => {
+  // Este teste afirmava o contrário — "master bypasses requireOrganization" —
+  // e o `&& !isMaster` que o sustentava foi REMOVIDO de propósito: master sem
+  // `organization_id` caía no fallback legado (`order('created_at').limit(1)`)
+  // e agia na org MAIS ANTIGA em que tem team_member, em silêncio. E ele tem
+  // team_member em toda org por onde passou, porque `ensure_master_team_member`
+  // insere linha real. O resultado era escrita org-scoped na org errada.
+  //
+  // Master é global em PERMISSÃO, nunca em ALVO. O teste passa a guardar a
+  // regra vigente, nos dois sentidos.
+  it("master TAMBÉM precisa dizer em qual org age (requireOrganization não tem escape)", async () => {
     mockState.user = { id: "u-master" };
     mockState.tables.master_users = [{ id: "m1", user_id: "u-master", is_active: true }];
     const req = new Request("https://x", { headers: { Authorization: "Bearer v" } });
-    const ctx = await requireAuth(req, { requireOrganization: true });
+    await expect(requireAuth(req, { requireOrganization: true })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
+  it("master COM organization_id no body age na org que pediu, como master", async () => {
+    mockState.user = { id: "u-master" };
+    mockState.tables.master_users = [{ id: "m1", user_id: "u-master", is_active: true }];
+    mockState.tables.team_members = [
+      {
+        id: "tm-master-b",
+        user_id: "u-master",
+        organization_id: "org-B",
+        role: "admin",
+        is_active: true,
+        job_title: null,
+        metric_type: null,
+      },
+    ];
+    const req = new Request("https://x", { headers: { Authorization: "Bearer v" } });
+    const ctx = await requireAuth(req, {
+      body: { organization_id: "org-B" },
+      requireOrganization: true,
+    });
     expect(ctx.isMaster).toBe(true);
     expect(ctx.isAdmin).toBe(true);
+    expect(ctx.organizationId).toBe("org-B");
   });
 
   it("rejects when body.organization_id is an org the user does not belong to", async () => {
