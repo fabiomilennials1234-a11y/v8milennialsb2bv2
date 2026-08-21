@@ -82,15 +82,31 @@ ON CONFLICT (user_id) DO NOTHING;
 
 SET LOCAL session_replication_role = origin;  -- triggers ON daqui em diante
 
--- (b) Seed de sistema como superusuário: cria propostas/vendido = won. Se o
--- gate bloqueasse o path privilegiado, isto explodiria (org nova jamais teria won).
+-- Contexto de BACKEND a partir daqui (SCRUM-361).
+--
+-- A semeadura abaixo cria etapa won/lost, e `fn_pipeline_stages_guard_money_role`
+-- (ADR-0017 §1) recusa isso fora de backend/master/admin. O erro é P0001 e aborta
+-- o arquivo — vira "Bad plan. You planned N tests but ran M".
+--
+-- O comentario que estava aqui dizia "como superusuario". Isso NUNCA foi verdade:
+-- medido em producao, `postgres` tem rolsuper=false (so `supabase_admin` e
+-- superusuario), entao o ramo `rolsuper` do guard nunca disparou. O caminho
+-- privilegiado REAL e o backend — em producao quem semeia funil e a edge function
+-- de provisionamento, com service_role.
+--
+-- As secoes de membro e de master mais abaixo trocam de papel explicitamente, e
+-- sao elas que provam a NEGACAO. Esta linha nao as afeta.
+SET LOCAL role service_role;
+
+-- (b) Seed de sistema pelo BACKEND: cria propostas/vendido = won. Se o gate
+-- bloqueasse o path privilegiado, isto explodiria (org nova jamais teria won).
 SELECT create_default_pipeline_stages('99090090-0000-0000-0000-000000000904');
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99090090-0000-0000-0000-000000000904'
       AND pipeline_type = 'propostas' AND stage_key = 'vendido'),
-  'won', '(b) seed de sistema (superusuário) criou propostas/vendido = won');
+  'won', '(b) seed de sistema (backend) criou propostas/vendido = won');
 
 -- ---------------------------------------------------------------------------
 -- (c/d/e) MEMBRO

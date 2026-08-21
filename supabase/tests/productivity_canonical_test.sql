@@ -130,6 +130,23 @@ WHERE s.organization_id = '10001000-aaaa-0000-0000-000000001000'
 
 SET LOCAL session_replication_role = origin;
 
+-- Contexto de BACKEND a partir daqui (SCRUM-361).
+--
+-- Sem isto a suíte morre na primeira escrita/leitura que passa por um gate:
+-- `fn_pipeline_stages_guard_money_role` recusa won/lost, e `assert_org_access`
+-- recusa a RPC — as duas com P0001, que aborta o arquivo inteiro e vira
+-- "Bad plan. You planned N tests but ran M".
+--
+-- O comentario antigo dizia "seed de sistema como superusuario". Isso NUNCA foi
+-- verdade: medido em producao, `postgres` tem rolsuper=false (so `supabase_admin`
+-- e superusuario). O ramo `rolsuper` do guard nunca disparou para esta suite, em
+-- lugar nenhum. O caminho privilegiado REAL e o backend — quem semeia funil em
+-- producao e a edge function de provisionamento, com service_role.
+--
+-- A autorizacao continua provada onde ela e o assunto: as secoes de membro e de
+-- cross-org trocam de papel explicitamente mais abaixo.
+SET LOCAL role service_role;
+
 -- Janela de julho/2027 (bounds passados como a RPC recebe: timestamptz).
 -- ---------------------------------------------------------------------------
 -- (b) vendido líquido de estorno — org-wide = sv1 + sv3 = 2 (sv2 estornada fora)
