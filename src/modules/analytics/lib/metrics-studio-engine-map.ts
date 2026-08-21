@@ -125,6 +125,10 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // SCRUM-417. Só `total`: recortar LTV dividiria a receita de um balde pelo
   // denominador de outro — número plausível e errado.
   ltv: ["total"],
+  // SCRUM-419. Sem `tempo` (é estado) e sem corte por pessoa: o lead pode ter
+  // falado com três pessoas, e atribuir a fila a uma delas seria escolha
+  // arbitrária disfarçada de dado.
+  clientes_sem_resposta: ["total", "origem", "tag"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -148,6 +152,7 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   ganho_perda: "integer",
   num_vendas_pre_venda: "integer",
   ltv: "currency_brl",
+  clientes_sem_resposta: "integer",
 };
 
 /**
@@ -177,6 +182,7 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   ganho_perda: "count",
   num_vendas_pre_venda: "count",
   ltv: "currency",
+  clientes_sem_resposta: "count",
 };
 
 /**
@@ -366,6 +372,15 @@ export const ENGINE_METRICS: EngineMetric[] = [
     measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
     cortes: ["total"],
     formatId: "percent_1",
+  },
+  {
+    // SCRUM-419 — a fila que está esperando, não a taxa de quem respondeu. As
+    // duas convivem: `response_rate_pct` continua em `useAnalyticsEngajamento`.
+    id: "clientes_sem_resposta",
+    label: "Clientes sem resposta",
+    measureRef: { kind: "leaf", id: "clientes_sem_resposta" },
+    cortes: ["total", "origem", "tag"],
+    formatId: "integer",
   },
   {
     // SCRUM-417 — a decisão do SCRUM-365: receita REALIZADA por cliente, numa
