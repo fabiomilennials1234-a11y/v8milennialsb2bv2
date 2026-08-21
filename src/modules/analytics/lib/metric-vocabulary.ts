@@ -56,4 +56,14 @@ export interface MetricFilters {
   tag_id?: string;
   product_id?: string;
   stream?: "novo_negocio" | "carteira";
+  /**
+   * SCRUM-316 — as duas pontas da conversão entre etapas. São `stage_key`
+   * (slug), não id: é o que `pipeline_stage_events` guarda.
+   *
+   * Só as medidas `negocios_coorte_*` os lêem, e para elas NÃO são opcionais —
+   * o motor levanta 22023 quando falta um dos dois, em vez de devolver zero.
+   * Zero seria um número que parece resposta.
+   */
+  from_stage_key?: string;
+  to_stage_key?: string;
 }

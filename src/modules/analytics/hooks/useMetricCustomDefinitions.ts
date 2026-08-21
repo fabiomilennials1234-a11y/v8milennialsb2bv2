@@ -10,8 +10,15 @@ import type { MetricFormatId, MetricUnit } from "@/modules/analytics/lib/metric-
  *
  * Leitura e escrita vão por PostgREST com RLS, sem função nova: a tabela
  * `metric_custom_definitions` isola por `get_my_organization_ids()` na leitura
- * e por `get_my_admin_organization_ids()` na escrita. Não há GRANT em SECURITY
- * DEFINER para errar aqui.
+ * e por `get_my_team_admin_organization_ids()` na escrita. Não há GRANT em
+ * SECURITY DEFINER para errar aqui.
+ *
+ * ⚠ A helper de ESCRITA é `get_my_team_admin_organization_ids()`, NÃO
+ * `get_my_admin_organization_ids()` — os nomes não distinguem, os corpos sim.
+ * A segunda inclui GESTOR DE PORTFÓLIO (ADR-0021), papel escopado a funis, que
+ * não deve definir métrica da organização inteira. A policy usa `role = 'admin'
+ * AND is_active`, e nada mais. Ver o cabeçalho da migration
+ * `20270813110000_metric_custom_definitions.sql`. Não "alinhe" uma à outra.
  *
  * A validação da árvore acontece nas DUAS pontas, e nenhuma delas é este hook:
  * o compositor valida com `validarArvore` antes de habilitar o botão, e o banco

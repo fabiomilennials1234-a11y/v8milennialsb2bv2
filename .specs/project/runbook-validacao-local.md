@@ -163,6 +163,30 @@ list_branches          # confirme zero efêmeras
 Apague o `branch.env`. Branch órfã é cobrança à toa e, pior, vira ambiente permanente
 por acidente.
 
+> **Pela CLI, quando o MCP não estiver autenticado** (medido em 2026-08-20 — o
+> servidor MCP do Supabase pode estar instalado e ainda assim só expor
+> `authenticate`, e aí `create_branch`/`delete_branch` não existem):
+>
+> ```bash
+> supabase branches list   --project-ref jsjsmuncfkbsbzqzqhfq
+> supabase branches create qa-<ticket> --project-ref jsjsmuncfkbsbzqzqhfq
+> supabase branches delete <branch-ref> --project-ref jsjsmuncfkbsbzqzqhfq
+> ```
+>
+> **`--project-ref` é obrigatório em TODAS, inclusive no `delete`** — e é sempre o
+> ref de PROD (o pai), não o da branch. Sem ele o comando morre com `Cannot find
+> project ref. Have you run supabase link?`, que num checkout deliberadamente
+> não-linkado se lê como se a guarda tivesse disparado. Não é a guarda: é o
+> argumento faltando.
+>
+> Crie **sem** `--with-data` e **sem** `--persistent`. Sem dado de produção a
+> branch é mais barata, sobe mais rápido, e o pgTAP monta as próprias fixtures de
+> qualquer forma.
+>
+> `supabase branches get <ref> -o env` funciona para a credencial. Já o
+> `--output json` do `get` não trouxe o `status` de forma estável aqui — para
+> acompanhar o provisionamento, use `branches list` e leia a coluna `STATUS`.
+
 ---
 
 ## Se for subir a INTERFACE contra a branch
