@@ -122,9 +122,24 @@ describe("selectSendableInstance — prefer live, fall back, never regress", () 
     expect(out?.id).toBe("chip");
   });
 
-  it("meta_cloud-only org: fallback keeps legacy parity (returns the meta row, exactly like the old query)", async () => {
+  // Este caso afirmava o contrário — "paridade com a query legada, devolve a
+  // linha meta". A paridade foi ABANDONADA de propósito quando a allowlist de
+  // provider entrou nas DUAS queries: quem sai daqui vai para
+  // `getWhatsAppProvider`, que assume chip de sessão e manda texto livre. O
+  // Meta Cloud é gated por janela de 24h e template; mensagem livre por ali é
+  // recusada pela Meta, não entregue.
+  //
+  // O caller (`copilot-batch-processor`) trata null como `no_active_instance`
+  // retryable, então a saída fail-closed já existe.
+  //
+  // ⚠ O que este teste NÃO resolve, e é decisão de produto (SCRUM-410): numa
+  // org SÓ-Meta o copilot fica mudo por construção. Dentro da janela de 24h a
+  // Meta aceitaria texto livre, e o repo já sabe fazer o escape para template
+  // quando a janela fecha (#1689). Ligar isso é feature de roteamento, não
+  // conserto de teste — e não entra numa PR de destravar CI.
+  it("meta_cloud-only org: NÃO devolve a linha meta — texto livre não sai por canal gated", async () => {
     const meta = inst({ id: "meta-only", provider: "meta_cloud" });
     const out = await selectSendableInstance(instancesStub([meta]), "org-1");
-    expect(out?.id).toBe("meta-only");
+    expect(out).toBeNull();
   });
 });
