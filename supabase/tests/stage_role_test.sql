@@ -85,6 +85,10 @@ SET LOCAL session_replication_role = origin;  -- triggers ON daqui em diante
 -- A autorizacao continua provada onde ela e o assunto: as secoes de membro e de
 -- cross-org trocam de papel explicitamente mais abaixo.
 SET LOCAL role service_role;
+-- E o CLAIM, nao so o papel do Postgres: `assert_org_access` decide por
+-- `auth.role()`, que le `request.jwt.claims`. Medido no CI — com SET ROLE
+-- sozinho a RPC continuava recusando com access_denied.
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 SELECT create_default_pipeline_stages('99099099-0000-0000-0000-000000000990');
 

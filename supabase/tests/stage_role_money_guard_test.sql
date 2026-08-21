@@ -97,6 +97,10 @@ SET LOCAL session_replication_role = origin;  -- triggers ON daqui em diante
 -- As secoes de membro e de master mais abaixo trocam de papel explicitamente, e
 -- sao elas que provam a NEGACAO. Esta linha nao as afeta.
 SET LOCAL role service_role;
+-- E o CLAIM, nao so o papel do Postgres: `assert_org_access` decide por
+-- `auth.role()`, que le `request.jwt.claims`. Medido no CI — com SET ROLE
+-- sozinho a RPC continuava recusando com access_denied.
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 -- (b) Seed de sistema pelo BACKEND: cria propostas/vendido = won. Se o gate
 -- bloqueasse o path privilegiado, isto explodiria (org nova jamais teria won).
