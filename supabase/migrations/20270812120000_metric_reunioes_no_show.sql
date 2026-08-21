@@ -11,7 +11,7 @@
 --
 -- Aquela migration faz `CREATE OR REPLACE` de `_metric_leaf` com o `CASE` de
 -- **8** medidas — o corpo que existia em 2026-07. O corpo vigente
--- (`20270811170000`) tem **13**, porque as seis fatias anteriores do SCRUM-311
+-- (`20270811170001`) tem **13**, porque as seis fatias anteriores do SCRUM-311
 -- acrescentaram as suas. Como `20260727140000` ordena ANTES delas, um `db push`
 -- a aplica primeiro e as 2027 a sobrescrevem depois. Resultado medido:
 --

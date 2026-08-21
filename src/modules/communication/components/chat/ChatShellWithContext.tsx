@@ -30,6 +30,12 @@ import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
+import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
+import {
+  computeChatDeepLinkPlan,
+  type ChatDeepLinkPlan,
+} from "@/modules/communication/lib/computeChatDeepLinkPlan";
+import { useLeadPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useCopilotToggle } from "@/modules/copilot/hooks/useCopilotToggle";
 import { useCopilotPause } from "@/modules/copilot/hooks/useCopilotPause";
 import { ChatShell } from "@/modules/communication/components/chat/layout/ChatShell";
@@ -44,9 +50,28 @@ import { MobileComposerContextual } from "@/modules/communication/components/cha
 import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
 import { ImagePreviewModal } from "@/modules/communication/components/chat/media/ImagePreviewModal";
-import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
+import { SocialChatView } from "@/modules/communication/components/chat/social/SocialChatView";
+import { SocialContextPanel } from "@/modules/communication/components/chat/social/SocialContextPanel";
+import { useInboxBoxes } from "@/modules/communication/hooks/chat/useInboxBoxes";
 import { useWhatsAppContacts } from "@/modules/communication/hooks/chat/useWhatsAppContacts";
+import { useSocialContacts } from "@/modules/communication/hooks/chat/useSocialContacts";
+import { useOfficialWhatsAppContacts } from "@/modules/communication/hooks/chat/useOfficialWhatsAppContacts";
+import { useSendSocialMessage } from "@/modules/communication/hooks/chat/useSendSocialMessage";
+import { useNotificameWhatsAppSend } from "@/modules/communication/hooks/chat/useNotificameWhatsAppSend";
+import {
+  directSender,
+  officialWhatsAppSender,
+} from "@/modules/communication/hooks/chat/social-sender";
+import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
+import {
+  chaveDeConversaOficial,
+  contatoDeConversaNova,
+} from "@/modules/communication/lib/official-conversation";
+import { useSocialRealtime } from "@/modules/communication/hooks/chat/useSocialRealtime";
 import { useWhatsAppMessages } from "@/modules/communication/hooks/chat/useWhatsAppMessages";
+import { ChatThreadUnavailable } from "@/modules/communication/components/chat/ChatThreadUnavailable";
+import { resolveThreadState } from "@/modules/communication/lib/resolveThreadState";
+import { invalidateChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
 import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
 import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
@@ -76,12 +101,30 @@ import { supabase } from "@/integrations/supabase/client";
 import { usePreferredInstance } from "@/modules/communication/hooks/usePreferredInstance";
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { resolveEffectiveLead } from "@/modules/communication/lib/resolveEffectiveLead";
-import type { ChatContact, FailedMessage } from "@/modules/communication/hooks/chat/types";
+import type {
+  ChatContact,
+  FailedMessage,
+  SocialContact,
+} from "@/modules/communication/hooks/chat/types";
 import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDensity";
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
 type ConversationTab = "active" | "archived";
+
+/**
+ * Monta a subscription de Realtime dos canais sociais SÓ enquanto a caixa
+ * social está aberta.
+ *
+ * `useRealtimeSubscription` não aceita `enabled` — quem decide se o canal
+ * postgres_changes existe é quem monta o hook. Um componente que renderiza
+ * `null` é o gate mais barato possível, e mantém as ~30 orgs que só usam
+ * WhatsApp sem pagar uma subscription por causa desta fatia.
+ */
+function SocialRealtimeMount() {
+  useSocialRealtime();
+  return null;
+}
 
 // ─── ChatView — coluna central (header + messages + composer) ────────────────
 
@@ -129,10 +172,13 @@ function ChatView({
   const { leadId: effectiveLeadId, leadName: effectiveLeadName } =
     resolveEffectiveLead(selectedContact, leadByPhone);
 
-  const { data: messages = [], isLoading: messagesLoading } = useWhatsAppMessages(
-    phoneNumber,
-    instanceId,
-  );
+  const {
+    data: messages = [],
+    isLoading: messagesLoading,
+    isError: messagesError,
+    isFetching: messagesFetching,
+    refetch: refetchMessages,
+  } = useWhatsAppMessages(phoneNumber, instanceId);
 
   // Tique azul para o contato. Complementa `markConversationRead` (que só zera o
   // badge interno do CRM e nunca falou com o WhatsApp).
@@ -199,6 +245,18 @@ function ChatView({
 
   const contactName =
     effectiveLeadName ?? selectedContact?.push_name ?? phoneNumber ?? "";
+
+  // A lista já afirmou que existe mensagem com este contato. Se a thread volta
+  // vazia mesmo assim, "Comece a conversa" seria uma afirmação falsa — ver
+  // `resolveThreadState`.
+  const threadState = resolveThreadState({
+    isLoading: messagesLoading,
+    isError: messagesError,
+    messageCount: messages.length,
+    failedCount: failedMessages.length,
+    callCount: calls.length,
+    lastMessageTime: selectedContact?.last_message_time,
+  });
 
   const conversationKey = `${instanceId}:${phoneNumber}`;
 
@@ -267,10 +325,22 @@ function ChatView({
       )}
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
-        {messagesLoading ? (
+        {threadState === "loading" ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
+        ) : threadState !== "list" ? (
+          <ChatThreadUnavailable
+            reason={threadState}
+            contactName={contactName}
+            onRetry={() => {
+              // Sem descartar o cache do chip, o retry devolveria o mesmo
+              // conjunto degradado — ver `invalidateChipInstanceIds`.
+              invalidateChipInstanceIds(organizationId, instanceId);
+              void refetchMessages();
+            }}
+            isRetrying={messagesFetching}
+          />
         ) : (
           <MessageList
             messages={messages}
@@ -349,32 +419,117 @@ export function ChatShellWithContext() {
   const { data: allTags = [] } = useTags();
   const queryClient = useQueryClient();
 
-  // ── Instâncias ──────────────────────────────────────────────────────────────
-  const { data: instances = [], isLoading: instancesLoading } = useWhatsAppInstancesForUser();
+  // ── Caixas de entrada ───────────────────────────────────────────────────────
+  // Números de WhatsApp ∪ canais sociais. Org sem canal social recebe exatamente
+  // a lista de antes — nenhum gate de feature precisa ser plumbado até aqui.
+  const { boxes, instances, isLoading: boxesLoading } = useInboxBoxes();
 
-  const [selectedInstanceId, setSelectedInstanceIdRaw] = useState<string | null>(null);
+  const [selectedBoxId, setSelectedBoxIdRaw] = useState<string | null>(null);
 
   const { preferredInstanceId, setPreferredInstance } = usePreferredInstance(instances);
 
-  const setSelectedInstanceId = useCallback((id: string | null) => {
-    setSelectedInstanceIdRaw(id);
-    if (id) setPreferredInstance(id);
-  }, [setPreferredInstance]);
+  const setSelectedBoxId = useCallback((id: string | null) => {
+    setSelectedBoxIdRaw(id);
+    // `team_members.preferred_whatsapp_instance_id` tem FK para
+    // `whatsapp_instances`: gravar ali o id de um canal social violaria a
+    // restrição e derrubaria a preferência de número que já funciona.
+    if (id && instances.some((i) => i.id === id)) setPreferredInstance(id);
+  }, [setPreferredInstance, instances]);
 
-  // ── Deep-link (?phone=&instance=) ───────────────────────────────────────────
+  const selectedBox = useMemo(
+    () => boxes.find((b) => b.id === selectedBoxId) ?? null,
+    [boxes, selectedBoxId],
+  );
+  /**
+   * A caixa aberta lê `channel_messages`? O discriminador decide pelo PROVIDER, e
+   * não pelo `kind`: o canal oficial é `kind: "whatsapp"` (mora em
+   * `whatsapp_instances`) e mesmo assim recebe em `channel_messages`. Ausência de
+   * provider significa o comportamento antigo — são ~30 orgs com instâncias
+   * gravadas antes da coluna existir.
+   */
+  const isSocialBox = selectedBox ? boxUsesChannelMessages(selectedBox) : false;
+  /** Dentro dessas, qual é a do canal oficial (a que envia por outra rota). */
+  const isOfficialBox = isSocialBox && selectedBox?.kind === "whatsapp";
+
+  /**
+   * O id da caixa, desdobrado por canal. Os dois hooks de lista recebem `null`
+   * quando não é a vez deles e já têm `enabled: !!id` — é isso que garante que a
+   * RPC `get_whatsapp_conversation_list` NUNCA seja chamada com o uuid de um
+   * canal social (ela levantaria 22023/42501) e vice-versa.
+   */
+  const selectedInstanceId = isSocialBox ? null : selectedBoxId;
+  /**
+   * Três eixos, e não dois, desde a caixa oficial:
+   *   `selectedInstanceId`      → WhatsApp por QR, lê `whatsapp_messages`
+   *   `selectedChannelId`       → Instagram, lê `channel_messages` por canal
+   *   `selectedOfficialInstance`→ canal oficial, lê `channel_messages` por instância
+   *
+   * Cada hook recebe `null` quando não é a vez dele e já tem `enabled: !!id` — é
+   * isso que garante que nenhuma das três RPCs seja chamada com o uuid do eixo
+   * errado (as duas de lista levantam 42501 nesse caso, por desenho).
+   */
+  const selectedChannelId =
+    selectedBox?.kind === "instagram" ? selectedBoxId : null;
+  const selectedOfficialInstanceId = isOfficialBox ? selectedBoxId : null;
+
+  // ── Deep-link (?phone=&instance=&box=&lead=) ────────────────────────────────
   // Lê params uma vez no mount; estado pendente impede que o auto-select de
-  // instância sobrescreva a resolução do link, e impede também que múltiplos
+  // caixa sobrescreva a resolução do link, e impede também que múltiplos
   // re-renders re-disparem a lógica.
+  //
+  // `?box=` é o param novo, e é o que o aviso de mensagem recebida usa para
+  // levar à caixa onde a conversa existe. `?instance=` continua existindo e
+  // continua significando WhatsApp — renomeá-lo quebraria todo link já enviado.
+  //
+  // `?lead=` existe porque a carteira navega conhecendo o lead, não o telefone
+  // (CarteiraClientPreview, ClienteDetailPage, Upsell). A tradução lead→telefone
+  // acontece aqui; daí pra frente o fluxo é idêntico ao de `?phone=`.
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialDeepLinkRef = useRef<{ phone: string | null; instance: string | null } | null>(null);
-  if (initialDeepLinkRef.current === null) {
-    initialDeepLinkRef.current = {
+  const initialPlanRef = useRef<ChatDeepLinkPlan | null>(null);
+  if (initialPlanRef.current === null) {
+    initialPlanRef.current = computeChatDeepLinkPlan({
       phone: searchParams.get("phone"),
       instance: searchParams.get("instance"),
-    };
+      box: searchParams.get("box"),
+      lead: searchParams.get("lead"),
+    });
   }
-  const deepLink = initialDeepLinkRef.current;
+  const plan = initialPlanRef.current;
+
+  const { data: leadPhone, isLoading: leadPhoneLoading } = useLeadPhone(
+    plan.kind === "lead" ? plan.leadId : null,
+  );
+  // Lead sem telefone, fora da org, ou inexistente → não há conversa a abrir.
+  const leadPlanPending = plan.kind === "lead" && leadPhoneLoading;
+
+  const deepLink = useMemo(
+    () => ({
+      phone:
+        plan.kind === "phone"
+          ? plan.phone
+          : plan.kind === "lead"
+            ? (leadPhone ?? null)
+            : null,
+      instance: plan.instance,
+      box: plan.box,
+    }),
+    [plan, leadPhone],
+  );
   const hasDeepLinkPhone = !!deepLink.phone;
+
+  // `?box=` sozinho: escolhe a caixa e sai da frente. Só aceita id que esteja na
+  // lista permitida — a lista já é recortada por org e por membro, então isto é
+  // a mesma defesa cross-tenant que o `?instance=` sempre teve.
+  const [boxDeepLinkProcessed, setBoxDeepLinkProcessed] = useState(false);
+  useEffect(() => {
+    if (boxDeepLinkProcessed) return;
+    if (!deepLink.box) { setBoxDeepLinkProcessed(true); return; }
+    if (!boxes.length) return;
+    if (boxes.some((b) => b.id === deepLink.box)) {
+      setSelectedBoxId(deepLink.box);
+    }
+    setBoxDeepLinkProcessed(true);
+  }, [deepLink.box, boxDeepLinkProcessed, boxes, setSelectedBoxId]);
 
   const [deepLinkProcessed, setDeepLinkProcessed] = useState(false);
   const [pendingDeepLinkPhone, setPendingDeepLinkPhone] = useState<string | null>(null);
@@ -387,7 +542,7 @@ export function ChatShellWithContext() {
     if (!deepLink.instance) return;
     const allowed = instances.some((i) => i.id === deepLink.instance);
     if (allowed) {
-      setSelectedInstanceId(deepLink.instance);
+      setSelectedBoxId(deepLink.instance);
     }
   }, [deepLink.instance, deepLinkProcessed, instances]);
 
@@ -416,6 +571,19 @@ export function ChatShellWithContext() {
     // Caminho A: instance da URL já foi setada acima — só precisamos achar o
     // phone real dentro dos contatos quando carregarem (handler abaixo).
     if (deepLink.instance && instances.some((i) => i.id === deepLink.instance)) {
+      // ⚠️ A CAIXA OFICIAL NÃO PASSA PELO `pendingDeepLinkPhone`. Aquele
+      // caminho procura o telefone entre os contatos de `whatsapp_messages`, e
+      // esta caixa lê `channel_messages` — quem nunca trocou mensagem não tem
+      // linha em NENHUMA das duas, e o lead do funil é justamente esse caso.
+      // Aqui a chave é montada a partir do telefone, e a conversa nasce na tela.
+      const alvo = instances.find((i) => i.id === deepLink.instance);
+      if (alvo?.provider === "notificame") {
+        const chave = chaveDeConversaOficial(alvo.id, deepLink.phone);
+        if (chave) setSelectedKey(chave);
+        setDeepLinkProcessed(true);
+        return;
+      }
+
       setPendingDeepLinkPhone(deepLink.phone);
       setDeepLinkProcessed(true);
       return;
@@ -425,14 +593,24 @@ export function ChatShellWithContext() {
     if (!resolveFetched) return;
 
     if (resolved) {
-      setSelectedInstanceId(resolved.instanceId);
+      setSelectedBoxId(resolved.instanceId);
       setPendingDeepLinkPhone(resolved.phoneNumber);
     } else {
       // Lead sem mensagens — selecionar instância padrão e abrir chat vazio
       const connected = instances.find((i) => i.status === "connected");
-      setSelectedInstanceId(connected?.id ?? instances[0].id);
-      const normalized = normalizePhone(deepLink.phone);
-      if (normalized) setSelectedPhone(normalized);
+      const escolhida = connected ?? instances[0];
+      setSelectedBoxId(escolhida.id);
+
+      // A caixa oficial identifica a conversa por `(instância, interlocutor)`, e
+      // não por telefone solto: guardar o telefone cru aqui deixaria a tela sem
+      // conversa nenhuma para abrir.
+      if (escolhida.provider === "notificame") {
+        const chave = chaveDeConversaOficial(escolhida.id, deepLink.phone);
+        if (chave) setSelectedKey(chave);
+      } else {
+        const normalized = normalizePhone(deepLink.phone);
+        if (normalized) setSelectedKey(normalized);
+      }
     }
     setDeepLinkProcessed(true);
   }, [
@@ -447,35 +625,51 @@ export function ChatShellWithContext() {
 
   // Limpa query params depois de processar (sucesso ou desistência).
   useEffect(() => {
-    if (!deepLinkProcessed) return;
-    if (!searchParams.get("phone") && !searchParams.get("instance")) return;
-    setSearchParams({}, { replace: true });
-  }, [deepLinkProcessed, searchParams, setSearchParams]);
-
-  // Auto-select: preferência do banco → primeira conectada → primeira da lista.
-  // Não dispara se deep-link pendente.
-  useEffect(() => {
-    if (selectedInstanceId) return;
-    if (!instances.length) return;
+    // `deepLinkProcessed` só é ligado pelo caminho de telefone — sem `?phone=`
+    // ele fica falso para sempre. Exigi-lo aqui deixaria um `?box=` sozinho
+    // grudado na URL até o próximo clique de navegação.
     if (hasDeepLinkPhone && !deepLinkProcessed) return;
+    if (!boxDeepLinkProcessed) return;
+    if (!searchParams.get("phone") && !searchParams.get("instance") && !searchParams.get("box") && !searchParams.get("lead")) return;
+    setSearchParams({}, { replace: true });
+  }, [hasDeepLinkPhone, deepLinkProcessed, boxDeepLinkProcessed, searchParams, setSearchParams]);
+
+  // Auto-select: preferência do banco → primeiro número conectado → primeira
+  // caixa da lista. A preferência e o "conectado" continuam sendo conceitos de
+  // WhatsApp; a caixa social só entra como último recurso — que é exatamente o
+  // caso de uma org que ainda não tem número nenhum. Não dispara se deep-link
+  // pendente.
+  useEffect(() => {
+    if (selectedBoxId) return;
+    if (!boxes.length) return;
+    if (hasDeepLinkPhone && !deepLinkProcessed) return;
+    if (deepLink.box && !boxDeepLinkProcessed) return;
+    // Lead cujo telefone ainda está sendo buscado: escolher a caixa agora faria
+    // a seleção pular quando o telefone chegasse.
+    if (leadPlanPending) return;
 
     const preferredIsValid = preferredInstanceId
       ? instances.some((i) => i.id === preferredInstanceId)
       : false;
 
     if (preferredIsValid) {
-      setSelectedInstanceIdRaw(preferredInstanceId);
+      setSelectedBoxIdRaw(preferredInstanceId);
       return;
     }
 
     const connected = instances.find((i) => i.status === "connected");
-    setSelectedInstanceIdRaw(connected?.id ?? instances[0].id);
-  }, [instances, selectedInstanceId, hasDeepLinkPhone, deepLinkProcessed, preferredInstanceId]);
-
-  const selectedInstance = useMemo(
-    () => instances.find((i) => i.id === selectedInstanceId) ?? null,
-    [instances, selectedInstanceId],
-  );
+    setSelectedBoxIdRaw(connected?.id ?? instances[0]?.id ?? boxes[0].id);
+  }, [
+    boxes,
+    instances,
+    selectedBoxId,
+    hasDeepLinkPhone,
+    deepLinkProcessed,
+    deepLink.box,
+    boxDeepLinkProcessed,
+    preferredInstanceId,
+    leadPlanPending,
+  ]);
 
   // ── Filtro do inbox ─────────────────────────────────────────────────────────
   // Declarado antes dos contatos porque as dimensões vão junto na busca: a RPC
@@ -493,56 +687,168 @@ export function ChatShellWithContext() {
   );
 
   // ── Contatos ────────────────────────────────────────────────────────────────
+  // Os dois hooks de lista são MUTUAMENTE EXCLUSIVOS por `enabled`: cada um
+  // recebe `null` quando a caixa aberta não é a dele. Com isso a RPC de WhatsApp
+  // (14 filtros, tabela-resumo, chip ids) não é tocada por esta fatia — o
+  // caminho de WhatsApp segue byte a byte o de antes.
+  //
   // `isError` importa porque a etiqueta é enriquecida DENTRO desta query: com
   // filtro de etiqueta ativo o hook deixa a falha subir em vez de devolver
   // `tags: []` (que o filtro trataria como verdade). Ver `useWhatsAppContacts`.
   const {
     data: contacts = [],
-    isLoading: contactsLoading,
+    isLoading: whatsappContactsLoading,
     isError: contactsError,
   } = useWhatsAppContacts(selectedInstanceId, serverFilter);
 
+  // ── As duas listas de `channel_messages`, SEMPRE montadas ──────────────────
+  //
+  // Os dois hooks são chamados incondicionalmente e um deles recebe `null`.
+  // Montar só o "da vez" mudaria a quantidade de hooks entre renders ao trocar
+  // de caixa — o erro que derrubou a primeira tentativa desta fatia.
+  const {
+    data: directContacts = [],
+    isLoading: directContactsLoading,
+  } = useSocialContacts(selectedChannelId);
+
+  const {
+    data: officialContacts = [],
+    isLoading: officialContactsLoading,
+  } = useOfficialWhatsAppContacts(selectedOfficialInstanceId);
+
+  const socialContacts = isOfficialBox ? officialContacts : directContacts;
+  const socialContactsLoading = isOfficialBox
+    ? officialContactsLoading
+    : directContactsLoading;
+
+  // ── As duas rotas de envio, também SEMPRE montadas ─────────────────────────
+  //
+  // `notificame-send-social` recusa WhatsApp por modelo (`channel_not_social`),
+  // então o canal oficial sai pelo proxy de WhatsApp — que já resolve provider,
+  // governor, janela e templates a partir da instância (#1640).
+  const directMutation = useSendSocialMessage(selectedChannelId);
+  const officialMutation = useNotificameWhatsAppSend(selectedOfficialInstanceId);
+  const socialSender = useMemo(
+    () =>
+      isOfficialBox
+        ? officialWhatsAppSender(officialMutation)
+        : directSender(directMutation),
+    [isOfficialBox, officialMutation, directMutation],
+  );
+
+  const contactsLoading = isSocialBox ? socialContactsLoading : whatsappContactsLoading;
+
   // ── Conversa selecionada ────────────────────────────────────────────────────
-  const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  // A identidade é `contactKey`: telefone no WhatsApp, `conversation_key` no
+  // canal social. Um estado só, porque só existe uma conversa aberta por vez —
+  // dois estados paralelos divergiriam na primeira troca de caixa.
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
+  // Trocar de caixa fecha a conversa: a chave da caixa anterior não existe na
+  // nova, e mantê-la deixaria o painel central preso no vazio.
+  //
+  // ⚠️ Só limpa numa troca ENTRE DUAS caixas. O primeiro `null → caixa` também é
+  // uma mudança de `selectedBoxId`, e limpar ali apagaria a conversa que o
+  // deep-link acabou de escolher: o caminho "lead sem mensagens" seta caixa e
+  // chave no MESMO efeito, e este rodaria depois, zerando a chave.
+  const prevBoxIdRef = useRef<string | null>(selectedBoxId);
+  useEffect(() => {
+    const prev = prevBoxIdRef.current;
+    prevBoxIdRef.current = selectedBoxId;
+    if (prev && selectedBoxId && prev !== selectedBoxId) setSelectedKey(null);
+  }, [selectedBoxId]);
 
   // Reset selection when master user switches shadow org
   const prevOrgIdRef = useRef(organizationId);
   useEffect(() => {
     if (prevOrgIdRef.current && organizationId && prevOrgIdRef.current !== organizationId) {
-      setSelectedInstanceIdRaw(null);
-      setSelectedPhone(null);
+      setSelectedBoxIdRaw(null);
+      setSelectedKey(null);
     }
     prevOrgIdRef.current = organizationId;
   }, [organizationId]);
 
   // Quando contatos carregam, casa pendingDeepLinkPhone pelo phone normalizado
-  // e seta selectedPhone com o phone_number canônico do contato.
+  // e seta a chave com o phone_number canônico do contato. Deep-link por
+  // telefone é, por construção, WhatsApp.
+  //
+  // Contato fora da janela de contatos abre pelo telefone mesmo assim — decisão
+  // em `resolvePendingDeepLink`, testada em tests/unit.
   useEffect(() => {
     if (!pendingDeepLinkPhone) return;
-    if (!contacts.length) return;
-    const target = normalizePhone(pendingDeepLinkPhone);
-    if (!target) {
-      setPendingDeepLinkPhone(null);
-      return;
-    }
-    const match = contacts.find((c) => normalizePhone(c.phone_number) === target);
-    if (match) {
-      setSelectedPhone(match.phone_number);
-      setPendingDeepLinkPhone(null);
-    }
-  }, [contacts, pendingDeepLinkPhone]);
+    const outcome = resolvePendingDeepLink({
+      pendingPhone: pendingDeepLinkPhone,
+      contacts,
+      contactsLoading,
+    });
+    if (outcome.action === "wait") return;
+    if (outcome.action === "select") setSelectedKey(outcome.contactKey);
+    setPendingDeepLinkPhone(null);
+  }, [contacts, contactsLoading, pendingDeepLinkPhone]);
 
   const selectedContact = useMemo(
-    () => contacts.find((c) => c.phone_number === selectedPhone) ?? null,
-    [contacts, selectedPhone],
+    () => contacts.find((c) => c.phone_number === selectedKey) ?? null,
+    [contacts, selectedKey],
   );
 
-  const handleSelectContact = useCallback((phone: string) => {
-    setSelectedPhone(phone);
+  /**
+   * O telefone de uma conversa oficial que ainda não existe na lista.
+   *
+   * Serve para descobrir o LEAD antes da primeira mensagem: quem foi chamado a
+   * partir do funil é conhecido do CRM, e a tela precisa mostrar o nome dele em
+   * vez de um identificador. `null` fora desse caso — e o hook abaixo é chamado
+   * sempre, com `null`, para a ordem dos hooks não mudar entre renders.
+   */
+  const telefoneDeConversaNova = useMemo(() => {
+    if (!isOfficialBox || !selectedKey || !selectedBoxId) return null;
+    const prefixo = `whatsapp_oficial:${selectedBoxId}:`;
+    if (!selectedKey.startsWith(prefixo)) return null;
+    const jaExiste = socialContacts.some((c) => c.conversation_key === selectedKey);
+    return jaExiste ? null : selectedKey.slice(prefixo.length) || null;
+  }, [isOfficialBox, selectedKey, selectedBoxId, socialContacts]);
+
+  // Mesma queryKey do painel de contexto ⇒ o TanStack dedupa, sem rede extra.
+  const { data: leadDeConversaNova } = useLeadByPhone(telefoneDeConversaNova);
+
+  const selectedSocialContact = useMemo(() => {
+    const existente = socialContacts.find((c) => c.conversation_key === selectedKey) ?? null;
+    if (existente || !isOfficialBox) return existente;
+
+    // CONVERSA QUE AINDA NÃO EXISTE. A lista da caixa oficial vem de uma RPC que
+    // só devolve quem já trocou mensagem — o primeiro contato, vindo do funil,
+    // não tem linha em lugar nenhum. O contato sintético existe só na tela, até a
+    // primeira mensagem sair; depois o real toma o lugar, com a mesma chave.
+    //
+    // O NOME DO LEAD entra aqui. Sem ele a conversa nascia rotulada por um
+    // identificador — e, pior, pelo fallback de Instagram, num canal que é
+    // WhatsApp.
+    return contatoDeConversaNova(
+      selectedKey,
+      selectedBoxId,
+      leadDeConversaNova?.name ?? null,
+    );
+  }, [socialContacts, selectedKey, isOfficialBox, selectedBoxId, leadDeConversaNova]);
+
+  /**
+   * A lista da caixa social, com a conversa NOVA no topo quando ela existe só na
+   * tela. Sem isto o chat abriria a conversa e a lista lateral não a mostraria —
+   * o vendedor veria o composer aberto e nenhuma linha selecionada, que se lê
+   * como tela quebrada.
+   */
+  const socialContactsComNova = useMemo(() => {
+    if (!selectedSocialContact) return socialContacts;
+    const jaEstaNaLista = socialContacts.some(
+      (c) => c.conversation_key === selectedSocialContact.conversation_key,
+    );
+    return jaEstaNaLista ? socialContacts : [selectedSocialContact, ...socialContacts];
+  }, [socialContacts, selectedSocialContact]);
+
+  const handleSelectContact = useCallback((key: string) => {
+    setSelectedKey(key);
   }, []);
 
   const handleBack = useCallback(() => {
-    setSelectedPhone(null);
+    setSelectedKey(null);
   }, []);
 
   // ── Read-state: zera "não lida" ao abrir a conversa ─────────────────────────
@@ -576,12 +882,67 @@ export function ChatShellWithContext() {
   );
 
   useEffect(() => {
-    if (!selectedPhone || !selectedInstanceId) return;
-    markConversationRead(selectedPhone, selectedInstanceId);
-  }, [selectedPhone, selectedInstanceId, markConversationRead]);
+    if (!selectedKey || !selectedInstanceId) return;
+    markConversationRead(selectedKey, selectedInstanceId);
+  }, [selectedKey, selectedInstanceId, markConversationRead]);
+
+  /**
+   * Read-state do canal social.
+   *
+   * NÃO passa pela RPC `mark_conversation_read`: ela recebe
+   * `(p_instance_id, p_normalized_phone)` e monta a chave `whatsapp:...`
+   * sozinha — não há telefone nem instância aqui. O upsert direto é o mesmo que
+   * a RLS de `conversation_read_state` já autoriza a `authenticated`
+   * (`user_id = auth.uid()` + org do usuário), e a chave gravada é EXATAMENTE a
+   * que a RPC social lê para calcular `unread_count`. Se as duas divergirem, o
+   * badge nunca zera — foi assim que o unread de WhatsApp quebrou
+   * (`useConversationReadState` grava `whatsapp:unknown:<phone>`, que a RPC de
+   * WhatsApp nunca casa; defeito pré-existente, issue separada, NÃO consertado
+   * aqui porque mexeria no comportamento de ~30 orgs em produção).
+   */
+  const markSocialConversationRead = useCallback(
+    (conversationKey: string, channelId: string, externalUserId: string) => {
+      if (!organizationId || !user?.id) return;
+      queryClient.setQueriesData<SocialContact[]>(
+        { queryKey: chatQueryKeys.socialContacts(organizationId, channelId) },
+        (old) =>
+          old?.map((c) =>
+            c.external_user_id === externalUserId ? { ...c, unread_count: 0 } : c,
+          ) ?? old,
+      );
+      void supabase
+        .from("conversation_read_state")
+        .upsert(
+          {
+            organization_id: organizationId,
+            user_id: user.id,
+            conversation_key: conversationKey,
+            last_read_at: new Date().toISOString(),
+          },
+          { onConflict: "organization_id,user_id,conversation_key" },
+        )
+        .then(undefined, () => {
+          /* sem-op: o badge reconcilia no próximo refetch da lista */
+        });
+    },
+    [queryClient, organizationId, user?.id],
+  );
+
+  useEffect(() => {
+    if (!selectedSocialContact) return;
+    markSocialConversationRead(
+      selectedSocialContact.conversation_key,
+      selectedSocialContact.messaging_channel_id,
+      selectedSocialContact.external_user_id,
+    );
+  }, [selectedSocialContact, markSocialConversationRead]);
 
   // ── Realtime ────────────────────────────────────────────────────────────────
-  useWhatsAppMessagesRealtime(selectedPhone, selectedInstanceId);
+  // Com a caixa social aberta o patcher de WhatsApp recebe `null` nos dois
+  // argumentos: ele continua montado (o canal é por org, não por conversa) mas
+  // não tem alvo de cache para tocar. O canal social é montado à parte, e só
+  // enquanto a caixa social está aberta — ver `SocialRealtimeMount`.
+  useWhatsAppMessagesRealtime(isSocialBox ? null : selectedKey, selectedInstanceId);
 
   // ── Waiting human — leads com state WAITING_HUMAN em conversations ──────────
   // Este Set é a fonte do chip "Pediu atendente". Descartar o `error` (como fazia
@@ -665,17 +1026,23 @@ export function ChatShellWithContext() {
   // `isLoading` que a lista respeita — o que faltava era o ramo de ERRO.
   const filterGate = useMemo(
     () =>
-      inboxFilterGate(
-        filter,
-        {
-          meta: metaStatus,
-          vendor: vendorStatus,
-          tags: contactsError ? "error" : "ready",
-          waitingHuman: waitingHumanError ? "error" : "ready",
-        },
-        { isMobile },
-      ),
-    [filter, metaStatus, vendorStatus, contactsError, waitingHumanError, isMobile],
+      // A caixa social não avalia NENHUMA das dimensões do gate — nem funil, nem
+      // vendedor, nem etiqueta, nem "pediu atendente". Deixar o gate de WhatsApp
+      // decidir aqui faria a lista de Instagram ficar em "carregando" ou exibir
+      // o aviso de enriquecimento por causa de um dado que ela nunca leu.
+      isSocialBox
+        ? "ok"
+        : inboxFilterGate(
+            filter,
+            {
+              meta: metaStatus,
+              vendor: vendorStatus,
+              tags: contactsError ? "error" : "ready",
+              waitingHuman: waitingHumanError ? "error" : "ready",
+            },
+            { isMobile },
+          ),
+    [isSocialBox, filter, metaStatus, vendorStatus, contactsError, waitingHumanError, isMobile],
   );
 
   // Precisa alcançar as QUATRO fontes que o gate lê. Invalidar só os dois hooks
@@ -755,7 +1122,7 @@ export function ChatShellWithContext() {
   const ShellComponent = isMobile ? MobileChatLayout : ChatShell;
 
   // ── Loading state ────────────────────────────────────────────────────────────
-  if (instancesLoading) {
+  if (boxesLoading) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground">
         <Loader2 className="w-6 h-6 animate-spin" />
@@ -763,29 +1130,31 @@ export function ChatShellWithContext() {
     );
   }
 
-  if (!instances.length) {
+  // Não é mais "nenhuma instância WhatsApp": uma org pode ter só Instagram.
+  if (!boxes.length) {
     return (
       <div className="flex h-full items-center justify-center flex-col gap-2 text-muted-foreground">
         <WifiOff className="w-8 h-8 opacity-40" />
-        <p className="text-sm">Nenhuma instância WhatsApp disponível</p>
+        <p className="text-sm">Nenhuma caixa de entrada disponível</p>
       </div>
     );
   }
 
   return (
     <>
+      {isSocialBox && <SocialRealtimeMount />}
       <ShellComponent
         list={
           <ConversationList
-            contacts={enrichedContacts}
-            selectedPhone={selectedPhone}
+            contacts={isSocialBox ? socialContactsComNova : enrichedContacts}
+            selectedKey={selectedKey}
             onSelectContact={handleSelectContact}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             isLoading={contactsLoading}
-            instances={instances}
-            selectedInstanceId={selectedInstanceId}
-            onSelectInstance={setSelectedInstanceId}
+            boxes={boxes}
+            selectedBoxId={selectedBoxId}
+            onSelectBox={setSelectedBoxId}
             waitingHumanCount={waitingHumanCount}
             waitingHumanLeadIds={waitingHumanLeadIds}
             activeTab={activeTab}
@@ -814,41 +1183,105 @@ export function ChatShellWithContext() {
           />
         }
         view={
-          <ChatView
-            selectedContact={selectedContact}
-            selectedPhone={selectedPhone}
-            instanceId={selectedInstanceId}
-            instanceName={selectedInstance?.instance_name ?? ""}
-            organizationId={organizationId}
-            mountTime={mountTimeRef.current}
-            onBack={handleBack}
-            onOpenLeadModal={handleOpenLeadModal}
-            density={density}
-            onDensityChange={setDensity}
-            isMobile={isMobile}
-          />
+          // Dois componentes, e não um `ChatView` com ramos: o header de
+          // WhatsApp carrega takeover, voz, sincronização de histórico, limites
+          // e toggle de Copilot — tudo ancorado em telefone e instância uazapi.
+          // Passar Instagram por ali seria desabilitar item por item no caminho
+          // mais quente do produto.
+          isSocialBox ? (
+            <SocialChatView
+              selectedContact={selectedSocialContact}
+              boxChannel={isOfficialBox ? "whatsapp_oficial" : "instagram"}
+              // Só a caixa oficial abre ficha de lead: lá o interlocutor É um
+              // telefone. No Instagram é IGSID, e a ficha é montada por telefone.
+              onOpenLead={isOfficialBox ? handleOpenLeadModal : undefined}
+              sender={socialSender}
+              channelName={selectedBox?.name ?? "Instagram"}
+              organizationId={organizationId}
+              mountTime={mountTimeRef.current}
+              onBack={handleBack}
+              density={density}
+              isMobile={isMobile}
+            />
+          ) : (
+            <ChatView
+              selectedContact={selectedContact}
+              selectedPhone={selectedKey}
+              instanceId={selectedInstanceId}
+              instanceName={selectedBox?.name ?? ""}
+              organizationId={organizationId}
+              mountTime={mountTimeRef.current}
+              onBack={handleBack}
+              onOpenLeadModal={handleOpenLeadModal}
+              density={density}
+              onDensityChange={setDensity}
+              isMobile={isMobile}
+            />
+          )
         }
         context={
-          selectedPhone ? (
-            <ContextPanel
-              leadId={selectedContact?.lead_id ?? undefined}
-              phoneNumber={selectedPhone}
-              pushName={selectedContact?.push_name ?? null}
-            />
+          selectedKey ? (
+            // Duas colunas de contexto, e não uma com ramos: a de WhatsApp
+            // resolve o lead pelo TELEFONE e é o caminho quente de 30 orgs; a
+            // social resolve pelo vínculo em `lead_social_identities` e, quando
+            // ele ainda não existe, oferece a ação de criá-lo em vez de exibir
+            // uma frase sobre o que não dá para fazer.
+            isOfficialBox ? (
+              // O canal oficial usa a coluna de WhatsApp, e não a social: o
+              // interlocutor É um telefone, que é o identificador forte do lead
+              // neste produto (decisão Q8 do spec). A coluna social resolve por
+              // `lead_social_identities`, chaveada por IGSID — vincular ali
+              // gravaria o telefone num campo de id de rede social, e a lista,
+              // que procura o lead POR TELEFONE, continuaria mostrando a conversa
+              // sem ficha. O botão pareceria funcionar e não faria nada.
+              selectedSocialContact ? (
+                <ContextPanel
+                  leadId={selectedSocialContact.lead_id ?? undefined}
+                  phoneNumber={selectedSocialContact.external_user_id}
+                  pushName={selectedSocialContact.display_name}
+                />
+              ) : undefined
+            ) : isSocialBox ? (
+              selectedSocialContact ? (
+                <SocialContextPanel contact={selectedSocialContact} />
+              ) : undefined
+            ) : (
+              <ContextPanel
+                leadId={selectedContact?.lead_id ?? undefined}
+                phoneNumber={selectedKey}
+                pushName={selectedContact?.push_name ?? null}
+              />
+            )
           ) : undefined
         }
-        selectedPhone={selectedPhone}
+        selectedPhone={selectedKey}
         onBack={handleBack}
         density={density}
         densityCssVars={cssVars}
       />
 
-      {selectedContact && (
+      {/* Recebe `phoneNumber` e monta a ficha do lead a partir dele — um
+          contato de Instagram não tem telefone, então o modal não existe lá. */}
+      {selectedContact && !isSocialBox && (
         <LeadContactModal
           isOpen={leadModalOpen}
           onClose={handleCloseLeadModal}
           phoneNumber={selectedContact.phone_number}
           pushName={selectedContact.push_name ?? undefined}
+        />
+      )}
+
+      {/* A caixa OFICIAL tem telefone — então tem ficha de lead, criação e
+          vínculo, exatamente como o WhatsApp por QR. O `contact_external_id` é o
+          telefone do interlocutor; `LeadDetailContent` normaliza por dentro e é
+          o mesmo componente das outras conversas. Sem isto o vendedor via
+          "Nenhum lead vinculado" sem nenhuma ação possível. */}
+      {isOfficialBox && selectedSocialContact && (
+        <LeadContactModal
+          isOpen={leadModalOpen}
+          onClose={handleCloseLeadModal}
+          phoneNumber={selectedSocialContact.external_user_id}
+          pushName={selectedSocialContact.display_name ?? undefined}
         />
       )}
     </>

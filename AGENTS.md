@@ -67,7 +67,11 @@ CI roda em PR: unit → integration → e2e → docker-image.
 - **Multi-tenant by default.** Toda query filtra `organization_id`. RLS
   garante isolamento. Frontend nunca envia `org_id` — vem do auth context.
 - **Permissions 3 camadas**: Master → Org Admin → Feature Permissions → Role
-  Matrix. Roles: `admin`, `master`, `membro`.
+  Matrix. `team_members.role` é o enum `app_role` = `admin | sdr | closer |
+  agency | bdr | cliente | member`; em uso hoje, `admin` e `member`. É
+  `member`, **nunca `membro`** (o banco recusa com `22P02`). `master` **não é
+  role** — é a camada de cima (`is_master_user()`, `useMasterAuth()`), fora do
+  enum. Guarda: `tests/unit/role-vocabulary.test.ts`.
 - **Edge Function pattern**: `Deno.serve(withErrorBoundary('nome', handler))` +
   `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return. Edge
   functions vivem em `supabase/functions/` (flat — Supabase CLI exige).
@@ -115,7 +119,9 @@ Deep dive: [`Obsidian/.../02 — Arquitetura/`](./Obsidian/Segundo%20Cerebro/Cla
 
 - Nunca editar `src/integrations/supabase/types.ts` manualmente
 - Nunca usar `--no-verify-jwt` na CLI (use `verify_jwt = false` no config.toml)
-- Nunca usar `SDR`/`Closer` como role no código — roles: `admin`/`master`/`membro`
+- Nunca escrever `membro` como role — o valor é `member` (enum `app_role`); `membro` estoura `22P02`
+- Nunca tratar `master` como role — é camada à parte (`is_master_user()`), não está no enum
+- Nunca usar `SDR`/`Closer` como role de permissão no código — existem no enum, mas o produto os trata como rótulo de UI
 - Nunca enviar service_role key no frontend
 - Nunca editar migration que já rodou — criar nova
 - Nunca commitar `.env` com credenciais reais

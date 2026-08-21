@@ -56,7 +56,7 @@ async function refineMessage(supabase: Supa, orgId: string, leadId: string, base
       }));
     const openRouter = new OpenRouterClient(OPENROUTER_API_KEY);
     const resp = await openRouter.chat({
-      model: Deno.env.get("OPENROUTER_DEFAULT_MODEL") || "google/gemini-2.5-flash",
+      model: Deno.env.get("OPENROUTER_DEFAULT_MODEL") || "openai/gpt-4.1-mini",
       messages: [{ role: "user", content: buildRefinePrompt({ baseText, recentMessages }) }],
       max_tokens: 220,
       temperature: 0.7,

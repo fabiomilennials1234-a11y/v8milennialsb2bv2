@@ -21,18 +21,73 @@
  * (continua em `src/hooks/` enquanto não houver `core/realtime/` — slice 14).
  */
 
-// ── WhatsApp — provider-aware connections (Uazapi / Meta Cloud) ───────────
+// ── WhatsApp — provider-aware connections (Uazapi / Meta Cloud / NotificaMe) ──
 export { WhatsAppProviderChooser } from "./components/whatsapp/WhatsAppProviderChooser";
 // Meta WhatsApp Cloud CONNECTION via Embedded Signup (Slice 3, ADR-0009).
 // INERT until Meta App Review + VITE_META_WA_CONFIG_ID — graceful fallback toast.
 export { useConnectWhatsAppCloud } from "./hooks/useConnectWhatsAppCloud";
 export type { UseConnectWhatsAppCloudResult } from "./hooks/useConnectWhatsAppCloud";
+// NotificaMe Seamless CONNECTION (canal oficial via BSP, fatia 1).
+// INERT enquanto faltarem os secrets do fornecedor — NOTIFICAME_API_TOKEN,
+// NOTIFICAME_SUBACCOUNT_DEFAULTS e NOTIFICAME_ENCRYPTION_KEY — ou enquanto quem
+// olha a tela não for admin/master: `isConfigured=false` + `configReason`
+// legível, para o card nascer desabilitado COM motivo.
+// (NOTIFICAME_COMPANY_UUID foi eliminado nesta branch: sob subconta por org não
+// há um uuid nosso e único; há um por org, e ele é credencial no cofre.)
+export { useConnectNotificame } from "./hooks/useConnectNotificame";
+export type {
+  UseConnectNotificameResult,
+  SeamlessChannelType,
+} from "./hooks/useConnectNotificame";
+// Canais SOCIAIS conectados pelo mesmo Seamless (Instagram na 1.1). Tabela
+// própria — `messaging_channels` —, porque perfil de rede social não é número de
+// WhatsApp: não disparia, não tem telefone e não come vaga paga de instância.
+export { useMessagingChannels } from "./hooks/useMessagingChannels";
+export type { MessagingChannel, MessagingChannelType } from "./hooks/useMessagingChannels";
+export { useNotificameTemplates, notificameTemplatesQueryKey } from "./hooks/useNotificameTemplates";
+export type { NotificameTemplate, NotificameTemplateStatus } from "./hooks/useNotificameTemplates";
+export { NotificameOperacaoCard } from "./components/whatsapp/NotificameOperacaoCard";
+export { NotificameTemplatesCard } from "./components/whatsapp/NotificameTemplatesCard";
+export { NotificameTemplateEditor } from "./components/whatsapp/NotificameTemplateEditor";
+export { useCreateNotificameTemplate } from "./hooks/useNotificameTemplates";
+// ── Inbox multicanal ──────────────────────────────────────────────────────
+// O seletor do chat deixou de ser "lista de números de WhatsApp" e passou a ser
+// uma união discriminada de CAIXAS. Estes são os tipos e helpers que qualquer
+// consumidor cross-module precisa para falar de uma conversa sem presumir que
+// ela tem telefone. Cross-module só entra por este barrel (ESLint
+// `boundaries/element-types` em modo error).
+export { useInboxBoxes } from "./hooks/chat/useInboxBoxes";
+export { useSocialContacts } from "./hooks/chat/useSocialContacts";
+export { useSocialMessages } from "./hooks/chat/useSocialMessages";
+export {
+  contactKey,
+  contactLabel,
+  contactAvatarSeed,
+  buildSocialConversationKey,
+  isWhatsAppContact,
+  isSocialContact,
+} from "./hooks/chat/types";
+export type {
+  SocialContact,
+  InboxContact,
+  InboxBox,
+} from "./hooks/chat/types";
+// Regra de origem do postMessage do Seamless, pura e testável (igualdade estrita).
+// `seamlessOriginFromStartUrl` é a ÚNICA derivação correta no cliente — a origem
+// esperada e a URL do popup precisam sair da MESMA fonte.
+export {
+  NOTIFICAME_ORIGIN,
+  readSeamlessMessage,
+  seamlessOriginFromStartUrl,
+} from "./lib/notificame-message";
+export type { SeamlessOutcome } from "./lib/notificame-message";
 export {
   getProviderProfile,
   canUseUazapiActions,
   type WhatsAppProviderId,
   type ProviderProfile,
   type ProviderCapabilities,
+  type ConnectKind,
 } from "./lib/whatsapp-provider";
 
 // ── Lib: blast media guard (consumido por campaigns/Disparos, #904) ────────
@@ -210,6 +265,7 @@ export {
   formatMessageTime,
   MessageStatusIcon,
   ChatEmptyState,
+  ChatThreadUnavailable,
   ScrollToBottomFab,
   UnreadDivider,
 } from "./components/chat";

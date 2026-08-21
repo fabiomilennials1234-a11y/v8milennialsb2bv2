@@ -8,7 +8,7 @@
 --
 -- A ordem abaixo importa: primeiro tira a medida do catálogo (senão a guarda de
 -- "medida catalogada sem ramo" da PRÓXIMA migration acusaria), depois devolve o
--- despachante ao corpo de 20270811170000 — 13 medidas, sem no-show e sem alvo.
+-- despachante ao corpo de 20270811170001 — 13 medidas, sem no-show e sem alvo.
 --
 -- `goal_type` fica na tabela. Coluna nula não muda número, e derrubá-la exigiria
 -- reescrever o despachante de novo se `20260727140000` ainda estiver pendente.

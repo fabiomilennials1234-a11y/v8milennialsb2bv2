@@ -19,7 +19,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse, type AuthContext } from "../_shared/user-auth.ts";
 
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "google/gemini-2.5-flash";
+const DEFAULT_MODEL = "openai/gpt-4.1-mini";
 
 interface ChatMessage {
   role: "user" | "assistant";

@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { useClientAlerts } from "@/modules/carteira/hooks/useClientAlerts";
@@ -253,22 +254,17 @@ export default function ClienteDetailPage() {
 
           {/* Action buttons */}
           <div className="flex items-center gap-2 shrink-0">
-            {clientPhone && (
-              <Button
+            {clientPhone && client?.lead_id && (
+              <AbrirConversaButton
+                leadId={client.lead_id}
+                phone={clientPhone}
                 size="sm"
                 variant="outline"
                 className="gap-1.5 border-border hover:bg-muted hover:border-green-600/50 hover:text-green-400"
-                onClick={() => {
-                  if (client?.lead_id) {
-                    navigate(`/chat?lead=${client.lead_id}`);
-                  } else if (clientPhone) {
-                    window.open(`https://wa.me/${clientPhone.replace(/\D/g, "")}`, "_blank");
-                  }
-                }}
               >
                 <MessageCircle size={13} />
                 WhatsApp
-              </Button>
+              </AbrirConversaButton>
             )}
             <Button
               size="sm"
@@ -330,6 +326,7 @@ export default function ClienteDetailPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ClienteCopilotSuggestion
             clientId={clientId}
+            leadId={client?.lead_id ?? null}
             clientName={clientName}
             phone={clientPhone}
             alerts={alerts}

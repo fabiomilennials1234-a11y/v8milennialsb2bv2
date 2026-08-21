@@ -1,0 +1,36 @@
+-- 20270812185700_payment_link_buyers_legal_name_comment.sql
+--
+-- SCRUM-289 — devolve ao catálogo o aviso sobre `payment_link_buyers.legal_name`
+-- que se perdeu no caminho até a `main`.
+-- ROLLBACK pareado: rollback/20270812185700_payment_link_buyers_legal_name_comment.sql
+--
+-- POR QUE UMA MIGRATION SÓ PARA UM COMENTÁRIO
+-- ------------------------------------------
+-- O aviso nasceu em `af1420dd`, na branch da Fatia 8. O PR que levou a tabela
+-- para a `main` (#1553) foi montado por cherry-pick de TRÊS commits, e esse não
+-- estava entre eles — então a 20270812111845 que **rodou em produção** não
+-- carrega o `COMMENT`.
+--
+-- E é por isso que este arquivo existe em vez de uma edição: aquela migration
+-- JÁ FOI APLICADA. Editar o arquivo faria o repositório descrever um schema
+-- diferente do que executou, que é a forma mais cara de mentira num diretório
+-- de migrations — quem lesse o arquivo depois acreditaria numa coisa e o banco
+-- teria outra. Migration aplicada é imutável; o conserto é uma migration nova.
+--
+-- POR QUE O AVISO VALE UMA MIGRATION
+-- ----------------------------------
+-- Ele já mudou uma decisão real. Ao montar a redação de PII do logger (#1547),
+-- a leitura inicial foi deixar `legal_name` de fora, com o argumento de que
+-- razão social é dado público na Receita. O argumento está certo para o ramo
+-- `cnpj` e errado para o outro: `payment_link_buyers_tax_id_coerente_check`
+-- admite `cpf`, e no ramo de pessoa física esta coluna guarda o NOME CIVIL de
+-- alguém, que não é público em cadastro nenhum.
+--
+-- O nome da coluna veio do vocabulário fiscal e não do conteúdo real, então ele
+-- INDUZ ao erro — e induziu. Um comentário no catálogo é o único lugar em que
+-- esse aviso alcança quem chega pelo banco, e não pelo arquivo.
+--
+-- Não muda schema, não muda dado, não muda permissão: só escreve no catálogo.
+
+COMMENT ON COLUMN public.payment_link_buyers.legal_name IS
+  'PII. NÃO é só razão social: no ramo cpf é o nome civil de uma pessoa física, que não é público em cadastro nenhum. Tratar como dado público (deixar de redigir em log, expor em tela, devolver numa porta) acerta metade das linhas e erra a outra metade.';

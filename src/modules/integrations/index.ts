@@ -26,11 +26,36 @@ export {
   type TituloStatus,
 } from "./hooks/useOmie";
 
+// ─── ERP: Toth (on-premise — SCRUM-229, Café Jurerê) ──────────────────────
+export {
+  useTothStatus,
+  useConnectToth,
+  useDisconnectToth,
+  useSyncTothClientes,
+  useSyncTothCobrancas,
+  useSimulateTothClientes,
+  useUpdateTothActiveWindow,
+  useUpdateTothSyncMode,
+  type TothDryRunResult,
+  type TothSyncMode,
+  type TothTokenTransport,
+  type TothConnectionStatus,
+  type TothConnectInput,
+} from "./hooks/useToth";
+
+export {
+  readTothEndpoint,
+  canSubmitTothConnection,
+  type TothEndpointReading,
+  type TothEndpointVerdict,
+} from "./lib/toth-endpoint";
+
 export { useErpProvider, type UseErpProviderResult } from "./hooks/useErpProvider";
 export {
   resolveErpProvider,
   TINY_CAPABILITIES,
   OMIE_CAPABILITIES,
+  TOTH_CAPABILITIES,
   type ErpCapabilities,
   type ErpProviderId,
   type ErpProviderManifest,

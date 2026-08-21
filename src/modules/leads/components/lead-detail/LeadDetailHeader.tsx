@@ -15,7 +15,8 @@ import { ScheduleFollowUpButton } from "@/modules/engagement/components/followup
 import { ORIGIN_COLORS } from "../leads/LeadCard";
 import { StageProgressBar } from "./StageProgressBar";
 import { cn } from "@/lib/utils";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { EMAIL_CHANNEL_AVAILABLE, SMS_CHANNEL_AVAILABLE } from "@/modules/communication/lib/channel-availability";
 import type { DrawerVariant } from "./legacy/drawer-variant";
 
@@ -50,7 +51,6 @@ export const LeadDetailHeader = memo(function LeadDetailHeader({
   onToggleAI, onClose, onOpenScheduleModal, onOpenCallModal,
   onOpenEmailWriter, onOpenEmailComposer, onOpenSmsDialog, onDelete,
 }: LeadDetailHeaderProps) {
-  const openWhatsApp = useOpenWhatsAppChat();
   const originColor = ORIGIN_COLORS[lead.origin] || ORIGIN_COLORS.outro;
 
   return (
@@ -115,10 +115,15 @@ export const LeadDetailHeader = memo(function LeadDetailHeader({
       {/* Row 4: Actions */}
       <div className="flex items-center gap-1.5 mt-3">
         {lead.phone && (
-          <Button variant="outline" size="sm" className="h-7 text-xs gap-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
-            onClick={() => openWhatsApp(formatPhoneForWhatsApp(lead.phone) ?? lead.phone)}>
+          <AbrirConversaButton
+            leadId={lead.id}
+            phone={lead.phone}
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
+          >
             <MessageSquare className="w-3 h-3" /> WhatsApp
-          </Button>
+          </AbrirConversaButton>
         )}
         {EMAIL_CHANNEL_AVAILABLE && lead.email && (
           <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={onOpenEmailComposer}>

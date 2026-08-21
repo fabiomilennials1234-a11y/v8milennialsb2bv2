@@ -45,19 +45,19 @@ const reply: LlmResponse = { text: 'olá!', toolCalls: [] };
 const baseInput = { message: { content: 'oi', canonicalPhone: '11987654321' }, toolSchemas: [], executeTool: async () => ({}) };
 
 describe('handleQueuedMessage — routing + model + prompt wiring', () => {
-  it('routes a NEW contact to Qualificador on a Flash-class model', async () => {
+  it('routes a NEW contact to Qualificador', async () => {
     const { makeLlm, captured } = captureLlm(reply);
     const out = await handleQueuedMessage({ ...baseInput, context: ctx({ contactStatus: 'NOVO' }), makeLlm });
-    expect(out).toMatchObject({ handled: true, archetype: 'qualificador', model: 'google/gemini-2.5-flash' });
-    expect(captured.model).toBe('google/gemini-2.5-flash');
+    expect(out).toMatchObject({ handled: true, archetype: 'qualificador', model: 'openai/gpt-4.1-mini' });
+    expect(captured.model).toBe('openai/gpt-4.1-mini');
     expect(captured.system).toContain('QUALIFICADOR');
   });
 
-  it('routes a QUALIFIED contact to Vendedor on a Sonnet-class model', async () => {
+  it('routes a QUALIFIED contact to Vendedor — mesmo motor, arquétipo diferente', async () => {
     const { makeLlm, captured } = captureLlm(reply);
     const out = await handleQueuedMessage({ ...baseInput, context: ctx({ contactStatus: 'QUALIFIED' }), makeLlm });
-    expect(out).toMatchObject({ handled: true, archetype: 'vendedor', model: 'anthropic/claude-sonnet-4-6' });
-    expect(captured.model).toBe('anthropic/claude-sonnet-4-6');
+    expect(out).toMatchObject({ handled: true, archetype: 'vendedor', model: 'openai/gpt-4.1-mini' });
+    expect(captured.model).toBe('openai/gpt-4.1-mini');
   });
 
   it('routes a portfolio customer to Carteira', async () => {

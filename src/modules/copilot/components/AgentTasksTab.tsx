@@ -29,6 +29,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAgentPendingTasks } from "@/modules/copilot/hooks/useAgentMetrics";
@@ -40,13 +41,25 @@ interface AgentTasksTabProps {
 type TaskType = "followup" | "confirmation" | "reengage" | "all";
 type TaskPriority = "high" | "medium" | "low";
 
+/**
+ * Era `any`. A forma vem do join `lead:leads(id, name, phone, company)` em
+ * `useAgentPendingTasks` — o tipo existia e era descartado aqui. Com `any`,
+ * o compilador para de olhar: é assim que uma prop morre sem ninguém notar.
+ */
+interface TaskLead {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  company: string | null;
+}
+
 interface Task {
   id: string;
   type: TaskType;
   priority: TaskPriority;
   title: string;
   description: string;
-  lead: any;
+  lead: TaskLead | null;
   metadata: Record<string, any>;
 }
 
@@ -98,6 +111,9 @@ function TemperatureIcon({ temperature }: { temperature: string }) {
 
 function TaskCard({ task, onAction }: { task: Task; onAction: (task: Task, action: string) => void }) {
   const lead = task.lead;
+  // Capturado fora do JSX: `lead?.phone &&` guarda a renderização mas não
+  // estreita o tipo dentro do onClick, que roda depois.
+  const leadPhone = lead?.phone ?? null;
 
   return (
     <motion.div
@@ -155,15 +171,16 @@ function TaskCard({ task, onAction }: { task: Task; onAction: (task: Task, actio
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {lead?.phone && (
-            <Button
+          {leadPhone && lead && (
+            <AbrirConversaButton
+              leadId={lead.id}
+              phone={leadPhone}
               variant="outline"
               size="sm"
-              onClick={() => window.open(`https://wa.me/${lead.phone.replace(/\D/g, '')}`, '_blank')}
             >
               <MessageSquare className="w-4 h-4 mr-1" />
               WhatsApp
-            </Button>
+            </AbrirConversaButton>
           )}
           <Button
             variant="outline"

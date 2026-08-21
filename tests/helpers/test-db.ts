@@ -14,7 +14,7 @@
  *   // In test file, after vi.mock declarations that delegate to mutable state:
  *   const { wrapper, supabase, emitRealtime } = createTestDB(
  *     { leads: [...], organizations: [...] },
- *     { userRole: 'membro', isMaster: false, _mockOrgState, _mockSupabaseState, ... }
+ *     { userRole: 'member', isMaster: false, _mockOrgState, _mockSupabaseState, ... }
  *   );
  *   const { result } = renderHook(() => useMyHook(), { wrapper });
  */
@@ -22,6 +22,7 @@
 import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createMockSupabase } from "./supabase-mock";
+import type { Database } from "@/integrations/supabase/types";
 
 type MockData = Record<string, unknown>[];
 
@@ -30,7 +31,15 @@ export interface TestDBTables {
 }
 
 export interface TestDBOptions {
-  userRole?: "admin" | "master" | "membro";
+  /**
+   * Amarrado ao enum do banco de propósito (#1541). Era
+   * `"admin" | "master" | "membro"` — dois dos três valores não existem em
+   * `app_role`: o banco recusa `membro` com `22P02`, e `master` não é role,
+   * é camada à parte (`isMaster`, logo abaixo). Dublê mais frouxo que o real
+   * esconde bug — foi assim que um gate comparando `"membro"` passou nos
+   * testes e negou todo não-admin em produção.
+   */
+  userRole?: Database["public"]["Enums"]["app_role"];
   isMaster?: boolean;
   /** Internal: reference to the mutable mockOrgState declared at test module level */
   _mockOrgState?: Record<string, unknown>;

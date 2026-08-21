@@ -54,7 +54,7 @@
 -- ⚠ As duas razões dividem âncoras diferentes (`fechamentos` ÷ `entradas`) — o
 -- motor devolve só a âncora do numerador. É o mesmo desvio que a `conversao`
 -- semeada em 2026-07 já tem, e é deliberado: conversão É a pergunta que cruza
--- coortes. A guarda (c) da 20270812100000 é escopada aos filhos daquela fatia,
+-- coortes. A guarda (c) da 20270812100001 é escopada aos filhos daquela fatia,
 -- então não reprova aqui; a guarda (d), que vale para TODAS as linhas, reprova
 -- se o formato não bater com a unidade derivada — e count÷count→percent→
 -- `percent_1` bate.
@@ -479,7 +479,7 @@ BEGIN
   END IF;
 
   -- Coerência unidade-derivada × formato-declarado, em TODAS as razões (mesma
-  -- regra da 20270812100000; repetida porque esta fatia acrescenta linha).
+  -- regra da 20270812100001; repetida porque esta fatia acrescenta linha).
   FOR v_row IN
     SELECT r.id, r.format_id, mn.unit AS num_unit, md.unit AS den_unit
     FROM public.metric_catalog_ratios r

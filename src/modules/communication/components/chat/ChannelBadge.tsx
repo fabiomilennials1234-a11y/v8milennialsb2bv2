@@ -5,7 +5,16 @@
 
 import { cn } from "@/lib/utils";
 
-export type ChannelType = "whatsapp" | "instagram" | "messenger";
+/**
+ * O canal de uma CONVERSA.
+ *
+ * `whatsapp_oficial` é o canal da API oficial da Meta (via NotificaMe). Ele usa
+ * o mesmo ícone e a mesma cor do WhatsApp de propósito: para o contato do outro
+ * lado é WhatsApp, e um segundo verde só faria o vendedor procurar diferença
+ * onde não há. A distinção que importa — por qual número estou falando — mora no
+ * SELETOR DE CAIXA, com o selo "Oficial" (decisão Q11 do spec).
+ */
+export type ChannelType = "whatsapp" | "whatsapp_oficial" | "instagram" | "messenger";
 
 interface ChannelBadgeProps {
   channel: ChannelType;
@@ -44,6 +53,10 @@ const channelConfig: Record<ChannelType, { bg: string; icon: typeof WhatsAppIcon
     bg: "bg-[#25D366]",
     icon: WhatsAppIcon,
   },
+  whatsapp_oficial: {
+    bg: "bg-[#25D366]",
+    icon: WhatsAppIcon,
+  },
   instagram: {
     bg: "bg-gradient-to-tr from-[#F58529] via-[#DD2A7B] to-[#8134AF]",
     icon: InstagramIcon,
@@ -68,7 +81,7 @@ export function ChannelBadge({ channel, size = 20, className, overlay = false }:
         className
       )}
       style={{ width: size, height: size }}
-      title={channel === "whatsapp" ? "WhatsApp" : channel === "instagram" ? "Instagram Direct" : "Messenger"}
+      title={getChannelLabel(channel)}
     >
       <Icon size={iconSize} />
     </div>
@@ -82,6 +95,8 @@ export function getChannelLabel(channel: ChannelType): string {
   switch (channel) {
     case "whatsapp":
       return "WhatsApp";
+    case "whatsapp_oficial":
+      return "WhatsApp Oficial";
     case "instagram":
       return "Instagram Direct";
     case "messenger":

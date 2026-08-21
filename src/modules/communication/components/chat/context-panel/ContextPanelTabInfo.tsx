@@ -33,6 +33,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -104,11 +105,41 @@ export function ContextPanelTabInfo({
   activeLeadId,
   phoneNumber,
 }: ContextPanelTabInfoProps) {
+  const [leadModalOpen, setLeadModalOpen] = useState(false);
+
   if (!lead && phoneNumber) {
     return (
       <div className="px-4 py-6 text-center">
         <p className="text-xs text-muted-foreground mb-1">Nenhum lead vinculado a</p>
         <p className="text-sm font-medium tabular-nums">{phoneNumber}</p>
+
+        {/*
+          A AÇÃO, e não só o diagnóstico.
+
+          Este painel dizia o que FALTA e não oferecia como resolver: o único
+          caminho era descobrir que clicar no nome do contato, lá no cabeçalho,
+          abre a ficha. Quem não sabia disso lia "nenhum lead vinculado" como
+          estado permanente.
+
+          Mesmo componente que o resto do produto usa para criar e vincular por
+          telefone (`LeadDetailContent`, dentro de `LeadContactModal`) — a ficha
+          decide entre criar e vincular a partir do que acha pelo número.
+        */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-3 h-8 text-xs"
+          onClick={() => setLeadModalOpen(true)}
+        >
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          Criar ou vincular lead
+        </Button>
+
+        <LeadContactModal
+          isOpen={leadModalOpen}
+          onClose={() => setLeadModalOpen(false)}
+          phoneNumber={phoneNumber}
+        />
       </div>
     );
   }

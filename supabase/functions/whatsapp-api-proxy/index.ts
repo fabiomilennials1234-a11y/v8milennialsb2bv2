@@ -27,6 +27,15 @@ import {
 } from "../_shared/whatsapp-client.ts";
 import { isActiveGestorForOrg } from "../_shared/gestor-auth.ts";
 import {
+  extractChatTarget,
+  isChatTargetAllowed,
+} from "../_shared/chat-owner-guard.ts";
+import { readTemplateRequest } from "../_shared/whatsapp-template-request.ts";
+import {
+  espelharMidiaDeTemplate,
+  precisaEspelhar,
+} from "../_shared/mirror-template-media.ts";
+import {
   nullifyInBatches,
   type BatchNullifyIO,
 } from "../_shared/whatsapp-instance-teardown.ts";
@@ -38,6 +47,11 @@ import {
 import "../_shared/whatsapp-providers/evolution-provider.ts";
 import "../_shared/whatsapp-providers/uazapi-provider.ts";
 import "../_shared/whatsapp-providers/meta-cloud-provider.ts";
+// notificame idem: o canal OFICIAL (API da Meta via NotificaMe) é resolvido em
+// `whatsapp-client.ts:336` pelo mesmo `await import()` dinâmico. Sem esta linha o
+// eszip não carrega o módulo e o envio da caixa oficial morre em runtime — a
+// mesma classe de incidente que pôs o meta-cloud nesta lista.
+import "../_shared/whatsapp-providers/notificame-provider.ts";
 
 // ---------------------------------------------------------------------------
 // Rate limit state (in-memory, per org)
@@ -57,6 +71,135 @@ function checkRateLimit(orgId: string): boolean {
   }
   rateLimitState.set(orgId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Guarda de ordem de deploy — estado de `whatsapp_messages_instance_id_fkey`
+// ---------------------------------------------------------------------------
+
+/**
+ * `present` = a FK ainda existe (ou não deu para saber). `dropped` = provado
+ * que não existe mais.
+ */
+type WhatsAppMessagesFkState = "present" | "dropped";
+
+/**
+ * Cache no isolate. Assimétrico de propósito:
+ *
+ *  - `dropped` é TERMINAL e vale para sempre. A FK não volta: recriá-la exige
+ *    `ADD CONSTRAINT`, que valida as 2,3M linhas contra órfãs que já violam a
+ *    referência — a própria migration documenta que recriar é recriar o bug.
+ *  - `present` expira em `FK_PRESENT_RECHECK_MS`, porque um isolate vivo desde
+ *    ANTES do apply da migration precisa enxergar o DROP sem esperar reciclagem.
+ *    Sem TTL, a guarda protegeria só isolates novos.
+ */
+let fkProbeCache: { state: WhatsAppMessagesFkState; at: number } | null = null;
+const FK_PRESENT_RECHECK_MS = 60_000;
+
+/**
+ * Uuid que nunca casa com linha nenhuma. `whatsapp_messages.id` é uuid, então
+ * este literal é aceito pelo parser (um valor de outro tipo viraria `22P02` e
+ * mascararia o `PGRST200` que interessa) e resolve por PK sem ler dado.
+ */
+const FK_PROBE_SENTINEL_ID = "00000000-0000-0000-0000-000000000000";
+
+/**
+ * Descobre, em runtime, se `whatsapp_messages_instance_id_fkey` ainda existe.
+ *
+ * Por que uma guarda em runtime, e não um comentário
+ * --------------------------------------------------
+ * O DROP da FK é a migration `20270811000010_whatsapp_messages_drop_instance_fk.sql`,
+ * passo MANUAL; o deploy desta função é outro passo MANUAL. Um comentário
+ * dizendo "aplique a migration antes" só vale enquanto alguém lê e obedece. Se
+ * o proxy subir primeiro já tendo parado de limpar `whatsapp_messages`, o
+ * DELETE da instância entrega as linhas ao `ON DELETE SET NULL` num statement
+ * único — ~155k só na Alamaster — e estoura o statement timeout: a falha que
+ * derrubou 34 de 95 exclusões. Perguntando, as duas ordens de deploy ficam
+ * seguras e o passo 2 deixa de depender do passo 1.
+ *
+ * Como se pergunta sem `pg_constraint`
+ * ------------------------------------
+ * `pg_constraint` não é legível por PostgREST (fora dos schemas expostos), e o
+ * único executor de SQL cru do projeto (`mcp_exec_readonly_sql`) é master-only
+ * — service_role não passa no `is_master_user()`. Sobra o MESMO catálogo por
+ * outro caminho: o grafo de relações do PostgREST é derivado de
+ * `pg_constraint`, e um embed que cita a constraint PELO NOME responde 200 se
+ * ela existe e `PGRST200` ("Could not find a relationship") se não existe.
+ *
+ * O `PGRST200` é levantado ao MONTAR a query, a partir do schema cache, antes de
+ * executar — por isso o probe filtra por um uuid sentinela que nunca casa: zero
+ * linha lida, zero PII em memória, e a validação do relacionamento acontece
+ * igual. E é um GET, não um HEAD: resposta HEAD não tem corpo, então um
+ * `PGRST200` viria sem `code` nem `message` e o probe travaria em "unknown"
+ * para sempre — exatamente o modo de falha que ele existe para evitar.
+ *
+ * Qual é o lado seguro na dúvida
+ * ------------------------------
+ * Manter o nullify — e a assimetria é real, não covardia. Com a FK viva o banco
+ * vai anular essas linhas no instante do DELETE de qualquer forma; o lote não
+ * causa perda que o schema já não imponha, só troca um statement gigante por
+ * vários curtos. Pular por engano não compra nada e ressuscita o timeout. Por
+ * isso só um `PGRST200` explícito autoriza pular: erro desconhecido, exceção ou
+ * resposta estranha caem em `present`.
+ *
+ * ⚠️ `unknown` PERMANENTE depois da migration aplicada inverte o sinal — aí o
+ * nullify volta a apagar histórico. Por isso toda dúvida emite log de erro:
+ * `delete_instance_fk_probe_failed` recorrente é para ser investigado, não
+ * tolerado.
+ */
+async function whatsappMessagesFkState(
+  // deno-lint-ignore no-explicit-any
+  supabaseAdmin: any,
+  orgId: string | null
+): Promise<WhatsAppMessagesFkState> {
+  const cached = fkProbeCache;
+  if (cached) {
+    if (cached.state === "dropped") return "dropped";
+    if (Date.now() - cached.at < FK_PRESENT_RECHECK_MS) return "present";
+  }
+
+  try {
+    const { error } = await supabaseAdmin
+      .from("whatsapp_messages")
+      .select("id, whatsapp_instances!whatsapp_messages_instance_id_fkey(id)")
+      .eq("id", FK_PROBE_SENTINEL_ID)
+      .limit(1);
+
+    if (!error) {
+      fkProbeCache = { state: "present", at: Date.now() };
+      return "present";
+    }
+
+    const relationshipGone =
+      error.code === "PGRST200" ||
+      /could not find a relationship/i.test(error.message ?? "");
+
+    if (relationshipGone) {
+      fkProbeCache = { state: "dropped", at: Date.now() };
+      return "dropped";
+    }
+
+    // Só o `code` — a mensagem do PostgREST pode ecoar conteúdo da linha.
+    await logRuntime({
+      organizationId: orgId ?? undefined,
+      module: "whatsapp",
+      action: "delete_instance_fk_probe_failed",
+      status: "error",
+      entityType: "whatsapp_messages",
+      errorMessage: `probe inconclusivo (${error.code ?? "sem code"}); mantendo o nullify de whatsapp_messages`,
+    });
+    return "present";
+  } catch (e) {
+    await logRuntime({
+      organizationId: orgId ?? undefined,
+      module: "whatsapp",
+      action: "delete_instance_fk_probe_failed",
+      status: "error",
+      entityType: "whatsapp_messages",
+      errorMessage: `probe lançou (${(e as Error).name ?? "erro"}); mantendo o nullify de whatsapp_messages`,
+    });
+    return "present";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -371,6 +514,54 @@ Deno.serve(
       }
 
       // -----------------------------------------------------------------------
+      // 4.7 Gate de escrita por responsável (#1635)
+      //
+      // A checagem acima é de ORG. Esta é de RESPONSÁVEL: com a política
+      // chat_restrict_to_owner ligada, o membro não-admin só age sobre a
+      // conversa dos leads de que é responsável.
+      //
+      // Fica AQUI, num choke único depois da fronteira de org e antes do
+      // switch, e não replicado ação a ação — as 13 ações com alvo estão
+      // enumeradas em _shared/chat-owner-guard.ts. O veredito é do banco:
+      // normalização de telefone e leitura do message_id moram junto do
+      // predicado.
+      //
+      // Master já é liberado pelo próprio predicado; a chamada usa o client do
+      // USUÁRIO porque can_see_chat_scope depende de auth.uid().
+      // -----------------------------------------------------------------------
+      {
+        const target = extractChatTarget(action, payload);
+        if (target) {
+          const allowed = await isChatTargetAllowed(
+            supabaseUser,
+            callerOrgId,
+            instanceId,
+            target,
+          );
+          if (!allowed) {
+            await logRuntime({
+              organizationId: callerOrgId,
+              module: "whatsapp",
+              action: "chat_owner_denied",
+              status: "error",
+              payloadSnapshot: {
+                user_id: user.id,
+                action,
+                instance_id: instanceId,
+                lead_id: target.leadId,
+                message_id: target.messageId,
+              },
+            });
+            return jsonResponse(
+              403,
+              { error: "Forbidden", reason: "chat_owner" },
+              corsHeaders,
+            );
+          }
+        }
+      }
+
+      // -----------------------------------------------------------------------
       // deleteInstance — handled before getWhatsAppProvider because orphan
       // instances (failed createInstance) have no provider credentials.
       // -----------------------------------------------------------------------
@@ -417,12 +608,61 @@ Deno.serve(
             );
           }
 
-          // Clear FKs BEFORE deleting the instance row, otherwise the
-          // ON DELETE SET NULL cascade runs as one statement over
-          // whatsapp_messages (~2.3M rows, 7 indexes on instance_id) and blows
-          // the statement timeout — 34 of 95 deletions failed that way. Each
-          // batch is a short statement in its own transaction, so locks on a
-          // table the webhook writes to continuously are released in between.
+          // `whatsapp_messages` sai desta limpeza SOMENTE DEPOIS que a FK
+          // `whatsapp_messages_instance_id_fkey` for dropada. Esse DROP é a
+          // migration `20270811000010_whatsapp_messages_drop_instance_fk.sql`, ainda um
+          // passo MANUAL — a ordem real é (1) migration em prod, (2) deploy
+          // deste proxy. Nada aqui pode supor o estado (1).
+          //
+          // Esses dois passos ESTANCAM a perda; eles não recuperam o que já foi
+          // perdido. As 385.828 linhas órfãs de antes só voltam com o script
+          // `scripts/backfill-orphan-whatsapp-messages.sql`, que é OPCIONAL e
+          // não está no caminho de deploy — decisão do CTO em 2026-08-11.
+          //
+          // Por que a saída é o conserto: enquanto existe FK ON DELETE SET NULL,
+          // este nullify antecipa o cascade e desliga o histórico do chip a cada
+          // exclusão de instância — o chat filtra por `instance_id`, então a
+          // conversa inteira some da tela embora siga no banco (385.828 linhas
+          // órfãs acumuladas). Sem a FK, `instance_id` passa a ser uuid
+          // histórico da mensagem, apagar a instância não toca as 2,3M linhas, e
+          // some junto a classe de statement timeout que justificava o lote
+          // nessa tabela. Quem liga chip → ids históricos passa a ser a lápide
+          // em `whatsapp_instance_reap_queue`.
+          //
+          // Quem decide não é este comentário: `whatsappMessagesFkState`
+          // pergunta ao catálogo, a cada exclusão (com cache no isolate).
+          // Enquanto a FK existir, `whatsapp_messages` continua na lista e o
+          // comportamento é exatamente o de hoje; quando não existir mais, sai
+          // sozinha. Deployar fora de ordem deixa de quebrar alguma coisa.
+          //
+          // `scheduled_user_messages.whatsapp_instance_id` continua com FK
+          // ON DELETE SET NULL e continua sendo limpo antes do DELETE em
+          // qualquer cenário: é fila de envio pendente, não histórico — perder o
+          // vínculo ali não esconde conversa de ninguém, e limpar em lotes
+          // curtos evita entregar tudo a um único statement de cascade.
+          const fkState = await whatsappMessagesFkState(
+            supabaseAdmin,
+            callerOrgId
+          );
+
+          const nullifyTargets: Array<{ table: string; column: string }> = [];
+          if (fkState === "present") {
+            nullifyTargets.push({
+              table: "whatsapp_messages",
+              column: "instance_id",
+            });
+          }
+          nullifyTargets.push({
+            table: "scheduled_user_messages",
+            column: "whatsapp_instance_id",
+          });
+
+          console.log(
+            `[deleteInstance] whatsapp_messages FK=${fkState} → alvos: ${nullifyTargets
+              .map((t) => t.table)
+              .join(", ")}`
+          );
+
           const nullifyIO: BatchNullifyIO = {
             async selectIds(table, column, value, limit) {
               const { data, error } = await supabaseAdmin
@@ -442,10 +682,7 @@ Deno.serve(
             },
           };
 
-          for (const target of [
-            { table: "whatsapp_messages", column: "instance_id" },
-            { table: "scheduled_user_messages", column: "whatsapp_instance_id" },
-          ]) {
+          for (const target of nullifyTargets) {
             const outcome = await nullifyInBatches(nullifyIO, {
               ...target,
               value: instanceId,
@@ -454,9 +691,10 @@ Deno.serve(
               `[deleteInstance] ${target.table}: cleared ${outcome.rows} rows in ${outcome.batches} batches`
             );
 
-            // Rows still carry the FK. Proceeding would hand the remainder to
-            // the cascade, which is exactly the statement that times out — so
-            // stop and let the caller retry instead of failing opaquely.
+            // Ainda há linhas apontando pra instância. Seguir entregaria o resto
+            // ao cascade — o statement único que o lote existe pra evitar.
+            // Melhor parar e ser repetido do que falhar de forma opaca no
+            // DELETE.
             if (outcome.hitBatchCeiling) {
               await logRuntime({
                 organizationId: callerOrgId,
@@ -534,7 +772,7 @@ Deno.serve(
       // -----------------------------------------------------------------------
       // Etapa B — vínculo user-instância (flag user_write_instance_strict).
       //
-      // Para ações de envio (sendText/sendMedia/sendAudio) que carregam
+      // Para ações de envio (sendText/sendMedia/sendAudio/sendTemplate) que carregam
       // `payload.lead_id` opcional: se a flag está ON na org, exigir
       //   (a) responsible_user_id do lead → instância vinculada == instance_id
       //   (b) caller pode escrever via instância (owner / admin / master)
@@ -542,7 +780,19 @@ Deno.serve(
       // Quando lead_id ausente, comportamento legado é preservado.
       // Frontend (Etapa C) passa a anexar lead_id no composer humano.
       // -----------------------------------------------------------------------
-      const SEND_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio"]);
+      const SEND_ACTIONS = new Set([
+        "sendText",
+        "sendMedia",
+        "sendAudio",
+        "sendTemplate",
+        "sendMenu",
+        "sendLocation",
+        "sendContact",
+        // Bloquear e desbloquear endereçam um contato — mesmo crivo. `listBlocked`
+        // e `numberHealth` NÃO entram: eles não têm destinatário nenhum.
+        "blockUser",
+        "unblockUser",
+      ]);
       const leadIdPayload = (payload?.lead_id ?? null) as string | null;
       if (SEND_ACTIONS.has(action) && leadIdPayload) {
         const {
@@ -628,7 +878,19 @@ Deno.serve(
       // actionable message instead. Defense-in-depth: the frontend already
       // blocks these in formatPhoneForWhatsApp, but mass send / workflow /
       // followup paths reach this proxy too.
-      const NUMBER_ACTIONS = new Set(["sendText", "sendMedia", "sendAudio", "setPresence"]);
+      const NUMBER_ACTIONS = new Set([
+        "sendText",
+        "sendMedia",
+        "sendAudio",
+        "sendTemplate",
+        "setPresence",
+        // As três novas do canal oficial passam pelo mesmo crivo: um telefone
+        // que limpa para menos de 10 dígitos faz o fornecedor devolver um 500
+        // que chega à tela como "Edge Function returned a non-2xx status code".
+        "sendMenu",
+        "sendLocation",
+        "sendContact",
+      ]);
       if (NUMBER_ACTIONS.has(action)) {
         const rawNumber = (payload?.number ?? "") as string;
         const digits = String(rawNumber).replace(/\D/g, "");
@@ -763,6 +1025,80 @@ Deno.serve(
         }
 
         // -------------------------------------------------------------------
+        // Template — a ÚNICA saída fora da janela de 24 horas.
+        //
+        // Passadas 24h da última mensagem do cliente, a Meta recusa texto livre.
+        // Até aqui o proxy não expunha esta ação: o provider a implementa desde
+        // sempre, o front lista templates, e o fio estava cortado no meio.
+        // -------------------------------------------------------------------
+        case "sendTemplate": {
+          // 422 e não `throw`, ao contrário dos vizinhos Uazapi-only: este
+          // caminho é clicado por um VENDEDOR, e um 500 genérico viraria "não foi
+          // possível enviar" numa hora em que ele precisa saber que este canal
+          // não tem template — não que o sistema quebrou.
+          if (!provider.sendTemplate) {
+            return jsonResponse(
+              422,
+              {
+                error: "Este canal não envia template",
+                code: "template_not_supported",
+              },
+              corsHeaders,
+            );
+          }
+
+          const pedido = readTemplateRequest(payload);
+          if (!pedido.ok) {
+            return jsonResponse(400, { error: pedido.error }, corsHeaders);
+          }
+
+          // ─── ESPELHAR A MÍDIA DO CABEÇALHO ────────────────────────────────
+          //
+          // A URL que a listagem devolve para a imagem aprovada é do CDN da Meta,
+          // assinada. NÓS baixamos com 200; o pipeline de envio DELA recebe 403:
+          //
+          //   131053 ... Downloading media from weblink failed with http code 403
+          //
+          // Espelhar aqui, e não no navegador, porque o CDN não manda cabeçalho de
+          // CORS — o front não consegue ler os bytes. Falha no espelhamento devolve
+          // a URL original: um envio que talvez funcione é melhor que um erro
+          // nosso no lugar da tentativa.
+          const componentesEspelhados = await Promise.all(
+            (pedido.value.components ?? []).map(async (c) => {
+              const comp = (c ?? {}) as Record<string, unknown>;
+              if (!Array.isArray(comp.parameters)) return c;
+
+              const parametros = await Promise.all(
+                (comp.parameters as unknown[]).map(async (p) => {
+                  const par = (p ?? {}) as Record<string, unknown>;
+                  const tipo = String(par.type ?? "").toLowerCase();
+                  if (tipo !== "image" && tipo !== "video" && tipo !== "document") return p;
+
+                  const aninhado = (par[tipo] ?? {}) as Record<string, unknown>;
+                  const link = typeof par.link === "string" && par.link
+                    ? par.link
+                    : typeof aninhado.link === "string" ? aninhado.link : "";
+                  if (!precisaEspelhar(link)) return p;
+
+                  const espelhada = await espelharMidiaDeTemplate(link, callerOrgId, {
+                    storage: supabaseAdmin.storage,
+                  });
+                  return { ...par, [tipo]: { ...aninhado, link: espelhada }, link: espelhada };
+                }),
+              );
+
+              return { ...comp, parameters: parametros };
+            }),
+          );
+
+          result = await provider.sendTemplate({
+            ...pedido.value,
+            components: componentesEspelhados,
+          });
+          break;
+        }
+
+        // -------------------------------------------------------------------
         // Message actions — Uazapi-only.
         // -------------------------------------------------------------------
         case "react": {
@@ -772,7 +1108,10 @@ Deno.serve(
             number?: string;
             emoji?: string;
           };
-          if (!message_id || !number || !emoji) {
+          // ⚠️ `emoji` VAZIO É VÁLIDO: é o comando de REMOVER a reação, e é assim
+          // que a Meta desfaz. Exigi-lo aqui deixava o vendedor sem como tirar
+          // uma reação que ele mesmo pôs — a ação existia só de ida.
+          if (!message_id || !number || emoji === undefined) {
             return jsonResponse(400, { error: "Missing message_id/number/emoji" }, corsHeaders);
           }
           await provider.react(message_id, number, emoji);
@@ -867,14 +1206,17 @@ Deno.serve(
         // -------------------------------------------------------------------
         case "sendMenu": {
           if (!provider.sendMenu) throw new Error("Provider does not support sendMenu");
-          const { number, type, text, choices, footer, selectableCount } = payload as {
-            number?: string;
-            type?: "button" | "list" | "poll" | "carousel";
-            text?: string;
-            choices?: Array<string | { title: string; description?: string }>;
-            footer?: string;
-            selectableCount?: number;
-          };
+          const { number, type, text, choices, footer, selectableCount, listButtonLabel, ctaUrl } =
+            payload as {
+              number?: string;
+              type?: "button" | "list" | "poll" | "carousel" | "cta";
+              text?: string;
+              choices?: Array<string | { title: string; description?: string }>;
+              footer?: string;
+              selectableCount?: number;
+              listButtonLabel?: string;
+              ctaUrl?: string;
+            };
           if (!number || !type || !text || !choices?.length) {
             return jsonResponse(400, { error: "Missing number/type/text/choices" }, corsHeaders);
           }
@@ -882,7 +1224,179 @@ Deno.serve(
           const flatChoices = choices.map((c) =>
             typeof c === "string" ? c : c.title
           );
-          result = await provider.sendMenu({ number, type, text, choices: flatChoices, footer, selectableCount });
+          // ⚠️ A DESCRIÇÃO SOBREVIVE, em campo separado. O achatamento acima é o
+          // que a Uazapi aceita, e por anos foi tudo que existia; a lista da Meta
+          // tem uma linha de descrição por item, e jogá-la fora aqui deixava o
+          // cliente com uma lista de títulos soltos. Campo novo para o caminho
+          // antigo continuar byte a byte o mesmo.
+          const richChoices = choices
+            .map((c) => (typeof c === "string" ? { title: c } : c))
+            .filter((c) => (c.title ?? "").trim() !== "");
+          result = await provider.sendMenu({
+            number,
+            type,
+            text,
+            choices: flatChoices,
+            richChoices,
+            footer,
+            selectableCount,
+            listButtonLabel,
+            ctaUrl,
+          });
+          break;
+        }
+
+        case "blockUser":
+        case "unblockUser": {
+          const fn = action === "blockUser" ? provider.blockUser : provider.unblockUser;
+          if (!fn) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não bloqueia contatos", code: "block_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number } = payload as { number?: string };
+          if (!number) return jsonResponse(400, { error: "Missing number" }, corsHeaders);
+          await fn.call(provider, number);
+          result = { ok: true };
+          break;
+        }
+
+        case "listBlocked": {
+          if (!provider.listBlocked) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não lista bloqueados", code: "block_not_supported" },
+              corsHeaders,
+            );
+          }
+          result = { blocked: await provider.listBlocked() };
+          break;
+        }
+
+        case "createSignupInvite": {
+          if (!provider.createSignupInvite) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não cria convite de cadastro", code: "signup_not_supported" },
+              corsHeaders,
+            );
+          }
+          const c = payload as {
+            mensagem?: string;
+            confirmacao?: string;
+            nome?: string;
+            politicaDePrivacidade?: string;
+            site?: string;
+            codigoPromocional?: string;
+          };
+          if (!c.mensagem || !c.confirmacao || !c.nome || !c.politicaDePrivacidade || !c.site) {
+            return jsonResponse(
+              400,
+              { error: "Missing mensagem/confirmacao/nome/politicaDePrivacidade/site" },
+              corsHeaders,
+            );
+          }
+          result = {
+            invite: await provider.createSignupInvite({
+              mensagem: c.mensagem,
+              confirmacao: c.confirmacao,
+              nome: c.nome,
+              politicaDePrivacidade: c.politicaDePrivacidade,
+              site: c.site,
+              codigoPromocional: c.codigoPromocional,
+            }),
+          };
+          break;
+        }
+
+        case "listSignupInvites": {
+          if (!provider.listSignupInvites) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não lista convites", code: "signup_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { limite } = payload as { limite?: number };
+          result = { invites: await provider.listSignupInvites(limite) };
+          break;
+        }
+
+        case "numberHealth": {
+          if (!provider.numberHealth) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não informa saúde do número", code: "health_not_supported" },
+              corsHeaders,
+            );
+          }
+          result = { health: await provider.numberHealth() };
+          break;
+        }
+
+        case "sendLocation": {
+          // 422 e não `throw`: quem clica é um VENDEDOR, e um 500 genérico viraria
+          // "não foi possível enviar" numa hora em que ele precisa saber que este
+          // canal não manda localização — não que o sistema quebrou.
+          if (!provider.sendLocation) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não envia localização", code: "location_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number, latitude, longitude, name, address } = payload as {
+            number?: string;
+            latitude?: number;
+            longitude?: number;
+            name?: string;
+            address?: string;
+          };
+          // `0` é coordenada — a checagem é de finitude, não de verdade.
+          if (!number || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+            return jsonResponse(400, { error: "Missing number/latitude/longitude" }, corsHeaders);
+          }
+          result = await provider.sendLocation({
+            number,
+            latitude: latitude as number,
+            longitude: longitude as number,
+            name,
+            address,
+          });
+          break;
+        }
+
+        case "sendContact": {
+          if (!provider.sendContact) {
+            return jsonResponse(
+              422,
+              { error: "Este canal não envia contato", code: "contact_not_supported" },
+              corsHeaders,
+            );
+          }
+          const { number, contacts } = payload as {
+            number?: string;
+            contacts?: Array<{
+              nome?: string;
+              telefones?: Array<{ numero?: string; waId?: string }>;
+              emails?: string[];
+            }>;
+          };
+          if (!number || !contacts?.length) {
+            return jsonResponse(400, { error: "Missing number/contacts" }, corsHeaders);
+          }
+          result = await provider.sendContact({
+            number,
+            contacts: contacts.map((c) => ({
+              nome: String(c.nome ?? "").trim(),
+              telefones: (c.telefones ?? [])
+                .map((t) => ({ numero: String(t.numero ?? "").trim(), waId: t.waId }))
+                .filter((t) => t.numero !== ""),
+              emails: c.emails,
+            })),
+          });
           break;
         }
 

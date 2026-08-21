@@ -14,8 +14,20 @@ When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the 
 
 Edit the right-hand column to match whatever vocabulary you actually use.
 
-## Estado no GitHub (2026-07-21)
+## Estado no GitHub (medido 2026-08-11)
 
-- `ready-for-agent` — **já existe** no repo (verde `#0E8A16`, "Triaged and ready for automated agent implementation"). Reusar, não recriar.
-- `needs-triage`, `needs-info`, `ready-for-human`, `wontfix` — ainda não criadas. O `/triage` cria na primeira aplicação (`gh label create <nome>`), ou crie antes à mão.
-- Labels de domínio que **não** são de triage e não devem ser confundidas: `bug`, `Feature`, `docs`, `api`, `prd`, `vault-health`.
+As cinco de triage **existem todas**. Nenhuma precisa ser criada; aplicar direto.
+
+| Label | Cor | Origem |
+| --- | --- | --- |
+| `needs-triage` | `#FBCA04` | criada em 2026-08-11 |
+| `needs-info` | `#FEF2C0` | criada em 2026-08-11 |
+| `ready-for-agent` | `#0E8A16` | já existia — reusada, não recriada |
+| `ready-for-human` | `#1D76DB` | criada em 2026-08-11 |
+| `wontfix` | `#FFFFFF` | criada em 2026-08-11 |
+
+Labels que **não** são de triage e não devem ser confundidas — 11 no total, o repo tem 16: `bug`, `Feature`, `docs`, `api`, `prd`, `vault-health`, `wayfinder:map`, `wayfinder:prototype`, `wayfinder:research`, `wayfinder:grilling`, `wayfinder:task`.
+
+> A versão anterior desta seção listava 6 labels de domínio e **não sabia das 5 `wayfinder:*`** — que já existiam quando ela foi escrita ou surgiram depois sem passar por aqui. Antes de afirmar o estado do tracker, meça: `gh label list --limit 60`.
+>
+> `Feature` com maiúscula é anomalia herdada e **não** está nesta tabela de propósito. Não renomear nem apagar sem decisão — issues antigas apontam para ela.

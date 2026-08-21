@@ -46,6 +46,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { toast } from "sonner";
 import {
   useAcoesDoDia,
@@ -190,13 +191,6 @@ export function AcoesDoDia() {
     toast.success("Copiado para a área de transferência!");
   };
 
-  const formatPhone = (phone: string) => {
-    // Clean the phone number
-    const cleaned = phone.replace(/\D/g, "");
-    // Format as WhatsApp link
-    return `https://wa.me/55${cleaned}`;
-  };
-
   const renderAcaoCard = (acao: AcaoDoDia) => {
     const isCompleted = acao.is_completed;
     const leadInfo = getLeadInfo(acao);
@@ -229,14 +223,21 @@ export function AcoesDoDia() {
             >
               <Copy className="w-3.5 h-3.5" />
             </Button>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-7 w-7 text-green-500 hover:text-green-600 hover:bg-green-500/10"
-              onClick={() => window.open(formatPhone(leadInfo.phone!), "_blank")}
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Button>
+            {/* `acao.lead_id` e não `leadInfo.id`: o lead vem de quatro origens
+                (acao, proposta, confirmacao, follow_up) e o tipo de algumas não
+                carrega `id` — só `acao.lead_id` está sempre lá. */}
+            {acao.lead_id && (
+              <AbrirConversaButton
+                leadId={acao.lead_id}
+                phone={leadInfo.phone}
+                size="icon"
+                variant="ghost"
+                className="h-7 w-7 text-green-500 hover:text-green-600 hover:bg-green-500/10"
+                title="Abrir conversa"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </AbrirConversaButton>
+            )}
           </div>
         )}
 

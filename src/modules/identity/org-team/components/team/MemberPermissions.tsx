@@ -10,6 +10,15 @@ import { useTeamMembers } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { buildPermissionMap } from "@/modules/identity/permissions/lib/resolvePermissionLayers";
+import {
+  LEAD_VISIBILITY_KEYS,
+  LEAD_VISIBILITY_OPTIONS,
+  isLegacyCombination,
+  levelFromPermissions,
+  permissionsFromLevel,
+  type LeadVisibilityLevel,
+} from "@/modules/identity/permissions/lib/leadVisibility";
 import { toast } from "sonner";
 
 interface FeaturePermission {
@@ -27,26 +36,141 @@ interface MemberFeaturePermission {
   enabled: boolean;
 }
 
-const MODULE_LABELS: Record<string, string> = {
-  leads: "Leads",
-  pipeline: "Funis",
-  campaigns: "Campanhas",
-  whatsapp: "WhatsApp / Chat",
-  copilot: "Copilot / IA",
-  workflows: "Automacoes",
-  products: "Produtos",
-  agenda: "Agenda",
-  performance: "Metas e Performance",
-  commissions: "Comissoes",
-  followups: "Follow-ups",
-  settings: "Configuracoes",
-  upsell: "Upsell / Carteira",
-  marketing: "Marketing",
-  team: "Equipe",
-};
+/**
+ * Um módulo da tela: o slug que prefixa as chaves (`leads`), o rótulo que o
+ * catálogo já traz (`Leads`) e as features.
+ *
+ * O slug precisa sair das CHAVES, não da coluna `module`. As duas nunca
+ * coincidiram — o catálogo guarda rótulo de exibição, acentuado e com espaço
+ * ("Automações", "Follow-ups"), enquanto as chaves usam slug ("workflows.view",
+ * "followups.view"). O código anterior montava `${module}.view` e procurava
+ * "Automações.view", que não existe em módulo nenhum: o switch de cabeçalho
+ * nunca renderizou e o `handleModuleToggle` gravava chave fantasma.
+ */
+interface ModuleGroup {
+  slug: string;
+  label: string;
+  features: FeaturePermission[];
+}
 
+/**
+ * O rótulo vem do catálogo, que é a fonte única. Havia um MODULE_LABELS
+ * paralelo aqui, indexado por slug e nunca acertado — além de morto, estava
+ * desatualizado ("Automacoes" sem acento contra "Automações" do banco).
+ */
+function toModuleGroups(features: FeaturePermission[]): ModuleGroup[] {
+  const groups = new Map<string, ModuleGroup>();
+
+  for (const feature of features) {
+    const slug = feature.key.split(".")[0];
+    if (!slug) continue;
+
+    const existing = groups.get(slug);
+    if (existing) {
+      existing.features.push(feature);
+    } else {
+      groups.set(slug, { slug, label: feature.module || slug, features: [feature] });
+    }
+  }
+
+  return Array.from(groups.values());
+}
+
+/** O grupo de visibilidade de leads vira um controle só. Ver `leadVisibility.ts`. */
+const LEAD_VISIBILITY_KEY_SET = new Set<string>(LEAD_VISIBILITY_KEYS);
+
+/**
+ * Escala de alcance, não três interruptores.
+ *
+ * Um `Switch` por chave sugeria que as três se combinavam livremente. Elas não
+ * se combinam: o RLS reduz as 8 combinações a 3 resultados, e 5 delas eram
+ * armadilha — desligar `leads.view_all` sozinho não tirava um único lead da
+ * frente de ninguém. Segmentado porque a grandeza é ordinal: cada passo à
+ * direita mostra estritamente mais do que o anterior.
+ */
+function LeadVisibilityField({
+  level,
+  isLegacy,
+  disabled,
+  onChange,
+}: {
+  level: LeadVisibilityLevel;
+  isLegacy: boolean;
+  disabled: boolean;
+  onChange: (level: LeadVisibilityLevel) => void;
+}) {
+  const active = LEAD_VISIBILITY_OPTIONS.find((o) => o.level === level);
+
+  return (
+    <div className={`px-4 py-3 ${disabled ? "opacity-50" : ""}`}>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <span className="font-medium text-sm">Visualizacao de leads</span>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {active?.description}
+          </p>
+        </div>
+
+        <div
+          className="inline-flex rounded-md border border-border p-0.5 shrink-0"
+          role="radiogroup"
+          aria-label="Visualizacao de leads"
+        >
+          {LEAD_VISIBILITY_OPTIONS.map((option) => {
+            const isActive = option.level === level;
+            return (
+              <button
+                key={option.level}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                disabled={disabled}
+                onClick={() => onChange(option.level)}
+                className={
+                  "px-3 py-1 text-xs rounded-sm transition-colors whitespace-nowrap disabled:cursor-not-allowed " +
+                  (isActive
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* O admin precisa saber que salvar normaliza as tres chaves. Mudanca de
+          permissao que acontece de lado, sem ninguem pedir, e a que ninguem
+          audita depois. */}
+      {isLegacy && !disabled && (
+        <p className="text-xs text-amber-500/90 mt-2">
+          A configuracao atual mistura as tres chaves antigas
+          (`leads.view_all`, `leads.view_unassigned`, `leads.view_subordinates`)
+          num estado que o banco ja resolve como &ldquo;{active?.label}&rdquo;.
+          Salvar grava as tres de forma coerente, sem mudar quem enxerga o que.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * `organization_feature_defaults` ainda não está em `src/integrations/supabase/types.ts`:
+ * aquele arquivo é gerado a partir de PRODUÇÃO. A premissa original deste
+ * comentário era que a migration `20270818170000` não tinha sido aplicada em
+ * prod — ela FOI (verificado 2026-08-19 no ledger
+ * `supabase_migrations.schema_migrations` e na própria tabela, que já tem linha
+ * da org Bolívar). Falta só regerar o arquivo de tipos; os casts somem no
+ * mesmo comando:
+ *
+ *   supabase gen types typescript --project-id <ref> > src/integrations/supabase/types.ts
+ *
+ * A regen não entra nesta branch de propósito: são 270KB de diff gerado, que
+ * afogaria a revisão de uma mudança de permissão — área frágil.
+ */
 export function MemberPermissions() {
-  const { isAdmin } = useIdentity();
+  const { isAdmin, organizationId } = useIdentity();
   const { data: members = [], isLoading: loadingMembers } = useTeamMembers();
   const queryClient = useQueryClient();
 
@@ -55,6 +179,15 @@ export function MemberPermissions() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [localOverrides, setLocalOverrides] = useState<Record<string, boolean>>({});
   const [isSaving, setIsSaving] = useState(false);
+  /**
+   * `"org"` edita a POLÍTICA da organização (organization_feature_defaults);
+   * `"member"` edita a exceção de uma pessoa (member_feature_permissions).
+   *
+   * A política da org é o que faz contratado novo nascer com a configuração
+   * certa — sem ela o admin desligava membro a membro e a próxima contratação
+   * desfazia tudo em silêncio.
+   */
+  const [scope, setScope] = useState<"org" | "member">("org");
 
   // Fetch all feature_permissions from Supabase
   const { data: featurePermissions = [], isLoading: loadingFeatures } = useQuery({
@@ -94,49 +227,62 @@ export function MemberPermissions() {
     enabled: !!firstSelectedId,
   });
 
+  const { data: orgDefaultRows = [] } = useQuery({
+    queryKey: ["organization_feature_defaults", organizationId],
+    queryFn: async () => {
+      if (!organizationId) return [];
+      const { data, error } = await (supabase as any)
+        .from("organization_feature_defaults")
+        .select("feature_key, enabled")
+        .eq("organization_id", organizationId);
+
+      if (error) throw error;
+      return (data ?? []) as MemberFeaturePermission[];
+    },
+    enabled: !!organizationId && isAdmin,
+  });
+
+  const orgDefaults = useMemo(() => {
+    const m: Record<string, boolean> = {};
+    for (const r of orgDefaultRows) m[r.feature_key] = r.enabled;
+    return m;
+  }, [orgDefaultRows]);
+
   // Build a map of current permissions (DB values + local overrides)
   const permissionMap = useMemo(() => {
-    const map: Record<string, boolean> = {};
-    // Start with defaults from feature_permissions
-    for (const fp of featurePermissions) {
-      map[fp.key] = fp.default_value;
-    }
-    // Apply DB overrides for the selected member
-    for (const mp of memberPermissions) {
-      map[mp.feature_key] = mp.enabled;
-    }
-    // Apply local (unsaved) overrides
-    for (const [key, val] of Object.entries(localOverrides)) {
-      map[key] = val;
-    }
-    return map;
-  }, [featurePermissions, memberPermissions, localOverrides]);
+    // A cascata vive em resolvePermissionLayers, que espelha
+    // has_feature_permission() no banco. Se as duas discordarem, a tela mente.
+    const memberOverrides: Record<string, boolean> = {};
+    for (const mp of memberPermissions) memberOverrides[mp.feature_key] = mp.enabled;
+
+    return buildPermissionMap(
+      { catalog: featurePermissions, orgDefaults, memberOverrides, localOverrides },
+      { scope },
+    );
+  }, [featurePermissions, orgDefaults, memberPermissions, localOverrides, scope]);
 
   // Group features by module
-  const groupedFeatures = useMemo(() => {
-    const groups: Record<string, FeaturePermission[]> = {};
-    for (const fp of featurePermissions) {
-      if (!groups[fp.module]) groups[fp.module] = [];
-      groups[fp.module].push(fp);
-    }
-    return groups;
-  }, [featurePermissions]);
+  const moduleGroups = useMemo(
+    () => toModuleGroups(featurePermissions),
+    [featurePermissions],
+  );
 
   // Filter features by search
-  const filteredModules = useMemo(() => {
-    if (!searchFeatures.trim()) return groupedFeatures;
+  const filteredGroups = useMemo(() => {
+    if (!searchFeatures.trim()) return moduleGroups;
     const q = searchFeatures.toLowerCase();
-    const filtered: Record<string, FeaturePermission[]> = {};
-    for (const [mod, features] of Object.entries(groupedFeatures)) {
-      const matched = features.filter(
-        (f) =>
-          f.name.toLowerCase().includes(q) ||
-          f.description.toLowerCase().includes(q),
-      );
-      if (matched.length > 0) filtered[mod] = matched;
-    }
-    return filtered;
-  }, [groupedFeatures, searchFeatures]);
+
+    return moduleGroups
+      .map((group) => ({
+        ...group,
+        features: group.features.filter(
+          (f) =>
+            f.name.toLowerCase().includes(q) ||
+            (f.description ?? "").toLowerCase().includes(q),
+        ),
+      }))
+      .filter((group) => group.features.length > 0);
+  }, [moduleGroups, searchFeatures]);
 
   // Filter members by search
   const filteredMembers = useMemo(() => {
@@ -164,39 +310,87 @@ export function MemberPermissions() {
 
   const isSelected = (id: string) => selectedIds.has(id);
 
-  const isModuleViewKey = (key: string) => key.endsWith(".view");
+  /** Chave-porta do módulo: `leads.view`, `whatsapp.view`, ... */
+  const getModuleViewKey = (slug: string) => `${slug}.view`;
 
-  const getModuleViewKey = (module: string) => `${module}.view`;
-
-  const isModuleEnabled = (module: string) => {
-    const viewKey = getModuleViewKey(module);
-    return permissionMap[viewKey] !== false;
-  };
+  const isModuleEnabled = (slug: string) =>
+    permissionMap[getModuleViewKey(slug)] !== false;
 
   const handleToggle = (featureKey: string, checked: boolean) => {
     setLocalOverrides((prev) => ({ ...prev, [featureKey]: checked }));
   };
 
-  const handleModuleToggle = (module: string, checked: boolean) => {
-    const viewKey = getModuleViewKey(module);
-    const updates: Record<string, boolean> = { [viewKey]: checked };
-    // If disabling the module, disable all features in this module
-    if (!checked && groupedFeatures[module]) {
-      for (const fp of groupedFeatures[module]) {
+  const handleModuleToggle = (group: ModuleGroup, checked: boolean) => {
+    const updates: Record<string, boolean> = {
+      [getModuleViewKey(group.slug)]: checked,
+    };
+    // Desligar o módulo desliga tudo dentro dele: deixar uma ação ligada sob um
+    // módulo fechado é permissão que ninguém vê na tela e o banco continua
+    // honrando se a porta reabrir.
+    if (!checked) {
+      for (const fp of group.features) {
         updates[fp.key] = false;
       }
     }
     setLocalOverrides((prev) => ({ ...prev, ...updates }));
   };
 
+  /**
+   * Um clique no controle de visibilidade escreve as TRÊS chaves. Gravar só a
+   * que mudou é o que produziu o estado da Bolívar — `view_all` desligado com
+   * `view_subordinates` ainda ligado, que o RLS lê como "vê tudo".
+   */
+  const handleLeadVisibilityChange = (level: LeadVisibilityLevel) => {
+    setLocalOverrides((prev) => ({ ...prev, ...permissionsFromLevel(level) }));
+  };
+
+  const leadVisibilityLevel = levelFromPermissions(permissionMap);
+  const leadVisibilityIsLegacy = isLegacyCombination(permissionMap);
+
   // Save permissions
   const handleSave = async () => {
-    if (selectedList.length === 0) {
-      toast.error("Selecione ao menos um membro.");
-      return;
-    }
     if (Object.keys(localOverrides).length === 0) {
       toast.info("Nenhuma alteracao para salvar.");
+      return;
+    }
+
+    if (scope === "org") {
+      if (!organizationId) {
+        toast.error("Organizacao nao resolvida.");
+        return;
+      }
+      setIsSaving(true);
+      try {
+        // Grava a linha explícita mesmo quando o valor coincide com o catálogo
+        // global: a intenção do admin é explícita, e apagar a linha faria a
+        // política voltar a seguir o produto sem ninguém pedir. Quem quer
+        // voltar ao padrão usa "Restaurar padrao".
+        const rows = Object.entries(localOverrides).map(([feature_key, enabled]) => ({
+          organization_id: organizationId,
+          feature_key,
+          enabled,
+        }));
+
+        const { error } = await (supabase as any)
+          .from("organization_feature_defaults")
+          .upsert(rows, { onConflict: "organization_id,feature_key" });
+
+        if (error) throw error;
+
+        toast.success("Politica da organizacao salva!");
+        setLocalOverrides({});
+        queryClient.invalidateQueries({ queryKey: ["organization_feature_defaults"] });
+      } catch (err: any) {
+        toast.error(err?.message || "Erro ao salvar a politica da organizacao.");
+        console.error("[MemberPermissions] org save error:", err);
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
+    if (selectedList.length === 0) {
+      toast.error("Selecione ao menos um membro.");
       return;
     }
 
@@ -252,6 +446,32 @@ export function MemberPermissions() {
 
   // Reset to defaults
   const handleReset = async () => {
+    if (scope === "org") {
+      if (!organizationId) {
+        toast.error("Organizacao nao resolvida.");
+        return;
+      }
+      setIsSaving(true);
+      try {
+        const { error } = await (supabase as any)
+          .from("organization_feature_defaults")
+          .delete()
+          .eq("organization_id", organizationId);
+
+        if (error) throw error;
+
+        toast.success("Politica da organizacao restaurada ao padrao do produto.");
+        setLocalOverrides({});
+        queryClient.invalidateQueries({ queryKey: ["organization_feature_defaults"] });
+      } catch (err: any) {
+        toast.error(err?.message || "Erro ao restaurar a politica.");
+        console.error("[MemberPermissions] org reset error:", err);
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
+
     if (selectedList.length === 0) {
       toast.error("Selecione ao menos um membro.");
       return;
@@ -293,21 +513,45 @@ export function MemberPermissions() {
             <div>
               <CardTitle>Permissoes por Feature</CardTitle>
               <CardDescription>
-                Selecione membros e configure quais features cada um pode acessar.
-                Desative o modulo inteiro pelo toggle do cabecalho ou controle cada feature individualmente.
+                {scope === "org"
+                  ? "Politica da organizacao: vale para todo membro, inclusive quem for contratado depois. Excecoes individuais ficam na aba Por membro."
+                  : "Excecao individual: sobrepoe a politica da organizacao apenas para os membros selecionados."}
               </CardDescription>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 items-center">
+            {/* Duas coisas diferentes, nunca no mesmo toggle: a POLITICA da org
+                e a EXCECAO de uma pessoa. Misturar as duas foi o que fez a
+                permissao vazar na contratacao seguinte. */}
+            <div className="inline-flex rounded-md border border-border p-0.5 mr-2">
+              {(["org", "member"] as const).map((s0) => (
+                <button
+                  key={s0}
+                  type="button"
+                  onClick={() => {
+                    setScope(s0);
+                    setLocalOverrides({});
+                  }}
+                  className={
+                    "px-3 py-1 text-xs rounded-sm transition-colors " +
+                    (scope === s0
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground")
+                  }
+                >
+                  {s0 === "org" ? "Organizacao" : "Por membro"}
+                </button>
+              ))}
+            </div>
             <Button
               variant="outline"
               size="sm"
               onClick={handleReset}
-              disabled={isSaving || selectedList.length === 0}
+              disabled={isSaving || (scope === "member" && selectedList.length === 0)}
               className="gap-1"
             >
               <RotateCcw className="w-4 h-4" />
-              Resetar para padrao
+              {scope === "org" ? "Restaurar padrao" : "Resetar para padrao"}
             </Button>
             <Button
               size="sm"
@@ -321,8 +565,9 @@ export function MemberPermissions() {
       </CardHeader>
       <CardContent>
         <div className="flex gap-6 flex-col lg:flex-row">
-          {/* Left panel: member list */}
-          <div className="w-full lg:w-72 shrink-0 space-y-3">
+          {/* Left panel: member list — só no escopo por membro. Editando a
+              política da organização não há quem selecionar. */}
+          <div className={`w-full lg:w-72 shrink-0 space-y-3 ${scope === "org" ? "hidden" : ""}`}>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
@@ -381,7 +626,7 @@ export function MemberPermissions() {
 
           {/* Right panel: permissions matrix by module */}
           <div className="flex-1 min-w-0 space-y-4">
-            {selectedList.length === 0 ? (
+            {scope === "member" && selectedList.length === 0 ? (
               <div className="flex items-center justify-center h-48 rounded-lg border border-dashed text-muted-foreground text-sm">
                 Selecione um ou mais membros para editar as permissoes.
               </div>
@@ -402,19 +647,23 @@ export function MemberPermissions() {
                   />
                 </div>
 
-                {Object.keys(filteredModules).length === 0 ? (
+                {filteredGroups.length === 0 ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     Nenhuma feature encontrada.
                   </div>
                 ) : (
-                  Object.entries(filteredModules).map(([module, features]) => {
-                    const moduleEnabled = isModuleEnabled(module);
-                    const viewKey = getModuleViewKey(module);
+                  filteredGroups.map((group) => {
+                    const { slug, label, features } = group;
+                    const moduleEnabled = isModuleEnabled(slug);
+                    const viewKey = getModuleViewKey(slug);
                     const hasViewFeature = features.some((f) => f.key === viewKey);
+                    const showLeadVisibility =
+                      slug === "leads" &&
+                      features.some((f) => LEAD_VISIBILITY_KEY_SET.has(f.key));
 
                     return (
                       <div
-                        key={module}
+                        key={slug}
                         className={`border rounded-lg overflow-hidden ${
                           !moduleEnabled ? "opacity-50" : ""
                         }`}
@@ -423,15 +672,13 @@ export function MemberPermissions() {
                         <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-b">
                           <div className="flex items-center gap-2">
                             <Shield className="w-4 h-4 text-primary" />
-                            <span className="font-semibold text-sm">
-                              {MODULE_LABELS[module] ?? module}
-                            </span>
+                            <span className="font-semibold text-sm">{label}</span>
                           </div>
                           {hasViewFeature && (
                             <Switch
                               checked={moduleEnabled}
                               onCheckedChange={(checked) =>
-                                handleModuleToggle(module, checked)
+                                handleModuleToggle(group, checked)
                               }
                             />
                           )}
@@ -440,9 +687,25 @@ export function MemberPermissions() {
                         {/* Feature list — separated by view vs action */}
                         <div className="divide-y">
                           {(() => {
-                            const nonViewFeatures = features.filter((f) => !isModuleViewKey(f.key));
-                            const viewFeatures = nonViewFeatures.filter((f) => f.key.endsWith(".view_all"));
-                            const actionFeatures = nonViewFeatures.filter((f) => !f.key.endsWith(".view_all"));
+                            // A porta do módulo já é o switch do cabeçalho, e as
+                            // três chaves de visibilidade de leads viraram um
+                            // controle só — nenhuma das duas volta como linha.
+                            const nonViewFeatures = features.filter(
+                              (f) =>
+                                f.key !== viewKey &&
+                                !(showLeadVisibility && LEAD_VISIBILITY_KEY_SET.has(f.key)),
+                            );
+                            // Visualização = quem governa O QUE se enxerga
+                            // (`*.view_all`, `leads.view_general_info`);
+                            // Ações = quem governa o que se FAZ. O corte antigo
+                            // era `endsWith('.view_all')`, que jogava
+                            // `view_general_info` no balde das ações.
+                            const viewFeatures = nonViewFeatures.filter((f) =>
+                              f.key.startsWith(`${slug}.view`),
+                            );
+                            const actionFeatures = nonViewFeatures.filter(
+                              (f) => !f.key.startsWith(`${slug}.view`),
+                            );
 
                             const renderFeature = (feature: FeaturePermission) => {
                               const enabled = permissionMap[feature.key] ?? feature.default_value;
@@ -488,13 +751,21 @@ export function MemberPermissions() {
 
                             return (
                               <>
-                                {viewFeatures.length > 0 && (
+                                {(showLeadVisibility || viewFeatures.length > 0) && (
                                   <>
                                     <div className="px-4 pt-3 pb-1">
                                       <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
                                         Visualizacao
                                       </p>
                                     </div>
+                                    {showLeadVisibility && (
+                                      <LeadVisibilityField
+                                        level={leadVisibilityLevel}
+                                        isLegacy={leadVisibilityIsLegacy}
+                                        disabled={!moduleEnabled}
+                                        onChange={handleLeadVisibilityChange}
+                                      />
+                                    )}
                                     {viewFeatures.map(renderFeature)}
                                     <div className="px-4">
                                       <Separator className="my-0" />
@@ -518,7 +789,10 @@ export function MemberPermissions() {
                   })
                 )}
 
-                {selectedList.length > 1 && (
+                {/* No escopo "Organizacao" a selecao de membros nem aparece —
+                    anunciar "aplicado a N membros" ali seria mentira sobre onde
+                    a gravacao vai cair. */}
+                {scope === "member" && selectedList.length > 1 && (
                   <p className="text-xs text-muted-foreground">
                     Alteracoes serao aplicadas a todos os {selectedList.length}{" "}
                     membros selecionados.

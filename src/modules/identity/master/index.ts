@@ -11,6 +11,7 @@
  */
 
 // ── Auth / access gate ─────────────────────────────────────────────────────
+export { MasterOnlineIndicator } from "./components/MasterOnlineIndicator";
 export { useMasterAuth, useCanAccessMaster } from "./hooks/useMasterAuth";
 export type { MasterUser, MasterPermissions } from "./hooks/useMasterAuth";
 

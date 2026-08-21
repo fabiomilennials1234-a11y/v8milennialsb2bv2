@@ -21,8 +21,11 @@
  *   - A decisão (confirmar / retentar / desistir) é da policy pura em
  *     _shared/whatsapp-reap-policy.ts. 404 conta como sucesso: instância que não
  *     existe é o estado desejado.
- *   - Purga lápides confirmadas após CONFIRMED_RETENTION_DAYS, encurtando a
- *     janela em que o token fica em repouso.
+ *   - **NÃO purga lápide confirmada.** A lápide deixou de ser fila descartável e
+ *     virou ARQUIVO PERMANENTE: com `phone_number`, ela é o mapa
+ *     chip → instance_ids históricos que faz o chat reencontrar a conversa de um
+ *     chip cuja Instance foi apagada. Apagar a linha apaga o endereço do
+ *     histórico. Ver o bloco "RETENÇÃO REMOVIDA" abaixo.
  *   - Devolve contagens da fila. Sem isso, o desenho assíncrono trocaria
  *     vazamento silencioso por acúmulo silencioso.
  *
@@ -43,7 +46,29 @@ import {
 } from "../_shared/whatsapp-reap-policy.ts";
 
 const BATCH_LIMIT = 50;
-const CONFIRMED_RETENTION_DAYS = 7;
+
+/*
+ * RETENÇÃO REMOVIDA — não existe mais purga de lápide confirmada, e a ausência
+ * é intencional.
+ *
+ * Havia `CONFIRMED_RETENTION_DAYS = 7`, que apagava daqui as lápides
+ * confirmadas há mais de uma semana. O motivo original era encurtar a janela do
+ * token de terceiro em repouso; mas o token JÁ é zerado no instante da
+ * confirmação (ver `provider_token: null` no ramo `confirm`, abaixo), então a
+ * linha arquivada não guarda segredo nenhum — sobra `instance_id`,
+ * `phone_number`, nome e provider.
+ *
+ * E é exatamente esse resto que virou indispensável: com `phone_number`, a
+ * lápide é o mapa chip → instance_ids históricos usado por
+ * `whatsapp_chip_instance_ids()` para o chat reencontrar a conversa de um chip
+ * cuja Instance foi apagada. Purgar em 7 dias significava perder o histórico
+ * daquele chip no oitavo.
+ *
+ * O banco também protege isso (trigger BEFORE DELETE cancela a linha), mas
+ * guarda de banco é defesa, não substituto: mantido o DELETE aqui, o coletor
+ * ficaria tentando apagar de 5 em 5 minutos, para sempre, reportando
+ * `purged: 0` — trabalho invisível fingindo ser rotina.
+ */
 
 /**
  * Teto de tempo de parede por rodada.
@@ -289,21 +314,13 @@ Deno.serve(
         retried += 1;
       }
 
-      // Purga por retenção: token de terceiro em repouso pelo menor tempo
-      // possível. Já foi zerado na confirmação; isto remove a linha.
-      const purgeBefore = new Date(
-        Date.now() - CONFIRMED_RETENTION_DAYS * 24 * 60 * 60 * 1000
-      ).toISOString();
-
-      const { count: purged } = await supabase
-        .from("whatsapp_instance_reap_queue")
-        .delete({ count: "exact" })
-        .not("confirmed_at", "is", null)
-        .lt("confirmed_at", purgeBefore);
-
+      // Nenhuma purga aqui — a lápide confirmada é arquivo permanente (ver o
+      // bloco "RETENÇÃO REMOVIDA" no topo). `archived_total` mede esse arquivo,
+      // que agora só cresce, no lugar do antigo `purged`.
+      //
       // Contagens da fila. O desenho é assíncrono; sem isto, uma fila parada é
       // tão invisível quanto o vazamento que ela substituiu.
-      const [pendingRes, overdueRes, gaveUpRes] = await Promise.all([
+      const [pendingRes, overdueRes, gaveUpRes, archivedRes] = await Promise.all([
         supabase
           .from("whatsapp_instance_reap_queue")
           .select("id", { count: "exact", head: true })
@@ -319,12 +336,17 @@ Deno.serve(
           .from("whatsapp_instance_reap_queue")
           .select("id", { count: "exact", head: true })
           .not("gave_up_at", "is", null),
+        supabase
+          .from("whatsapp_instance_reap_queue")
+          .select("id", { count: "exact", head: true })
+          .not("confirmed_at", "is", null),
       ]);
 
       const queue = {
         pending: pendingRes.count ?? 0,
         pending_over_1h: overdueRes.count ?? 0,
         gave_up_total: gaveUpRes.count ?? 0,
+        archived_total: archivedRes.count ?? 0,
       };
 
       await logRuntime({
@@ -341,7 +363,6 @@ Deno.serve(
           retried,
           gave_up: gaveUp,
           skipped_for_budget: skippedForBudget,
-          purged: purged ?? 0,
           queue,
         },
       });
@@ -354,7 +375,6 @@ Deno.serve(
           retried,
           gave_up: gaveUp,
           skipped_for_budget: skippedForBudget,
-          purged: purged ?? 0,
           queue,
         }),
         { status: 200, headers }

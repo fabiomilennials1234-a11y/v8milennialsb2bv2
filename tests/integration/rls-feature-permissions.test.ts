@@ -8,11 +8,14 @@
  *
  * Seed data assumptions (see supabase/seed.sql):
  *   - Org A has 4 leads: Alpha (sdr=TM140), Beta (closer=TM150), Gamma (unassigned), Delta (sdr=TM140,closer=TM150)
- *   - Member1 (TM 140, user_id 040) has NO feature permission overrides
+ *   - Member1 (TM 140, user_id 040) tem overrides EXPLÍCITOS = false para
+ *     leads.view_all, leads.view_unassigned e leads.view_subordinates. Antes de
+ *     2026-08-17 ele não tinha override nenhum e o teste se apoiava no
+ *     default_value da seed (false) — que em produção é true.
  *   - Member2 (TM 150, user_id 050) has member_feature_permissions override: leads.view_all = true
- *   - feature_permissions defaults: leads.delete=false, leads.view_all=false
- *   - feature_permissions catalog: leads.view_all (default=false), leads.create (default=true),
- *     leads.delete (default=false), workflows.edit (admin_only=true, default=true)
+ *   - feature_permissions: catálogo alinhado com produção pela migration
+ *     20270818120000 (81 chaves). leads.view_all default=true; a única chave
+ *     admin_only é voip.session.manage.
  *
  * Prerequisites: `supabase start` running, `supabase db reset` applied.
  */
@@ -73,7 +76,7 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
 
   describe('Feature permission effects on lead visibility', () => {
     it('Member1 without leads.view_all sees only assigned leads (2)', async () => {
-      // Member1 (TM 140) is sdr on Alpha and Delta -- no overrides, default leads.view_all=false
+      // Member1 (TM 140) is sdr on Alpha and Delta -- override explícito leads.view_all=false
       const { data, error } = await member1Client
         .from('leads')
         .select('id')
@@ -253,7 +256,7 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
   // ---------------------------------------------------------------
 
   describe('RPC: has_feature_permission()', () => {
-    it('returns false for member1 on leads.view_all (default=false, no override)', async () => {
+    it('returns false for member1 on leads.view_all (override explícito=false)', async () => {
       const { data, error } = await member1Client.rpc('has_feature_permission', {
         p_feature_key: 'leads.view_all',
       });
@@ -307,9 +310,11 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
       expect(data).toBe(true);
     });
 
-    it('returns false for member on workflows.edit (admin_only=true)', async () => {
+    it('returns false for member on voip.session.manage (admin_only=true)', async () => {
+      // Era `workflows.edit`. Em produção essa chave não é admin_only, então a
+      // asserção "member recebe false" descrevia a seed, não o produto.
       const { data, error } = await member1Client.rpc('has_feature_permission', {
-        p_feature_key: 'workflows.edit',
+        p_feature_key: 'voip.session.manage',
       });
 
       if (error && error.message.includes('Could not find the function')) {
@@ -397,14 +402,19 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
       expect(error).toBeNull();
       expect(data).not.toBeNull();
       expect(data!.is_admin_only).toBe(false);
-      expect(data!.default_value).toBe(false);
+      // default_value=true é o valor de PRODUÇÃO. Antes de 2026-08-17 a seed
+      // dizia false e este teste concordava com a seed, não com o produto.
+      expect(data!.default_value).toBe(true);
     });
 
-    it('workflows.edit is admin_only in feature_permissions', async () => {
+    it('voip.session.manage is admin_only in feature_permissions', async () => {
+      // Era `workflows.edit`, que em produção NÃO é admin_only (medido:
+      // is_admin_only=false). `voip.session.manage` é a única chave
+      // genuinamente admin-only do catálogo de produção.
       const { data, error } = await member1Client
         .from('feature_permissions')
         .select('key, is_admin_only, default_value')
-        .eq('key', 'workflows.edit')
+        .eq('key', 'voip.session.manage')
         .maybeSingle();
 
       expect(error).toBeNull();
@@ -426,11 +436,31 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
       expect(data!.enabled).toBe(true);
     });
 
-    it('member1 has no overrides in member_feature_permissions', async () => {
+    it('member1 lê os próprios overrides e todos são restritivos', async () => {
+      // Já falhava em origin/main: a seed dava a TM140 o override
+      // leads.delete=false, e a policy member_read_own_features deixa o membro
+      // ler os próprios. A asserção "0 overrides" nunca foi verdade.
+      const { data, error } = await member1Client
+        .from('member_feature_permissions')
+        .select('feature_key, enabled')
+        .eq('team_member_id', '00000000-0000-0000-0000-000000000140');
+
+      expect(error).toBeNull();
+      expect(data!.length).toBeGreaterThan(0); // controle positivo
+      expect(data!.every((r) => r.enabled === false)).toBe(true);
+      expect(data!.map((r) => r.feature_key).sort()).toEqual([
+        'leads.delete',
+        'leads.view_all',
+        'leads.view_subordinates',
+        'leads.view_unassigned',
+      ]);
+    });
+
+    it('member1 não lê os overrides de outro membro', async () => {
       const { data, error } = await member1Client
         .from('member_feature_permissions')
         .select('feature_key')
-        .eq('team_member_id', '00000000-0000-0000-0000-000000000140');
+        .eq('team_member_id', '00000000-0000-0000-0000-000000000150');
 
       expect(error).toBeNull();
       expect(data).toHaveLength(0);

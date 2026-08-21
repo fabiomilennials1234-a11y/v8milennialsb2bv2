@@ -42,9 +42,9 @@ const PDF_MAX_PAGES = 300;
 
 // Modelos via OpenAI
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
-const VISION_MODEL = "gpt-4o";
-const SUMMARY_MODEL = "gpt-4o-mini";
-const TEXT_EXTRACTION_MODEL = "gpt-4o-mini";
+const VISION_MODEL = "gpt-4.1-mini";
+const SUMMARY_MODEL = "gpt-4.1-mini";
+const TEXT_EXTRACTION_MODEL = "gpt-4.1-mini";
 
 // MIME types que sao imagens
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"]);

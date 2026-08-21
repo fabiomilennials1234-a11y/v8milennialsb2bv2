@@ -10,6 +10,13 @@
  *      o aviso de Chamado novo passou a tomar 401 da Uazapi. 35 chamados
  *      entraram sem que ninguém fosse notificado, por 23 dias. O único vestígio
  *      era uma linha de erro em `runtime_logs`, que ninguém lê.
+ *   3. 2026-08-11 — seis tabelas de backup criadas à mão em produção ficaram
+ *      legíveis por `anon`, uma delas com credencial viva de envio de WhatsApp.
+ *      Terceira repetição da mesma classe. O INV-5 (migration `20270811120000`)
+ *      passou a detectá-las — escrevendo em `runtime_logs`, a mesma tabela do
+ *      caso 2. **Detectar não é alertar**, e é por isso que
+ *      `checkExposedTables` mora aqui: sem consumidor, o detector seria mais
+ *      uma feature construída e nunca ligada.
  *
  * O segundo caso ensina a regra de ouro deste arquivo: **um alerta que depende
  * do canal que ele vigia não é alerta.** Por isso o watchdog usa secrets
@@ -27,6 +34,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { buildInv5AlertText, buildInv5PayloadFromRows } from "../_shared/inv5-alert.ts";
 
 // Silêncio entre avisos do mesmo assunto. Um incidente de banco dura dezenas de
 // minutos; avisar a cada 2 seria ruído, e ruído treina o time a ignorar.
@@ -36,14 +44,24 @@ const ALERT_COOLDOWN_MINUTES = 30;
 // oscilação de rede e ainda pega uma credencial morta no mesmo dia.
 const NOTIFY_FAILURE_STREAK = 3;
 
-type Alert = { key: string; text: string };
+type Alert = {
+  key: string;
+  text: string;
+  cooldownMinutes?: number;
+  /** Detalhe que acompanha o rastro em `runtime_logs` quando o aviso sai. */
+  logPayload?: Record<string, unknown>;
+};
 
 /**
  * Um assunto só volta a alertar depois do silêncio. O carimbo mora em
  * `cron_config` porque a função é stateless e roda em instância nova a cada
  * disparo.
  */
-async function shouldAlert(supabase: SupabaseClient, key: string): Promise<boolean> {
+async function shouldAlert(
+  supabase: SupabaseClient,
+  key: string,
+  cooldownMinutes: number = ALERT_COOLDOWN_MINUTES,
+): Promise<boolean> {
   const configKey = `watchdog_last_alert_${key}`;
   const { data } = await supabase
     .from("cron_config")
@@ -53,7 +71,7 @@ async function shouldAlert(supabase: SupabaseClient, key: string): Promise<boole
 
   if (data?.value) {
     const last = Date.parse(data.value);
-    if (Number.isFinite(last) && Date.now() - last < ALERT_COOLDOWN_MINUTES * 60_000) {
+    if (Number.isFinite(last) && Date.now() - last < cooldownMinutes * 60_000) {
       return false;
     }
   }
@@ -184,6 +202,76 @@ async function checkRunawayBackfill(supabase: SupabaseClient): Promise<Alert | n
   };
 }
 
+// Cooldown PRÓPRIO desta sonda: 24h, não os 30 minutos do resto do arquivo.
+//
+// `shouldAlert` é cooldown DESLIZANTE — regrava o carimbo toda vez que libera.
+// Com 30 minutos e um watchdog que roda a cada 2, uma exposição que dure o dia
+// inteiro dispara ~48 avisos, e nenhuma escolha de chave conserta isso: o que
+// manda é a relação entre o cooldown e a duração do problema. (Uma versão
+// anterior usava chave por linha de log achando que resolvia. Não resolvia: a
+// varredura era diária, então a chave ficava constante por 24h — exatamente o
+// mesmo resultado da chave fixa.)
+//
+// Lendo o estado ao vivo, este cooldown passa a ser o ÚNICO freio, e por isso
+// fica mais importante, não menos. 24h é a cadência certa: consertar exposição
+// exige mão humana no banco, então um lembrete por dia enquanto durar é
+// lembrete; de meia em meia hora é ruído, e ruído treina o time a ignorar o
+// canal — a lição que o cabeçalho deste arquivo existe para registrar.
+const INV5_ALERT_COOLDOWN_MINUTES = 24 * 60;
+
+/**
+ * Alguma tabela de `public` está legível por `anon`/`authenticated` sem RLS?
+ *
+ * Este bloco é a razão de o INV-5 existir de verdade. A migration
+ * `20270811120000` criou o detector e agendou uma varredura diária que escreve
+ * em `runtime_logs` — e `runtime_logs` é exatamente a tabela que o cabeçalho
+ * deste arquivo documenta como **não lida**. Detectar não é alertar.
+ *
+ * LÊ O ESTADO AO VIVO, a cada 2 minutos. Não parte da linha de log, e a razão é
+ * o enunciado da fatia: o defeito original não foi "exposição existiu", foi
+ * "exposição durou semanas sem ninguém saber". Uma sonda contra latência que
+ * embutisse 18h de latência estrutural estaria discutindo o problema errado.
+ *
+ * E há um caso que só o estado ao vivo enxerga: exposição que nasce às 10:00 e
+ * é removida às 16:00 não aparece em varredura NENHUMA — some sem deixar
+ * registro, e é exatamente a forma que a intervenção manual em produção tem.
+ *
+ * A varredura diária continua viva e não muda: ela é o LEDGER, a série
+ * temporal de quando o banco esteve exposto. Quem alerta e quem historia são
+ * papéis distintos, e separá-los não troca auditoria por velocidade — o rastro
+ * do próprio alerta vai no `runtime_logs` que o laço abaixo escreve quando o
+ * aviso sai, com as tabelas no payload, que é o que torna a exposição efêmera
+ * recuperável depois.
+ *
+ * FALSO POSITIVO DE JANELA, declarado: uma sequência de migrations que cria a
+ * tabela numa e liga a RLS em OUTRA deixa uma fresta em que esta sonda acusa.
+ * Dentro de uma transação não aparece; entre migrations, aparece. Com o
+ * cooldown de 24h isso custa no máximo um aviso — e o aviso está CERTO, a
+ * tabela esteve mesmo exposta. Não é ruído a corrigir; é o invariante
+ * funcionando.
+ */
+async function checkExposedTables(supabase: any): Promise<Alert | null> {
+  const { data: linhas, error } = await supabase.rpc("inv_public_tables_readable_by_anon");
+  if (error) return null;
+
+  const payload = buildInv5PayloadFromRows(linhas ?? []);
+
+  // Silêncio é o estado normal, e fica sem resposta de propósito: nenhum "tudo
+  // ok" diário. Canal que fala todo dia treina o time a ignorá-lo, que foi
+  // exatamente como o aviso de suporte morreu 23 dias sem ninguém ver.
+  if (payload.total === 0) return null;
+
+  return {
+    key: "inv5_exposed",
+    cooldownMinutes: INV5_ALERT_COOLDOWN_MINUTES,
+    text: buildInv5AlertText(payload, new Date().toISOString()),
+    // O detalhe viaja com o alerta para o `runtime_logs` do laço: sem ele, a
+    // exposição efêmera — a que nenhuma varredura diária vê — deixaria como
+    // único rastro a palavra "inv5_exposed", sem dizer QUAL tabela.
+    logPayload: { total: payload.total, violacoes: payload.violacoes },
+  };
+}
+
 async function sendWhatsApp(text: string): Promise<{ ok: boolean; detail?: string }> {
   // Secrets próprias primeiro. O fallback para as do suporte existe para o
   // watchdog nascer funcionando antes de alguém provisionar as dele — mas com
@@ -240,6 +328,7 @@ Deno.serve(
       checkDbPressure(supabase),
       checkSupportNotifyHealth(supabase),
       checkRunawayBackfill(supabase),
+      checkExposedTables(supabase),
     ]);
 
     const alerts = results
@@ -252,7 +341,7 @@ Deno.serve(
     const failed: string[] = [];
 
     for (const alert of alerts) {
-      if (!(await shouldAlert(supabase, alert.key))) {
+      if (!(await shouldAlert(supabase, alert.key, alert.cooldownMinutes))) {
         suppressed.push(alert.key);
         continue;
       }
@@ -264,7 +353,7 @@ Deno.serve(
           module: "job_monitor",
           action: "watchdog_alert",
           status: "success",
-          payloadSnapshot: { alert: alert.key },
+          payloadSnapshot: { alert: alert.key, ...(alert.logPayload ?? {}) },
         });
       } else {
         failed.push(alert.key);
@@ -275,11 +364,20 @@ Deno.serve(
           action: "watchdog_alert",
           status: "error",
           errorMessage: `${alert.key}: ${res.detail ?? "envio falhou"}`,
-          payloadSnapshot: { alert: alert.key, message_preview: alert.text.slice(0, 200) },
+          // O detalhe entra AQUI também, e aqui ele vale ainda mais que no
+          // caminho de sucesso: se o envio falhou, ninguém recebeu o texto, e
+          // esta linha é o ÚNICO registro do que foi encontrado. Sem ela sobrava
+          // o `message_preview` de 200 chars, que carrega algumas tabelas por
+          // acidente e não por desenho.
+          payloadSnapshot: {
+            alert: alert.key,
+            message_preview: alert.text.slice(0, 200),
+            ...(alert.logPayload ?? {}),
+          },
         });
       }
     }
 
-    return json({ ok: true, checked: 3, sent, suppressed, failed });
+    return json({ ok: true, checked: 4, sent, suppressed, failed });
   })
 );

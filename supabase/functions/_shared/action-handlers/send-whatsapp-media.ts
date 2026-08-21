@@ -17,6 +17,7 @@ import {
   buildTrackId,
   recipientGate,
   isRetryableSendFailure,
+  persistOutboundMessage,
 } from "./whatsapp-helpers.ts";
 
 // ─── Audio ─────────────────────────────────────────────────────────────────
@@ -80,23 +81,16 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
       return { success: false, error, retryable: isRetryableSendFailure(error) };
     }
 
-    const messageId = result.messageId || `wf_${crypto.randomUUID()}`;
-
-    await supabase.from("whatsapp_messages").upsert({
-      organization_id: organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: phone + "@s.whatsapp.net",
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: "audio",
+    await persistOutboundMessage(supabase, {
+      organizationId,
+      instanceId: wa.instanceId,
+      providerMessageId: result.messageId,
+      phone,
+      messageType: "audio",
       content: null,
-      media_url: audioUrl,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+      mediaUrl: audioUrl,
+      leadId,
+    });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-media] Gateway audio send failed:", gwResult.error);
     const error = `Audio send failed: ${gwResult.error}`;
@@ -167,6 +161,17 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
       const error = `Image send failed: ${sendResult.error}`;
       return { success: false, error, retryable: isRetryableSendFailure(error) };
     }
+
+    await persistOutboundMessage(supabase, {
+      organizationId,
+      instanceId: wa.instanceId,
+      providerMessageId: sendResult.messageId,
+      phone,
+      messageType: "image",
+      content: resolvedCaption || null,
+      mediaUrl: imageUrl,
+      leadId,
+    });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-media] Gateway image send failed:", gwResult.error);
     const error = `Image send failed: ${gwResult.error}`;
@@ -237,6 +242,17 @@ export async function sendWhatsAppVideo(input: ActionInput): Promise<ActionResul
       const error = `Video send failed: ${sendResult.error}`;
       return { success: false, error, retryable: isRetryableSendFailure(error) };
     }
+
+    await persistOutboundMessage(supabase, {
+      organizationId,
+      instanceId: wa.instanceId,
+      providerMessageId: sendResult.messageId,
+      phone,
+      messageType: "video",
+      content: resolvedCaption || null,
+      mediaUrl: videoUrl,
+      leadId,
+    });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-media] Gateway video send failed:", gwResult.error);
     const error = `Video send failed: ${gwResult.error}`;
@@ -303,6 +319,17 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
       const error = `Sticker send failed: ${sendResult.error}`;
       return { success: false, error, retryable: isRetryableSendFailure(error) };
     }
+
+    await persistOutboundMessage(supabase, {
+      organizationId,
+      instanceId: wa.instanceId,
+      providerMessageId: sendResult.messageId,
+      phone,
+      messageType: "sticker",
+      content: null,
+      mediaUrl: stickerUrl,
+      leadId,
+    });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-media] Gateway sticker send failed:", gwResult.error);
     const error = `Sticker send failed: ${gwResult.error}`;
@@ -375,6 +402,17 @@ export async function sendWhatsAppDocument(input: ActionInput): Promise<ActionRe
       const error = `Document send failed: ${sendResult.error}`;
       return { success: false, error, retryable: isRetryableSendFailure(error) };
     }
+
+    await persistOutboundMessage(supabase, {
+      organizationId,
+      instanceId: wa.instanceId,
+      providerMessageId: sendResult.messageId,
+      phone,
+      messageType: "document",
+      content: resolvedCaption || null,
+      mediaUrl: documentUrl,
+      leadId,
+    });
   } else if (!gwResult.success) {
     console.error("[send-whatsapp-media] Gateway document send failed:", gwResult.error);
     const error = `Document send failed: ${gwResult.error}`;

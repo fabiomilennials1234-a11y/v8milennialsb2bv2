@@ -21,7 +21,16 @@ import {
   parseHttpsRequest,
 } from "./workflow-code-nodes.ts";
 import { getNextSendTime } from "./followupSchedule.ts";
-import { resolveActiveWindow, computeNextWindowStart as computeNextWindowStartLocal } from "./copilot/time-context.ts";
+import {
+  resolveActiveWindow,
+  computeNextSendWindowStart,
+  windowSpanMinutes,
+  windowMatches,
+  getDayKeyInTimezone,
+  getHourMinutesInTimezone,
+  type WindowSchedule,
+} from "./copilot/time-context.ts";
+import { resolveWindowRole } from "./workflow-window-role.ts";
 import { logRuntime } from "./logger.ts";
 import { validateExternalUrl } from "./url-validator.ts";
 import { fetchWithTimeout } from "./fetch-utils.ts";
@@ -74,17 +83,58 @@ interface ExecuteWorkflowParams {
   context: Record<string, unknown>;
   currentNodeId?: string | null;
   loopCounters?: Record<string, number>;
+  /**
+   * `workflow_executions.next_run_at` da linha reclamada — o agendamento
+   * ORIGINAL, não o instante do reclaim (a RPC de claim faz `RETURNING w.*`
+   * pós-UPDATE e não toca esta coluna). É a única forma de o nó saber há quanto
+   * tempo o resume está atrasado.
+   */
+  nextRunAt?: string | null;
 }
 
 export interface ExecuteWorkflowResult {
   success: boolean;
-  status: "completed" | "failed" | "paused" | "waiting_response" | "loop_limit_reached";
+  status: "completed" | "failed" | "paused" | "waiting_response" | "loop_limit_reached" | "cancelled";
   error?: string;
   stepsExecuted: number;
 }
 
 /** Teto do `context` persistido no heartbeat (128 KB). Acima disso, não vai. */
 const CONTEXT_HEARTBEAT_MAX_CHARS = 131_072;
+
+/**
+ * Atraso máximo tolerado num resume de janela. Acima disso a execução expira
+ * SEM enviar: uma mensagem agendada para ontem e disparada hoje chega fora de
+ * contexto, e o custo de mandá-la (reputação do número, resposta confusa) é
+ * maior que o de não mandar. Decisão do CTO, 2026-08-19.
+ */
+const STALE_RESUME_MAX_MS = 24 * 60 * 60_000;
+
+/**
+ * Espalhamento máximo do release de janela. Quando N execuções acordam na mesma
+ * abertura de janela, soltar todas no mesmo minuto é uma rajada — e a Chique já
+ * tomou um 463 ("temporary restriction for starting new conversations") em
+ * 2026-08-13. 30 min é escolha de projeto, não medida; `jitterMs` vai no
+ * payload do step justamente para permitir medir depois.
+ */
+const JITTER_SPREAD_MS = 30 * 60_000;
+
+/**
+ * Hash determinístico (FNV-1a 32-bit) do executionId.
+ *
+ * Determinístico é o requisito, não a distribuição: a MESMA execução, se for
+ * reavaliada, precisa cair no MESMO minuto. Com `Math.random()` cada reavaliação
+ * sortearia de novo e o espalhamento viraria passeio aleatório — a execução
+ * andaria para frente a cada tick em vez de convergir.
+ */
+function fnv1a32(input: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash >>> 0;
+}
 
 // ─── Main Executor ──────────────────────────────────────────────────────────
 
@@ -658,8 +708,10 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
         }
 
         case "wait_business_window": {
-          // ── Onda 5: Time-Aware com windows[] + actions (pass | hold_until | route) ──
-          // Legacy fallback se windows[] vazio: comportamento antigo single-window hold.
+          // ── Gate de horário. Dois caminhos, sem meio-termo: ──
+          //   windows[] presente → resolução por PAPEL (`workflow-window-role.ts`);
+          //   windows[] ausente  → caminho LEGACY via getNextSendTime, intocado
+          //                        (624 execuções da Goletric já escalonadas nele).
           const wbw = node.data as {
             days?: string[];
             startTime?: string;
@@ -673,91 +725,228 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           const wbwNow = new Date();
 
           if (wbwWindows.length > 0) {
-            // Novo: resolver shared
+            // ── Semântica (CTO 2026-08-19): a janela desenhada é o horário em
+            // que a mensagem DISPARA. Dentro de janela de envio → passa. Fora de
+            // toda janela (ou dentro de um blackout) → dorme até a próxima abrir.
+            const wbwStepInput = { windows: wbwWindows, mode: wbw.mode ?? null };
+
+            // ── Guarda de resume vencido ───────────────────────────────────
+            // Agendado para ontem e reclamado hoje: expira SEM enviar. Fica ANTES
+            // de qualquer resolução de janela justamente para que nenhum nó a
+            // jusante execute — o WhatsApp enviado não volta.
+            const scheduledFor = params.nextRunAt ? new Date(params.nextRunAt) : null;
+            if (scheduledFor && !isNaN(scheduledFor.getTime())) {
+              const lateByMs = wbwNow.getTime() - scheduledFor.getTime();
+              if (lateByMs > STALE_RESUME_MAX_MS) {
+                const staleError = "expired:stale_resume_24h";
+                await recordStep(supabase, executionId, node, "skipped",
+                  wbwStepInput,
+                  {
+                    insideWindow: null,
+                    activeWindow: null,
+                    action: null,
+                    roleResolved: "expired",
+                    jitterMs: 0,
+                    nextRunAt: null,
+                    scheduledFor: scheduledFor.toISOString(),
+                    lateByMs,
+                    evaluatedAt: wbwNow.toISOString(),
+                  },
+                  staleError,
+                );
+                await updateExecution(
+                  supabase, executionId, "cancelled", nodeId, loopCounters, staleError,
+                  { next_run_at: null },
+                );
+                return { success: true, status: "cancelled", error: staleError, stepsExecuted };
+              }
+            }
+
             const ctx = resolveActiveWindow(
               { behavior_windows: wbwWindows as any, availability: { timezone: wbwTz } },
               wbwNow,
             );
+            const activeAction = ctx ? String((ctx.window as any).action ?? "") : null;
+            const role = ctx ? resolveWindowRole(activeAction) : null;
 
-            if (!ctx) {
-              // Nenhuma janela ativa agora → fallback hold até abrir primeira janela com action=pass
-              const passWindow = wbwWindows.find((w) => w.action === "pass");
-              const fallbackTarget = passWindow?.name ?? wbwWindows[0]?.name;
-              if (!fallbackTarget) {
-                await recordStep(supabase, executionId, node, "failed",
-                  { windows: wbwWindows },
-                  { reason: "no_window_to_resume" },
-                );
-                return { success: false, status: "failed", error: "wait_business_window: nenhuma janela configurada", stepsExecuted };
-              }
-              const nextStart = computeNextWindowStartLocal(wbwWindows, fallbackTarget, wbwTz, wbwNow);
-              const nextRunAt = (nextStart ?? new Date(wbwNow.getTime() + 60 * 60_000)).toISOString();
+            if (role?.kind === "send") {
+              // Dentro do horário de envio: segue no MESMO tick, sem tocar
+              // next_run_at. Escrever agendamento aqui é o que criava o livelock.
               await recordStep(supabase, executionId, node, "success",
-                { windows: wbwWindows, mode: wbw.mode ?? "hold" },
-                { insideWindow: false, fallback: "hold_until_next_pass", nextRunAt, evaluatedAt: new Date().toISOString() },
-              );
-              await supabase.from("workflow_executions").update({
-                status: "running",
-                current_node_id: nodeId,
-                next_run_at: nextRunAt,
-                loop_counters: loopCounters,
-              }).eq("id", executionId);
-              return { success: true, status: "paused", stepsExecuted };
-            }
-
-            const action = String((ctx.window as any).action ?? "pass");
-
-            if (action === "pass") {
-              await recordStep(supabase, executionId, node, "success",
-                { windows: wbwWindows, mode: wbw.mode ?? "hold" },
-                { insideWindow: true, activeWindow: ctx.window.name, action, evaluatedAt: new Date().toISOString() },
+                wbwStepInput,
+                {
+                  insideWindow: true,
+                  activeWindow: ctx!.window.name,
+                  action: activeAction,
+                  roleResolved: "send",
+                  jitterMs: 0,
+                  nextRunAt: null,
+                  evaluatedAt: wbwNow.toISOString(),
+                },
               );
               nextNodes.push(...getNextNodes(nodeId, edgeMap));
-            } else if (action.startsWith("hold_until:")) {
-              const targetName = action.split(":")[1];
-              const nextStart = computeNextWindowStartLocal(wbwWindows, targetName, wbwTz, wbwNow);
-              if (!nextStart) {
-                await recordStep(supabase, executionId, node, "failed",
-                  { windows: wbwWindows, action },
-                  { reason: `hold_until target "${targetName}" not found` },
-                );
-                return { success: false, status: "failed", error: `wait_business_window: janela "${targetName}" não encontrada`, stepsExecuted };
-              }
-              await recordStep(supabase, executionId, node, "success",
-                { windows: wbwWindows, mode: wbw.mode ?? "hold" },
-                { insideWindow: true, activeWindow: ctx.window.name, action, holdUntil: nextStart.toISOString(), evaluatedAt: new Date().toISOString() },
-              );
-              await supabase.from("workflow_executions").update({
-                status: "running",
-                current_node_id: nodeId,
-                next_run_at: nextStart.toISOString(),
-                loop_counters: loopCounters,
-              }).eq("id", executionId);
-              return { success: true, status: "paused", stepsExecuted };
-            } else if (action.startsWith("route:")) {
-              const branchKey = action.split(":")[1];
+              break;
+            }
+
+            if (role?.kind === "route") {
               const outEdges = edgeMap.get(nodeId) || [];
-              const branchTargets = outEdges.filter((e) => (e.sourceHandle ?? "") === branchKey).map((e) => e.target);
+              const branchTargets = outEdges
+                .filter((e) => (e.sourceHandle ?? "") === role.key)
+                .map((e) => e.target);
               if (branchTargets.length === 0) {
+                const routeError = `wait_business_window: edge "${role.key}" não encontrada`;
                 await recordStep(supabase, executionId, node, "failed",
-                  { windows: wbwWindows, action },
-                  { reason: `route branch "${branchKey}" sem edge correspondente` },
+                  wbwStepInput,
+                  {
+                    insideWindow: true,
+                    activeWindow: ctx!.window.name,
+                    action: activeAction,
+                    roleResolved: "route",
+                    jitterMs: 0,
+                    nextRunAt: null,
+                    reason: `route branch "${role.key}" sem edge correspondente`,
+                    evaluatedAt: wbwNow.toISOString(),
+                  },
+                  routeError,
                 );
-                return { success: false, status: "failed", error: `wait_business_window: edge "${branchKey}" não encontrada`, stepsExecuted };
+                await updateExecution(supabase, executionId, "failed", nodeId, loopCounters, routeError);
+                return { success: false, status: "failed", error: routeError, stepsExecuted };
               }
               await recordStep(supabase, executionId, node, "success",
-                { windows: wbwWindows, mode: wbw.mode ?? "route" },
-                { insideWindow: true, activeWindow: ctx.window.name, action, routedTo: branchTargets, evaluatedAt: new Date().toISOString() },
+                wbwStepInput,
+                {
+                  insideWindow: true,
+                  activeWindow: ctx!.window.name,
+                  action: activeAction,
+                  roleResolved: "route",
+                  jitterMs: 0,
+                  nextRunAt: null,
+                  routedTo: branchTargets,
+                  evaluatedAt: wbwNow.toISOString(),
+                },
               );
               nextNodes.push(...branchTargets);
-            } else {
-              await recordStep(supabase, executionId, node, "failed",
-                { windows: wbwWindows, action },
-                { reason: `action desconhecida: ${action}` },
-              );
-              return { success: false, status: "failed", error: `wait_business_window: action "${action}" inválida`, stepsExecuted };
+              break;
             }
-            break;
+
+            // ── Dorme: nenhuma janela casou, ou casou um blackout ──────────
+            // Escada (a ordem É o contrato):
+            //   1. próxima abertura entre as janelas de ENVIO;
+            //   2. se não existe nenhuma janela de envio, próxima abertura entre
+            //      janelas de qualquer papel — um nó só-`route` (Happyneis) é
+            //      legítimo e não pode expirar por não ter janela de envio;
+            //   3. nada abre em 14 dias → expira;
+            //   4. resultado <= agora em qualquer ponto → expira (contradição de
+            //      config, não agendamento).
+            const wbwSchedules = wbwWindows as unknown as WindowSchedule[];
+            const sendWindows = wbwSchedules.filter((w) =>
+              resolveWindowRole((w as unknown as { action?: string }).action).kind === "send"
+            );
+            const scanPool = sendWindows.length > 0 ? sendWindows : wbwSchedules;
+            const nextOpen = computeNextSendWindowStart(scanPool, wbwTz, wbwNow);
+
+            const holdBase = {
+              insideWindow: !!ctx,
+              activeWindow: ctx?.window.name ?? null,
+              action: activeAction,
+              roleResolved: role?.kind ?? "none",
+              scannedPool: sendWindows.length > 0 ? "send" : "any_role",
+              evaluatedAt: wbwNow.toISOString(),
+            };
+
+            if (!nextOpen) {
+              const noWindowError = "expired:no_send_window";
+              await recordStep(supabase, executionId, node, "failed",
+                wbwStepInput,
+                { ...holdBase, jitterMs: 0, nextRunAt: null, reason: "nenhuma janela abre nos próximos 14 dias" },
+                noWindowError,
+              );
+              await updateExecution(
+                supabase, executionId, "cancelled", nodeId, loopCounters, noWindowError,
+                { next_run_at: null },
+              );
+              return { success: true, status: "cancelled", error: noWindowError, stepsExecuted };
+            }
+
+            // R2: JAMAIS gravar next_run_at <= agora. A verificação roda ANTES
+            // do jitter, de propósito: o jitter é positivo e empurraria um
+            // `nextOpen === agora` para o futuro, mascarando a contradição. O
+            // caso real é um nó só de bloqueio com a janela ativa — a varredura
+            // de "qualquer papel" casaria no offset 0 e o nó dormiria minutos
+            // para acordar dentro do mesmo bloqueio, para sempre.
+            if (nextOpen.getTime() <= wbwNow.getTime()) {
+              const loopError = "expired:window_resolution_loop";
+              await recordStep(supabase, executionId, node, "failed",
+                wbwStepInput,
+                {
+                  ...holdBase,
+                  jitterMs: 0,
+                  nextRunAt: null,
+                  windowOpensAt: nextOpen.toISOString(),
+                  reason: "próxima abertura resolveu para o passado/presente",
+                },
+                loopError,
+              );
+              await updateExecution(
+                supabase, executionId, "cancelled", nodeId, loopCounters, loopError,
+                { next_run_at: null },
+              );
+              return { success: true, status: "cancelled", error: loopError, stepsExecuted };
+            }
+
+            // Jitter determinístico, limitado a metade da janela para nunca
+            // vazar pelo fim dela.
+            const openDayKey = getDayKeyInTimezone(nextOpen, wbwTz);
+            const openClock = getHourMinutesInTimezone(nextOpen, wbwTz);
+            const openMinutes = openClock.hour * 60 + openClock.minute;
+            const openingWindow = scanPool.find((w) => windowMatches(w, openDayKey, openMinutes));
+            const spanMs = openingWindow ? windowSpanMinutes(openingWindow) * 60_000 : JITTER_SPREAD_MS;
+            const jitterCap = Math.max(0, Math.min(JITTER_SPREAD_MS, Math.floor(spanMs / 2)));
+            const jitterMs = jitterCap > 0 ? fnv1a32(executionId) % jitterCap : 0;
+            const resumeAt = new Date(nextOpen.getTime() + jitterMs);
+
+            // Rede de segurança: mesmo com a checagem acima, nada é gravado se
+            // o valor final não for estritamente futuro. Gravar passado ou
+            // presente viraria livelock — reclamado a cada ciclo, para sempre,
+            // consumindo o per_org_cap da org inteira.
+            if (resumeAt.getTime() <= wbwNow.getTime()) {
+              const loopError = "expired:window_resolution_loop";
+              await recordStep(supabase, executionId, node, "failed",
+                wbwStepInput,
+                {
+                  ...holdBase,
+                  jitterMs,
+                  nextRunAt: null,
+                  windowOpensAt: nextOpen.toISOString(),
+                  reason: "próxima abertura resolveu para o passado/presente",
+                },
+                loopError,
+              );
+              await updateExecution(
+                supabase, executionId, "cancelled", nodeId, loopCounters, loopError,
+                { next_run_at: null },
+              );
+              return { success: true, status: "cancelled", error: loopError, stepsExecuted };
+            }
+
+            const resumeIso = resumeAt.toISOString();
+            await recordStep(supabase, executionId, node, "success",
+              wbwStepInput,
+              {
+                ...holdBase,
+                jitterMs,
+                nextRunAt: resumeIso,
+                windowOpensAt: nextOpen.toISOString(),
+                openingWindow: openingWindow?.name ?? null,
+              },
+            );
+            await supabase.from("workflow_executions").update({
+              status: "running",
+              current_node_id: nodeId,
+              next_run_at: resumeIso,
+              loop_counters: loopCounters,
+            }).eq("id", executionId);
+            return { success: true, status: "paused", stepsExecuted };
           }
 
           // ── Legacy single-window hold (retrocompat) ──
@@ -1362,6 +1551,7 @@ async function updateExecution(
   currentNodeId: string | null,
   loopCounters: Record<string, number>,
   error?: string,
+  extra?: Record<string, unknown>,
 ): Promise<void> {
   const update: Record<string, unknown> = {
     status,
@@ -1369,11 +1559,20 @@ async function updateExecution(
     loop_counters: loopCounters,
   };
 
-  if (status === "completed" || status === "failed" || status === "loop_limit_reached") {
+  // `cancelled` é desfecho TERMINAL (expiração deliberada). Sem carimbar
+  // completed_at ele fica com nulo e parece aberto em qualquer consulta com
+  // recorte de data — um terminal exibido como eterno.
+  if (
+    status === "completed" || status === "failed" ||
+    status === "loop_limit_reached" || status === "cancelled"
+  ) {
     update.completed_at = new Date().toISOString();
   }
   if (error) {
     update.error = error;
+  }
+  if (extra) {
+    Object.assign(update, extra);
   }
 
   await supabase.from("workflow_executions").update(update).eq("id", executionId);

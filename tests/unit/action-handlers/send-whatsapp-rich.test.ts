@@ -87,31 +87,55 @@ describe("sendWhatsAppTemplate", () => {
     expect(result.error).toContain("template");
   });
 
-  it("returns error when template not found in DB", async () => {
-    const { input } = makeInput({ templateId: "tpl-nonexistent" });
-    // whatsapp_templates table not mocked → returns null
+  /**
+   * ⚠️ ESTES CASOS MUDARAM COM A REFORMA DO NÓ (#1688).
+   *
+   * O nó lia `whatsapp_templates` — tabela que NUNCA existiu em produção — e
+   * mandava o conteúdo como texto puro. Não era template da Meta. Os testes
+   * antigos fixavam esse comportamento: "template não encontrado no BD" e
+   * "envia template" passando por uma tabela fantasma.
+   *
+   * Agora o nó guarda o NOME e o IDIOMA do template aprovado, mais o mapeamento
+   * de variáveis, e envia HSM. O que os casos abaixo protegem é o novo contrato.
+   */
+  it("sem nome de template configurado, recusa antes de qualquer I/O", async () => {
+    const { input } = makeInput({});
     const result = await sendWhatsAppTemplate(input);
+
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Template not found");
+    expect(result.error).toContain("template");
+    expect(result.retryable).toBe(false);
   });
 
-  it("sends template successfully", async () => {
+  it("variável do template não preenchida barra o envio, dizendo o que falta", async () => {
+    // A Meta recusa parâmetro vazio, e a recusa dela chega por callback — depois
+    // de o vendedor achar que mandou. Barrar aqui é a diferença entre um erro
+    // legível no passo e uma mensagem que some.
+    //
+    // ⚠️ Note que o caso NÃO é "variável que o lead não tem": o resolvedor de
+    // variáveis deixa o token desconhecido intacto, então ele chega como texto
+    // e não como vazio. O vazio de verdade é o campo que ninguém preencheu no nó.
     const { sb, mockTable } = createMockSupabase();
     mockTable("whatsapp_instances", [WA_INSTANCE]);
-    mockTable("whatsapp_messages", []);
     mockTable("leads", [LEAD]);
-    mockTable("whatsapp_templates", [{ id: "tpl-1", name: "Welcome", content: "Oi {{nome}}!" }]);
 
     const result = await sendWhatsAppTemplate({
       supabase: sb,
       organizationId: "org-1",
       leadId: "lead-1",
       conversationId: null,
-      params: { templateId: "tpl-1", whatsappInstanceId: "inst-1" },
+      params: {
+        templateName: "boas_vindas",
+        templateLanguage: "pt_BR",
+        templateComponents: [{ type: "BODY", text: "Olá {{1}}" }],
+        templateVariables: { "1": "   " },
+        whatsappInstanceId: "inst-1",
+      },
       executionContext: {},
     });
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("Welcome");
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("falta");
   });
 });
 

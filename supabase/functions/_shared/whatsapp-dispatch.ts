@@ -161,10 +161,20 @@ export async function resolveInstance(
  *      "live" here (the watchdog only audits uazapi rows) and would otherwise
  *      deterministically win the recency ordering, mis-routing free-form
  *      copilot replies through the Meta API.
- *   2. FALLBACK: the legacy query byte-for-byte (provider-blind, unordered) —
- *      session_dead_since can be a stale false-positive (10-min watchdog
- *      cycle) and a hard filter would silence the copilot. This NEVER returns
- *      null where the legacy query would have returned a row.
+ *   2. FALLBACK: the legacy query, MINUS one predicate only — it drops the
+ *      liveness filter (session_dead_since can be a stale false-positive of the
+ *      10-min watchdog cycle, and a hard filter would silence the copilot) but
+ *      KEEPS the provider allowlist. It relaxes liveness, never provider. This
+ *      NEVER returns null where a LEGACY-PROVIDER row existed.
+ *
+ * PROVIDER ALLOWLIST, NOT A DENYLIST — both queries are scoped to
+ * ['uazapi','evolution']. This function hands its row to `getWhatsAppProvider`,
+ * which assumes a session-based chip; every non-legacy provider (meta_cloud
+ * today, notificame next) is template/window-gated and must never receive a
+ * free-form automation message picked here. An allowlist makes the 5th provider
+ * born excluded — a denylist of the known names would leave the hole open.
+ * The only caller, copilot-batch-processor, already treats null as the
+ * retryable `no_active_instance`, so the fail-closed exit path exists.
  */
 export async function selectSendableInstance(
   supabaseAdmin: any,
@@ -182,11 +192,13 @@ export async function selectSendableInstance(
     .maybeSingle();
   if (live) return live as WhatsAppInstance;
 
-  // Legacy fallback — identical to the callers' previous selection.
+  // Liveness fallback — the legacy selection minus the session_dead_since
+  // filter. The provider allowlist stays (see the contract above).
   const { data: fallback } = await supabaseAdmin
     .from("whatsapp_instances")
     .select("*")
     .eq("organization_id", organizationId)
+    .in("provider", ["uazapi", "evolution"])
     .in("status", ["open", "connected"])
     .limit(1)
     .maybeSingle();
@@ -332,6 +344,88 @@ export async function sendTextViaInstance(
           replyid: opts.replyId,
         }),
     );
+    if (isSkippedSend(governed)) {
+      return { success: false, error: `governor_${governed.action}:${governed.reason}` };
+    }
+    return { success: true, messageId: governed.message_id };
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : (error as any)?.message ?? JSON.stringify(error),
+    };
+  }
+}
+
+/**
+ * Manda um TEMPLATE aprovado. É a única saída fora da janela de 24 horas.
+ *
+ * ─── POR QUE ELE PRECISA EXISTIR AQUI ───────────────────────────────────────
+ *
+ * Havia cinco remetentes neste arquivo e nenhum de template. Sem este, o nó de
+ * template ficaria fora da costura que todos os outros têm: a governança de
+ * envio, o dedup de conteúdo e a classificação de falha. Dois regimes para o
+ * mesmo produto.
+ *
+ * ⚠️ NEM TODO PROVIDER TEM TEMPLATE. Uazapi e Evolution não o implementam — é
+ * conceito da API oficial. O recurso ausente é recusado com mensagem legível,
+ * antes de qualquer I/O, e não com um erro de "propriedade indefinida".
+ *
+ * ⚠️ O `previewText` e os `buttonLabels` VIAJAM JUNTO, e isso não é enfeite: a
+ * Meta renderiza a mensagem do lado dela, então a linha gravada nasceria sem
+ * texto e a conversa exibiria "Mensagem interativa" no lugar do que o cliente
+ * recebeu. Só quem tem o corpo aprovado e os parâmetros consegue reproduzi-lo.
+ */
+export async function sendTemplateViaInstance(
+  supabaseAdmin: any,
+  instance: WhatsAppInstance,
+  phoneNumber: string,
+  template: {
+    name: string;
+    language: string;
+    components: unknown[];
+    previewText: string;
+    buttonLabels: string[];
+  },
+  opts: { trackSource?: string; trackId?: string; idempotencyKey?: string } = {}
+): Promise<SendResultSimple> {
+  const phone = normalizeBrazilianPhone(phoneNumber);
+  if (!phone) return { success: false, error: "Invalid phone" };
+
+  try {
+    const provider = await getWhatsAppProvider(instance, supabaseAdmin);
+
+    if (!provider.sendTemplate) {
+      return {
+        success: false,
+        error: `provider ${instance.provider} does not support sendTemplate`,
+      };
+    }
+
+    // Send Governor (SHADOW seam) — mesmo contrato de `sendTextViaInstance`.
+    // O conteúdo que alimenta o dedup é o texto RENDERIZADO: dois envios do
+    // mesmo template com parâmetros diferentes são mensagens diferentes.
+    const governed = await governSend(
+      supabaseAdmin,
+      {
+        orgId: instance.organization_id,
+        instanceId: instance.id,
+        category: deriveCategory(opts.trackSource),
+        recipientPhone: phone,
+        trackSource: opts.trackSource,
+        content: template.previewText,
+        idempotencyKey: opts.idempotencyKey,
+      },
+      () =>
+        provider.sendTemplate!({
+          number: phone,
+          templateName: template.name,
+          language: template.language,
+          components: template.components,
+          previewText: template.previewText,
+          buttonLabels: template.buttonLabels,
+        } as never),
+    );
+
     if (isSkippedSend(governed)) {
       return { success: false, error: `governor_${governed.action}:${governed.reason}` };
     }

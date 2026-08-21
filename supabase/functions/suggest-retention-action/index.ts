@@ -15,7 +15,7 @@ import { requireAuth, AuthError, authErrorResponse, type AuthContext } from "../
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const MODEL = "google/gemini-2.5-flash";
+const MODEL = "openai/gpt-4.1-mini";
 
 const SYSTEM_PROMPT = `Você é um consultor de retenção B2B especializado em distribuidoras e fábricas.
 Analise o contexto do cliente e retorne EXATAMENTE um JSON com:

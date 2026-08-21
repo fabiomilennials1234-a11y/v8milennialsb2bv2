@@ -28,5 +28,6 @@ export { MessageStatusIcon } from "./MessagePrimitives";
 
 // Onda 1 primitives
 export { ChatEmptyState } from "./ChatEmptyState";
+export { ChatThreadUnavailable } from "./ChatThreadUnavailable";
 export { ScrollToBottomFab } from "./ScrollToBottomFab";
 export { UnreadDivider } from "./UnreadDivider";

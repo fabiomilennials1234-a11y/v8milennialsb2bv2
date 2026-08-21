@@ -722,41 +722,14 @@ describe("handleSendWhatsAppImage — deep", () => {
 });
 
 describe("handleSendWhatsAppTemplate — deep", () => {
-  it("succeeds with template found in DB", async () => {
-    const { sb, mockTable } = createMockSupabase();
-    mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("whatsapp_instances", [WA_INSTANCE]);
-    mockTable("whatsapp_messages", []);
-    mockTable("whatsapp_templates", [{ id: "tpl-1", name: "Welcome", content: "Olá {{nome}}, bem-vindo!" }]);
-    mockTable("lead_history", []);
-
-    const result = await executeWorkflowAction({
-      supabase: sb, organizationId: "org-1", leadId: "lead-1",
-      nodeData: { actionType: "send_whatsapp_template", templateId: "tpl-1" },
-      executionContext: {},
-    });
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("Welcome");
-  });
-
-  it("fails when template not found in DB", async () => {
-    setupEvolutionEnv();
-    const { sb, mockTable } = createMockSupabase();
-    mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("whatsapp_instances", [WA_INSTANCE]);
-    mockTable("whatsapp_templates", []);
-
-    const result = await executeWorkflowAction({
-      supabase: sb, organizationId: "org-1", leadId: "lead-1",
-      nodeData: { actionType: "send_whatsapp_template", templateId: "tpl-missing" },
-      executionContext: {},
-    });
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("Template not found");
-  });
-
-  it("fails when no templateId is configured", async () => {
-    setupEvolutionEnv();
+  /**
+   * ⚠️ REESCRITO NA REFORMA DO NÓ (#1688). Os casos antigos — "template
+   * encontrado no BD" e "não encontrado no BD" — exercitavam uma leitura de
+   * `whatsapp_templates`, tabela que nunca existiu em produção, e um envio como
+   * TEXTO PURO. O nó agora guarda nome e idioma do template aprovado e manda
+   * HSM; não há tabela para encontrar ou deixar de encontrar.
+   */
+  it("sem nome de template, recusa e não é retentável", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("whatsapp_instances", [WA_INSTANCE]);
@@ -766,8 +739,9 @@ describe("handleSendWhatsAppTemplate — deep", () => {
       nodeData: { actionType: "send_whatsapp_template" },
       executionContext: {},
     });
+
     expect(result.success).toBe(false);
-    expect(result.error).toContain("No template configured");
+    expect(result.retryable).toBe(false);
   });
 });
 

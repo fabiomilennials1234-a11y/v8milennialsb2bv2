@@ -26,6 +26,7 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { formatBRL } from "@/lib/format";
 import {
   usePortfolioClients,
@@ -43,7 +44,6 @@ export type { PortfolioClientRow };
 interface CarteiraClientTableProps {
   selectedClientId: string | null;
   onSelectClient: (client: PortfolioClientRow | null) => void;
-  onWhatsApp?: (client: PortfolioClientRow) => void;
   onNewOrder?: (clientId: string) => void;
   onViewDetail?: (clientId: string) => void;
   searchQuery: string;
@@ -187,7 +187,6 @@ const thBase =
 export function CarteiraClientTable({
   selectedClientId,
   onSelectClient,
-  onWhatsApp,
   onNewOrder,
   onViewDetail,
   searchQuery,
@@ -539,17 +538,18 @@ export function CarteiraClientTable({
 
                   <TableCell className="py-3 pr-4">
                     <div className="flex gap-1">
-                      {onWhatsApp && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onWhatsApp(client);
-                          }}
+                      {/* Cliente sem lead vinculado não tem Conversa do Lead.
+                          A prop `onWhatsApp` deixou de existir: o botão resolve
+                          a caixa aqui, em vez de o pai improvisar a navegação. */}
+                      {client.lead_id && (
+                        <AbrirConversaButton
+                          leadId={client.lead_id}
+                          phone={client.phone}
                           className={iconBtnClass}
                           title="WhatsApp"
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
-                        </button>
+                        </AbrirConversaButton>
                       )}
                       {onNewOrder && (
                         <button

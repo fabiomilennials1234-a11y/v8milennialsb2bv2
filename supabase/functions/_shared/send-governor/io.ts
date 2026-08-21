@@ -6,7 +6,10 @@
  * fail CLOSED (a read error resolves to "cap consumed"): the governor's prime
  * directive is the opposite — it must NEVER be a single point of failure for a
  * send. So every read here degrades to the MOST PERMISSIVE value (mode 'off',
- * usedToday 0, reputation 'healthy', high cap, isColdContact false) → allow.
+ * usedToday 0, reputation 'healthy', high cap, isColdContact false, janela de 24h
+ * NÃO-RESOLVIDA) → allow. Na P5 "permissivo" é `windowResolved:false`
+ * (DESCONHECIDO), jamais um inbound inventado: a regra se desliga na incerteza,
+ * ela não finge que o contato respondeu.
  *
  * No Deno-only TOP-LEVEL import: the module takes the Supabase client as a
  * parameter and lazily/guardedly imports logger.ts only where Deno exists, so
@@ -21,7 +24,11 @@ import type {
   ReputationState,
   ResolveStateInput,
 } from "./types.ts";
-import { GOVERNOR_DEFAULT_CAP } from "./core.ts";
+import {
+  GOVERNOR_DEFAULT_CAP,
+  isSessionWindowOpen,
+  sessionWindowApplies,
+} from "./core.ts";
 import { resolveInstanceCap } from "../quick-blast/instance-budget.ts";
 import { saoPauloUsageDate } from "../quick-blast/daily-budget.ts";
 
@@ -34,6 +41,13 @@ function permissiveState(nowIso: string): GovernorState {
     usedToday: 0,
     instanceCap: GOVERNOR_DEFAULT_CAP,
     instanceAgeDays: null,
+    // P5 permissiva: provider desconhecido + janela NÃO resolvida = a regra nem
+    // é avaliada. Nunca "janela aberta" por invenção — a permissividade vem de
+    // `windowResolved:false` (desconhecido), não de um inbound falso.
+    instanceProvider: null,
+    lastInboundIso: null,
+    windowResolved: false,
+    windowSource: null,
     reputation: "healthy",
     quarantineUntil: null,
     isColdContact: false,
@@ -101,6 +115,182 @@ async function resolveIsColdContact(
   return (count ?? 0) === 0;
 }
 
+// ─── P5 — a leitura da janela de 24h ─────────────────────────────────────────
+
+/**
+ * Resultado da leitura da janela. `resolved:false` é DESCONHECIDO (erro/sem
+ * dado de entrada) e o core não bloqueia nele; `resolved:true` + `lastInboundIso
+ * === null` é o fato "nunca houve inbound" → janela fechada.
+ */
+interface SessionWindowRead {
+  resolved: boolean;
+  lastInboundIso: string | null;
+  source: "whatsapp_messages" | "channel_messages" | null;
+}
+
+/**
+ * Variantes de telefone que representam o MESMO contato, para o `IN`.
+ *
+ * Por que não um `.eq(normalizePhone(...))` e pronto: NÃO EXISTE payload real de
+ * inbound oficial ainda (nenhum canal NotificaMe conectado escreve mensagem de
+ * entrada hoje), então o formato exato em que o telefone vai ser gravado é
+ * DERIVADO DE DOC. Se ele chegar como '+55…' ou sem o 9º dígito e nós casarmos
+ * só a forma canônica, TODA leitura devolve vazio, toda janela lê como fechada,
+ * e o enforce barraria 100% da automação por um detalhe de formatação.
+ *
+ * A assimetria é deliberada e segura: variante a MAIS só pode ABRIR uma janela
+ * (achar um inbound que existe), nunca fechar uma aberta. Erra para o lado do
+ * fail-open, que é a diretriz do módulo.
+ *
+ * Espelha `normalizePhoneForSearch` (lead-service.ts) na regra do 9º dígito, mas
+ * inline: este módulo é leve de propósito e não importa o grafo de leads.
+ */
+function phoneCandidates(raw: string): string[] {
+  const out = new Set<string>();
+  const push = (v: string | null | undefined) => {
+    if (v && v.length >= 8) out.add(v);
+  };
+  push(raw.trim());
+
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length < 8) return [...out];
+  push(digits);
+
+  const local = digits.startsWith("55") && digits.length >= 12
+    ? digits.slice(2)
+    : digits;
+  push(local);
+  push("55" + local);
+  push("+55" + local);
+
+  // 9º dígito do celular brasileiro: DDD(2) + 9 + 8 dígitos. Gera o par (com/sem)
+  // porque as duas formas circulam em base legada.
+  let toggled: string | null = null;
+  if (local.length === 11 && local[2] === "9") {
+    toggled = local.slice(0, 2) + local.slice(3);
+  } else if (local.length === 10) {
+    toggled = local.slice(0, 2) + "9" + local.slice(2);
+  }
+  if (toggled) {
+    push(toggled);
+    push("55" + toggled);
+    push("+55" + toggled);
+  }
+  return [...out];
+}
+
+/** Lê o timestamp da última `incoming` de um par (canal, contato) numa tabela. */
+async function lastInboundFrom(
+  supabaseAdmin: GovernorSupabaseClient,
+  table: "whatsapp_messages" | "channel_messages",
+  orgId: string,
+  instanceId: string,
+  phones: string[],
+): Promise<{ ok: boolean; iso: string | null }> {
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .select("timestamp")
+    .eq("organization_id", orgId)
+    .eq("instance_id", instanceId)
+    .eq("direction", "incoming")
+    .in("phone_number", phones)
+    .order("timestamp", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { ok: false, iso: null };
+  const ts = data?.timestamp;
+  return { ok: true, iso: typeof ts === "string" && ts ? ts : null };
+}
+
+/**
+ * P5 — quando o contato falou com este canal pela última vez.
+ *
+ * ⚠️ QUAL TABELA (premissa da SCRUM-376 corrigida contra o código): o brief dizia
+ * `channel_messages`. Para canal de WhatsApp isso está ERRADO hoje e o repo prova
+ * nos dois sentidos: (a) TODO inbound de WhatsApp — uazapi (`whatsapp-webhook`),
+ * meta_cloud (`meta-webhook`) e sz.chat — grava em `whatsapp_messages`;
+ * (b) a janela de 24h JÁ EXISTE para a Meta Cloud em
+ * `whatsapp-providers/meta-cloud-window.ts` e lê `whatsapp_messages`, com a mesma
+ * consulta. `channel_messages` é a tabela dos canais SOCIAIS (Instagram/Messenger)
+ * — e o inbound de Instagram do NotificaMe grava lá com `instance_id: null` e
+ * `phone_number: null`, então ela não casaria um envio de WhatsApp nem por acaso.
+ * Ler só `channel_messages` daria janela SEMPRE fechada e enforce barrando tudo.
+ *
+ * Então: `whatsapp_messages` é a fonte primária, e `channel_messages` é
+ * consultada APENAS quando a primária não achou nada — hedge barato contra a
+ * fatia futura de inbound oficial escolher a outra tabela (o receptor NotificaMe
+ * que existe hoje escreve lá). O custo fica no caminho negativo, e a segunda
+ * leitura só pode ABRIR a janela, nunca fechar uma já aberta.
+ *
+ * FAIL-OPEN: as duas leituras com erro → `resolved:false` (desconhecido) → o core
+ * não bloqueia. Uma leitura OK e vazia é FATO, não erro → `resolved:true` +
+ * `lastInboundIso:null` → janela fechada.
+ *
+ * ÍNDICES (nenhuma migration nova é necessária):
+ *   - `whatsapp_messages` → `idx_whatsapp_msgs_org_instance_phone`
+ *     (organization_id, instance_id, phone_number, timestamp DESC) — casa o
+ *     predicado inteiro; `direction` fica como filtro residual sobre um range já
+ *     estreito (uma conversa), varrido de trás para frente com LIMIT 1;
+ *   - `channel_messages` → `idx_channel_messages_conversation`
+ *     (organization_id, phone_number, channel, timestamp DESC) — prefixo
+ *     (org, phone) resolve, e a tabela tem ~11k linhas.
+ *   Índice parcial dedicado `(organization_id, instance_id, phone_number,
+ *   timestamp DESC) WHERE direction='incoming'` só se vale quando o EXPLAIN
+ *   mostrar cauda longa de `outgoing` antes da primeira `incoming` num canal
+ *   oficial real — e aí tem que nascer CONCURRENTLY, FORA de migration:
+ *   `db push` roda em transação e CREATE INDEX não-concorrente travaria escrita
+ *   em `whatsapp_messages`, que é a tabela mais quente do produto.
+ */
+async function resolveSessionWindow(
+  supabaseAdmin: GovernorSupabaseClient,
+  orgId: string,
+  instanceId: string,
+  recipientPhone: string,
+): Promise<SessionWindowRead> {
+  const phones = phoneCandidates(recipientPhone);
+  if (phones.length === 0) {
+    return { resolved: false, lastInboundIso: null, source: null };
+  }
+
+  const primary = await lastInboundFrom(
+    supabaseAdmin,
+    "whatsapp_messages",
+    orgId,
+    instanceId,
+    phones,
+  );
+  if (primary.ok && primary.iso) {
+    return {
+      resolved: true,
+      lastInboundIso: primary.iso,
+      source: "whatsapp_messages",
+    };
+  }
+
+  const fallback = await lastInboundFrom(
+    supabaseAdmin,
+    "channel_messages",
+    orgId,
+    instanceId,
+    phones,
+  );
+  if (fallback.ok && fallback.iso) {
+    return {
+      resolved: true,
+      lastInboundIso: fallback.iso,
+      source: "channel_messages",
+    };
+  }
+
+  // Nenhum inbound encontrado. Só é FATO (→ janela fechada) se ao menos uma das
+  // leituras respondeu sem erro; se as duas erraram, é DESCONHECIDO → fail-open.
+  return {
+    resolved: primary.ok || fallback.ok,
+    lastInboundIso: null,
+    source: null,
+  };
+}
+
 /**
  * Resolve the full governor state for a send. FAIL-OPEN throughout: the org row
  * is the primary read; if the org is 'off' we short-circuit (1 read) so inert
@@ -136,22 +326,27 @@ export async function resolveGovernorState(
 
     let instanceCap = GOVERNOR_DEFAULT_CAP;
     let instanceAgeDays: number | null = null;
+    let instanceProvider: string | null = null;
     let reputation: ReputationState = "healthy";
     let quarantineUntil: string | null = null;
     let usedToday = 0;
 
     if (input.instanceId) {
-      // 2. Per-number base cap + age.
+      // 2. Per-number base cap + age + provider (o provider liga a P5).
       try {
         const { data } = await supabaseAdmin
           .from("whatsapp_instances")
-          .select("daily_blast_cap, created_at")
+          .select("daily_blast_cap, created_at, provider")
           .eq("id", input.instanceId)
           .maybeSingle();
         instanceCap = resolveInstanceCap(data?.daily_blast_cap);
         instanceAgeDays = ageDaysFrom(data?.created_at, nowIso);
+        instanceProvider = typeof data?.provider === "string"
+          ? data.provider
+          : null;
       } catch {
         instanceCap = GOVERNOR_DEFAULT_CAP;
+        instanceProvider = null; // desconhecido → P5 nem é avaliada (fail-open)
       }
 
       // 3. Reputation.
@@ -187,7 +382,34 @@ export async function resolveGovernorState(
       }
     }
 
-    // 5. Cold-contact — only when enabled + automation + a phone is known.
+    // 5. P5 janela de 24h — só para provider COM janela (allowlist do core) e
+    //    categoria automation|mass. O predicado é o MESMO que o core usa, para
+    //    que "não paguei a leitura" e "a regra não se aplica" nunca divirjam.
+    //    Sem telefone (envio que resolve o destinatário tarde) → não dá para
+    //    perguntar → fica DESCONHECIDO → fail-open.
+    let lastInboundIso: string | null = null;
+    let windowResolved = false;
+    let windowSource: GovernorState["windowSource"] = null;
+    if (
+      input.instanceId && input.recipientPhone &&
+      sessionWindowApplies(instanceProvider, input.category)
+    ) {
+      try {
+        const w = await resolveSessionWindow(
+          supabaseAdmin,
+          input.orgId,
+          input.instanceId,
+          input.recipientPhone,
+        );
+        lastInboundIso = w.lastInboundIso;
+        windowResolved = w.resolved;
+        windowSource = w.source;
+      } catch {
+        windowResolved = false; // desconhecido → o core não bloqueia
+      }
+    }
+
+    // 6. Cold-contact — only when enabled + automation + a phone is known.
     let isColdContact = false;
     if (
       coldGateEnabled && input.category === "automation" && input.recipientPhone
@@ -210,6 +432,10 @@ export async function resolveGovernorState(
       usedToday,
       instanceCap,
       instanceAgeDays,
+      instanceProvider,
+      lastInboundIso,
+      windowResolved,
+      windowSource,
       reputation,
       quarantineUntil,
       isColdContact,
@@ -296,6 +522,22 @@ export async function recordDecision(
         instance_cap: state.instanceCap,
         instance_age_days: state.instanceAgeDays,
         reputation: state.reputation,
+        // P5 — o que torna o shadow DECIDÍVEL antes do flip para enforce. Sem
+        // `window_source` não dá para distinguir os dois "fechada" que exigem
+        // ações OPOSTAS: (a) contato que de fato não respondeu — a regra está
+        // certa e o enforce pode entrar; (b) TODA decisão com source null e
+        // last_inbound null — o feed de inbound oficial ainda não existe, e
+        // ligar enforce nesse estado barraria 100% da automação do canal.
+        provider: state.instanceProvider,
+        window_applies: state.instanceProvider
+          ? sessionWindowApplies(state.instanceProvider, decision.category)
+          : false,
+        window_resolved: state.windowResolved,
+        window_open: state.windowResolved
+          ? isSessionWindowOpen(state.lastInboundIso, state.nowIso)
+          : null,
+        last_inbound_at: state.lastInboundIso,
+        window_source: state.windowSource,
         recipient_hash: await hashPhone(ctx.recipientPhone),
       },
     });

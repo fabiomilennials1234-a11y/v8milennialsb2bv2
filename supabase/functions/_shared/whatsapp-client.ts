@@ -22,15 +22,28 @@ import type {
   UazapiSenderResponse,
 } from "./uazapi-types.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { normalizeSeamlessType } from "./notificame.ts";
 
 // ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
 
+/**
+ * Os providers que a factory sabe construir.
+ *
+ * ⚠️ ESTE TIPO NÃO É A ALLOWLIST DE DISPATCH. Alargá-lo diz "existe um provider
+ * para isto"; NÃO diz "o robô pode escolher este número sozinho". Quem decide o
+ * segundo são as allowlists `['uazapi','evolution']` de
+ * `_shared/whatsapp-dispatch.ts` e do wizard de Disparo, e elas continuam
+ * fechadas para `meta_cloud` e `notificame` — canal oficial só manda forma livre
+ * dentro da janela de 24h, e a janela ainda não existe.
+ */
+export type WhatsAppProviderName = "evolution" | "uazapi" | "meta_cloud" | "notificame";
+
 export type WhatsAppInstance = {
   id: string;
   organization_id: string;
-  provider: "evolution" | "uazapi" | "meta_cloud";
+  provider: WhatsAppProviderName;
   instance_name: string;
   // Evolution-only fields
   evolution_api_key?: string | null;
@@ -98,13 +111,38 @@ export type SendTemplateOptions = {
   language: string;
   /** Graph template components (header/body/button params). Provider passes through. */
   components?: unknown[];
+  /**
+   * O texto RENDERIZADO do template — o que o cliente vai ler.
+   *
+   * Opcional e informado por quem envia, porque só ele tem as duas metades: o
+   * corpo APROVADO (que veio da listagem do fornecedor) e os parâmetros que
+   * acabou de preencher. O provider recebe só nome e parâmetros, e sem isto a
+   * linha nasce sem texto — a conversa mostra "Mensagem interativa" no lugar da
+   * mensagem que saiu.
+   */
+  previewText?: string;
+  /** Rótulos dos botões do template, na ordem — só para exibir na conversa. */
+  buttonLabels?: string[];
 };
 
 export type SendMenuOptions = {
   number: string;
-  type: "button" | "list" | "poll" | "carousel";
+  type: "button" | "list" | "poll" | "carousel" | "cta";
   text: string;
+  /** Só os títulos — é o que a Uazapi aceita. */
   choices: string[];
+  /**
+   * As mesmas opções COM descrição.
+   *
+   * A Uazapi só quer título, e o proxy achatava tudo para `string[]`; a lista da
+   * Meta tem uma linha de descrição por item, e achatar a jogava fora. Campo
+   * separado para o caminho antigo continuar exatamente como era.
+   */
+  richChoices?: Array<{ title: string; description?: string }>;
+  /** Só em `list`: o texto do botão que ABRE a lista. Sem ele ela não abre. */
+  listButtonLabel?: string;
+  /** Só em `cta`: o endereço que o botão abre. */
+  ctaUrl?: string;
   footer?: string;
   selectableCount?: number;
   delay?: number;
@@ -194,6 +232,19 @@ export interface WhatsAppProvider {
 
   // Uazapi-only (Evolution throws NotSupportedError)
   sendMenu?(opts: SendMenuOptions): Promise<SendResult>;
+  /** Canal oficial (Meta) — ponto no mapa. */
+  sendLocation?(opts: {
+    number: string;
+    latitude: number;
+    longitude: number;
+    name?: string;
+    address?: string;
+  }): Promise<SendResult>;
+  /** Canal oficial (Meta) — cartão de contato. */
+  sendContact?(opts: {
+    number: string;
+    contacts: Array<{ nome: string; telefones: Array<{ numero: string; waId?: string }>; emails?: string[] }>;
+  }): Promise<SendResult>;
   sendPixButton?(opts: SendPixButtonOptions): Promise<SendResult>;
   react?(messageId: string, number: string, emoji: string): Promise<void>;
   edit?(messageId: string, number: string, newText: string): Promise<void>;
@@ -201,6 +252,35 @@ export interface WhatsAppProvider {
   deleteForAll?(messageId: string, number: string): Promise<void>;
   /** Marca mensagens como lidas. Aceita lote — o endpoint da Uazapi é por array. */
   markRead?(messageIds: string | string[]): Promise<void>;
+  /**
+   * Canal oficial (Meta) — bloqueio de contato.
+   *
+   * Bloquear impede o cliente de escrever para este número. Não é mensagem:
+   * quem implementa NÃO grava linha na conversa.
+   */
+  blockUser?(number: string): Promise<void>;
+  unblockUser?(number: string): Promise<void>;
+  /** Quem está bloqueado. A resposta É o resultado. */
+  listBlocked?(): Promise<unknown>;
+  /**
+   * A saúde do número do lado da Meta — verde, amarelo ou vermelho. Determinada
+   * pelo feedback dos clientes; vermelho é o degrau antes da limitação.
+   */
+  numberHealth?(): Promise<unknown>;
+  /**
+   * Convite de opt-in — o deep link em que o cliente ACEITA receber mensagens.
+   * O aceite fica registrado do lado da Meta: é consentimento formal, e a defesa
+   * mais direta contra os vetores de ban.
+   */
+  createSignupInvite?(convite: {
+    mensagem: string;
+    confirmacao: string;
+    nome: string;
+    politicaDePrivacidade: string;
+    site: string;
+    codigoPromocional?: string;
+  }): Promise<unknown>;
+  listSignupInvites?(limite?: number): Promise<unknown>;
   listChats?(type?: "all" | "individual" | "group"): Promise<Array<{ id: string; name?: string; isGroup?: boolean; lastMessageTimestamp?: number }>>;
   historySync?(opts: {
     chat_jid?: string;
@@ -228,7 +308,7 @@ export interface WhatsAppProvider {
   senderResume?(folderId: string): Promise<void>;
   senderStop?(folderId: string): Promise<void>;
 
-  readonly provider: "evolution" | "uazapi" | "meta_cloud";
+  readonly provider: WhatsAppProviderName;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +323,28 @@ export interface WhatsAppProvider {
  *
  * Throws if credentials are missing or RPC fails — never swallows errors.
  */
+/**
+ * O canal declarado NÃO é WhatsApp? PURO, e exportado para ser testável — o
+ * `getWhatsAppProvider` faz import dinâmico e precisa de Supabase, então o
+ * predicado ficaria fora do alcance de qualquer teste se morasse embutido nele.
+ *
+ * ⚠️ A COMPARAÇÃO PASSA POR `normalizeSeamlessType`, e essa é a correção: quem
+ * grava `provider_config.channel_type` é o `channel-finish`, com o valor que o
+ * FORNECEDOR declara em `/v1/channels` — e o canal oficial chega como
+ * `whatsapp_business_account`. A versão anterior comparava com as strings cruas
+ * `"whatsapp"`/`"wa"` e recusava justamente o caso que devia deixar passar: todo
+ * envio da primeira instância oficial de produção morreria em
+ * `is not a whatsapp channel (channel_type="whatsapp_business_account")`.
+ *
+ * Campo VAZIO devolve `false` (aceita): linha antiga, gravada antes de o campo
+ * existir, não pode parar de enviar por causa de um backstop novo.
+ */
+export function isNonWhatsAppChannelType(declaredType: string): boolean {
+  const v = (declaredType ?? "").trim();
+  if (!v) return false;
+  return normalizeSeamlessType(v) !== "whatsapp";
+}
+
 export async function getWhatsAppProvider(
   instance: WhatsAppInstance,
   supabaseAdmin: SupabaseClient,
@@ -260,6 +362,75 @@ export async function getWhatsAppProvider(
       organizationId: instance.organization_id,
       supabaseAdmin,
     });
+  }
+
+  // NotificaMe (canal OFICIAL via BSP). Resolve ANTES do kill-switch pelo mesmo
+  // motivo do Meta Cloud: `whatsapp_provider_override` é chave de pânico ENTRE OS
+  // DOIS LEGADOS e nunca pode coagir uma linha oficial para um caminho legado —
+  // fazê-lo procuraria `get_uazapi_credentials` para uma linha que não tem cofre
+  // da Uazapi, ou montaria um EvolutionProvider com chaves nulas.
+  if (instance.provider === "notificame") {
+    const cfg = (instance.provider_config ?? {}) as Record<string, unknown>;
+
+    const channelId = typeof cfg.channel_id === "string" && cfg.channel_id.trim()
+      ? cfg.channel_id.trim()
+      : null;
+    if (!channelId) {
+      // Linha oficial sem id de canal não tem `from` para o envelope. Falhar aqui
+      // é a única saída honesta: o fornecedor devolveria HTTP 200 com erro dentro.
+      throw new Error(
+        `notificame instance ${instance.id} has no provider_config.channel_id`,
+      );
+    }
+
+    // ⚠️ BACKSTOP DE ISOLAMENTO SOCIAL — espelha o throw de
+    // `buildNotificameInstanceRow`. Canal de Instagram/Facebook mora em
+    // `messaging_channels`, NÃO em `whatsapp_instances`. Se um escapasse para cá
+    // (bug de escrita, linha editada à mão), este caminho o entregaria a 13
+    // superfícies de front que só sabem falar de número — e o mandaria pela rota
+    // `/v2/channels/whatsapp/messages`, errada para ele. Recusa explícita.
+    const declaredType = typeof cfg.channel_type === "string" ? cfg.channel_type : "";
+    if (isNonWhatsAppChannelType(declaredType)) {
+      throw new Error(
+        `notificame instance ${instance.id} is not a whatsapp channel (channel_type="${declaredType}")`,
+      );
+    }
+
+    const subaccountId = typeof cfg.subaccount_id === "string" && cfg.subaccount_id.trim()
+      ? cfg.subaccount_id.trim()
+      : null;
+
+    const { NotificameProvider } = await import("./whatsapp-providers/notificame-provider.ts");
+    return new NotificameProvider({
+      organizationId: instance.organization_id,
+      channelId,
+      channelKind: "whatsapp",
+      // CONFERÊNCIA, não seleção: o cofre é buscado por organization_id. Ver
+      // `loadOrgConfig` no provider.
+      expectedSubaccountId: subaccountId,
+      instanceId: instance.id,
+      messagingChannelId: null,
+      supabaseAdmin,
+    });
+  }
+
+  // FAIL-CLOSED on any provider that isn't legacy, BEFORE the kill-switch reads
+  // the org row. Three things at once:
+  //   1. It closes the vector where `whatsapp_provider_override` (below) COERCES
+  //      a non-legacy row into uazapi (which would look up `get_uazapi_credentials`
+  //      for a row that has no vault entry) or into evolution (which would build an
+  //      EvolutionProvider with null keys). That path is reachable via
+  //      preferredInstanceId and is NOT covered by the dispatch allowlist.
+  //      `meta_cloud` and `notificame` are resolved ABOVE, so what reaches here is
+  //      a value nobody declared — a typo, a hand-edited row, a future 6th
+  //      provider — and for those the coercion vector is exactly as real.
+  //   2. It makes the `let effectiveProvider: "uazapi" | "evolution"` annotation
+  //      below HONEST — rows arrive here cast as `any`, so without it the
+  //      annotation lies, and that lie is how the hole is born silent.
+  //   3. It moves the "Unknown provider" throw ahead of any I/O.
+  // Behaviour for legacy rows: identical.
+  if (instance.provider !== "uazapi" && instance.provider !== "evolution") {
+    throw new Error(`Unknown provider: ${instance.provider}`);
   }
 
   // Sprint 3 S3.2 — kill-switch: organizations.whatsapp_provider_override

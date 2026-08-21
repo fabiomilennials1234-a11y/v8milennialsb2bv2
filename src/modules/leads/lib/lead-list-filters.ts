@@ -25,6 +25,16 @@ export interface LeadListFilterValues {
   createdFrom?: string;
   /** Instante ISO (inclusive) — limite superior de `created_at`. */
   createdTo?: string;
+  /**
+   * Recorte por atribuição. `"unassigned"` = lead sem responsável em NENHUMA
+   * das quatro colunas.
+   *
+   * As quatro, não duas: o RLS de leads e o predicado do chat consideram
+   * pre_sale, sale, sdr e closer, e elas divergem entre si em milhares de
+   * registros. Um recorte com duas listaria como "sem responsável" lead que o
+   * produto considera atribuído — e o admin atribuiria por cima do dono real.
+   */
+  filterAssignment?: "all" | "unassigned";
 }
 
 /**
@@ -52,10 +62,22 @@ function extractSearchDigits(search: string): string | null {
  * via `.eq("organization_id", …)` própria). O builder é mutado por
  * encadeamento e retornado para permitir `query = applyLeadListFilters(query, …)`.
  */
+/** Colunas que o produto considera "responsável" por um lead. */
+const RESPONSIBLE_COLUMNS = [
+  "pre_sale_responsible_id",
+  "sale_responsible_id",
+  "sdr_id",
+  "closer_id",
+] as const;
+
 export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues): Q {
   // O tipo do postgrest builder é encadeável mas difícil de anotar
   // genericamente; tratamos como `any` internamente, preservando `Q` na saída.
   let q = query as any;
+
+  if (filters.filterAssignment === "unassigned") {
+    for (const col of RESPONSIBLE_COLUMNS) q = q.is(col, null);
+  }
 
   const search = filters.searchQuery?.trim();
   if (search) {

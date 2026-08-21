@@ -14,6 +14,7 @@ import { Save, Loader2 } from "lucide-react";
 import { PlanFeatureCard } from "./PlanFeatureCard";
 import { useUpdatePlan, type Plan } from "../hooks/useMasterPlans";
 import {
+  FEATURES,
   LIMITS,
   getFeaturesByCategory,
 } from "@/modules/platform/lib/feature-registry";
@@ -113,7 +114,13 @@ export function PlanEditor({ plan }: PlanEditorProps) {
 
   const moduleFeatures = getFeaturesByCategory("modules");
   const campaignFeatures = getFeaturesByCategory("campaigns");
-  const advancedFeatures = getFeaturesByCategory("advanced");
+  // "Avançado" é tudo o que não é módulo nem campanha, e não a categoria literal
+  // "advanced". O catálogo veio do banco e traz categorias que este editor não conhece
+  // (`features`, `integrations`, ...); filtrar pela literal esconderia features vendáveis
+  // como customer_portfolio e external_cadastro.
+  const advancedFeatures = FEATURES.filter(
+    (f) => f.category !== "modules" && f.category !== "campaigns",
+  );
 
   return (
     <div className="space-y-6">

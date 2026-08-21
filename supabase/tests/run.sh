@@ -226,6 +226,192 @@
 #      motor NÃO multiplica — (TR1) afirma 2,5 e não 250. Quem quer percentual
 #      escreve `× 100` na própria árvore, e (TR3) prova que sai certo.
 #
+#  26. organizations_plan_fk_test.sql — o catálogo passa a mandar em
+#      `organizations.subscription_plan` (SCRUM-337, 20270811000000). O CHECK de
+#      8 literais permitia `basic`, nome que NUNCA existiu em
+#      `subscription_plans`: a org passava na validação e depois perdia TODAS as
+#      features no `COALESCE(sp.features, '{}')` de
+#      `org_get_features_and_limits` — apagão silencioso.
+#      Asserções de COMPORTAMENTO, não de estrutura: nenhuma pergunta "existe
+#      uma constraint chamada X" (quebra em refactor sem defeito e passaria
+#      verde com CHECK e FK vivos ao mesmo tempo). Quem mata essa ambiguidade é
+#      atribuir um plano RECÉM-CADASTRADO no catálogo — só passa se o CHECK
+#      tiver morrido. Prova ainda: plano ausente recusado no INSERT *e* no
+#      UPDATE; rename no catálogo levando a org junto (CASCADE); DELETE de plano
+#      com org recusado (RESTRICT) com o gatilho `trg_sync_org_plan_quotas`
+#      desligado e `plan_id` NULO — senão quem recusaria seria a FK ANTIGA de
+#      `plan_id` e o teste passaria sem provar nada da nova; esse isolamento é
+#      CONDICIONAL, porque a SCRUM-338 derruba a coluna `plan_id` e o gatilho
+#      junto, e nenhuma das duas fatias deve depender da ordem de merge da
+#      outra; e NULO ainda
+#      permitido, com a coluna omitida ficando NULA (sem NOT NULL, sem DEFAULT),
+#      porque `create_org_sandbox` e o edge `test-workflow-system` inserem org
+#      sem plano.
+#  27. organizations_plan_quota_sync_test.sql — a cota segue o plano VIGENTE,
+#      resolvido por NOME (SCRUM-338, 20270811000001). Exercita a porta REAL —
+#      `UPDATE organizations SET subscription_plan` deixando o gatilho agir —
+#      porque chamar `sync_org_plan_quotas()` direto provaria só que a função
+#      faz o que a função faz. Nasceu VERMELHO contra o schema antigo, na forma
+#      exata do defeito que mordeu produção em 11/08: `plan_base` ficava no
+#      plano velho (2 do free em vez de 5 do pro) porque o gatilho resolvia por
+#      `organizations.plan_id`, que só era preenchido quando NULO. Prova também
+#      que `admin_adjustment` e `purchased_addons` SOBREVIVEM à sincronização
+#      (há clientes com ajuste manual em produção), que -1 (ILIMITADO)
+#      atravessa inteiro sem virar soma, que descer de plano também move a
+#      cota, e que a coluna `plan_id` não existe mais.
+#      Cobre ainda o par que não pode colapsar: chave AUSENTE de `limits`
+#      (jsonb DEFAULT '{}') não rebaixa a cota para 0, enquanto chave presente
+#      com 0 grava 0 — sem as duas, o pulo passaria verde por dois motivos. E o
+#      ramo `subscription_plan` NULO, que só produção exercitava
+#      (`create_org_sandbox`, edge `test-workflow-system`).
+#
+#  28. inv5_public_tables_readable_by_anon_test.sql — INV-5: nenhuma tabela de
+#      `public` é legível por `anon`/`authenticated` sem RLS (20270811120000).
+#      Nasceu de seis tabelas `_bkp_%` criadas À MÃO em produção que ficaram
+#      legíveis por `anon` — uma delas com `uazapi_token`, credencial viva de
+#      envio. Terceira vez da mesma classe de defeito. A causa NÃO é "herda o
+#      GRANT do schema public": é `ALTER DEFAULT PRIVILEGES`, que faz toda
+#      tabela criada em `public` NASCER com SELECT para `anon` — o default é
+#      inseguro, e disciplina humana não fecha isso.
+#      O INV-3 não pegou por três razões, e o arquivo ataca as três: população
+#      (INV-3 só olha tabela com `organization_id`; três das seis não têm),
+#      predicado (INV-3 testa só `relrowsecurity`, mas quem expõe é GRANT **e**
+#      RLS off) e ONDE roda. Esta última é a que decide: a suíte corre contra um
+#      banco montado de `supabase/migrations/*`, onde objeto feito à mão em
+#      produção nunca existe. Por isso a fatia entrega também `pg_cron` 1x/dia
+#      rodando o MESMO detector contra o banco vivo e escrevendo em
+#      `runtime_logs`; só a suíte seria teatro para este achado.
+#      As asserções vêm em PARES: o hard-0 (schema real limpo) E a falha
+#      plantada, porque hard-0 sozinho passa verde tanto com detector correto
+#      quanto com detector que nunca devolve linha. E o par CONSERTO 1 / CONSERTO
+#      2 (ligar RLS limpa; revogar SELECT também limpa) é o que prova que o
+#      predicado é conjunção honesta — um detector que olhasse só a RLS passaria
+#      no primeiro e falharia no segundo. Cobre ainda: regressão (desligar a RLS
+#      volta a acusar, provando que se lê ESTADO e não carimbo de criação),
+#      `has_function_privilege` nome por nome nas duas funções novas (nem anon
+#      nem authenticated executam), e o alarme exercitado pelo comando LITERAL
+#      de `cron.job` — banco limpo não escreve nada (silêncio é o estado
+#      normal), banco sujo escreve UMA linha `error` sem `organization_id` e com
+#      a tabela nomeada no payload.
+#
+#  29. payment_links_test.sql — link de pagamento do billing (SCRUM-286,
+#      20270811140000). A asserção que manda é NEGATIVA: o link NÃO é
+#      recuperável do banco. Molde `generate_api_key` — guarda-se o SHA-256 de
+#      16 bytes aleatórios, nunca o texto, então dump não entrega link vivo e o
+#      Master copia o link uma única vez.
+#      Provar isso comparando hash com sha256(token) seria fraco: mostraria que
+#      o hash está certo, não que o texto está AUSENTE — uma coluna extra
+#      guardando o link passaria verde. Por isso a prova VARRE dinamicamente
+#      toda coluna de texto e jsonb das tabelas novas E de `master_audit_logs`,
+#      sem lista escrita à mão: coluna nova nasce fora de lista fixa, e é a
+#      coluna nova que vaza. Provado com dois mutantes — auditoria registrando o
+#      token, e uma coluna `raw_token` — e o segundo só é pego porque a varredura
+#      é dinâmica.
+#      O resto ataca o que custou caro neste banco no mesmo dia (23 RPCs DEFINER
+#      fechadas por escrita/leitura cross-tenant): toda função nova é exercida
+#      como `authenticated` NÃO-master e os grants vão conferidos nome por nome,
+#      porque `DROP + CREATE` devolve EXECUTE a PUBLIC. Cobre ainda: alvo
+#      coerente por CHECK (org existente exige a org, org nova a proíbe);
+#      gerar link NÃO toca a assinatura da org — a troca é no pagamento, não na
+#      proposta; política do motor herdada (Pix mensal recusado) com recusa PURA,
+#      sem linha órfã; revogação como ESTADO e não deleção; e a idempotência por
+#      (link, método), que é o que impede QR velho, entulho de cobrança no
+#      gateway e recarregar-a-página-virar-gerador-de-cobrança.
+#
+#  32. payment_links_package_test.sql — SCRUM-288 (Fatia 7): o pacote montado, o
+#      desconto manual auditável e o COMPRADOR pré-preenchido pelo Master. As
+#      asserções que mandam são NEGATIVAS: `payment_links` NÃO tem
+#      `customer_legal_name`, `customer_tax_id` nem `customer_email`. A primeira
+#      versão da fatia guardava PII ali, e essa tabela tem GRANT para `anon` e
+#      `authenticated` com UMA policy no caminho; o comprador mora em
+#      `payment_link_buyers` (item 36), fechada por REVOKE. Sem a asserção
+#      negativa, alguém recria as colunas em seis meses e nada fica vermelho.
+#      Cobre também ATOMICIDADE (comprador inválido derruba a criação do link,
+#      porque a porta LEVANTA dentro da mesma transação) e a semântica que custou
+#      duas asserções: `p_manual_final_cents` é o preço MENSAL, não o total —
+#      passar o total de um ciclo anual não dá desconto, dá aumento de 12x.
+#      DEPENDE de 20270812111845 (Fatia 8) estar aplicada: dela são a tabela e a
+#      porta `billing_prefill_link_buyer`.
+#
+#  33. payment_history_receipt_period_method_test.sql — as tres faltas de
+#      `payment_history` que travavam a area de billing do admin (SCRUM-289 /
+#      #1390, migration 20270811160000): recibo e fatura (DUAS colunas, porque
+#      sao dois documentos — a fatura existe desde a emissao, o recibo so depois
+#      da liquidacao), o PERIODO coberto (sem ele "Referente a" nao e derivavel
+#      em ciclo semestral ou anual: `paid_at` diz quando pagou, nao o que
+#      cobriu) e a forma de pagamento por linha.
+#      Alem de "a coluna existe", prova que os dois CHECK MORDEM — periodo
+#      invertido e forma fora do vocabulario do Asaas sao recusados, porque
+#      constraint que nao recusa nada e documentacao que se acha codigo — e que
+#      NULO segue valido nas cinco, que e o que impede a migration de quebrar
+#      uma ingestao que nem existe no repositorio ainda.
+#  34. payment_webhook_ledger_test.sql — o que faz a re-entrega do gateway ser
+#      inofensiva (SCRUM-287, migration 20270811220000). A entrega do Asaas e
+#      at-least-once e o `id` do evento (`evt_...`) se repete: a idempotencia ou
+#      mora no BANCO, ou o handler perde a corrida entre duas entregas
+#      simultaneas — um SELECT antes do INSERT nao protege nada quando as duas
+#      chegam no mesmo milissegundo.
+#      Prova: o mesmo evt_ duas vezes deixa UMA linha; o mesmo cupom no mesmo
+#      pagamento resgata UMA vez e no pagamento SEGUINTE resgata de novo (senao
+#      o cupom valeria uma vez na vida); tipo DESCONHECIDO tem onde ser gravado
+#      (`unknown_type`), porque devolver erro pausa a fila do provedor e derruba
+#      o recebimento de TODA a receita; e nem anon nem authenticated alcancam os
+#      dois livros — `increment_coupon_uses` deixa de ser um POST que queima uso
+#      de cupom alheio.
+#  36. payment_link_buyers_test.sql — o COMPRADOR da proposta (SCRUM-289,
+#      migration 20270812111845). A Asaas exige `cpfCnpj` para Pix e cartao, e o
+#      e-mail coletado aqui e o unico caminho pelo qual a Fatia 9 cria o admin da
+#      organizacao nova — sem persistir, o dado passa, vai para o gateway e some.
+#      Duas asserções mandam, as duas NEGATIVAS: (a) nem anon, nem authenticated,
+#      nem service_role tem GRANT na tabela de comprador — a PII fica fora do
+#      PostgREST por CONSTRUCAO, nao por policy, que e o controle que a gente
+#      pode errar; (b) varredura generica de toda coluna de texto/jsonb de
+#      `public` prova que o documento fiscal existe em UMA coluna, a que existe
+#      para guarda-lo.
+#      Cobre ainda a regressao de caminho VIVO: `provider_charge_id` passa a ser
+#      UNICO. `asaas-webhook` ja resolve o link com `.maybeSingle()` nessa busca
+#      e engole erro com 200 — duplicata seria organizacao nunca ativada, em
+#      silencio. E prova que a retentativa (mesmo link, mesmo metodo, mesma
+#      cobranca) continua REUSANDO com a segunda restricao unica no ar, que e a
+#      regressao que o UNIQUE novo introduziria sozinho.
+
+#  35. provision_existing_org_test.sql — o pagamento vira ACESSO para
+#      organizacao existente (Fatia 9, migration 20270812100000). A assercao
+#      que manda NAO e "a linha foi escrita": e que a COTA chega sem ninguem
+#      escrever cota. O provisionamento grava o NOME do plano em
+#      organizations.subscription_plan e trg_sync_org_plan_quotas (SCRUM-338)
+#      sincroniza org_quotas.plan_base sozinho — escrever cota aqui recriaria a
+#      segunda fonte de verdade que aquela fatia matou.
+#      Prova tambem: cobranca sem assinatura recusa LIMPO (ordem de chegada,
+#      nao incidente); o par CONFIRMED/RECEIVED ativa UMA vez (UNIQUE no livro,
+#      nao IF no codigo); renovar antes de vencer SOMA o ciclo em vez de jogar
+#      fora os dias pagos; e nem anon nem authenticated ativam organizacao.
+
+#  37. payment_link_paid_at_test.sql — a recusa que NUNCA acontecia.
+#      `payment_links.paid_at` era declarado, indexado e LIDO em tres pontos de
+#      decisao — e escrito em NENHUM. `billing_attach_link_charge` recusa
+#      cobranca em link ja pago pelo predicado `paid_at IS NOT NULL`; com a
+#      coluna sempre nula, aquela recusa era codigo morto.
+#      O custo era do CLIENTE: paga no Pix, recarrega a pagina, clica em cartao,
+#      e nasce uma SEGUNDA cobranca no gateway para uma proposta ja paga — a
+#      idempotencia por (link, metodo) nao salva, porque metodos diferentes sao
+#      linhas diferentes POR DESENHO.
+#      Este arquivo prova a recusa ACONTECENDO, e prova tambem que ela e PURA
+#      (nenhuma linha de cobranca nasce dela) e que a re-entrega NAO move o
+#      carimbo — vale a PRIMEIRA confirmacao, porque no cartao o RECEIVED chega
+#      32 dias depois do CONFIRMED.
+#  38. provision_new_org_test.sql — pagamento de organizacao NOVA vira
+#      organizacao + acesso (Fatia 9 parte 2, migration 20270812160000).
+#      A assercao mais grave nao e "a org nasce": e que PAGAMENTO CONFIRMADO SEM
+#      COMPRADOR NAO SOME. Vira linha BLOQUEADA e visivel no livro, com dono
+#      NULO — e ha CHECK provando que "provisionado sem dono" continua proibido,
+#      porque linha orfa e pior que ausencia. E o alarme sai UMA vez: o worker
+#      passa a cada 2 min, e repetir afogaria o sinal em vez de emitir um.
+#      Prova tambem: tudo numa transacao (org + historico + assinatura +
+#      ativacao); a COTA chega sem ninguem escrever cota (gatilho da SCRUM-338);
+#      a re-entrega NAO cria uma segunda organizacao; link de org EXISTENTE e
+#      recusado aqui, senao quem ja tem org ganharia uma segunda.
+
 #  14. assert_org_access_test.sql     — gate de tenancy dos leitores SECURITY
 #      DEFINER (#1209): membro ATIVO passa, membro DESATIVADO é BLOQUEADO (o
 #      furo: lia receita/ranking/comissão da org que o desativou), master e
@@ -233,6 +419,31 @@
 #      (ADR-0021). Inclui planted-failure: replanta a definição antiga e prova
 #      que sob ela o desativado passava e o gestor era bloqueado.
 #
+#  30. rls_inv6_definer_sem_gate_test.sql — INV-6 (SCRUM-339): nenhuma função
+#      SECURITY DEFINER em `public` alcançável por anon/authenticated pode
+#      existir sem portão de autorização no corpo. É o invariante que faltava
+#      quando, em 11/08, fechamos 23 funções com exatamente essa forma — a que
+#      deixou despachar WhatsApp pelo número da vítima, enfileirar webhook com
+#      corpo escolhido pelo atacante, escrever em `organizations` e devolver
+#      telefone de lead de qualquer organização.
+#      O recorte é por QUEM ALCANÇA, nunca por qual parâmetro a função recebe:
+#      `schedule_rule_steps_from_position` escapou de três varreduras porque
+#      recebe `whatsapp_instance_id` e não org. E NÃO exige escrita no corpo: o
+#      primeiro recorte pedia INSERT/UPDATE/DELETE, achou 9 onde havia 24, e as
+#      que faltavam eram justamente as que exfiltravam. Nasce como RATCHET
+#      (teto em rls_invariants_baseline.sql), com prova plantada em transação
+#      revertida de que morde e de que os DOIS caminhos de conserto limpam.
+#
+#  31. billing_cycle_semiannual_test.sql — `semiannual` é o nome canônico do
+#      ciclo semestral (SCRUM-289 §4.0). Prova por COMPORTAMENTO, não por
+#      estrutura: o que o banco ACEITA e o que RECUSA. Antes da migration
+#      20270811150000 o ciclo semestral não entrava com NENHUM dos dois nomes —
+#      `org_subscriptions` carregava dois CHECK contraditórios (o do baseline
+#      exigindo `semester` e o de 20270807000002 exigindo `semiannual`), ANDados
+#      numa interseção {monthly, annual}. Cobre a consequência de negócio:
+#      `pix + semiannual` volta a ser inserível, e `pix + monthly` continua
+#      recusado — abrir o semestre não afrouxou a regra do Pix.
+
 # All files run inside rolled-back transactions, so none mutates the DB.
 #
 # Env:
@@ -299,12 +510,27 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/voip_recording_playback_test.sql" \
     "$SCRIPT_DIR/voip_recording_retention_test.sql" \
     "$SCRIPT_DIR/voip_incoming_creates_call_test.sql" \
-    "$SCRIPT_DIR/whatsapp_instance_reap_queue_test.sql"
+    "$SCRIPT_DIR/whatsapp_instance_reap_queue_test.sql" \
+    "$SCRIPT_DIR/subscription_snapshot_base_layer_test.sql" \
+    "$SCRIPT_DIR/organizations_plan_fk_test.sql" \
+    "$SCRIPT_DIR/organizations_plan_quota_sync_test.sql" \
+    "$SCRIPT_DIR/inv5_public_tables_readable_by_anon_test.sql" \
+    "$SCRIPT_DIR/payment_links_test.sql" \
+    "$SCRIPT_DIR/rls_inv6_definer_sem_gate_test.sql" \
+    "$SCRIPT_DIR/billing_cycle_semiannual_test.sql" \
+    "$SCRIPT_DIR/payment_links_package_test.sql" \
+    "$SCRIPT_DIR/payment_history_receipt_period_method_test.sql" \
+    "$SCRIPT_DIR/payment_webhook_ledger_test.sql" \
+    "$SCRIPT_DIR/provision_existing_org_test.sql" \
+    "$SCRIPT_DIR/payment_link_buyers_test.sql" \
+    "$SCRIPT_DIR/payment_link_paid_at_test.sql" \
+    "$SCRIPT_DIR/provision_new_org_test.sql"
 }
 
 run_with_psql() {
   local f
   for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql metric_leads_sem_responsavel_test.sql metric_qualidade_lead_test.sql metric_negocios_perdidos_test.sql metric_tempo_resposta_test.sql metric_taxa_qualidade_test.sql metric_reunioes_no_show_test.sql metric_negocio_semantica_test.sql metric_custom_tree_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql rls_inv6_definer_sem_gate_test.sql billing_cycle_semiannual_test.sql payment_links_package_test.sql payment_history_receipt_period_method_test.sql payment_webhook_ledger_test.sql provision_existing_org_test.sql payment_link_buyers_test.sql provision_new_org_test.sql payment_link_paid_at_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces

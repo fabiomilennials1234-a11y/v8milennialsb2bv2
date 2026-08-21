@@ -41,7 +41,7 @@ describe("move-pipe-record permission gate", () => {
       const { sb, mockTable } = createMockSupabase();
       // Setup member without permission
       mockTable("team_members", [
-        { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
+        { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "member", is_active: true },
       ]);
       // Deny move_pipe_record via feature_permissions (default_value: false, no override)
       mockTable("feature_permissions", [
@@ -82,7 +82,7 @@ describe("move-pipe-record permission gate", () => {
     it("403 result body contains error and reason fields", async () => {
       const { sb, mockTable } = createMockSupabase();
       mockTable("team_members", [
-        { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
+        { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "member", is_active: true },
       ]);
       mockTable("feature_permissions", [
         { key: "pipeline.move_cards", is_admin_only: false, default_value: false },
@@ -105,7 +105,7 @@ describe("move-pipe-record permission gate", () => {
       const { sb, mockTable } = createMockSupabase();
       // Member with explicit move_pipe_record denied
       mockTable("team_members", [
-        { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
+        { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "member", is_active: true },
       ]);
       mockTable("feature_permissions", [
         { key: "pipeline.move_cards", is_admin_only: false, default_value: false },
@@ -164,7 +164,7 @@ describe("move-pipe-record permission gate", () => {
     it("returns error when user lacks permission", async () => {
       const { sb, mockTable } = createMockSupabase();
       mockTable("team_members", [
-        { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "membro", is_active: true },
+        { id: "tm1", user_id: "u-member", organization_id: "org-1", role: "member", is_active: true },
       ]);
       mockTable("feature_permissions", [
         { key: "pipeline.move_cards", is_admin_only: false, default_value: false },

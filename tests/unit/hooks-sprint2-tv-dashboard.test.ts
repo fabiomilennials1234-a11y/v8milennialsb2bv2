@@ -100,7 +100,7 @@ vi.mock("@/modules/identity/permissions/hooks/useUserRole", () => ({
 
 const mockTeamMembers = [
   { id: "tm1", name: "Closer 1", is_active: true, metric_type: "sales", role: "admin", user_id: "u1", organization_id: "org-t" },
-  { id: "tm2", name: "SDR 1", is_active: true, metric_type: "meetings", role: "membro", user_id: "u2", organization_id: "org-t" },
+  { id: "tm2", name: "SDR 1", is_active: true, metric_type: "meetings", role: "member", user_id: "u2", organization_id: "org-t" },
 ];
 
 vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({

@@ -1,0 +1,79 @@
+-- 20270811190000_revoke_anon_lead_family_dos_surface.sql
+--
+-- APLICADA EM PRODUÇÃO em 2026-08-11. Fecha as portas RESTANTES do vetor de
+-- negação de serviço; ver 20270811180000 para a primeira mitigação (as views).
+--
+-- ═══ CAUSA-RAIZ ISOLADA ═════════════════════════════════════════════════════
+--
+-- Não é recursão de policy nem estouro de pilha. É SEGMENTATION FAULT,
+-- confirmado no log do postmaster:
+--
+--   "server process (PID 3217) was terminated by signal 11: Segmentation fault"
+--
+-- A distinção é o que decide o conserto: recursão e limite de pilha o Postgres
+-- levanta como ERRO e a sessão sobrevive. Segfault é o PROCESSO morrendo — e por
+-- isso derruba o cluster inteiro em recovery, levando todos os clientes junto.
+-- Não há CHECK, guarda ou limite que conserte; ou se muda a função, ou se tira o
+-- alcance.
+--
+-- ONDE: a policy `leads_select_by_responsibility_and_permissions`, e dentro dela
+-- especificamente o termo `has_feature_permission(text, uuid)`.
+--
+-- Isolado por bissecção em transação revertida (DDL é transacional, então
+-- DROP POLICY + ROLLBACK é seguro): sem essa policy, `anon` planeja normal; dos
+-- 6 termos dela, cinco sobrevivem e este mata. Chamando a função DIRETO como
+-- `anon`, mesma morte — logo não é a RLS, é a FUNÇÃO.
+--
+-- DETALHE QUE ESTREITA MUITO: as duas variantes se comportam diferente.
+--   has_feature_permission(text)       — anon TEM execute; resolve a org do
+--                                        usuário, que para anon é NULA, e retorna
+--                                        cedo. NÃO mata.
+--   has_feature_permission(text, uuid) — com org NÃO-NULA: MATA. E `anon` nem tem
+--                                        EXECUTE nela — morre ANTES da checagem de
+--                                        permissão.
+-- É por isso que a RLS entrega o vetor: na policy, o segundo argumento é a COLUNA
+-- `organization_id`, sempre não-nula.
+--
+-- ═══ AS PORTAS ══════════════════════════════════════════════════════════════
+--
+-- Três tabelas têm policy que chama `has_feature_permission`: `leads`,
+-- `campanha_leads` e `lead_history`. Das três, `anon` lia as duas primeiras —
+-- e `campanha_leads` foi confirmada na prática: derrubou.
+--
+-- Esta migration fecha `leads` e `campanha_leads`. `lead_custom_field_values`
+-- entra por compartilhar `is_user_responsible` da mesma família.
+-- `lead_history` já não era legível por `anon`.
+--
+-- ═══ POR QUE REVOGAR NÃO TIRA NADA DE NINGUÉM ═══════════════════════════════
+--
+-- As quatro têm consumidores no código, mas TODOS em caminho autenticado: o front
+-- usa a sessão do usuário (papel `authenticated`) e as edge functions usam
+-- `service_role`. Os arquivos que importam a ANON KEY o fazem COM o JWT do usuário
+-- no header, então o papel efetivo nunca é `anon` puro. E a RLS já devolveria zero
+-- linha a `anon` de qualquer forma. O grant não entrega DADO; entrega o CRASH.
+--
+-- ═══ O QUE ISTO NÃO RESOLVE ═════════════════════════════════════════════════
+--
+-- `has_feature_permission(text, uuid)` CONTINUA morrendo. Enquanto morrer,
+-- qualquer caminho novo que a alcance como `anon` reabre o vetor — e ela é
+-- chamada por 3 policies. Fechar o segfault exigiria backtrace do processo, que
+-- está além do que dá para fazer daqui.
+--
+-- E o quintal segue grande: `anon` tem SELECT em ~234 tabelas de `public`. Isso é
+-- default do Supabase (ALTER DEFAULT PRIVILEGES concede a anon e authenticated),
+-- com a RLS como portão — ninguém escolheu tabela a tabela. A RLS protege o DADO,
+-- mas cada uma dessas tabelas é superfície de PLANO: basta uma policy que toque
+-- uma função que morre. Hoje são três; a lista de 234 é o tamanho do quintal, não
+-- do buraco.
+--
+-- A fatia estrutural — revogar `anon` em bloco, mantendo só o que a página pública
+-- de checkout precisar — transforma "cada policy é uma bomba" em "anon não alcança
+-- nada". É decisão do CTO e está registrada.
+--
+-- NÃO REPRODUZIDO EM PRODUÇÃO nenhuma vez, de propósito: reproduzir é derrubar o
+-- CRM de 99 organizações. Toda a bissecção foi feita em banco local, na mesma
+-- família de imagem de produção.
+
+REVOKE ALL ON TABLE public.leads FROM anon;
+REVOKE ALL ON TABLE public.campanha_leads FROM anon;
+REVOKE ALL ON TABLE public.lead_custom_field_values FROM anon;

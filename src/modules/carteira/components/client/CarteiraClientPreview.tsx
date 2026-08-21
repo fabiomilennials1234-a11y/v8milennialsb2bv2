@@ -1,8 +1,8 @@
-import { useNavigate } from "react-router-dom";
 import { X, MessageCircle, ExternalLink, ShoppingCart, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { formatBRL } from "@/lib/format";
 import { useClientAlerts } from "@/modules/carteira/hooks/useClientAlerts";
 import { useHealthHistory } from "@/modules/platform/hooks/useHealthHistory";
@@ -60,7 +60,6 @@ export function CarteiraClientPreview({
   onViewDetail,
   onNewOrder,
 }: CarteiraClientPreviewProps) {
-  const navigate = useNavigate();
   const { data: alerts = [], resolveAlert } = useClientAlerts(client.id);
   const { data: healthHistory = [] } = useHealthHistory(client.id);
 
@@ -258,24 +257,16 @@ export function CarteiraClientPreview({
             Novo Pedido
           </Button>
           {client?.lead_id && (
-            <Button
+            <AbrirConversaButton
+              leadId={client.lead_id}
+              phone={client.phone}
               size="sm"
               variant="outline"
               className="flex-1 gap-2 border-border hover:bg-muted hover:border-green-600/50 hover:text-green-400"
-              onClick={() => {
-                if (client.lead_id) {
-                  navigate(`/chat?lead=${client.lead_id}`);
-                } else if (client.phone) {
-                  window.open(
-                    `https://wa.me/${client.phone.replace(/\D/g, "")}`,
-                    "_blank",
-                  );
-                }
-              }}
             >
               <MessageCircle size={13} />
               WhatsApp
-            </Button>
+            </AbrirConversaButton>
           )}
         </div>
       </div>

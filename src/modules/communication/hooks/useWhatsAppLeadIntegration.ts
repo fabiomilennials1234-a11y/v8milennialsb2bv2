@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
+import { responsavelParaGravar } from "@/modules/communication/lib/lead-responsible";
 import { DEFAULT_STAGES } from "@/contracts/pipe";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
@@ -175,7 +176,23 @@ export function useCreateLeadFromWhatsApp() {
       }
 
       const normalizedPhone = normalizePhone(phone) || phone.replace(/\D/g, "");
-      const effectiveSdrId = sdrId || teamMember.id;
+
+      // ⚠️ MEMBRO VIRTUAL NÃO VAI PARA FK.
+      //
+      // Master e Gestor de Portfólio agem numa org sem serem `team_members` dela:
+      // `useCurrentTeamMember` devolve um membro VIRTUAL, com id
+      // `master-virtual-<uuid>` / `gestor-virtual-<uuid>`, e o próprio módulo diz
+      // que ele "NUNCA é persistido em FK" (ADR-0021).
+      //
+      // Este caminho gravava esse id em `responsible_id`/`sdr_id`. O banco recusa
+      // — não é sequer um uuid —, a mutation rejeita, e como nenhum chamador
+      // tratava o erro, o botão "Criar Lead" simplesmente NÃO FAZIA NADA. Medido
+      // em produção com um master em shadow na Chique (19/08).
+      //
+      // Sem responsável é melhor que com responsável inexistente: o lead nasce e
+      // alguém o assume depois. A alternativa — não deixar criar — tiraria do
+      // master a operação que ele foi lá fazer.
+      const effectiveSdrId = responsavelParaGravar(teamMember.id, sdrId);
       const effectiveDestination = destination || "qualificacao";
 
       // 1. Verificar se já existe lead com esse telefone na mesma organização
@@ -198,7 +215,7 @@ export function useCreateLeadFromWhatsApp() {
         console.log("[WhatsApp Lead] Promovendo shadow lead:", existingLead.id);
 
         // Atualizar shadow lead com dados completos
-        const effectiveSdr = sdrId || teamMember.id;
+        const effectiveSdr = responsavelParaGravar(teamMember.id, sdrId);
         await supabase
           .from("leads")
           .update({
@@ -212,7 +229,8 @@ export function useCreateLeadFromWhatsApp() {
           .eq("id", existingLead.id);
 
         // Inserir no pipe correto (mesmo fluxo de um lead novo, abaixo)
-        const effectiveSdrIdForShadow = sdrId || teamMember.id;
+        // Mesma regra do topo: id virtual não entra em FK.
+        const effectiveSdrIdForShadow = responsavelParaGravar(teamMember.id, sdrId);
 
         if (effectiveDestination === "qualificacao") {
           // Não duplicar se já estiver em confirmação ou propostas (ver `pipePresence`)
@@ -291,8 +309,24 @@ export function useCreateLeadFromWhatsApp() {
         name: pushName || `WhatsApp ${normalizedPhone.slice(-4)}`,
         phone: normalizedPhone,
         origin: origin || "whatsapp",
+        // ⚠️ OS DOIS MODELOS DE RESPONSÁVEL, e não por indecisão.
+        //
+        // A ficha do lead lê `pre_sale_responsible_id`/`sale_responsible_id` — é
+        // o que a tela rotula "Pré-venda" e "Vendas". Este caminho gravava só o
+        // par legado, e o lead nascia com esses dois campos VAZIOS na tela de
+        // quem acabou de criá-lo.
+        //
+        // O legado não pode sair junto: medido em prod, 994 leads dos últimos 30
+        // dias têm SÓ ele, e outros caminhos ainda o leem. Enquanto os dois
+        // existem, criar preenchendo um só é escolher qual tela vai mentir.
+        //
+        // `pre_sale` e não `sale`: lead que nasce no chat entra em qualificação,
+        // que é trabalho de pré-venda. Vendas fica vazio até alguém assumir o
+        // fechamento — inventar dono ali daria ao funil um closer que ninguém
+        // escolheu.
         responsible_id: effectiveSdrId,
         sdr_id: effectiveSdrId,
+        pre_sale_responsible_id: effectiveSdrId,
         notes: `Lead criado via WhatsApp`,
         organization_id: teamMember.organization_id,
       };
@@ -550,5 +584,46 @@ export function useUpdateLeadPipelineStatus() {
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["pipe_whatsapp_by_lead"] });
     },
+  });
+}
+
+/**
+ * useLeadPhone — telefone de um lead, por id. O inverso de `useLeadByPhone`.
+ *
+ * Existe para o deep-link `/chat?lead=<uuid>`: três call sites da carteira
+ * (`CarteiraClientPreview`, `ClienteDetailPage`, `Upsell`) navegam para o chat
+ * conhecendo o lead, não o telefone. O chat abre a conversa por telefone, então
+ * alguém precisa fazer a tradução.
+ *
+ * Mora aqui, e não em `leads`, pelo mesmo motivo que `useLeadByPhone`: importar
+ * o barrel de `leads` a partir do chat fecha um ciclo entre os dois módulos —
+ * o dep-cruise recusa. A entidade é de `leads`, mas a pergunta é do chat.
+ *
+ * Multi-tenant: filtra por `organization_id` explicitamente além do RLS.
+ *
+ * Devolve `null` quando o lead não existe, não é da org, ou não tem telefone.
+ * O chamador trata os três casos igual: não há conversa a abrir.
+ */
+export function useLeadPhone(leadId: string | null | undefined) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id ?? null;
+
+  return useQuery<string | null>({
+    queryKey: ["lead-phone", organizationId, leadId],
+    queryFn: async () => {
+      if (!organizationId || !leadId) return null;
+
+      const { data, error } = await supabase
+        .from("leads")
+        .select("phone")
+        .eq("id", leadId)
+        .eq("organization_id", organizationId)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data?.phone ?? null;
+    },
+    enabled: !!organizationId && !!leadId,
+    staleTime: 60_000,
   });
 }

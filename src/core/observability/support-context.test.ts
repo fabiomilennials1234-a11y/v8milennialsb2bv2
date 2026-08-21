@@ -50,7 +50,7 @@ describe("buildSupportContext", () => {
     viewport: { width: 1440, height: 900 },
     organizationId: "org-1",
     userId: "user-1",
-    role: "membro",
+    role: "member",
     sessionId: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",
   };
 
@@ -72,7 +72,7 @@ describe("buildSupportContext", () => {
     const ctx = buildSupportContext(base);
     expect(ctx.org_id).toBe("org-1");
     expect(ctx.user_id).toBe("user-1");
-    expect(ctx.role).toBe("membro");
+    expect(ctx.role).toBe("member");
   });
 
   it("anexa os erros do buffer", () => {

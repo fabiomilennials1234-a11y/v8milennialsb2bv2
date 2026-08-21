@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 
 interface PriorityLead {
   lead: {
@@ -187,15 +188,14 @@ function PriorityLeadsBase() {
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                   {item.lead.phone && (
-                    <a
-                      href={`https://wa.me/55${item.lead.phone.replace(/\D/g, "")}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="p-1.5 rounded-full bg-success/10 hover:bg-success/20 text-success transition-colors"
+                    <AbrirConversaButton
+                      leadId={item.lead.id}
+                      phone={item.lead.phone}
+                      className="p-1.5 h-auto rounded-full bg-success/10 hover:bg-success/20 text-success transition-colors"
+                      title="Abrir conversa"
                     >
                       <Phone className="w-3 h-3" />
-                    </a>
+                    </AbrirConversaButton>
                   )}
                   <div className="flex items-center gap-1 text-muted-foreground">
                     <Clock className="w-3 h-3" />

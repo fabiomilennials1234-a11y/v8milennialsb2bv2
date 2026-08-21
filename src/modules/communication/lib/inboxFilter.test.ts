@@ -15,6 +15,7 @@ let seq = 0;
 function contact(over: Partial<ChatContact> = {}): ChatContact {
   seq += 1;
   return {
+    channel: "whatsapp",
     phone_number: `5548999${String(seq).padStart(6, "0")}`,
     push_name: `Contato ${seq}`,
     last_message: "oi",
@@ -54,6 +55,25 @@ describe("applyInboxFilters — escopo", () => {
     const cs = [contact({ lead_name: "individual" }), contact({ is_group: true, lead_name: "grupo" })];
     const out = applyInboxFilters(cs, state(), ctx());
     expect(names(out)).toEqual(["individual"]);
+  });
+
+  it("remove grupos mesmo com o estado antigo pedindo showGroups", () => {
+    // O toggle "Grupos" saiu do produto (#1632): a captura já está desligada
+    // nas 104 orgs e o webhook dropa mensagem de grupo, então o que sobrava era
+    // histórico congelado atrás de um controle que o próprio membro ligava.
+    //
+    // Este caso existe porque REMOVER o controle não basta: estado antigo
+    // persistido, uma saved view ou um chamador que ainda passe o campo
+    // ressuscitariam a lista. O engine tem que recusar grupo sem consultar
+    // ninguém.
+    const cs = [contact({ lead_name: "individual" }), contact({ is_group: true, lead_name: "grupo" })];
+    const legado = { ...state(), showGroups: true } as unknown as InboxFilterState;
+    const out = applyInboxFilters(cs, legado, ctx());
+    expect(names(out)).toEqual(["individual"]); // controle positivo junto
+  });
+
+  it("showGroups não existe mais no estado padrão", () => {
+    expect("showGroups" in DEFAULT_INBOX_FILTER).toBe(false);
   });
 
   it("tab active esconde arquivadas; archived só mostra arquivadas", () => {

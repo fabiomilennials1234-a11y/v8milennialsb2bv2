@@ -16,6 +16,7 @@
 export {
   useLeads,
   useLeadsCount,
+  useLeadById,
   useCreateLead,
   useUpdateLead,
   useDeleteLead,

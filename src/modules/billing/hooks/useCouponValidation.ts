@@ -8,13 +8,18 @@ export interface CouponResult {
   error: string | null;
 }
 
+/**
+ * Estas frases são lidas por quem está com o cartão na mão. Texto sem acento na
+ * hora de pagar lê como sistema improvisado, e a página de checkout é a primeira
+ * — às vezes a única — que um não-cliente vê do produto.
+ */
 const ERROR_MESSAGES: Record<string, string> = {
-  COUPON_NOT_FOUND: "Cupom nao encontrado.",
-  COUPON_INACTIVE: "Este cupom esta inativo.",
-  COUPON_NOT_YET_VALID: "Este cupom ainda nao esta valido.",
-  COUPON_EXPIRED: "Este cupom esta expirado.",
+  COUPON_NOT_FOUND: "Cupom não encontrado.",
+  COUPON_INACTIVE: "Este cupom está inativo.",
+  COUPON_NOT_YET_VALID: "Este cupom ainda não está válido.",
+  COUPON_EXPIRED: "Este cupom está expirado.",
   COUPON_MAX_USES_REACHED: "Este cupom atingiu o limite de usos.",
-  COUPON_PLAN_NOT_ELIGIBLE: "Este cupom nao se aplica ao plano selecionado.",
+  COUPON_PLAN_NOT_ELIGIBLE: "Este cupom não se aplica ao plano selecionado.",
 };
 
 export function useCouponValidation() {

@@ -40,6 +40,7 @@ export type GovernorDecisionReason =
   | "governor_off"     // mode 'off' → inert
   | "manual_exempt"    // manual category → always allowed
   | "quarantined"      // P3 disjuntor tripped
+  | "outside_24h_window" // P5 — janela de 24h do provider oficial fechada
   | "per_number_cap"   // P1/P2 per-number daily cap reached
   | "cold_contact"     // P4 cold-contact gate
   | "allowed"          // evaluated, nothing tripped
@@ -91,6 +92,23 @@ export interface GovernorState {
   /** Number age in days (from created_at); null when unknown → no warm-up
    *  restriction (fail-open). */
   instanceAgeDays: number | null;
+  /** `whatsapp_instances.provider` do número remetente ('uazapi' | 'evolution' |
+   *  'meta_cloud' | 'notificame'), ou null quando não há instanceId / a leitura
+   *  falhou. É o que liga a P5: só provider COM janela de sessão a aplica. */
+  instanceProvider: string | null;
+  /** P5 — ISO da ÚLTIMA mensagem `incoming` daquele contato naquele canal, ou
+   *  null quando não existe nenhuma. `null` NÃO é "erro": é o fato "esse contato
+   *  nunca falou com esse número" → janela fechada. */
+  lastInboundIso: string | null;
+  /** P5 — a leitura da janela ACONTECEU e é confiável. `false` significa
+   *  DESCONHECIDO (erro de query, sem telefone, sem instância, provider sem
+   *  janela) e o core NUNCA bloqueia no desconhecido — fail-open, ao contrário
+   *  do fail-safe de `meta-cloud-window.ts`. Ver o bloco P5 em core.ts. */
+  windowResolved: boolean;
+  /** P5 — de qual tabela veio `lastInboundIso`. Só telemetria; é o que torna o
+   *  shadow DECIDÍVEL (todo decision com source null = feed de inbound não
+   *  existe ainda, não "contato frio"). */
+  windowSource: "whatsapp_messages" | "channel_messages" | null;
   /** Current reputation. On read failure → 'healthy' (fail-open). */
   reputation: ReputationState;
   /** ISO quarantine expiry, or null (indefinite when reputation quarantined). */

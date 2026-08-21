@@ -54,7 +54,7 @@ describe.skipIf(shouldSkip)('SDR mérito comparecimento — get_ranking_data', (
       {
         id: sdrA,
         organization_id: TEST_ORG_ID,
-        role: 'membro',
+        role: 'member',
         name: 'SDR Test A',
         email: `sdr-test-${sdrA.slice(0, 8)}@test.com`,
         is_active: true,
@@ -64,7 +64,7 @@ describe.skipIf(shouldSkip)('SDR mérito comparecimento — get_ranking_data', (
       {
         id: closerB,
         organization_id: TEST_ORG_ID,
-        role: 'membro',
+        role: 'member',
         name: 'Closer Test B',
         email: `closer-test-${closerB.slice(0, 8)}@test.com`,
         is_active: true,
