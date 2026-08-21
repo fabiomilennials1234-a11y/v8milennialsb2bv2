@@ -17,6 +17,7 @@ import { Kanban } from "lucide-react";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useFeaturePermissions, useIdentity, useOrganization, useUserRole } from "@/modules/identity";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
+import { useMetricsStudioEnabled } from "@/modules/analytics";
 import {
   useActiveTemporaryFunnels,
   usePermanentCustomFunnels,
@@ -76,9 +77,11 @@ export function useNavigationModel(): NavigationModel {
   const { data: permanentPipelines = [] } = usePermanentCustomFunnels();
   const { data: temporaryFunnels = [] } = useActiveTemporaryFunnels();
   const { data: metaPages } = useMetaPages();
+  const metricsStudio = useMetricsStudioEnabled();
 
   const isOutboundMember = orgType === "outbound" && userRole?.role === "member";
   const metaPagesConnected = (metaPages?.pages.length ?? 0) > 0;
+  const metricsStudioEnabled = metricsStudio.enabled;
 
   const canViewRoute = useMemo(
     () => makeCanViewRoute({ isMaster, isAdmin, featurePerms }),
@@ -149,12 +152,19 @@ export function useNavigationModel(): NavigationModel {
     const filtered = filterByPermission(
       filterByGate(
         filterByMaster(filterByOutbound(withChildren, isOutboundMember), isMaster),
-        { metaPagesConnected },
+        { metaPagesConnected, metricsStudioEnabled },
       ),
       canViewRoute,
     );
     return pruneChildren(filtered, canViewRoute);
-  }, [funisChildren, isOutboundMember, isMaster, metaPagesConnected, canViewRoute]);
+  }, [
+    funisChildren,
+    isOutboundMember,
+    isMaster,
+    metaPagesConnected,
+    metricsStudioEnabled,
+    canViewRoute,
+  ]);
 
   const pitstopGroups = useMemo(() => {
     // Membro de org outbound não tem Pitstop: o recorte dele não inclui
@@ -162,9 +172,13 @@ export function useNavigationModel(): NavigationModel {
     if (isOutboundMember) return [];
     return PITSTOP_GROUPS.map((group) => ({
       ...group,
-      items: group.items.filter((item) => canViewRoute(item.path)),
+      // O Pitstop passa pelo mesmo gate da lateral: Métricas vive aqui e
+      // continua escondida enquanto a org não estiver no rollout.
+      items: filterByGate(group.items, { metaPagesConnected, metricsStudioEnabled }).filter(
+        (item) => canViewRoute(item.path),
+      ),
     })).filter((group) => group.items.length > 0);
-  }, [canViewRoute, isOutboundMember]);
+  }, [canViewRoute, isOutboundMember, metaPagesConnected, metricsStudioEnabled]);
 
   const isActive = useMemo(
     () =>

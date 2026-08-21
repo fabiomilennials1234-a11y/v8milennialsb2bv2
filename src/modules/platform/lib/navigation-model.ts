@@ -11,6 +11,7 @@
 
 import {
   Bot,
+  ChartNoAxesCombined,
   Briefcase,
   Gift,
   Heart,
@@ -36,7 +37,6 @@ import {
   TrendingUp,
   Trophy,
   Tv,
-  Wallet,
   Workflow,
   Wrench,
   Zap,
@@ -49,7 +49,7 @@ export interface NavNode {
   /** Item só aparece para master. */
   masterOnly?: boolean;
   /** Gate de runtime resolvido pelo hook (ex.: páginas Meta conectadas). */
-  gate?: "meta_pages_connected";
+  gate?: "meta_pages_connected" | "metrics_studio_enabled";
   /** Cor própria do item — só funis customizados usam. */
   color?: string;
   /** Abre um grupo novo dentro da lista de filhos (funis customizados). */
@@ -97,13 +97,18 @@ export const TURBO_CHILDREN: NavNode[] = [
  * Fechado no estudo de navegação: mesma densidade do concorrente (6 na lateral
  * + 4 no rodapé). Ranking desceu para o Pitstop porque é consulta semanal de
  * gestor, não tela de turno. Disparos fica — é porta canônica (#904).
+ *
+ * Duas decisões que esta branch NÃO reabre, porque já eram da navegação daqui:
+ * Leads é a fonte de verdade do lead e ocupa lugar próprio (o antigo rótulo
+ * "Combustível" morreu junto); Carteira deixou de ser módulo e virou dado do
+ * lead, então não volta ao primeiro nível.
  */
 export const SIDEBAR_PRIMARY: NavNode[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
-  { label: "Carteira", icon: Wallet, path: "/upsell" },
+  { label: "Leads", icon: Fuel, path: "/leads" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: TURBO_CHILDREN },
 ];
 
@@ -138,6 +143,14 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
     title: "Gestão",
     hint: "Consulta semanal, não diária",
     items: [
+      // Métricas guarda o gate de rollout por org: sem a flag o item não
+      // aparece, porque o clique cairia na tela de "ainda não liberado".
+      {
+        label: "Métricas",
+        icon: ChartNoAxesCombined,
+        path: "/metricas",
+        gate: "metrics_studio_enabled",
+      },
       { label: "Ranking", icon: Trophy, path: "/performance" },
       { label: "Comissões", icon: DollarSign, path: "/comissoes" },
       { label: "Revisão", icon: Wrench, path: "/follow-ups" },
@@ -148,7 +161,6 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
     title: "Rotas",
     hint: "O que vivia no menu “Mais”",
     items: [
-      { label: "Combustível", icon: Fuel, path: "/leads" },
       { label: "Checklists", icon: ListChecks, path: "/checklists" },
       { label: "Templates", icon: FileText, path: "/templates" },
       { label: "Duplicatas", icon: Copy, path: "/duplicatas" },

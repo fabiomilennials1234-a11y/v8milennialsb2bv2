@@ -10,7 +10,13 @@ import {
   makeCanViewRoute,
   pruneChildren,
 } from "./navigation-filters";
-import { FUNIS_PATHS, TURBO_PATHS, type NavNode } from "./navigation-model";
+import {
+  FUNIS_PATHS,
+  PITSTOP_GROUPS,
+  SIDEBAR_PRIMARY,
+  TURBO_PATHS,
+  type NavNode,
+} from "./navigation-model";
 
 const node = (path: string, extra: Partial<NavNode> = {}): NavNode => ({
   label: path,
@@ -57,12 +63,62 @@ describe("filterByMaster", () => {
 });
 
 describe("filterByGate", () => {
+  const gates = { metaPagesConnected: false, metricsStudioEnabled: false };
+
   it("respeita o gate de páginas Meta conectadas", () => {
     const items = [node("/dashboard"), node("/atendimento/meta", { gate: "meta_pages_connected" })];
-    expect(filterByGate(items, { metaPagesConnected: false }).map((i) => i.path)).toEqual([
-      "/dashboard",
-    ]);
-    expect(filterByGate(items, { metaPagesConnected: true })).toHaveLength(2);
+    expect(filterByGate(items, gates).map((i) => i.path)).toEqual(["/dashboard"]);
+    expect(filterByGate(items, { ...gates, metaPagesConnected: true })).toHaveLength(2);
+  });
+
+  it("esconde Métricas enquanto a org não está no rollout", () => {
+    const items = [node("/performance"), node("/metricas", { gate: "metrics_studio_enabled" })];
+    expect(filterByGate(items, gates).map((i) => i.path)).toEqual(["/performance"]);
+    expect(filterByGate(items, { ...gates, metricsStudioEnabled: true })).toHaveLength(2);
+  });
+
+  it("os dois gates são independentes", () => {
+    const items = [
+      node("/atendimento/meta", { gate: "meta_pages_connected" }),
+      node("/metricas", { gate: "metrics_studio_enabled" }),
+    ];
+    const soMetrics = filterByGate(items, { metaPagesConnected: false, metricsStudioEnabled: true });
+    expect(soMetrics.map((i) => i.path)).toEqual(["/metricas"]);
+  });
+});
+
+/**
+ * Guarda de inventário. Esta branch nasceu da navegação da main, onde Carteira
+ * é módulo próprio e Leads se chama "Combustível" e vive no menu "Mais". Aqui
+ * as três decisões são outras, e um merge limpo apagaria as três em silêncio —
+ * sem conflito, sem teste vermelho. Estes casos existem para não deixar.
+ */
+describe("inventário da navegação", () => {
+  const caminhosLaterais = SIDEBAR_PRIMARY.map((item) => item.path);
+  const itensPitstop = PITSTOP_GROUPS.flatMap((group) => group.items);
+
+  it("Leads é porta própria da lateral", () => {
+    expect(caminhosLaterais).toContain("/leads");
+    expect(SIDEBAR_PRIMARY.find((item) => item.path === "/leads")?.label).toBe("Leads");
+  });
+
+  it("Carteira não voltou ao primeiro nível", () => {
+    expect(caminhosLaterais).not.toContain("/upsell");
+  });
+
+  it("o rótulo Combustível não existe mais", () => {
+    const rotulos = [...SIDEBAR_PRIMARY, ...itensPitstop].map((item) => item.label);
+    expect(rotulos).not.toContain("Combustível");
+  });
+
+  it("Métricas está no Pitstop e mantém o gate de rollout", () => {
+    const metricas = itensPitstop.find((item) => item.path === "/metricas");
+    expect(metricas).toBeDefined();
+    expect(metricas?.gate).toBe("metrics_studio_enabled");
+  });
+
+  it("a lateral tem seis portas", () => {
+    expect(SIDEBAR_PRIMARY).toHaveLength(6);
   });
 });
 
