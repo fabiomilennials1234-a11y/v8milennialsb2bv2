@@ -56,6 +56,9 @@ const VOCABULARIO_DAS_MEDIDAS = [
   // fatia 9 — Lead ≠ Negócio (20270813100000)
   "negocios_na_etapa",
   "negocios_abertos",
+  // SCRUM-391 — fatia funil (20270821170000). COMPÕE num_vendas e
+  // negocios_perdidos; não é conta nova.
+  "ganho_perda",
 ];
 
 describe("engine map — integridade contra o catálogo do motor", () => {
@@ -218,11 +221,15 @@ describe("engine map — decisões do grill", () => {
   // Ele NÃO é a defesa contra oferecer medida que o banco não tem — essa é
   // `filtrarPeloCatalogo`, testada acima. Aqui só se afirma que ninguém
   // acrescentou entrada por acidente.
-  it("G1: a oferta de fábrica é 16 medidas + 5 razões", () => {
+  it("G1: a oferta de fábrica é 17 medidas + 5 razões + 1 árvore", () => {
+    // O número sobe a cada fatia do SCRUM-311, e é isso que ele serve para
+    // dizer: medida nova sem passar por aqui é medida que ninguém contou.
     const leafs = ENGINE_METRICS.filter((m) => m.measureRef.kind === "leaf");
     const ratios = ENGINE_METRICS.filter((m) => m.measureRef.kind === "ratio");
-    expect(leafs).toHaveLength(16);
+    const trees = ENGINE_METRICS.filter((m) => m.measureRef.kind === "tree");
+    expect(leafs).toHaveLength(17);
     expect(ratios).toHaveLength(5);
+    expect(trees).toHaveLength(1);
   });
 
   it("SCRUM-311: leads_sem_responsavel não oferece corte por pessoa", () => {
@@ -297,6 +304,29 @@ describe("negócios por lead — a armadilha de 100× (SCRUM-392)", () => {
     expect(
       filtrarPeloCatalogo([daCliente], catalogoVazioDeOperandos).map((m) => m.id),
     ).toEqual(["minha_metrica"]);
+  });
+});
+
+describe("família origem — é CORTE, não medida (SCRUM-390 / G2)", () => {
+  // "Receita por origem" é Faturamento com corte `origem`; "Ranking de origem"
+  // é Leads que entraram (e Nº de vendas) com o mesmo corte. Se alguém tirar o
+  // corte dessas medidas, a família origem some da tela — e some em silêncio,
+  // porque nada no inventário aponta para cá.
+  it.each(["receita", "num_vendas", "leads_criados"])(
+    "%s oferece o corte origem",
+    (id) => {
+      const m = ENGINE_BY_ID.get(id)!;
+      expect(m.cortes).toContain("origem");
+      expect(parEhCompativel(m, "origem")).toBe(true);
+    },
+  );
+
+  it("nenhuma medida DE RECEITA por origem foi criada em paralelo", () => {
+    // Uma segunda soma de dinheiro é uma segunda verdade sobre dinheiro
+    // (ADR-0017 §1), e `receita` já tem consumidor legado.
+    const ids = ENGINE_METRICS.map((m) => m.id);
+    expect(ids).not.toContain("receita_por_origem");
+    expect(ids).not.toContain("ranking_origem");
   });
 });
 

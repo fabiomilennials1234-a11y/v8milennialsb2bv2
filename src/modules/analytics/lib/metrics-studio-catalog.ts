@@ -385,6 +385,21 @@ export const STUDIO_METRICS: StudioMetric[] = [
   },
 
   // ── Origem ───────────────────────────────────────────────────────────────
+  //
+  // ⚠ A família origem NÃO vira medida do catálogo (SCRUM-390), pela decisão G2
+  // do grill: o corte é escolha do usuário, não atributo da métrica. "Receita
+  // por origem" É Faturamento com corte `origem`; "Ranking de origem" é Leads
+  // que entraram (e Nº de vendas) com o mesmo corte.
+  //
+  // As três medidas já declaram `origem` em `cortes` no `ENGINE_METRICS`, e o
+  // motor já aceita o recorte — conferido contra `metric_catalog_measure_recortes`.
+  // Portá-las como medidas próprias criaria uma segunda soma de RECEITA, que é
+  // dinheiro (ADR-0017 §1) e tem consumidor legado (`useDashboardMetrics`,
+  // `useAnalyticsFinanceiro`). Duas somas de dinheiro é uma a mais.
+  //
+  // O teste `metrics-studio-engine-map.test.ts` guarda a promessa: se alguém
+  // tirar `origem` dos cortes dessas medidas, a família origem some da tela sem
+  // que ninguém perceba — e é isso que ele reprova.
   {
     id: "ranking_origem",
     label: "Ranking de origem",
