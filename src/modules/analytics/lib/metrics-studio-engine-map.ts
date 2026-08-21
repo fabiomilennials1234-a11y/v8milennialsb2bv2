@@ -34,6 +34,9 @@
  */
 
 import type { MeasureRef } from "@/modules/analytics/hooks/useMetricMeasure";
+// `metric-tree` é folha e só importa `metric-vocabulary` — a aresta daqui para
+// lá não fecha ciclo.
+import type { MetricTreeNode } from "@/modules/analytics/lib/metric-tree";
 import type {
   MetricFilters,
   MetricFormatId,
@@ -348,6 +351,39 @@ export const ENGINE_METRICS: EngineMetric[] = [
     cortes: ["total"],
     formatId: "percent_1",
   },
+  {
+    // SCRUM-392 — e o ponto inteiro da fatia é o que ela NÃO é.
+    //
+    // O inventário declara `negocios_por_lead` com `unit: "ratio"`, e a
+    // tentação é escrever `kind: "ratio"`. Não pode: o ramo `ratio` do motor
+    // deriva `count ÷ count` como PERCENT e multiplica por 100, enquanto o
+    // front só sufixa "%" sem multiplicar. Declarada assim, "1,35 negócios por
+    // lead" imprime "135%" — erro de 100× que nenhum teste de tipo pega.
+    //
+    // A árvore da Emenda 1 deriva `count ÷ count` como RAZÃO e nunca
+    // multiplica (asserção UN1 de `metric_custom_tree_test.sql`). Por isso
+    // `kind: "tree"`, e por isso o formato é `ratio_2`.
+    //
+    // Zero migration: os dois operandos já estão no motor, e os dois ancoram em
+    // `entradas` — aberturas de negócio na janela sobre leads que entraram na
+    // mesma janela. Dividir estoque por fluxo daria um número que muda quando
+    // alguém arrasta um card, e é justamente o que `negocios_na_etapa`
+    // (âncora `hoje`) seria aqui.
+    id: "negocios_por_lead",
+    label: "Negócios por lead",
+    measureRef: {
+      kind: "tree",
+      tree: {
+        type: "op",
+        op: "div",
+        left: { type: "measure", id: "negocios_abertos" },
+        right: { type: "measure", id: "leads_criados" },
+      },
+      format_id: "ratio_2",
+    },
+    cortes: ["total"],
+    formatId: "ratio_2",
+  },
   // ⚠ `conversao_entre_etapas` (SCRUM-316, migration 20270821120000) EXISTE no
   // motor e está DELIBERADAMENTE FORA desta lista. Não adicione.
   //
@@ -374,7 +410,22 @@ export const ENGINE_BY_ID = new Map(ENGINE_METRICS.map((m) => [m.id, m]));
 export function medidasDe(m: EngineMetric): string[] {
   if (m.measureRef.kind === "leaf") return [m.measureRef.id];
   if (m.measureRef.kind === "ratio") return [m.measureRef.num, m.measureRef.den];
+  // Árvore DE FÁBRICA (SCRUM-392): os operandos são escritos aqui, neste
+  // arquivo, e não foram validados contra catálogo nenhum na escrita — ao
+  // contrário da personalizada, que passa pelo trigger do banco. Então eles
+  // precisam ser conferidos como os de qualquer outra: devolvê-los é o que
+  // permite a `filtrarPeloCatalogo` esconder a métrica na org onde a migration
+  // do operando ainda não rodou, em vez de oferecer uma janela que levanta
+  // 22023 ao ser solta no painel.
+  if (m.measureRef.kind === "tree") return folhasDaArvore(m.measureRef.tree);
   return [];
+}
+
+/** Ids de medida nas folhas da árvore, em ordem de leitura. */
+function folhasDaArvore(node: MetricTreeNode): string[] {
+  if (node.type === "measure") return [node.id];
+  if (node.type === "op") return [...folhasDaArvore(node.left), ...folhasDaArvore(node.right)];
+  return []; // literal
 }
 
 /**
@@ -438,13 +489,21 @@ export function filtrarPeloCatalogo(
   return metrics.flatMap((m) => {
     // Personalizada não passa por aqui: a árvore dela já foi validada contra o
     // catálogo na escrita E é revalidada em runtime pelo motor.
-    if (m.measureRef.kind === "custom" || m.measureRef.kind === "tree") return [m];
+    //
+    // Árvore DE FÁBRICA passa (SCRUM-392): ela é escrita neste arquivo e não
+    // encosta em trigger nenhum, então os operandos dela têm que ser conferidos
+    // como os de qualquer outra medida. Antes desta linha, `kind: "tree"` era
+    // tratado junto de `custom` e escapava da checagem — e a primeira árvore de
+    // fábrica teria aparecido na lista lateral de TODA org, inclusive as que
+    // ainda não têm a migration do operando, prometendo número e entregando
+    // 22023.
+    if (m.measureRef.kind === "custom") return [m];
 
     const medidas = medidasDe(m);
     if (!medidas.every((id) => disponiveis.has(id))) return [];
 
-    // Razão ignora corte — o motor força `total` nos dois filhos.
-    if (m.measureRef.kind === "ratio") return [m];
+    // Razão e árvore ignoram corte — o motor força `total` nos filhos.
+    if (m.measureRef.kind === "ratio" || m.measureRef.kind === "tree") return [m];
 
     const aceitos = disponiveis.get(m.measureRef.id)!;
     const cortes = m.cortes.filter((c) => aceitos.has(c));
