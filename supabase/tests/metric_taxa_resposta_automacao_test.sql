@@ -49,16 +49,19 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.whatsapp_messages
   (id, organization_id, instance_id, message_id, remote_jid, phone_number, direction,
    message_type, content, lead_id, timestamp, status, sent_source, sent_by_ai, deleted_at) VALUES
+-- ⚠ `sent_source` é NOT NULL com DEFAULT 'manual'. Passar NULL explícito
+-- DERRUBA o default e viola a constraint — a mensagem de entrada leva 'manual',
+-- que é o que produção grava.
  (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'a-l1','x@s.w','5511910000001','outgoing','text','oi','4210ead1-0000-4000-8000-000000000001','2027-07-10 12:00-03','delivered','workflow',true,NULL),
- (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l1','x@s.w','5511910000001','incoming','text','oi!','4210ead1-0000-4000-8000-000000000001','2027-07-10 14:00-03','read',NULL,false,NULL),
+ (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l1','x@s.w','5511910000001','incoming','text','oi!','4210ead1-0000-4000-8000-000000000001','2027-07-10 14:00-03','read','manual',false,NULL),
  (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'a-l2','x@s.w','5511910000002','outgoing','text','oi','4210ead1-0000-4000-8000-000000000002','2027-07-11 12:00-03','read','workflow',true,NULL),
- (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l2','x@s.w','5511910000002','incoming','text','oi!','4210ead1-0000-4000-8000-000000000002','2027-07-15 12:00-03','read',NULL,false,NULL),
- (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l3-antes','x@s.w','5511910000003','incoming','text','ola','4210ead1-0000-4000-8000-000000000003','2027-07-11 12:00-03','read',NULL,false,NULL),
+ (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l2','x@s.w','5511910000002','incoming','text','oi!','4210ead1-0000-4000-8000-000000000002','2027-07-15 12:00-03','read','manual',false,NULL),
+ (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l3-antes','x@s.w','5511910000003','incoming','text','ola','4210ead1-0000-4000-8000-000000000003','2027-07-11 12:00-03','read','manual',false,NULL),
  (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'a-l3','x@s.w','5511910000003','outgoing','text','oi','4210ead1-0000-4000-8000-000000000003','2027-07-12 12:00-03','delivered','copilot',true,NULL),
  (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'a-l4','x@s.w','5511910000004','outgoing','text','oi','4210ead1-0000-4000-8000-000000000004','2027-07-13 12:00-03','sent','workflow',true,NULL),
- (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l4','x@s.w','5511910000004','incoming','text','oi!','4210ead1-0000-4000-8000-000000000004','2027-07-13 13:00-03','read',NULL,false,NULL),
+ (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l4','x@s.w','5511910000004','incoming','text','oi!','4210ead1-0000-4000-8000-000000000004','2027-07-13 13:00-03','read','manual',false,NULL),
  (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'a-l5','x@s.w','5511910000005','outgoing','text','oi','4210ead1-0000-4000-8000-000000000005','2027-07-14 12:00-03','delivered','manual',false,NULL),
- (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l5','x@s.w','5511910000005','incoming','text','oi!','4210ead1-0000-4000-8000-000000000005','2027-07-14 13:00-03','read',NULL,false,NULL);
+ (gen_random_uuid(),'42100000-0000-4000-8000-00000000000a',NULL,'r-l5','x@s.w','5511910000005','incoming','text','oi!','4210ead1-0000-4000-8000-000000000005','2027-07-14 13:00-03','read','manual',false,NULL);
 
 SET LOCAL session_replication_role = origin;
 
