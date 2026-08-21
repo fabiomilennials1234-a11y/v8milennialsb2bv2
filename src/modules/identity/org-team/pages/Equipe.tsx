@@ -50,6 +50,7 @@ import { useTeamMembers, useUpdateTeamMember, TeamMember } from "../hooks/useTea
 import { useOrganization } from "../hooks/useOrganization";
 import { useIdentity } from "../../auth/hooks/useIdentity";
 import { MemberPermissions } from "../components/team/MemberPermissions";
+import { ChatRestrictionCard } from "../components/team/ChatRestrictionCard";
 import { useProfiles } from "../hooks/useProfiles";
 import { useSeatUsage } from "../hooks/useSeatUsage";
 import { SeatUsageBar } from "../components/team/SeatUsageBar";
@@ -701,6 +702,10 @@ export default function Equipe() {
           </div>
         )}
       </div>
+
+      {/* Política da organização, antes da lista: é o que governa TODO membro,
+          inclusive quem ainda vai ser contratado. */}
+      <ChatRestrictionCard />
 
       {seatUsage && <SeatUsageBar usage={seatUsage} />}
       {seatUsage && !seatUsage.can_add && (

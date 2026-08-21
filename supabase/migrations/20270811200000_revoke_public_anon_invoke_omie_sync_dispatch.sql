@@ -1,0 +1,44 @@
+-- 20270811200000_revoke_public_anon_invoke_omie_sync_dispatch.sql
+--
+-- APLICADA EM PRODUÇÃO em 2026-08-11. Fecha acionamento de trabalho do sistema
+-- SEM LOGIN.
+--
+-- `invoke_omie_sync_dispatch()` — zero argumentos, SECURITY DEFINER de dono
+-- `postgres` — tinha GRANT EXPLÍCITO para `anon`, `authenticated` E `PUBLIC`.
+-- Não é privilégio default esquecido: está escrito no baseline, linha 43069.
+-- O `proacl` confirmava no banco: {=X/postgres, postgres=X, anon=X,
+-- authenticated=X, service_role=X} — o `=X` inicial é PUBLIC.
+--
+-- A ANOMALIA ESTAVA AO LADO DO PADRÃO CERTO, no mesmo trecho do baseline:
+--   GRANT ALL ON FUNCTION invoke_meta_leadgen_poll()  TO service_role;   <- correto
+--   GRANT ALL ON FUNCTION invoke_omie_sync_dispatch() TO anon;           <- esta
+--
+-- O QUE ELA FAZ: lê `cron_config` — inclusive `cron_secret` e as quatro URLs de
+-- sync do Omie (clientes, pedidos, financeiro, produtos) — e dispara o fan-out de
+-- sincronização do ERP, com `bucket_count = 30`.
+--
+-- Qualquer pessoa com a ANON KEY, que é pública e sai do bundle do frontend,
+-- fazia `POST /rest/v1/rpc/invoke_omie_sync_dispatch` e acionava a sincronização
+-- inteira do ERP. Sem login, sem cota, sem trilha de quem foi. Não vaza o segredo
+-- no retorno — mas USA o segredo para chamar as edge functions em nome do sistema.
+-- Uma requisição anônima virava 30 baldes de trabalho.
+--
+-- NÃO FOI TESTADA A EXECUÇÃO, de propósito: disparar sync de ERP contra banco que
+-- espelha produção é causar o dano para provar que ele existe. O afirmado é o
+-- medido no catálogo — grant existe, função é DEFINER, zero argumentos, corpo
+-- dispara `pg_net`.
+--
+-- POR QUE NÃO QUEBRA NADA: zero chamadores no produto (grep em `src/` e
+-- `supabase/functions/`). Quem chama é o `pg_cron`, como `postgres`, e o dono
+-- mantém EXECUTE. ACL depois: {postgres=X, service_role=X} — idêntico ao vizinho
+-- correto.
+--
+-- ESCOPO: apenas esta função, por ser a única da família alcançável SEM LOGIN.
+-- Outras 27 `invoke_*` mais a `sweep_copilot_queue` seguem executáveis por
+-- `authenticated` e aguardam decisão do CTO. A `sweep_copilot_queue` é a mais
+-- grave delas: recebe `p_lease_seconds` do chamador e, com 0, força
+-- reprocessamento de TODA conversa em voo — um POST por batch, e mensagem
+-- duplicada saindo pelo WhatsApp do cliente.
+
+REVOKE EXECUTE ON FUNCTION public.invoke_omie_sync_dispatch()
+  FROM PUBLIC, anon, authenticated;

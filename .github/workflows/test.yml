@@ -19,7 +19,13 @@ jobs:
     name: Lint & Build
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 porque o guarda de colisão de migration compara a branch
+      # contra `origin/main` (metade (b), issue #1534). No clone raso o ref da
+      # base não existe, o guarda avisa e PULA essa metade — e meia guarda que
+      # passa em silêncio é o defeito que ela existe para pegar.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -38,7 +44,9 @@ jobs:
         run: npm run lint:ratchet
       - name: Dep-cruise ratchet (no new violations vs baseline)
         run: npm run lint:deps:check
-      - name: Migration version lint (no new duplicate version prefixes)
+      - name: Migration version guard — self-test (red + negative control)
+        run: bash scripts/check-migration-versions.test.sh
+      - name: Migration version guard (no duplicates here, none colliding with the base)
         run: bash scripts/check-migration-versions.sh
       - name: Metric anti-pattern lint (ADR-0017 — no new metric root causes)
         run: bash scripts/check-metric-antipatterns.sh

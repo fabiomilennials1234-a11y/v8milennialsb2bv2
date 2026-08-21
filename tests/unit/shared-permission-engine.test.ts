@@ -66,7 +66,7 @@ describe("canUserPerformAction", () => {
 
   it("checks feature permission for member with edit_workflow", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("team_members", [{ id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true }]);
+    mockTable("team_members", [{ id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true }]);
     mockTable("feature_permissions", [{ key: "workflows.edit", is_admin_only: false, default_value: true }]);
     const result = await canUserPerformAction({
       supabase: sb,
@@ -79,7 +79,7 @@ describe("canUserPerformAction", () => {
 
   it("fallback allows for unmatched actions", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("team_members", [{ id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true }]);
+    mockTable("team_members", [{ id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true }]);
     const result = await canUserPerformAction({
       supabase: sb,
       userId: "u1",
@@ -115,7 +115,7 @@ describe("canUserAccessFeature", () => {
 
   it("checks feature_permissions for members", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("team_members", [{ id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true }]);
+    mockTable("team_members", [{ id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true }]);
     mockTable("feature_permissions", [{ key: "workflows.edit", is_admin_only: false, default_value: true }]);
     const result = await canUserAccessFeature(sb, "u1", "org-1", "workflows.edit");
     expect(result).toBe(true);
@@ -143,7 +143,7 @@ describe("Type exports", () => {
 describe("canUserPerformAction — feature-key actions", () => {
   const asMember = (mockTable: (t: string, r: unknown[]) => void) => {
     mockTable("team_members", [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ]);
   };
 
@@ -256,7 +256,7 @@ describe("canUserPerformAction — feature-key actions", () => {
 describe("canUserPerformAction — delete_lead (org permission)", () => {
   const asMember = (mockTable: (t: string, r: unknown[]) => void) => {
     mockTable("team_members", [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ]);
   };
 
@@ -484,7 +484,7 @@ describe("canUserAccessFeature — edge cases", () => {
   it("returns false when feature row is missing", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ]);
     const result = await canUserAccessFeature(sb, "u1", "org-1", "unknown.feature");
     expect(result).toBe(false);
@@ -493,7 +493,7 @@ describe("canUserAccessFeature — edge cases", () => {
   it("returns false when feature is admin_only (member)", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ]);
     mockTable("feature_permissions", [
       { key: "admin.secret", is_admin_only: true, default_value: true },
@@ -505,7 +505,7 @@ describe("canUserAccessFeature — edge cases", () => {
   it("member override enabled=true grants access even if default_value=false", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ]);
     mockTable("feature_permissions", [
       { key: "reports.view", is_admin_only: false, default_value: false },
@@ -520,7 +520,7 @@ describe("canUserAccessFeature — edge cases", () => {
   it("returns default_value=false when no override", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("team_members", [
-      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "membro", is_active: true },
+      { id: "tm1", user_id: "u1", organization_id: "org-1", role: "member", is_active: true },
     ]);
     mockTable("feature_permissions", [
       { key: "reports.view", is_admin_only: false, default_value: false },

@@ -106,7 +106,7 @@ vi.mock("@/modules/communication/lib/voiceRingback", () => ({
 }));
 
 vi.mock("@/modules/identity", () => ({
-  useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1", role: "membro" }),
+  useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1", role: "member" }),
 }));
 
 // ─── o banco, para o nome de quem liga ───────────────────────────────────────

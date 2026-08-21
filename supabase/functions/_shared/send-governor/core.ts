@@ -10,10 +10,11 @@
  *   1. category 'manual'                → allow  (manual_exempt)  [any mode]
  *   2. category 'system'               → allow  (allowed)        [exempt PR-0]
  *   3. P3 quarantine (automation|mass)  → block  (quarantined)
- *   4. category 'mass'                  → allow  (allowed)  [caps: blast_*]
- *   5. P1/P2 per-number cap (automation)→ defer  (per_number_cap)
- *   6. P4 cold gate (automation)        → block  (cold_contact)
- *   7. otherwise                        → allow  (allowed)
+ *   4. P5 janela 24h (automation|mass)  → block  (outside_24h_window)
+ *   5. category 'mass'                  → allow  (allowed)  [caps: blast_*]
+ *   6. P1/P2 per-number cap (automation)→ defer  (per_number_cap)
+ *   7. P4 cold gate (automation)        → block  (cold_contact)
+ *   8. otherwise                        → allow  (allowed)
  *
  * SHADOW OVERRIDE: when mode === 'shadow', the EFFECTIVE action is ALWAYS
  * 'allow'; the would-be block/defer is preserved in `wouldBe` (+ shadowed=true).
@@ -58,6 +59,106 @@ export function warmupCapForAge(
   else if (ageDays <= 6) ramp = 50;
   else return baseCap; // 7+ days → fully warmed, use the configured cap
   return Math.min(ramp, baseCap);
+}
+
+// ─── P5 — janela de 24h (customer service window) ────────────────────────────
+//
+// A Meta recusa TEXTO LIVRE fora da janela de 24h aberta pela última mensagem do
+// contato; só template aprovado reabre. Isso vale para qualquer canal OFICIAL —
+// hoje, no nosso parque, o do NotificaMe (BSP).
+//
+// POR QUE A REGRA EXISTE, SE A META JÁ RECUSA: ela não impede a infração — a Meta
+// é o enforcer final e nada aqui muda isso. Ela troca uma FALHA SILENCIOSA (o
+// copiloto "respondeu", o fornecedor devolveu erro, o lead nunca recebeu, e
+// ninguém soube) por um RESULTADO BOM: o envio não sai, o motivo fica em
+// `runtime_logs` com `reason='outside_24h_window'`, e quem opera descobre no
+// mesmo dia — não pela reclamação do cliente.
+//
+// POR QUE `block` E NÃO `defer`: `defer` promete "tenta de novo mais tarde", e
+// mais tarde NÃO resolve — a janela não reabre com o tempo, reabre com uma
+// mensagem do contato (ou com um template). Um `defer` aqui viraria fila de
+// retry que só envelhece e volta a bater na mesma parede.
+//
+// ONDE ENTRA NA PRECEDÊNCIA: DEPOIS da quarentena (P3 é o sinal mais forte) e
+// ANTES do atalho de `mass`. A ordem não é estética: `mass` retorna `allow` na
+// regra 5, então uma P5 colocada abaixo dela NUNCA veria disparo em massa — que
+// é justamente o caminho que produz recusa em lote num canal oficial.
+//
+// RELAÇÃO COM `meta-cloud-window.ts`: mesma pergunta ("última incoming < 24h?"),
+// dois consumidores com contratos OPOSTOS na incerteza. Lá é o caminho de envio
+// da Meta, certificado, e ele falha FECHADO (na dúvida, coage para template).
+// Aqui é o choke de TODA a automação, e a diretriz é fail-OPEN: erro de leitura
+// → deixa passar (a Meta recusa, e voltamos ao status quo), porque um governor
+// que bloqueia a frota por soluço de banco é pior do que o problema que resolve.
+// A distinção erro-vs-ausência mora em `state.windowResolved`, e é por isso que
+// esta regra NÃO reusa `isSessionOpen` (que colapsa os dois em `open:false`).
+
+/** Duração da janela de sessão. 24h é contrato da Meta, não parâmetro nosso. */
+export const SESSION_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Providers cujo envio de texto livre É governado pela janela de 24h.
+ *
+ * ALLOWLIST, e não denylist de 'uazapi': o parque tem 4 providers e vai ganhar
+ * outros. Denylist faria o PRÓXIMO provider oficial nascer SEM janela e sem
+ * ninguém perceber; allowlist faz ele nascer sem a regra e com o sintoma óbvio.
+ *
+ * 'meta_cloud' está FORA de propósito — não porque não tenha janela (tem, e é a
+ * mesma), mas porque o caminho de envio dele JÁ a aplica em
+ * `whatsapp-providers/meta-cloud-window.ts`, com coerção para template. Incluí-lo
+ * aqui criaria DUPLA GOVERNANÇA sobre o mesmo envio, com dois contratos
+ * diferentes na incerteza. Se um dia a coerção sair de lá, entra aqui.
+ */
+export const SESSION_WINDOW_PROVIDERS: ReadonlySet<string> = new Set([
+  "notificame",
+]);
+
+/** O provider deste número tem janela de sessão governada AQUI? */
+export function providerHasSessionWindow(
+  provider: string | null | undefined,
+): boolean {
+  return typeof provider === "string" &&
+    SESSION_WINDOW_PROVIDERS.has(provider);
+}
+
+/**
+ * A P5 se aplica a este envio? Predicado ÚNICO, exportado, porque duas camadas
+ * precisam da mesma resposta: o core (para decidir) e o io (para decidir se
+ * PAGA a leitura da janela). Duas cópias divergiriam, e a divergência seria
+ * silenciosa — o io deixaria de ler e o core leria `windowResolved:false` como
+ * "desconhecido", desligando a regra sem que nada ficasse vermelho.
+ *
+ * `manual` e `system` nunca chegam aqui (a precedência os libera antes), mas o
+ * predicado os recusa explicitamente: ele também é chamado do io, onde a
+ * precedência não existe. Humano no chat NUNCA é barrado por esta regra.
+ */
+export function sessionWindowApplies(
+  provider: string | null | undefined,
+  category: SendCategory,
+): boolean {
+  if (category !== "automation" && category !== "mass") return false;
+  return providerHasSessionWindow(provider);
+}
+
+/**
+ * A janela está ABERTA? Aberta ⇔ existe uma `incoming` daquele contato naquele
+ * canal há MENOS de 24h.
+ *
+ * Sem inbound (`null`) → FECHADA. Isso é fato, não erro: o contato nunca falou
+ * com este número. Timestamp impossível de parsear → FECHADA (o dado existe e
+ * está corrompido; abrir a janela na base de lixo seria inventar consentimento).
+ * O caminho de fail-open para ERRO de leitura NÃO é aqui — é `windowResolved`,
+ * avaliado por quem chama.
+ */
+export function isSessionWindowOpen(
+  lastInboundIso: string | null | undefined,
+  nowIso: string,
+): boolean {
+  if (!lastInboundIso) return false;
+  const last = Date.parse(lastInboundIso);
+  const now = Date.parse(nowIso);
+  if (Number.isNaN(last) || Number.isNaN(now)) return false;
+  return now - last < SESSION_WINDOW_MS;
 }
 
 /**
@@ -166,13 +267,30 @@ export function evaluateSend(
   // 3. P3 disjuntor: a quarantined number blocks automation AND mass.
   if (quarantineActive(state)) return decide("block", "quarantined");
 
-  // 4. Mass: only the quarantine gate applies here. Volume caps for mass are
+  // 4. P5 janela de 24h — só para provider oficial (allowlist), automation E
+  //    mass. ANTES do atalho de `mass` da regra 5: se ficasse depois, disparo em
+  //    massa por canal oficial passaria batido, que é o caso mais caro.
+  //
+  //    `windowResolved:false` = DESCONHECIDO (erro de leitura, sem telefone, sem
+  //    instância) → NÃO bloqueia. Fail-open é a diretriz do governor inteira, e
+  //    aqui ela tem custo baixo: a Meta recusa o envio de qualquer jeito, então
+  //    o pior caso do fail-open é o comportamento que já existe hoje.
+  if (sessionWindowApplies(state.instanceProvider, ctx.category)) {
+    if (
+      state.windowResolved &&
+      !isSessionWindowOpen(state.lastInboundIso, state.nowIso)
+    ) {
+      return decide("block", "outside_24h_window");
+    }
+  }
+
+  // 5. Mass: only the quarantine gate applies here. Volume caps for mass are
   //    enforced by the existing blast_* ledgers — do NOT re-implement them.
   if (ctx.category === "mass") return decide("allow", "allowed");
 
   // — automation only —
 
-  // 5. P1/P2: per-number daily cap, tightened by the warm-up ramp when enabled.
+  // 6. P1/P2: per-number daily cap, tightened by the warm-up ramp when enabled.
   const warmupCap = state.warmupEnabled
     ? warmupCapForAge(state.instanceAgeDays, state.instanceCap)
     : state.instanceCap;
@@ -181,11 +299,13 @@ export function evaluateSend(
     return decide("defer", "per_number_cap", nextDayIso(state.nowIso));
   }
 
-  // 6. P4: cold-contact gate (only when the org enabled it).
+  // 7. P4: cold-contact gate (only when the org enabled it). Num canal oficial a
+  //    P5 já cobre o caso "nunca respondeu" (janela fechada), com motivo mais
+  //    preciso; a P4 segue existindo para os providers SEM janela.
   if (state.coldGateEnabled && ctx.category === "automation" && state.isColdContact) {
     return decide("block", "cold_contact");
   }
 
-  // 7. Nothing tripped.
+  // 8. Nothing tripped.
   return decide("allow", "allowed");
 }

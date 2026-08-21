@@ -94,12 +94,60 @@ Deno.serve(
       return new Response(JSON.stringify({ error: error.message }), { status: 500, headers });
     }
 
-    const total = rows?.length ?? 0;
+    // Mídia de grupo não vai para o Storage (ver whatsapp-webhook/index.ts).
+    // O gate do webhook só impede jobs NOVOS; a fila já carrega jobs de grupo
+    // enfileirados antes dele. Resolvê-los aqui em vez de apenas pular é o que
+    // impede que travem o lote: o select é ordenado por created_at asc, então
+    // um job pulado-e-não-resolvido reapareceria em todo ciclo e bloquearia os
+    // jobs legítimos atrás dele.
+    const jobRows = rows ?? [];
+    let skippedGroups = 0;
+    let workRows = jobRows;
+
+    if (jobRows.length > 0) {
+      const { data: groupMsgs } = await supabase
+        .from("whatsapp_messages")
+        .select("message_id, instance_id")
+        .in("message_id", jobRows.map((r) => r.message_id))
+        .eq("is_group", true);
+
+      const groupKeys = new Set(
+        (groupMsgs ?? []).map((m: { message_id: string; instance_id: string }) =>
+          `${m.message_id}|${m.instance_id}`
+        ),
+      );
+
+      if (groupKeys.size > 0) {
+        const groupJobIds = jobRows
+          .filter((r) => groupKeys.has(`${r.message_id}|${r.instance_id}`))
+          .map((r) => r.id);
+
+        if (groupJobIds.length > 0) {
+          const { error: skipErr } = await supabase
+            .from("whatsapp_media_jobs")
+            .update({
+              resolved_at: new Date().toISOString(),
+              last_error: "skipped_group_media",
+            })
+            .in("id", groupJobIds);
+
+          if (skipErr) {
+            console.error("[whatsapp-media-retry] group skip stamp failed:", skipErr.message);
+          } else {
+            skippedGroups = groupJobIds.length;
+            const skipSet = new Set(groupJobIds);
+            workRows = jobRows.filter((r) => !skipSet.has(r.id));
+          }
+        }
+      }
+    }
+
+    const total = workRows.length;
     let resolved = 0;
     let stillFailing = 0;
     let exhausted = 0;
 
-    for (const row of rows ?? []) {
+    for (const row of workRows) {
       const result: MediaPersistResult = await downloadAndPersistMedia(
         supabase,
         UAZAPI_BASE_URL,
@@ -138,11 +186,23 @@ Deno.serve(
       module: "webhook",
       action: "media_retry_run",
       status: "success",
-      payloadSnapshot: { total, resolved, still_failing: stillFailing, exhausted },
+      payloadSnapshot: {
+        total,
+        resolved,
+        still_failing: stillFailing,
+        exhausted,
+        skipped_groups: skippedGroups,
+      },
     });
 
     return new Response(
-      JSON.stringify({ total, resolved, still_failing: stillFailing, exhausted }),
+      JSON.stringify({
+        total,
+        resolved,
+        still_failing: stillFailing,
+        exhausted,
+        skipped_groups: skippedGroups,
+      }),
       { status: 200, headers },
     );
   }),

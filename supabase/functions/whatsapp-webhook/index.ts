@@ -32,6 +32,7 @@ import {
   isWhatsAppCdnUrl as isWhatsAppCdnUrlShared,
   stampMediaJob,
 } from "../_shared/whatsapp-media.ts";
+import { shouldPersistMedia } from "./group-media-gate.ts";
 import { timingSafeCompare, checkRateLimitPersistent } from "../_shared/auth.ts";
 import { extractOwnerNumber } from "../_shared/whatsapp-owner.ts";
 import {
@@ -166,6 +167,7 @@ export function computeShouldTriggerCopilot(normalized: {
 
   return COPILOT_MEDIA_TYPES.has(normalized.message_type) && !!normalized.media_url;
 }
+
 
 export interface ReactionContext {
   shouldTriggerCopilot: boolean;
@@ -955,13 +957,14 @@ export async function persistMessage(
   }
 
   // Best-effort: download encrypted WhatsApp CDN media and persist to Storage.
-  if (normalized.media_url && isWhatsAppCdnUrlShared(normalized.media_url) && normalized.message_id) {
+  // Ver shouldPersistMedia — grupo não desce mídia.
+  if (shouldPersistMedia(normalized)) {
     persistMediaToStorage(
       supabase,
       instance,
-      normalized.message_id,
+      normalized.message_id!,
       normalized.message_type,
-      normalized.media_url,
+      normalized.media_url!,
     ).catch((err) => console.error(`[webhook] media persist fire-forget:`, err));
   }
 

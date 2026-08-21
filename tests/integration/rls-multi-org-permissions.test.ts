@@ -130,8 +130,11 @@ describe.skipIf(shouldSkip)('RLS Fase 2: permissions multi-org deterministic', (
     });
 
     it('retorna false para admin-only quando user é member', async () => {
+      // Era `workflows.edit`, que em PRODUÇÃO tem is_admin_only=false — a
+      // asserção descrevia a seed, não o produto. `voip.session.manage` é a
+      // única chave genuinamente admin-only do catálogo de produção.
       const { data, error } = await orgAMember.rpc('has_feature_permission', {
-        p_feature_key: 'workflows.edit',
+        p_feature_key: 'voip.session.manage',
         p_org_id: TEST_ORG_ID,
       });
       expect(error).toBeNull();

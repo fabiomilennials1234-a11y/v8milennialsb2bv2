@@ -308,12 +308,24 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
                 unreadByPhone[norm] = (unreadByPhone[norm] ?? 0) + 1;
               }
             }
+            // Sem `as ChatContact[]`: o cast escondia DOIS campos obrigatórios que
+            // este sítio nunca preencheu (`last_message_sent_source`, `is_group`).
+            // O discriminador `channel` da união `InboxContact` é literal e
+            // obrigatório justamente para que todo sítio de CONSTRUÇÃO apareça no
+            // compilador — o cast anulava esse efeito neste, o único que constrói
+            // ChatContact à mão fora da camada de dados.
             return Object.entries(unreadByPhone).map(([phone, unread]) => ({
+              channel: "whatsapp" as const,
               phone_number: phone, push_name: null, last_message: null,
               last_message_time: new Date().toISOString(), last_message_direction: null,
+              last_message_sent_source: null,
               unread_count: unread, lead_id: null, lead_name: null, conversation_id: null,
               archived_at: null, tags: [],
-            })) as ChatContact[];
+              // Este caminho conta badge de não-lidas por TELEFONE normalizado
+              // (`normalizePhone`), e um remote_jid de grupo (@g.us) não sobrevive a
+              // ele — nenhum destes contatos é grupo por construção.
+              is_group: false,
+            }));
           },
           enabled: !!organizationId && !!inst.id,
           staleTime: 5 * 60_000,

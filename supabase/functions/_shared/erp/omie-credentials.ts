@@ -1,12 +1,12 @@
 /**
  * Omie credential vault access — the ONLY module that touches
- * omie_connection_secrets. Encrypts with _shared/erp/crypto.ts (AES-256-GCM,
+ * omie_connection_secrets. Encrypts with _shared/crypto.ts (AES-256-GCM,
  * key from env OMIE_ENCRYPTION_KEY) and reads/writes via a service_role client,
  * because the table is deny-all (ADR-0020, migration 20270203000000).
  */
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { encryptSecret, decryptSecret } from "./crypto.ts";
+import { encryptSecret, decryptSecret } from "../crypto.ts";
 
 export const OMIE_ENCRYPTION_KEY_HEX = Deno.env.get("OMIE_ENCRYPTION_KEY") ?? "";
 export const OMIE_ENCRYPTION_KEY_ID = "v1";

@@ -11,7 +11,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
+import { AbrirConversaMenuItem } from "@/modules/communication/components/chat/AbrirConversaMenuItem";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { DraggableItem } from "@/contracts/pipe";
@@ -121,12 +123,6 @@ export interface LeadCardData extends DraggableItem {
   /** Responsáveis dual (pre-venda / venda) com avatar. */
   preSaleResponsible?: { name: string | null; avatar_url?: string | null } | null;
   saleResponsible?:    { name: string | null; avatar_url?: string | null } | null;
-  /**
-   * Instância WhatsApp default deste lead — pré-resolvida pelo hook que monta
-   * o Kanban. Quando presente, vai como `?instance=` na URL do chat e o
-   * shell pula `useResolveChatDeepLink`. Quando ausente, o resolver decide.
-   */
-  primaryInstanceId?: string | null;
   /** Stage atual da entry (slug). Usado p/ confirmação de reunião no funil mergeado. */
   stageKey?: string | null;
   /** Data da reunião (ISO) — funil mergeado Oportunidades. */
@@ -313,7 +309,6 @@ export const LeadCard = memo(function LeadCard({
   const origin = ORIGIN_COLORS[lead.origin || "outro"] || ORIGIN_COLORS.outro;
   const urgency = lead.urgency ? URGENCY_COLORS[lead.urgency] : null;
   const hasPhone = !!formatPhoneForWhatsApp(lead.phone ?? undefined);
-  const openWhatsApp = useOpenWhatsAppChat();
   const parsedDate = lead.date ? (lead.date instanceof Date ? lead.date : new Date(lead.date)) : null;
   const dateIndicator = config.showDate ? getDateIndicator(parsedDate) : null;
 
@@ -327,13 +322,19 @@ export const LeadCard = memo(function LeadCard({
   const itensDoMenu = (
     <>
       {hasPhone && (
-        <DropdownMenuItem
-          onClick={(e) => openWhatsApp(lead.phone ?? undefined, e, lead.primaryInstanceId ?? undefined)}
-          onMouseEnter={openWhatsApp.prefetchRoute}
-          onFocus={openWhatsApp.prefetchRoute}
-          onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined, lead.primaryInstanceId ?? undefined)}
-        >
-          <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
+        <DropdownMenuItem asChild>
+          {/* Mesmo caminho da Quick Actions Row abaixo. O `openWhatsApp` que
+              estava aqui saiu com a consolidação de main ("um caminho só para
+              falar com o lead"); este menu é refactor de develop, então nunca
+              tinha sido migrado. */}
+          <AbrirConversaButton
+            leadId={lead.id}
+            phone={lead.phone}
+            className="w-full justify-start font-normal"
+            title="Abrir WhatsApp"
+          >
+            <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
+          </AbrirConversaButton>
         </DropdownMenuItem>
       )}
       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
@@ -510,14 +511,9 @@ export const LeadCard = memo(function LeadCard({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                   {hasPhone && (
-                    <DropdownMenuItem
-                      onClick={(e) => openWhatsApp(lead.phone ?? undefined, e, lead.primaryInstanceId ?? undefined)}
-                      onMouseEnter={openWhatsApp.prefetchRoute}
-                      onFocus={openWhatsApp.prefetchRoute}
-                      onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined, lead.primaryInstanceId ?? undefined)}
-                    >
+                    <AbrirConversaMenuItem leadId={lead.id} phone={lead.phone}>
                       <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
-                    </DropdownMenuItem>
+                    </AbrirConversaMenuItem>
                   )}
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
                     <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
@@ -676,16 +672,14 @@ export const LeadCard = memo(function LeadCard({
           {(hasPhone || !!onQuickAction) && (
             <div className="flex items-center gap-1.5">
               {hasPhone && (
-                <button
-                  onClick={(e) => openWhatsApp(lead.phone ?? undefined, e, lead.primaryInstanceId ?? undefined)}
-                  onMouseEnter={openWhatsApp.prefetchRoute}
-                  onFocus={openWhatsApp.prefetchRoute}
-                  onMouseDown={() => openWhatsApp.prefetchData(lead.phone ?? undefined, lead.primaryInstanceId ?? undefined)}
-                  className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 rounded-md bg-[#25D366] hover:bg-[#1da851] text-white text-xs font-medium transition-colors"
+                <AbrirConversaButton
+                  leadId={lead.id}
+                  phone={lead.phone}
+                  className="flex items-center gap-1.5 flex-1 justify-center px-2 py-1.5 h-auto rounded-md bg-[#25D366] hover:bg-[#1da851] text-white text-xs font-medium transition-colors"
                   title="Abrir WhatsApp"
                 >
                   <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
-                </button>
+                </AbrirConversaButton>
               )}
               {onQuickAction && <QuickActionPopover onAction={onQuickAction} />}
             </div>

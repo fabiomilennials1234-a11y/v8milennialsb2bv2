@@ -254,7 +254,7 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
       const residueRows = orgRows.filter((r) => plan.unresolved.some((u) => u.id === r.id));
       try {
         const response = await openRouter.chat({
-          model: Deno.env.get("OPENROUTER_DEFAULT_MODEL") || "google/gemini-2.5-flash",
+          model: Deno.env.get("OPENROUTER_DEFAULT_MODEL") || "openai/gpt-4.1-mini",
           messages: [{ role: "user", content: buildPrompt(residueRows) }],
           max_tokens: 1200,
           temperature: 0,

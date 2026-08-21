@@ -193,9 +193,21 @@ export async function requireAuth(
       .maybeSingle();
     teamMember = data;
   } else {
-    if (options?.requireOrganization && !isMaster) {
+    // `requireOrganization` vale para TODO MUNDO, master inclusive. O
+    // `&& !isMaster` que ficava aqui era um escape com nome enganoso: um master
+    // sem organization_id no body pulava este throw, caía no fallback legado
+    // (`order('created_at').limit(1)`) com um mero console.warn, atravessava as
+    // duas redes de segurança abaixo — ambas condicionais em `!isMaster` — e saía
+    // com a org MAIS ANTIGA em que ele tem team_member. E ele tem: o
+    // `ensure_master_team_member` insere linhas reais toda vez que um master passa
+    // por `assertPermission` em qualquer org. Resultado: escrita org-scoped na org
+    // errada, em silêncio. Master é global em PERMISSÃO, nunca em ALVO.
+    // Precedente do formato correto no repo: `_shared/voip/caller.ts` ("Master
+    // must provide organization_id").
+    if (options?.requireOrganization) {
       throw new AuthError(
-        "organization_id obrigatório (edge function org-scoped; fallback por created_at é inseguro em multi-org)",
+        "organization_id obrigatório (edge function org-scoped; fallback por created_at é inseguro em multi-org). " +
+          "Vale também para usuário master: ele é global em permissão, não em alvo — precisa dizer em QUAL org está agindo.",
         400,
       );
     }

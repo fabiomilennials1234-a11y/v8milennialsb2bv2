@@ -24,7 +24,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { useOpenWhatsAppChat, formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import type { FollowUp } from "@/modules/engagement/hooks/useFollowUps";
 
 interface FollowUpCardProps {
@@ -77,7 +78,6 @@ export const FollowUpCard = memo(function FollowUpCard({
   const isDueToday = isToday(dueDate);
   const isCompleted = !!followUp.completed_at;
   const PipeIcon = followUp.source_pipe ? pipeIcons[followUp.source_pipe as keyof typeof pipeIcons] : null;
-  const openWhatsApp = useOpenWhatsAppChat();
   const hasPhone = !!formatPhoneForWhatsApp(followUp.lead?.phone);
 
   const handleCompleteWithNotes = () => {
@@ -209,18 +209,16 @@ export const FollowUpCard = memo(function FollowUpCard({
             {!isCompleted && (
               <div className="flex flex-wrap gap-1.5">
                 {hasPhone && (
-                  <Button
+                  <AbrirConversaButton
+                    leadId={followUp.lead_id}
+                    phone={followUp.lead?.phone}
                     size="sm"
                     variant="ghost"
                     className="h-7 gap-1.5 text-xs text-[#25D366] hover:text-[#25D366] hover:bg-[#25D366]/10"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openWhatsApp(followUp.lead?.phone, e);
-                    }}
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     WhatsApp
-                  </Button>
+                  </AbrirConversaButton>
                 )}
 
                 {onReschedule && (

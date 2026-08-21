@@ -16,7 +16,10 @@ export function ElevenLabsSettings() {
   const [saving, setSaving] = useState(false);
   const [apiKey, setApiKey] = useState("");
 
-  const isAdmin = role === "admin" || role === "owner";
+  // `role` é `team_members.role`, o enum `app_role`
+  // (admin|sdr|closer|agency|bdr|cliente|member). "owner" não é um valor dele,
+  // então o disjunto era inalcançável — removido sem mudar quem passa (#1541).
+  const isAdmin = role === "admin";
 
   const { data: orgData, isLoading } = useQuery({
     queryKey: ["org-elevenlabs-key", organizationId],

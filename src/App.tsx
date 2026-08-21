@@ -107,7 +107,10 @@ const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/page
 const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterDashboard")));
 const MasterOrganizations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOrganizations")));
 const MasterUsers = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterUsers")));
+// Usuários ativos por org — quem deu sinal de uso (auth.sessions), master-only
+const MasterUsuariosAtivos = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterUsuariosAtivos")));
 const MasterPlans = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterPlans")));
+const MasterPaymentLinks = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterPaymentLinks")));
 const MasterFeatures = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterFeatures")));
 const MasterAuditLogs = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterAuditLogs")));
 const MasterOperations = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterOperations")));
@@ -574,8 +577,17 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/* /chat — alias legado consolidado em /chat-whatsapp (canônico: deep-links ?phone/?instance, sidebar, prefetch/skeleton) */}
-      <Route path="/chat" element={<Navigate to="/chat-whatsapp" replace />} />
+      {/* /chat — alias legado consolidado em /chat-whatsapp (canônico: deep-links
+          ?phone/?instance, sidebar, prefetch/skeleton).
+
+          ⚠️ `to` PRECISA repassar a query string. `<Navigate to="/chat-whatsapp">`
+          sem ela descartava TODOS os params, e isso quebrava em silêncio todo
+          deep-link que passasse por aqui: o `?lead=` da carteira nunca chegava
+          ao ChatShell, e o seletor de Conversa do Lead abria na caixa errada
+          porque `?instance=` era comido no caminho. Achado só rodando o app
+          (validação ponta a ponta do mapa #1605) — nenhum teste de unidade vê
+          um redirect de rota. */}
+      <Route path="/chat" element={<NavigateComQuery to="/chat-whatsapp" />} />
       <Route
         path="/chat-whatsapp"
         element={
@@ -749,6 +761,7 @@ function AppRoutes() {
         <Route path="organizations" element={<MasterOrganizations />} />
         <Route path="users" element={<MasterUsers />} />
         <Route path="plans" element={<MasterPlans />} />
+        <Route path="payment-links" element={<MasterPaymentLinks />} />
         <Route path="features" element={<MasterFeatures />} />
         <Route path="audit-logs" element={<MasterAuditLogs />} />
         <Route path="operations" element={<MasterOperations />} />
@@ -761,6 +774,7 @@ function AppRoutes() {
         <Route path="meta-assets" element={<MasterMetaAssets />} />
         <Route path="support-tickets" element={<MasterSupportTickets />} />
         <Route path="stage-roles" element={<MasterStageRoleReview />} />
+        <Route path="usuarios-ativos" element={<MasterUsuariosAtivos />} />
       </Route>
 
       {/* Insights — área master azul (top-level, chrome próprio, sem MasterLayout) */}
@@ -779,6 +793,19 @@ function AppRoutes() {
     </Routes>
     </Suspense>
   );
+}
+
+/**
+ * `NavigateComQuery` — redirect que PRESERVA a query string.
+ *
+ * `<Navigate to="/x" />` descarta `?a=b`. Num alias de rota isso quebra todo
+ * deep-link em silêncio: nenhum erro aparece, a tela só abre sem contexto.
+ * Foi assim que `?lead=` da carteira e `?instance=` do seletor de Conversa do
+ * Lead morriam antes de chegar ao ChatShell (mapa #1605).
+ */
+function NavigateComQuery({ to }: { to: string }) {
+  const { search, hash } = useLocation();
+  return <Navigate to={`${to}${search}${hash}`} replace />;
 }
 
 const App = () => {

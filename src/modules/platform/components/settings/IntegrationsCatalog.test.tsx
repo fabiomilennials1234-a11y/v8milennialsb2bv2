@@ -38,8 +38,29 @@ vi.mock("@/modules/carteira/hooks/useTinyErp", () => ({
   useTinyErpStatus: () => ({ data: undefined }),
 }));
 
+// O catálogo importa TothSettings no topo, então o mock precisa cobrir tudo o
+// que aquela tela consome do barrel — não só o que o catálogo usa direto.
 vi.mock("@/modules/integrations", () => ({
   useOmieStatus: () => ({ data: undefined }),
+  useTothStatus: () => ({ data: undefined }),
+  useConnectToth: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDisconnectToth: () => ({ mutate: vi.fn() }),
+  useSyncTothClientes: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useSyncTothCobrancas: () => ({ mutate: vi.fn(), mutateAsync: vi.fn(), isPending: false }),
+  useUpdateTothSyncMode: () => ({ mutate: vi.fn(), isPending: false }),
+  useSimulateTothClientes: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useUpdateTothActiveWindow: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  readTothEndpoint: () => ({ verdict: "vazio", host: null, insecure: false, message: "" }),
+  canSubmitTothConnection: () => false,
+  TOTH_CAPABILITIES: {
+    pushOrder: false,
+    syncProducts: false,
+    fetchNfe: false,
+    syncClientes: true,
+    syncPedidos: false,
+    canonicalMode: false,
+    receivables: true,
+  },
 }));
 
 vi.mock("@/modules/identity", () => ({
@@ -91,16 +112,27 @@ beforeEach(() => {
 describe("IntegrationsCatalog — gate por feature", () => {
   it("integrações sem featureKey continuam visíveis mesmo com a org sem nenhuma feature paga", () => {
     // hasFeature nega tudo (só "voice_calls" é controlado pelo teste, e aqui
-    // está false) — WhatsApp, Facebook, Instagram, Google Calendar, TinyERP,
-    // Omie e ElevenLabs não têm featureKey nenhum, então o gate não se aplica.
+    // está false) — WhatsApp, Facebook, Google Calendar, TinyERP, Omie e
+    // ElevenLabs não têm featureKey nenhum, então o gate não se aplica.
     render();
     expect(screen.getByText("WhatsApp Business")).toBeInTheDocument();
     expect(screen.getByText("Facebook")).toBeInTheDocument();
-    expect(screen.getByText("Instagram")).toBeInTheDocument();
     expect(screen.getByText("Google Calendar")).toBeInTheDocument();
     expect(screen.getByText("TinyERP")).toBeInTheDocument();
     expect(screen.getByText("Omie")).toBeInTheDocument();
     expect(screen.getByText("ElevenLabs")).toBeInTheDocument();
+  });
+
+  // O card "Instagram" do caminho Graph foi REMOVIDO (decisão do CTO, 14/08/2026):
+  // ele levava ao OAuth do nosso app Meta, que não tem App Review, e a Meta
+  // respondia "esse app não está disponível". Instagram tem UMA porta agora, e ela
+  // é gated por `notificame_instagram` — com a org sem features, não aparece
+  // nenhuma. Este caso trava a remoção: sem ele, o card legado volta por descuido
+  // num merge e ninguém percebe até um cliente clicar e cair na tela de erro.
+  it("o Instagram do Graph não tem mais porta de entrada", () => {
+    render();
+    expect(screen.queryByText("Instagram")).not.toBeInTheDocument();
+    expect(screen.queryByText("Instagram (oficial)")).not.toBeInTheDocument();
   });
 
   it("TorqueCalls não aparece sem a feature voice_calls", () => {

@@ -37,6 +37,8 @@ export interface LeadsFilterParams {
    * clique no cabeçalho — três `count(*)` a mais por clique, de graça.
    */
   sort?: LeadListSort;
+  /** `"unassigned"` recorta leads sem responsável nas quatro colunas. */
+  filterAssignment?: "all" | "unassigned";
 }
 
 /**
@@ -63,17 +65,17 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, sort = DEFAULT_LEAD_SORT } = params;
+  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
 
   return useQuery({
-    // A ordem entra na chave junto com os filtros e a página: sem isso o cache
-    // devolveria a página 3 da ordem antiga como se fosse a da ordem nova.
-    // Espalhada em duas primitivas (e não como objeto) para a chave continuar
-    // legível no devtools.
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, sort.key, sort.direction],
+    // Ordem e recorte entram na chave junto com filtros e pagina. Sem sort.*,
+    // o cache devolve a pagina da ordem antiga; sem filterAssignment, mistura
+    // "todos" com "sem responsavel". Espalhados (e nao como objeto) para a
+    // chave continuar legivel no devtools.
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, sort.key, sort.direction],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -97,7 +99,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment });
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
       // paginação por OFFSET repete linha entre páginas dentro de um empate,
@@ -116,11 +118,11 @@ export function useLeads(params: LeadsFilterParams = {}) {
  * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo } = filters;
+  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment } = filters;
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo],
+    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment],
     queryFn: async () => {
       if (!organizationId) return 0;
 
@@ -128,7 +130,7 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
         .from("leads")
         .select("*", { count: "exact", head: true });
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment });
 
       const { count, error } = await query;
       if (error) throw error;
@@ -140,6 +142,57 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
 }
 
 export { LEADS_PAGE_SIZE };
+
+/**
+ * Busca UM lead pelo id, com os mesmos joins que `useLeadByPhone` traz.
+ *
+ * POR QUE EXISTE. O painel de contexto do chat sempre resolveu o lead a partir
+ * do TELEFONE (`useLeadByPhone`) — o que bastava enquanto todo canal do inbox
+ * era WhatsApp. Uma conversa de Instagram não tem telefone e mesmo assim pode
+ * ter lead: o vínculo vive em `lead_social_identities` e chega ao front já
+ * resolvido como `lead_id`. Sem este hook o painel teria o id e nenhuma forma
+ * de carregar a ficha.
+ *
+ * O shape devolvido é DELIBERADAMENTE o mesmo de `useLeadByPhone`, porque os
+ * dois alimentam exatamente os mesmos consumidores (`ContextPanelTabInfo`,
+ * header do painel). Dois shapes para o mesmo painel seria a próxima
+ * divergência.
+ *
+ * SECURITY: filtra por `organization_id` — id de lead é adivinhável o bastante
+ * para não ser credencial. `deleted_at` fora: lead na lixeira não é lead.
+ */
+export function useLeadById(leadId: string | null) {
+  const { organizationId, isReady } = useOrganization();
+
+  return useQuery({
+    queryKey: ["lead_by_id", leadId, organizationId],
+    queryFn: async () => {
+      if (!leadId || !organizationId) return null;
+
+      const { data, error } = await supabase
+        .from("leads")
+        .select(`
+          *,
+          responsible:team_members!leads_responsible_id_fkey(id, name),
+          sdr:team_members!leads_sdr_id_fkey(id, name),
+          closer:team_members!leads_closer_id_fkey(id, name),
+          lead_tags(tag:tags(id, name, color))
+        `)
+        .eq("id", leadId)
+        .eq("organization_id", organizationId)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erro ao buscar lead por id:", error);
+        return null;
+      }
+
+      return data;
+    },
+    enabled: !!leadId && !!organizationId && isReady,
+  });
+}
 
 /**
  * Create a new lead

@@ -11,7 +11,7 @@ describe("resolvePermission — pure permission resolver", () => {
   it("master → allowed for any action (even unmapped)", () => {
     const result = resolvePermission("totally_unknown_action" as never, {
       isMaster: true,
-      role: "membro",
+      role: "member",
       featurePermissions: {},
     });
     expect(result).toEqual({ allowed: true, reason: "master" });
@@ -29,7 +29,7 @@ describe("resolvePermission — pure permission resolver", () => {
   it("membro + move_pipe_record + feature enabled → allowed", () => {
     const result = resolvePermission("move_pipe_record", {
       isMaster: false,
-      role: "membro",
+      role: "member",
       featurePermissions: { "pipeline.move_cards": true },
     });
     expect(result.allowed).toBe(true);
@@ -39,7 +39,7 @@ describe("resolvePermission — pure permission resolver", () => {
   it("membro + move_pipe_record + feature disabled → denied", () => {
     const result = resolvePermission("move_pipe_record", {
       isMaster: false,
-      role: "membro",
+      role: "member",
       featurePermissions: { "pipeline.move_cards": false },
     });
     expect(result.allowed).toBe(false);
@@ -48,7 +48,7 @@ describe("resolvePermission — pure permission resolver", () => {
   it("membro + move_pipe_record + feature missing → denied (fail-closed)", () => {
     const result = resolvePermission("move_pipe_record", {
       isMaster: false,
-      role: "membro",
+      role: "member",
       featurePermissions: {},
     });
     expect(result.allowed).toBe(false);
@@ -57,7 +57,7 @@ describe("resolvePermission — pure permission resolver", () => {
   it("membro + send_message + feature enabled → allowed", () => {
     const result = resolvePermission("send_message", {
       isMaster: false,
-      role: "membro",
+      role: "member",
       featurePermissions: { "whatsapp.send_messages": true },
     });
     expect(result.allowed).toBe(true);
@@ -67,7 +67,7 @@ describe("resolvePermission — pure permission resolver", () => {
   it("membro + unmapped action → denied", () => {
     const result = resolvePermission("totally_unknown_action" as never, {
       isMaster: false,
-      role: "membro",
+      role: "member",
       featurePermissions: {},
     });
     expect(result.allowed).toBe(false);
@@ -76,7 +76,7 @@ describe("resolvePermission — pure permission resolver", () => {
   it("membro + feature action + feature enabled → allowed", () => {
     const result = resolvePermission("edit_workflow", {
       isMaster: false,
-      role: "membro",
+      role: "member",
       featurePermissions: { "workflows.edit": true },
     });
     expect(result.allowed).toBe(true);
@@ -86,7 +86,7 @@ describe("resolvePermission — pure permission resolver", () => {
   it("membro + feature action + feature disabled → denied", () => {
     const result = resolvePermission("manage_copilot", {
       isMaster: false,
-      role: "membro",
+      role: "member",
       featurePermissions: { "copilot.create": false },
     });
     expect(result.allowed).toBe(false);

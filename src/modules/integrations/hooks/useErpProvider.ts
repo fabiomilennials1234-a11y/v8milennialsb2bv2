@@ -7,6 +7,7 @@
 
 import { useMemo } from "react";
 import { useOmieStatus } from "./useOmie";
+import { useTothStatus } from "./useToth";
 import { useTinyErpStatus } from "@/modules/carteira";
 import { resolveErpProvider, type ResolvedErp } from "../lib/erp-provider";
 
@@ -17,11 +18,15 @@ export interface UseErpProviderResult extends ResolvedErp {
 export function useErpProvider(): UseErpProviderResult {
   const tinyQuery = useTinyErpStatus();
   const omieQuery = useOmieStatus();
+  const tothQuery = useTothStatus();
 
   const resolved = useMemo(
-    () => resolveErpProvider(tinyQuery.data, omieQuery.data),
-    [tinyQuery.data, omieQuery.data],
+    () => resolveErpProvider(tinyQuery.data, omieQuery.data, tothQuery.data),
+    [tinyQuery.data, omieQuery.data, tothQuery.data],
   );
 
-  return { ...resolved, isLoading: tinyQuery.isLoading || omieQuery.isLoading };
+  return {
+    ...resolved,
+    isLoading: tinyQuery.isLoading || omieQuery.isLoading || tothQuery.isLoading,
+  };
 }

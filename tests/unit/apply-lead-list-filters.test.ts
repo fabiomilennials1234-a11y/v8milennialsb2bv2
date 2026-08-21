@@ -225,3 +225,37 @@ describe("applyLeadListFilters — janela de criação (created_at)", () => {
     expect(rec.ors[0]).toContain("name.ilike.%acme%");
   });
 });
+
+describe("applyLeadListFilters — atribuição", () => {
+  // O atalho da política de isolamento (#1636) leva o admin daqui para a
+  // atribuição em massa. Sem este recorte, o diálogo diz "M leads sem
+  // responsável" e joga o admin numa lista de tudo.
+  const COLUNAS = [
+    "pre_sale_responsible_id",
+    "sale_responsible_id",
+    "sdr_id",
+    "closer_id",
+  ];
+
+  it("'unassigned' exige as QUATRO colunas de responsável nulas", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { filterAssignment: "unassigned" });
+    for (const col of COLUNAS) {
+      expect(rec.iss).toContainEqual([col, null]);
+    }
+  });
+
+  it("NÃO filtra quando a atribuição é 'all'", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { filterAssignment: "all" });
+    for (const col of COLUNAS) {
+      expect(rec.iss).not.toContainEqual([col, null]);
+    }
+  });
+
+  it("NÃO filtra quando a atribuição é omitida — controle positivo", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, {});
+    expect(rec.iss.filter(([c]) => COLUNAS.includes(c as string))).toHaveLength(0);
+  });
+});

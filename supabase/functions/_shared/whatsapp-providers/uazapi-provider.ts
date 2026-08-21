@@ -12,6 +12,11 @@
 import { UazapiClient } from "../uazapi-client.ts";
 import { extractOwnerNumber } from "../whatsapp-owner.ts";
 import { deriveDeviceName } from "../whatsapp-device-name.ts";
+import {
+  resolveManagedRegion,
+  ufFromPhone,
+  type ManagedRegion,
+} from "../whatsapp-proxy-region.ts";
 import type {
   CreateInstanceInput,
   CreateInstanceResult,
@@ -196,10 +201,57 @@ export class UazapiProvider implements WhatsAppProvider {
     });
   }
 
+  /**
+   * Resolve the regional proxy for this instance, or null to send nothing.
+   *
+   * Never throws and never blocks the connection: every failure path — no phone,
+   * non-Brazilian number, catalog unavailable, UF absent from the catalog —
+   * degrades to today's behaviour. See _shared/whatsapp-proxy-region.ts for why
+   * the granularity is state and not city.
+   */
+  private async resolveProxyRegion(
+    phone?: string
+  ): Promise<ManagedRegion | null> {
+    try {
+      let effectivePhone = phone ?? null;
+
+      // QR flow sends no phone. The instance's own stored number is the same
+      // number being paired, so it is the honest source for the region.
+      if (!effectivePhone) {
+        const { data } = await this.supabaseAdmin
+          .from("whatsapp_instances")
+          .select("phone_number")
+          .eq("id", this.instanceId)
+          .maybeSingle();
+        effectivePhone = (data?.phone_number as string | null) ?? null;
+      }
+
+      const uf = ufFromPhone(effectivePhone);
+      if (!uf) return null;
+
+      const catalog = await this.client.listProxyCities("br", uf);
+      return resolveManagedRegion({
+        phone: effectivePhone,
+        catalog: catalog?.cities ?? null,
+      });
+    } catch (e) {
+      console.warn(
+        `[uazapi] proxy region skipped for instance=${this.instanceId}: ${(e as Error).message}`
+      );
+      return null;
+    }
+  }
+
   async connectQR(
     phone?: string
   ): Promise<{ qrcode?: string; paircode?: string }> {
-    const raw: any = await this.client.connectInstance(phone);
+    const region = await this.resolveProxyRegion(phone);
+    if (region) {
+      console.log(
+        `[uazapi] connect with managed proxy region ${region.proxy_managed_state}/${region.proxy_managed_city}`
+      );
+    }
+    const raw: any = await this.client.connectInstance(phone, region ?? undefined);
     return {
       qrcode: raw.instance?.qrcode || raw.qrcode,
       paircode: raw.instance?.paircode || raw.paircode,
@@ -329,6 +381,13 @@ export class UazapiProvider implements WhatsAppProvider {
   // =========================================================================
 
   async sendMenu(opts: SendMenuOptions): Promise<SendResult> {
+    // `cta` é da Meta — um botão que abre link, sem resposta de volta. A Uazapi
+    // não o tem, e mapeá-lo para `button` entregaria ao cliente um botão que
+    // devolve texto no lugar de um que abre o navegador.
+    if (opts.type === "cta") {
+      throw new Error("uazapi does not support sendMenu(cta)");
+    }
+
     const resp = await this.client.sendMenu({
       number: opts.number,
       type: opts.type,

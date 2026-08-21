@@ -9,7 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { useOrgSwitcher } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
-import { useMasterAuth } from "@/modules/identity";
+import { useMasterAuth, MasterOnlineIndicator } from "@/modules/identity";
 import { useNavigate } from "react-router-dom";
 
 export function OrgSwitcher() {
@@ -117,6 +117,9 @@ export function OrgSwitcher() {
           <span className="text-xs font-medium">Gestor</span>
         </Button>
       )}
+
+      {/* Só o sinal: ping verde + total de usuários ativos na frota. */}
+      <MasterOnlineIndicator />
     </div>
   );
 }

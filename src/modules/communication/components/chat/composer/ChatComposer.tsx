@@ -45,6 +45,10 @@ import type { MessageTemplate } from "@/modules/communication/hooks/useMessageTe
 import type { DensityMode } from "@/modules/communication/components/chat/layout/ChatShell";
 import { ChatQuickActions } from "./ChatQuickActions";
 import { SendMenuDialog } from "./SendMenuDialog";
+import { useQueryClient } from "@tanstack/react-query";
+import { criarEnviadorUazapi, type MenuMontado } from "@/modules/communication/lib/menu-sender";
+import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
+import { sendMenu as enviarMenuNoProxy } from "@/modules/communication/lib/whatsappApi";
 import { SendPixDialog } from "./SendPixDialog";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -93,6 +97,54 @@ export function ChatComposer({
 }: ChatComposerProps) {
   const { user } = useAuth();
   const { data: teamMember } = useCurrentTeamMember();
+  const menuQueryClient = useQueryClient();
+
+  /**
+   * Quem envia o menu neste eixo. OBJETO, e montado aqui — nunca um hook
+   * passado por prop: hook por prop muda a ordem dos hooks quando o pai troca de
+   * canal, e o React aborta com "Rendered more hooks than during the previous
+   * render". Nenhum gate de tipo pega isso.
+   *
+   * A gravação da linha continua sendo do NAVEGADOR neste eixo, como sempre foi
+   * — no canal oficial quem grava é o provider, no servidor.
+   */
+  const enviadorDeMenu = criarEnviadorUazapi({
+    instanceId,
+    numero: phoneNumber,
+    aoEnviar: (inst, numero, tipo, texto, opcoes, extras) =>
+      enviarMenuNoProxy(inst, numero, tipo, texto, opcoes, extras),
+    aoGravar: async (menu: MenuMontado, messageId: string | null) => {
+      const orgId = teamMember?.organization_id;
+      // ⚠️ SEM ID DO PROVEDOR, NÃO GRAVA. Antes havia um `menu_${Date.now()}` de
+      // reserva aqui: id sintético é novo a cada tentativa, derrota a UNIQUE que
+      // é a única guarda de idempotência desta tabela, e transforma reenvio em
+      // mensagem duplicada no inbox.
+      if (!orgId || !messageId) return;
+
+      const optionsText = menu.opcoes.map((c) => `• ${c.title}`).join("\n");
+
+      await supabase.from("whatsapp_messages").upsert({
+        organization_id: orgId,
+        instance_id: instanceId,
+        message_id: messageId,
+        // ⚠️ `formatPhoneForWhatsApp` e NÃO um `replace` de não-dígitos: ela
+        // normaliza DDI e o nono dígito. Trocá-la por algo mais simples só para
+        // evitar uma aresta no dep-cruiser produziria JID errado — e mensagem
+        // gravada na conversa errada.
+        remote_jid: `${formatPhoneForWhatsApp(phoneNumber)}@s.whatsapp.net`,
+        phone_number: phoneNumber,
+        direction: "outgoing",
+        message_type: menu.tipo === "button" ? "button" : "list",
+        content: `${menu.texto}\n\n${optionsText}`,
+        status: "sent",
+        timestamp: new Date().toISOString(),
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+
+      menuQueryClient.invalidateQueries({
+        queryKey: ["whatsapp_messages", orgId, phoneNumber, instanceId],
+      });
+    },
+  });
 
   // Draft persistido — user-scoped (B1 pattern)
   const { draft: message, setDraft: setMessage } = useConversationDraft(conversationKey, user?.id);
@@ -688,8 +740,7 @@ export function ChatComposer({
       <SendMenuDialog
         open={menuDialogOpen}
         onOpenChange={setMenuDialogOpen}
-        instanceId={instanceId}
-        phoneNumber={phoneNumber}
+        enviador={enviadorDeMenu}
       />
 
       <SendPixDialog

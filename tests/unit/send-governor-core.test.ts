@@ -40,6 +40,22 @@ function state(overrides: Partial<State> = {}): State {
     quarantineUntil: null,
     isColdContact: false,
     nowIso: NOW,
+    // ── P5 (janela de 24h) ────────────────────────────────────────────────
+    // Estes quatro campos passaram a ser OBRIGATÓRIOS em `GovernorState` e este
+    // helper não os tinha. Nada ficou vermelho porque `tests/` não é
+    // type-checked (o `include` do tsconfig é `src`), então o objeto incompleto
+    // atravessava: `state.instanceProvider` chegava `undefined`,
+    // `sessionWindowApplies` devolvia false, e a P5 NUNCA era avaliada em teste
+    // nenhum. O arquivo ficava verde POR AUSÊNCIA — a regra mais nova era a
+    // única sem cobertura, e era exatamente por isso.
+    //
+    // O default é 'uazapi' de propósito: é o provider dominante do parque, ele
+    // NÃO tem janela de sessão, e assim todo caso pré-existente (P1/P2/P3/P4)
+    // segue medindo o que media. Quem quer P5 declara `instanceProvider`.
+    instanceProvider: "uazapi",
+    lastInboundIso: null,
+    windowResolved: false,
+    windowSource: null,
     ...overrides,
   };
 }
@@ -274,5 +290,147 @@ describe("SHADOW invariant — never a real block/defer", () => {
     expect(d.action).toBe("allow");
     expect(d.wouldBe).toBe("allow");
     expect(d.shadowed).toBe(false);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// P5 — janela de 24h (canal oficial)
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// A regra nasceu nesta rodada junto com o provider do NotificaMe e chegou aqui
+// SEM UM ÚNICO CASO. Ela é a única do core que depende de um fato EXTERNO ao
+// número (a última incoming daquele contato), e é a única com contrato de
+// incerteza próprio — por isso o que segue insiste em três eixos que as outras
+// regras não têm: allowlist de provider, precedência contra `mass`, e a
+// distinção erro-vs-ausência.
+
+const { isSessionWindowOpen, sessionWindowApplies, providerHasSessionWindow, SESSION_WINDOW_MS } =
+  await import("../../supabase/functions/_shared/send-governor/core.ts");
+
+describe("isSessionWindowOpen — o predicado puro", () => {
+  it("aberta enquanto a última incoming tem MENOS de 24h", () => {
+    const last = new Date(Date.parse(NOW) - 23 * 60 * 60 * 1000).toISOString();
+    expect(isSessionWindowOpen(last, NOW)).toBe(true);
+  });
+
+  it("fechada assim que completa 24h — a borda é fechada, não aberta", () => {
+    // Exatamente 24h NÃO é "menos de 24h". A fronteira é onde a Meta recusa, e
+    // um `<=` aqui mandaria o envio no exato instante em que ele passa a ser
+    // recusado — o pior lugar possível para um off-by-one.
+    const exact = new Date(Date.parse(NOW) - SESSION_WINDOW_MS).toISOString();
+    expect(isSessionWindowOpen(exact, NOW)).toBe(false);
+
+    const justInside = new Date(Date.parse(NOW) - SESSION_WINDOW_MS + 1000).toISOString();
+    expect(isSessionWindowOpen(justInside, NOW)).toBe(true);
+  });
+
+  it("sem inbound nenhum → FECHADA (é fato, não erro: o contato nunca falou)", () => {
+    expect(isSessionWindowOpen(null, NOW)).toBe(false);
+    expect(isSessionWindowOpen(undefined, NOW)).toBe(false);
+  });
+
+  it("timestamp corrompido → FECHADA (não se inventa consentimento sobre lixo)", () => {
+    expect(isSessionWindowOpen("nao-e-uma-data", NOW)).toBe(false);
+  });
+});
+
+describe("sessionWindowApplies — allowlist de provider e de categoria", () => {
+  it("só provider oficial da allowlist tem janela governada aqui", () => {
+    expect(providerHasSessionWindow("notificame")).toBe(true);
+    expect(providerHasSessionWindow("uazapi")).toBe(false);
+    expect(providerHasSessionWindow("evolution")).toBe(false);
+    // meta_cloud está FORA de propósito: o caminho de envio dele já aplica a
+    // janela com coerção para template. Incluí-lo criaria dupla governança.
+    expect(providerHasSessionWindow("meta_cloud")).toBe(false);
+    // Allowlist, não denylist: o provider que ninguém declarou nasce SEM a
+    // regra e com sintoma óbvio, em vez de nascer sem ela e em silêncio.
+    expect(providerHasSessionWindow("provider_futuro")).toBe(false);
+    expect(providerHasSessionWindow(null)).toBe(false);
+  });
+
+  it("humano NUNCA é barrado pela janela — nem manual, nem system", () => {
+    expect(sessionWindowApplies("notificame", "manual")).toBe(false);
+    expect(sessionWindowApplies("notificame", "system")).toBe(false);
+    expect(sessionWindowApplies("notificame", "automation")).toBe(true);
+    expect(sessionWindowApplies("notificame", "mass")).toBe(true);
+  });
+});
+
+describe("evaluateSend — P5 no núcleo", () => {
+  const OFICIAL = { instanceProvider: "notificame", windowResolved: true } as const;
+
+  it("bloqueia automação de canal oficial com a janela fechada", () => {
+    const d = evaluateSend(ctx(), state({ ...OFICIAL, lastInboundIso: null }));
+    expect(d.action).toBe("block");
+    expect(d.reason).toBe("outside_24h_window");
+  });
+
+  it("deixa passar quando a janela está ABERTA", () => {
+    const last = new Date(Date.parse(NOW) - 60 * 60 * 1000).toISOString();
+    const d = evaluateSend(ctx(), state({ ...OFICIAL, lastInboundIso: last }));
+    expect(d.action).toBe("allow");
+    expect(d.reason).toBe("allowed");
+  });
+
+  it("NÃO bloqueia provider sem janela, mesmo sem inbound nenhum", () => {
+    // CONTROLE NEGATIVO da allowlist: o mesmo estado que bloqueia no oficial
+    // tem que passar batido na Uazapi. Sem este caso, uma P5 que ignorasse o
+    // provider bloquearia a frota inteira e o teste acima seguiria verde.
+    const d = evaluateSend(
+      ctx(),
+      state({ instanceProvider: "uazapi", windowResolved: true, lastInboundIso: null }),
+    );
+    expect(d.action).toBe("allow");
+    expect(d.reason).toBe("allowed");
+  });
+
+  it("windowResolved:false é DESCONHECIDO e faz fail-OPEN — não bloqueia", () => {
+    // A diferença entre "não sei" e "sei que está fechada" é a razão de
+    // `windowResolved` existir. Colapsar os dois em `open:false` transformaria
+    // um soluço de banco em bloqueio da frota.
+    const d = evaluateSend(
+      ctx(),
+      state({ instanceProvider: "notificame", windowResolved: false, lastInboundIso: null }),
+    );
+    expect(d.action).toBe("allow");
+    expect(d.reason).toBe("allowed");
+  });
+
+  it("mass em canal oficial TAMBÉM é barrado — a P5 vem ANTES do atalho de mass", () => {
+    // O caso mais caro e o que a ordem de precedência protege: `mass` retorna
+    // allow na regra 5, então uma P5 colocada abaixo dela nunca veria disparo em
+    // massa — justamente o caminho que produz recusa EM LOTE num canal oficial.
+    const d = evaluateSend(ctx({ category: "mass" }), state({ ...OFICIAL, lastInboundIso: null }));
+    expect(d.action).toBe("block");
+    expect(d.reason).toBe("outside_24h_window");
+  });
+
+  it("manual em canal oficial com janela fechada PASSA — humano no chat é isento", () => {
+    const d = evaluateSend(ctx({ category: "manual" }), state({ ...OFICIAL, lastInboundIso: null }));
+    expect(d.action).toBe("allow");
+    expect(d.reason).toBe("manual_exempt");
+  });
+
+  it("quarentena (P3) vence a janela — o sinal mais forte nomeia o motivo", () => {
+    const d = evaluateSend(
+      ctx(),
+      state({ ...OFICIAL, lastInboundIso: null, reputation: "quarantined", quarantineUntil: null }),
+    );
+    expect(d.action).toBe("block");
+    expect(d.reason).toBe("quarantined");
+  });
+
+  it("mode 'off' desliga a P5 como desliga todo o resto", () => {
+    const d = evaluateSend(ctx(), state({ ...OFICIAL, lastInboundIso: null, mode: "off" }));
+    expect(d.action).toBe("allow");
+    expect(d.reason).toBe("governor_off");
+  });
+
+  it("shadow NUNCA bloqueia de verdade, mas registra o wouldBe da janela", () => {
+    const d = evaluateSend(ctx(), state({ ...OFICIAL, lastInboundIso: null, mode: "shadow" }));
+    expect(d.action).toBe("allow");
+    expect(d.wouldBe).toBe("block");
+    expect(d.reason).toBe("outside_24h_window");
+    expect(d.shadowed).toBe(true);
   });
 });

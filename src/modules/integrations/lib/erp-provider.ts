@@ -10,7 +10,7 @@
 
 import type { OmieSyncMode } from "../hooks/useOmie";
 
-export type ErpProviderId = "omie" | "tiny";
+export type ErpProviderId = "omie" | "toth" | "tiny";
 
 export interface ErpCapabilities {
   /** Push a closed sale INTO the ERP. */
@@ -51,7 +51,34 @@ export const OMIE_CAPABILITIES: ErpCapabilities = {
   receivables: false, // S8/S9
 };
 
-const ERP_PRIORITY: ErpProviderId[] = ["omie", "tiny"]; // Omie = ADR-0020 canonical layer wins
+/**
+ * Toth (SCRUM-229) — ERP on-premise. É o PRIMEIRO provider com `receivables`
+ * de verdade: `POST /cobrancas` existe e `toth-sync-cobrancas` grava em
+ * `titulos_receber`. Os outros dois declaram false porque o endpoint ainda não
+ * foi construído, não porque a tabela não exista.
+ *
+ * O resto é false por ausência de endpoint no ERP do cliente, não por decisão
+ * nossa: não há pedidos, produtos nem NF-e publicados. O fornecedor se ofereceu
+ * a construí-los; quando chegarem, é aqui que viram `true` — depois de mapeados
+ * e testados, nunca antes.
+ */
+export const TOTH_CAPABILITIES: ErpCapabilities = {
+  pushOrder: false, // integração é somente leitura
+  syncProducts: false, // sem endpoint de produtos
+  fetchNfe: false, // sem endpoint de NF-e
+  syncClientes: true, // useSyncTothClientes → toth-sync-clientes
+  syncPedidos: false, // sem endpoint de pedidos
+  canonicalMode: false, // derivado de erp_sync_mode
+  receivables: true, // useSyncTothCobrancas → toth-sync-cobrancas
+};
+
+// Ordem determinística de desempate. A ADR-0020 §3 diz que uma org conecta NO
+// MÁXIMO um ERP, então esta lista existe para um estado que não deveria
+// acontecer — e é justamente por isso que ela não pode depender de qual
+// manifesto é mais rico: seria um convite a "conectar o segundo pra ganhar a
+// capacidade". Quem estiver em mais de um recebe `multipleConnected` para poder
+// avisar.
+const ERP_PRIORITY: ErpProviderId[] = ["omie", "toth", "tiny"];
 
 export interface ErpProviderManifest {
   id: ErpProviderId;
@@ -59,7 +86,15 @@ export interface ErpProviderManifest {
   accountName: string | null;
   connectedAt: string | null;
   lastError: string | null;
-  syncMode: OmieSyncMode | null; // Omie only; null for Tiny
+  /** Omie e Toth têm modo de reconciliação; Tiny não — null. */
+  syncMode: OmieSyncMode | null;
+  /**
+   * O ERP responde sem TLS. Só o Toth pode ser `true` (é on-premise e o
+   * endereço vem do cliente); Omie e Tiny são SaaS em https fixo. Existe aqui
+   * para que qualquer superfície que mostre dado vindo do ERP possa avisar,
+   * não só a tela de conexão.
+   */
+  insecureTransport: boolean;
   capabilities: ErpCapabilities;
 }
 
@@ -67,7 +102,11 @@ export interface ResolvedErp {
   provider: ErpProviderManifest | null;
   providerId: ErpProviderId | null;
   can: (cap: keyof ErpCapabilities) => boolean;
-  bothConnected: boolean;
+  /**
+   * Mais de um ERP conectado — configuração que a ADR-0020 §3 não prevê. Era
+   * `bothConnected` quando existiam dois providers; com três, "ambos" mentiria.
+   */
+  multipleConnected: boolean;
 }
 
 // Minimal structural shapes — the real statuses are assignable to these.
@@ -80,49 +119,78 @@ interface TinyStatusLike {
 interface OmieStatusLike extends TinyStatusLike {
   erp_sync_mode: OmieSyncMode;
 }
+interface TothStatusLike {
+  connected: boolean;
+  base_url: string | null;
+  connected_at: string | null;
+  last_error: string | null;
+  erp_sync_mode: OmieSyncMode;
+  insecure_transport: boolean;
+}
 
 export function resolveErpProvider(
   tiny: TinyStatusLike | undefined,
   omie: OmieStatusLike | undefined,
+  toth?: TothStatusLike | undefined,
 ): ResolvedErp {
-  const tinyConnected = !!tiny?.connected;
-  const omieConnected = !!omie?.connected;
-  const bothConnected = tinyConnected && omieConnected;
+  // Tabela em vez de cadeia de `else if`: o quarto ERP é uma entrada aqui, não
+  // mais um ramo. Cada candidato só é construído se estiver conectado.
+  const candidates: Partial<Record<ErpProviderId, ErpProviderManifest>> = {};
 
-  const providerId: ErpProviderId | null = ERP_PRIORITY.find(
-    (id) => (id === "omie" && omieConnected) || (id === "tiny" && tinyConnected),
-  ) ?? null;
-
-  let provider: ErpProviderManifest | null = null;
-  if (providerId === "omie" && omie) {
-    provider = {
+  if (omie?.connected) {
+    candidates.omie = {
       id: "omie",
       label: "Omie",
       accountName: omie.account_name,
       connectedAt: omie.connected_at,
       lastError: omie.last_error,
       syncMode: omie.erp_sync_mode,
+      insecureTransport: false,
       capabilities: {
         ...OMIE_CAPABILITIES,
         canonicalMode: omie.erp_sync_mode === "canonical",
       },
     };
-  } else if (providerId === "tiny" && tiny) {
-    provider = {
+  }
+
+  if (toth?.connected) {
+    candidates.toth = {
+      id: "toth",
+      label: "Toth",
+      // O Toth não tem "conta": a identidade da conexão é o endereço do
+      // servidor do cliente. É isso que a UI mostra.
+      accountName: toth.base_url,
+      connectedAt: toth.connected_at,
+      lastError: toth.last_error,
+      syncMode: toth.erp_sync_mode,
+      insecureTransport: toth.insecure_transport,
+      capabilities: {
+        ...TOTH_CAPABILITIES,
+        canonicalMode: toth.erp_sync_mode === "canonical",
+      },
+    };
+  }
+
+  if (tiny?.connected) {
+    candidates.tiny = {
       id: "tiny",
       label: "TinyERP",
       accountName: tiny.account_name,
       connectedAt: tiny.connected_at,
       lastError: tiny.last_error,
       syncMode: null,
+      insecureTransport: false,
       capabilities: { ...TINY_CAPABILITIES },
     };
   }
 
+  const connectedIds = ERP_PRIORITY.filter((id) => candidates[id]);
+  const provider = connectedIds.length > 0 ? candidates[connectedIds[0]]! : null;
+
   return {
     provider,
-    providerId,
+    providerId: provider?.id ?? null,
     can: (cap) => provider?.capabilities[cap] ?? false,
-    bothConnected,
+    multipleConnected: connectedIds.length > 1,
   };
 }

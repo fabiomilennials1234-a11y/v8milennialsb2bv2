@@ -113,3 +113,10 @@ scripts/recovery/
 
 # ESLint cache — ratchet local (scripts/lint-ratchet.cjs). Nunca commitado.
 .eslintcache
+# Credenciais de ferramenta local. Os padrões `.env*` acima NÃO pegam nomes como
+# `.jira.env` — o `.env` fica no fim, não no começo. Verificado em 2026-08-17:
+# `git check-ignore .jira.env` saía 1 (não ignorado) enquanto o cabeçalho do
+# próprio arquivo afirmava estar ignorado. Token vivo do Jira a um `git add -A`
+# de distância de um commit.
+.jira.env
+*.env

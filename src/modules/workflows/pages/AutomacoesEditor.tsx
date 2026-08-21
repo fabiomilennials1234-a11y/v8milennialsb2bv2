@@ -93,13 +93,25 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
     case "goto":
       return { type: "goto", label: "Ir Para", targetNodeId: "", targetNodeLabel: "" } as GotoNodeData;
     case "wait_business_window":
+      // Nasce com `windows[]` preenchido. Antes o nó nascia LEGADO (só `days`
+      // com chaves PT + startTime/endTime) e caía no caminho de retrocompat até
+      // alguém abrir o painel — comportamento diferente do que a UI mostrava.
       return {
         type: "wait_business_window",
         label: "Janela Comercial",
-        days: ["seg", "ter", "qua", "qui", "sex"],
-        startTime: "08:00",
-        endTime: "18:00",
         timezone: "America/Sao_Paulo",
+        windows: [
+          {
+            id: typeof crypto !== "undefined" && crypto.randomUUID
+              ? crypto.randomUUID()
+              : `w-${Date.now()}`,
+            name: "Comercial",
+            days: ["mon", "tue", "wed", "thu", "fri"],
+            start: "08:00",
+            end: "18:00",
+            action: "pass",
+          },
+        ],
       } as WaitBusinessWindowNodeData;
     case "assign_responsible":
       return {

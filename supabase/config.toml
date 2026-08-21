@@ -61,6 +61,30 @@ verify_jwt = false
 [functions.meta-embedded-signup-exchange]
 verify_jwt = false
 
+# notificame: provisiona a subconta da org (idempotente, claim no banco antes do fornecedor) e devolve a URL do popup com o token DA SUBCONTA; o token da conta-mãe nunca sai do servidor. JWT (requireAuth) inside fn + gate de flag + whatsapp.manage_instances
+[functions.notificame-channel-start]
+verify_jwt = false
+
+# notificame: finaliza a conexão Seamless — lista canais COM O TOKEN DA SUBCONTA e vincula o canal novo (diff contra a baseline da sessão) à org do auth; registra a subscription de entrada (só Instagram) e CARIMBA o resultado em messaging_channels.inbound_subscription_* (colunas, não jsonb), SEM desfazer o vínculo quando falha — quem repara é notificame-subscription-repair. JWT (requireAuth) inside fn + gate de flag + whatsapp.manage_instances
+[functions.notificame-channel-finish]
+verify_jwt = false
+
+# notificame-subscription-repair: O LEITOR do estado de recebimento. Cron de 5 min (pg_cron → pg_net, x-cron-secret fail-closed) que reencontra os canais status='connected' com inbound_subscription_status IN ('pending','failed') e retenta POST /v1/subscriptions com backoff exponencial (5min → 6h, sem estado terminal). Existe porque subscription_pending era produzido e NINGUÉM lia: o canal conectava, a tela dizia sucesso e nenhuma mensagem chegava. NÃO desregistra, NÃO desfaz vínculo, NÃO consulta feature flag (flag gateia conectar/mostrar, não receber).
+[functions.notificame-subscription-repair]
+verify_jwt = false
+
+# notificame-webhook: ingress de eventos do NotificaMe; auth = secret no path (timingSafeCompare, 404 em falha) + uuid da subconta no path + allowlist de IP fail-closed — o fornecedor NÃO assina o corpo; tenant sai do uuid da subconta que NÓS registramos, nunca do body. Evento não-interpretável é PARKADO inteiro em notificame_webhook_events (200 = "está guardado"), nunca descartado; sem external_id do fornecedor a linha NÃO nasce. Inbound INERTE: não acorda Copilot nem workflow.
+[functions.notificame-webhook]
+verify_jwt = false
+
+# notificame-templates: A PORTA de leitura dos templates HSM — o módulo _shared/notificame-templates.ts existia com 22 testes e NENHUM consumidor (nem edge function, nem hook), o que o tornava inalcançável pelo produto. SÓ LEITURA nesta fatia: criar/apagar submete à Meta e sai numa fatia própria, com o editor. JWT (requireAuth com requireOrganization) inside fn + flag `notificame` + whatsapp.manage_instances (a MESMA chave da tela de canais). NÃO exige isAdmin, ao contrário de channel-start: lá o retorno carrega a credencial da subconta, aqui carrega lista de templates aprovados. A instância vem por parâmetro do CLIENTE (`instance_id`, o uuid da NOSSA linha em whatsapp_instances — template é conceito de WhatsApp, e canal de WhatsApp NÃO mora em messaging_channels, que guarda os sociais) e é conferida contra a org em _shared/notificame-template-access.ts — o SELECT de propósito NÃO filtra por org, senão a guarda de tenancy ficaria inalcançável e nenhum teste a exercitaria. Falha do fornecedor vira 502, nunca 200 com lista vazia.
+[functions.notificame-templates]
+verify_jwt = false
+
+# notificame-send-social: RESPONDER pelo Direct (Instagram/Facebook). Contrato confirmado em DUAS fontes do fornecedor (doc app.notificame.com.br + node oficial n8n): POST /v2/channels/{kind}/messages com {from,to,contents[]}. NÃO monta envelope nem grava a linha — delega ao NotificameProvider, que já persiste em channel_messages; reimplementar criaria uma segunda verdade sobre o formato. JWT (requireAuth com requireOrganization) inside fn + flag `notificame` + whatsapp.manage_instances. O canal vem por parâmetro do CLIENTE e é conferido em _shared/notificame-social-send.ts — aqui o gate é ESCRITA: canal alheio aceito manda mensagem pela conta de outro tenant. WhatsApp é RECUSADO por modelo (mora em whatsapp_instances e tem governor/janela/templates próprios). NÃO bloqueia por janela de 24h: a doc do fornecedor a declara, mas quem decide tentar é o operador — a tela mostra o tempo restante e a recusa sobe legível.
+[functions.notificame-send-social]
+verify_jwt = false
+
 # api: public REST API router /api/v1/* (ADR-0008); auth via API key inside fn
 [functions.api]
 verify_jwt = false
@@ -169,6 +193,26 @@ verify_jwt = false
 
 # omie-webhook: skeleton spike-gated (S11); deploy pós-confirmação do payload Omie
 [functions.omie-webhook]
+verify_jwt = false
+
+# ERP Toth (Café Jurerê, SCRUM-229). Auth por JWT de admin dentro do handler,
+# como as demais funções de ERP — o verify_jwt do gateway fica desligado porque
+# toth-sync-clientes também aceita x-cron-secret.
+[functions.toth-connect]
+verify_jwt = false
+
+[functions.toth-disconnect]
+verify_jwt = false
+
+# toth-probe: ferramenta de descoberta de contrato. Devolve FORMA, não dado.
+[functions.toth-probe]
+verify_jwt = false
+
+[functions.toth-sync-clientes]
+verify_jwt = false
+
+# toth-sync-cobrancas: consulta por CNPJ; exige toth-sync-clientes antes.
+[functions.toth-sync-cobrancas]
 verify_jwt = false
 
 [functions.tinyerp-proxy]
@@ -327,6 +371,11 @@ verify_jwt = false
 [functions.whatsapp-instance-reaper]
 verify_jwt = false
 
+# whatsapp-instance-reconcile: relatório READ-ONLY do passivo de Instances no
+# provider (#1478); sob demanda, sem cron; auth via x-cron-secret. NÃO deleta.
+[functions.whatsapp-instance-reconcile]
+verify_jwt = false
+
 # whatsapp-session-watchdog: detecta sessões WhatsApp mortas; cron 10min; auth via x-cron-secret
 [functions.whatsapp-session-watchdog]
 verify_jwt = false
@@ -339,7 +388,15 @@ verify_jwt = false
 [functions.whatsapp-media-retry]
 verify_jwt = false
 # whatsapp-media-retention: deleta whatsapp-media/ >30d via Storage API + marca media_expired; cron diário 04:00; auth via x-cron-secret
+# ATENÇÃO — drift: o fonte no repo usa RETENTION_DAYS=30, mas a versão rodando
+# em prod responde retention_days=90. Deployar daqui muda a janela de retenção
+# de 90 para 30 dias como efeito colateral, e passa a apagar mídia real que hoje
+# sobrevive. Faça isso como decisão consciente, não de carona em outro deploy.
 [functions.whatsapp-media-retention]
+verify_jwt = false
+# whatsapp-media-purge: limpeza retroativa do bucket media (órfãos + mídia de grupo);
+# SEM cron — operação manual, dryRun por default; auth via x-cron-secret
+[functions.whatsapp-media-purge]
 verify_jwt = false
 # history-sync-worker: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.history-sync-worker]
@@ -452,3 +509,40 @@ verify_jwt = false
 
 
 
+
+# billing-payment-link: porta PÚBLICA do checkout (SCRUM-289). verify_jwt=false —
+# a página do link não tem sessão; a autorização é o CONHECIMENTO DO TOKEN, que é
+# tratado como credencial (nunca em log). Resolve pelo hash via a RPC
+# service_role-only e devolve lista branca; rate-limited por IP
+# (auth_rate_limits + check_auth_rate_limit), 20 req / 5 min.
+[functions.billing-payment-link]
+verify_jwt = false
+
+# billing-payment-status: "e aí, caiu?" (SCRUM-289, Fatia 8). verify_jwt=false pelo
+# mesmo motivo da porta acima — a página não tem sessão e a autorização é o
+# conhecimento do token. Teto PRÓPRIO de 80/5min por IP, e não os 20 da porta do
+# link: aqui o front PERGUNTA (3s nos primeiros 2 min, 10s depois), então 20
+# reprovaria o uso legítimo e a tela ficaria "aguardando" para quem já pagou.
+# Deriva `paid` de payment_webhook_events, NÃO de org_subscriptions — no ramo
+# new_org a organização só existe depois do pagamento. O porquê está em status.ts.
+[functions.billing-payment-status]
+verify_jwt = false
+
+# asaas-webhook: recebe os eventos do gateway de pagamento (SCRUM-287).
+# verify_jwt=false — quem chama é o Asaas, que não tem sessão nossa. A defesa é
+# COMPOSTA, porque o provedor NÃO assina o corpo (não há HMAC, só um token
+# estático que nós escolhemos): caminho secreto na URL + token no header
+# `asaas-access-token`, ambos em tempo constante, + allowlist de IP exigida só
+# quando ASAAS_ENV=production (o Sandbox entrega de IPs fora da lista publicada).
+# Responde SEMPRE 200 — erro devolvido pausa a fila do provedor e derruba o
+# recebimento de toda a receita, não só daquele evento.
+[functions.asaas-webhook]
+verify_jwt = false
+
+# billing-provision-worker: transforma pagamento confirmado em ACESSO (Fatia 9).
+# verify_jwt=false — quem chama é o pg_cron via pg_net; auth por x-cron-secret.
+# É worker separado do webhook DE PROPÓSITO: o webhook responde 200 sempre (a
+# fila do Asaas pausa em 15 falhas), e provisionar lá dentro faria a organização
+# ficar paga e inacessível em silêncio. Aqui a falha é vermelha e visível.
+[functions.billing-provision-worker]
+verify_jwt = false

@@ -28,9 +28,9 @@ describe("isConnectedInstance", () => {
 describe("instancesToNumbers", () => {
   it("keeps only connected lines and selects the first", () => {
     const instances: InstanceLike[] = [
-      { id: "a", instance_name: "Comercial", status: "open", created_at: daysAgo(90) },
-      { id: "b", instance_name: "Desligado", status: "disconnected", created_at: daysAgo(90) },
-      { id: "c", instance_name: "Suporte", status: "connected", created_at: daysAgo(90) },
+      { id: "a", instance_name: "Comercial", status: "open", provider: "uazapi", created_at: daysAgo(90) },
+      { id: "b", instance_name: "Desligado", status: "disconnected", provider: "uazapi", created_at: daysAgo(90) },
+      { id: "c", instance_name: "Suporte", status: "connected", provider: "evolution", created_at: daysAgo(90) },
     ];
     const nums = instancesToNumbers(instances, NOW);
     expect(nums.map((n) => n.id)).toEqual(["a", "c"]);
@@ -42,7 +42,13 @@ describe("instancesToNumbers", () => {
 
   it("flags + clamps a freshly connected line", () => {
     const instances: InstanceLike[] = [
-      { id: "new", instance_name: "Recém", status: "open", created_at: daysAgo(NEW_NUMBER_WINDOW_DAYS - 1) },
+      {
+        id: "new",
+        instance_name: "Recém",
+        status: "open",
+        provider: "uazapi",
+        created_at: daysAgo(NEW_NUMBER_WINDOW_DAYS - 1),
+      },
     ];
     const [n] = instancesToNumbers(instances, NOW);
     expect(n.isNew).toBe(true);
@@ -51,8 +57,8 @@ describe("instancesToNumbers", () => {
 
   it("falls back to phone then a positional label", () => {
     const instances: InstanceLike[] = [
-      { id: "a", instance_name: null, phone_number: "5511999", status: "open" },
-      { id: "b", instance_name: "", phone_number: null, status: "open" },
+      { id: "a", instance_name: null, phone_number: "5511999", status: "open", provider: "uazapi" },
+      { id: "b", instance_name: "", phone_number: null, status: "open", provider: "uazapi" },
     ];
     const nums = instancesToNumbers(instances, NOW);
     expect(nums[0].label).toBe("5511999");
@@ -60,7 +66,31 @@ describe("instancesToNumbers", () => {
   });
 
   it("treats a line with no created_at as not new", () => {
-    const [n] = instancesToNumbers([{ id: "a", status: "open" }], NOW);
+    const [n] = instancesToNumbers([{ id: "a", status: "open", provider: "uazapi" }], NOW);
     expect(n.isNew).toBe(false);
+  });
+
+  // ── Isolamento do canal oficial ────────────────────────────────────────────
+  // Meta e NotificaMe são template-gated e window-gated: disparo de texto livre
+  // não existe neles. Uma linha dessas aparecendo como "número" selecionável só
+  // se manifesta como envio recusado na hora do disparo — tarde e em massa.
+  it("exclui canal oficial mesmo conectado (meta_cloud e notificame)", () => {
+    const instances: InstanceLike[] = [
+      { id: "uaz", instance_name: "Comercial", status: "open", provider: "uazapi" },
+      { id: "meta", instance_name: "Oficial Meta", status: "connected", provider: "meta_cloud" },
+      { id: "nm", instance_name: "Oficial NotificaMe", status: "connected", provider: "notificame" },
+    ];
+    expect(instancesToNumbers(instances, NOW).map((n) => n.id)).toEqual(["uaz"]);
+  });
+
+  it("fail-closed: linha sem provider não é disparável", () => {
+    expect(instancesToNumbers([{ id: "a", status: "open" }], NOW)).toEqual([]);
+  });
+
+  it("fail-closed: provider novo e desconhecido nasce excluído", () => {
+    const instances: InstanceLike[] = [
+      { id: "x", status: "connected", provider: "provider_do_futuro" },
+    ];
+    expect(instancesToNumbers(instances, NOW)).toEqual([]);
   });
 });

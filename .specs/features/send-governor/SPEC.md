@@ -27,10 +27,11 @@ Estado pré-governor: o teto 80/dia (`whatsapp_instances.daily_blast_cap`) só c
 1. category 'manual'                 → allow  (manual_exempt)   [qualquer modo]
 2. category 'system'                 → allow  (exempt PR-0)
 3. P3 quarentena (automation|mass)   → block  (quarantined)
-4. category 'mass'                   → allow  (caps: blast_* existentes)
-5. P1/P2 teto por-número (automation)→ defer  (per_number_cap)   [warmupCap se P2 on]
-6. P4 cold gate (automation)         → block  (cold_contact)     [se org habilitou]
-7. senão                             → allow
+4. P5 janela 24h (automation|mass)   → block  (outside_24h_window) [só provider oficial]
+5. category 'mass'                   → allow  (caps: blast_* existentes)
+6. P1/P2 teto por-número (automation)→ defer  (per_number_cap)   [warmupCap se P2 on]
+7. P4 cold gate (automation)         → block  (cold_contact)     [se org habilitou]
+8. senão                             → allow
 ```
 
 **SHADOW OVERRIDE:** `mode==='shadow'` → ação efetiva SEMPRE `allow`; o veredito real fica em `decision.wouldBe` + `shadowed=true`. Shadow **nunca** emite block/defer real (invariante testada).
@@ -41,6 +42,7 @@ Estado pré-governor: o teto 80/dia (`whatsapp_instances.daily_blast_cap`) só c
 - **P2** warm-up ramp por idade do número: `0→20, 1-2→30, 3-6→50, 7+→cap`. `warmupCapForAge` clampa a baseCap; idade desconhecida → baseCap (fail-open, nunca aperta em dado faltante).
 - **P3** disjuntor: 463 OU 3º sinal/24h → `quarantined` (24h p/ 463, 1h p/ 429). Quarentena expira no read (recover implícito). Bloqueia automation+mass, nunca manual.
 - **P4** cold gate (opt-in, default off): sem inbound prévio (`channel_messages.direction='incoming'`) → block automação. Manual isento.
+- **P5** janela de 24h (SCRUM-376): fora da janela de sessão de um canal OFICIAL → block automação **e** massa. Manual isento. Ver a seção própria abaixo.
 
 ### Choke nos caminhos (shadow)
 
@@ -89,6 +91,82 @@ O feed do disjuntor P3 estava dormante: `governSend` fazia `doSend()` e propagav
 - **Comportamento-neutro**: com enforce OFF (default), a única mudança observável é 1 linha em `whatsapp_instance_reputation` por 463/429 de automação. Envio, ledger e telemetria de decisão seguem idênticos.
 
 **Nota pra PR-1b (enforce):** quando `send_governor_mode='enforce'`, um 463 em um chip passa a `quarantined` por 24h e o core (regra 3) passa a **bloquear automação E mass** naquele número — incluindo respostas do **Copilot** (categoria `automation`) por 24h. Intencional (anti-ban): humano ainda responde manual (isento), e o skip é logado com `reason='quarantined'`. Quarentena expira no read (recover implícito).
+
+## P5 — janela de 24h do canal oficial (SCRUM-376)
+
+**Status:** implementado no core/io. Inerte por padrão (`send_governor_mode='off'`), e hoje **sem feed** (ver "Gate de rollout").
+
+A Meta recusa texto livre fora da janela de 24h aberta pela última mensagem do contato; só template aprovado reabre. A regra **não existe para impedir a infração** — a Meta é o enforcer final e nada aqui muda isso. Ela existe para trocar uma **falha silenciosa** (o copiloto "respondeu", o fornecedor devolveu erro, o lead nunca recebeu, ninguém soube) por um **resultado bom**: o envio não sai e o motivo fica registrado.
+
+Entra como **regra dentro do `send-governor`**, não como gate paralelo — herda off→shadow→enforce por org, fail-open, telemetria e rollback de 1 UPDATE.
+
+### Comportamento
+
+| categoria | fora da janela |
+|---|---|
+| `manual` | **nunca bloqueia** (a precedência libera antes; o chat manual nem passa pelo governor) |
+| `automation` (copilot, workflow, campanha, carteira) | **block** `outside_24h_window` + registro |
+| `mass` | **block** `outside_24h_window` + registro |
+
+- **Ativa só quando `whatsapp_instances.provider === 'notificame'`** — allowlist `SESSION_WINDOW_PROVIDERS` em `core.ts`, não denylist: denylist faria o próximo provider oficial nascer sem janela e sem sintoma.
+- **`meta_cloud` fica de fora de propósito**: o caminho de envio dele já aplica a mesma janela em `whatsapp-providers/meta-cloud-window.ts`, com coerção para template. Incluí-lo aqui seria dupla governança sobre o mesmo envio, com dois contratos diferentes na incerteza.
+- **`block`, não `defer`**: `defer` promete "tenta mais tarde", e mais tarde não resolve — a janela reabre com uma mensagem do contato (ou com template), não com o relógio. `defer` viraria fila de retry que só envelhece.
+- **Ordem**: depois da quarentena (P3 é o sinal mais forte), **antes** do atalho de `mass` — `mass` retorna `allow` logo em seguida, então uma P5 abaixo dela nunca veria disparo em massa por canal oficial, que é o caso mais caro.
+
+### A consulta
+
+Última `incoming` daquele contato naquele canal, < 24h:
+
+```sql
+SELECT "timestamp" FROM whatsapp_messages
+ WHERE organization_id = $org AND instance_id = $instance
+   AND direction = 'incoming' AND phone_number IN ($variantes)
+ ORDER BY "timestamp" DESC LIMIT 1;
+```
+
+**Correção de premissa (verificada contra o código):** o brief da SCRUM-376 dizia `channel_messages`. Para canal de WhatsApp isso está errado hoje, e o repo prova nos dois sentidos: (a) **todo** inbound de WhatsApp — uazapi (`whatsapp-webhook`), meta_cloud (`meta-webhook`) e sz.chat — grava em **`whatsapp_messages`**; (b) a janela de 24h **já existe** para a Meta Cloud em `meta-cloud-window.ts` e lê `whatsapp_messages`, com esta mesma consulta. `channel_messages` é a tabela dos canais **sociais**, e o inbound de Instagram do NotificaMe grava lá com `instance_id: null` e `phone_number: null` — não casaria um envio de WhatsApp nem por acaso. Ler só `channel_messages` daria janela **sempre fechada** e enforce barrando 100% da automação.
+
+Então: `whatsapp_messages` é a primária e `channel_messages` é consultada **apenas quando a primária não achou nada** — hedge barato contra a fatia futura de inbound oficial escolher a outra tabela (é onde o receptor NotificaMe escreve hoje). O custo fica no caminho negativo, e a segunda leitura só pode **abrir** a janela, nunca fechar uma aberta.
+
+**Variantes de telefone** (`phoneCandidates`): não existe payload real de inbound oficial ainda — o formato do telefone é derivado de doc. Casamos cru, dígitos, com/sem `55`, com/sem 9º dígito. Assimetria deliberada: variante a mais só **abre** janela, nunca fecha.
+
+### Índice — nenhuma migration nova
+
+As duas consultas caem em índice existente:
+
+- `whatsapp_messages` → **`idx_whatsapp_msgs_org_instance_phone`** `(organization_id, instance_id, phone_number, timestamp DESC)` — casa o predicado inteiro; `direction` fica como filtro residual sobre um range já estreito (uma conversa), varrido de trás para frente com `LIMIT 1`;
+- `channel_messages` → **`idx_channel_messages_conversation`** `(organization_id, phone_number, channel, timestamp DESC)` — prefixo `(org, phone)` resolve, e a tabela tem ~11k linhas.
+
+Índice parcial dedicado `(organization_id, instance_id, phone_number, "timestamp" DESC) WHERE direction='incoming'` só se justifica quando o `EXPLAIN` mostrar cauda longa de `outgoing` antes da primeira `incoming` num canal oficial **real** — e aí precisa nascer `CONCURRENTLY`, **fora** de migration: `db push` roda em transação e `CREATE INDEX` não-concorrente travaria escrita em `whatsapp_messages`, a tabela mais quente do produto. Criar hoje seria pagar lock e espaço por leitura que ainda não existe.
+
+### Fail-open — a distinção que sustenta a regra
+
+Três estados, não dois:
+
+| estado | significado | desfecho |
+|---|---|---|
+| `windowResolved:false` | **desconhecido** — erro de leitura, sem telefone, sem instância, provider desconhecido | **allow** (não bloqueia) |
+| `windowResolved:true` + `lastInboundIso:null` | **fato** — o contato nunca falou com este número | **block** |
+| `windowResolved:true` + ISO < 24h | janela aberta | allow |
+
+Contraste deliberado com `meta-cloud-window.ts`, que falha **fechado** (na dúvida coage para template): lá é o caminho de envio da Meta, certificado; aqui é o choke de toda a automação, e um governor que bloqueia a frota por soluço de banco é pior que o problema que resolve. É por isso que a P5 **não reusa `isSessionOpen`** — ele colapsa erro e ausência em `open:false`.
+
+### Gate de rollout — ⛔ NÃO ligar enforce ainda
+
+**Não existe hoje nenhum escritor de inbound para canal WhatsApp do NotificaMe.** `whatsapp-webhook` é específico da Uazapi (path secreto + lookup por `uazapi_instance_id`) e o receptor NotificaMe que existe é **inbound-only de Instagram**. Enquanto essa fatia não existir, toda janela de canal oficial lê **fechada por ausência de feed** — que é indistinguível, no veredito, de "o contato não respondeu".
+
+Por isso a telemetria carrega **`window_source`**: é ela que torna o shadow decidível.
+
+- toda decisão com `window_source: null` e `last_inbound_at: null` ⇒ **o feed não existe** — ligar enforce barraria 100% da automação do canal;
+- decisões com `window_source` preenchido ⇒ o feed está vivo e a regra pode ser medida de verdade.
+
+**Ordem:** fatia de inbound oficial → shadow na Milennials → conferir `window_source` no `runtime_logs` → só então enforce.
+
+### Verificação
+
+- `deno check supabase/functions/_shared/send-governor/*.ts` → limpo; `deno lint` → limpo.
+- `npx vitest run tests/unit/send-governor-core.test.ts tests/unit/send-governor-gate.test.ts` → 64/64 (sem regressão; a P5 é inerte para provider não-oficial).
+- Rollback: `UPDATE organizations SET send_governor_mode='off'` — o mesmo 1 UPDATE do resto do governor.
 
 ## Fronteiras de escopo (PR-0)
 

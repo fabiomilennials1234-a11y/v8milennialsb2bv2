@@ -102,7 +102,7 @@ export class OpenRouterClient {
    *
    * Resiliência (Bug 2 — fallback "houve um problema"):
    *   - Erros transientes (429/5xx/timeout/rede) → retry com backoff exponencial.
-   *   - Erro 400 (modelo inválido/deprecado) → swap único para gemini fallback.
+   *   - Erro 400 (modelo inválido/deprecado) → swap único para o fallback.
    *   - Timeout por tentativa evita hang silencioso que virava texto vazio.
    */
   async chat(request: OpenRouterRequest): Promise<OpenRouterResponse> {
@@ -126,7 +126,11 @@ export class OpenRouterClient {
       ) as OpenRouterMessage[];
     }
 
-    const fallback = 'google/gemini-2.5-flash';
+    // Motor único (decisão CTO 2026-08-12). Com o primário já em gpt-4.1-mini o
+    // guard `request.model !== fallback` abaixo torna o swap um no-op e o 400
+    // sobe como erro — de propósito: um fallback para outro provider gastava
+    // tokens fora do motor escolhido, silenciosamente e sem aparecer em lugar nenhum.
+    const fallback = 'openai/gpt-4.1-mini';
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt <= this.maxRetries; attempt++) {

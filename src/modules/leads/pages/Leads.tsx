@@ -4,6 +4,8 @@ import { useViewport } from "@/shared/hooks/use-viewport";
 import { motion } from "framer-motion";
 import {
   Search,
+  Filter,
+  UserX,
   Calendar,
   MoreHorizontal,
   Plus,
@@ -284,9 +286,24 @@ function LeadsInner() {
     [setPersistedSort],
   );
 
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, sort };
+  // Recorte por atribuição (?atribuicao=sem-responsavel) — deep-link do
+  // diálogo da política de isolamento em Pilotos. Leva o admin direto ao que
+  // ele precisa arrumar antes de ligar a política.
+  const assignmentParam = searchParams.get("atribuicao");
+  const filterAssignment: "all" | "unassigned" =
+    assignmentParam === "sem-responsavel" ? "unassigned" : "all";
+  const hasAssignmentFilter = filterAssignment === "unassigned";
+  const clearAssignmentFilter = useCallback(() => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete("atribuicao");
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -704,8 +721,27 @@ function LeadsInner() {
         </div>
       )}
 
-      {/* Lista de cartões (desktop) / Card list (mobile) */}
-      <div className="rounded-lg">
+      {/* Chip do recorte de atribuição — pela mesma razão do chip acima: sem
+          ele o deep-link filtra a lista em silêncio e o admin lê "sumiram leads". */}
+      {hasAssignmentFilter && (
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="gap-1.5 py-1 pl-2.5 pr-1.5 font-medium">
+            <UserX className="h-3.5 w-3.5" />
+            Sem responsável
+            <button
+              type="button"
+              onClick={clearAssignmentFilter}
+              aria-label="Remover filtro de atribuição"
+              className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-background/80"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </Badge>
+        </div>
+      )}
+
+      {/* Table (desktop) / Card list (mobile) */}
+      <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
         {isMobile ? (
           <div className="space-y-2.5 py-0.5">
             {/* Ordenação do celular: no desktop quem ordena é o cabeçalho da

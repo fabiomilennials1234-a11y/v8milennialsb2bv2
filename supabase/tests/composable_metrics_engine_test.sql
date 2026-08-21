@@ -176,7 +176,7 @@ SELECT is(
   7, '(cat) as sete medidas fundadoras continuam no catálogo');
 -- Mesmo tratamento das medidas, e pela mesma razão. Esta linha ficou literal em
 -- 3 enquanto a de cima já era à prova de futuro — e a primeira razão nova
--- (`taxa_qualidade`, 20270812100000) a reprovaria sem que nada estivesse
+-- (`taxa_qualidade`, 20270812100001) a reprovaria sem que nada estivesse
 -- errado. O que importa é a identidade função↔tabela e a sobrevivência das três
 -- fundadoras.
 SELECT is(

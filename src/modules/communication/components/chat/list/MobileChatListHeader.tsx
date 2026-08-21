@@ -9,6 +9,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Search, X, ChevronDown, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ChannelBadge, type ChannelType } from "../ChannelBadge";
 import {
   Select,
   SelectContent,
@@ -18,11 +19,21 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type MobileChatFilter = "all" | "unread" | "groups";
+export type MobileChatFilter = "all" | "unread";
 
 export interface MobileChatListHeaderProps {
   instanceName: string;
   instanceConnected?: boolean;
+  /** Canal da caixa aberta. Decide o selo do pill; default mantém o de antes. */
+  channel?: ChannelType;
+  /**
+   * Mostra a fileira de chips (vendedor / todas / não lidas / grupos).
+   *
+   * Falso na caixa social: vendedor sai de `leads.responsible_id` e "grupos" é
+   * conceito de WhatsApp — os chips existiriam sem nada para recortar, e um
+   * chip que não muda a lista ensina o usuário a desconfiar do filtro inteiro.
+   */
+  showFilters?: boolean;
   onOpenInstanceSelector: () => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -52,6 +63,8 @@ interface ChipDef {
 export function MobileChatListHeader({
   instanceName,
   instanceConnected = false,
+  channel = "whatsapp",
+  showFilters = true,
   onOpenInstanceSelector,
   searchQuery,
   onSearchChange,
@@ -83,7 +96,6 @@ export function MobileChatListHeader({
   const chips: ChipDef[] = [
     { key: "all", label: "Todas" },
     { key: "unread", label: "Não lidas", count: unreadCount },
-    { key: "groups", label: "Grupos" },
   ];
 
   // Label curta pro chip de vendedor (o valor completo fica no dropdown).
@@ -141,6 +153,7 @@ export function MobileChatListHeader({
               onClick={onOpenInstanceSelector}
               className="flex items-center gap-2 rounded-full border border-border/40 px-3 py-1.5 text-sm font-medium text-foreground active:bg-muted/60 transition-colors min-w-0"
             >
+              <ChannelBadge channel={channel} size={14} />
               <span
                 className={cn(
                   "w-2 h-2 rounded-full shrink-0",
@@ -166,6 +179,7 @@ export function MobileChatListHeader({
       </div>
 
       {/* ── Row 2: Filter chips (horizontal scroll) ────────────────────────── */}
+      {showFilters && (
       <div className="flex gap-2 px-3 pt-1 pb-2 overflow-x-auto scrollbar-none">
         {/* Chip de vendedor — Select estilizado como chip */}
         <Select value={vendorFilter} onValueChange={onVendorFilterChange}>
@@ -217,6 +231,7 @@ export function MobileChatListHeader({
           );
         })}
       </div>
+      )}
     </div>
   );
 }

@@ -6,8 +6,10 @@
  * Auth: x-cron-secret header.
  *
  * Per client:
- *  - Fetches all orders, sorts by sold_at ASC
- *  - Computes cycle days (avg gap between orders, default 30)
+ *  - Fetches all order LINES, sorts by sold_at ASC
+ *  - Colapsa as linhas no pedido real (cliente + dia UTC) e daí tira o ciclo de
+ *    recompra e o avg_ticket — `upsell_orders` é linha-por-item, ver
+ *    groupOrdersByDay em _shared/portfolio-health.ts
  *  - Calculates recency / frequency / ticket scores
  *  - Engagement defaults to 50 (neutral) — will be enhanced later
  *  - New clients (< 3 orders) get health_score = 70 (neutral)
@@ -34,6 +36,8 @@ import {
   deriveSegment,
   deriveTrend,
   detectSignals,
+  groupOrdersByDay,
+  computeCycleDays,
   type DetectedSignal,
   type ProductFrequency,
 } from "../_shared/portfolio-health.ts";
@@ -43,7 +47,6 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
 const BATCH_SIZE = 100;
-const DEFAULT_CYCLE_DAYS = 30;
 const ENGAGEMENT_DEFAULT = 50; // neutral — enhanced in future
 const NEW_CLIENT_SCORE = 70;    // < 3 orders → neutral start
 
@@ -69,18 +72,6 @@ interface ClientRow {
 
 function daysBetween(a: Date, b: Date): number {
   return Math.abs(b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24);
-}
-
-function computeCycleDays(orders: Order[], orgDefault?: number): number {
-  if (orders.length < 2) return orgDefault ?? DEFAULT_CYCLE_DAYS;
-  const sorted = [...orders].sort(
-    (a, b) => new Date(a.sold_at).getTime() - new Date(b.sold_at).getTime(),
-  );
-  const gaps: number[] = [];
-  for (let i = 1; i < sorted.length; i++) {
-    gaps.push(daysBetween(new Date(sorted[i - 1].sold_at), new Date(sorted[i].sold_at)));
-  }
-  return Math.max(1, Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length));
 }
 
 function productFrequencies(orders: Order[]): ProductFrequency[] {
@@ -149,8 +140,21 @@ async function processClient(
   }
 
   const orderList: Order[] = orders ?? [];
+
+  // `upsell_orders` é linha-por-ITEM. `dayOrders` colapsa no pedido real
+  // (cliente + dia UTC de sold_at) — ver groupOrdersByDay em _shared.
+  const dayOrders = groupOrdersByDay(orderList);
+
+  // ⚠️ ESCOPO DELIBERADO (decisão do CTO, 2026-08-13): o agrupamento por pedido
+  // alimenta SÓ o ciclo de recompra e o avg_ticket gravado — os dois números que
+  // o KPI "Receita Recorrente" usa e que estavam ×30 errados. `order_count`
+  // continua contando LINHAS de propósito: ele é entrada de `deriveSegment`
+  // (< 3 → 'novo', >= 5 → 'ouro'/'resgate'), e trocá-lo jogaria 145 dos 148
+  // clientes da Basic4u pra 'novo', esvaziando os funis de ouro/prata/resgate.
+  // Consequência aceita: para cliente com pedido multi-item,
+  // lifetime_value / order_count ≠ avg_ticket.
   const orderCount = orderList.length;
-  const cycleDays = computeCycleDays(orderList, orgDefaultCycleDays);
+  const cycleDays = computeCycleDays(dayOrders, orgDefaultCycleDays);
 
   // Last order date + recency
   const sorted = [...orderList].sort(
@@ -171,8 +175,17 @@ async function processClient(
 
   // Ticket stats
   const totalValue = orderList.reduce((s, o) => s + Number(o.sale_value), 0);
-  const avgTicket = orderCount > 0 ? totalValue / orderCount : 0;
   const lifetimeValue = totalValue;
+
+  // Gravado na coluna avg_ticket: total / PEDIDOS (o que a tela e o KPI mostram).
+  const avgTicket = dayOrders.length > 0 ? totalValue / dayOrders.length : 0;
+
+  // Usado só nos SCORES: total / LINHAS, a base de hoje. Mantido de propósito
+  // porque as contrapartes com que ele é comparado também são por linha —
+  // `recentAvg` (média das linhas dos últimos 90d), `lastThreeTickets` (últimas
+  // 3 linhas) e `orgAvgTicket` (média das linhas da org). Trocar só um lado da
+  // razão moveria health/segment/trend sem que nada tivesse ficado mais correto.
+  const scoringAvgTicket = orderCount > 0 ? totalValue / orderCount : 0;
 
   // Recency period = last 90 days vs historical base
   const cutoff90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
@@ -194,7 +207,7 @@ async function processClient(
     recent90.length > 0
       ? recent90.reduce((s, o) => s + Number(o.sale_value), 0) / recent90.length
       : 0;
-  const ticketScore = calculateTicketScore(recentAvg, avgTicket || 1);
+  const ticketScore = calculateTicketScore(recentAvg, scoringAvgTicket || 1);
 
   const dims = {
     recency: recencyScore,
@@ -208,8 +221,8 @@ async function processClient(
     orderCount < 3 ? NEW_CLIENT_SCORE : calculateHealthScore(dims);
 
   const healthStatus = deriveHealthStatus(healthScore);
-  const segment = deriveSegment(healthScore, avgTicket, orgAvgTicket, orderCount);
-  const trend = deriveTrend(lastThreeTickets, avgTicket);
+  const segment = deriveSegment(healthScore, scoringAvgTicket, orgAvgTicket, orderCount);
+  const trend = deriveTrend(lastThreeTickets, scoringAvgTicket);
 
   // Next expected order
   const nextOrderExpected = lastOrderAt
@@ -223,7 +236,7 @@ async function processClient(
     daysSinceLastOrder,
     cycleDays,
     lastThreeTickets,
-    historicalAvgTicket: avgTicket,
+    historicalAvgTicket: scoringAvgTicket,
     productFrequencies: pf,
     lastOrderProducts,
     daysSinceLastWhatsAppReply: daysSinceLastIncoming,

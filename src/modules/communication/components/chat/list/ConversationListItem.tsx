@@ -38,13 +38,24 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import type { ChatContact } from "@/modules/communication/hooks/useWhatsAppChat";
+import {
+  contactAvatarSeed,
+  contactKey,
+  contactLabel,
+  type InboxContact,
+} from "@/modules/communication/hooks/chat/types";
 import { ChannelBadge } from "../ChannelBadge";
 import { getAvatarGradient } from "./avatarGradient";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-export function contactDisplayName(c: ChatContact): string {
-  return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
+/**
+ * Rótulo da linha. Delega para `contactLabel`, que é o único lugar que sabe
+ * nomear conversa de cada canal — este export continua existindo porque a lista
+ * e a linha do mobile já o importam por este nome.
+ */
+export function contactDisplayName(c: InboxContact): string {
+  return contactLabel(c);
 }
 
 export function formatContactTime(timestamp: string): string {
@@ -217,9 +228,10 @@ function ContactContextMenu({
 // ─── ConversationListItem ─────────────────────────────────────────────────────
 
 export interface ConversationListItemProps {
-  contact: ChatContact;
+  contact: InboxContact;
   isSelected: boolean;
-  onSelect: (phone: string) => void;
+  /** Recebe `contactKey(contact)` — telefone no WhatsApp, `conversation_key` no social. */
+  onSelect: (key: string) => void;
   waitingHumanLeadIds?: Set<string>;
   activeTab: "active" | "archived";
   isAdmin: boolean;
@@ -252,13 +264,16 @@ export function ConversationListItem({
   stageLabel,
 }: ConversationListItemProps) {
   const displayName = contactDisplayName(contact);
-  const avatarGradient = getAvatarGradient(
-    contact.phone_number || displayName,
-  );
+  const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
+  const key = contactKey(contact);
+  // Ações de conversa (arquivar/excluir/etiquetar) vivem em
+  // `whatsapp_conversations`. Não existe tabela equivalente para canal social,
+  // então o menu não é renderizado — melhor ausente do que presente e inerte.
+  const isWhatsApp = contact.channel === "whatsapp";
 
   return (
     <motion.div
-      key={contact.phone_number}
+      key={key}
       tabIndex={0}
       role="button"
       aria-pressed={isSelected}
@@ -266,7 +281,7 @@ export function ConversationListItem({
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelect(contact.phone_number);
+          onSelect(key);
         }
       }}
       className={cn(
@@ -278,41 +293,69 @@ export function ConversationListItem({
             : "hover:bg-muted/50 border-l-transparent",
       )}
       whileTap={{ scale: 0.99 }}
-      onClick={() => onSelect(contact.phone_number)}
+      onClick={() => onSelect(key)}
     >
       <div className="flex items-start gap-3">
         <div className="relative shrink-0">
-          <div
-            className={cn(
-              "w-11 h-11 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
-              avatarGradient.ink ? "text-[#1c1c1c]" : "text-white",
-            )}
-            style={{ background: avatarGradient.background }}
-            aria-hidden
-          >
-            {(displayName.charAt(0) || "?").toUpperCase()}
-          </div>
-          <ChannelBadge channel="whatsapp" size={18} overlay />
+          {!isWhatsApp && contact.avatar_url ? (
+            <img
+              src={contact.avatar_url}
+              alt=""
+              className="w-11 h-11 rounded-full border-2 border-background shadow-sm object-cover"
+            />
+          ) : (
+            <div
+              className={cn(
+                "w-11 h-11 rounded-full border-2 border-background shadow-sm flex items-center justify-center font-semibold text-sm select-none",
+                avatarGradient.ink ? "text-[#1c1c1c]" : "text-white",
+              )}
+              style={{ background: avatarGradient.background }}
+              aria-hidden
+            >
+              {(displayName.replace("@", "").charAt(0) || "?").toUpperCase()}
+            </div>
+          )}
+          {/* O selo deixa de ser chumbado: é ele que faz a segunda caixa ser
+              lida como Instagram, e não como "mais um número". */}
+          <ChannelBadge channel={contact.channel} size={18} overlay />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-1">
             <span className="font-semibold text-foreground truncate text-sm flex items-center gap-1">
               <span className="truncate">{displayName}</span>
-              <ContactContextMenu
-                contact={contact}
-                activeTab={activeTab}
-                isAdmin={isAdmin}
-                instanceId={instanceId}
-                organizationId={organizationId}
-                allTags={allTags}
-                onArchive={onArchive}
-                onUnarchive={onUnarchive}
-                onDelete={onDelete}
-                onAddTag={onAddTag}
-                onRemoveTag={onRemoveTag}
-              />
+              {isWhatsApp && (
+                <ContactContextMenu
+                  contact={contact}
+                  activeTab={activeTab}
+                  isAdmin={isAdmin}
+                  instanceId={instanceId}
+                  organizationId={organizationId}
+                  allTags={allTags}
+                  onArchive={onArchive}
+                  onUnarchive={onUnarchive}
+                  onDelete={onDelete}
+                  onAddTag={onAddTag}
+                  onRemoveTag={onRemoveTag}
+                />
+              )}
+              {/* "Sem lead ainda" é informação onde o vínculo é possível — e
+                  desde que a conversa de Instagram pode virar lead pelo painel,
+                  isso passou a valer para os dois canais. O ponto some assim que
+                  alguém vincula, nos dois. */}
               {!contact.lead_id && (
                 <span className="w-2 h-2 rounded-full bg-primary/60 shrink-0" title="Novo" />
+              )}
+              {/* No WhatsApp o nome do lead JÁ é o título da linha
+                  (`contactDisplayName`). No Instagram o título é o @handle —
+                  que é o que a pessoa vê no app — então o lead vinculado só
+                  aparece se ganhar espaço próprio. */}
+              {!isWhatsApp && contact.lead_name && (
+                <span
+                  className="text-[10px] leading-none px-1.5 py-0.5 rounded shrink-0 max-w-[104px] truncate bg-muted text-muted-foreground/90 whitespace-nowrap"
+                  title={`Lead: ${contact.lead_name}`}
+                >
+                  {contact.lead_name}
+                </span>
               )}
               {contact.tags.slice(0, 2).map((tag) => (
                 <span
@@ -350,13 +393,18 @@ export function ConversationListItem({
                   {stageLabel}
                 </span>
               )}
-              {contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "workflow" && (
+              {/* Autoria da última mensagem. `last_message_sent_source` é campo
+                  de `whatsapp_messages`; no canal social a origem ainda não
+                  existe (nada sai daqui nesta fatia), então o marcador se
+                  resume ao "Você:" quando a direção for de saída. */}
+              {isWhatsApp && contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "workflow" && (
                 <Zap className="h-2.5 w-2.5 text-[#a78bfa] shrink-0" />
               )}
-              {contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "copilot" && (
+              {isWhatsApp && contact.last_message_direction === "outgoing" && contact.last_message_sent_source === "copilot" && (
                 <Bot className="h-2.5 w-2.5 text-[#fbbf24] shrink-0" />
               )}
-              {contact.last_message_direction === "outgoing" && (!contact.last_message_sent_source || contact.last_message_sent_source === "manual") && (
+              {contact.last_message_direction === "outgoing" &&
+                (!isWhatsApp || !contact.last_message_sent_source || contact.last_message_sent_source === "manual") && (
                 <span className="text-foreground/50 shrink-0" title="Você enviou">
                   Você:
                 </span>

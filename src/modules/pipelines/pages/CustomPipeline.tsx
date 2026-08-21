@@ -45,7 +45,10 @@ import {
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { CustomPipelineKanban } from "@/modules/pipelines/components/custom/CustomPipelineKanban";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
-import { matchesQualificationFilters } from "@/modules/pipelines/lib/kanbanFilterParams";
+import {
+  matchesQualificationFilters,
+  matchesCustomPipeResponsible,
+} from "@/modules/pipelines/lib/kanbanFilterParams";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import {
@@ -58,6 +61,7 @@ import {
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
+import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { DisparoWizard } from "../components/disparo";
 import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
@@ -68,7 +72,7 @@ import {
 } from "@/modules/pipelines/lib/stalled-buckets";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
-import { useFeaturePermission } from "@/modules/identity";
+import { useFeaturePermission, useResponsibleMembers } from "@/modules/identity";
 const ICON_MAP: Record<string, LucideIcon> = {
   kanban: Kanban,
   target: Target,
@@ -87,6 +91,7 @@ function CustomPipelinePageInner() {
 
   const { openDeal } = useDealSheet();
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterResponsible, setFilterResponsible] = useState("all");
   const [qualificationTier, setQualificationTier] = useState<string[]>([]);
   const [preQualificationTier, setPreQualificationTier] = useState<string[]>([]);
   const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
@@ -106,38 +111,52 @@ function CustomPipelinePageInner() {
   const moveLead = useMoveLeadInCustomPipe();
   const { allowed: canDeletePipeline } = useFeaturePermission("pipeline.delete");
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
+  // Pool de responsáveis = membros ATIVOS da org (mesma fonte dos funis do
+  // sistema — `org_visible_members`), então a lista aqui é a mesma que o
+  // operador já vê no Funil de Qualificação.
+  const responsibleMembers = useResponsibleMembers();
 
   const isLoading = loadingPipeline || loadingStages || loadingEntries;
 
-  // Qualification-tier filter (client-side — este board não é paginado no
-  // servidor). Aplicado às entries carregadas ANTES de alimentar o kanban e a
-  // lista mobile, e propagado como `tierFilterActive` pro kanban derivar o
-  // badge da contagem client-side (o RPC de count não conhece tier).
+  // ── Entries cujo lead a RLS negou ────────────────────────────────────────
+  // `custom_pipe_entries` tem RLS por ORG; `leads` tem RLS por
+  // RESPONSABILIDADE. Numa org que desligou `leads.view_all`, o membro recebe
+  // TODAS as entries mas o embed `lead:leads(...)` volta null nas que nao sao
+  // dele — e o card renderizava "Sem nome". Medido no PROD (HGE Iluminacao,
+  // funil "Prospeccao"): 575 de 673 assim para um dos vendedores.
+  //
+  // Descartar aqui e o que iguala este board aos funis do sistema, onde
+  // `get_pipeline_page` usa INNER JOIN e a linha esvaziada some inteira.
+  const visibleEntries = useMemo(() => entries.filter((e) => e.lead != null), [entries]);
+  const ghostCount = entries.length - visibleEntries.length;
+
+  // Filtros client-side — este board nao e paginado no servidor. Aplicados as
+  // entries VISIVEIS (nunca a `entries` cru: senao o filtro reintroduziria os
+  // fantasmas que a linha acima acabou de tirar).
   const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
   const stalledBucket = useMemo(() => getStalledBucket(filterStalled), [filterStalled]);
 
-  // `tierFilterActive` continua significando "a contagem da coluna precisa ser
-  // derivada no cliente" — agora vale pra qualquer um dos filtros client-side,
-  // não só o de qualificação, senão o badge voltaria a contar o que a tela não
-  // mostra.
+  // `tierFilterActive` significa "a contagem da coluna precisa ser derivada no
+  // cliente" — vale para QUALQUER filtro client-side, senao o badge conta o que
+  // a tela nao mostra. O nome ficou porque e ele que o kanban recebe.
   const tierFilterActive =
     qualificationTier.length > 0 ||
     preQualificationTier.length > 0 ||
+    filterResponsible !== "all" ||
     !!periodRange ||
     !!stalledBucket;
 
   const tieredEntries = useMemo(() => {
-    if (!tierFilterActive) return entries;
+    if (!tierFilterActive) return visibleEntries;
     const periodStart = periodRange ? new Date(periodRange.startStr).getTime() : null;
     const periodEnd = periodRange ? new Date(periodRange.endStr).getTime() : null;
     const now = new Date();
-    return entries.filter((e) => {
-      if (!matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier)) {
-        return false;
-      }
+    return visibleEntries.filter((e) => {
+      if (!matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier)) return false;
+      if (!matchesCustomPipeResponsible(e, filterResponsible)) return false;
       if (periodStart !== null && periodEnd !== null) {
-        // Comparação por timestamp, não por string: o Postgres devolve
-        // "+00:00" e o range sai como "Z" — lexicograficamente eles não se
+        // Comparacao por timestamp, nao por string: o Postgres devolve
+        // "+00:00" e o range sai como "Z" — lexicograficamente eles nao se
         // ordenam, mesmo apontando pro mesmo instante.
         const created = e.created_at ? new Date(e.created_at).getTime() : NaN;
         if (Number.isNaN(created) || created < periodStart || created > periodEnd) return false;
@@ -148,19 +167,44 @@ function CustomPipelinePageInner() {
         now,
       );
     });
-  }, [entries, tierFilterActive, qualificationTier, preQualificationTier, periodRange, stalledBucket]);
+  }, [visibleEntries, tierFilterActive, qualificationTier, preQualificationTier, filterResponsible, periodRange, stalledBucket]);
+
+  // O badge da coluna vem do RPC (server-side) e só conhece a BUSCA — não
+  // conhece tier nem responsável. Sob qualquer filtro client-side ele precisa
+  // ser derivado dos items filtrados, ou contaria o que a tela não mostra.
+  //
+  // ⚠️ Fantasma NÃO entra mais nesta disjunção. Entrava enquanto a migration
+  // `20270812130000` era deploy manual e o front subia sozinho no merge: na
+  // janela entre os dois, o RPC ainda somava os fantasmas que esta tela
+  // acabava de esconder. A migration está no PROD desde 2026-08-13, o RPC é
+  // SECURITY INVOKER e agora usa INNER JOIN — ele já devolve o total que a
+  // RLS autoriza PARA ESTE usuário (medido: 98 para um vendedor restrito da
+  // HGE, 670 para a admin, com o controle negado em 0).
+  //
+  // Manter o fantasma aqui custava caro e para sempre: `useCustomPipeEntries`
+  // não tem `.limit()`, então o PostgREST corta em 1000 linhas — e derivar do
+  // que sobrou faz o badge MENTIR justamente nos funis grandes. É o bug que
+  // motivou criar este RPC (ver o cabeçalho de
+  // `archive/20270315000000_get_custom_pipeline_stage_counts.sql`: "Prospecção
+  // CNAE" mostrava 1000 de 2543). Ligar por fantasma reintroduzia isso de
+  // forma PASSIVA — sem o usuário pedir filtro nenhum —, e bastava 1 lead
+  // soft-deleted para disparar, porque a policy de `leads` começa por
+  // `deleted_at IS NULL` ANTES do teste de admin.
+  const clientCountActive = tierFilterActive;
 
   const filterSections: FilterSectionConfig[] = useMemo(
     () => [
       { type: "created-period", value: periodState, onChange: setPeriodState },
       { type: "stalled-days", value: filterStalled, onChange: setFilterStalled },
+      { type: "responsible", value: filterResponsible, onChange: setFilterResponsible, members: responsibleMembers },
       { type: "qualification-tier", value: qualificationTier, onChange: setQualificationTier },
       { type: "pre-qualification-tier", value: preQualificationTier, onChange: setPreQualificationTier },
     ],
-    [periodState, filterStalled, qualificationTier, preQualificationTier],
+    [periodState, filterStalled, filterResponsible, responsibleMembers, qualificationTier, preQualificationTier],
   );
 
   const handleClearFilters = useCallback(() => {
+    setFilterResponsible("all");
     setQualificationTier([]);
     setPreQualificationTier([]);
     setPeriodState(createInitialPeriodState());
@@ -324,6 +368,11 @@ function CustomPipelinePageInner() {
         <p className="-mt-2 truncate text-sm text-muted-foreground">{pipeline.description}</p>
       )}
 
+      {/* Leads que a RLS de `leads` esconde deste usuario. Sem este aviso o
+          board simplesmente encolhe e o vendedor le como "sumiram os cards" —
+          na Alamaster a tela ficaria VAZIA (95 entries, 0 leads visiveis). */}
+      <GhostLeadsBanner pipeType="custom" ghostCount={ghostCount} />
+
       {/* Kanban */}
       {stages.length > 0 ? (
         isMobile ? (
@@ -340,7 +389,7 @@ function CustomPipelinePageInner() {
             stages={stages}
             entries={tieredEntries}
             searchQuery={searchQuery}
-            tierFilterActive={tierFilterActive}
+            clientCountActive={clientCountActive}
             onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
             onClickEntry={(entry) => {
               openDeal(entry.id, entry.lead_id);

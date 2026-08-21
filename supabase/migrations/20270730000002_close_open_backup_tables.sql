@@ -15,10 +15,24 @@
 -- -----
 -- `CREATE TABLE ... AS` rodado à mão em script de faxina
 -- (supabase/scripts/cleanup-chique-oportunidades-2026-07-29.sql:60 e similares).
--- A tabela nasce herdando os privilégios DEFAULT do schema `public`, que no
--- Supabase incluem `anon` e `authenticated`. Quem cria backup assim não escolhe
--- expor — expõe por omissão, e o nome com prefixo `_backup_` dá a sensação
--- oposta, de coisa interna.
+-- CORREÇÃO DE MECANISMO (2026-08-11): esta explicação estava ERRADA e ficou no
+-- repositório ensinando o mecanismo errado. Postgres NÃO tem herança de
+-- privilégio de TABELA a partir de GRANT de SCHEMA — GRANT em schema concede
+-- apenas USAGE e CREATE. Privilégio de tabela vem de GRANT explícito ou de
+-- ALTER DEFAULT PRIVILEGES no momento da criação, e é este o caso aqui:
+--
+--   public | postgres       | r | anon=rxtm/postgres
+--   public | supabase_admin | r | anon=arwdDxtm/supabase_admin
+--
+-- Ou seja, TODA tabela criada por `postgres` em `public` nasce com privilégio
+-- para `anon` e `authenticated`, qualquer que seja o comando — não é o
+-- `CREATE TABLE AS` que causa, é criar tabela em `public` como `postgres`.
+-- Reproduzido em transação revertida. A distinção importa: com a explicação
+-- errada, isto parece descuido humano evitável; com a certa, é default inseguro
+-- que exige gate automático (ver INV-5).
+--
+-- Quem cria backup assim não escolhe expor — expõe por omissão, e o nome com
+-- prefixo `_backup_` dá a sensação oposta, de coisa interna.
 --
 -- POR QUE O CI NÃO PEGOU
 -- ----------------------

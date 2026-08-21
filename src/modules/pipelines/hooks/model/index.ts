@@ -14,6 +14,7 @@ export * from "./usePipelineStages";
 export * from "./useStageLeadIds";
 export * from "./useFilteredLeadIds";
 export * from "./useCustomFilteredLeadIds";
+export * from "./useAllFunnelsLeadIds";
 
 // `usePipelineEntries` existe em ./usePipelines (versão por pipelineId) e em
 // ./usePipelineEntries (versão slug-typed). O conflito entre os dois `export *`
