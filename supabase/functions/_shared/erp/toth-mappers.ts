@@ -397,6 +397,134 @@ export function pickPhone(row: Record<string, unknown>): string | null {
   return null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Empresa do grupo (atendimentos[])
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A base do Toth da Café Jurerê atende QUATRO empresas do grupo — CAFE JURERE
+ * (11.182 clientes), CAMIPLACE (524), COSTA ESMERALDA (107) e ALIMENTA MAIS
+ * (36), mais 878 sem atendimento nenhum e 111 atendidos por mais de uma.
+ *
+ * `GET /clientes` devolve as quatro juntas, sem parâmetro de filtro. Separar é
+ * trabalho nosso, e é o que impede a carteira de uma organização de receber
+ * cliente que é de outra empresa.
+ */
+export function tothClienteEmpresas(row: Record<string, unknown>): string[] {
+  const list = pickField(row, ["atendimentos"]);
+  if (!Array.isArray(list)) return [];
+  const out: string[] = [];
+  for (const entry of list) {
+    if (!isRecord(entry)) continue;
+    const nome = asString(pickField(entry, ["nomeFantasiaEmpresa", "empresa"]));
+    if (nome && !out.includes(nome)) out.push(nome);
+  }
+  return out;
+}
+
+/** Compara nome de empresa ignorando caixa, acento e espaço repetido. */
+export function sameCompanyName(a: string, b: string): boolean {
+  return normalizeKey(a) === normalizeKey(b);
+}
+
+/**
+ * O cliente entra na sincronização?
+ *
+ * Sem filtro configurado, entra sempre — é o comportamento anterior, e mudar o
+ * default silenciosamente esvaziaria a carteira de quem já sincroniza.
+ *
+ * `incluirSemEmpresa` existe porque "somente a empresa X" é ambíguo para quem
+ * não tem atendimento nenhum: não é da empresa X, mas também não é de outra.
+ * A escolha é do admin, não minha.
+ */
+export function tothClienteMatchesEmpresa(
+  row: Record<string, unknown>,
+  empresa: string | null | undefined,
+  incluirSemEmpresa = false,
+): boolean {
+  if (!empresa) return true;
+  const empresas = tothClienteEmpresas(row);
+  if (empresas.length === 0) return incluirSemEmpresa;
+  return empresas.some((e) => sameCompanyName(e, empresa));
+}
+
+/**
+ * Atendimento correspondente à empresa filtrada — é dele que sai o
+ * representante.
+ *
+ * Importa porque 111 clientes são atendidos por mais de uma empresa do grupo:
+ * pegar o primeiro da lista daria o vendedor da CAMIPLACE para um cliente que a
+ * sincronização trouxe como da CAFE JURERE.
+ */
+function pickAtendimento(
+  row: Record<string, unknown>,
+  empresa?: string | null,
+): Record<string, unknown> | null {
+  const list = pickField(row, ["atendimentos"]);
+  if (!Array.isArray(list)) return null;
+  const entries = list.filter(isRecord);
+  if (entries.length === 0) return null;
+
+  if (empresa) {
+    const match = entries.find((e) => {
+      const nome = asString(pickField(e, ["nomeFantasiaEmpresa", "empresa"]));
+      return nome ? sameCompanyName(nome, empresa) : false;
+    });
+    if (match) return match;
+  }
+  return entries[0];
+}
+
+/** UF só quando são exatamente duas letras — a coluna do CRM é `char(2)`. */
+function sanitizeUf(value: unknown): string | null {
+  const raw = asString(value);
+  if (!raw) return null;
+  const uf = raw.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(uf) ? uf : null;
+}
+
+/** Campos sem coluna dedicada. Só entra o que veio preenchido. */
+const METADATA_FIELDS = [
+  "logradouro",
+  "numero",
+  "complemento",
+  "bairro",
+  "cep",
+  "numeroInscricaoEstadual",
+  "contribuinteIcms",
+  "tipoPessoa",
+  "codigoGrupoParceiro",
+  "codigoTipoMercado",
+  "temSuframa",
+  "site",
+] as const;
+
+function buildMetadata(
+  row: Record<string, unknown>,
+  atendimento: Record<string, unknown> | null,
+): Record<string, unknown> | null {
+  const meta: Record<string, unknown> = {};
+  for (const field of METADATA_FIELDS) {
+    const value = pickField(row, [field]);
+    if (value === undefined || value === null) continue;
+    // O cadastro do Toth guarda campo "preenchido" com espaço em branco
+    // (`complemento: "  "`). Sem o trim, o metadata carrega vazio disfarçado e
+    // a UI mostra um rótulo com nada do lado.
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+      if (trimmed === "") continue;
+      meta[field] = trimmed;
+      continue;
+    }
+    meta[field] = value;
+  }
+  const empresas = tothClienteEmpresas(row);
+  if (empresas.length > 1) meta.empresasAtendimento = empresas;
+  const repEmail = atendimento ? pickField(atendimento, ["emails"]) : undefined;
+  if (Array.isArray(repEmail) && repEmail.length > 0) meta.representanteEmails = repEmail;
+  return Object.keys(meta).length > 0 ? meta : null;
+}
+
 export class TothMappingError extends Error {
   constructor(message: string) {
     super(message);
@@ -410,7 +538,11 @@ export class TothMappingError extends Error {
  * Lança `TothMappingError` sem identificador: cliente sem id imutável não tem
  * chave de idempotência, e importá-lo duplicaria o registro a cada execução.
  */
-export function mapTothClienteToCanonical(row: Record<string, unknown>): CanonicalClient {
+export function mapTothClienteToCanonical(
+  row: Record<string, unknown>,
+  /** Empresa do grupo em foco — decide de qual atendimento sai o representante. */
+  opts: { empresa?: string | null } = {},
+): CanonicalClient {
   const externalId = asString(pickField(row, ID_FIELDS));
   if (!externalId) {
     throw new TothMappingError(
@@ -420,6 +552,7 @@ export function mapTothClienteToCanonical(row: Record<string, unknown>): Canonic
 
   const name = asString(pickField(row, NAME_FIELDS));
   const company = asString(pickField(row, COMPANY_FIELDS));
+  const atendimento = pickAtendimento(row, opts.empresa);
 
   return {
     externalId,
@@ -430,6 +563,23 @@ export function mapTothClienteToCanonical(row: Record<string, unknown>): Canonic
     company: company ?? null,
     email: pickEmail(row),
     phone: pickPhone(row),
+
+    erpCompany: atendimento
+      ? asString(pickField(atendimento, ["nomeFantasiaEmpresa", "empresa"]))
+      : null,
+    ownerName: atendimento
+      ? asString(pickField(atendimento, ["nomeRepresentante", "representante"]))
+      : null,
+    ownerExternalId: atendimento
+      ? asString(pickField(atendimento, ["codigoRepresentante"]))
+      : null,
+    // Cru de propósito — 0/1/2/3 sem legenda do fornecedor.
+    erpStatus: asString(pickField(row, ["situacaoParceiro"])),
+    segment: asString(pickField(row, ["descricaoTipoMercado", "tipoMercado"])),
+    registeredAt: parseTothDate(pickField(row, ["dataCadastro"])),
+    city: asString(pickField(row, ["cidade"])),
+    uf: sanitizeUf(pickField(row, ["UF", "uf", "estado"])),
+    metadata: buildMetadata(row, atendimento),
   };
 }
 

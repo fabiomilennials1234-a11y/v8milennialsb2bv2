@@ -53,6 +53,14 @@ export interface TothConnectionStatus {
   erp_sync_mode: TothSyncMode;
   /** Janela em dias que define cliente ativo. null = base inteira. */
   clientes_dias_compras: number | null;
+  /**
+   * Empresa do grupo a sincronizar. O Toth devolve as empresas do grupo na
+   * mesma resposta e não aceita filtro por empresa — separar é trabalho nosso.
+   * null = trazer todas.
+   */
+  clientes_empresa: string | null;
+  /** Trazer também quem não tem atendimento em empresa nenhuma. */
+  clientes_incluir_sem_empresa: boolean;
   last_clientes_sync_at: string | null;
   last_cobrancas_sync_at: string | null;
   last_error: string | null;
@@ -66,6 +74,8 @@ const DISCONNECTED: TothConnectionStatus = {
   connected_at: null,
   erp_sync_mode: "enrich_only",
   clientes_dias_compras: null,
+  clientes_empresa: null,
+  clientes_incluir_sem_empresa: false,
   last_clientes_sync_at: null,
   last_cobrancas_sync_at: null,
   last_error: null,
@@ -83,7 +93,9 @@ export function useTothStatus() {
 
       const { data, error } = await tothConnectionsTable()
         .select(
-          "base_url, token_transport, allow_insecure_transport, connected_at, status, erp_sync_mode, clientes_dias_compras, last_clientes_sync_at, last_cobrancas_sync_at, last_error",
+          "base_url, token_transport, allow_insecure_transport, connected_at, status, erp_sync_mode, " +
+            "clientes_dias_compras, clientes_empresa, clientes_incluir_sem_empresa, " +
+            "last_clientes_sync_at, last_cobrancas_sync_at, last_error",
         )
         .eq("organization_id", organizationId)
         .maybeSingle();
@@ -103,6 +115,8 @@ export function useTothStatus() {
         connected_at: row.connected_at,
         erp_sync_mode: (row.erp_sync_mode as TothSyncMode) ?? "enrich_only",
         clientes_dias_compras: row.clientes_dias_compras ?? null,
+        clientes_empresa: row.clientes_empresa ?? null,
+        clientes_incluir_sem_empresa: row.clientes_incluir_sem_empresa === true,
         last_clientes_sync_at: row.last_clientes_sync_at,
         last_cobrancas_sync_at: row.last_cobrancas_sync_at,
         last_error: row.last_error,
@@ -270,6 +284,14 @@ export interface TothDryRunResult {
   escreveu: false;
   modo: TothSyncMode;
   janela_dias_compras: number | null;
+  empresa: string | null;
+  incluir_sem_empresa: boolean;
+  /** Quem o filtro de empresa deixou de fora, e de quem eram. */
+  fora_do_filtro_de_empresa: {
+    total: number;
+    sem_empresa: number;
+    por_empresa: Record<string, number>;
+  };
   linhas_recebidas: number;
   sem_identificador: number;
   totais: {
@@ -340,6 +362,41 @@ export function useUpdateTothActiveWindow() {
     },
     onError: (error: Error) => {
       toast.error("Erro ao salvar a janela de cliente ativo", { description: error.message });
+    },
+  });
+}
+
+// ─── Empresa do grupo ───────────────────────────────────────────────────────
+
+/**
+ * Grava qual empresa do grupo a sincronização traz.
+ *
+ * O Toth devolve TODAS as empresas do grupo na mesma resposta de `/clientes` e
+ * não aceita filtro por empresa — na base da Café Jurerê são quatro. Sem esta
+ * escolha, a carteira de uma organização recebe cliente que é de outra empresa.
+ *
+ * `null` volta a trazer todas, que é o comportamento anterior.
+ */
+export function useUpdateTothEmpresa() {
+  const { organizationId } = useOrganization();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { empresa: string | null; incluirSemEmpresa: boolean }) => {
+      if (!organizationId) throw new Error("Sem organização");
+      const { error } = await tothConnectionsTable()
+        .update({
+          clientes_empresa: params.empresa,
+          clientes_incluir_sem_empresa: params.incluirSemEmpresa,
+        })
+        .eq("organization_id", organizationId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["toth-status"] });
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao salvar a empresa do grupo", { description: error.message });
     },
   });
 }
