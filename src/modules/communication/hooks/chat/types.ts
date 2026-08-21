@@ -215,7 +215,12 @@ export function isSocialContact(c: InboxContact): c is SocialContact {
  * `chat-meta` casou thread por `sender_id` e fez toda mensagem de SAÍDA sumir.
  */
 export function contactKey(c: InboxContact): string {
-  return c.channel === "whatsapp" ? c.phone_number : c.conversation_key;
+  // Canal AUSENTE é WhatsApp legado: toda conversa era WhatsApp antes do
+  // NotificaMe, e o tipo exigir `channel` não faz dado antigo passar a tê-lo.
+  // Sem este default, contato sem canal caía no ramo social, devolvia
+  // `conversation_key` inexistente, e a chave da conversa virava `undefined` —
+  // o que quebra seleção, comparação e o onPress da linha do mobile de uma vez.
+  return (c.channel ?? "whatsapp") === "whatsapp" ? c.phone_number : c.conversation_key;
 }
 
 /**

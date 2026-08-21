@@ -37,7 +37,10 @@ export function MobileConversationRow({
   const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
   const hasUnread = contact.unread_count > 0 && !isSelected;
   const key = contactKey(contact);
-  const isWhatsApp = contact.channel === "whatsapp";
+  // Canal AUSENTE e WhatsApp legado, nao "outro canal": toda conversa era
+  // WhatsApp antes do NotificaMe. Sem este default, contato antigo caia no
+  // ramo do selo e pedia um icone que nao existe.
+  const isWhatsApp = (contact.channel ?? "whatsapp") === "whatsapp";
 
   const isOutgoingManual =
     contact.last_message_direction === "outgoing" &&
