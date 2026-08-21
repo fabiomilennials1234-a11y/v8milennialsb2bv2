@@ -44,19 +44,44 @@ UPDATE public.feature_catalog
 -- comparado com o banco por `tests/integration/feature-catalog-parity.test.ts`.
 -- Falhar aqui é melhor que ver a divergência aparecer como teste vermelho três
 -- passos adiante.
+--
+-- ⚠ A guarda só vale quando a LINHA EXISTE, e isso não é detalhe: as linhas de
+-- `feature_catalog` são DADO, não schema. Migration nenhuma as semeia — elas
+-- foram inseridas em produção e o arquivo gerado é o retrato daquilo. Num banco
+-- construído do repo (o `supabase start` do CI), a tabela nasce VAZIA, os dois
+-- UPDATEs acima acertam zero linhas e afirmar "o rótulo é Leads" reprovaria um
+-- apply correto.
+--
+-- Medido: a primeira versão desta guarda derrubou o `supabase start` do job de
+-- E2E com "rótulo de leads ficou <NULL>". Ela estava certa em falhar alto e
+-- errada no que perguntava.
 DO $guard$
 DECLARE
   v_label text;
   v_path  text;
+  v_tem_leads boolean;
+  v_tem_deals boolean;
 BEGIN
-  SELECT COALESCE(display_name, name) INTO v_label FROM public.feature_catalog WHERE key = 'leads';
-  IF v_label IS DISTINCT FROM 'Leads' THEN
-    RAISE EXCEPTION 'GUARDA: rótulo de `leads` ficou %, esperado Leads', v_label;
+  SELECT EXISTS (SELECT 1 FROM public.feature_catalog WHERE key = 'leads') INTO v_tem_leads;
+  SELECT EXISTS (SELECT 1 FROM public.feature_catalog WHERE key = 'deals') INTO v_tem_deals;
+
+  IF NOT v_tem_leads AND NOT v_tem_deals THEN
+    RAISE NOTICE 'feature_catalog sem as chaves leads/deals — banco construído do repo, nada a corrigir.';
+    RETURN;
   END IF;
 
-  SELECT sidebar_path INTO v_path FROM public.feature_catalog WHERE key = 'deals';
-  IF v_path IS NOT NULL THEN
-    RAISE EXCEPTION 'GUARDA: `deals` ainda anuncia sidebar_path %', v_path;
+  IF v_tem_leads THEN
+    SELECT COALESCE(display_name, name) INTO v_label FROM public.feature_catalog WHERE key = 'leads';
+    IF v_label IS DISTINCT FROM 'Leads' THEN
+      RAISE EXCEPTION 'GUARDA: rótulo de `leads` ficou %, esperado Leads', v_label;
+    END IF;
+  END IF;
+
+  IF v_tem_deals THEN
+    SELECT sidebar_path INTO v_path FROM public.feature_catalog WHERE key = 'deals';
+    IF v_path IS NOT NULL THEN
+      RAISE EXCEPTION 'GUARDA: `deals` ainda anuncia sidebar_path %', v_path;
+    END IF;
   END IF;
 END
 $guard$;
