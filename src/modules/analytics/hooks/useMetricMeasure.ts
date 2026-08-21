@@ -49,6 +49,19 @@ export interface MetricMeasureResult {
   recorte?: string;
   value: number | null;
   series: { key: string | null; label: string; value: number }[] | null;
+  /**
+   * ALVO do período, quando a medida tem `goal_type` no catálogo (SCRUM-389).
+   *
+   * O motor já devolvia este campo desde `20260727140000` — soma de
+   * `goals.target_value` da org no mês do período, org-level salvo filtro de
+   * membro. Nenhum consumidor do Estúdio o lia; era número calculado e jogado
+   * fora a cada janela aberta.
+   *
+   * `null` significa "esta medida não tem alvo" OU "ninguém cadastrou meta
+   * para o mês". As duas se leem igual daqui, e é intencional: a janela não
+   * deve inventar termômetro sobre meta ausente.
+   */
+  target?: number | null;
   empty_reason: string | null;
   /** Só em kind='ratio': os 2 filhos da razão (profundidade 1, exatamente 2). */
   num?: { measure_id: string; value: number | null; unit: string };

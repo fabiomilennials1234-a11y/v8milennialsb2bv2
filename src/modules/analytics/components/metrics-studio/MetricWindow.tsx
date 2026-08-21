@@ -242,6 +242,50 @@ function MetricWindowBase({
               )}
             </div>
 
+            {/* Termômetro da meta (SCRUM-389).
+                O motor já devolvia `target` desde 20260727140000 e ninguém lia:
+                número calculado e jogado fora a cada janela aberta. Só aparece
+                quando existe alvo — meta ausente não vira barra em zero, que
+                leria como "não bateu nada". */}
+            {dados.meta !== null && !compact && (
+              <div className="flex flex-col gap-1">
+                <div className="flex items-baseline justify-between gap-2 text-[10px] text-muted-foreground/70">
+                  <span className="truncate">Meta: {formatMetricValue(dados.meta, metric.formatId)}</span>
+                  {dados.atingimento !== null && (
+                    <span
+                      className={cn(
+                        "shrink-0 font-semibold tabular-nums",
+                        dados.atingimento >= 100 ? "text-emerald-500" : "text-muted-foreground",
+                      )}
+                    >
+                      {dados.atingimento.toFixed(0)}% da meta
+                    </span>
+                  )}
+                </div>
+                {dados.atingimento !== null && (
+                  <div
+                    className="h-1 w-full overflow-hidden rounded-full bg-muted"
+                    role="progressbar"
+                    aria-valuenow={Math.round(dados.atingimento)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-label={`${metric.label}: ${Math.round(dados.atingimento)}% da meta`}
+                  >
+                    {/* A barra satura em 100%; o número ao lado segue dizendo
+                        a verdade quando passa. Barra estourando a caixa é
+                        defeito visual, mas 137% é informação. */}
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-[width] duration-500",
+                        dados.atingimento >= 100 ? "bg-emerald-500" : "bg-primary",
+                      )}
+                      style={{ width: `${Math.min(100, Math.max(0, dados.atingimento))}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             {win.chart !== "number" && (
               <div className="min-h-0 flex-1">
                 {dados.series.length === 0 ? (

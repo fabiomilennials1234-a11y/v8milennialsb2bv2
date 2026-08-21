@@ -36,9 +36,33 @@ export interface MetricWindowData {
   /** Já ordenada: cronológica em `tempo`, por valor nos demais cortes. */
   series: MetricSeriesPoint[];
   valorAnterior: number | null;
+  /** Alvo do período (SCRUM-389). `null` = medida sem alvo ou mês sem meta. */
+  meta: number | null;
+  /**
+   * Percentual do alvo alcançado, JÁ MULTIPLICADO POR 100 (SCRUM-389).
+   *
+   * A multiplicação mora aqui de propósito. O formatador `percent_1` apenas
+   * SUFIXA "%" — quem entrega 0,87 imprime "0,9%" para uma meta 87% batida. É
+   * a mesma armadilha de 100× que o ADR-0023 nomeia no motor, e ela não some
+   * por estar no front.
+   *
+   * `null` quando não há alvo, e também quando o alvo é ZERO: dividir por zero
+   * daria Infinity, e "∞% da meta" é pior que ausência.
+   */
+  atingimento: number | null;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
+}
+
+/**
+ * Percentual do alvo. Exportada para o teste poder exercitar as bordas sem
+ * montar um hook — são elas que quebram na frente do cliente.
+ */
+export function percentualDaMeta(valor: number | null, alvo: number | null | undefined): number | null {
+  if (valor === null || alvo === null || alvo === undefined) return null;
+  if (alvo === 0) return null;
+  return (valor / alvo) * 100;
 }
 
 export function useMetricWindowData(
@@ -89,10 +113,14 @@ export function useMetricWindowData(
     return [...bruta].sort((a, b) => (a.key ?? "").localeCompare(b.key ?? ""));
   }, [medida, corte]);
 
+  const meta = medida?.target ?? null;
+
   return {
     medida,
     series,
     valorAnterior: headValueFromMeasure(comparativo.data ?? null),
+    meta,
+    atingimento: percentualDaMeta(headValueFromMeasure(medida), meta),
     isLoading: principal.isLoading,
     isError: principal.isError,
     refetch: () => {
