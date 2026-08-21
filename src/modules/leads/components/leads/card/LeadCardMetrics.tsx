@@ -30,10 +30,9 @@ interface LeadCardMetricsProps {
   className?: string;
 }
 
-function initials(name?: string | null): string {
-  if (!name) return "?";
-  return name.split(" ").filter(Boolean).map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-}
+/* `initials` saiu junto com o `MiniResponsible` que a usava — a pílula mostra
+   o nome curto, não a inicial. Quem precisa de inicial hoje é o card compacto,
+   que tem a sua própria. */
 
 function colorFromName(name?: string | null): string {
   if (!name) return "hsl(0, 0%, 40%)";
@@ -74,34 +73,10 @@ function NomeResponsavel({ member, label }: { member: ResponsibleMini | null | u
   );
 }
 
-function MiniResponsible({ member, label }: { member: ResponsibleMini | null | undefined; label: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <div
-          className={cn(
-            "w-5 h-5 rounded-full flex items-center justify-center border border-card",
-            !member && "bg-muted/40",
-          )}
-          style={member ? { backgroundColor: colorFromName(member.name) } : undefined}
-        >
-          {member ? (
-            member.avatar_url ? (
-              <img src={member.avatar_url} alt={member.name ?? ""} className="w-full h-full rounded-full object-cover" />
-            ) : (
-              <span className="text-[8px] font-semibold text-white">{initials(member.name)}</span>
-            )
-          ) : (
-            <span className="text-[10px] text-muted-foreground/40">·</span>
-          )}
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="top" className="text-[10px]">
-        {label}{member?.name ? `: ${member.name}` : ": —"}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
+/* `MiniResponsible` (bolinha de 20px com a inicial) vivia aqui e foi removido:
+   o commit do card DataCrazy o substituiu pela pílula com NOME logo acima, e
+   ele ficou órfão — sem chamador, mas ainda compilando. O ratchet de tipos o
+   acusou como erro INTRODUZIDO por esta branch, e estava certo. */
 
 export const LeadCardMetrics = memo(function LeadCardMetrics({
   leadId,

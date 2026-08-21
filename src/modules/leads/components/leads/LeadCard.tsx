@@ -92,7 +92,12 @@ const VARIANT_CONFIG: Record<LeadCardVariant, {
   showContact: boolean; showValue: boolean; showDate: boolean;
   showProducts: boolean; showMeetLink: boolean; showNotes: boolean;
 }> = {
-  whatsapp:        { showContact: true,  showValue: true,  showDate: false, showProducts: false, showMeetLink: false, showNotes: false },
+  // `showDate`/`showProducts` ligados em 21/08: a anatomia do DataCrazy dá
+  // LINHA PRÓPRIA a produto e data, e com os dois desligados o card do funil
+  // principal — que é onde o cliente olha — perdia metade do desenho novo.
+  // Campo vazio não some: vira o link azul "Sem produto"/"Sem data", que é o
+  // convite a preencher do próprio print.
+  whatsapp:        { showContact: true,  showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false },
   confirmacao:     { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: true,  showNotes: false },
   propostas:       { showContact: false, showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false },
   followup:        { showContact: false, showValue: false, showDate: true,  showProducts: false, showMeetLink: false, showNotes: true  },
@@ -403,6 +408,24 @@ export const LeadCard = memo(function LeadCard({
           urgency={urgency}
           dateIndicator={dateIndicator}
           parsedDate={parsedDate}
+          /* Montado AQUI e passado pronto: se o card compacto importasse
+             `AbrirConversaButton`, fecharia um ciclo leads↔communication que o
+             dependency-cruiser barra. Quem já tem essa dependência é este
+             arquivo. `null` quando o telefone não é celular BR válido. */
+          acaoWhatsapp={
+            hasPhone ? (
+              <AbrirConversaButton
+                leadId={lead.leadId ?? lead.id}
+                phone={lead.phone}
+                variant="ghost"
+                size="icon"
+                className="size-[26px] rounded-md p-0 text-[#25D366] hover:bg-[#25D366]/15 hover:text-[#25D366]"
+                title="Abrir WhatsApp"
+              >
+                <MessageCircle className="size-[15px]" />
+              </AbrirConversaButton>
+            ) : null
+          }
           selected={selected}
           onSelect={onSelect}
           onClick={onClick}

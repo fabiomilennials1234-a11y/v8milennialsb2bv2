@@ -1,36 +1,54 @@
 import { memo, type ReactNode } from "react";
-import { Building2, Check, Clock, MoreVertical } from "lucide-react";
+import { Building2, CalendarDays, Check, ClipboardList, Clock, MoreVertical, User, Wallet } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 // `Strict` e não `formatDistanceToNow`: a versão frouxa devolve "há cerca de
-// 4 horas", e o "cerca de" sozinho estoura a linha dos badges — o card passa
-// a ter 112px em vez de 98px. O protótipo escreve "há 2 horas".
+// 4 horas", e o "cerca de" sozinho estoura a linha dos badges.
 import { formatDistanceToNowStrict } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatFaturamento } from "@/lib/format/faturamento";
+import { LeadCardAvatar } from "./LeadCardAvatar";
+import { LeadCardLabels } from "./LeadCardLabels";
+// Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
+import type { QualificationTier } from "../../lead-detail/modal/types";
 
 /**
- * Card compacto do funil — a tradução 1:1 do `.cd` do protótipo
- * `.specs/mockups/funis-redesign/` (styles.css:383-457, app.js:220-323).
+ * Card do funil na ANATOMIA DO DATACRAZY.
  *
- * O card confortável empilha seis blocos e mede ~250px, então cabem duas
- * fichas por coluna. Aqui o MESMO conteúdo vira três linhas de ~100px:
+ * Antes este arquivo era a tradução 1:1 do `.cd` do protótipo
+ * `.specs/mockups/funis-redesign/` — três linhas de ~100px, cujo objetivo era
+ * caber mais ficha por coluna. O pedido de 20/08 trocou o alvo: o card passa a
+ * seguir o concorrente, lido do print real (protótipo em `funis-datacrazy/`).
  *
- *   1. nome + empresa · avatares dos responsáveis · menu
- *   2. marcadores de tag · origem · potencial · tempo parado · idade
- *   3. telefone · valor
+ * ⚠️ A troca tem um custo declarado, não um acidente: o card CRESCE. O desenho
+ * antigo existia para caber mais ficha por coluna, e o do DataCrazy dá linha
+ * própria a cada dado. Quem escolheu foi o Lucas, sabendo disso.
  *
- * O que economiza altura não é cortar informação, é parar de dar linha
- * própria a cada dado: os avatares sobem pra linha do nome, as tags viram
- * marcador vertical de 3px em vez de tarja horizontal, e o tempo — que era
- * um rodapé inteiro — vira badge.
+ * A anatomia, na ordem do print:
+ *   (inicial) Nome — Empresa                    [qualificação]  ⋮
+ *   produto, como link azul sublinhado
+ *   👤 pré-venda · venda            ┐
+ *   💰 valor                        │  ações (WhatsApp) na LATERAL direita,
+ *   📅 data                         │  no meio da lista, como no concorrente
+ *   🗒 atividades                    ┘
+ *   ──────────────────────────────────
+ *   etiquetas COM NOME, no rodapé
  *
- * O nome trunca em UMA linha de propósito. Com `line-clamp-2` um nome longo
- * empurra o card pra 115px e a coluna perde uma ficha inteira; a altura do
- * card passa a depender do cadastro, não do layout.
+ * Duas decisões que se afastam do print, de propósito:
+ *
+ *   1. A qualificação fica onde o DataCrazy põe o `#1` — canto superior
+ *      direito — e MENOR que a inicial (20px contra 26px). É o pedido literal
+ *      ("menores que o símbolo do cara"). Ganho de brinde: hoje `avatar_url`
+ *      COBRE as metades de qualificação; separados, os dois convivem.
+ *   2. O print tem um `⊕` na lateral que abre o menu de opções. Aqui o `⋮` do
+ *      topo já faz isso — repetir o mesmo menu em dois lugares no mesmo card é
+ *      ruído, não fidelidade. A lateral fica só com o WhatsApp.
+ *
+ * O padrão "campo vazio é link azul sublinhado" vem do print e é intencional:
+ * é o convite a preencher. Vale para produto, responsáveis e valor.
  */
 
 interface Responsavel {
@@ -46,6 +64,8 @@ interface Tag {
 interface LeadCardCompactProps {
   lead: {
     id: string;
+    /** Id do LEAD (o `id` acima é o da ENTRADA no funil). O chat precisa deste. */
+    leadId?: string | null;
     name: string;
     company?: string | null;
     phone?: string | null;
@@ -65,6 +85,11 @@ interface LeadCardCompactProps {
     potencial?: string | null;
     preSaleResponsible?: Responsavel | null;
     saleResponsible?: Responsavel | null;
+    /** As duas metades da qualificação — pré-venda (SDR) e venda. */
+    preQualTier?: QualificationTier | null;
+    qualTier?: QualificationTier | null;
+    avatarUrl?: string | null;
+    metrics?: { commentsCount?: number; checklistsCompleted?: number; checklistsTotal?: number } | null;
   };
   config: {
     showContact: boolean; showValue: boolean; showDate: boolean;
@@ -74,27 +99,36 @@ interface LeadCardCompactProps {
   urgency: { label: string; className: string } | null;
   dateIndicator: { label: string; className: string } | null;
   parsedDate: Date | null;
+  /**
+   * O botão de WhatsApp, montado PRONTO pelo `LeadCard`.
+   *
+   * Não é preciosismo: importar `AbrirConversaButton` (ou
+   * `communication/lib/whatsapp`) daqui fecha um ciclo entre os módulos
+   * `leads` e `communication`, e o dependency-cruiser barra
+   * (`no-circular-dynamic`). Quem já tem essa dependência é o `LeadCard`;
+   * este arquivo só recebe o nó e escolhe ONDE pendurar. Vem `null` quando o
+   * telefone não passa em `formatPhoneForWhatsApp` — aí o botão some.
+   */
+  acaoWhatsapp?: ReactNode;
   selected?: boolean;
   onSelect?: (e: React.MouseEvent) => void;
   onClick?: () => void;
   menuItems: ReactNode;
   /**
-   * Slot de domínio (ex.: confirmar reunião no funil mergeado). Continua
-   * existindo no compacto — tirar o botão em nome da altura trocaria um
-   * problema por outro.
+   * Slot de domínio (ex.: confirmar reunião no funil mergeado).
    */
   extraActions?: ReactNode;
 }
 
-function iniciais(nome?: string | null): string {
-  if (!nome) return "?";
-  return nome.split(" ").filter(Boolean).map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-}
-
-function corDoNome(nome?: string | null): string {
-  if (!nome) return "hsl(0, 0%, 40%)";
-  const hash = Array.from(nome).reduce((acc, c) => acc + c.charCodeAt(0), 0);
-  return `hsl(${hash % 360}, 60%, 45%)`;
+/**
+ * Cor da inicial. Mesma função do ramo confortável (`corDaInicial` em
+ * LeadCard.tsx) e de `colorFromName` em LeadCardMetrics: soma os charCodes e
+ * gira o matiz, para duas pessoas não caírem na mesma cor por acidente.
+ */
+function corDaInicial(nome?: string | null): string {
+  if (!nome) return "hsl(0 0% 45%)";
+  const h = Array.from(nome).reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return `hsl(${h % 360} 55% 55%)`;
 }
 
 function formatCurrency(value: number): string {
@@ -107,9 +141,9 @@ function formatCurrency(value: number): string {
 }
 
 /**
- * `12/08 · 14:00` — o formato do protótipo. Ano fica de fora (compromisso de
- * funil é sempre perto) e a hora só aparece quando existe: data sem hora vem
- * como meia-noite, e "· 00:00" leria como reunião de madrugada.
+ * `12/08 · 14:00`. Ano fica de fora (compromisso de funil é sempre perto) e a
+ * hora só aparece quando existe: data sem hora vem como meia-noite, e
+ * "· 00:00" leria como reunião de madrugada.
  */
 function formatarCompromisso(d: Date): string {
   const dia = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
@@ -135,13 +169,36 @@ function Badge({ children, className, style }: {
   );
 }
 
+/**
+ * Uma das 4 linhas com ícone. `vazio` é o texto do convite a preencher — e,
+ * quando o valor falta, a linha vira link azul sublinhado, como no print.
+ */
+function Linha({ icone, children, vazio }: {
+  icone: ReactNode; children?: ReactNode; vazio: string;
+}) {
+  const preenchida = children !== null && children !== undefined && children !== false;
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-[11px] leading-[1.45]">
+      <span className="grid size-[13px] shrink-0 place-items-center text-muted-foreground/70" aria-hidden>
+        {icone}
+      </span>
+      {preenchida ? (
+        <span className="min-w-0 truncate text-muted-foreground">{children}</span>
+      ) : (
+        <span className="min-w-0 truncate text-[#3da8f5] underline decoration-[#3da8f5]/40 underline-offset-2">
+          {vazio}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export const LeadCardCompact = memo(function LeadCardCompact({
-  lead, config, origin, urgency, dateIndicator, parsedDate,
+  lead, config, origin, urgency, dateIndicator, parsedDate, acaoWhatsapp,
   selected, onSelect, onClick, menuItems, extraActions,
 }: LeadCardCompactProps) {
-  const responsaveis = [lead.preSaleResponsible, lead.saleResponsible].filter(
-    (r): r is Responsavel => !!r?.name,
-  );
+  const preVenda = lead.preSaleResponsible?.name ?? null;
+  const venda = lead.saleResponsible?.name ?? null;
 
   const diasParado = lead.stageEnteredAt
     ? Math.floor((Date.now() - new Date(lead.stageEnteredAt).getTime()) / 86400000)
@@ -155,11 +212,16 @@ export const LeadCardCompact = memo(function LeadCardCompact({
       : null
     : null;
 
-  const tags = lead.tags ?? [];
-  const tagsVisiveis = tags.slice(0, 3);
+  // O `LeadCard` só monta o slot quando o telefone é celular BR válido.
+  const temZap = config.showContact && !!acaoWhatsapp;
 
-  // Linha 3 só existe se houver o que pôr nela.
-  const temLinhaInfo = (config.showContact && lead.phone) || valorExibido;
+  const produto = lead.products?.[0]?.name ?? null;
+
+  const feitos = lead.metrics?.checklistsCompleted ?? 0;
+  const totalCk = lead.metrics?.checklistsTotal ?? 0;
+  const atividades = totalCk > 0
+    ? `${feitos}/${totalCk} atividade${totalCk > 1 ? "s" : ""}`
+    : null;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -167,8 +229,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
         data-lead-id={lead.id}
         onClick={onClick}
         className={cn(
-          // `p-0` anula o `p-4` que `.kanban-card` aplica no CSS global — o
-          // recheio aqui é do wrapper interno, 8×10px como no protótipo.
+          // `p-0` anula o `p-4` que `.kanban-card` aplica no CSS global.
           "kanban-card group relative cursor-pointer p-0",
           "flex flex-col rounded-[10px]",
           lead.isInactive && "opacity-60",
@@ -177,7 +238,7 @@ export const LeadCardCompact = memo(function LeadCardCompact({
       >
         <div className="flex flex-col gap-1.5 px-2.5 py-2">
 
-          {/* ── 1. nome + empresa · avatares · menu ── */}
+          {/* ── 1. inicial · nome + empresa · QUALIFICAÇÃO · menu ── */}
           <div className="flex items-start gap-2">
             {onSelect && (
               <button
@@ -187,8 +248,6 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                 aria-label={`Selecionar ${lead.name}`}
                 onClick={(e) => { e.stopPropagation(); onSelect(e); }}
                 className={cn(
-                  // No fluxo, não `absolute`: sobreposto ele cobriria o nome
-                  // num card que agora tem 100px, não 250px.
                   "mt-px flex size-[15px] shrink-0 items-center justify-center rounded border transition-all",
                   selected
                     ? "border-primary bg-primary text-primary-foreground opacity-100"
@@ -198,6 +257,20 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                 {selected && <Check className="size-[9px]" />}
               </button>
             )}
+
+            {/* o "símbolo do cara": a inicial, 26px */}
+            <div
+              className="grid size-[26px] shrink-0 place-items-center overflow-hidden rounded-full text-[11px] font-semibold"
+              style={{
+                color: corDaInicial(lead.name),
+                backgroundColor: `color-mix(in srgb, ${corDaInicial(lead.name)} 18%, transparent)`,
+              }}
+              aria-hidden
+            >
+              {lead.avatarUrl
+                ? <img src={lead.avatarUrl} alt="" className="size-full object-cover" />
+                : (lead.name?.trim()?.[0]?.toUpperCase() ?? "?")}
+            </div>
 
             <div className="min-w-0 flex-1">
               <h4 className="truncate text-[12.5px] font-semibold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary">
@@ -211,24 +284,15 @@ export const LeadCardCompact = memo(function LeadCardCompact({
               )}
             </div>
 
-            {responsaveis.length > 0 && (
-              <div className="flex shrink-0 -space-x-[5px] pt-px">
-                {responsaveis.map((r, i) => (
-                  <Tooltip key={i}>
-                    <TooltipTrigger asChild>
-                      <span
-                        className="grid size-[17px] place-items-center rounded-full border-[1.5px] border-card text-[7.5px] font-bold text-white"
-                        style={{ backgroundColor: corDoNome(r.name) }}
-                      >
-                        {r.avatar_url
-                          ? <img src={r.avatar_url} alt={r.name ?? ""} className="size-full rounded-full object-cover" />
-                          : iniciais(r.name)}
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="text-[10px]">{r.name}</TooltipContent>
-                  </Tooltip>
-                ))}
-              </div>
+            {/* onde o DataCrazy põe o "#1": 20px, MENOR que a inicial de 26px */}
+            {(lead.preQualTier || lead.qualTier) && (
+              <LeadCardAvatar
+                preQualTier={lead.preQualTier}
+                qualTier={lead.qualTier}
+                name={lead.name}
+                size={20}
+                className="mt-px shrink-0"
+              />
             )}
 
             <DropdownMenu>
@@ -245,34 +309,68 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             </DropdownMenu>
           </div>
 
-          {/* ── 2. marcadores de tag · badges ── */}
-          <div className="flex flex-wrap items-center gap-1">
-            {tagsVisiveis.length > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="mr-px inline-flex items-center gap-[3px]">
-                    {tagsVisiveis.map((t, i) => (
-                      <i
-                        key={i}
-                        aria-hidden
-                        className="block h-[13px] w-[3px] rounded-sm"
-                        style={{ backgroundColor: t.color || "#888" }}
-                      />
-                    ))}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-[10px]">
-                  {tags.map((t) => t.name).join(" · ")}
-                </TooltipContent>
-              </Tooltip>
-            )}
+          {/* ── 2. o produto, como link azul sublinhado ── */}
+          {config.showProducts && (
+            <a
+              onClick={(e) => e.stopPropagation()}
+              className="block min-w-0 truncate text-[11px] leading-[1.35] text-[#3da8f5] underline decoration-[#3da8f5]/40 underline-offset-2"
+            >
+              {produto ?? "Sem produto"}
+            </a>
+          )}
 
+          {/* ── 3. as linhas com ícone + as ações na LATERAL direita ── */}
+          <div className="flex items-stretch gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
+              <Linha icone={<User className="size-[13px]" />} vazio="Sem responsável">
+                {/* Só os nomes que EXISTEM, unidos por "·". A versão anterior
+                    imprimia um travessão no lugar do ausente e saía
+                    "—Bruna Ricci" grudado: metade vazia não é informação,
+                    é sujeira. Quem tem um responsável só mostra um. */}
+                {preVenda || venda
+                  ? [preVenda, venda].filter(Boolean).join(" · ")
+                  : null}
+              </Linha>
+
+              {config.showValue && (
+                <Linha icone={<Wallet className="size-[13px]" />} vazio="R$ 0,00">
+                  {valorExibido ? (
+                    <span className="font-semibold tabular-nums text-emerald-500">{valorExibido}</span>
+                  ) : null}
+                </Linha>
+              )}
+
+              {config.showDate && (
+                <Linha icone={<CalendarDays className="size-[13px]" />} vazio="Sem data">
+                  {parsedDate ? (
+                    <>
+                      {lead.dateLabel && <b className="font-semibold text-foreground">{lead.dateLabel} </b>}
+                      {formatarCompromisso(parsedDate)}
+                    </>
+                  ) : null}
+                </Linha>
+              )}
+
+              <Linha icone={<ClipboardList className="size-[13px]" />} vazio="Sem atividades">
+                {atividades}
+              </Linha>
+            </div>
+
+            {/* No print os botões ficam no MEIO da lista, à direita — não no topo. */}
+            {temZap && (
+              <div className="flex shrink-0 flex-col items-center justify-center">
+                {acaoWhatsapp}
+              </div>
+            )}
+          </div>
+
+          {/* ── 4. os badges que o produto já tinha (origem, tempo, alertas) ── */}
+          <div className="flex flex-wrap items-center gap-1">
             <Badge style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}40` }}>
               {origin.label}
             </Badge>
 
-            {/* Como o protótipo devolve o calor ao card: sem a pílula de chama
-                de 1 a 10, só o corte que muda a ação de quem lê a coluna. */}
+            {/* O calor sem a pílula de 1 a 10: só o corte que muda a ação. */}
             {lead.rating != null && lead.rating >= 8 && (
               <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-500">Alto potencial</Badge>
             )}
@@ -311,63 +409,37 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             )}
           </div>
 
-          {/* ── 3. telefone · valor ── */}
-          {temLinhaInfo && (
-            <div className="flex items-baseline justify-between gap-2 border-l-2 border-primary/50 pl-2 text-[11px] leading-[1.35]">
-              {/* Sem espaçador quando não há telefone: `justify-between` com um
-                  filho só empurraria o valor pra direita e deixaria um vão ao
-                  lado da barra — nos funis de confirmação e propostas, que não
-                  mostram contato, a linha parecia quebrada. */}
-              {config.showContact && lead.phone && (
-                <span className="truncate tabular-nums text-muted-foreground">{lead.phone}</span>
-              )}
-              {valorExibido && (
-                <span className="shrink-0 font-bold tabular-nums text-emerald-500">{valorExibido}</span>
-              )}
-            </div>
+          {config.showNotes && lead.notes && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="max-w-full truncate text-[10px] leading-[1.4] text-muted-foreground">
+                  {lead.notes}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-[10px]">{lead.notes}</TooltipContent>
+            </Tooltip>
           )}
 
-          {/* Data da reunião, Meet, produtos e notas viram chips — só aparecem
-              nos funis cujo `variant` os liga, e nunca ganham bloco próprio. */}
-          {(config.showDate && parsedDate) || (config.showMeetLink && lead.meetLink) ||
-           (config.showProducts && lead.products?.length) || (config.showNotes && lead.notes) ? (
-            <div className="flex flex-wrap items-center gap-1">
-              {config.showDate && parsedDate && (
-                <Badge className="border-white/[0.07] bg-white/[0.05] text-muted-foreground">
-                  {lead.dateLabel && <b className="font-semibold text-foreground">{lead.dateLabel}</b>}
-                  {formatarCompromisso(parsedDate)}
-                </Badge>
-              )}
-              {config.showMeetLink && lead.meetLink && (
-                <a
-                  href={lead.meetLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-[9px] font-semibold leading-[1.65] text-primary hover:underline"
-                >
-                  Entrar no Meet
-                </a>
-              )}
-              {config.showProducts && lead.products && lead.products.length > 0 && (
-                <Badge className="border-white/[0.07] bg-white/[0.05] text-muted-foreground">
-                  {lead.products.length} produto{lead.products.length > 1 ? "s" : ""}
-                </Badge>
-              )}
-              {config.showNotes && lead.notes && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span className="max-w-full truncate text-[10px] leading-[1.4] text-muted-foreground">
-                      {lead.notes}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-xs text-[10px]">{lead.notes}</TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          ) : null}
+          {config.showMeetLink && lead.meetLink && (
+            <a
+              href={lead.meetLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="text-[10px] font-semibold text-primary hover:underline"
+            >
+              Entrar no Meet
+            </a>
+          )}
 
           {extraActions}
+
+          {/* ── 5. divisória + etiquetas COM NOME, no rodapé ── */}
+          {lead.tags && lead.tags.length > 0 && (
+            <div className="mt-px border-t border-border/40 pt-1.5">
+              <LeadCardLabels tags={lead.tags} />
+            </div>
+          )}
         </div>
       </div>
     </TooltipProvider>
