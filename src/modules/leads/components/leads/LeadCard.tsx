@@ -322,20 +322,9 @@ export const LeadCard = memo(function LeadCard({
   const itensDoMenu = (
     <>
       {hasPhone && (
-        <DropdownMenuItem asChild>
-          {/* Mesmo caminho da Quick Actions Row abaixo. O `openWhatsApp` que
-              estava aqui saiu com a consolidação de main ("um caminho só para
-              falar com o lead"); este menu é refactor de develop, então nunca
-              tinha sido migrado. */}
-          <AbrirConversaButton
-            leadId={lead.id}
-            phone={lead.phone}
-            className="w-full justify-start font-normal"
-            title="Abrir WhatsApp"
-          >
-            <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
-          </AbrirConversaButton>
-        </DropdownMenuItem>
+        <AbrirConversaMenuItem leadId={lead.id} phone={lead.phone}>
+          <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
+        </AbrirConversaMenuItem>
       )}
       <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
         <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
@@ -509,30 +498,7 @@ export const LeadCard = memo(function LeadCard({
                     <MoreVertical className="h-4 w-4" />
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {hasPhone && (
-                    <AbrirConversaMenuItem leadId={lead.id} phone={lead.phone}>
-                      <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
-                    </AbrirConversaMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
-                    <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
-                  </DropdownMenuItem>
-                  {pipeOps && (
-                    <AddToFunilMenuItem
-                      pipeOps={pipeOps}
-                      onSelect={() => setAddFunilOpen(true)}
-                    />
-                  )}
-                  {onRemove && (
-                    <DropdownMenuItem
-                      className="text-destructive focus:text-destructive"
-                      onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" /> Remover do funil
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
+                <DropdownMenuContent align="end">{itensDoMenu}</DropdownMenuContent>
               </DropdownMenu>
             </div>
           </div>
