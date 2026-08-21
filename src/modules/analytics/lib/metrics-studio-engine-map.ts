@@ -119,6 +119,9 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // SCRUM-391 fatia funil. Sem `total` de proposito: somar ganho com perda da
   // um numero que nao responde pergunta nenhuma.
   ganho_perda: ["desfecho"],
+  // SCRUM-422. Mesmos recortes de num_vendas: e a mesma consulta com um
+  // predicado a mais.
+  num_vendas_pre_venda: ["total", "closer", "sdr", "origem", "tag", "stream", "pipeline", "tempo"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -140,6 +143,7 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   negocios_na_etapa: "integer",
   negocios_abertos: "integer",
   ganho_perda: "integer",
+  num_vendas_pre_venda: "integer",
 };
 
 /**
@@ -167,6 +171,7 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   negocios_na_etapa: "count",
   negocios_abertos: "count",
   ganho_perda: "count",
+  num_vendas_pre_venda: "count",
 };
 
 /**
@@ -354,6 +359,22 @@ export const ENGINE_METRICS: EngineMetric[] = [
     id: "taxa_qualidade",
     label: "Taxa de qualidade de leads",
     measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
+    cortes: ["total"],
+    formatId: "percent_1",
+  },
+  {
+    // SCRUM-422 — a taxa que o SCRUM-393 definiu: venda com pré-venda sobre o
+    // total de vendas.
+    //
+    // Os dois filhos são `count`, e AQUI o ×100 do ramo `ratio` é o certo:
+    // taxa É percentual. Em `negocios_por_lead` a mesma derivação seria o erro
+    // de 100× — a diferença não é técnica, é semântica.
+    //
+    // O numerador é subconjunto do denominador por construção, então a razão
+    // vive em [0, 100] sem trava. Mesma disciplina de `taxa_qualidade`.
+    id: "taxa_pre_venda",
+    label: "Vendas com pré-venda",
+    measureRef: { kind: "ratio", num: "num_vendas_pre_venda", den: "num_vendas" },
     cortes: ["total"],
     formatId: "percent_1",
   },
