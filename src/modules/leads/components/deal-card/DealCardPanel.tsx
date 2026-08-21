@@ -1,10 +1,8 @@
 import { memo, useCallback } from "react";
-import { X } from "lucide-react";
 import { toast } from "sonner";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -122,16 +120,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && close()}>
+      {/* Sem botão de fechar próprio: o `DialogContent` já desenha um
+          `DialogPrimitive.Close` em `right-4 top-4` (ui/dialog.tsx:48-51).
+          O botão que existia aqui ficava em `right-3 top-3` — 4px ao lado —
+          e o resultado era DOIS "X" quase sobrepostos no canto.
+          Fica o do primitivo: ele já traz rótulo `sr-only`, fecha no Esc e
+          devolve o foco ao gatilho, e é o mesmo de todo diálogo do produto. */}
       <DialogContent className="h-[84vh] max-w-[900px] gap-0 overflow-hidden p-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={close}
-          aria-label="Fechar"
-          className="absolute right-3 top-3 z-20 h-8 w-8 rounded-full hover:bg-muted"
-        >
-          <X className="h-4 w-4" />
-        </Button>
         {conteudo}
       </DialogContent>
     </Dialog>

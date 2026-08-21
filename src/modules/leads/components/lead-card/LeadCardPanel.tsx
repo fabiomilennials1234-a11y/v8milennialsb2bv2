@@ -1,9 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
-import { Button } from "@/components/ui/button";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
@@ -80,16 +78,10 @@ export const LeadCardPanel = memo(function LeadCardPanel() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && close()}>
+      {/* Mesmo defeito que o painel do Negócio tinha: o `DialogContent` já
+          desenha o `DialogPrimitive.Close` (ui/dialog.tsx:48-51) e este
+          arquivo desenhava um segundo 4px ao lado. Fica só o do primitivo. */}
       <DialogContent className="h-[86vh] max-w-[1180px] gap-0 overflow-hidden p-0">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={close}
-          aria-label="Fechar"
-          className="absolute right-3 top-3 z-20 h-8 w-8 rounded-full hover:bg-muted"
-        >
-          <X className="h-4 w-4" />
-        </Button>
         {conteudo}
       </DialogContent>
     </Dialog>
