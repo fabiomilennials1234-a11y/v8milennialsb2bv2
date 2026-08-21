@@ -272,7 +272,9 @@ SELECT is(
   (SELECT sum((s->>'value')::numeric)
      FROM jsonb_array_elements(
        public.fn_metric_measure('39130000-0000-4000-8000-00000000000a',
-         '{"kind":"leaf","id":"leads_na_etapa"}'::jsonb, 'etapa') -> 'series') s),
+         '{"kind":"leaf","id":"leads_na_etapa"}'::jsonb, 'etapa',
+         NULL, NULL, NULL, NULL,
+         '{"pipeline_id":"39139191-0000-4000-8000-00000000000a"}'::jsonb) -> 'series') s),
   3::numeric,
   'SE3: a soma da série de leads (3) NÃO é o total (2) — distinct por balde, de propósito');
 
