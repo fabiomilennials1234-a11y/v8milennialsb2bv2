@@ -4,7 +4,6 @@ import { useViewport } from "@/shared/hooks/use-viewport";
 import { motion } from "framer-motion";
 import {
   Search,
-  Filter,
   UserX,
   Calendar,
   MoreHorizontal,

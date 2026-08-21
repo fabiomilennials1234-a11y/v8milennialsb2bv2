@@ -1,7 +1,7 @@
 -- ===========================================================================
 -- SCRUM-316 — Conversão entre etapas, por COORTE
 -- ===========================================================================
--- Migration: 20270820100000_metric_conversao_entre_etapas.sql
+-- Migration: 20270821120000_metric_conversao_entre_etapas.sql
 --
 -- A DECISÃO QUE ESTA MIGRATION ENCARNA (CTO, 2026-08-20)
 --
@@ -119,7 +119,7 @@ BEGIN
     -- NUNCA entra: ele vem do parâmetro do servidor.
     --
     -- SCRUM-316 acrescentou `from_stage_key` e `to_stage_key` — ESTA é a única
-    -- linha que a 20270820100000 muda neste corpo.
+    -- linha que a 20270821120000 muda neste corpo.
     IF p_node ? 'filters' THEN
       IF jsonb_typeof(p_node->'filters') <> 'object' THEN
         RAISE EXCEPTION 'filtros da medida % não são objeto', v_id USING ERRCODE = '22023';
@@ -345,7 +345,7 @@ BEGIN
     WHEN 'leads_nao_avaliados'    THEN public._metric_leaf_leads_qualidade(p_org_id, p_recorte, v_bounds, v_tz, p_filters, 'nao_avaliados')
     WHEN 'boas_avaliacoes'        THEN public._metric_leaf_leads_qualidade(p_org_id, p_recorte, v_bounds, v_tz, p_filters, 'bons')
     WHEN 'tempo_resposta_equipe'  THEN public._metric_leaf_tempo_resposta(p_org_id, p_recorte, v_bounds, v_tz, p_filters)
-    -- SCRUM-316. As três partilham a MESMA coorte; ver o cabeçalho da 20270820100000.
+    -- SCRUM-316. As três partilham a MESMA coorte; ver o cabeçalho da 20270821120000.
     WHEN 'negocios_coorte_origem'      THEN public._metric_leaf_coorte_etapa(p_org_id, p_recorte, v_bounds, v_tz, p_filters, 'origem')
     WHEN 'negocios_coorte_convertidos' THEN public._metric_leaf_coorte_etapa(p_org_id, p_recorte, v_bounds, v_tz, p_filters, 'convertidos')
     WHEN 'negocios_coorte_em_aberto'   THEN public._metric_leaf_coorte_etapa(p_org_id, p_recorte, v_bounds, v_tz, p_filters, 'em_aberto')
