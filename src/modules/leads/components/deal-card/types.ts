@@ -40,6 +40,37 @@ export interface DealCardLeadRef {
   telefone: string | null;
   /** `Cliente` quando a pessoa já comprou alguma vez — ADR-0023 §6/§7. */
   relacao: "lead" | "cliente";
+
+  /**
+   * ── O bloco do lead DENTRO do negócio ──────────────────────────────────
+   * O card nasceu com a regra "o lead é link, não conteúdo": só nome, empresa
+   * e telefone, o bastante para saber de quem é o negócio. Na prática o painel
+   * abria e não dizia nada — nem o nome da pessoa aparecia, porque o cabeçalho
+   * mostrava `empresa ?? nome` e a empresa quase sempre existe.
+   *
+   * Estes campos não abrem uma segunda ficha: são o mínimo para reconhecer a
+   * pessoa sem sair daqui — quem é, de onde veio, quando chegou e como falar
+   * com ela. O aprofundamento continua sendo o card do Lead, a um clique.
+   */
+  email: string | null;
+  origem: string | null;
+  /** `leads.created_at` — "quando chegou". */
+  chegouEm: string | null;
+  qualificacao: string | null;
+  preQualificacao: string | null;
+  responsaveis: { preVenda: string | null; venda: string | null };
+  etiquetas: Array<{ nome: string; cor: string }>;
+  /** Faixa de faturamento declarada (texto livre no banco). */
+  faturamento: string | null;
+}
+
+/** Uma linha de `deal_items` — os produtos do negócio. */
+export interface DealCardItem {
+  id: string;
+  nome: string;
+  quantidade: number;
+  precoUnitario: number;
+  total: number;
 }
 
 export interface DealCardData {
@@ -79,6 +110,21 @@ export interface DealCardData {
   valor: number;
   moeda: string;
   produto: string | null;
+
+  /**
+   * ── O que estava no banco e o painel não lia ───────────────────────────
+   * De `deals` o app inteiro selecionava apenas `id, title`
+   * (`useLeadsDeals.ts:179-181`), e o `valor` acima vem de
+   * `metadata.sale_value`, não de `deals.value` — por isso um negócio com
+   * valor gravado aparecia sem a seção "Valor".
+   */
+  valorDoNegocio: number | null;
+  probabilidade: number | null;
+  previsaoFechamento: string | null;
+  fechadoEm: string | null;
+  criadoEm: string | null;
+  /** `deal_items` — tabela que existe desde a Wave 1 e nenhuma tela lia. */
+  itens: DealCardItem[];
 
   reuniao: { data: string; confirmada: boolean; link: string | null } | null;
 

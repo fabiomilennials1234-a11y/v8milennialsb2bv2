@@ -38,6 +38,39 @@ import type { DealCardData } from "./types";
  * card do Lead — o que sobrevive à venda mora lá.
  */
 
+/**
+ * Um campo do bloco do lead. Campo vazio NÃO some: vira um traço apagado.
+ * Sumir esconde a diferença entre "não tem telefone" e "o painel não mostra
+ * telefone" — e foi essa dúvida que fez o card parecer quebrado.
+ */
+function Campo({ rotulo, valor }: { rotulo: string; valor: string | null }) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+        {rotulo}
+      </dt>
+      <dd className={cn("truncate text-[12.5px]", valor ? "text-foreground" : "text-muted-foreground/40")}>
+        {valor ?? "—"}
+      </dd>
+    </div>
+  );
+}
+
+function formatarData(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
+
+const TIERS: Record<string, string> = {
+  diamante: "Diamante", ouro: "Ouro", prata: "Prata",
+  bronze: "Bronze", desqualificado: "Desqualificado",
+};
+/** O banco guarda o enum em minúsculas; a tela mostra o rótulo. */
+function rotuloTier(t: string | null): string | null {
+  return t ? (TIERS[t] ?? t) : null;
+}
+
 function Ladrilho({
   icone: Icone,
   cor,
@@ -183,9 +216,17 @@ export function DealCard({
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               )}
             >
-              <span className="truncate text-[13.5px] text-muted-foreground group-hover:text-foreground">
-                {negocio.lead.empresa ?? negocio.lead.nome}
+              {/* O NOME primeiro. Era `empresa ?? nome` — e como empresa quase
+                  sempre existe, o nome da pessoa nunca aparecia: abria-se o
+                  negócio sem saber de quem ele é. A empresa vira o secundário. */}
+              <span className="truncate text-[13.5px] font-medium text-foreground group-hover:underline">
+                {negocio.lead.nome || "Sem nome"}
               </span>
+              {negocio.lead.empresa && (
+                <span className="truncate text-[13.5px] text-muted-foreground">
+                  · {negocio.lead.empresa}
+                </span>
+              )}
               {negocio.lead.relacao === "cliente" && (
                 <span className="shrink-0 rounded border border-primary/40 bg-primary/10 px-1.5 text-[10.5px] font-semibold text-primary">
                   Cliente
@@ -252,6 +293,60 @@ export function DealCard({
       {/* ── Corpo ─────────────────────────────────────────────────────── */}
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         <div className="flex flex-col gap-6">
+          {/* ── O LEAD ──────────────────────────────────────────────────
+              Um negócio pertence a EXATAMENTE UM lead (ADR-0023 §2, e o índice
+              `uq_pipeline_entries_deal_id` garante). Então não há lista: há uma
+              pessoa, e o painel precisa dizer quem é sem obrigar a sair daqui.
+              O aprofundamento continua no card do Lead, no link do cabeçalho. */}
+          <section className="flex flex-col gap-3">
+            <div className="flex items-baseline justify-between gap-3">
+              <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Lead</h2>
+              <button
+                type="button"
+                onClick={() => onOpenLead?.(negocio.lead.id)}
+                className="text-[11.5px] text-muted-foreground hover:text-foreground hover:underline"
+              >
+                Ver ficha completa
+              </button>
+            </div>
+
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
+              <Campo rotulo="Telefone" valor={negocio.lead.telefone} />
+              <Campo rotulo="E-mail" valor={negocio.lead.email} />
+              <Campo rotulo="Origem" valor={negocio.lead.origem} />
+              <Campo
+                rotulo="Chegou em"
+                valor={negocio.lead.chegouEm ? formatarData(negocio.lead.chegouEm) : null}
+              />
+              <Campo rotulo="Pré-venda" valor={negocio.lead.responsaveis.preVenda} />
+              <Campo rotulo="Venda" valor={negocio.lead.responsaveis.venda} />
+              <Campo
+                rotulo="Qualificação"
+                valor={rotuloTier(negocio.lead.qualificacao) ?? rotuloTier(negocio.lead.preQualificacao)}
+              />
+              <Campo rotulo="Faturamento" valor={negocio.lead.faturamento} />
+            </dl>
+
+            {negocio.lead.etiquetas.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {negocio.lead.etiquetas.map((t, i) => (
+                  <span
+                    key={`${t.nome}-${i}`}
+                    className="inline-flex items-center gap-1.5 rounded-full border px-2 py-px text-[11px] font-semibold"
+                    style={{
+                      backgroundColor: `color-mix(in srgb, ${t.cor} 12%, transparent)`,
+                      borderColor: `color-mix(in srgb, ${t.cor} 24%, transparent)`,
+                      color: t.cor,
+                    }}
+                  >
+                    <i className="h-[5px] w-[5px] rounded-full" style={{ backgroundColor: t.cor }} aria-hidden />
+                    {t.nome}
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+
           {/* Tempo — a manchete, e só enquanto o negócio está vivo. */}
           {aberto ? (
             <section className="flex flex-col gap-3">
@@ -336,7 +431,61 @@ export function DealCard({
             </section>
           )}
 
-          {/* Dinheiro — some quando não há, em vez de mostrar R$ 0,00 em 99%. */}
+          {/* ── O NEGÓCIO, lido de `deals` ───────────────────────────────
+              Até 21/08 o app selecionava de `deals` apenas `id, title`: valor,
+              probabilidade, previsão de fechamento e data de criação estavam
+              gravados e não chegavam à tela. `deal_items` — os produtos —
+              existe desde a Wave 1 e nunca teve leitor.
+              Aqui o vazio NÃO some, pelo mesmo motivo do bloco do lead. */}
+          <section className="flex flex-col gap-3">
+            <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Negócio</h2>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-3">
+              <Campo
+                rotulo="Valor"
+                valor={negocio.valorDoNegocio != null ? formatBRL(negocio.valorDoNegocio) : null}
+              />
+              <Campo
+                rotulo="Probabilidade"
+                valor={negocio.probabilidade != null ? `${negocio.probabilidade}%` : null}
+              />
+              <Campo
+                rotulo="Previsão de fechamento"
+                valor={negocio.previsaoFechamento ? formatarData(negocio.previsaoFechamento) : null}
+              />
+              <Campo
+                rotulo="Criado em"
+                valor={negocio.criadoEm ? formatarData(negocio.criadoEm) : null}
+              />
+              <Campo
+                rotulo="Fechado em"
+                valor={negocio.fechadoEm ? formatarData(negocio.fechadoEm) : null}
+              />
+              <Campo rotulo="Dono" valor={negocio.dono} />
+            </dl>
+
+            {negocio.itens.length > 0 && (
+              <div className="flex flex-col gap-1.5 rounded-lg border border-border/60 p-2.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/70">
+                  Produtos
+                </span>
+                {negocio.itens.map((i) => (
+                  <div key={i.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
+                    <span className="min-w-0 truncate">
+                      {i.nome}
+                      {i.quantidade > 1 && (
+                        <span className="text-muted-foreground"> × {i.quantidade}</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 font-semibold tabular-nums text-emerald-500">
+                      {formatBRL(i.total)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Dinheiro do funil (metadata.sale_value) — some quando não há. */}
           {(negocio.valor > 0 || negocio.produto) && (
             <section className="flex flex-col gap-3">
               <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Valor</h2>
