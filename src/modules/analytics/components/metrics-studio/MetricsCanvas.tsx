@@ -3,7 +3,7 @@ import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
-import type { StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import type { StudioPeriod, StudioRange } from "@/modules/analytics/lib/metrics-studio-period";
 import type { StudioWindow } from "@/modules/analytics/hooks/useMetricsStudio";
 import { MetricWindow } from "./MetricWindow";
 
@@ -16,6 +16,7 @@ interface MetricsCanvasProps {
    */
   byId: Map<string, EngineMetric>;
   period: StudioPeriod;
+  range?: StudioRange | null;
   podeVerPorPessoa: boolean;
   editavel: boolean;
   onEditar: () => void;
@@ -35,7 +36,7 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, byId, period, podeVerPorPessoa, editavel, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, byId, period, range, podeVerPorPessoa, editavel, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
   ref,
 ) {
   const empty = windows.length === 0;
@@ -98,6 +99,7 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
             win={win}
             metric={metric}
             period={period}
+            range={range}
             podeVerPorPessoa={podeVerPorPessoa}
             editavel={editavel}
             selected={selectedId === win.id}

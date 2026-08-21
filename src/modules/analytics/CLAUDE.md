@@ -168,7 +168,19 @@ compositor avisa em português quando o formato é `percent_1`.
 5. ✅ **Trava de liberação por org** (G5): `organizations.metrics_studio_enabled`, migration `20270811100000`. Falha para FECHADO — enquanto não estiver em prod, o Estúdio fica invisível para todos. Fecha três portas: rota, item da top bar e command palette.
 7. ✅ **Modos Visualização e Edição** (SCRUM-308). Nasce em Visualização; canvas travado, sem alças nem controles, lista lateral recolhida.
 8. ✅ **Painel persistido no servidor** (SCRUM-309): `metrics_studio_panels`, um por (org, membro), migration `20270811110000`. NÃO reusa `dashboard_widgets` — ver o cabeçalho da migration para os quatro motivos medidos.
-6. 🟠 **17 das 29 do inventário seguem fora do motor** — é o SCRUM-311 que as porta.
+6. 🟠 **15 das 29 do inventário seguem fora do motor** — é o SCRUM-311 que as porta.
+   Eram 17 quando esta linha nasceu; o motor ganhou medidas desde então.
+   **Não copie este número — conte:** cruze os `id` de `metrics-studio-catalog.ts`
+   contra `ENGINE_METRICS` de `metrics-studio-engine-map.ts`. Das 15, **5 travam
+   em decisão de produto** (SCRUM-365) e as outras 10 estão fatiadas em
+   SCRUM-389…394, agrupadas por FONTE partilhada — portar duas medidas que leem
+   a mesma tabela em fatias separadas faz cada uma reimplementar o mesmo join.
+9. ✅ **Período personalizado** (SCRUM-313): `StudioPeriod` aceita `"custom"` e
+   `StudioRange` carrega duas datas de CALENDÁRIO. 🔴 O Comando faz diferente —
+   `useCommandMetrics` recorta com `startOfUTCDay` NO CLIENTE, e para uma org em
+   BRT isso desloca a virada do dia em 3 horas. Aqui as datas viajam cruas e o
+   servidor corta. As duas telas devem PARECER iguais, não CALCULAR igual
+   (SCRUM-322).
 
 **Asperezas do motor que a UI precisa respeitar** (todas tratadas em `useMetricWindowData`):
 

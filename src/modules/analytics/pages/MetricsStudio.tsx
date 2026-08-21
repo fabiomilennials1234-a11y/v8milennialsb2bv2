@@ -1,6 +1,9 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Download, Gauge, Loader2, Lock, Pencil, Trash2 } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { CalendarDays, Check, Download, Gauge, Loader2, Lock, Pencil, Trash2 } from "lucide-react";
+import type { DateRange } from "react-day-picker";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,7 +22,13 @@ import { useMetricsStudioReport } from "@/modules/analytics/hooks/useMetricsStud
 import { useStudioCatalog } from "@/modules/analytics/hooks/useStudioCatalog";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
-import { STUDIO_PERIODS, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  isoDaData,
+  STUDIO_PERIODS,
+  type StudioPeriod,
+} from "@/modules/analytics/lib/metrics-studio-period";
 import { useCurrentTeamMember, useFeaturePermission } from "@/modules/identity";
 
 /**
@@ -53,6 +62,27 @@ export default function MetricsStudio() {
   const [modo, setModo] = useState<"ver" | "editar">("ver");
   const editando = modo === "editar";
   const [period, setPeriod] = useState<StudioPeriod>("month");
+
+  // SCRUM-313. O seletor guarda `Date` porque é o que o calendário fala; a
+  // conversão para data de calendário acontece na BORDA, em `rangeMotor`, e
+  // nada abaixo daqui volta a ver um instante.
+  const [range, setRange] = useState<DateRange | undefined>();
+  const rangeMotor =
+    range?.from && range?.to
+      ? { from: isoDaData(range.from), to: isoDaData(range.to) }
+      : null;
+  // `custom` sem as duas pontas NÃO mede o intervalo. Chutar um período
+  // mostraria um número plausível de algo que ninguém pediu — o pior erro
+  // possível numa tela de métrica.
+  const periodoIncompleto = period === "custom" && rangeMotor === null;
+
+  // O que o painel mede enquanto o intervalo está pela metade: o último preset
+  // COMPLETO que o usuário viu. Guardado aqui porque `period` já virou
+  // "custom" no clique, e voltar a um "mês" fixo faria o número saltar sem
+  // motivo visível para quem estava olhando trimestre.
+  const ultimoPeriodoCompletoRef = useRef<StudioPeriod>("month");
+  if (period !== "custom") ultimoPeriodoCompletoRef.current = period;
+  const ultimoPeriodoCompleto = ultimoPeriodoCompletoRef.current;
 
   // G5: trava de liberação por org. Falha para FECHADO — ver o hook.
   const rollout = useMetricsStudioEnabled();
@@ -209,6 +239,47 @@ export default function MetricsStudio() {
             ))}
           </div>
 
+          {/* SCRUM-313. Mesma gramática do cabeçalho do Comando — o usuário não
+              deve perceber que são duas telas. O que NÃO se copia de lá é a
+              conta: o Comando recorta o intervalo no cliente com startOfUTCDay,
+              e aqui as datas seguem CRUAS para o servidor cortar na timezone da
+              org. Ver o comentário de `StudioRange`. */}
+          {period === "custom" && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center gap-[7px] rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold transition-colors",
+                    range?.from
+                      ? "text-foreground hover:border-primary/50"
+                      : "text-muted-foreground hover:text-foreground hover:border-border",
+                  )}
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  {range?.from && range?.to
+                    ? `${format(range.from, "dd MMM", { locale: ptBR })} — ${format(range.to, "dd MMM", { locale: ptBR })}`
+                    : range?.from
+                      ? `${format(range.from, "dd MMM", { locale: ptBR })} — ...`
+                      : "Selecionar intervalo"}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-auto border-border/60 p-0 shadow-lg dark:bg-popover dark:shadow-black/40"
+                align="end"
+              >
+                <Calendar
+                  mode="range"
+                  selected={range}
+                  onSelect={setRange}
+                  numberOfMonths={2}
+                  locale={ptBR}
+                  defaultMonth={range?.from}
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+
           <Link
             to="/dashboard"
             className="inline-flex items-center gap-1.5 rounded-[9px] border border-border bg-card px-3 py-[7px] text-[12px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
@@ -297,11 +368,26 @@ export default function MetricsStudio() {
         )}
 
         <div className="min-w-0 flex-1">
+          {periodoIncompleto && (
+            <div className="mb-3 flex items-center gap-2 rounded-[9px] border border-dashed border-border bg-card/50 px-3 py-2 text-[12px] text-muted-foreground">
+              <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Escolha as duas datas do intervalo para o painel medir. Enquanto
+                falta uma ponta, as janelas seguem no último período válido —
+                não inventamos um intervalo por você.
+              </span>
+            </div>
+          )}
           <MetricsCanvas
             ref={canvasRef}
             windows={studio.windows}
             byId={catalogo.byId}
-            period={period}
+            // Com o intervalo pela metade, o painel segue medindo o último
+            // período COMPLETO — o que o usuário via antes de clicar em
+            // "Escolher", não um "mês" chutado. O aviso acima diz o que está
+            // acontecendo; número que muda sem explicação seria pior.
+            period={periodoIncompleto ? ultimoPeriodoCompleto : period}
+            range={rangeMotor}
             podeVerPorPessoa={podeVerPorPessoa}
             editavel={editando}
             onEditar={() => setModo("editar")}
@@ -324,7 +410,9 @@ export default function MetricsStudio() {
         <MetricComposer
           key={compondo.editando?.id ?? "nova"}
           aberto
-          period={period}
+          period={periodoIncompleto ? ultimoPeriodoCompleto : period}
+          range={rangeMotor}
+          
           editando={compondo.editando}
           salvando={catalogo.custom.salvando}
           onFechar={() => setCompondo(null)}

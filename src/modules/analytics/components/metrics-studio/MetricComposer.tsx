@@ -30,7 +30,11 @@ import {
   type MetricTreeOp,
 } from "@/modules/analytics/lib/metric-tree";
 import type { MetricFormatId } from "@/modules/analytics/lib/metric-vocabulary";
-import { periodoAtual, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import {
+  periodoAtual,
+  type StudioPeriod,
+  type StudioRange,
+} from "@/modules/analytics/lib/metrics-studio-period";
 import { EM_DASH, formatMetricValue } from "@/modules/analytics/lib/tv-metric-format";
 
 /**
@@ -79,6 +83,7 @@ const NO_INICIAL: MetricTreeNode = {
 interface MetricComposerProps {
   aberto: boolean;
   period: StudioPeriod;
+  range?: StudioRange | null;
   /** Definição em edição. `null` = criando uma nova. */
   editando: MetricCustomDefinition | null;
   salvando: boolean;
@@ -87,7 +92,7 @@ interface MetricComposerProps {
 }
 
 export function MetricComposer({
-  aberto, period, editando, salvando, onFechar, onSalvar,
+  aberto, period, range, editando, salvando, onFechar, onSalvar,
 }: MetricComposerProps) {
   const [nome, setNome] = useState(editando?.name ?? "");
   const [arvore, setArvore] = useState<MetricTreeNode>(editando?.tree ?? NO_INICIAL);
@@ -106,7 +111,7 @@ export function MetricComposer({
   const formatoEfetivo: MetricFormatId | null =
     formato && formatosOk.includes(formato) ? formato : (formatosOk[0] ?? null);
 
-  const atual = periodoAtual(period);
+  const atual = periodoAtual(period, undefined, range);
   const previa = useMetricMeasure({
     measureRef: unidade && formatoEfetivo ? { kind: "tree", tree: arvore, format_id: formatoEfetivo } : null,
     recorte: "total",

@@ -9,7 +9,11 @@ import {
   type EngineMetric,
   type MetricRecorte,
 } from "@/modules/analytics/lib/metrics-studio-engine-map";
-import { variacaoPct, type StudioPeriod } from "@/modules/analytics/lib/metrics-studio-period";
+import {
+  variacaoPct,
+  type StudioPeriod,
+  type StudioRange,
+} from "@/modules/analytics/lib/metrics-studio-period";
 import { EM_DASH, formatMetricValue } from "@/modules/analytics/lib/tv-metric-format";
 import { headValueFromMeasure } from "@/modules/analytics/lib/tv-series";
 import { useMetricWindowData } from "@/modules/analytics/hooks/useMetricWindowData";
@@ -27,6 +31,8 @@ interface MetricWindowProps {
   win: StudioWindow;
   metric: EngineMetric;
   period: StudioPeriod;
+  /** Só quando `period === "custom"` (SCRUM-313). */
+  range?: StudioRange | null;
   podeVerPorPessoa: boolean;
   /** SCRUM-308: em Visualização a janela é só leitura. */
   editavel: boolean;
@@ -53,7 +59,7 @@ const snap = (n: number) => Math.round(n / GRID) * GRID;
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), max);
 
 function MetricWindowBase({
-  win, metric, period, podeVerPorPessoa, editavel, selected, canvas,
+  win, metric, period, range, podeVerPorPessoa, editavel, selected, canvas,
   onSelect, onMove, onResize, onChart, onCorte, onRemove,
 }: MetricWindowProps) {
   // Geometria em trânsito fica LOCAL. Commitar por pointermove subiria cada
@@ -69,7 +75,7 @@ function MetricWindowBase({
   }, []);
 
   const geo = draft ?? win;
-  const dados = useMetricWindowData(metric, win.corte, period);
+  const dados = useMetricWindowData(metric, win.corte, period, range);
 
   const startDrag = useCallback(
     (e: React.PointerEvent) => {
