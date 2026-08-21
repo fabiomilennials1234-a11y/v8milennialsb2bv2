@@ -35,6 +35,7 @@ export {
   useSyncTothCobrancas,
   useSimulateTothClientes,
   useUpdateTothActiveWindow,
+  useUpdateTothEmpresa,
   useUpdateTothSyncMode,
   type TothDryRunResult,
   type TothSyncMode,

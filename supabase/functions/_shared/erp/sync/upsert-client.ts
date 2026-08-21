@@ -13,6 +13,7 @@
  */
 
 import { CanonicalClient } from "../types.ts";
+import { clientEnrichmentColumns, leadEnrichmentColumns } from "./client-enrichment.ts";
 
 export type ErpSyncMode = "off" | "enrich_only" | "canonical";
 
@@ -31,6 +32,49 @@ export interface ExistingClient {
   external_source?: string | null;
   external_id?: string | null;
   external_ref?: string | null;
+
+  /**
+   * Enriquecimento já gravado. Tem a MESMA função dos `external_*` acima: sem
+   * estes campos no que o store devolve, a comparação de "mudou alguma coisa?"
+   * nunca acha o valor atual, conclui que mudou e reescreve todo cliente a cada
+   * execução — que é exatamente o que estourou o teto de 150s do gateway.
+   */
+  erp_company?: string | null;
+  erp_owner_name?: string | null;
+  erp_owner_external_id?: string | null;
+  erp_status?: string | null;
+  erp_segment?: string | null;
+  erp_registered_at?: string | null;
+  erp_city?: string | null;
+  erp_uf?: string | null;
+  erp_metadata?: Record<string, unknown> | null;
+}
+
+/**
+ * Serialização estável para comparar JSONB.
+ *
+ * `erp_metadata` é objeto, e `a !== b` entre dois objetos é SEMPRE verdadeiro —
+ * a comparação ingênua marcaria todo cliente como alterado. Comparar o JSON
+ * também não basta cru: o Postgres devolve JSONB com as chaves reordenadas
+ * (por tamanho, depois byte a byte), então a mesma informação volta numa ordem
+ * diferente da que gravamos. Ordenar as chaves antes resolve os dois.
+ */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, v]) => v !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
+  return `{${entries.join(",")}}`;
+}
+
+function sameValue(current: unknown, next: unknown): boolean {
+  if (current === next) return true;
+  if (typeof current === "object" && current !== null && typeof next === "object" && next !== null) {
+    return stableStringify(current) === stableStringify(next);
+  }
+  return false;
 }
 
 export interface ClientStore {
@@ -39,7 +83,14 @@ export interface ClientStore {
   enrich(id: string, patch: Record<string, unknown>): Promise<void>;
   createLead(
     organizationId: string,
-    lead: { name: string; company: string | null; phone: string | null; email: string | null },
+    lead: {
+      name: string;
+      company: string | null;
+      phone: string | null;
+      email: string | null;
+      /** Colunas extras do lead vindas do ERP (segmento, UF). Opcional. */
+      extra?: Record<string, unknown>;
+    },
   ): Promise<string>;
   createClient(row: Record<string, unknown>): Promise<string>;
 }
@@ -75,8 +126,20 @@ export async function upsertCanonicalClient(
     external_ref: client.externalRef,
   };
 
+  /**
+   * Enriquecimento acompanha o carimbo, nos DOIS modos.
+   *
+   * Os campos `erp_*` são espelho do ERP: não há tela onde alguém os cure, e não
+   * existe versão "do CRM" deles para proteger. A regra do `enrich_only` — só
+   * preencher o que está vazio — existe para não sobrescrever trabalho humano,
+   * e aqui não há trabalho humano a sobrescrever. Tratá-los como campo curado
+   * congelaria o representante na primeira sincronização e o cliente ficaria
+   * com o vendedor errado para sempre.
+   */
+  const enrichment = clientEnrichmentColumns(client);
+
   if (existing) {
-    const patch: Record<string, unknown> = { ...stamp };
+    const patch: Record<string, unknown> = { ...stamp, ...enrichment };
     if (syncMode === "canonical") {
       patch.name = client.name;
       patch.company = client.company;
@@ -104,7 +167,7 @@ export async function upsertCanonicalClient(
     // comportamento continua o de antes: escreve.
     const changed = Object.entries(patch).filter(([key, value]) => {
       const current = (existing as unknown as Record<string, unknown>)[key];
-      return current === undefined ? true : current !== value;
+      return current === undefined ? true : !sameValue(current, value);
     });
 
     if (changed.length === 0) {
@@ -126,6 +189,7 @@ export async function upsertCanonicalClient(
     company: client.company,
     phone: client.phone,
     email: client.email,
+    extra: leadEnrichmentColumns(client, source),
   });
   const clientId = await store.createClient({
     organization_id: organizationId,
@@ -137,6 +201,7 @@ export async function upsertCanonicalClient(
     email: client.email,
     is_active: true,
     ...stamp,
+    ...enrichment,
   });
   return { action: "created", clientId };
 }

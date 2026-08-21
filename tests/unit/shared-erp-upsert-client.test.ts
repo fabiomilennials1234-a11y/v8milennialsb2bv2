@@ -93,6 +93,85 @@ describe("upsertCanonicalClient — não escreve quando nada muda", () => {
     expect(escritas).toHaveLength(0);
   });
 
+  it("🔴 enriquecimento idêntico também não gera UPDATE, JSONB incluído", async () => {
+    // `erp_metadata` é objeto: `a !== b` entre dois objetos é SEMPRE verdadeiro.
+    // Sem comparação por valor, cada cliente voltaria a ser reescrito em toda
+    // execução — o mesmo 504, agora por um campo novo.
+    const enriquecido: ExistingClient = {
+      ...identico,
+      erp_company: "CAFE JURERE",
+      erp_owner_name: "MARIA SOUZA",
+      erp_owner_external_id: "77",
+      erp_status: "1",
+      erp_segment: "TELEVENDAS-VAREJO",
+      erp_registered_at: "2024-03-15",
+      erp_city: "Florianópolis",
+      erp_uf: "SC",
+      // Chaves em ordem DIFERENTE da que gravamos: é assim que o Postgres
+      // devolve JSONB, e a comparação precisa sobreviver a isso.
+      erp_metadata: { tipoPessoa: "J", bairro: "Centro" },
+    };
+    const escritas: Array<Record<string, unknown>> = [];
+    const store: ClientStore = {
+      findByExternalId: () => Promise.resolve(enriquecido),
+      findByCnpj: () => Promise.resolve(enriquecido),
+      enrich: (_id, patch) => {
+        escritas.push(patch);
+        return Promise.resolve();
+      },
+      createLead: () => Promise.resolve("l-1"),
+      createClient: () => Promise.resolve("c-1"),
+    };
+
+    const r = await upsertCanonicalClient(store, {
+      organizationId: "org-1",
+      source: "toth",
+      client: {
+        ...CLIENT,
+        erpCompany: "CAFE JURERE",
+        ownerName: "MARIA SOUZA",
+        ownerExternalId: "77",
+        erpStatus: "1",
+        segment: "TELEVENDAS-VAREJO",
+        registeredAt: "2024-03-15",
+        city: "Florianópolis",
+        uf: "SC",
+        metadata: { bairro: "Centro", tipoPessoa: "J" },
+      },
+      syncMode: "canonical",
+    });
+
+    expect(r).toEqual({ action: "skipped", reason: "no_changes" });
+    expect(escritas).toHaveLength(0);
+  });
+
+  it("troca de representante é escrita mesmo em enrich_only", async () => {
+    // Os campos `erp_*` espelham o ERP e não têm curadoria humana. Tratá-los
+    // como campo curado congelaria o vendedor na primeira sincronização.
+    const comDono: ExistingClient = { ...identico, erp_owner_name: "JOAO LIMA" };
+    const escritas: Array<Record<string, unknown>> = [];
+    const store: ClientStore = {
+      findByExternalId: () => Promise.resolve(comDono),
+      findByCnpj: () => Promise.resolve(comDono),
+      enrich: (_id, patch) => {
+        escritas.push(patch);
+        return Promise.resolve();
+      },
+      createLead: () => Promise.resolve("l-1"),
+      createClient: () => Promise.resolve("c-1"),
+    };
+
+    const r = await upsertCanonicalClient(store, {
+      organizationId: "org-1",
+      source: "toth",
+      client: { ...CLIENT, ownerName: "MARIA SOUZA" },
+      syncMode: "enrich_only",
+    });
+
+    expect(r.action).toBe("enriched");
+    expect(escritas).toEqual([{ erp_owner_name: "MARIA SOUZA" }]);
+  });
+
   it("escreve só o campo que mudou", async () => {
     const { store, escritas } = storeIdentico();
     const r = await upsertCanonicalClient(store, {

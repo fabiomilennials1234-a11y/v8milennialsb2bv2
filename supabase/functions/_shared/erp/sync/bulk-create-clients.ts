@@ -17,6 +17,7 @@
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { CanonicalClient } from "../types.ts";
+import { clientEnrichmentColumns, leadEnrichmentColumns } from "./client-enrichment.ts";
 
 /** Linhas por statement. */
 export const DEFAULT_BATCH_SIZE = 500;
@@ -71,6 +72,7 @@ export function buildClientRows(
       phone: phoneAvailable ? client.phone : null,
       email: client.email,
       origin: `erp_${source}`,
+      ...leadEnrichmentColumns(client, source),
     },
     carteira: {
       organization_id: organizationId,
@@ -84,6 +86,7 @@ export function buildClientRows(
       external_source: source,
       external_id: client.externalId,
       external_ref: client.externalRef,
+      ...clientEnrichmentColumns(client),
     },
   };
 }

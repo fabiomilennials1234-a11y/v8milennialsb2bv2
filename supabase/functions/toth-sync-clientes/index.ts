@@ -33,7 +33,13 @@ import { timingSafeCompare } from "../_shared/auth.ts";
 import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
 import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
 import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
-import { extractRows, mapTothClienteToCanonical, TothMappingError } from "../_shared/erp/toth-mappers.ts";
+import {
+  extractRows,
+  mapTothClienteToCanonical,
+  TothMappingError,
+  tothClienteEmpresas,
+  tothClienteMatchesEmpresa,
+} from "../_shared/erp/toth-mappers.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
 import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
@@ -144,7 +150,10 @@ Deno.serve(
 
     const { data: conn } = await admin
       .from("toth_connections")
-      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras")
+      // Literal única: o supabase-js infere as colunas a partir do TEXTO do
+      // select. Concatenar com `+` produz `string` genérico e o retorno degrada
+      // para `GenericStringError`, quebrando o acesso a todo campo.
+      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras, clientes_empresa, clientes_incluir_sem_empresa")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -210,8 +219,30 @@ Deno.serve(
         ? Math.floor(body.max_clients)
         : null;
 
+    /**
+     * Empresa do grupo a sincronizar.
+     *
+     * `GET /clientes` devolve as QUATRO empresas do grupo juntas — CAFE JURERE,
+     * CAMIPLACE, COSTA ESMERALDA e ALIMENTA MAIS — e não aceita filtro por
+     * empresa. Sem separar aqui, a carteira de uma organização recebe cliente
+     * que é de outra empresa: na Café Jurerê são 667 registros de terceiros.
+     *
+     * Vem da CONEXÃO para valer igual no botão e no cron. O corpo só sobrescreve
+     * para diagnóstico.
+     */
+    const empresaFiltro =
+      typeof body.empresa === "string" && body.empresa.trim()
+        ? body.empresa.trim()
+        : ((conn.clientes_empresa as string | null) ?? null);
+    const incluirSemEmpresa =
+      typeof body.incluir_sem_empresa === "boolean"
+        ? body.incluir_sem_empresa
+        : conn.clientes_incluir_sem_empresa === true;
+
     const seenIds = new Set<string>();
     const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
+    /** Quantos o filtro de empresa deixou de fora, e de quem eram. */
+    const foraDoFiltro = { total: 0, sem_empresa: 0, por_empresa: {} as Record<string, number> };
     const mappingErrors: string[] = [];
     const previews: PreviewedClient[] = [];
     const mappedClients: CanonicalClient[] = [];
@@ -243,11 +274,37 @@ Deno.serve(
         }
 
         let newInThisPage = 0;
+        /**
+         * Filtrados nesta página. Conta separado porque o guard de "a API
+         * ignorou a paginação" olha para `newInThisPage === 0` — e uma página
+         * legítima cujos clientes são todos de outra empresa do grupo também
+         * zera aquele contador. Sem esta distinção, o filtro de empresa
+         * encerraria a varredura no meio, alegando repetição que não houve.
+         */
+        let filteredInThisPage = 0;
+
         for (const row of rows) {
           stats.rows++;
+
+          // Filtro de empresa ANTES de mapear: quem não é da empresa não vira
+          // cliente, não conta como visto e não gasta trabalho de mapeamento.
+          if (!tothClienteMatchesEmpresa(row, empresaFiltro, incluirSemEmpresa)) {
+            filteredInThisPage++;
+            foraDoFiltro.total++;
+            const empresas = tothClienteEmpresas(row);
+            if (empresas.length === 0) {
+              foraDoFiltro.sem_empresa++;
+            } else {
+              for (const e of empresas) {
+                foraDoFiltro.por_empresa[e] = (foraDoFiltro.por_empresa[e] ?? 0) + 1;
+              }
+            }
+            continue;
+          }
+
           let canonical;
           try {
-            canonical = mapTothClienteToCanonical(row);
+            canonical = mapTothClienteToCanonical(row, { empresa: empresaFiltro });
           } catch (err) {
             stats.failed++;
             if (err instanceof TothMappingError && mappingErrors.length < 3) {
@@ -333,7 +390,7 @@ Deno.serve(
         }
 
         // A API ignorou a paginação e repetiu o bloco anterior.
-        if (newInThisPage === 0) {
+        if (newInThisPage === 0 && filteredInThisPage === 0) {
           stopReason = "no_new_records";
           break;
         }
@@ -391,7 +448,13 @@ Deno.serve(
         action: "toth_sync_clientes_dry_run",
         status: "success",
         // Sem amostra aqui: o log não é lugar de dado de cliente.
-        payloadSnapshot: { ...totals, ...orphans, stop_reason: stopReason },
+        payloadSnapshot: {
+          ...totals,
+          ...orphans,
+          stop_reason: stopReason,
+          empresa: empresaFiltro,
+          fora_do_filtro: foraDoFiltro.total,
+        },
       });
 
       return json(
@@ -400,6 +463,9 @@ Deno.serve(
           escreveu: false,
           modo: syncMode,
           janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+          empresa: empresaFiltro,
+          incluir_sem_empresa: incluirSemEmpresa,
+          fora_do_filtro_de_empresa: foraDoFiltro,
           stop_reason: stopReason,
           paginas_lidas: stats.pages,
           linhas_recebidas: stats.rows,
@@ -471,9 +537,25 @@ Deno.serve(
       module: "general",
       action: "toth_sync_clientes",
       status: "success",
-      payloadSnapshot: { ...stats, stop_reason: stopReason, mapping_errors: mappingErrors.length },
+      payloadSnapshot: {
+        ...stats,
+        stop_reason: stopReason,
+        mapping_errors: mappingErrors.length,
+        empresa: empresaFiltro,
+        fora_do_filtro: foraDoFiltro.total,
+      },
     });
 
-    return json({ success: true, stop_reason: stopReason, stats, mapping_errors: mappingErrors }, cors);
+    return json(
+      {
+        success: true,
+        stop_reason: stopReason,
+        stats,
+        empresa: empresaFiltro,
+        fora_do_filtro_de_empresa: foraDoFiltro,
+        mapping_errors: mappingErrors,
+      },
+      cors,
+    );
   }),
 );
