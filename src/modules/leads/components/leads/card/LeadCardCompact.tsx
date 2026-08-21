@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from "react";
-import { Building2, CalendarDays, Check, ClipboardList, Clock, MoreVertical, User, Wallet } from "lucide-react";
+import { Building2, CalendarDays, Check, ClipboardList, Clock, PlusCircle, User, Wallet } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -30,11 +30,11 @@ import type { QualificationTier } from "../../lead-detail/modal/types";
  * própria a cada dado. Quem escolheu foi o Lucas, sabendo disso.
  *
  * A anatomia, na ordem do print:
- *   (inicial) Nome — Empresa                    [qualificação]  ⋮
+ *   (inicial) Nome — Empresa                    [qualificação]
  *   produto, como link azul sublinhado
  *   👤 pré-venda · venda            ┐
- *   💰 valor                        │  ações (WhatsApp) na LATERAL direita,
- *   📅 data                         │  no meio da lista, como no concorrente
+ *   💰 valor                        │  WhatsApp e `⊕` na LATERAL direita,
+ *   📅 data                         │  no MEIO da lista, como no concorrente
  *   🗒 atividades                    ┘
  *   ──────────────────────────────────
  *   etiquetas COM NOME, no rodapé
@@ -45,9 +45,10 @@ import type { QualificationTier } from "../../lead-detail/modal/types";
  *      direito — e MENOR que a inicial (20px contra 26px). É o pedido literal
  *      ("menores que o símbolo do cara"). Ganho de brinde: hoje `avatar_url`
  *      COBRE as metades de qualificação; separados, os dois convivem.
- *   2. O print tem um `⊕` na lateral que abre o menu de opções. Aqui o `⋮` do
- *      topo já faz isso — repetir o mesmo menu em dois lugares no mesmo card é
- *      ruído, não fidelidade. A lateral fica só com o WhatsApp.
+ *   2. Uma porta só de opções: o `⊕` da lateral, com os 15 itens em 3 grupos
+ *      do protótipo (`funis-datacrazy/dados.js:219-246`). O `⋮` do topo
+ *      chegou a coexistir e foi REMOVIDO em 21/08, olhando os dois no ar —
+ *      os 4 itens dele já eram os `real: true` do menu do `⊕`.
  *
  * O padrão "campo vazio é link azul sublinhado" vem do print e é intencional:
  * é o convite a preencher. Vale para produto, responsáveis e valor.
@@ -116,6 +117,13 @@ interface LeadCardCompactProps {
   onSelect?: (e: React.MouseEvent) => void;
   onClick?: () => void;
   menuItems: ReactNode;
+  /**
+   * O menu do "⊕" da lateral: os 15 itens em 3 grupos do protótipo. Vem
+   * montado do `LeadCard`, que tem os handlers, o estado dos modais e o
+   * `pipeOps`. NÃO é o mesmo nó de `menuItems` — botões diferentes, menus
+   * diferentes.
+   */
+  menuAdicionar?: ReactNode;
   /**
    * Slot de domínio (ex.: confirmar reunião no funil mergeado).
    */
@@ -196,7 +204,7 @@ function Linha({ icone, children, vazio }: {
 }
 
 export const LeadCardCompact = memo(function LeadCardCompact({
-  lead, config, origin, urgency, dateIndicator, parsedDate, acaoWhatsapp,
+  lead, config, origin, urgency, dateIndicator, parsedDate, acaoWhatsapp, menuAdicionar,
   selected, onSelect, onClick, menuItems, extraActions,
 }: LeadCardCompactProps) {
   const preVenda = lead.preSaleResponsible?.name ?? null;
@@ -322,18 +330,12 @@ export const LeadCardCompact = memo(function LeadCardCompact({
               />
             )}
 
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <button
-                  type="button"
-                  aria-label={`Ações de ${lead.name}`}
-                  className="-mt-px shrink-0 rounded p-px text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <MoreVertical className="size-[14px]" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">{menuItems}</DropdownMenuContent>
-            </DropdownMenu>
+            {/* Sem "⋮" no topo — decisão do Lucas em 21/08, depois de ver os
+                dois no ar. É o que o print do DataCrazy mostra: o card tem UMA
+                porta de opções, o "⊕" da lateral, e o "⋯" mora no cabeçalho da
+                COLUNA. Nada se perde: os 4 itens que o "⋮" tinha (WhatsApp,
+                Agendar mensagem, Adicionar a funil, Remover do funil) são os
+                mesmos `real: true` que o menu do "⊕" já traz, agrupados. */}
           </div>
 
           {/* ── 2. o produto, como link azul sublinhado ── */}
@@ -402,12 +404,43 @@ export const LeadCardCompact = memo(function LeadCardCompact({
               )}
             </div>
 
-            {/* No print os botões ficam no MEIO da lista, à direita — não no topo. */}
-            {temZap && (
-              <div className="flex shrink-0 flex-col items-center justify-center">
-                {acaoWhatsapp}
-              </div>
-            )}
+            {/* ── A LATERAL DE AÇÕES ──
+                No print os dois botões ficam no MEIO da lista, à direita — não
+                no topo. São eles: WhatsApp e o "⊕" de opções.
+
+                A coluna é INCONDICIONAL. Antes ela só existia com telefone
+                válido (`temZap`), e sumia inteira num lead sem celular — o que
+                no print não acontece, porque é o "⊕" que segura a coluna. */}
+            <div className="flex shrink-0 flex-col items-center justify-center gap-1">
+              {temZap && acaoWhatsapp}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    // dnd-kit: abrir o menu não pode iniciar arrasto.
+                    onPointerDown={(e) => e.stopPropagation()}
+                    aria-label={`Opções de ${lead.name}`}
+                    title="Opções"
+                    className={cn(
+                      "grid size-[26px] shrink-0 place-items-center rounded-md",
+                      "text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      "data-[state=open]:bg-muted data-[state=open]:text-foreground",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70",
+                    )}
+                  >
+                    <PlusCircle className="size-[15px]" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="max-h-[min(420px,70vh)] w-56 overflow-y-auto"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {menuAdicionar ?? menuItems}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
 
           {/* ── 4. os badges que o produto já tinha (origem, tempo, alertas) ── */}

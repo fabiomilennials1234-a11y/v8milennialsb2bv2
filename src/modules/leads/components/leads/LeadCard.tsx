@@ -2,10 +2,13 @@ import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Building2, Clock, MoreVertical, Trash2, MessageCircle, Target, Video, Check,
+  Phone, NotebookPen, MoveRight, Users, Gem, Tag, CheckSquare, CalendarDays,
+  Wallet, XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
@@ -376,6 +379,129 @@ export const LeadCard = memo(function LeadCard({
     </>
   );
 
+  /**
+   * O menu do "⊕" da lateral — o MESMO do protótipo `funis-datacrazy` (:8902),
+   * item por item: 15 opções em 3 grupos rotulados (`dados.js:219-246`).
+   *
+   * Não é o menu do "⋮". O "⋮" são AÇÕES sobre o negócio; este é tudo que se
+   * pendura no lead. Decisão do Lucas em 21/08: dois botões, dois assuntos.
+   *
+   * O selo `FICHA` marca o que HOJE só existe dentro da ficha do lead
+   * (`LeadModalToolbar`, `CrossPipePanel`, o header de responsáveis/
+   * qualificação/etiquetas). Esses itens ABREM a ficha em vez de fingir que
+   * agem daqui — o protótipo carrega o mesmo selo pelo mesmo motivo. Item que
+   * promete e não cumpre é pior do que item ausente.
+   */
+  const selo = (
+    <span className="ml-auto pl-3 text-[9px] font-semibold tracking-wide text-muted-foreground/60">
+      FICHA
+    </span>
+  );
+  const abrirFicha = (e: React.MouseEvent) => { e.stopPropagation(); onClick?.(); };
+  const telefoneNu = (lead.phone ?? "").replace(/\D/g, "");
+
+  const itensDoMenuAdicionar = (
+    <>
+      <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        Conversa
+      </DropdownMenuLabel>
+      {hasPhone && (
+        <AbrirConversaMenuItem leadId={lead.id} phone={lead.phone}>
+          <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
+        </AbrirConversaMenuItem>
+      )}
+      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
+        <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
+      </DropdownMenuItem>
+      {/* "Ligar" é o único `real: false` do protótipo que dá para cumprir aqui
+          sem a ficha: é um `tel:`, igual ao LeadModalToolbar. */}
+      {telefoneNu && (
+        <DropdownMenuItem asChild>
+          <a href={`tel:${telefoneNu}`} onClick={(e) => e.stopPropagation()}>
+            <Phone className="w-4 h-4 mr-2" /> Ligar
+          </a>
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem onClick={abrirFicha}>
+        <NotebookPen className="w-4 h-4 mr-2" /> Registrar ligação {selo}
+      </DropdownMenuItem>
+
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        Alterar o lead
+      </DropdownMenuLabel>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <MoveRight className="w-4 h-4 mr-2" /> Mover de etapa {selo}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <Users className="w-4 h-4 mr-2" /> Responsáveis {selo}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <Gem className="w-4 h-4 mr-2" /> Qualificação {selo}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <Tag className="w-4 h-4 mr-2" /> Etiquetas {selo}
+      </DropdownMenuItem>
+      {/* Checklists não leva selo: o slot da direita é do CONTADOR, como no
+          protótipo (app.js:546). Verde quando tudo está feito. */}
+      <DropdownMenuItem onClick={abrirFicha}>
+        <CheckSquare className="w-4 h-4 mr-2" /> Checklists
+        {(lead.metrics?.checklistsTotal ?? 0) > 0 && (
+          <span
+            className={cn(
+              "ml-auto pl-3 text-[10px] font-semibold tabular-nums",
+              lead.metrics!.checklistsCompleted === lead.metrics!.checklistsTotal
+                ? "text-emerald-500"
+                : "text-muted-foreground",
+            )}
+          >
+            {lead.metrics!.checklistsCompleted}/{lead.metrics!.checklistsTotal}
+          </span>
+        )}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <CalendarDays className="w-4 h-4 mr-2" /> Reunião {selo}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <Wallet className="w-4 h-4 mr-2" /> Orçamento {selo}
+      </DropdownMenuItem>
+
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        Funil
+      </DropdownMenuLabel>
+      {/* Os 15 itens aparecem SEMPRE, como no protótipo. Quando a ação real
+          não está disponível no contexto — `pipeOps` é null fora do
+          PipeOpsProvider, `onRemove` não vem em toda superfície — o item não
+          some: cai para a ficha, com o selo. Item que desaparece sem explicar
+          faz o usuário procurar o que ele nunca vai achar. */}
+      {/* "Adicionar a funil" tem portão PRÓPRIO e ele fica: o
+          `AddToFunilMenuItem` devolve null quando a org não tem nenhum funil
+          custom ativo, para não oferecer um diálogo que abriria vazio. Não
+          troquei por um fallback com selo porque a ficha também não teria o
+          que mostrar — seria mandar o usuário a lugar nenhum. */}
+      {pipeOps && <AddToFunilMenuItem pipeOps={pipeOps} onSelect={() => setAddFunilOpen(true)} />}
+      <DropdownMenuItem onClick={abrirFicha}>
+        <XCircle className="w-4 h-4 mr-2" /> Marcar como perdido {selo}
+      </DropdownMenuItem>
+      {onRemove ? (
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        >
+          <Trash2 className="w-4 h-4 mr-2" /> Remover do funil
+        </DropdownMenuItem>
+      ) : (
+        <DropdownMenuItem onClick={abrirFicha}>
+          <Trash2 className="w-4 h-4 mr-2" /> Remover do funil {selo}
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={abrirFicha}>
+        <Trash2 className="w-4 h-4 mr-2" /> Excluir lead {selo}
+      </DropdownMenuItem>
+    </>
+  );
+
   const modais = (
     <>
       {scheduleOpen && (
@@ -430,6 +556,7 @@ export const LeadCard = memo(function LeadCard({
           onSelect={onSelect}
           onClick={onClick}
           menuItems={itensDoMenu}
+          menuAdicionar={itensDoMenuAdicionar}
           extraActions={extraActions}
         />
         {modais}
