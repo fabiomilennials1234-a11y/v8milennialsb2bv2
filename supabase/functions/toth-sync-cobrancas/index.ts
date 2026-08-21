@@ -50,8 +50,20 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
-/** Teto de clientes consultados por execução. */
-const MAX_CLIENTS_PER_RUN = 600;
+/**
+ * Teto de clientes consultados por execução.
+ *
+ * Medido em 21/08 com 600: a execução inteira levou **12 segundos** (12 lotes
+ * de 50 CNPJs, com 400ms de pausa entre eles). Nesse ritmo, cobrir os 12.613
+ * clientes da Café Jurerê exigiria 21 execuções — a cada 2 horas, mais de um
+ * dia e meio até a primeira volta fechar.
+ *
+ * 3.000 são ~60 lotes, na casa de 60-70s: folga confortável para os 150s do
+ * gateway, e a volta completa cai para 5 execuções. O que limita aqui é a
+ * paciência do servidor do cliente, não o nosso tempo de CPU — por isso a pausa
+ * entre lotes continua.
+ */
+const MAX_CLIENTS_PER_RUN = 3000;
 /**
  * CNPJs por requisição. O fornecedor indicou que `cnpj=a,b,c` devolve os três,
  * mas disse "pelo que vi" — não é contrato firmado. Lote conservador: erra num
@@ -139,23 +151,57 @@ Deno.serve(
     // carga nunca passava deles — 600 de 12.609, indefinidamente. `id` é
     // estável, então `> cursor` avança de verdade.
     const cursor = conn.cobrancas_cursor as string | null;
-    let query = admin
-      .from("upsell_clients")
-      .select("id, cnpj")
-      .eq("organization_id", organizationId)
-      .eq("external_source", TOTH_PROVIDER_ID)
-      .not("cnpj", "is", null)
-      .order("id", { ascending: true })
-      .limit(MAX_CLIENTS_PER_RUN);
 
-    if (cursor) query = query.gt("id", cursor);
+    /**
+     * Busca os alvos em páginas de 1.000.
+     *
+     * 🔴 `.limit(3000)` NÃO devolve 3.000: o PostgREST corta em 1.000 linhas por
+     * resposta, em silêncio. E o corte era pior que perder linhas — o cursor só
+     * avança quando o lote vem CHEIO (`length === teto`), então 1.000 ≠ 3.000
+     * fazia a função concluir "a volta terminou", zerar o cursor e varrer
+     * eternamente os mesmos 1.000 primeiros clientes. Exatamente o defeito que o
+     * cursor existe para consertar, reintroduzido ao subir o teto de 600 para
+     * 3.000 — e invisível, porque `truncated: false` parecia boa notícia.
+     *
+     * Paginar mantém o teto como teto de verdade, e `length === teto` volta a
+     * significar "tem mais adiante".
+     */
+    const PAGE = 1000;
+    const clients: Array<{ id: string; cnpj: string | null }> = [];
+    let pageCursor = cursor;
+    let clientsErr: { message: string } | null = null;
 
-    const { data: clients, error: clientsErr } = await query;
+    while (clients.length < MAX_CLIENTS_PER_RUN) {
+      const faltam = Math.min(PAGE, MAX_CLIENTS_PER_RUN - clients.length);
+      let query = admin
+        .from("upsell_clients")
+        .select("id, cnpj")
+        .eq("organization_id", organizationId)
+        .eq("external_source", TOTH_PROVIDER_ID)
+        .not("cnpj", "is", null)
+        .order("id", { ascending: true })
+        .limit(faltam);
+
+      if (pageCursor) query = query.gt("id", pageCursor);
+
+      const { data, error } = await query;
+      if (error) {
+        clientsErr = error;
+        break;
+      }
+      const rows = (data ?? []) as Array<{ id: string; cnpj: string | null }>;
+      if (rows.length === 0) break;
+
+      clients.push(...rows);
+      pageCursor = rows[rows.length - 1].id;
+      // Página curta = acabaram os clientes, não acabou a página.
+      if (rows.length < faltam) break;
+    }
 
     if (clientsErr) {
       return json({ error: `Erro ao listar clientes: ${clientsErr.message}` }, cors);
     }
-    if (!clients || clients.length === 0) {
+    if (clients.length === 0) {
       // Fim da volta com cursor adiantado: zera e devolve, para que o próximo
       // clique (ou o cron) recomece do início em vez de ficar preso no fim.
       if (cursor) {
