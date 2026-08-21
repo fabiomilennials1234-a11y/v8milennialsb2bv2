@@ -212,13 +212,20 @@ SELECT is(
 -- Monotonicidade non-increasing across the 4 steps.
 SELECT ok(
   (
-    SELECT bool_and(rc >= lead(rc) OVER (ORDER BY ord))
+    -- A janela precisa de um nível PRÓPRIO: agregado não pode conter chamada de
+    -- função de janela ("aggregate function calls cannot contain window
+    -- function calls"), e o erro aborta o arquivo inteiro — 8 de 23 asserções
+    -- é onde esta suíte parava.
+    SELECT bool_and(nao_alargou)
     FROM (
-      SELECT ord, (step ->> 'reached_count')::int AS rc
-      FROM jsonb_array_elements(
-        public.get_funnel_flow('99699699-aaaa-0000-0000-000000000996','99699699-aaaa-4444-0001-000000000996','month','2027-07-15') -> 'steps'
-      ) WITH ORDINALITY AS t(step, ord)
-    ) s
+      SELECT rc >= lead(rc) OVER (ORDER BY ord) AS nao_alargou
+      FROM (
+        SELECT ord, (step ->> 'reached_count')::int AS rc
+        FROM jsonb_array_elements(
+          public.get_funnel_flow('99699699-aaaa-0000-0000-000000000996','99699699-aaaa-4444-0001-000000000996','month','2027-07-15') -> 'steps'
+        ) WITH ORDINALITY AS t(step, ord)
+      ) s
+    ) w
   ) IS NOT FALSE,
   '(c) degraus non-increasing por construção (funil nunca alarga)');
 

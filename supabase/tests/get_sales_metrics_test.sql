@@ -228,7 +228,11 @@ SELECT is(
 SELECT is(
   (public.get_sales_metrics('99599599-aaaa-0000-0000-000000000995','month','2027-07-15',
       NULL, NULL, NULL, '99599599-aaaa-2222-0000-000000000995') ->> 'revenue_total')::numeric,
-  1000 + 500 + 7777 + 111 + 400,  -- s1,s2,s6,s7,s8 do closer1
+  -- `::numeric` explícito: `is()` do pgTAP é `anyelement, anyelement`, e a soma
+  -- de literais inteiros dá INTEGER. Sem o cast, o par vira
+  -- `is(numeric, integer)` e o Postgres nem acha a função — a suíte aborta ali,
+  -- sem chegar às nove asserções seguintes.
+  (1000 + 500 + 7777 + 111 + 400)::numeric,  -- s1,s2,s6,s7,s8 do closer1
   '(g) filtro por closer1 soma só as vendas dele (sale_responsible_id)');
 
 -- ---------------------------------------------------------------------------

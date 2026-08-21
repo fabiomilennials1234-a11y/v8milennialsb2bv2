@@ -235,11 +235,19 @@ SELECT is(
   1.0::numeric, '(e) c1 projeto taxa snapshotada = 1%');
 
 -- (f) rate snapshot: mudar a taxa do membro DEPOIS não move o ledger.
+--
+-- `session_replication_role` é parâmetro de SUPERUSUÁRIO, e a suíte roda como
+-- `service_role` daqui para cima (o contexto de backend que `assert_org_access`
+-- exige). Volta a `postgres` só para desarmar os gatilhos e devolve o papel em
+-- seguida — sem isso o apply morre com "permission denied to set parameter".
+SET LOCAL role postgres;
 SET LOCAL session_replication_role = replica;
 UPDATE public.team_members
   SET commission_mrr_percent = 99.0, commission_projeto_percent = 99.0
   WHERE id = '99899899-aaaa-2222-0000-000000000997';
 SET LOCAL session_replication_role = origin;
+SET LOCAL role service_role;
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 SELECT is(
   (SELECT (e->>'commission')::numeric
