@@ -100,6 +100,7 @@ export {
   findOrCreatePipelineEntry,
   usePipelineStages,
   useAllPipelineStages,
+  useEtapasDoFunil,
   stagesToColumns,
   useCreatePipelineStage,
   useUpdatePipelineStage,
