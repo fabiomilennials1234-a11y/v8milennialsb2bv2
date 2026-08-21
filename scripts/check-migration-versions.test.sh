@@ -87,5 +87,27 @@ else
   falhas=$((falhas + 1))
 fi
 
-if [ "$falhas" -eq 0 ]; then echo "guarda de colisão: 5/5"; else echo "guarda de colisão: $falhas falha(s)" >&2; fi
+# --- (6) RENUMERAÇÃO: a branch MOVEU o arquivo da base e ocupou a versão ------
+# Forma real da develop (2026-08-21): `20270730000010` é `deals` aqui e `voip` na
+# base, porque esta branch já moveu o `voip` para `...011`. O merge aplica a
+# renomeação e cada arquivo fica com a sua versão — não há o que pular. Antes
+# desta regra o guarda reprovava TODO push para develop.
+git checkout -q -b renumerada base
+mig 20260606000000 arquivo_da_base && commitar base-tem-o-arquivo
+git checkout -q base && git merge -q --no-ff -m merge renumerada >/dev/null 2>&1
+git checkout -q -b renumerada2 base
+git mv supabase/migrations/20260606000000_arquivo_da_base.sql \
+       supabase/migrations/20260606000001_arquivo_da_base.sql >/dev/null 2>&1
+mig 20260606000000 arquivo_novo_da_branch && commitar branch-renumera-e-ocupa
+checar renumerada2 passa "arquivo da base renumerado aqui não é colisão"
+
+# --- (7) CONTROLE NEGATIVO DO (6): renumerar NÃO pode virar salvo-conduto -----
+# Mesma forma, com uma diferença que muda tudo: o arquivo da base sumiu daqui em
+# vez de mudar de versão. Aí o merge o traz de volta e sobram dois na versão.
+git checkout -q -b sumiu base
+git rm -q supabase/migrations/20260606000000_arquivo_da_base.sql >/dev/null 2>&1
+mig 20260606000000 outro_arquivo && commitar branch-apaga-e-ocupa
+checar sumiu falha "versão reocupada com o arquivo da base ausente reprova"
+
+if [ "$falhas" -eq 0 ]; then echo "guarda de colisão: 7/7"; else echo "guarda de colisão: $falhas falha(s)" >&2; fi
 exit "$falhas"
