@@ -234,6 +234,72 @@ describe("engine map — decisões do grill", () => {
   });
 });
 
+describe("negócios por lead — a armadilha de 100× (SCRUM-392)", () => {
+  const npl = ENGINE_BY_ID.get("negocios_por_lead")!;
+
+  it("é ÁRVORE, nunca kind=ratio — é aqui que o erro de 100× morre", () => {
+    // `kind: "ratio"` faria o motor derivar count ÷ count como PERCENT e
+    // multiplicar por 100, enquanto o front só sufixa "%": "1,35 negócios por
+    // lead" viraria "135%". A árvore deriva RAZÃO e não multiplica.
+    expect(npl.measureRef.kind).toBe("tree");
+    expect(npl.formatId).toBe("ratio_2");
+    expect(npl.formatId).not.toBe("percent_1");
+  });
+
+  it("divide aberturas de negócio por leads da MESMA janela", () => {
+    expect(medidasDe(npl)).toEqual(["negocios_abertos", "leads_criados"]);
+    // `negocios_na_etapa` é estoque (âncora `hoje`): dividido por um fluxo,
+    // daria um número que muda quando alguém arrasta um card.
+    expect(medidasDe(npl)).not.toContain("negocios_na_etapa");
+  });
+
+  it("é escalar e não oferece corte além de total", () => {
+    expect(npl.cortes).toEqual(["total"]);
+    expect(ehEscalar(npl, "total")).toBe(true);
+  });
+
+  it("some da lista quando o banco-alvo não tem UM dos operandos", () => {
+    // Árvore de fábrica é escrita no código e não passa por trigger nenhum —
+    // sem esta checagem ela apareceria em TODA org, inclusive as que ainda não
+    // têm a migration de `negocios_abertos`, prometendo número e dando 22023.
+    const semNegocios = {
+      measures: [{ id: "leads_criados", compatible_recortes: ["total"] }],
+    };
+    expect(
+      filtrarPeloCatalogo(ENGINE_METRICS, semNegocios).map((m) => m.id),
+    ).not.toContain("negocios_por_lead");
+
+    const comOsDois = {
+      measures: [
+        { id: "leads_criados", compatible_recortes: ["total"] },
+        { id: "negocios_abertos", compatible_recortes: ["total"] },
+      ],
+    };
+    expect(
+      filtrarPeloCatalogo(ENGINE_METRICS, comOsDois).map((m) => m.id),
+    ).toContain("negocios_por_lead");
+  });
+
+  it("personalizada continua passando sem checagem de catálogo", () => {
+    // A distinção que a fatia introduziu: `custom` é validada na escrita pelo
+    // banco; `tree` de fábrica, não. Se as duas voltarem a ser tratadas juntas,
+    // este caso continua verde e o de cima fica vermelho — que é a ordem certa.
+    const daCliente = {
+      id: "minha_metrica",
+      label: "Minha métrica",
+      measureRef: { kind: "custom" as const, id: "abc" },
+      cortes: ["total"] as MetricRecorte[],
+      formatId: "ratio_2" as const,
+    };
+    const catalogoVazioDeOperandos = {
+      measures: [{ id: "receita", compatible_recortes: ["total"] }],
+    };
+    expect(
+      filtrarPeloCatalogo([daCliente], catalogoVazioDeOperandos).map((m) => m.id),
+    ).toEqual(["minha_metrica"]);
+  });
+});
+
 describe("engine map — higiene", () => {
   it("não há id duplicado", () => {
     const ids = ENGINE_METRICS.map((m) => m.id);
