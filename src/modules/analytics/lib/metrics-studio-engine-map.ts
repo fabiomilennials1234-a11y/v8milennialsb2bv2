@@ -67,6 +67,7 @@ export const ROTULO_DO_CORTE: Record<MetricRecorte, string> = {
   stream: "Por tipo de negócio",
   pipeline: "Por funil",
   etapa: "Por etapa",
+  desfecho: "Ganho x perda",
 };
 
 export interface EngineMetric {
@@ -115,6 +116,9 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // SCRUM-311 fatia 9 — a unidade do funil é o NEGÓCIO (ADR-0023).
   negocios_na_etapa: ["total", "pipeline", "etapa"],
   negocios_abertos: ["total", "tempo", "origem", "pipeline", "etapa"],
+  // SCRUM-391 fatia funil. Sem `total` de proposito: somar ganho com perda da
+  // um numero que nao responde pergunta nenhuma.
+  ganho_perda: ["desfecho"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -135,6 +139,7 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   tempo_resposta_equipe: "duration_human",
   negocios_na_etapa: "integer",
   negocios_abertos: "integer",
+  ganho_perda: "integer",
 };
 
 /**
@@ -161,6 +166,7 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   tempo_resposta_equipe: "duration_seconds",
   negocios_na_etapa: "count",
   negocios_abertos: "count",
+  ganho_perda: "count",
 };
 
 /**
@@ -350,6 +356,19 @@ export const ENGINE_METRICS: EngineMetric[] = [
     measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
     cortes: ["total"],
     formatId: "percent_1",
+  },
+  {
+    // SCRUM-391 fatia funil. A medida é COMPOSIÇÃO: o motor chama as mesmas
+    // funções de `num_vendas` e `negocios_perdidos` em vez de recontar, então
+    // os três números batem por construção.
+    //
+    // A OUTRA metade do card não virou entrada nenhuma: "Negócios por funil" é
+    // `negocios_por_etapa` com corte `pipeline` (decisão G2), e já está aqui.
+    id: "ganho_perda",
+    label: "Ganho e perda",
+    measureRef: { kind: "leaf", id: "ganho_perda" },
+    cortes: ["desfecho"],
+    formatId: "integer",
   },
   {
     // SCRUM-392 — e o ponto inteiro da fatia é o que ela NÃO é.
