@@ -122,6 +122,24 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // SCRUM-422. Mesmos recortes de num_vendas: e a mesma consulta com um
   // predicado a mais.
   num_vendas_pre_venda: ["total", "closer", "sdr", "origem", "tag", "stream", "pipeline", "tempo"],
+  // SCRUM-417. Só `total`: recortar LTV dividiria a receita de um balde pelo
+  // denominador de outro — número plausível e errado.
+  ltv: ["total"],
+  // SCRUM-419. Sem `tempo` (é estado) e sem corte por pessoa: o lead pode ter
+  // falado com três pessoas, e atribuir a fila a uma delas seria escolha
+  // arbitrária disfarçada de dado.
+  clientes_sem_resposta: ["total", "origem", "tag"],
+  // SCRUM-421. As duas metades da taxa de resposta por automação.
+  disparos_entregues: ["total", "tempo", "origem"],
+  disparos_respondidos: ["total", "tempo", "origem"],
+  // SCRUM-420. `closer` faz sentido aqui, ao contrário de
+  // `clientes_sem_resposta`: o cliente da carteira TEM dono declarado, e "a
+  // carteira de quem está parada" é a pergunta do gestor.
+  clientes_sem_atuacao: ["total", "closer"],
+  // SCRUM-418. Só `produto`: a curva É a série por produto. `total` daria a
+  // soma da receita de itens, que já é `receita` por um caminho líquido de
+  // estorno — este não é.
+  curva_abc: ["produto"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -144,6 +162,12 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   negocios_abertos: "integer",
   ganho_perda: "integer",
   num_vendas_pre_venda: "integer",
+  ltv: "currency_brl",
+  clientes_sem_resposta: "integer",
+  disparos_entregues: "integer",
+  disparos_respondidos: "integer",
+  clientes_sem_atuacao: "integer",
+  curva_abc: "currency_brl",
 };
 
 /**
@@ -172,6 +196,12 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   negocios_abertos: "count",
   ganho_perda: "count",
   num_vendas_pre_venda: "count",
+  ltv: "currency",
+  clientes_sem_resposta: "count",
+  disparos_entregues: "count",
+  disparos_respondidos: "count",
+  clientes_sem_atuacao: "count",
+  curva_abc: "currency",
 };
 
 /**
@@ -361,6 +391,72 @@ export const ENGINE_METRICS: EngineMetric[] = [
     measureRef: { kind: "ratio", num: "boas_avaliacoes", den: "leads_avaliados" },
     cortes: ["total"],
     formatId: "percent_1",
+  },
+  {
+    // SCRUM-418 — a curva responde "onde meu faturamento se concentra", não
+    // "quanto entrou". A fonte é `pipe_proposta_items`, a única com receita por
+    // ITEM, e ela NÃO é líquida de estorno — o cabeçalho da migration explica.
+    id: "curva_abc",
+    label: "Curva ABC de produtos",
+    measureRef: { kind: "leaf", id: "curva_abc" },
+    cortes: ["produto"],
+    formatId: "currency_brl",
+  },
+  {
+    // SCRUM-420 — o sujeito é o CLIENTE da carteira, não o lead. Contar leads
+    // daria outra pergunta ("prospect esquecido"), legítima e diferente.
+    id: "clientes_sem_atuacao",
+    label: "Clientes sem atuação",
+    measureRef: { kind: "leaf", id: "clientes_sem_atuacao" },
+    cortes: ["total", "closer"],
+    formatId: "integer",
+  },
+  {
+    // SCRUM-421 — as duas metades aparecem como medida própria porque cada uma
+    // responde sozinha: "quantos chegaram" e "quantos voltaram".
+    id: "disparos_entregues",
+    label: "Disparos entregues",
+    measureRef: { kind: "leaf", id: "disparos_entregues" },
+    cortes: ["total", "tempo", "origem"],
+    formatId: "integer",
+  },
+  {
+    id: "disparos_respondidos",
+    label: "Disparos respondidos",
+    measureRef: { kind: "leaf", id: "disparos_respondidos" },
+    cortes: ["total", "tempo", "origem"],
+    formatId: "integer",
+  },
+  {
+    // SCRUM-421 — a taxa. Numerador é subconjunto do denominador por
+    // construção (o mesmo leaf, com um predicado a mais), então a razão vive em
+    // [0, 100] sem trava.
+    id: "taxa_resposta_automacao",
+    label: "Taxa de resposta por automação",
+    measureRef: { kind: "ratio", num: "disparos_respondidos", den: "disparos_entregues" },
+    cortes: ["total"],
+    formatId: "percent_1",
+  },
+  {
+    // SCRUM-419 — a fila que está esperando, não a taxa de quem respondeu. As
+    // duas convivem: `response_rate_pct` continua em `useAnalyticsEngajamento`.
+    id: "clientes_sem_resposta",
+    label: "Clientes sem resposta",
+    measureRef: { kind: "leaf", id: "clientes_sem_resposta" },
+    cortes: ["total", "origem", "tag"],
+    formatId: "integer",
+  },
+  {
+    // SCRUM-417 — a decisão do SCRUM-365: receita REALIZADA por cliente, numa
+    // janela própria de 12 meses ancorada no fim do período escolhido.
+    //
+    // Trocar o seletor de "este mês" para "este ano" mexe pouco neste número, e
+    // é assim que tem que ser: LTV de um mês não existe.
+    id: "ltv",
+    label: "LTV do cliente",
+    measureRef: { kind: "leaf", id: "ltv" },
+    cortes: ["total"],
+    formatId: "currency_brl",
   },
   {
     // SCRUM-422 — a taxa que o SCRUM-393 definiu: venda com pré-venda sobre o
