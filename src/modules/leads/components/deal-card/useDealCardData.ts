@@ -98,7 +98,9 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
               .order("position")
           : supabase
               .from("custom_pipeline_stages")
-              .select("id, name, stage_role, position")
+              // `stage_key` entra para a régua conseguir casar a etapa: é o
+              // slug que o gatilho grava em `pipeline_entries.stage_key`.
+              .select("id, stage_key, name, stage_role, position")
               .eq("pipeline_id", pipelineId)
               .eq("is_active", true)
               .order("position"),
@@ -190,14 +192,18 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         : {};
 
     const etapas: DealCardStage[] = (extras.data?.etapas ?? []).map((e) => ({
-      // System chaveia por `stage_key`; custom, pelo uuid da etapa. A entry
-      // guarda ora um, ora outro — a mesma dualidade de `useLeadsDeals`.
-      chave: String(e.stage_key ?? e.id),
+      // ESCRITA: system manda `stage_key`; custom manda o uuid, que é o que
+      // `custom_pipe_entries.stage_id` espera.
+      chave: negocioBase.isSystem ? String(e.stage_key ?? e.id) : String(e.id ?? e.stage_key),
+      // LEITURA: nos dois tipos a entry guarda o `stage_key`. Em funil custom
+      // quem traduz o uuid para o slug é o gatilho `sync_custom_pipe_to_entries`.
+      chaveEntry: String(e.stage_key ?? e.id),
       nome: String(e.name ?? ""),
       papel: papelDaEtapa(e.stage_role),
     }));
 
-    const nomePorChave = new Map(etapas.map((e) => [e.chave, e.nome]));
+    // Pela chave de LEITURA: é `to_stage_key` que chega aqui, não o uuid.
+    const nomePorChave = new Map(etapas.map((e) => [e.chaveEntry, e.nome]));
 
     const movimentacoes: DealCardMove[] = (extras.data?.movimentos ?? []).map((m) => ({
       id: String(m.id),

@@ -20,7 +20,24 @@ import type { LeadCardDeal } from "../lead-card/types";
 export type EstadoDoNegocio = "aberto" | "ganho" | "perdido";
 
 export interface DealCardStage {
+  /**
+   * Chave de ESCRITA — o que `moverEtapa` manda de volta ao banco.
+   * Funil system: o `stage_key`. Funil custom: o **uuid** da etapa, porque é
+   * ele que vai em `custom_pipe_entries.stage_id`.
+   */
   chave: string;
+  /**
+   * Chave de LEITURA — o que `pipeline_entries.stage_key` e
+   * `pipeline_stage_events.to_stage_key` realmente guardam. Nos dois tipos de
+   * funil é o `stage_key` (slug de texto): em funil custom o gatilho
+   * `sync_custom_pipe_to_entries()` TRADUZ o uuid para o slug ao espelhar.
+   *
+   * Existe separada de `chave` porque um campo só não pode ser as duas coisas:
+   * comparar a posição atual pelo uuid dava `-1` em todo funil custom — nenhuma
+   * casa ficava marcada como "aqui" e cada círculo carimbava "—", que nesta
+   * régua quer dizer "por aqui não passou". Afirmação falsa, não só ausência.
+   */
+  chaveEntry: string;
   nome: string;
   /** Etapa terminal — desenha diferente e encerra a trilha. */
   papel: "aberto" | "ganho" | "perdido";

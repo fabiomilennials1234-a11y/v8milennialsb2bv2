@@ -13,11 +13,11 @@ import type { DealCardData } from "./types";
  */
 
 const ETAPAS_ORCAMENTOS = [
-  { chave: "orcamento", nome: "Orçamento", papel: "aberto" as const },
-  { chave: "proposta_enviada", nome: "Proposta enviada", papel: "aberto" as const },
-  { chave: "negociacao", nome: "Em negociação", papel: "aberto" as const },
-  { chave: "vendido", nome: "Vendido", papel: "ganho" as const },
-  { chave: "perdido", nome: "Perdido", papel: "perdido" as const },
+  { chave: "orcamento", chaveEntry: "orcamento", nome: "Orçamento", papel: "aberto" as const },
+  { chave: "proposta_enviada", chaveEntry: "proposta_enviada", nome: "Proposta enviada", papel: "aberto" as const },
+  { chave: "negociacao", chaveEntry: "negociacao", nome: "Em negociação", papel: "aberto" as const },
+  { chave: "vendido", chaveEntry: "vendido", nome: "Vendido", papel: "ganho" as const },
+  { chave: "perdido", chaveEntry: "perdido", nome: "Perdido", papel: "perdido" as const },
 ];
 
 /** O caso que a operação precisa ver: parado muito acima da mediana da etapa. */
@@ -166,10 +166,10 @@ export const NEGOCIO_MAGRO: DealCardData = {
   funilCor: "#22c55e",
   pipeTable: "pipe_whatsapp",
   etapas: [
-    { chave: "novo", nome: "Novo lead", papel: "aberto" },
-    { chave: "abordado", nome: "Abordado", papel: "aberto" },
-    { chave: "respondeu", nome: "Respondeu", papel: "aberto" },
-    { chave: "agendado", nome: "Agendado", papel: "aberto" },
+    { chave: "novo", chaveEntry: "novo", nome: "Novo lead", papel: "aberto" },
+    { chave: "abordado", chaveEntry: "abordado", nome: "Abordado", papel: "aberto" },
+    { chave: "respondeu", chaveEntry: "respondeu", nome: "Respondeu", papel: "aberto" },
+    { chave: "agendado", chaveEntry: "agendado", nome: "Agendado", papel: "aberto" },
   ],
   etapaAtual: "abordado",
   dono: null,

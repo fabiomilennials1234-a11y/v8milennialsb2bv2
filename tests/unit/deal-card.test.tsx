@@ -25,16 +25,16 @@ import { DealCard } from "@/modules/leads/components/deal-card/DealCard";
 import type { DealCardData, DealCardStage } from "@/modules/leads/components/deal-card/types";
 
 const ETAPAS_COM_DESFECHO: DealCardStage[] = [
-  { chave: "orcamento", nome: "Orçamento", papel: "aberto" },
-  { chave: "proposta_enviada", nome: "Proposta enviada", papel: "aberto" },
-  { chave: "vendido", nome: "Vendido", papel: "ganho" },
-  { chave: "perdido", nome: "Perdido", papel: "perdido" },
+  { chave: "orcamento", chaveEntry: "orcamento", nome: "Orçamento", papel: "aberto" },
+  { chave: "proposta_enviada", chaveEntry: "proposta_enviada", nome: "Proposta enviada", papel: "aberto" },
+  { chave: "vendido", chaveEntry: "vendido", nome: "Vendido", papel: "ganho" },
+  { chave: "perdido", chaveEntry: "perdido", nome: "Perdido", papel: "perdido" },
 ];
 
 /** O funil custom sem etapa terminal — 83 deles em prod. */
 const ETAPAS_SEM_DESFECHO: DealCardStage[] = [
-  { chave: "s1", nome: "Triagem", papel: "aberto" },
-  { chave: "s2", nome: "Em análise", papel: "aberto" },
+  { chave: "s1", chaveEntry: "s1", nome: "Triagem", papel: "aberto" },
+  { chave: "s2", chaveEntry: "s2", nome: "Em análise", papel: "aberto" },
 ];
 
 function negocio(over: Partial<DealCardData> = {}): DealCardData {
@@ -124,8 +124,8 @@ describe("DealCard — ganhar e perder são movimentos, não estado", () => {
 
   it("mostra só Ganhou quando o funil tem ganho mas não tem perdido", () => {
     const etapas: DealCardStage[] = [
-      { chave: "s1", nome: "Triagem", papel: "aberto" },
-      { chave: "ok", nome: "Fechado", papel: "ganho" },
+      { chave: "s1", chaveEntry: "s1", nome: "Triagem", papel: "aberto" },
+      { chave: "ok", chaveEntry: "ok", nome: "Fechado", papel: "ganho" },
     ];
     render(<DealCard negocio={negocio({ etapas, etapaAtual: "s1" })} />);
 

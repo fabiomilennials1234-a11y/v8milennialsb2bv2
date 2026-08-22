@@ -163,7 +163,9 @@ export function DealCardStages({
   const abertas = etapas.filter((e) => e.papel === "aberto");
   const terminais = etapas.filter((e) => e.papel !== "aberto");
   const datas = datasPorEtapa(movimentacoes);
-  const indiceAtual = abertas.findIndex((e) => e.chave === atual);
+  // Pela chave de LEITURA: `atual` vem de `pipeline_entries.stage_key`, que em
+  // funil custom é o slug, nunca o uuid que `chave` carrega.
+  const indiceAtual = abertas.findIndex((e) => e.chaveEntry === atual);
   const bloqueado = !!movendo;
 
   if (etapas.length === 0) {
@@ -180,7 +182,7 @@ export function DealCardStages({
       etapa={etapa}
       estado={estado}
       cor={cor}
-      data={dataCurta(datas.get(etapa.chave))}
+      data={dataCurta(datas.get(etapa.chaveEntry))}
       onMover={onMover}
       bloqueado={bloqueado}
       emTransito={movendo === etapa.chave}
@@ -216,7 +218,7 @@ export function DealCardStages({
           {/* O vão é o argumento: as saídas não são a continuação do caminho. */}
           <span className="mx-2 mt-[3px] h-6 w-px shrink-0 bg-border" aria-hidden="true" />
           <div className="flex shrink-0 items-start">
-            {terminais.map((e) => casa(e, e.chave === atual ? "aqui" : "futuro", true))}
+            {terminais.map((e) => casa(e, e.chaveEntry === atual ? "aqui" : "futuro", true))}
           </div>
         </>
       )}
