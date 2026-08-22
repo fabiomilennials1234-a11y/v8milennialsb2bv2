@@ -158,25 +158,34 @@ describe("DealCard — ganhar e perder são movimentos, não estado", () => {
   });
 });
 
+/**
+ * A regra é a mesma de sempre — acende acima do DOBRO da mediana da etapa, não
+ * de um número fixo. O que mudou com o painel de duas colunas foi só a
+ * superfície: a frase corrida ("parado muito acima do normal desta etapa")
+ * virou o primeiro LADRILHO do print, que troca de rótulo e de tom.
+ */
 describe("DealCard — estagnação compara com a etapa, não com um número fixo", () => {
   it("acende acima do dobro da mediana da etapa", () => {
     render(<DealCard negocio={negocio({ diasNaEtapa: 74, medianaDaEtapa: 21 })} />);
 
-    expect(screen.getByText(/parado muito acima do normal desta etapa/i)).toBeInTheDocument();
-    expect(screen.getByText(/74 dias contra uma mediana de/i)).toBeInTheDocument();
+    expect(screen.getByText(/^parado na etapa$/i)).toBeInTheDocument();
+    expect(screen.getByText("74")).toBeInTheDocument();
+    expect(screen.getByText(/normal aqui: 21 dias/i)).toBeInTheDocument();
   });
 
   it("NÃO acende no dobro exato — a fronteira é estritamente maior", () => {
     render(<DealCard negocio={negocio({ diasNaEtapa: 42, medianaDaEtapa: 21 })} />);
 
-    expect(screen.getByText(/dentro do ritmo desta etapa/i)).toBeInTheDocument();
-    expect(screen.queryByText(/contra uma mediana de/i)).toBeNull();
+    expect(screen.getByText(/^em aberto$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^parado na etapa$/i)).toBeNull();
+    expect(screen.queryByText(/normal aqui:/i)).toBeNull();
   });
 
   it("NÃO acende sem mediana — etapa sem amostra não vira acusação", () => {
     render(<DealCard negocio={negocio({ diasNaEtapa: 400, medianaDaEtapa: null })} />);
 
-    expect(screen.getByText(/dentro do ritmo desta etapa/i)).toBeInTheDocument();
+    expect(screen.getByText(/^em aberto$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^parado na etapa$/i)).toBeNull();
   });
 
   it("negócio fechado troca Tempo por Desfecho — parado não quer dizer nada depois da venda", () => {
@@ -191,10 +200,16 @@ describe("DealCard — estagnação compara com a etapa, não com um número fix
       />,
     );
 
-    expect(screen.getByRole("heading", { name: /desfecho/i })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /^tempo$/i })).toBeNull();
-    expect(screen.queryByText(/parado muito acima do normal/i)).toBeNull();
+    // O bloco de desfecho deixou de ser <h2> e virou a faixa "Perdido em".
+    expect(screen.getByText(/^perdido em$/i)).toBeInTheDocument();
     expect(screen.getByText("Preço")).toBeInTheDocument();
+    // O que este teste guarda: depois do fecho o painel NÃO acusa estagnação.
+    expect(screen.queryByText(/^parado na etapa$/i)).toBeNull();
+    expect(screen.queryByText(/normal aqui:/i)).toBeNull();
+    // ⚠ HERDADO desta branch, ainda não corrigido: o primeiro ladrilho só tem
+    // dois rótulos ("Parado na etapa" | "Em aberto"), então um negócio PERDIDO
+    // ainda aparece rotulado como "Em aberto". Não é o que este teste guarda,
+    // mas está errado na tela — decidir o rótulo do negócio fechado.
   });
 });
 
@@ -250,11 +265,22 @@ describe("DealCard — o lead é link, não conteúdo", () => {
 });
 
 describe("DealCard — anotação", () => {
+  /**
+   * No painel de duas colunas a anotação deixou de ficar solta na rolagem e
+   * virou a segunda aba do bloco de dinheiro ("Produtos e Valores" · "Anotação").
+   * A textarea só existe depois do clique — antes disto os testes achavam o
+   * campo direto, e passaram a não achar nada.
+   */
+  function abrirAnotacao() {
+    fireEvent.click(screen.getByRole("button", { name: /^anotação$/i }));
+    return screen.getByRole("textbox");
+  }
+
   it("não grava quando o texto não mudou", () => {
     const onSaveNote = vi.fn();
     render(<DealCard negocio={negocio({ nota: "Aguardando retorno" })} onSaveNote={onSaveNote} />);
 
-    fireEvent.blur(screen.getByRole("textbox"));
+    fireEvent.blur(abrirAnotacao());
 
     expect(onSaveNote).not.toHaveBeenCalled();
   });
@@ -263,7 +289,7 @@ describe("DealCard — anotação", () => {
     const onSaveNote = vi.fn();
     render(<DealCard negocio={negocio({ nota: "Aguardando retorno" })} onSaveNote={onSaveNote} />);
 
-    const campo = screen.getByRole("textbox");
+    const campo = abrirAnotacao();
     fireEvent.change(campo, { target: { value: "Cliente pediu desconto" } });
     fireEvent.blur(campo);
 
@@ -272,9 +298,10 @@ describe("DealCard — anotação", () => {
 
   it("troca de negócio troca a anotação em tela — o card é reusado entre cards do funil", () => {
     const { rerender } = render(<DealCard negocio={negocio({ id: "e1", nota: "Nota do e1" })} />);
-    expect(screen.getByRole("textbox")).toHaveValue("Nota do e1");
+    expect(abrirAnotacao()).toHaveValue("Nota do e1");
 
     rerender(<DealCard negocio={negocio({ id: "e2", nota: "Nota do e2" })} />);
-    expect(screen.getByRole("textbox")).toHaveValue("Nota do e2");
+    // Trocar de negócio volta para "Produtos e Valores" — de propósito.
+    expect(abrirAnotacao()).toHaveValue("Nota do e2");
   });
 });
