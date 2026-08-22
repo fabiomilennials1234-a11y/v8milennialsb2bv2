@@ -120,3 +120,12 @@ scripts/recovery/
 # de distância de um commit.
 .jira.env
 *.env
+
+# Dumps do Jira — artefato de leitura, não fonte. Regenera com
+# `node scripts/jira-dump.mjs`. Ficam de fora porque são grandes (0,5 MB cada),
+# ficam velhos em horas e o diff deles não diz nada a ninguém.
+# Os mapas (`jira-status-map.json`, `jira-type-map.json`) SÃO configuração e
+# continuam versionados — por isso o padrão é específico, não `jira-*.json`.
+.specs/project/jira-dump*.json
+.specs/project/jira-abertos*.json
+.tmp-jira-dump.json
