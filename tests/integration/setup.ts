@@ -15,7 +15,22 @@ const SUPABASE_SERVICE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+/**
+ * 🔴 `persistSession: false` NÃO É DETALHE — VER rls-helpers.ts.
+ *
+ * Sem isso, este cliente lê a sessão que qualquer outra suíte tiver gravado sob
+ * a chave padrão do supabase-js e passa a mandar o JWT de um USUÁRIO em vez da
+ * service key. Ele deixa de bypassar RLS, e os fixtures morrem em 42501 num
+ * lugar que não tem nada a ver com o que está sendo testado.
+ */
+export const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+  auth: {
+    persistSession: false,
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+    storageKey: 'torque-test-setup-service',
+  },
+});
 
 export const TEST_ORG_ID = '00000000-0000-0000-0000-000000000001';
 export const TEST_MASTER_ID = '00000000-0000-0000-0000-000000000010';
