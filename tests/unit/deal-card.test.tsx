@@ -213,48 +213,75 @@ describe("DealCard — estagnação compara com a etapa, não com um número fix
   });
 });
 
-describe("DealCard — dinheiro some quando não há, em vez de virar R$ 0,00", () => {
-  it("esconde a seção Valor no negócio sem valor nem produto (98,9% deles)", () => {
+/**
+ * O painel de duas colunas trouxe os ladrilhos do print, que ficam SEMPRE na
+ * tela — o layout não some mais. O que não mudou é a regra que originou este
+ * bloco: `sale_value` existe em 1,1% dos 38.739 negócios, então carimbar
+ * "R$ 0,00" em 98,9% das aberturas afirma que o negócio não vale nada, e não
+ * saber quanto vale é outra coisa. O ladrilho fica; o número vira "—".
+ * Decisão do dono do produto em 22/08/2026.
+ */
+describe("DealCard — sem valor o dinheiro vira '—', nunca R$ 0,00", () => {
+  it("nunca carimba R$ 0,00 no negócio sem valor nem produto (98,9% deles)", () => {
     render(<DealCard negocio={negocio({ valor: 0, produto: null })} />);
 
-    expect(screen.queryByRole("heading", { name: /^valor$/i })).toBeNull();
+    expect(screen.queryByText(/R\$\s*0,00/)).toBeNull();
+    // O ladrilho continua na tela — o que sai é o zero, não a caixa.
+    expect(screen.getByText(/^valor total$/i)).toBeInTheDocument();
+  });
+
+  it("mostra o número quando há valor", () => {
+    render(<DealCard negocio={negocio({ valor: 12400 })} />);
+
+    expect(screen.getByText(/^valor total$/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/R\$\s*12\.400,00/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/R\$\s*0,00/)).toBeNull();
   });
 
-  it("mostra a seção quando há valor", () => {
-    render(<DealCard negocio={negocio({ valor: 12400 })} />);
-
-    expect(screen.getByRole("heading", { name: /^valor$/i })).toBeInTheDocument();
-  });
-
-  it("mostra a seção quando há só produto, sem valor", () => {
+  it("negócio com produto e sem valor também não vira zero", () => {
     render(<DealCard negocio={negocio({ valor: 0, produto: "Linha Performance 5kg" })} />);
 
-    expect(screen.getByRole("heading", { name: /^valor$/i })).toBeInTheDocument();
-    expect(screen.getByText("Linha Performance 5kg")).toBeInTheDocument();
+    expect(screen.queryByText(/R\$\s*0,00/)).toBeNull();
   });
 });
 
-describe("DealCard — o lead é link, não conteúdo", () => {
-  it("clicar na empresa abre o card da pessoa pelo id", () => {
-    const onOpenLead = vi.fn();
-    render(<DealCard negocio={negocio()} onOpenLead={onOpenLead} />);
+/**
+ * ── Este bloco mudou de contrato em 22/08/2026 ────────────────────────────
+ *
+ * Era "o lead é link, não conteúdo": o negócio estampava a empresa e clicar
+ * nela TROCAVA de card, abrindo a ficha da pessoa. Fazia sentido enquanto os
+ * dois cards se excluíam.
+ *
+ * Com o painel de duas colunas a pessoa deixou de ser link e passou a ser
+ * COLUNA — 356px fixos à esquerda, montados por `DealCardPanel`. Não há mais
+ * o que clicar, porque não há mais para onde ir: a pessoa já está na tela.
+ *
+ * O que passa a ser guardado aqui é o outro lado da mesma moeda: o `DealCard`
+ * não pode voltar a estampar a identidade da pessoa. Se voltar, a tela passa
+ * a dizer duas vezes quem é o lead — uma vez na coluna e outra dentro do
+ * negócio — e é exatamente essa duplicação que o modelo Lead↔Negócio existe
+ * para acabar. A composição das duas colunas é provada em
+ * `tests/unit/cards-nunca-empilham.test.tsx`.
+ */
+describe("DealCard — a pessoa é coluna, não conteúdo do negócio", () => {
+  it("não repete a identidade da pessoa dentro do negócio", () => {
+    render(<DealCard negocio={negocio()} />);
 
-    fireEvent.click(screen.getByText("Distética Comércio Ltda"));
-
-    expect(onOpenLead).toHaveBeenCalledWith("l1");
+    expect(screen.queryByText("Distética Comércio Ltda")).toBeNull();
+    expect(screen.queryByText("Distética Suplementos")).toBeNull();
+    expect(screen.queryByText("(11) 98472-1130")).toBeNull();
   });
 
-  it("cai no nome da pessoa quando não há empresa", () => {
-    render(<DealCard negocio={negocio({ lead: { ...negocio().lead, empresa: null } })} />);
-
-    expect(screen.getByText("Distética Suplementos")).toBeInTheDocument();
-  });
-
-  it("marca Cliente quando a pessoa já comprou (ADR-0023 §6/§7)", () => {
+  it("não repete o selo de relação — quem diz 'Cliente' é a coluna da pessoa", () => {
     render(<DealCard negocio={negocio({ lead: { ...negocio().lead, relacao: "cliente" } })} />);
 
-    expect(screen.getByText("Cliente")).toBeInTheDocument();
+    expect(screen.queryByText("Cliente")).toBeNull();
+  });
+
+  it("o que é DO NEGÓCIO continua no negócio — título e funil", () => {
+    render(<DealCard negocio={negocio()} />);
+
+    expect(screen.getByText("Reposição trimestral")).toBeInTheDocument();
   });
 
   it("diz sem dono em vez de estampar uuid — o caso cross-org que o M6 trava", () => {

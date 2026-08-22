@@ -140,8 +140,11 @@ export function DealCardMoney({
           {!temItens && valorDoNegocio != null && (
             <span className="text-[11.5px] text-muted-foreground/70">valor do negócio</span>
           )}
+          {/* Mesma regra do ladrilho: sem lastro nenhum o Total diz "—".
+              "R$ 0,00" afirmaria que o negócio vale zero; "—" diz que não se
+              sabe, que é a verdade em 98,9% dos negócios. */}
           <span className="ml-auto text-[19px] font-semibold tabular-nums tracking-[-0.02em]">
-            {formatBRL(total, 2)}
+            {total > 0 ? formatBRL(total, 2) : "—"}
           </span>
         </div>
       </div>

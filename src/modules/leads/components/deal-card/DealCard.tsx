@@ -355,10 +355,15 @@ export function DealCard({
                       : undefined
                 }
               />
+              {/* O ladrilho FICA sempre, como no print — mas sem valor ele
+                  mostra "—", não "R$ 0,00". `sale_value` existe em 1,1% dos
+                  38.739 negócios: carimbar zero em 98,9% das aberturas é
+                  afirmar que o negócio não vale nada, e não saber quanto vale
+                  é outra coisa. Decisão do dono do produto em 22/08. */}
               <Ladrilho
                 tom="verde"
                 rotulo="Valor Total"
-                valor={formatBRL(total, 2)}
+                valor={total > 0 ? formatBRL(total, 2) : "—"}
                 nota={negocio.itens.length > 0 ? `${negocio.itens.length} produto(s)` : undefined}
               />
               <Ladrilho

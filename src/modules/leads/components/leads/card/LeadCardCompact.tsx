@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from "react";
-import { Building2, CalendarDays, Check, ClipboardList, Clock, PlusCircle, User, Wallet } from "lucide-react";
+import { Building2, CalendarDays, Check, ClipboardList, Clock, Phone, PlusCircle, User, Wallet } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -361,8 +361,22 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                   : null}
               </Linha>
 
+              {/* O telefone não está no print do DataCrazy, mas `showContact`
+                  é ajuste POR ORG e havia orgs com ele ligado: o redesenho o
+                  tinha derrubado em silêncio, e ajuste que não faz mais nada é
+                  pior do que ajuste que não existe. Volta atrás da mesma
+                  chave que já governa o slot de WhatsApp. */}
+              {config.showContact && lead.phone && (
+                <Linha icone={<Phone className="size-[13px]" />} vazio="Sem telefone">
+                  <span className="tabular-nums">{lead.phone}</span>
+                </Linha>
+              )}
+
               {config.showValue && (
-                <Linha icone={<Wallet className="size-[13px]" />} vazio="R$ 0,00">
+                /* `vazio` era "R$ 0,00" — carimbava zero em lead sem valor, que
+                   é afirmar que ele não vale nada em vez de dizer que não se
+                   sabe. Mesma regra do painel do Negócio (decisão de 22/08). */
+                <Linha icone={<Wallet className="size-[13px]" />} vazio="Sem valor">
                   {valorExibido ? (
                     <span className="font-semibold tabular-nums text-emerald-500">{valorExibido}</span>
                   ) : null}
