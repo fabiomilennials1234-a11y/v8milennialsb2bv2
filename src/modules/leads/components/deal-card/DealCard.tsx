@@ -195,12 +195,24 @@ export function DealCard({
   const [abaDinheiro, setAbaDinheiro] = useState<AbaDinheiro>("produtos");
   const [nota, setNota] = useState(negocio.nota);
 
+  // Repor o texto quando o que está salvo muda.
   useEffect(() => {
     setNota(negocio.nota);
+  }, [negocio.nota]);
+
+  /**
+   * Voltar à primeira aba SÓ quando o negócio troca.
+   *
+   * Junto com o efeito de cima isto era um efeito só, com `negocio.nota` na
+   * lista — e aí gravar a anotação resetava a navegação: o `onBlur` grava,
+   * a query refaz, `negocio.nota` muda, e a textarea que a pessoa acabava de
+   * usar sumia da tela. Acontecia em 100% das gravações.
+   */
+  useEffect(() => {
     setAba("negocio");
     setSubAba("pipeline");
     setAbaDinheiro("produtos");
-  }, [negocio.id, negocio.nota]);
+  }, [negocio.id]);
 
   const aberto = negocio.estado === "aberto";
   const etapaGanha = negocio.etapas.find((e) => e.papel === "ganho");

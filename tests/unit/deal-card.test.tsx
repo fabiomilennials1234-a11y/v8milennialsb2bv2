@@ -48,6 +48,14 @@ function negocio(over: Partial<DealCardData> = {}): DealCardData {
       empresa: "Distética Comércio Ltda",
       telefone: "(11) 98472-1130",
       relacao: "lead",
+      email: null,
+      origem: null,
+      chegouEm: null,
+      qualificacao: null,
+      preQualificacao: null,
+      responsaveis: { preVenda: null, venda: null },
+      etiquetas: [],
+      faturamento: null,
     },
     funil: "Orçamentos",
     funilCor: "#a855f7",
@@ -65,6 +73,19 @@ function negocio(over: Partial<DealCardData> = {}): DealCardData {
     desfecho: null,
     movimentacoes: [],
     nota: "",
+    // ── Campos do painel de duas colunas ──────────────────────────────────
+    // `itens` NÃO pode faltar: `contaDoNegocio` soma a lista, e sem ela o
+    // painel inteiro morre com "Cannot read properties of undefined". Como
+    // `tsconfig.app.json` só inclui `src`, esta pasta não é checada por tipo
+    // e um fixture defasado passa a compilar e só explode em tempo de teste.
+    valorDoNegocio: null,
+    probabilidade: null,
+    previsaoFechamento: null,
+    fechadoEm: null,
+    criadoEm: null,
+    itens: [],
+    atividades: [],
+    outrosNegocios: [],
     ...over,
   };
 }
