@@ -1,5 +1,5 @@
 -- ===========================================================================
--- ROLLBACK — 20270821130000_metric_coorte_canonica_leads.sql (SCRUM-368)
+-- ROLLBACK — 20270821135000_metric_coorte_canonica_leads.sql (SCRUM-368)
 -- ===========================================================================
 -- Ordem: os leaves PRIMEIRO (param de chamar), depois a função da coorte. O
 -- inverso deixaria três funções apontando para uma função inexistente entre

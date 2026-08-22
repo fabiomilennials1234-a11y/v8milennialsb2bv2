@@ -1,4 +1,4 @@
--- 20270821130000_metric_coorte_canonica_leads.sql
+-- 20270821135000_metric_coorte_canonica_leads.sql
 --
 -- SCRUM-368 — "quantos leads entraram" devolve número diferente conforme a
 -- tela. Esta migration escolhe UMA coorte e faz o motor obedecê-la.
@@ -57,7 +57,7 @@
 -- venda, não de entrada de lead. Aplicar o predicado ali sem medir mudaria
 -- receita, que é dinheiro (ADR-0017 §1).
 --
--- ROLLBACK pareado: rollback/20270821130000_metric_coorte_canonica_leads.sql
+-- ROLLBACK pareado: rollback/20270821135000_metric_coorte_canonica_leads.sql
 
 -- ===========================================================================
 -- 1 — A COORTE CANÔNICA

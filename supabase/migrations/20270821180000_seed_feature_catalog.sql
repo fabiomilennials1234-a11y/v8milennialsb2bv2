@@ -13,7 +13,7 @@
 -- teste reprovava sempre, e a mensagem ("rode gen-feature-catalog") apontava
 -- para o lado errado: não havia banco de onde regerar.
 --
--- E não era só teste. A guarda da migration 20270821140000 (SCRUM-409) morreu
+-- E não era só teste. A guarda da migration 20270821145000 (SCRUM-409) morreu
 -- pela mesma razão: afirmou "o rótulo de leads é Leads" num banco onde a linha
 -- `leads` não existia.
 --
