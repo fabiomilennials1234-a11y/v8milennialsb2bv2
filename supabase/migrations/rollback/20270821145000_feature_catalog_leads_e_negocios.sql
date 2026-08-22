@@ -1,5 +1,5 @@
 -- ===========================================================================
--- ROLLBACK — 20270821140000_feature_catalog_leads_e_negocios.sql (SCRUM-409)
+-- ROLLBACK — 20270821145000_feature_catalog_leads_e_negocios.sql (SCRUM-409)
 -- ===========================================================================
 -- Devolve os dois valores medidos em produção em 2026-08-21.
 --

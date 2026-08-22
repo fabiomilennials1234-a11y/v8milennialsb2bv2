@@ -1,4 +1,4 @@
--- 20270821140000_feature_catalog_leads_e_negocios.sql
+-- 20270821145000_feature_catalog_leads_e_negocios.sql
 --
 -- SCRUM-409 — a nav anuncia duas coisas que o produto não tem mais.
 --
@@ -29,7 +29,7 @@
 --
 -- Só metadado de plataforma: nenhuma linha de cliente é tocada.
 --
--- ROLLBACK pareado: rollback/20270821140000_feature_catalog_leads_e_negocios.sql
+-- ROLLBACK pareado: rollback/20270821145000_feature_catalog_leads_e_negocios.sql
 
 UPDATE public.feature_catalog
    SET name = 'Leads',
