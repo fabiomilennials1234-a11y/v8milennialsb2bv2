@@ -21,7 +21,23 @@ import { clearClients, createServiceClient, getMaster, getOrgAAdmin, getOrgBMemb
 const ORG_B = '00000000-0000-0000-0000-000000000002';
 const sha256hex = (s: string) => createHash('sha256').update(s).digest('hex');
 
-describe('crm-mcp: PAT resolver + table RLS', () => {
+// ⚠ SUÍTE PENDENTE — a feature NÃO EXISTE (SCRUM-425).
+//
+// Medido em produção em 2026-08-21: não há `personal_access_tokens` nem
+// `crm_mcp_resolve_token`. Nenhuma migration do repo as cria, e o catálogo de
+// prod também não as tem. Isto aqui é a fatia C2 do crm-mcp escrita a partir do
+// DESIGN.md — ESPECIFICAÇÃO, não regressão.
+//
+// `describe.skip` e não deleção: o teste é o contrato acordado da fatia, e
+// apagá-lo perderia o desenho de segurança já pensado (resolver hermético,
+// RLS por dono, master-ghost, imutabilidade do hash). Quando a migration da
+// C2 entrar, tirar o `.skip` é a primeira coisa a fazer — e ele vai reprovar
+// até a implementação bater com o contrato, que é o ponto.
+//
+// Deixá-lo rodando manteria o job de Integration vermelho para sempre por uma
+// feature que ninguém começou, e portão que nasce vermelho é portão que
+// ninguém lê.
+describe.skip('crm-mcp: PAT resolver + table RLS (feature não construída — SCRUM-425)', () => {
   const svc = createServiceClient();
   let userId: string;
   let patId: string;

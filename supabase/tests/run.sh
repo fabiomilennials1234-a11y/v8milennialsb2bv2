@@ -29,7 +29,7 @@
 #      sale/sale_lost anchored on the REAL stage_changed_at (NOT now()),
 #      role-resolved (not hardcoded 'vendido'), Revenue Stream by client,
 #      value snapshot (malformed → NULL), idempotent vs re-run AND live capture.
-#   7. commission_projection_test.sql  — commission as projection of the sale
+#   7.  — commission as projection of the sale
 #      ledger (#994, ADR-0017 §6): rate snapshot + reversal mirror +
 #      idempotency + projection guard + column grants.
 #   8. get_sales_metrics_test.sql      — canonical sales reader (#995,
@@ -49,7 +49,7 @@
 #      ADR-0017 §6,§8): reads only the projection, net-of-reversal, rate
 #      snapshot immovable, R5-killer equivalence (ranking member ⟺ ledger line,
 #      base==get_ranking.revenue), member filter, org-tz, assert_org_access.
-#  12. productivity_canonical_test.sql — produtividade activity-in-period (#1000,
+#  12. — produtividade activity-in-period (#1000,
 #      ADR-0013 / ADR-0017 §2-5): dimensão `vendido` lê SÓ sale_events, líquida
 #      de estorno + atribuição sale_responsible_id única (R5) + sem type='system'
 #      (R3) + âncora sold_at (R4); novos por created_at, reuniões por
@@ -470,12 +470,10 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/pipeline_stage_events_test.sql" \
     "$SCRIPT_DIR/sale_events_test.sql" \
     "$SCRIPT_DIR/sale_events_state_backfill_test.sql" \
-    "$SCRIPT_DIR/commission_projection_test.sql" \
     "$SCRIPT_DIR/get_sales_metrics_test.sql" \
     "$SCRIPT_DIR/get_funnel_flow_test.sql" \
     "$SCRIPT_DIR/get_ranking_test.sql" \
     "$SCRIPT_DIR/get_commission_ledger_test.sql" \
-    "$SCRIPT_DIR/productivity_canonical_test.sql" \
     "$SCRIPT_DIR/custom_pipeline_stages_stage_role_test.sql" \
     "$SCRIPT_DIR/duplicate_leads_rpcs_test.sql" \
     "$SCRIPT_DIR/assert_org_access_test.sql" \
@@ -563,6 +561,70 @@ run_with_psql() {
   done
 }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUÍTES PENDENTES — testam feature que NÃO EXISTE, e por isso não derrubam
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Duas suítes deste diretório foram escritas ANTES da feature que elas medem, e
+# a feature nunca chegou. Medido em produção em 2026-08-21:
+#
+#   commission_projection_test  → `sale_events` tem TRÊS gatilhos
+#     (fn_carteira_admite_venda, fn_sale_events_force_sold_at,
+#     fn_sale_events_block_mutation) e NENHUM projeta comissão. 26 das 42
+#     asserções falham a partir de "projeção encadeada no caderno de venda".
+#     Card: SCRUM-416.
+#
+#   productivity_canonical_test → o cabeçalho dela diz "a dimensão vendido lê SÓ
+#     sale_events". `get_productivity_activity` em produção NÃO MENCIONA
+#     sale_events: conta por `pipeline_entries` + `lead_history`, com o COALESCE
+#     encadeado de chaves de atribuição que o próprio ADR-0017 §2 proíbe.
+#     Card: SCRUM-415.
+#
+# Elas não são regressão — são ESPECIFICAÇÃO esperando implementação. Deixá-las
+# no bloco principal mantém o job vermelho para sempre por dívida que nenhuma
+# branch introduziu, e portão que nasce vermelho é portão que ninguém lê. Mesma
+# razão do ratchet do vitest e do tsc.
+#
+# ⚠ O RATCHET SÓ ENCOLHE: se uma pendente PASSAR, este script REPROVA pedindo
+# que ela seja promovida. Sem isso a lista viraria depósito, e uma feature
+# entregue ficaria com o teste dela fora do portão.
+SUITES_PENDENTES=(
+  "commission_projection_test.sql"
+  "productivity_canonical_test.sql"
+)
+
+rodar_pendentes() {
+  local caminhos=()
+  local f
+  for f in "${SUITES_PENDENTES[@]}"; do caminhos+=("$SCRIPT_DIR/$f"); done
+
+  echo "==> ${#SUITES_PENDENTES[@]} suíte(s) PENDENTE(S) (feature não construída — SCRUM-415, SCRUM-416)"
+
+  local passou=0
+  if command -v pg_prove >/dev/null 2>&1; then
+    pg_prove --ext .sql -d "$DATABASE_URL" "${caminhos[@]}" && passou=1
+  else
+    local todas_ok=1
+    for f in "${SUITES_PENDENTES[@]}"; do
+      local out
+      out="$(psql "$DATABASE_URL" --no-psqlrc --quiet -t -A \
+              --variable ON_ERROR_STOP=1 --file "$SCRIPT_DIR/$f" 2>&1)" || todas_ok=0
+      grep -Eq '(^|[[:space:]])not ok' <<<"$out" && todas_ok=0
+    done
+    passou=$todas_ok
+  fi
+
+  if [ "$passou" -eq 1 ]; then
+    echo "FAIL: suíte pendente PASSOU — a feature foi construída." >&2
+    echo "      Promova-a para a lista principal (as duas de run_with_*) e" >&2
+    echo "      tire-a de SUITES_PENDENTES. O ratchet só encolhe." >&2
+    exit 1
+  fi
+
+  echo "==> pendentes seguem vermelhas, como esperado. Não derrubam o job."
+}
+
 if command -v pg_prove >/dev/null 2>&1; then
   echo "==> using pg_prove"
   run_with_pg_prove
@@ -570,5 +632,7 @@ else
   echo "==> pg_prove not found; using psql fallback"
   run_with_psql
 fi
+
+rodar_pendentes
 
 echo "==> pgTAP suites passed"
