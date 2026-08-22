@@ -2,6 +2,7 @@ import { Package, Plus, Tag } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { DealCardItem } from "./types";
+import { contaDoNegocio } from "./conta-do-negocio";
 
 /**
  * "Produtos e Valores" — o bloco de dinheiro do negócio, no formato do print.
@@ -60,31 +61,6 @@ function Linha({
       </span>
     </div>
   );
-}
-
-/**
- * A conta do negócio, num lugar só.
- *
- * Exportada porque o ladrilho "Valor Total" do topo e o "Total" deste bloco
- * PRECISAM ser o mesmo número. Cada um calculando o seu é como o painel passa
- * a mostrar dois valores para o mesmo negócio — e aí não há qual acreditar.
- */
-export function contaDoNegocio(
-  itens: DealCardItem[],
-  valorDoNegocio: number | null,
-  /** `metadata.sale_value` do funil — último recurso, e só quando há. */
-  valorDoFunil = 0,
-) {
-  // Bruto = o que os itens somariam sem abatimento. O desconto do negócio é a
-  // diferença até o total gravado, que é coluna GENERATED e já é a verdade.
-  const bruto = itens.reduce((s, i) => s + i.precoUnitario * i.quantidade, 0);
-  const liquido = itens.reduce((s, i) => s + i.total, 0);
-  const temItens = itens.length > 0;
-  return {
-    temItens,
-    desconto: Math.max(0, bruto - liquido),
-    total: temItens ? liquido : (valorDoNegocio ?? (valorDoFunil > 0 ? valorDoFunil : 0)),
-  };
 }
 
 export function DealCardMoney({

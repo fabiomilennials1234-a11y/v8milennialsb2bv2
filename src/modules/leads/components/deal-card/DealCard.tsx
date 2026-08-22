@@ -6,7 +6,8 @@ import { LeadCardDeals } from "../lead-card/LeadCardDeals";
 import { DealCardActivities } from "./DealCardActivities";
 import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
-import { DealCardMoney, contaDoNegocio } from "./DealCardMoney";
+import { DealCardMoney } from "./DealCardMoney";
+import { contaDoNegocio } from "./conta-do-negocio";
 import type { DealCardData } from "./types";
 
 /**
