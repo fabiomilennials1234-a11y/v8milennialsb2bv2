@@ -25,7 +25,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(24);
+SELECT plan(25);
 
 -- ---------------------------------------------------------------------------
 -- (a) Estrutura + grants
@@ -347,11 +347,23 @@ SELECT is(
       AND lead_id = 'dddddddd-aaaa-0000-0000-000000000001'),
   2, '(d) as 2 entries foram re-apontadas para o lead mantido');
 
+-- ⚠ Escalar, não conjunto. A asserção acima acabou de afirmar que sobrevivem
+-- DUAS entries; um `(SELECT lead_id FROM …)` sem agregação devolve as duas e o
+-- Postgres estoura `more than one row returned by a subquery used as an
+-- expression` — ERRO de execução, não asserção vermelha. Por isso o arquivo
+-- saía com `Tests: 24 Failed: 0` e ainda assim `exited 3`, e o job inteiro
+-- ficava vermelho sem um único `not ok` para apontar.
+-- A pergunta que interessa é "TODAS apontam para o mantido?": conta distintos.
 SELECT is(
-  (SELECT lead_id FROM public.pipeline_entries
+  (SELECT count(DISTINCT lead_id)::int FROM public.pipeline_entries
+    WHERE pipeline_id = 'dddddddd-9999-0000-0000-000000000001'),
+  1, '(d) as entries remanescentes no pipe P apontam todas para o MESMO lead');
+
+SELECT is(
+  (SELECT DISTINCT lead_id FROM public.pipeline_entries
     WHERE pipeline_id = 'dddddddd-9999-0000-0000-000000000001'),
   'dddddddd-aaaa-0000-0000-000000000001'::uuid,
-  '(d) a entry remanescente no pipe P é a do lead mantido (a1)');
+  '(d) e esse lead é o mantido (a1)');
 
 SELECT * FROM finish();
 
