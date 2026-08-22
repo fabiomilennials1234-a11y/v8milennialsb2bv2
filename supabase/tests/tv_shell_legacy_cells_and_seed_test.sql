@@ -213,12 +213,35 @@ SELECT ok(
      GROUP BY w.page_id) t) <= 12,
   '(SEED) nenhuma página semeada estoura o teto de 12 widgets (§6.4)');
 
+-- Os 2 pinados aparecem em CADA uma das 2 páginas (custo por página) — e são
+-- NATIVOS, não `legacy`.
+--
+-- ⚠ ESTA ASSERÇÃO MEDIA 'legacy' E FICOU PARA TRÁS (SCRUM-413). A migration
+-- 20260727110100_tv_reseed_legacy_to_native.sql promoveu os quatro widgets
+-- `legacy:*` ao formato nativo equivalente — thermometer virou Progresso
+-- (receita/total) e closer-performance virou Ranking (receita/closer) — porque
+-- célula legada renderizava moldura e travessão SEM corpo, e a regra do Vitral
+-- §5.0 proíbe célula pinada em branco na parede viva. Desde então o semeador
+-- não emite `legacy` nenhum, e a asserção pedia 4 de uma espécie extinta:
+-- `have: 0, want: 4`.
+--
+-- Medido em produção em 2026-08-22: `dashboard_widgets` tem 15 linhas, ZERO
+-- `legacy`, e as 4 pinadas são todas `leaf`/`receita`.
 SELECT is(
   (SELECT count(*)::int FROM public.dashboard_widgets w
    JOIN public.dashboard_pages p ON p.id = w.page_id
    WHERE p.organization_id = '12070000-0000-4000-8000-00000000000c'
-     AND w.measure_kind = 'legacy' AND w.pinned),
-  4, '(SEED) os 2 pinned legados aparecem em CADA uma das 2 páginas (custo por página)');
+     AND w.measure_kind = 'leaf' AND w.measure_id = 'receita' AND w.pinned),
+  4, '(SEED) os 2 pinados NATIVOS (receita/total + receita/closer) em CADA uma das 2 páginas');
+
+-- E o legado não volta pela porta dos fundos: o semeador é a única fonte de
+-- painel novo, e ele não pode ressuscitar a espécie que a fatia 1 aposentou.
+SELECT is(
+  (SELECT count(*)::int FROM public.dashboard_widgets w
+   JOIN public.dashboard_pages p ON p.id = w.page_id
+   WHERE p.organization_id = '12070000-0000-4000-8000-00000000000c'
+     AND w.measure_kind = 'legacy'),
+  0, '(SEED) o semeador NÃO emite célula legacy — ela renderiza moldura sem corpo');
 
 -- ===========================================================================
 -- (TRG) o flip da flag semeia sozinho

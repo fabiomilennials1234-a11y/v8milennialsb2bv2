@@ -25,7 +25,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(23);
+SELECT plan(25);
 
 -- ---------------------------------------------------------------------------
 -- (a) Estrutura + grants
@@ -131,9 +131,23 @@ VALUES
    'Distribuidora Acme LTDA', '5511999990000', 'contato@acme.com', NULL)
 ON CONFLICT (id) DO NOTHING;
 
--- Pipeline compartilhado + entries de a1 E a2 no MESMO pipeline → colisão
--- UNIQUE(pipeline_id, lead_id) [PARCIAL: WHERE lead_id IS NOT NULL]. É o caso
--- comum que abortava o merge antes do pre-dedupe data-driven.
+-- Pipeline compartilhado + entries de a1 E a2 no MESMO pipeline.
+--
+-- ⚠ ISTO JÁ FOI UMA COLISÃO, E DEIXOU DE SER (SCRUM-412). Até a migration
+-- 20270730000050_deal_por_lead_destrava.sql, `pipeline_entries` tinha DOIS
+-- únicos sobre (pipeline_id, lead_id) — a constraint `uq_...` e o índice
+-- parcial `idx_...` — e mesclar dois leads com entry no mesmo funil abortava
+-- por 23505. Aquela migration DERRUBA os dois de propósito: sob Lead ≠ Negócio,
+-- o mesmo lead pode ter VÁRIOS negócios no mesmo funil, e a unicidade era
+-- justamente o que impedia o segundo.
+--
+-- Consequência para o merge: não há mais o que deduplicar aqui, e as duas
+-- entries sobrevivem — cada uma é uma negociação distinta, com histórico e
+-- possivelmente venda própria. Apagar uma destruiria um negócio.
+--
+-- O pre-dedupe data-driven continua vivo e continua testado: ele age em toda
+-- tabela que AINDA tem único envolvendo a FK para leads, e a asserção passou a
+-- exercitá-lo por `lead_tags` (UNIQUE(lead_id, tag_id)), logo abaixo.
 INSERT INTO public.pipelines (id, organization_id, name, slug, type)
 VALUES ('dddddddd-9999-0000-0000-000000000001', 'dddddddd-0000-0000-0000-00000000000a',
         'Pipe dup-test', 'pipe-dup-test', 'custom')
@@ -145,6 +159,21 @@ VALUES
    'dddddddd-9999-0000-0000-000000000001', 'dddddddd-aaaa-0000-0000-000000000001', 'novo'),
   ('dddddddd-7777-0000-0000-000000000002', 'dddddddd-0000-0000-0000-00000000000a',
    'dddddddd-9999-0000-0000-000000000001', 'dddddddd-aaaa-0000-0000-000000000002', 'novo')
+ON CONFLICT (id) DO NOTHING;
+
+-- Tag compartilhada por a1 E a2 → colisão REAL de UNIQUE(lead_id, tag_id) no
+-- merge. É por aqui que o pre-dedupe data-driven é exercitado agora.
+INSERT INTO public.tags (id, organization_id, name)
+VALUES ('dddddddd-6666-0000-0000-000000000001', 'dddddddd-0000-0000-0000-00000000000a',
+        'Tag dup-test')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.lead_tags (id, lead_id, tag_id)
+VALUES
+  ('dddddddd-5555-0000-0000-000000000001',
+   'dddddddd-aaaa-0000-0000-000000000001', 'dddddddd-6666-0000-0000-000000000001'),
+  ('dddddddd-5555-0000-0000-000000000002',
+   'dddddddd-aaaa-0000-0000-000000000002', 'dddddddd-6666-0000-0000-000000000001')
 ON CONFLICT (id) DO NOTHING;
 
 SET LOCAL session_replication_role = origin;
@@ -293,11 +322,30 @@ SELECT is(
   'dddddddd-aaaa-0000-0000-000000000001'::uuid,
   '(d) FK re-apontada: lead_history de a2 agora aponta p/ a1 (não cascadeou)');
 
--- pre-dedupe: entry de a2 no pipe P foi removida (colidia); só a de a1 fica.
+-- pre-dedupe: a tag compartilhada colide em UNIQUE(lead_id, tag_id) e é
+-- deduplicada ANTES do re-apontamento — sem isso o merge morre em 23505.
+SELECT is(
+  (SELECT count(*)::int FROM public.lead_tags
+    WHERE lead_id = 'dddddddd-aaaa-0000-0000-000000000001'
+      AND tag_id  = 'dddddddd-6666-0000-0000-000000000001'),
+  1, '(d) pre-dedupe: 1 lead_tags para (a1, tag T) — a linha de a2 foi deduplicada');
+
+-- As DUAS entries do funil sobrevivem, e isto é o comportamento CORRETO desde
+-- 20270730000050_deal_por_lead_destrava.sql: os únicos sobre
+-- (pipeline_id, lead_id) foram derrubados de propósito, porque sob Lead ≠
+-- Negócio o mesmo lead tem vários negócios no mesmo funil. Cada entry é uma
+-- negociação, com histórico e possivelmente venda própria — deduplicar aqui
+-- apagaria um negócio. Ver SCRUM-412.
 SELECT is(
   (SELECT count(*)::int FROM public.pipeline_entries
     WHERE pipeline_id = 'dddddddd-9999-0000-0000-000000000001'),
-  1, '(d) pre-dedupe: 1 entry no pipe P (a de a2 deduplicada, sem unique_violation)');
+  2, '(d) as 2 entries do funil P sobrevivem (Lead ≠ Negócio: são 2 negócios)');
+
+SELECT is(
+  (SELECT count(*)::int FROM public.pipeline_entries
+    WHERE pipeline_id = 'dddddddd-9999-0000-0000-000000000001'
+      AND lead_id = 'dddddddd-aaaa-0000-0000-000000000001'),
+  2, '(d) as 2 entries foram re-apontadas para o lead mantido');
 
 SELECT is(
   (SELECT lead_id FROM public.pipeline_entries
