@@ -16,26 +16,45 @@
  */
 
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import { supabase, TEST_ORG_ID } from './setup';
+import { supabase, TEST_ORG_ID, TEST_LEAD_ALPHA_ID } from './setup';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
-// We need a test client in upsell_clients
-const TEST_CLIENT_ID = '00000000-0000-0000-0000-000000009001';
+// We need a test client in upsell_clients.
+//
+// ⚠ O id era `...009001`, que o seed passou a usar para um LEAD do cenário de
+// métricas ("Lead Com Dois Negocios"). Tabelas diferentes, então não havia
+// conflito de chave — só de leitura humana, e ela custou caro: ninguém percebeu
+// que o cliente da carteira nunca chegava a existir.
+const TEST_CLIENT_ID = '00000000-0000-0000-0000-00000000cf01';
 const TEST_CLOSER_ID = '00000000-0000-0000-0000-000000000110'; // TEST_TM_MASTER_ID
 
 let createdOrderIds: string[] = [];
 
 describe.skipIf(shouldSkip)('New Order creation', () => {
   beforeAll(async () => {
-    // Ensure test client exists
-    await supabase.from('upsell_clients').upsert({
+    // Ensure test client exists.
+    //
+    // 🔴 `lead_id` É NOT NULL EM `upsell_clients`, E FALTAVA AQUI (SCRUM-362).
+    // O upsert falhava com 23502, o erro era DESCARTADO — sem `if (error)
+    // throw` — e as cinco asserções da suíte morriam depois em 23503, apontando
+    // para a FK do pedido. O sintoma ficava a dois passos da causa: quem lia o
+    // vermelho investigava `upsell_orders`, e o defeito estava no fixture.
+    //
+    // Cliente da carteira é sempre a projeção comercial de um lead: sem lead
+    // não há de quem o pedido é. Por isso o NOT NULL, e por isso o fixture
+    // pendura no Lead Alpha do seed.
+    const { error: clientError } = await supabase.from('upsell_clients').upsert({
       id: TEST_CLIENT_ID,
       organization_id: TEST_ORG_ID,
+      lead_id: TEST_LEAD_ALPHA_ID,
       name: 'Test Client Order',
       company: 'Test Corp',
       is_active: true,
     }, { onConflict: 'id' });
+    if (clientError) {
+      throw new Error(`fixture: upsell_clients upsert falhou — ${clientError.message}`);
+    }
   });
 
   afterAll(async () => {
@@ -45,6 +64,9 @@ describe.skipIf(shouldSkip)('New Order creation', () => {
       await supabase.from('upsell_orders').delete().eq('id', orderId);
     }
     await supabase.from('upsell_client_products').delete().eq('client_id', TEST_CLIENT_ID);
+    // O cliente do fixture também sai: linha de carteira esquecida entra na
+    // conta de outras suítes (e da inadimplência) como cliente real.
+    await supabase.from('upsell_clients').delete().eq('id', TEST_CLIENT_ID);
   });
 
   it('creates order with correct total from multiple items', async () => {

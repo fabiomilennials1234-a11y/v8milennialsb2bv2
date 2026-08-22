@@ -28,6 +28,7 @@ import {
   TEST_LEAD_BETA_ID,
   TEST_LEAD_GAMMA_ID,
   TEST_LEAD_DELTA_ID,
+  TEST_ORG_A_LEAD_IDS,
 } from './setup';
 import {
   getOrgAAdmin,
@@ -49,7 +50,7 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
   // ──────────────────────────────────────────────────────────────
 
   describe('Admin visibility', () => {
-    it('1. Admin sees all 4 Org A leads', async () => {
+    it('1. Admin vê TODOS os leads da Org A', async () => {
       const admin = await getOrgAAdmin();
       const { data, error } = await admin
         .from('leads')
@@ -57,7 +58,7 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
         .eq('organization_id', TEST_ORG_ID);
 
       expect(error).toBeNull();
-      expect(data).toHaveLength(4);
+      expect(new Set(data!.map((l) => l.id))).toEqual(new Set(TEST_ORG_A_LEAD_IDS));
     });
 
     it('2. Admin sees pipe_whatsapp entry for Org A', async () => {
@@ -160,7 +161,7 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
   // ──────────────────────────────────────────────────────────────
 
   describe('Member2 visibility (has leads.view_all)', () => {
-    it('9. Member2 sees ALL 4 Org A leads', async () => {
+    it('9. Member2 vê TODOS os leads da Org A', async () => {
       const member2 = await getOrgAMember2();
       const { data, error } = await member2
         .from('leads')
@@ -168,7 +169,7 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
         .eq('organization_id', TEST_ORG_ID);
 
       expect(error).toBeNull();
-      expect(data).toHaveLength(4);
+      expect(new Set(data!.map((l) => l.id))).toEqual(new Set(TEST_ORG_A_LEAD_IDS));
     });
 
     it('10. Member2 sees Lead Alpha even though sdr_id != self', async () => {

@@ -45,5 +45,32 @@ export const TEST_LEAD_DELTA_ID = '00000000-0000-0000-0000-000000001004';
 export const TEST_LEAD_ORGB_1_ID = '00000000-0000-0000-0000-000000002001';
 export const TEST_LEAD_ORGB_2_ID = '00000000-0000-0000-0000-000000002002';
 
+// Leads do cenário "Lead ≠ Negócio" (seed §12): L1 tem DOIS negócios abertos no
+// "Funil Métricas", L2 tem um. Vivem na Org A de propósito — o E2E do Estúdio
+// de Métricas entra com um usuário da Org A e precisa enxergá-los.
+export const TEST_LEAD_DOIS_NEGOCIOS_ID = '00000000-0000-0000-0000-000000009001';
+export const TEST_LEAD_UM_NEGOCIO_ID = '00000000-0000-0000-0000-000000009002';
+
+/**
+ * TODOS os leads que o seed cria na Org A.
+ *
+ * 🔴 QUEM ADICIONAR LEAD AO SEED ADICIONA AQUI. Cinco asserções de RLS pediam
+ * `toHaveLength(4)` e passaram a receber 6 quando o cenário de métricas entrou
+ * (SCRUM-362) — cinco vermelhos que se leem como falha de isolamento entre
+ * suítes e não eram: o seed é que tinha crescido.
+ *
+ * A asserção passou a comparar o CONJUNTO, não o tamanho. Ela fica mais forte
+ * (um lead trocado por outro deixa de passar despercebido) e o próximo fixture
+ * quebra UM lugar, com o nome do que falta.
+ */
+export const TEST_ORG_A_LEAD_IDS = [
+  TEST_LEAD_ALPHA_ID,
+  TEST_LEAD_BETA_ID,
+  TEST_LEAD_GAMMA_ID,
+  TEST_LEAD_DELTA_ID,
+  TEST_LEAD_DOIS_NEGOCIOS_ID,
+  TEST_LEAD_UM_NEGOCIO_ID,
+] as const;
+
 // Common password for all test users
 export const TEST_PASSWORD = 'Test123!@#';
