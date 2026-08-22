@@ -101,7 +101,8 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
         .from('custom_pipelines')
         .insert({
           organization_id: TEST_ORG_ID,
-          name: `Pipeline Teste FK ${Date.now()}`,
+          name: `Pipeline Teste FK ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          slug: `pipeline-teste-fk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           is_active: true,
         })
         .select('id')
@@ -117,6 +118,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
+          stage_key: 'novo',
           name: 'Novo',
           position: 0,
           is_active: true,
@@ -160,7 +162,8 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
         .from('custom_pipelines')
         .insert({
           organization_id: TEST_ORG_ID,
-          name: `Pipeline Teste FK Invalid ${Date.now()}`,
+          name: `Pipeline Teste FK Invalid ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          slug: `pipeline-teste-fk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           is_active: true,
         })
         .select('id')
@@ -172,6 +175,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
+          stage_key: 'novo',
           name: 'Novo',
           position: 0,
           is_active: true,
@@ -213,7 +217,8 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
         .from('custom_pipelines')
         .insert({
           organization_id: TEST_ORG_ID,
-          name: `Pipeline Teste Null ${Date.now()}`,
+          name: `Pipeline Teste Null ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          slug: `pipeline-teste-null-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           is_active: true,
         })
         .select('id')
@@ -225,6 +230,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
+          stage_key: 'novo',
           name: 'Novo',
           position: 0,
           is_active: true,

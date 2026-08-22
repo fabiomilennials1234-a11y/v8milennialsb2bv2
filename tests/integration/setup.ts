@@ -89,3 +89,74 @@ export const TEST_ORG_A_LEAD_IDS = [
 
 // Common password for all test users
 export const TEST_PASSWORD = 'Test123!@#';
+
+/**
+ * Devolve o id do funil de sistema da org — o QUE JÁ EXISTE, nunca um segundo.
+ *
+ * 🔴 TRÊS FIXTURES CRIAVAM UM FUNIL 'whatsapp' PARALELO E FALHAVAM EM SILÊNCIO
+ * (SCRUM-362). `pipelines` tem `UNIQUE (organization_id, slug)`, e o upsert
+ * delas vinha com `onConflict: 'id'` — id novo, mesmo par (org, slug). O
+ * conflito caía no índice ERRADO, o Postgres devolvia 23505, ninguém checava o
+ * erro, e o funil não nascia. As entries seguintes morriam na FK, também em
+ * silêncio, e a RPC respondia com o que sobrava: a linha do seed.
+ *
+ * O sintoma era `expected Set{1 item} to deeply equal Set{2 items}` em
+ * get_stage_lead_ids e get_filtered_lead_ids — que se lê como bug na RPC, e não
+ * era: a RPC estava certa, o fixture é que nunca existiu.
+ *
+ * Em produção há UM funil de sistema por slug por org (nasce no
+ * provisionamento). Duplicar isso no teste não reproduz nada real.
+ */
+/**
+ * Devolve o funil de sistema ao estado do seed: uma entry em `novo` para o
+ * Lead Alpha (Org A) e uma para o OrgB-1 (Org B).
+ *
+ * As suítes dos resolvers de público limpam o funil inteiro para montar o
+ * cenário delas. Sem esta restauração, quem rodar depois encontra o funil vazio
+ * — e `rls-org-isolation` afirma "Org A vê exatamente 1 pipe_whatsapp", que é
+ * VIEW sobre essas entries. Com `--no-file-parallelism` a ordem é estável, mas
+ * "estável" não é "restaurada".
+ */
+export async function restoreSeedWhatsappEntries(): Promise<void> {
+  const [pipeA, pipeB] = await Promise.all([
+    getSystemPipelineId(TEST_ORG_ID, 'whatsapp'),
+    getSystemPipelineId(TEST_ORG_B_ID, 'whatsapp'),
+  ]);
+  await supabase.from('pipeline_entries').delete().in('pipeline_id', [pipeA, pipeB]);
+  await supabase.from('pipeline_entries').insert([
+    {
+      organization_id: TEST_ORG_ID,
+      pipeline_id: pipeA,
+      lead_id: TEST_LEAD_ALPHA_ID,
+      stage_key: 'novo',
+    },
+    {
+      organization_id: TEST_ORG_B_ID,
+      pipeline_id: pipeB,
+      lead_id: TEST_LEAD_ORGB_1_ID,
+      stage_key: 'novo',
+    },
+  ]);
+}
+
+export async function getSystemPipelineId(
+  organizationId: string,
+  slug: 'whatsapp' | 'confirmacao' | 'propostas',
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('pipelines')
+    .select('id')
+    .eq('organization_id', organizationId)
+    .eq('slug', slug)
+    .maybeSingle();
+  if (error) throw new Error(`getSystemPipelineId(${slug}): ${error.message}`);
+  if (data?.id) return data.id as string;
+
+  const { data: created, error: insErr } = await supabase
+    .from('pipelines')
+    .insert({ organization_id: organizationId, name: slug, slug, type: 'system' })
+    .select('id')
+    .single();
+  if (insErr) throw new Error(`getSystemPipelineId(${slug}) insert: ${insErr.message}`);
+  return created!.id as string;
+}
