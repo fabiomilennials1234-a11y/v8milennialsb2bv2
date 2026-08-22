@@ -81,7 +81,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       const isSystem = negocioBase!.isSystem;
       const stageType = SLUG_TO_STAGE_TYPE[negocioBase!.pipelineSlug] ?? negocioBase!.pipelineSlug;
 
-      const [entryRes, etapasRes, movRes, amostraRes] = await Promise.all([
+      const [entryRes, etapasRes, movRes, amostraRes, ativRes] = await Promise.all([
         supabase
           .from("pipeline_entries")
           // `deal_id` entra aqui para o negócio poder ser lido de `deals`.
@@ -115,6 +115,24 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
           .eq("pipeline_id", pipelineId)
           .eq("stage_key", negocioBase!.stageKey ?? "")
           .limit(400),
+        /**
+         * Atividades — a aba de mesmo nome no print.
+         *
+         * Filtra por `lead_id`, não por `deal_id`: a coluna `deal_id` existe em
+         * `activities`, mas só é preenchida quando o negócio nasceu pelo
+         * caminho novo, e a maioria das entradas do funil não tem linha em
+         * `deals`. Por lead a aba responde de verdade; por negócio ela abriria
+         * vazia quase sempre — e aba que abre vazia ensina a não clicar nela.
+         */
+        leadId
+          ? supabase
+              .from("activities")
+              .select("id, type, subject, description, due_date, completed_at, created_at, outcome, is_automated")
+              .eq("organization_id", organizationId!)
+              .eq("lead_id", leadId)
+              .order("created_at", { ascending: false })
+              .limit(50)
+          : Promise.resolve({ data: [] as Linha[] }),
       ]);
 
       /**
@@ -148,6 +166,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         etapas: (etapasRes.data ?? []) as Linha[],
         movimentos: (movRes.data ?? []) as Linha[],
         amostra: (amostraRes.data ?? []) as Linha[],
+        atividades: (ativRes.data ?? []) as Linha[],
         negocio: (negocioRes?.data ?? null) as Linha | null,
         itens: (itensRes?.data ?? []) as Linha[],
       };
@@ -184,6 +203,9 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       id: String(m.id),
       de: m.from_stage_key ? (nomePorChave.get(String(m.from_stage_key)) ?? String(m.from_stage_key)) : null,
       para: nomePorChave.get(String(m.to_stage_key)) ?? String(m.to_stage_key ?? ""),
+      // A chave crua segue junto do nome: é por ela que a régua carimba a data
+      // na casa certa, e ela sobrevive a renomear etapa.
+      paraChave: typeof m.to_stage_key === "string" && m.to_stage_key !== "" ? m.to_stage_key : null,
       quando: String(m.occurred_at ?? ""),
       autor: typeof m.actor === "string" && m.actor !== "" ? m.actor : null,
       origem:
@@ -305,7 +327,19 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
           probabilidade: num(n?.probability),
           previsaoFechamento: str(n?.expected_close_date),
           fechadoEm: str(n?.closed_at),
-          criadoEm: str(n?.created_at),
+          /**
+           * "Data de Criação" cai para `entered_at` quando não há linha em
+           * `deals`.
+           *
+           * O painel é chaveado por `pipeline_entries.id`, e a linha em `deals`
+           * só existe quando alguém criou o negócio pelo caminho novo —
+           * `deal_id` é NULO na maioria das entradas. Sem a queda, o ladrilho
+           * "Data de Criação" mostraria um traço justamente nos negócios
+           * antigos, que são os que interessa datar. `entered_at` é quando o
+           * negócio entrou no funil, que é a mesma pergunta respondida pelo
+           * dado que existe para 100% deles.
+           */
+          criadoEm: str(n?.created_at) ?? negocioBase.enteredAt ?? null,
           itens: (extras.data?.itens ?? []).map((i) => ({
             id: String(i.id),
             nome: typeof i.product_name === "string" ? i.product_name : "Item",
@@ -338,6 +372,45 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
       movimentacoes,
       nota: typeof entry?.notes === "string" ? entry.notes : "",
+
+      atividades: (extras.data?.atividades ?? []).map((a) => {
+        const txt = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : null);
+        return {
+          id: String(a.id),
+          tipo: String(a.type ?? "outro"),
+          // `subject` é o título; sem ele o tipo vira o título, que é o que a
+          // linha precisa ter para não abrir sem rótulo.
+          titulo: txt(a.subject) ?? String(a.type ?? "Atividade"),
+          descricao: txt(a.description),
+          resultado: txt(a.outcome),
+          automatica: a.is_automated === true,
+          // A data que interessa é a que o usuário marcou; sem ela, a de
+          // criação. Concluída manda em tudo: ela diz que já aconteceu.
+          quando: txt(a.completed_at) ?? txt(a.due_date) ?? String(a.created_at ?? ""),
+          concluida: txt(a.completed_at) !== null,
+        };
+      }),
+
+      // Mesmo mapeamento do card do Lead (`useLeadCardData.ts:123-135`), sobre a
+      // MESMA lista que já está em memória — `useLeadsDeals` foi consultado no
+      // topo deste hook para achar `negocioBase`, e o resto era descartado.
+      outrosNegocios: (dealsMap?.[String(l.id)] ?? []).map((d) => ({
+        id: d.id,
+        titulo: d.title,
+        funil: d.funnelName,
+        funilCor: d.funnelColor,
+        etapa: d.stageName,
+        valor: d.value,
+        estado: (d.outcome === "won"
+          ? "ganho"
+          : d.outcome === "lost"
+            ? "perdido"
+            : "aberto") as DealCardData["estado"],
+        diasNaEtapa: d.daysInStage,
+        diasEmAberto: diasDesde(d.enteredAt),
+        etapaIndice: d.stageIndex,
+        etapaTotal: d.stageCount,
+      })),
     };
   }, [lead, negocioBase, dealsMap, vendasMap, carteiraMap, extras.data, equipe]);
 

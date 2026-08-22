@@ -1,7 +1,10 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
 
+import { cn } from "@/lib/utils";
+
 import { LeadCard } from "./LeadCard";
+import { LeadCardAside } from "./LeadCardAside";
 import { useLeadCardData } from "./useLeadCardData";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
 import { useSaveCustomFieldValue } from "../../hooks/useLeadCustomFields";
@@ -29,11 +32,26 @@ export function LeadCardContainer({
   isOpen,
   onOpenDeal,
   onNewDeal,
+  forma = "card",
+  onAbrirFicha,
 }: {
   leadId: string | null;
   isOpen: boolean;
   onOpenDeal?: (entryId: string, leadId: string) => void;
   onNewDeal?: () => void;
+  /**
+   * `card` é a ficha inteira; `coluna` é a faixa de 356px que o painel do
+   * Negócio encosta à esquerda (o print do DataCrazy).
+   *
+   * As duas formas ficam no MESMO container de propósito: o que muda é o
+   * desenho, não de onde vem o dado nem como ele grava. Um segundo container
+   * significaria uma segunda regra de "campo do sistema vai por `useUpdateLead`,
+   * campo da org vai por `useSaveCustomFieldValue`" — e é assim que as duas
+   * gravações começam a divergir.
+   */
+  forma?: "card" | "coluna";
+  /** Só na forma `coluna`: leva para a ficha inteira do lead. */
+  onAbrirFicha?: () => void;
 }) {
   const { data, isLoading, visibility } = useLeadCardData(leadId, isOpen);
   const updateLead = useUpdateLead();
@@ -84,9 +102,17 @@ export function LeadCardContainer({
 
   if (!isOpen) return null;
 
+  // Na forma `coluna` a caixa de aviso tem de ocupar EXATAMENTE a largura da
+  // coluna: sem isso ela vira `flex-1` e empurra o negócio para fora da tela
+  // enquanto carrega, e o painel pisca de duas larguras a cada abertura.
+  const molduraAviso =
+    forma === "coluna"
+      ? "w-[356px] shrink-0 border-r border-border"
+      : "rounded-xl border border-border";
+
   if (isLoading || visibility === "loading") {
     return (
-      <div className="flex h-full items-center justify-center rounded-xl border border-border bg-background">
+      <div className={cn("flex h-full items-center justify-center bg-background", molduraAviso)}>
         <span className="text-[13px] text-muted-foreground">Carregando…</span>
       </div>
     );
@@ -103,9 +129,25 @@ export function LeadCardContainer({
           ? "Você não tem acesso a este lead."
           : "Lead não encontrado.";
     return (
-      <div className="flex h-full items-center justify-center rounded-xl border border-border bg-background px-6 text-center">
+      <div
+        className={cn(
+          "flex h-full items-center justify-center bg-background px-6 text-center",
+          molduraAviso,
+        )}
+      >
         <span className="text-[13px] text-muted-foreground">{mensagem}</span>
       </div>
+    );
+  }
+
+  if (forma === "coluna") {
+    return (
+      <LeadCardAside
+        lead={data}
+        onSaveNote={salvarNota}
+        onSaveField={salvarCampo}
+        onAbrirFicha={onAbrirFicha}
+      />
     );
   }
 

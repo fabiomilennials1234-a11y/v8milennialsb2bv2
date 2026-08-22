@@ -53,7 +53,19 @@ export const LeadCardPanel = memo(function LeadCardPanel() {
       <LeadCardContainer
         leadId={leadId}
         isOpen={isOpen}
-        onOpenDeal={(entryId, id) => openDeal(entryId, id)}
+        /**
+         * Fecha ESTE painel antes de abrir o do Negócio.
+         *
+         * Antes os dois diálogos se empilhavam — dois `Dialog` do Radix, dois
+         * focus-trap, e o Esc fechando só o de cima. Passava despercebido
+         * porque o painel do Negócio não mostrava a pessoa. Agora ele tem a
+         * coluna do lead dentro, então empilhar põe o MESMO lead duas vezes na
+         * tela, um por cima do outro.
+         */
+        onOpenDeal={(entryId, id) => {
+          close();
+          openDeal(entryId, id);
+        }}
         onNewDeal={() => setNovoNegocio(true)}
       />
       {(novoNegocio || jaAbriu.current) && (

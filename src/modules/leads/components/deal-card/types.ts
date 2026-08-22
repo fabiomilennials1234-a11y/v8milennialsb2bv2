@@ -15,6 +15,8 @@
  *     30. Tempo é o único dado que existe para 100% e o único que aponta ação.
  */
 
+import type { LeadCardDeal } from "../lead-card/types";
+
 export type EstadoDoNegocio = "aberto" | "ganho" | "perdido";
 
 export interface DealCardStage {
@@ -28,6 +30,16 @@ export interface DealCardMove {
   id: string;
   de: string | null;
   para: string;
+  /**
+   * A CHAVE da etapa de destino, não o rótulo.
+   *
+   * `para` é o nome já resolvido, que é o que a lista de movimentação lê. A
+   * régua precisa casar a movimentação com a casa, e casar por nome quebra em
+   * duas situações reais: etapa renomeada depois do evento, e dois funis com
+   * etapas de mesmo nome. `null` quando o evento aponta para uma etapa que não
+   * existe mais.
+   */
+  paraChave: string | null;
   quando: string;
   autor: string | null;
   origem: "manual" | "automacao" | "sistema";
@@ -62,6 +74,25 @@ export interface DealCardLeadRef {
   etiquetas: Array<{ nome: string; cor: string }>;
   /** Faixa de faturamento declarada (texto livre no banco). */
   faturamento: string | null;
+}
+
+/**
+ * Uma linha de `activities` — a aba "Atividades" do print.
+ *
+ * A tabela tem `deal_id` E `lead_id`. A aba lê por **lead**: `deal_id` só é
+ * preenchido quando o negócio nasceu pelo caminho novo, e a maioria das
+ * entradas de funil não tem linha em `deals` — por negócio a aba abriria vazia
+ * quase sempre.
+ */
+export interface DealCardActivity {
+  id: string;
+  tipo: string;
+  titulo: string;
+  descricao: string | null;
+  resultado: string | null;
+  automatica: boolean;
+  quando: string;
+  concluida: boolean;
 }
 
 /** Uma linha de `deal_items` — os produtos do negócio. */
@@ -138,4 +169,18 @@ export interface DealCardData {
 
   movimentacoes: DealCardMove[];
   nota: string;
+
+  /** `activities` do lead — a aba "Atividades" do print. */
+  atividades: DealCardActivity[];
+
+  /**
+   * Os negócios do MESMO lead, este inclusive — a aba "Negócios" do print.
+   *
+   * Não custa consulta nova: `useLeadsDeals(leadId)` já roda no hook para achar
+   * este negócio, e devolve a lista inteira. O card só jogava fora o resto.
+   * É o que responde "esta pessoa tem outra coisa em aberto?" sem sair daqui —
+   * um lead atravessa vários funis na mesma venda, e é exatamente aí que se
+   * cobra duas vezes ou se abandona a metade que ninguém viu.
+   */
+  outrosNegocios: LeadCardDeal[];
 }

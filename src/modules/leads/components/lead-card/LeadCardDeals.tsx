@@ -58,15 +58,27 @@ function Metrica({ valor, rotulo }: { valor: string; rotulo: string }) {
   );
 }
 
-function LinhaAberta({ deal, onOpen }: { deal: LeadCardDeal; onOpen: (id: string) => void }) {
+function LinhaAberta({
+  deal,
+  onOpen,
+  atual,
+}: {
+  deal: LeadCardDeal;
+  onOpen: (id: string) => void;
+  atual?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={() => onOpen(deal.id)}
+      aria-current={atual ? "true" : undefined}
       className={cn(
-        "group flex w-full flex-col gap-2.5 rounded-lg border border-border bg-card px-3 py-3 text-left",
-        "transition-[border-color,box-shadow] hover:border-muted-foreground/35 hover:shadow-sm",
+        "group flex w-full flex-col gap-2.5 rounded-lg border bg-card px-3 py-3 text-left",
+        "transition-[border-color,box-shadow] hover:shadow-sm",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        atual
+          ? "border-primary/45 bg-primary/[0.05]"
+          : "border-border hover:border-muted-foreground/35",
       )}
     >
       <div className="flex items-center gap-2.5">
@@ -77,7 +89,16 @@ function LinhaAberta({ deal, onOpen }: { deal: LeadCardDeal; onOpen: (id: string
           <ShoppingCart className="size-3.5" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13.5px] font-medium">{deal.titulo}</span>
+          <span className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-[13.5px] font-medium">{deal.titulo}</span>
+            {/* Sem esta marca, a lista mostra o negócio que já está aberto como
+                se fosse outro, e clicar nele parece não fazer nada. */}
+            {atual && (
+              <span className="shrink-0 rounded border border-primary/40 bg-primary/10 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                este
+              </span>
+            )}
+          </span>
           <span className="block truncate text-[11.5px] text-muted-foreground">
             {/* Valor só quando existe: a maioria da qualificação não tem
                 `sale_value`, e "R$ 0,00" em toda linha esconde o que importa. */}
@@ -122,10 +143,16 @@ export function LeadCardDeals({
   negocios,
   onOpenDeal,
   onNewDeal,
+  atual,
 }: {
   negocios: LeadCardDeal[];
   onOpenDeal: (id: string) => void;
   onNewDeal: () => void;
+  /**
+   * O negócio que já está aberto na tela, quando esta lista é montada DENTRO de
+   * um painel de negócio. No card do Lead não há "atual" e a prop fica vazia.
+   */
+  atual?: string;
 }) {
   const [historicoAberto, setHistoricoAberto] = useState(false);
 
@@ -161,7 +188,7 @@ export function LeadCardDeals({
       {abertos.length > 0 ? (
         <div className="flex flex-col gap-2">
           {abertos.map((d) => (
-            <LinhaAberta key={d.id} deal={d} onOpen={onOpenDeal} />
+            <LinhaAberta key={d.id} deal={d} onOpen={onOpenDeal} atual={d.id === atual} />
           ))}
         </div>
       ) : (
