@@ -25,7 +25,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(25);
+SELECT plan(26);
 
 -- ---------------------------------------------------------------------------
 -- (a) Estrutura + grants
