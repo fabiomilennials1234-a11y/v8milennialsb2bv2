@@ -102,29 +102,97 @@ export function instanceRoutingLabel(policy: InstanceRoutingPolicy): string {
 }
 
 /**
- * Provedores que o envio legado do Workflow usa. Números Meta ficam de fora
- * (isolamento de certificação) — precisa espelhar `LEGACY_PROVIDERS` do
- * backend, senão o painel conta um número que o envio nunca vai usar.
+ * Os chips — número comum, WhatsApp não-oficial. Espelha `LEGACY_PROVIDERS` do
+ * backend.
+ *
+ * Deixou de ser o universo do roteamento no #1700 e virou um recorte dentro
+ * dele, usado onde o canal oficial não serve: o atalho de fixa morta e o nó
+ * `send_to_number`.
  */
 const LEGACY_PROVIDERS = ["uazapi", "evolution"];
 
 /**
- * Uma Instance é elegível ao roteamento quando está conectada, sem sessão
- * morta e não é Meta. Mesma definição de `isInstanceLive` em
- * `supabase/functions/_shared/instance-routing.ts`: se o painel e o envio
- * discordarem sobre quantos números vivos existem, o operador vê um campo de
- * recuo que o backend ignora — ou não vê o que ele exige.
+ * Os provedores que o roteamento do Workflow alcança (issue #1700). Espelha
+ * `ROUTABLE_PROVIDERS` do backend.
+ *
+ * Números `meta`/`meta_cloud` continuam de fora (isolamento de certificação).
+ * O canal oficial via NotificaMe entrou: ele é escolhível pela regra, não só
+ * nomeável por uma pessoa.
+ */
+const ROUTABLE_PROVIDERS = [...LEGACY_PROVIDERS, "notificame"];
+
+/** Canal oficial (Meta via NotificaMe). Só para rotular a opção na tela. */
+export function isOfficialChannel(inst: { provider?: string | null }): boolean {
+  return String(inst.provider) === "notificame";
+}
+
+/**
+ * Uma Instance é elegível ao roteamento quando está conectada, sem sessão morta
+ * e de provedor que o executor alcança. Mesma definição de
+ * `isRoutableInstance` em `supabase/functions/_shared/instance-routing.ts`: se
+ * o painel e o envio discordarem sobre quantos números vivos existem, o
+ * operador vê um campo de recuo que o backend ignora — ou não vê o que ele
+ * exige. O gêmeo `tests/unit/instance-routing-twin.test.ts` prende os dois.
  */
 export function isRoutableInstance(inst: {
   status?: string | null;
   session_dead_since?: string | null;
   provider?: string | null;
 }): boolean {
+  return isLive(inst) && ROUTABLE_PROVIDERS.includes(String(inst.provider));
+}
+
+/** Vivacidade pura — saúde de sessão, sem opinião sobre provedor. */
+function isLive(inst: { status?: string | null; session_dead_since?: string | null }): boolean {
   return (
     (inst.status === "connected" || inst.status === "open") &&
-    inst.session_dead_since == null &&
-    LEGACY_PROVIDERS.includes(String(inst.provider))
+    inst.session_dead_since == null
   );
+}
+
+/**
+ * **Chip** = viva e de provedor não-oficial. Espelha `isChipInstance` do
+ * backend.
+ *
+ * O painel precisa desta contagem em dois lugares, e os dois espelham uma
+ * decisão do executor:
+ *
+ *  - `send_to_number`, que nunca oferece o canal oficial (a janela de 24h
+ *    daqueles números está fechada por definição);
+ *  - o aviso de fixa obsoleta, que descreve o `deadPinShortcut` do executor —
+ *    com a fixa morta, o atalho conta só chips. Contar diferente aqui faria o
+ *    aviso mentir sobre por onde o envio sai hoje.
+ */
+export function isChipInstance(inst: {
+  status?: string | null;
+  session_dead_since?: string | null;
+  provider?: string | null;
+}): boolean {
+  return isLive(inst) && LEGACY_PROVIDERS.includes(String(inst.provider));
+}
+
+/**
+ * O recorte que o executor usa no atalho de "uma Instance viva só" quando a
+ * política é `fixed` e a fixa declarada não resolveu — porque o id morreu ou
+ * nunca foi preenchido. Espelha `deadPinShortcut` do backend.
+ *
+ * Medido em 2026-08-20: 63 nós de envio ativos em 9 organizações apontam para
+ * instâncias que não existem mais, e nenhum declara recuo. Todos sobrevivem por
+ * este atalho. Com o canal oficial escolhível (#1700), contá-lo aqui levaria a
+ * Chique de uma Instance viva para duas e derrubaria os 18 nós dela — por isso
+ * o recorte é de chips, e só cai no universo inteiro quando a organização não
+ * tem chip nenhum.
+ *
+ * O painel usa isto para dizer a verdade no aviso de fixa obsoleta. Se ele
+ * contasse diferente, o aviso prometeria um número que o envio não usaria.
+ */
+export function deadPinShortcut<T extends {
+  status?: string | null;
+  session_dead_since?: string | null;
+  provider?: string | null;
+}>(live: T[]): T[] {
+  const chips = live.filter((i) => isChipInstance(i));
+  return chips.length > 0 ? chips : live;
 }
 
 function isPolicy(value: unknown): value is InstanceRoutingPolicy {

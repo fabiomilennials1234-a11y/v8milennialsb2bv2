@@ -1,5 +1,23 @@
 import type { Node, Edge } from "@xyflow/react";
 
+/**
+ * A forma de um componente de template aprovado, como a listagem da Meta a
+ * devolve (#1688).
+ *
+ * Declarada aqui, estruturalmente idêntica a `NotificameTemplateComponent` de
+ * `modules/communication`, em vez de importada: `src/types/` é cross-cutting e
+ * puxar o barrel de um módulo de domínio daqui cruzaria fronteira e convidaria
+ * um ciclo. Sendo estrutural, os dois lados continuam atribuíveis um ao outro —
+ * e um campo novo lá que este tipo não tenha simplesmente não é lido aqui.
+ */
+export interface WorkflowTemplateComponent {
+  type: string;
+  format?: string | null;
+  text?: string | null;
+  buttons?: unknown[] | null;
+  example?: unknown;
+}
+
 // =====================================================
 // ENUMS
 // =====================================================
@@ -352,7 +370,33 @@ export interface ActionNodeData {
   semiAutomatic?: boolean;
   // Send WhatsApp (texto)
   messageTemplate?: string;
+  /** @deprecated Legado do nó de template antigo. Ver `templateName` (#1688). */
   templateId?: string;
+  // Send WhatsApp Template (canal oficial, #1688) — o nó guarda a FORMA do
+  // template aprovado, não uma referência a catálogo local. Ver
+  // `action-configs/TemplateNodeConfig.tsx`.
+  templateName?: string;
+  templateLanguage?: string;
+  /** Os `components` como vieram da listagem da Meta — a forma, para o executor remontar. */
+  templateComponents?: WorkflowTemplateComponent[];
+  /**
+   * Token do template → expressão do Torque. `{ "1": "{{nome}}" }`.
+   * ⚠️ Dois namespaces: a chave é da Meta, o valor é nosso.
+   */
+  templateVariables?: Record<string, string>;
+  /** Vazio significa "use o arquivo que veio aprovado com o template". */
+  templateHeaderMediaUrl?: string;
+  // ── Escape de janela do nó de TEXTO (canal oficial, #1689) ────────────────
+  // Qual template usar quando a janela de 24h estiver fechada e a Meta recusar
+  // mensagem livre. Campos SEPARADOS dos do nó de template de propósito: um nó
+  // de texto pode ter os dois assuntos (o texto e o escape) e reaproveitar as
+  // mesmas chaves faria um sobrescrever o outro. Sem `escapeTemplateName` o nó
+  // falha com motivo legível — ver `_shared/decisao-de-envio.ts`.
+  escapeTemplateName?: string;
+  escapeTemplateLanguage?: string;
+  escapeTemplateComponents?: WorkflowTemplateComponent[];
+  escapeTemplateVariables?: Record<string, string>;
+  escapeTemplateHeaderMediaUrl?: string;
   useTemplate?: boolean;
   templateMode?: "free" | "campaign_template" | "meta_template" | "ai";
   templateSourceId?: string;
@@ -390,9 +434,19 @@ export interface ActionNodeData {
   pixAmount?: number;
   pixMerchantName?: string;
   pixText?: string;
-  // Send Meta
-  metaChannel?: "instagram" | "facebook";
+  // Instagram Direct (`send_meta_message`)
+  //
+  // ⚠️ `metaChannel` é LEGADO da rota da Meta direta, que oferecia Messenger. O
+  // nó é do Instagram e só; a tela não o oferece mais e o executor recusa
+  // qualquer outro valor em vez de silenciosamente mandar pela caixa errada.
+  /** @deprecated O nó é Instagram-only. Ver `_shared/instagram-node.ts`. */
+  metaChannel?: "instagram";
   metaMessage?: string;
+  /** Texto, imagem, vídeo ou áudio. Documento e figurinha não existem no Direct. */
+  metaMessageType?: "texto" | "imagem" | "video" | "audio";
+  /** URL https PÚBLICA — quem baixa o arquivo é o fornecedor, não nós. */
+  metaMediaUrl?: string;
+  metaCaption?: string;
   // Semi-automático
   semiAutoMessage?: string;
   semiAutoApprover?: string;
@@ -898,7 +952,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_whatsapp_template: "Enviar Template WhatsApp",
   send_whatsapp_menu: "Enviar Menu Interativo (Uazapi)",
   send_whatsapp_pix_button: "Enviar Botão PIX (Uazapi)",
-  send_meta_message: "Enviar Mensagem Meta",
+  send_meta_message: "Enviar Mensagem no Instagram",
   send_semi_automatic: "Envio Semi-Automático",
   send_to_number: "Enviar p/ número fixo",
   // Lead Management

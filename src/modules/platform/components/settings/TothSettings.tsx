@@ -66,6 +66,7 @@ import {
   useUpdateTothSyncMode,
   useSimulateTothClientes,
   useUpdateTothActiveWindow,
+  useUpdateTothEmpresa,
   readTothEndpoint,
   canSubmitTothConnection,
   TOTH_CAPABILITIES,
@@ -112,6 +113,8 @@ export function TothSettings() {
   const [acceptedInsecure, setAcceptedInsecure] = useState(false);
   const [confirmCanonical, setConfirmCanonical] = useState(false);
   const [janela, setJanela] = useState("");
+  const [empresa, setEmpresa] = useState("");
+  const [incluirSemEmpresa, setIncluirSemEmpresa] = useState(false);
   const [simulacao, setSimulacao] = useState<TothDryRunResult | null>(null);
 
   const { data: status, isLoading } = useTothStatus();
@@ -122,6 +125,7 @@ export function TothSettings() {
   const updateSyncMode = useUpdateTothSyncMode();
   const simular = useSimulateTothClientes();
   const updateJanela = useUpdateTothActiveWindow();
+  const updateEmpresa = useUpdateTothEmpresa();
 
   // A janela vem do servidor; o input só assume o controle depois que o valor
   // salvo chega, senão o campo pisca vazio e parece que não havia configuração.
@@ -131,6 +135,28 @@ export function TothSettings() {
   useEffect(() => {
     setJanela(janelaSalva);
   }, [janelaSalva]);
+
+  // Mesmo padrão da janela: o input só assume o controle quando o valor salvo
+  // chega, senão pisca vazio e parece que não havia configuração.
+  const empresaSalva = status?.clientes_empresa ?? "";
+  const incluirSalvo = status?.clientes_incluir_sem_empresa === true;
+  useEffect(() => {
+    setEmpresa(empresaSalva);
+    setIncluirSemEmpresa(incluirSalvo);
+  }, [empresaSalva, incluirSalvo]);
+
+  const empresaMudou = empresa.trim() !== empresaSalva || incluirSemEmpresa !== incluirSalvo;
+
+  const handleSaveEmpresa = async () => {
+    const nome = empresa.trim();
+    await updateEmpresa.mutateAsync({
+      empresa: nome === "" ? null : nome,
+      // Sem filtro de empresa a opção não tem sentido: "quem não tem empresa"
+      // já entra junto com todo mundo.
+      incluirSemEmpresa: nome === "" ? false : incluirSemEmpresa,
+    });
+    setSimulacao(null);
+  };
 
   const handleSaveJanela = async () => {
     const parsed = janela.trim() === "" ? null : Number(janela);
@@ -439,7 +465,10 @@ export function TothSettings() {
                 className="h-8 w-24"
                 value={janela}
                 onChange={(e) => setJanela(e.target.value)}
-                placeholder="150"
+                // Sem número no placeholder. `placeholder="150"` fez a janela
+                // parecer configurada quando estava vazia, e a primeira carga
+                // rodou sem filtro nenhum sem que ninguém notasse.
+                placeholder="—"
               />
               <span className="text-xs text-muted-foreground">dias</span>
               <Button
@@ -452,9 +481,61 @@ export function TothSettings() {
                 {updateJanela.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
               </Button>
             </div>
+            {/* Medido em 21/08: o ERP aceita `diasCompras` e devolve a MESMA
+                contagem com e sem a janela. Enquanto o fornecedor não confirmar
+                qual parâmetro filtra de verdade, a tela não pode prometer um
+                recorte que não acontece. */}
+            <p className="text-[11px] text-amber-500 leading-relaxed flex items-start gap-1">
+              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+              {status?.clientes_dias_compras == null
+                ? "Sem janela definida: a carga traz o cadastro inteiro do ERP, histórico incluído."
+                : "O ERP hoje IGNORA esta janela — a última medição trouxe a mesma quantidade com e sem ela. Pendente de resposta do fornecedor."}
+            </p>
+          </div>
+
+          {/* Empresa do grupo */}
+          <div className="rounded-lg border bg-card/40 p-3 space-y-2">
+            <Label htmlFor="toth-empresa" className="text-xs">
+              Empresa do grupo
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="toth-empresa"
+                className="h-8"
+                value={empresa}
+                onChange={(e) => setEmpresa(e.target.value)}
+                placeholder="Todas as empresas"
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2 text-[11px] shrink-0"
+                onClick={handleSaveEmpresa}
+                disabled={updateEmpresa.isPending || !empresaMudou}
+              >
+                {updateEmpresa.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
+              </Button>
+            </div>
+
+            {empresa.trim() !== "" && (
+              <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={incluirSemEmpresa}
+                  onChange={(e) => setIncluirSemEmpresa(e.target.checked)}
+                />
+                <span>
+                  Trazer também quem não tem atendimento em empresa nenhuma — não é desta
+                  empresa, mas também não é de outra.
+                </span>
+              </label>
+            )}
+
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Sem recorte, a carga traz o cadastro inteiro do ERP — histórico incluído. A janela é
-              o que separa carteira de lista de nomes.
+              {status?.clientes_empresa
+                ? `Só entram os clientes atendidos por "${status.clientes_empresa}".`
+                : "O ERP devolve as empresas do grupo na mesma resposta e não aceita filtro por empresa — sem escolher uma, a carteira recebe clientes de todas."}
             </p>
           </div>
 
@@ -627,15 +708,48 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
       animate={{ opacity: 1, y: 0 }}
       className="rounded-lg border bg-muted/20 p-3 space-y-3"
     >
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <FlaskConical className="w-3.5 h-3.5 text-sky-500 shrink-0" />
         <span className="text-xs font-medium">Simulação — nada foi gravado</span>
-        {data.janela_dias_compras && (
-          <Badge variant="secondary" className="ml-auto text-[10px]">
-            últimos {data.janela_dias_compras} dias
-          </Badge>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          {data.empresa && (
+            <Badge variant="secondary" className="text-[10px]">
+              {data.empresa}
+            </Badge>
+          )}
+          {data.janela_dias_compras && (
+            <Badge variant="secondary" className="text-[10px]">
+              últimos {data.janela_dias_compras} dias
+            </Badge>
+          )}
+        </div>
       </div>
+
+      {/* O que o filtro de empresa descartou. Silenciar isso faria a queda na
+          contagem parecer erro de leitura do ERP. */}
+      {data.fora_do_filtro_de_empresa?.total > 0 && (
+        <div className="rounded-md bg-background/60 p-2 space-y-1">
+          <p className="text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {data.fora_do_filtro_de_empresa.total.toLocaleString("pt-BR")}
+            </span>{" "}
+            de fora por não serem de {data.empresa}:
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {Object.entries(data.fora_do_filtro_de_empresa.por_empresa).map(([nome, n]) => (
+              <Badge key={nome} variant="outline" className="text-[10px] font-normal">
+                {nome} · {n.toLocaleString("pt-BR")}
+              </Badge>
+            ))}
+            {data.fora_do_filtro_de_empresa.sem_empresa > 0 && (
+              <Badge variant="outline" className="text-[10px] font-normal">
+                sem atendimento ·{" "}
+                {data.fora_do_filtro_de_empresa.sem_empresa.toLocaleString("pt-BR")}
+              </Badge>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-2 text-center">
         <Stat label="Recebidos do ERP" value={data.linhas_recebidas} />

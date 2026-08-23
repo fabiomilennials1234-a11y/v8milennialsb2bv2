@@ -15,6 +15,31 @@ export interface CanonicalClient {
   company: string | null;
   email: string | null;
   phone: string | null;
+
+  /**
+   * Enriquecimento opcional. Todo campo abaixo é `?` de propósito: adapters que
+   * não os produzem (Omie, Tiny) seguem compilando e o sync grava só o que veio.
+   */
+
+  /** Empresa do grupo que atende o cliente no ERP. */
+  erpCompany?: string | null;
+  /** Vendedor dono da conta — rótulo, não vínculo com team_members. */
+  ownerName?: string | null;
+  ownerExternalId?: string | null;
+  /**
+   * Situação do parceiro no ERP, **crua**. Não normalizar: o Toth devolve
+   * 0/1/2/3 sem legenda, e traduzir para ativo/inativo seria inventar.
+   */
+  erpStatus?: string | null;
+  /** Segmento / tipo de mercado. */
+  segment?: string | null;
+  /** Data de cadastro NO ERP (ISO). Cadastro não é venda. */
+  registeredAt?: string | null;
+  city?: string | null;
+  /** UF em duas letras maiúsculas, ou null. */
+  uf?: string | null;
+  /** Campos sem coluna dedicada — endereço completo, IE, tipo de pessoa. */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface CanonicalOrder {

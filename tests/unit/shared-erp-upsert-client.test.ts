@@ -48,6 +48,164 @@ function makeStore(overrides: Partial<ClientStore> = {}) {
   return { store, calls };
 }
 
+describe("upsertCanonicalClient — não escreve quando nada muda", () => {
+  /** Cliente já gravado exatamente como o ERP o devolveria. */
+  const identico: ExistingClient = {
+    id: "c-1",
+    cnpj: CLIENT.cnpj,
+    phone: CLIENT.phone,
+    email: CLIENT.email,
+    company: CLIENT.company,
+    name: CLIENT.name,
+    external_source: "toth",
+    external_id: CLIENT.externalId,
+    external_ref: CLIENT.externalRef,
+  };
+
+  function storeIdentico() {
+    const escritas: Array<Record<string, unknown>> = [];
+    const store: ClientStore = {
+      findByExternalId: () => Promise.resolve(identico),
+      findByCnpj: () => Promise.resolve(identico),
+      enrich: (_id, patch) => {
+        escritas.push(patch);
+        return Promise.resolve();
+      },
+      createLead: () => Promise.resolve("l-1"),
+      createClient: () => Promise.resolve("c-1"),
+    };
+    return { store, escritas };
+  }
+
+  it("🔴 re-sincronizar não gera UPDATE — foi o que estourou os 150s", async () => {
+    // Na 2ª execução da carga, 12.608 clientes já existentes viraram 12.608
+    // updates idênticos e a função morreu com HTTP 504. Cada update ainda
+    // dispara auditoria e evento de Realtime.
+    const { store, escritas } = storeIdentico();
+    const r = await upsertCanonicalClient(store, {
+      organizationId: "org-1",
+      source: "toth",
+      client: CLIENT,
+      syncMode: "canonical",
+    });
+
+    expect(r).toEqual({ action: "skipped", reason: "no_changes" });
+    expect(escritas).toHaveLength(0);
+  });
+
+  it("🔴 enriquecimento idêntico também não gera UPDATE, JSONB incluído", async () => {
+    // `erp_metadata` é objeto: `a !== b` entre dois objetos é SEMPRE verdadeiro.
+    // Sem comparação por valor, cada cliente voltaria a ser reescrito em toda
+    // execução — o mesmo 504, agora por um campo novo.
+    const enriquecido: ExistingClient = {
+      ...identico,
+      erp_company: "CAFE JURERE",
+      erp_owner_name: "MARIA SOUZA",
+      erp_owner_external_id: "77",
+      erp_status: "1",
+      erp_segment: "TELEVENDAS-VAREJO",
+      erp_registered_at: "2024-03-15",
+      erp_city: "Florianópolis",
+      erp_uf: "SC",
+      // Chaves em ordem DIFERENTE da que gravamos: é assim que o Postgres
+      // devolve JSONB, e a comparação precisa sobreviver a isso.
+      erp_metadata: { tipoPessoa: "J", bairro: "Centro" },
+    };
+    const escritas: Array<Record<string, unknown>> = [];
+    const store: ClientStore = {
+      findByExternalId: () => Promise.resolve(enriquecido),
+      findByCnpj: () => Promise.resolve(enriquecido),
+      enrich: (_id, patch) => {
+        escritas.push(patch);
+        return Promise.resolve();
+      },
+      createLead: () => Promise.resolve("l-1"),
+      createClient: () => Promise.resolve("c-1"),
+    };
+
+    const r = await upsertCanonicalClient(store, {
+      organizationId: "org-1",
+      source: "toth",
+      client: {
+        ...CLIENT,
+        erpCompany: "CAFE JURERE",
+        ownerName: "MARIA SOUZA",
+        ownerExternalId: "77",
+        erpStatus: "1",
+        segment: "TELEVENDAS-VAREJO",
+        registeredAt: "2024-03-15",
+        city: "Florianópolis",
+        uf: "SC",
+        metadata: { bairro: "Centro", tipoPessoa: "J" },
+      },
+      syncMode: "canonical",
+    });
+
+    expect(r).toEqual({ action: "skipped", reason: "no_changes" });
+    expect(escritas).toHaveLength(0);
+  });
+
+  it("troca de representante é escrita mesmo em enrich_only", async () => {
+    // Os campos `erp_*` espelham o ERP e não têm curadoria humana. Tratá-los
+    // como campo curado congelaria o vendedor na primeira sincronização.
+    const comDono: ExistingClient = { ...identico, erp_owner_name: "JOAO LIMA" };
+    const escritas: Array<Record<string, unknown>> = [];
+    const store: ClientStore = {
+      findByExternalId: () => Promise.resolve(comDono),
+      findByCnpj: () => Promise.resolve(comDono),
+      enrich: (_id, patch) => {
+        escritas.push(patch);
+        return Promise.resolve();
+      },
+      createLead: () => Promise.resolve("l-1"),
+      createClient: () => Promise.resolve("c-1"),
+    };
+
+    const r = await upsertCanonicalClient(store, {
+      organizationId: "org-1",
+      source: "toth",
+      client: { ...CLIENT, ownerName: "MARIA SOUZA" },
+      syncMode: "enrich_only",
+    });
+
+    expect(r.action).toBe("enriched");
+    expect(escritas).toEqual([{ erp_owner_name: "MARIA SOUZA" }]);
+  });
+
+  it("escreve só o campo que mudou", async () => {
+    const { store, escritas } = storeIdentico();
+    const r = await upsertCanonicalClient(store, {
+      organizationId: "org-1",
+      source: "toth",
+      client: { ...CLIENT, email: "novo@acme.com" },
+      syncMode: "canonical",
+    });
+
+    expect(r.action).toBe("enriched");
+    expect(escritas).toEqual([{ email: "novo@acme.com" }]);
+  });
+
+  it("sem external_* no existente, o comportamento antigo continua: escreve", async () => {
+    // Chamador que não informa a identidade externa não pode ser penalizado
+    // com um "pulo" incorreto.
+    const { store, escritas } = storeIdentico();
+    const semStamp: ClientStore = {
+      ...store,
+      findByExternalId: () =>
+        Promise.resolve({ ...identico, external_source: undefined, external_id: undefined, external_ref: undefined }),
+    };
+    const r = await upsertCanonicalClient(semStamp, {
+      organizationId: "org-1",
+      source: "toth",
+      client: CLIENT,
+      syncMode: "canonical",
+    });
+
+    expect(r.action).toBe("enriched");
+    expect(escritas).toHaveLength(1);
+  });
+});
+
 describe("upsertCanonicalClient — mode off", () => {
   it("skips entirely, writing nothing", async () => {
     const { store, calls } = makeStore();

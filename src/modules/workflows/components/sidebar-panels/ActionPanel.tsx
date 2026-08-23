@@ -20,7 +20,12 @@ import { Mic, MicOff, Upload, Trash2, Play, Square, Plus, FileText } from "lucid
 import { cn } from "@/lib/utils";
 import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
-import { MenuNodeConfig, PixButtonNodeConfig } from "@/modules/workflows/components/action-configs";
+import {
+  EscapeDeJanelaConfig,
+  MenuNodeConfig,
+  PixButtonNodeConfig,
+  TemplateNodeConfig,
+} from "@/modules/workflows/components/action-configs";
 import { useFeatureFlag } from "@/modules/platform";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
 import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
@@ -460,50 +465,78 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
         <WhatsAppDocumentPanel data={data} onUpdate={onUpdate} />
       )}
 
-      {/* Send WhatsApp Template */}
+      {/* Send WhatsApp Template — canal oficial (#1688) */}
       {at === "send_whatsapp_template" && (
-        <div className="space-y-2">
-          <Label>ID do Template</Label>
-          <Input
-            value={data.templateId || ""}
-            onChange={(e) => onUpdate({ templateId: e.target.value })}
-            placeholder="ID do template aprovado"
-          />
-          <p className="text-xs text-muted-foreground">
-            Templates aprovados pela Meta para envio em massa
-          </p>
-        </div>
+        <TemplateNodeConfig data={data} onUpdate={onUpdate} />
       )}
 
-      {/* Send Meta Message */}
+      {/* Instagram Direct — texto, imagem, vídeo e áudio.
+          Documento e figurinha ficam de fora: o Direct não os tem. */}
       {at === "send_meta_message" && (
         <>
           <div className="space-y-2">
-            <Label>Canal</Label>
+            <Label>Tipo de mensagem</Label>
             <Select
-              value={data.metaChannel || "instagram"}
+              value={data.metaMessageType || "texto"}
               onValueChange={(v) =>
-                onUpdate({ metaChannel: v as "instagram" | "facebook" })
+                onUpdate({
+                  metaMessageType: v as "texto" | "imagem" | "video" | "audio",
+                })
               }
             >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="instagram">Instagram</SelectItem>
-                <SelectItem value="facebook">Facebook</SelectItem>
+                <SelectItem value="texto">Texto</SelectItem>
+                <SelectItem value="imagem">Imagem</SelectItem>
+                <SelectItem value="video">Vídeo</SelectItem>
+                <SelectItem value="audio">Áudio</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-2">
-            <Label>Mensagem</Label>
-            <Textarea
-              value={data.metaMessage || ""}
-              onChange={(e) => onUpdate({ metaMessage: e.target.value })}
-              placeholder="Olá {{nome}}!"
-              rows={3}
-            />
-          </div>
+
+          {(data.metaMessageType || "texto") === "texto" ? (
+            <div className="space-y-2">
+              <Label>Mensagem</Label>
+              <Textarea
+                value={data.metaMessage || ""}
+                onChange={(e) => onUpdate({ metaMessage: e.target.value })}
+                placeholder="Olá {{nome}}!"
+                rows={3}
+              />
+            </div>
+          ) : (
+            <>
+              <div className="space-y-2">
+                <Label>URL do arquivo</Label>
+                <Input
+                  value={data.metaMediaUrl || ""}
+                  onChange={(e) => onUpdate({ metaMediaUrl: e.target.value })}
+                  placeholder="https://..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Precisa ser um endereço https público — quem baixa o arquivo é
+                  o Instagram, não o Torque.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Legenda (opcional)</Label>
+                <Textarea
+                  value={data.metaCaption || ""}
+                  onChange={(e) => onUpdate({ metaCaption: e.target.value })}
+                  placeholder="Olá {{nome}}, segue o catálogo!"
+                  rows={2}
+                />
+              </div>
+            </>
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Só age em conversas do Direct que alguém já vinculou a um lead pelo
+            botão do chat. Lead sem conversa vinculada: o nó não envia nada e o
+            workflow segue.
+          </p>
         </>
       )}
 
@@ -1443,6 +1476,9 @@ function WhatsAppTextPanel({
           />
         </div>
       )}
+
+      {/* Escape de janela — só aparece quando o nó nomeia o canal oficial (#1689) */}
+      <EscapeDeJanelaConfig data={data} onUpdate={onUpdate} />
     </>
   );
 }

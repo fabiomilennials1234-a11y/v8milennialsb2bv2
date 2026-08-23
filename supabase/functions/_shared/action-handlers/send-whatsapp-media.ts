@@ -84,6 +84,7 @@ export async function sendWhatsAppAudio(input: ActionInput): Promise<ActionResul
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: result.messageId,
       phone,
       messageType: "audio",
@@ -165,6 +166,7 @@ export async function sendWhatsAppImage(input: ActionInput): Promise<ActionResul
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
       phone,
       messageType: "image",
@@ -246,6 +248,7 @@ export async function sendWhatsAppVideo(input: ActionInput): Promise<ActionResul
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
       phone,
       messageType: "video",
@@ -323,6 +326,7 @@ export async function sendWhatsAppSticker(input: ActionInput): Promise<ActionRes
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
       phone,
       messageType: "sticker",
@@ -406,6 +410,7 @@ export async function sendWhatsAppDocument(input: ActionInput): Promise<ActionRe
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
       phone,
       messageType: "document",

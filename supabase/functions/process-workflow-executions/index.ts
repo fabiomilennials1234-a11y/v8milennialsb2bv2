@@ -23,10 +23,19 @@ import { fireTrigger, processCronTriggers, processScheduledDateTriggers, matches
 import { resolvePipelineId } from "../_shared/pipeline-adapter.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
+import {
+  readPoolConfig,
+  persistPoolDecision,
+  releaseClaimed,
+  runWithPool,
+  decidePool,
+  CONTROLLER,
+  RPC_PER_ORG_CAP,
+} from "../_shared/workflow-dispatch-pool.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const BATCH_SIZE = 20;
+
 
 Deno.serve(
   withErrorBoundary("process-workflow-executions", async (req: Request): Promise<Response> => {
@@ -96,46 +105,111 @@ Deno.serve(
       }
 
       // ── Mode: default — process pending executions ──
-      const stats = { claimed: 0, completed: 0, failed: 0, paused: 0, cancelled: 0, skipped_plan: 0 };
+      //
+      // Carga I/O-bound (medido: 4,88s por execução, ~94% espera). O loop sequencial
+      // que existia aqui dava vazão de ~12/min por invocação, e nenhum batch_size
+      // mudava isso. Agora: claim em PEDAÇOS + pool concorrente + orçamento de
+      // wall-clock. Ver ADR-0023.
+      const runStartedAt = Date.now();
+      const stats = {
+        claimed: 0, completed: 0, failed: 0, paused: 0,
+        cancelled: 0, skipped_plan: 0, released: 0,
+      };
 
-      // 1. Claim batch
-      const { data: executions, error: claimError } = await supabase.rpc("claim_workflow_executions", {
-        batch_size: BATCH_SIZE,
-      });
-
-      if (claimError) {
-        console.error("[process-workflow-executions] Claim RPC failed:", claimError);
-        await logRuntime({
-          module: "workflow",
-          action: "claim_executions",
-          status: "error",
-          errorMessage: claimError.message,
-        });
-        return new Response(JSON.stringify({ error: "Claim failed", detail: claimError.message }), {
-          status: 500,
-          headers,
-        });
-      }
-
-      if (!executions || executions.length === 0) {
-        return new Response(JSON.stringify({ message: "No pending executions", stats }), { headers });
-      }
-
-      stats.claimed = executions.length;
-      console.log(`[process-workflow-executions] Claimed ${executions.length} executions`);
-
-      // 2. Process each execution (plan gate cacheado por org dentro do batch)
+      const cfg = await readPoolConfig(supabase);
+      const deadlineMs = runStartedAt + cfg.budgetMs;
       const planGateCache = new Map<string, boolean>();
-      for (const execution of executions) {
-        await processExecution(supabase, execution, stats, planGateCache);
+      const lags: number[] = [];
+
+      let drained = false;      // a fila secou dentro do orçamento
+      let lastChunkFull = false; // último pedaço veio cheio ⇒ provavelmente há mais
+      let leftoverTotal = 0;
+
+      while (Date.now() < deadlineMs) {
+        const { data: batch, error: claimError } = await supabase.rpc("claim_workflow_executions", {
+          batch_size: cfg.chunk,
+          // per_org_cap deixa de ser o freio (era 5 por default e estrangulava tudo).
+          // O freio agora é orçamento + concorrência. Ver ADR-0023, decisão 3.
+          per_org_cap: RPC_PER_ORG_CAP,
+        });
+
+        if (claimError) {
+          console.error("[process-workflow-executions] Claim RPC failed:", claimError);
+          await logRuntime({
+            module: "workflow",
+            action: "claim_executions",
+            status: "error",
+            errorMessage: claimError.message,
+          });
+          return new Response(JSON.stringify({ error: "Claim failed", detail: claimError.message }), {
+            status: 500,
+            headers,
+          });
+        }
+
+        if (!batch || batch.length === 0) {
+          drained = true;
+          lastChunkFull = false;
+          break;
+        }
+
+        lastChunkFull = batch.length >= cfg.chunk;
+        stats.claimed += batch.length;
+        for (const e of batch) {
+          const lag = (e as { claimed_lag_ms?: number | null }).claimed_lag_ms;
+          if (typeof lag === "number") lags.push(lag);
+        }
+
+        const { leftover } = await runWithPool(
+          batch as Record<string, unknown>[],
+          (e) => e.organization_id as string,
+          (e) => processExecution(supabase, e, stats, planGateCache),
+          { size: cfg.size, perOrg: cfg.perOrg, deadlineMs },
+        );
+
+        if (leftover.length > 0) {
+          // Devolve o que o orçamento não alcançou, em vez de deixar preso em
+          // `processing` até o stale de 10 min. Melhor esforço: se a função for
+          // morta pelo teto de wall-clock, o stale ainda é a rede.
+          leftoverTotal += leftover.length;
+          stats.released += await releaseClaimed(supabase, leftover.map((e) => e.id as string));
+          break;
+        }
+
+        if (!lastChunkFull) {
+          drained = true;
+          break;
+        }
       }
 
-      console.log("[process-workflow-executions] Batch complete:", stats);
+      const elapsedMs = Date.now() - runStartedAt;
+
+      // Sinal do controlador: SATURAÇÃO, não Lag. Lag é indicador atrasado —
+      // quando ele sobe, o cliente já esperou. Ver ADR-0023, decisão 3.
+      const outcome = {
+        saturated: leftoverTotal > 0 || (!drained && lastChunkFull),
+        idle: drained && elapsedMs < cfg.budgetMs * CONTROLLER.IDLE_BUDGET_FRACTION,
+      };
+      const decision = decidePool(cfg, outcome, Date.now());
+      await persistPoolDecision(supabase, cfg, decision);
+
+      const lagStats = summarizeLag(lags);
+      console.log("[process-workflow-executions] Batch complete:", { ...stats, ...lagStats });
       await logRuntime({
         module: "workflow",
         action: "process_batch",
         status: "success",
-        payloadSnapshot: stats,
+        payloadSnapshot: {
+          ...stats,
+          elapsed_ms: elapsedMs,
+          pool_size: cfg.size,
+          pool_per_org: cfg.perOrg,
+          pool_mode: cfg.mode,
+          pool_next: decision.size,
+          pool_reason: decision.reason,
+          saturated: outcome.saturated,
+          ...lagStats,
+        },
       });
 
       return new Response(JSON.stringify({ success: true, stats }), { headers });
@@ -610,4 +684,12 @@ async function checkWorkflowFailureAlert(
   } catch (err) {
     console.warn("[process-workflow-executions] Alert check failed:", err);
   }
+}
+
+/** Resumo de Lag do batch. Lag = Claimed − Due (ver CONTEXT.md). Distinto de Wait. */
+function summarizeLag(lags: number[]): Record<string, number | null> {
+  if (lags.length === 0) return { lag_n: 0, lag_p50_ms: null, lag_p90_ms: null, lag_max_ms: null };
+  const s = [...lags].sort((a, b) => a - b);
+  const at = (q: number) => s[Math.min(s.length - 1, Math.floor(q * s.length))];
+  return { lag_n: s.length, lag_p50_ms: at(0.5), lag_p90_ms: at(0.9), lag_max_ms: s[s.length - 1] };
 }

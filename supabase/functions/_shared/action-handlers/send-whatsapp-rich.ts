@@ -14,6 +14,7 @@ import {
   recipientGate,
   persistOutboundMessage,
 } from "./whatsapp-helpers.ts";
+import { enviarTemplateAprovado } from "./enviar-template.ts";
 
 // ─── Template ──────────────────────────────────────────────────────────────
 
@@ -51,77 +52,40 @@ export async function sendWhatsAppTemplate(input: ActionInput): Promise<ActionRe
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
   if (recipientBlock) return recipientBlock;
 
-  // ⚠️ O EXECUTOR NÃO LISTA OS TEMPLATES, e isto é uma troca consciente.
-  //
-  // Listar exigiria refazer aqui todo o caminho de cofre — carregar a subconta,
-  // decifrar o token, montar a config — só para validar um nome. Em vez disso o
-  // envio referencia o template pelo nome e o fornecedor recusa na resposta do
-  // POST, de forma síncrona: o motivo dele chega ao passo da execução.
+  // O "COMO" DO ENVIO mora em `enviar-template.ts`, compartilhado com o escape
+  // de janela do nó de texto (#1689): remontar a forma aprovada, resolver os
+  // valores contra o lead e entregar ao transporte é o mesmo trabalho nos dois
+  // caminhos, e duas cópias divergiriam na primeira correção.
   //
   // O QUE NÃO FOI MEDIDO: se a recusa por template inexistente vem no corpo da
   // resposta (síncrona, e então legível no passo) ou por callback de status
   // (assíncrona, e então invisível para o executor). A primeira mensagem real
   // com um nome errado decide — e se for a segunda, esta escolha precisa ser
   // revista.
-  //
-  // A FORMA do template — quantas variáveis, se tem cabeçalho de mídia — vem do
-  // que o NÓ guardou quando alguém o escolheu na tela, que é onde a listagem
-  // acontece com login de usuário.
-  const template = {
-    name: templateName,
-    id: null,
-    language: templateLanguage,
-    status: "APPROVED" as const,
-    category: null,
-    parameterFormat: null,
-    components: (params.templateComponents as never) ?? [],
-  } as unknown as import("../notificame-templates.ts").NotificameTemplate;
-
-  // A REGRA COMPOSTA decide tudo num lugar só: resolve os valores contra o lead,
-  // confere o que falta e monta os componentes. Pendência barra o envio — a Meta
-  // recusa parâmetro vazio, e a recusa dela chega depois de o vendedor achar
-  // que mandou.
-  const { prepararEnvioDeTemplate } = await import("../template-node-valores.ts");
-  const preparado = await prepararEnvioDeTemplate({
-    template,
-    mapeamento: (params.templateVariables as Record<string, string>) ?? {},
-    resolver: (texto) => resolveVariables(supabase, leadId, texto, executionContext),
-    headerMediaUrl: params.templateHeaderMediaUrl as string | undefined,
+  const envio = await enviarTemplateAprovado({
+    supabase,
+    leadId,
+    executionContext,
+    instance: wa.instance,
+    phone,
+    template: {
+      name: templateName,
+      language: templateLanguage,
+      components: (params.templateComponents as unknown[]) ?? [],
+      variables: (params.templateVariables as Record<string, string>) ?? {},
+      headerMediaUrl: (params.templateHeaderMediaUrl as string | undefined) ?? null,
+    },
+    trackSource: "workflow-action-template",
+    trackId: params._executionId as string | undefined,
   });
 
-  if (!preparado.ok) {
-    return {
-      success: false,
-      error: `Template incompleto — falta: ${preparado.pendencias.join(", ")}`,
-      retryable: false,
-    };
-  }
-
-  const { sendTemplateViaInstance } = await import("../whatsapp-dispatch.ts");
-  const sendResult = await sendTemplateViaInstance(
-    supabase,
-    wa.instance,
-    phone,
-    {
-      name: template.name,
-      language: templateLanguage,
-      components: preparado.components,
-      previewText: preparado.previewText,
-      buttonLabels: preparado.buttonLabels,
-    },
-    {
-      trackSource: "workflow-action-template",
-      trackId: params._executionId as string | undefined,
-    },
-  );
-
-  if (!sendResult.success) {
-    return { success: false, error: `Template send failed: ${sendResult.error}` };
+  if (!envio.ok) {
+    return { success: false, error: envio.erro, retryable: envio.retryable };
   }
 
   // ⚠️ NÃO grava a linha. O provider do canal oficial já a escreve, no mesmo
   // instante do envio — gravar de novo aqui duplicaria a mensagem na conversa.
-  return { success: true, message: `Template "${template.name}" enviado` };
+  return { success: true, message: `Template "${envio.nome}" enviado` };
 }
 
 // ─── Menu (button/list/poll/carousel) ──────────────────────────────────────
@@ -207,6 +171,7 @@ export async function sendWhatsAppMenu(input: ActionInput): Promise<ActionResult
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
       phone,
       messageType: menuType,
@@ -301,6 +266,7 @@ export async function sendWhatsAppPixButton(input: ActionInput): Promise<ActionR
     await persistOutboundMessage(supabase, {
       organizationId,
       instanceId: wa.instanceId,
+      provider: wa.instance.provider,
       providerMessageId: sendResult.messageId,
       phone,
       messageType: "pix_button",

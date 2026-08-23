@@ -1386,44 +1386,60 @@ describe("handleInvokeEdgeFunction — deep", () => {
   });
 });
 
+/**
+ * O nó de Instagram — REFORMADO na issue #1691.
+ *
+ * ⚠️ ESTE BLOCO MUDOU DE CONTRATO, e a mudança é o ponto. Ele asseria que o nó
+ * chamava a edge function `send-meta-message` (rota da Meta direta). Aquele
+ * destino nunca podia ter funcionado a partir de um workflow: exige
+ * `recipientId` e um JWT de USUÁRIO, e um executor não tem usuário. Medido: 0
+ * nós configurados e 0 execuções em 30 dias.
+ *
+ * O caminho feliz mora em `workflow-action-instagram.test.ts`, com o provider
+ * do NotificaMe dublado. Aqui ficam os dois desfechos que NÃO tocam rede — e é
+ * por isso que este arquivo não precisa dublar o provider.
+ */
 describe("handleSendMetaMessage — deep", () => {
-  it("sends meta message with resolved variables", async () => {
+  it("lead sem conversa de Instagram vinculada: o nó não age, e não é erro", async () => {
+    // Medido: 562 mensagens de Instagram recebidas em produção, ZERO com lead
+    // vinculado. O vínculo é manual, feito por um humano no chat. Falhar aqui
+    // pararia a execução de todo lead por causa de uma caixa que ninguém ligou.
     setupSupabaseEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("lead_history", []);
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: () => Promise.resolve({ sent: true }),
-      text: () => Promise.resolve(""),
-    });
+    mockTable("lead_social_identities", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
-      nodeData: { actionType: "send_meta_message", metaChannel: "instagram", metaMessage: "Olá {{nome}}" },
+      nodeData: { actionType: "send_meta_message", metaMessage: "Olá {{nome}}" },
       executionContext: {},
     });
+
     expect(result.success).toBe(true);
-    expect(result.message).toContain("instagram");
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({ skipped: true });
+    // E não sobrou nenhuma chamada de rede: a rota antiga saiu de cena.
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it("fails when edge function returns !ok", async () => {
+  it("documento não existe no Direct — recusa com motivo, antes de qualquer envio", async () => {
     setupSupabaseEnv();
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      text: () => Promise.resolve("Unauthorized"),
-      json: () => Promise.resolve({}),
-    });
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
-      nodeData: { actionType: "send_meta_message", metaMessage: "Hi" },
+      nodeData: {
+        actionType: "send_meta_message",
+        metaMessageType: "documento",
+        metaMediaUrl: "https://cdn.exemplo.com/tabela.pdf",
+      },
       executionContext: {},
     });
+
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Meta message failed");
+    expect(result.error).toContain("documento");
   });
 });
 

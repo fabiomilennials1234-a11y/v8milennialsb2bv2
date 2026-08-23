@@ -11,6 +11,7 @@ import {
 } from "@/modules/workflows/lib/clipboard";
 import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
 import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
+import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
 import { CODE_JS_NODE_FLAG, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
 
@@ -504,7 +505,46 @@ export default function AutomacoesEditor() {
     }
 
     const triggerData = triggerNode.data as unknown as TriggerNodeData;
-    const definition = { nodes, edges };
+
+    // Nó de ação incompleto não impede SALVAR (rascunho pela metade é legítimo),
+    // mas impede ATIVAR. Medido em produção: ~6.400 execuções morreram em 90 dias
+    // porque o editor deixava ligar workflow com campo obrigatório vazio, e o
+    // cliente não via erro nenhum — a automação simplesmente não acontecia.
+    const issues = findNodeConfigIssues(nodes);
+    const issueByNode = new Map(issues.map((i) => [i.nodeId, `Falta: ${i.missing}`]));
+
+    // Marca o culpado no canvas. Recusar sem apontar qual nó, entre vinte, seria
+    // trocar um defeito por outro.
+    setNodes((atuais) =>
+      atuais.map((n) => {
+        const aviso = issueByNode.get(n.id);
+        const jaTem = (n.data as Record<string, unknown>).__configIssue;
+        if (aviso === jaTem) return n;
+        const data = { ...(n.data as Record<string, unknown>) };
+        if (aviso) data.__configIssue = aviso;
+        else delete data.__configIssue;
+        return { ...n, data } as typeof n;
+      }),
+    );
+
+    if (isActive && issues.length > 0) {
+      const nomes = [...new Set(issues.map((i) => i.nodeLabel))].slice(0, 3).join(", ");
+      toast.error(
+        issues.length === 1
+          ? `"${nomes}" está incompleto — falta ${issues[0].missing}. Complete ou desative o workflow para salvar.`
+          : `${issues.length} nós incompletos (${nomes}${issues.length > 3 ? "…" : ""}). Complete ou desative o workflow para salvar.`,
+        { duration: 8000 },
+      );
+      return;
+    }
+
+    // A marca de aviso é estado de tela — não pode poluir o DAG salvo.
+    const nodesLimpos = nodes.map((n) => {
+      const data = { ...(n.data as Record<string, unknown>) };
+      delete data.__configIssue;
+      return { ...n, data } as typeof n;
+    });
+    const definition = { nodes: nodesLimpos, edges };
 
     // Build extra fields for enrollment/reenrollment
     const extraFields = {
@@ -541,7 +581,7 @@ export default function AutomacoesEditor() {
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar workflow");
     }
-  }, [name, isActive, nodes, edges, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment]);
+  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null

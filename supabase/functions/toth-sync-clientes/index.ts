@@ -33,10 +33,18 @@ import { timingSafeCompare } from "../_shared/auth.ts";
 import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
 import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
 import { loadTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
-import { extractRows, mapTothClienteToCanonical, TothMappingError } from "../_shared/erp/toth-mappers.ts";
+import {
+  extractRows,
+  mapTothClienteToCanonical,
+  TothMappingError,
+  tothClienteEmpresas,
+  tothClienteMatchesEmpresa,
+} from "../_shared/erp/toth-mappers.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseClientStore } from "../_shared/erp/sync/client-store.ts";
 import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
+import { deferredEnrichStore } from "../_shared/erp/sync/deferred-enrich-store.ts";
+import { bulkCreateClients } from "../_shared/erp/sync/bulk-create-clients.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
 import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
@@ -54,6 +62,21 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
 const PAGE_SIZE = 100;
 const MAX_PAGES_PER_RUN = 20;
+
+/**
+ * Enriquecimentos por execução, e de quanto em quanto a fila é esvaziada.
+ *
+ * 🔴 Acumular a fila inteira derrubou o worker com `WORKER_RESOURCE_LIMIT`
+ * (546) — não é o teto de tempo, é memória: 12.613 registros do ERP mais a
+ * carteira pré-carregada mais 11.179 patches vivos ao mesmo tempo.
+ *
+ * O teto por execução NÃO precisa de cursor. A varredura lê a base inteira toda
+ * vez, e `upsertCanonicalClient` pula quem já está igual (`no_changes`) — então
+ * a execução seguinte atravessa de graça o que a anterior gravou e ataca o
+ * resto. A retomada é consequência da idempotência, não de estado guardado.
+ */
+const MAX_ENRICH_PER_RUN = 3000;
+const ENRICH_FLUSH_EVERY = 500;
 /** Pausa entre páginas: o alvo é o servidor de UM cliente, não uma nuvem. */
 const PAGE_DELAY_MS = 300;
 
@@ -143,7 +166,10 @@ Deno.serve(
 
     const { data: conn } = await admin
       .from("toth_connections")
-      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras")
+      // Literal única: o supabase-js infere as colunas a partir do TEXTO do
+      // select. Concatenar com `+` produz `string` genérico e o retorno degrada
+      // para `GenericStringError`, quebrando o acesso a todo campo.
+      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras, clientes_empresa, clientes_incluir_sem_empresa")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -165,12 +191,22 @@ Deno.serve(
     // Carteira pré-carregada: o store direto faria duas consultas por cliente do
     // ERP, sequenciais. Numa carga inicial isso são dezenas de milhares de idas
     // ao banco, e foi parte do "CPU Time exceeded" de 20/08.
-    const store = await cachedClientStore(
+    const cached = await cachedClientStore(
       admin,
       organizationId,
       TOTH_PROVIDER_ID,
       supabaseClientStore(admin, TOTH_PROVIDER_ID),
     );
+
+    // Enriquecimento vai para uma fila e é escrito em paralelo no fim.
+    //
+    // Enquanto os enriquecimentos eram poucos, escrever um a um no laço não
+    // incomodava. Deixou de ser pouco quando a carteira ganhou as colunas de
+    // ERP: elas nascem NULL, então TODO cliente já existente muda de fato —
+    // 11.179 UPDATEs sequenciais na Café Jurerê, e sequencial nesse volume é o
+    // mesmo HTTP 504 de 20/08.
+    const deferred = deferredEnrichStore(cached);
+    const store = deferred.store;
 
     // ── Modo prévia ─────────────────────────────────────────────────────────
     // `dry_run` lê, mapeia e RELATA sem escrever. `max_clients` limita o piloto.
@@ -209,13 +245,52 @@ Deno.serve(
         ? Math.floor(body.max_clients)
         : null;
 
+    /**
+     * Empresa do grupo a sincronizar.
+     *
+     * `GET /clientes` devolve as QUATRO empresas do grupo juntas — CAFE JURERE,
+     * CAMIPLACE, COSTA ESMERALDA e ALIMENTA MAIS — e não aceita filtro por
+     * empresa. Sem separar aqui, a carteira de uma organização recebe cliente
+     * que é de outra empresa: na Café Jurerê são 667 registros de terceiros.
+     *
+     * Vem da CONEXÃO para valer igual no botão e no cron. O corpo só sobrescreve
+     * para diagnóstico.
+     */
+    const empresaFiltro =
+      typeof body.empresa === "string" && body.empresa.trim()
+        ? body.empresa.trim()
+        : ((conn.clientes_empresa as string | null) ?? null);
+    const incluirSemEmpresa =
+      typeof body.incluir_sem_empresa === "boolean"
+        ? body.incluir_sem_empresa
+        : conn.clientes_incluir_sem_empresa === true;
+
+    const maxEnrich =
+      typeof body.max_enrich === "number" && body.max_enrich > 0
+        ? Math.floor(body.max_enrich)
+        : MAX_ENRICH_PER_RUN;
+
     const seenIds = new Set<string>();
     const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
+    /** Quantos o filtro de empresa deixou de fora, e de quem eram. */
+    const foraDoFiltro = { total: 0, sem_empresa: 0, por_empresa: {} as Record<string, number> };
     const mappingErrors: string[] = [];
     const previews: PreviewedClient[] = [];
     const mappedClients: CanonicalClient[] = [];
+    /** Fila da criação em lote — ver bulk-create-clients.ts. */
+    const toCreate: CanonicalClient[] = [];
     let page = conn.clientes_cursor ?? 1;
     let stopReason = "max_pages";
+
+    /** Esvazia a fila de enriquecimento e contabiliza o que falhou. */
+    const flushEnrich = async () => {
+      const flushed = await deferred.flush();
+      stats.failed += flushed.failed;
+      stats.enriched -= flushed.failed;
+      for (const e of flushed.errors) {
+        if (mappingErrors.length < 3) mappingErrors.push(e);
+      }
+    };
 
     try {
       for (let i = 0; i < MAX_PAGES_PER_RUN; i++) {
@@ -240,11 +315,37 @@ Deno.serve(
         }
 
         let newInThisPage = 0;
+        /**
+         * Filtrados nesta página. Conta separado porque o guard de "a API
+         * ignorou a paginação" olha para `newInThisPage === 0` — e uma página
+         * legítima cujos clientes são todos de outra empresa do grupo também
+         * zera aquele contador. Sem esta distinção, o filtro de empresa
+         * encerraria a varredura no meio, alegando repetição que não houve.
+         */
+        let filteredInThisPage = 0;
+
         for (const row of rows) {
           stats.rows++;
+
+          // Filtro de empresa ANTES de mapear: quem não é da empresa não vira
+          // cliente, não conta como visto e não gasta trabalho de mapeamento.
+          if (!tothClienteMatchesEmpresa(row, empresaFiltro, incluirSemEmpresa)) {
+            filteredInThisPage++;
+            foraDoFiltro.total++;
+            const empresas = tothClienteEmpresas(row);
+            if (empresas.length === 0) {
+              foraDoFiltro.sem_empresa++;
+            } else {
+              for (const e of empresas) {
+                foraDoFiltro.por_empresa[e] = (foraDoFiltro.por_empresa[e] ?? 0) + 1;
+              }
+            }
+            continue;
+          }
+
           let canonical;
           try {
-            canonical = mapTothClienteToCanonical(row);
+            canonical = mapTothClienteToCanonical(row, { empresa: empresaFiltro });
           } catch (err) {
             stats.failed++;
             if (err instanceof TothMappingError && mappingErrors.length < 3) {
@@ -284,15 +385,45 @@ Deno.serve(
             });
             mappedClients.push(canonical);
           } else {
-            const result = await upsertCanonicalClient(store, {
+            // Casados enriquecem AGORA, um a um: são poucos, e a regra de qual
+            // campo pode ser sobrescrito não vale duplicar. Novos vão para a
+            // fila do lote — criar é o que era caro (dois INSERT por registro,
+            // 25.216 idas ao banco numa carga inicial).
+            const byExternalId = await store.findByExternalId(
               organizationId,
-              source: TOTH_PROVIDER_ID,
-              client: canonical,
-              syncMode,
-            });
-            if (result.action === "created") stats.created++;
-            else if (result.action === "enriched") stats.enriched++;
-            else stats.skipped++;
+              canonical.externalId,
+            );
+            const byCnpj =
+              !byExternalId && canonical.cnpj
+                ? await store.findByCnpj(organizationId, canonical.cnpj)
+                : null;
+
+            if (byExternalId || byCnpj) {
+              const result = await upsertCanonicalClient(store, {
+                organizationId,
+                source: TOTH_PROVIDER_ID,
+                client: canonical,
+                syncMode,
+              });
+              if (result.action === "enriched") {
+                stats.enriched++;
+                // Esvazia de tempos em tempos: é o que segura a memória do
+                // worker. Guardar tudo para o fim foi o que causou o 546.
+                if (deferred.pending() >= ENRICH_FLUSH_EVERY) {
+                  await flushEnrich();
+                }
+                if (stats.enriched >= maxEnrich) {
+                  stopReason = "max_enrich";
+                  break;
+                }
+              } else {
+                stats.skipped++;
+              }
+            } else if (syncMode === "canonical") {
+              toCreate.push(canonical);
+            } else {
+              stats.skipped++;
+            }
           }
 
           if (maxClients !== null && seenIds.size >= maxClients) {
@@ -301,7 +432,7 @@ Deno.serve(
           }
         }
 
-        if (stopReason === "max_clients") break;
+        if (stopReason === "max_clients" || stopReason === "max_enrich") break;
 
         // Sem paginação, a resposta é a base inteira: pedir de novo traria o
         // mesmo bloco. O guard de "nenhum id novo" abaixo pegaria, mas só depois
@@ -312,7 +443,7 @@ Deno.serve(
         }
 
         // A API ignorou a paginação e repetiu o bloco anterior.
-        if (newInThisPage === 0) {
+        if (newInThisPage === 0 && filteredInThisPage === 0) {
           stopReason = "no_new_records";
           break;
         }
@@ -370,7 +501,13 @@ Deno.serve(
         action: "toth_sync_clientes_dry_run",
         status: "success",
         // Sem amostra aqui: o log não é lugar de dado de cliente.
-        payloadSnapshot: { ...totals, ...orphans, stop_reason: stopReason },
+        payloadSnapshot: {
+          ...totals,
+          ...orphans,
+          stop_reason: stopReason,
+          empresa: empresaFiltro,
+          fora_do_filtro: foraDoFiltro.total,
+        },
       });
 
       return json(
@@ -379,6 +516,9 @@ Deno.serve(
           escreveu: false,
           modo: syncMode,
           janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+          empresa: empresaFiltro,
+          incluir_sem_empresa: incluirSemEmpresa,
+          fora_do_filtro_de_empresa: foraDoFiltro,
           stop_reason: stopReason,
           paginas_lidas: stats.pages,
           linhas_recebidas: stats.rows,
@@ -397,6 +537,47 @@ Deno.serve(
       );
     }
 
+    // Resto da fila — o laço já esvaziou a cada ENRICH_FLUSH_EVERY.
+    if (deferred.pending() > 0) await flushEnrich();
+
+    // ── Criação em lote ─────────────────────────────────────────────────────
+    // Fora do laço de propósito: um statement com 500 leads e outro com 500
+    // clientes, em vez de dois por registro. É o que faz a carga inicial caber
+    // numa execução.
+    if (toCreate.length > 0) {
+      // Telefones já pertencentes a leads da org. `idx_leads_org_phone_unique` é
+      // UNIQUE em (org, normalized_phone), e o ERP tem clientes distintos com o
+      // mesmo número — sem esta carga prévia, a duplicata só apareceria como
+      // erro de lote, derrubando 500 registros de uma vez.
+      const usedPhones = new Set<string>();
+      for (let from = 0; ; from += 1000) {
+        const { data } = await admin
+          .from("leads")
+          .select("normalized_phone")
+          .eq("organization_id", organizationId)
+          .not("normalized_phone", "is", null)
+          .range(from, from + 999);
+        const rows = data ?? [];
+        for (const r of rows) {
+          if (r.normalized_phone) usedPhones.add(r.normalized_phone as string);
+        }
+        if (rows.length < 1000) break;
+      }
+
+      const bulk = await bulkCreateClients(admin, {
+        organizationId,
+        source: TOTH_PROVIDER_ID,
+        clients: toCreate,
+        usedPhones,
+        normalizePhone: normalizePhoneForSearch,
+      });
+      stats.created = bulk.created;
+      stats.failed += bulk.failed;
+      for (const e of bulk.errors) {
+        if (mappingErrors.length < 3) mappingErrors.push(e);
+      }
+    }
+
     await admin
       .from("toth_connections")
       .update({
@@ -412,9 +593,29 @@ Deno.serve(
       module: "general",
       action: "toth_sync_clientes",
       status: "success",
-      payloadSnapshot: { ...stats, stop_reason: stopReason, mapping_errors: mappingErrors.length },
+      payloadSnapshot: {
+        ...stats,
+        stop_reason: stopReason,
+        mapping_errors: mappingErrors.length,
+        empresa: empresaFiltro,
+        fora_do_filtro: foraDoFiltro.total,
+      },
     });
 
-    return json({ success: true, stop_reason: stopReason, stats, mapping_errors: mappingErrors }, cors);
+    return json(
+      {
+        success: true,
+        stop_reason: stopReason,
+        stats,
+        // Bateu o teto por execução: falta gente. A próxima execução atravessa
+        // de graça o que já está igual e continua daqui. Dizer isso evita ler
+        // um número parcial como se fosse o total.
+        incompleto: stopReason === "max_enrich",
+        empresa: empresaFiltro,
+        fora_do_filtro_de_empresa: foraDoFiltro,
+        mapping_errors: mappingErrors,
+      },
+      cors,
+    );
   }),
 );

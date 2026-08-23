@@ -42,6 +42,8 @@ import {
   useToggleCopilotEngine,
   type ReprocessType,
 } from "@/modules/workflows/hooks/useAutomationHealth";
+import AutomationLagTab from "../components/AutomationLagTab";
+import WorkflowConfigTab from "../components/WorkflowConfigTab";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -111,8 +113,10 @@ export default function MasterAutomationHealth() {
         />
       </div>
 
-      <Tabs defaultValue="dead-letter" className="w-full">
-        <TabsList className="grid grid-cols-2 sm:grid-cols-7 gap-1 h-auto">
+      <Tabs defaultValue="lag" className="w-full">
+        <TabsList className="grid grid-cols-2 sm:grid-cols-9 gap-1 h-auto">
+          <TabsTrigger value="lag">Atraso</TabsTrigger>
+          <TabsTrigger value="config">Configuração</TabsTrigger>
           <TabsTrigger value="dead-letter">Dead-Letter</TabsTrigger>
           <TabsTrigger value="workflows">Workflows</TabsTrigger>
           <TabsTrigger value="stuck">Stuck</TabsTrigger>
@@ -122,6 +126,12 @@ export default function MasterAutomationHealth() {
           <TabsTrigger value="engine">Engine</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="lag">
+          <AutomationLagTab />
+        </TabsContent>
+        <TabsContent value="config">
+          <WorkflowConfigTab />
+        </TabsContent>
         <TabsContent value="dead-letter">
           <DeadLetterTab onReprocess={handleReprocess} />
         </TabsContent>

@@ -8,7 +8,10 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMockSupabase } from "../helpers/supabase-mock";
-import { resolveRoutedInstance } from "../../supabase/functions/_shared/instance-routing.ts";
+import {
+  LEGACY_PROVIDERS,
+  resolveRoutedInstance,
+} from "../../supabase/functions/_shared/instance-routing.ts";
 
 const ORG = "org-1";
 const OUTRA_ORG = "org-2";
@@ -21,6 +24,9 @@ const INST_MORTA = { ...base, id: "inst-morta", organization_id: ORG, instance_n
 const INST_DESLOGADA = { ...base, id: "inst-deslogada", organization_id: ORG, instance_name: "Deslogada", status: "connected", session_dead_since: "2026-08-01T09:00:00Z" };
 const INST_META = { ...base, id: "inst-meta", organization_id: ORG, instance_name: "Meta Oficial", status: "connected", provider: "meta" };
 const INST_ALHEIA = { ...base, id: "inst-alheia", organization_id: OUTRA_ORG, instance_name: "De outro cliente", status: "connected" };
+/** Canal oficial (Meta via NotificaMe). Vivo — e, desde o #1700, em todos os degraus. */
+const INST_OFICIAL = { ...base, id: "inst-oficial", organization_id: ORG, instance_name: "Chique Oficial", status: "connected", provider: "notificame" };
+const INST_OFICIAL_MORTA = { ...INST_OFICIAL, id: "inst-oficial-morta", instance_name: "Oficial Caída", status: "disconnected" };
 
 const LEAD = { id: "lead-1", organization_id: ORG, normalized_phone: "48999053409", responsible_id: null };
 
@@ -50,7 +56,26 @@ beforeEach(() => {
   mockTable("leads", [LEAD]);
   mockTable("whatsapp_instances", [INST_1, INST_2, INST_MORTA, INST_ALHEIA]);
   mockTable("whatsapp_messages", []);
+  mockTable("channel_messages", []);
 });
+
+/**
+ * Uma linha da caixa do canal oficial. O telefone é CRU — prefixado por 55 e,
+ * às vezes, sem o nono dígito. Medido em produção (36 linhas, 2026-08-20):
+ * `554884398055` e `5555992382506`, só dígitos, 12 ou 13 caracteres.
+ */
+function msgOficial(over: Record<string, unknown> = {}) {
+  return {
+    organization_id: ORG,
+    channel: "whatsapp",
+    phone_number: "5548" + LEAD.normalized_phone.slice(2),
+    instance_id: INST_OFICIAL.id,
+    direction: "incoming",
+    lead_id: null,
+    timestamp: "2026-08-01T10:00:00Z",
+    ...over,
+  };
+}
 
 function resolve(node: Record<string, unknown>, leadId: string | null = LEAD.id) {
   return resolveRoutedInstance(sb, { organizationId: ORG, leadId, node });
@@ -346,6 +371,275 @@ describe("contrato do erro", () => {
   it("org que nunca conectou um número reporta ausência de número", async () => {
     mockTable("whatsapp_instances", []);
     const r = await resolve({ instanceRoutingPolicy: "conversation" });
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+});
+
+
+// ─── Canal oficial (#1700) ─────────────────────────────────────────────────
+
+/**
+ * O canal oficial passou a ser ESCOLHÍVEL pela regra, não só nomeável por uma
+ * pessoa: conta no atalho de "uma Instance viva só", `conversation` e
+ * `responsible` resolvem nele, e ele pode ser o recuo declarado.
+ *
+ * A exceção é uma só, e é o risco central da fatia: quando a fixa declarada
+ * morreu, o atalho conta só chips. Ver o bloco "os 63 nós de fixa morta".
+ */
+describe("canal oficial", () => {
+  it("fixed nomeando o canal oficial resolve nele", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_OFICIAL]);
+    const inst = await resolved({
+      instanceRoutingPolicy: "fixed",
+      whatsappInstanceId: INST_OFICIAL.id,
+    });
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  // Critério de aceite: org só com canal oficial funciona sem configurar nada.
+  it("org só com canal oficial: o atalho de uma viva só o encontra", async () => {
+    mockTable("whatsapp_instances", [INST_OFICIAL, INST_MORTA]);
+    const inst = await resolved({ instanceRoutingPolicy: "conversation" });
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  it("o canal oficial serve de recuo declarado", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL]);
+    const inst = await resolved({
+      instanceRoutingPolicy: "conversation",
+      fallbackInstanceId: INST_OFICIAL.id,
+    });
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  it("responsible resolve no canal oficial quando é o número do responsável", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL]);
+    // O nome do RPC importa: com o nome errado o mock devolve vazio, a regra
+    // nunca chega ao canal oficial e o teste ficaria verde sem provar nada.
+    mockRpc("get_lead_write_instance", [
+      { instance_id: INST_OFICIAL.id, instance_name: "Chique Oficial", responsible_user_id: "tm-9" },
+    ]);
+    const inst = await resolved({ instanceRoutingPolicy: "responsible" });
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  it("canal oficial desconectado falha — não troca de número, como o chip", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL_MORTA]);
+    await expect(
+      resolve({
+        instanceRoutingPolicy: "fixed",
+        whatsappInstanceId: INST_OFICIAL_MORTA.id,
+        fallbackInstanceId: INST_1.id,
+      }),
+    ).resolves.toMatchObject({ ok: false, code: "instance_disconnected" });
+  });
+
+  it("um número meta_cloud continua fora de tudo", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_META]);
+    const inst = await resolved({ instanceRoutingPolicy: "conversation" });
+    expect(inst.id).toBe(INST_1.id);
+  });
+});
+
+// ─── conversation nas DUAS caixas (#1700) ──────────────────────────────────
+
+/**
+ * O canal oficial NÃO grava em `whatsapp_messages` — o provider dele grava em
+ * `channel_messages` por conta própria (#1699, `providerPersistsOwnMessages`).
+ * Sem ler as duas caixas, `conversation` seria cego para o oficial e a Chique
+ * responderia pelo chip a quem escreveu no oficial.
+ */
+describe("conversation lê as duas caixas", () => {
+  beforeEach(() => {
+    mockTable("whatsapp_instances", [INST_1, INST_OFICIAL, INST_2]);
+  });
+
+  it("thread só no canal oficial resolve no canal oficial", async () => {
+    mockTable("channel_messages", [msgOficial()]);
+    const inst = await resolved({ instanceRoutingPolicy: "conversation" });
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  it("thread só no chip resolve no chip", async () => {
+    mockTable("whatsapp_messages", [msg({ instance_id: INST_1.id })]);
+    const inst = await resolved({ instanceRoutingPolicy: "conversation" });
+    expect(inst.id).toBe(INST_1.id);
+  });
+
+  // Critério de aceite: responde pelo número em que o cliente escreveu.
+  it("com as duas caixas povoadas, ganha a mensagem mais recente", async () => {
+    mockTable("whatsapp_messages", [msg({ instance_id: INST_1.id, timestamp: "2026-07-01T10:00:00Z" })]);
+    mockTable("channel_messages", [msgOficial({ timestamp: "2026-08-01T10:00:00Z" })]);
+    const inst = await resolved({ instanceRoutingPolicy: "conversation" });
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  it("e o chip ganha quando é ele o mais recente", async () => {
+    mockTable("whatsapp_messages", [msg({ instance_id: INST_1.id, timestamp: "2026-08-02T10:00:00Z" })]);
+    mockTable("channel_messages", [msgOficial({ timestamp: "2026-08-01T10:00:00Z" })]);
+    const inst = await resolved({ instanceRoutingPolicy: "conversation" });
+    expect(inst.id).toBe(INST_1.id);
+  });
+
+  // `channel_messages.phone_number` é cru: 55 na frente e, às vezes, sem o
+  // nono dígito. `leads.normalized_phone` não tem nem um nem outro.
+  it("casa o telefone cru sem o nono dígito com o canônico do lead", async () => {
+    const sem9 = "55" + LEAD.normalized_phone.slice(0, 2) + LEAD.normalized_phone.slice(3);
+    mockTable("channel_messages", [msgOficial({ phone_number: sem9 })]);
+    const inst = await resolved({ instanceRoutingPolicy: "conversation" });
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  it("ignora a thread de outro telefone na mesma caixa", async () => {
+    mockTable("channel_messages", [msgOficial({ phone_number: "5511988887777" })]);
+    const r = await resolve({ instanceRoutingPolicy: "conversation" });
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("ignora a caixa de outra organização", async () => {
+    mockTable("channel_messages", [msgOficial({ organization_id: OUTRA_ORG })]);
+    const r = await resolve({ instanceRoutingPolicy: "conversation" });
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  // O Instagram mora na MESMA tabela. Em produção suas linhas não têm telefone
+  // nem instância, mas o filtro de canal é o que garante isso — a fixture
+  // carrega os dois de propósito, senão o teste passaria pelo motivo errado.
+  it("ignora a caixa do Instagram", async () => {
+    mockTable("channel_messages", [msgOficial({ channel: "instagram" })]);
+    const r = await resolve({ instanceRoutingPolicy: "conversation" });
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  // Simetria com o chip: thread parada num número caído FALHA, não troca.
+  it("thread no canal oficial caído falha — não cai para o chip", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL_MORTA]);
+    mockTable("channel_messages", [msgOficial({ instance_id: INST_OFICIAL_MORTA.id })]);
+    await expect(
+      resolve({ instanceRoutingPolicy: "conversation", fallbackInstanceId: INST_1.id }),
+    ).resolves.toMatchObject({ ok: false, code: "instance_disconnected" });
+  });
+
+  /**
+   * Critério de aceite: os ~30 clientes que só usam chip não mudam de
+   * comportamento. Aqui isso é estrutural, não uma promessa — sem Instance de
+   * canal oficial na organização, `channel_messages` nem é consultada.
+   */
+  it("org só com chip não consulta a caixa do canal oficial", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2]);
+    // Uma linha que resolveria no oficial se fosse lida. Não é.
+    mockTable("channel_messages", [msgOficial({ timestamp: "2026-09-01T10:00:00Z" })]);
+    mockTable("whatsapp_messages", [msg({ instance_id: INST_1.id })]);
+    const inst = await resolved({ instanceRoutingPolicy: "conversation" });
+    expect(inst.id).toBe(INST_1.id);
+  });
+});
+
+// ─── Os 63 nós de fixa morta (#1700) ───────────────────────────────────────
+
+/**
+ * ⚠️ O RISCO CENTRAL DA FATIA, e a razão de `deadPinShortcut` existir.
+ *
+ * Medido em produção em 2026-08-20: 63 nós de envio ativos, em 9 organizações,
+ * apontam para instâncias que não existem mais, e NENHUM declara recuo —
+ * Basic4u 29, Chique 18, Itatex 6, SC Beauty 3, mais 5 orgs com 7. Todos
+ * sobrevivem exclusivamente pelo atalho de "uma Instance viva só".
+ *
+ * A Chique é a única org com canal oficial e tem também um chip. Se o oficial
+ * entrasse na contagem do atalho, ela iria de uma Instance viva para duas, o
+ * atalho pararia de disparar, `fixed` não participa do degrau 3, não há recuo —
+ * e os 18 nós dela parariam de enviar no dia do deploy.
+ */
+describe("os 63 nós de fixa morta continuam enviando", () => {
+  const FIXA_MORTA = {
+    instanceRoutingPolicy: "fixed",
+    whatsappInstanceId: "inst-que-nao-existe-mais",
+  };
+
+  // A Chique, exatamente: 1 chip + 1 oficial, 18 nós assim.
+  it("org com chip e canal oficial sai pelo chip", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_OFICIAL]);
+    const inst = await resolved(FIXA_MORTA);
+    expect(inst.id).toBe(INST_1.id);
+  });
+
+  // A thread no oficial não muda nada: `fixed` não participa do degrau 3.
+  it("nem mesmo com a conversa do lead viva no canal oficial", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_OFICIAL]);
+    mockTable("channel_messages", [msgOficial({ timestamp: "2026-09-01T10:00:00Z" })]);
+    const inst = await resolved(FIXA_MORTA);
+    expect(inst.id).toBe(INST_1.id);
+  });
+
+  // Basic4u, Itatex, SC Beauty: um chip só, nenhum canal oficial.
+  it("org de um chip só sai por ele", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_MORTA]);
+    const inst = await resolved(FIXA_MORTA);
+    expect(inst.id).toBe(INST_1.id);
+  });
+
+  // Sem chip nenhum, o oficial é o único número que a organização tem.
+  it("org só com canal oficial sai por ele", async () => {
+    mockTable("whatsapp_instances", [INST_OFICIAL]);
+    const inst = await resolved(FIXA_MORTA);
+    expect(inst.id).toBe(INST_OFICIAL.id);
+  });
+
+  // Dois chips vivos: ambíguo antes e depois do #1700. A máquina não escolhe.
+  it("org com dois chips falha — a máquina não desempata sozinha", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL]);
+    await expect(resolve(FIXA_MORTA)).resolves.toMatchObject({
+      ok: false,
+      code: "no_instance_resolved",
+    });
+  });
+
+  it("e com dois chips e recuo declarado usa o recuo", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL]);
+    const inst = await resolved({ ...FIXA_MORTA, fallbackInstanceId: INST_2.id });
+    expect(inst.id).toBe(INST_2.id);
+  });
+});
+
+// ─── send_to_number: o universo estreito (#1700) ───────────────────────────
+
+/**
+ * `send_to_number` manda para números avulsos — vendedores, gestores. Eles não
+ * são leads e nunca escreveram antes, então a janela de 24 horas da Meta está
+ * fechada por definição e o texto livre pelo canal oficial seria recusa
+ * garantida, por callback, depois de a tela dizer "enviado".
+ *
+ * O painel daquele nó já recusa a opção desde o #1699. Isto é a mesma recusa do
+ * lado do executor: o handler passa `LEGACY_PROVIDERS` como `providers`.
+ */
+describe("nó de números avulsos: o canal oficial não entra", () => {
+  function resolveEstreito(node: Record<string, unknown>) {
+    return resolveRoutedInstance(sb, {
+      organizationId: ORG,
+      leadId: null,
+      node,
+      providers: LEGACY_PROVIDERS,
+    });
+  }
+
+  it("o atalho de uma viva só não enxerga o canal oficial", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_OFICIAL]);
+    const r = await resolveEstreito({});
+    expect(r.ok === true && r.instance.id).toBe(INST_1.id);
+  });
+
+  it("nomear o canal oficial não resolve nele", async () => {
+    mockTable("whatsapp_instances", [INST_1, INST_2, INST_OFICIAL]);
+    const r = await resolveEstreito({
+      instanceRoutingPolicy: "fixed",
+      whatsappInstanceId: INST_OFICIAL.id,
+    });
+    expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
+  });
+
+  it("org só com canal oficial reporta ausência de número", async () => {
+    mockTable("whatsapp_instances", [INST_OFICIAL]);
+    const r = await resolveEstreito({});
     expect(r).toMatchObject({ ok: false, code: "no_instance_resolved" });
   });
 });

@@ -32,6 +32,7 @@ import { ClienteCopilotSuggestion } from "./ClienteCopilotSuggestion";
 import { ClienteProductsTable } from "./ClienteProductsTable";
 import { ClienteOrderHistory } from "./ClienteOrderHistory";
 import { ClienteTitulos } from "./ClienteTitulos";
+import { ClienteDadosErp } from "./ClienteDadosErp";
 import { ClienteTimeline } from "./ClienteTimeline";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -406,6 +407,10 @@ export default function ClienteDetailPage() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Quem atende, de que praça, de que segmento. Some sozinho para
+            cliente que não veio de ERP. */}
+        <ClienteDadosErp clientId={clientId} />
 
       </div>
 

@@ -40,7 +40,10 @@ vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   getPipeEntry: vi.fn().mockResolvedValue(null),
 }));
 
-import { persistOutboundMessage } from "../../../supabase/functions/_shared/action-handlers/whatsapp-helpers";
+import {
+  persistOutboundMessage,
+  providerPersistsOwnMessages,
+} from "../../../supabase/functions/_shared/action-handlers/whatsapp-helpers";
 import { sendWhatsAppImage } from "../../../supabase/functions/_shared/action-handlers/send-whatsapp-media";
 import { sendMediaViaInstance } from "../../../supabase/functions/_shared/whatsapp-dispatch";
 
@@ -265,5 +268,54 @@ describe("sendWhatsAppImage (ramo legado) — RC-2", () => {
 
     expect(result.success).toBe(true);
     expect(result.message).toContain("image sent");
+  });
+});
+
+// ─── Canal oficial: quem já gravou não grava de novo (#1690) ───────────────
+
+/**
+ * A partir do #1690 um nó pode NOMEAR o canal oficial, e o caminho de envio
+ * passa a receber uma Instance `notificame`. O provider dela grava a linha em
+ * `channel_messages` no mesmo instante do envio — e uma segunda linha aqui não
+ * seria só ruído: nasceria com `remote_jid` no formato da Uazapi, à espera de
+ * um eco `fromMe` que nunca vem, e nunca receberia o `status_event` do
+ * callback. A conversa mostraria a mensagem duas vezes e a cópia órfã mentiria
+ * sobre o status para sempre.
+ */
+describe("providerPersistsOwnMessages", () => {
+  it("o canal oficial grava sozinho; os legados não", () => {
+    expect(providerPersistsOwnMessages("notificame")).toBe(true);
+    expect(providerPersistsOwnMessages("uazapi")).toBe(false);
+    expect(providerPersistsOwnMessages("evolution")).toBe(false);
+    expect(providerPersistsOwnMessages(null)).toBe(false);
+    expect(providerPersistsOwnMessages(undefined)).toBe(false);
+  });
+
+  it("não grava linha quando a Instance é do canal oficial", async () => {
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("whatsapp_messages", []);
+
+    await persistOutboundMessage(sb, {
+      ...BASE,
+      provider: "notificame",
+      providerMessageId: "wamid.HBg",
+    });
+
+    expect(getInserted("whatsapp_messages")).toHaveLength(0);
+  });
+
+  // Controle positivo: sem ele, "zero linhas" não distingue a guarda de um
+  // dublê que simplesmente não grava nada.
+  it("continua gravando quando a Instance é legada", async () => {
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("whatsapp_messages", []);
+
+    await persistOutboundMessage(sb, {
+      ...BASE,
+      provider: "uazapi",
+      providerMessageId: "BATATA:3EB0",
+    });
+
+    expect(getInserted("whatsapp_messages")).toHaveLength(1);
   });
 });

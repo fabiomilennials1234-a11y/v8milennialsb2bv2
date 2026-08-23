@@ -6,7 +6,13 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ClientStore, ExistingClient } from "./upsert-client.ts";
 
-const SELECT = "id, cnpj, phone, email, company, name";
+// `external_*` e `erp_*` entram no SELECT para que `upsertCanonicalClient`
+// consiga comparar o que já está gravado e PULAR a escrita quando nada muda.
+// Coluna escrita mas não lida aqui volta como `undefined` e é sempre tratada
+// como alterada.
+// Literal única, sem concatenar — ver a nota em cached-client-store.ts.
+const SELECT =
+  "id, cnpj, phone, email, company, name, external_source, external_id, external_ref, erp_company, erp_owner_name, erp_owner_external_id, erp_status, erp_segment, erp_registered_at, erp_city, erp_uf, erp_metadata";
 
 export function supabaseClientStore(admin: SupabaseClient, source: string): ClientStore {
   return {
@@ -52,6 +58,7 @@ export function supabaseClientStore(admin: SupabaseClient, source: string): Clie
           // Toth nasceria rotulado como Omie e a origem deixaria de responder
           // "de onde veio". Para `source = "omie"` o valor não muda.
           origin: `erp_${source}`,
+          ...(lead.extra ?? {}),
         })
         .select("id")
         .single();

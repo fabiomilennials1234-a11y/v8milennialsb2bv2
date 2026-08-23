@@ -18,7 +18,16 @@
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ClientStore, ExistingClient } from "./upsert-client.ts";
 
-const SELECT = "id, cnpj, phone, email, company, name, external_id";
+/**
+ * Toda coluna que `upsertCanonicalClient` compara precisa estar aqui. Campo que
+ * ele escreve mas o store não devolve volta como `undefined`, é lido como
+ * "mudou" e reescreve o cliente em toda execução.
+ */
+// Literal única, sem concatenar: o supabase-js infere o tipo do retorno a
+// partir do TEXTO do select, e `a + b` vira `string` genérico — o resultado
+// degrada para `GenericStringError` e nenhum campo fica acessível.
+const SELECT =
+  "id, cnpj, phone, email, company, name, external_source, external_id, external_ref, erp_company, erp_owner_name, erp_owner_external_id, erp_status, erp_segment, erp_registered_at, erp_city, erp_uf, erp_metadata";
 /** Teto por página da pré-carga — o PostgREST limita a resposta. */
 const PRELOAD_PAGE = 1000;
 
@@ -56,13 +65,14 @@ export async function cachedClientStore(
 
     for (const row of rows) {
       preloaded++;
-      const { external_id, ...client } = row;
-      // Só indexa por external_id do MESMO provider: um id do Omie não pode
-      // casar com um id do Toth só por coincidência numérica.
-      if (external_id) byExternalId.set(`${source}:${external_id}`, client);
-      if (client.cnpj) {
-        const digits = client.cnpj.replace(/\D/g, "");
-        if (digits && !byCnpj.has(digits)) byCnpj.set(digits, client);
+      // Guarda a linha INTEIRA, com `external_*`. Uma versão anterior removia o
+      // `external_id` por destructuring, e sem ele `upsertCanonicalClient` não
+      // consegue comparar o carimbo — voltaria a escrever em todo registro,
+      // que é justamente o que estoura o tempo na re-sincronização.
+      if (row.external_id) byExternalId.set(`${source}:${row.external_id}`, row);
+      if (row.cnpj) {
+        const digits = row.cnpj.replace(/\D/g, "");
+        if (digits && !byCnpj.has(digits)) byCnpj.set(digits, row);
       }
     }
 
@@ -93,14 +103,12 @@ export async function cachedClientStore(
 
       // Mantém o índice coerente dentro da própria execução: sem isto, dois
       // registros do ERP com o mesmo CNPJ criariam duas linhas na carteira.
-      const created: ExistingClient = {
-        id,
-        cnpj: (row.cnpj as string | null) ?? null,
-        phone: (row.phone as string | null) ?? null,
-        email: (row.email as string | null) ?? null,
-        company: (row.company as string | null) ?? null,
-        name: (row.name as string | null) ?? null,
-      };
+      //
+      // Copia a linha inteira em vez de reconstruir campo a campo. A versão
+      // anterior listava as colunas na mão, e cada coluna nova de
+      // enriquecimento teria que ser lembrada aqui também — esquecer uma faz o
+      // cliente recém-criado parecer desatualizado no resto da execução.
+      const created = { ...row, id } as unknown as ExistingClient;
       const externalId = row.external_id as string | null;
       if (externalId) byExternalId.set(`${source}:${externalId}`, created);
       if (created.cnpj) {

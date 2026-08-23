@@ -41,8 +41,10 @@ import {
   resolveVariables,
   buildTrackId,
   recipientGate,
+  providerPersistsOwnMessages,
 } from "./whatsapp-helpers.ts";
 import { sendTextViaInstance, normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
+import { LEGACY_PROVIDERS } from "../instance-routing.ts";
 import { summarizeConversation } from "./ai-operations.ts";
 import { reserveSendOrSkip } from "../send-dedup.ts";
 
@@ -87,11 +89,14 @@ function resolveDestinations(raw: unknown): { valid: string[]; invalid: string[]
 async function persistChatHistory(
   supabase: ActionInput["supabase"],
   organizationId: string,
-  instance: { id: string },
+  instance: { id: string; provider?: string | null },
   phone: string,
   content: string,
   messageId?: string,
 ): Promise<void> {
+  // Ver `providerPersistsOwnMessages`: o canal oficial já gravou a linha.
+  if (providerPersistsOwnMessages(instance.provider)) return;
+
   try {
     const { error } = await supabase
       .from("whatsapp_messages")
@@ -140,7 +145,20 @@ export async function sendToNumber(input: ActionInput): Promise<ActionResult> {
   //    números fixos, não o lead — seguir a conversa dele não faria sentido aqui.
   //    O dead-session guard (M1) agora vive dentro da resolução: instância
   //    deslogada devolve falha não-retentável, sem tentativa de envio.
-  const wa = await getWhatsAppInstance(supabase, organizationId, params, null);
+  //
+  //    `LEGACY_PROVIDERS` estreita o universo de propósito (issue #1700): estes
+  //    destinatários são vendedores e gestores, não leads. Nunca escreveram
+  //    para a organização, então a janela de 24 horas da Meta está fechada por
+  //    definição e o canal oficial recusaria o texto livre — por callback,
+  //    depois de a tela dizer "enviado". O painel deste nó já recusa a opção;
+  //    isto é a mesma recusa do lado do executor.
+  const wa = await getWhatsAppInstance(
+    supabase,
+    organizationId,
+    params,
+    null,
+    LEGACY_PROVIDERS,
+  );
   if (!wa.ok) return wa.failure;
 
   // 3) Resolve the message template against the lead.

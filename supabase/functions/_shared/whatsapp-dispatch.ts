@@ -34,6 +34,7 @@ import {
   type WriteInstanceErrorCode,
 } from "./instance-write-guard.ts";
 import { governSend, isSkippedSend } from "./send-governor/gate.ts";
+import { espelharMidiaDosComponentes } from "./mirror-template-media.ts";
 import { deriveCategory } from "./send-governor/core.ts";
 
 export type ResolveOptions = {
@@ -374,6 +375,20 @@ export async function sendTextViaInstance(
  * Meta renderiza a mensagem do lado dela, então a linha gravada nasceria sem
  * texto e a conversa exibiria "Mensagem interativa" no lugar do que o cliente
  * recebeu. Só quem tem o corpo aprovado e os parâmetros consegue reproduzi-lo.
+ *
+ * ⚠️ A MÍDIA DO CABEÇALHO É ESPELHADA AQUI, e o lugar é escolhido (#1706). A URL
+ * que vem aprovada com o template é do CDN da Meta, assinada: NÓS baixamos com
+ * 200 e o pipeline de envio DELA recebe 403 (`131053`). O caminho do chat já
+ * espelhava no proxy; o da automação mandava a URL crua, e a recusa chegava por
+ * CALLBACK — depois de esta função ter devolvido `success`. Para quem montou o
+ * funil, a mensagem sumia sem passo vermelho.
+ *
+ * Espelhar no TRANSPORTE, e não no handler do nó, é o que faz todo remetente de
+ * template herdar o conserto — inclusive o escape de janela fechada, que monta
+ * os componentes por outro caminho.
+ *
+ * E fica DENTRO do doSend: um envio que o governor barrar não paga download,
+ * upload, nem deixa arquivo órfão no storage.
  */
 export async function sendTemplateViaInstance(
   supabaseAdmin: any,
@@ -415,12 +430,16 @@ export async function sendTemplateViaInstance(
         content: template.previewText,
         idempotencyKey: opts.idempotencyKey,
       },
-      () =>
-        provider.sendTemplate!({
+      async () =>
+        await provider.sendTemplate!({
           number: phone,
           templateName: template.name,
           language: template.language,
-          components: template.components,
+          components: await espelharMidiaDosComponentes(
+            template.components,
+            instance.organization_id,
+            { storage: supabaseAdmin.storage },
+          ),
           previewText: template.previewText,
           buttonLabels: template.buttonLabels,
         } as never),

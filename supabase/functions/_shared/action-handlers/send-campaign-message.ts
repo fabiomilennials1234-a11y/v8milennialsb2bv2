@@ -22,6 +22,7 @@ import {
   resolveVariables,
   buildTrackId,
   recipientGate,
+  providerPersistsOwnMessages,
 } from "./whatsapp-helpers.ts";
 
 export async function sendCampaignMessage(input: ActionInput): Promise<ActionResult> {
@@ -101,21 +102,25 @@ export async function sendCampaignMessage(input: ActionInput): Promise<ActionRes
 
     const messageId = sendResult.messageId || `wf_camp_${crypto.randomUUID()}`;
 
-    await supabase.from("whatsapp_messages").upsert({
-      organization_id: organizationId,
-      instance_id: wa.instanceId,
-      message_id: messageId,
-      remote_jid: phone + "@s.whatsapp.net",
-      phone_number: phone,
-      direction: "outgoing",
-      message_type: isAudio ? "audio" : "conversation",
-      content: isAudio ? null : message,
-      media_url: isAudio ? template.audio_url : null,
-      timestamp: new Date().toISOString(),
-      status: "sent",
-      sent_by_ai: true,
-      sent_source: "workflow",
-    }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    // Ver `providerPersistsOwnMessages`: o canal oficial já gravou a linha em
+    // `channel_messages`, e uma segunda cópia aqui nasceria órfã.
+    if (!providerPersistsOwnMessages(wa.instance.provider)) {
+      await supabase.from("whatsapp_messages").upsert({
+        organization_id: organizationId,
+        instance_id: wa.instanceId,
+        message_id: messageId,
+        remote_jid: phone + "@s.whatsapp.net",
+        phone_number: phone,
+        direction: "outgoing",
+        message_type: isAudio ? "audio" : "conversation",
+        content: isAudio ? null : message,
+        media_url: isAudio ? template.audio_url : null,
+        timestamp: new Date().toISOString(),
+        status: "sent",
+        sent_by_ai: true,
+        sent_source: "workflow",
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false });
+    }
   } else if (!gwResult.success) {
     console.error("[send-campaign-message] Gateway campaign message send failed:", gwResult.error);
     return { success: false, error: `Campaign message send failed: ${gwResult.error}` };
