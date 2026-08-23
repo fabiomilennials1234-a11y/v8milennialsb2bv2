@@ -102,9 +102,8 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/performance": "performance",
   "/comissoes": "commissions",
   "/tv": "tv_dashboard",
-  // catálogo / negócios
+  // catálogo
   "/produtos": "products",
-  "/negocios": "deals",
   // carteira
   "/upsell": "carteira",
   "/carteira/:clientId": "carteira",

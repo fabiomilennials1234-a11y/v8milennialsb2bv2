@@ -24,7 +24,7 @@ describe.skipIf(skipReason)("stage auto-checklist trigger", () => {
   let pipelineId: string;
 
   beforeAll(async () => {
-    admin = createClient(SUPABASE_URL!, SERVICE_ROLE!);
+    admin = createClient(SUPABASE_URL!, SERVICE_ROLE!, { auth: { persistSession: false, autoRefreshToken: false, storageKey: 'torque-test-checklist-service' } });
 
     const { data: org, error: orgErr } = await admin.from("organizations")
       .insert({ name: `test-stage-checklist-${Date.now()}` })

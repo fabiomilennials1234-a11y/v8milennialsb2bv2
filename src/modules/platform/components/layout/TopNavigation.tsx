@@ -1,7 +1,17 @@
+/**
+ * @deprecated Substituída pela navegação lateral (`Sidebar`).
+ *
+ * Desde a troca da top bar pela lateral, nada monta este componente — o
+ * `MainLayout` renderiza `Sidebar` no desktop e `SidebarMobileDrawer` no
+ * celular. O arquivo segue no repositório apenas como caminho de volta durante
+ * o rollout; assim que a lateral estiver estável em produção, deve ser
+ * removido junto com este comentário.
+ */
 import { useState, useRef, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   Gauge,
+  ChartNoAxesCombined,
   Fuel,
   CalendarDays,
   Wrench,
@@ -23,7 +33,6 @@ import {
   BarChart2,
   Workflow,
   TrendingUp,
-  Wallet,
   Lock,
   Camera,
   Loader2,
@@ -56,6 +65,7 @@ import { useAuth } from "@/modules/identity";
 import { useUserRole, useJobTitle, useFeaturePermissions } from "@/modules/identity";
 import { useIdentity } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
+import { useMetricsStudioEnabled } from "@/modules/analytics";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
@@ -98,7 +108,7 @@ interface NavItem {
   badge?: number;
   masterOnly?: boolean;
   /** Optional runtime gate key — filtered by the component when false. */
-  gate?: "meta_pages_connected";
+  gate?: "meta_pages_connected" | "metrics_studio_enabled";
 }
 
 interface NavItemWithChildren extends NavItem {
@@ -129,12 +139,19 @@ const turboSubItems: NavItem[] = [
 // Primary items — always visible in the top bar
 const primaryNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
+  // Métricas sai do Comando: lá é operação (próximos passos), aqui é análise.
+  // Rollout por org (G5): sem a flag, o item não aparece — se aparecesse, o
+  // clique levaria à tela de "ainda não liberado", que é pior que não ver.
+  { label: "Métricas", icon: ChartNoAxesCombined, path: "/metricas", gate: "metrics_studio_enabled" },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   // Disparos — porta canônica, sempre visível perto do Chat (#904)
   { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] }, // children set dynamically via displayConfig
-  { label: "Carteira", icon: Wallet, path: "/upsell" },
+  // Leads sobe do "Mais" pra barra principal: é a fonte de verdade do lead.
+  // Substitui "Combustível" (mesma rota) e ocupa o lugar de "Carteira", que
+  // passa a ser dado do lead (cluster "Dados" da lista), não módulo próprio.
+  { label: "Leads", icon: Fuel, path: "/leads" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
@@ -143,7 +160,6 @@ const primaryNavItems: NavItemWithChildren[] = [
 // Secondary items — go inside "Mais" overflow menu
 const moreNavItems: NavItemWithChildren[] = [
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
-  { label: "Combustível", icon: Fuel, path: "/leads" },
   // Comissões desceu pro "Mais" — Disparos tomou seu lugar na top bar (#904)
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Checklists", icon: ListChecks, path: "/checklists" },
@@ -155,6 +171,7 @@ const moreNavItems: NavItemWithChildren[] = [
 // All items combined for mobile
 const allNavItems: NavItemWithChildren[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
+  { label: "Métricas", icon: ChartNoAxesCombined, path: "/metricas", gate: "metrics_studio_enabled" },
   { label: "Agenda", icon: CalendarDays, path: "/agenda" },
   { label: "Revisão", icon: Wrench, path: "/follow-ups" },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
@@ -162,8 +179,7 @@ const allNavItems: NavItemWithChildren[] = [
   { label: "Disparos", icon: Send, path: "/disparos" },
   // { label: "Mensagens Meta", icon: Instagram, path: "/atendimento/meta", gate: "meta_pages_connected" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
-  { label: "Carteira", icon: Wallet, path: "/upsell" },
-  { label: "Combustível", icon: Fuel, path: "/leads" },
+  { label: "Leads", icon: Fuel, path: "/leads" },
   { label: "Ranking", icon: Trophy, path: "/performance" },
   { label: "Comissões", icon: DollarSign, path: "/comissoes" },
   { label: "Turbo", icon: Zap, path: "/turbo", children: turboSubItems },
@@ -230,7 +246,6 @@ const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/automacoes": "workflows.view",
   "/equipe": "team.view",
   "/produtos": "products.view",
-  "/negocios": "deals.view",
   "/configuracoes": "settings.view",
 };
 
@@ -258,11 +273,14 @@ export function TopNavigation() {
   const prefetchPipes = usePrefetchPipes();
   const { data: metaPages } = useMetaPages();
   const showMetaNav = (metaPages?.pages.length ?? 0) > 0;
+  // G5: trava de rollout do Estúdio de Métricas. Falha para fechado.
+  const metricsStudio = useMetricsStudioEnabled();
 
   // Build dynamic funnel sub-items from display config
   const dynamicFunisChildren: NavItem[] = (displayConfig ?? [])
     .filter((c) => c.is_visible)
-    // Carteira (upsell) agora é item próprio na top bar — não entra no dropdown de Funis
+    // Carteira (upsell) saiu da navegação: virou dado do lead na aba Leads.
+    // A rota /upsell segue viva, só não tem mais porta no menu.
     .filter((c) => c.pipe_type !== "upsell")
     // Agendamentos colapsado em Oportunidades quando o merge está ON (ADR-0004)
     .filter((c) => !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")))
@@ -396,6 +414,7 @@ export function TopNavigation() {
   const filterByGate = (items: NavItemWithChildren[]) =>
     items.filter((item) => {
       if (item.gate === "meta_pages_connected") return showMetaNav;
+      if (item.gate === "metrics_studio_enabled") return metricsStudio.enabled;
       return true;
     });
 

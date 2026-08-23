@@ -1,5 +1,9 @@
 # Roadmap — Torque CRM
 
+> ⚠️ **Este arquivo é histórico.** Ele descreve a Fase 1 (modularização), que **terminou em 2026-05-28**, e o hardening que vinha depois. Nada aqui foi remedido desde 26/05.
+>
+> O roadmap **vivo** é [`roadmap-virada-e-fatia-3.md`](./roadmap-virada-e-fatia-3.md) — a sprint da virada Leads↔Negócios e a fatia 3. Mantido separado de propósito: este aqui é a visão estratégica de 6 meses, aquele é a ordem de execução do que está na mão.
+
 **Last updated:** 2026-05-26
 
 ## Visão estratégica (próximos 6 meses)

@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useState, useCallback } from "react";
 import { Loader2 } from "lucide-react";
 import { useAnalyticsUtms, type UtmLevel } from "@/modules/analytics/hooks/useAnalyticsUtms";
@@ -6,8 +7,6 @@ import { UtmBreadcrumb } from "../charts/UtmBreadcrumb";
 import { UtmKpiCards } from "../charts/UtmKpiCards";
 import { UtmDataTable } from "../charts/UtmDataTable";
 import { UtmLeadsList } from "../charts/UtmLeadsList";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 
 interface DrillDownState {
   level: UtmLevel;
@@ -19,7 +18,7 @@ interface DrillDownState {
 }
 
 function UtmsTabInner() {
-  const { openLead } = useLeadSheet();
+  const navigate = useNavigate();
   const [drill, setDrill] = useState<DrillDownState>({
     level: "campaign",
     campaign: null,
@@ -124,7 +123,7 @@ function UtmsTabInner() {
         <AnalyticsErrorBoundary>
           <UtmLeadsList
             leads={data.leads}
-            onOpenLead={(id) => openLead(id)}
+            onOpenLead={(id) => navigate(`/leads?lead=${id}`)}
           />
         </AnalyticsErrorBoundary>
       ) : (
@@ -143,10 +142,6 @@ function UtmsTabInner() {
 
 export function UtmsTab() {
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
         <UtmsTabInner />
-      </LeadPanelLayout>
-    </LeadPanelProvider>
   );
 }

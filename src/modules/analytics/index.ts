@@ -131,6 +131,8 @@ export * from "./lib/funnel-health-stages";
 export * from "./hooks/useMetricCatalog";
 export * from "./hooks/useMetricMeasure";
 export * from "./hooks/useDashboardSnapshot";
+// Trava de rollout do Estúdio (G5) — consumida pela top bar em platform.
+export { useMetricsStudioEnabled } from "./hooks/useMetricsStudioEnabled";
 
 // Casca da TV montável (#1207): grid 12×6, WidgetFrame, painel semeado.
 export * from "./hooks/useComposableDashboard";

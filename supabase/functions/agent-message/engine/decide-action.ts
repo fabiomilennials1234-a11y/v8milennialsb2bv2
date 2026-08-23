@@ -6,7 +6,7 @@
  *  - processLLMResponse:        parse de tool_calls + assistant message
  *  - enqueueToolAction:         enfileira 1 action no pending_ai_actions
  *  - enqueueAutomationActions:  dispara qualify/disqualify/need_human conforme estado
- *  - enqueuePipelineStageUpdate: atualiza pipe_whatsapp baseado em turn/action
+ *  - enqueuePipelineStageUpdate: avança a etapa do NEGÓCIO baseado em turn/action
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -16,6 +16,7 @@ import {
   mapToolToAction as mapToolToActionExternal,
 } from "../../_shared/copilot/dispatcher.ts";
 import { determineNextState as determineNextStateExternal } from "../../_shared/copilot/state-machine.ts";
+import { getPipeEntry } from "../../_shared/pipeline-adapter.ts";
 
 export interface ProcessLLMResponseResult {
   nextState: string;
@@ -323,21 +324,25 @@ export async function enqueuePipelineStageUpdate(
       return;
     }
 
-    const { data: lead, error: fetchError } = await supabase
-      .from("leads")
-      .select("pipe_whatsapp")
-      .eq("id", leadId)
-      .single();
+    // ADR-0023 §10: a etapa corrente é do NEGÓCIO, não do lead. `leads.pipe_whatsapp`
+    // sobrevive como espelho legado e não é mais lido aqui — em L2 um gatilho passa a
+    // zerá-lo quando o negócio sai de Oportunidades, e continuar lendo dali mudaria o
+    // comportamento do agente em silêncio (1.885 leads em 34 orgs já divergem hoje).
+    const entry = await getPipeEntry(supabase, leadId, organizationId, "whatsapp");
 
-    if (fetchError) {
-      console.warn(
-        "[engine/decide-action] Could not fetch lead for pipeline update:",
-        fetchError.message,
+    if (!entry) {
+      // Sem negócio no funil não há posição para avançar. Antes daqui saía um
+      // `update_pipeline_stage`, e `executeUpdatePipelineStage` faz `upsertPipeEntry`,
+      // que INSERE a entry quando não existe — ou seja, o agente CRIAVA o negócio.
+      // ADR-0023 §3: negócio nasce só por clique humano. Nenhuma automação abre um.
+      console.log(
+        "[engine/decide-action] Lead sem negócio no funil WhatsApp; nada a avançar.",
+        { leadId },
       );
       return;
     }
 
-    const currentStage = lead?.pipe_whatsapp;
+    const currentStage = entry.stage_key;
     let newStage: string | null = null;
 
     const isStandardStage = STANDARD_WHATSAPP_STAGES.includes(currentStage || "");

@@ -60,7 +60,11 @@ export type WorkflowNodeType =
   | "webhook_call"
   | "goto"
   | "wait_business_window"
-  | "assign_responsible";
+  | "assign_responsible"
+  // Nós de código
+  | "code_json"
+  | "code_javascript"
+  | "code_https";
 
 /**
  * Instance Routing Policy (PRD #1331) — a regra declarada no WhatsApp Message
@@ -241,6 +245,12 @@ export interface TriggerConfigCron {
 export interface TriggerConfigLeadReplied {
   channel?: "whatsapp" | "meta" | "any";
   contains_text?: string;
+  /**
+   * Funis em que o lead precisa estar para o trigger disparar (`pipelines.id`).
+   * Um campo só cobre funil padrão e custom — `pipelines` é a união dos dois.
+   * Semântica OR; vazio/ausente = qualquer funil.
+   */
+  pipeline_ids?: string[];
 }
 
 export interface TriggerConfigLeadNoReply {
@@ -719,6 +729,78 @@ export interface AssignResponsibleNodeData {
   [key: string]: unknown;
 }
 
+// =====================================================
+// NÓS DE CÓDIGO (JSON / JavaScript / HTTPS)
+// =====================================================
+
+/** O que o nó faz quando o próprio nó falha (parse inválido, fonte vazio, timeout). */
+export type CodeErrorPolicy = "fail" | "continue";
+
+/**
+ * Teto de bytes do campo de código, POR NÓ. 64 KB ≈ 4× a maior `definition` de
+ * produção hoje (17 KB) — o blob viaja em todo tick do cron e é reserializado em
+ * todo save, por isso o teto é baixo.
+ */
+export const CODE_SOURCE_MAX_BYTES = 65_536; // 64 KB
+
+/** Teto somado dos fontes de TODOS os nós de código de um workflow. */
+export const CODE_WORKFLOW_MAX_BYTES = 196_608; // 192 KB = 3 × 64 KB
+
+/** Teto de caracteres gravados em `context[outputVariable]` pelos nós de código. */
+export const CODE_OUTPUT_MAX_CHARS = 16_000;
+
+/**
+ * Feature flag (organizations.feature_flags) que libera o nó JavaScript.
+ * Fase 1: controla apenas a VISIBILIDADE na toolbar. Fase 2 passa a controlar
+ * também a execução em `run-user-code`. Fail-closed.
+ */
+export const CODE_JS_NODE_FLAG = "workflow_code_js";
+
+export interface CodeJsonNodeData {
+  type: "code_json";
+  label: string;
+  /** Template JSON com `{{variaveis}}`. Vazio é permitido no save, falha no runtime. */
+  code: string;
+  /** Nome da chave gravada no `context`. Obrigatório para o nó ter efeito. */
+  outputVariable: string;
+  /** Chaves de PRIMEIRO NÍVEL que precisam existir no objeto resultante. Vazio = sem checagem. */
+  requiredKeys?: string[];
+  /** Default "fail". */
+  onError?: CodeErrorPolicy;
+  [key: string]: unknown;
+}
+
+export interface CodeJavascriptNodeData {
+  type: "code_javascript";
+  label: string;
+  /** Fonte JS. Fase 1: só armazenado e exibido — NÃO executado. */
+  code: string;
+  outputVariable: string;
+  /** Teto de wall-clock por execução, em ms. Só tem efeito na Fase 2. Default 500, teto 2000. */
+  timeoutMs?: number;
+  onError?: CodeErrorPolicy;
+  [key: string]: unknown;
+}
+
+/**
+ * Nó HTTPS — a requisição INTEIRA é escrita à mão como um único JSON em `code`
+ * (`method`, `url`, `headers`, `body`, `timeoutMs`). A `url` precisa começar com
+ * `https://`: `http://` é recusado na validação, é o que dá nome ao nó.
+ *
+ * 🚨 O `input_data` do passo NUNCA carrega `headers` (levam `Authorization`), o
+ * `code`, nem a query string da `url` — `workflow_execution_steps` é legível por
+ * qualquer membro da org.
+ */
+export interface CodeHttpsNodeData {
+  type: "code_https";
+  label: string;
+  /** JSON que descreve a requisição inteira. Aceita {{variaveis}}. */
+  code: string;
+  outputVariable: string;
+  onError?: CodeErrorPolicy;
+  [key: string]: unknown;
+}
+
 export type WorkflowNodeData =
   | TriggerNodeData
   | ActionNodeData
@@ -731,7 +813,10 @@ export type WorkflowNodeData =
   | WebhookCallNodeData
   | GotoNodeData
   | WaitBusinessWindowNodeData
-  | AssignResponsibleNodeData;
+  | AssignResponsibleNodeData
+  | CodeJsonNodeData
+  | CodeJavascriptNodeData
+  | CodeHttpsNodeData;
 
 // =====================================================
 // REACT FLOW NODE/EDGE TYPES
@@ -832,6 +917,9 @@ export const NODE_COLORS: Record<WorkflowNodeType, { border: string; bgLight: st
   goto:                  { border: "border-teal-500",    bgLight: "bg-teal-50",    bgDark: "dark:bg-teal-950" },
   wait_business_window:  { border: "border-amber-500",   bgLight: "bg-amber-50",   bgDark: "dark:bg-amber-950" },
   assign_responsible:    { border: "border-rose-500",    bgLight: "bg-rose-50",    bgDark: "dark:bg-rose-950" },
+  code_json:             { border: "border-emerald-500", bgLight: "bg-emerald-50", bgDark: "dark:bg-emerald-950" },
+  code_javascript:       { border: "border-sky-500",     bgLight: "bg-sky-50",     bgDark: "dark:bg-sky-950" },
+  code_https:            { border: "border-violet-500",  bgLight: "bg-violet-50",  bgDark: "dark:bg-violet-950" },
 };
 
 export const NODE_LABELS: Record<WorkflowNodeType, string> = {
@@ -847,6 +935,9 @@ export const NODE_LABELS: Record<WorkflowNodeType, string> = {
   goto: "Ir Para",
   wait_business_window: "Janela Comercial",
   assign_responsible: "Definir Responsável",
+  code_json: "JSON",
+  code_javascript: "JavaScript",
+  code_https: "HTTPS",
 };
 
 export const ACTION_LABELS: Record<WorkflowActionType, string> = {

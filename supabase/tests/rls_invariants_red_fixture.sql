@@ -80,8 +80,20 @@ SELECT isnt(
   'INV-2 RED: detector flags writing DEFINER function executable by PUBLIC'
 );
 
--- and once PUBLIC EXECUTE is revoked, the detector clears it (no longer reachable)
-REVOKE EXECUTE ON FUNCTION public._rls_inv_bad_writer(uuid) FROM PUBLIC;
+-- and once the function is out of reach, the detector clears it.
+--
+-- REVOKE FROM PUBLIC alone does NOT clear it, and that is not a detector bug —
+-- it is the Supabase default privilege (SCRUM-361). Every function created in
+-- `public` is born with an EXPLICIT grant to `anon`, `authenticated` and
+-- `service_role` (ALTER DEFAULT PRIVILEGES, shipped with the platform), on top
+-- of the PUBLIC default. Dropping PUBLIC leaves anon's own grant standing, and
+-- the detector — correctly — keeps flagging a writing DEFINER function that
+-- anon can call.
+--
+-- This is the same trap in reverse of the one that made `REVOKE ... FROM anon`
+-- read as a no-op elsewhere in the repo: whoever revokes has to name every
+-- grantee, because the two grants are independent.
+REVOKE EXECUTE ON FUNCTION public._rls_inv_bad_writer(uuid) FROM PUBLIC, anon, authenticated;
 SELECT is(
   (SELECT count(*)::int FROM public._rls_inv_writing_definer_exec_by_anon_or_public()
      WHERE functionname = '_rls_inv_bad_writer'),

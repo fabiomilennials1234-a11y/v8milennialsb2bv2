@@ -23,8 +23,17 @@ vi.mock("../../../supabase/functions/_shared/logger.ts", () => ({
   logRuntime: vi.fn(async () => {}),
   redactSecrets: (v: unknown) => v,
 }));
+// Entries por slug de funil. ADR-0023 §10: a etapa que roteia vem do NEGÓCIO
+// (`pipeline_entries`), inclusive a do funil WhatsApp — antes ela vinha da coluna
+// legada `leads.pipe_whatsapp`, e por isso os fixtures abaixo não a carregam mais.
+const { pipeEntries } = vi.hoisted(() => ({
+  pipeEntries: {} as Record<string, unknown>,
+}));
+
 vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
-  getPipeEntry: vi.fn().mockResolvedValue(null),
+  getPipeEntry: vi.fn(
+    async (_sb: unknown, _leadId: string, _orgId: string, slug: string) => pipeEntries[slug] ?? null,
+  ),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
   resolvePipelineId: vi.fn().mockResolvedValue(null),
 }));
@@ -90,11 +99,13 @@ function buildSupabase(overrides: {
 describe("AgentRouter", () => {
   beforeEach(() => {
     AgentRouter.clearCache();
+    for (const k of Object.keys(pipeEntries)) delete pipeEntries[k];
   });
 
   it("routes by stage when lead has matching stage", async () => {
+    pipeEntries.whatsapp = { id: "entry-1", stage_key: "novo_lead" };
     const sb = buildSupabase({
-      lead: { pipe_whatsapp: "novo_lead", origin: "meta_ads", segment: null },
+      lead: { origin: "meta_ads", segment: null },
       stageAgent: AGENT_STAGE,
     });
 
@@ -105,9 +116,26 @@ describe("AgentRouter", () => {
     expect(result!.id).toBe("agent-stage");
   });
 
-  it("falls to origin when stage match fails", async () => {
+  it("ignora a coluna legada leads.pipe_whatsapp ao rotear (ADR-0023 §10)", async () => {
+    // Sem negócio no funil WhatsApp: a etapa não existe, mesmo que o espelho
+    // legado ainda carregue um valor. Sem etapa, o roteamento por stage não casa
+    // e a cascata precisa cair para o agente default.
     const sb = buildSupabase({
-      lead: { pipe_whatsapp: "novo_lead", origin: "meta_ads", segment: null },
+      lead: { pipe_whatsapp: "novo_lead", origin: null, segment: null },
+      stageAgent: AGENT_STAGE,
+      defaultAgent: AGENT_DEFAULT,
+    });
+
+    const router = new AgentRouter(sb, "org-1");
+    const result = await router.route("lead-1");
+
+    expect(result!.id).toBe("agent-default");
+  });
+
+  it("falls to origin when stage match fails", async () => {
+    pipeEntries.whatsapp = { id: "entry-1", stage_key: "novo_lead" };
+    const sb = buildSupabase({
+      lead: { origin: "meta_ads", segment: null },
       stageAgent: null,
       originAgent: AGENT_ORIGIN,
     });
@@ -120,8 +148,9 @@ describe("AgentRouter", () => {
   });
 
   it("falls to default agent when no routing match", async () => {
+    pipeEntries.whatsapp = { id: "entry-1", stage_key: "novo_lead" };
     const sb = buildSupabase({
-      lead: { pipe_whatsapp: "novo_lead", origin: "meta_ads", segment: null },
+      lead: { origin: "meta_ads", segment: null },
       stageAgent: null,
       originAgent: null,
       segmentAgent: null,
@@ -136,8 +165,9 @@ describe("AgentRouter", () => {
   });
 
   it("falls to any active agent when no default", async () => {
+    pipeEntries.whatsapp = { id: "entry-1", stage_key: "novo_lead" };
     const sb = buildSupabase({
-      lead: { pipe_whatsapp: "novo_lead", origin: null, segment: null },
+      lead: { origin: null, segment: null },
       defaultAgent: null,
       anyAgent: AGENT_FALLBACK,
     });

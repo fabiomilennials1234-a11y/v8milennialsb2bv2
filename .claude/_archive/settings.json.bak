@@ -1,0 +1,28 @@
+{
+  "enabledPlugins": {
+    "obsidian@obsidian-skills": true
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/orchestrador-router-hook.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash(git commit*)",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/obsidian-post-commit.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

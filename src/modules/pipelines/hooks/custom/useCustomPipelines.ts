@@ -847,6 +847,65 @@ export function useAddLeadToCustomPipe() {
   });
 }
 
+/** Funis de sistema alcançáveis pela auto-transição (slugs em `pipelines`). */
+type SystemPipeSlug = "whatsapp" | "confirmacao" | "propostas";
+
+/**
+ * Teto de linhas lidas por `(funil de sistema, lead)` — espelha
+ * `PIPELINE_ENTRY_READ_CAP` em `../model/usePipelineEntries.ts`.
+ */
+const SYSTEM_PIPE_ENTRY_READ_CAP = 50;
+
+/**
+ * O negócio CORRENTE do lead num funil de sistema, ou `null` se ele ainda não
+ * está nele.
+ *
+ * Lê `pipeline_entries` em vez das views `pipe_*` porque `pipe_whatsapp` e
+ * `pipe_confirmacao` não expõem `closed_at`, e sem ele não dá pra aplicar o
+ * mesmo critério que o kanban e o Copilot já usam. O `pipelines!inner`
+ * reproduz o JOIN da view; a escrita continua indo pela view, que traduz
+ * `status` → `stage_key` no INSTEAD OF.
+ *
+ * Corrente = ABERTO primeiro, depois o de movimentação mais recente — mesma
+ * regra de `readActivePipelineEntry` (`../model/usePipelineEntries.ts`) e de
+ * `pickActiveEntry` (`_shared/pipeline-adapter.ts`). Aqui errar tem preço
+ * concreto: tirar um card da etapa de ganho dispara `fn_capture_sale_event`,
+ * que grava estorno e não se desfaz.
+ *
+ * Por que não `.maybeSingle()`: com mais de uma linha o postgrest-js zera o
+ * `data` e devolve `PGRST116`; o chamador lia isso como "não existe" e inseria
+ * outro negócio a cada passagem. Depois do M1 (`20270730000050`, que derrubou
+ * os três uniques do par funil+lead) N linhas é o caso normal — é assim que
+ * recompra existe.
+ *
+ * Lança em falha de leitura: o `catch` da auto-transição pula a transição e
+ * loga, em vez de inserir às cegas e duplicar o negócio.
+ */
+async function readCurrentSystemPipeEntry(slug: SystemPipeSlug, leadId: string) {
+  const { data, error } = await supabase
+    .from("pipeline_entries")
+    .select("id, closed_at, pipeline:pipelines!inner(slug)")
+    .eq("lead_id", leadId)
+    .eq("pipeline.slug", slug)
+    .eq("pipeline.type", "system")
+    .order("closed_at", { ascending: false, nullsFirst: true })
+    .order("stage_changed_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(SYSTEM_PIPE_ENTRY_READ_CAP);
+
+  if (error) throw error;
+
+  const rows = data ?? [];
+  if (rows.length > 1) {
+    // Sinal explícito de "existem N" — o que `.maybeSingle()` apagava.
+    console.warn(
+      `[auto-transition] ${rows.length} negócios para lead=${leadId} no funil ${slug}; usando o primeiro ABERTO, ou o mais recente se todos estiverem fechados.`,
+    );
+  }
+  return rows.find((r) => r.closed_at == null) ?? rows[0] ?? null;
+}
+
 /** Mover lead entre etapas (drag-and-drop) */
 export function useMoveLeadInCustomPipe() {
   const queryClient = useQueryClient();
@@ -906,9 +965,22 @@ export function useMoveLeadInCustomPipe() {
           const targetStageKey = stageRow.target_stage_key;
 
           if (pipeType === "whatsapp") {
-            await supabase.from("leads").update({ pipe_whatsapp: targetStageKey }).eq("id", data.lead_id);
-            const { data: existing } = await supabase
-              .from("pipe_whatsapp").select("id").eq("lead_id", data.lead_id).maybeSingle();
+            // SCRUM-202: a transição escreve só a entry (via a view homônima). O
+            // espelho `leads.pipe_whatsapp` sai daqui por dois motivos, e nenhum
+            // é estilo:
+            //
+            //   1. era REDUNDANTE — quem alimenta a coluna é o gatilho
+            //      `sync_pipeline_entry_to_lead_pipe_whatsapp`, que dispara no
+            //      write da entry logo abaixo. Escrever dos dois lados só cria a
+            //      chance de divergirem;
+            //   2. era ESCRITA DIRETA em `leads` fora da porta do Negócio, e
+            //      desde a `20270803000040` o espelho deixou de acompanhar o
+            //      move — então este UPDATE podia deixar a coluna dizendo uma
+            //      etapa que a entry não confirma.
+            //
+            // A coluna é dropada na fatia 3 (SCRUM-222); esta linha viraria erro
+            // de coluna inexistente derrubando a transição inteira.
+            const existing = await readCurrentSystemPipeEntry("whatsapp", data.lead_id);
             if (existing) {
               await supabase.from("pipe_whatsapp").update({ status: targetStageKey }).eq("id", existing.id);
             } else {
@@ -917,8 +989,7 @@ export function useMoveLeadInCustomPipe() {
               });
             }
           } else if (pipeType === "confirmacao") {
-            const { data: existing } = await supabase
-              .from("pipe_confirmacao").select("id").eq("lead_id", data.lead_id).maybeSingle();
+            const existing = await readCurrentSystemPipeEntry("confirmacao", data.lead_id);
             if (existing) {
               await supabase.from("pipe_confirmacao").update({ status: targetStageKey }).eq("id", existing.id);
             } else {
@@ -927,8 +998,7 @@ export function useMoveLeadInCustomPipe() {
               });
             }
           } else if (pipeType === "propostas") {
-            const { data: existing } = await supabase
-              .from("pipe_propostas").select("id").eq("lead_id", data.lead_id).maybeSingle();
+            const existing = await readCurrentSystemPipeEntry("propostas", data.lead_id);
             if (existing) {
               await supabase.from("pipe_propostas").update({ status: targetStageKey }).eq("id", existing.id);
             } else {

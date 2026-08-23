@@ -15,36 +15,41 @@ Este doc é **mínimo**. Para detalhe, navegar via:
   - `src/modules/<bc>/CLAUDE.md` — 14 sub-CLAUDE.md (1 por BC)
 - **AGENTS.md** raiz — spec agent-agnostic
 - **llms.txt** raiz — index curado pra LLMs
+- **`docs/MASTER-ROADMAP-WORLD-CLASS.md`** — 7 waves, 47 gaps, dependências explícitas. 🔴 **Ler ANTES de remover qualquer arquivo.** É o que distingue **andaime de wave futura** de **resíduo morto** — tabela vazia e código sem chamador são o estado *esperado* de uma wave ainda não construída.
 
-## Subagentes (7)
+### ⚠️ Antes de remover arquivo: de onde ele veio?
 
-Entry point = **orchestrador** (coordenador). Ele classifica, roteia pelo ramo, custodia o Context Packet e segura o estado com loops de reprovação. Pipeline por ramo (`‖` = paralelo, mesma mensagem):
-
-```
-BUG      → diagnosticador → engenheiro → [revisor ‖ qa] → arquiteto(versiona) → humano deploya
-FEATURE  → arquiteto(macro) → engenheiro (+design ‖) → [revisor ‖ qa] → arquiteto(versiona) → humano
-REFACTOR → arquiteto(plano) → engenheiro → [revisor ‖ qa] → arquiteto(versiona) → humano
-VISUAL   → design(spec) → engenheiro → [revisor ‖ qa] → arquiteto(versiona) → humano
-TRIVIAL  → engenheiro → revisor → arquiteto(versiona)
+```bash
+git log --all --follow --diff-filter=A -- <arquivo>   # commit que CRIOU o arquivo
 ```
 
-**Fan-out revisor ‖ qa**: leituras independentes do mesmo diff, despachadas juntas. Pré-condição = `lint`+`test:unit`+`build` verdes no output do engenheiro. Serializa (revisor primeiro) só se build vermelho, RLS/multi-tenant/permissões não revisado, payment/efeito externo irreversível, ou migration destrutiva. Junção: `APROVA+PASSA` → arquiteto; qualquer `REPROVA`/`FALHA` → engenheiro em **uma** volta com os dois feedbacks fundidos. REPROVA de segurança bloqueia mesmo com QA PASSA.
+Nasceu num commit de fundação (ex.: `8dd7d94c` *"feat: waves 0-7 — world-class CRM foundation"*)? **É andaime de roadmap, não resíduo. Pare.** Custa 2 segundos e é a checagem que não existia quando a #1434 removeu o andaime da Wave 2 (e-mail/SMS) e precisou ser revertida pela #1456.
 
-**Context Packet** (`.claude/skills/_shared/context-packet.md`): subagentes não compartilham contexto, então o CP é o estado que viaja com a task — `Mapa verificado`, `Achados`, `Descartado`, `Comandos que valem`, `Aberto`. Todo brief carrega o CP **verbatim**; cada papel devolve `CP-v(N+1)`; o orchestrador propaga e funde. Sem CP, cada hop re-explora o repo do zero (medido: 197 leituras para 19 edições numa sessão).
+Duas regras que saíram daquele episódio:
+1. **PR que remove código nasce como `draft`**, e traz no corpo *de onde os arquivos vieram* (a saída do comando acima).
+2. **`count(*) = 0` NÃO é evidência de feature morta.** Tabela vazia também significa: é o futuro (SCRUM-43) · está em construção · é cache/lock com TTL · é sink quebrado por RLS · é infra nova não exercitada. Só a sexta causa autoriza remover. Prova mínima: `count(*)` + `max(created_at)` + **quem ESCREVE** (`git grep 'from("<tabela>")'`) + onde a UI está montada + **a edge function está deployada?**
 
-Loops: revisor **REPROVA** ou qa **FALHA** → orchestrador re-despacha o engenheiro com feedback. Uma rodada de fan-out = **uma** volta. Cap = **2 voltas** no mesmo ponto → escala CTO.
+⚠️ **O custo é assimétrico:** adicionar código errado dá erro; **remover código errado dá silêncio**, e a conta chega meses depois.
 
-| Subagente | Função | Skill |
-|-----------|--------|-------|
-| **orchestrador** | Entry + coordenador. grill-with-docs + grill-me, classifica, roteia, segura estado, aplica loops+cap | `orchestrador` |
-| **diagnosticador** | Causa-raiz de bug/regressão (reproduz→minimiza→localiza). Não implementa | `diagnosticador` |
-| **arquiteto** | Arquitetura macro (entrada) + versionamento/prep-PR (saída). Não roteia, não sobe prod | `arquiteto` |
-| **engenheiro** | Fullstack — TS/React/Deno + DB/RLS/RPC + tests + segurança + docs Obsidian/`.specs` + auto-QA | `engenheiro` |
-| **design** | UI/UX completo — visual, interação, microcopy, motion (invoca `hm-design`) | `design` |
-| **revisor** | Gate qualidade+segurança. Lógica + rubric segurança obrigatório em área frágil. APROVA/REPROVA | `revisor` |
-| **qa** | Teste end-to-end real (dirige o fluxo, observa). PASSA/FALHA (invoca `hm-qa`) | `qa` |
+## Como o trabalho anda (revisto 2026-07-28)
 
-**Regras**: orchestrador coordena, nunca implementa/versiona. arquiteto desenha macro + versiona, nunca roteia. diagnosticador/revisor/qa nunca implementam — apontam; correção é do engenheiro. engenheiro cobre Impl+DB+Tests+Security+Docs. Áreas frágeis (Copilot/WhatsApp/Uazapi/Permissões/RLS/multi-tenant/PII/payment) = rubric de segurança obrigatório e bloqueante no revisor. Commit+push = arquiteto; **prod = humano** (arquiteto só prepara PR). Default deploy: dev. Prod: só com pedido explícito.
+**Default: o agente da sessão faz o trabalho direto.** Sem pipeline de papéis, sem roteamento obrigatório, sem Context Packet. O harness de 7 subagentes foi aposentado — arquivado em `.claude/_archive/skills-2026-07-28/`. Ele custava mais coordenação do que o trabalho coordenado: cada task pagava 5 hops de serialização de estado, e o Context Packet existia só pra remendar o fato de que subagentes não compartilham contexto.
+
+Subagente agora é **ferramenta, não protocolo**. Use quando ganha de verdade:
+- Busca ampla (varrer muitos arquivos/convenções) → `Explore`
+- Trabalhos genuinamente paralelos e independentes
+- O CTO pedir revisão adversarial explícita
+
+**Disciplinas que continuam valendo** (como comportamento, não como papel):
+
+1. **Bug → causa-raiz antes de fix.** Reproduz → minimiza → hipótese → instrumenta → localiza `arquivo:linha`. Não trate sintoma.
+2. **Pergunta ≠ ordem de conserto.** "Por que X?" / "isso é normal?" → responda e pare. Não abra PR que ninguém pediu.
+3. **Escopo = o diff.** Nunca trave a task por dívida que a branch não criou. Reporte `HERDADO — arquivo:linha — o quê` e siga; vira issue.
+4. **Gate é delta, não zero absoluto.** `lint:ratchet` + `typecheck:ratchet` + `test:ratchet` + `build`. O repo carrega 805 erros de tipo, 29.142 warnings e **178 testes vermelhos** herdados — exigir verde absoluto trava tudo pra sempre. **Nunca use `npm run lint` cru como sinal**: sai 0 mas imprime `✖ 29142 problems`. **Nem `npm run test:unit` cru**: reprova sempre, por 178 falhas que a sua branch não criou (medido 2026-08-05; a causa dominante é `No QueryClient set` em teste que monta componente sem `QueryClientProvider`). O ratchet reprova só o introduzido e avisa quando um teste do baseline volta a passar — aí `npm run test:baseline` encolhe o teto, com uma frase no PR por linha que sai.
+5. **Área frágil → `/security-rubric`**, disparado pelo diff (RLS, multi-tenant, permissões, auth, secrets, CORS, PII, payment, Copilot, WhatsApp/Uazapi). Bloqueante.
+6. **Fechar = `/ship`** — branch nova, stage seletivo, commit Conventional, push, PR. **Prod é botão do humano.** Default deploy: dev.
+
+Skills de apoio sob demanda: `/design` (barra visual), `/code-review`, `/grilling` (stress-test de plano), `/diagnose`, `/tdd`, `/triage`, `/to-spec`, `/to-tickets`, `n8n-*`.
 
 ## Agent skills
 
@@ -96,16 +101,21 @@ Regras, sem exceção:
 3. **`list_branches` antes de criar** — nunca duas.
 4. Prod é **botão do humano**. Branch valida antes; não vira ambiente permanente.
 
-✅ **BASELINE FEITO (#1233, 2026-07-23) — o "bloqueio 840" morreu.** Ledger de prod reconciliado = **18 linhas** (baseline + ativas, bate 1:1 com o repo); as 840 antigas em `supabase/migrations/archive/` (não reaplicar). O texto anterior ("BLOQUEIO ATIVO, MIGRATIONS_FAILED, baseline não feito") era **stale e falso** — mesmo veneno do #1212/#1223.
+✅ **BASELINE FEITO (#1233, 2026-07-23) — o "bloqueio 840" morreu.** As 840 antigas estão em `supabase/migrations/archive/` (não reaplicar). O texto anterior ("BLOQUEIO ATIVO, MIGRATIONS_FAILED, baseline não feito") era **stale e falso** — mesmo veneno do #1212/#1223.
 
-⚠️ **A branch precisa de `db push` do repo, não só `create_branch`:** a linha do baseline no ledger é **marcador de 189 chars** (não o dump), então `create_branch` replaya sobre schema vazio; o `db push` do repo aplica o baseline real (1.8 MB). Passo-a-passo no runbook.
+⚠️ **Ledger de prod NÃO bate 1:1 com o repo.** Medido 2026-07-30 (`list_migrations`): prod = **38 versões**, repo = **36 arquivos**, com **10 pendentes** e **12 versões em prod sem arquivo no repo**. A versão anterior deste parágrafo dizia "18 linhas, bate 1:1" — **stale**. Consequência prática: `db push` do repo **arrasta os 10 pendentes**, não só a sua migration, e `20270203000000_omie_foundation.sql` **falha** (`42P07`, o objeto já vem no baseline). Confira o drift antes de aplicar; receita e classes de drift no runbook.
+
+⚠️ **A branch precisa de `db push` do repo, não só `create_branch`:** a linha do baseline no ledger é **marcador de 189 chars** (não o dump), então `create_branch` replaya sobre schema vazio; o `db push` do repo aplica o baseline real (1.8 MB). Confirmado 2026-07-30: a branch nasce `MIGRATIONS_FAILED` com `preview_project_status: ACTIVE_HEALTHY` (Postgres de pé, replay morto), ledger com 3 linhas mentindo e **0 tabelas** — reverta essas 3 antes do push. Passo-a-passo no runbook.
+
+⚠️ **Branch valida a migration; NÃO licencia o front.** `gen types` a partir da branch **corrompe** `types.ts` (a branch não tem as 12 órfãs de prod). Regenerar tipos, remover ponte de compatibilidade e virar flag que assume o parâmetro novo — os três só depois do apply em **prod**, num commit.
 
 ### 🔒 GUARDA MECÂNICA de escrita — `db push` NÃO é seguro na mão
 Um `db push` com URL/ref errado escreve em PROD (já aconteceu). Defesa por desenho, não disciplina:
-- **Checkout NÃO-LINKADO por padrão.** Provado: `supabase db push` bare → `Cannot find project ref`. Linkar = ato deliberado e temporário, desfeito ao fim. **1ª linha.**
-- **Toda escrita via `scripts/db-push-branch.sh`** — recusa a URL se contiver o ref de prod (`jsjsmuncfkbsbzqzqhfq`), roda `--dry-run`, exige confirmação, aborta se o push tocar dado real ("1 org promovida").
-- **MCP Supabase em `read_only`** — só leitura + `create/list/delete_branch`; escrita (`execute_sql`/`apply_migration`) negada. Escrita de QA = `psql` na branch (`supabase/qa-seed/`), nunca MCP.
+- **Checkout NÃO-LINKADO por padrão.** Provado: `supabase db push` bare → `Cannot find project ref`. Linkar = ato deliberado e temporário, desfeito ao fim. **1ª linha.** ⚠️ Isso **deriva**: em 2026-07-30 o checkout estava linkado ao dev aposentado. E `scripts/deploy-create-org-user.sh:10` roda `supabase link` em **prod** sem condição e deixa linkado. Rode `supabase unlink` ao fim de qualquer coisa que linke.
+- **Toda escrita via `scripts/db-push-branch.sh`** — recusa ref de prod (`jsjsmuncfkbsbzqzqhfq`), recusa o dev aposentado, recusa checkout linkado, roda `--dry-run`, imprime tudo que seria aplicado, recusa migration que toque dado sem `--allow-dml`, e exige confirmação (TTY, ou `--confirm <ref>` batendo com o ref da própria URL). *Escrito em 2026-07-30 — antes disso o CLAUDE.md declarava este arquivo obrigatório e ele **nunca existiu em nenhum ref**.*
+- **MCP Supabase em `read_only`** — leitura (`execute_sql` com `SELECT` funciona) + `create/list/delete_branch`. Escrita (`apply_migration`) negada. Escrita de QA = `psql` na branch (`supabase/qa-seed/`), nunca MCP — mas **`psql` não está no PATH** desta máquina; o CLI aplica migration sem ele.
 - **Migration = só schema** (guarda F4): `DO`/backfill de dado de cliente não entra no apply; assim URL errada vira erro de schema recuperável, não mudança de dado.
+- **`npm run dev` recusa produção** — `predev` roda `scripts/assert-dev-not-prod.mjs`, que espelha a precedência do Vite (`.env` < `.env.local` < `.env.development` < `.env.development.local`) e aborta se o alvo for prod ou o dev aposentado. Aponte para a branch com **`npm run dev:branch`** (escreve `.env.development.local`, gitignored). Escape deliberado: `ALLOW_PROD_DEV=1 npm run dev`. *Escrito 2026-07-30, depois de achar **dois** servidores de dev de pé havia dois dias servindo PROD — a causa era um `.env.development.local` local apontando pra prod, que vence todos os outros `.env`.* Ao encerrar a branch, apague o arquivo.
 
 Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`
 

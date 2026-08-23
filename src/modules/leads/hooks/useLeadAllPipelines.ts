@@ -65,10 +65,19 @@ export function useLeadAllPipelines(leadId: string | null) {
         { data: customStagesAll },
         { data: pipeUpsell },
       ] = await Promise.all([
+        // Ordem idêntica à de `readActivePipelineEntry`
+        // (`pipelines/hooks/model/usePipelineEntries.ts`) e à de `readPipeEntries`
+        // (`supabase/functions/_shared/pipeline-adapter.ts`): aberto antes de
+        // fechado, depois o mais recente. É o que faz o PRIMEIRO negócio de cada
+        // funil aqui ser o mesmo que o kanban e o Copilot chamam de corrente.
         (supabase.from as any)("pipeline_entries")
-          .select("id, pipeline_id, stage_key")
+          .select("id, pipeline_id, stage_key, closed_at, stage_changed_at, created_at")
           .eq("lead_id", leadId)
-          .eq("organization_id", orgId),
+          .eq("organization_id", orgId)
+          .order("closed_at", { ascending: false, nullsFirst: true })
+          .order("stage_changed_at", { ascending: false })
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false }),
         supabase
           .from("pipeline_stages")
           .select("pipeline_type, stage_key, name, color, position, stage_role")
@@ -107,33 +116,79 @@ export function useLeadAllPipelines(leadId: string | null) {
 
       const getStages = (pipeType: string) => stagesByDbType.get(PIPE_TYPE_MAP[pipeType] || pipeType) || [];
 
-      // Map pipeline_id → entry
-      const entryByPipelineId = new Map(entries.map((e: any) => [e.pipeline_id, e]));
+      /**
+       * Map pipeline_id → TODAS as entries daquele funil, não uma só.
+       *
+       * Era `new Map(entries.map(e => [e.pipeline_id, e]))`: com dois negócios no
+       * mesmo funil (o que o M1 passa a permitir — recompra) a segunda linha
+       * sobrescrevia a primeira e um dos negócios sumia da tela. Não é só ruído
+       * visual: `DealDetailDialog` acha o funil do negócio por
+       * `pipelines.find(p => p.pipeId === entryId)`, então o negócio descartado
+       * abria o drawer no estado "negócio que sumiu embaixo do usuário".
+       *
+       * O critério de QUAL é o corrente continua sendo o mesmo do resto do
+       * sistema — só que aqui ele vira ORDEM, não filtro: quem consome com
+       * `.find(...)` (ex.: `whatsappEntry` em `CrossPipePanel`) pega o corrente,
+       * e quem itera (as rails da seção "Negócios") vê os N.
+       */
+      const entriesByPipelineId = new Map<string, any[]>();
+      for (const e of entries as any[]) {
+        const arr = entriesByPipelineId.get(e.pipeline_id);
+        if (arr) arr.push(e);
+        else entriesByPipelineId.set(e.pipeline_id, [e]);
+      }
+
+      /**
+       * Negócios de um funil, aberto antes de fechado.
+       *
+       * O `ORDER BY` já entrega assim; a partição é estável e refaz em JS só o
+       * passo 1 de `pickActiveEntry` (`_shared/pipeline-adapter.ts`), pelo mesmo
+       * motivo de lá — se `nullsFirst` mudar de comportamento, a escolha do
+       * corrente continua certa. Os desempates de recência seguem vindo do SQL.
+       */
+      const dealsOf = (pipelineId: string | null | undefined): any[] => {
+        if (!pipelineId) return [];
+        const rows = entriesByPipelineId.get(pipelineId) ?? [];
+        return [
+          ...rows.filter((e) => e.closed_at == null),
+          ...rows.filter((e) => e.closed_at != null),
+        ];
+      };
 
       // Map pipeline slug → pipeline
       const pipelineBySlug = new Map(pipelines.map((p) => [p.slug, p]));
 
       const results: PipelineStatus[] = [];
 
-      // System pipelines
+      // System pipelines — uma linha POR NEGÓCIO; sem negócio, uma linha vazia
+      // (é ela que os consumidores leem como "dá pra abrir negócio aqui").
       for (const [slug, pipeType] of Object.entries(SYSTEM_SLUG_TO_PIPE)) {
         const pipeline = pipelineBySlug.get(slug);
-        const entry = pipeline ? entryByPipelineId.get(pipeline.id) : null;
         const stages = getStages(pipeType);
         const label = slug === "whatsapp" ? "Qualificação" : slug === "confirmacao" ? "Confirmação" : "Propostas";
         const color = slug === "whatsapp" ? "#6366f1" : slug === "confirmacao" ? "#22c55e" : "#f59e0b";
-
-        results.push({
-          type: "standard",
+        const base = {
+          type: "standard" as const,
           pipeType,
           label,
           color,
           pipelineDbId: pipeline?.id ?? null,
-          pipeId: entry?.id || null,
-          currentStage: entry?.stage_key || null,
-          currentStageLabel: stages.find((s) => s.id === entry?.stage_key)?.label || null,
           stages,
-        });
+        };
+
+        const deals = dealsOf(pipeline?.id);
+        if (deals.length === 0) {
+          results.push({ ...base, pipeId: null, currentStage: null, currentStageLabel: null });
+          continue;
+        }
+        for (const entry of deals) {
+          results.push({
+            ...base,
+            pipeId: entry.id || null,
+            currentStage: entry.stage_key || null,
+            currentStageLabel: stages.find((s) => s.id === entry.stage_key)?.label || null,
+          });
+        }
       }
 
       // Upsell (still legacy — no sync trigger yet)
@@ -158,21 +213,32 @@ export function useLeadAllPipelines(leadId: string | null) {
       });
 
       for (const pipeline of customPipelines) {
-        const entry = entryByPipelineId.get(pipeline.id);
         const stages = (stagesByPipeline.get(pipeline.id) || []).sort((a, b) => a.position - b.position);
-        const currentStage = entry ? stages.find((s) => s.stage_key === entry.stage_key || s.id === entry.stage_key) : null;
-
-        results.push({
-          type: "custom",
+        const base = {
+          type: "custom" as const,
           pipelineId: pipeline.id,
           pipelineName: pipeline.name,
           pipelineColor: pipeline.color,
           pipelineIcon: pipeline.icon,
-          entryId: entry?.id || null,
-          currentStageId: currentStage?.id || null,
-          currentStageName: currentStage?.name || null,
           stages: stages.map((s) => ({ id: s.id, name: s.name, color: s.color ?? "#64748b", position: s.position ?? 0, role: (s as { stage_role?: string | null }).stage_role ?? null })),
-        });
+        };
+
+        // O M1 também derrubou `custom_pipe_entries_pipeline_id_lead_id_key`, então
+        // recompra em funil customizado tem o mesmo N que o system.
+        const deals = dealsOf(pipeline.id);
+        if (deals.length === 0) {
+          results.push({ ...base, entryId: null, currentStageId: null, currentStageName: null });
+          continue;
+        }
+        for (const entry of deals) {
+          const currentStage = stages.find((s) => s.stage_key === entry.stage_key || s.id === entry.stage_key);
+          results.push({
+            ...base,
+            entryId: entry.id || null,
+            currentStageId: currentStage?.id || null,
+            currentStageName: currentStage?.name || null,
+          });
+        }
       }
 
       return results;
@@ -184,6 +250,46 @@ export function useLeadAllPipelines(leadId: string | null) {
 // ─── Mutation: add lead to a standard pipeline ────────────────
 // Writes to legacy tables → sync triggers push to pipeline_entries
 
+/**
+ * Recusa dono que não é da org. Função pura de dados — sem React, de propósito:
+ * importar o barril `@/modules/identity` num componente de board arrasta um
+ * grafo grande e estourou o orçamento de 5s dos testes vizinhos.
+ *
+ * As policies dos pipes validam `organization_id` da linha, nunca o org do
+ * membro referenciado; a FK garante que o uuid existe, não de quem ele é. Ver
+ * M6 em `08 — Backlog/em-progresso/lead-negocio-migrations-db` — o conserto
+ * definitivo é no banco, isto é defesa em profundidade.
+ */
+export async function assertMemberInOrg(
+  memberId: string,
+  organizationId: string,
+): Promise<void> {
+  const { data, error } = await supabase
+    .from("team_members")
+    .select("id")
+    .eq("id", memberId)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Responsável não pertence a esta organização");
+}
+
+export interface AddLeadToStandardPipeVars {
+  leadId: string;
+  pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+  stageId: string;
+  /**
+   * Dono do negócio (`team_members.id`). Ausente = quem está criando, que era
+   * o comportamento único antes do modal de novo negócio existir.
+   */
+  ownerId?: string | null;
+  /** Só `propostas` tem coluna de valor. */
+  saleValue?: number | null;
+  /** Só `confirmacao` — os lembretes D-5/D-3/D-1 dependem deste carimbo. */
+  meetingDate?: string | null;
+  notes?: string | null;
+}
+
 export function useAddLeadToStandardPipe() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
@@ -193,45 +299,86 @@ export function useAddLeadToStandardPipe() {
       leadId,
       pipeType,
       stageId,
-    }: {
-      leadId: string;
-      pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
-      stageId: string;
-    }) => {
+      ownerId,
+      saleValue,
+      meetingDate,
+      notes,
+    }: AddLeadToStandardPipeVars) => {
       if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
 
       // Virtual master team_members carry a non-UUID id ("master-virtual-<uuid>")
       // and must never be written into uuid FK columns (responsible_id/sdr_id/closer_id).
-      const memberId = isVirtualTeamMember(teamMember.id) ? null : teamMember.id;
+      const currentMemberId = isVirtualTeamMember(teamMember.id) ? null : teamMember.id;
+      // Mesmo guard vale pro dono escolhido no modal: master virtual não é FK.
+      const chosenOwnerId =
+        ownerId && !isVirtualTeamMember(ownerId) ? ownerId : null;
 
-      if (pipeType === "qualificacao") {
-        const { error } = await supabase.from("pipe_whatsapp").insert({
-          lead_id: leadId,
-          status: stageId,
-          responsible_id: memberId,
-          sdr_id: memberId,
-          organization_id: teamMember.organization_id,
-        });
-        if (error) throw error;
-      } else if (pipeType === "confirmacao") {
-        const { error } = await supabase.from("pipe_confirmacao").insert({
-          lead_id: leadId,
-          status: stageId,
-          responsible_id: memberId,
-          sdr_id: memberId,
-          organization_id: teamMember.organization_id,
-        });
-        if (error) throw error;
-      } else if (pipeType === "propostas") {
-        const { error } = await supabase.from("pipe_propostas").insert({
-          lead_id: leadId,
-          status: stageId,
-          responsible_id: memberId,
-          closer_id: memberId,
-          organization_id: teamMember.organization_id,
-        });
+      /**
+       * Dono escolhido tem que ser da MESMA org.
+       *
+       * As policies dos pipes checam `organization_id` da linha — nenhuma valida
+       * o org do membro referenciado em `responsible_id`/`sdr_id`/`closer_id`. A
+       * FK garante que o uuid existe, não de quem ele é. Sem esta checagem, um
+       * `ownerId` de outra org entra numa linha desta org, e qualquer join que
+       * resolve responsável → `team_members.name` passa a exibir o nome de um
+       * membro de fora — vazamento cross-tenant, além de atribuição suja.
+       *
+       * Guarda de cliente é defesa em profundidade, não a última: o conserto
+       * definitivo é no banco (CHECK/trigger comparando as orgs). Registrado em
+       * `08 — Backlog/em-progresso/lead-negocio-migrations-db`.
+       */
+      if (chosenOwnerId) await assertMemberInOrg(chosenOwnerId, teamMember.organization_id);
+
+      const memberId = chosenOwnerId ?? currentMemberId;
+      const trimmedNotes = notes?.trim() ? notes.trim() : null;
+
+      /**
+       * ADR-0023 decisões 3 e 9 — abrir negócio é UM ato, não dois.
+       *
+       * Antes daqui saíam três `insert` nas views de compatibilidade, e cada um
+       * criava só a POSIÇÃO. A identidade (`deals`) nunca nascia: o único
+       * `INSERT INTO deals` do repo vivia no hook de `/negocios`, que a fatia 2
+       * apagou. Resultado: o "negócio" não tinha título próprio — a lista de
+       * Leads derivava um na leitura, a partir do nome do funil, que é
+       * exatamente o que a decisão 9 rejeita por produzir dezenas de milhares de
+       * negócios chamados "Qualificação".
+       *
+       * A RPC `abrir_negocio` faz as duas escritas no corpo de uma função só:
+       * ou nascem identidade e posição ligadas por `deal_id`, ou nenhuma. Do
+       * cliente seriam duas chamadas, e uma falha no meio deixaria card órfão —
+       * o mesmo estado que o backfill do L3 existe para consertar, refeito a
+       * cada erro de rede.
+       *
+       * A RPC é `SECURITY INVOKER`: a permissão continua sendo exatamente a de
+       * criar o card. A pergunta em aberto ("quem pode abrir um negócio?") segue
+       * respondível depois, mexendo em policy.
+       *
+       * `as never` no nome: `abrir_negocio` ainda não está em
+       * `integrations/supabase/types.ts`, que é gerado e só é regenerado depois
+       * do apply em prod (regenerar a partir de branch efêmera corrompe o
+       * arquivo — ver CLAUDE.md).
+       */
+      const RPC_PIPE: Record<string, string> = {
+        qualificacao: "whatsapp",
+        confirmacao: "confirmacao",
+        propostas: "propostas",
+      };
+
+      if (RPC_PIPE[pipeType]) {
+        const { error } = await supabase.rpc("abrir_negocio" as never, {
+          p_lead_id: leadId,
+          p_pipe: RPC_PIPE[pipeType],
+          p_stage: stageId,
+          p_owner_id: memberId,
+          p_value: pipeType === "propostas" ? saleValue ?? null : null,
+          p_meeting_date: pipeType === "confirmacao" ? meetingDate ?? null : null,
+          p_notes: trimmedNotes,
+          p_title: null,
+        } as never);
         if (error) throw error;
       } else if (pipeType === "upsell") {
+        // Carteira entra por regra própria (ADR-0023 decisão 8), não por esta
+        // porta — a RPC recusa `upsell` de propósito.
         const { error } = await supabase.from("upsell").insert({
           lead_id: leadId,
           status: stageId,
@@ -244,6 +391,12 @@ export function useAddLeadToStandardPipe() {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       queryClient.invalidateQueries({ queryKey: ["upsell"] });
+      // A camada de negócio da lista de Leads passa a ter linha nova em `deals`
+      // a cada abertura — sem isto, o negócio existe no banco e a lista segue
+      // mostrando o estado anterior até perder e recuperar o foco. Mesmo par que
+      // `useCrossPipeMove` invalida ao mover etapa.
+      queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
+      queryClient.invalidateQueries({ queryKey: ["leads-sales-metrics"] });
     },
   });
 }

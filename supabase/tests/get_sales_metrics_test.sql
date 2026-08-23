@@ -77,7 +77,7 @@ VALUES
   ('99599599-aaaa-2222-0000-000000000995', '99599599-aaaa-0000-0000-000000000995',
    '99599599-aaaa-1111-0000-000000000995', 'Closer 1', 'admin', true),
   ('99599599-aaaa-2222-0001-000000000995', '99599599-aaaa-0000-0000-000000000995',
-   NULL, 'Closer 2', 'membro', true)
+   NULL, 'Closer 2', 'member', true)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.leads (id, organization_id, name)
@@ -122,6 +122,27 @@ WHERE s.organization_id = '99599599-aaaa-0000-0000-000000000995'
   AND s.event_type = 'sale' AND s.sale_value = 2000;
 
 SET LOCAL session_replication_role = origin;
+
+-- Contexto de BACKEND a partir daqui (SCRUM-361).
+--
+-- Sem isto a suíte morre na primeira escrita/leitura que passa por um gate:
+-- `fn_pipeline_stages_guard_money_role` recusa won/lost, e `assert_org_access`
+-- recusa a RPC — as duas com P0001, que aborta o arquivo inteiro e vira
+-- "Bad plan. You planned N tests but ran M".
+--
+-- O comentario antigo dizia "seed de sistema como superusuario". Isso NUNCA foi
+-- verdade: medido em producao, `postgres` tem rolsuper=false (so `supabase_admin`
+-- e superusuario). O ramo `rolsuper` do guard nunca disparou para esta suite, em
+-- lugar nenhum. O caminho privilegiado REAL e o backend — quem semeia funil em
+-- producao e a edge function de provisionamento, com service_role.
+--
+-- A autorizacao continua provada onde ela e o assunto: as secoes de membro e de
+-- cross-org trocam de papel explicitamente mais abaixo.
+SET LOCAL role service_role;
+-- E o CLAIM, nao so o papel do Postgres: `assert_org_access` decide por
+-- `auth.role()`, que le `request.jwt.claims`. Medido no CI — com SET ROLE
+-- sozinho a RPC continuava recusando com access_denied.
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 -- ---------------------------------------------------------------------------
 -- (b) Net-of-reversal + (c) stream split + (d) invariante closers
@@ -207,7 +228,11 @@ SELECT is(
 SELECT is(
   (public.get_sales_metrics('99599599-aaaa-0000-0000-000000000995','month','2027-07-15',
       NULL, NULL, NULL, '99599599-aaaa-2222-0000-000000000995') ->> 'revenue_total')::numeric,
-  1000 + 500 + 7777 + 111 + 400,  -- s1,s2,s6,s7,s8 do closer1
+  -- `::numeric` explícito: `is()` do pgTAP é `anyelement, anyelement`, e a soma
+  -- de literais inteiros dá INTEGER. Sem o cast, o par vira
+  -- `is(numeric, integer)` e o Postgres nem acha a função — a suíte aborta ali,
+  -- sem chegar às nove asserções seguintes.
+  (1000 + 500 + 7777 + 111 + 400)::numeric,  -- s1,s2,s6,s7,s8 do closer1
   '(g) filtro por closer1 soma só as vendas dele (sale_responsible_id)');
 
 -- ---------------------------------------------------------------------------

@@ -56,19 +56,46 @@ interface ActionContext {
 
 // ─── Variable substitution ──────────────────────────────────────────────────
 
-async function resolveVariables(
+/**
+ * Substitui `{{variavel}}` pelo valor do lead / do contexto de execução.
+ *
+ * `opts.escape` existe para os nós de código: um lead chamado `Pneus "Bom Preço" Ltda`
+ * quebra o `JSON.parse` do nó JSON, e um chamado `<script>alert(1)</script>` injeta no
+ * HTML gerado. Sem o hook, os dois nós nasceriam com bug de dado real. Parâmetro
+ * opcional de propósito — os call-sites de ação passam 4 argumentos e nada muda para eles.
+ */
+export async function resolveVariables(
   supabase: SupabaseClient,
   leadId: string,
   template: string,
   executionContext?: Record<string, unknown>,
+  opts?: { escape?: (raw: string) => string },
 ): Promise<string> {
   if (!template || !template.includes("{{")) return template;
+
+  const esc = opts?.escape ?? ((v: string) => v);
+
+  /**
+   * Substitui usando replacement de FUNÇÃO — nunca de string.
+   *
+   * `replaceAll(alvo, "texto")` roda GetSubstitution e interpreta `$$`, `$&`, "$`" e `$'`
+   * DENTRO do valor. Como o valor aqui é dado do lead, isso atravessa o `esc`: `jsonEscape`
+   * neutraliza `"` e `\`, mas não `$`. Medido: `notes` = `cliente disse: 'paguei US$' ontem`
+   * quebrava o JSON estruturalmente (`$'` = "tudo depois do match") e derrubava a execução
+   * inteira no `JSON.parse` do nó de código; `promo $$$` perdia um caractere em silêncio; e
+   * `total $&` reinjetava o `{{placeholder}}` cru no payload enviado ao cliente.
+   *
+   * A forma de função devolve o texto literal. Vale também para os call-sites SEM escape
+   * (mensagem de WhatsApp), onde a mesma corrupção já existia antes desta branch.
+   */
+  const sub = (haystack: string, needle: string, value: string): string =>
+    haystack.replaceAll(needle, () => esc(value));
 
   // First pass: resolve execution context variables (e.g., {{ai_message}} from previous nodes)
   if (executionContext) {
     for (const [key, val] of Object.entries(executionContext)) {
       if (val !== null && val !== undefined && typeof val !== "object") {
-        template = template.replaceAll(`{{${key}}}`, String(val));
+        template = sub(template, `{{${key}}}`, String(val));
       }
     }
     // If all variables resolved, return early
@@ -82,11 +109,26 @@ async function resolveVariables(
     // tipos do postgrest-js só sabe ler um literal. Com `string` ele devolve
     // `ParserError`, a linha vira `GenericStringError` e TODO acesso a coluna
     // aqui embaixo virava um TS2339. O texto enviado ao servidor é idêntico.
-    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id, responsible_id, organization_id, faturamento, segment, urgency, notes, origin")
+    // SCRUM-202: `pipe_whatsapp` saiu desta lista. Ela era LIDA e nunca USADA —
+    // `{{estagio}}` logo abaixo vem de `waEntry.stage_key`, não da coluna. Isto
+    // é a SEGUNDA cópia do mesmo `resolveVariables`; a primeira
+    // (`action-handlers/whatsapp-helpers.ts:287`) perdeu a coluna quando o
+    // espelho deixou de ser fonte da etapa, e esta ficou para trás.
+    //
+    // Sobra de select não é inócua aqui: no DROP COLUMN da fatia 3 o PostgREST
+    // devolve `column leads.pipe_whatsapp does not exist` e a query inteira
+    // falha — ou seja, TODA resolução de variável de ação de workflow para de
+    // funcionar por causa de uma coluna que ninguém lia. É a classe de sítio que
+    // o SCRUM-202 existe para varrer, e o inventário de 8 não a continha.
+    .select("name, company, email, phone, qualification_score, rating, sdr_id, closer_id, responsible_id, organization_id, faturamento, segment, urgency, notes, origin")
     .eq("id", leadId)
     .maybeSingle();
 
   if (!lead) return template;
+
+  // ADR-0023 §10: `{estagio}` é a etapa do NEGÓCIO. Ver a nota longa em
+  // `action-handlers/whatsapp-helpers.ts` — a coluna espelho congela no MOVE.
+  const waEntry = await getPipeEntry(supabase, leadId, lead.organization_id as string, "whatsapp");
 
   let result = template;
 
@@ -96,7 +138,7 @@ async function resolveVariables(
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
-    estagio:    lead.pipe_whatsapp || "",
+    estagio:    waEntry?.stage_key || "",
     score:      String(lead.qualification_score ?? ""),
     rating:     String(lead.rating ?? ""),
     faturamento: String(lead.faturamento ?? ""),
@@ -179,7 +221,7 @@ async function resolveVariables(
   }
 
   for (const [key, val] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, val);
+    result = sub(result, `{{${key}}}`, val);
   }
 
   // Campaign variables: {{campanha_nome}}, {{campanha_estagio}}
@@ -213,7 +255,7 @@ async function resolveVariables(
 
   // Second pass for late-bound vars (campaign + AI)
   for (const [key, val] of Object.entries(vars)) {
-    result = result.replaceAll(`{{${key}}}`, val);
+    result = sub(result, `{{${key}}}`, val);
   }
 
   // Custom fields: {{custom.campo}}
@@ -240,13 +282,48 @@ async function resolveVariables(
           val = fv?.value || "";
         }
       }
-      result = result.replaceAll(match, val);
+      result = sub(result, match, val);
+    }
+  }
+
+  // Tags: {{tag.<nome>}} → ecoa o nome quando o lead carrega a tag, senão "".
+  //
+  // Este bloco existia SÓ no gêmeo `action-handlers/whatsapp-helpers.ts`. Enquanto esta
+  // função era alcançada apenas por notifyMessage/followupTitle/eventTitle/aiPrompt —
+  // nenhum deles com seletor de variável na tela —, a divergência era invisível. Os
+  // painéis dos nós de código são a primeira UI do repo a oferecer os chips de tag sobre
+  // um campo resolvido por AQUI: sem este bloco, o operador clicava em `Ouro` e a API do
+  // cliente recebia o literal `{{tag.Ouro}}`, com o passo gravado `success` e HTTP 200.
+  const tagMatches = result.match(/\{\{tag\.([^}]+)\}\}/g);
+  if (tagMatches) {
+    const { data: leadTags } = await supabase
+      .from("lead_tags")
+      .select("tags(name)")
+      .eq("lead_id", leadId);
+    // Sem o `Database` gerado, o parser do postgrest-js chuta ARRAY para o embed
+    // `tags(name)`. A relação é muitos-para-um (`lead_tags.tag_id → tags.id`) e o
+    // PostgREST devolve OBJETO — asserção, e não `.returns<>()`, que é método de RUNTIME
+    // do builder e quebraria os dublês de teste. Idem ao gêmeo.
+    const tagRows = (leadTags ?? []) as unknown as Array<{ tags: { name: string | null } | null }>;
+    const tagNames = new Set(
+      tagRows
+        .map((lt) => lt.tags?.name)
+        .filter((n): n is string => Boolean(n)),
+    );
+    for (const match of tagMatches) {
+      const tagName = match.replace("{{tag.", "").replace("}}", "");
+      result = sub(result, match, tagNames.has(tagName) ? tagName : "");
     }
   }
 
   // A suppressed placeholder name (see personalizationName) leaves a punctuation
   // gap like "Boa tarde , tudo bem?" — clean it only when we actually blanked one.
-  if (isPlaceholderLeadName(lead.name)) result = tidyEmptyVarGaps(result);
+  //
+  // Nunca em nó de código: `tidyEmptyVarGaps` é limpeza de COPY de mensagem (come o espaço
+  // antes da vírgula, colapsa espaço duplo), e os nós de código passam por aqui o documento
+  // JSON inteiro — a limpeza reescreveria o texto DENTRO das strings, mudando o que chega
+  // na API do cliente sem erro nenhum. `opts.escape` é o sinal de "isto é código, não copy".
+  if (!opts?.escape && isPlaceholderLeadName(lead.name)) result = tidyEmptyVarGaps(result);
 
   return result;
 }

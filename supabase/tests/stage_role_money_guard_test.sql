@@ -72,7 +72,7 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active)
 VALUES
   ('99090090-aaaa-2222-0000-000000000904', '99090090-0000-0000-0000-000000000904', '99090090-aaaa-1111-0000-000000000904', 'Admin FIX4',  'admin',  true),
-  ('99090090-bbbb-2222-0000-000000000904', '99090090-0000-0000-0000-000000000904', '99090090-bbbb-1111-0000-000000000904', 'Member FIX4', 'membro', true)
+  ('99090090-bbbb-2222-0000-000000000904', '99090090-0000-0000-0000-000000000904', '99090090-bbbb-1111-0000-000000000904', 'Member FIX4', 'member', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- master SEM team_member na org (prova o path master, não o de admin da org).
@@ -82,15 +82,35 @@ ON CONFLICT (user_id) DO NOTHING;
 
 SET LOCAL session_replication_role = origin;  -- triggers ON daqui em diante
 
--- (b) Seed de sistema como superusuário: cria propostas/vendido = won. Se o
--- gate bloqueasse o path privilegiado, isto explodiria (org nova jamais teria won).
+-- Contexto de BACKEND a partir daqui (SCRUM-361).
+--
+-- A semeadura abaixo cria etapa won/lost, e `fn_pipeline_stages_guard_money_role`
+-- (ADR-0017 §1) recusa isso fora de backend/master/admin. O erro é P0001 e aborta
+-- o arquivo — vira "Bad plan. You planned N tests but ran M".
+--
+-- O comentario que estava aqui dizia "como superusuario". Isso NUNCA foi verdade:
+-- medido em producao, `postgres` tem rolsuper=false (so `supabase_admin` e
+-- superusuario), entao o ramo `rolsuper` do guard nunca disparou. O caminho
+-- privilegiado REAL e o backend — em producao quem semeia funil e a edge function
+-- de provisionamento, com service_role.
+--
+-- As secoes de membro e de master mais abaixo trocam de papel explicitamente, e
+-- sao elas que provam a NEGACAO. Esta linha nao as afeta.
+SET LOCAL role service_role;
+-- E o CLAIM, nao so o papel do Postgres: `assert_org_access` decide por
+-- `auth.role()`, que le `request.jwt.claims`. Medido no CI — com SET ROLE
+-- sozinho a RPC continuava recusando com access_denied.
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
+
+-- (b) Seed de sistema pelo BACKEND: cria propostas/vendido = won. Se o gate
+-- bloqueasse o path privilegiado, isto explodiria (org nova jamais teria won).
 SELECT create_default_pipeline_stages('99090090-0000-0000-0000-000000000904');
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
     WHERE organization_id = '99090090-0000-0000-0000-000000000904'
       AND pipeline_type = 'propostas' AND stage_key = 'vendido'),
-  'won', '(b) seed de sistema (superusuário) criou propostas/vendido = won');
+  'won', '(b) seed de sistema (backend) criou propostas/vendido = won');
 
 -- ---------------------------------------------------------------------------
 -- (c/d/e) MEMBRO

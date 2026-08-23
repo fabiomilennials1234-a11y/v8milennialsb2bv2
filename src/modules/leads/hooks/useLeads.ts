@@ -9,6 +9,7 @@ import { normalizePhone } from "@/lib/normalizePhone";
 import { useIdentity } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
 import { applyLeadListFilters } from "../lib/lead-list-filters";
+import { applyLeadListSort, DEFAULT_LEAD_SORT, type LeadListSort } from "../lib/lead-list-sort";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -27,6 +28,15 @@ export interface LeadsFilterParams {
   createdFrom?: string;
   /** Instante ISO (inclusive) — limite superior de `created_at`. */
   createdTo?: string;
+  /**
+   * Ordenação da lista (ADR-0024 decisão 2). Catálogo fechado e regra de
+   * desempate em `../lib/lead-list-sort`. Ausente = a ordem de sempre.
+   *
+   * Só `useLeads` usa. `useLeadsCount` não recebe de propósito: contagem não
+   * depende de ordem, e incluí-la lá invalidaria o cache do total a cada
+   * clique no cabeçalho — três `count(*)` a mais por clique, de graça.
+   */
+  sort?: LeadListSort;
   /** `"unassigned"` recorta leads sem responsável nas quatro colunas. */
   filterAssignment?: "all" | "unassigned";
 }
@@ -55,13 +65,17 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment } = params;
+  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
 
   return useQuery({
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment],
+    // Ordem e recorte entram na chave junto com filtros e pagina. Sem sort.*,
+    // o cache devolve a pagina da ordem antiga; sem filterAssignment, mistura
+    // "todos" com "sem responsavel". Espalhados (e nao como objeto) para a
+    // chave continuar legivel no devtools.
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, sort.key, sort.direction],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -87,9 +101,10 @@ export function useLeads(params: LeadsFilterParams = {}) {
 
       query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment });
 
-      const { data, error } = await query
-        .order("created_at", { ascending: false })
-        .range(from, to);
+      // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
+      // paginação por OFFSET repete linha entre páginas dentro de um empate,
+      // e em prod há um grupo de 643 leads com o mesmo `created_at`.
+      const { data, error } = await applyLeadListSort(query, sort).range(from, to);
 
       if (error) throw error;
       return data;
@@ -311,10 +326,30 @@ export function useUpdateLead() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       // refetchType: 'active' — só refaz queries atualmente renderizadas (evita cascata de refetch em todas as páginas)
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: 'active' });
+      /**
+       * As três chaves abaixo são as que a tela realmente lê, e nenhuma delas
+       * casa com as duas de cima:
+       *
+       * - `["lead-detail", id]` é o que a COLUNA DO LEAD do painel lê
+       *   (`useLeadDetail`). Sem esta linha o campo editado grava no banco e
+       *   volta ao valor antigo na própria linha, porque `useInlineEdit` repõe
+       *   o dado do servidor ao sair da edição — e o usuário conclui que a
+       *   gravação falhou.
+       * - `["pipeline-page"]` é a RPC `get_pipeline_page` de que os boards
+       *   vivem (`usePaginatedPipeline`). Sem ela o card atrás do painel fica
+       *   com o valor velho até um F5 — e o mesmo vale para a edição inline e
+       *   o "calor" nos três boards, que chamam este hook direto.
+       *
+       * Strings literais de propósito: importar as chaves de `modules/pipelines`
+       * reabriria o ciclo leads↔pipelines que o dependency-cruiser barra.
+       */
+      queryClient.invalidateQueries({ queryKey: ["lead-detail", variables.id], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-page"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"], refetchType: 'active' });
     },
   });
 }

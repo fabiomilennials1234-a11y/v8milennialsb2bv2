@@ -41,6 +41,88 @@ interface FireTriggerParams {
 }
 
 /**
+ * Normaliza `trigger_config.pipeline_ids` (jsonb livre — nada valida a forma
+ * na escrita) para uma lista de uuids utilizável. Descarta não-strings, apara
+ * espaço e remove vazios.
+ */
+export function normalizePipelineIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  for (const raw of value) {
+    if (typeof raw !== "string") continue;
+    const id = raw.trim();
+    if (id) seen.add(id);
+  }
+  return [...seen];
+}
+
+/** Um workflow de `lead_replied` só precisa do lookup de funis se filtrar por eles. */
+function usesPipelineFilter(triggerConfig: Record<string, unknown> | null | undefined): boolean {
+  return normalizePipelineIds((triggerConfig || {}).pipeline_ids).length > 0;
+}
+
+/**
+ * Funis (`pipelines.id`) em que o lead tem entrada.
+ *
+ * `pipeline_entries` é a tabela canônica e sozinha cobre os dois tipos de
+ * funil: as views `pipe_*` são projeções dela, e os funis custom são
+ * espelhados nela por trigger. Medido em PROD 2026-08-11: 0 entries órfãs e 0
+ * `custom_pipe_entries` sem par (de 16.233) — ler só esta tabela não perde nada.
+ *
+ * Sem `.limit()` de propósito: a constraint UNIQUE (pipeline_id, lead_id) limita
+ * o retorno a 1 linha por funil da org (máximo medido em PROD: 21), muito abaixo
+ * do teto de 1000 do PostgREST que corta select sem limite em silêncio.
+ *
+ * Devolve `null` quando a leitura falha — o matcher trata `null` como
+ * fail-closed. O filtro por `organization_id` é explícito e obrigatório: quem
+ * chama é service_role, que BYPASSA a RLS de `pipeline_entries`.
+ */
+async function loadLeadPipelineIds(
+  supabase: SupabaseClient,
+  organizationId: string,
+  leadId: string,
+): Promise<string[] | null> {
+  const { data, error } = await supabase
+    .from("pipeline_entries")
+    .select("pipeline_id")
+    .eq("organization_id", organizationId)
+    .eq("lead_id", leadId);
+
+  if (error) {
+    console.warn("[workflow-trigger] Falha ao ler funis do lead:", error.message);
+    return null;
+  }
+  return (data ?? []).map((row: { pipeline_id: string }) => String(row.pipeline_id));
+}
+
+/**
+ * Existe algum workflow ativo desse trigger na org?
+ *
+ * Guarda barata para caminhos quentes: o inbound do WhatsApp passa por aqui a
+ * cada mensagem, e sem esta checagem pagaríamos um lookup de lead por mensagem
+ * em toda a frota. Em PROD hoje 42 de 99 orgs têm algum workflow ativo.
+ */
+export async function hasActiveWorkflowsForTrigger(
+  supabase: SupabaseClient,
+  organizationId: string,
+  triggerType: string,
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("workflows")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("trigger_type", triggerType)
+    .eq("is_active", true)
+    .limit(1);
+
+  if (error) {
+    console.warn("[workflow-trigger] Falha ao checar workflows ativos:", error.message);
+    return false;
+  }
+  return (data?.length ?? 0) > 0;
+}
+
+/**
  * Finds active workflows matching the trigger type, validates trigger_config,
  * and creates workflow_execution records.
  *
@@ -70,9 +152,37 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     // é preço que não se paga (quebrou dublê de teste em `whatsapp-helpers`).
     const workflows = data as unknown as TriggerWorkflowRow[];
 
+    // ── Contexto de MATCHING ──
+    // O filtro por funil do `lead_replied` precisa saber em quais funis o lead
+    // está — informação que não vem no evento. Buscamos sob demanda: só quando
+    // algum workflow candidato realmente configurou o filtro. Assim o inbound
+    // da esmagadora maioria das orgs não paga query nenhuma.
+    //
+    // Esta lista PRECISA entrar no `context` gravado em `workflow_executions`:
+    // `process-workflow-executions` relê o context persistido e roda
+    // `matchesTriggerConfig` DE NOVO antes de executar. Sem os funis ali, o
+    // fail-closed do matcher reprova tudo — o filtro vira no-op em 100% dos
+    // casos, com `error: "Skipped: trigger conditions not met"`.
+    //
+    // O medo de mexer na chave de dedup era legítimo (os funis do lead mudam
+    // com o tempo, e isso a tornaria instável) mas não se aplica: `context:` e
+    // `payload:` já são expressões separadas na montagem da execução, e só a
+    // primeira leva os funis. A chave sai byte-a-byte igual.
+    //
+    // `lead_replied` é o primeiro trigger cujo matcher depende de um insumo que
+    // não vem no evento — os outros só leem campos que o próprio evento traz,
+    // e para eles a revalidação sempre foi idempotente.
+    let matchContext: Record<string, unknown> = context || {};
+    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesPipelineFilter(w.trigger_config))) {
+      matchContext = {
+        ...matchContext,
+        lead_pipeline_ids: await loadLeadPipelineIds(supabase, organizationId, leadId),
+      };
+    }
+
     // Filter by trigger_config match
     let matching = workflows.filter((w) =>
-      matchesTriggerConfig(triggerType, w.trigger_config, context || {}),
+      matchesTriggerConfig(triggerType, w.trigger_config, matchContext),
     );
 
     // Origin guard: skip workflows with copilot nodes when triggered by copilot
@@ -136,9 +246,14 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
         organization_id: organizationId,
         lead_id: leadId,
         status: "running",
-        context: { trigger_type: triggerType, ...(context || {}) },
+        // `matchContext` (e não `context`): carrega os funis do lead, que o
+        // executor precisa reler para revalidar o matcher. Quando o trigger não
+        // usa filtro de funil, `matchContext` É `context` — nada muda.
+        context: { trigger_type: triggerType, ...matchContext },
         trigger_dedup_key: leadId
           ? await computeTriggerDedupKey({
+              // `context`, NÃO `matchContext`: a chave de dedup precisa ser
+              // estável, e os funis do lead mudam com o tempo.
               triggerType,
               payload: context || {},
               now,
@@ -233,6 +348,33 @@ export function matchesTriggerConfig(
 
     case "lead_replied": {
       if (config.channel && config.channel !== "any" && context.channel && config.channel !== context.channel) return false;
+
+      // ── Filtro por funil ──
+      // `pipeline_ids` é uma lista de `pipelines.id`. Um campo só cobre funil
+      // padrão E custom porque `pipelines` é a UNIÃO dos dois: cada linha de
+      // `custom_pipelines` é espelhada ali com o MESMO uuid (trigger
+      // `trg_sync_custom_pipeline`). Medido em PROD 2026-08-11: 379 pipelines
+      // = 294 system + 85 custom, e 0 custom_pipelines sem espelho.
+      //
+      // Por isso NÃO copiamos a forma do `lead_created` (`filter_pipe` slug +
+      // `filter_pipeline_id` uuid): aquele par duplica o mesmo conceito, e o
+      // slug lá é comparado contra um `pipe_type` que o trigger PG grava
+      // HARDCODED como 'pipe_whatsapp'.
+      //
+      // Semântica: OR — basta o lead estar em QUALQUER um dos funis marcados.
+      // Lista vazia/ausente = qualquer funil (mesma convenção de `channel`).
+      const wantedPipelines = normalizePipelineIds(config.pipeline_ids);
+      if (wantedPipelines.length > 0) {
+        const leadPipelines = context.lead_pipeline_ids;
+        // Fail-closed: sem a lista de funis do lead o filtro é inavaliável, e
+        // disparar seria pior que não disparar (a automação sairia para leads
+        // fora do funil escolhido). `fireTrigger` injeta a lista sempre que
+        // algum workflow candidato usa o filtro; ausência aqui = leitura falhou.
+        if (!Array.isArray(leadPipelines)) return false;
+        const isInAnyWanted = leadPipelines.some((id) => wantedPipelines.includes(String(id)));
+        if (!isInAnyWanted) return false;
+      }
+
       if (config.contains_text && context.message) {
         return String(context.message).toLowerCase().includes(String(config.contains_text).toLowerCase());
       }

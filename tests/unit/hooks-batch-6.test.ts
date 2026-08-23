@@ -56,7 +56,6 @@ import { useAgentMetrics } from "@/modules/copilot/hooks/useAgentMetrics";
 import { useCustomPipelineMembers } from "@/modules/pipelines/hooks/custom/useCustomPipelineMembers";
 import { useSegmentBenchmark } from "@/modules/analytics/hooks/useSegmentBenchmark";
 import { useSellerActivity } from "@/modules/engagement/hooks/useSellerActivity";
-import { useWhatsAppFunnel } from "@/modules/communication/hooks/useWhatsAppFunnel";
 import { useWhatsAppInstanceAllowedMembers } from "@/modules/communication/hooks/useWhatsAppInstanceAllowedMembers";
 import { useWhatsAppConversations } from "@/modules/communication/hooks/useWhatsAppConversations";
 import { useMilestoneAutoUnlock } from "@/modules/engagement/hooks/useMilestoneAutoUnlock";
@@ -81,8 +80,9 @@ import { useWhatsAppLeadIntegration } from "@/modules/communication/hooks/useWha
 import { useCampaignTemplates } from "@/modules/campaigns/hooks/useCampaignTemplates";
 
 // Hooks that throw removed: useTinyErp, useMasterOperations, useGoogleCalendarSharing,
-// useCustomPipelineMembers, useSellerActivity, useWhatsAppFunnel, useWhatsAppInstanceAllowedMembers,
+// useCustomPipelineMembers, useSellerActivity, useWhatsAppInstanceAllowedMembers,
 // useWhatsAppConversations, useWorkflowPortability, useMetaConnection, useWhatsAppLeadIntegration
+// (useWhatsAppFunnel saiu junto com o hook — SCRUM-202, era o último escritor do espelho no front)
 const hooks: [string, () => any][] = [
   ["useGoogleCalendar", () => useGoogleCalendar()],
   ["useRankingTransitions", () => useRankingTransitions()],

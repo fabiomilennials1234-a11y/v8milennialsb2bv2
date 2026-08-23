@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router-dom";
 import { CrossPipePanel } from "../CrossPipePanel";
 import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
 
@@ -50,6 +51,21 @@ const pipeOpsPort = {
 
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 
+// O modal de novo negócio lista os donos possíveis — vem do identity, que exige
+// AuthProvider. Aqui só interessa que o modal renderize.
+vi.mock("@/modules/identity", () => ({
+  useResponsibleMembers: () => [{ id: "tm-1", name: "Ana" }],
+  useCurrentTeamMember: () => ({ data: { id: "tm-1", organization_id: "org-1" } }),
+  isVirtualTeamMember: (id: string) => String(id).startsWith("master-virtual-"),
+}));
+
+// Metadados de negócio (valor / dias parados / rota do board). Vazio por padrão:
+// os testes daqui asseguram o trilho de etapas, não a meta.
+const dealsMock = vi.fn(() => ({ data: {} as Record<string, unknown[]> }));
+vi.mock("@/modules/leads/hooks/useLeadsDeals", () => ({
+  useLeadsDeals: (...args: unknown[]) => dealsMock(...(args as [])),
+}));
+
 const gatesMock = vi.fn(() => ({
   canAddToPipe: { allowed: true, isLoading: false },
   canRemoveFromPipe: { allowed: true, isLoading: false },
@@ -84,26 +100,35 @@ beforeEach(() => {
 function renderPanel(extraProps: Partial<React.ComponentProps<typeof CrossPipePanel>> = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={qc}>
-      <MockPipeOpsProvider port={pipeOpsPort}>
-        <CrossPipePanel
-          leadId="lead-1"
-          organizationId="org-1"
-          userId="user-1"
-          {...extraProps}
-        />
-      </MockPipeOpsProvider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={qc}>
+        <MockPipeOpsProvider port={pipeOpsPort}>
+          <CrossPipePanel
+            leadId="lead-1"
+            organizationId="org-1"
+            userId="user-1"
+            {...extraProps}
+          />
+        </MockPipeOpsProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────
 
 describe("CrossPipePanel — empty state", () => {
-  it("renders 'Sem pipes ainda' when there are 0 active and 0 inactive", () => {
+  it("renders 'Nenhum negócio ainda' when there are 0 active and 0 inactive", () => {
     allPipelinesMock.mockReturnValue({ data: [], isLoading: false });
     renderPanel();
     expect(screen.getByTestId("cross-pipe-panel-empty")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum negócio ainda")).toBeInTheDocument();
+  });
+
+  it("offers 'Novo negócio' disabled when the lead is in no pipe and none is available", () => {
+    allPipelinesMock.mockReturnValue({ data: [], isLoading: false });
+    renderPanel();
+    expect(screen.getByTestId("new-deal-button")).toBeDisabled();
   });
 });
 
@@ -150,7 +175,12 @@ describe("CrossPipePanel — rails", () => {
     renderPanel();
     expect(screen.getByTestId("stage-rail-whatsapp")).toBeInTheDocument();
     expect(screen.queryByTestId("stage-rail-confirmacao")).not.toBeInTheDocument();
-    expect(screen.getByText("Confirmação")).toBeInTheDocument(); // inactive chip
+
+    // Funil em que o lead não está deixou de ser chip no rodapé: agora é opção
+    // de "Novo negócio", porque criar negócio virou ação explícita (D1).
+    expect(screen.queryByText("Confirmação")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("new-deal-button"));
+    expect(screen.getByText("Confirmação")).toBeInTheDocument();
   });
 });
 
@@ -413,7 +443,7 @@ describe("CrossPipePanel — collapsible rails", () => {
       isLoading: false,
     });
     renderPanel();
-    const region = screen.getByRole("region", { name: "Pipes do lead" });
+    const region = screen.getByRole("region", { name: "Negócios do lead" });
     expect(region).toBeInTheDocument();
     const collapsed = screen.getByTestId("stage-rail-collapsed-whatsapp");
     expect(collapsed).toHaveAttribute("aria-expanded", "false");

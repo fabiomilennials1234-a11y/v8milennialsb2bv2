@@ -216,6 +216,13 @@ export function useAgentPendingTasks(agentId: string | undefined) {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
 
+      // SCRUM-202: os dois selects abaixo pediam `pipe_whatsapp` no join de
+      // `leads` e não liam o campo uma única vez — mesma sobra que havia em
+      // `_shared/workflow-action-handler.ts`. Removido: não muda resultado
+      // nenhum hoje, e no DROP da fatia 3 um select que ainda pede a coluna
+      // derruba a QUERY INTEIRA com `column leads.pipe_whatsapp does not
+      // exist`, não só o campo que ninguém usava. A etapa do funil vem da
+      // entry (`pipeline_entries.stage_key`), nunca do espelho.
       const { data: leadsNoResponse } = await supabase
         .from('conversation_context_summary')
         .select(`
@@ -226,7 +233,7 @@ export function useAgentPendingTasks(agentId: string | undefined) {
           engagement_score,
           last_message_at,
           followup_count,
-          lead:leads(id, name, phone, company, pipe_whatsapp)
+          lead:leads(id, name, phone, company)
         `)
         .eq('organization_id', agent.organization_id)
         .lt('last_message_at', oneDayAgo)
@@ -260,7 +267,7 @@ export function useAgentPendingTasks(agentId: string | undefined) {
           lead_temperature,
           engagement_score,
           last_message_at,
-          lead:leads(id, name, phone, company, pipe_whatsapp)
+          lead:leads(id, name, phone, company)
         `)
         .eq('organization_id', agent.organization_id)
         .eq('lead_temperature', 'hot')
@@ -296,7 +303,11 @@ export function useAgentPendingTasks(agentId: string | undefined) {
             tasks.push({
               id: `followup-${item.lead_id}`,
               type: 'followup' as const,
-              priority: item.lead_temperature === 'hot' ? 'high' : item.lead_temperature === 'warm' ? 'medium' : 'low',
+              // `as const` nos três ramos: sem eles o ternário infere `string`,
+              // e `string` não entra em `'high' | 'medium' | 'low'`. As outras
+              // duas tarefas já fixavam o literal, então só esta desalinhava —
+              // e derrubava o `.map()` inteiro em AgentTasksTab.
+              priority: item.lead_temperature === 'hot' ? ('high' as const) : item.lead_temperature === 'warm' ? ('medium' as const) : ('low' as const),
               title: `Follow-up com ${(item.lead as any).name || 'Lead'}`,
               description: item.last_topic 
                 ? `Último assunto: "${item.last_topic.substring(0, 50)}..."`

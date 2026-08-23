@@ -125,6 +125,8 @@ Deep dive: [`Obsidian/.../02 — Arquitetura/`](./Obsidian/Segundo%20Cerebro/Cla
 - Nunca enviar service_role key no frontend
 - Nunca editar migration que já rodou — criar nova
 - Nunca commitar `.env` com credenciais reais
+- Nunca remover arquivo sem antes rodar `git log --all --follow --diff-filter=A -- <arquivo>` e conferir `docs/MASTER-ROADMAP-WORLD-CLASS.md`. Nascido em commit de fundação = **andaime de wave futura**, não resíduo. Código sem chamador e tabela com `count(*) = 0` são o estado *esperado* de uma wave ainda não construída
+- Nunca tratar `count(*) = 0` como prova de feature morta — ver `CLAUDE.md § Contexto JIT`
 
 ## Testing
 

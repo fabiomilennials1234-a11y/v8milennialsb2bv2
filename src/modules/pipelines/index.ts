@@ -100,6 +100,7 @@ export {
   findOrCreatePipelineEntry,
   usePipelineStages,
   useAllPipelineStages,
+  useEtapasDoFunil,
   stagesToColumns,
   useCreatePipelineStage,
   useUpdatePipelineStage,
@@ -222,7 +223,6 @@ export {
   GhostLeadsBanner,
   ManagePipelineStagesContent,
   ManagePipelineStagesModal,
-  MetricsPeriodSelector,
   PipeDispatchRulesSection,
   PipeDistributionSection,
   PipeSettingsDialog,
@@ -302,3 +302,9 @@ export type {
   SuggestableStageRole,
   StageRoleSuggestionSource,
 } from "@/contracts/pipe";
+
+// ── Mover negócio (ADR-0023 decisão 4: avançar é MOVER, não copiar) ───────
+// Exportado pela API pública porque o drawer do lead (módulo `leads`) também faz
+// a transição compareceu → Orçamentos, e cross-module só entra pelo barrel.
+export { moverNegocio, invalidateAfterMove } from "./lib/moverNegocio";
+export type { MoverNegocioParams } from "./lib/moverNegocio";

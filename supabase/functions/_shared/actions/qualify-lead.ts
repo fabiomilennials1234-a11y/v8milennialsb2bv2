@@ -9,7 +9,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { promoveShadowLead } from "../lead-service.ts";
 import type { ActionResult } from "./types.ts";
-import { upsertPipeEntry, deletePipeEntry } from "../pipeline-adapter.ts";
+import { upsertPipeEntry, upsertPipeEntryDetailed, deletePipeEntry } from "../pipeline-adapter.ts";
 import type { PipeSlug } from "../pipeline-adapter.ts";
 
 export async function executeUpdateQualificationScore(
@@ -63,10 +63,18 @@ export async function executeAutomation(
     updates.ai_disabled_at = new Date().toISOString();
   }
 
-  if (actionConfig.moveToStage) {
-    updates.pipe_whatsapp = actionConfig.moveToStage;
-  }
-
+  // SCRUM-202: `updates.pipe_whatsapp = actionConfig.moveToStage` saiu daqui.
+  //
+  // ⚠️ E a remoção NÃO é apagar a linha. Este era o único sítio do repo em que o
+  // espelho não era redundante mas ESTRUTURAL: o mover-de-verdade
+  // (`upsertPipeEntry`) vivia no `else` do UPDATE em `leads`, dentro de um
+  // `if (Object.keys(updates).length > 0)`. Nos action_type `qualify` e
+  // `disqualify` a coluna era a ÚNICA chave de `updates` — apagá-la deixaria o
+  // objeto vazio, o bloco inteiro seria pulado e o lead pararia de andar no
+  // funil, em silêncio, em toda automação do Copilot que usa moveToStage.
+  //
+  // Por isso o move virou incondicional e o UPDATE em `leads` ficou só com o que
+  // é de fato do lead (`ai_disabled`), sem depender um do outro.
   if (Object.keys(updates).length > 0) {
     const { error: updateError } = await supabase
       .from("leads")
@@ -74,14 +82,22 @@ export async function executeAutomation(
       .eq("id", leadId);
     if (updateError) {
       console.warn("[executeAutomation] Failed to update lead:", updateError);
-    } else if (actionConfig.moveToStage) {
-      const entryId = await upsertPipeEntry(supabase, {
-        leadId, orgId: organizationId, slug: "whatsapp",
-        stageKey: actionConfig.moveToStage as string,
-      });
-      if (!entryId) {
-        console.error("[executeAutomation] Failed to upsert pipeline_entries for whatsapp");
-      }
+    }
+  }
+
+  if (actionConfig.moveToStage) {
+    const result = await upsertPipeEntryDetailed(supabase, {
+      leadId, orgId: organizationId, slug: "whatsapp",
+      stageKey: actionConfig.moveToStage as string,
+    });
+    if (result.status === "skipped_deal_manual_only") {
+      // ADR-0023 decisão 3: a org só abre negócio por clique humano e este lead
+      // não tem um aberto. Não é erro — é a política.
+      console.log(
+        `[executeAutomation] deal_manual_only ON em org=${organizationId}: lead=${leadId} não movido para whatsapp/${actionConfig.moveToStage} (sem negócio aberto).`,
+      );
+    } else if (result.status !== "created" && result.status !== "updated") {
+      console.error("[executeAutomation] Failed to upsert pipeline_entries for whatsapp");
     }
   }
 

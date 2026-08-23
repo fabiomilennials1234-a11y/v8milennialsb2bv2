@@ -360,6 +360,67 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- ────────────────────────────────────────────────────────────
+-- 11. Estúdio de Métricas — SCRUM-311 fatias 9 e 10
+-- ────────────────────────────────────────────────────────────
+-- Org A entra no rollout; org B fica de fora DE PROPÓSITO. A coluna falha para
+-- FECHADO, então sem esta linha o Estúdio é invisível e o E2E não teria o que
+-- abrir. Org B é o controle: a mesma rota, sem a chave, mostra "ainda não
+-- liberado".
+UPDATE organizations SET metrics_studio_enabled = true
+ WHERE id = '00000000-0000-0000-0000-000000000001';
+
+-- O CENÁRIO QUE PROVA LEAD ≠ NEGÓCIO (ADR-0023)
+--
+-- Um lead com DOIS negócios abertos, e outro com um. A leitura correta é:
+--
+--     "Negócios na etapa"  conta a ENTRADA  → os dois de L1 contam 2
+--     "Leads na etapa"     conta a PESSOA   → os dois de L1 contam 1
+--
+-- Em produção a mesma medida servia aos dois nomes: 41.025 entradas para
+-- 36.073 leads, 12% de erro que ninguém via.
+--
+-- ⚠ Os números ABSOLUTOS da tela incluem o card de `pipe_whatsapp` que o bloco
+-- 9 já semeia. Por isso o E2E afirma a DIFERENÇA (negócios = leads + 1), não o
+-- total: a relação é o que a fatia mudou, e ela sobrevive a quem acrescentar
+-- lead ao seed depois.
+INSERT INTO pipelines (id, organization_id, name, slug, type, display_order)
+VALUES
+  ('00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000000001',
+   'Funil Métricas', 'funil-metricas', 'custom', 9)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO leads (id, name, company, organization_id, created_at, metrics_period_at)
+VALUES
+  ('00000000-0000-0000-0000-000000009001', 'Lead Com Dois Negocios', 'Acme Dois',
+   '00000000-0000-0000-0000-000000000001', now(), now()),
+  ('00000000-0000-0000-0000-000000009002', 'Lead Com Um Negocio', 'Acme Um',
+   '00000000-0000-0000-0000-000000000001', now(), now())
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key, entered_at)
+VALUES
+  -- L1: DOIS negócios abertos, em etapas diferentes — é o coração do cenário
+  ('00000000-0000-0000-0000-000000009101', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009001', 'novo', now()),
+  ('00000000-0000-0000-0000-000000009102', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009001', 'proposta', now()),
+  -- L2: um só
+  ('00000000-0000-0000-0000-000000009103', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-0000000009e1', '00000000-0000-0000-0000-000000009002', 'novo', now())
+ON CONFLICT (id) DO NOTHING;
+
+-- Receita do mês corrente, para a métrica personalizada `receita ÷ leads` ter
+-- número. `sold_at` é now() porque o Estúdio abre no período `month`.
+INSERT INTO sale_events (id, organization_id, lead_id, pipeline_id, stage_key,
+                         event_type, sold_at, sale_value, currency, revenue_stream, source)
+VALUES
+  ('00000000-0000-0000-0000-000000009201', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000009001', '00000000-0000-0000-0000-0000000009e1', 'proposta',
+   'sale', now(), 2500.00, 'BRL', 'novo_negocio', 'backfill'),
+  ('00000000-0000-0000-0000-000000009202', '00000000-0000-0000-0000-000000000001',
+   '00000000-0000-0000-0000-000000009002', '00000000-0000-0000-0000-0000000009e1', 'proposta',
+   'sale', now(), 1500.00, 'BRL', 'novo_negocio', 'backfill')
+ON CONFLICT (id) DO NOTHING;
 -- 11. Canal Meta — fixture do isolamento de chat (#1634)
 -- ────────────────────────────────────────────────────────────
 -- Alpha é do Member1 (pre_sale/sdr), Beta é do Member2 (sale/closer) — o par
@@ -397,6 +458,33 @@ INSERT INTO organization_features (organization_id, feature_key, enabled)
 VALUES
   ('00000000-0000-0000-0000-000000000001', 'chat', true),
   ('00000000-0000-0000-0000-000000000002', 'chat', true)
+ON CONFLICT DO NOTHING;
+
+-- ────────────────────────────────────────────────────────────
+-- 13. Cota de assentos das orgs de teste (SCRUM-423)
+-- ────────────────────────────────────────────────────────────
+-- O trigger fica DESLIGADO durante a semeadura e volta a valer no fim deste
+-- arquivo. Só que os TESTES também inserem `team_members` — e aí ele está
+-- ligado, com a cota resolvendo ZERO:
+--
+--     Limite de seats atingido. Seats pagos: 0, membros ativos: 4.
+--
+-- `org_resolve_quota` lê `org_quotas` como fonte autoritativa, e num banco
+-- construído do repo essa tabela nasce vazia. Em produção não acontece porque
+-- toda org tem cota. O gate está CERTO; o que faltava era a org de teste ter
+-- cota, como qualquer org real.
+--
+-- 50 é folga larga sobre o que qualquer suíte cria. Ilimitado (-1) esconderia
+-- um bug de contagem: com teto finito, uma suíte que vazar membros esbarra e
+-- avisa.
+INSERT INTO org_quotas (organization_id, resource_key, plan_base, purchased_addons, admin_adjustment)
+VALUES
+  ('00000000-0000-0000-0000-000000000001', 'max_users', 50, 0, 0),
+  ('00000000-0000-0000-0000-000000000002', 'max_users', 50, 0, 0),
+  ('00000000-0000-0000-0000-000000000001', 'max_whatsapp_instances', 20, 0, 0),
+  ('00000000-0000-0000-0000-000000000002', 'max_whatsapp_instances', 20, 0, 0),
+  ('00000000-0000-0000-0000-000000000001', 'max_copilot_agents', 20, 0, 0),
+  ('00000000-0000-0000-0000-000000000002', 'max_copilot_agents', 20, 0, 0)
 ON CONFLICT DO NOTHING;
 
 -- Re-enable seat limit trigger

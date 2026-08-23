@@ -65,11 +65,11 @@ SELECT is(public._stage_key_label('e2a52000-0000-4000-8000-000000000001', 'e2a52
 -- (DEGRADA) etapa SEM pipeline → total (não soma etapas de funis distintos)
 -- ===========================================================================
 SELECT is(
-  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb) ->> 'value'),
+  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') ->> 'value'),
   '4', '(DEGRADA) etapa sem escopo → value = total (4: 3 sistema + 1 custom), não série');
 SELECT ok(
-  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb) -> 'series') IS NULL
-  OR (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb) ->> 'series') IS NULL,
+  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') -> 'series') IS NULL
+  OR (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') ->> 'series') IS NULL,
   '(DEGRADA) etapa sem escopo NÃO devolve série (zero rótulo cru na parede)');
 
 -- ===========================================================================
@@ -77,32 +77,32 @@ SELECT ok(
 -- ===========================================================================
 SELECT ok(
   (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa',
-     '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000a1"}'::jsonb) -> 'series')
+     '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000a1"}'::jsonb, 'negocio') -> 'series')
    @> '[{"label":"Novo Lead"}]'::jsonb,
   '(RÓTULO) etapa escopada: label = "Novo Lead" (humano)');
 SELECT ok(
   (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa',
-     '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000a1"}'::jsonb) -> 'series')
+     '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000a1"}'::jsonb, 'negocio') -> 'series')
    @> '[{"label":"Compareceu","value":1}]'::jsonb,
   '(RÓTULO) etapa escopada: "Compareceu" com value correto');
 -- Nenhum label é a stage-key crua.
 SELECT is(
   (SELECT count(*)::int FROM jsonb_array_elements(
      public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa',
-       '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000a1"}'::jsonb) -> 'series') s
+       '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000a1"}'::jsonb, 'negocio') -> 'series') s
    WHERE s->>'label' IN ('novo','compareceu')),
   0, '(RÓTULO) NENHUM label é stage-key crua (novo/compareceu)');
 
 -- etapa escopada num pipeline CUSTOM → nome humano da etapa custom.
 SELECT ok(
   (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa',
-     '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000c1"}'::jsonb) -> 'series')
+     '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000c1"}'::jsonb, 'negocio') -> 'series')
    @> '[{"label":"Proposta Enviada","value":1}]'::jsonb,
   '(CUSTOM) etapa escopada em pipeline custom: label humano "Proposta Enviada"');
 
 -- SINAL de degradação (#1254 volta 2): quem degrada CONTA que degradou.
 SELECT is(
-  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb) ->> 'effective_recorte'),
+  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') ->> 'effective_recorte'),
   'total', '(SINAL) leaf sinaliza effective_recorte=total ao degradar');
 SELECT is(
   (public._metric_leaf('e2a52000-0000-4000-8000-000000000001', 'leads_na_etapa', 'etapa', 'month', NULL, NULL, NULL, '{}'::jsonb) ->> 'recorte'),
@@ -114,7 +114,7 @@ SELECT is(
 
 -- total continua total.
 SELECT is(
-  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'total', '{}'::jsonb) ->> 'value'),
+  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'total', '{}'::jsonb, 'negocio') ->> 'value'),
   '4', '(TOTAL) recorte total inalterado');
 
 SELECT * FROM finish();

@@ -1,0 +1,215 @@
+/**
+ * Formato de entrada do Card do Negócio.
+ *
+ * O Negócio é o que morre com a venda; o Lead é o que sobrevive a ela. Por isso
+ * aqui a pessoa entra como **referência clicável**, não como conteúdo: nome e
+ * empresa para saber de quem é, e o id para abrir o card dela.
+ *
+ * ── O QUE A MEDIÇÃO IMPÔS AO FORMATO ──────────────────────────────────────
+ * Prod, 04/08/2026, sobre 38.739 cards:
+ *   - `valor` existe em **1,1%**. É opcional de verdade, não "quase sempre
+ *     preenchido" — o card precisa ser bom sem ele.
+ *   - a média é de **1,16 movimentação por negócio**: 39.297 têm uma só, a da
+ *     criação. A linha do tempo tem que ser boa com um item.
+ *   - o negócio mediano está parado há **42 dias** e 57% da carteira passou de
+ *     30. Tempo é o único dado que existe para 100% e o único que aponta ação.
+ */
+
+import type { LeadCardDeal } from "../lead-card/types";
+
+export type EstadoDoNegocio = "aberto" | "ganho" | "perdido";
+
+export interface DealCardStage {
+  /**
+   * Chave de ESCRITA — o que `moverEtapa` manda de volta ao banco.
+   * Funil system: o `stage_key`. Funil custom: o **uuid** da etapa, porque é
+   * ele que vai em `custom_pipe_entries.stage_id`.
+   */
+  chave: string;
+  /**
+   * Chave de LEITURA — o que `pipeline_entries.stage_key` e
+   * `pipeline_stage_events.to_stage_key` realmente guardam. Nos dois tipos de
+   * funil é o `stage_key` (slug de texto): em funil custom o gatilho
+   * `sync_custom_pipe_to_entries()` TRADUZ o uuid para o slug ao espelhar.
+   *
+   * Existe separada de `chave` porque um campo só não pode ser as duas coisas:
+   * comparar a posição atual pelo uuid dava `-1` em todo funil custom — nenhuma
+   * casa ficava marcada como "aqui" e cada círculo carimbava "—", que nesta
+   * régua quer dizer "por aqui não passou". Afirmação falsa, não só ausência.
+   */
+  chaveEntry: string;
+  nome: string;
+  /** Etapa terminal — desenha diferente e encerra a trilha. */
+  papel: "aberto" | "ganho" | "perdido";
+}
+
+export interface DealCardMove {
+  id: string;
+  de: string | null;
+  para: string;
+  /**
+   * A CHAVE da etapa de destino, não o rótulo.
+   *
+   * `para` é o nome já resolvido, que é o que a lista de movimentação lê. A
+   * régua precisa casar a movimentação com a casa, e casar por nome quebra em
+   * duas situações reais: etapa renomeada depois do evento, e dois funis com
+   * etapas de mesmo nome. `null` quando o evento aponta para uma etapa que não
+   * existe mais.
+   */
+  paraChave: string | null;
+  quando: string;
+  autor: string | null;
+  origem: "manual" | "automacao" | "sistema";
+}
+
+export interface DealCardLeadRef {
+  id: string;
+  nome: string;
+  empresa: string | null;
+  telefone: string | null;
+  /** `Cliente` quando a pessoa já comprou alguma vez — ADR-0023 §6/§7. */
+  relacao: "lead" | "cliente";
+
+  /**
+   * ── O bloco do lead DENTRO do negócio ──────────────────────────────────
+   * O card nasceu com a regra "o lead é link, não conteúdo": só nome, empresa
+   * e telefone, o bastante para saber de quem é o negócio. Na prática o painel
+   * abria e não dizia nada — nem o nome da pessoa aparecia, porque o cabeçalho
+   * mostrava `empresa ?? nome` e a empresa quase sempre existe.
+   *
+   * Estes campos não abrem uma segunda ficha: são o mínimo para reconhecer a
+   * pessoa sem sair daqui — quem é, de onde veio, quando chegou e como falar
+   * com ela. O aprofundamento continua sendo o card do Lead, a um clique.
+   */
+  email: string | null;
+  origem: string | null;
+  /** `leads.created_at` — "quando chegou". */
+  chegouEm: string | null;
+  qualificacao: string | null;
+  preQualificacao: string | null;
+  responsaveis: { preVenda: string | null; venda: string | null };
+  etiquetas: Array<{ nome: string; cor: string }>;
+  /** Faixa de faturamento declarada (texto livre no banco). */
+  faturamento: string | null;
+}
+
+/**
+ * Uma linha de `activities` — a aba "Atividades" do print.
+ *
+ * A tabela tem `deal_id` E `lead_id`. A aba lê por **lead**: `deal_id` só é
+ * preenchido quando o negócio nasceu pelo caminho novo, e a maioria das
+ * entradas de funil não tem linha em `deals` — por negócio a aba abriria vazia
+ * quase sempre.
+ */
+export interface DealCardActivity {
+  id: string;
+  tipo: string;
+  titulo: string;
+  descricao: string | null;
+  resultado: string | null;
+  automatica: boolean;
+  quando: string;
+  concluida: boolean;
+}
+
+/** Uma linha de `deal_items` — os produtos do negócio. */
+export interface DealCardItem {
+  id: string;
+  nome: string;
+  quantidade: number;
+  precoUnitario: number;
+  total: number;
+}
+
+export interface DealCardData {
+  /** `pipeline_entries.id` — a posição, que é o que identifica o negócio hoje. */
+  id: string;
+  /**
+   * `deals.id` — a IDENTIDADE do negócio, e `null` na maioria das entradas.
+   *
+   * O painel é chaveado pela posição (`id`), não por isto: `pipeline_entries.deal_id`
+   * é NULO em quase todas as 38.156 entradas, e exigir a linha em `deals` para
+   * abrir o painel deixaria a tela vazia para quase todo mundo.
+   *
+   * Existe porque ESCREVER exige a identidade: `deal_items.deal_id` é NOT NULL.
+   * Sem este campo o painel não tem como lançar produto — e é por isso que ele
+   * sobe até aqui em vez de morrer dentro do hook, como acontecia.
+   */
+  dealId: string | null;
+  titulo: string;
+  estado: EstadoDoNegocio;
+
+  lead: DealCardLeadRef;
+
+  funil: string;
+  funilCor: string;
+  /**
+   * Tabela do funil system (`pipe_whatsapp` | `pipe_confirmacao` |
+   * `pipe_propostas`), ou `null` em funil custom. É o que `useCrossPipeMove`
+   * precisa para saber onde escrever — as duas famílias guardam a posição em
+   * lugares diferentes.
+   */
+  pipeTable: "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas" | null;
+  /** Trilha completa do funil, para a barra mostrar onde ele está e o que falta. */
+  etapas: DealCardStage[];
+  etapaAtual: string;
+
+  dono: string | null;
+
+  /** Dias desde `entered_at`. */
+  diasEmAberto: number | null;
+  /** Dias desde `stage_changed_at`. */
+  diasNaEtapa: number | null;
+  /**
+   * Mediana de dias parado dos negócios da MESMA org e etapa. O alerta compara
+   * com isto em vez de um número fixo: a 30 dias fixos, 22.060 dos 38.403
+   * negócios abertos acenderiam, e alarme que toca sempre não é alarme.
+   */
+  medianaDaEtapa: number | null;
+
+  valor: number;
+  moeda: string;
+  produto: string | null;
+
+  /**
+   * ── O que estava no banco e o painel não lia ───────────────────────────
+   * De `deals` o app inteiro selecionava apenas `id, title`
+   * (`useLeadsDeals.ts:179-181`), e o `valor` acima vem de
+   * `metadata.sale_value`, não de `deals.value` — por isso um negócio com
+   * valor gravado aparecia sem a seção "Valor".
+   */
+  valorDoNegocio: number | null;
+  probabilidade: number | null;
+  previsaoFechamento: string | null;
+  fechadoEm: string | null;
+  criadoEm: string | null;
+  /** `deal_items` — tabela que existe desde a Wave 1 e nenhuma tela lia. */
+  itens: DealCardItem[];
+
+  reuniao: { data: string; confirmada: boolean; link: string | null } | null;
+
+  /** Preenchido só quando `estado` não é `aberto`. */
+  desfecho: {
+    quando: string;
+    /** Valor da venda no ledger (`sale_events`), quando ganho. */
+    valorVenda: number | null;
+    motivo: string | null;
+  } | null;
+
+  movimentacoes: DealCardMove[];
+  nota: string;
+
+  /** `activities` do lead — a aba "Atividades" do print. */
+  atividades: DealCardActivity[];
+
+  /**
+   * Os negócios do MESMO lead, este inclusive — a aba "Negócios" do print.
+   *
+   * Não custa consulta nova: `useLeadsDeals(leadId)` já roda no hook para achar
+   * este negócio, e devolve a lista inteira. O card só jogava fora o resto.
+   * É o que responde "esta pessoa tem outra coisa em aberto?" sem sair daqui —
+   * um lead atravessa vários funis na mesma venda, e é exatamente aí que se
+   * cobra duas vezes ou se abandona a metade que ninguém viu.
+   */
+  outrosNegocios: LeadCardDeal[];
+}

@@ -13,6 +13,7 @@ import {
 import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
+import { EMAIL_CHANNEL_AVAILABLE, SMS_CHANNEL_AVAILABLE } from "@/modules/communication/lib/channel-availability";
 import { useLeadActionGates } from "../hooks/useLeadActionGates";
 import { cn } from "@/lib/utils";
 
@@ -66,7 +67,7 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
           </a>
         </Button>
       )}
-      {lead.email && canSendMessage && (
+      {EMAIL_CHANNEL_AVAILABLE && lead.email && canSendMessage && (
         <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onOpenEmailComposer}>
           <Mail className="w-3.5 h-3.5" /> Email
         </Button>
@@ -102,9 +103,11 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
                 <DropdownMenuItem onClick={onOpenCallModal}>
                   <PhoneCall className="w-3.5 h-3.5 mr-2" /> Registrar ligação
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={onOpenEmailWriter}>
-                  <Mail className="w-3.5 h-3.5 mr-2" /> Email com IA
-                </DropdownMenuItem>
+                {EMAIL_CHANNEL_AVAILABLE && (
+                  <DropdownMenuItem onClick={onOpenEmailWriter}>
+                    <Mail className="w-3.5 h-3.5 mr-2" /> Email com IA
+                  </DropdownMenuItem>
+                )}
               </>
             )}
             {lead.phone && canSendMessage && (
@@ -117,9 +120,11 @@ export const LeadModalToolbar = memo(function LeadModalToolbar({
                     <Send className="w-3.5 h-3.5 mr-2" /> Abrir conversa
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={onOpenSmsDialog}>
-                  <Phone className="w-3.5 h-3.5 mr-2" /> Enviar SMS
-                </DropdownMenuItem>
+                {SMS_CHANNEL_AVAILABLE && (
+                  <DropdownMenuItem onClick={onOpenSmsDialog}>
+                    <Phone className="w-3.5 h-3.5 mr-2" /> Enviar SMS
+                  </DropdownMenuItem>
+                )}
               </>
             )}
             {gates.canDelete.allowed && (

@@ -57,7 +57,26 @@ const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION ===
 
 const PERIOD_AT = '2099-09-15T12:00:00Z';
 
-describe.skipIf(shouldSkip)('admin_reassign_*_credit RPCs', () => {
+// 🔴 A FEATURE NÃO EXISTE — NEM NO REPO, NEM EM PRODUÇÃO (SCRUM-427).
+//
+// Medido em 2026-08-22: `pg_proc` de produção não tem NENHUMA função
+// `admin_reassign%`, e `git grep` no repositório só encontra
+// `supabase/migrations/archive/20261026000000_admin_reassign_credit_rpcs.sql` —
+// arquivo do lote arquivado no baseline, que portanto não é reaplicado. O
+// vermelho da suíte era `PGRST202: Could not find the function
+// public.admin_reassign_meeting_credit(...) in the schema cache`, e ele estava
+// dizendo a verdade.
+//
+// Isto é ESPECIFICAÇÃO esperando implementação, não regressão — mesma classe de
+// commission_projection e productivity_canonical (SCRUM-415/416). Fica no repo,
+// desligada, porque descrever a regra de negócio com precisão é metade do
+// trabalho de construí-la: só as duas RPCs podem mexer no snapshot congelado
+// pelo trigger, ambas exigem admin/master da org da entry, ambas exigem motivo
+// não-vazio e ambas auditam em `lead_history`.
+//
+// Para religar: porte a migration do archive, confirme os grants e troque
+// `describe.skip` de volta por `describe.skipIf(shouldSkip)`.
+describe.skip('admin_reassign_*_credit RPCs (feature não construída — SCRUM-427)', () => {
   // Synthetic team members owned by this suite (besides the seeded ones above).
   let sdrSource: string;       // active SDR in Org A — initial credit holder
   let sdrTarget: string;       // active SDR in Org A — target of valid reassign

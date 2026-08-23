@@ -4,7 +4,15 @@ on:
   push:
     branches: [main, develop]
   pull_request:
-    branches: [main]
+    # `develop` entrou em 2026-08-11. Antes disso, PR com base develop não
+    # rodava NADA daqui — nem typecheck, nem build, nem vitest, nem os pgTAP
+    # de invariante de RLS. Os gates só disparavam no push do merge, ou seja
+    # DEPOIS de o código já estar em develop, quando reprovar custa reverter.
+    #
+    # Os outros workflows com pull_request (codeql, secret-scan,
+    # vault-sentinel) já listavam os dois branches; este era o único fora do
+    # padrão, o que fazia o PR parecer verde com dois checks passando.
+    branches: [main, develop]
 
 jobs:
   quality:
@@ -26,12 +34,35 @@ jobs:
       - name: Security audit
         run: npm audit --audit-level=high
         continue-on-error: true
-      - run: npm run lint
+      # ESLint ratchet, não `npm run lint` cru: o repo tem 0 errors e ~29k
+      # warnings herdados. O comando cru sai 0 mas imprime 29.142 linhas
+      # terminadas em "✖ 29142 problems" — que subagente do harness lia como
+      # vermelho, recusando o fan-out por dívida que a branch não criou.
+      # O ratchet reprova só o INTRODUZIDO (errors e warnings) e imprime o
+      # herdado como informativo, com teto de 20 linhas.
+      - name: ESLint ratchet (no new lint problems vs baseline)
+        run: npm run lint:ratchet
       - name: Dep-cruise ratchet (no new violations vs baseline)
         run: npm run lint:deps:check
       - name: Migration version guard — self-test (red + negative control)
         run: bash scripts/check-migration-versions.test.sh
       - name: Migration version guard (no duplicates here, none colliding with the base)
+        # A base tem que ser AQUELA EM QUE O PR VAI ENTRAR, não `main` sempre.
+        #
+        # Sem esta linha o script cai no default `origin/main`, e aí TODO PR que
+        # mira `develop` é comparado com main. Como develop legitimamente carrega
+        # migrations que main não tem, vira falso positivo por construção.
+        #
+        # Medido em 2026-08-21: o PR #1712 reprovou aqui por `20270730000010`,
+        # que em develop é `deals_rls_org_scope` e em main é `voip_webhook_ingest`
+        # — porque o renumber da PR #1430 (SCRUM-244) só chegou em develop. Nada
+        # estava errado no PR; a base é que era.
+        #
+        # `github.base_ref` só existe em pull_request. No push (main/develop) ele
+        # vem vazio e o default do script volta a valer — que é o certo: num push
+        # para develop, comparar com main é exatamente a pergunta útil.
+        env:
+          MIGRATION_BASE_REF: ${{ github.base_ref && format('origin/{0}', github.base_ref) || '' }}
         run: bash scripts/check-migration-versions.sh
       - name: Metric anti-pattern lint (ADR-0017 — no new metric root causes)
         run: bash scripts/check-metric-antipatterns.sh
@@ -81,9 +112,31 @@ jobs:
           node-version: '24'
           cache: 'npm'
       - run: npm ci
-      - run: npm run test:unit
-      # Coverage thresholds in vitest.config.ts are the regression gate.
+      # Ratchet, e não `npm run test:unit` cru: medido em 2026-08-05 na
+      # develop, a suíte tem 178 vermelhos herdados de 7.718 — o job reprovava
+      # em toda execução, e portão que nasce vermelho ninguém lê. A dívida não
+      # é regressão de feature nenhuma: o CI rodava só `tests/unit/` e, quando
+      # passou a incluir `src/` (#1041), apareceram os arquivos co-locados que
+      # nunca tinham sido executados.
+      #
+      # O ratchet reprova só o que ESTA branch quebrou, e avisa quando um teste
+      # do baseline volta a passar — para o teto encolher em vez de virar
+      # decoração. Mesma forma de `lint:ratchet` e `typecheck:ratchet`.
+      - name: Vitest ratchet (no newly broken tests vs baseline)
+        run: npm run test:ratchet
+      # Os thresholds de coverage em vitest.config.ts SERIAM o portão de
+      # regressão — mas hoje não são: `vitest run --coverage` sai != 0 por
+      # teste vermelho antes de chegar a avaliar cobertura, e são 137 dos 178
+      # herdados dentro de `tests/unit/` (medido 2026-08-05). O passo reprovava
+      # sempre, pelo mesmo motivo que o de cima.
+      #
+      # Fica informativo ATÉ o baseline do ratchet encolher — o relatório
+      # continua sendo publicado como artefato, que é o que serve para decidir
+      # onde escrever teste. Voltar a ser bloqueante é uma linha: apagar o
+      # `continue-on-error`. Não faça isso antes de `.vitest-baseline.json`
+      # chegar a zero, ou o portão volta a nascer vermelho.
       - run: npm run test:coverage
+        continue-on-error: true
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -186,6 +239,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      # Deno 2. O `supabase/functions/deno.lock` está na versão 5 do formato, que
+      # só o Deno 2 lê — o 1.46.3 morre com "Unsupported lockfile version '5'"
+      # antes de rodar um teste sequer. A main já corrigiu isto no a9b99c7e; a
+      # develop não recebeu, e ninguém viu porque o job vinha `skipped` atrás do
+      # `needs: [quality]` vermelho.
       - uses: denoland/setup-deno@v1
         with:
           deno-version: v2.x
@@ -205,6 +263,17 @@ jobs:
     needs: [unit-tests]
     steps:
       - uses: actions/checkout@v4
+      - name: Guard do alvo remoto — self-test (pula sem secret, recusa prod)
+        run: bash scripts/test-workflows.guard.test.sh
+      # Os dois secrets NÃO estão cadastrados no repositório, e por isso este job
+      # ficou vermelho desde sempre com "SUPABASE_SERVICE_ROLE_KEY is required"
+      # (SCRUM-364) — vermelho de secret ausente, lido por meses como defeito de
+      # código. Agora o script PULA em voz alta, e diz no resumo do job que verde
+      # aqui significa "não rodou".
+      #
+      # Quando forem cadastrados, o valor tem que ser o de uma BRANCH EFÊMERA.
+      # O nome `_DEV` é histórico: o projeto dev foi APOSENTADO em 2026-07-22 e o
+      # script recusa tanto o ref dele quanto o de produção.
       - name: Run workflow system tests
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_DEV }}

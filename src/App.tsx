@@ -47,6 +47,7 @@ function lazyRetry<T extends { default: any }>(
 // Lazy-loaded pages — cada página vira um chunk separado (com retry automático)
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
+const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
 const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
 const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
 const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
@@ -67,7 +68,6 @@ const NovoDisparo = lazy(() => lazyRetry(() => import("@/modules/campaigns/pages
 const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/FunisHub")));
 // Marketing and Analytics are unified in the Analytics tab — see TabAnalyticsV2.tsx
 const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
-const Negocios = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Negocios")));
 const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
@@ -302,6 +302,22 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* SCRUM-11 — Estúdio de Métricas. SEM PermissionProtectedRoute de
+          propósito, espelhando /dashboard: `useFeaturePermission` é fail-closed
+          (`features?.[key] === true`), então gatear numa chave que a
+          `get-member-permissions` ainda não semeia trancaria todo membro
+          não-admin. Quando `metrics.view` existir no modelo de permissão, o
+          gate entra aqui e a rota entra no NAV_VIEW_PERMISSIONS. */}
+      <Route
+        path="/metricas"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <MetricsStudio />
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/funis"
         element={
@@ -522,16 +538,6 @@ function AppRoutes() {
             <OrgFeaturesProvider>
               <FeatureRoute feature="tv_dashboard"><TVDashboard /></FeatureRoute>
             </OrgFeaturesProvider>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/negocios"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <FeatureRoute feature="deals"><Negocios /></FeatureRoute>
-            </LayoutWrapper>
           </ProtectedRoute>
         }
       />

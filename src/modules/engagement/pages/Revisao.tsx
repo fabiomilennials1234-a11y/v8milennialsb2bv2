@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useState, useMemo } from "react";
 import { Search, Lightbulb, ChevronDown, ChevronUp, Settings2, ClipboardList, MessageSquare, ListChecks } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,8 +16,6 @@ import {
 import { EmptyState } from "@/shared/components/EmptyState";
 import { RevisionItem, type RevisionTask } from "@/modules/engagement/components/revisao/RevisionItem";
 import { AutomationSettings } from "@/modules/engagement/components/followups/AutomationSettings";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
-import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { ScheduleFollowUpModal } from "@/modules/engagement/components/followups/ScheduleFollowUpModal";
 import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useDeleteFollowUp } from "@/modules/engagement/hooks/useFollowUps";
 import { useMyScheduledMessages, useCancelScheduledMessage } from "@/modules/communication/hooks/useScheduledMessages";
@@ -27,7 +26,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 function RevisaoInner() {
-  const { openLead } = useLeadSheet();
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [assignedTo, setAssignedTo] = useState<string>("mine");
   const [showCompleted, setShowCompleted] = useState(false);
@@ -140,7 +139,7 @@ function RevisaoInner() {
   };
 
   const handleOpenLead = (leadId: string) => {
-    openLead(leadId);
+    navigate(`/leads?lead=${leadId}`);
   };
 
   const handleScheduleNew = (
@@ -378,10 +377,6 @@ function RevisaoInner() {
 
 export default function Revisao() {
   return (
-    <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
         <RevisaoInner />
-      </LeadPanelLayout>
-    </LeadPanelProvider>
   );
 }

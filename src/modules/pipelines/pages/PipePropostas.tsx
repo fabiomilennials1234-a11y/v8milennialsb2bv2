@@ -2,13 +2,19 @@ import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Search, Plus, Calendar as CalendarIcon,
+  Plus, Calendar as CalendarIcon,
   DollarSign, Loader2, TrendingUp, Package,
   BarChart3, MessageCircle, Settings2,
-  MoreVertical, Trash2, LayoutGrid, Send
+  MoreVertical, MoreHorizontal, Trash2, LayoutGrid, Send
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -16,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { exigeTextoLivre, resolverMotivoDaPerda } from "../lib/loss-reason";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -39,9 +47,14 @@ import { useUpdatePipeProposta, useDeletePipeProposta, PipePropostasStatus } fro
 import { usePaginatedPipeline } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { usePipePropostasMetrics } from "@/modules/pipelines/hooks/config/usePipeMetrics";
 import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
-import { MetricsPeriodSelector } from "@/modules/pipelines/components/shared/MetricsPeriodSelector";
+import {
+  getStalledBucket,
+  STALLED_ALL,
+  STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES,
+} from "@/modules/pipelines/lib/stalled-buckets";
+import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
+import { FunnelViewsMenu } from "@/modules/pipelines/components/shared/FunnelViewsMenu";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
-import { PipeViewToggle } from "@/modules/pipelines/components/shared/PipeViewToggle";
 import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
 import { useDeleteAllLeadsInPipe, useUpdateLead } from "@/modules/leads";
 import { usePipelineStages, stagesToColumns } from "@/modules/pipelines/hooks/model/usePipelineStages";
@@ -55,7 +68,13 @@ import { useTeamMembers, useResponsibleMembers } from "@/modules/identity";
 import { CreateProposalModal } from "@/modules/carteira/components/proposal/CreateProposalModal";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
+import {
+  DealPanelProvider,
+  useDealSheet,
+  LeadPanelProvider,
+  DealCardPanel,
+  LeadCardPanel,
+} from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import {
   AnalyticsPanel,
@@ -88,7 +107,6 @@ import { useIdentity } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
-import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
 import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "@/modules/pipelines/components/disparo";
 import { useLossReasons } from "@/modules/pipelines/hooks/config/useLossReasons";
 import { useSearchParams } from "react-router-dom";
@@ -159,6 +177,10 @@ type PropostasFilterState = {
   filterQualificationTier: string[];
   filterPreQualificationTier: string[];
   filterScheduled: boolean;
+  /** Data de criação. Saiu do cabeçalho pro painel de Filtros (protótipo). */
+  periodState: MetricsPeriodState;
+  /** Dias na etapa atual — id de `STALLED_BUCKETS`, ou "all". */
+  filterStalled: string;
   viewMode: "kanban" | "analytics";
   // Marca se já aplicamos o default "me" para membros (one-shot por usuário).
   // Depois de true, respeitamos a escolha manual do usuário.
@@ -176,6 +198,8 @@ const DEFAULT_PROPOSTAS_FILTERS: PropostasFilterState = {
   filterQualificationTier: [],
   filterPreQualificationTier: [],
   filterScheduled: false,
+  periodState: createInitialPeriodState(),
+  filterStalled: STALLED_ALL,
   viewMode: "kanban",
   membroDefaultApplied: false,
 };
@@ -186,7 +210,16 @@ function PipePropostasInner() {
     DEFAULT_PROPOSTAS_FILTERS
   );
 
-  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, viewMode } = filterState;
+  const { searchTerm, filterResponsible, filterProductType, filterPriority, filterCalor, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterScheduled, periodState, filterStalled, viewMode } = filterState;
+
+  const setPeriodState = useCallback(
+    (v: MetricsPeriodState) => setFilterState((f) => ({ ...f, periodState: v })),
+    [setFilterState]
+  );
+  const setFilterStalled = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterStalled: v })),
+    [setFilterState]
+  );
 
   const setSearchTerm = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchTerm: v })),
@@ -215,6 +248,8 @@ function PipePropostasInner() {
       filterQualificationTier: [],
       filterPreQualificationTier: [],
       filterScheduled: false,
+      periodState: createInitialPeriodState(),
+      filterStalled: STALLED_ALL,
     }));
   }, [setFilterState]);
 
@@ -234,7 +269,7 @@ function PipePropostasInner() {
       membroDefaultApplied: true,
     }));
   }, [teamMemberId, isAdmin, isMaster, filterState.membroDefaultApplied, setFilterState]);
-  const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isDisparoOpen, setIsDisparoOpen] = useState(false);
@@ -279,6 +314,8 @@ function PipePropostasInner() {
   // State for loss reason dialog (drag-to-perdido)
   const [lossReasonDialogOpen, setLossReasonDialogOpen] = useState(false);
   const [selectedLossReason, setSelectedLossReason] = useState<string>("");
+  /** Texto livre do motivo "Outro" (SCRUM-369) — obrigatório quando escolhido. */
+  const [lossReasonNote, setLossReasonNote] = useState<string>("");
   const [pendingPerdido, setPendingPerdido] = useState<{
     itemId: string;
     leadId: string;
@@ -290,7 +327,6 @@ function PipePropostasInner() {
 
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; pipeId: string; leadId: string } | null>(null);
   const [deleteAllLeadsDialogOpen, setDeleteAllLeadsDialogOpen] = useState(false);
-  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
   const [drilldownMetric, setDrilldownMetric] = useState<MetricType | null>(null);
   const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
@@ -303,6 +339,10 @@ function PipePropostasInner() {
   // D1 / SQL-I3: gate won-transitions behind a required sale_value.
   const saleGuard = useSaleValueGuard(pipelineStages);
   const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const stalledBucket = useMemo(
+    () => (STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES ? getStalledBucket(filterStalled) : null),
+    [filterStalled],
+  );
   const { stageData, allItems: pipeData, isLoading } = usePaginatedPipeline(
     "propostas",
     pipelineStages,
@@ -324,6 +364,8 @@ function PipePropostasInner() {
       periodAfter: periodRange?.startStr ?? undefined,
       periodBefore: periodRange?.endStr ?? undefined,
       closedStatusKeys: periodRange ? [...PROPOSTAS_CLOSED_STATUS_KEYS] : undefined,
+      stalledMinDays: stalledBucket?.minDays ?? null,
+      stalledMaxDays: stalledBucket?.maxDays ?? null,
     }
   );
   const refetch = useCallback(() => {}, []);
@@ -346,10 +388,36 @@ function PipePropostasInner() {
   const { data: dbLossReasons } = useLossReasons();
   const lossReasons = useMemo(() => {
     if (dbLossReasons && dbLossReasons.length > 0) {
-      return dbLossReasons.map((r) => ({ value: r.id, label: r.name }));
+      return dbLossReasons.map((r) => ({ value: r.id, label: r.name, doCatalogo: true }));
     }
-    return LOSS_REASONS_FALLBACK;
+    return LOSS_REASONS_FALLBACK.map((r) => ({ ...r, doCatalogo: false }));
   }, [dbLossReasons]);
+
+  /**
+   * O motivo escolhido, nas duas formas que o banco guarda (SCRUM-369).
+   *
+   * `null` enquanto a escolha não estiver COMPLETA — e é isso que trava o botão
+   * de confirmar. A decisão do CTO (2026-08-21) é que o motivo é obrigatório:
+   * antes o placeholder dizia "opcional", ninguém escolhia, e a métrica de
+   * motivos de perda nasceu vazia em 99 organizações.
+   *
+   * "Outro" exige o texto livre. Um balde "Outro" com 40% dos casos e nenhuma
+   * palavra dentro não responde nada — é o mesmo vazio com outro nome.
+   */
+  /**
+   * O motivo escolhido, nas duas formas que o banco guarda (SCRUM-369).
+   * `null` = escolha incompleta; é isso que trava o botão de confirmar.
+   */
+  const perdaResolvida = useMemo(
+    () => resolverMotivoDaPerda(selectedLossReason, lossReasonNote, lossReasons),
+    [selectedLossReason, lossReasonNote, lossReasons],
+  );
+
+  /** O campo de texto só aparece quando o motivo escolhido é "Outro". */
+  const precisaDeTexto = useMemo(
+    () => exigeTextoLivre(selectedLossReason, lossReasons),
+    [selectedLossReason, lossReasons],
+  );
   const bulk = useBulkSelection();
   const allLeadIds = useMemo(() => {
     if (!pipeData) return [];
@@ -358,6 +426,14 @@ function PipePropostasInner() {
 
   // Build declarative sections for KanbanFilterPanel
   const filterSections: FilterSectionConfig[] = useMemo(() => [
+    // Os dois filtros de tempo do redesenho: "criado" é entrada, "parado" é a
+    // etapa atual. Independentes de propósito, combináveis.
+    { type: "created-period", value: periodState, onChange: setPeriodState },
+    // "Parado há" só entra com a migration 20270729000010 aplicada — ver
+    // STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES.
+    ...(STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES
+      ? [{ type: "stalled-days", value: filterStalled, onChange: setFilterStalled } as const]
+      : []),
     { type: "responsible", value: filterResponsible, onChange: (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })), members: responsibleMembers },
     { type: "origin-multi", value: filterOrigin, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterOrigin: v })) },
     { type: "tags", value: filterTags, onChange: (v: string[]) => setFilterState((f) => ({ ...f, filterTags: v })), tags: orgTags },
@@ -367,7 +443,7 @@ function PipePropostasInner() {
     { type: "calor", value: filterCalor, onChange: (v: string) => setFilterState((f) => ({ ...f, filterCalor: v })) },
     { type: "priority", value: filterPriority, onChange: (v: string) => setFilterState((f) => ({ ...f, filterPriority: v })) },
     { type: "scheduled", value: filterScheduled, onChange: (v: boolean) => setFilterState((f) => ({ ...f, filterScheduled: v })) },
-  ], [filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState]);
+  ], [periodState, filterStalled, filterResponsible, filterOrigin, filterTags, filterQualificationTier, filterPreQualificationTier, filterProductType, filterCalor, filterPriority, filterScheduled, responsibleMembers, orgTags, setFilterState, setPeriodState, setFilterStalled]);
 
   // Board filter handed to the Disparo "Filtro ativo" source. Mirrors EXACTLY
   // the dimensions usePaginatedPipeline resolves server-side (search,
@@ -528,9 +604,9 @@ function PipePropostasInner() {
   const handleMobileLeadClick = useCallback(
     (entryId: string) => {
       const item = pipeData?.find((p) => p.id === entryId);
-      if (item) openLead(item.lead_id || item.lead?.id, item.id);
+      if (item) openDeal(item.id, item.lead_id || item.lead?.id);
     },
-    [pipeData, openLead],
+    [pipeData, openDeal],
   );
   const handleMobileMove = (entryId: string, stageKey: string) => {
     handleStatusChange(entryId, stageKey);
@@ -889,6 +965,7 @@ function PipePropostasInner() {
         closerId: item.closer_id,
       });
       setSelectedLossReason("");
+      setLossReasonNote("");
       setLossReasonDialogOpen(true);
       return;
     }
@@ -898,7 +975,7 @@ function PipePropostasInner() {
 
   // Handle loss reason dialog confirmation
   const handleLossReasonConfirm = async () => {
-    if (!pendingPerdido) return;
+    if (!pendingPerdido || !perdaResolvida) return;
     await executeStatusChange(
       pendingPerdido.itemId,
       "perdido",
@@ -906,17 +983,19 @@ function PipePropostasInner() {
       pendingPerdido.closerId,
       undefined,
       false,
-      selectedLossReason || null
+      perdaResolvida,
     );
     setLossReasonDialogOpen(false);
     setPendingPerdido(null);
     setSelectedLossReason("");
+    setLossReasonNote("");
   };
 
   const handleLossReasonCancel = () => {
     setLossReasonDialogOpen(false);
     setPendingPerdido(null);
     setSelectedLossReason("");
+    setLossReasonNote("");
     toast("Operação cancelada");
   };
 
@@ -928,7 +1007,12 @@ function PipePropostasInner() {
     closerId: string | null,
     commitmentDate?: Date,
     skipAutoPush?: boolean,
-    lossReason?: string | null,
+    /**
+     * Motivo da perda, nas DUAS formas (SCRUM-369). O id liga ao catálogo da
+     * org; o texto é o rótulo snapshotado, que sobrevive a renomear ou apagar
+     * o motivo depois. Guardar só o id deixaria o histórico ilegível.
+     */
+    perda?: { id: string | null; texto: string | null },
     saleValue?: number
   ) => {
     try {
@@ -954,9 +1038,15 @@ function PipePropostasInner() {
         updates.closed_at = new Date().toISOString();
       }
 
-      // If loss reason provided (for perdido), save it
-      if (newStatus === "perdido" && lossReason) {
-        updates.loss_reason = lossReason;
+      // Motivo da perda — as duas formas, quando houver (SCRUM-369).
+      //
+      // Antes só `loss_reason` era escrito, e o valor colocado ali era o ID do
+      // motivo. A allowlist de `useUpdatePipeProposta` não conhecia essa chave,
+      // então o valor era descartado em silêncio: 72 negócios perdidos em
+      // produção, ZERO com motivo (medido em 2026-08-21).
+      if (newStatus === "perdido" && perda) {
+        if (perda.id) updates.loss_reason_id = perda.id;
+        if (perda.texto) updates.loss_reason = perda.texto;
       }
 
       await updatePipeProposta.mutateAsync(updates);
@@ -1110,45 +1200,80 @@ function PipePropostasInner() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">
-            Gestão de Propostas
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {pipeData?.length || 0} propostas • Arraste para alterar status
-          </p>
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
-          <PipeViewToggle
-            value={viewMode}
-            onChange={setViewMode}
-            layoutId="pipe-propostas-view-indicator"
-            options={[
+      {/* Faixa única de controles — Modelo 1 do protótipo
+          `.specs/mockups/funis-redesign/`, o mesmo componente dos outros funis. */}
+      <FunnelControlBar
+        funnelKey="sys:propostas"
+        funnelLabel="Propostas"
+        funnelColor="#f59e0b"
+        search={searchTerm}
+        onSearchChange={setSearchTerm}
+        searchPlaceholder="Buscar proposta, empresa, telefone…"
+        views={
+          <FunnelViewsMenu
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            viewOptions={[
               { value: "kanban", icon: LayoutGrid, label: "Kanban" },
               { value: "analytics", icon: BarChart3, label: "Analytics" },
             ]}
+            entityType="pipe_propostas"
+            currentFilters={filterState}
+            defaultFilters={DEFAULT_PROPOSTAS_FILTERS}
+            onApplyFilters={(f) => setFilterState(() => f)}
+            activeViewId={activeViewId}
+            onActiveViewChange={handleActiveViewChange}
           />
-          <AutoCreateLeadToggle />
-          <Button variant="outline" className="gap-2" onClick={() => setIsSettingsOpen(true)}>
-            <Settings2 className="w-4 h-4" />
-            Configurações
-          </Button>
-          <Button
-            variant="outline"
-            className="gap-2 border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-            onClick={handleOpenDisparoStage}
-          >
-            <Send className="w-4 h-4 text-primary" />
-            Disparo
-          </Button>
-          <Button className="gap-2" onClick={() => setIsCreateModalOpen(true)}>
-            <Plus className="w-4 h-4" />
+        }
+        filters={
+          viewMode !== "analytics" ? (
+            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+        actions={
+          <>
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setIsSettingsOpen(true)}>
+              <Settings2 className="w-4 h-4 mr-2" />
+              Configurações
+            </Button>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-9 px-2"
+                  aria-label="Mais ações do funil"
+                  data-testid="funnel-overflow"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-60">
+                <DropdownMenuItem onClick={handleOpenDisparoStage}>
+                  <Send className="w-4 h-4 mr-2 text-primary" />
+                  Disparo
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <div className="px-2 py-1.5">
+                  <AutoCreateLeadToggle />
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </>
+        }
+        primaryAction={
+          <Button size="sm" className="h-9 gradient-gold" onClick={() => setIsCreateModalOpen(true)}>
+            <Plus className="w-4 h-4 mr-2" />
             Nova Proposta
           </Button>
-        </div>
-      </div>
+        }
+        chips={
+          viewMode !== "analytics" ? (
+            <FilterChips sections={filterSections} onClearAll={handleClearAllFilters} />
+          ) : null
+        }
+      />
 
       <PipeSettingsDialog
         open={isSettingsOpen}
@@ -1159,9 +1284,6 @@ function PipePropostasInner() {
 
       {/* Ghost leads (RLS divergente entre pipe e leads) */}
       <GhostLeadsBanner pipeType="propostas" ghostCount={ghostLeadsCount} />
-
-      {/* Período das métricas */}
-      <MetricsPeriodSelector state={periodState} onChange={setPeriodState} />
 
       {/* Summary Cards — só no modo Analytics */}
       {viewMode === "analytics" && (
@@ -1238,37 +1360,6 @@ function PipePropostasInner() {
               </div>
             )}
 
-            {/* Filters */}
-            <div className="flex flex-col gap-3 mb-6">
-              <div className="flex items-center gap-3">
-                <div className="relative flex-1 min-w-[200px] max-w-sm">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar proposta..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <SavedViewsDropdown
-                  entityType="pipe_propostas"
-                  currentFilters={filterState}
-                  defaultFilters={DEFAULT_PROPOSTAS_FILTERS}
-                  onApplyFilters={(f) => setFilterState(() => f)}
-                  activeViewId={activeViewId}
-                  onActiveViewChange={handleActiveViewChange}
-                />
-                <KanbanFilterPanel
-                  sections={filterSections}
-                  onClearAll={handleClearAllFilters}
-                />
-              </div>
-              <FilterChips
-                sections={filterSections}
-                onClearAll={handleClearAllFilters}
-              />
-            </div>
-
             {/* Kanban Board with Drag-and-Drop (desktop) / List View (mobile) */}
             {isMobile ? (
               <PipelineListView
@@ -1300,6 +1391,7 @@ function PipePropostasInner() {
                 <LeadCard
                   lead={card}
                   variant="propostas"
+                  density="compact"
                   selected={bulk.isSelected(card.leadId || "")}
                   onSelect={(e) => {
                     const lid = card.leadId || "";
@@ -1309,7 +1401,7 @@ function PipePropostasInner() {
                   onClick={() => {
                     const item = pipeData?.find(p => p.id === card.id);
                     if (item) {
-                      openLead(item.lead_id || item.lead?.id, item.id);
+                      openDeal(item.id, item.lead_id || item.lead?.id);
                     }
                   }}
                   onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
@@ -1535,18 +1627,19 @@ function PipePropostasInner() {
       />
 
       {/* Loss Reason Dialog (drag-to-perdido) */}
-      <AlertDialog open={lossReasonDialogOpen} onOpenChange={(open) => { if (!open) { setLossReasonDialogOpen(false); setPendingPerdido(null); setSelectedLossReason(""); } }}>
+      <AlertDialog open={lossReasonDialogOpen} onOpenChange={(open) => { if (!open) { setLossReasonDialogOpen(false); setPendingPerdido(null); setSelectedLossReason(""); setLossReasonNote(""); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Motivo da perda</AlertDialogTitle>
             <AlertDialogDescription>
-              Selecione o motivo pelo qual esta proposta foi perdida. Isso ajuda a melhorar o processo comercial.
+              Sem o motivo, a perda vira só um número. É ele que responde onde o
+              funil está furando.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="px-1 py-2">
+          <div className="flex flex-col gap-2 px-1 py-2">
             <Select value={selectedLossReason} onValueChange={setSelectedLossReason}>
               <SelectTrigger>
-                <SelectValue placeholder="Selecionar motivo (opcional)" />
+                <SelectValue placeholder="Selecionar motivo" />
               </SelectTrigger>
               <SelectContent>
                 {lossReasons.map((r) => (
@@ -1556,11 +1649,24 @@ function PipePropostasInner() {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* "Outro" sem texto é o mesmo vazio com outro nome: um balde que
+                concentra 40% dos casos e não diz nada. */}
+            {precisaDeTexto && (
+              <Textarea
+                value={lossReasonNote}
+                onChange={(e) => setLossReasonNote(e.target.value)}
+                placeholder="Qual foi o motivo? (obrigatório)"
+                rows={3}
+                autoFocus
+              />
+            )}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={handleLossReasonCancel}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleLossReasonConfirm}
+              disabled={!perdaResolvida}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Confirmar Perda
@@ -1671,12 +1777,31 @@ function PipePropostasInner() {
   );
 }
 
+/**
+ * Os dois cards do sistema (SCRUM-124). Ver a nota em `PipeWhatsapp.tsx` — a
+ * ordem dos providers não é estética: `LeadPanelProvider` por fora, senão o link
+ * "abrir a pessoa" de dentro do card do Negócio não acha contexto.
+ *
+ * Aqui o card novo importa mais que nos outros funis: é neste que o negócio é
+ * ganho ou perdido, e é o card do Negócio que carrega valor, etapa e a trilha do
+ * funil. O `DealDetailDialog` legado mostrava a ficha do lead numa tela sobre
+ * fechamento de venda.
+ */
 export default function PipePropostas() {
   return (
     <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
-        <PipePropostasInner />
-      </LeadPanelLayout>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <DealCardPanel />
+              <LeadCardPanel />
+            </>
+          }
+        >
+          <PipePropostasInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
     </LeadPanelProvider>
   );
 }

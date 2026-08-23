@@ -3,10 +3,8 @@ import { Layers } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import {
-  useAddLeadToStandardPipe,
   useLeadAllPipelines,
   useRemoveLeadFromStandardPipe,
-  type CustomPipelineStatus,
   type PipelineStatus,
   type StandardPipelineStatus,
 } from "../../../../hooks/useLeadAllPipelines";
@@ -18,7 +16,15 @@ import { MeetingFieldBlock } from "../../cross-pipe/MeetingFieldBlock";
 import { BudgetFieldBlock } from "../../cross-pipe/BudgetFieldBlock";
 import { ActionPill, type ActionPillType } from "./ActionPill";
 import { ActionPanel } from "./ActionPanel";
-import { OtherPipesStrip, type InactivePipeDescriptor } from "./OtherPipesStrip";
+import { NewDealDialog } from "./NewDealDialog";
+import {
+  SYSTEM_PIPE_SHORT_LABEL,
+  isCustomPipe,
+  isSystemPipe,
+} from "./newDealOptions";
+import { useAbrirNegocio } from "./useAbrirNegocio";
+import { DealMeta } from "./DealMeta";
+import { useLeadsDeals } from "../../../../hooks/useLeadsDeals";
 import { StageRail, type StageRailPipe } from "./StageRail";
 import { useCrossPipeMove } from "./useCrossPipeMove";
 import {
@@ -30,11 +36,17 @@ import {
 } from "./pipeRanking";
 
 /**
- * CrossPipePanel — replaces LeadCrossPipeAccordion. Three horizontal zones:
+ * CrossPipePanel — a seção **Negócios** do lead. Três zonas horizontais:
  *
- *   A. StageRails        — one row per pipe the lead is currently in
- *   B. ActionPills + Panel — meeting/budget summary chips + expanded editor
- *   C. OtherPipesStrip   — dashed chips for pipes the lead is *not* in
+ *   A. StageRails        — uma linha por negócio (= card de funil), com valor,
+ *                          tempo parado e ponte pro board em `DealMeta`
+ *   B. ActionPills + Panel — chips de reunião/orçamento + editor expandido
+ *   C. NewDealDialog     — a única porta de criação de negócio (decisão D1)
+ *
+ * Vocabulário: **card de funil É o negócio** enquanto `deals` não está acesa
+ * (0 linhas em prod). O backfill 1:1 da fatia 2 só torna literal o que esta
+ * seção já mostra — nenhuma mudança visual no dia da migração. Ver
+ * `useLeadsDeals` e o doc `08 — Backlog/em-progresso/lead-negocio-separacao-fluxo-e2e`.
  *
  * Goal: collapse the ~200px tall accordion down to ~140-180px in the
  * typical 2-pipe case while keeping every action one click away.
@@ -44,38 +56,11 @@ import {
  * `propostas`, custom pipe ids) are migrated transparently on first read.
  */
 
-const SYSTEM_PIPE_TYPES = new Set<StandardPipelineStatus["pipeType"]>([
-  "qualificacao",
-  "confirmacao",
-  "propostas",
-]);
-
 const SYSTEM_RAIL_REF: Record<string, "whatsapp" | "confirmacao" | "propostas"> = {
   qualificacao: "whatsapp",
   confirmacao: "confirmacao",
   propostas: "propostas",
 };
-
-const SYSTEM_PIPE_SHORT_LABEL: Record<string, string> = {
-  qualificacao: "Qualificação",
-  confirmacao: "Confirmação",
-  propostas: "Propostas",
-  upsell: "Carteira",
-};
-
-function isSystemPipe(p: PipelineStatus): p is StandardPipelineStatus & {
-  pipeType: "qualificacao" | "confirmacao" | "propostas";
-} {
-  return p.type === "standard" && SYSTEM_PIPE_TYPES.has(p.pipeType);
-}
-
-function isUpsellPipe(p: PipelineStatus): p is StandardPipelineStatus {
-  return p.type === "standard" && p.pipeType === "upsell";
-}
-
-function isCustomPipe(p: PipelineStatus): p is CustomPipelineStatus {
-  return p.type === "custom";
-}
 
 type ExpandedAction = "meeting" | "budget" | null;
 
@@ -104,14 +89,15 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   defaultExpandedPipeEntryId,
   userId,
 }: CrossPipePanelProps) {
-  const { usePipeConfirmacaoByLeadId, usePipePropostaByLeadId, useAddLeadToCustomPipe, useRemoveLeadFromCustomPipe, MergedMeetingEditor } = usePipeOps();
+  const { usePipeConfirmacaoByLeadId, usePipePropostaByLeadId, useRemoveLeadFromCustomPipe, MergedMeetingEditor } = usePipeOps();
   const { hasFeature } = useOrgFeatures();
   const { data: pipelines = [], isLoading } = useLeadAllPipelines(leadId);
+  // Metadados do negócio (valor, tempo parado, funil-alvo) — mesma fonte que a
+  // coluna "Negócios" da lista, então as duas telas contam a mesma coisa.
+  const { data: dealsByLead } = useLeadsDeals(leadId ? [leadId] : []);
   const { data: confirmacaoData } = usePipeConfirmacaoByLeadId(leadId);
   const { data: propostaData } = usePipePropostaByLeadId(leadId);
-  const addStandardMutation = useAddLeadToStandardPipe();
   const removeStandardMutation = useRemoveLeadFromStandardPipe();
-  const addCustomMutation = useAddLeadToCustomPipe();
   const removeCustomMutation = useRemoveLeadFromCustomPipe();
   const logAction = useLogLeadAction();
   const { canAddToPipe, canRemoveFromPipe, canMoveMeeting } = useLeadActionGates(leadId);
@@ -120,10 +106,6 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   // ─── Partition pipes ────────────────────────────────────────────────
   const systemPipes = useMemo(
     () => (pipelines as PipelineStatus[]).filter(isSystemPipe),
-    [pipelines],
-  );
-  const upsellPipe = useMemo(
-    () => (pipelines as PipelineStatus[]).find(isUpsellPipe) ?? null,
     [pipelines],
   );
   const customPipes = useMemo(
@@ -135,20 +117,10 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     () => systemPipes.filter((p) => p.pipeId !== null),
     [systemPipes],
   );
-  const inactiveSystem = useMemo(
-    () => systemPipes.filter((p) => p.pipeId === null),
-    [systemPipes],
-  );
   const activeCustom = useMemo(
     () => customPipes.filter((p) => p.entryId !== null),
     [customPipes],
   );
-  const inactiveCustom = useMemo(
-    () => customPipes.filter((p) => p.entryId === null),
-    [customPipes],
-  );
-
-  const upsellActive = !!upsellPipe?.pipeId;
 
   const hasConfirmacao = activeSystem.some((p) => p.pipeType === "confirmacao");
   const hasPropostas = activeSystem.some((p) => p.pipeType === "propostas");
@@ -239,6 +211,14 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     return list;
   }, [activeSystem, activeCustom]);
 
+  // `recordId` do rail é o id da `pipeline_entries` (system e custom), a mesma
+  // chave que `useLeadsDeals` devolve — casa 1:1 sem tradução.
+  const dealByEntryId = useMemo(() => {
+    const map = new Map<string, NonNullable<typeof dealsByLead>[string][number]>();
+    for (const deal of dealsByLead?.[leadId] ?? []) map.set(deal.id, deal);
+    return map;
+  }, [dealsByLead, leadId]);
+
   // ─── Rail focus (which rail is expanded) ───────────────────────────
   // Single-expand: at most one rail is expanded at a time. When 2+ rails
   // are active, the others render as compact chips. Persisted per user+lead
@@ -278,68 +258,29 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     [railFocusKey],
   );
 
-  // ─── Add handlers ──────────────────────────────────────────────────
-  const handleAddSystem = useCallback(
-    async (pipe: StandardPipelineStatus) => {
-      if (!pipe.stages.length) {
-        toast.error("Pipe sem stages configuradas");
-        return;
-      }
-      const stageId = pipe.stages[0].id;
-      try {
-        await addStandardMutation.mutateAsync({
-          leadId,
-          pipeType: pipe.pipeType,
-          stageId,
-        });
-        void logAction({
-          leadId,
-          action: "pipe_added",
-          description: `Adicionado a ${pipe.label}`,
-          metadata: { pipe_type: pipe.pipeType, stage_key: stageId },
-        });
-        toast.success(`Adicionado a ${pipe.label}`);
-        if (pipe.pipeType === "confirmacao") forceExpand("meeting");
-        else if (pipe.pipeType === "propostas") forceExpand("budget");
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao adicionar";
-        toast.error(msg);
-      }
+  // ─── Abrir negócio — a porta única (ADR-0023 decisão 3) ────────────
+  //
+  // O construtor de opções e o roteamento saíram daqui para `newDealOptions`/
+  // `useAbrirNegocio` porque o botão "Criar negócio" do Card do Lead precisa
+  // exatamente do mesmo comportamento — e a alternativa era uma segunda cópia
+  // da regra, que é como duas telas passam a discordar sobre onde a Carteira
+  // está travada. O painel só acrescenta o que é dele: abrir o editor certo
+  // logo depois de criar.
+  const {
+    options: dealOptions,
+    isCreating,
+    criar: handleCreateDeal,
+  } = useAbrirNegocio({
+    leadId,
+    organizationId: _organizationId,
+    pipelines: pipelines as PipelineStatus[],
+    canAdd: canAddToPipe,
+    vendaFechada: propostaData?.status === "vendido",
+    onCreated: (option) => {
+      if (option.key === "sys:confirmacao") forceExpand("meeting");
+      else if (option.key === "sys:propostas") forceExpand("budget");
     },
-    [addStandardMutation, leadId, logAction, forceExpand],
-  );
-
-  const handleAddCustom = useCallback(
-    async (pipe: CustomPipelineStatus) => {
-      if (!pipe.stages.length) {
-        toast.error("Pipe sem stages configuradas");
-        return;
-      }
-      const stageId = pipe.stages[0].id;
-      try {
-        await addCustomMutation.mutateAsync({
-          lead_id: leadId,
-          pipeline_id: pipe.pipelineId,
-          stage_id: stageId,
-        });
-        void logAction({
-          leadId,
-          action: "pipe_added",
-          description: `Adicionado a ${pipe.pipelineName}`,
-          metadata: {
-            pipe_type: "custom",
-            pipeline_id: pipe.pipelineId,
-            stage_id: stageId,
-          },
-        });
-        toast.success(`Adicionado a ${pipe.pipelineName}`);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Erro ao adicionar";
-        toast.error(msg);
-      }
-    },
-    [addCustomMutation, leadId, logAction],
-  );
+  });
 
   // ─── Remove handlers ───────────────────────────────────────────────
   const handleRemoveSystem = useCallback(
@@ -377,68 +318,6 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     [removeStandardMutation, leadId, logAction, expanded, persistExpanded],
   );
 
-  // ─── Inactive descriptors for strip ────────────────────────────────
-  const inactive: InactivePipeDescriptor[] = useMemo(() => {
-    const out: InactivePipeDescriptor[] = [];
-    for (const p of inactiveSystem) {
-      out.push({
-        key: `sys:${p.pipeType}`,
-        label: p.label,
-        shortLabel: SYSTEM_PIPE_SHORT_LABEL[p.pipeType] ?? p.label,
-        isAdding: addStandardMutation.isPending,
-        onAdd: () => handleAddSystem(p),
-        disabled: !canAddToPipe.allowed,
-        disabledReason: canAddToPipe.reason ?? "Sem permissão",
-        testId: `inactive-pipe-chip-sys-${p.pipeType}`,
-      });
-    }
-    if (upsellPipe && !upsellActive) {
-      const hasClosedSale = propostaData?.status === "vendido";
-      out.push({
-        key: "sys:upsell",
-        label: upsellPipe.label,
-        shortLabel: SYSTEM_PIPE_SHORT_LABEL.upsell,
-        isAdding: addStandardMutation.isPending,
-        onAdd: () => handleAddSystem(upsellPipe),
-        disabled: !canAddToPipe.allowed || !hasClosedSale,
-        disabledReason: !canAddToPipe.allowed
-          ? canAddToPipe.reason ?? "Sem permissão"
-          : !hasClosedSale
-            ? "Disponível só quando há venda fechada"
-            : undefined,
-        testId: "inactive-pipe-chip-sys-upsell",
-      });
-    }
-    const sortedCustoms = [...inactiveCustom].sort((a, b) =>
-      a.pipelineName.localeCompare(b.pipelineName, "pt-BR"),
-    );
-    for (const p of sortedCustoms) {
-      out.push({
-        key: `custom:${p.pipelineId}`,
-        label: p.pipelineName,
-        shortLabel: p.pipelineName,
-        isAdding: addCustomMutation.isPending,
-        onAdd: () => handleAddCustom(p),
-        disabled: !canAddToPipe.allowed,
-        disabledReason: canAddToPipe.reason ?? "Sem permissão",
-        testId: `inactive-pipe-chip-custom-${p.pipelineId}`,
-      });
-    }
-    return out;
-  }, [
-    inactiveSystem,
-    inactiveCustom,
-    upsellPipe,
-    upsellActive,
-    propostaData?.status,
-    addStandardMutation.isPending,
-    addCustomMutation.isPending,
-    canAddToPipe.allowed,
-    canAddToPipe.reason,
-    handleAddSystem,
-    handleAddCustom,
-  ]);
-
   // ─── Loading ────────────────────────────────────────────────────────
   if (isLoading) {
     return (
@@ -450,15 +329,29 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     );
   }
 
-  // ─── Total empty (no active, no inactive) ──────────────────────────
-  if (rails.length === 0 && inactive.length === 0) {
+  // ─── Sem negócio ────────────────────────────────────────────────────
+  // O lead existe, ninguém abriu negócio ainda. Depois do D1 este é o estado
+  // normal de entrada — o ingest cria lead e para por aí —, então o vazio
+  // precisa oferecer a ação, não só informar a ausência.
+  if (rails.length === 0) {
     return (
       <div
         className="rounded-xl border border-dashed border-border/40 bg-muted/10 p-6 text-center"
         data-testid="cross-pipe-panel-empty"
       >
         <Layers className="w-6 h-6 mx-auto text-muted-foreground/60 mb-2" />
-        <p className="text-sm text-muted-foreground">Sem pipes ainda</p>
+        <p className="text-sm text-muted-foreground">Nenhum negócio ainda</p>
+        <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">
+          O lead está na base. Abrir um negócio é o que o coloca num funil.
+        </p>
+        <div className="mt-3 flex justify-center">
+          <NewDealDialog
+            options={dealOptions}
+            isCreating={isCreating}
+            onCreate={handleCreateDeal}
+            size="md"
+          />
+        </div>
       </div>
     );
   }
@@ -472,29 +365,51 @@ export const CrossPipePanel = memo(function CrossPipePanel({
 
   return (
     <div className={cn("space-y-3")} data-testid="cross-pipe-panel">
+      {/* Cabeçalho — conta os negócios e carrega a única porta de criação. */}
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+          Negócios
+          <span className="text-[11px] tabular-nums text-muted-foreground/60">
+            {rails.length}
+          </span>
+        </h3>
+        <NewDealDialog
+          options={dealOptions}
+          isCreating={isCreating}
+          onCreate={handleCreateDeal}
+        />
+      </div>
+
       {/* Zone A — StageRails (single-expand, collapsed chips for others) */}
       {rails.length > 0 && (
         <div
           className="space-y-1.5"
           data-testid="stage-rails"
           role="region"
-          aria-label="Pipes do lead"
+          aria-label="Negócios do lead"
         >
           {rails.map((rail) => {
             const key = railKey(rail);
             const isExpanded = key === expandedRailKey;
             return (
-              <StageRail
-                key={key}
-                pipe={rail}
-                pendingStageKey={move.pendingStageKey}
-                recentlyMovedStageKey={move.recentlyMovedStageKey}
-                disabled={!canMoveMeeting.allowed}
-                disabledReason={movePipeDisabledReason}
-                onMove={move.move}
-                mode={isExpanded ? "expanded" : "collapsed"}
-                onExpand={() => handleExpandRail(rail)}
-              />
+              <div key={key} className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <StageRail
+                    pipe={rail}
+                    pendingStageKey={move.pendingStageKey}
+                    recentlyMovedStageKey={move.recentlyMovedStageKey}
+                    disabled={!canMoveMeeting.allowed}
+                    disabledReason={movePipeDisabledReason}
+                    onMove={move.move}
+                    mode={isExpanded ? "expanded" : "collapsed"}
+                    onExpand={() => handleExpandRail(rail)}
+                  />
+                </div>
+                <DealMeta
+                  deal={dealByEntryId.get(rail.recordId)}
+                  fallbackLabel={rail.shortLabel}
+                />
+              </div>
             );
           })}
         </div>
@@ -568,8 +483,11 @@ export const CrossPipePanel = memo(function CrossPipePanel({
         </div>
       )}
 
-      {/* Zone C — Other pipes strip */}
-      {inactive.length > 0 && <OtherPipesStrip inactive={inactive} />}
+      {/* Zone C — a criação mora no cabeçalho (`NewDealDialog`). O strip de
+          chips pontilhados saiu junto com `OtherPipesStrip`/`InactivePipeChip`:
+          com negócio nascendo só de clique, "adicionar a um pipe" virou a ação
+          principal e não podia seguir como rodapé de um clique só, sem etapa,
+          sem dono e sem valor. */}
 
       {/* Hidden but accessible: custom pipe remove via kebab is handled by
           ActionPanel which today only renders for confirmação/propostas.

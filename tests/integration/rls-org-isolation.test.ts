@@ -20,6 +20,13 @@ import {
   clearClients,
   expectRowCount,
 } from './rls-helpers';
+import {
+  TEST_ORG_ID,
+  TEST_ORG_B_ID,
+  TEST_ORG_A_LEAD_IDS,
+  TEST_LEAD_ORGB_1_ID,
+  TEST_LEAD_ORGB_2_ID,
+} from './setup';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const shouldSkip =
@@ -71,12 +78,26 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
   });
 
   describe('leads', () => {
-    it('Org A admin sees exactly 4 leads', async () => {
-      await expectRowCount(adminA, 'leads', 4);
+    // ⚠ CONTAGEM EXATA NÃO SOBREVIVE NUM BANCO COMPARTILHADO (SCRUM-362/426).
+    // Este par pedia 4 e 2, e recebeu 7 e 2: dois leads vieram do seed §12
+    // (cenário "Lead ≠ Negócio", que mora na Org A de propósito) e um veio de
+    // uma suíte vizinha ainda em curso. A afirmação que importa é a fronteira:
+    // o admin vê TODO o seed da própria org e NADA da outra.
+    it('Org A admin vê todo o seed da Org A e nada de fora', async () => {
+      const { data, error } = await adminA.from('leads').select('id, organization_id');
+      expect(error).toBeNull();
+      const ids = new Set((data ?? []).map((r) => r.id));
+      for (const seeded of TEST_ORG_A_LEAD_IDS) expect(ids.has(seeded)).toBe(true);
+      for (const row of data ?? []) expect(row.organization_id).toBe(TEST_ORG_ID);
     });
 
-    it('Org B admin sees exactly 2 leads', async () => {
-      await expectRowCount(adminB, 'leads', 2);
+    it('Org B admin vê todo o seed da Org B e nada de fora', async () => {
+      const { data, error } = await adminB.from('leads').select('id, organization_id');
+      expect(error).toBeNull();
+      const ids = new Set((data ?? []).map((r) => r.id));
+      expect(ids.has(TEST_LEAD_ORGB_1_ID)).toBe(true);
+      expect(ids.has(TEST_LEAD_ORGB_2_ID)).toBe(true);
+      for (const row of data ?? []) expect(row.organization_id).toBe(TEST_ORG_B_ID);
     });
 
     it('cross-org isolation: counts are disjoint', async () => {
@@ -154,8 +175,13 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
       await expectRowCount(master, 'organizations', 2);
     });
 
-    it('master sees all leads (6 = 4 + 2)', async () => {
-      await expectRowCount(master, 'leads', 6);
+    it('master vê o seed das DUAS orgs (a contagem exata não é estável)', async () => {
+      const { data, error } = await master.from('leads').select('id');
+      expect(error).toBeNull();
+      const ids = new Set((data ?? []).map((r) => r.id));
+      for (const seeded of TEST_ORG_A_LEAD_IDS) expect(ids.has(seeded)).toBe(true);
+      expect(ids.has(TEST_LEAD_ORGB_1_ID)).toBe(true);
+      expect(ids.has(TEST_LEAD_ORGB_2_ID)).toBe(true);
     });
 
     it('master sees tags from both orgs', async () => {
@@ -205,29 +231,52 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
     'follow_ups',
   ] as const;
 
-  describe('unseeded tables: RLS active, 0 rows', () => {
+  // ⚠ ESTE BLOCO PEDIA `count === 0` E ERA UMA ARMADILHA (SCRUM-426).
+  //
+  // "Tabela não semeada" não é propriedade do banco, é uma suposição sobre o que
+  // as OUTRAS suítes fizeram — e o Vitest roda os arquivos em paralelo contra o
+  // MESMO Postgres. Quatro vermelhos vieram daí: `workflows` com 2 linhas,
+  // `workflow_executions` com 16, `custom_pipelines` e `custom_pipeline_stages`
+  // com 1 cada, todas criadas por suítes vizinhas que ainda não tinham chegado
+  // no `afterAll`. O vermelho aparecia e sumia conforme a ordem do agendador,
+  // que é a pior espécie: mancha de leopardo em portão de segurança.
+  //
+  // O que esta suíte mede é ISOLAMENTO, e isolamento não depende de a tabela
+  // estar vazia: o admin da Org A pode ver linha da Org A, e NUNCA linha da Org
+  // B. É isso que passa a ser afirmado — e é mais forte, porque a versão antiga
+  // passava trivialmente quando a tabela estava vazia por acaso.
+  describe('unseeded tables: RLS active, nada atravessa a fronteira', () => {
     for (const table of unseededTables) {
-      it(`${table}: Org A returns 0 rows`, async () => {
-        const { count, error } = await adminA
+      it(`${table}: Org A só enxerga linha da Org A`, async () => {
+        const { data, error } = await adminA
           .from(table)
-          .select('*', { count: 'exact', head: true });
+          .select('organization_id');
 
         // 42P01 = relation does not exist — skip gracefully
         if (error?.code === '42P01') return;
+        // 42703 = a tabela existe mas não é escopada por org (não se aplica)
+        if (error?.code === '42703') return;
 
         expect(error).toBeNull();
-        expect(count).toBe(0);
+        const foreign = (data ?? []).filter(
+          (r: { organization_id: string | null }) => r.organization_id !== TEST_ORG_ID,
+        );
+        expect(foreign).toEqual([]);
       });
 
-      it(`${table}: Org B returns 0 rows`, async () => {
-        const { count, error } = await adminB
+      it(`${table}: Org B só enxerga linha da Org B`, async () => {
+        const { data, error } = await adminB
           .from(table)
-          .select('*', { count: 'exact', head: true });
+          .select('organization_id');
 
         if (error?.code === '42P01') return;
+        if (error?.code === '42703') return;
 
         expect(error).toBeNull();
-        expect(count).toBe(0);
+        const foreign = (data ?? []).filter(
+          (r: { organization_id: string | null }) => r.organization_id !== TEST_ORG_B_ID,
+        );
+        expect(foreign).toEqual([]);
       });
     }
   });

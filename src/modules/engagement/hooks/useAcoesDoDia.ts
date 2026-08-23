@@ -44,17 +44,30 @@ export function useAcoesDoDia() {
     queryFn: async () => {
       if (!user?.id) return [];
 
+      // 🔴 O NOME DO FK É OBRIGATÓRIO NOS DOIS PIPES, e a falta dele deixou
+      // este hook quebrado para TODOS os consumidores desde sempre.
+      //
+      // `proposta_id` e `confirmacao_id` apontam ambos para `pipeline_entries`,
+      // e `pipe_propostas`/`pipe_confirmacao` são views sobre essa MESMA tabela.
+      // Então, para cada embed, o PostgREST enxerga dois caminhos possíveis e
+      // se recusa a escolher: devolve HTTP 300 com `PGRST201`
+      // ("Could not embed because more than one relationship was found").
+      // Não é erro de permissão nem de RLS — a query inteira falha, e a lista
+      // nunca chega. Medido contra a branch efêmera em 21/08/2026.
+      //
+      // Desambiguar com `!<constraint>` resolve. Os nomes vêm do próprio corpo
+      // do erro do PostgREST, que lista os candidatos.
       const { data, error } = await supabase
         .from("acoes_do_dia")
         .select(`
           *,
-          proposta:pipe_propostas(
+          proposta:pipe_propostas!acoes_do_dia_proposta_id_pipeline_entries_fkey(
             id,
             sale_value,
             lead:leads(name, company, phone, email)
           ),
           lead:leads(id, name, company, phone, email),
-          confirmacao:pipe_confirmacao(
+          confirmacao:pipe_confirmacao!acoes_do_dia_confirmacao_id_pipeline_entries_fkey(
             id,
             lead:leads(name, phone, email, company)
           ),

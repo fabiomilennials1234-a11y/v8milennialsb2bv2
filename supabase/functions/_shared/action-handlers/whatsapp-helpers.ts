@@ -463,11 +463,19 @@ export async function resolveVariables(
     // tipos do postgrest-js só sabe ler um literal. Com `string` ele devolve
     // `ParserError`, a linha vira `GenericStringError` e TODO acesso a coluna
     // aqui embaixo virava um TS2339. O texto enviado ao servidor é idêntico.
-    .select("name, company, email, phone, pipe_whatsapp, qualification_score, rating, sdr_id, closer_id, responsible_id, organization_id, faturamento, segment, urgency, notes, origin")
+    .select("name, company, email, phone, qualification_score, rating, sdr_id, closer_id, responsible_id, organization_id, faturamento, segment, urgency, notes, origin")
     .eq("id", leadId)
     .maybeSingle();
 
   if (!lead) return template;
+
+  // ADR-0023 §10: `{estagio}` é a etapa do NEGÓCIO, não a coluna espelho do lead.
+  // `leads.pipe_whatsapp` não pode ser lida aqui a partir do L2: quando o negócio
+  // sai de Oportunidades por MOVE, o gatilho resolve o slug por `NEW.pipeline_id`
+  // e não escreve — a coluna CONGELA na última etapa de whatsapp. A mensagem sairia
+  // com uma etapa que o negócio não ocupa mais, e ninguém veria campo vazio para
+  // desconfiar.
+  const waEntry = await getPipeEntry(supabase, leadId, lead.organization_id as string, "whatsapp");
 
   let result = template;
 
@@ -476,7 +484,7 @@ export async function resolveVariables(
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
-    estagio:    lead.pipe_whatsapp || "",
+    estagio:    waEntry?.stage_key || "",
     score:      String(lead.qualification_score ?? ""),
     rating:     String(lead.rating ?? ""),
     faturamento: String(lead.faturamento ?? ""),

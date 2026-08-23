@@ -4,20 +4,40 @@
  * covers the pure `compare()` function.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// ADR-0023 §10: `field: "stage"` resolve a etapa do NEGÓCIO via
+// `getPipeEntry(..., "whatsapp")`, não mais de `leads.pipe_whatsapp` — o espelho
+// legado congela quando o negócio sai de Oportunidades por UPDATE, e uma condição
+// comparando etapa passaria a casar sempre contra estado que não existe mais.
+const { pipeEntries } = vi.hoisted(() => ({ pipeEntries: {} as Record<string, unknown> }));
+
+vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
+  getPipeEntry: vi.fn(
+    async (_sb: unknown, _leadId: string, _orgId: string, slug: string) => pipeEntries[slug] ?? null,
+  ),
+  getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
+  resolvePipelineId: vi.fn().mockResolvedValue(null),
+}));
+
 import { evaluateCondition } from "../../supabase/functions/_shared/workflow-condition-evaluator";
 import { createMockSupabase } from "../helpers/supabase-mock";
 
+// Sem `pipe_whatsapp`: a coluna saiu do caminho de leitura, e mantê-la no fixture
+// esconderia uma regressão — o teste passaria de novo se alguém a reintroduzisse.
 const LEAD = {
   id: "lead-1",
   organization_id: "org-1",
   name: "Ada",
   email: "ada@x.com",
-  pipe_whatsapp: "abordado",
   qualification_score: 82,
   rating: 4,
   segment: "B2B",
 };
+
+beforeEach(() => {
+  for (const k of Object.keys(pipeEntries)) delete pipeEntries[k];
+});
 
 describe("evaluateCondition — lead lookup", () => {
   it("returns false when lead not found", async () => {
@@ -43,7 +63,8 @@ describe("evaluateCondition — field resolution", () => {
     expect(result).toBe(true);
   });
 
-  it("field='stage' maps to pipe_whatsapp", async () => {
+  it("field='stage' resolve a etapa do negócio no funil WhatsApp", async () => {
+    pipeEntries.whatsapp = { id: "entry-1", stage_key: "abordado" };
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD]);
     const result = await evaluateCondition(sb, "lead-1", {
@@ -54,7 +75,22 @@ describe("evaluateCondition — field resolution", () => {
     expect(result).toBe(true);
   });
 
-  it("field='stage' falls back to empty string when pipe_whatsapp missing", async () => {
+  it("field='stage' ignora a coluna legada leads.pipe_whatsapp", async () => {
+    // Sem negócio no funil, mas com o espelho legado carregando valor: é
+    // exatamente o estado em que a coluna fica DEPOIS do move (ela congela, não
+    // esvazia). A condição tem de tratar como "sem etapa", não casar com o
+    // valor velho.
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [{ ...LEAD, pipe_whatsapp: "abordado" }]);
+    const result = await evaluateCondition(sb, "lead-1", {
+      field: "stage",
+      operator: "in_stage",
+      value: "abordado",
+    });
+    expect(result).toBe(false);
+  });
+
+  it("field='stage' cai para string vazia quando o lead não tem negócio no funil", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [{ id: "lead-1", organization_id: "org-1" }]);
     const result = await evaluateCondition(sb, "lead-1", {

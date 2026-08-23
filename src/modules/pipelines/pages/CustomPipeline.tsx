@@ -1,7 +1,12 @@
 import { useState, useMemo, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +20,7 @@ import {
 import {
   Settings2,
   Plus,
-  Search,
+  MoreHorizontal,
   Loader2,
   AlertTriangle,
   Trash2,
@@ -46,12 +51,25 @@ import {
 } from "@/modules/pipelines/lib/kanbanFilterParams";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 import { useViewport } from "@/shared/hooks/use-viewport";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "@/modules/leads";
+import {
+  DealPanelProvider,
+  useDealSheet,
+  LeadPanelProvider,
+  DealCardPanel,
+  LeadCardPanel,
+} from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
 import { GhostLeadsBanner } from "@/modules/pipelines/components/shared/GhostLeadsBanner";
 import { DisparoWizard } from "../components/disparo";
+import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
+import { type MetricsPeriodState, getDateRange, createInitialPeriodState } from "@/lib/metrics-period";
+import {
+  getStalledBucket,
+  matchesStalledBucket,
+  STALLED_ALL,
+} from "@/modules/pipelines/lib/stalled-buckets";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
 import { useFeaturePermission, useResponsibleMembers } from "@/modules/identity";
@@ -71,11 +89,13 @@ function CustomPipelinePageInner() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
-  const { openLead } = useLeadSheet();
+  const { openDeal } = useDealSheet();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterResponsible, setFilterResponsible] = useState("all");
   const [qualificationTier, setQualificationTier] = useState<string[]>([]);
   const [preQualificationTier, setPreQualificationTier] = useState<string[]>([]);
+  const [periodState, setPeriodState] = useState<MetricsPeriodState>(createInitialPeriodState);
+  const [filterStalled, setFilterStalled] = useState<string>(STALLED_ALL);
   const [showAddLead, setShowAddLead] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
@@ -101,38 +121,53 @@ function CustomPipelinePageInner() {
   // ── Entries cujo lead a RLS negou ────────────────────────────────────────
   // `custom_pipe_entries` tem RLS por ORG; `leads` tem RLS por
   // RESPONSABILIDADE. Numa org que desligou `leads.view_all`, o membro recebe
-  // TODAS as entries mas o embed `lead:leads(...)` volta null nas que não são
-  // dele — e o card renderizava "Sem nome". Medido no PROD (HGE Iluminação,
-  // funil "Prospecção"): 575 de 673 assim para um dos vendedores.
+  // TODAS as entries mas o embed `lead:leads(...)` volta null nas que nao sao
+  // dele — e o card renderizava "Sem nome". Medido no PROD (HGE Iluminacao,
+  // funil "Prospeccao"): 575 de 673 assim para um dos vendedores.
   //
-  // Os funis do sistema nunca tiveram isso porque `get_pipeline_page` usa
-  // INNER JOIN: a linha que a RLS esvazia some inteira. Aqui o embed equivale
-  // a LEFT JOIN, então descartamos no cliente para dar o mesmo resultado. O
-  // contador da coluna vem da migration 20270812130000, que troca o LEFT JOIN
-  // por JOIN em `get_custom_pipeline_stage_counts`.
-  //
-  // Não é filtro de UI: não tem chave no painel e não vira chip. É a leitura
-  // se alinhando com o que a RLS já decidiu.
+  // Descartar aqui e o que iguala este board aos funis do sistema, onde
+  // `get_pipeline_page` usa INNER JOIN e a linha esvaziada some inteira.
   const visibleEntries = useMemo(() => entries.filter((e) => e.lead != null), [entries]);
   const ghostCount = entries.length - visibleEntries.length;
 
-  // Filtros client-side — este board não é paginado no servidor. Aplicados às
-  // entries visíveis ANTES de alimentar o kanban e a lista mobile.
-  const filtersActive =
+  // Filtros client-side — este board nao e paginado no servidor. Aplicados as
+  // entries VISIVEIS (nunca a `entries` cru: senao o filtro reintroduziria os
+  // fantasmas que a linha acima acabou de tirar).
+  const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
+  const stalledBucket = useMemo(() => getStalledBucket(filterStalled), [filterStalled]);
+
+  // `tierFilterActive` significa "a contagem da coluna precisa ser derivada no
+  // cliente" — vale para QUALQUER filtro client-side, senao o badge conta o que
+  // a tela nao mostra. O nome ficou porque e ele que o kanban recebe.
+  const tierFilterActive =
     qualificationTier.length > 0 ||
     preQualificationTier.length > 0 ||
-    filterResponsible !== "all";
-  const tieredEntries = useMemo(
-    () =>
-      filtersActive
-        ? visibleEntries.filter(
-            (e) =>
-              matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier) &&
-              matchesCustomPipeResponsible(e, filterResponsible),
-          )
-        : visibleEntries,
-    [visibleEntries, filtersActive, qualificationTier, preQualificationTier, filterResponsible],
-  );
+    filterResponsible !== "all" ||
+    !!periodRange ||
+    !!stalledBucket;
+
+  const tieredEntries = useMemo(() => {
+    if (!tierFilterActive) return visibleEntries;
+    const periodStart = periodRange ? new Date(periodRange.startStr).getTime() : null;
+    const periodEnd = periodRange ? new Date(periodRange.endStr).getTime() : null;
+    const now = new Date();
+    return visibleEntries.filter((e) => {
+      if (!matchesQualificationFilters(e.lead, qualificationTier, preQualificationTier)) return false;
+      if (!matchesCustomPipeResponsible(e, filterResponsible)) return false;
+      if (periodStart !== null && periodEnd !== null) {
+        // Comparacao por timestamp, nao por string: o Postgres devolve
+        // "+00:00" e o range sai como "Z" — lexicograficamente eles nao se
+        // ordenam, mesmo apontando pro mesmo instante.
+        const created = e.created_at ? new Date(e.created_at).getTime() : NaN;
+        if (Number.isNaN(created) || created < periodStart || created > periodEnd) return false;
+      }
+      return matchesStalledBucket(
+        (e as { stage_changed_at?: string | null }).stage_changed_at ?? e.created_at,
+        stalledBucket,
+        now,
+      );
+    });
+  }, [visibleEntries, tierFilterActive, qualificationTier, preQualificationTier, filterResponsible, periodRange, stalledBucket]);
 
   // O badge da coluna vem do RPC (server-side) e só conhece a BUSCA — não
   // conhece tier nem responsável. Sob qualquer filtro client-side ele precisa
@@ -155,21 +190,25 @@ function CustomPipelinePageInner() {
   // forma PASSIVA — sem o usuário pedir filtro nenhum —, e bastava 1 lead
   // soft-deleted para disparar, porque a policy de `leads` começa por
   // `deleted_at IS NULL` ANTES do teste de admin.
-  const clientCountActive = filtersActive;
+  const clientCountActive = tierFilterActive;
 
   const filterSections: FilterSectionConfig[] = useMemo(
     () => [
+      { type: "created-period", value: periodState, onChange: setPeriodState },
+      { type: "stalled-days", value: filterStalled, onChange: setFilterStalled },
       { type: "responsible", value: filterResponsible, onChange: setFilterResponsible, members: responsibleMembers },
       { type: "qualification-tier", value: qualificationTier, onChange: setQualificationTier },
       { type: "pre-qualification-tier", value: preQualificationTier, onChange: setPreQualificationTier },
     ],
-    [filterResponsible, responsibleMembers, qualificationTier, preQualificationTier],
+    [periodState, filterStalled, filterResponsible, responsibleMembers, qualificationTier, preQualificationTier],
   );
 
   const handleClearFilters = useCallback(() => {
     setFilterResponsible("all");
     setQualificationTier([]);
     setPreQualificationTier([]);
+    setPeriodState(createInitialPeriodState());
+    setFilterStalled(STALLED_ALL);
   }, []);
 
   // ── Mobile: lista por stage (PipelineListView) em vez do kanban drag-drop ──
@@ -195,9 +234,9 @@ function CustomPipelinePageInner() {
   const handleMobileLeadClick = useCallback(
     (entryId: string) => {
       const entry = entries.find((e) => e.id === entryId);
-      if (entry) openLead(entry.lead_id, entry.id);
+      if (entry) openDeal(entry.id, entry.lead_id);
     },
-    [entries, openLead],
+    [entries, openDeal],
   );
   const handleMobileMove = useCallback(
     (entryId: string, stageId: string) => {
@@ -255,76 +294,84 @@ function CustomPipelinePageInner() {
 
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0"
-            style={{ backgroundColor: `${pipeline.color}20` }}
-          >
-            <PipeIcon className="w-5 h-5" style={{ color: pipeline.color }} />
-          </div>
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold truncate">{pipeline.name}</h1>
-            {pipeline.description && (
-              <p className="text-sm text-muted-foreground truncate">{pipeline.description}</p>
+      {/* Faixa única de controles — Modelo 1 do protótipo
+          `.specs/mockups/funis-redesign/`, o mesmo componente dos funis do
+          sistema. Substitui o par cabeçalho + fileira de busca/filtros.
+          A contagem de leads virou chip ao lado do nome: era informação, não
+          controle, e ocupava um canto da fileira que deixou de existir. */}
+      <FunnelControlBar
+        funnelKey={`custom:${pipeline.id}`}
+        funnelLabel={pipeline.name}
+        funnelColor={pipeline.color}
+        search={searchQuery}
+        onSearchChange={setSearchQuery}
+        filters={
+          <>
+            {/* O ícone é escolha do usuário ao criar o funil — o FunnelSwitcher
+                só carrega o ponto de cor, então ele fica aqui pra identidade do
+                funil não sumir com o cabeçalho antigo. */}
+            <PipeIcon
+              className="hidden size-4 shrink-0 sm:block"
+              style={{ color: pipeline.color }}
+              aria-hidden
+            />
+            {stages.length > 0 && (
+              <>
+                <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:inline">
+                  {tieredEntries.length} {tieredEntries.length === 1 ? "lead" : "leads"}
+                </span>
+                <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
+              </>
             )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 [&>*]:shrink-0">
-          {stages.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-primary/30 text-foreground hover:border-primary/60 hover:bg-primary/5"
-              onClick={() => setIsDisparoOpen(true)}
-            >
-              <Send className="w-4 h-4 mr-2 text-primary" />
-              Disparo
+          </>
+        }
+        actions={
+          <>
+            <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSettings(true)}>
+              <Settings2 className="w-4 h-4 mr-2" />
+              Configurações
             </Button>
-          )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowSettings(true)}
-          >
-            <Settings2 className="w-4 h-4 mr-2" />
-            Configurações
-          </Button>
-          <Button size="sm" onClick={() => setShowAddLead(true)}>
+
+            {stages.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-9 px-2"
+                    aria-label="Mais ações do funil"
+                    data-testid="funnel-overflow"
+                  >
+                    <MoreHorizontal className="w-4 h-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-60">
+                  <DropdownMenuItem onClick={() => setIsDisparoOpen(true)}>
+                    <Send className="w-4 h-4 mr-2 text-primary" />
+                    Disparo
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </>
+        }
+        primaryAction={
+          <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowAddLead(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Adicionar Lead
           </Button>
-        </div>
-      </div>
+        }
+        chips={<FilterChips sections={filterSections} onClearAll={handleClearFilters} />}
+      />
 
-      {/* Leads que a RLS de `leads` esconde deste usuário. Sem este aviso o
-          board simplesmente encolhe e o vendedor lê como "sumiram os cards" —
-          na Alamaster a tela ficaria VAZIA (95 entries, 0 leads visíveis). */}
+      {pipeline.description && (
+        <p className="-mt-2 truncate text-sm text-muted-foreground">{pipeline.description}</p>
+      )}
+
+      {/* Leads que a RLS de `leads` esconde deste usuario. Sem este aviso o
+          board simplesmente encolhe e o vendedor le como "sumiram os cards" —
+          na Alamaster a tela ficaria VAZIA (95 entries, 0 leads visiveis). */}
       <GhostLeadsBanner pipeType="custom" ghostCount={ghostCount} />
-
-      {/* Stats + Search + Filtros */}
-      <div className="flex flex-col gap-3">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar lead, empresa, telefone..."
-              className="pl-9"
-            />
-          </div>
-          {stages.length > 0 && (
-            <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
-          )}
-          <div className="text-sm text-muted-foreground ml-auto shrink-0">
-            {tieredEntries.length} {tieredEntries.length === 1 ? "lead" : "leads"} no funil
-          </div>
-        </div>
-        <FilterChips sections={filterSections} onClearAll={handleClearFilters} />
-      </div>
 
       {/* Kanban */}
       {stages.length > 0 ? (
@@ -345,7 +392,7 @@ function CustomPipelinePageInner() {
             clientCountActive={clientCountActive}
             onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
             onClickEntry={(entry) => {
-              openLead(entry.lead_id, entry.id);
+              openDeal(entry.id, entry.lead_id);
             }}
           />
         )
@@ -452,12 +499,29 @@ function CustomPipelinePageInner() {
   );
 }
 
+/**
+ * Os dois cards do sistema (SCRUM-124). Ver a nota em `PipeWhatsapp.tsx` sobre a
+ * ordem dos providers.
+ *
+ * O funil CUSTOM é onde as orgs modelam reativação e upsell, e é o único dos
+ * quatro que não tem etapa fixa — mais uma razão para a ficha ser a do Negócio,
+ * que desenha a trilha a partir das etapas do próprio funil, e não a do lead.
+ */
 export default function CustomPipelinePage() {
   return (
     <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
-        <CustomPipelinePageInner />
-      </LeadPanelLayout>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <DealCardPanel />
+              <LeadCardPanel />
+            </>
+          }
+        >
+          <CustomPipelinePageInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
     </LeadPanelProvider>
   );
 }

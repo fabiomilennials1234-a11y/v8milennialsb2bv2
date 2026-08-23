@@ -56,6 +56,10 @@ const ASSIGN_RESPONSIBLE_ORG_FIELDS: Record<string, OrgFieldSpec> = {
 /** Fields in TriggerConfig that reference org-specific resources */
 const TRIGGER_CONFIG_ORG_FIELDS: Record<string, OrgFieldSpec> = {
   pipeline_id: { type: "custom_pipeline" },
+  // Filtro por funil do `lead_replied` — uuids de `pipelines`, org-specific.
+  // Sem neutralizar, o arquivo exportado carregaria ids de outra org: o filtro
+  // nunca casaria e o workflow ficaria em no-op silencioso.
+  pipeline_ids: { type: "custom_pipeline" },
   campaign_id: { type: "campaign" },
   tag_id: { type: "tag", hintField: "tag_name" },
 };
@@ -74,16 +78,21 @@ function extractRefsFromData(
 
   for (const [field, spec] of Object.entries(registry)) {
     const value = data[field];
+    // Campos de lista (ex.: `pipeline_ids`) seguem a convenção já usada por
+    // `memberIds`: serializa em JSON e zera para `[]`, não para `null`. Lista
+    // vazia não é referência a nada — não vira dependência pendente.
+    const isList = Array.isArray(value);
+    if (isList && value.length === 0) continue;
     if (value != null && value !== "") {
       const hint = spec.hintField ? String(data[spec.hintField] ?? "") : "";
       refs.push({
         nodeId,
         field,
         type: spec.type,
-        originalValue: String(value),
+        originalValue: isList ? JSON.stringify(value) : String(value),
         hint,
       });
-      cleaned[field] = null;
+      cleaned[field] = isList ? [] : null;
       if (spec.hintField && spec.hintField !== field) {
         cleaned[spec.hintField] = null;
       }

@@ -3,22 +3,13 @@ import { usePersistedState } from "@/shared/hooks/usePersistedState";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { motion } from "framer-motion";
 import {
-  Fuel,
   Search,
-  Filter,
-  Star,
-  Phone,
-  Mail,
-  Building,
   UserX,
   Calendar,
-  Tag,
   MoreHorizontal,
   Plus,
   X,
   Edit2,
-  Eye,
-  ChevronDown,
   FileDown,
   History,
   CircleDashed,
@@ -27,13 +18,23 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  LeadListRow,
+  LeadListHeader,
+  LEAD_LIST_MIN_WIDTH,
+  type LeadListItem,
+} from "../components/leads/LeadListRow";
+import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
+import { mergeDataMetrics } from "../lib/data-metrics";
+import {
+  DEFAULT_LEAD_SORT,
+  normalizeLeadSort,
+  toggleLeadSort,
+  type LeadSortKey,
+} from "../lib/lead-list-sort";
+import { deriveLeadStandings } from "../lib/lead-relacao-situacao";
+import { useLeadsStats } from "../hooks/useLeadsStats";
+import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
+import { useLeadsDeals } from "../hooks/useLeadsDeals";
 import {
   Select,
   SelectContent,
@@ -57,11 +58,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "../hooks/useLeads";
+import { LeadMobileCard, StarRating, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
+import { LeadMobileSortBar } from "../components/leads/LeadMobileSortBar";
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
 import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
 import { QUALIFICATION_TIERS } from "../components/lead-detail/modal/types";
-import { LeadPanelProvider, useLeadSheet, LeadDetailSheet } from "../components/lead-detail";
+import { LeadPanelProvider, useLeadSheet } from "../components/lead-detail";
+import { LeadCardPanel } from "../components/lead-card/LeadCardPanel";
+import { DealPanelProvider } from "../components/deal-detail/DealPanelProvider";
+import { DealCardPanel } from "../components/deal-card/DealCardPanel";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { useCanDo } from "@/modules/identity";
 import { useFeaturePermission } from "@/modules/identity";
@@ -145,29 +151,6 @@ const initialFormData: LeadFormData = {
   compromisso_date: "",
 };
 
-function StarRating({ rating, onRate, readonly = false }: { rating: number; onRate?: (r: number) => void; readonly?: boolean }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
-        <button
-          key={star}
-          type="button"
-          disabled={readonly}
-          onClick={() => onRate?.(star)}
-          className={`${readonly ? "cursor-default" : "cursor-pointer hover:scale-110"} transition-transform`}
-        >
-          <Star
-            className={`w-3.5 h-3.5 ${
-              star <= rating
-                ? "fill-chart-5 text-chart-5"
-                : "text-muted-foreground/30"
-            }`}
-          />
-        </button>
-      ))}
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Persisted filter state — scoped per org + user, TTL 24 h
@@ -283,6 +266,25 @@ function LeadsInner() {
       return next;
     }, { replace: true });
   }, [setSearchParams]);
+  /**
+   * ADR-0024 decisão 2 — a ordenação chega pelo clique no cabeçalho.
+   *
+   * Guardada FORA de `filterState` de propósito. `filterState` é o payload das
+   * visões salvas (`SavedViewsDropdown`), e enfiar ordenação ali mudaria o
+   * formato do que já está gravado na conta de quem usa. A separação também é
+   * conceitual: a visão salva descreve QUAIS leads aparecem; ordem é
+   * apresentação, não recorte.
+   *
+   * `normalizeLeadSort` fecha o caminho de volta: o valor vem de localStorage,
+   * então nunca é repassado cru ao `.order()`.
+   */
+  const [persistedSort, setPersistedSort] = usePersistedState("leads-sort", DEFAULT_LEAD_SORT);
+  const sort = useMemo(() => normalizeLeadSort(persistedSort), [persistedSort]);
+  const handleSortChange = useCallback(
+    (key: LeadSortKey) => setPersistedSort((atual) => toggleLeadSort(normalizeLeadSort(atual), key)),
+    [setPersistedSort],
+  );
+
   // Recorte por atribuição (?atribuicao=sem-responsavel) — deep-link do
   // diálogo da política de isolamento em Pilotos. Leva o admin direto ao que
   // ele precisa arrumar antes de ligar a política.
@@ -298,7 +300,7 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment };
+  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
   const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment });
   const { data: teamMembers = [] } = useTeamMembers();
@@ -314,6 +316,47 @@ function LeadsInner() {
   const responsibleMembers = useResponsibleMembers();
   const bulk = useBulkSelection();
   const allLeadIds = useMemo(() => leads.map((l: Lead) => l.id), [leads]);
+
+  // Cluster "Dados" da lista — números de carteira (upsell_clients) em lote.
+  const { data: carteiraMetrics } = useLeadsCarteiraMetrics(allLeadIds);
+  // Vendas ganhas no funil, de `sale_events` (ADR-0017). Ver `useLeadsSalesMetrics`.
+  const { data: salesMetrics } = useLeadsSalesMetrics(allLeadIds);
+  // Coluna "Negócios" — card de funil é o negócio (D1). Ver `useLeadsDeals`.
+  const { data: leadDeals } = useLeadsDeals(allLeadIds);
+
+  /**
+   * Cluster "Dados" — a regra de precedência mora em `lib/data-metrics.ts`.
+   *
+   * ADR-0024 decisão 1 tirou o cluster da LISTA e o levou para o drawer, então
+   * o drawer passou a precisar do mesmo número. A regra saiu daqui para uma
+   * função pura em vez de ser copiada — duas cópias divergem no primeiro ajuste.
+   *
+   * A lista ainda consome isto porque o `segment` (ouro/prata/novo/resgate)
+   * continua sendo mostrado como selo na linha.
+   */
+  const dataMetrics = useMemo(() => {
+    return mergeDataMetrics(carteiraMetrics, salesMetrics);
+  }, [carteiraMetrics, salesMetrics]);
+
+  /**
+   * Relação + Situação (ADR-0023 decisão 6). A regra mora em
+   * `lib/lead-relacao-situacao`; aqui só junta as três fontes que a página já
+   * carregou em lote — nenhuma query nova entra por causa destas colunas.
+   *
+   * Relação lê `salesMetrics` (ledger `sale_events`) e o contador de pedidos da
+   * carteira, nunca a posição do card: com a decisão 4, avançar move o card
+   * para fora da etapa onde ganhou, e 119 dos 342 clientes de prod já estão
+   * nessa situação.
+   */
+  const standings = useMemo(
+    () =>
+      deriveLeadStandings(allLeadIds, {
+        deals: leadDeals,
+        vendas: salesMetrics,
+        carteira: carteiraMetrics,
+      }),
+    [allLeadIds, leadDeals, salesMetrics, carteiraMetrics],
+  );
   const { isMobile } = useViewport();
 
   // ── Pipe/funnel selection for new leads ──
@@ -364,23 +407,36 @@ function LeadsInner() {
     }
   }, [selectedPipe, stageOptions, selectedStage]);
 
-  // Reset para página 0 quando filtros mudam
+  // Reset para página 0 quando filtros ou ordenação mudam. A ordenação entra
+  // aqui pelo mesmo motivo dos filtros: a página 5 da ordem anterior não é a
+  // página 5 da nova, e ficar nela devolve um pedaço arbitrário da lista.
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterRating, filterQualification, createdFrom, createdTo]);
+  }, [searchQuery, filterOrigin, filterRating, filterQualification, createdFrom, createdTo, sort.key, sort.direction]);
 
-  const stats = useMemo(() => {
-    const total = totalLeads ?? leads.length;
-    const highRating = leads.filter((l: Lead) => (l.rating || 0) >= 7).length;
-    const thisMonth = leads.filter((l: Lead) => {
-      const date = new Date(l.created_at);
-      const now = new Date();
-      return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-    }).length;
-    const withSDR = leads.filter((l: Lead) => l.responsible_id).length;
+  /**
+   * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
+   *
+   * Antes, três deles filtravam o array `leads`, que é **a página atual** (25
+   * linhas), e ficavam encostados num "Total" que vinha de `useLeadsCount` e
+   * contava a org. Três números de página ao lado de um total de organização,
+   * sem nada na tela marcando a diferença — numa org com 2.987 leads, "deste
+   * mês" reportava o que coubesse numa página.
+   *
+   * O corte de "deste mês" também mudou de fuso: era o do navegador, virou o da
+   * org, que é o que o resto do produto usa.
+   */
+  const { data: orgStats } = useLeadsStats({
+    searchQuery, filterOrigin, filterRating, filterQualification,
+    filterUf: ufFilter, createdFrom, createdTo,
+  });
 
-    return { total, highRating, thisMonth, withSDR };
-  }, [leads, totalLeads]);
+  const stats = useMemo(() => ({
+    total: totalLeads ?? leads.length,
+    highRating: orgStats?.highRating ?? 0,
+    thisMonth: orgStats?.thisMonth ?? 0,
+    withSDR: orgStats?.withOwner ?? 0,
+  }), [totalLeads, leads.length, orgStats]);
 
   const handleOpenDialog = (lead?: any) => {
     if (lead) {
@@ -511,10 +567,10 @@ function LeadsInner() {
             animate={{ opacity: 1, x: 0 }}
             className="text-2xl font-bold"
           >
-            Tanque de Combustível
+            Leads
           </motion.h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie todo o combustível da sua máquina de vendas
+            Todas as pessoas e empresas da sua operação — e os negócios de cada uma.
           </p>
         </div>
 
@@ -687,6 +743,18 @@ function LeadsInner() {
       <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
         {isMobile ? (
           <div className="space-y-2.5 py-0.5">
+            {/* Ordenação do celular: no desktop quem ordena é o cabeçalho da
+                tabela, que aqui não existe — sem esta faixa o telefone ficava
+                preso na ordem padrão (inv:H5-22).
+
+                `setPersistedSort` e NÃO `handleSortChange`: os dois contratos
+                são diferentes de propósito. O cabeçalho do desktop entrega a
+                COLUNA clicada e quem resolve a direção é o `handleSortChange`;
+                a faixa do celular já resolve com `toggleLeadSort` e entrega a
+                ordenação PRONTA. Ligar um no outro aplicava o toggle duas
+                vezes — e `LEAD_SORT_COLUMNS[{objeto}]` é `undefined`, então
+                tocar num chip derrubava a lista com TypeError. */}
+            <LeadMobileSortBar sort={sort} onSortChange={setPersistedSort} />
             {isLoading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <Skeleton key={i} className="h-24 w-full rounded-xl" />
@@ -697,197 +765,88 @@ function LeadsInner() {
               </div>
             ) : (
               leads.map((lead: Lead) => (
-                <div
+                <LeadMobileCard
                   key={lead.id}
-                  onClick={() => openLead(lead.id)}
-                  className={cn(
-                    "rounded-xl border border-border bg-card p-3.5 transition-colors active:bg-muted/50",
-                    bulk.isSelected(lead.id) && "border-primary/40 bg-primary/5",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold">{lead.name}</p>
-                      {lead.company && (
-                        <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
-                          <Building className="h-3 w-3 shrink-0" />
-                          {lead.company}
-                        </p>
-                      )}
-                    </div>
-                    <StarRating rating={lead.rating || 0} readonly />
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <Badge variant="outline" className={originColors[lead.origin] || originColors.outro}>
-                      {originLabels[lead.origin] || lead.origin}
-                    </Badge>
-                    {lead.pre_sale_responsible?.name && (
-                      <Badge variant="outline" className="border-blue-500/30 text-xs text-blue-400">
-                        {lead.pre_sale_responsible.name}
-                      </Badge>
-                    )}
-                    {lead.sale_responsible?.name && (
-                      <Badge variant="outline" className="border-emerald-500/30 text-xs text-emerald-400">
-                        {lead.sale_responsible.name}
-                      </Badge>
-                    )}
-                  </div>
-                  {(lead.phone || lead.email) && (
-                    <div className="mt-2 flex flex-col gap-0.5">
-                      {lead.phone && (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Phone className="h-3 w-3 shrink-0" />
-                          {lead.phone}
-                        </span>
-                      )}
-                      {lead.email && (
-                        <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-                          <Mail className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{lead.email}</span>
-                        </span>
-                      )}
-                    </div>
-                  )}
-                  <div className="mt-2 border-t border-border/60 pt-2">
-                    <span className="text-[11px] text-muted-foreground">
-                      {formatDayInTz(lead.created_at, orgTimezone)}
-                    </span>
-                  </div>
-                </div>
+                  lead={lead as LeadMobileCardLead}
+                  standing={standings[lead.id]}
+                  selecionado={bulk.isSelected(lead.id)}
+                  onOpen={() => openLead(lead.id)}
+                  originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "outro"}
+                  originClassName={originColors[lead.origin ?? "outro"] || originColors.outro}
+                  createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
+                />
               ))
             )}
           </div>
         ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[40px]">
-                <Checkbox
-                  checked={allLeadIds.length > 0 && allLeadIds.every(id => bulk.isSelected(id))}
-                  onCheckedChange={() => bulk.selectAll(allLeadIds)}
-                />
-              </TableHead>
-              <TableHead>Lead</TableHead>
-              <TableHead>Contato</TableHead>
-              <TableHead>Origem</TableHead>
-              <TableHead>Rating</TableHead>
-              <TableHead>Responsável</TableHead>
-              <TableHead>Criado em</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={i}>
-                  <TableCell colSpan={8}>
-                    <Skeleton className="h-10 w-full" />
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : leads.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+          <div className="overflow-x-auto pb-1">
+            <div className={LEAD_LIST_MIN_WIDTH}>
+              <LeadListHeader
+                sort={sort}
+                onSortChange={handleSortChange}
+                selectAll={
+                  <Checkbox
+                    checked={allLeadIds.length > 0 && allLeadIds.every(id => bulk.isSelected(id))}
+                    onCheckedChange={() => bulk.selectAll(allLeadIds)}
+                    aria-label="Selecionar todos os leads da página"
+                  />
+                }
+              />
+              {isLoading ? (
+                <div className="space-y-2.5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-[70px] w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : leads.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border bg-card py-10 text-center text-sm text-muted-foreground">
                   Nenhum lead encontrado
-                </TableCell>
-              </TableRow>
-            ) : (
-              leads.map((lead: Lead) => (
-                <TableRow key={lead.id} className={cn("cursor-pointer hover:bg-muted/50", bulk.isSelected(lead.id) && "bg-primary/5")} onClick={() => openLead(lead.id)}>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      checked={bulk.isSelected(lead.id)}
-                      onCheckedChange={() => bulk.toggle(lead.id)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium">{lead.name}</p>
-                      {lead.company && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Building className="w-3 h-3" />
-                          {lead.company}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      {lead.email && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Mail className="w-3 h-3" />
-                          {lead.email}
-                        </p>
-                      )}
-                      {lead.phone && (
-                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                          <Phone className="w-3 h-3" />
-                          {lead.phone}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={originColors[lead.origin] || originColors.outro}>
-                      {originLabels[lead.origin] || lead.origin}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <StarRating rating={lead.rating || 0} readonly />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-col gap-0.5">
-                      {lead.pre_sale_responsible?.name && (
-                        <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-400">
-                          {lead.pre_sale_responsible.name}
-                        </Badge>
-                      )}
-                      {lead.sale_responsible?.name && (
-                        <Badge variant="outline" className="text-xs border-emerald-500/30 text-emerald-400">
-                          {lead.sale_responsible.name}
-                        </Badge>
-                      )}
-                      {!lead.pre_sale_responsible?.name && !lead.sale_responsible?.name && (
-                        <span className="text-muted-foreground text-xs">-</span>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <span className="text-xs text-muted-foreground">
-                      {formatDayInTz(lead.created_at, orgTimezone)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleOpenDialog(lead)}>
-                          <Edit2 className="w-4 h-4 mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => {
-                            setLeadToDelete(lead);
-                            setDeleteConfirmOpen(true);
-                          }}
-                          className="text-destructive focus:text-destructive"
-                          disabled={!canDeleteLead}
-                        >
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+                </div>
+              ) : (
+                leads.map((lead: Lead) => (
+                  <LeadListRow
+                    key={lead.id}
+                    lead={lead as LeadListItem}
+                    metrics={dataMetrics[lead.id]}
+                    deals={leadDeals?.[lead.id]}
+                    standing={standings[lead.id]}
+                    selected={bulk.isSelected(lead.id)}
+                    onToggleSelect={() => bulk.toggle(lead.id)}
+                    onOpen={() => openLead(lead.id)}
+                    createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
+                    originLabel={originLabels[lead.origin] || lead.origin}
+                    originClassName={originColors[lead.origin] || originColors.outro}
+                    actions={
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenDialog(lead)}>
+                            <Edit2 className="w-4 h-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setLeadToDelete(lead);
+                              setDeleteConfirmOpen(true);
+                            }}
+                            className="text-destructive focus:text-destructive"
+                            disabled={!canDeleteLead}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    }
+                  />
+                ))
+              )}
+            </div>
+          </div>
         )}
 
         {/* Paginação */}
@@ -1189,12 +1148,34 @@ function LeadsInner() {
   );
 }
 
+/**
+ * O painel da aba de Leads passa a ser o **Card do Lead** novo.
+ *
+ * `DealPanelProvider` entra junto porque clicar num negócio dentro do card abre
+ * o card do Negócio por cima. É o que permite tirar etapa, reunião e orçamento
+ * do card do Lead sem tirar a função de ninguém.
+ *
+ * SCRUM-124: o segundo painel era o `DealDetailDialog` legado. Passou a ser o
+ * `DealCardPanel`, o mesmo que os quatro funis montam. Antes, abrir o MESMO
+ * negócio pela aba de Leads e pelo funil dava duas telas diferentes, e nada na
+ * interface explicava por quê — a diferença era a porta de entrada, que é
+ * exatamente o tipo de coisa que o usuário não tem como deduzir.
+ */
 export default function Leads() {
   return (
     <LeadPanelProvider>
-      <LeadPanelLayout panel={<LeadDetailSheet />}>
-        <LeadsInner />
-      </LeadPanelLayout>
+      <DealPanelProvider>
+        <LeadPanelLayout
+          panel={
+            <>
+              <DealCardPanel />
+              <LeadCardPanel />
+            </>
+          }
+        >
+          <LeadsInner />
+        </LeadPanelLayout>
+      </DealPanelProvider>
     </LeadPanelProvider>
   );
 }

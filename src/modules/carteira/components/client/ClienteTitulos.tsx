@@ -1,150 +1,190 @@
+import { useMemo } from "react";
+import { AlertTriangle, CalendarClock, CircleDollarSign } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { formatBRL } from "@/lib/format";
+import { useTitulos } from "@/modules/integrations";
+import { resumirInadimplencia, type TituloNaTela } from "@/modules/carteira/lib/inadimplencia";
+
 /**
- * Títulos a receber do cliente — a lista por trás do selo de inadimplência.
+ * Títulos a receber do cliente (SCRUM-229, bloco 4.1).
  *
- * O selo no cabeçalho já dizia "Inadimplente · R$ X", mas parava aí: quem
- * atende o cliente precisa saber QUAIS títulos, de quando, e quanto falta em
- * cada um. Sem isso, a informação serve para julgar e não para cobrar.
+ * O ERP sincroniza contas a receber desde a integração do Toth, e até aqui
+ * NENHUMA superfície da Carteira mostrava. Medido em produção em 2026-08-21:
+ * 214 títulos, 21 atrasados, R$ 667 mil em aberto — dado chegando ao banco e
+ * morrendo lá.
  *
- * Ordena por vencimento crescente, com os atrasados no topo — é a ordem em que
- * a cobrança acontece.
+ * A régua de atraso é a DATA, não o `status` do ERP: aquele é o que ele disse
+ * na última sincronização, e entre uma e outra o calendário anda. A conta mora
+ * em `lib/inadimplencia.ts`, com teste.
  */
 
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, Clock } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
-
-type TituloStatus = "aberto" | "pago" | "atrasado";
-
-interface TituloRow {
-  id: string;
-  valor: number | null;
-  vencimento: string | null;
-  status: TituloStatus;
-  pago_em: string | null;
+interface ClienteTitulosProps {
+  clientId: string | null | undefined;
 }
 
-const STATUS_META: Record<TituloStatus, { label: string; className: string; Icon: typeof Clock }> = {
-  atrasado: { label: "Atrasado", className: "text-red-400 bg-red-500/10", Icon: AlertTriangle },
-  aberto: { label: "Em aberto", className: "text-amber-400 bg-amber-500/10", Icon: Clock },
-  pago: { label: "Pago", className: "text-emerald-400 bg-emerald-500/10", Icon: CheckCircle2 },
-};
-
-/** Ordem de cobrança: atrasado primeiro, depois por vencimento. */
-const STATUS_ORDER: Record<TituloStatus, number> = { atrasado: 0, aberto: 1, pago: 2 };
-
-const formatBRL = (v: number) =>
-  v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-
-/** `aaaa-mm-dd` → `dd/mm/aaaa`, sem passar por Date para não deslocar fuso. */
-function formatDate(iso: string | null): string {
-  if (!iso) return "—";
-  const [y, m, d] = iso.slice(0, 10).split("-");
-  return y && m && d ? `${d}/${m}/${y}` : "—";
+function formatarData(iso: string | null): string {
+  if (!iso) return "sem data";
+  const [ano, mes, dia] = iso.slice(0, 10).split("-");
+  return `${dia}/${mes}/${ano.slice(2)}`;
 }
 
-export function ClienteTitulos({ clientId }: { clientId: string | undefined }) {
-  const { organizationId } = useOrganization();
-
-  const { data: titulos = [], isLoading } = useQuery({
-    queryKey: ["client-titulos", organizationId, clientId],
-    queryFn: async (): Promise<TituloRow[]> => {
-      if (!organizationId || !clientId) return [];
-      const { data, error } = await supabase
-        .from("titulos_receber")
-        .select("id, valor, vencimento, status, pago_em")
-        .eq("organization_id", organizationId)
-        .eq("client_id", clientId)
-        .order("vencimento", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as TituloRow[];
-    },
-    enabled: !!organizationId && !!clientId,
-    staleTime: 60_000,
-  });
-
-  const ordenados = useMemo(
-    () =>
-      [...titulos].sort(
-        (a, b) =>
-          STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
-          (a.vencimento ?? "").localeCompare(b.vencimento ?? ""),
-      ),
-    [titulos],
+function Atraso({ titulo }: { titulo: TituloNaTela }) {
+  if (titulo.diasDeAtraso === null) {
+    // Sem vencimento: rótulo próprio. Dizer "vence hoje" sobre campo vazio
+    // seria inventar data.
+    return <span className="text-muted-foreground">—</span>;
+  }
+  if (titulo.diasDeAtraso > 0) {
+    return (
+      <span className="font-medium text-destructive tabular-nums">
+        {titulo.diasDeAtraso}d
+      </span>
+    );
+  }
+  if (titulo.diasDeAtraso === 0) {
+    return <span className="font-medium text-amber-400">hoje</span>;
+  }
+  return (
+    <span className="text-muted-foreground tabular-nums">
+      em {Math.abs(titulo.diasDeAtraso)}d
+    </span>
   );
+}
 
-  const emAberto = useMemo(
-    () =>
-      titulos
-        .filter((t) => t.status !== "pago")
-        .reduce((soma, t) => soma + (t.valor ?? 0), 0),
-    [titulos],
-  );
+export function ClienteTitulos({ clientId }: ClienteTitulosProps) {
+  const { data: titulos = [], isLoading } = useTitulos(clientId);
+  const resumo = useMemo(() => resumirInadimplencia(titulos), [titulos]);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-8 animate-pulse rounded bg-muted/40" />
+        ))}
+      </div>
+    );
+  }
+
+  // Duas ausências diferentes, e a distinção importa: "o ERP não mandou nada"
+  // não é "este cliente está em dia". Confundir as duas faz o vendedor
+  // acreditar numa quitação que ninguém verificou.
+  if (titulos.length === 0) {
+    return (
+      <p className="py-6 text-center text-[13px] text-muted-foreground">
+        Nenhum título sincronizado do ERP para este cliente.
+      </p>
+    );
+  }
+
+  if (resumo.fila.length === 0) {
+    return (
+      <p className="py-6 text-center text-[13px] text-muted-foreground">
+        Todos os títulos deste cliente estão quitados.
+      </p>
+    );
+  }
 
   return (
-    <Card className="bg-card border-border">
-      <CardHeader className="px-4 pt-4 pb-2 flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-sm font-semibold text-card-foreground">
-          Títulos a receber
-        </CardTitle>
-        {emAberto > 0 && (
-          <span className="text-xs font-bold tabular-nums text-amber-400">
-            {formatBRL(emAberto)} em aberto
-          </span>
-        )}
-      </CardHeader>
-
-      <CardContent className="px-4 pb-4">
-        {isLoading ? (
-          <p className="text-sm text-muted-foreground py-3">Carregando…</p>
-        ) : ordenados.length === 0 ? (
-          /* Silêncio aqui é ambíguo: pode ser cliente em dia ou sincronização
-             que ainda não alcançou este cliente. A frase não promete a primeira. */
-          <p className="text-sm text-muted-foreground py-3">
-            Nenhum título encontrado para este cliente.
+    <div className="space-y-3">
+      {/* Os três números que decidem se o vendedor liga hoje. */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <CircleDollarSign className="h-3 w-3" />
+            Em aberto
+          </div>
+          <p className="mt-0.5 text-[15px] font-bold tabular-nums tracking-[-0.02em]">
+            {formatBRL(resumo.emAberto)}
           </p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {ordenados.map((t) => {
-              const meta = STATUS_META[t.status] ?? STATUS_META.aberto;
-              return (
-                <li key={t.id} className="flex items-center gap-3 py-2 first:pt-0 last:pb-0">
-                  <span
-                    className={cn(
-                      "flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-full text-[11px] font-medium",
-                      meta.className,
-                    )}
-                  >
-                    <meta.Icon size={11} />
-                    {meta.label}
-                  </span>
+        </div>
 
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    venc. {formatDate(t.vencimento)}
-                  </span>
-
-                  <span className="ml-auto text-sm font-semibold tabular-nums text-card-foreground">
-                    {formatBRL(t.valor ?? 0)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        {/* O ERP do Toth não devolve data de pagamento — só o saldo. Dizer isso
-            aqui evita que a ausência da informação seja lida como atraso do
-            sistema, e é honesto sobre o que a integração consegue afirmar. */}
-        {ordenados.some((t) => t.status === "pago" && !t.pago_em) && (
-          <p className="text-[11px] text-muted-foreground mt-3 pt-2 border-t border-border">
-            O ERP não informa a data do pagamento, apenas o saldo — por isso títulos
-            quitados aparecem sem data.
+        <div
+          className={cn(
+            "rounded-lg border px-3 py-2",
+            resumo.atrasado > 0
+              ? "border-destructive/30 bg-destructive/[0.06]"
+              : "border-border/60 bg-muted/20",
+          )}
+        >
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <AlertTriangle className="h-3 w-3" />
+            Atrasado
+          </div>
+          <p
+            className={cn(
+              "mt-0.5 text-[15px] font-bold tabular-nums tracking-[-0.02em]",
+              resumo.atrasado > 0 && "text-destructive",
+            )}
+          >
+            {formatBRL(resumo.atrasado)}
           </p>
-        )}
-      </CardContent>
-    </Card>
+          {resumo.quantidadeAtrasada > 0 && (
+            <p className="text-[10px] text-muted-foreground">
+              {resumo.quantidadeAtrasada}{" "}
+              {resumo.quantidadeAtrasada === 1 ? "título" : "títulos"}
+              {resumo.maiorAtraso !== null && ` · até ${resumo.maiorAtraso}d`}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <CalendarClock className="h-3 w-3" />
+            Próximo
+          </div>
+          <p className="mt-0.5 text-[15px] font-bold tabular-nums tracking-[-0.02em]">
+            {resumo.proximoVencimento ? formatarData(resumo.proximoVencimento) : "—"}
+          </p>
+        </div>
+      </div>
+
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="h-8 text-[11px]">Vencimento</TableHead>
+            <TableHead className="h-8 text-[11px]">Situação</TableHead>
+            <TableHead className="h-8 text-right text-[11px]">Atraso</TableHead>
+            <TableHead className="h-8 text-right text-[11px]">Valor</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {resumo.fila.map((titulo) => (
+            <TableRow key={titulo.id} className="border-border/50">
+              <TableCell className="py-1.5 text-[12px] tabular-nums">
+                {formatarData(titulo.vencimento)}
+              </TableCell>
+              <TableCell className="py-1.5">
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px] font-medium",
+                    titulo.atrasado
+                      ? "border-destructive/25 bg-destructive/10 text-destructive"
+                      : "border-border/60 bg-muted/30 text-muted-foreground",
+                  )}
+                >
+                  {titulo.atrasado ? "Atrasado" : "A vencer"}
+                </Badge>
+              </TableCell>
+              <TableCell className="py-1.5 text-right text-[12px]">
+                <Atraso titulo={titulo} />
+              </TableCell>
+              <TableCell className="py-1.5 text-right text-[12px] font-medium tabular-nums">
+                {formatBRL(Number(titulo.valor) || 0)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
   );
 }

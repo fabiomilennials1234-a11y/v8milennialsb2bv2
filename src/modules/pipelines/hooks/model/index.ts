@@ -24,3 +24,8 @@ export * from "./useAllFunnelsLeadIds";
 // slug-typed (intenção documentada no CLAUDE.md do módulo). A versão por
 // pipelineId continua acessível via deep-import de ./usePipelines.
 export { usePipelineEntries } from "./usePipelineEntries";
+
+// SCRUM-388 — etapas de um funil, sistema ou custom, sem quem chama precisar
+// saber em qual tabela elas moram.
+export { useEtapasDoFunil } from "./useEtapasDoFunil";
+export type { EtapaDoFunil } from "./useEtapasDoFunil";

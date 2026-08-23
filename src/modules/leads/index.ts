@@ -221,6 +221,26 @@ export {
   useLeadSheet,
 } from "./components/lead-detail";
 export { LeadDetailMobileTabs } from "./components/lead-detail/modal/LeadDetailMobileTabs";
+
+// ── Components: deal-detail (modal do negócio — decisão CTO 2026-07-29) ────
+// O card do funil abre o NEGÓCIO; o modal do lead abre só na aba Leads.
+export { DealDetailDialog } from "./components/deal-detail/DealDetailDialog";
+export { DealPanelProvider } from "./components/deal-detail/DealPanelProvider";
+export { useDealSheet } from "./components/deal-detail/deal-sheet-context";
+
+// ── Components: os DOIS cards (ADR-0023 / ADR-0024) ────────────────────────
+//
+// São as duas únicas fichas do produto: `DealCardPanel` é a ficha da VENDA,
+// `LeadCardPanel` é a ficha da PESSOA. Nunca ficam empilhados — o card do funil
+// abre o Negócio, e clicar na pessoa dentro dele fecha esse e abre o Lead.
+//
+// Saem pelo barrel (SCRUM-124) porque agora são montados pelos 4 funis, que
+// vivem no módulo `pipelines`. Enquanto só o pipe-whatsapp os montava, ele os
+// alcançava por deep-import — o que o `boundaries/element-types` do ESLint
+// proíbe entre módulos. Replicar aquele import em mais três páginas seria
+// multiplicar a violação por quatro em vez de fechá-la.
+export { DealCardPanel } from "./components/deal-card/DealCardPanel";
+export { LeadCardPanel } from "./components/lead-card/LeadCardPanel";
 // Slots de responsável/qualificação — reusados fora do modal (ex.: painel do chat).
 export { ResponsibleSlot } from "./components/lead-detail/modal/header/ResponsibleSlot";
 export { QualificationSlot } from "./components/lead-detail/modal/header/QualificationSlot";

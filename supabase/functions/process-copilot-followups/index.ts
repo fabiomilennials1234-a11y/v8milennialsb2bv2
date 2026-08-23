@@ -181,7 +181,7 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
           .in("lead_id", leadIds)
       : Promise.resolve({ data: [] });
 
-    const [{ data: allLeads }, { data: execRows }, confEntries, propEntries, { data: stepLogs }] = await Promise.all([
+    const [{ data: allLeads }, { data: execRows }, waEntries, confEntries, propEntries, { data: stepLogs }] = await Promise.all([
       supabase
         .from("leads")
         .select(`
@@ -192,7 +192,6 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
           email,
           origin,
           segment,
-          pipe_whatsapp,
           ai_disabled,
           lead_tags(tag:tags(name)),
           upsell_clients(tipo_cliente_tempo, gestao_stage),
@@ -204,18 +203,23 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
         .select("lead_id")
         .eq("rule_id", rule.id)
         .in("lead_id", leadIds),
+      // ADR-0023 §10: o funil WhatsApp entra pelo NEGÓCIO, igual aos outros dois.
+      // `leads.pipe_whatsapp` saiu do SELECT — é espelho legado e não filtra mais.
+      getPipeEntriesByLeads(supabase, leadIds, orgId, "whatsapp"),
       getPipeEntriesByLeads(supabase, leadIds, orgId, "confirmacao"),
       getPipeEntriesByLeads(supabase, leadIds, orgId, "propostas"),
       stepLogPromise,
     ]);
 
     // Build lookup maps for pipe entries
+    const waByLead = new Map(waEntries.map(e => [e.lead_id, { status: e.stage_key }]));
     const confByLead = new Map(confEntries.map(e => [e.lead_id, { status: e.stage_key }]));
     const propByLead = new Map(propEntries.map(e => [e.lead_id, { status: e.stage_key }]));
 
     // Attach pipe data to leads for downstream filter compatibility
     const allLeadsWithPipes = (allLeads || []).map((l: any) => ({
       ...l,
+      pipe_whatsapp_entry: waByLead.get(l.id) ?? null,
       pipe_confirmacao: confByLead.get(l.id) ? [confByLead.get(l.id)] : [],
       pipe_propostas: propByLead.get(l.id) ? [propByLead.get(l.id)] : [],
     }));
@@ -291,7 +295,7 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
         const propostas = (lead as any).pipe_propostas?.[0] || (lead as any).pipe_propostas || null;
         const campanhaLead = (lead as any).campanha_leads?.[0] || (lead as any).campanha_leads || null;
         const leadPipes: string[] = [];
-        if (lead.pipe_whatsapp) leadPipes.push("whatsapp");
+        if (lead.pipe_whatsapp_entry?.status) leadPipes.push("whatsapp");
         if (upsellClient?.tipo_cliente_tempo) leadPipes.push("upsell_base");
         if (upsellClient?.gestao_stage) leadPipes.push("upsell_gestao");
         if (confirmacao?.status) leadPipes.push("confirmacao");
@@ -309,7 +313,7 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
         const propostas = (lead as any).pipe_propostas?.[0] || (lead as any).pipe_propostas || null;
         const campanhaLead = (lead as any).campanha_leads?.[0] || (lead as any).campanha_leads || null;
         const allStages = [
-          lead.pipe_whatsapp || "",
+          lead.pipe_whatsapp_entry?.status || "",
           upsellClient?.tipo_cliente_tempo || "",
           upsellClient?.gestao_stage || "",
           confirmacao?.status || "",

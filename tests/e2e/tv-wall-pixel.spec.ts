@@ -28,7 +28,7 @@ test.describe("TV parede — harness de pixel", () => {
   test("parede real: sem truncamento, sem card vazio, rótulo honesto", async ({ page }) => {
     await page.goto("/tv-wall-preview");
 
-    // 1) os 4 cards montaram.
+    // 1) os 5 cards montaram.
     await page.waitForSelector('[data-testid="tv-card"]', { timeout: 20000 });
     await page.waitForFunction(() => document.querySelectorAll('[data-testid="tv-card"]').length === 5, { timeout: 20000 });
 
@@ -40,7 +40,10 @@ test.describe("TV parede — harness de pixel", () => {
     //    parou de assentar). Sem isto o scrollWidth mede antes da fonte/tamanho final.
     await page.waitForFunction(() => {
       const cards = Array.from(document.querySelectorAll('[data-testid="tv-card"]')) as HTMLElement[];
-      if (cards.length !== 4) return false;
+      // 5, não 4: o 5º widget (funil) entrou no fixture em 106f6c24 e a espera
+      // da linha 33 já contava 5 — esta aqui ficou em 4 e nunca resolvia, o que
+      // matava o harness mesmo rodando contra a rota de verdade.
+      if (cards.length !== 5) return false;
       const sig = cards.map((c) => {
         const v = c.querySelector('[data-testid="tv-value"]') as HTMLElement | null;
         const e = c.querySelector('[data-testid="tv-eyebrow"]') as HTMLElement | null;

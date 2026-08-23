@@ -9,7 +9,8 @@
 
 Visão agregada do desempenho da org. Inclui:
 
-- **Dashboard** — KPIs principais (leads novos, conversão, ticket médio, receita)
+- **Comando** (`/dashboard`) — aba default **Próximos passos** (fila de ação da operação) + KPIs (leads novos, conversão, ticket médio, receita), Performance, Saúde, Mapa
+- **Estúdio de Métricas** (`/metricas`) — painel em branco + catálogo lateral; o usuário compõe as janelas que quer ver
 - **Dashboard Outbound** — fila de envio, queue health
 - **TV Dashboard** — display rotativo pra parede do escritório (period rotation)
 - **Performance** — view por vendedor (cross-cut com `engagement`)
@@ -92,6 +93,105 @@ Tipos públicos re-exportados via barrel: `PipelineVelocity`, `RevenueAttributio
 ### Eventos (post slice 19)
 
 n/a — analytics é read-only (consome eventos via aggregation tables/RPCs).
+
+## Estúdio de Métricas (`/metricas`) — SCRUM-11, MVP
+
+Superfície nova. Comando vira **operação** (o que fazer agora), Estúdio vira **análise** (o que olhar). Portas cruzadas nas duas direções: botão "Ver métricas" na aba Próximos passos, botão "Comando" no header do Estúdio, item na top bar e no Command Palette.
+
+| Peça | Arquivo |
+|---|---|
+| Página | `pages/MetricsStudio.tsx` (rota WIDE — ver `WIDE_LAYOUT_PATTERNS`) |
+| Inventário do roadmap (29 métricas) | `lib/metrics-studio-catalog.ts` — NÃO é o que a UI lista |
+| Vocabulário fechado (folha, sem deps) | `lib/metric-vocabulary.ts` — `MetricRecorte`, `MetricFormatId`, `MetricUnit`, `MetricFilters` |
+| Mapa Estúdio→motor | `lib/metrics-studio-engine-map.ts` (+ `.test.ts`) — 16 medidas + 5 razões |
+| Árvore personalizada (espelho do validador SQL) | `lib/metric-tree.ts` |
+| Período Estúdio→motor | `lib/metrics-studio-period.ts` (+ `.test.ts`) |
+| Dado de uma janela | `hooks/useMetricWindowData.ts` |
+| Catálogo efetivo (fábrica + personalizadas) | `hooks/useStudioCatalog.ts` |
+| CRUD de métrica personalizada | `hooks/useMetricCustomDefinitions.ts` → `metric_custom_definitions` |
+| Estado do painel | `hooks/useMetricsStudio.ts` (cópia de trabalho; recebe `byId` do catálogo) |
+| Persistência do painel | `hooks/useMetricsStudioPanel.ts` → tabela `metrics_studio_panels`, 1 por (org, membro) |
+| Trava de rollout | `hooks/useMetricsStudioEnabled.ts` → `organizations.metrics_studio_enabled` |
+| Lista lateral | `components/metrics-studio/MetricsStudioSidebar.tsx` |
+| Compositor de métrica | `components/metrics-studio/MetricComposer.tsx` |
+| Canvas / janela | `components/metrics-studio/{MetricsCanvas,MetricWindow}.tsx` |
+| Gráficos | `components/metrics-studio/charts/Studio{Line,Pie}Chart.tsx` (Candle existe e está DESLIGADO — G3) |
+
+### 🔴 Lead ≠ Negócio (fatia 9 · migration `20270813100000`)
+
+A unidade do funil é o **NEGÓCIO** (ADR-0023 `negocio-is-the-funnel-unit`). O motor
+passou a distinguir, e as duas medidas leem a MESMA tabela:
+
+| medida | conta | prod 2026-08-12 |
+|---|---|---|
+| `negocios_na_etapa` | `COUNT(*)` de entrada aberta | 41.025 |
+| `leads_na_etapa` | `COUNT(DISTINCT lead_id)` | 36.073 |
+
+⚠️ **`leads_na_etapa` MUDOU de conta.** Painel salvo apontando para ela cai 12%.
+É a correção, não o efeito colateral — e é grátis hoje porque o Estúdio inteiro
+está atrás de `metrics_studio_enabled`, que não está em prod.
+
+O StudioMetric `negocios_por_etapa` **manteve o id** (painel salvo continua
+abrindo) e passou a apontar para `negocios_na_etapa`. Ele já se chamava
+"Negócios na etapa" na tela e contava entrada — três nomes, uma conta.
+
+`negocios_abertos` (âncora `entradas`, por `entered_at`) existe para a razão
+`taxa_conversao_negocio`: dividir venda por LEAD infla o denominador quando o
+lead tem vários negócios (4.380 leads têm mais de um aberto).
+
+### Métrica personalizada (fatia 10 · migration `20270813110000`)
+
+Emenda 1 do ADR-0023: profundidade ≤ 3, operadores `+ − × ÷`, folha = id do
+catálogo (+ filtro da allowlist) ou número literal, árvore `jsonb` tipada.
+
+- `measure_ref` ganhou `kind='custom'` (definição salva) e `kind='tree'` (prévia
+  inline do compositor). Os dois passam pelo mesmo validador e pelo mesmo
+  avaliador — prévia não é caminho privilegiado.
+- Validação nas **duas pontas**: trigger na escrita e `fn_metric_tree_validate`
+  em runtime, porque a linha gravada sobrevive a mudança de validador.
+- Escrita é **admin-only** (`get_my_admin_organization_ids()`); leitura é de
+  qualquer membro da org.
+
+🔴 **A armadilha de 100×, e por que ela não existe na árvore.** O ramo
+`kind='ratio'` deriva `count/count → percent` e **multiplica por 100**; o front
+apenas SUFIXA `%` sem multiplicar. Par incoerente imprime erro de 100× que nada
+detecta. Na árvore personalizada, `count ÷ count` deriva **`ratio`** e o motor
+**nunca multiplica** — quem quer percentual escreve `× 100` na composição, e o
+compositor avisa em português quando o formato é `percent_1`.
+
+**Estado, após o grill de 2026-08-11** (13 decisões em `.specs/features/metricas-v2/SPEC.md` §1.7):
+
+1. ✅ **Números vêm do motor** `fn_metric_measure`, via `useMetricWindowData`. A amostra foi deletada.
+2. ✅ **A lista mostra só o que tem número real** (G1): 7 medidas + 3 razões. O inventário de 29 continua em `metrics-studio-catalog.ts` como mapa do roadmap, não como fonte da UI.
+3. ✅ **O corte é escolha do usuário** (G2) — o seletor da janela oferece só os cortes que aquela medida aceita, conferidos contra prod.
+4. ✅ **Cortes por pessoa reusam `performance.view`** (G6). Não foi preciso criar `metrics.view`.
+5. ✅ **Trava de liberação por org** (G5): `organizations.metrics_studio_enabled`, migration `20270811100000`. Falha para FECHADO — enquanto não estiver em prod, o Estúdio fica invisível para todos. Fecha três portas: rota, item da top bar e command palette.
+7. ✅ **Modos Visualização e Edição** (SCRUM-308). Nasce em Visualização; canvas travado, sem alças nem controles, lista lateral recolhida.
+8. ✅ **Painel persistido no servidor** (SCRUM-309): `metrics_studio_panels`, um por (org, membro), migration `20270811110000`. NÃO reusa `dashboard_widgets` — ver o cabeçalho da migration para os quatro motivos medidos.
+6. 🟠 **15 das 29 do inventário seguem fora do motor** — é o SCRUM-311 que as porta.
+   Eram 17 quando esta linha nasceu; o motor ganhou medidas desde então.
+   **Não copie este número — conte:** cruze os `id` de `metrics-studio-catalog.ts`
+   contra `ENGINE_METRICS` de `metrics-studio-engine-map.ts`. Das 15, **5 travam
+   em decisão de produto** (SCRUM-365) e as outras 10 estão fatiadas em
+   SCRUM-389…394, agrupadas por FONTE partilhada — portar duas medidas que leem
+   a mesma tabela em fatias separadas faz cada uma reimplementar o mesmo join.
+9. ✅ **Período personalizado** (SCRUM-313): `StudioPeriod` aceita `"custom"` e
+   `StudioRange` carrega duas datas de CALENDÁRIO. 🔴 O Comando faz diferente —
+   `useCommandMetrics` recorta com `startOfUTCDay` NO CLIENTE, e para uma org em
+   BRT isso desloca a virada do dia em 3 horas. Aqui as datas viajam cruas e o
+   servidor corta. As duas telas devem PARECER iguais, não CALCULAR igual
+   (SCRUM-322).
+
+**Asperezas do motor que a UI precisa respeitar** (todas tratadas em `useMetricWindowData`):
+
+- `value` XOR `series`: recorte `total` devolve escalar e `series: null`; qualquer outro devolve série e `value: null`.
+- Toda série vem ordenada por VALOR desc — inclusive `tempo`. A série temporal é reordenada por `key` antes de virar linha, senão o gráfico sai embaralhado.
+- Razão devolve `series: null` SEMPRE, e força `total` nos dois filhos.
+- O motor DEGRADA recorte em silêncio e reporta o efetivo em `measure.recorte`. A janela rotula pelo efetivo, não pelo pedido.
+- Par (medida, recorte) incompatível levanta `EXCEPTION 22023`, que **não** é capturado por `isMissingSchemaError`. O mapa é a guarda.
+- O comparativo de período (G4) é uma SEGUNDA chamada, sempre em `total`, e não bloqueia a janela.
+
+**Vela é SVG próprio** (`StudioCandleChart`): recharts não tem candlestick, e a receita usual de empilhar `Bar` com base falsa quebra quando `low = 0`.
 
 ## Áreas frágeis
 

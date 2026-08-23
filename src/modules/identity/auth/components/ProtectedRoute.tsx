@@ -7,6 +7,7 @@ import { useGestor } from '../../gestor/hooks/useGestor';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { TorqueLoader } from '@/components/ui/branding/TorqueLoader';
 import { Button } from '@/components/ui/button';
+import { IS_DEMO_MODE } from '@/core/demo-mode';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -18,6 +19,14 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
   const { data: teamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
   const { isMaster, isLoading: masterLoading } = useIdentity();
   const { isGestor, isLoading: gestorLoading } = useGestor();
+
+  // Modo demonstração (build de dev + VITE_DEMO_MODE=1). Em produção
+  // `IS_DEMO_MODE` é a constante `false` e este bloco não chega ao bundle.
+  // Fica ANTES dos gates para não depender de sessão/team_member — a demo
+  // roda sem Supabase. Ver src/core/demo-mode.ts.
+  if (IS_DEMO_MODE) {
+    return <>{children}</>;
+  }
 
   if (authLoading || masterLoading || gestorLoading) {
     return <TorqueLoader variant="full" />;

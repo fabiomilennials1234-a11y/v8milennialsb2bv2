@@ -28,7 +28,7 @@
  * Disparado por pg_cron a cada 2 minutos. Auth: x-cron-secret.
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -58,7 +58,7 @@ type Alert = {
  * disparo.
  */
 async function shouldAlert(
-  supabase: any,
+  supabase: SupabaseClient,
   key: string,
   cooldownMinutes: number = ALERT_COOLDOWN_MINUTES,
 ): Promise<boolean> {
@@ -83,7 +83,7 @@ async function shouldAlert(
 }
 
 /** Pressão do pool acima do teto configurado. */
-async function checkDbPressure(supabase: any): Promise<Alert | null> {
+async function checkDbPressure(supabase: SupabaseClient): Promise<Alert | null> {
   const { data, error } = await supabase.rpc("db_connection_pressure");
   if (error || !data) return null;
 
@@ -117,7 +117,7 @@ async function checkDbPressure(supabase: any): Promise<Alert | null> {
  * quando a Uazapi recusa — decisão correta (evita o trigger repetir), mas que
  * deixa todo monitor de status HTTP verde durante a falha.
  */
-async function checkSupportNotifyHealth(supabase: any): Promise<Alert | null> {
+async function checkSupportNotifyHealth(supabase: SupabaseClient): Promise<Alert | null> {
   const { data } = await supabase
     .from("runtime_logs")
     .select("status, error_message, created_at")
@@ -127,7 +127,7 @@ async function checkSupportNotifyHealth(supabase: any): Promise<Alert | null> {
     .limit(NOTIFY_FAILURE_STREAK);
 
   if (!data || data.length < NOTIFY_FAILURE_STREAK) return null;
-  if (!data.every((r: any) => r.status === "error")) return null;
+  if (!data.every((r: { status: string | null }) => r.status === "error")) return null;
 
   const detail = String(data[0].error_message ?? "").slice(0, 160);
   return {
@@ -161,7 +161,7 @@ const BACKFILL_BURST_MINUTES = 5;
  * escrito AGORA. `history_sync_write_budget` guarda exatamente isso, por org e
  * por minuto, e é alimentada pelo próprio worker a cada lote.
  */
-async function checkRunawayBackfill(supabase: any): Promise<Alert | null> {
+async function checkRunawayBackfill(supabase: SupabaseClient): Promise<Alert | null> {
   const desde = new Date(Date.now() - BACKFILL_BURST_MINUTES * 60_000).toISOString();
 
   const { data } = await supabase

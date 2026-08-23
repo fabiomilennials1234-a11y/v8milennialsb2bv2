@@ -217,8 +217,12 @@ describe("B.2 superfícies de WhatsApp diante de um lead sem telefone", () => {
       "utf8",
     );
     expect(src).toMatch(/const hasPhone = !!formatPhoneForWhatsApp\(/);
-    // Dois pontos de uso: item do menu e botão da linha de ações rápidas.
-    expect(src.match(/\{hasPhone && \(/g) ?? []).toHaveLength(2);
+    // TRÊS pontos de uso: item do menu, botão da linha de ações rápidas e o
+    // slot lateral de WhatsApp do card no formato DataCrazy. O terceiro nasceu
+    // com o redesenho do card — e nasceu gateado, que é o que este teste
+    // guarda. O número aqui é o de superfícies de WhatsApp no arquivo: se
+    // subir, a superfície nova precisa do gate; se cair, alguma sumiu.
+    expect(src.match(/\{hasPhone && \(/g) ?? []).toHaveLength(3);
   });
 
   it("BURACO CONHECIDO: 'Agendar mensagem' NÃO é gateado e recebe `phone || \"\"`", () => {

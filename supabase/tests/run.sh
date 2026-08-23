@@ -29,7 +29,7 @@
 #      sale/sale_lost anchored on the REAL stage_changed_at (NOT now()),
 #      role-resolved (not hardcoded 'vendido'), Revenue Stream by client,
 #      value snapshot (malformed → NULL), idempotent vs re-run AND live capture.
-#   7. commission_projection_test.sql  — commission as projection of the sale
+#   7.  — commission as projection of the sale
 #      ledger (#994, ADR-0017 §6): rate snapshot + reversal mirror +
 #      idempotency + projection guard + column grants.
 #   8. get_sales_metrics_test.sql      — canonical sales reader (#995,
@@ -49,7 +49,7 @@
 #      ADR-0017 §6,§8): reads only the projection, net-of-reversal, rate
 #      snapshot immovable, R5-killer equivalence (ranking member ⟺ ledger line,
 #      base==get_ranking.revenue), member filter, org-tz, assert_org_access.
-#  12. productivity_canonical_test.sql — produtividade activity-in-period (#1000,
+#  12. — produtividade activity-in-period (#1000,
 #      ADR-0013 / ADR-0017 §2-5): dimensão `vendido` lê SÓ sale_events, líquida
 #      de estorno + atribuição sale_responsible_id única (R5) + sem type='system'
 #      (R3) + âncora sold_at (R4); novos por created_at, reuniões por
@@ -190,6 +190,41 @@
 #      reescreve `peer_phone`; e a projeção do S13 leva a ligação ao histórico do
 #      lead. `has_function_privilege` nome por nome — nem anon, nem
 #      authenticated, nem service_role executam a função nova.
+#
+#  26. metric_negocio_semantica_test.sql — LEAD ≠ NEGÓCIO (SCRUM-311 fatia 9,
+#      20270813100000, ADR-0023 `negocio-is-the-funnel-unit`). A asserção que o
+#      arquivo existe para fazer: um lead com DOIS negócios abertos devolve
+#      "Negócios na etapa" = 2 e "Leads na etapa" = 1. Em produção a mesma
+#      medida servia aos dois nomes — 41.025 entradas para 36.073 leads, 12% de
+#      erro mudo. (LN3) afirma que os dois números NÃO batem: se voltarem a
+#      bater, a fatia foi desfeita.
+#      Prova também: a soma da série de `leads_na_etapa` (3) NÃO é o total (2),
+#      porque distinct por balde não é aditivo — está afirmado para que ninguém
+#      "conserte"; `negocios_abertos` conta ABERTURA na janela, então o negócio
+#      fechado depois continua contando; a conversão por negócio divide venda
+#      por negócio (mesma unidade nos dois lados); `sale_events.deal_id` existe,
+#      é nulável, tem FK e índice e ZERO linhas preenchidas (schema, não dado);
+#      o snapshot de 3 argumentos MORREU, senão a conta antiga continuaria a um
+#      `CREATE OR REPLACE` de distância; e a RECEITA sobreviveu à reescrita do
+#      despachante.
+#
+#  27. metric_custom_tree_test.sql — MÉTRICA PERSONALIZADA (SCRUM-311 fatia 10 /
+#      SCRUM-316..320, 20270813110000, Emenda 1 do ADR-0023). Cobre as três
+#      obrigações que a emenda cria, uma por bloco:
+#        (1) validar nas DUAS pontas — (WR) exercita o trigger de escrita e (RT)
+#            planta uma árvore inválida com o trigger DESLIGADO e prova que o
+#            motor a recusa mesmo assim. A linha gravada sobrevive a mudança de
+#            validador; um lado só não bastaria.
+#        (2) falhar alto — (ER) sete formas de árvore inválida, todas 22023,
+#            nenhuma devolvendo null que passe por número.
+#        (3) um teste por operador e o teto — (OP) `+ − × ÷` com números
+#            exatos, (PF) profundidade 3 aceita e profundidade 4 RECUSADA nas
+#            duas pontas.
+#      🔴 O bloco que mais importa é (TR), a ARMADILHA DE 100×: o ramo
+#      `kind='ratio'` do v1 deriva count/count → percent e MULTIPLICA por 100,
+#      enquanto o front só SUFIXA '%'. Na árvore, count ÷ count deriva RATIO e o
+#      motor NÃO multiplica — (TR1) afirma 2,5 e não 250. Quem quer percentual
+#      escreve `× 100` na própria árvore, e (TR3) prova que sai certo.
 #
 #  26. organizations_plan_fk_test.sql — o catálogo passa a mandar em
 #      `organizations.subscription_plan` (SCRUM-337, 20270811000000). O CHECK de
@@ -408,6 +443,19 @@
 #      numa interseção {monthly, annual}. Cobre a consequência de negócio:
 #      `pix + semiannual` volta a ser inserível, e `pix + monthly` continua
 #      recusado — abrir o semestre não afrouxou a regra do Pix.
+#
+#  39. disparo_resolvers_org_scope_test.sql — os 5 resolvers de PÚBLICO do
+#      Disparo escopam pela org pedida (SCRUM-429, migration 20270822180000). O
+#      predicado de tenancy autorizava (`OR` com o ramo master) mas não escopava,
+#      então master pedindo a org B recebia B mais todas as outras — num caminho
+#      que ENVIA WhatsApp. O comportamento é provado com auth real nas suítes de
+#      integração; aqui a asserção é de CATÁLOGO (`pg_proc.prosrc`), porque o que
+#      escapa da integração é a regressão silenciosa: um `CREATE OR REPLACE`
+#      futuro que deixe a linha cair de UM dos cinco — ou, na união de
+#      `get_all_funnels_lead_ids`, de UM dos dois ramos. Cobre também a direção
+#      oposta (o ramo master preservado, senão o master-ghost volta), que nenhum
+#      deles virou SECURITY DEFINER (a RLS de `leads` é o backstop) e que
+#      `authenticated` manteve EXECUTE após o REPLACE.
 
 # All files run inside rolled-back transactions, so none mutates the DB.
 #
@@ -435,14 +483,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/pipeline_stage_events_test.sql" \
     "$SCRIPT_DIR/sale_events_test.sql" \
     "$SCRIPT_DIR/sale_events_state_backfill_test.sql" \
-    "$SCRIPT_DIR/commission_projection_test.sql" \
     "$SCRIPT_DIR/get_sales_metrics_test.sql" \
     "$SCRIPT_DIR/get_funnel_flow_test.sql" \
     "$SCRIPT_DIR/get_ranking_test.sql" \
     "$SCRIPT_DIR/get_commission_ledger_test.sql" \
-    "$SCRIPT_DIR/productivity_canonical_test.sql" \
     "$SCRIPT_DIR/custom_pipeline_stages_stage_role_test.sql" \
     "$SCRIPT_DIR/duplicate_leads_rpcs_test.sql" \
+    "$SCRIPT_DIR/password_reset_grants_test.sql" \
     "$SCRIPT_DIR/assert_org_access_test.sql" \
     "$SCRIPT_DIR/export_lead_data_authz_test.sql" \
     "$SCRIPT_DIR/metric_revenue_stream_test.sql" \
@@ -451,6 +498,23 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/funnel_stream_by_customer_moment_test.sql" \
     "$SCRIPT_DIR/reetiqueta_funnel_streams_test.sql" \
     "$SCRIPT_DIR/composable_metrics_engine_test.sql" \
+    "$SCRIPT_DIR/metric_leads_sem_responsavel_test.sql" \
+    "$SCRIPT_DIR/metric_qualidade_lead_test.sql" \
+    "$SCRIPT_DIR/metric_negocios_perdidos_test.sql" \
+    "$SCRIPT_DIR/metric_tempo_resposta_test.sql" \
+    "$SCRIPT_DIR/metric_taxa_qualidade_test.sql" \
+    "$SCRIPT_DIR/metric_reunioes_no_show_test.sql" \
+    "$SCRIPT_DIR/metric_negocio_semantica_test.sql" \
+    "$SCRIPT_DIR/metric_custom_tree_test.sql" \
+    "$SCRIPT_DIR/metric_conversao_etapas_test.sql" \
+    "$SCRIPT_DIR/metric_coorte_canonica_test.sql" \
+    "$SCRIPT_DIR/metric_ganho_perda_test.sql" \
+    "$SCRIPT_DIR/metric_taxa_pre_venda_test.sql" \
+    "$SCRIPT_DIR/metric_ltv_test.sql" \
+    "$SCRIPT_DIR/metric_clientes_sem_resposta_test.sql" \
+    "$SCRIPT_DIR/metric_taxa_resposta_automacao_test.sql" \
+    "$SCRIPT_DIR/metric_clientes_sem_atuacao_test.sql" \
+    "$SCRIPT_DIR/metric_curva_abc_test.sql" \
     "$SCRIPT_DIR/tv_shell_legacy_cells_and_seed_test.sql" \
     "$SCRIPT_DIR/tv_reseed_s1_test.sql" \
     "$SCRIPT_DIR/tv_s2_stage_label_scope_test.sql" \
@@ -482,12 +546,13 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/provision_existing_org_test.sql" \
     "$SCRIPT_DIR/payment_link_buyers_test.sql" \
     "$SCRIPT_DIR/payment_link_paid_at_test.sql" \
-    "$SCRIPT_DIR/provision_new_org_test.sql"
+    "$SCRIPT_DIR/provision_new_org_test.sql" \
+    "$SCRIPT_DIR/disparo_resolvers_org_scope_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql assert_org_access_test.sql export_lead_data_authz_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql rls_inv6_definer_sem_gate_test.sql billing_cycle_semiannual_test.sql payment_links_package_test.sql payment_history_receipt_period_method_test.sql payment_webhook_ledger_test.sql provision_existing_org_test.sql payment_link_buyers_test.sql provision_new_org_test.sql payment_link_paid_at_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql password_reset_grants_test.sql assert_org_access_test.sql export_lead_data_authz_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql metric_leads_sem_responsavel_test.sql metric_qualidade_lead_test.sql metric_negocios_perdidos_test.sql metric_tempo_resposta_test.sql metric_taxa_qualidade_test.sql metric_reunioes_no_show_test.sql metric_negocio_semantica_test.sql metric_custom_tree_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql rls_inv6_definer_sem_gate_test.sql billing_cycle_semiannual_test.sql payment_links_package_test.sql payment_history_receipt_period_method_test.sql payment_webhook_ledger_test.sql provision_existing_org_test.sql payment_link_buyers_test.sql provision_new_org_test.sql payment_link_paid_at_test.sql metric_conversao_etapas_test.sql metric_coorte_canonica_test.sql metric_ganho_perda_test.sql metric_taxa_pre_venda_test.sql metric_ltv_test.sql metric_clientes_sem_resposta_test.sql metric_taxa_resposta_automacao_test.sql metric_clientes_sem_atuacao_test.sql metric_curva_abc_test.sql disparo_resolvers_org_scope_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces
@@ -512,6 +577,70 @@ run_with_psql() {
   done
 }
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SUÍTES PENDENTES — testam feature que NÃO EXISTE, e por isso não derrubam
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# Duas suítes deste diretório foram escritas ANTES da feature que elas medem, e
+# a feature nunca chegou. Medido em produção em 2026-08-21:
+#
+#   commission_projection_test  → `sale_events` tem TRÊS gatilhos
+#     (fn_carteira_admite_venda, fn_sale_events_force_sold_at,
+#     fn_sale_events_block_mutation) e NENHUM projeta comissão. 26 das 42
+#     asserções falham a partir de "projeção encadeada no caderno de venda".
+#     Card: SCRUM-416.
+#
+#   productivity_canonical_test → o cabeçalho dela diz "a dimensão vendido lê SÓ
+#     sale_events". `get_productivity_activity` em produção NÃO MENCIONA
+#     sale_events: conta por `pipeline_entries` + `lead_history`, com o COALESCE
+#     encadeado de chaves de atribuição que o próprio ADR-0017 §2 proíbe.
+#     Card: SCRUM-415.
+#
+# Elas não são regressão — são ESPECIFICAÇÃO esperando implementação. Deixá-las
+# no bloco principal mantém o job vermelho para sempre por dívida que nenhuma
+# branch introduziu, e portão que nasce vermelho é portão que ninguém lê. Mesma
+# razão do ratchet do vitest e do tsc.
+#
+# ⚠ O RATCHET SÓ ENCOLHE: se uma pendente PASSAR, este script REPROVA pedindo
+# que ela seja promovida. Sem isso a lista viraria depósito, e uma feature
+# entregue ficaria com o teste dela fora do portão.
+SUITES_PENDENTES=(
+  "commission_projection_test.sql"
+  "productivity_canonical_test.sql"
+)
+
+rodar_pendentes() {
+  local caminhos=()
+  local f
+  for f in "${SUITES_PENDENTES[@]}"; do caminhos+=("$SCRIPT_DIR/$f"); done
+
+  echo "==> ${#SUITES_PENDENTES[@]} suíte(s) PENDENTE(S) (feature não construída — SCRUM-415, SCRUM-416)"
+
+  local passou=0
+  if command -v pg_prove >/dev/null 2>&1; then
+    pg_prove --ext .sql -d "$DATABASE_URL" "${caminhos[@]}" && passou=1
+  else
+    local todas_ok=1
+    for f in "${SUITES_PENDENTES[@]}"; do
+      local out
+      out="$(psql "$DATABASE_URL" --no-psqlrc --quiet -t -A \
+              --variable ON_ERROR_STOP=1 --file "$SCRIPT_DIR/$f" 2>&1)" || todas_ok=0
+      grep -Eq '(^|[[:space:]])not ok' <<<"$out" && todas_ok=0
+    done
+    passou=$todas_ok
+  fi
+
+  if [ "$passou" -eq 1 ]; then
+    echo "FAIL: suíte pendente PASSOU — a feature foi construída." >&2
+    echo "      Promova-a para a lista principal (as duas de run_with_*) e" >&2
+    echo "      tire-a de SUITES_PENDENTES. O ratchet só encolhe." >&2
+    exit 1
+  fi
+
+  echo "==> pendentes seguem vermelhas, como esperado. Não derrubam o job."
+}
+
 if command -v pg_prove >/dev/null 2>&1; then
   echo "==> using pg_prove"
   run_with_pg_prove
@@ -519,5 +648,7 @@ else
   echo "==> pg_prove not found; using psql fallback"
   run_with_psql
 fi
+
+rodar_pendentes
 
 echo "==> pgTAP suites passed"

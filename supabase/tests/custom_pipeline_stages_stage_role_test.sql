@@ -31,7 +31,7 @@ VALUES ('a1000000-0000-0000-0000-000000000001', 'Org U1 custom governance', 'org
 
 INSERT INTO public.team_members (id, organization_id, user_id, name, role, is_active) VALUES
   ('a1000000-aaaa-2222-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'a1000000-aaaa-1111-0000-000000000001', 'Admin U1',  'admin',  true),
-  ('a1000000-bbbb-2222-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'a1000000-bbbb-1111-0000-000000000001', 'Member U1', 'membro', true);
+  ('a1000000-bbbb-2222-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'a1000000-bbbb-1111-0000-000000000001', 'Member U1', 'member', true);
 
 -- master SEM team_member na org (prova o path master, não o de admin).
 INSERT INTO public.master_users (user_id, is_active)
@@ -41,6 +41,26 @@ INSERT INTO public.leads (id, organization_id, name, sale_responsible_id)
 VALUES ('a1000000-1ead-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'Lead U1', 'a1000000-aaaa-1111-0000-000000000001');
 
 SET LOCAL session_replication_role = origin;  -- triggers ON (sync + capture + system map)
+
+-- Contexto de BACKEND a partir daqui (SCRUM-361).
+--
+-- A semeadura abaixo cria etapa won/lost, e `fn_pipeline_stages_guard_money_role`
+-- (ADR-0017 §1) recusa isso fora de backend/master/admin. O erro é P0001 e aborta
+-- o arquivo — vira "Bad plan. You planned N tests but ran M".
+--
+-- O comentario que estava aqui dizia "como superusuario". Isso NUNCA foi verdade:
+-- medido em producao, `postgres` tem rolsuper=false (so `supabase_admin` e
+-- superusuario), entao o ramo `rolsuper` do guard nunca disparou. O caminho
+-- privilegiado REAL e o backend — em producao quem semeia funil e a edge function
+-- de provisionamento, com service_role.
+--
+-- As secoes de membro e de master mais abaixo trocam de papel explicitamente, e
+-- sao elas que provam a NEGACAO. Esta linha nao as afeta.
+SET LOCAL role service_role;
+-- E o CLAIM, nao so o papel do Postgres: `assert_org_access` decide por
+-- `auth.role()`, que le `request.jwt.claims`. Medido no CI — com SET ROLE
+-- sozinho a RPC continuava recusando com access_denied.
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 -- SYSTEM pipeline (propostas): pipeline_stages governa via system_stage_role.
 INSERT INTO public.pipelines (id, organization_id, name, slug, type)

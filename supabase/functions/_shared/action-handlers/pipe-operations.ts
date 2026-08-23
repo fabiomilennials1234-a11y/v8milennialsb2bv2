@@ -1,7 +1,7 @@
 import type { ActionInput, ActionResult } from "./types.ts";
 import {
   getPipeEntry,
-  upsertPipeEntry,
+  upsertPipeEntryDetailed,
   updatePipeEntryById,
   deletePipeEntry,
 } from "../pipeline-adapter.ts";
@@ -35,15 +35,24 @@ export async function duplicateToPipe(input: ActionInput): Promise<ActionResult>
   }
 
   if (STANDARD_PIPES.includes(targetPipeType)) {
-    await upsertPipeEntry(supabase, {
+    // SCRUM-202: espelho `leads.pipe_whatsapp` removido. O upsert bate direto em
+    // `pipeline_entries` (depth 1) e `trg_sync_whatsapp_stage_to_lead` grava a
+    // coluna com o mesmo valor.
+    // ADR-0023 decisão 3: se a org é manual-only e o lead não tem negócio no
+    // funil alvo, o adapter devolve `skipped_deal_manual_only` e nada é criado.
+    const result = await upsertPipeEntryDetailed(supabase, {
       leadId,
       orgId: organizationId,
       slug: targetPipeType as PipeSlug,
       stageKey: targetPipeStage,
     });
 
-    if (targetPipeType === "whatsapp") {
-      await supabase.from("leads").update({ pipe_whatsapp: targetPipeStage }).eq("id", leadId);
+    if (result.status === "skipped_deal_manual_only") {
+      return {
+        success: true,
+        message: `Não duplicado para ${targetPipeType}/${targetPipeStage}: organização abre negócio só por clique humano.`,
+        data: { skipped: true, reason: "deal_manual_only" },
+      };
     }
   }
 
@@ -64,11 +73,11 @@ export async function removeFromPipe(input: ActionInput): Promise<ActionResult> 
   const pipeType = (params.pipeType as string) || "whatsapp";
 
   if (STANDARD_PIPES.includes(pipeType)) {
+    // SCRUM-202: espelho `leads.pipe_whatsapp = null` removido. `deletePipeEntry`
+    // faz DELETE direto em `pipeline_entries` (depth 1), e o ramo DELETE de
+    // `sync_pipeline_entry_to_lead_pipe_whatsapp` já zera a coluna
+    // (20270803000040:65). Escrever NULL de novo era duplicação.
     await deletePipeEntry(supabase, leadId, organizationId, pipeType as PipeSlug);
-
-    if (pipeType === "whatsapp") {
-      await supabase.from("leads").update({ pipe_whatsapp: null }).eq("id", leadId);
-    }
   }
 
   return { success: true, message: `Removed from ${pipeType}` };

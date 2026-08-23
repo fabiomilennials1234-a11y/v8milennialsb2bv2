@@ -25,6 +25,24 @@ export default tseslint.config(
       // branch que por acaso estava aberta. E como o ratchet imprime só 20
       // linhas, uma regressão real do diff ficava invisível embaixo do ruído —
       // o gate rodava, mas não sinalizava.
+      // Worktrees de agente: CÓPIAS do repo dentro do repo, já ignoradas pelo
+      // git (`.gitignore:99`). O flat config do ESLint 9 **não** ignora
+      // dot-directories por padrão — o comportamento antigo era do `.eslintrc` —,
+      // então cada worktree era lintado como se fosse código novo.
+      //
+      // Custo real, medido em 2026-08-04: um worktree criado durante a sessão
+      // acrescentou **753 warnings** ao `lint:ratchet`, todos atribuídos à branch
+      // que por acaso estava aberta. Os worktrees mais antigos não acusavam
+      // porque já estavam dentro do baseline — ou seja, o baseline carrega lint
+      // de arquivos que nem versionados são, e qualquer worktree novo reprova o
+      // gate de quem não tem nada a ver com ele.
+      ".claude/worktrees/",
+      // E o outro lugar onde eles nascem. `.worktrees/` (raiz) só está em
+      // `.git/info/exclude`, que é local e que o ESLint não lê — então o git
+      // não vê o diretório e o ESLint vê tudo. Mesmo defeito de 2026-08-04,
+      // metade não corrigida: medido em 2026-08-12, um `.worktrees/` presente
+      // no checkout acrescenta **2.979 warnings** ao ratchet, atribuídos a quem
+      // por acaso tem a branch aberta.
       ".worktrees/",
     ],
   },

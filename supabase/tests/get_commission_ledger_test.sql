@@ -80,7 +80,7 @@ VALUES
   ('99899899-aaaa-2222-0000-000000000997', '99899899-aaaa-0000-0000-000000000997',
    '99899899-aaaa-1111-0000-000000000997', 'Closer 1', 'admin', true, 2.0, 1.0),
   ('99899899-aaaa-2222-0001-000000000997', '99899899-aaaa-0000-0000-000000000997',
-   NULL, 'Closer 2', 'membro', true, 5.0, 1.0)
+   NULL, 'Closer 2', 'member', true, 5.0, 1.0)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.leads (id, organization_id, name)
@@ -131,6 +131,27 @@ VALUES
  ('99899899-aaaa-0000-0000-000000000997','99899899-aaaa-2222-0000-000000000997',2,'mrr',7,2027,false,'99899899-e007-0000-0000-000000000997','sale_event_projection',2.0);
 
 SET LOCAL session_replication_role = origin;
+
+-- Contexto de BACKEND a partir daqui (SCRUM-361).
+--
+-- Sem isto a suíte morre na primeira escrita/leitura que passa por um gate:
+-- `fn_pipeline_stages_guard_money_role` recusa won/lost, e `assert_org_access`
+-- recusa a RPC — as duas com P0001, que aborta o arquivo inteiro e vira
+-- "Bad plan. You planned N tests but ran M".
+--
+-- O comentario antigo dizia "seed de sistema como superusuario". Isso NUNCA foi
+-- verdade: medido em producao, `postgres` tem rolsuper=false (so `supabase_admin`
+-- e superusuario). O ramo `rolsuper` do guard nunca disparou para esta suite, em
+-- lugar nenhum. O caminho privilegiado REAL e o backend — quem semeia funil em
+-- producao e a edge function de provisionamento, com service_role.
+--
+-- A autorizacao continua provada onde ela e o assunto: as secoes de membro e de
+-- cross-org trocam de papel explicitamente mais abaixo.
+SET LOCAL role service_role;
+-- E o CLAIM, nao so o papel do Postgres: `assert_org_access` decide por
+-- `auth.role()`, que le `request.jwt.claims`. Medido no CI — com SET ROLE
+-- sozinho a RPC continuava recusando com access_denied.
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 -- ---------------------------------------------------------------------------
 -- Números líquidos de julho (e4 estornada fora; e5 sem projeção):
@@ -214,11 +235,19 @@ SELECT is(
   1.0::numeric, '(e) c1 projeto taxa snapshotada = 1%');
 
 -- (f) rate snapshot: mudar a taxa do membro DEPOIS não move o ledger.
+--
+-- `session_replication_role` é parâmetro de SUPERUSUÁRIO, e a suíte roda como
+-- `service_role` daqui para cima (o contexto de backend que `assert_org_access`
+-- exige). Volta a `postgres` só para desarmar os gatilhos e devolve o papel em
+-- seguida — sem isso o apply morre com "permission denied to set parameter".
+SET LOCAL role postgres;
 SET LOCAL session_replication_role = replica;
 UPDATE public.team_members
   SET commission_mrr_percent = 99.0, commission_projeto_percent = 99.0
   WHERE id = '99899899-aaaa-2222-0000-000000000997';
 SET LOCAL session_replication_role = origin;
+SET LOCAL role service_role;
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 SELECT is(
   (SELECT (e->>'commission')::numeric

@@ -100,6 +100,16 @@ Superfície completa em `./index.ts`. Resumo:
 
 **Hooks email/sms/ai (slice 16 longtail):** `useEmailAccounts`, `useEmails`, `useSms`, `useAiEmailDrafts`.
 
+⚠️ **E-mail e SMS estão ESCONDIDOS na UI desde 06/08/2026** — `lib/channel-availability.ts`
+(`EMAIL_CHANNEL_AVAILABLE` / `SMS_CHANNEL_AVAILABLE`, ambas `false`). O andaime está completo,
+mas as edge functions `send-email`, `send-sms` e `generate-ai-email-draft` **nunca foram
+construídas** (não existem em nenhum commit, nem no `config.toml`, nem entre as 150 funções
+deployadas no PROD). Os botões davam erro no cliente desde maio. É **Wave 2** do
+`docs/MASTER-ROADMAP-WORLD-CLASS.md` (2.1 Email Sync, 2.2 Unified Inbox, 2.4 SMS), que depende
+da Wave 1.1 (Contact/Deal = épico SCRUM-43). **Não apagar** — `useEmails` já aceita `contactId`
+e `AiEmailWriter` já aceita `dealId`. Para religar: construir a function, registrar no
+`config.toml`, deployar e virar a flag.
+
 **Components:** `ChatShellWithContext`, `ChatSkeleton`, `MessageBubble`, `MessagesAreaErrorBoundary`, `AudioPlayer`, `AudioRecorder`, `ImagePreviewModal`, `MessageImage/Video/Document`, `ChatEmptyState`, `ScrollToBottomFab`, `UnreadDivider`, `ScheduledMessagesBanner`, `ScheduleMessageModal`, `ConversationNotes`, `LeadContactModal`, `HumanPauseBadge`, `ChannelBadge`, `RealtimeStatusBadge`; Meta: `MetaChatShell`, `MetaChatHeader`, `MetaConversationList(Item)`, `MetaMessage{List,Bubble}`, `MetaComposer`, `MetaWindowWarning`, `LinkLeadDialog`, `ChatMetaSkeleton`; WhatsApp lifecycle: `SessionDeadBanner`, `RepairingWizard`; Email/SMS/AI (slice 16): `AiEmailWriter`, email/sms internals.
 
 **Lib:** `whatsappApi` (namespace export), `primaryInstanceFor`, `computeNeedsDeepLinkResolve`, `prefetchChatRoute`, `prefetchChatData`.

@@ -35,7 +35,17 @@ Automações via DAG (Directed Acyclic Graph). Workflows reagem a eventos do pro
 
 Triggers: `lead_created`, `stage_changed`, `tag_added`, `cron`, `manual`.
 
-Node types: `trigger`, `action`, `condition`, `delay`, `wait_response`, `split_ab`, `copilot`, `webhook_call`, `wait_business_window`.
+Node types (15, união `WorkflowNodeType` em `@/types/workflow`): `trigger`, `action`, `condition`, `delay`, `copilot`, `end`, `wait_response`, `split_ab`, `webhook_call`, `goto`, `wait_business_window`, `assign_responsible`, `code_json`, `code_javascript`, `code_https`.
+
+⚠️ **Um tipo novo tem 8 pontos de registro** e só 3 quebram o build. Os que falham **calados**: `nodeTypes` do `WorkflowCanvas` (nó vira o cinza default do React Flow), o `switch` de `renderPanel` do `WorkflowSidebar` (`default: return null` → sidebar vazio) e `ADD_NODE_GROUPS` do `WorkflowToolbar` (nó inalcançável). Os que quebram: `NODE_COLORS`, `NODE_LABELS` (ambos `Record<WorkflowNodeType, …>`) e `createDefaultNodeData` (`switch` sem `default`). Fora do front, `_shared/workflow-schema/enums.ts` tem um teste de paridade que lê o **texto** de `src/types/workflow.ts` e só roda em `npm run test:edge`.
+
+**Nós de código** (`code_json`, `code_javascript`, `code_https`) — cada um tem **um único campo de código escrito à mão**, mais variável de saída e política de erro. Não há anexo de arquivo nem geração por IA: o usuário escreve, e só. Escrevem o resultado em `context[outputVariable]`, consumido depois via `{{variavel}}` (caso de uso nº 1: o `bodyTemplate` de um `webhook_call`).
+
+**`code_https`** — a requisição HTTP inteira é escrita como **UM JSON** no campo de código (`method`, `url`, `headers`, `body`, `timeoutMs`), com `{{variaveis}}` em qualquer valor. Runtime: resolve variáveis com `jsonEscape` → `JSON.parse` → valida a forma → dispara → grava a resposta em `context[outputVariable]`. A `url` **precisa começar com `https://`** — `http://` é recusado com mensagem explícita (é o que dá nome ao nó) e depois disso ainda passa por `validateExternalUrl` de `_shared/url-validator.ts`. Defaults: `method` `"GET"`, `timeoutMs` 15000 com teto de 30000. Um nó novo já nasce com um JSON de exemplo no campo — é o que ensina o formato, já que não há doc na tela.
+
+🚨 **`code_javascript` NÃO executa nesta fase.** O executor grava o step como `skipped` e segue o fluxo (fail-open deliberado — um nó não executável nunca mata um workflow de produção). Motivo: não há sandbox — `new Function` + shadowing de globais escapa por 4 vetores medidos e exfiltra o `SUPABASE_SERVICE_ROLE_KEY`, e a Web Worker API não existe no runtime da Supabase. A execução isolada (QuickJS em WASM, numa edge function dedicada) é a fase 2. Enquanto isso o item fica **oculto na toolbar** atrás da flag `workflow_code_js` (`CODE_JS_NODE_FLAG`) — **não ligar para nenhum cliente**.
+
+🚨 **O passo do `code_https` não pode vazar segredo.** `workflow_execution_steps` é legível por **qualquer membro da org**, então o `input_data` do passo NUNCA carrega `headers` (levam `Authorization`), nem o `code`, nem a query string da `url` (pode levar token). Grava só `{ method, url_host, url_path, has_body, output_variable, bytes }`; o `output_data` fica em `{ status, bytes, preview }`, com o preview cortado em 500 chars.
 
 Track: `workflow_executions` + `workflow_execution_steps`.
 
@@ -69,11 +79,14 @@ Inclui:
 
 ### Components
 
-Internals (não re-exportados — usados apenas via Pages do próprio módulo): WorkflowCanvas, WorkflowSidebar, WorkflowToolbar, WorkflowAnalytics, WorkflowImportDialog, WorkflowTemplates, EnrollmentCriteria, ReenrollmentConfig, SplitAbAnalytics, TemplateTextarea, VariableInserter + subpastas `action-configs/`, `edges/`, `nodes/`, `sidebar-panels/`.
+Internals (não re-exportados — usados apenas via Pages do próprio módulo): WorkflowCanvas, WorkflowSidebar, WorkflowToolbar, WorkflowAnalytics, WorkflowImportDialog, WorkflowTemplates, EnrollmentCriteria, ReenrollmentConfig, SplitAbAnalytics, TemplateTextarea, VariableInserter, CodeField + subpastas `action-configs/`, `edges/`, `nodes/`, `sidebar-panels/`.
+
+`CodeField` (textarea `font-mono` com inserção no cursor + drop de chips `{{…}}`) é compartilhado pelos 3 painéis de código. **Não há editor com realce de sintaxe** — o repo não tem Monaco/CodeMirror e trazer um para um sidebar de 360 px é desproporcional.
 
 ### Lib interna
 
 - `lib/instance-routing.ts` — **Instance Routing Policy** (ADR-0025): de qual Instance o nó de mensagem envia. `readRoutingPolicy` (resolve o legado: `whatsappInstanceId` preenchido = `fixed`, vazio = `conversation`), `buildPolicyChange`/`buildFixedInstanceChange`/`buildFallbackChange` (patches de `data`), `isInstanceRoutedAction` (quais actionTypes declaram política — inclui `send_campaign_message`). Um único `POLICY_SPECS` guarda rótulo, frase de apoio e necessidade de recuo. Pura, testada (`tests/unit/instance-routing.test.ts`). UI: `sidebar-panels/InstanceRoutingSelector.tsx`. **Entrar em `fixed` preserva o recuo** — apagá-lo destruiria o valor semeado (#1333).
+- `lib/codeNodes.ts` — regras dos **nós de código**. `codeNodeBytes` (bytes UTF-8 do `code`, não `.length`), `isValidOutputVariable` (o prefixo `_` é reservado para as chaves internas do executor: `_retry_counts`, `_wait_resolved`, `_last_error`, …) e `validateCodeNodes(nodes): string[]` (validação pré-save, mensagens em PT-BR). Pura, testada. É o **primeiro precedente de validação por-nó** no `handleSave` do editor, que antes só checava nome e trigger; os limites de tamanho (`CODE_SOURCE_MAX_BYTES`, 64 KB por nó; `CODE_WORKFLOW_MAX_BYTES`, 192 KB por automação) são **advisory** — a RLS de `workflows` deixa qualquer membro escrever `definition` direto pelo PostgREST.
 - `lib/clipboard.ts` — copy/paste de nós no editor. `extractSelection` (seleção copiável + edges internas) + `cloneSelection` (remap IDs/edges/goto, preserva splitAb `sourceHandle`, filtra trigger). Pura, testada (`clipboard.test.ts`). Consumida só por `AutomacoesEditor`. Feature doc: `06 — Features/automacoes/copy-paste-nodes.md`.
 
 ### Pages

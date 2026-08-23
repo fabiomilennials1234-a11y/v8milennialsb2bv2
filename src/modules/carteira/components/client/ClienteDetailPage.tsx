@@ -356,6 +356,21 @@ export default function ClienteDetailPage() {
           </Card>
         </div>
 
+        {/* ── Financeiro: títulos a receber (SCRUM-229 bloco 4.1) ──────────
+            O ERP sincroniza contas a receber desde a integração do Toth, e até
+            aqui nenhuma superfície da Carteira mostrava — o dado chegava ao
+            banco e morria lá. */}
+        <Card className="bg-card border-border">
+          <CardHeader className="px-4 pt-4 pb-2">
+            <CardTitle className="text-sm font-semibold text-card-foreground">
+              Títulos a receber
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <ClienteTitulos clientId={clientId} />
+          </CardContent>
+        </Card>
+
         {/* ── Bottom row: Order History + Timeline ────────────────────────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card className="bg-card border-border">
@@ -392,10 +407,6 @@ export default function ClienteDetailPage() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Ao lado do histórico de pedidos de propósito: o que ele comprou e o
-            que ele deve são a mesma conversa na hora de ligar para o cliente. */}
-        <ClienteTitulos clientId={clientId} />
 
         {/* Quem atende, de que praça, de que segmento. Some sozinho para
             cliente que não veio de ERP. */}
