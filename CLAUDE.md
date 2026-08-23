@@ -101,10 +101,21 @@ Regras, sem exceção:
 ⚠️ **A branch precisa de `db push` do repo, não só `create_branch`:** a linha do baseline no ledger é **marcador de 189 chars** (não o dump), então `create_branch` replaya sobre schema vazio; o `db push` do repo aplica o baseline real (1.8 MB). Passo-a-passo no runbook.
 
 ### 🔒 GUARDA MECÂNICA de escrita — `db push` NÃO é seguro na mão
-Um `db push` com URL/ref errado escreve em PROD (já aconteceu). Defesa por desenho, não disciplina:
+Um `db push` com URL/ref errado escreve em PROD (já aconteceu). A intenção é defesa por desenho, não disciplina — mas **hoje só 3 das 4 estão armadas; o MCP está aberto** (3º item):
 - **Checkout NÃO-LINKADO por padrão.** Provado: `supabase db push` bare → `Cannot find project ref`. Linkar = ato deliberado e temporário, desfeito ao fim. **1ª linha.**
 - **Toda escrita via `scripts/db-push-branch.sh`** — recusa a URL se contiver o ref de prod (`jsjsmuncfkbsbzqzqhfq`), roda `--dry-run`, exige confirmação, aborta se o push tocar dado real ("1 org promovida").
-- **MCP Supabase em `read_only`** — só leitura + `create/list/delete_branch`; escrita (`execute_sql`/`apply_migration`) negada. Escrita de QA = `psql` na branch (`supabase/qa-seed/`), nunca MCP.
+- 🔴 **MCP Supabase NÃO está em `read_only` — é escrita livre em PROD.** Escrita de QA = `psql` na branch (`supabase/qa-seed/`), nunca MCP; mas isso é **convenção, não guarda**: nada impede o MCP hoje.
+  > **Medido em 2026-08-19.** Um `UPDATE` em `pipeline_entries` (org Bolivar) passou pelo MCP direto em prod, sem dry-run e sem confirmação. Causa: o plugin declara o servidor em `~/.claude/plugins/cache/claude-plugins-official/supabase/<versão>/.mcp.json` apontando para `https://mcp.supabase.com/mcp` **sem nenhum query param**. Pela doc oficial, o modo vem da URL — `read_only=true`, `project_ref=<id>`, `features=<grupos>`. Sem eles, o default é escrita liberada em **todos** os projetos que a conta OAuth alcança. Não há override em `~/.claude.json` (só `n8n-mcp` e `atlassian`), nem em `.claude/settings.json`, nem `.mcp.json` na raiz do repo.
+  >
+  > A versão anterior desta linha afirmava o oposto ("MCP Supabase em `read_only`; escrita negada") e foi escrita como se fosse defesa por desenho. Não era: **nunca houve parâmetro nenhum na URL.** Enquanto isso valeu, o doc descrevia uma guarda inexistente — o pior modo de falhar, porque parece armada.
+  >
+  > **Consertar exige duas edições, e editar o `.mcp.json` do plugin NÃO serve** (vive em `plugins/cache/`; a próxima versão reescreve o diretório e a guarda some em silêncio). Declarar um servidor `supabase` próprio também não basta sozinho — ele coexiste com o do plugin, que segue com escrita. O caminho é desligar o plugin e declarar na mão:
+  > 1. `~/.claude/settings.json` → `"enabledPlugins": { "supabase@claude-plugins-official": false }`
+  > 2. `~/.claude.json`, bloco global `mcpServers` → `"supabase": { "type": "http", "url": "https://mcp.supabase.com/mcp?project_ref=jsjsmuncfkbsbzqzqhfq&read_only=true" }`
+  >
+  > `read_only=true` é enforcement **server-side** (usuário Postgres read-only de verdade), então é guarda mecânica real. Cobre `execute_sql` e `apply_migration`; **provavelmente não cobre `deploy_edge_function`**, que não é query SQL — para fechar isso é preciso o `features=`, cujo slug exato dos grupos de nome composto não está na doc que li. Meça antes de escrever o slug aqui.
+  >
+  > O risco não é só typo humano: as respostas do MCP vêm embrulhadas em aviso de "untrusted data" porque conteúdo de lead pode carregar instrução injetada. Com escrita habilitada, isso vira caminho de **mutação em prod a partir de texto que um lead digitou**.
 - **Migration = só schema** (guarda F4): `DO`/backfill de dado de cliente não entra no apply; assim URL errada vira erro de schema recuperável, não mudança de dado.
 
 Org Milennials: `6030520a-2ca7-477d-be89-55758e2cd808`
