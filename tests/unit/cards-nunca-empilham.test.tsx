@@ -1,21 +1,34 @@
 /**
- * O Torque tem DOIS cards — o do Lead e o do Negócio — e eles nunca ficam
- * empilhados. Clicar na pessoa dentro do Negócio TROCA de card.
+ * O Lead e o Negócio abrem JUNTOS, num overlay só.
  *
- * Prova `inv:H5-11` (SCRUM-116).
+ * ── `inv:H5-11` (SCRUM-116) foi APOSENTADO em 22/08/2026 ──────────────────
  *
- * Por que isto é teste e não comentário: `DealCardPanel` e `LeadCardPanel` são
- * montados **lado a lado** no funil (`PipeWhatsapp`), cada um lendo o próprio
- * contexto. Nada na estrutura impede os dois de estarem abertos ao mesmo tempo
- * — o que impede é uma linha só, o `close()` antes do `openLead()` em
- * `DealCardPanel.abrirLead`. Trocar a ordem, esquecer o `close()` ou fazer o
- * link virar navegação pura deixa as duas fichas na tela, cada uma afirmando
- * uma coisa sobre a mesma pessoa — que é exatamente o estado que o modelo
- * Lead↔Negócio existe para acabar.
+ * O invariante antigo dizia o contrário: "os dois cards nunca ficam
+ * empilhados; clicar na pessoa dentro do Negócio TROCA de card". Ele existia
+ * porque as duas fichas eram overlays irmãos e independentes — deixar as duas
+ * abertas punha duas verdades sobre a mesma pessoa na tela ao mesmo tempo.
  *
- * Os dois painéis aqui são os de verdade, com os providers de verdade. Só o
- * acesso a banco é mockado: o que se está provando é a máquina de estados dos
- * dois contextos, e ela mora nos providers.
+ * O painel de duas colunas resolve o mesmo problema por outro caminho, e o
+ * resolve melhor: em vez de proibir a segunda ficha, ele deixa de existir. A
+ * pessoa passou a ser uma COLUNA de 356px dentro do painel do Negócio
+ * (`LeadCardContainer forma="coluna"`), montada a partir do MESMO `leadId`.
+ * Não há duas verdades porque não há duas fichas — há uma tela só, com as
+ * duas metades do mesmo assunto.
+ *
+ * O que continua valendo, e é o que este arquivo guarda:
+ *
+ *   1. NUNCA dois overlays empilhados. O motivo original não mudou; o que
+ *      mudou é que agora o risco é o painel do Lead abrir POR CIMA do painel
+ *      do Negócio, em vez de ao lado dele;
+ *   2. a coluna recebe o id do LEAD, nunca o `pipeline_entries.id`. Os dois
+ *      estão na mão de quem abre o painel, e trocar um pelo outro é o erro
+ *      mais fácil deste caminho — daria "Lead não encontrado" numa coluna que
+ *      deveria mostrar a pessoa;
+ *   3. fechar o painel leva as DUAS colunas junto — nada sobrevive por baixo.
+ *
+ * Os painéis aqui são os de verdade, com os providers de verdade. Só o acesso
+ * a banco é mockado: o que se está provando é a máquina de estados dos dois
+ * contextos, e ela mora nos providers.
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -130,16 +143,26 @@ const TITULO_NEGOCIO = NEGOCIO_ESTAGNADO.titulo;
 const NOME_LEAD = LEAD_EXEMPLO.nome;
 
 /**
- * Clicar na pessoa DENTRO do card do Negócio.
+ * Overlays montados. Antes bastava contar `h1` porque cada ficha tinha o seu;
+ * agora a coluna da pessoa não emite `h1` (o título da tela é o do negócio),
+ * então quem responde "quantas telas estão empilhadas" é o número de diálogos.
  *
- * Por `role: button` de propósito: a mesma empresa aparece como texto no card
- * do Lead depois da troca, e um `getByText` acharia os dois — o que esconderia
- * justamente a falha que este arquivo procura.
+ * Radix marca o diálogo de baixo com `aria-hidden` quando outro empilha por
+ * cima — por isso a varredura é no DOM, e não por papel: uma consulta por
+ * papel devolveria "um só" exatamente no caso que este arquivo existe para
+ * pegar.
  */
-function clicarNaPessoa() {
-  fireEvent.click(
-    screen.getByRole("button", { name: new RegExp(NEGOCIO_ESTAGNADO.lead.empresa!, "i") }),
-  );
+function overlaysAbertos(): number {
+  return document.querySelectorAll("[role=dialog]").length;
+}
+
+/**
+ * O "X" do overlay. O rótulo é "Close" — vem do primitivo do Radix, não da
+ * nossa tradução — então a busca aceita os dois, para não quebrar no dia em
+ * que alguém traduzir.
+ */
+function fecharOverlay() {
+  fireEvent.click(screen.getAllByRole("button", { name: /close|fechar/i })[0]);
 }
 
 /**
@@ -162,7 +185,7 @@ function clicarNaPessoa() {
  */
 const TIMEOUT_RENDER_MS = 20_000;
 
-describe("Os dois cards do Torque nunca ficam empilhados", { timeout: TIMEOUT_RENDER_MS }, () => {
+describe("O Lead e o Negócio abrem juntos, num overlay só", { timeout: TIMEOUT_RENDER_MS }, () => {
   beforeEach(() => {
     negocioRef.value = { ...NEGOCIO_ESTAGNADO, lead: { ...NEGOCIO_ESTAGNADO.lead, id: "l1" } };
     leadRef.value = { ...LEAD_EXEMPLO, id: "l1" };
@@ -172,25 +195,35 @@ describe("Os dois cards do Torque nunca ficam empilhados", { timeout: TIMEOUT_RE
     montarFunil();
 
     expect(fichasAbertas()).toEqual([]);
+    expect(overlaysAbertos()).toBe(0);
   });
 
-  it("o card do funil abre o Negócio — e SÓ o Negócio", () => {
+  it("o card do funil abre UM overlay com o negócio E a coluna da pessoa", () => {
     montarFunil();
 
     fireEvent.click(screen.getByText("abrir negócio do funil"));
 
+    // Um overlay só, com o negócio dando o título da tela...
+    expect(overlaysAbertos()).toBe(1);
     expect(fichasAbertas()).toEqual([TITULO_NEGOCIO]);
-    expect(screen.queryByRole("heading", { level: 1, name: NOME_LEAD })).toBeNull();
+    // ...e a pessoa presente ali dentro, como coluna e não como segunda ficha.
+    // `getAll` porque o nome aparece duas vezes na coluna: no cabeçalho dela e
+    // de novo como campo editável em "Perfil".
+    expect(screen.getAllByText(NOME_LEAD).length).toBeGreaterThan(0);
   });
 
-  it("clicar na pessoa TROCA de card: o Negócio fecha e o Lead abre", () => {
+  it("mexer na pessoa dentro da coluna não abre uma segunda ficha", () => {
     montarFunil();
     fireEvent.click(screen.getByText("abrir negócio do funil"));
 
-    clicarNaPessoa();
+    // A empresa continua clicável — mas agora é campo EDITÁVEL da coluna, não
+    // o link que trocava de card. Clicar tem de deixar a tela como estava.
+    fireEvent.click(
+      screen.getByRole("button", { name: new RegExp(NEGOCIO_ESTAGNADO.lead.empresa!, "i") }),
+    );
 
-    // Uma ficha, e é a da pessoa. Duas aqui = duas verdades na tela.
-    expect(fichasAbertas()).toEqual([NOME_LEAD]);
+    expect(overlaysAbertos()).toBe(1);
+    expect(fichasAbertas()).toEqual([TITULO_NEGOCIO]);
   });
 
   it("a lista de Leads abre o Lead sem arrastar o Negócio junto", () => {
@@ -199,55 +232,60 @@ describe("Os dois cards do Torque nunca ficam empilhados", { timeout: TIMEOUT_RE
     fireEvent.click(screen.getByText("abrir lead da lista"));
 
     expect(fichasAbertas()).toEqual([NOME_LEAD]);
+    expect(overlaysAbertos()).toBe(1);
   });
 
-  it("fechar o Lead depois da troca deixa a tela limpa — o Negócio não ressuscita", () => {
+  it("fechar o painel leva as DUAS colunas junto — nada sobra por baixo", () => {
     montarFunil();
     fireEvent.click(screen.getByText("abrir negócio do funil"));
-    clicarNaPessoa();
 
-    fireEvent.click(screen.getAllByRole("button", { name: /fechar/i })[0]);
+    fecharOverlay();
 
     expect(fichasAbertas()).toEqual([]);
+    expect(overlaysAbertos()).toBe(0);
+    expect(screen.queryByText(NOME_LEAD)).toBeNull();
   });
 
-  it("nunca há duas fichas ao mesmo tempo em nenhum ponto do vaivém funil↔pessoa", () => {
+  it("nunca há dois overlays empilhados em nenhum ponto do vaivém funil↔pessoa", () => {
     montarFunil();
 
-    const fechar = () => fireEvent.click(screen.getAllByRole("button", { name: /fechar/i })[0]);
+    const fechar = () => fecharOverlay();
     const passos = [
       () => fireEvent.click(screen.getByText("abrir negócio do funil")),
-      clicarNaPessoa,
+      fechar,
+      () => fireEvent.click(screen.getByText("abrir lead da lista")),
       fechar,
       () => fireEvent.click(screen.getByText("abrir negócio do funil")),
-      clicarNaPessoa,
       fechar,
     ];
 
     for (const passo of passos) {
       passo();
+      // O risco de hoje não é a ficha ao lado: é o painel do Lead abrindo POR
+      // CIMA do painel do Negócio. Um overlay, no máximo, em todo ponto.
+      expect(overlaysAbertos()).toBeLessThanOrEqual(1);
       expect(fichasAbertas().length).toBeLessThanOrEqual(1);
     }
 
-    expect(fichasAbertas()).toEqual([]);
+    expect(overlaysAbertos()).toBe(0);
   });
 });
 
-describe("O card do Negócio é a porta para a pessoa, não a ficha dela", () => {
+describe("A coluna da pessoa é alimentada pelo id do LEAD, não pelo da entry", () => {
   beforeEach(() => {
     negocioRef.value = { ...NEGOCIO_ESTAGNADO, lead: { ...NEGOCIO_ESTAGNADO.lead, id: "l1" } };
     leadRef.value = { ...LEAD_EXEMPLO, id: "l1" };
   });
 
-  it("abre a pessoa pelo id do LEAD, não pelo id da entry do funil", () => {
+  it("monta a coluna com o lead `l1`, não com a entry `e1`", () => {
     montarFunil();
+
     fireEvent.click(screen.getByText("abrir negócio do funil"));
 
-    clicarNaPessoa();
-
-    // O card montado é o do lead `l1`. Se tivesse ido o `entryId` ("e1"), o
-    // mock devolveria `not_found` e a tela diria "Lead não encontrado".
-    expect(fichasAbertas()).toEqual([NOME_LEAD]);
+    // Quem abre o painel tem os dois ids na mão, e trocar um pelo outro é o
+    // erro mais fácil deste caminho. Se fosse o `entryId` ("e1"), o mock
+    // devolveria `not_found` e a coluna diria "Lead não encontrado".
+    expect(screen.getAllByText(NOME_LEAD).length).toBeGreaterThan(0);
     expect(screen.queryByText(/lead não encontrado/i)).toBeNull();
   });
 

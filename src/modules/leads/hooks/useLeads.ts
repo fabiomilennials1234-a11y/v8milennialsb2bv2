@@ -326,10 +326,30 @@ export function useUpdateLead() {
 
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       // refetchType: 'active' — só refaz queries atualmente renderizadas (evita cascata de refetch em todas as páginas)
       queryClient.invalidateQueries({ queryKey: ["leads"], refetchType: 'active' });
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"], refetchType: 'active' });
+      /**
+       * As três chaves abaixo são as que a tela realmente lê, e nenhuma delas
+       * casa com as duas de cima:
+       *
+       * - `["lead-detail", id]` é o que a COLUNA DO LEAD do painel lê
+       *   (`useLeadDetail`). Sem esta linha o campo editado grava no banco e
+       *   volta ao valor antigo na própria linha, porque `useInlineEdit` repõe
+       *   o dado do servidor ao sair da edição — e o usuário conclui que a
+       *   gravação falhou.
+       * - `["pipeline-page"]` é a RPC `get_pipeline_page` de que os boards
+       *   vivem (`usePaginatedPipeline`). Sem ela o card atrás do painel fica
+       *   com o valor velho até um F5 — e o mesmo vale para a edição inline e
+       *   o "calor" nos três boards, que chamam este hook direto.
+       *
+       * Strings literais de propósito: importar as chaves de `modules/pipelines`
+       * reabriria o ciclo leads↔pipelines que o dependency-cruiser barra.
+       */
+      queryClient.invalidateQueries({ queryKey: ["lead-detail", variables.id], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-page"], refetchType: 'active' });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts"], refetchType: 'active' });
     },
   });
 }

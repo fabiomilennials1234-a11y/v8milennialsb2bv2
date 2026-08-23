@@ -2,10 +2,13 @@ import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Building2, Clock, MoreVertical, Trash2, MessageCircle, Target, Video, Check,
+  Phone, NotebookPen, MoveRight, Users, Gem, Tag, CheckSquare, CalendarDays,
+  Wallet, XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
@@ -29,20 +32,50 @@ import { AddToFunilMenuItem, AddToFunilDialog } from "./AddToFunilDialog";
 
 // ─── Origin Colors (unified across all funnels) ──────────
 
+/**
+ * Cor da pílula de origem.
+ *
+ * 🔴 Era um mapa de 12 pastéis de TEMA CLARO em hex (#E1F5EE, #EEEDFE, …)
+ * aplicado por `style` inline. Inline vence qualquer `dark:`, então no tema
+ * escuro cada pílula virava uma ilha quase branca dentro do card — e este é
+ * o card do funil, a tela em obra.
+ *
+ * Agora cada origem guarda só o MATIZ. O fundo é uma tinta translúcida (14%),
+ * que assenta sobre qualquer superfície; a tinta do texto sai de
+ * `--origin-ink-l`, um token que vale ~34% no claro e ~74% no escuro. Um
+ * token, dois temas, e cada origem mantém a identidade de cor que tinha.
+ */
+/**
+ * Cor da inicial do lead. Mesma função do resto do produto (colorFromName em
+ * LeadCardMetrics): soma os charCodes e gira o matiz, para que duas pessoas
+ * diferentes nunca caiam na mesma cor por acidente.
+ */
+const corDaInicial = (nome?: string | null): string => {
+  if (!nome) return "hsl(0 0% 45%)";
+  const h = Array.from(nome).reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  return `hsl(${h % 360} 55% 55%)`;
+};
+
+const origem = (h: number, s: number, label: string) => ({
+  bg: `hsl(${h} ${s}% 50% / 0.14)`,
+  text: `hsl(${h} ${s}% var(--origin-ink-l))`,
+  label,
+});
+
 export const ORIGIN_COLORS: Record<string, { bg: string; text: string; label: string }> = {
-  whatsapp:        { bg: "#E1F5EE", text: "#0F6E56", label: "WhatsApp" },
-  meta_ads:        { bg: "#EEEDFE", text: "#534AB7", label: "Meta Ads" },
-  instagram:       { bg: "#FDEEF4", text: "#C2185B", label: "Instagram" },
+  whatsapp:        origem(162, 60, "WhatsApp"),
+  meta_ads:        origem(246, 48, "Meta Ads"),
+  instagram:       origem(333, 62, "Instagram"),
   tiktok:          { bg: "hsl(var(--muted))", text: "hsl(var(--muted-foreground))", label: "Tiktok" },
-  google_ads:      { bg: "#FCEBEB", text: "#A32D2D", label: "Google Ads" },
-  site:            { bg: "#E6F1FB", text: "#185FA5", label: "Site" },
-  landing_page:    { bg: "#E0F2FE", text: "#0369A1", label: "Landing Page" },
-  remarketing:     { bg: "#FFF3E0", text: "#B35C00", label: "Remarketing" },
-  indicacao:       { bg: "#EAF3DE", text: "#3B6D11", label: "Indicação" },
-  evento:          { bg: "#F3E8FF", text: "#6D28D9", label: "Evento" },
-  prospeccao_ativa:{ bg: "#FFF7ED", text: "#C2410C", label: "Prospecção Ativa" },
-  cal:             { bg: "#F3E8FF", text: "#7C3AED", label: "Cal.com" },
-  outro:           { bg: "#F1EFE8", text: "#5F5E5A", label: "Outros" },
+  google_ads:      origem(0, 55, "Google Ads"),
+  site:            origem(209, 62, "Site"),
+  landing_page:    origem(201, 70, "Landing Page"),
+  remarketing:     origem(31, 75, "Remarketing"),
+  indicacao:       origem(89, 58, "Indicação"),
+  evento:          origem(263, 62, "Evento"),
+  prospeccao_ativa:origem(20, 72, "Prospecção Ativa"),
+  cal:             origem(263, 70, "Cal.com"),
+  outro:           origem(45, 6, "Outros"),
 };
 
 const URGENCY_COLORS: Record<string, { label: string; className: string }> = {
@@ -62,7 +95,12 @@ const VARIANT_CONFIG: Record<LeadCardVariant, {
   showContact: boolean; showValue: boolean; showDate: boolean;
   showProducts: boolean; showMeetLink: boolean; showNotes: boolean;
 }> = {
-  whatsapp:        { showContact: true,  showValue: true,  showDate: false, showProducts: false, showMeetLink: false, showNotes: false },
+  // `showDate`/`showProducts` ligados em 21/08: a anatomia do DataCrazy dá
+  // LINHA PRÓPRIA a produto e data, e com os dois desligados o card do funil
+  // principal — que é onde o cliente olha — perdia metade do desenho novo.
+  // Campo vazio não some: vira o link azul "Sem produto"/"Sem data", que é o
+  // convite a preencher do próprio print.
+  whatsapp:        { showContact: true,  showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false },
   confirmacao:     { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: true,  showNotes: false },
   propostas:       { showContact: false, showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false },
   followup:        { showContact: false, showValue: false, showDate: true,  showProducts: false, showMeetLink: false, showNotes: true  },
@@ -341,6 +379,129 @@ export const LeadCard = memo(function LeadCard({
     </>
   );
 
+  /**
+   * O menu do "⊕" da lateral — o MESMO do protótipo `funis-datacrazy` (:8902),
+   * item por item: 15 opções em 3 grupos rotulados (`dados.js:219-246`).
+   *
+   * Não é o menu do "⋮". O "⋮" são AÇÕES sobre o negócio; este é tudo que se
+   * pendura no lead. Decisão do Lucas em 21/08: dois botões, dois assuntos.
+   *
+   * O selo `FICHA` marca o que HOJE só existe dentro da ficha do lead
+   * (`LeadModalToolbar`, `CrossPipePanel`, o header de responsáveis/
+   * qualificação/etiquetas). Esses itens ABREM a ficha em vez de fingir que
+   * agem daqui — o protótipo carrega o mesmo selo pelo mesmo motivo. Item que
+   * promete e não cumpre é pior do que item ausente.
+   */
+  const selo = (
+    <span className="ml-auto pl-3 text-[9px] font-semibold tracking-wide text-muted-foreground/60">
+      FICHA
+    </span>
+  );
+  const abrirFicha = (e: React.MouseEvent) => { e.stopPropagation(); onClick?.(); };
+  const telefoneNu = (lead.phone ?? "").replace(/\D/g, "");
+
+  const itensDoMenuAdicionar = (
+    <>
+      <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        Conversa
+      </DropdownMenuLabel>
+      {hasPhone && (
+        <AbrirConversaMenuItem leadId={lead.id} phone={lead.phone}>
+          <MessageCircle className="w-4 h-4 mr-2 text-[#25D366]" /> WhatsApp
+        </AbrirConversaMenuItem>
+      )}
+      <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setScheduleOpen(true); }}>
+        <Clock className="w-4 h-4 mr-2" /> Agendar mensagem
+      </DropdownMenuItem>
+      {/* "Ligar" é o único `real: false` do protótipo que dá para cumprir aqui
+          sem a ficha: é um `tel:`, igual ao LeadModalToolbar. */}
+      {telefoneNu && (
+        <DropdownMenuItem asChild>
+          <a href={`tel:${telefoneNu}`} onClick={(e) => e.stopPropagation()}>
+            <Phone className="w-4 h-4 mr-2" /> Ligar
+          </a>
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem onClick={abrirFicha}>
+        <NotebookPen className="w-4 h-4 mr-2" /> Registrar ligação {selo}
+      </DropdownMenuItem>
+
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        Alterar o lead
+      </DropdownMenuLabel>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <MoveRight className="w-4 h-4 mr-2" /> Mover de etapa {selo}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <Users className="w-4 h-4 mr-2" /> Responsáveis {selo}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <Gem className="w-4 h-4 mr-2" /> Qualificação {selo}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <Tag className="w-4 h-4 mr-2" /> Etiquetas {selo}
+      </DropdownMenuItem>
+      {/* Checklists não leva selo: o slot da direita é do CONTADOR, como no
+          protótipo (app.js:546). Verde quando tudo está feito. */}
+      <DropdownMenuItem onClick={abrirFicha}>
+        <CheckSquare className="w-4 h-4 mr-2" /> Checklists
+        {(lead.metrics?.checklistsTotal ?? 0) > 0 && (
+          <span
+            className={cn(
+              "ml-auto pl-3 text-[10px] font-semibold tabular-nums",
+              lead.metrics!.checklistsCompleted === lead.metrics!.checklistsTotal
+                ? "text-emerald-500"
+                : "text-muted-foreground",
+            )}
+          >
+            {lead.metrics!.checklistsCompleted}/{lead.metrics!.checklistsTotal}
+          </span>
+        )}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <CalendarDays className="w-4 h-4 mr-2" /> Reunião {selo}
+      </DropdownMenuItem>
+      <DropdownMenuItem onClick={abrirFicha}>
+        <Wallet className="w-4 h-4 mr-2" /> Orçamento {selo}
+      </DropdownMenuItem>
+
+      <DropdownMenuSeparator />
+      <DropdownMenuLabel className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        Funil
+      </DropdownMenuLabel>
+      {/* Os 15 itens aparecem SEMPRE, como no protótipo. Quando a ação real
+          não está disponível no contexto — `pipeOps` é null fora do
+          PipeOpsProvider, `onRemove` não vem em toda superfície — o item não
+          some: cai para a ficha, com o selo. Item que desaparece sem explicar
+          faz o usuário procurar o que ele nunca vai achar. */}
+      {/* "Adicionar a funil" tem portão PRÓPRIO e ele fica: o
+          `AddToFunilMenuItem` devolve null quando a org não tem nenhum funil
+          custom ativo, para não oferecer um diálogo que abriria vazio. Não
+          troquei por um fallback com selo porque a ficha também não teria o
+          que mostrar — seria mandar o usuário a lugar nenhum. */}
+      {pipeOps && <AddToFunilMenuItem pipeOps={pipeOps} onSelect={() => setAddFunilOpen(true)} />}
+      <DropdownMenuItem onClick={abrirFicha}>
+        <XCircle className="w-4 h-4 mr-2" /> Marcar como perdido {selo}
+      </DropdownMenuItem>
+      {onRemove ? (
+        <DropdownMenuItem
+          className="text-destructive focus:text-destructive"
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        >
+          <Trash2 className="w-4 h-4 mr-2" /> Remover do funil
+        </DropdownMenuItem>
+      ) : (
+        <DropdownMenuItem onClick={abrirFicha}>
+          <Trash2 className="w-4 h-4 mr-2" /> Remover do funil {selo}
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={abrirFicha}>
+        <Trash2 className="w-4 h-4 mr-2" /> Excluir lead {selo}
+      </DropdownMenuItem>
+    </>
+  );
+
   const modais = (
     <>
       {scheduleOpen && (
@@ -373,10 +534,29 @@ export const LeadCard = memo(function LeadCard({
           urgency={urgency}
           dateIndicator={dateIndicator}
           parsedDate={parsedDate}
+          /* Montado AQUI e passado pronto: se o card compacto importasse
+             `AbrirConversaButton`, fecharia um ciclo leads↔communication que o
+             dependency-cruiser barra. Quem já tem essa dependência é este
+             arquivo. `null` quando o telefone não é celular BR válido. */
+          acaoWhatsapp={
+            hasPhone ? (
+              <AbrirConversaButton
+                leadId={lead.leadId ?? lead.id}
+                phone={lead.phone}
+                variant="ghost"
+                size="icon"
+                className="size-[26px] rounded-md p-0 text-[#25D366] hover:bg-[#25D366]/15 hover:text-[#25D366]"
+                title="Abrir WhatsApp"
+              >
+                <MessageCircle className="size-[15px]" />
+              </AbrirConversaButton>
+            ) : null
+          }
           selected={selected}
           onSelect={onSelect}
           onClick={onClick}
           menuItems={itensDoMenu}
+          menuAdicionar={itensDoMenuAdicionar}
           extraActions={extraActions}
         />
         {modais}
@@ -409,8 +589,6 @@ export const LeadCard = memo(function LeadCard({
         onClick={onClick}
       >
         {/* ── Color stripes (Trello-style) ── */}
-        <LeadCardLabels tags={lead.tags} />
-
         <div className="p-3 pt-2.5 flex flex-col gap-2">
           {/* ── Selection checkbox ── */}
           {onSelect && (
@@ -427,15 +605,27 @@ export const LeadCard = memo(function LeadCard({
             </button>
           )}
 
-          {/* ── Header: Avatar + Name + Calor + Kebab ── */}
+          {/* ── Header: Avatar + Name + Calor + Kebab ──
+               Anatomia do DataCrazy: à esquerda o "símbolo do cara" (a
+               inicial, 32px); a QUALIFICAÇÃO sai daqui e vai para o canto
+               superior direito, menor (22px) — é o lugar onde o concorrente
+               põe o "#1".
+               Ganho de brinde: hoje, quando o lead tem `avatar_url`, a foto
+               COBRE as metades de qualificação e a leitura se perde. Separando
+               os dois, eles passam a conviver. */}
           <div className="flex items-start gap-2.5">
-            <LeadCardAvatar
-              preQualTier={lead.preQualTier}
-              qualTier={lead.qualTier}
-              avatarUrl={lead.avatarUrl}
-              name={lead.name}
-              size={32}
-            />
+            <div
+              className="w-8 h-8 shrink-0 rounded-full grid place-items-center text-[12px] font-semibold overflow-hidden"
+              style={{
+                color: corDaInicial(lead.name),
+                backgroundColor: `color-mix(in srgb, ${corDaInicial(lead.name)} 18%, transparent)`,
+              }}
+              aria-hidden
+            >
+              {lead.avatarUrl
+                ? <img src={lead.avatarUrl} alt="" className="w-full h-full object-cover" />
+                : (lead.name?.trim()?.[0]?.toUpperCase() ?? "?")}
+            </div>
             <div className="flex-1 min-w-0">
               {editingField === "name" ? (
                 <input
@@ -489,6 +679,14 @@ export const LeadCard = memo(function LeadCard({
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              {/* A qualificação, no lugar do "#1" do DataCrazy: 22px contra os
+                  32px do avatar — menor que o símbolo do cara, como pedido. */}
+              <LeadCardAvatar
+                preQualTier={lead.preQualTier}
+                qualTier={lead.qualTier}
+                name={lead.name}
+                size={22}
+              />
               {lead.rating != null && lead.rating > 0 && (
                 <LeadCardCalor calor={lead.rating} onChange={onCalorChange} />
               )}
@@ -653,6 +851,11 @@ export const LeadCard = memo(function LeadCard({
 
           {/* ── Extra actions slot (ex: confirmação de reunião) ── */}
           {extraActions}
+
+          {/* ── Etiquetas, ABAIXO do negócio ──
+               Saíram do topo do card (onde eram riscos de 1,5px sem rótulo) e
+               vieram para cá, com o nome legível, como no card do DataCrazy. */}
+          <LeadCardLabels tags={lead.tags} />
 
           {/* ── Footer: Inline metrics (Trello-style) ── */}
           <div className="flex items-center justify-between pt-2 mt-auto border-t border-border/40">

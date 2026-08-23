@@ -30,10 +30,9 @@ interface LeadCardMetricsProps {
   className?: string;
 }
 
-function initials(name?: string | null): string {
-  if (!name) return "?";
-  return name.split(" ").filter(Boolean).map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-}
+/* `initials` saiu junto com o `MiniResponsible` que a usava — a pílula mostra
+   o nome curto, não a inicial. Quem precisa de inicial hoje é o card compacto,
+   que tem a sua própria. */
 
 function colorFromName(name?: string | null): string {
   if (!name) return "hsl(0, 0%, 40%)";
@@ -41,27 +40,31 @@ function colorFromName(name?: string | null): string {
   return `hsl(${hash % 360}, 60%, 45%)`;
 }
 
-function MiniResponsible({ member, label }: { member: ResponsibleMini | null | undefined; label: string }) {
+/** Primeiro nome + sobrenome abreviado, para caber na largura da coluna. */
+function nomeCurto(nome?: string | null): string {
+  if (!nome) return "";
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length <= 1) return partes[0] ?? "";
+  return `${partes[0]} ${partes[partes.length - 1][0].toUpperCase()}.`;
+}
+
+function NomeResponsavel({ member, label }: { member: ResponsibleMini | null | undefined; label: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div
+        <span
           className={cn(
-            "w-5 h-5 rounded-full flex items-center justify-center border border-card",
-            !member && "bg-muted/40",
+            "flex min-w-0 items-center gap-1",
+            member ? "text-foreground/80" : "text-muted-foreground/50",
           )}
-          style={member ? { backgroundColor: colorFromName(member.name) } : undefined}
         >
-          {member ? (
-            member.avatar_url ? (
-              <img src={member.avatar_url} alt={member.name ?? ""} className="w-full h-full rounded-full object-cover" />
-            ) : (
-              <span className="text-[8px] font-semibold text-white">{initials(member.name)}</span>
-            )
-          ) : (
-            <span className="text-[10px] text-muted-foreground/40">·</span>
-          )}
-        </div>
+          <i
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            style={{ backgroundColor: member ? colorFromName(member.name) : "hsl(var(--muted-foreground) / 0.4)" }}
+            aria-hidden
+          />
+          <span className="truncate">{member ? nomeCurto(member.name) : "—"}</span>
+        </span>
       </TooltipTrigger>
       <TooltipContent side="top" className="text-[10px]">
         {label}{member?.name ? `: ${member.name}` : ": —"}
@@ -69,6 +72,11 @@ function MiniResponsible({ member, label }: { member: ResponsibleMini | null | u
     </Tooltip>
   );
 }
+
+/* `MiniResponsible` (bolinha de 20px com a inicial) vivia aqui e foi removido:
+   o commit do card DataCrazy o substituiu pela pílula com NOME logo acima, e
+   ele ficou órfão — sem chamador, mas ainda compilando. O ratchet de tipos o
+   acusou como erro INTRODUZIDO por esta branch, e estava certo. */
 
 export const LeadCardMetrics = memo(function LeadCardMetrics({
   leadId,
@@ -82,8 +90,11 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
   const checklistDone = checklistsTotal > 0 && checklistsCompleted === checklistsTotal;
   const hasComments = commentsCount > 0;
   const hasChecklists = checklistsTotal > 0;
-  // Badge vira popover clicável só quando há lead + checklists. Senão, chip passivo.
-  const checklistInteractive = !!leadId && hasChecklists;
+  // Basta ter lead. Antes exigia `checklistsTotal > 0`, e isso criava um ponto
+  // cego real: lead SEM checklist não tinha por onde abrir o painel — logo não
+  // tinha por onde APLICAR um. Pior, checklist criado com zero itens conta 0/0,
+  // então ele existia no banco e era invisível na tela.
+  const checklistInteractive = !!leadId;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -135,10 +146,15 @@ export const LeadCardMetrics = memo(function LeadCardMetrics({
           </Tooltip>
         )}
 
-        {/* Responsibles — empilhados levemente */}
-        <div className="flex items-center -space-x-1.5 ml-auto">
-          <MiniResponsible member={preSaleResponsible ?? null} label="Pré-Venda" />
-          <MiniResponsible member={saleResponsible ?? null} label="Venda" />
+        {/* Responsáveis — os DOIS nomes, escritos.
+            Eram dois avatares de 20px empilhados, com o nome só no tooltip: em
+            um board com 30 cards ninguém passa o mouse, então na prática o card
+            não dizia de quem era o lead. O dado (`name`) já chegava aqui.
+            Quem estiver vazio vira um traço discreto, sem ocupar espaço. */}
+        <div className="flex min-w-0 items-center gap-1 ml-auto">
+          <NomeResponsavel member={preSaleResponsible ?? null} label="Pré-Venda" />
+          <span className="text-muted-foreground/40" aria-hidden>·</span>
+          <NomeResponsavel member={saleResponsible ?? null} label="Venda" />
         </div>
       </div>
     </TooltipProvider>

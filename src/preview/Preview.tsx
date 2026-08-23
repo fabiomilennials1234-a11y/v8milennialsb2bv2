@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { LeadCard } from "@/modules/leads/components/lead-card/LeadCard";
+import { LeadCardAside } from "@/modules/leads/components/lead-card/LeadCardAside";
 import {
   LEAD_EXEMPLO,
   LEAD_EXEMPLO_MAGRO,
@@ -78,11 +79,28 @@ export function Preview() {
           </button>
         </div>
 
+        {/* Negócio abre em DUAS COLUNAS, que é como o painel abre no produto
+            desde o formato DataCrazy: a pessoa à esquerda, o negócio à direita.
+            Julgar o card do Negócio sozinho aqui esconderia justamente o que
+            mudou — e foi assim que a primeira versão passou dias sendo
+            aprovada numa bancada que não era a tela real. */}
         <div className="h-[calc(100vh-124px)] min-h-[620px] overflow-hidden rounded-xl shadow-2xl">
           {atual.grupo === "Lead" ? (
             <LeadCard lead={atual.dado as Parameters<typeof LeadCard>[0]["lead"]} />
           ) : (
-            <DealCard negocio={atual.dado as Parameters<typeof DealCard>[0]["negocio"]} />
+            <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-border bg-background">
+              <LeadCardAside
+                lead={
+                  (atual.chave === "neg-magro"
+                    ? LEAD_EXEMPLO_MAGRO
+                    : LEAD_EXEMPLO) as Parameters<typeof LeadCardAside>[0]["lead"]
+                }
+                onAbrirFicha={() => undefined}
+              />
+              <div className="flex min-w-0 flex-1 flex-col">
+                <DealCard negocio={atual.dado as Parameters<typeof DealCard>[0]["negocio"]} />
+              </div>
+            </div>
           )}
         </div>
       </div>

@@ -75,6 +75,35 @@
     --input: 40 15% 88%;
     --ring: 47 100% 50%;
 
+    /* ─── Profundidade (claro) ──────────────────────────────────────
+       O detalhe que faz um token só funcionar nos DOIS temas: quem
+       escava muda de lado. No ESCURO quem trabalha é o lábio de luz de
+       BAIXO (branco sobre preto); no CLARO é a parte PRETA de cima
+       (sombra sobre branco). Mesmo nome, mesmo significado, mecanismo
+       invertido — e por isso o "afundado" tem sinal correto nos dois,
+       ao contrário do "levantado", que inverte de mecanismo.
+       É exatamente o defeito medido no `bg-muted`, que hoje lê afundado
+       no claro e levantado no escuro. */
+    --sunken: 40 20% 94%;
+    --elevated: 0 0% 100%;
+
+    /* Tinta da pílula de origem do lead. É o único valor que precisa virar
+       de lado por tema — o matiz de cada origem mora no ORIGIN_COLORS. */
+    --origin-ink-l: 34%;
+
+    --relevo:
+      0 1px 2px 0 hsl(30 18% 20% / .06),
+      0 4px 10px -4px hsl(30 18% 20% / .10);
+    --relevo-alto:
+      0 2px 4px -1px hsl(30 18% 20% / .08),
+      0 16px 40px -12px hsl(30 18% 20% / .18);
+    --afundado:
+      inset 0 2px 5px -1px hsl(30 18% 20% / .12),
+      inset 0 -1px 0 0 hsl(0 0% 100% / .70);
+    --afundado-raso:
+      inset 0 1px 2px 0 hsl(30 18% 20% / .10),
+      inset 0 -1px 0 0 hsl(0 0% 100% / .60);
+
     /* ─── Bubble tokens ───────────────────────────────────────── */
     --bubble-outgoing:            220 30% 88%;
     --bubble-outgoing-foreground: 220 25% 18%;
@@ -148,29 +177,66 @@
   html.dark,
   .dark {
     color-scheme: dark;
-    /* Page background matches the mockup's warm dark (#191714). */
-    --background: 36 11% 9%;
-    --foreground: 45 20% 95%;
+    /* ═══════════════════════════════════════════════════════════════════
+       PRETO NEUTRO — decisão do cliente em 20/08/2026, olhando os dois
+       protótipos lado a lado (preto puro × quase-preto). Venceu o PURO.
 
-    /* Warm muted dark surfaces, in the #191714 family (low-saturation hue 36). */
-    --card: 35 10% 13%;
-    --card-foreground: 45 20% 95%;
+       O que havia antes: todo neutro em hue 35-40 com 7-11% de saturação,
+       ou seja R > B em TODOS os 14 tokens de papel (--background tinha
+       R−B=5, --muted-foreground R−B=16). Não era cinza, era marrom de
+       baixa saturação — é isso que lia como "pastel". Agora S = 0%.
 
-    --popover: 35 10% 13%;
-    --popover-foreground: 45 20% 95%;
+       ⚠️ O preto NÃO conserta contraste: medido, a troca melhora só de
+       +0,37 a +2,02 pontos de razão, e nenhum par que reprovava passa a
+       aprovar só por isso. É decisão estética. Onde havia reprovação de
+       verdade, o token foi corrigido à parte (ver --muted-foreground e
+       a nota em --destructive).
+
+       Consequência física de #000 como base: NÃO existe sombra escura
+       sobre ele — não há nada abaixo de zero. Por isso o relevo aqui é
+       feito por LUMINÂNCIA + aresta de luz no topo, e a cava só funciona
+       DENTRO de uma superfície mais clara. Ver os tokens de profundidade
+       no fim deste bloco.
+       ═══════════════════════════════════════════════════════════════════ */
+    --background: 0 0% 0%;
+    --foreground: 0 0% 95%;
+
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 95%;
 
     --primary: 47 100% 50%;
-    --primary-foreground: 30 18% 15%;
+    --primary-foreground: 0 0% 8%;
 
-    --secondary: 35 8% 17%;
-    --secondary-foreground: 45 20% 95%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 95%;
 
-    --muted: 35 8% 17%;
-    --muted-foreground: 40 7% 56%;
+    /* --muted é FILL DE CONTROLE (hover de ícone, thumb de scroll), por isso
+       fica ACIMA do card. Bloco secundário afundado usa --sunken, abaixo.
+       ⚠️ Isto NÃO conserta as ~890 ocorrências de `bg-muted` que hoje
+       significam "bloco secundário" e invertem de sentido entre os temas
+       (no claro --muted é mais escuro que o card, no escuro é mais claro).
+       Migrar aquelas para --sunken é passada separada. */
+    --muted: 0 0% 17%;
+    /* era 40 7% 56% (#948e84, R−B=16 e 4,1:1 sobre o card) — sobe para 64%
+       de lightness, o que dá ~7,3:1 sobre #141414 e passa AA folgado. */
+    --muted-foreground: 0 0% 64%;
 
-    --accent: 47 100% 50%;
-    --accent-foreground: 30 18% 15%;
+    /* 🔴 INCONGRUÊNCIA CORRIGIDA — este token INVERTIA de significado entre
+       os temas: marrom escuro no claro, DOURADO SÓLIDO no escuro. Como o
+       shadcn usa --accent em todo hover/focus de item (menu, dropdown,
+       command, select), no escuro cada botão ghost virava uma tarja
+       dourada. Agora é uma superfície neutra de hover nos dois temas.
+       O dourado continua sendo --primary, que é onde ele significa algo. */
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 95%;
 
+    /* ⚠️ NÃO RESOLVIDO, e registrado de propósito: como TEXTO sobre o card
+       este vermelho dá ~3,5:1 e reprova AA. Clarear conserta o texto e
+       quebra o botão sólido (que usa fg branco). Precisa virar dois tokens
+       — um de tinta, um de superfície — e isso é mudança de contrato. */
     --destructive: 0 62% 50%;
     --destructive-foreground: 0 0% 100%;
 
@@ -188,32 +254,72 @@
     --insights: 205 90% 60%;
     --insights-foreground: 36 11% 9%;
 
-    --border: 35 8% 19%;
-    --input: 35 8% 19%;
+    --border: 0 0% 14%;
+    --input: 0 0% 14%;
     --ring: 47 100% 50%;
+
+    /* ─── Profundidade ──────────────────────────────────────────────
+       O Torque não tinha sistema de elevação: --shadow-sm/md/lg só
+       existiam no :root claro e tinham ZERO consumidores, e todo
+       `shadow-*` do app é o valor de fábrica do Tailwind — preto puro,
+       cego a tema, contraste 1,031 sobre fundo escuro (trabalho zero).
+       A separação era feita por BORDA: 5.047 utilitários `border*`
+       contra 223 `shadow*` em src/modules.
+
+       Vocabulário curto e fechado, senão vira neumorfismo:
+         aresta de luz no topo  = está levantado
+         sombra externa grande  = está solto do documento (popover/toast)
+         cava                   = é secundário
+       Nada mais tem profundidade. */
+    --sunken: 0 0% 4%;              /* bloco secundário DENTRO de um card */
+    --elevated: 0 0% 12%;           /* card em hover */
+    --origin-ink-l: 74%;            /* ver ORIGIN_COLORS no LeadCard.tsx */
+
+    --relevo:
+      inset 0 1px 0 0 hsl(0 0% 100% / .07),
+      0 1px 0 0 hsl(0 0% 0% / 1);
+    --relevo-alto:
+      inset 0 1px 0 0 hsl(0 0% 100% / .10),
+      0 0 0 1px hsl(0 0% 100% / .06),
+      0 20px 48px -12px hsl(0 0% 0% / 1);
+    --afundado:
+      inset 0 2px 6px -1px hsl(0 0% 0% / .95),
+      inset 0 -1px 0 0 hsl(0 0% 100% / .05);
+    --afundado-raso:
+      inset 0 1px 3px 0 hsl(0 0% 0% / .9),
+      inset 0 -1px 0 0 hsl(0 0% 100% / .045);
+
+    /* as sombras genéricas passam a existir no escuro (antes herdavam
+       tinta MARROM a 5% vinda do :root claro, invisível sobre o fundo) */
+    --shadow-sm: 0 1px 2px 0 hsl(0 0% 0% / .6);
+    --shadow-md: 0 4px 6px -1px hsl(0 0% 0% / .7), 0 2px 4px -2px hsl(0 0% 0% / .5);
+    --shadow-lg: 0 10px 15px -3px hsl(0 0% 0% / .8), 0 4px 6px -4px hsl(0 0% 0% / .6);
 
     /* ─── Bubble tokens (dark) ────────────────────────────────── */
     --bubble-outgoing:            217 19% 27%;
     --bubble-outgoing-foreground: 210 20% 94%;
     --bubble-outgoing-border:     217 20% 38%;
 
-    /* Incoming (cliente): superfície sutil sobre o fundo warm-dark (#191714),
-       lendo como translúcida ~rgba(255,255,255,0.04) + linha ~0.06. */
-    --bubble-incoming:            36 9% 14%;
-    --bubble-incoming-foreground: 45 12% 90%;
-    --bubble-incoming-border:     36 8% 22%;
+    /* Incoming (cliente): superfície sutil sobre o preto, lendo como
+       translúcida. Neutralizada — era hue 36 (R−B=8). */
+    --bubble-incoming:            0 0% 10%;
+    --bubble-incoming-foreground: 0 0% 90%;
+    --bubble-incoming-border:     0 0% 18%;
 
-    --bubble-ai:                  38 22% 24%;
-    --bubble-ai-foreground:       47 40% 90%;
+    /* A bolha da IA MANTÉM matiz de propósito: aqui a cor é identidade, não
+       papel neutro. Mas a saturação cai de 22% para 16% — era o token mais
+       amarronzado do arquivo (R−B=27, o pior da paleta inteira). */
+    --bubble-ai:                  47 16% 15%;
+    --bubble-ai-foreground:       47 35% 90%;
     --bubble-ai-border:           47 100% 50%;
 
     --bubble-workflow:            263 30% 12%;
     --bubble-workflow-foreground: 263 70% 80%;
     --bubble-workflow-border:     263 60% 55%;
 
-    --bubble-system:              36 15% 15%;
-    --bubble-system-foreground:   40 12% 56%;
-    --bubble-system-border:       38 12% 22%;
+    --bubble-system:              0 0% 11%;
+    --bubble-system-foreground:   0 0% 62%;
+    --bubble-system-border:       0 0% 18%;
 
     /* density vars não variam por tema — definidas só em :root */
 
@@ -221,8 +327,32 @@
     --command-palette-bg:     220 15% 10%;
     --command-palette-border: 220 10% 20%;
 
-    --sidebar-background: 36 12% 7%;
-    --sidebar-foreground: 45 20% 90%;
+    --sidebar-background: 0 0% 0%;
+    --sidebar-foreground: 0 0% 90%;
+
+    /* 🔴 INCONGRUÊNCIA CORRIGIDA — 11 tokens visuais eram declarados SÓ no
+       :root e nunca redefinidos aqui, então o tema escuro herdava valor do
+       tema CLARO. Os piores: --sidebar-accent/--sidebar-border eram
+       #494236 (marrom), --sidebar-primary era #e9932b (laranja de tema
+       claro) e --chart-3 era #433a2d — marrom praticamente invisível
+       sobre o fundo escuro.
+       A paleta de gráficos abaixo é a mesma que a superfície TV já usava
+       (5 matizes distintos e legíveis no escuro), agora promovida ao tema. */
+    --sidebar-primary: 47 100% 50%;
+    --sidebar-primary-foreground: 0 0% 8%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 14%;
+    --sidebar-ring: 47 100% 50%;
+
+    --chart-1: 47 100% 50%;   /* dourado  */
+    --chart-2: 205 90% 60%;   /* azul     */
+    --chart-3: 271 65% 68%;   /* violeta  */
+    --chart-4: 25 85% 58%;    /* âmbar    */
+    --chart-5: 190 70% 52%;   /* teal     */
+
+    /* o gradiente escuro também era do tema claro (hue 36, marrom) */
+    --gradient-dark: linear-gradient(135deg, hsl(0 0% 8%) 0%, hsl(0 0% 14%) 100%);
   }
 
   /* ─── Superfície TV — parede vista a 3m, ambiente iluminado ─────────

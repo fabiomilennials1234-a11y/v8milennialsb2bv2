@@ -25,16 +25,16 @@ import { DealCard } from "@/modules/leads/components/deal-card/DealCard";
 import type { DealCardData, DealCardStage } from "@/modules/leads/components/deal-card/types";
 
 const ETAPAS_COM_DESFECHO: DealCardStage[] = [
-  { chave: "orcamento", nome: "Orçamento", papel: "aberto" },
-  { chave: "proposta_enviada", nome: "Proposta enviada", papel: "aberto" },
-  { chave: "vendido", nome: "Vendido", papel: "ganho" },
-  { chave: "perdido", nome: "Perdido", papel: "perdido" },
+  { chave: "orcamento", chaveEntry: "orcamento", nome: "Orçamento", papel: "aberto" },
+  { chave: "proposta_enviada", chaveEntry: "proposta_enviada", nome: "Proposta enviada", papel: "aberto" },
+  { chave: "vendido", chaveEntry: "vendido", nome: "Vendido", papel: "ganho" },
+  { chave: "perdido", chaveEntry: "perdido", nome: "Perdido", papel: "perdido" },
 ];
 
 /** O funil custom sem etapa terminal — 83 deles em prod. */
 const ETAPAS_SEM_DESFECHO: DealCardStage[] = [
-  { chave: "s1", nome: "Triagem", papel: "aberto" },
-  { chave: "s2", nome: "Em análise", papel: "aberto" },
+  { chave: "s1", chaveEntry: "s1", nome: "Triagem", papel: "aberto" },
+  { chave: "s2", chaveEntry: "s2", nome: "Em análise", papel: "aberto" },
 ];
 
 function negocio(over: Partial<DealCardData> = {}): DealCardData {
@@ -48,6 +48,14 @@ function negocio(over: Partial<DealCardData> = {}): DealCardData {
       empresa: "Distética Comércio Ltda",
       telefone: "(11) 98472-1130",
       relacao: "lead",
+      email: null,
+      origem: null,
+      chegouEm: null,
+      qualificacao: null,
+      preQualificacao: null,
+      responsaveis: { preVenda: null, venda: null },
+      etiquetas: [],
+      faturamento: null,
     },
     funil: "Orçamentos",
     funilCor: "#a855f7",
@@ -65,6 +73,19 @@ function negocio(over: Partial<DealCardData> = {}): DealCardData {
     desfecho: null,
     movimentacoes: [],
     nota: "",
+    // ── Campos do painel de duas colunas ──────────────────────────────────
+    // `itens` NÃO pode faltar: `contaDoNegocio` soma a lista, e sem ela o
+    // painel inteiro morre com "Cannot read properties of undefined". Como
+    // `tsconfig.app.json` só inclui `src`, esta pasta não é checada por tipo
+    // e um fixture defasado passa a compilar e só explode em tempo de teste.
+    valorDoNegocio: null,
+    probabilidade: null,
+    previsaoFechamento: null,
+    fechadoEm: null,
+    criadoEm: null,
+    itens: [],
+    atividades: [],
+    outrosNegocios: [],
     ...over,
   };
 }
@@ -103,8 +124,8 @@ describe("DealCard — ganhar e perder são movimentos, não estado", () => {
 
   it("mostra só Ganhou quando o funil tem ganho mas não tem perdido", () => {
     const etapas: DealCardStage[] = [
-      { chave: "s1", nome: "Triagem", papel: "aberto" },
-      { chave: "ok", nome: "Fechado", papel: "ganho" },
+      { chave: "s1", chaveEntry: "s1", nome: "Triagem", papel: "aberto" },
+      { chave: "ok", chaveEntry: "ok", nome: "Fechado", papel: "ganho" },
     ];
     render(<DealCard negocio={negocio({ etapas, etapaAtual: "s1" })} />);
 
@@ -137,25 +158,34 @@ describe("DealCard — ganhar e perder são movimentos, não estado", () => {
   });
 });
 
+/**
+ * A regra é a mesma de sempre — acende acima do DOBRO da mediana da etapa, não
+ * de um número fixo. O que mudou com o painel de duas colunas foi só a
+ * superfície: a frase corrida ("parado muito acima do normal desta etapa")
+ * virou o primeiro LADRILHO do print, que troca de rótulo e de tom.
+ */
 describe("DealCard — estagnação compara com a etapa, não com um número fixo", () => {
   it("acende acima do dobro da mediana da etapa", () => {
     render(<DealCard negocio={negocio({ diasNaEtapa: 74, medianaDaEtapa: 21 })} />);
 
-    expect(screen.getByText(/parado muito acima do normal desta etapa/i)).toBeInTheDocument();
-    expect(screen.getByText(/74 dias contra uma mediana de/i)).toBeInTheDocument();
+    expect(screen.getByText(/^parado na etapa$/i)).toBeInTheDocument();
+    expect(screen.getByText("74")).toBeInTheDocument();
+    expect(screen.getByText(/normal aqui: 21 dias/i)).toBeInTheDocument();
   });
 
   it("NÃO acende no dobro exato — a fronteira é estritamente maior", () => {
     render(<DealCard negocio={negocio({ diasNaEtapa: 42, medianaDaEtapa: 21 })} />);
 
-    expect(screen.getByText(/dentro do ritmo desta etapa/i)).toBeInTheDocument();
-    expect(screen.queryByText(/contra uma mediana de/i)).toBeNull();
+    expect(screen.getByText(/^em aberto$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^parado na etapa$/i)).toBeNull();
+    expect(screen.queryByText(/normal aqui:/i)).toBeNull();
   });
 
   it("NÃO acende sem mediana — etapa sem amostra não vira acusação", () => {
     render(<DealCard negocio={negocio({ diasNaEtapa: 400, medianaDaEtapa: null })} />);
 
-    expect(screen.getByText(/dentro do ritmo desta etapa/i)).toBeInTheDocument();
+    expect(screen.getByText(/^em aberto$/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^parado na etapa$/i)).toBeNull();
   });
 
   it("negócio fechado troca Tempo por Desfecho — parado não quer dizer nada depois da venda", () => {
@@ -170,55 +200,88 @@ describe("DealCard — estagnação compara com a etapa, não com um número fix
       />,
     );
 
-    expect(screen.getByRole("heading", { name: /desfecho/i })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: /^tempo$/i })).toBeNull();
-    expect(screen.queryByText(/parado muito acima do normal/i)).toBeNull();
+    // O bloco de desfecho deixou de ser <h2> e virou a faixa "Perdido em".
+    expect(screen.getByText(/^perdido em$/i)).toBeInTheDocument();
     expect(screen.getByText("Preço")).toBeInTheDocument();
+    // O que este teste guarda: depois do fecho o painel NÃO acusa estagnação.
+    expect(screen.queryByText(/^parado na etapa$/i)).toBeNull();
+    expect(screen.queryByText(/normal aqui:/i)).toBeNull();
+    // ⚠ HERDADO desta branch, ainda não corrigido: o primeiro ladrilho só tem
+    // dois rótulos ("Parado na etapa" | "Em aberto"), então um negócio PERDIDO
+    // ainda aparece rotulado como "Em aberto". Não é o que este teste guarda,
+    // mas está errado na tela — decidir o rótulo do negócio fechado.
   });
 });
 
-describe("DealCard — dinheiro some quando não há, em vez de virar R$ 0,00", () => {
-  it("esconde a seção Valor no negócio sem valor nem produto (98,9% deles)", () => {
+/**
+ * O painel de duas colunas trouxe os ladrilhos do print, que ficam SEMPRE na
+ * tela — o layout não some mais. O que não mudou é a regra que originou este
+ * bloco: `sale_value` existe em 1,1% dos 38.739 negócios, então carimbar
+ * "R$ 0,00" em 98,9% das aberturas afirma que o negócio não vale nada, e não
+ * saber quanto vale é outra coisa. O ladrilho fica; o número vira "—".
+ * Decisão do dono do produto em 22/08/2026.
+ */
+describe("DealCard — sem valor o dinheiro vira '—', nunca R$ 0,00", () => {
+  it("nunca carimba R$ 0,00 no negócio sem valor nem produto (98,9% deles)", () => {
     render(<DealCard negocio={negocio({ valor: 0, produto: null })} />);
 
-    expect(screen.queryByRole("heading", { name: /^valor$/i })).toBeNull();
+    expect(screen.queryByText(/R\$\s*0,00/)).toBeNull();
+    // O ladrilho continua na tela — o que sai é o zero, não a caixa.
+    expect(screen.getByText(/^valor total$/i)).toBeInTheDocument();
+  });
+
+  it("mostra o número quando há valor", () => {
+    render(<DealCard negocio={negocio({ valor: 12400 })} />);
+
+    expect(screen.getByText(/^valor total$/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/R\$\s*12\.400,00/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/R\$\s*0,00/)).toBeNull();
   });
 
-  it("mostra a seção quando há valor", () => {
-    render(<DealCard negocio={negocio({ valor: 12400 })} />);
-
-    expect(screen.getByRole("heading", { name: /^valor$/i })).toBeInTheDocument();
-  });
-
-  it("mostra a seção quando há só produto, sem valor", () => {
+  it("negócio com produto e sem valor também não vira zero", () => {
     render(<DealCard negocio={negocio({ valor: 0, produto: "Linha Performance 5kg" })} />);
 
-    expect(screen.getByRole("heading", { name: /^valor$/i })).toBeInTheDocument();
-    expect(screen.getByText("Linha Performance 5kg")).toBeInTheDocument();
+    expect(screen.queryByText(/R\$\s*0,00/)).toBeNull();
   });
 });
 
-describe("DealCard — o lead é link, não conteúdo", () => {
-  it("clicar na empresa abre o card da pessoa pelo id", () => {
-    const onOpenLead = vi.fn();
-    render(<DealCard negocio={negocio()} onOpenLead={onOpenLead} />);
+/**
+ * ── Este bloco mudou de contrato em 22/08/2026 ────────────────────────────
+ *
+ * Era "o lead é link, não conteúdo": o negócio estampava a empresa e clicar
+ * nela TROCAVA de card, abrindo a ficha da pessoa. Fazia sentido enquanto os
+ * dois cards se excluíam.
+ *
+ * Com o painel de duas colunas a pessoa deixou de ser link e passou a ser
+ * COLUNA — 356px fixos à esquerda, montados por `DealCardPanel`. Não há mais
+ * o que clicar, porque não há mais para onde ir: a pessoa já está na tela.
+ *
+ * O que passa a ser guardado aqui é o outro lado da mesma moeda: o `DealCard`
+ * não pode voltar a estampar a identidade da pessoa. Se voltar, a tela passa
+ * a dizer duas vezes quem é o lead — uma vez na coluna e outra dentro do
+ * negócio — e é exatamente essa duplicação que o modelo Lead↔Negócio existe
+ * para acabar. A composição das duas colunas é provada em
+ * `tests/unit/cards-nunca-empilham.test.tsx`.
+ */
+describe("DealCard — a pessoa é coluna, não conteúdo do negócio", () => {
+  it("não repete a identidade da pessoa dentro do negócio", () => {
+    render(<DealCard negocio={negocio()} />);
 
-    fireEvent.click(screen.getByText("Distética Comércio Ltda"));
-
-    expect(onOpenLead).toHaveBeenCalledWith("l1");
+    expect(screen.queryByText("Distética Comércio Ltda")).toBeNull();
+    expect(screen.queryByText("Distética Suplementos")).toBeNull();
+    expect(screen.queryByText("(11) 98472-1130")).toBeNull();
   });
 
-  it("cai no nome da pessoa quando não há empresa", () => {
-    render(<DealCard negocio={negocio({ lead: { ...negocio().lead, empresa: null } })} />);
-
-    expect(screen.getByText("Distética Suplementos")).toBeInTheDocument();
-  });
-
-  it("marca Cliente quando a pessoa já comprou (ADR-0023 §6/§7)", () => {
+  it("não repete o selo de relação — quem diz 'Cliente' é a coluna da pessoa", () => {
     render(<DealCard negocio={negocio({ lead: { ...negocio().lead, relacao: "cliente" } })} />);
 
-    expect(screen.getByText("Cliente")).toBeInTheDocument();
+    expect(screen.queryByText("Cliente")).toBeNull();
+  });
+
+  it("o que é DO NEGÓCIO continua no negócio — título e funil", () => {
+    render(<DealCard negocio={negocio()} />);
+
+    expect(screen.getByText("Reposição trimestral")).toBeInTheDocument();
   });
 
   it("diz sem dono em vez de estampar uuid — o caso cross-org que o M6 trava", () => {
@@ -229,11 +292,22 @@ describe("DealCard — o lead é link, não conteúdo", () => {
 });
 
 describe("DealCard — anotação", () => {
+  /**
+   * No painel de duas colunas a anotação deixou de ficar solta na rolagem e
+   * virou a segunda aba do bloco de dinheiro ("Produtos e Valores" · "Anotação").
+   * A textarea só existe depois do clique — antes disto os testes achavam o
+   * campo direto, e passaram a não achar nada.
+   */
+  function abrirAnotacao() {
+    fireEvent.click(screen.getByRole("button", { name: /^anotação$/i }));
+    return screen.getByRole("textbox");
+  }
+
   it("não grava quando o texto não mudou", () => {
     const onSaveNote = vi.fn();
     render(<DealCard negocio={negocio({ nota: "Aguardando retorno" })} onSaveNote={onSaveNote} />);
 
-    fireEvent.blur(screen.getByRole("textbox"));
+    fireEvent.blur(abrirAnotacao());
 
     expect(onSaveNote).not.toHaveBeenCalled();
   });
@@ -242,7 +316,7 @@ describe("DealCard — anotação", () => {
     const onSaveNote = vi.fn();
     render(<DealCard negocio={negocio({ nota: "Aguardando retorno" })} onSaveNote={onSaveNote} />);
 
-    const campo = screen.getByRole("textbox");
+    const campo = abrirAnotacao();
     fireEvent.change(campo, { target: { value: "Cliente pediu desconto" } });
     fireEvent.blur(campo);
 
@@ -251,9 +325,10 @@ describe("DealCard — anotação", () => {
 
   it("troca de negócio troca a anotação em tela — o card é reusado entre cards do funil", () => {
     const { rerender } = render(<DealCard negocio={negocio({ id: "e1", nota: "Nota do e1" })} />);
-    expect(screen.getByRole("textbox")).toHaveValue("Nota do e1");
+    expect(abrirAnotacao()).toHaveValue("Nota do e1");
 
     rerender(<DealCard negocio={negocio({ id: "e2", nota: "Nota do e2" })} />);
-    expect(screen.getByRole("textbox")).toHaveValue("Nota do e2");
+    // Trocar de negócio volta para "Produtos e Valores" — de propósito.
+    expect(abrirAnotacao()).toHaveValue("Nota do e2");
   });
 });

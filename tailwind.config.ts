@@ -21,6 +21,10 @@ export default {
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
+        // Superfície AFUNDADA — bloco secundário dentro de um card.
+        // Diferente de `muted`, que é fill de controle e fica ACIMA do card.
+        sunken: "hsl(var(--sunken))",
+        elevated: "hsl(var(--elevated))",
         foreground: "hsl(var(--foreground))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
@@ -139,6 +143,13 @@ export default {
       boxShadow: {
         'gold': '0 10px 30px -10px hsl(47 100% 50% / 0.3)',
         'success': '0 10px 30px -10px hsl(142 70% 45% / 0.3)',
+        // Profundidade tematizável. As sombras de fábrica do Tailwind são
+        // preto cru, cegas a tema, e sobre fundo escuro rendem contraste
+        // 1,031 — trabalho zero. Estas leem o token, então mudam com o tema.
+        'relevo': 'var(--relevo)',
+        'relevo-alto': 'var(--relevo-alto)',
+        'afundado': 'var(--afundado)',
+        'afundado-raso': 'var(--afundado-raso)',
       },
       keyframes: {
         "accordion-down": {
