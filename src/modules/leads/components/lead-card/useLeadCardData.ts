@@ -79,6 +79,21 @@ function nomeDoJoin(linha: Linha, chave: string): string | null {
   return typeof nome === "string" && nome !== "" ? nome : null;
 }
 
+/**
+ * O par `{id, name}` de um join de `team_members`.
+ *
+ * Irmão de `nomeDoJoin`, e existe porque editar precisa do id: o nome sozinho
+ * não diz ao `ResponsibleSlot` qual membro marcar na lista.
+ */
+function membroDoJoin(linha: Linha, chave: string): { id: string; name: string } | null {
+  const v = linha[chave];
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const m = v as Linha;
+  return typeof m.id === "string" && typeof m.name === "string" && m.name !== ""
+    ? { id: m.id, name: m.name }
+    : null;
+}
+
 function diasDesde(iso: string | null | undefined): number | null {
   if (!iso) return null;
   const t = new Date(iso).getTime();
@@ -227,6 +242,13 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
 
     return {
       id,
+      edicao: {
+        preVenda: membroDoJoin(l, "pre_sale_responsible"),
+        venda: membroDoJoin(l, "sale_responsible"),
+        preQualificacao: texto(l, "pre_qualification_tier"),
+        qualificacao: texto(l, "qualification_tier"),
+        atualizadoEm: texto(l, "updated_at"),
+      },
       nome: texto(l, "name") ?? "",
       empresa: texto(l, "company"),
       telefone: texto(l, "phone"),

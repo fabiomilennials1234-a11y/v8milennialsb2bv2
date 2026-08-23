@@ -171,6 +171,15 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         atividades: (ativRes.data ?? []) as Linha[],
         negocio: (negocioRes?.data ?? null) as Linha | null,
         itens: (itensRes?.data ?? []) as Linha[],
+        /**
+         * O id da linha em `deals`, que até aqui era calculado e descartado.
+         *
+         * É a chave de ESCRITA do bloco de produtos: `deal_items.deal_id` é NOT
+         * NULL, então sem ele não há onde lançar item. Quem consome decide o que
+         * fazer com o `null` — o painel esconde o botão e diz o porquê, em vez
+         * de oferecer uma ação que falharia no INSERT.
+         */
+        dealId,
       };
     },
   });
@@ -329,6 +338,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         const str = (v: unknown): string | null =>
           typeof v === "string" && v !== "" ? v : null;
         return {
+          dealId: extras.data?.dealId ?? null,
           valorDoNegocio: num(n?.value),
           probabilidade: num(n?.probability),
           previsaoFechamento: str(n?.expected_close_date),

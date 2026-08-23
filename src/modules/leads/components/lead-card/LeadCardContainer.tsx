@@ -5,7 +5,9 @@ import { cn } from "@/lib/utils";
 
 import { LeadCard } from "./LeadCard";
 import { LeadCardAside } from "./LeadCardAside";
+import { LeadCardControles } from "./LeadCardControles";
 import { useLeadCardData } from "./useLeadCardData";
+import type { QualificationTier } from "../lead-detail/modal/types";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
 import { useSaveCustomFieldValue } from "../../hooks/useLeadCustomFields";
 
@@ -141,12 +143,41 @@ export function LeadCardContainer({
   }
 
   if (forma === "coluna") {
+    /**
+     * Os ids vêm de `data.edicao`, e NÃO de um segundo `useLeadDetail`.
+     *
+     * Chamar o hook de novo aqui parecia grátis — react-query devolveria a
+     * mesma linha do cache — mas `useLeadDetail` monta `useTrackView`, que não
+     * deduplica: cada montagem dispara `track_recent_view`. Como o
+     * `useDealCardData` do painel já o chama, a segunda chamada gravaria DUAS
+     * visualizações a cada abertura do painel. Quem pegou foi
+     * `cards-nunca-empilham.test.tsx`.
+     *
+     * O `as` cobre o `types.ts` gerado, que ainda não conhece o enum de tier —
+     * mesmo motivo do cast em `QualificationSlot.tsx:37`.
+     */
+    const e = data.edicao;
+    const tier = (v: string | null | undefined): QualificationTier | null =>
+      v ? (v as QualificationTier) : null;
+
     return (
       <LeadCardAside
         lead={data}
         onSaveNote={salvarNota}
         onSaveField={salvarCampo}
         onAbrirFicha={onAbrirFicha}
+        controles={
+          leadId && e ? (
+            <LeadCardControles
+              leadId={leadId}
+              preVenda={e.preVenda}
+              venda={e.venda}
+              preQualificacao={tier(e.preQualificacao)}
+              qualificacao={tier(e.qualificacao)}
+              atualizadoEm={e.atualizadoEm}
+            />
+          ) : undefined
+        }
       />
     );
   }

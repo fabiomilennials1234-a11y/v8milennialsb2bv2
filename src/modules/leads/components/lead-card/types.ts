@@ -141,6 +141,28 @@ export interface LeadCardData {
   situacao: { funil: string; funilCor: string } | null;
 
   dono: { nome: string; papel: string } | null;
+
+  /**
+   * O que os CONTROLES precisam e o desenho não usa: ids e tiers crus.
+   *
+   * `dono` acima é um NOME só, colapsado por precedência (venda → pré-venda →
+   * responsável) — bom para ler, inútil para editar: `ResponsibleSlot` precisa
+   * saber QUEM está marcado em CADA um dos dois campos, e isso é `{id, name}`
+   * por campo. Os tiers vêm como texto porque o `types.ts` gerado ainda não
+   * conhece o enum de qualificação; quem monta o controle faz o cast.
+   *
+   * Opcional de propósito: só a forma `coluna` (o painel do Negócio) monta
+   * controle, e as fixtures da tela de visualização não precisam disto para
+   * desenhar. `atualizadoEm` liga a trava otimista da escrita.
+   */
+  edicao?: {
+    preVenda: { id: string; name: string } | null;
+    venda: { id: string; name: string } | null;
+    preQualificacao: string | null;
+    qualificacao: string | null;
+    atualizadoEm: string | null;
+  };
+
   copilotAtivo: boolean;
 
   tags: LeadCardTag[];

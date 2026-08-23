@@ -40,12 +40,22 @@ export function LeadCardAside({
   onSaveNote,
   onSaveField,
   onAbrirFicha,
+  controles,
 }: {
   lead: LeadCardData;
   onSaveNote?: (texto: string) => void;
   onSaveField?: (chave: string, valor: string) => Promise<void>;
   /** Abre a ficha inteira do lead. Sem ela o lápis não aparece. */
   onAbrirFicha?: () => void;
+  /**
+   * Qualificação e responsáveis, montados PRONTOS por quem tem acesso ao banco.
+   *
+   * Não é preciosismo de arquitetura: este arquivo está no grafo de
+   * `/preview.html`, e `preview-cards-sem-banco.test.ts` reprova qualquer coisa
+   * aqui dentro que alcance react-query. Mesmo formato de `acaoWhatsapp` no
+   * `LeadCardCompact`. Sem a prop, a coluna continua como era — só de leitura.
+   */
+  controles?: React.ReactNode;
 }) {
   const [nota, setNota] = useState(lead.nota);
   const [grupo, setGrupo] = useState(0);
@@ -152,6 +162,15 @@ export function LeadCardAside({
               <span className="text-primary underline underline-offset-2">Sem atendente</span>
             )}
           </div>
+
+          {/* Os controles ficam logo abaixo da linha do atendente porque é a
+              mesma pergunta — "quem cuida disto?" — só que acionável. A linha
+              de cima continua existindo: ela mostra o NOME do responsável
+              efetivo, e os círculos dos slots mostram só as iniciais. Trocar
+              uma pela outra ganharia um clique e perderia a leitura. */}
+          {controles && (
+            <div className="mt-3 w-full border-t border-border pt-3">{controles}</div>
+          )}
 
           {onAbrirFicha && (
             <button

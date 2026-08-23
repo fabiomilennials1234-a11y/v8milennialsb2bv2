@@ -1,4 +1,4 @@
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 import { toast } from "sonner";
 
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -10,6 +10,7 @@ import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
 import { useCrossPipeMove } from "../lead-detail/modal/pipes/useCrossPipeMove";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
+import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { useDealCardData } from "./useDealCardData";
 
@@ -39,6 +40,24 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useDealCardData(entryId, leadId, isOpen);
+
+  const [adicionandoProduto, setAdicionandoProduto] = useState(false);
+
+  /**
+   * Lançar produto exige a linha em `deals` — `deal_items.deal_id` é NOT NULL.
+   *
+   * Quando ela não existe, o callback NÃO desce: o `DealCardMoney` só desenha o
+   * "+ Adicionar produto" quando recebe a prop, e um botão que abriria um
+   * diálogo cujo INSERT falharia é pior que botão nenhum. O bloco explica a
+   * ausência em vez de escondê-la (ver `motivoSemProduto` abaixo).
+   *
+   * Criar o negócio aqui não é opção de bastidor: ADR-0023 decisão 3 diz que
+   * "um Negócio nasce só por clique humano", e a única porta é a RPC
+   * `abrir_negocio`, que cria card NOVO em vez de pendurar negócio numa entrada
+   * existente. Ligar entrada antiga a negócio novo é trabalho de RPC própria,
+   * não de um efeito colateral do botão de produto.
+   */
+  const dealId = data?.dealId ?? null;
 
   /**
    * Mover de etapa — inclusive ganhar e perder, que são movimentos para a
@@ -120,6 +139,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
       onMoverEtapa={moverEtapa}
       onOpenDeal={trocarNegocio}
       onNewDeal={abrirFicha}
+      onAdicionarProduto={dealId ? () => setAdicionandoProduto(true) : undefined}
       movendo={pendingStageKey}
     />
   ) : (
@@ -154,17 +174,43 @@ export const DealCardPanel = memo(function DealCardPanel() {
 
   if (!isOpen) return null;
 
+  /**
+   * O diálogo de produto fica FORA da casca, irmão dela.
+   *
+   * Aninhá-lo dentro do `DialogContent` empilharia dois overlays do Radix, que é
+   * exatamente o que `cards-nunca-empilham.test.tsx` proíbe: o de dentro rouba o
+   * foco, e fechar um fecha os dois. Como irmão, cada um tem seu portal e o
+   * painel continua aberto por trás enquanto o produto é lançado.
+   *
+   * E ele só é MONTADO quando abre. Montá-lo junto com o painel — mesmo fechado —
+   * põe `useOrganization` e a mutation para rodar em toda abertura de negócio,
+   * por uma tela que ninguém pediu ainda. Mesma regra do painel logo acima
+   * (`if (!isOpen) return null`).
+   */
+  const dialogoProduto = dealId && adicionandoProduto ? (
+    <AdicionarProdutoDialog
+      aberto={adicionandoProduto}
+      aoFechar={() => setAdicionandoProduto(false)}
+      dealId={dealId}
+      entryId={entryId}
+    />
+  ) : null;
+
   if (isMobile) {
     return (
-      <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
-        <SheetContent side="bottom" className="h-[92vh] p-0">
-          {conteudo(false)}
-        </SheetContent>
-      </Sheet>
+      <>
+        <Sheet open={isOpen} onOpenChange={(v) => !v && close()}>
+          <SheetContent side="bottom" className="h-[92vh] p-0">
+            {conteudo(false)}
+          </SheetContent>
+        </Sheet>
+        {dialogoProduto}
+      </>
     );
   }
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(v) => !v && close()}>
       {/* Sem botão de fechar próprio: o `DialogContent` já desenha um
           `DialogPrimitive.Close` em `right-4 top-4` (ui/dialog.tsx:48-51).
@@ -180,5 +226,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         {conteudo(true)}
       </DialogContent>
     </Dialog>
+    {dialogoProduto}
+    </>
   );
 });
