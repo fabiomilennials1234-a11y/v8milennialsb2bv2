@@ -17,6 +17,12 @@ import { Sidebar } from "./Sidebar";
 const upgradeSpy = vi.fn();
 
 vi.mock("./OrgSwitcher", () => ({ OrgSwitcher: () => <div data-testid="org-switcher" /> }));
+// Mesmo motivo do dublê acima: os atalhos de master leem a sessão
+// (`useMasterAuth` → `useAuth`), e este teste não monta `AuthProvider` porque o
+// que ele cobre é a FORMA da lateral, não quem enxerga o quê.
+vi.mock("./SidebarMasterLinks", () => ({
+  SidebarMasterLinks: () => <div data-testid="master-links" />,
+}));
 vi.mock("./SidebarUserMenu", () => ({ SidebarUserMenu: () => <div data-testid="user-menu" /> }));
 vi.mock("@/modules/platform/components/notifications/AlertsDropdown", () => ({
   AlertsDropdown: () => <div data-testid="alerts" />,

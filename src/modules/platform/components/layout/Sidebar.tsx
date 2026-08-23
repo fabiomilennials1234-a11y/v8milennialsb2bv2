@@ -27,6 +27,7 @@ import {
 } from "@/modules/platform/lib/navigation-model";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { OrgSwitcher } from "./OrgSwitcher";
+import { SidebarMasterLinks } from "./SidebarMasterLinks";
 import { PitstopPanel } from "./PitstopPanel";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarUserMenu } from "./SidebarUserMenu";
@@ -190,6 +191,12 @@ export function Sidebar() {
             <AlertsDropdown />
             {!collapsed && <span className="flex-1 truncate">Notificações</span>}
           </div>
+
+          {/* Master, Gestor e "Ativos agora" — só para quem é master. Vieram do
+              topo, de dentro do `OrgSwitcher`, onde a linha transbordava a
+              largura da barra e invadia o conteúdo. Aqui eles recolhem junto
+              com o menu, o que no topo não acontecia. */}
+          <SidebarMasterLinks collapsed={collapsed} />
 
           {collapsed ? (
             <Tooltip delayDuration={120}>

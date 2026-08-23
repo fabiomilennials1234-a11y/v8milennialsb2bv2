@@ -1,4 +1,4 @@
-import { Building2, ChevronDown, Check, Loader2, Shield, FlaskConical, LineChart } from "lucide-react";
+import { Building2, ChevronDown, Check, Loader2, FlaskConical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
@@ -9,17 +9,34 @@ import {
 import { Button } from "@/components/ui/button";
 import { useOrgSwitcher } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
-import { useMasterAuth, MasterOnlineIndicator } from "@/modules/identity";
-import { useNavigate } from "react-router-dom";
+// Fica só pelo selo SHADOW: master lendo a org de um cliente precisa saber que
+// está de empréstimo. Os ATALHOS de master mudaram de lugar — ver o bloco acima.
+import { useMasterAuth } from "@/modules/identity";
 
+/**
+ * Trocar de organização — e só isso.
+ *
+ * ── POR QUE OS ATALHOS DE MASTER SAÍRAM DAQUI ─────────────────────────────
+ * Este componente é montado no TOPO da barra lateral (`Sidebar.tsx`), que tem
+ * largura fixa. Enquanto ele carregava, além do seletor, os botões "Master" e
+ * "Gestor" e o indicador de usuários ativos, a linha somava quatro controles —
+ * o dropdown sozinho vai a 240px — e **transbordava a lateral**, aparecendo por
+ * cima da área de conteúdo. Da tela, a leitura era de botões soltos no meio do
+ * Comando; a causa era largura, não posicionamento.
+ *
+ * Os três viraram linhas do RODAPÉ da lateral (`SidebarMasterLinks`), junto de
+ * Agenda e Notificações, que é onde moram os atalhos que não são navegação de
+ * funil. Lá eles herdam o comportamento de recolher junto com o menu, que aqui
+ * nunca tiveram — `Sidebar.tsx` já os escondia por inteiro no modo recolhido.
+ */
 export function OrgSwitcher() {
   const { orgs, hasMultipleOrgs, isSwitching, switchOrg } = useOrgSwitcher();
   const { organizationId } = useOrganization();
-  const { isMaster, isOutbounder } = useMasterAuth();
-  const navigate = useNavigate();
+  const { isMaster } = useMasterAuth();
 
-  // Só renderiza se o user tem mais de 1 org (master sempre vê)
-  if (!hasMultipleOrgs && !isMaster) return null;
+  // Sem segunda org não há o que trocar. O master também cai nesta regra: o
+  // acesso dele à visão de frota é pelo rodapé, não por um seletor de uma org só.
+  if (!hasMultipleOrgs) return null;
 
   const currentOrg = orgs.find((o) => o.id === organizationId);
 
@@ -92,34 +109,6 @@ export function OrgSwitcher() {
         </DropdownMenu>
       )}
 
-      {isMaster && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5 border-red-500/30 text-red-600 hover:bg-red-500/10 hover:text-red-700"
-          onClick={() => navigate("/master")}
-        >
-          <Shield className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium">
-            {isOutbounder ? "Painel Outbound" : "Master"}
-          </span>
-        </Button>
-      )}
-
-      {isMaster && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5 border-insights/30 text-insights hover:bg-insights/10 hover:text-insights focus-visible:ring-2 focus-visible:ring-insights focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          onClick={() => navigate("/insights")}
-        >
-          <LineChart className="w-3.5 h-3.5" />
-          <span className="text-xs font-medium">Gestor</span>
-        </Button>
-      )}
-
-      {/* Só o sinal: ping verde + total de usuários ativos na frota. */}
-      <MasterOnlineIndicator />
     </div>
   );
 }
