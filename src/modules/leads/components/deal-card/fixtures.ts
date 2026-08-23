@@ -23,6 +23,9 @@ const ETAPAS_ORCAMENTOS = [
 /** O caso que a operação precisa ver: parado muito acima da mediana da etapa. */
 export const NEGOCIO_ESTAGNADO: DealCardData = {
   id: "e1",
+  // A fixture tem negócio de verdade: é o caso em que o bloco de produtos é
+  // editável, que é o que a tela de visualização precisa mostrar.
+  dealId: "d1",
   titulo: "Reposição trimestral",
   estado: "aberto",
   lead: {
@@ -145,6 +148,10 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
 /** 98,9% dos negócios: sem valor, uma movimentação só, recém-criado. */
 export const NEGOCIO_MAGRO: DealCardData = {
   id: "e2",
+  // Sem linha em `deals` — o caso da MAIORIA das entradas em produção. É o que
+  // faz a visualização mostrar o bloco de produtos sem botão, com a frase que
+  // explica a ausência.
+  dealId: null,
   titulo: "Negócio de ago/2026",
   estado: "aberto",
   lead: {
@@ -220,6 +227,7 @@ export const NEGOCIO_MAGRO: DealCardData = {
 /** Fechado: o desfecho substitui o bloco de tempo, que deixou de apontar ação. */
 export const NEGOCIO_GANHO: DealCardData = {
   id: "e3",
+  dealId: "d3",
   titulo: "Negócio de mai/2026",
   estado: "ganho",
   lead: {

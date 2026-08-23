@@ -76,6 +76,16 @@ export function DealCardMoney({
   /** Sem ela o "+ Adicionar produto" não aparece — botão que não faz nada mente. */
   onAdicionarProduto?: () => void;
 }) {
+  /**
+   * A ausência do botão é DITA, não escondida.
+   *
+   * `deal_items.deal_id` é NOT NULL e `pipeline_entries.deal_id` é nulo em quase
+   * todas as entradas em produção — então, na maioria dos negócios, não há onde
+   * lançar item e o botão não desce. Sem esta frase o bloco fica idêntico ao que
+   * era antes (uma lista sem saída), e quem abrir vai concluir de novo que a
+   * tela simplesmente não deixa cadastrar produto.
+   */
+  const semNegocio = !onAdicionarProduto;
   const { temItens, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
 
   return (
@@ -118,9 +128,17 @@ export function DealCardMoney({
             ))}
           </div>
         ) : (
-          <p className="py-4 text-[12.5px] text-muted-foreground/70">
-            Nenhum produto lançado neste negócio.
-          </p>
+          <div className="flex flex-col gap-1 py-4">
+            <p className="text-[12.5px] text-muted-foreground/70">
+              Nenhum produto lançado neste negócio.
+            </p>
+            {semNegocio && (
+              <p className="text-[11.5px] text-muted-foreground/55">
+                Este card ainda não tem um negócio aberto — é nele que os produtos
+                ficam. Abra um em "Novo negócio" para poder lançá-los.
+              </p>
+            )}
+          </div>
         )}
 
         {desconto > 0 && (

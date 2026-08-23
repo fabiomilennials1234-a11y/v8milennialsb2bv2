@@ -124,6 +124,18 @@ export interface DealCardItem {
 export interface DealCardData {
   /** `pipeline_entries.id` — a posição, que é o que identifica o negócio hoje. */
   id: string;
+  /**
+   * `deals.id` — a IDENTIDADE do negócio, e `null` na maioria das entradas.
+   *
+   * O painel é chaveado pela posição (`id`), não por isto: `pipeline_entries.deal_id`
+   * é NULO em quase todas as 38.156 entradas, e exigir a linha em `deals` para
+   * abrir o painel deixaria a tela vazia para quase todo mundo.
+   *
+   * Existe porque ESCREVER exige a identidade: `deal_items.deal_id` é NOT NULL.
+   * Sem este campo o painel não tem como lançar produto — e é por isso que ele
+   * sobe até aqui em vez de morrer dentro do hook, como acontecia.
+   */
+  dealId: string | null;
   titulo: string;
   estado: EstadoDoNegocio;
 
