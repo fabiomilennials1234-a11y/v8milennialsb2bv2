@@ -1182,12 +1182,43 @@ async function importToCustomPipeline(
         }
 
         // Upsert into custom_pipe_entries
-        const { data: existingEntry, error: existingEntryError } = await supabase
+        //
+        // NÃO usar `.maybeSingle()` aqui. A constraint
+        // `custom_pipe_entries_pipeline_id_lead_id_key` caiu em
+        // `20270730000050_deal_por_lead_destrava` — ADR-0023 decisão 2 permite
+        // ao mesmo Lead ter mais de um Negócio no MESMO funil, que é o que
+        // representa a recompra.
+        //
+        // Com 2+ linhas, o postgrest-js zera `data` e devolve `PGRST116`. O
+        // swallow que vira "vazio" só cobre `details` com "0 rows", então
+        // "existem 2" ficava indistinguível de "não existe" — e aqui isso não
+        // criava linha nova, caía no ramo de erro abaixo e REJEITAVA a linha da
+        // planilha com "Falha ao verificar funil existente". Importação
+        // silenciosamente incompleta, sem ninguém para desfazer.
+        //
+        // Mesma forma que a `develop` já aplicou nos irmãos
+        // (`usePipelineEntries.readActivePipelineEntry`,
+        // `useCustomPipelines`, `stageTransition`, `move-stage`): lê a fila
+        // ordenada com teto e escolhe a corrente — a mais recentemente movida.
+        const CUSTOM_PIPE_ENTRY_READ_CAP = 50;
+        const { data: existingEntries, error: existingEntryError } = await supabase
           .from("custom_pipe_entries")
           .select("id")
           .eq("lead_id", leadId)
           .eq("pipeline_id", pipelineId)
-          .maybeSingle();
+          .order("stage_changed_at", { ascending: false, nullsFirst: false })
+          .order("created_at", { ascending: false, nullsFirst: false })
+          .order("id", { ascending: false })
+          .limit(CUSTOM_PIPE_ENTRY_READ_CAP);
+
+        const entryRows = existingEntries ?? [];
+        if (entryRows.length > 1) {
+          // Sinal explícito de "existem N" — o que `.maybeSingle()` apagava.
+          console.warn(
+            `[import-leads] ${entryRows.length} entries em custom_pipe_entries para pipeline=${pipelineId} lead=${leadId}; atualizando a mais recente.`,
+          );
+        }
+        const existingEntry = entryRows[0] ?? null;
 
         if (existingEntryError) {
           report.errors.push({
