@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertsDropdown } from "@/modules/platform/components/notifications/AlertsDropdown";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import { OrgSwitcher } from "./OrgSwitcher";
+import { SidebarMasterLinks } from "./SidebarMasterLinks";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarUserMenu } from "./SidebarUserMenu";
 
@@ -117,6 +118,12 @@ export function SidebarMobileDrawer() {
                   collapsed={false}
                 />
               )}
+
+              {/* Os atalhos de master saíram do `OrgSwitcher` (que aqui em cima
+                  ficou só com a troca de org). Sem esta linha, o master perderia
+                  a porta do painel no celular — a regressão silenciosa da
+                  mudança, já que o drawer não tem rodapé como o desktop. */}
+              <SidebarMasterLinks collapsed={false} />
 
               {/* No celular o Pitstop não é painel: é o resto da mesma lista. */}
               {model.pitstopGroups.map((group) => (
