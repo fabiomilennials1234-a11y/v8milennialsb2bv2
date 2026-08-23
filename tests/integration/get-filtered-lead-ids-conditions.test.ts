@@ -41,7 +41,7 @@ import {
   TEST_LEAD_GAMMA_ID,
   TEST_LEAD_ORGB_1_ID,
 } from './setup';
-import { getOrgAAdmin, getOrgBAdmin, clearClients } from './rls-helpers';
+import { getOrgAAdmin, getOrgBAdmin, getMaster, clearClients } from './rls-helpers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 const shouldSkip =
@@ -72,9 +72,10 @@ const UPSELL_B_ID = '00000000-0000-0000-0000-0000000723e3';
 describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () => {
   let adminA: SupabaseClient;
   let adminB: SupabaseClient;
+  let master: SupabaseClient;
 
   beforeAll(async () => {
-    [adminA, adminB] = await Promise.all([getOrgAAdmin(), getOrgBAdmin()]);
+    [adminA, adminB, master] = await Promise.all([getOrgAAdmin(), getOrgBAdmin(), getMaster()]);
 
     // ── Lead conditions ──────────────────────────────────────────────────
     // Alpha: tier diamante, origin meta_ads. Beta/Gamma: tier ouro, origin site.
@@ -362,6 +363,139 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
       expect(idsB).toEqual([TEST_LEAD_ORGB_1_ID]);
       expect(idsA).not.toContain(TEST_LEAD_ORGB_1_ID);
       for (const id of idsB) expect(idsA).not.toContain(id);
+    });
+  });
+
+  // ── 4. SCRUM-429 — p_organization_id ESCOPA, não só autoriza ─────────────
+  //
+  // O predicado de tenancy dos 5 resolvers era um `OR`:
+  //
+  //     org IN (SELECT get_my_organization_ids())
+  //     OR (p_organization_id IS NOT NULL AND is_master_user() AND org = p_organization_id)
+  //
+  // `OR` não substitui o primeiro ramo, SOMA a ele. Como
+  // `get_my_organization_ids()` tem branch de master, master pedindo a org B
+  // recebia B **mais todas as outras** — e é com estas RPCs que o
+  // DisparoWizard monta o público. Mensagem de WhatsApp enviada não volta.
+  //
+  // A migration 20270822180000 acrescenta um predicado de ESCOPO:
+  //     AND (p_organization_id IS NULL OR org = p_organization_id)
+  //
+  // Estas asserções são a prova de saída. Elas cobrem os CINCO resolvers
+  // porque o predicado foi copiado nos cinco — e em `get_all_funnels_lead_ids`
+  // ele existe DUAS vezes, uma por ramo da união. Cobrir só um resolver deixaria
+  // os outros quatro livres para regredir em silêncio.
+  describe('SCRUM-429 — master pedindo UMA org recebe SÓ aquela org', () => {
+    // A âncora de cada caso é a mesma: pedir a org B e afirmar que NENHUM lead
+    // da org A entra. Alpha é o lead que aparecia indevidamente.
+    const semVazamentoDeA = (ids: string[]) => {
+      expect(ids).not.toContain(TEST_LEAD_ALPHA_ID);
+      expect(ids).not.toContain(TEST_LEAD_BETA_ID);
+      expect(ids).not.toContain(TEST_LEAD_GAMMA_ID);
+    };
+
+    it('get_stage_lead_ids — org B pedida devolve só a lead de B', async () => {
+      const { data, error } = await master.rpc('get_stage_lead_ids', {
+        p_pipeline_type: 'whatsapp',
+        p_stage_key: SYS_STAGE,
+        p_organization_id: TEST_ORG_B_ID,
+      });
+      expect(error).toBeNull();
+      const ids = (data as string[]) ?? [];
+      expect(ids).toContain(TEST_LEAD_ORGB_1_ID);
+      semVazamentoDeA(ids);
+    });
+
+    it('get_filtered_lead_ids — org B pedida devolve só a lead de B', async () => {
+      const { data, error } = await master.rpc('get_filtered_lead_ids', {
+        p_pipeline_type: 'whatsapp',
+        p_stage_key: null,
+        p_search: null,
+        p_responsible_id: null,
+        p_tag_ids: null,
+        p_qualification_tier: null,
+        p_pre_qualification_tier: null,
+        p_origin: null,
+        p_organization_id: TEST_ORG_B_ID,
+      });
+      expect(error).toBeNull();
+      const ids = (data as string[]) ?? [];
+      expect(ids).toContain(TEST_LEAD_ORGB_1_ID);
+      semVazamentoDeA(ids);
+    });
+
+    it('get_custom_filtered_lead_ids — org B pedida devolve só a lead de B', async () => {
+      const { data, error } = await master.rpc('get_custom_filtered_lead_ids', {
+        p_pipeline_id: CUSTOM_PIPELINE_B_ID,
+        p_stage_id: null,
+        p_search: null,
+        p_responsible_id: null,
+        p_tag_ids: null,
+        p_qualification_tier: null,
+        p_pre_qualification_tier: null,
+        p_origin: null,
+        p_organization_id: TEST_ORG_B_ID,
+      });
+      expect(error).toBeNull();
+      const ids = (data as string[]) ?? [];
+      expect(ids).toContain(TEST_LEAD_ORGB_1_ID);
+      semVazamentoDeA(ids);
+    });
+
+    it('get_carteira_lead_ids — org B pedida devolve só a lead de B', async () => {
+      const { data, error } = await master.rpc('get_carteira_lead_ids', {
+        p_segments: null,
+        p_search: null,
+        p_tag_ids: null,
+        p_qualification_tier: null,
+        p_pre_qualification_tier: null,
+        p_origin: null,
+        p_organization_id: TEST_ORG_B_ID,
+      });
+      expect(error).toBeNull();
+      const ids = (data as string[]) ?? [];
+      expect(ids).toContain(TEST_LEAD_ORGB_1_ID);
+      semVazamentoDeA(ids);
+    });
+
+    it('get_all_funnels_lead_ids — os DOIS ramos da união escopam (system + custom)', async () => {
+      const { data, error } = await master.rpc('get_all_funnels_lead_ids', {
+        p_tag_ids: null,
+        p_qualification_tier: null,
+        p_pre_qualification_tier: null,
+        p_origin: null,
+        p_organization_id: TEST_ORG_B_ID,
+      });
+      expect(error).toBeNull();
+      const ids = (data as string[]) ?? [];
+      // OrgB-1 está no funil system E no custom da org B: se um dos dois ramos
+      // perdesse o escopo, Alpha (que também está nos dois, na org A) entraria.
+      expect(ids).toContain(TEST_LEAD_ORGB_1_ID);
+      semVazamentoDeA(ids);
+    });
+
+    // ── Não-regressão do gate de AUTORIZAÇÃO ──────────────────────────────
+    // O predicado novo só RESTRINGE. Estas duas provam que ele não abriu nada
+    // e não fechou nada que já funcionava.
+    it('não-master pedindo org alheia continua sem nada (sem escalada)', async () => {
+      const { data, error } = await adminA.rpc('get_stage_lead_ids', {
+        p_pipeline_type: 'whatsapp',
+        p_stage_key: SYS_STAGE,
+        p_organization_id: TEST_ORG_B_ID,
+      });
+      expect(error).toBeNull();
+      expect((data as string[]) ?? []).toEqual([]);
+    });
+
+    it('sem p_organization_id o comportamento é o de antes (back-compat)', async () => {
+      const { data, error } = await adminA.rpc('get_stage_lead_ids', {
+        p_pipeline_type: 'whatsapp',
+        p_stage_key: SYS_STAGE,
+      });
+      expect(error).toBeNull();
+      expect(new Set((data as string[]) ?? [])).toEqual(
+        new Set([TEST_LEAD_ALPHA_ID, TEST_LEAD_BETA_ID, TEST_LEAD_GAMMA_ID]),
+      );
     });
   });
 });
