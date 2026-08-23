@@ -214,7 +214,7 @@ export const FEATURES: FeatureMeta[] = [
     description: "Gestão de negócios com produtos, probabilidade e forecast",
     icon: "Briefcase",
     category: "modules",
-    sidebarPath: "/negocios",
+    sidebarPath: null,
     featureType: "module",
     position: 0,
     defaultEnabled: false,
@@ -294,7 +294,7 @@ export const FEATURES: FeatureMeta[] = [
   },
   {
     key: "leads",
-    label: "Combustivel",
+    label: "Leads",
     description: "Gestao de leads e contatos",
     icon: "Fuel",
     category: "modules",

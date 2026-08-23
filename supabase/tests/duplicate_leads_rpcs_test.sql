@@ -95,6 +95,21 @@ ON CONFLICT (id) DO NOTHING;
 --  a3: nome quase igual ao de a1 (→ name match), email E2
 --  a4: email E2 em MAIÚSCULA (→ email match c/ a3, case-insensitive)
 --  a5: SOFT-DELETED, mesmo phone P + mesmo nome (→ NÃO pode aparecer)
+-- O par de telefone é LEGADO, e a fixture precisa dizer isso (SCRUM-361).
+--
+-- `idx_leads_org_phone_unique` (baseline, parcial em `normalized_phone IS NOT
+-- NULL AND deleted_at IS NULL`) proíbe duas linhas VIVAS com o mesmo telefone
+-- na mesma org. Medido em produção em 2026-08-21: ZERO pares. Ou seja, o ramo
+-- `phone` de `find_duplicate_leads` só alcança dado anterior ao índice — e a
+-- fixture, escrita antes dele, morria aqui com 23505 e abortava o arquivo
+-- inteiro ("planned 23 tests but ran 5").
+--
+-- Derrubar o índice DENTRO da transação revertida reproduz o estado legado sem
+-- deixar rastro: `DROP INDEX` é transacional, e o `ROLLBACK` do fim recria. O
+-- que se perde é a prova de que o índice existe — que não é assunto desta
+-- suíte, e vive em `inv5`/schema.
+DROP INDEX IF EXISTS public.idx_leads_org_phone_unique;
+
 INSERT INTO public.leads (id, organization_id, name, normalized_phone, email, deleted_at)
 VALUES
   ('dddddddd-aaaa-0000-0000-000000000001', 'dddddddd-0000-0000-0000-00000000000a',

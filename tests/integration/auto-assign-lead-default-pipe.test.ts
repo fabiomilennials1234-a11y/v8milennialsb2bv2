@@ -41,8 +41,10 @@ let pg: Client;
 
 async function ensureScratchOrg(orgId: string) {
   await pg.query(
-    `INSERT INTO public.organizations (id, name)
-     VALUES ($1, $2)
+    // `slug` e NOT NULL e nao tem default. Sem ele o INSERT morre com 23502 e
+    // a suite inteira cai antes da primeira assercao.
+    `INSERT INTO public.organizations (id, name, slug)
+     VALUES ($1, $2, $2)
      ON CONFLICT (id) DO NOTHING`,
     [orgId, `scratch-${orgId.slice(-4)}`],
   );
@@ -196,9 +198,13 @@ describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED'
     const customStageId    = '00000000-0000-0000-0000-00000cc00103';
 
     await pg.query(
+      // O unico indice unico de (organization_id, slug) em custom_pipelines e
+      // PARCIAL (`WHERE is_active = true`). ON CONFLICT sem o mesmo predicado
+      // nao encontra arbitro e morre com 42P10.
       `INSERT INTO public.custom_pipelines (id, organization_id, name, slug, is_active)
        VALUES ($1, $2, 'CustomPipe', 'custom-auto-assign-c3', true)
-       ON CONFLICT (organization_id, slug) DO UPDATE SET is_active = true`,
+       ON CONFLICT (organization_id, slug) WHERE is_active = true
+       DO UPDATE SET is_active = true`,
       [customPipelineId, TEST_ORG_ID],
     );
     await pg.query(

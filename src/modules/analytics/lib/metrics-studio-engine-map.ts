@@ -34,6 +34,9 @@
  */
 
 import type { MeasureRef } from "@/modules/analytics/hooks/useMetricMeasure";
+// `metric-tree` é folha e só importa `metric-vocabulary` — a aresta daqui para
+// lá não fecha ciclo.
+import type { MetricTreeNode } from "@/modules/analytics/lib/metric-tree";
 import type {
   MetricFilters,
   MetricFormatId,
@@ -64,6 +67,7 @@ export const ROTULO_DO_CORTE: Record<MetricRecorte, string> = {
   stream: "Por tipo de negócio",
   pipeline: "Por funil",
   etapa: "Por etapa",
+  desfecho: "Ganho x perda",
 };
 
 export interface EngineMetric {
@@ -112,6 +116,30 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // SCRUM-311 fatia 9 — a unidade do funil é o NEGÓCIO (ADR-0023).
   negocios_na_etapa: ["total", "pipeline", "etapa"],
   negocios_abertos: ["total", "tempo", "origem", "pipeline", "etapa"],
+  // SCRUM-391 fatia funil. Sem `total` de proposito: somar ganho com perda da
+  // um numero que nao responde pergunta nenhuma.
+  ganho_perda: ["desfecho"],
+  // SCRUM-422. Mesmos recortes de num_vendas: e a mesma consulta com um
+  // predicado a mais.
+  num_vendas_pre_venda: ["total", "closer", "sdr", "origem", "tag", "stream", "pipeline", "tempo"],
+  // SCRUM-417. Só `total`: recortar LTV dividiria a receita de um balde pelo
+  // denominador de outro — número plausível e errado.
+  ltv: ["total"],
+  // SCRUM-419. Sem `tempo` (é estado) e sem corte por pessoa: o lead pode ter
+  // falado com três pessoas, e atribuir a fila a uma delas seria escolha
+  // arbitrária disfarçada de dado.
+  clientes_sem_resposta: ["total", "origem", "tag"],
+  // SCRUM-421. As duas metades da taxa de resposta por automação.
+  disparos_entregues: ["total", "tempo", "origem"],
+  disparos_respondidos: ["total", "tempo", "origem"],
+  // SCRUM-420. `closer` faz sentido aqui, ao contrário de
+  // `clientes_sem_resposta`: o cliente da carteira TEM dono declarado, e "a
+  // carteira de quem está parada" é a pergunta do gestor.
+  clientes_sem_atuacao: ["total", "closer"],
+  // SCRUM-418. Só `produto`: a curva É a série por produto. `total` daria a
+  // soma da receita de itens, que já é `receita` por um caminho líquido de
+  // estorno — este não é.
+  curva_abc: ["produto"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -132,6 +160,14 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   tempo_resposta_equipe: "duration_human",
   negocios_na_etapa: "integer",
   negocios_abertos: "integer",
+  ganho_perda: "integer",
+  num_vendas_pre_venda: "integer",
+  ltv: "currency_brl",
+  clientes_sem_resposta: "integer",
+  disparos_entregues: "integer",
+  disparos_respondidos: "integer",
+  clientes_sem_atuacao: "integer",
+  curva_abc: "currency_brl",
 };
 
 /**
@@ -158,6 +194,14 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   tempo_resposta_equipe: "duration_seconds",
   negocios_na_etapa: "count",
   negocios_abertos: "count",
+  ganho_perda: "count",
+  num_vendas_pre_venda: "count",
+  ltv: "currency",
+  clientes_sem_resposta: "count",
+  disparos_entregues: "count",
+  disparos_respondidos: "count",
+  clientes_sem_atuacao: "count",
+  curva_abc: "currency",
 };
 
 /**
@@ -348,6 +392,134 @@ export const ENGINE_METRICS: EngineMetric[] = [
     cortes: ["total"],
     formatId: "percent_1",
   },
+  {
+    // SCRUM-418 — a curva responde "onde meu faturamento se concentra", não
+    // "quanto entrou". A fonte é `pipe_proposta_items`, a única com receita por
+    // ITEM, e ela NÃO é líquida de estorno — o cabeçalho da migration explica.
+    id: "curva_abc",
+    label: "Curva ABC de produtos",
+    measureRef: { kind: "leaf", id: "curva_abc" },
+    cortes: ["produto"],
+    formatId: "currency_brl",
+  },
+  {
+    // SCRUM-420 — o sujeito é o CLIENTE da carteira, não o lead. Contar leads
+    // daria outra pergunta ("prospect esquecido"), legítima e diferente.
+    id: "clientes_sem_atuacao",
+    label: "Clientes sem atuação",
+    measureRef: { kind: "leaf", id: "clientes_sem_atuacao" },
+    cortes: ["total", "closer"],
+    formatId: "integer",
+  },
+  {
+    // SCRUM-421 — as duas metades aparecem como medida própria porque cada uma
+    // responde sozinha: "quantos chegaram" e "quantos voltaram".
+    id: "disparos_entregues",
+    label: "Disparos entregues",
+    measureRef: { kind: "leaf", id: "disparos_entregues" },
+    cortes: ["total", "tempo", "origem"],
+    formatId: "integer",
+  },
+  {
+    id: "disparos_respondidos",
+    label: "Disparos respondidos",
+    measureRef: { kind: "leaf", id: "disparos_respondidos" },
+    cortes: ["total", "tempo", "origem"],
+    formatId: "integer",
+  },
+  {
+    // SCRUM-421 — a taxa. Numerador é subconjunto do denominador por
+    // construção (o mesmo leaf, com um predicado a mais), então a razão vive em
+    // [0, 100] sem trava.
+    id: "taxa_resposta_automacao",
+    label: "Taxa de resposta por automação",
+    measureRef: { kind: "ratio", num: "disparos_respondidos", den: "disparos_entregues" },
+    cortes: ["total"],
+    formatId: "percent_1",
+  },
+  {
+    // SCRUM-419 — a fila que está esperando, não a taxa de quem respondeu. As
+    // duas convivem: `response_rate_pct` continua em `useAnalyticsEngajamento`.
+    id: "clientes_sem_resposta",
+    label: "Clientes sem resposta",
+    measureRef: { kind: "leaf", id: "clientes_sem_resposta" },
+    cortes: ["total", "origem", "tag"],
+    formatId: "integer",
+  },
+  {
+    // SCRUM-417 — a decisão do SCRUM-365: receita REALIZADA por cliente, numa
+    // janela própria de 12 meses ancorada no fim do período escolhido.
+    //
+    // Trocar o seletor de "este mês" para "este ano" mexe pouco neste número, e
+    // é assim que tem que ser: LTV de um mês não existe.
+    id: "ltv",
+    label: "LTV do cliente",
+    measureRef: { kind: "leaf", id: "ltv" },
+    cortes: ["total"],
+    formatId: "currency_brl",
+  },
+  {
+    // SCRUM-422 — a taxa que o SCRUM-393 definiu: venda com pré-venda sobre o
+    // total de vendas.
+    //
+    // Os dois filhos são `count`, e AQUI o ×100 do ramo `ratio` é o certo:
+    // taxa É percentual. Em `negocios_por_lead` a mesma derivação seria o erro
+    // de 100× — a diferença não é técnica, é semântica.
+    //
+    // O numerador é subconjunto do denominador por construção, então a razão
+    // vive em [0, 100] sem trava. Mesma disciplina de `taxa_qualidade`.
+    id: "taxa_pre_venda",
+    label: "Vendas com pré-venda",
+    measureRef: { kind: "ratio", num: "num_vendas_pre_venda", den: "num_vendas" },
+    cortes: ["total"],
+    formatId: "percent_1",
+  },
+  {
+    // SCRUM-391 fatia funil. A medida é COMPOSIÇÃO: o motor chama as mesmas
+    // funções de `num_vendas` e `negocios_perdidos` em vez de recontar, então
+    // os três números batem por construção.
+    //
+    // A OUTRA metade do card não virou entrada nenhuma: "Negócios por funil" é
+    // `negocios_por_etapa` com corte `pipeline` (decisão G2), e já está aqui.
+    id: "ganho_perda",
+    label: "Ganho e perda",
+    measureRef: { kind: "leaf", id: "ganho_perda" },
+    cortes: ["desfecho"],
+    formatId: "integer",
+  },
+  {
+    // SCRUM-392 — e o ponto inteiro da fatia é o que ela NÃO é.
+    //
+    // O inventário declara `negocios_por_lead` com `unit: "ratio"`, e a
+    // tentação é escrever `kind: "ratio"`. Não pode: o ramo `ratio` do motor
+    // deriva `count ÷ count` como PERCENT e multiplica por 100, enquanto o
+    // front só sufixa "%" sem multiplicar. Declarada assim, "1,35 negócios por
+    // lead" imprime "135%" — erro de 100× que nenhum teste de tipo pega.
+    //
+    // A árvore da Emenda 1 deriva `count ÷ count` como RAZÃO e nunca
+    // multiplica (asserção UN1 de `metric_custom_tree_test.sql`). Por isso
+    // `kind: "tree"`, e por isso o formato é `ratio_2`.
+    //
+    // Zero migration: os dois operandos já estão no motor, e os dois ancoram em
+    // `entradas` — aberturas de negócio na janela sobre leads que entraram na
+    // mesma janela. Dividir estoque por fluxo daria um número que muda quando
+    // alguém arrasta um card, e é justamente o que `negocios_na_etapa`
+    // (âncora `hoje`) seria aqui.
+    id: "negocios_por_lead",
+    label: "Negócios por lead",
+    measureRef: {
+      kind: "tree",
+      tree: {
+        type: "op",
+        op: "div",
+        left: { type: "measure", id: "negocios_abertos" },
+        right: { type: "measure", id: "leads_criados" },
+      },
+      format_id: "ratio_2",
+    },
+    cortes: ["total"],
+    formatId: "ratio_2",
+  },
   // ⚠ `conversao_entre_etapas` (SCRUM-316, migration 20270821120000) EXISTE no
   // motor e está DELIBERADAMENTE FORA desta lista. Não adicione.
   //
@@ -374,7 +546,22 @@ export const ENGINE_BY_ID = new Map(ENGINE_METRICS.map((m) => [m.id, m]));
 export function medidasDe(m: EngineMetric): string[] {
   if (m.measureRef.kind === "leaf") return [m.measureRef.id];
   if (m.measureRef.kind === "ratio") return [m.measureRef.num, m.measureRef.den];
+  // Árvore DE FÁBRICA (SCRUM-392): os operandos são escritos aqui, neste
+  // arquivo, e não foram validados contra catálogo nenhum na escrita — ao
+  // contrário da personalizada, que passa pelo trigger do banco. Então eles
+  // precisam ser conferidos como os de qualquer outra: devolvê-los é o que
+  // permite a `filtrarPeloCatalogo` esconder a métrica na org onde a migration
+  // do operando ainda não rodou, em vez de oferecer uma janela que levanta
+  // 22023 ao ser solta no painel.
+  if (m.measureRef.kind === "tree") return folhasDaArvore(m.measureRef.tree);
   return [];
+}
+
+/** Ids de medida nas folhas da árvore, em ordem de leitura. */
+function folhasDaArvore(node: MetricTreeNode): string[] {
+  if (node.type === "measure") return [node.id];
+  if (node.type === "op") return [...folhasDaArvore(node.left), ...folhasDaArvore(node.right)];
+  return []; // literal
 }
 
 /**
@@ -438,13 +625,21 @@ export function filtrarPeloCatalogo(
   return metrics.flatMap((m) => {
     // Personalizada não passa por aqui: a árvore dela já foi validada contra o
     // catálogo na escrita E é revalidada em runtime pelo motor.
-    if (m.measureRef.kind === "custom" || m.measureRef.kind === "tree") return [m];
+    //
+    // Árvore DE FÁBRICA passa (SCRUM-392): ela é escrita neste arquivo e não
+    // encosta em trigger nenhum, então os operandos dela têm que ser conferidos
+    // como os de qualquer outra medida. Antes desta linha, `kind: "tree"` era
+    // tratado junto de `custom` e escapava da checagem — e a primeira árvore de
+    // fábrica teria aparecido na lista lateral de TODA org, inclusive as que
+    // ainda não têm a migration do operando, prometendo número e entregando
+    // 22023.
+    if (m.measureRef.kind === "custom") return [m];
 
     const medidas = medidasDe(m);
     if (!medidas.every((id) => disponiveis.has(id))) return [];
 
-    // Razão ignora corte — o motor força `total` nos dois filhos.
-    if (m.measureRef.kind === "ratio") return [m];
+    // Razão e árvore ignoram corte — o motor força `total` nos filhos.
+    if (m.measureRef.kind === "ratio" || m.measureRef.kind === "tree") return [m];
 
     const aceitos = disponiveis.get(m.measureRef.id)!;
     const cortes = m.cortes.filter((c) => aceitos.has(c));

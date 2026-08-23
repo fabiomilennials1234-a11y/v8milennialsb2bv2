@@ -163,6 +163,27 @@ VALUES
 
 SET LOCAL session_replication_role = origin;
 
+-- Contexto de BACKEND a partir daqui (SCRUM-361).
+--
+-- Sem isto a suíte morre na primeira escrita/leitura que passa por um gate:
+-- `fn_pipeline_stages_guard_money_role` recusa won/lost, e `assert_org_access`
+-- recusa a RPC — as duas com P0001, que aborta o arquivo inteiro e vira
+-- "Bad plan. You planned N tests but ran M".
+--
+-- O comentario antigo dizia "seed de sistema como superusuario". Isso NUNCA foi
+-- verdade: medido em producao, `postgres` tem rolsuper=false (so `supabase_admin`
+-- e superusuario). O ramo `rolsuper` do guard nunca disparou para esta suite, em
+-- lugar nenhum. O caminho privilegiado REAL e o backend — quem semeia funil em
+-- producao e a edge function de provisionamento, com service_role.
+--
+-- A autorizacao continua provada onde ela e o assunto: as secoes de membro e de
+-- cross-org trocam de papel explicitamente mais abaixo.
+SET LOCAL role service_role;
+-- E o CLAIM, nao so o papel do Postgres: `assert_org_access` decide por
+-- `auth.role()`, que le `request.jwt.claims`. Medido no CI — com SET ROLE
+-- sozinho a RPC continuava recusando com access_denied.
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
+
 -- ---------------------------------------------------------------------------
 -- (b) Coorte = só entrantes no período. Julho/P_SYS: L1..L6,L8 = 7 (L7 junho fora).
 -- ---------------------------------------------------------------------------
@@ -191,13 +212,20 @@ SELECT is(
 -- Monotonicidade non-increasing across the 4 steps.
 SELECT ok(
   (
-    SELECT bool_and(rc >= lead(rc) OVER (ORDER BY ord))
+    -- A janela precisa de um nível PRÓPRIO: agregado não pode conter chamada de
+    -- função de janela ("aggregate function calls cannot contain window
+    -- function calls"), e o erro aborta o arquivo inteiro — 8 de 23 asserções
+    -- é onde esta suíte parava.
+    SELECT bool_and(nao_alargou)
     FROM (
-      SELECT ord, (step ->> 'reached_count')::int AS rc
-      FROM jsonb_array_elements(
-        public.get_funnel_flow('99699699-aaaa-0000-0000-000000000996','99699699-aaaa-4444-0001-000000000996','month','2027-07-15') -> 'steps'
-      ) WITH ORDINALITY AS t(step, ord)
-    ) s
+      SELECT rc >= lead(rc) OVER (ORDER BY ord) AS nao_alargou
+      FROM (
+        SELECT ord, (step ->> 'reached_count')::int AS rc
+        FROM jsonb_array_elements(
+          public.get_funnel_flow('99699699-aaaa-0000-0000-000000000996','99699699-aaaa-4444-0001-000000000996','month','2027-07-15') -> 'steps'
+        ) WITH ORDINALITY AS t(step, ord)
+      ) s
+    ) w
   ) IS NOT FALSE,
   '(c) degraus non-increasing por construção (funil nunca alarga)');
 

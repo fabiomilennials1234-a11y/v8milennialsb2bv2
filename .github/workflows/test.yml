@@ -263,6 +263,17 @@ jobs:
     needs: [unit-tests]
     steps:
       - uses: actions/checkout@v4
+      - name: Guard do alvo remoto — self-test (pula sem secret, recusa prod)
+        run: bash scripts/test-workflows.guard.test.sh
+      # Os dois secrets NÃO estão cadastrados no repositório, e por isso este job
+      # ficou vermelho desde sempre com "SUPABASE_SERVICE_ROLE_KEY is required"
+      # (SCRUM-364) — vermelho de secret ausente, lido por meses como defeito de
+      # código. Agora o script PULA em voz alta, e diz no resumo do job que verde
+      # aqui significa "não rodou".
+      #
+      # Quando forem cadastrados, o valor tem que ser o de uma BRANCH EFÊMERA.
+      # O nome `_DEV` é histórico: o projeto dev foi APOSENTADO em 2026-07-22 e o
+      # script recusa tanto o ref dele quanto o de produção.
       - name: Run workflow system tests
         env:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY_DEV }}

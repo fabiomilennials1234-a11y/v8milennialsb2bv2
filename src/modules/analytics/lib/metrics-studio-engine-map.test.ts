@@ -56,6 +56,22 @@ const VOCABULARIO_DAS_MEDIDAS = [
   // fatia 9 — Lead ≠ Negócio (20270813100000)
   "negocios_na_etapa",
   "negocios_abertos",
+  // SCRUM-391 — fatia funil (20270821170000). COMPÕE num_vendas e
+  // negocios_perdidos; não é conta nova.
+  "ganho_perda",
+  // SCRUM-422 — vendas com pré-venda (20270821190000)
+  "num_vendas_pre_venda",
+  // SCRUM-417 — LTV (20270821200000)
+  "ltv",
+  // SCRUM-419 — clientes sem resposta (20270821210000)
+  "clientes_sem_resposta",
+  // SCRUM-421 — as duas metades da taxa por automação (20270821220000)
+  "disparos_entregues",
+  "disparos_respondidos",
+  // SCRUM-420 — clientes sem atuação (20270821230000)
+  "clientes_sem_atuacao",
+  // SCRUM-418 — curva ABC (20270821240000)
+  "curva_abc",
 ];
 
 describe("engine map — integridade contra o catálogo do motor", () => {
@@ -218,11 +234,15 @@ describe("engine map — decisões do grill", () => {
   // Ele NÃO é a defesa contra oferecer medida que o banco não tem — essa é
   // `filtrarPeloCatalogo`, testada acima. Aqui só se afirma que ninguém
   // acrescentou entrada por acidente.
-  it("G1: a oferta de fábrica é 16 medidas + 5 razões", () => {
+  it("G1: a oferta de fábrica é 23 medidas + 7 razões + 1 árvore", () => {
+    // O número sobe a cada fatia do SCRUM-311, e é isso que ele serve para
+    // dizer: medida nova sem passar por aqui é medida que ninguém contou.
     const leafs = ENGINE_METRICS.filter((m) => m.measureRef.kind === "leaf");
     const ratios = ENGINE_METRICS.filter((m) => m.measureRef.kind === "ratio");
-    expect(leafs).toHaveLength(16);
-    expect(ratios).toHaveLength(5);
+    const trees = ENGINE_METRICS.filter((m) => m.measureRef.kind === "tree");
+    expect(leafs).toHaveLength(23);
+    expect(ratios).toHaveLength(7);
+    expect(trees).toHaveLength(1);
   });
 
   it("SCRUM-311: leads_sem_responsavel não oferece corte por pessoa", () => {
@@ -231,6 +251,95 @@ describe("engine map — decisões do grill", () => {
     expect(m.cortes).not.toContain("sdr");
     // Nem série temporal: é estado atual, não contagem de período.
     expect(m.cortes).not.toContain("tempo");
+  });
+});
+
+describe("negócios por lead — a armadilha de 100× (SCRUM-392)", () => {
+  const npl = ENGINE_BY_ID.get("negocios_por_lead")!;
+
+  it("é ÁRVORE, nunca kind=ratio — é aqui que o erro de 100× morre", () => {
+    // `kind: "ratio"` faria o motor derivar count ÷ count como PERCENT e
+    // multiplicar por 100, enquanto o front só sufixa "%": "1,35 negócios por
+    // lead" viraria "135%". A árvore deriva RAZÃO e não multiplica.
+    expect(npl.measureRef.kind).toBe("tree");
+    expect(npl.formatId).toBe("ratio_2");
+    expect(npl.formatId).not.toBe("percent_1");
+  });
+
+  it("divide aberturas de negócio por leads da MESMA janela", () => {
+    expect(medidasDe(npl)).toEqual(["negocios_abertos", "leads_criados"]);
+    // `negocios_na_etapa` é estoque (âncora `hoje`): dividido por um fluxo,
+    // daria um número que muda quando alguém arrasta um card.
+    expect(medidasDe(npl)).not.toContain("negocios_na_etapa");
+  });
+
+  it("é escalar e não oferece corte além de total", () => {
+    expect(npl.cortes).toEqual(["total"]);
+    expect(ehEscalar(npl, "total")).toBe(true);
+  });
+
+  it("some da lista quando o banco-alvo não tem UM dos operandos", () => {
+    // Árvore de fábrica é escrita no código e não passa por trigger nenhum —
+    // sem esta checagem ela apareceria em TODA org, inclusive as que ainda não
+    // têm a migration de `negocios_abertos`, prometendo número e dando 22023.
+    const semNegocios = {
+      measures: [{ id: "leads_criados", compatible_recortes: ["total"] }],
+    };
+    expect(
+      filtrarPeloCatalogo(ENGINE_METRICS, semNegocios).map((m) => m.id),
+    ).not.toContain("negocios_por_lead");
+
+    const comOsDois = {
+      measures: [
+        { id: "leads_criados", compatible_recortes: ["total"] },
+        { id: "negocios_abertos", compatible_recortes: ["total"] },
+      ],
+    };
+    expect(
+      filtrarPeloCatalogo(ENGINE_METRICS, comOsDois).map((m) => m.id),
+    ).toContain("negocios_por_lead");
+  });
+
+  it("personalizada continua passando sem checagem de catálogo", () => {
+    // A distinção que a fatia introduziu: `custom` é validada na escrita pelo
+    // banco; `tree` de fábrica, não. Se as duas voltarem a ser tratadas juntas,
+    // este caso continua verde e o de cima fica vermelho — que é a ordem certa.
+    const daCliente = {
+      id: "minha_metrica",
+      label: "Minha métrica",
+      measureRef: { kind: "custom" as const, id: "abc" },
+      cortes: ["total"] as MetricRecorte[],
+      formatId: "ratio_2" as const,
+    };
+    const catalogoVazioDeOperandos = {
+      measures: [{ id: "receita", compatible_recortes: ["total"] }],
+    };
+    expect(
+      filtrarPeloCatalogo([daCliente], catalogoVazioDeOperandos).map((m) => m.id),
+    ).toEqual(["minha_metrica"]);
+  });
+});
+
+describe("família origem — é CORTE, não medida (SCRUM-390 / G2)", () => {
+  // "Receita por origem" é Faturamento com corte `origem`; "Ranking de origem"
+  // é Leads que entraram (e Nº de vendas) com o mesmo corte. Se alguém tirar o
+  // corte dessas medidas, a família origem some da tela — e some em silêncio,
+  // porque nada no inventário aponta para cá.
+  it.each(["receita", "num_vendas", "leads_criados"])(
+    "%s oferece o corte origem",
+    (id) => {
+      const m = ENGINE_BY_ID.get(id)!;
+      expect(m.cortes).toContain("origem");
+      expect(parEhCompativel(m, "origem")).toBe(true);
+    },
+  );
+
+  it("nenhuma medida DE RECEITA por origem foi criada em paralelo", () => {
+    // Uma segunda soma de dinheiro é uma segunda verdade sobre dinheiro
+    // (ADR-0017 §1), e `receita` já tem consumidor legado.
+    const ids = ENGINE_METRICS.map((m) => m.id);
+    expect(ids).not.toContain("receita_por_origem");
+    expect(ids).not.toContain("ranking_origem");
   });
 });
 

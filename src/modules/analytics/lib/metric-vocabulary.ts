@@ -23,7 +23,11 @@ export type MetricRecorte =
   | "stream"
   | "pipeline"
   | "etapa"
-  | "tempo";
+  | "tempo"
+  // SCRUM-391: dois baldes, ganho e perda. Serve só a `ganho_perda` por
+  // enquanto — o motor produz série a partir de um recorte, e a medida existe
+  // para mostrar os dois lado a lado.
+  | "desfecho";
 
 /**
  * Unidade da medida — `metric_catalog_measures.unit`, mais `number` para o

@@ -73,8 +73,11 @@ describe("whatsapp_messages global idempotency contract", () => {
     // Exception: legacy send.message handler may write Storage-backed
     // media_url and must refresh it over a null/CDN URL. That block is anchored
     // by the "SEND_MESSAGE_MEDIA_REFRESH" marker in the 8 lines above.
+    // `join()` devolve `\` no Windows e `/` no Linux. Ancorar a regex em `/`
+    // fazia o filtro achar ZERO arquivos na máquina do dev — e um teste que só
+    // passa no runner é um teste que ninguém roda antes de subir.
     const webhookFiles = allTsFiles.filter((f) =>
-      /(whatsapp-webhook|sz-chat-webhook)\/index\.ts$/.test(f),
+      /(whatsapp-webhook|sz-chat-webhook)[\\/]index\.ts$/.test(f),
     );
     expect(webhookFiles.length).toBeGreaterThan(0);
 

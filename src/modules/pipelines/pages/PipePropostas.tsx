@@ -22,6 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { exigeTextoLivre, resolverMotivoDaPerda } from "../lib/loss-reason";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   AlertDialog,
@@ -312,6 +314,8 @@ function PipePropostasInner() {
   // State for loss reason dialog (drag-to-perdido)
   const [lossReasonDialogOpen, setLossReasonDialogOpen] = useState(false);
   const [selectedLossReason, setSelectedLossReason] = useState<string>("");
+  /** Texto livre do motivo "Outro" (SCRUM-369) — obrigatório quando escolhido. */
+  const [lossReasonNote, setLossReasonNote] = useState<string>("");
   const [pendingPerdido, setPendingPerdido] = useState<{
     itemId: string;
     leadId: string;
@@ -384,10 +388,36 @@ function PipePropostasInner() {
   const { data: dbLossReasons } = useLossReasons();
   const lossReasons = useMemo(() => {
     if (dbLossReasons && dbLossReasons.length > 0) {
-      return dbLossReasons.map((r) => ({ value: r.id, label: r.name }));
+      return dbLossReasons.map((r) => ({ value: r.id, label: r.name, doCatalogo: true }));
     }
-    return LOSS_REASONS_FALLBACK;
+    return LOSS_REASONS_FALLBACK.map((r) => ({ ...r, doCatalogo: false }));
   }, [dbLossReasons]);
+
+  /**
+   * O motivo escolhido, nas duas formas que o banco guarda (SCRUM-369).
+   *
+   * `null` enquanto a escolha não estiver COMPLETA — e é isso que trava o botão
+   * de confirmar. A decisão do CTO (2026-08-21) é que o motivo é obrigatório:
+   * antes o placeholder dizia "opcional", ninguém escolhia, e a métrica de
+   * motivos de perda nasceu vazia em 99 organizações.
+   *
+   * "Outro" exige o texto livre. Um balde "Outro" com 40% dos casos e nenhuma
+   * palavra dentro não responde nada — é o mesmo vazio com outro nome.
+   */
+  /**
+   * O motivo escolhido, nas duas formas que o banco guarda (SCRUM-369).
+   * `null` = escolha incompleta; é isso que trava o botão de confirmar.
+   */
+  const perdaResolvida = useMemo(
+    () => resolverMotivoDaPerda(selectedLossReason, lossReasonNote, lossReasons),
+    [selectedLossReason, lossReasonNote, lossReasons],
+  );
+
+  /** O campo de texto só aparece quando o motivo escolhido é "Outro". */
+  const precisaDeTexto = useMemo(
+    () => exigeTextoLivre(selectedLossReason, lossReasons),
+    [selectedLossReason, lossReasons],
+  );
   const bulk = useBulkSelection();
   const allLeadIds = useMemo(() => {
     if (!pipeData) return [];
@@ -935,6 +965,7 @@ function PipePropostasInner() {
         closerId: item.closer_id,
       });
       setSelectedLossReason("");
+      setLossReasonNote("");
       setLossReasonDialogOpen(true);
       return;
     }
@@ -944,7 +975,7 @@ function PipePropostasInner() {
 
   // Handle loss reason dialog confirmation
   const handleLossReasonConfirm = async () => {
-    if (!pendingPerdido) return;
+    if (!pendingPerdido || !perdaResolvida) return;
     await executeStatusChange(
       pendingPerdido.itemId,
       "perdido",
@@ -952,17 +983,19 @@ function PipePropostasInner() {
       pendingPerdido.closerId,
       undefined,
       false,
-      selectedLossReason || null
+      perdaResolvida,
     );
     setLossReasonDialogOpen(false);
     setPendingPerdido(null);
     setSelectedLossReason("");
+    setLossReasonNote("");
   };
 
   const handleLossReasonCancel = () => {
     setLossReasonDialogOpen(false);
     setPendingPerdido(null);
     setSelectedLossReason("");
+    setLossReasonNote("");
     toast("Operação cancelada");
   };
 
@@ -974,7 +1007,12 @@ function PipePropostasInner() {
     closerId: string | null,
     commitmentDate?: Date,
     skipAutoPush?: boolean,
-    lossReason?: string | null,
+    /**
+     * Motivo da perda, nas DUAS formas (SCRUM-369). O id liga ao catálogo da
+     * org; o texto é o rótulo snapshotado, que sobrevive a renomear ou apagar
+     * o motivo depois. Guardar só o id deixaria o histórico ilegível.
+     */
+    perda?: { id: string | null; texto: string | null },
     saleValue?: number
   ) => {
     try {
@@ -1000,9 +1038,15 @@ function PipePropostasInner() {
         updates.closed_at = new Date().toISOString();
       }
 
-      // If loss reason provided (for perdido), save it
-      if (newStatus === "perdido" && lossReason) {
-        updates.loss_reason = lossReason;
+      // Motivo da perda — as duas formas, quando houver (SCRUM-369).
+      //
+      // Antes só `loss_reason` era escrito, e o valor colocado ali era o ID do
+      // motivo. A allowlist de `useUpdatePipeProposta` não conhecia essa chave,
+      // então o valor era descartado em silêncio: 72 negócios perdidos em
+      // produção, ZERO com motivo (medido em 2026-08-21).
+      if (newStatus === "perdido" && perda) {
+        if (perda.id) updates.loss_reason_id = perda.id;
+        if (perda.texto) updates.loss_reason = perda.texto;
       }
 
       await updatePipeProposta.mutateAsync(updates);
@@ -1583,18 +1627,19 @@ function PipePropostasInner() {
       />
 
       {/* Loss Reason Dialog (drag-to-perdido) */}
-      <AlertDialog open={lossReasonDialogOpen} onOpenChange={(open) => { if (!open) { setLossReasonDialogOpen(false); setPendingPerdido(null); setSelectedLossReason(""); } }}>
+      <AlertDialog open={lossReasonDialogOpen} onOpenChange={(open) => { if (!open) { setLossReasonDialogOpen(false); setPendingPerdido(null); setSelectedLossReason(""); setLossReasonNote(""); } }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Motivo da perda</AlertDialogTitle>
             <AlertDialogDescription>
-              Selecione o motivo pelo qual esta proposta foi perdida. Isso ajuda a melhorar o processo comercial.
+              Sem o motivo, a perda vira só um número. É ele que responde onde o
+              funil está furando.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <div className="px-1 py-2">
+          <div className="flex flex-col gap-2 px-1 py-2">
             <Select value={selectedLossReason} onValueChange={setSelectedLossReason}>
               <SelectTrigger>
-                <SelectValue placeholder="Selecionar motivo (opcional)" />
+                <SelectValue placeholder="Selecionar motivo" />
               </SelectTrigger>
               <SelectContent>
                 {lossReasons.map((r) => (
@@ -1604,11 +1649,24 @@ function PipePropostasInner() {
                 ))}
               </SelectContent>
             </Select>
+
+            {/* "Outro" sem texto é o mesmo vazio com outro nome: um balde que
+                concentra 40% dos casos e não diz nada. */}
+            {precisaDeTexto && (
+              <Textarea
+                value={lossReasonNote}
+                onChange={(e) => setLossReasonNote(e.target.value)}
+                placeholder="Qual foi o motivo? (obrigatório)"
+                rows={3}
+                autoFocus
+              />
+            )}
           </div>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={handleLossReasonCancel}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleLossReasonConfirm}
+              disabled={!perdaResolvida}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Confirmar Perda
