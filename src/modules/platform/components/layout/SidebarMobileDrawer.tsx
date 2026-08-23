@@ -19,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertsDropdown } from "@/modules/platform/components/notifications/AlertsDropdown";
 import { useNavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import { OrgSwitcher } from "./OrgSwitcher";
+import { SidebarBrand } from "./SidebarBrand";
 import { SidebarMasterLinks } from "./SidebarMasterLinks";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarUserMenu } from "./SidebarUserMenu";
@@ -75,11 +76,11 @@ export function SidebarMobileDrawer() {
           className="flex w-[min(280px,86vw)] flex-col gap-0 border-r border-sidebar-border bg-sidebar p-0"
         >
           <div className="flex flex-col gap-3 border-b border-sidebar-border px-3 py-4">
-            <div className="flex items-center gap-2.5 px-1">
-              <span className="grid h-[26px] w-[26px] place-items-center rounded-md bg-primary text-[14px] font-extrabold text-primary-foreground">
-                T
-              </span>
-              <span className="text-base font-bold tracking-tight text-sidebar-foreground">Torque</span>
+            {/* Mesma marca da lateral. No celular não existe estado recolhido,
+                então `collapsed={false}` — o wordmark revela no toque/hover
+                igual ao desktop expandido. */}
+            <div className="flex items-center px-1">
+              <SidebarBrand collapsed={false} />
             </div>
             <OrgSwitcher />
           </div>
