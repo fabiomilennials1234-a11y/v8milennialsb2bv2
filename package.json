@@ -28,7 +28,7 @@
     "test:unit": "vitest run tests/unit/ src/ --reporter=verbose",
     "test:ratchet": "node scripts/test-ratchet.cjs",
     "test:baseline": "node scripts/test-ratchet.cjs --write",
-    "test:integration": "vitest run tests/integration/ --reporter=verbose",
+    "test:integration": "vitest run tests/integration/ --reporter=verbose --no-file-parallelism",
     "test:e2e": "playwright test",
     "test:coverage": "vitest run tests/unit/ --coverage",
     "typecheck:edge-shared": "cd supabase/functions && deno task check:shared",

@@ -51,7 +51,7 @@ const ORG_B_ID = "aabb0000-0000-0000-0000-000000000002";
 const USER_A_ID = "aabb0000-0000-0000-0000-000000000010";
 const USER_B_ID = "aabb0000-0000-0000-0000-000000000011";
 
-const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false, storageKey: 'torque-test-proxy-service' } });
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -99,7 +99,7 @@ async function createTestUser(
     .eq("organization_id", orgId);
 
   // Sign in to get JWT
-  const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const supabaseAnon = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, storageKey: 'torque-test-proxy-anon' } });
   const { data: signInData, error: signInErr } =
     await supabaseAnon.auth.signInWithPassword({
       email,

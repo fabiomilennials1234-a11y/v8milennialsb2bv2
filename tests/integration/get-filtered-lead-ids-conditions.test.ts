@@ -33,6 +33,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   supabase, // service-role client — setup/teardown only
   TEST_ORG_ID,
+  getSystemPipelineId,
+  restoreSeedWhatsappEntries,
   TEST_ORG_B_ID,
   TEST_LEAD_ALPHA_ID,
   TEST_LEAD_BETA_ID,
@@ -46,8 +48,14 @@ const shouldSkip =
   !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
 // System pipeline fixtures (slug 'whatsapp').
-const SYS_PIPELINE_A_ID = '00000000-0000-0000-0000-0000000723a1';
-const SYS_PIPELINE_B_ID = '00000000-0000-0000-0000-0000000723b1';
+// ⚠ O funil de sistema é o QUE JÁ EXISTE na org (resolvido em `beforeAll` por
+// `getSystemPipelineId`), não um segundo criado aqui. `pipelines` tem
+// UNIQUE (organization_id, slug): o upsert antigo, com `onConflict: 'id'` e id
+// próprio, batia no índice errado, devolvia 23505 sem ninguém checar, e o funil
+// nunca nascia — a RPC então respondia com a linha do seed e a asserção lia
+// `Set{1}` contra `Set{2}`. Ver SCRUM-362 e o comentário de getSystemPipelineId.
+let SYS_PIPELINE_A_ID: string;
+let SYS_PIPELINE_B_ID: string;
 const SYS_STAGE = 'novo';
 
 // Custom pipeline fixtures.
@@ -85,13 +93,10 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
       .eq('id', TEST_LEAD_ORGB_1_ID);
 
     // ── System funnels ───────────────────────────────────────────────────
-    await supabase.from('pipelines').upsert(
-      [
-        { id: SYS_PIPELINE_A_ID, organization_id: TEST_ORG_ID, name: 'WhatsApp', slug: 'whatsapp', type: 'system' },
-        { id: SYS_PIPELINE_B_ID, organization_id: TEST_ORG_B_ID, name: 'WhatsApp', slug: 'whatsapp', type: 'system' },
-      ],
-      { onConflict: 'id' },
-    );
+    [SYS_PIPELINE_A_ID, SYS_PIPELINE_B_ID] = await Promise.all([
+      getSystemPipelineId(TEST_ORG_ID, 'whatsapp'),
+      getSystemPipelineId(TEST_ORG_B_ID, 'whatsapp'),
+    ]);
     await supabase
       .from('pipeline_entries')
       .delete()
@@ -158,14 +163,9 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
       .from('custom_pipelines')
       .delete()
       .in('id', [CUSTOM_PIPELINE_A_ID, CUSTOM_PIPELINE_B_ID]);
-    await supabase
-      .from('pipeline_entries')
-      .delete()
-      .in('pipeline_id', [SYS_PIPELINE_A_ID, SYS_PIPELINE_B_ID]);
-    await supabase
-      .from('pipelines')
-      .delete()
-      .in('id', [SYS_PIPELINE_A_ID, SYS_PIPELINE_B_ID]);
+    await restoreSeedWhatsappEntries();
+    // O funil de sistema NÃO é apagado: ele é do seed, e outras suítes contam
+    // com ele (`pipe_whatsapp` é view sobre ele).
     // Undo lead mutations.
     await supabase
       .from('leads')

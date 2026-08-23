@@ -460,5 +460,32 @@ VALUES
   ('00000000-0000-0000-0000-000000000002', 'chat', true)
 ON CONFLICT DO NOTHING;
 
+-- ────────────────────────────────────────────────────────────
+-- 13. Cota de assentos das orgs de teste (SCRUM-423)
+-- ────────────────────────────────────────────────────────────
+-- O trigger fica DESLIGADO durante a semeadura e volta a valer no fim deste
+-- arquivo. Só que os TESTES também inserem `team_members` — e aí ele está
+-- ligado, com a cota resolvendo ZERO:
+--
+--     Limite de seats atingido. Seats pagos: 0, membros ativos: 4.
+--
+-- `org_resolve_quota` lê `org_quotas` como fonte autoritativa, e num banco
+-- construído do repo essa tabela nasce vazia. Em produção não acontece porque
+-- toda org tem cota. O gate está CERTO; o que faltava era a org de teste ter
+-- cota, como qualquer org real.
+--
+-- 50 é folga larga sobre o que qualquer suíte cria. Ilimitado (-1) esconderia
+-- um bug de contagem: com teto finito, uma suíte que vazar membros esbarra e
+-- avisa.
+INSERT INTO org_quotas (organization_id, resource_key, plan_base, purchased_addons, admin_adjustment)
+VALUES
+  ('00000000-0000-0000-0000-000000000001', 'max_users', 50, 0, 0),
+  ('00000000-0000-0000-0000-000000000002', 'max_users', 50, 0, 0),
+  ('00000000-0000-0000-0000-000000000001', 'max_whatsapp_instances', 20, 0, 0),
+  ('00000000-0000-0000-0000-000000000002', 'max_whatsapp_instances', 20, 0, 0),
+  ('00000000-0000-0000-0000-000000000001', 'max_copilot_agents', 20, 0, 0),
+  ('00000000-0000-0000-0000-000000000002', 'max_copilot_agents', 20, 0, 0)
+ON CONFLICT DO NOTHING;
+
 -- Re-enable seat limit trigger
 ALTER TABLE team_members ENABLE TRIGGER trg_enforce_seat_limit;

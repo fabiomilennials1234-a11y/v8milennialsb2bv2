@@ -33,7 +33,36 @@ const TEST_MONTH = 8;
 const TEST_YEAR = 2099;
 const PERIOD_AT = `${TEST_YEAR}-0${TEST_MONTH}-15T12:00:00Z`;
 
-describe.skipIf(shouldSkip)('snapshot_responsible_from_lead lifecycle', () => {
+// 🔴 O GATILHO QUE ESTA SUÍTE DESCREVE NÃO EXISTE EM PRODUÇÃO (SCRUM-428).
+//
+// Medido em 2026-08-22: `pg_proc` de produção não tem `snapshot_responsible_
+// from_lead`, e o baseline (que é dump de produção) não o menciona uma vez
+// sequer. O que existe é um primo mais estreito, `pipeline_entries_snapshot_
+// responsibles`, e ele:
+//
+//   • só age quando `pipelines.slug = 'propostas'` — as Regras 1, 3 e 4 do
+//     desenho original, todas sobre `confirmacao`, não têm implementação;
+//   • só PREENCHE quando os quatro campos de responsável estão vazios; nunca
+//     REESCREVE. O cenário 9 ("transição para vendido atualiza o snapshot")
+//     recebia o valor antigo porque atualizar não é o que a função faz.
+//
+// A origem está no `archive`: 20261025000000_snapshot_responsible_from_lead.sql
+// implementava as quatro regras e diz no cabeçalho "ratificado pelo CTO — não
+// rediscutir"; 20261211120000_propostas_snapshot_responsibles.sql, de dezembro,
+// resolveu um incidente de vendas sem vendedor com a versão estreita. A larga
+// sumiu no caminho, e ninguém viu porque esta suíte estava atrás de um CI morto.
+//
+// ⚠ ISSO TEM CONSEQUÊNCIA MEDIDA, NÃO É SÓ TESTE VERMELHO: nos últimos 60 dias,
+// 31 das 207 entries de `confirmacao` (15%) estão sem
+// `metadata.pre_sale_responsible_id`. São reuniões sem crédito de SDR — que é
+// ranking, meta individual e comissão.
+//
+// NÃO RELIGO POR CONTA PRÓPRIA. Escrever metadata de atribuição muda dinheiro
+// de lugar (ADR-0017), e a decisão entre "reinstalar as quatro regras" e
+// "assumir que o app preenche e fechar o buraco na aplicação" é do CTO. A suíte
+// fica no repo, desligada, porque descreve o comportamento pretendido com
+// precisão — e é o que a implementação vai precisar respeitar.
+describe.skip('snapshot_responsible_from_lead lifecycle (gatilho ausente em prod — SCRUM-428)', () => {
   // Suite-scoped fixtures
   let sdrA: string;
   let sdrB: string;

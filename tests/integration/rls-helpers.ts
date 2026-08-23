@@ -13,9 +13,47 @@ const SUPABASE_SERVICE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU';
 
+/**
+ * 🔴 SESSÃO NUNCA PERSISTE, E CADA CLIENTE TEM A PRÓPRIA CHAVE DE ARMAZENAMENTO.
+ *
+ * O supabase-js guarda a sessão do usuário logado sob UMA chave e, por padrão,
+ * TODO cliente criado no mesmo processo lê dessa mesma chave. O cliente
+ * "service_role" então passava a mandar o JWT do último usuário que alguma
+ * suíte tinha logado — e deixava de ser service_role: virava `authenticated`.
+ *
+ * Os sintomas ficavam a quilômetros da causa (SCRUM-424 / SCRUM-362):
+ *
+ *   • `leads`: INSERT do fixture morria em 42501, "new row violates row-level
+ *     security policy" — RLS agindo sobre um cliente que deveria bypassá-la;
+ *   • `password_reset_tokens`: "permission denied for table" nas cinco
+ *     asserções da suíte de reset de senha. A tabela é deny-all por desenho —
+ *     nenhum grant para anon/authenticated — então o erro é exatamente o que
+ *     `authenticated` recebe. Produção CONCEDE tudo a service_role (medido em
+ *     `pg_class.relacl`), e por isso a leitura do baseline nunca fechava o caso.
+ *
+ * O próprio SDK avisava, e o aviso passava por ruído: "Multiple GoTrueClient
+ * instances detected in the same browser context ... under the same storage
+ * key".
+ *
+ * `persistSession: false` mantém a sessão só em memória, no cliente que fez o
+ * login; `storageKey` único é o cinto e suspensório.
+ */
+let storageKeySeq = 0;
+function isolatedAuth(prefix: string) {
+  storageKeySeq += 1;
+  return {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: `torque-test-${prefix}-${storageKeySeq}`,
+    },
+  };
+}
+
 /** Service role client — bypasses RLS. Use only for setup/teardown. */
 export function createServiceClient(): SupabaseClient {
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  return createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, isolatedAuth('service'));
 }
 
 /** Create a Supabase client authenticated as a specific user. */
@@ -23,7 +61,7 @@ export async function createAuthenticatedClient(
   email: string,
   password: string = TEST_PASSWORD,
 ): Promise<SupabaseClient> {
-  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, isolatedAuth('user'));
   const { error } = await client.auth.signInWithPassword({ email, password });
   if (error) throw new Error(`Failed to authenticate as ${email}: ${error.message}`);
   return client;

@@ -25,6 +25,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import {
   supabase, // service-role client — setup/teardown only
   TEST_ORG_ID,
+  getSystemPipelineId,
+  restoreSeedWhatsappEntries,
   TEST_ORG_B_ID,
   TEST_LEAD_ALPHA_ID,
   TEST_LEAD_BETA_ID,
@@ -41,8 +43,14 @@ const STAGE = 'novo';
 const OTHER_STAGE = 'abordado';
 
 // Deterministic fixture pipeline ids (system pipelines, slug 'whatsapp').
-const PIPELINE_A_ID = '00000000-0000-0000-0000-0000000703a1';
-const PIPELINE_B_ID = '00000000-0000-0000-0000-0000000703b1';
+// ⚠ O funil de sistema é o QUE JÁ EXISTE na org (resolvido em `beforeAll` por
+// `getSystemPipelineId`), não um segundo criado aqui. `pipelines` tem
+// UNIQUE (organization_id, slug): o upsert antigo, com `onConflict: 'id'` e id
+// próprio, batia no índice errado, devolvia 23505 sem ninguém checar, e o funil
+// nunca nascia — a RPC então respondia com a linha do seed e a asserção lia
+// `Set{1}` contra `Set{2}`. Ver SCRUM-362 e o comentário de getSystemPipelineId.
+let PIPELINE_A_ID: string;
+let PIPELINE_B_ID: string;
 
 describe.skipIf(shouldSkip)('get_stage_lead_ids RPC', () => {
   let adminA: SupabaseClient;
@@ -52,25 +60,10 @@ describe.skipIf(shouldSkip)('get_stage_lead_ids RPC', () => {
     [adminA, adminB] = await Promise.all([getOrgAAdmin(), getOrgBAdmin()]);
 
     // System pipelines (slug 'whatsapp') for both orgs.
-    await supabase.from('pipelines').upsert(
-      [
-        {
-          id: PIPELINE_A_ID,
-          organization_id: TEST_ORG_ID,
-          name: 'WhatsApp',
-          slug: 'whatsapp',
-          type: 'system',
-        },
-        {
-          id: PIPELINE_B_ID,
-          organization_id: TEST_ORG_B_ID,
-          name: 'WhatsApp',
-          slug: 'whatsapp',
-          type: 'system',
-        },
-      ],
-      { onConflict: 'id' },
-    );
+    [PIPELINE_A_ID, PIPELINE_B_ID] = await Promise.all([
+      getSystemPipelineId(TEST_ORG_ID, 'whatsapp'),
+      getSystemPipelineId(TEST_ORG_B_ID, 'whatsapp'),
+    ]);
 
     // Org A: Alpha + Beta in STAGE, Gamma in OTHER_STAGE.
     // Org B: OrgB-1 in STAGE (must stay invisible to org A and vice-versa).
@@ -87,11 +80,7 @@ describe.skipIf(shouldSkip)('get_stage_lead_ids RPC', () => {
   });
 
   afterAll(async () => {
-    await supabase
-      .from('pipeline_entries')
-      .delete()
-      .in('pipeline_id', [PIPELINE_A_ID, PIPELINE_B_ID]);
-    await supabase.from('pipelines').delete().in('id', [PIPELINE_A_ID, PIPELINE_B_ID]);
+    await restoreSeedWhatsappEntries();
     // Undo any soft-delete from the exclusion test.
     await supabase
       .from('leads')

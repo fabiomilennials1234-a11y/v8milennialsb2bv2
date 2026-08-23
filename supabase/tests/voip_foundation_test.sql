@@ -16,7 +16,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(38);
+SELECT plan(39);
 
 -- ===========================================================================
 -- (1) ESTRUTURA
@@ -234,7 +234,42 @@ UPDATE public.whatsapp_instances
    SET voice_calls_enabled = true
  WHERE id = 'd1111111-1111-1111-1111-111111111111';
 
--- Com a chave ligada, o gate seguinte é o consentimento de voz — que não existe.
+-- Com a chave ligada e SEM exigência de consentimento (o default desde
+-- 2026-07-31), a reserva PASSA: o CTO decidiu assumir todo lead como
+-- consentido, e o gate saiu do caminho crítico.
+--
+-- ⚠ ESTA PARTE MEDIA A REGRA ANTIGA (SCRUM-414). Até a migration
+-- 20270730000009_voip_consentimento_opcional.sql, chamada de saída exigia linha
+-- viva em `consent_records`; a trava virou a coluna
+-- `organizations.require_voice_consent`, default false. A asserção seguinte
+-- pedia `consent_missing` e recebia NULL — e o efeito colateral era pior que o
+-- vermelho dela: a reserva CONCLUÍA, o operador ficava com chamada viva, e a
+-- asserção "reserva autoriza com kill-switch ligado + consentimento vivo"
+-- reprovava depois por "operador com chamada viva não reserva outra". Um
+-- desalinhamento produzia dois vermelhos, e o segundo apontava para o lugar
+-- errado.
+SELECT is(
+  (public.fn_voip_call_reserve(
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111',
+    'tc-sess-teste', '554891005289', 'c1111111-1111-1111-1111-111111111111'
+  ) ->> 'ok')::boolean,
+  true,
+  'sem require_voice_consent a reserva passa — todo lead é assumido consentido (CTO 2026-07-31)'
+);
+
+-- Encerra a chamada recém-criada: operador com chamada viva não reserva outra,
+-- e o resto da suíte precisa da linha de partida limpa.
+UPDATE public.voip_calls
+   SET status = 'ended', ended_at = now()
+ WHERE organization_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+   AND status IN ('authorized', 'ringing', 'connected');
+
+-- Agora a trava, LIGADA — ela continua inteira para quem precisar dela
+-- (mudança de política do WhatsApp, cliente em mercado regulado).
+UPDATE public.organizations
+   SET require_voice_consent = true
+ WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+
 SELECT is(
   public.fn_voip_call_reserve(
     'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '11111111-1111-1111-1111-111111111111',
@@ -300,10 +335,19 @@ SELECT is(
 
 -- Telefone entra com máscara e é gravado só com dígitos: teto por destino não
 -- pode ser burlado trocando o formato.
-SELECT is(
-  (SELECT peer_phone FROM public.voip_calls LIMIT 1),
-  '5548991005289',
-  'peer_phone é normalizado para dígitos na gravação'
+--
+-- ⚠ `LIMIT 1` SEM `ORDER BY` LIA A LINHA ERRADA (SCRUM-414). A suíte cria mais
+-- de uma chamada, e a asserção comparava com a primeira que o heap devolvesse —
+-- na prática a do gate anterior, discada como `554891005289`. O vermelho dizia
+-- `have: 554891005289 / want: 5548991005289`, que se lê como "a normalização
+-- comeu o nono dígito do celular" e manda investigar o normalizador. Não era: o
+-- normalizador só tira o que não é dígito. Era a linha errada.
+-- `ORDER BY created_at` também não desempata: dentro da transação da suíte
+-- `now()` é constante, e o id é uuid aleatório. A asserção passa a ser sobre o
+-- CONJUNTO, que não depende de ordem nenhuma.
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.voip_calls WHERE peer_phone = '5548991005289'),
+  'peer_phone é normalizado para dígitos na gravação (a máscara "5548 99100-5289" virou 13 dígitos)'
 );
 
 -- Segunda reserva do MESMO operador colide no índice único parcial.
@@ -316,12 +360,16 @@ SELECT is(
   'operador com chamada viva não reserva outra'
 );
 
--- O contador do desenho (C) andou.
+-- O contador do desenho (C) andou — DUAS vezes, porque a suíte agora autoriza
+-- duas chamadas: uma com `require_voice_consent = false` (o default desde
+-- 2026-07-31) e outra com a trava ligada e consentimento vivo. O teto por
+-- instância conta as duas: o que ele mede é chamada autorizada, não chamada
+-- consentida.
 SELECT is(
   (SELECT calls_authorized FROM public.voip_call_usage
     WHERE organization_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'),
-  1,
-  'voip_call_usage contou a chamada autorizada'
+  2,
+  'voip_call_usage contou as duas chamadas autorizadas'
 );
 
 -- ── RLS de voip_calls ──────────────────────────────────────────────────────
@@ -331,8 +379,8 @@ SET LOCAL request.jwt.claims TO '{"sub":"11111111-1111-1111-1111-111111111111","
 
 SELECT is(
   (SELECT count(*)::int FROM public.voip_calls),
-  1,
-  'responsável pelo lead vê a chamada'
+  2,
+  'responsável pelo lead vê as duas chamadas discadas para ele'
 );
 
 -- O colega da mesma org, sem leads.view_all e sem ser responsável, não vê.

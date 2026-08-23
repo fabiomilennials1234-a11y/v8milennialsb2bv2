@@ -34,6 +34,7 @@ import {
   TEST_ORG_ID,
   TEST_MASTER_ID,
   TEST_ADMIN_ID,
+  TEST_ORG_A_LEAD_IDS,
 } from './setup';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
@@ -90,7 +91,7 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
       expect(ids).toContain('00000000-0000-0000-0000-000000001004'); // Delta (sdr=TM140)
     });
 
-    it('Member2 WITH leads.view_all override sees all org leads (4)', async () => {
+    it('Member2 WITH leads.view_all override sees all org leads', async () => {
       // Member2 (TM 150) has member_feature_permissions: leads.view_all = true
       const { data, error } = await member2Client
         .from('leads')
@@ -98,7 +99,7 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
         .eq('organization_id', TEST_ORG_ID);
 
       expect(error).toBeNull();
-      expect(data).toHaveLength(4);
+      expect(new Set(data!.map((l) => l.id))).toEqual(new Set(TEST_ORG_A_LEAD_IDS));
     });
 
     it('Admin sees all leads regardless of feature permissions', async () => {
@@ -108,7 +109,7 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
         .eq('organization_id', TEST_ORG_ID);
 
       expect(error).toBeNull();
-      expect(data).toHaveLength(4);
+      expect(new Set(data!.map((l) => l.id))).toEqual(new Set(TEST_ORG_A_LEAD_IDS));
     });
 
     it('Master sees all leads regardless of feature permissions', async () => {
@@ -118,7 +119,7 @@ describe.skipIf(shouldSkip)('RLS: Feature permissions and RPCs', () => {
         .eq('organization_id', TEST_ORG_ID);
 
       expect(error).toBeNull();
-      expect(data).toHaveLength(4);
+      expect(new Set(data!.map((l) => l.id))).toEqual(new Set(TEST_ORG_A_LEAD_IDS));
     });
 
     it('Member1 does NOT see unassigned leads (Gamma) when see_unassigned_cards=false', async () => {
