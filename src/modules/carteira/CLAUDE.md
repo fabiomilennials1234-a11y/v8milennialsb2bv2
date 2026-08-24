@@ -25,6 +25,18 @@ Pós-venda. Cliente que já comprou vira "cliente da carteira" do vendedor. Dom�
 - Comissões do vendedor → `engagement` (não migrado nesta slice)
 - TV Dashboard / `useCloserPerformance` → cross-domain (`engagement`/`analytics`) — mantido fora
 
+## Entrada/saída de automação (deals)
+
+`deals` tem porta de entrada e de saída no motor de workflows (`workflows` BC):
+node `create_deal` (cria o negócio vinculado ao lead) e trigger `deal_created`
+(PG trigger `trg_workflow_deal_created` em `deals`). Guard de laço via
+`deals.metadata.workflow_execution_id`. Feature doc:
+`06 — Features/automacoes/negocio-criado.md`.
+
+**Atenção ao schema real**: prod NÃO tem `deals.pipeline_id` nem `deals.stage_id`,
+embora `src/integrations/supabase/types.ts` os declare — por isso a tela de
+Negócios empilha tudo em "Sem estágio". Node e trigger seguem o schema de prod.
+
 ## Estrutura
 
 ```

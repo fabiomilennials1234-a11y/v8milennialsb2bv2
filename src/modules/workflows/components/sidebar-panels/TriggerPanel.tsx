@@ -2,6 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2 } from "lucide-react";
 import {
   Select,
@@ -13,6 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TRIGGER_CATEGORIES } from "@/types/workflow";
+import { useTeamMembers } from "@/modules/identity";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
 import { usePipelineStages, type PipelineType, usePipelines, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
@@ -26,6 +29,11 @@ interface TriggerPanelProps {
 
 export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
   const cfg = (data.config || {}) as Record<string, unknown>;
+  const { hasFeature } = useOrgFeatures();
+  // Categoria Negócios só aparece para org com o módulo ligado (feature `deals`).
+  const triggerCategories = TRIGGER_CATEGORIES.filter(
+    (c) => c.label !== "Negócios" || hasFeature("deals"),
+  );
 
   const updateConfig = (updates: Record<string, unknown>) => {
     onUpdate({ config: { ...cfg, ...updates } as any });
@@ -54,7 +62,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             <SelectValue placeholder="Selecione o trigger" />
           </SelectTrigger>
           <SelectContent>
-            {TRIGGER_CATEGORIES.map((cat) => (
+            {triggerCategories.map((cat) => (
               <SelectGroup key={cat.label}>
                 <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
                   {cat.label}
@@ -84,6 +92,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "campaign_completed" ? "Lead Concluiu a Campanha" :
                      t === "field_changed" ? "Campo do Lead Alterado" :
                      t === "scheduled_date" ? "Antes de uma data" :
+                     t === "deal_created" ? "Negócio Criado" :
                      t}
                   </SelectItem>
                 ))}
@@ -356,7 +365,102 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
           </div>
         </>
       )}
+      {/* ── deal_created ── */}
+      {data.triggerType === "deal_created" && (
+        <DealCreatedConfig cfg={cfg} updateConfig={updateConfig} />
+      )}
     </div>
+  );
+}
+
+// ── Sub-componente para deal_created (Negócios) ──
+
+function DealCreatedConfig({
+  cfg,
+  updateConfig,
+}: {
+  cfg: Record<string, unknown>;
+  updateConfig: (updates: Record<string, unknown>) => void;
+}) {
+  const { data: members = [] } = useTeamMembers();
+  const activeMembers = members.filter((m) => m.is_active);
+  const requireLead = cfg.require_lead !== false;
+
+  return (
+    <>
+      <div className="flex items-center justify-between rounded-md border border-border/60 p-3">
+        <div className="space-y-0.5 pr-3">
+          <Label className="text-sm">Só negócios com lead</Label>
+          <p className="text-xs text-muted-foreground">
+            Negócio sem lead vinculado não tem quem receber mensagem, tag ou etapa.
+          </p>
+        </div>
+        <Switch
+          checked={requireLead}
+          onCheckedChange={(v) => updateConfig({ require_lead: v })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Procedência do negócio</Label>
+        <Select
+          value={(cfg.source as string) || "any"}
+          onValueChange={(v) => updateConfig({ source: v })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Qualquer procedência</SelectItem>
+            <SelectItem value="human">Criado por pessoa</SelectItem>
+            <SelectItem value="workflow">Criado por automação</SelectItem>
+            <SelectItem value="api">Criado pela API</SelectItem>
+            <SelectItem value="import">Importação</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Valor mínimo (R$)</Label>
+        <Input
+          type="number"
+          min={0}
+          step={0.01}
+          value={(cfg.min_value as number) ?? ""}
+          onChange={(e) =>
+            updateConfig({ min_value: e.target.value === "" ? undefined : Number(e.target.value) })
+          }
+          placeholder="Vazio = qualquer valor"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Responsável do negócio</Label>
+        <Select
+          value={(cfg.filter_owner_id as string) || "__any__"}
+          onValueChange={(v) =>
+            updateConfig({ filter_owner_id: v === "__any__" ? "" : v })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__any__">Qualquer responsável</SelectItem>
+            {activeMembers.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
+        Dispara quando um negócio é criado — na tela de Negócios ou pelo nó "Criar Negócio".
+        O lead do workflow é o lead vinculado ao negócio.
+      </div>
+    </>
   );
 }
 

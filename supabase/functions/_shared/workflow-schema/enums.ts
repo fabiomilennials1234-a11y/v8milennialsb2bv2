@@ -47,6 +47,7 @@ export const TRIGGER_TYPES = [
   "campaign_completed",
   "field_changed",
   "scheduled_date",
+  "deal_created",
 ] as const;
 
 export const ACTION_TYPES = [
@@ -81,6 +82,7 @@ export const ACTION_TYPES = [
   "resume_campaign_sequence",
   "create_calendar_event",
   "schedule_meeting",
+  "create_deal",
   "create_tinyerp_order",
   "create_tinyerp_upsell_order",
   "assign_responsible",
