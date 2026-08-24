@@ -119,22 +119,22 @@ SELECT is(
 -- (FILTROS)
 -- ===========================================================================
 SELECT is(
-  (SELECT count(*) FROM public.api_list_deals('deadbeef-0000-4000-8000-00000000ab01', 'propostas')),
+  (SELECT count(*) FROM public.api_list_deals(p_org => 'deadbeef-0000-4000-8000-00000000ab01', p_pipeline => 'propostas')),
   1::bigint,
   '(FILTRO) por funil');
 
 SELECT is(
-  (SELECT count(*) FROM public.api_list_deals('deadbeef-0000-4000-8000-00000000ab01', NULL, 'abordado')),
+  (SELECT count(*) FROM public.api_list_deals(p_org => 'deadbeef-0000-4000-8000-00000000ab01', p_stage => 'abordado')),
   1::bigint,
   '(FILTRO) por etapa');
 
 SELECT is(
-  (SELECT count(*) FROM public.api_list_deals('deadbeef-0000-4000-8000-00000000ab01', NULL, NULL, NULL, 'open')),
+  (SELECT count(*) FROM public.api_list_deals(p_org => 'deadbeef-0000-4000-8000-00000000ab01', p_status => 'open')),
   2::bigint,
   '(FILTRO) situação aberta exclui o fechado');
 
 SELECT is(
-  (SELECT count(*) FROM public.api_list_deals('deadbeef-0000-4000-8000-00000000ab01', NULL, NULL, NULL, 'won')),
+  (SELECT count(*) FROM public.api_list_deals(p_org => 'deadbeef-0000-4000-8000-00000000ab01', p_status => 'won')),
   1::bigint,
   '(FILTRO) situação ganha traz só o ganho');
 
@@ -144,18 +144,18 @@ SELECT is(
 -- Página 1, uma linha só.
 CREATE TEMP TABLE pg1 AS
 SELECT id, last_activity_at
-  FROM public.api_list_deals('deadbeef-0000-4000-8000-00000000ab01', NULL, NULL, NULL, NULL, 1);
+  FROM public.api_list_deals(p_org => 'deadbeef-0000-4000-8000-00000000ab01', p_limit => 1);
 
 -- Página 2, continuando do cursor da página 1.
 CREATE TEMP TABLE pg2 AS
 SELECT id, last_activity_at
-  FROM public.api_list_deals('deadbeef-0000-4000-8000-00000000ab01', NULL, NULL, NULL, NULL, 1,
-        (SELECT last_activity_at FROM pg1), (SELECT id FROM pg1));
+  FROM public.api_list_deals(p_org => 'deadbeef-0000-4000-8000-00000000ab01', p_limit => 1,
+        p_cursor_last_activity => (SELECT last_activity_at FROM pg1), p_cursor_id => (SELECT id FROM pg1));
 
 CREATE TEMP TABLE pg3 AS
 SELECT id, last_activity_at
-  FROM public.api_list_deals('deadbeef-0000-4000-8000-00000000ab01', NULL, NULL, NULL, NULL, 1,
-        (SELECT last_activity_at FROM pg2), (SELECT id FROM pg2));
+  FROM public.api_list_deals(p_org => 'deadbeef-0000-4000-8000-00000000ab01', p_limit => 1,
+        p_cursor_last_activity => (SELECT last_activity_at FROM pg2), p_cursor_id => (SELECT id FROM pg2));
 
 SELECT isnt(
   (SELECT id FROM pg2), (SELECT id FROM pg1),
@@ -172,5 +172,58 @@ SELECT is(
   (SELECT last_activity_at FROM pg1),
   '2026-08-10T00:00:00Z'::timestamptz,
   '(CONTROLE) a ordenação é por última atividade DESC — a primeira página traz a mais recente');
+
+-- ===========================================================================
+-- (INCREMENTAL) o corte por última atividade — #1771
+-- ===========================================================================
+-- É o que torna o node de n8n possível: "o que mudou desde a última vez?".
+-- Sem isto o conector só enxerga registro NOVO, e um Negócio que mudou de etapa
+-- ontem seria invisível — justamente o evento que interessa.
+
+SELECT is(
+  (SELECT count(*) FROM public.api_list_deals(
+     p_org => 'deadbeef-0000-4000-8000-00000000ab01',
+     p_updated_since => '2026-08-05T00:00:00Z')),
+  2::bigint,
+  '(INCREMENTAL) o corte deixa de fora o que não teve atividade depois dele');
+
+SELECT is(
+  (SELECT count(*) FROM public.api_list_deals(
+     p_org => 'deadbeef-0000-4000-8000-00000000ab01',
+     p_updated_since => '2026-01-01T00:00:00Z')),
+  3::bigint,
+  '(CONTROLE) corte antigo traz os três — o filtro não recusa por acidente');
+
+SELECT is(
+  (SELECT count(*) FROM public.api_list_deals(
+     p_org => 'deadbeef-0000-4000-8000-00000000ab01',
+     p_updated_since => '2026-12-31T00:00:00Z')),
+  0::bigint,
+  '(INCREMENTAL) corte no futuro traz vazio, não a base inteira');
+
+-- ── O caso que motiva a coluna: MUDAR DE ETAPA aparece no delta ────────────
+-- Um Negócio antigo, fora do corte, passa a entrar assim que só a POSIÇÃO dele
+-- muda. Sem o gatilho de #1766 este Negócio ficaria invisível para sempre, e o
+-- conector nunca saberia que o funil andou.
+UPDATE public.pipeline_entries SET stage_key = 'respondeu'
+ WHERE id = 'deadbeef-0000-4000-8000-00000000ae03';
+
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.api_list_deals(
+            p_org => 'deadbeef-0000-4000-8000-00000000ab01',
+            p_updated_since => now() - interval '1 minute')
+          WHERE id = 'deadbeef-0000-4000-8000-00000000ad03'),
+  '(INCREMENTAL) Negócio que só MUDOU DE ETAPA entra no delta');
+
+-- E o mesmo para mudança na própria linha.
+UPDATE public.deals SET title = 'N1 renegociado'
+ WHERE id = 'deadbeef-0000-4000-8000-00000000ad01';
+
+SELECT ok(
+  EXISTS (SELECT 1 FROM public.api_list_deals(
+            p_org => 'deadbeef-0000-4000-8000-00000000ab01',
+            p_updated_since => now() - interval '1 minute')
+          WHERE id = 'deadbeef-0000-4000-8000-00000000ad01'),
+  '(INCREMENTAL) Negócio que só mudou de TÍTULO também entra');
 
 ROLLBACK;

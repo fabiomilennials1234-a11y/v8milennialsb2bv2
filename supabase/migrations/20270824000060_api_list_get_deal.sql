@@ -25,12 +25,19 @@
 -- ============================================================================
 BEGIN;
 
+-- A assinatura mudou (ganhou `p_updated_since`). CREATE OR REPLACE com lista de
+-- argumentos diferente cria OVERLOAD, e o PostgREST resolve por nome+argumentos:
+-- a chamada poderia cair na versão sem o corte, devolvendo a base inteira onde o
+-- conector esperava o delta.
+DROP FUNCTION IF EXISTS public.api_list_deals(uuid, text, text, uuid, text, int, timestamptz, uuid);
+
 CREATE OR REPLACE FUNCTION public.api_list_deals(
   p_org                   uuid,
   p_pipeline              text        DEFAULT NULL,
   p_stage                 text        DEFAULT NULL,
   p_owner_id              uuid        DEFAULT NULL,
   p_status                text        DEFAULT NULL,
+  p_updated_since         timestamptz DEFAULT NULL,
   p_limit                 int         DEFAULT 51,
   p_cursor_last_activity  timestamptz DEFAULT NULL,
   p_cursor_id             uuid        DEFAULT NULL
@@ -66,6 +73,11 @@ AS $function$
        OR (p_status = 'won'  AND d.won IS TRUE)
        OR (p_status = 'lost' AND d.closed_at IS NOT NULL AND d.won IS NOT TRUE)
      )
+     -- Sincronização incremental (#1771). O corte é pela MESMA coluna do
+     -- keyset, e isso não é coincidência: se o corte usasse `updated_at` e a
+     -- ordenação usasse a última atividade, um Negócio que só mudou de Stage
+     -- entraria no corte e sairia da ordenação — o conector veria buraco.
+     AND (p_updated_since IS NULL OR d.last_activity_at > p_updated_since)
      -- Keyset. O desempate por id evita repetir ou pular quando dois Negócios
      -- têm a mesma última atividade.
      AND (
@@ -105,13 +117,13 @@ AS $function$
   ) t;
 $function$;
 
-REVOKE ALL ON FUNCTION public.api_list_deals(uuid, text, text, uuid, text, int, timestamptz, uuid) FROM public, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.api_list_deals(uuid, text, text, uuid, text, int, timestamptz, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.api_list_deals(uuid, text, text, uuid, text, timestamptz, int, timestamptz, uuid) FROM public, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.api_list_deals(uuid, text, text, uuid, text, timestamptz, int, timestamptz, uuid) TO service_role;
 
 REVOKE ALL ON FUNCTION public.api_get_deal(uuid, uuid) FROM public, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.api_get_deal(uuid, uuid) TO service_role;
 
-COMMENT ON FUNCTION public.api_list_deals(uuid, text, text, uuid, text, int, timestamptz, uuid) IS
+COMMENT ON FUNCTION public.api_list_deals(uuid, text, text, uuid, text, timestamptz, int, timestamptz, uuid) IS
   'GET /api/v1/deals. Keyset por (last_activity_at, id) DESC — a mesma chave que '
   'o updated_since do #1771 usa, para não trocar cursor depois e quebrar quem '
   'pagina. A posição vem de pipeline_entries, que espelha também os funis '
@@ -124,6 +136,11 @@ COMMENT ON FUNCTION public.api_get_deal(uuid, uuid) IS
 DO $do$
 DECLARE v_aberto int;
 BEGIN
+  IF (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname='public' AND p.proname='api_list_deals') <> 1 THEN
+    RAISE EXCEPTION 'FAIL: overload de api_list_deals — o PostgREST resolveria a versao sem o corte incremental.';
+  END IF;
+
   SELECT count(*) INTO v_aberto
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public'

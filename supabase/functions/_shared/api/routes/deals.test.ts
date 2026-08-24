@@ -168,3 +168,73 @@ Deno.test("getDeal — a organização vai do contexto, nunca do caminho", async
   assertEquals(calls[0].args.p_org, "org-1");
   assertEquals(calls[0].args.p_deal_id, "d-1");
 });
+
+// ── updated_since — sincronização incremental (#1771) ──────────────────────
+//
+// É a peça que torna um node de n8n ou um cenário no Make possível: acordar de
+// tempos em tempos e perguntar "o que mudou desde a última vez?".
+//
+// Sem ela, o conector só enxerga registro NOVO — um Negócio que mudou de etapa
+// ontem seria invisível, que é justamente o evento que interessa.
+
+Deno.test("listDeals — updated_since chega ao banco", async () => {
+  const calls: RpcCall[] = [];
+  await listDeals(ctx(
+    "https://x/api/v1/deals?updated_since=2026-08-01T00:00:00Z",
+    { data: [] },
+    calls,
+  ));
+
+  assertEquals(calls[0].args.p_updated_since, "2026-08-01T00:00:00.000Z");
+});
+
+Deno.test("listDeals — sem updated_since, o corte vai nulo", async () => {
+  const calls: RpcCall[] = [];
+  await listDeals(ctx("https://x/api/v1/deals", { data: [] }, calls));
+
+  assertEquals(calls[0].args.p_updated_since, null);
+});
+
+// Instante ilegível não pode virar "sem corte": o conector receberia a base
+// inteira achando que recebeu só o delta, e processaria tudo de novo — em fluxo
+// que dispara mensagem, isso é reenvio em massa.
+Deno.test("listDeals — updated_since ilegível recusa, e não consulta o banco", async () => {
+  const calls: RpcCall[] = [];
+  const res = await listDeals(ctx(
+    "https://x/api/v1/deals?updated_since=ontem",
+    { data: [] },
+    calls,
+  ));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_updated_since");
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("listDeals — updated_since aceita data sem hora", async () => {
+  const calls: RpcCall[] = [];
+  const res = await listDeals(ctx(
+    "https://x/api/v1/deals?updated_since=2026-08-01",
+    { data: [] },
+    calls,
+  ));
+
+  assertEquals(res.status, 200);
+  assertEquals(calls[0].args.p_updated_since, "2026-08-01T00:00:00.000Z");
+});
+
+// O cursor precisa da chave de ordenação num campo que `paginateByCursor` lê —
+// que é `created_at`. Fazer isso sobrescrevendo o campo do PRÓPRIO objeto que vai
+// para o corpo corrompe a resposta: o integrador receberia a última atividade
+// rotulada como data de criação, e um relatório "negócios criados em agosto"
+// contaria errado.
+Deno.test("listDeals — created_at no corpo é a CRIAÇÃO, não a última atividade", async () => {
+  const res = await listDeals(ctx(
+    "https://x/api/v1/deals",
+    { data: [row("d-1", "2026-08-20T00:00:00Z", { created_at: "2026-01-15T00:00:00Z" })] },
+  ));
+
+  const d = (await res.json()).data[0];
+  assertEquals(d.created_at, "2026-01-15T00:00:00Z");
+  assertEquals(d.last_activity_at, "2026-08-20T00:00:00Z");
+});

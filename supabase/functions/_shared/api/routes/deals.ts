@@ -72,6 +72,30 @@ export async function listDeals(ctx: ApiRouteContext): Promise<Response> {
   const limit = parseLimit(url.searchParams);
   const cursor = decodeCursor(url.searchParams.get("cursor"));
 
+  // ── updated_since ────────────────────────────────────────────────────────
+  //
+  // Instante ilegível NÃO pode virar "sem corte". O conector receberia a base
+  // inteira achando que recebeu só o delta, e processaria tudo de novo — em
+  // fluxo que dispara mensagem, isso é reenvio em massa para o cliente final.
+  //
+  // Normaliza para ISO: o banco compara timestamptz, e deixar o formato do
+  // chamador chegar cru faria "2026-08-01" ser interpretado no fuso do servidor
+  // em vez de UTC, deslocando o corte em três horas sem ninguém perceber.
+  const desde = url.searchParams.get("updated_since");
+  let updatedSince: string | null = null;
+  if (desde !== null) {
+    const t = Date.parse(desde);
+    if (Number.isNaN(t)) {
+      return apiError(
+        422,
+        "invalid_updated_since",
+        "updated_since deve ser uma data ISO 8601, por exemplo 2026-08-01T00:00:00Z",
+        ctx.cors,
+      );
+    }
+    updatedSince = new Date(t).toISOString();
+  }
+
   const supabase = ctx.supabase as unknown as RpcClient;
   const { data, error } = await supabase.rpc("api_list_deals", {
     p_org: ctx.organizationId,
@@ -79,6 +103,7 @@ export async function listDeals(ctx: ApiRouteContext): Promise<Response> {
     p_stage: url.searchParams.get("stage"),
     p_owner_id: url.searchParams.get("owner_id"),
     p_status: url.searchParams.get("status"),
+    p_updated_since: updatedSince,
     p_limit: limit + 1, // +1 para saber se há próxima página
     p_cursor_last_activity: cursor?.created_at ?? null,
     p_cursor_id: cursor?.id ?? null,
@@ -91,12 +116,12 @@ export async function listDeals(ctx: ApiRouteContext): Promise<Response> {
   }
 
   const rows = (data ?? []) as DealRow[];
-  // `paginateByCursor` é tipado sobre `created_at`; aqui a chave de ordenação é
-  // a última atividade. Alimenta com ela, para o token carregar a chave certa.
-  const paraCursor = rows.map((r) => ({ ...r, created_at: r.last_activity_at }));
-  const { page, nextCursor } = paginateByCursor(paraCursor, limit);
+  // A chave de ordenação vai por parâmetro. Sobrescrever `created_at` na linha
+  // para alimentar o cursor corromperia o corpo — é o MESMO objeto que vai
+  // serializado para quem integra.
+  const { page, nextCursor } = paginateByCursor(rows, limit, "last_activity_at");
 
-  return apiList(page.map((r) => serializeDealRow(r as unknown as DealRow)), nextCursor, ctx.cors);
+  return apiList(page.map(serializeDealRow), nextCursor, ctx.cors);
 }
 
 export async function getDeal(ctx: ApiRouteContext): Promise<Response> {
