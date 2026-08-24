@@ -84,5 +84,5 @@ Migration + redeploy de `process-workflow-executions` (importa `_shared/workflow
 
 ## Relacionado
 
-- [[deals-existe-e-esta-vazio]] — o módulo Negócios estava ligado em 3 orgs com 0 registros.
+- Histórico: o módulo Negócios já esteve ligado em 3 orgs com 0 registros. Hoje prod tem 34.966 negócios em 69 orgs.
 - [[copy-paste-nodes]], [[marcar-item-checklist]] — outros nodes do editor.
