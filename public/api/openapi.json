@@ -564,6 +564,83 @@
                 "name": "Acme Renomeado",
                 "tier": "ouro",
                 "rating": 5
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Nome do contato."
+                  },
+                  "company": {
+                    "type": "string",
+                    "description": "Empresa."
+                  },
+                  "email": {
+                    "type": "string",
+                    "description": "E-mail."
+                  },
+                  "phone": {
+                    "type": "string",
+                    "description": "Telefone."
+                  },
+                  "notes": {
+                    "type": "string",
+                    "description": "Observações."
+                  },
+                  "segment": {
+                    "type": "string",
+                    "description": "Segmento — coluna própria de leads, lida pelas telas."
+                  },
+                  "faturamento": {
+                    "type": "string",
+                    "description": "Faturamento declarado — coluna própria de leads."
+                  },
+                  "utm_source": {
+                    "type": "string",
+                    "description": "UTM source."
+                  },
+                  "utm_medium": {
+                    "type": "string",
+                    "description": "UTM medium."
+                  },
+                  "utm_campaign": {
+                    "type": "string",
+                    "description": "UTM campaign."
+                  },
+                  "utm_content": {
+                    "type": "string",
+                    "description": "UTM content."
+                  },
+                  "utm_term": {
+                    "type": "string",
+                    "description": "UTM term."
+                  },
+                  "rating": {
+                    "type": "number",
+                    "description": "Estrelas de 1 a 5."
+                  },
+                  "qualification_score": {
+                    "type": "number",
+                    "description": "Score de 0 a 100."
+                  },
+                  "tier": {
+                    "type": "string",
+                    "description": "diamante, ouro, prata, bronze ou desqualificado."
+                  },
+                  "responsible_id": {
+                    "type": "string",
+                    "description": "UUID do responsável."
+                  },
+                  "sale_responsible_id": {
+                    "type": "string",
+                    "description": "UUID de vendas."
+                  },
+                  "pre_sale_responsible_id": {
+                    "type": "string",
+                    "description": "UUID da pré-venda."
+                  }
+                }
               }
             }
           }
