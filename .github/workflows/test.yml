@@ -191,6 +191,15 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [quality]
+    # Medido em 2026-08-21 (run 32504868837): este job passou de UMA HORA
+    # `in_progress` e nunca reportou. Sem teto, o default do GitHub é 360
+    # minutos — na prática o job vira invisível: não é verde, não é vermelho,
+    # some da leitura de quem olha o PR.
+    #
+    # 25 minutos é folga sobre a execução saudável (a rodada verde de 21/08 na
+    # main levou 5m40s, do checkout ao fim). Estourar aqui é informação: a
+    # suíte está em retry infinito ou o webServer não subiu.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
