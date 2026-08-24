@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
-import { listLeads, serializeLeadRow } from "./leads.ts";
+import { listLeads, searchLeads, serializeLeadRow } from "./leads.ts";
 import type { ApiRouteContext } from "../router.ts";
 import { decodeCursor } from "../cursor.ts";
 
@@ -212,4 +212,62 @@ Deno.test("getLeadTimeline — 500 on rpc error", async () => {
   const { getLeadTimeline } = await import("./leads.ts");
   const res = await getLeadTimeline(ctx);
   assertEquals(res.status, 500);
+});
+
+// ── GET /leads/search ──────────────────────────────────────────
+//
+// O passo de dedup que todo conector faz antes de criar. No jeito estrito
+// (ADR/spec: `POST /deals` exige `lead_id`), esta rota é o que impede que a
+// integração ingênua crie uma segunda pessoa — ela pergunta antes.
+//
+// Devolve LISTA, não um só: um telefone pode casar mais de um Lead, e esconder
+// isso atrás de um resultado único faria a rota mentir exatamente onde a
+// duplicata mora.
+
+Deno.test("searchLeads — por telefone devolve os Leads que casam", async () => {
+  const calls: RpcCall[] = [];
+  const res = await searchLeads(fakeCtx(
+    "https://x/api/v1/leads/search?phone=11999990000",
+    { data: [row("l-1", "2026-01-01T00:00:00Z")] },
+    calls,
+  ));
+
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.data.length, 1);
+  assertEquals(body.data[0].id, "l-1");
+  assertEquals(calls[0].args.p_phone, "11999990000");
+});
+
+// Busca sem critério não pode virar "liste tudo". Quem quer a base inteira usa
+// `GET /leads`, que é paginado por cursor; esta rota é lookup e precisa de alvo.
+// Sem a guarda, um parâmetro escrito errado no node vira varredura silenciosa.
+
+Deno.test("searchLeads — sem telefone nem e-mail recusa, e não consulta o banco", async () => {
+  const calls: RpcCall[] = [];
+  const res = await searchLeads(fakeCtx(
+    "https://x/api/v1/leads/search",
+    { data: [] },
+    calls,
+  ));
+
+  assertEquals(res.status, 422);
+  const body = await res.json();
+  assertEquals(body.error.code, "missing_search_criteria");
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("searchLeads — por e-mail devolve os Leads que casam", async () => {
+  const calls: RpcCall[] = [];
+  const res = await searchLeads(fakeCtx(
+    "https://x/api/v1/leads/search?email=joao@acme.com",
+    { data: [row("l-7", "2026-01-01T00:00:00Z")] },
+    calls,
+  ));
+
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.data[0].id, "l-7");
+  assertEquals(calls[0].args.p_email, "joao@acme.com");
+  assertEquals(calls[0].args.p_phone, null);
 });
