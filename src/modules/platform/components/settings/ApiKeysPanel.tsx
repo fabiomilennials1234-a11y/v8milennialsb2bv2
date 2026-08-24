@@ -310,7 +310,25 @@ export function ApiKeysPanel() {
               </div>
 
               <div className="grid gap-2">
-                <Label>Escopos</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Escopos</Label>
+                  {/* Uma integração de CRM costuma precisar de quase tudo. Marcar
+                      dez caixas uma a uma, por cliente, é onde se esquece a que
+                      importa — e o esquecimento só aparece como 403 lá na frente. */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setScopes(
+                        scopes.length === AVAILABLE_SCOPES.length
+                          ? []
+                          : AVAILABLE_SCOPES.map((s) => s.value),
+                      )
+                    }
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    {scopes.length === AVAILABLE_SCOPES.length ? "Limpar todos" : "Selecionar todos"}
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {AVAILABLE_SCOPES.map((scope) => (
                     <label
