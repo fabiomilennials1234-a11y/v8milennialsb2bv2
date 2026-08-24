@@ -208,6 +208,28 @@ laço foi provado com dublês — mas **duas sessões concorrentes disputando a 
 rodaram**. Isso é SQL, e SQL não se prova com dublê. Pede branch efêmera, e a autorização
 está de pé. É a primeira coisa a fazer se o worker duplicar envio em produção.
 
+## 5-bis. `post_send_target` no regime oficial — quem move o lead
+
+Registrado pelo Despachante, a partir da descrição do operário e de medição própria no
+código entregue. Ficou de fora do handoff original e por pouco morreu com o terminal.
+
+**O criador não move o lead no regime oficial, e isso é correto.**
+`quick-blast/blast-plan.ts` chama `notifyRecipientsSent` em quatro pontos (`:408`, `:553`,
+`:775`, `:817`) — **todos no ramo do Chip**. Chamá-lo na criação de um Disparo oficial
+afirmaria um envio que ainda não aconteceu: no Canal Oficial a linha nasce `pending` e só
+sai quando o worker a reivindica.
+
+**Quem move é o worker, quando o envio sai — e ele já move.** Medido em
+`_shared/blast-official-runner.ts`: o `postSendTarget` é lido do plano (`:247`, `:275`),
+carregado no contexto do destinatário (`:89`, `:230-231`) e aplicado depois do envio
+(`:284-297`), chamando `deps.aposEnviar` apenas quando há `leadId`. É best-effort e nunca
+lança — a mesma assimetria de `notifyRecipientsSent`, deliberada: falha ao mover não
+desfaz um envio que já saiu.
+
+**Não há trabalho pendente aqui.** O que havia era uma decisão de desenho viva só na
+conversa. Se um dia o comportamento parecer errado, o lugar de olhar é
+`blast-official-runner.ts:284-297`, não o criador.
+
 ## 6. O que me surpreendeu
 
 - **O id da resposta do envio NÃO é o `providerMessageId` estável — e nunca foi.** Medido
