@@ -157,6 +157,11 @@ describe("processarTiqueDoDisparo", () => {
     expect(r.enviados).toBe(1);
     expect(enviarTemplate).toHaveBeenCalledTimes(1);
 
+    // A linha guarda o id da RESPOSTA DO ENVIO — o mesmo valor que o transporte
+    // devolveu, e o mesmo que vira `channel_messages.external_id`. NÃO é o
+    // `providerMessageId` estável: medido em prod (2026-08-24), os dois nunca
+    // coincidem em 747 linhas. Esta asserção é o que impede alguém de "corrigir"
+    // o worker para gravar outra coisa sem entender a diferença.
     const marca = admin.escritas.find((e) => e.tabela === "blast_plan_recipients");
     expect(marca?.payload).toMatchObject({
       status: "sent",
@@ -284,5 +289,117 @@ describe("processarTiqueDoDisparo", () => {
     expect(r).toMatchObject({ reivindicados: 0, enviados: 0, falhas: 0 });
     expect(enviarTemplate).not.toHaveBeenCalled();
     expect(admin.escritas).toHaveLength(0);
+  });
+});
+
+// ── Destino pós-envio (o "Destino" do wizard) ───────────────────────────────
+
+describe("post_send_target — mover o lead quando A MENSAGEM DELE sai", () => {
+  const PLANO_COM_DESTINO = {
+    ...PLANO,
+    post_send_target: { funnelKind: "system", pipelineType: "pipe_propostas", stageKey: "enviada" },
+  };
+
+  function comDestino(over: Record<string, unknown> = {}) {
+    const admin = makeAdmin({
+      __claim: [linha()],
+      blast_plans: [PLANO_COM_DESTINO],
+      whatsapp_instances: [INSTANCIA],
+      ...over,
+    });
+    const aposEnviar = vi.fn(async () => {});
+    return { admin, aposEnviar };
+  }
+
+  it("move o lead depois de um envio bem-sucedido", async () => {
+    // No Chip isso acontece na criação, porque despachar já É enviar. No Canal
+    // Oficial o envio é do worker, um a um — então é AQUI que o lead se move, e
+    // só depois de a mensagem dele realmente sair.
+    const { admin, aposEnviar } = comDestino();
+
+    await processarTiqueDoDisparo(
+      {
+        supabaseAdmin: admin.client,
+        enviarTemplate: vi.fn(async () => ({ success: true, messageId: "prov-1" })),
+        esperar: async () => {},
+        agora: () => AGORA,
+        aposEnviar,
+      } as never,
+      { batchSize: 20, perOrgCap: 5, pausaMs: 0 },
+    );
+
+    expect(aposEnviar).toHaveBeenCalledTimes(1);
+    expect(aposEnviar.mock.calls[0][0]).toMatchObject({
+      orgId: "org-1",
+      leadIds: ["lead-1"],
+      postSendTarget: PLANO_COM_DESTINO.post_send_target,
+    });
+  });
+
+  it("NÃO move quando o envio falhou", async () => {
+    // Mover um lead cuja mensagem foi recusada afirmaria um envio que não houve —
+    // e o funil passaria a mentir sobre onde a pessoa está.
+    const { admin, aposEnviar } = comDestino();
+
+    await processarTiqueDoDisparo(
+      {
+        supabaseAdmin: admin.client,
+        enviarTemplate: vi.fn(async () => ({ success: false, error: "recusado" })),
+        esperar: async () => {},
+        agora: () => AGORA,
+        aposEnviar,
+      } as never,
+      { batchSize: 20, perOrgCap: 5, pausaMs: 0 },
+    );
+
+    expect(aposEnviar).not.toHaveBeenCalled();
+  });
+
+  it("plano sem Destino não chama o movedor", async () => {
+    // CONTROLE: o Destino é opcional ("manter onde estão" é o default do wizard).
+    const admin = makeAdmin({
+      __claim: [linha()],
+      blast_plans: [PLANO],
+      whatsapp_instances: [INSTANCIA],
+    });
+    const aposEnviar = vi.fn(async () => {});
+
+    await processarTiqueDoDisparo(
+      {
+        supabaseAdmin: admin.client,
+        enviarTemplate: vi.fn(async () => ({ success: true, messageId: "p" })),
+        esperar: async () => {},
+        agora: () => AGORA,
+        aposEnviar,
+      } as never,
+      { batchSize: 20, perOrgCap: 5, pausaMs: 0 },
+    );
+
+    expect(aposEnviar).not.toHaveBeenCalled();
+  });
+
+  it("falha do movedor não derruba o tique nem desfaz o envio", async () => {
+    // Best-effort, mesma assimetria de `notifyRecipientsSent` no Chip: a mensagem
+    // JÁ SAIU. Transformar falha de movimentação em erro faria o tique seguinte
+    // reprocessar quem já recebeu — e a duplicata é cobrada.
+    const { admin } = comDestino();
+    const aposEnviar = vi.fn(async () => {
+      throw new Error("funil sumiu");
+    });
+
+    const r = await processarTiqueDoDisparo(
+      {
+        supabaseAdmin: admin.client,
+        enviarTemplate: vi.fn(async () => ({ success: true, messageId: "p" })),
+        esperar: async () => {},
+        agora: () => AGORA,
+        aposEnviar,
+      } as never,
+      { batchSize: 20, perOrgCap: 5, pausaMs: 0 },
+    );
+
+    expect(r.enviados).toBe(1);
+    const marca = admin.escritas.find((e) => e.tabela === "blast_plan_recipients");
+    expect(marca?.payload).toMatchObject({ status: "sent" });
   });
 });

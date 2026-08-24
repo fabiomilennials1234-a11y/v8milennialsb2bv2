@@ -32,6 +32,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { sendTemplateViaInstance } from "../_shared/whatsapp-dispatch.ts";
 import type { WhatsAppInstance } from "../_shared/whatsapp-client.ts";
 import { processarTiqueDoDisparo } from "../_shared/blast-official-runner.ts";
+import { buildPostSendMover } from "../_shared/quick-blast/post-send-target.ts";
 
 const FUNCTION_NAME = "process-blast-recipients";
 
@@ -100,6 +101,12 @@ Deno.serve(
             },
             { trackSource, trackId },
           ),
+        // O "Destino" do wizard. No Chip ele dispara na criação do plano, porque
+        // despachar já é enviar; aqui dispara quando a mensagem DAQUELA pessoa
+        // sai. Mesmo movedor dos dois lados — o funil não pode divergir por
+        // regime.
+        aposEnviar: ({ orgId, postSendTarget, leadIds }) =>
+          buildPostSendMover(supabase, orgId, postSendTarget)(leadIds),
         esperar: (ms: number) => new Promise((r) => setTimeout(r, ms)),
         agora: () => new Date(),
       },

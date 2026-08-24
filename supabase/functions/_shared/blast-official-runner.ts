@@ -73,6 +73,21 @@ export interface DepsDoWorker {
   }): Promise<ResultadoDoEnvio>;
   esperar(ms: number): Promise<void>;
   agora(): Date;
+  /**
+   * O "Destino" do wizard: mover o lead quando A MENSAGEM DELE sai.
+   *
+   * No Chip isso acontece na criação do plano, porque despachar já É enviar. No
+   * Canal Oficial quem envia é este laço, um a um — então é aqui, e só depois de
+   * a mensagem realmente ter saído. Em produção: `buildPostSendMover`.
+   *
+   * Best-effort, de propósito: a mensagem já saiu, e transformar falha de
+   * movimentação em erro faria o tique seguinte reprocessar quem já recebeu.
+   */
+  aposEnviar?(params: {
+    orgId: string;
+    postSendTarget: unknown;
+    leadIds: string[];
+  }): Promise<void>;
 }
 
 export interface ConfigDoTique {
@@ -165,12 +180,32 @@ export async function processarTiqueDoDisparo(
       await marcar(deps, linha.id, {
         status: "sent",
         sent_at: deps.agora().toISOString(),
-        // O id da resposta do envio. É o que o callback de status usa para
-        // achar esta linha (#1724) — e a UNIQUE parcial em
-        // `provider_message_id` é o que impede a mesma resposta de fechar duas.
+        // ⚠️ LEIA ANTES DE USAR ISTO NA #1724.
+        //
+        // Este é o id da RESPOSTA DO ENVIO, e ele é o `external_id` da linha que
+        // o provider grava em `channel_messages`. Ele NÃO é o `providerMessageId`
+        // estável que o callback de status carrega.
+        //
+        // Medido em produção em 2026-08-24, 747 linhas de saída com os dois ids
+        // preenchidos: `provider_message_id = external_id` em ZERO delas. São
+        // espaços de identificador diferentes — o do envio é UUID
+        // (`610d05f8-2efd-…`), o estável é base64 longo (`dGg3ZzQwYnh3…`),
+        // 747/747 de cada lado.
+        //
+        // Consequência: casar o callback DIRETO contra esta coluna pelo id
+        // estável não acha nada, nunca. O caminho que funciona é o que o webhook
+        // já faz certo — ele resolve o callback até a linha de `channel_messages`
+        // por DUAS chaves (`notificame-webhook/index.ts:1139-1174`); de lá,
+        // `external_id` casa com este valor. Reusar aquele casamento é melhor do
+        // que duplicar a dança de duas chaves numa segunda tabela.
+        //
+        // O que esta coluna É, e continua sendo: a chave de idempotência do
+        // envio. A UNIQUE parcial do #1721 impede a mesma resposta de fechar
+        // duas linhas, e para isso o UUID serve tão bem quanto o base64.
         provider_message_id: envio.messageId ?? null,
         reason: null,
       });
+      await moverAposEnvio(deps, ctx!, linha.lead_id);
       r.enviados += 1;
     } else {
       // Falha de UM destinatário não derruba o tique: a fila é por pessoa
@@ -190,6 +225,9 @@ interface ContextoDoPlano {
   plano: { status: string; template: TemplateDoPlano | null };
   instance: Record<string, unknown>;
   regime: "chip" | "oficial";
+  orgId: string;
+  /** `blast_plans.post_send_target` — opaco aqui; quem o entende é o movedor. */
+  postSendTarget: unknown;
 }
 
 /**
@@ -205,7 +243,7 @@ async function carregarContexto(
 
   const { data: planos } = await deps.supabaseAdmin
     .from("blast_plans")
-    .select("id, organization_id, status, instance_id, template")
+    .select("id, organization_id, status, instance_id, template, post_send_target")
     .in("id", planIds);
 
   const instanceIds = [
@@ -231,9 +269,37 @@ async function carregarContexto(
       // O regime é do provedor da Instance, e a mesma verdade do módulo do
       // front (`campaigns/lib/disparo-numbers.ts`): oficial é `notificame`.
       regime: instance.provider === "notificame" ? "oficial" : "chip",
+      orgId: p.organization_id,
+      postSendTarget: p.post_send_target ?? null,
     });
   }
   return mapa;
+}
+
+/**
+ * Move o lead para o Destino do plano, depois de a mensagem DELE ter saído.
+ *
+ * Best-effort e nunca lança: mesma assimetria de `notifyRecipientsSent` no
+ * caminho do Chip. A mensagem já saiu; um funil que não aceitou a movimentação é
+ * ruído no log, não motivo para reenviar.
+ */
+async function moverAposEnvio(
+  deps: DepsDoWorker,
+  ctx: ContextoDoPlano,
+  leadId: string | null,
+): Promise<void> {
+  if (!deps.aposEnviar || !ctx.postSendTarget || !leadId) return;
+  try {
+    await deps.aposEnviar({
+      orgId: ctx.orgId,
+      postSendTarget: ctx.postSendTarget,
+      leadIds: [leadId],
+    });
+  } catch (e) {
+    console.warn(
+      `[blast-official] destino pós-envio falhou para lead=${leadId} (best-effort, ignorado): ${(e as Error)?.message ?? e}`,
+    );
+  }
 }
 
 async function marcar(
