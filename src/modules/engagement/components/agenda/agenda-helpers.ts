@@ -23,6 +23,21 @@ export const HOUR_HEIGHT = 64; // px per hour in time grid
 export const HOURS = Array.from({ length: 24 }, (_, i) => i);
 export const DAY_NAMES_SHORT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+/**
+ * Cabeçalho por extenso da grade mensal. Convive com `DAY_NAMES_SHORT`: a grade
+ * mostra o nome inteiro quando há largura e cai no curto no celular, em vez de
+ * truncar "Segunda-feira" no meio.
+ */
+export const DAY_NAMES_FULL = [
+  "Domingo",
+  "Segunda-feira",
+  "Terça-feira",
+  "Quarta-feira",
+  "Quinta-feira",
+  "Sexta-feira",
+  "Sábado",
+];
+
 /** Source → colour mapping for the unified agenda. */
 export const SOURCE_COLORS: Record<string, string> = {
   meeting: "hsl(47, 100%, 50%)",      // gold (primary brand)
@@ -40,6 +55,10 @@ export const SOURCE_LABELS: Record<string, string> = {
   pipe_confirmacao: "Confirmação",
   google: "Google Calendar",
 };
+
+/** Visões do calendário. Mora aqui, e não no componente, porque a página e a
+ *  barra antiga precisam do mesmo vocabulário sem depender uma da outra. */
+export type ViewType = "day" | "week" | "month";
 
 // ─── Event-type filter (by event_type, not source) ─────────────────────────────
 
@@ -81,6 +100,119 @@ export function normalizeEventType(t: string | null | undefined): EventTypeKey {
   return "other";
 }
 
+// ─── Estado do compromisso (pendente × finalizado) ────────────────────────────
+
+/** Abas de estado da tela — mesmo vocabulário que a operação usa. */
+export type AgendaStatusFilter = "pending" | "all" | "done";
+
+/**
+ * Status terminais das quatro fontes da agenda. Cada uma fala um dialeto:
+ * `meetings` usa o enum `MeetingStatus`, `follow_ups` vira `completed` na
+ * própria RPC, `scheduled_user_messages` usa o ciclo de envio e
+ * `pipe_confirmacao` grava a chave da etapa do kanban (`compareceu`/`perdido`).
+ * O que não estiver aqui conta como pendente — desconhecido nunca some da aba
+ * "Pendentes", que é a que a pessoa abre para trabalhar.
+ */
+const FINISHED_STATUSES = new Set([
+  // meetings
+  "completed",
+  "cancelled",
+  "canceled",
+  "no_show",
+  // scheduled_user_messages
+  "sent",
+  "failed",
+  // pipe_confirmacao (stage_key)
+  "compareceu",
+  "perdido",
+]);
+
+/** Um compromisso está finalizado quando o status é terminal. */
+export function isFinishedEvent(event: UnifiedEvent): boolean {
+  return FINISHED_STATUSES.has((event.status ?? "").toLowerCase());
+}
+
+/** Aplica a aba de estado sobre a lista já normalizada. */
+export function matchesStatusFilter(
+  event: UnifiedEvent,
+  filter: AgendaStatusFilter,
+): boolean {
+  if (filter === "all") return true;
+  const done = isFinishedEvent(event);
+  return filter === "done" ? done : !done;
+}
+
+// ─── Escopo de visibilidade (comum × admin) ───────────────────────────────────
+
+/**
+ * `created_by` na RPC `get_agenda_events` **não é uma chave só**: para
+ * `meetings` vem de `auth.users.id` (o JOIN em prod é `tm.user_id =
+ * m.created_by`), e para `follow_ups`, `scheduled_user_messages` e
+ * `pipe_confirmacao` vem de `team_members.id`. Por isso a comparação é contra
+ * um CONJUNTO de identidades do usuário — comparar contra uma só casaria zero
+ * linha em três das quatro fontes.
+ */
+export function buildOwnerIdentity(
+  userId: string | null,
+  teamMemberId: string | null,
+): Set<string> {
+  return new Set([userId, teamMemberId].filter((v): v is string => !!v));
+}
+
+/**
+ * O evento é visível para quem tem estas identidades.
+ *
+ * Três portas, e cada uma existe por um motivo medido:
+ *
+ * 1. **Google** entra sempre — é o calendário que a própria pessoa conectou,
+ *    mais os que colegas compartilharam com ela de propósito. Recortar ali
+ *    apagaria uma funcionalidade que já tem consentimento explícito.
+ * 2. **Sem dono** (`created_by` nulo) entra sempre. Parece o contrário do
+ *    seguro, e não é: `follow_ups.assigned_to` é nulável e a própria UI grava
+ *    follow-up sem responsável; em `pipe_confirmacao` o dono é
+ *    `COALESCE(closer_id, sdr_id)`, nulo em boa parte da base. Esconder o
+ *    ownerless apagaria da agenda da pessoa o compromisso que ELA criou —
+ *    perda de trabalho, não ganho de privacidade. Compromisso de ninguém
+ *    também não é "de outra pessoa".
+ * 3. **Dono batendo** com alguma das identidades — ver `buildOwnerIdentity`.
+ *
+ * `extraIds` carrega o que não vem em `created_by`: hoje, as reuniões em que a
+ * pessoa é participante convidada.
+ */
+export function isOwnedBy(
+  event: UnifiedEvent,
+  ownerIds: Set<string>,
+  extraIds?: Set<string>,
+): boolean {
+  if (event.source === "google") return true;
+  if (!event.createdBy) return true;
+  if (ownerIds.has(event.createdBy)) return true;
+  return !!extraIds?.has(rawEventId(event));
+}
+
+/**
+ * O id da linha de origem, sem o prefixo de fonte que `normalizeAgendaEvents`
+ * adiciona para evitar colisão entre tabelas (`meeting-<uuid>`).
+ *
+ * O corte é pelo comprimento da fonte, não pelo primeiro hífen: um uuid é
+ * cheio de hífen, e um `source` novo com hífen no nome quebraria a busca sem
+ * fazer barulho.
+ */
+export function rawEventId(event: UnifiedEvent): string {
+  const prefixo = `${event.source}-`;
+  return event.id.startsWith(prefixo) ? event.id.slice(prefixo.length) : event.id;
+}
+
+/** Iniciais do responsável — identifica o dono sem gastar a largura da pílula. */
+export function initialsOf(name: string | null | undefined): string {
+  if (!name) return "";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  const first = parts[0][0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? "") : "";
+  return (first + last).toUpperCase();
+}
+
 /** Google Calendar event colorId → hex. */
 export const GOOGLE_EVENT_COLORS: Record<string, string> = {
   "1": "#7986CB",
@@ -116,6 +248,11 @@ export interface UnifiedEvent {
   leadName: string | null;
   leadCompany: string | null;
   creatorName: string | null;
+  /**
+   * Dono do compromisso. Chave heterogênea por fonte — ver
+   * `buildOwnerIdentity`. Nulo em evento sem responsável e no overlay Google.
+   */
+  createdBy: string | null;
   status: string;
   eventType: string;
   googleEventId: string | null;
@@ -245,6 +382,7 @@ export function normalizeAgendaEvents(events: RpcAgendaEvent[]): UnifiedEvent[] 
       leadName: e.lead_name,
       leadCompany: e.lead_company,
       creatorName: e.creator_name,
+      createdBy: e.created_by,
       status: e.status,
       eventType: e.event_type,
       googleEventId: e.google_event_id,
@@ -313,6 +451,7 @@ export function normalizeGoogleEvents(
         leadName: null,
         leadCompany: null,
         creatorName: calInfo?.name ?? null,
+        createdBy: null,
         status: (e.status as string) ?? "confirmed",
         eventType: "google",
         googleEventId: (e.id as string) ?? null,

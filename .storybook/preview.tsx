@@ -2,7 +2,10 @@ import type { Preview } from "@storybook/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import React from "react";
-import { AuthContext } from "../src/contexts/AuthContext";
+// HERDADO: o caminho antigo (`src/contexts/AuthContext`) morreu na
+// modularização — o contexto vive em `identity/auth` desde a slice 3, e o
+// Storybook inteiro estava sem subir por causa desta linha.
+import { AuthContext } from "../src/modules/identity/auth/contexts/AuthContext";
 import "../src/index.css";
 
 const queryClient = new QueryClient({
