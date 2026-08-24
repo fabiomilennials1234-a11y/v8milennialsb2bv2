@@ -1,5 +1,13 @@
-import { useState, useEffect, lazy, Suspense, type CSSProperties, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  lazy,
+  Suspense,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
@@ -9,23 +17,10 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Palette,
   Shield,
-  Bell,
   Database,
   Globe,
   MoreHorizontal,
-  MessageSquare,
-  Calendar,
-  Webhook,
-  HelpCircle,
-  Plug,
-  Code,
-  Timer,
-  Key,
-  FlaskConical,
-  ClipboardList,
-  Award,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -61,6 +56,17 @@ import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } fro
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
+import {
+  DEFAULT_SETTINGS_TAB,
+  SETTINGS_BASE_PATH,
+  SETTINGS_OTHERS_PATH,
+  SETTINGS_OTHERS_SLUG,
+  isPrimarySettingsTab,
+  resolveSettingsTab,
+  settingsTabPath,
+  visibleOtherSettingsTabs,
+  visibleSettingsTabs,
+} from "@/modules/platform/lib/settings-tabs";
 import { toast } from "sonner";
 
 // Lazy imports — cada tab carrega só quando ativada.
@@ -632,30 +638,51 @@ function PillTab({ value, label, icon }: { value: string; label: string; icon: R
   );
 }
 
-const TAB_VALUES = new Set([
-  "tags",
-  "notifications",
-  "whatsapp",
-  "integracoes",
-  "webhooks",
-  "api",
-  "sla",
-  "api-keys",
-  "sandbox",
-  "checklists",
-  "general",
-  "ajuda",
-]);
-
 export default function Configuracoes() {
   const { orgType } = useOrganization();
   const { isAdmin } = useIdentity();
+  const { tab: tabParam } = useParams<{ tab?: string }>();
   const [searchParams] = useSearchParams();
-  const requestedTab = searchParams.get("tab");
-  const initialTab =
-    requestedTab && (TAB_VALUES.has(requestedTab) || (requestedTab === "marcos" && orgType === "outbound"))
-      ? requestedTab
-      : "tags";
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isOutboundOrg = orgType === "outbound";
+  const tabs = useMemo(
+    () => visibleSettingsTabs({ isAdmin, isOutboundOrg }),
+    [isAdmin, isOutboundOrg],
+  );
+
+  // A URL manda. `:tab` é a rota das três primárias; `?tab=` identifica as de
+  // "Outros" e continua servindo os links antigos (onboarding, banner do chat).
+  // Aba pedida mas invisível para este usuário (Marcos fora de outbound, Ajuda
+  // sem admin) cai no padrão da rota em que ele está.
+  const isOthersRoute = tabParam === SETTINGS_OTHERS_SLUG;
+  const requested = resolveSettingsTab(tabParam) ?? resolveSettingsTab(searchParams.get("tab"));
+  const fallbackTab = isOthersRoute
+    ? (visibleOtherSettingsTabs({ isAdmin, isOutboundOrg })[0] ?? DEFAULT_SETTINGS_TAB)
+    : DEFAULT_SETTINGS_TAB;
+  const activeTab =
+    requested && tabs.some((t) => t.value === requested.value) ? requested : fallbackTab;
+
+  // Normaliza para o endereço canônico da aba ativa. Os demais parâmetros de
+  // query sobrevivem de propósito: o retorno do OAuth do Google cai aqui com
+  // `?google=connected&email=…`, e descartá-los engoliria o toast de conexão.
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (isPrimarySettingsTab(activeTab)) nextParams.delete("tab");
+    else nextParams.set("tab", activeTab.value);
+
+    const basePath = isPrimarySettingsTab(activeTab)
+      ? `${SETTINGS_BASE_PATH}/${activeTab.slug}`
+      : SETTINGS_OTHERS_PATH;
+    const query = nextParams.toString();
+    const canonical = query ? `${basePath}?${query}` : basePath;
+
+    if (`${location.pathname}${location.search}` !== canonical) {
+      navigate(canonical, { replace: true });
+    }
+  }, [activeTab, location.pathname, location.search, navigate, searchParams]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -673,29 +700,28 @@ export default function Configuracoes() {
         </p>
       </div>
 
-      <Tabs defaultValue={initialTab} className="w-full">
+      {/* Trocar de aba navega: a aba É a rota. As pílulas saem do mesmo
+          registro que alimenta o Pitstop — dois inventários divergiriam.
+          Leitura da ajuda mora no painel de suporte (o "?" do Cmd+K); aqui fica
+          só a autoria, e `HelpAdminPanel` não se protege sozinho — quem gateava
+          era o `HelpCenter`, que saiu daqui. */}
+      <Tabs
+        value={activeTab.value}
+        onValueChange={(value) => {
+          const next = tabs.find((t) => t.value === value);
+          if (next) navigate(settingsTabPath(next));
+        }}
+        className="w-full"
+      >
         <TabsList className="flex flex-nowrap items-center gap-3 h-auto border-b-0 bg-transparent p-0 py-2 w-full max-w-5xl [overflow-x:clip]">
-          <PillTab value="tags" label="Tags" icon={<Tag className="w-4 h-4" />} />
-          <PillTab value="notifications" label="Notificações" icon={<Bell className="w-4 h-4" />} />
-          <PillTab value="whatsapp" label="WhatsApp" icon={<MessageSquare className="w-4 h-4" />} />
-          <PillTab value="integracoes" label="Integrações" icon={<Plug className="w-4 h-4" />} />
-          <PillTab value="webhooks" label="Webhooks" icon={<Webhook className="w-4 h-4" />} />
-          <PillTab value="api" label="API & Chaves" icon={<Code className="w-4 h-4" />} />
-          <PillTab value="sla" label="SLA" icon={<Timer className="w-4 h-4" />} />
-          <PillTab value="api-keys" label="API Keys" icon={<Key className="w-4 h-4" />} />
-          <PillTab value="sandbox" label="Sandbox" icon={<FlaskConical className="w-4 h-4" />} />
-          <PillTab value="checklists" label="Checklists" icon={<ClipboardList className="w-4 h-4" />} />
-          <PillTab value="general" label="Geral" icon={<Settings className="w-4 h-4" />} />
-          {orgType === "outbound" && (
-            <PillTab value="marcos" label="Marcos" icon={<Award className="w-4 h-4" />} />
-          )}
-          {/* Leitura mora no painel de suporte (o "?" do Cmd+K). Aqui fica só a
-              autoria — dois lugares para buscar ajuda e nenhum seria o óbvio.
-              `HelpAdminPanel` nao se protege sozinho: quem gateava era o
-              `HelpCenter`, que saiu daqui. */}
-          {isAdmin && (
-            <PillTab value="ajuda" label="Central de Ajuda" icon={<HelpCircle className="w-4 h-4" />} />
-          )}
+          {tabs.map((tab) => (
+            <PillTab
+              key={tab.value}
+              value={tab.value}
+              label={tab.label}
+              icon={<tab.icon className="w-4 h-4" />}
+            />
+          ))}
         </TabsList>
 
         <div className="mt-6">

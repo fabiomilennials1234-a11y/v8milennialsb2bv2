@@ -30,6 +30,7 @@ import {
   PIPE_ICON_MAP,
   PIPE_PATH_MAP,
   PITSTOP_GROUPS,
+  buildSettingsGroup,
   SIDEBAR_AGENDA,
   SIDEBAR_PITSTOP,
   SIDEBAR_PRIMARY,
@@ -38,6 +39,7 @@ import {
   type NavNode,
   type PitstopGroup,
 } from "@/modules/platform/lib/navigation-model";
+import { SETTINGS_BASE_PATH } from "@/modules/platform/lib/settings-tabs";
 import {
   filterByGate,
   filterByMaster,
@@ -170,19 +172,31 @@ export function useNavigationModel(): NavigationModel {
     // Membro de org outbound não tem Pitstop: o recorte dele não inclui
     // nenhuma dessas rotas, e um painel vazio é pior que painel nenhum.
     if (isOutboundMember) return [];
-    return PITSTOP_GROUPS.map((group) => ({
-      ...group,
-      // O Pitstop passa pelo mesmo gate da lateral: Métricas vive aqui e
-      // continua escondida enquanto a org não estiver no rollout.
-      items: filterByGate(group.items, { metaPagesConnected, metricsStudioEnabled }).filter(
-        (item) => canViewRoute(item.path),
-      ),
-    })).filter((group) => group.items.length > 0);
-  }, [canViewRoute, isOutboundMember, metaPagesConnected, metricsStudioEnabled]);
+    // O grupo de Configurações fecha o painel: é por ele que `/configuracoes`
+    // passa a ter caminho de UI no desktop, onde o gatilho do Pitstop só abre.
+    const groups = [
+      ...PITSTOP_GROUPS,
+      buildSettingsGroup({ isAdmin, isOutboundOrg: orgType === "outbound" }),
+    ];
+    return groups
+      .map((group) => ({
+        ...group,
+        // O Pitstop passa pelo mesmo gate da lateral: Métricas vive aqui e
+        // continua escondida enquanto a org não estiver no rollout.
+        items: filterByGate(group.items, { metaPagesConnected, metricsStudioEnabled }).filter(
+          (item) => canViewRoute(item.path),
+        ),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, metricsStudioEnabled, orgType]);
 
   const isActive = useMemo(
     () =>
       (path: string): boolean => {
+        // Aba de configuração casa exata: por prefixo, um slug novo que comece
+        // igual a outro (`/configuracoes/api` × `/configuracoes/api-keys`)
+        // acenderia dois itens ao mesmo tempo.
+        if (path.startsWith(`${SETTINGS_BASE_PATH}/`)) return location.pathname === path;
         const extras =
           path === "/funis" ? FUNIS_PATHS : path === "/turbo" ? TURBO_PATHS : [];
         return isRouteActive(location.pathname, path, extras);
