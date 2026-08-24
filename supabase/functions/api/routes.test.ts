@@ -4,6 +4,7 @@ import { matchRoute } from "../_shared/api/router.ts";
 import { searchLeads } from "../_shared/api/routes/leads.ts";
 import { createLead } from "../_shared/api/routes/leads-create.ts";
 import { createDeal } from "../_shared/api/routes/deals-create.ts";
+import { getDeal, listDeals } from "../_shared/api/routes/deals.ts";
 import { API_SCOPES, hasScope } from "../_shared/api/scopes.ts";
 
 // ── A tabela de rotas ──────────────────────────────────────────
@@ -50,4 +51,21 @@ Deno.test("scopes — deal:write não é concedido por lead:write", () => {
   assertEquals(hasScope(["deal:write"], "deal:write"), true);
   assertEquals(API_SCOPES.includes("deal:read" as never), true);
   assertEquals(API_SCOPES.includes("deal:write" as never), true);
+});
+
+Deno.test("routes — GET /deals e GET /deals/{id} casam, com escopo de leitura", () => {
+  const lista = matchRoute("GET", "/api/v1/deals", routes);
+  assertEquals(lista?.route.handler, listDeals);
+  assertEquals(lista?.route.scope, "deal:read");
+
+  const um = matchRoute("GET", "/api/v1/deals/d-123", routes);
+  assertEquals(um?.route.handler, getDeal);
+  assertEquals(um?.params.id, "d-123");
+});
+
+// Ler não pode conceder escrever. Uma chave de parceiro que só acompanha o funil
+// não abre venda nele.
+Deno.test("scopes — deal:read não concede deal:write", () => {
+  assertEquals(hasScope(["deal:read"], "deal:write"), false);
+  assertEquals(hasScope(["deal:read"], "deal:read"), true);
 });
