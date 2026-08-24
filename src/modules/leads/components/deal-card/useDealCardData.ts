@@ -58,7 +58,7 @@ const SLUG_TO_STAGE_TYPE: Record<string, string> = {
 };
 
 export function useDealCardData(entryId: string | null, leadId: string | null, isOpen: boolean) {
-  const { organizationId } = useOrganization();
+  const { organizationId, teamMemberId, role } = useOrganization();
   const { lead, isLoading: carregandoLead } = useLeadDetail(leadId, isOpen);
 
   const ids = useMemo(() => (leadId ? [leadId] : []), [leadId]);
@@ -430,5 +430,33 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     };
   }, [lead, negocioBase, dealsMap, vendasMap, carteiraMap, extras.data, equipe]);
 
-  return { data, isLoading: carregandoLead || extras.isLoading };
+  /**
+   * ── Quem está olhando, e sob qual org se grava ──────────────────────────
+   * Sai daqui, e não de `useIdentity` no painel, por um motivo mecânico: todo
+   * hook de identidade deste repo passa por `useAuth`, que **lança** fora de um
+   * `AuthProvider`. `cards-nunca-empilham.test.tsx` monta o painel de verdade
+   * sem esse provider — chamar identidade lá derrubaria seis casos de um
+   * guarda que não tem nada a ver com comentário. Aqui o hook inteiro já é
+   * mockado naquele teste, então o campo simplesmente não vem e o painel
+   * degrada para leitura, que é o comportamento certo quando não se sabe quem
+   * está escrevendo.
+   *
+   * A org vem do LEAD antes de vir da associação de quem olha — é o que o
+   * `DealDetailDialog` fazia (`lead.organization_id ?? ""`, l.188) e é o que
+   * mantém o usuário master comentando: ele não está em `team_members`, então
+   * `useOrganization()` devolve `null` para ele, mas as policies da tabela têm
+   * bypass de master e só exigem `author_user_id = auth.uid()`.
+   */
+  const organizacaoDoLead = (() => {
+    const v = (lead as Linha | null)?.organization_id;
+    return typeof v === "string" && v !== "" ? v : null;
+  })();
+
+  return {
+    data,
+    isLoading: carregandoLead || extras.isLoading,
+    organizacaoId: organizacaoDoLead ?? organizationId ?? null,
+    membroId: teamMemberId ?? null,
+    souAdmin: role === "admin",
+  };
 }

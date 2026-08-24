@@ -1,4 +1,4 @@
-import type { DealCardData } from "./types";
+import type { DealCardComentario, DealCardData } from "./types";
 
 /**
  * Exemplos do Card do Negócio — só para a rota de visualização.
@@ -11,6 +11,51 @@ import type { DealCardData } from "./types";
  *   - o negócio SEM VALOR é 98,9% deles — `sale_value` existe em 1,1%;
  *   - o negócio com UMA movimentação só é 91% deles (média 1,16).
  */
+
+/**
+ * Comentários da bancada de desenho.
+ *
+ * Os três casos que o bloco precisa aguentar e que só aparecem juntos em base
+ * de verdade: um comentário deste negócio, um do LEAD (sem vínculo, herdado de
+ * antes de a coluna existir — 100% dos 2.885 de prod são assim) e um escrito em
+ * OUTRO negócio da mesma pessoa, que é o único que ganha selo.
+ */
+export const COMENTARIOS_EXEMPLO: DealCardComentario[] = [
+  {
+    id: "c1",
+    corpo:
+      "Comprador pediu para refazer a proposta com prazo de 30 dias em vez de 15. Disse que aprova ainda esta semana se o prazo entrar.",
+    autor: "Luiza Andrade",
+    autorAvatar: null,
+    criadoEm: "2026-08-22T17:32:00.000Z",
+    editadoEm: null,
+    deOutroNegocio: null,
+    podeEditar: true,
+    podeApagar: true,
+  },
+  {
+    id: "c2",
+    corpo: "Falar depois das 15h — antes disso ele está na fábrica e não atende.",
+    autor: "Marcos Teixeira",
+    autorAvatar: null,
+    criadoEm: "2026-08-19T12:05:00.000Z",
+    editadoEm: "2026-08-19T12:11:00.000Z",
+    deOutroNegocio: null,
+    podeEditar: false,
+    podeApagar: false,
+  },
+  {
+    id: "c3",
+    corpo: "Já comprou a linha básica em janeiro e ficou satisfeito. Vale puxar o histórico na conversa.",
+    autor: "Marcos Teixeira",
+    autorAvatar: null,
+    criadoEm: "2026-06-04T14:20:00.000Z",
+    editadoEm: null,
+    deOutroNegocio: "Primeira compra",
+    podeEditar: false,
+    podeApagar: false,
+  },
+];
 
 const ETAPAS_ORCAMENTOS = [
   { chave: "orcamento", chaveEntry: "orcamento", nome: "Orçamento", papel: "aberto" as const },

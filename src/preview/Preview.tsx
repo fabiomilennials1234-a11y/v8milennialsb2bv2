@@ -8,6 +8,7 @@ import {
 } from "@/modules/leads/components/lead-card/fixtures";
 import { DealCard } from "@/modules/leads/components/deal-card/DealCard";
 import {
+  COMENTARIOS_EXEMPLO,
   NEGOCIO_ESTAGNADO,
   NEGOCIO_MAGRO,
   NEGOCIO_GANHO,
@@ -98,7 +99,13 @@ export function Preview() {
                 onAbrirFicha={() => undefined}
               />
               <div className="flex min-w-0 flex-1 flex-col">
-                <DealCard negocio={atual.dado as Parameters<typeof DealCard>[0]["negocio"]} />
+                {/* O negócio "magro" abre sem comentário de propósito: é o
+                    caso majoritário e é onde o estado vazio precisa ser bom. */}
+                <DealCard
+                  negocio={atual.dado as Parameters<typeof DealCard>[0]["negocio"]}
+                  comentarios={atual.chave === "neg-magro" ? [] : COMENTARIOS_EXEMPLO}
+                  onComentar={() => undefined}
+                />
               </div>
             </div>
           )}

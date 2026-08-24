@@ -4,11 +4,12 @@ import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { LeadCardDeals } from "../lead-card/LeadCardDeals";
 import { DealCardActivities } from "./DealCardActivities";
+import { DealCardComments } from "./DealCardComments";
 import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
 import { DealCardMoney } from "./DealCardMoney";
 import { contaDoNegocio } from "./conta-do-negocio";
-import type { DealCardData } from "./types";
+import type { DealCardComentario, DealCardData } from "./types";
 
 /**
  * O Card do Negócio — a coluna DIREITA do painel, no formato do print DataCrazy.
@@ -180,6 +181,11 @@ export function DealCard({
   onNewDeal,
   onAdicionarProduto,
   movendo,
+  comentarios = [],
+  onComentar,
+  onEditarComentario,
+  onApagarComentario,
+  comentando,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
@@ -190,6 +196,19 @@ export function DealCard({
   onNewDeal?: () => void;
   onAdicionarProduto?: () => void;
   movendo?: string | null;
+  /**
+   * ── Comentários entram por FORA de `negocio` ──────────────────────────
+   * Eles não vêm de `useDealCardData`: têm consulta e chave de cache própria
+   * (`["lead-comments", leadId]`), que é o que faz comentar/editar/apagar
+   * refletir na hora sem refazer o painel inteiro. Enfiá-los em `DealCardData`
+   * casaria as duas invalidações e um comentário passaria a custar uma
+   * releitura de etapas, mediana e produtos.
+   */
+  comentarios?: DealCardComentario[];
+  onComentar?: (texto: string) => void | Promise<void>;
+  onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
+  onApagarComentario?: (id: string) => void | Promise<void>;
+  comentando?: boolean;
 }) {
   const [aba, setAba] = useState<Aba>("negocio");
   const [subAba, setSubAba] = useState<SubAba>("pipeline");
@@ -515,6 +534,27 @@ export function DealCard({
                   )}
                 />
               )}
+            </div>
+
+            {/* Comentários — bloco FIXO no pé da aba, não uma quarta sub-aba.
+                A escolha é do dono do produto (24/08) e tem precedente medido:
+                `leads.notes` está preenchido em 74,9% dos leads e `lead_comments`
+                em 4,4%, e a diferença mais provável entre os dois nunca foi
+                preferência por texto solto — é que a nota estava na cara e o
+                comentário atrás de uma aba. Repetir a aba aqui seria repetir o
+                experimento sabendo o resultado.
+
+                Ele fica DEPOIS do dinheiro de propósito: quem abre o negócio
+                abre para decidir, e o que decide (tempo, valor, etapa, produto)
+                tem de vir antes da conversa sobre a decisão. */}
+            <div className="border-t border-border pt-5">
+              <DealCardComments
+                comentarios={comentarios}
+                onComentar={onComentar}
+                onEditar={onEditarComentario}
+                onApagar={onApagarComentario}
+                enviando={comentando}
+              />
             </div>
           </div>
         )}

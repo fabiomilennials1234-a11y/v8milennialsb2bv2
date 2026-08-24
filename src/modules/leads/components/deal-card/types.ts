@@ -112,6 +112,37 @@ export interface DealCardActivity {
   concluida: boolean;
 }
 
+/**
+ * Uma linha de `lead_comments` — o bloco "Comentários" do painel.
+ *
+ * ── POR QUE ELE NÃO É A ANOTAÇÃO ──────────────────────────────────────────
+ * `pipeline_entries.notes` é um campo só, sobrescrevível, sem autor e sem data:
+ * serve para "o que este negócio precisa lembrar", e quem escreve depois apaga
+ * quem escreveu antes. Comentário é o oposto — é append-only, tem autor, tem
+ * hora e tem histórico. Os dois convivem no mesmo painel porque respondem a
+ * perguntas diferentes: um é o estado, o outro é a conversa.
+ *
+ * ── O QUE `deOutroNegocio` RESOLVE ────────────────────────────────────────
+ * 4.948 dos 40.903 leads de prod têm mais de um negócio. Sem o selo, um
+ * comentário escrito na negociação de setembro apareceria dentro do upsell de
+ * dezembro sem nada dizendo de onde veio — e a leitura mais natural ("isto foi
+ * dito sobre ESTE negócio") seria falsa. `null` quer dizer "não precisa de
+ * selo": ou nasceu aqui, ou é do lead e vale para todos.
+ */
+export interface DealCardComentario {
+  id: string;
+  corpo: string;
+  autor: string;
+  autorAvatar: string | null;
+  /** ISO. A lista desce do mais recente para o mais antigo. */
+  criadoEm: string;
+  editadoEm: string | null;
+  /** Título do negócio em que foi escrito, quando NÃO é o negócio aberto. */
+  deOutroNegocio: string | null;
+  podeEditar: boolean;
+  podeApagar: boolean;
+}
+
 /** Uma linha de `deal_items` — os produtos do negócio. */
 export interface DealCardItem {
   id: string;
