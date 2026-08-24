@@ -9,7 +9,7 @@
  * the list envelope with no cursor (catalogs are bounded).
  */
 import type { ApiRouteContext } from "../router.ts";
-import { apiError, apiList } from "../responses.ts";
+import { apiError, apiList, apiResource } from "../responses.ts";
 
 interface RpcClient {
   rpc: (
@@ -70,4 +70,50 @@ export async function listPipelines(ctx: ApiRouteContext): Promise<Response> {
   return apiList(filtrados, null, ctx.cors);
 }
 export const listTags = (ctx: ApiRouteContext) => catalog(ctx, "api_list_tags");
+/**
+ * Membros da organização, para preencher os campos de responsável.
+ *
+ * Uma lista só, de propósito: o Torque não marca no membro quem é pré-venda e
+ * quem é vendas — isso é decidido por Lead, e a mesma pessoa pode ser um num
+ * Lead e outro no seguinte. `job_title` é texto livre e serve como dica, não
+ * como filtro. É a mesma lista que a tela usa nos dois campos.
+ */
+export const listTeamMembers = (ctx: ApiRouteContext) => catalog(ctx, "api_list_team_members");
 export const listCustomFields = (ctx: ApiRouteContext) => catalog(ctx, "api_list_custom_fields");
+
+/**
+ * `POST /custom-fields` — cadastra um campo personalizado de Lead.
+ *
+ * Idempotente por nome, ignorando caixa: pedir um campo que já existe devolve o
+ * existente com `created: false` e 200, em vez de criar "Faturamento" ao lado de
+ * "faturamento". Um cenário que roda mil vezes não pode multiplicar a estrutura
+ * da organização.
+ */
+export async function createCustomField(ctx: ApiRouteContext): Promise<Response> {
+  let body: Record<string, unknown>;
+  try {
+    body = await ctx.req.json() as Record<string, unknown>;
+  } catch {
+    return apiError(400, "invalid_body", "Corpo deve ser um objeto JSON", ctx.cors);
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return apiError(400, "invalid_body", "Corpo deve ser um objeto JSON", ctx.cors);
+  }
+
+  const supabase = ctx.supabase as RpcClient;
+  const { data, error } = await supabase.rpc("api_create_custom_field", {
+    p_org: ctx.organizationId,
+    p_field_name: body.field_name ?? null,
+    p_field_type: body.field_type ?? "text",
+    p_field_options: body.field_options ?? null,
+    p_is_required: body.is_required ?? false,
+  });
+  if (error) return apiError(500, "internal_error", "Erro ao criar campo", ctx.cors);
+
+  const r = (data ?? {}) as { ok?: boolean; code?: string; message?: string; created?: boolean; field?: unknown };
+  if (!r.ok) {
+    return apiError(422, r.code ?? "invalid_request", r.message ?? "Campo inválido", ctx.cors);
+  }
+  // 201 só quando criou de verdade — replay devolve 200, como no resto da API.
+  return apiResource({ ...(r.field as Record<string, unknown>), created: r.created === true }, ctx.cors, r.created ? 201 : 200);
+}

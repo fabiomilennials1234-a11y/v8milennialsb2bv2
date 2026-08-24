@@ -188,3 +188,38 @@ Deno.test("putCustomFields — 400 when body is not an object", async () => {
   const c = ctx("PUT", "https://x/api/v1/leads/l-1/custom-fields", [1, 2], { data: { ok: true } });
   assertEquals((await putCustomFields(c)).status, 400);
 });
+
+// ── create_missing ──────────────────────────────────────────────────────────
+//
+// O caminho do integrador é o inverso do nosso: ele tem o valor na mão e
+// descobre no envio que o campo não estava cadastrado. Com `create_missing=true`
+// o campo nasce como `text` em vez de 422 — mas continua opt-in, para que
+// estrutura não apareça por integração em quem não pediu.
+
+Deno.test("putCustomFields — create_missing=true usa a RPC que cria o campo ausente", async () => {
+  const calls: RpcCall[] = [];
+  const c = ctx("PUT", "https://x/api/v1/leads/l-1/custom-fields?create_missing=true",
+    { novo_campo: "x" }, { data: { ok: true, created_fields: ["novo_campo"] } }, calls);
+  const res = await putCustomFields(c);
+  assertEquals(calls[0].name, "api_set_custom_fields_creating");
+  assertEquals(res.status, 200);
+});
+
+Deno.test("putCustomFields — sem o parâmetro, campo desconhecido continua sendo 422", async () => {
+  const calls: RpcCall[] = [];
+  const c = ctx("PUT", "https://x/api/v1/leads/l-1/custom-fields", { ghost: "x" },
+    { data: { ok: false, code: "unknown_field", unknown_fields: ["ghost"] } }, calls);
+  const res = await putCustomFields(c);
+  assertEquals(calls[0].name, "api_set_custom_fields");
+  assertEquals(res.status, 422);
+});
+
+Deno.test("putCustomFields — só o literal 'true' liga a criação", async () => {
+  for (const v of ["1", "yes", "false"]) {
+    const calls: RpcCall[] = [];
+    const c = ctx("PUT", `https://x/api/v1/leads/l-1/custom-fields?create_missing=${v}`,
+      { x: "1" }, { data: { ok: true } }, calls);
+    await putCustomFields(c);
+    assertEquals(calls[0].name, "api_set_custom_fields", `valor ${v} não deveria criar`);
+  }
+});

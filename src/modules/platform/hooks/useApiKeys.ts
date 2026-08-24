@@ -46,29 +46,40 @@ export function useCreateApiKey() {
       rate_limit_per_minute?: number;
       expires_at?: string;
     }) => {
+      // Escopos, limite e validade vão no MESMO chamado. O padrão anterior era
+      // criar e depois `UPDATE api_keys SET scopes`, do lado do cliente — e a
+      // RLS filtrava esse UPDATE em silêncio para quem é master sem vínculo
+      // ativo na organização: o supabase-js devolve sucesso com zero linhas
+      // afetadas. A chave nascia com o default da coluna e o erro só aparecia
+      // depois, como 403 na integração.
       const { data, error } = await supabase.rpc("generate_api_key", {
         p_org_id: organizationId!,
         p_name: input.name,
         p_created_by: user!.id,
+        p_scopes: input.scopes ?? null,
+        p_rate_limit_per_minute: input.rate_limit_per_minute ?? null,
+        p_expires_at: input.expires_at ?? null,
       });
       if (error) throw error;
 
-      const result = data as { key_id: string; raw_key: string; prefix: string };
+      const result = data as {
+        key_id: string;
+        raw_key: string;
+        prefix: string;
+        scopes: string[];
+      };
 
-      const hasCustomConfig =
-        input.scopes || input.rate_limit_per_minute || input.expires_at;
-      if (hasCustomConfig) {
-        const { error: updateError } = await (supabase.from as any)("api_keys")
-          .update({
-            ...(input.scopes && { scopes: input.scopes }),
-            ...(input.rate_limit_per_minute && { rate_limit_per_minute: input.rate_limit_per_minute }),
-            ...(input.expires_at && { expires_at: input.expires_at }),
-          })
-          .eq("id", result.key_id);
-        if (updateError) throw updateError;
+      // A função devolve o que FICOU gravado. Se divergir do pedido, quem criou
+      // precisa saber agora — não na primeira chamada que tomar 403.
+      const pedidos = input.scopes ?? [];
+      const faltando = pedidos.filter((s) => !(result.scopes ?? []).includes(s));
+      if (faltando.length > 0) {
+        throw new Error(
+          `A chave foi criada, mas sem os escopos: ${faltando.join(", ")}. Fale com o suporte antes de usá-la.`,
+        );
       }
 
-      return { id: result.key_id, key: result.raw_key };
+      return { id: result.key_id, key: result.raw_key, scopes: result.scopes ?? [] };
     },
     onSuccess: () => {
       toast.success("API key criada — copie agora, não será exibida novamente");

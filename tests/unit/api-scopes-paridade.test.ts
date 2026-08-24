@@ -47,6 +47,16 @@ describe("escopos de API — tela e backend concordam", () => {
     expect(tela).toContain("deal:write");
   });
 
+  it("a tela oferece TODOS os escopos do backend — nenhum fica sem caixa para marcar", () => {
+    // A direção que faltava. O teste original só barrava escopo inventado na
+    // tela; escopo novo no backend passava despercebido, e o cliente ficava sem
+    // como conceder uma permissão que existe — foi o que aconteceu com
+    // `deal:write`, e o sintoma foi 403 no Make.
+    const tela = new Set(escoposDaTela());
+    const ausentes = escoposDoBackend().filter((s) => !tela.has(s));
+    expect(ausentes, "escopo existe no backend e a tela não deixa marcar").toEqual([]);
+  });
+
   it("controle: os dois lados foram lidos de verdade", () => {
     expect(escoposDoBackend().length).toBeGreaterThan(5);
     expect(escoposDaTela().length).toBeGreaterThan(5);
