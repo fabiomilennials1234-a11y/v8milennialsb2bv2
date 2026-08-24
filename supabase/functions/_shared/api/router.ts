@@ -40,6 +40,8 @@ export interface ApiAuthResult {
   scopes?: string[];
   rateLimitPerMinute?: number;
   error?: string;
+  /** Chave boa, assinatura bloqueada — vira 402, não 401. */
+  subscriptionBlocked?: boolean;
 }
 
 export interface RateLimitResult {
@@ -75,6 +77,16 @@ export async function handleApiRequest(
   }
 
   const auth = await deps.authenticate(req);
+  if (auth.subscriptionBlocked) {
+    // 402, não 401: a chave é válida. Devolver "unauthorized" faria o integrador
+    // rotacionar chave atrás de um problema que é de cobrança.
+    return apiError(
+      402,
+      "subscription_blocked",
+      auth.error ?? "Assinatura da organização suspensa",
+      cors,
+    );
+  }
   if (!auth.valid) {
     return apiError(401, "unauthorized", auth.error ?? "API key inválida", cors);
   }

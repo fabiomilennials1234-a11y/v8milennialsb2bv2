@@ -50,6 +50,12 @@ Deno.serve(withErrorBoundary('partner-webhook', async (req) => {
 
   // --- Validate API key ---
   const auth = await validateApiKey(supabase, req);
+  if (auth.subscriptionBlocked) {
+    return new Response(JSON.stringify({ error: auth.error }), {
+      status: 402,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
   if (!auth.valid) {
     return new Response(JSON.stringify({ error: auth.error }), {
       status: 401,
