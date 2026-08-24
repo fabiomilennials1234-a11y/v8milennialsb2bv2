@@ -3,6 +3,8 @@ import { routes } from "./routes.ts";
 import { matchRoute } from "../_shared/api/router.ts";
 import { searchLeads } from "../_shared/api/routes/leads.ts";
 import { createLead } from "../_shared/api/routes/leads-create.ts";
+import { createDeal } from "../_shared/api/routes/deals-create.ts";
+import { API_SCOPES, hasScope } from "../_shared/api/scopes.ts";
 
 // ── A tabela de rotas ──────────────────────────────────────────
 //
@@ -30,4 +32,22 @@ Deno.test("routes — POST /leads casa a criação, com escopo de escrita", () =
   const m = matchRoute("POST", "/api/v1/leads", routes);
   assertEquals(m?.route.handler, createLead);
   assertEquals(m?.route.scope, "lead:write");
+});
+
+// ── Negócio ────────────────────────────────────────────────────────────────
+
+Deno.test("routes — POST /deals casa a abertura de Negócio, com escopo próprio", () => {
+  const m = matchRoute("POST", "/api/v1/deals", routes);
+  assertEquals(m?.route.handler, createDeal);
+  assertEquals(m?.route.scope, "deal:write");
+});
+
+// `deal:write` NÃO pode ser satisfeito por `lead:write`: são recursos distintos,
+// e uma chave de parceiro com permissão de editar pessoa não deve poder abrir
+// venda no funil.
+Deno.test("scopes — deal:write não é concedido por lead:write", () => {
+  assertEquals(hasScope(["lead:write"], "deal:write"), false);
+  assertEquals(hasScope(["deal:write"], "deal:write"), true);
+  assertEquals(API_SCOPES.includes("deal:read" as never), true);
+  assertEquals(API_SCOPES.includes("deal:write" as never), true);
 });

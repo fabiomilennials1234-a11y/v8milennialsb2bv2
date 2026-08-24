@@ -13,6 +13,11 @@ export const API_SCOPES = [
   "pipeline:read",
   "metadata:read", // tags + custom-fields catalogs
   "webhook:read",
+  // ADR-0030: Negócio é recurso próprio, com escopo próprio. `lead:write`
+  // deliberadamente NÃO concede `deal:write` — permissão de editar a pessoa não
+  // é permissão de abrir venda no funil dela.
+  "deal:read",
+  "deal:write",
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];

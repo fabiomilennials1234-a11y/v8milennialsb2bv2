@@ -13,6 +13,7 @@ import type { ApiRoute } from "../_shared/api/router.ts";
 import { getLead, getLeadTimeline, listLeads, searchLeads } from "../_shared/api/routes/leads.ts";
 import { listCustomFields, listPipelines, listTags } from "../_shared/api/routes/catalogs.ts";
 import { createLead } from "../_shared/api/routes/leads-create.ts";
+import { createDeal } from "../_shared/api/routes/deals-create.ts";
 import {
   addLeadTags,
   moveLeadStage,
@@ -49,6 +50,7 @@ export const routes: ApiRoute[] = [
   { method: "GET", pattern: "/api/v1/custom-fields", scope: "metadata:read", handler: listCustomFields },
   // P2 — writes (lead:write)
   { method: "POST", pattern: "/api/v1/leads", scope: "lead:write", handler: createLead },
+  { method: "POST", pattern: "/api/v1/deals", scope: "deal:write", handler: createDeal },
   { method: "PATCH", pattern: "/api/v1/leads/{id}", scope: "lead:write", handler: patchLead },
   { method: "POST", pattern: "/api/v1/leads/{id}/stage", scope: "lead:write", handler: moveLeadStage },
   { method: "POST", pattern: "/api/v1/leads/{id}/tags", scope: "lead:write", handler: addLeadTags },
