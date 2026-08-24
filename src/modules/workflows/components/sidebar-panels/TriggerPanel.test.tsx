@@ -35,6 +35,14 @@ vi.mock("./CampaignSelectorField", () => ({
   CampaignSelectorField: () => null,
 }));
 
+// A categoria "Negócios" do picker é gateada pela feature `deals` da org
+// (o painel chama `useOrgFeatures`). Ligada por padrão; um teste abaixo desliga.
+const mockHasFeature = vi.fn((key: string) => key === "deals");
+
+vi.mock("@/contexts/OrgFeaturesContext", () => ({
+  useOrgFeatures: () => ({ hasFeature: mockHasFeature }),
+}));
+
 import { TriggerPanel } from "./TriggerPanel";
 import type { TriggerNodeData } from "@/types/workflow";
 
@@ -84,6 +92,7 @@ describe("TriggerPanel — lead_replied", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
   });
 
   it("mostra os três campos do trigger", () => {
@@ -166,5 +175,35 @@ describe("TriggerPanel — lead_replied", () => {
     const cfg = lastConfig(onUpdate);
     expect(cfg.contains_text).toBe("orçamento");
     expect(cfg.pipeline_ids).toEqual([QUALIFICACAO]);
+  });
+  // ── Gate da categoria "Negócios" (feature `deals` da org) ──────────────
+  // O painel filtra TRIGGER_CATEGORIES por `hasFeature("deals")`. Abrir o
+  // Select do Radix em jsdom exige os dublês de ponteiro abaixo — jsdom não
+  // implementa Pointer Events nem scrollIntoView, e o Radix chama os dois.
+
+  function openTriggerTypeSelect() {
+    const proto = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+    proto.hasPointerCapture = () => false;
+    proto.setPointerCapture = () => {};
+    proto.releasePointerCapture = () => {};
+    proto.scrollIntoView = () => {};
+    const combobox = screen
+      .getByText("Tipo de Trigger")
+      .parentElement!.querySelector("[role='combobox']")!;
+    // Radix abre pelo teclado sem depender de Pointer Events, que jsdom não tem.
+    fireEvent.keyDown(combobox, { key: "Enter" });
+  }
+
+  it("org com a feature deals vê a categoria Negócios no picker", () => {
+    renderPanel();
+    openTriggerTypeSelect();
+    expect(screen.getByText("Negócios")).toBeInTheDocument();
+  });
+
+  it("org sem a feature deals não vê a categoria Negócios no picker", () => {
+    mockHasFeature.mockImplementation(() => false);
+    renderPanel();
+    openTriggerTypeSelect();
+    expect(screen.queryByText("Negócios")).not.toBeInTheDocument();
   });
 });

@@ -330,6 +330,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* /turbo — Turbo é grupo da lateral (Copilot + Automações), não tela.
+          O item pai navega E expande no mesmo clique (SidebarNavItem), então o
+          path do grupo precisa de destino: sem esta rota o clique cai em 404.
+          Vai pra Automações porque é o que "Turbo" nomeia no produto. */}
+      <Route
+        path="/turbo"
+        element={<Navigate to="/automacoes" replace />}
+      />
       {/* /campanhas — Kanban de campanhas legado RETIRADO; redireciona pros funis (links antigos) */}
       <Route
         path="/campanhas"
