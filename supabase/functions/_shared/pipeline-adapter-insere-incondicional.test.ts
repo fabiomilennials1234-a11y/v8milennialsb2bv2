@@ -1,16 +1,21 @@
 /**
- * O gate de `deal_manual_only` dentro de `upsertPipeEntryDetailed`.
+ * `upsertPipeEntryDetailed` cria posição no funil SEM consultar política por
+ * organização.
  *
- * ADR-0023 decisão 3 proíbe CRIAR Negócio por ingest/integração/automação — não
- * proíbe MOVER. Toda a correção mora nessa distinção, e é ela que estes testes
- * travam: com a flag ligada, o ramo de INSERT some e o de UPDATE continua
- * intacto. Se alguém "simplificar" o gate para o topo da função, o Copilot para
- * de mover cards que já existem e ninguém descobre por uma tela.
+ * Esta suíte nasceu travando o gate de `deal_manual_only` (ADR-0023 decisão 3).
+ * O gate foi removido em #1774 — pelo ADR-0030 §2 quem autoriza a criação é a
+ * ferramenta que chamou (Workflow ativo, chave de API escopada), não uma flag na
+ * organização. Os casos continuam aqui, virados do avesso: agora eles provam que
+ * a criação é INCONDICIONAL, e ficam vermelhos se alguém reintroduzir uma leitura
+ * de flag no caminho do INSERT.
+ *
+ * O que NÃO mudou, e a suíte segue guardando: a distinção entre criar e mover.
+ * O ramo de UPDATE nunca dependeu de política, e continua movendo card que já
+ * existe.
  */
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { upsertPipeEntry, upsertPipeEntryDetailed } from "./pipeline-adapter.ts";
-import { __resetDealPolicyCache } from "./deal-policy.ts";
 
 type Row = Record<string, unknown>;
 
@@ -20,7 +25,14 @@ interface QueryResult {
 }
 
 interface FakeState {
-  manualOnly: boolean;
+  /** `true` se o adapter consultou `organizations` — não deve consultar. */
+  leuOrganizations?: boolean;
+  /**
+   * O que `organizations.feature_flags` devolve. Fica no fake de propósito: é
+   * assim que se prova que o adapter NÃO lê mais a flag — mesmo com
+   * `deal_manual_only: true` na linha da org, o INSERT acontece.
+   */
+  flagsDaOrg: Row;
   entries: Row[];
   inserted: Row[];
   updated: { id: string; payload: Row }[];
@@ -41,10 +53,13 @@ interface FakeBuilder {
 }
 
 /**
- * Fake do PostgREST cobrindo as três tabelas do caminho: `pipelines`
- * (resolvePipelineId), `organizations` (isDealManualOnly) e `pipeline_entries`
- * (leitura + escrita). `readPipeEntries` termina em `.limit()`, o update em
- * `.eq()`, e o insert em `.single()` — daí o builder ser encadeável E aguardável.
+ * Fake do PostgREST cobrindo o caminho: `pipelines` (resolvePipelineId),
+ * `organizations` (ninguém deveria mais tocar) e `pipeline_entries` (leitura +
+ * escrita). `readPipeEntries` termina em `.limit()`, o update em `.eq()`, e o
+ * insert em `.single()` — daí o builder ser encadeável E aguardável.
+ *
+ * `state.leuOrganizations` registra se o adapter foi buscar a linha da org: é o
+ * controle positivo da remoção do gate.
  */
 function fakeSupabase(state: FakeState): SupabaseClient {
   const build = (table: string): FakeBuilder => {
@@ -55,10 +70,8 @@ function fakeSupabase(state: FakeState): SupabaseClient {
     const resolve = (): QueryResult => {
       if (table === "pipelines") return { data: { id: "pipe-1" }, error: null };
       if (table === "organizations") {
-        return {
-          data: { feature_flags: state.manualOnly ? { deal_manual_only: true } : {} },
-          error: null,
-        };
+        state.leuOrganizations = true;
+        return { data: { feature_flags: state.flagsDaOrg }, error: null };
       }
       if (table === "pipeline_entries") {
         if (mode === "insert") {
@@ -104,44 +117,54 @@ function fakeSupabase(state: FakeState): SupabaseClient {
 }
 
 function makeState(over: Partial<FakeState> = {}): FakeState {
-  return { manualOnly: false, entries: [], inserted: [], updated: [], ...over };
+  return { flagsDaOrg: {}, entries: [], inserted: [], updated: [], leuOrganizations: false, ...over };
 }
 
 /**
  * `resolvePipelineId` tem cache module-level por `${orgId}:${slug}`. Cada teste
- * usa uma org distinta para não herdar o pipeline resolvido do teste anterior —
- * e `__resetDealPolicyCache` zera o cache da flag pelo mesmo motivo.
+ * usa uma org distinta para não herdar o pipeline resolvido do teste anterior.
  */
 function org(name: string): string {
-  __resetDealPolicyCache();
   return `org-${name}`;
 }
 
-Deno.test("flag OFF + sem entry → CRIA o Negócio (comportamento histórico intacto)", async () => {
+Deno.test("sem entry → CRIA a posição no funil", async () => {
   const state = makeState();
   const result = await upsertPipeEntryDetailed(fakeSupabase(state), {
-    leadId: "lead-1", orgId: org("off-cria"), slug: "whatsapp", stageKey: "novo",
+    leadId: "lead-1", orgId: org("cria"), slug: "whatsapp", stageKey: "novo",
   });
   assertEquals(result.status, "created");
   assertEquals(state.inserted.length, 1);
 });
 
-Deno.test("flag ON + sem entry → NÃO cria, e diz por quê", async () => {
-  const state = makeState({ manualOnly: true });
+Deno.test("#1774: org com deal_manual_only ainda ligada na linha → CRIA do mesmo jeito", async () => {
+  // O gate morreu. Se voltar, este caso fica vermelho — é a razão de a flag
+  // continuar no fake.
+  const state = makeState({ flagsDaOrg: { deal_manual_only: true } });
   const result = await upsertPipeEntryDetailed(fakeSupabase(state), {
-    leadId: "lead-1", orgId: org("on-nao-cria"), slug: "whatsapp", stageKey: "novo",
+    leadId: "lead-1", orgId: org("flag-ignorada"), slug: "whatsapp", stageKey: "novo",
   });
-  assertEquals(result.status, "skipped_deal_manual_only");
-  assertEquals(state.inserted.length, 0);
+  assertEquals(result.status, "created");
+  assertEquals(state.inserted.length, 1);
 });
 
-Deno.test("flag ON + entry EXISTENTE → move normalmente (decisão 3 proíbe criar, não mover)", async () => {
+Deno.test("#1774: o adapter não consulta mais `organizations` no caminho do INSERT", async () => {
+  // Controle positivo da remoção: o fake grava a leitura. Uma query por lead num
+  // import de milhares de linhas era o custo que o cache de 30s existia para
+  // amortizar — sem gate, não há query nenhuma a amortizar.
+  const state = makeState();
+  await upsertPipeEntryDetailed(fakeSupabase(state), {
+    leadId: "lead-1", orgId: org("sem-query-de-org"), slug: "whatsapp", stageKey: "novo",
+  });
+  assertEquals(state.leuOrganizations, false);
+});
+
+Deno.test("entry EXISTENTE → move (criar e mover seguem sendo caminhos distintos)", async () => {
   const state = makeState({
-    manualOnly: true,
     entries: [{ id: "entry-1", lead_id: "lead-1", stage_key: "novo", closed_at: null, metadata: {} }],
   });
   const result = await upsertPipeEntryDetailed(fakeSupabase(state), {
-    leadId: "lead-1", orgId: org("on-move"), slug: "whatsapp", stageKey: "agendado",
+    leadId: "lead-1", orgId: org("move"), slug: "whatsapp", stageKey: "agendado",
   });
   assertEquals(result.status, "updated");
   assertEquals(state.updated.length, 1);
@@ -149,21 +172,11 @@ Deno.test("flag ON + entry EXISTENTE → move normalmente (decisão 3 proíbe cr
   assertEquals(state.inserted.length, 0);
 });
 
-Deno.test("upsertPipeEntry (assinatura fina) devolve null no skip — nunca um id falso", async () => {
-  const state = makeState({ manualOnly: true });
-  // 34 call sites usam esta forma. Devolver sentinela em vez de null faria
-  // `pipe_proposta_items.pipe_proposta_id` apontar para nada.
-  const id = await upsertPipeEntry(fakeSupabase(state), {
-    leadId: "lead-1", orgId: org("on-null"), slug: "propostas", stageKey: "enviada",
-  });
-  assertEquals(id, null);
-  assertEquals(state.inserted.length, 0);
-});
-
-Deno.test("upsertPipeEntry devolve o id quando cria de verdade", async () => {
+Deno.test("upsertPipeEntry (assinatura fina) devolve o id quando cria", async () => {
   const state = makeState();
   const id = await upsertPipeEntry(fakeSupabase(state), {
-    leadId: "lead-1", orgId: org("off-id"), slug: "confirmacao", stageKey: "reuniao_marcada",
+    leadId: "lead-1", orgId: org("id"), slug: "confirmacao", stageKey: "reuniao_marcada",
   });
   assertEquals(id, "entry-nova");
+  assertEquals(state.inserted.length, 1);
 });

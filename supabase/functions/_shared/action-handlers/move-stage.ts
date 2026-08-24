@@ -1,7 +1,6 @@
 import type { ActionInput, ActionResult } from "./types.ts";
 import { upsertPipeEntry, upsertPipeEntryDetailed } from "../pipeline-adapter.ts";
 import type { PipeSlug } from "../pipeline-adapter.ts";
-import { isDealManualOnly } from "../deal-policy.ts";
 
 const STANDARD_PIPES = ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao", "campanha"];
 
@@ -108,15 +107,6 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
       const result = await upsertPipeEntryDetailed(supabase, {
         leadId, orgId: organizationId, slug: targetPipe as PipeSlug, stageKey: finalStage,
       });
-      // ADR-0023 decisão 3: sem negócio aberto e com `deal_manual_only` ON, não
-      // há o que mover. Não é falha do workflow — é a política da org.
-      if (result.status === "skipped_deal_manual_only") {
-        return {
-          success: true,
-          message: `Lead não movido: organização abre negócio só por clique humano e não há negócio aberto em ${targetPipe}.`,
-          data: { skipped: true, reason: "deal_manual_only" },
-        };
-      }
       if (result.status !== "created" && result.status !== "updated") {
         return { success: false, error: `Falha ao atualizar pipeline_entries para ${targetPipe}/${finalStage}` };
       }
@@ -163,18 +153,6 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
           .from("custom_pipe_entries")
           .update({ stage_id: targetStage, stage_changed_at: now })
           .eq("id", existingEntry.id);
-      } else if (await isDealManualOnly(supabase, organizationId)) {
-        // ADR-0023 decisão 3 — o adapter gateia `pipeline_entries`; este ramo é
-        // a outra tabela e precisa do mesmo gate, senão o funil customizado vira
-        // a porta dos fundos da política.
-        console.log(
-          `[move-stage] deal_manual_only ON em org=${organizationId}: NÃO criando Negócio no funil custom ${customPipelineId} para lead=${leadId}.`,
-        );
-        return {
-          success: true,
-          message: "Lead não movido: organização abre negócio só por clique humano e não há negócio aberto neste funil.",
-          data: { skipped: true, reason: "deal_manual_only" },
-        };
       } else {
         await supabase.from("custom_pipe_entries").insert({
           lead_id: leadId,
@@ -198,12 +176,6 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
             await supabase.from("custom_pipe_entries")
               .update({ stage_id: stageRow.target_stage_id, stage_changed_at: now })
               .eq("id", targetEntry.id);
-          } else if (await isDealManualOnly(supabase, organizationId)) {
-            // Auto-transição is_final_positive entre funis customizados. Sem
-            // negócio no destino, criar um seria automação abrindo Negócio.
-            console.log(
-              `[move-stage] deal_manual_only ON em org=${organizationId}: auto-transição para o funil custom ${stageRow.target_pipeline_id} NÃO cria Negócio para lead=${leadId}.`,
-            );
           } else {
             await supabase.from("custom_pipe_entries").insert({
               lead_id: leadId, organization_id: organizationId,
@@ -216,8 +188,7 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
           const transStage = stageRow.target_stage_key;
           if (transPipe === "whatsapp" || transPipe === "confirmacao" || transPipe === "propostas") {
             // SCRUM-202: espelho `leads.pipe_whatsapp` removido — o
-            // `upsertPipeEntry` abaixo já dispara o gatilho de sync. O gate de
-            // `deal_manual_only` mora dentro do adapter.
+            // `upsertPipeEntry` abaixo já dispara o gatilho de sync.
             await upsertPipeEntry(supabase, {
               leadId, orgId: organizationId, slug: transPipe as PipeSlug, stageKey: transStage,
             });

@@ -38,22 +38,12 @@ export async function duplicateToPipe(input: ActionInput): Promise<ActionResult>
     // SCRUM-202: espelho `leads.pipe_whatsapp` removido. O upsert bate direto em
     // `pipeline_entries` (depth 1) e `trg_sync_whatsapp_stage_to_lead` grava a
     // coluna com o mesmo valor.
-    // ADR-0023 decisão 3: se a org é manual-only e o lead não tem negócio no
-    // funil alvo, o adapter devolve `skipped_deal_manual_only` e nada é criado.
     const result = await upsertPipeEntryDetailed(supabase, {
       leadId,
       orgId: organizationId,
       slug: targetPipeType as PipeSlug,
       stageKey: targetPipeStage,
     });
-
-    if (result.status === "skipped_deal_manual_only") {
-      return {
-        success: true,
-        message: `Não duplicado para ${targetPipeType}/${targetPipeStage}: organização abre negócio só por clique humano.`,
-        data: { skipped: true, reason: "deal_manual_only" },
-      };
-    }
   }
 
   return { success: true, message: `Duplicated to ${targetPipeType}/${targetPipeStage}` };

@@ -16,7 +16,6 @@ import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } 
 import { successResponse, errorResponse } from "../_shared/response.ts";
 import { upsertPipeEntry, getPipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
-import { isDealManualOnly } from "../_shared/deal-policy.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare, checkRateLimitPersistent, getClientIdentifier, checkRateLimit, rateLimitedResponse } from "../_shared/auth.ts";
@@ -486,10 +485,9 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
       };
       // SCRUM-202: a semeadura da coluna legada `pipe_whatsapp` saiu daqui.
       // Quem a mantém é `trg_sync_whatsapp_stage_to_lead`, disparado pelo
-      // `upsertPipeEntry` logo abaixo. Com `deal_manual_only` ON não há entry, o
-      // gatilho não roda, e a coluna fica NULL — que é a verdade: lead na base,
-      // sem Negócio. (A migration 20270806000010 tira o `DEFAULT 'novo'` da
-      // coluna; sem ela o default gravaria "novo" e a coluna mentiria.)
+      // `upsertPipeEntry` logo abaixo. (A migration 20270806000010 tira o
+      // `DEFAULT 'novo'` da coluna; sem ela o default gravaria "novo" para lead
+      // que ainda não entrou em funil nenhum, e a coluna mentiria.)
       if (payload.assigned_user_id) {
         insertData.sdr_id = payload.assigned_user_id;
         insertData.closer_id = payload.assigned_user_id;
@@ -732,7 +730,6 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     //      n8n recebia 200 com `place_in_pipe` ecoado e concluía que o lead foi
     //      posicionado. Silêncio aqui é exatamente o modo de falha que o ADR
     //      nomeia: "o webhook responde 200, o Lead é criado, só o card falta".
-    let dealManualOnlySkippedPipe = false;
 
     // Colocar lead em um pipe (funil) em etapa específica (ex: n8n, campanha de ads)
     if (payload.place_in_pipe?.pipe && payload.place_in_pipe?.stage) {
@@ -890,14 +887,6 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
             `[lead-webhook] Lead reconverteu em pipeline_entries(${pipeSlug}): "${existingEntry.stage_key}" → "${resolvedStageKey}".`
           );
         }
-      } else if (await isDealManualOnly(supabase, organizationId)) {
-        // Lead novo, sem card no funil pedido, e a org abre negócio só por
-        // clique. Não cria e não distribui — o lead fica na base, visível em
-        // Leads, esperando alguém decidir que há venda a perseguir.
-        dealManualOnlySkippedPipe = true;
-        console.log(
-          `[lead-webhook] deal_manual_only ON em org=${organizationId}: place_in_pipe(${pipeSlug}/${resolvedStageKey}) IGNORADO para lead=${leadId} (ADR-0023 decisão 3).`,
-        );
       } else {
         await upsertPipeEntry(supabase, {
           leadId,
@@ -1020,12 +1009,11 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     }
     if (payload.place_in_pipe) {
       responseBody.place_in_pipe = payload.place_in_pipe;
-      // Contrato explícito com quem integra: `place_in_pipe` ecoado NÃO quer
-      // dizer "posicionado". Ver ADR-0023 decisão 3.
-      responseBody.placed_in_pipe = !dealManualOnlySkippedPipe;
-      if (dealManualOnlySkippedPipe) {
-        responseBody.place_in_pipe_skipped_reason = "deal_manual_only";
-      }
+      // Contrato com quem integra: `place_in_pipe` é o que foi pedido,
+      // `placed_in_pipe` é o que aconteceu. Desde #1774 não há política por
+      // organização que recuse o posicionamento, então este caminho sempre
+      // posiciona — o campo fica para não quebrar quem já o lê.
+      responseBody.placed_in_pipe = true;
     }
     if (payload.place_in_campaign) {
       responseBody.place_in_campaign = payload.place_in_campaign;
