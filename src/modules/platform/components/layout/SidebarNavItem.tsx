@@ -24,6 +24,15 @@ interface SidebarNavItemProps {
   onToggleExpand?: () => void;
   onLockedClick?: () => void;
   onHoverPrefetch?: () => void;
+  /**
+   * Troca o link por um botão: o item deixa de navegar e passa a acionar algo
+   * na própria tela. Usado pela Agenda, que abre painel sobreposto em vez de
+   * trocar de página. `active` continua vindo de fora — só que do estado do
+   * painel, não da rota.
+   */
+  onActivate?: () => void;
+  /** Espelha o estado do que `onActivate` abre, para leitor de tela. */
+  activateExpanded?: boolean;
   /** Conteúdo à direita do rótulo (contador, chip de data). */
   trailing?: React.ReactNode;
   /** Substitui o ícone — usado pela Agenda, que mostra o dia de hoje. */
@@ -61,6 +70,8 @@ export function SidebarNavItem({
   onToggleExpand,
   onLockedClick,
   onHoverPrefetch,
+  onActivate,
+  activateExpanded,
   trailing,
   leading,
   compact = false,
@@ -96,6 +107,20 @@ export function SidebarNavItem({
   if (locked) {
     row = (
       <button type="button" onClick={onLockedClick} className={rowClasses(false, compact)}>
+        {inner}
+      </button>
+    );
+  } else if (onActivate) {
+    row = (
+      <button
+        type="button"
+        onClick={onActivate}
+        aria-expanded={activateExpanded}
+        // Recolhida, o rótulo visível some e sobra um ícone mudo. O link tem o
+        // href pra se identificar; um botão não tem nada.
+        aria-label={item.label}
+        className={rowClasses(active, compact)}
+      >
         {inner}
       </button>
     );

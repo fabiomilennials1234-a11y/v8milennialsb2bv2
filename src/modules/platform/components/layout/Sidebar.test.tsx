@@ -1,4 +1,9 @@
-import { render, screen, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { Gauge, GitBranch, Send, Settings, Trophy, Wallet, Zap } from "lucide-react";
@@ -114,7 +119,11 @@ describe("Sidebar", () => {
     for (const label of ["Comando", "Chat", "Disparos", "Funis", "Carteira", "Turbo"]) {
       expect(screen.getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     }
-    expect(screen.getByRole("link", { name: /Agenda/ })).toBeInTheDocument();
+    // A Agenda é BOTÃO, não link: ela abre painel sobreposto por cima da tela
+    // atual em vez de navegar. A rota `/agenda` continua existindo para o
+    // celular e para link direto — ver `AgendaPanel`.
+    expect(screen.getByRole("button", { name: /Agenda/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Agenda/ })).not.toBeInTheDocument();
     expect(screen.getByText("Notificações")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Ajuda/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Pitstop/ })).toBeInTheDocument();
@@ -223,6 +232,32 @@ describe("Sidebar", () => {
 
   it("esconde a Agenda quando a permissão nega", () => {
     renderSidebar(makeModel({ agenda: null }));
+    expect(screen.queryByRole("button", { name: /Agenda/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Agenda/ })).not.toBeInTheDocument();
+  });
+
+  it("o botão da Agenda abre e fecha o painel, sem navegar", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    const botao = screen.getByRole("button", { name: /Agenda/ });
+    expect(botao).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(botao);
+    expect(screen.getByRole("button", { name: /Agenda/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    // O painel é `React.lazy`: o que se vê no primeiro paint é o fallback.
+    expect(await screen.findByLabelText("Atividades")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Agenda/ }));
+    expect(screen.getByRole("button", { name: /Agenda/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    // `AnimatePresence` mantém o painel montado durante a saída — esperar a
+    // remoção, e não afirmar ausência no mesmo tick.
+    await waitForElementToBeRemoved(() => screen.queryByLabelText("Atividades"));
   });
 });

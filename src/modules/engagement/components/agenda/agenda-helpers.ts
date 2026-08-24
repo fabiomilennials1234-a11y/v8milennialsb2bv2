@@ -465,3 +465,44 @@ export function normalizeGoogleEvents(
       };
     });
 }
+
+// ─── Painel sobreposto da Agenda ──────────────────────────────────────────────
+
+/**
+ * Faixa mínima da página de baixo que fica à mostra, em px. É o que separa
+ * "consultar a agenda" de "sair da página": abaixo disso a camada vira uma
+ * troca de tela disfarçada.
+ */
+const MIN_FAIXA_VISIVEL = 72;
+
+/** Proporção da referência do DataCrazy: painel na direita, página na esquerda. */
+const PROPORCAO_PAINEL = 0.65;
+
+/** Acima disto o painel para de crescer — calendário não ganha com 2000px. */
+const LARGURA_MAXIMA_PAINEL = 1280;
+
+/**
+ * Piso de sanidade. A lateral só é montada a partir de 768px, então o teto real
+ * nunca chega perto disto; existe para nunca renderizar painel de 0px.
+ */
+const LARGURA_MINIMA_PAINEL = 360;
+
+/**
+ * Largura do painel da Agenda, em px.
+ *
+ * Em CSS isto seria `width: min(65%, 1280px)` com
+ * `max-width: calc(100vw - <lateral> - 72px)`, e foi assim que nasceu. Virou
+ * número por uma razão medida: o jsdom **não parseia `min()`** (a propriedade
+ * some inteira) e **reescreve `calc(100vw - 248px - 72px)` como
+ * `calc(100vw - 72px + 248px)`** — com o sinal trocado. Cálculo que o teste não
+ * consegue ler é cálculo que ninguém protege, e este carrega a promessa da
+ * tela: a página de baixo nunca some.
+ */
+export function larguraDoPainel(
+  viewportWidth: number,
+  sidebarWidth: number,
+): number {
+  const teto = viewportWidth - sidebarWidth - MIN_FAIXA_VISIVEL;
+  const desejada = Math.min(viewportWidth * PROPORCAO_PAINEL, LARGURA_MAXIMA_PAINEL);
+  return Math.round(Math.max(Math.min(desejada, teto), LARGURA_MINIMA_PAINEL));
+}

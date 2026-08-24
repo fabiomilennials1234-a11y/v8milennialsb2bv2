@@ -89,7 +89,41 @@ const EVENTOS: UnifiedEvent[] = [
   }),
 ];
 
-/** Recria a composição da página dentro do contêiner do `<main>`. */
+/**
+ * A página que fica ATRÁS do painel. Não é enfeite: o ponto da tela é que ela
+ * continue legível, então a história precisa provar isso.
+ */
+function PaginaDeBaixo() {
+  return (
+    <div className="min-w-0 flex-1 px-6 py-6">
+      <h1 className="text-2xl font-bold">Dashboard</h1>
+      <p className="mt-1 text-muted-foreground">
+        Visão geral do seu desempenho e atividades
+      </p>
+      <div className="mt-6 grid grid-cols-2 gap-4">
+        {[
+          { rotulo: "Total criados", valor: "R$ 0,00", nota: "21 negócios" },
+          { rotulo: "Total ganhos", valor: "R$ 0,00", nota: "0 negócios" },
+        ].map((c) => (
+          <div key={c.rotulo} className="stat-card">
+            <p className="stat-card-label">{c.rotulo}</p>
+            <p className="stat-card-value">{c.valor}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{c.nota}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-lg border border-border bg-card p-4">
+        <p className="text-sm font-semibold">Dados diários</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Visualização por valor dos negócios
+        </p>
+        <div className="mt-4 h-40 rounded bg-muted/40" />
+      </div>
+    </div>
+  );
+}
+
+/** Recria a composição da tela dentro do painel sobreposto. */
 function TelaAtividades({
   eventos,
   admin,
@@ -111,10 +145,13 @@ function TelaAtividades({
     });
 
   return (
-    // Espelha `MainLayout.tsx` — padding e teto de largura da área principal.
-    <div className="min-h-screen bg-background">
-      <div className="mx-auto flex h-screen w-full max-w-[1600px] flex-col px-4 py-5 sm:px-6 sm:py-6 lg:px-10 lg:py-8 xl:px-12">
-        <div className="flex min-h-0 flex-1 flex-col gap-5">
+    // Espelha o painel sobreposto: lateral + página de baixo à mostra na
+    // esquerda, e a Agenda ocupando a direita.
+    <div className="relative flex h-screen bg-background">
+      <div className="w-[68px] shrink-0 border-r border-sidebar-border bg-sidebar" />
+      <PaginaDeBaixo />
+      <div className="absolute inset-y-0 right-0 flex w-[65%] min-w-[680px] max-w-[1280px] flex-col border-l border-border bg-card shadow-2xl">
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 py-5 lg:px-6 lg:py-6">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h1 className="text-2xl font-bold">Atividades</h1>
