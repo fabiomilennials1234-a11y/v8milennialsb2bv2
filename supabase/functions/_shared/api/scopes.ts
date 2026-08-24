@@ -22,6 +22,9 @@ export const API_SCOPES = [
   // não `metadata:read`: tags e campos personalizados são vocabulário, membros
   // são pessoas — nome e e-mail de quem trabalha na organização.
   "team:read",
+  // Criar campo personalizado é mexer na ESTRUTURA da organização, não gravar um
+  // dado. `metadata:read` continua sendo só leitura de catálogo.
+  "metadata:write",
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];

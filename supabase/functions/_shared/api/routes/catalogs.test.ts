@@ -132,3 +132,74 @@ Deno.test("pipelines — funil inexistente devolve lista vazia, não erro", asyn
   assertEquals(res.status, 200);
   assertEquals((await res.json()).data, []);
 });
+
+// ── POST /custom-fields ─────────────────────────────────────────────────────
+//
+// Criar campo é mexer na estrutura da organização. Um cenário que roda mil vezes
+// não pode multiplicar a estrutura — daí a idempotência por nome sem distinção
+// de caixa, verificada aqui pelo status e pelo campo `created`.
+
+import { createCustomField } from "./catalogs.ts";
+
+function ctxPost(body: unknown, rpcResult: { data?: unknown; error?: unknown }, calls: { name: string; args: Record<string, unknown> }[] = []): ApiRouteContext {
+  return {
+    req: new Request("https://x/api/v1/custom-fields", { method: "POST", body: JSON.stringify(body) }),
+    params: {},
+    organizationId: "org-1",
+    scopes: [],
+    supabase: {
+      rpc: (name: string, args: Record<string, unknown>) => {
+        calls.push({ name, args });
+        return Promise.resolve(rpcResult);
+      },
+    },
+    cors,
+  };
+}
+
+Deno.test("createCustomField — criou de verdade devolve 201 e created=true", async () => {
+  const calls: { name: string; args: Record<string, unknown> }[] = [];
+  const res = await createCustomField(ctxPost(
+    { field_name: "faturamento", field_type: "number" },
+    { data: { ok: true, created: true, field: { id: "f1", field_name: "faturamento", field_type: "number" } } },
+    calls,
+  ));
+  assertEquals(res.status, 201);
+  const body = await res.json();
+  assertEquals(body.created, true);
+  assertEquals(body.field_name, "faturamento");
+  assertEquals(calls[0].name, "api_create_custom_field");
+});
+
+Deno.test("createCustomField — já existia devolve 200 e created=false (não duplica)", async () => {
+  const res = await createCustomField(ctxPost(
+    { field_name: "Faturamento" },
+    { data: { ok: true, created: false, field: { id: "f1", field_name: "faturamento", field_type: "text" } } },
+  ));
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.created, false);
+  // Devolve o nome COMO ESTÁ no banco, não como foi pedido — quem chamou precisa
+  // saber com que grafia gravar os valores depois.
+  assertEquals(body.field_name, "faturamento");
+});
+
+Deno.test("createCustomField — tipo inválido vira 422 com o código do banco", async () => {
+  const res = await createCustomField(ctxPost(
+    { field_name: "x", field_type: "moeda" },
+    { data: { ok: false, code: "invalid_type", message: "field_type inválido. Válidos: text, number, date, select, boolean" } },
+  ));
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_type");
+});
+
+Deno.test("createCustomField — corpo que não é objeto JSON vira 400", async () => {
+  const ctx = {
+    req: new Request("https://x/api/v1/custom-fields", { method: "POST", body: "[1,2]" }),
+    params: {}, organizationId: "org-1", scopes: [],
+    supabase: { rpc: () => Promise.resolve({ data: null }) },
+    cors,
+  } as ApiRouteContext;
+  const res = await createCustomField(ctx);
+  assertEquals(res.status, 400);
+});

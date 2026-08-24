@@ -11,7 +11,7 @@
 import { apiResource } from "../_shared/api/responses.ts";
 import type { ApiRoute } from "../_shared/api/router.ts";
 import { getLead, getLeadTimeline, listLeads, searchLeads } from "../_shared/api/routes/leads.ts";
-import { listCustomFields, listPipelines, listTags, listTeamMembers } from "../_shared/api/routes/catalogs.ts";
+import { createCustomField, listCustomFields, listPipelines, listTags, listTeamMembers } from "../_shared/api/routes/catalogs.ts";
 import { createLead } from "../_shared/api/routes/leads-create.ts";
 import { createDeal } from "../_shared/api/routes/deals-create.ts";
 import { getDeal, listDeals, listLeadDeals, patchDeal } from "../_shared/api/routes/deals.ts";
@@ -51,6 +51,7 @@ export const routes: ApiRoute[] = [
   { method: "GET", pattern: "/api/v1/tags", scope: "metadata:read", handler: listTags },
   { method: "GET", pattern: "/api/v1/custom-fields", scope: "metadata:read", handler: listCustomFields },
   { method: "GET", pattern: "/api/v1/team-members", scope: "team:read", handler: listTeamMembers },
+  { method: "POST", pattern: "/api/v1/custom-fields", scope: "metadata:write", handler: createCustomField },
   // P2 — writes (lead:write)
   { method: "POST", pattern: "/api/v1/leads", scope: "lead:write", handler: createLead },
   { method: "GET", pattern: "/api/v1/deals", scope: "deal:read", handler: listDeals },

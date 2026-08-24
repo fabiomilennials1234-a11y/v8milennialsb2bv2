@@ -68,6 +68,7 @@ const AVAILABLE_SCOPES = [
   { value: "deal:read", label: "Negócios (leitura)", description: "Listar e ler negócios" },
   { value: "deal:write", label: "Negócios (escrita)", description: "Abrir, editar e mover negócios" },
   { value: "team:read", label: "Equipe (leitura)", description: "Listar membros — resolve os IDs de responsável" },
+  { value: "metadata:write", label: "Catálogos (escrita)", description: "Criar campos personalizados pela API" },
 ];
 
 // ── Component ─────────────────────────────────────────────────

@@ -182,12 +182,23 @@ export async function putCustomFields(ctx: ApiRouteContext): Promise<Response> {
   if (body === INVALID || !isPlainObject(body)) {
     return apiError(400, "invalid_body", "Corpo deve ser um objeto { campo: valor }", ctx.cors);
   }
+  // `create_missing=true` cria como `text` o campo que ainda não existe, em vez
+  // de recusar com 422. O caminho do integrador é o inverso do nosso: ele tem o
+  // valor na mão (a resposta de um formulário) e descobre no envio que o campo
+  // não estava cadastrado — sem isto, teria que parar o cenário, abrir o CRM,
+  // criar o campo e voltar. Continua sendo opt-in: sem o parâmetro, campo
+  // desconhecido segue recusado, e quem não quer estrutura nascendo por
+  // integração não precisa fazer nada.
+  const criarAusentes = new URL(ctx.req.url).searchParams.get("create_missing") === "true";
   const supabase = ctx.supabase as RpcClient;
-  const { data, error } = await supabase.rpc("api_set_custom_fields", {
-    p_org: ctx.organizationId,
-    p_lead_id: ctx.params.id,
-    p_values: body,
-  });
+  const { data, error } = await supabase.rpc(
+    criarAusentes ? "api_set_custom_fields_creating" : "api_set_custom_fields",
+    {
+      p_org: ctx.organizationId,
+      p_lead_id: ctx.params.id,
+      p_values: body,
+    },
+  );
   if (error) return apiError(500, "internal_error", "Erro ao salvar campos", ctx.cors);
   const r = (data ?? {}) as { ok?: boolean; code?: string; unknown_fields?: unknown };
   if (!r.ok) {
