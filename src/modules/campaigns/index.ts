@@ -172,3 +172,23 @@ export {
 } from "./hooks/useDispatchQueueItems";
 
 export type { QueueItem } from "./hooks/useDispatchQueueItems";
+
+// ────────────────────────────────────────────────────────────────────────
+// Disparo — o módulo ÚNICO de números, com regime (#1722)
+// ────────────────────────────────────────────────────────────────────────
+// Público por necessidade: o Disparo Rápido vive em `leads` e precisa OFERECER
+// o mesmo conjunto que o wizard. Duas telas, uma decisão (ADR-0028 §6).
+
+export {
+  instancesToNumbers,
+  isBlastableInstance,
+  isConnectedInstance,
+  regimeDaInstancia,
+  NEW_NUMBER_WINDOW_DAYS,
+} from "./lib/disparo-numbers";
+
+export type {
+  InstanceLike,
+  DisparoNumber,
+  RegimeDeDisparo,
+} from "./lib/disparo-numbers";

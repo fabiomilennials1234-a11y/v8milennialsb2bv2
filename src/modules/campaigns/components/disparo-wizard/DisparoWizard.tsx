@@ -27,7 +27,7 @@ import { StepPostSend } from "./StepPostSend";
 import { StepSpeed } from "./StepSpeed";
 import { StepReview } from "./StepReview";
 import { StepMonitor } from "./StepMonitor";
-import { instancesToNumbers } from "./instances-to-numbers";
+import { instancesToNumbers } from "../../lib/disparo-numbers";
 import type { DisparoNumber } from "./wizard-machine";
 
 /** Today as a Sao Paulo calendar date (YYYY-MM-DD) — the plan's clock-free anchor. */

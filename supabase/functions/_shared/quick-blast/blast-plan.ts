@@ -88,6 +88,13 @@ export interface PlanRow {
    *  its message is sent. NULL/absent = no move. Consumed by the edge fns to
    *  inject `onRecipientsSent`; the core treats it as opaque data. */
   post_send_target?: Record<string, unknown> | null;
+  /**
+   * O Template aprovado, quando o Disparo é pelo Canal Oficial (#1722).
+   * NULL em plano de Chip, que manda texto livre em `message`. Congelado: a
+   * Meta pode pausar ou reclassificar o Template a qualquer momento, e um
+   * Disparo em curso não muda de conteúdo no meio (ADR-0029).
+   */
+  template?: Record<string, unknown> | null;
   /** The instance row, needed by the releaser to dispatch. Persisted as a column
    *  in production via the FK + a read; carried inline here for the store seam. */
   instance?: { id: string; organization_id: string; provider?: string };
@@ -201,6 +208,12 @@ export interface CreateBlastPlanParams {
   /** The RESOLVED audience (org-scoped by the caller). Frozen here. */
   leads: BlastLead[];
   message: string;
+  /**
+   * O Template aprovado do Canal Oficial (#1722). Ausente em Disparo de Chip.
+   * Quando presente, `message` carrega o CORPO renderizado do Template — é o
+   * texto que a pessoa recebe, e é o que a Revisão e o histórico mostram.
+   */
+  template?: Record<string, unknown> | null;
   refinements: BlastRefinementOptions;
   imageUrl?: string;
   delayMinMs?: number;
@@ -291,6 +304,7 @@ export async function createBlastPlan(
     status: "active",
     source: params.source ?? null,
     message: params.message,
+    template: params.template ?? null,
     refinements: (params.refinements as Record<string, unknown>) ?? null,
     image_url: params.imageUrl ?? null,
     delay_min_ms: params.delayMinMs ?? null,
@@ -445,6 +459,7 @@ async function createMultiNumberBlastPlan(
     status: "active",
     source: params.source ?? null,
     message: params.message,
+    template: params.template ?? null,
     refinements: (params.refinements as Record<string, unknown>) ?? null,
     image_url: params.imageUrl ?? null,
     delay_min_ms: params.delayMinMs ?? null,
