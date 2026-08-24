@@ -33,7 +33,7 @@ válido quando salvou. Gate de ativação não pega. Sai na aba Configuração d
 
 Automações via DAG (Directed Acyclic Graph). Workflows reagem a eventos do produto e executam steps em sequência/paralelo.
 
-Triggers: `lead_created`, `stage_changed`, `tag_added`, `cron`, `manual`.
+Triggers: `lead_created`, `stage_changed`, `tag_added`, `cron`, `manual`, `deal_created`.
 
 Node types (15, união `WorkflowNodeType` em `@/types/workflow`): `trigger`, `action`, `condition`, `delay`, `copilot`, `end`, `wait_response`, `split_ab`, `webhook_call`, `goto`, `wait_business_window`, `assign_responsible`, `code_json`, `code_javascript`, `code_https`.
 
@@ -112,6 +112,7 @@ Tipos de domínio (`Workflow`, `WorkflowExecution`, `WorkflowExecutionStep`, `Wo
 
 - **Stage_changed fan-out** — consumido via event-bus `lead.stage_changed` (slice 19 + fase 3 event-bus dev). Handler `_shared/events/handlers/lead-stage-changed.ts` chama `fireTrigger` no executor.
 - **Dedup obrigatório** — mesma trigger não dispara workflow 2x (memória `workflow-trigger-dedup.ts`).
+- **`deal_created` ↔ `create_deal`** — laço em potencial. Cortado por `metadata.workflow_execution_id` (vira parent execution → chain_depth) + `dealSkipIfOpenExists`. Feature doc: `06 — Features/automacoes/negocio-criado.md`.
 - **`actions/` vs `action-handlers/`** — split ambíguo em `_shared/`. Slice 16 audita + consolida.
 - **wait_response** + **wait_business_window** — workflow pausado por tempo indefinido. Cron retoma.
 

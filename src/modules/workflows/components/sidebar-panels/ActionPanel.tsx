@@ -27,6 +27,7 @@ import {
   TemplateNodeConfig,
 } from "@/modules/workflows/components/action-configs";
 import { useFeatureFlag } from "@/modules/platform";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
 import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
 import { useOrganization } from "@/modules/identity";
@@ -104,6 +105,152 @@ function AssignResponsibleConfig({
           </Select>
         </div>
       )}
+    </>
+  );
+}
+
+function CreateDealConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { data: members = [] } = useTeamMembers();
+  const activeMembers = members.filter((m) => m.is_active);
+  const valueMode = data.dealValueMode || "fixed";
+  const ownerMode = data.dealOwnerMode || "lead_responsible";
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Título do negócio</Label>
+        <Input
+          value={data.dealTitleTemplate ?? "Negócio — {{nome}}"}
+          onChange={(e) => onUpdate({ dealTitleTemplate: e.target.value })}
+          placeholder="Negócio — {{nome}}"
+        />
+        <p className="text-xs text-muted-foreground">
+          Aceita variáveis do lead: {"{{nome}}"}, {"{{empresa}}"}.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Valor</Label>
+        <Select
+          value={valueMode}
+          onValueChange={(v) => onUpdate({ dealValueMode: v as "fixed" | "proposal" })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fixed">Valor fixo</SelectItem>
+            <SelectItem value="proposal">Valor da proposta do lead</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {valueMode === "fixed" && (
+        <div className="space-y-2">
+          <Label>Valor (R$)</Label>
+          <Input
+            type="number"
+            min={0}
+            step={0.01}
+            value={data.dealValue ?? ""}
+            onChange={(e) => onUpdate({ dealValue: Number(e.target.value) })}
+            placeholder="0,00"
+          />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label>Probabilidade (%)</Label>
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          value={data.dealProbability ?? 50}
+          onChange={(e) => onUpdate({ dealProbability: Number(e.target.value) })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Responsável do negócio</Label>
+        <Select
+          value={ownerMode}
+          onValueChange={(v) =>
+            onUpdate({ dealOwnerMode: v as "lead_responsible" | "specific" })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="lead_responsible">Responsável do lead</SelectItem>
+            <SelectItem value="specific">Membro específico</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {ownerMode === "specific" && (
+        <div className="space-y-2">
+          <Label>Membro</Label>
+          <Select
+            value={data.dealOwnerId || ""}
+            onValueChange={(v) => {
+              const member = activeMembers.find((m) => m.id === v);
+              onUpdate({ dealOwnerId: v, dealOwnerName: member?.name || "" });
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o membro" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeMembers.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}{m.role ? ` (${m.role})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label>Previsão de fechamento (dias)</Label>
+        <Input
+          type="number"
+          min={0}
+          value={data.dealExpectedCloseDays ?? ""}
+          onChange={(e) => onUpdate({ dealExpectedCloseDays: Number(e.target.value) })}
+          placeholder="Ex: 30 (vazio = sem previsão)"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Observações (opcional)</Label>
+        <Textarea
+          value={data.dealNotes || ""}
+          onChange={(e) => onUpdate({ dealNotes: e.target.value })}
+          placeholder="Contexto do negócio. Aceita variáveis."
+          rows={2}
+        />
+      </div>
+
+      <div className="flex items-center justify-between rounded-md border border-border/60 p-3">
+        <div className="space-y-0.5 pr-3">
+          <Label className="text-sm">Não duplicar negócio aberto</Label>
+          <p className="text-xs text-muted-foreground">
+            Se o lead já tem um negócio em aberto, o nó não cria outro.
+          </p>
+        </div>
+        <Switch
+          checked={data.dealSkipIfOpenExists !== false}
+          onCheckedChange={(v) => onUpdate({ dealSkipIfOpenExists: v })}
+        />
+      </div>
     </>
   );
 }
@@ -368,7 +515,11 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   // Node unificado gateado por org (ADR-0012). Fail-closed: enquanto carrega ou
   // se a org não tem a flag, o picker mostra os envios legados, como antes.
   const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
-  const actionCategories = getActionCategories(unifiedEnabled);
+  const { hasFeature } = useOrgFeatures();
+  // Categoria Negócios só aparece para org com o módulo ligado (feature `deals`).
+  const actionCategories = getActionCategories(unifiedEnabled).filter(
+    (c) => c.label !== "Negócios" || hasFeature("deals"),
+  );
 
   return (
     <div className="space-y-4">
@@ -921,6 +1072,10 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
           </div>
         </>
       )}
+
+      {/* ═══════ NEGÓCIOS ═══════ */}
+
+      {at === "create_deal" && <CreateDealConfig data={data} onUpdate={onUpdate} />}
 
       {/* ═══════ FOLLOW-UP ═══════ */}
 

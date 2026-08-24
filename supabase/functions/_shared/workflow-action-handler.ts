@@ -22,6 +22,7 @@ import { sendMetaMessage as sharedSendMetaMessage, sendSemiAutomatic as sharedSe
 import { sendToNumber as sharedSendToNumber } from "./action-handlers/send-to-number.ts";
 import { addToCampaign as sharedAddToCampaign, removeFromCampaign as sharedRemoveFromCampaign, moveCampaignStage as sharedMoveCampaignStage, pauseCampaignSequence as sharedPauseCampaignSequence, resumeCampaignSequence as sharedResumeCampaignSequence } from "./action-handlers/campaign-operations.ts";
 import { createCalendarEvent as sharedCreateCalendarEvent } from "./action-handlers/calendar-operations.ts";
+import { createDeal as sharedCreateDeal } from "./action-handlers/deal-operations.ts";
 import { createTinyerpOrder as sharedCreateTinyerpOrder, createTinyerpUpsellOrder as sharedCreateTinyerpUpsellOrder } from "./action-handlers/tinyerp-operations.ts";
 import { assignResponsible as sharedAssignResponsible, assignSdr as sharedAssignSdr, assignCloser as sharedAssignCloser, notifyTeamMember as sharedNotifyTeamMember } from "./action-handlers/team-operations.ts";
 import { createFollowup as sharedCreateFollowup } from "./action-handlers/followup-operations.ts";
@@ -52,6 +53,10 @@ interface ActionContext {
   leadId: string;
   nodeData: Record<string, unknown>;
   executionContext: Record<string, unknown>;
+  /** Execução corrente — vira `metadata.workflow_execution_id` em create_deal
+   *  (marca a origem do negócio e alimenta o guard de chain_depth do trigger deal_created).
+   *  É a chave que `toActionInput` já lia como `_executionId` e que ninguém preenchia. */
+  executionId?: string;
 }
 
 // ─── Variable substitution ──────────────────────────────────────────────────
@@ -621,6 +626,39 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     case "schedule_meeting":
       result = await sharedQueueScheduleMeeting(toActionInput(ctx));
       break;
+
+    // ── Negócios ──
+    case "create_deal": {
+      const dealTitle = await resolveVariables(
+        ctx.supabase,
+        ctx.leadId,
+        (ctx.nodeData.dealTitleTemplate as string) || "Negócio — {{nome}}",
+        ctx.executionContext,
+      );
+      const dealNotes = ctx.nodeData.dealNotes
+        ? await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.dealNotes as string, ctx.executionContext)
+        : null;
+
+      result = await sharedCreateDeal({
+        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
+        conversationId: null,
+        params: {
+          ...ctx.nodeData,
+          dealTitleTemplate: dealTitle,
+          dealNotes,
+          _executionId: ctx.executionId,
+        },
+        executionContext: ctx.executionContext,
+      });
+
+      // Expõe o negócio para os nós seguintes ({{negocio_id}}, {{negocio_titulo}}, {{negocio_valor}})
+      if (result.success && result.data) {
+        for (const key of ["deal_id", "negocio_id", "negocio_titulo", "negocio_valor"]) {
+          if (result.data[key] != null) ctx.executionContext[key] = result.data[key];
+        }
+      }
+      break;
+    }
 
     // ── TinyERP ──
     case "create_tinyerp_order":

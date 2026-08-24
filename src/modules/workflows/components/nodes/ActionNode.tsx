@@ -30,6 +30,7 @@ import {
   Brain,
   FileSearch,
   CheckCircle,
+  Briefcase,
 } from "lucide-react";
 import { BaseNode } from "./BaseNode";
 import { ACTION_LABELS } from "@/types/workflow";
@@ -81,6 +82,7 @@ const ACTION_ICONS: Record<string, React.ElementType> = {
   create_calendar_event: Calendar,
   schedule_meeting: CalendarCheck,
   // TinyERP
+  create_deal: Briefcase,
   create_tinyerp_order: ShoppingCart,
   create_tinyerp_upsell_order: ShoppingBag,
   // Equipe

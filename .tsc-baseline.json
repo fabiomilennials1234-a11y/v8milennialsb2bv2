@@ -782,7 +782,7 @@
     "src/modules/workflows/components/nodes/SplitAbNode.tsx|TS6133|'SplitAbNodeData' is declared but its value is never read.",
     "src/modules/workflows/components/sidebar-panels/ActionPanel.tsx|TS2322|Type '\"upsell_base\"' is not assignable to type 'PipelineType'.",
     "src/modules/workflows/components/sidebar-panels/ActionPanel.tsx|TS2322|Type '\"upsell_gestao\"' is not assignable to type 'PipelineType'.",
-    "src/modules/workflows/components/sidebar-panels/ActionPanel.tsx|TS2367|This comparison appears to be unintentional because the types '\"send_whatsapp\" | \"send_whatsapp_audio\" | \"send_whatsapp_image\" | \"send_whatsapp_sticker\" | \"send_whatsapp_template\" | \"send_whatsapp_menu\" | \"send_whatsapp_pix_button\" | ... 27 more ... | \"evaluate_conversation\"' and '\"assign_sale_responsible\"' have no overlap.",
+    "src/modules/workflows/components/sidebar-panels/ActionPanel.tsx|TS2367|This comparison appears to be unintentional because the types '\"send_whatsapp_audio\" | \"move_stage\" | \"send_whatsapp\" | \"send_whatsapp_image\" | \"send_whatsapp_message\" | \"send_whatsapp_video\" | \"send_whatsapp_sticker\" | \"send_whatsapp_document\" | ... 32 more ... | \"evaluate_conversation\"' and '\"assign_sale_responsible\"' have no overlap.",
     "src/modules/workflows/components/sidebar-panels/ActionPanel.tsx|TS6133|'Switch' is declared but its value is never read.",
     "src/modules/workflows/components/sidebar-panels/TriggerPanel.tsx|TS2339|Property 'id' does not exist on type 'never'.",
     "src/modules/workflows/components/sidebar-panels/TriggerPanel.tsx|TS6133|'getPipelineTypeName' is declared but its value is never read.",

@@ -45,7 +45,8 @@ export type WorkflowTriggerType =
   | "campaign_lead_no_reply"
   | "campaign_completed"
   | "field_changed"
-  | "scheduled_date";
+  | "scheduled_date"
+  | "deal_created";
 
 export type WorkflowNodeType =
   | "trigger"
@@ -124,6 +125,8 @@ export type WorkflowActionType =
   // Agenda
   | "create_calendar_event"
   | "schedule_meeting"
+  // Negócios
+  | "create_deal"
   // TinyERP
   | "create_tinyerp_order"
   | "create_tinyerp_upsell_order"
@@ -323,6 +326,21 @@ export interface TriggerConfigScheduledDate {
   dispatches: ScheduledDispatchItem[];
 }
 
+/**
+ * deal_created — disparado pelo PG trigger `trigger_workflow_deal_created`
+ * (AFTER INSERT em `deals`). O lead do workflow é `deals.source_lead_id`.
+ */
+export interface TriggerConfigDealCreated {
+  /** Só dispara para negócios vinculados a um lead. Default: true (fail-closed —
+   *  a maioria dos nós downstream precisa de lead). */
+  require_lead?: boolean;
+  /** Origem do negócio: manual (tela), workflow (nó create_deal) ou qualquer uma. */
+  source?: "any" | "manual" | "workflow";
+  filter_owner_id?: string;
+  /** Valor mínimo do negócio (R$) para disparar. */
+  min_value?: number;
+}
+
 export type TriggerConfig =
   | TriggerConfigLeadCreated
   | TriggerConfigStageChanged
@@ -338,7 +356,8 @@ export type TriggerConfig =
   | TriggerConfigLeadAssigned
   | TriggerConfigCampaignStatus
   | TriggerConfigFieldChanged
-  | TriggerConfigScheduledDate;
+  | TriggerConfigScheduledDate
+  | TriggerConfigDealCreated;
 
 // =====================================================
 // NODE DATA
@@ -488,6 +507,18 @@ export interface ActionNodeData {
   // Schedule meeting
   meetingDate?: string;
   meetingCloserId?: string;
+  // Negócio (create_deal)
+  dealTitleTemplate?: string;
+  dealValueMode?: "fixed" | "proposal";
+  dealValue?: number;
+  dealProbability?: number;
+  dealOwnerMode?: "lead_responsible" | "specific";
+  dealOwnerId?: string;
+  dealOwnerName?: string;
+  dealExpectedCloseDays?: number;
+  dealNotes?: string;
+  /** Não cria segundo negócio aberto para o mesmo lead. Default: true. */
+  dealSkipIfOpenExists?: boolean;
   // TinyERP
   tinyProductId?: string;
   tinyProductName?: string;
@@ -976,6 +1007,8 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   // Agenda
   create_calendar_event: "Criar Evento no Calendar",
   schedule_meeting: "Agendar Reunião",
+  // Negócios
+  create_deal: "Criar Negócio",
   // TinyERP
   create_tinyerp_order: "Criar Pedido TinyERP",
   create_tinyerp_upsell_order: "Criar Pedido Upsell TinyERP",
@@ -1018,6 +1051,7 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   campaign_completed: "Lead Concluiu a Campanha",
   field_changed: "Campo do Lead Alterado",
   scheduled_date: "Antes de uma data",
+  deal_created: "Negócio Criado",
 };
 
 export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
@@ -1095,6 +1129,10 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
   {
     label: "Agenda",
     actions: ["create_calendar_event", "schedule_meeting"],
+  },
+  {
+    label: "Negócios",
+    actions: ["create_deal"],
   },
   {
     label: "TinyERP",
@@ -1194,6 +1232,10 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { key: "{{sdr}}",                    label: "SDR (legado)",                 category: "Responsável" },
   { key: "{{closer}}",                 label: "Vendedor (legado)",            category: "Responsável" },
   // Campanha
+  // Negócio (trigger deal_created / nó Criar Negócio)
+  { key: "{{negocio_id}}",       label: "ID do negócio",       category: "Negócio" },
+  { key: "{{negocio_titulo}}",   label: "Título do negócio",   category: "Negócio" },
+  { key: "{{negocio_valor}}",    label: "Valor do negócio",    category: "Negócio" },
   { key: "{{campanha_nome}}",    label: "Nome da campanha",    category: "Campanha" },
   { key: "{{campanha_estagio}}", label: "Estágio na campanha", category: "Campanha" },
   // I.A.
@@ -1226,6 +1268,10 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   {
     label: "Campanhas",
     triggers: ["campaign_status_changed", "lead_added_to_campaign", "lead_removed_from_campaign", "campaign_lead_replied", "campaign_lead_no_reply", "campaign_completed"],
+  },
+  {
+    label: "Negócios",
+    triggers: ["deal_created"],
   },
   {
     label: "Automação",

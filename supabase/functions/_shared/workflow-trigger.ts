@@ -410,6 +410,28 @@ export function matchesTriggerConfig(
       return true;
     }
 
+    case "deal_created": {
+      // Fail-closed: por padrão só negócio vinculado a lead — os nós downstream
+      // (mensagem, tag, stage) todos precisam de lead.
+      const requireLead = config.require_lead !== false;
+      if (requireLead && !context.lead_id) return false;
+
+      const source = (config.source as string) || "any";
+      if (source !== "any") {
+        const ctxSource = context.created_by_workflow ? "workflow" : "manual";
+        if (source !== ctxSource) return false;
+      }
+
+      if (config.filter_owner_id && config.filter_owner_id !== context.owner_id) return false;
+
+      if (config.min_value != null) {
+        const min = Number(config.min_value) || 0;
+        if ((Number(context.deal_value) || 0) < min) return false;
+      }
+
+      return true;
+    }
+
     case "lead_assigned": {
       if (config.role && config.role !== "any" && context.role && config.role !== context.role) return false;
       return true;

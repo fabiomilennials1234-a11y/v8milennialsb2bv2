@@ -427,6 +427,58 @@ describe("matchesTriggerConfig", () => {
     });
   });
 
+  // deal_created
+  describe("deal_created", () => {
+    const ctx = (over: Record<string, unknown> = {}) => ({
+      lead_id: "lead-1",
+      deal_id: "deal-1",
+      deal_value: 1000,
+      owner_id: "tm-1",
+      created_by_workflow: false,
+      ...over,
+    });
+
+    it("matches a deal linked to a lead with no filters", () => {
+      expect(matchesTriggerConfig("deal_created", {}, ctx())).toBe(true);
+    });
+
+    it("rejects a deal without lead by default (fail-closed)", () => {
+      expect(matchesTriggerConfig("deal_created", {}, ctx({ lead_id: null }))).toBe(false);
+    });
+
+    it("accepts a deal without lead when require_lead is off", () => {
+      expect(
+        matchesTriggerConfig("deal_created", { require_lead: false }, ctx({ lead_id: null })),
+      ).toBe(true);
+    });
+
+    it("filters by source — manual vs workflow", () => {
+      expect(matchesTriggerConfig("deal_created", { source: "manual" }, ctx())).toBe(true);
+      expect(
+        matchesTriggerConfig("deal_created", { source: "manual" }, ctx({ created_by_workflow: true })),
+      ).toBe(false);
+      expect(
+        matchesTriggerConfig("deal_created", { source: "workflow" }, ctx({ created_by_workflow: true })),
+      ).toBe(true);
+      expect(
+        matchesTriggerConfig("deal_created", { source: "any" }, ctx({ created_by_workflow: true })),
+      ).toBe(true);
+    });
+
+    it("filters by min_value", () => {
+      expect(matchesTriggerConfig("deal_created", { min_value: 500 }, ctx())).toBe(true);
+      expect(matchesTriggerConfig("deal_created", { min_value: 5000 }, ctx())).toBe(false);
+      expect(
+        matchesTriggerConfig("deal_created", { min_value: 1 }, ctx({ deal_value: null })),
+      ).toBe(false);
+    });
+
+    it("filters by owner", () => {
+      expect(matchesTriggerConfig("deal_created", { filter_owner_id: "tm-1" }, ctx())).toBe(true);
+      expect(matchesTriggerConfig("deal_created", { filter_owner_id: "tm-9" }, ctx())).toBe(false);
+    });
+  });
+
   // unknown trigger type
   describe("unknown trigger type", () => {
     it("returns true by default", () => {
