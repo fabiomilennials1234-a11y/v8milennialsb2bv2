@@ -2,7 +2,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMockSupabase } from "../helpers/supabase-mock";
 import { moveStage } from "../../supabase/functions/_shared/action-handlers/move-stage";
-import { __resetDealPolicyCache } from "../../supabase/functions/_shared/deal-policy";
 
 function makeInput(overrides: Record<string, unknown> = {}) {
   const { sb } = createMockSupabase();
@@ -418,12 +417,9 @@ function move(sb: never, stageId: string, pipelineId = PIPE) {
 }
 
 describe("moveStage — funil customizado não duplica card (inv:H4-08 / SCRUM-102)", () => {
-  beforeEach(() => {
-    // `isDealManualOnly` cacheia por org durante 30s; sem limpar, o primeiro caso
-    // decidiria a política de todos os seguintes.
-    __resetDealPolicyCache();
-  });
-
+  // O `beforeEach` que limpava o cache de `isDealManualOnly` saiu junto com o
+  // gate: a #1774 apagou `_shared/deal-policy.ts` e deixou este import órfão,
+  // o que impedia o arquivo de COLETAR (0 testes rodavam).
   it("com negócio já aberto no funil, MOVE o card existente e não cria um segundo", async () => {
     const db = createCustomPipeDb({
       stages: STAGES,
