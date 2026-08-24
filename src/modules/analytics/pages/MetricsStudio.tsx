@@ -95,7 +95,7 @@ export default function MetricsStudio() {
   // Compor métrica é ato de ADMIN DE EQUIPE **ou de MASTER**, e esta linha
   // espelha as policies de `metric_custom_definitions`:
   //   - tenant: `get_my_team_admin_organization_ids()` = `role = 'admin' AND is_active`
-  //   - master: `master_ghost_all_metric_custom_definitions` (mig. 20270824070000)
+  //   - master: `master_ghost_all_metric_custom_definitions` (mig. 20270824100000)
   //
   // ⚠️ HISTÓRIA QUE ESTE COMENTÁRIO JÁ CONTOU ERRADO. A versão anterior dizia
   // que usar `useCurrentTeamMember()` — em vez de `useIdentity().isAdmin` —

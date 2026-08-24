@@ -1,4 +1,13 @@
--- 20270824070000_metric_custom_definitions_master_ghost.sql
+-- 20270824100000_metric_custom_definitions_master_ghost.sql
+--
+-- ⚠️ NASCEU COMO `20270824070000` E FOI RENUMERADA. Aquele número já estava
+-- ocupado no ledger de PROD por `api_list_pipelines_inclui_etapas_custom`, de
+-- outra frente, que o tomou entre a checagem de versão desta branch e o apply.
+-- É a armadilha registrada em `.specs/features/metricas-v2/` §motor: `db push`
+-- PULA em silêncio arquivo cuja versão já consta no ledger, e a migration
+-- nunca chegaria em prod sem ninguém ser avisado.
+-- `scripts/check-migration-versions.sh` não pega isto: ele compara o repo
+-- consigo mesmo, nunca com o ledger de prod.
 --
 -- SINTOMA: ao tentar criar uma métrica personalizada no Estúdio, o usuário
 -- MASTER recebe
@@ -43,7 +52,7 @@
 -- DDL PURA (guarda F4): só policy. Nenhum INSERT/UPDATE de dado de cliente.
 --
 -- ROLLBACK pareado:
---   rollback/20270824070000_metric_custom_definitions_master_ghost.sql
+--   rollback/20270824100000_metric_custom_definitions_master_ghost.sql
 
 DROP POLICY IF EXISTS master_ghost_all_metric_custom_definitions
   ON public.metric_custom_definitions;
