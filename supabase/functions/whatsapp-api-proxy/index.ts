@@ -20,6 +20,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isOrgBlocked } from "../_shared/org-status.ts";
 import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
 import {
   getWhatsAppProvider,
@@ -345,6 +346,25 @@ Deno.serve(
           corsHeaders
         );
       }
+    }
+
+    // -------------------------------------------------------------------------
+    // 3.5 Gate de assinatura — org bloqueada não opera WhatsApp
+    // -------------------------------------------------------------------------
+    // Este proxy é o caminho MANUAL (a pessoa mandando pelo inbox) e não passa
+    // pelo choke `governSend`, então precisa do gate próprio. A tela já está
+    // bloqueada para org suspensa, mas a sessão continua autenticada e o
+    // endpoint é alcançável com o token que a pessoa já tem.
+    // Master passa por fora, como no plan gate logo abaixo.
+    if (!isMaster && (await isOrgBlocked(supabaseAdmin, callerOrgId))) {
+      return jsonResponse(
+        402,
+        {
+          error: "subscription_blocked",
+          message: "Assinatura da organização suspensa.",
+        },
+        corsHeaders
+      );
     }
 
     // -------------------------------------------------------------------------

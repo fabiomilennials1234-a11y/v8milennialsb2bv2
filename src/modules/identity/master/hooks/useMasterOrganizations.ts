@@ -380,6 +380,66 @@ export function useMasterUpdateOrganization() {
 }
 
 /**
+ * Suspender / reativar organização.
+ *
+ * Passa pela RPC `master_set_org_suspension` em vez de escrever
+ * `subscription_status` direto: suspender precisa LIMPAR o `billing_override`
+ * na mesma transação, senão o bloqueio não vale nada — `org_access_blocked()`
+ * é `status bloqueado AND NOT billing_override`. Escrever só o status era um
+ * no-op silencioso na maioria das orgs de prod, que carregam override ligado.
+ */
+export interface OrgSuspensionResult {
+  org_id: string;
+  status: string;
+  billing_override: boolean;
+  override_revogado: boolean;
+  acesso_bloqueado: boolean;
+}
+
+export function useMasterSetOrgSuspension() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      orgId,
+      suspend,
+      reason,
+    }: {
+      orgId: string;
+      suspend: boolean;
+      reason?: string;
+    }): Promise<OrgSuspensionResult> => {
+      const { data, error } = await supabase.rpc("master_set_org_suspension" as any, {
+        _org_id: orgId,
+        _suspend: suspend,
+        _reason: reason ?? null,
+      } as any);
+
+      if (error) throw error;
+      return data as unknown as OrgSuspensionResult;
+    },
+    onSuccess: (result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["master-organizations"] });
+      queryClient.invalidateQueries({ queryKey: ["master-organization", variables.orgId] });
+      queryClient.invalidateQueries({ queryKey: ["master-organization-stats"] });
+
+      if (!variables.suspend) {
+        toast.success("Organização reativada.");
+        return;
+      }
+      toast.success(
+        result.override_revogado
+          ? "Organização suspensa. Liberação de plano revogada — o acesso foi cortado."
+          : "Organização suspensa. Acesso cortado."
+      );
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Erro ao alterar a suspensão da organização");
+    },
+  });
+}
+
+/**
  * Excluir organização
  */
 export function useMasterDeleteOrganization() {

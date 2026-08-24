@@ -25,6 +25,9 @@ Deno.serve(withErrorBoundary('webhook-confirmacao', async (req) => {
     // --- API Key Authentication (obrigatória — fail-closed) ---
     // SEGURANÇA (incidente 2026-06-01): janela de graça permitia criação anônima de leads.
     const authResult = await validateApiKey(supabase, req);
+    if (authResult.subscriptionBlocked) {
+      return errorResponse(402, authResult.error || "Assinatura suspensa", corsHeaders, { req });
+    }
     if (!authResult.valid) {
       return errorResponse(401, authResult.error || "API key required", corsHeaders, { req });
     }

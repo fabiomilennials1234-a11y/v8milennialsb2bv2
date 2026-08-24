@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCurrentTeamMember } from '../../org-team/hooks/useTeamMembers';
 import { useIdentity } from '../hooks/useIdentity';
 import { useGestor } from '../../gestor/hooks/useGestor';
+import { useDeactivatedMembership } from '../../org-team/hooks/useMembershipStatus';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { TorqueLoader } from '@/components/ui/branding/TorqueLoader';
 import { Button } from '@/components/ui/button';
@@ -19,6 +20,10 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
   const { data: teamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
   const { isMaster, isLoading: masterLoading } = useIdentity();
   const { isGestor, isLoading: gestorLoading } = useGestor();
+  // Só consultamos quando não há vínculo ativo — é o único caso ambíguo.
+  const semVinculoAtivo = !teamMemberLoading && !teamMember?.organization_id;
+  const { data: foiDesativado, isLoading: desativadoLoading } =
+    useDeactivatedMembership(semVinculoAtivo && !isMaster && !isGestor);
 
   // Modo demonstração (build de dev + VITE_DEMO_MODE=1). Em produção
   // `IS_DEMO_MODE` é a constante `false` e este bloco não chega ao bundle.
@@ -48,6 +53,32 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
       if (isGestor) {
         return <Navigate to="/gestor" replace />;
       }
+
+      if (desativadoLoading) {
+        return <TorqueLoader variant="full" />;
+      }
+
+      // Vínculo existe e foi desativado ≠ vínculo nunca criado. São dois avisos
+      // diferentes e a pessoa merece o certo — "sua conta está sendo
+      // configurada" para quem acabou de ser desligado é desinformação.
+      if (foiDesativado) {
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-background">
+            <div className="flex flex-col items-center gap-4 max-w-md text-center p-6">
+              <AlertTriangle className="h-12 w-12 text-red-500" />
+              <h2 className="text-xl font-semibold">Conta Desativada</h2>
+              <p className="text-muted-foreground">
+                Seu acesso a esta organização foi desativado. Fale com o administrador
+                se isso não deveria ter acontecido.
+              </p>
+              <Button onClick={() => signOut()} variant="outline">
+                Fazer logout
+              </Button>
+            </div>
+          </div>
+        );
+      }
+
       return (
         <div className="min-h-screen flex items-center justify-center bg-background">
           <div className="flex flex-col items-center gap-4 max-w-md text-center p-6">
