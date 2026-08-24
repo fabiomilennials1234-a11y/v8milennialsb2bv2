@@ -8,7 +8,6 @@ import { isValidUUID, isValidISODate } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
 import { isFeatureFlagEnabled } from "../_shared/feature-flags.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
-import { isDealManualOnly } from "../_shared/deal-policy.ts";
 
 Deno.serve(withErrorBoundary('webhook-confirmacao', async (req) => {
   const origin = req.headers.get("origin");
@@ -85,23 +84,6 @@ Deno.serve(withErrorBoundary('webhook-confirmacao', async (req) => {
     // lead no funil whatsapp em `agendado` (não no confirmacao legacy).
     const useMergedFunnel = await isFeatureFlagEnabled(supabase, organization_id, "merged_opportunity_funnel");
 
-    // ADR-0023 decisão 3 — este webhook cria lead E card pela RPC
-    // `create_lead_with_pipe`, que roda dentro do banco e não passa pelo gate do
-    // `pipeline-adapter`. Com a flag ON, `p_pipe_type = null` (o mesmo caminho
-    // que o merge de funis já usa) e o `upsertPipeEntry` do ramo merged é
-    // pulado. A reunião continua sendo registrada; o que não nasce é o Negócio.
-    //
-    // ⚠️ Estes são DOIS sistemas de flag homônimos: `isFeatureFlagEnabled` lê a
-    // cascata organization_features → tabela feature_flags;
-    // `isDealManualOnly` lê a coluna jsonb organizations.feature_flags. Ver
-    // `_shared/deal-policy.ts`.
-    const dealManualOnly = await isDealManualOnly(supabase, organization_id);
-    if (dealManualOnly) {
-      console.log(
-        `[webhook-confirmacao] deal_manual_only ON em org=${organization_id}: lead criado SEM card de funil.`,
-      );
-    }
-
     // 1+2. Atomic lead + pipe creation via RPC. Com o merge ON, cria só o lead
     // (p_pipe_type null) e a entry de whatsapp:agendado é feita logo abaixo via
     // upsertPipeEntry (preserva meeting_date no metadata — o branch whatsapp do
@@ -129,8 +111,8 @@ Deno.serve(withErrorBoundary('webhook-confirmacao', async (req) => {
       p_utm_campaign: utm_campaign || null,
       p_utm_term: utm_term || null,
       p_utm_content: utm_content || null,
-      p_pipe_type: (useMergedFunnel || dealManualOnly) ? null : 'confirmacao',
-      p_pipe_status: (useMergedFunnel || dealManualOnly) ? null : 'reuniao_marcada',
+      p_pipe_type: useMergedFunnel ? null : 'confirmacao',
+      p_pipe_status: useMergedFunnel ? null : 'reuniao_marcada',
       p_pipe_meeting_date: meeting_date || null,
       p_pipe_responsible_id: closer_id || sdr_id || null,
     });
@@ -144,7 +126,7 @@ Deno.serve(withErrorBoundary('webhook-confirmacao', async (req) => {
 
     // Merge ON: cria a entry no funil de Oportunidades (whatsapp:agendado) com a
     // data da reunião no metadata + confirmação pendente.
-    if (useMergedFunnel && !dealManualOnly) {
+    if (useMergedFunnel) {
       await upsertPipeEntry(supabase, {
         leadId,
         orgId: organization_id,

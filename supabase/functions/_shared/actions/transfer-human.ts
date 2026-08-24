@@ -104,8 +104,7 @@ async function moveLeadToHumanStage(
 
     // SCRUM-202: espelho `leads.pipe_whatsapp` removido — `upsertPipeEntry`
     // acima já dispara `trg_sync_whatsapp_stage_to_lead` (depth 1) com o mesmo
-    // valor. O gate de `deal_manual_only` mora dentro do adapter: sem negócio
-    // aberto, o handoff para humano continua acontecendo e só o card não nasce.
+    // valor.
     console.log(`[moveLeadToHumanStage] Lead ${leadId} moved to stage ${stage.stage_key}`);
   } catch (err) {
     // Non-fatal: transfer already succeeded, pipeline move is best-effort

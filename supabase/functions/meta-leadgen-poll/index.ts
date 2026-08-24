@@ -177,8 +177,7 @@ async function createLead(
     company: p.fields.company ?? null,
     origin: "meta_ads",
     // SCRUM-202: `pipe_whatsapp: stageKey` removido — o upsertPipeEntry logo
-    // abaixo faz o gatilho de sync gravar a coluna. Com `deal_manual_only` ON
-    // não há entry e a coluna fica NULL, que é a verdade.
+    // abaixo faz o gatilho de sync gravar a coluna.
     meta_lead_id: p.leadgenId,
   }).select("id").single();
   if (error) { console.error("[meta-leadgen-poll] insert lead failed:", error.message); return false; }

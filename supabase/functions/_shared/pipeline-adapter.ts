@@ -7,7 +7,6 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { isDealManualOnly } from "./deal-policy.ts";
 
 export type PipeSlug = "whatsapp" | "confirmacao" | "propostas";
 
@@ -326,17 +325,18 @@ export async function getPipeEntriesByLeads(
 /**
  * Resultado de `upsertPipeEntryDetailed`.
  *
- * Existe porque `string | null` achata quatro coisas diferentes em "null", e uma
- * delas passou a ser uma DECISÃO DE PRODUTO, não uma falha: a org que ligou
- * `deal_manual_only` não quer que o Negócio nasça daqui. Vários chamadores
- * traduzem `null` em erro visível (`success:false`, `report.rejected++`) — sem
- * distinguir, uma política deliberada apareceria para o cliente como "erro ao
- * inserir proposta".
+ * Existe porque `string | null` achata causas diferentes em "null", e vários
+ * chamadores traduzem `null` em erro visível (`success:false`,
+ * `report.rejected++`) — sem distinguir, "não havia funil" aparece para o
+ * cliente como "erro ao inserir proposta".
+ *
+ * Já teve um quarto caso, `skipped_deal_manual_only`: a org que ligava a flag
+ * `deal_manual_only` não queria Negócio nascendo por porta automática. A flag
+ * foi aposentada (#1774) — pelo ADR-0030 §2 a pré-autorização é a própria
+ * ferramenta (Workflow ativo, chave escopada), não uma configuração à parte.
  */
 export type UpsertPipeEntryResult =
   | { status: "created" | "updated"; entryId: string }
-  /** ADR-0023 decisão 3 — a org só abre Negócio por clique humano. Não é erro. */
-  | { status: "skipped_deal_manual_only" }
   | { status: "no_pipeline" }
   | { status: "read_failed" }
   | { status: "write_failed" };
@@ -432,35 +432,10 @@ export async function upsertPipeEntryDetailed(
     return { status: "updated", entryId: existing.id };
   }
 
-  // ── ADR-0023 decisão 3 — "um Negócio nasce só por clique humano" ──────────
-  //
-  // O gate fica AQUI, e só no ramo do INSERT, porque é aqui que a distinção do
-  // ADR mora: a decisão 3 proíbe CRIAR, não proíbe MOVER. Um Negócio que já
-  // existe continua andando por automação, webhook e agente — é o ramo do
-  // UPDATE acima, que não passa por este teste.
-  //
-  // Por que no adapter e não em cada caminho de ingest: são 34 call sites em 20
-  // arquivos, e a lista cresce a cada integração nova. É o mesmo argumento que o
-  // ADR usa para pôr o índice único em `pipeline_entries.deal_id` (decisão 5) —
-  // uma garantia estrutural vale mais que uma propriedade que N caminhos têm de
-  // honrar cada um por conta.
-  //
-  // O que este gate NÃO alcança, de propósito:
-  //   - `abrir_negocio` (migration 20270803000020): é a porta humana, roda em
-  //     SQL pelas views de compatibilidade e nunca passa por aqui. Se passasse,
-  //     a flag desligaria justamente o clique que ela existe para preservar.
-  //   - `custom_pipe_entries`: outra tabela, gateada nos 4 sítios que a inserem.
-  //   - `create_lead_with_pipe`: cria lead+entry dentro do banco; gateado nos 2
-  //     webhooks que a chamam, passando `p_pipe_type = null`.
-  //
-  // A leitura é cacheada por 30s por org (ver `_shared/deal-policy.ts`), então o
-  // custo num lote de import é uma query, não uma por linha.
-  if (await isDealManualOnly(supabase, params.orgId)) {
-    console.log(
-      `[pipeline-adapter] deal_manual_only ON em org=${params.orgId}: NÃO criando Negócio em ${params.slug}/${params.stageKey} para lead=${params.leadId} (ADR-0023 decisão 3). Lead permanece na base, sem card.`,
-    );
-    return { status: "skipped_deal_manual_only" };
-  }
+  // Aqui era o gate de `deal_manual_only` (ADR-0023 decisão 3), removido em
+  // #1774: o INSERT é incondicional de novo. O ADR-0030 §2 restringiu aquela
+  // decisão — quem autoriza a criação é a ferramenta que chamou (Workflow ativo,
+  // chave de API escopada), não uma flag por organização.
 
   const { data, error } = await supabase
     .from("pipeline_entries")

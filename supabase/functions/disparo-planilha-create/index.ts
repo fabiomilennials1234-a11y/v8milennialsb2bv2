@@ -39,7 +39,6 @@ import {
   upsertPipeEntry,
   type PipeSlug,
 } from "../_shared/pipeline-adapter.ts";
-import { isDealManualOnly } from "../_shared/deal-policy.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -228,11 +227,6 @@ Deno.serve(
         validTagIds = (tagRows ?? []).map((t) => t.id as string);
       }
 
-      // ADR-0023 decisão 3 — resolvido uma vez para o lote inteiro, pelo mesmo
-      // motivo do import: a planilha pode atravessar o TTL do cache, e metade das
-      // linhas virando card é pior que nenhuma.
-      const dealManualOnly = await isDealManualOnly(supabaseAdmin, orgId);
-
       // --- Create the non-matches in one batch. normalized_phone is filled by trigger. ---
       const createdLeadIds: string[] = [];
       if (partition.toCreate.length > 0) {
@@ -271,13 +265,6 @@ Deno.serve(
               slug: funnel as PipeSlug,
               stageKey: systemStageKey,
             });
-          } else if (dealManualOnly) {
-            // ADR-0023 decisão 3: planilha de disparo é ingest. O lead entra na
-            // base e o Negócio não nasce. O ramo `system` acima não precisa deste
-            // teste — `upsertPipeEntry` gateia por dentro.
-            console.log(
-              `[disparo-planilha-create] deal_manual_only ON em org=${orgId}: lead=${leadId} criado SEM card no funil custom ${funnel}.`,
-            );
           } else {
             const now = new Date().toISOString();
             const { error: entryErr } = await supabaseAdmin

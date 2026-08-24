@@ -90,13 +90,7 @@ export async function executeAutomation(
       leadId, orgId: organizationId, slug: "whatsapp",
       stageKey: actionConfig.moveToStage as string,
     });
-    if (result.status === "skipped_deal_manual_only") {
-      // ADR-0023 decisão 3: a org só abre negócio por clique humano e este lead
-      // não tem um aberto. Não é erro — é a política.
-      console.log(
-        `[executeAutomation] deal_manual_only ON em org=${organizationId}: lead=${leadId} não movido para whatsapp/${actionConfig.moveToStage} (sem negócio aberto).`,
-      );
-    } else if (result.status !== "created" && result.status !== "updated") {
+    if (result.status !== "created" && result.status !== "updated") {
       console.error("[executeAutomation] Failed to upsert pipeline_entries for whatsapp");
     }
   }
