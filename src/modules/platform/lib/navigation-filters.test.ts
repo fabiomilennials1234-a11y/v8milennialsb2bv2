@@ -111,14 +111,21 @@ describe("inventário da navegação", () => {
     expect(rotulos).not.toContain("Combustível");
   });
 
-  it("Métricas está no Pitstop e mantém o gate de rollout", () => {
-    const metricas = itensPitstop.find((item) => item.path === "/metricas");
+  it("Métricas é porta da lateral, entre Comando e Chat, e mantém o gate", () => {
+    const metricas = SIDEBAR_PRIMARY.find((item) => item.path === "/metricas");
     expect(metricas).toBeDefined();
     expect(metricas?.gate).toBe("metrics_studio_enabled");
+    // A posição é o pedido, não detalhe: entre Comando e Chat.
+    expect(caminhosLaterais.indexOf("/metricas")).toBe(caminhosLaterais.indexOf("/dashboard") + 1);
+    expect(caminhosLaterais.indexOf("/chat-whatsapp")).toBe(caminhosLaterais.indexOf("/metricas") + 1);
   });
 
-  it("a lateral tem seis portas", () => {
-    expect(SIDEBAR_PRIMARY).toHaveLength(6);
+  it("Métricas saiu do Pitstop e não ficou duplicada", () => {
+    expect(itensPitstop.some((item) => item.path === "/metricas")).toBe(false);
+  });
+
+  it("a lateral tem sete portas", () => {
+    expect(SIDEBAR_PRIMARY).toHaveLength(7);
   });
 });
 

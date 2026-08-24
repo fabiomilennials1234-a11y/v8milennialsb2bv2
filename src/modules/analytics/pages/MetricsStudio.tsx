@@ -92,14 +92,29 @@ export default function MetricsStudio() {
   // que já existe. Sem ela, o seletor de corte simplesmente não os oferece.
   const { allowed: podeVerPorPessoa } = useFeaturePermission("performance.view");
 
-  // Compor métrica é ato de ADMIN DE EQUIPE, e esta linha espelha a RLS letra
-  // por letra: `get_my_team_admin_organization_ids()` é
-  // `role = 'admin' AND is_active = true`, e mais nada.
+  // Compor métrica é ato de ADMIN DE EQUIPE **ou de MASTER**, e esta linha
+  // espelha as policies de `metric_custom_definitions`:
+  //   - tenant: `get_my_team_admin_organization_ids()` = `role = 'admin' AND is_active`
+  //   - master: `master_ghost_all_metric_custom_definitions` (mig. 20270824070000)
   //
-  // NÃO usa `useIdentity().isAdmin` nem `effectiveRole`: os dois devolvem
-  // 'admin' para MASTER, que não tem policy de escrita nesta tabela (mesma
-  // decisão de `metrics_studio_panels`). Master veria o botão e levaria erro na
-  // gravação — botão que sempre falha é pior que botão ausente.
+  // ⚠️ HISTÓRIA QUE ESTE COMENTÁRIO JÁ CONTOU ERRADO. A versão anterior dizia
+  // que usar `useCurrentTeamMember()` — em vez de `useIdentity().isAdmin` —
+  // evitava mostrar o botão para master. Não evitava: para master,
+  // `useCurrentTeamMember` devolve um TEAM MEMBER VIRTUAL montado no cliente,
+  // com `role: "admin", is_active: true` (`useCurrentTeamMember.ts:60-63`). Os
+  // dois caminhos diziam 'admin'. O resultado era o botão aparecer e a gravação
+  // morrer em "new row violates row-level security policy" — exatamente o que o
+  // comentário afirmava estar prevenindo.
+  //
+  // A correção foi no BANCO (dar ao master a policy que ele não tinha), não
+  // aqui: master é quem configura org de cliente, e sem policy ele nem LISTAVA
+  // as personalizadas. Por isso esta expressão continua valendo para o membro
+  // virtual — hoje ela é verdadeira e o banco concorda.
+  //
+  // 🔴 `metrics_studio_panels` NÃO foi corrigida junto e ainda barra o master:
+  // a policy exige `team_member_id IN get_my_team_member_ids()`, e o id virtual
+  // (`master-virtual-*`) não é uuid de `team_members`. Salvar painel como master
+  // continua falhando. Está fora do escopo desta correção, de propósito.
   const { data: membroAtual } = useCurrentTeamMember();
   const podeCompor =
     (membroAtual as { role?: string; is_active?: boolean } | null | undefined)?.role === "admin" &&
