@@ -667,6 +667,15 @@
         ],
         "parameters": [
           {
+            "name": "pipeline",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Devolve só um funil. Aceita o slug (funil de sistema: whatsapp, confirmacao, propostas) ou o id (funil personalizado). Funil inexistente devolve lista vazia."
+          },
+          {
             "name": "only_active_stages",
             "in": "query",
             "required": false,

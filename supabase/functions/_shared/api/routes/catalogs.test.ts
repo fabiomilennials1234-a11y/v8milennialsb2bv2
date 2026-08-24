@@ -103,3 +103,31 @@ Deno.test("pipelines — qualquer outro valor não filtra (só o literal 'true')
     assertEquals(body.data[0].stages.length, 3, `valor ${v} não deveria filtrar`);
   }
 });
+
+// ── pipeline= (um funil só) ─────────────────────────────────────────────────
+//
+// Quem monta seletor de etapa quer UM funil. Sem isto, o cliente precisa baixar
+// todos e filtrar do lado dele — e filtrar do lado de lá foi exatamente onde a
+// primeira versão do seletor no Make errou, trazendo as etapas de todos os funis.
+
+Deno.test("pipelines — pipeline=<slug> devolve só o funil de sistema pedido", async () => {
+  const res = await listPipelines(ctxComUrl("https://x/api/v1/pipelines?pipeline=whatsapp"));
+  const body = await res.json();
+  assertEquals(body.data.length, 1);
+  assertEquals(body.data[0].slug, "whatsapp");
+});
+
+Deno.test("pipelines — pipeline=<slug> combina com only_active_stages", async () => {
+  const res = await listPipelines(
+    ctxComUrl("https://x/api/v1/pipelines?pipeline=whatsapp&only_active_stages=true"),
+  );
+  const body = await res.json();
+  assertEquals(body.data.length, 1);
+  assertEquals(body.data[0].stages.map((e: { stage_key: string }) => e.stage_key), ["novo", "agendado"]);
+});
+
+Deno.test("pipelines — funil inexistente devolve lista vazia, não erro", async () => {
+  const res = await listPipelines(ctxComUrl("https://x/api/v1/pipelines?pipeline=nao-existe"));
+  assertEquals(res.status, 200);
+  assertEquals((await res.json()).data, []);
+});
