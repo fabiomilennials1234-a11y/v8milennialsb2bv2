@@ -16,7 +16,10 @@
  *   recusar → NÃO toca na linha: é o Disparo que não pode partir agora
  */
 import { describe, it, expect } from "vitest";
-import { decidirDisparoDoDestinatario } from "../../supabase/functions/_shared/decisao-do-disparo.ts";
+import {
+  decidirDisparoDoDestinatario,
+  regimeDoConjunto,
+} from "../../supabase/functions/_shared/decisao-do-disparo.ts";
 
 const PLANO_OK = {
   status: "active",
@@ -173,5 +176,45 @@ describe("precedência — recusa de plano antes de pulo de linha", () => {
       destinatario: { ...DESTINATARIO_OK, phone: null },
     });
     expect(d.acao).toBe("recusar");
+  });
+});
+
+// ── O regime do CONJUNTO — a validação do servidor (#1722) ──────────────────
+
+describe("regimeDoConjunto", () => {
+  it("um número de Chip: regime chip", () => {
+    expect(regimeDoConjunto(["uazapi"])).toEqual({ ok: true, regime: "chip" });
+  });
+
+  it("vários números de Chip: continua chip — multi-número é o de hoje", () => {
+    expect(regimeDoConjunto(["uazapi", "evolution", "uazapi"])).toEqual({ ok: true, regime: "chip" });
+  });
+
+  it("um número oficial: regime oficial", () => {
+    expect(regimeDoConjunto(["notificame"])).toEqual({ ok: true, regime: "oficial" });
+  });
+
+  it("Chip e Canal Oficial juntos: mixed_regime", () => {
+    // Decisão do CTO, fechada: os dois não coexistem num mesmo Disparo. A tela
+    // barra e o servidor barra de novo — a tela é conveniência, o servidor é a
+    // garantia.
+    expect(regimeDoConjunto(["uazapi", "notificame"])).toEqual({ ok: false, erro: "mixed_regime" });
+  });
+
+  it("número que nenhum motor dispara: recusa antes de criar o plano", () => {
+    // `meta_cloud` é oficial e é template-gated, mas o transporte desta fatia é
+    // o do NotificaMe. Deixar passar criaria um plano que nasce e nunca anda.
+    expect(regimeDoConjunto(["meta_cloud"])).toEqual({ ok: false, erro: "instance_nao_disparavel" });
+    expect(regimeDoConjunto(["uazapi", null])).toEqual({ ok: false, erro: "instance_nao_disparavel" });
+  });
+
+  it("a recusa por número inválido vem ANTES da recusa por mistura", () => {
+    // Ordem deliberada: o motivo mais específico é o mais acionável. "Este
+    // número não dispara" diz o que fazer; "regimes misturados" mandaria o
+    // operador desmarcar um número que já era inválido sozinho.
+    expect(regimeDoConjunto(["notificame", "meta_cloud"])).toEqual({
+      ok: false,
+      erro: "instance_nao_disparavel",
+    });
   });
 });

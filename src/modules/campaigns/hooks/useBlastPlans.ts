@@ -68,7 +68,20 @@ export interface CreateBlastPlanInput {
   /** Per-leva send window (ADR-0015 / #909). Default server-side: Mon–Sat 08–20. */
   window?: { days?: number[]; from_minutes?: number; to_minutes?: number };
   lead_ids: string[];
+  /** O texto que a pessoa recebe. No Canal Oficial, o corpo do Template. */
   message: string;
+  /**
+   * O Template aprovado, quando o Disparo é pelo Canal Oficial (#1722).
+   * Ausente em Disparo de Chip. O servidor recusa plano oficial sem ele, e
+   * recusa regime misto — a tela barra antes, mas a garantia é do servidor.
+   */
+  template?: {
+    name: string;
+    language: string;
+    components: unknown[];
+    previewText: string;
+    buttonLabels: string[];
+  } | null;
   delay_min_ms?: number;
   delay_max_ms?: number;
   image_url?: string;

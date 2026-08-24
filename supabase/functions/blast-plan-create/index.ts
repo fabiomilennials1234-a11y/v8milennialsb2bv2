@@ -19,6 +19,7 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { runUazapiSenderJob } from "../_shared/dispatch-router.ts";
+import { regimeDoConjunto } from "../_shared/decisao-do-disparo.ts";
 import { getDailyBlastBudget, blastDailyUsageSource } from "../_shared/quick-blast/daily-budget.ts";
 import { channelMessagesActivitySource } from "../_shared/quick-blast/refinements.ts";
 import { blastPlanStore } from "../_shared/quick-blast/blast-plan-store.ts";
@@ -84,6 +85,7 @@ Deno.serve(
       window: windowRaw,
       lead_ids,
       message,
+      template,
       delay_min_ms,
       delay_max_ms,
       image_url,
@@ -103,6 +105,14 @@ Deno.serve(
       window?: { days?: number[]; from_minutes?: number; to_minutes?: number };
       lead_ids?: string[];
       message?: string;
+      /** O Template aprovado, quando o Disparo é pelo Canal Oficial (#1722). */
+      template?: {
+        name?: string;
+        language?: string;
+        components?: unknown[];
+        previewText?: string;
+        buttonLabels?: string[];
+      } | null;
       delay_min_ms?: number;
       delay_max_ms?: number;
       image_url?: string;
@@ -166,6 +176,30 @@ Deno.serve(
         return jsonResponse(403, { error: "instance_org_mismatch" }, corsHeaders);
       }
     }
+    // ── Regime (#1722, ADR-0028 §1) ──────────────────────────────────────────
+    //
+    // A Instance escolhida decide o que o conteúdo pode ser. A tela já barra
+    // seleção incoerente, mas o servidor barra de novo: a tela é conveniência,
+    // o servidor é a garantia.
+    const regime = regimeDoConjunto(instances.map((i) => i.provider));
+    if (!regime.ok) {
+      return jsonResponse(400, { error: regime.erro }, corsHeaders);
+    }
+
+    const oficial = regime.regime === "oficial";
+    if (oficial) {
+      // Fora da janela de 24h a Meta só aceita Template aprovado. Sem ele o
+      // plano criaria uma fila que o worker recusaria linha a linha.
+      if (!template?.name || !template?.language) {
+        return jsonResponse(400, { error: "template_obrigatorio_no_canal_oficial" }, corsHeaders);
+      }
+    }
+
+    // `message` continua sendo o texto que a pessoa recebe — no Canal Oficial,
+    // o corpo renderizado do Template. É o que a Revisão mostra e o que o
+    // histórico guarda, e ele sobrevive à Meta pausar o Template do lado dela.
+    const mensagemDoPlano = oficial ? (template!.previewText ?? message) : message;
+
     const instanceById = new Map(instances.map((i) => [i.id as string, i]));
 
     // ADR-0015 multi-number distribution params: one BlastPlanNumber per selected
@@ -222,7 +256,8 @@ Deno.serve(
           numbers,
           window,
           leads,
-          message,
+          message: mensagemDoPlano,
+          template: oficial ? (template as unknown as Record<string, unknown>) : null,
           refinements,
           imageUrl: image_url,
           delayMinMs: delay_min_ms,

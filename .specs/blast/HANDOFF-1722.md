@@ -5,9 +5,10 @@ Branch `feat/1722-disparo-canal-oficial`, empilhada em `feat/1721-blast-recipien
 Plano e medições: [`PLANO-1722.md`](./PLANO-1722.md) · Antecessor: [`HANDOFF-1721.md`](./HANDOFF-1721.md)
 Decisões do CTO: `~/Dev/.maestri/briefs/1722-decisoes.md`
 
-> **Estado: INCOMPLETO, e de propósito.** Quatro das seis fatias estão prontas e verdes;
-> duas não couberam nesta janela. O que falta está em §4, com o desenho já feito — não é
-> "descobrir de novo", é executar. Ver §7 para a recomendação de re-corte.
+> **Estado: INCOMPLETO, e de propósito.** Cinco das seis fatias estão prontas e verdes —
+> incluindo a bifurcação do criador, que era o item crítico. Falta **a tela**: a seleção de
+> Template (critérios 3 e 4) e o progresso por pessoa (critério 7). O desenho está em §4;
+> não é "descobrir de novo", é executar. Ver §7 para o re-corte.
 
 ---
 
@@ -60,9 +61,9 @@ por quê.
 |---|---|---|
 | 1 | Número oficial aparece na tela, com regime visível | ✅ módulo + seletor do Disparo Rápido; o rótulo no wizard depende da fatia 5 (§4) |
 | 2 | Wizard e Disparo Rápido, mesmo conjunto, mesmo módulo | ✅ com **guarda mecânica** que reprova quem voltar a filtrar sozinho |
-| 3 | Número oficial troca o passo de conteúdo | 🟡 máquina de estados pronta e testada; **falta a UI** (§4.1) |
-| 4 | Só Templates aprovados, sem catálogo local | 🟡 idem — o hook existe e já filtra; falta montar o painel |
-| 5 | Uma linha por destinatário, worker consome uma a uma | 🟡 worker, claim e cron prontos; **falta o fork do criador** (§4.2) |
+| 3 | Número oficial troca o passo de conteúdo | 🟡 máquina de estados pronta e testada, ordem já revista; **falta a UI** (§4.1) |
+| 4 | Só Templates aprovados, sem catálogo local | 🟡 idem — o hook existe; falta o painel compartilhado |
+| 5 | Uma linha por destinatário, worker consome uma a uma | ✅ worker, claim, cron **e** a bifurcação do criador nos 4 sítios de despacho |
 | 6 | Mensagem aparece na conversa e **não** é gravada duas vezes | ✅ **provado por mutação**, não por leitura |
 | 7 | Progresso por pessoa, não contador | ❌ não construído (§4.3) |
 | 8 | Organization só com Chip: idêntico a hoje | ✅ provado — allowlist intocada, testes portados, controle explícito |
@@ -149,31 +150,33 @@ exige `draft.template` quando o regime é oficial. Falta a UI:
   PENDING/REJECTED/PAUSED também. O filtro `APPROVED` é de quem chama — hoje o front faz
   (`TemplateNodeConfig.tsx:130-133`). O picker novo tem de manter isso, ou o critério 4 cai.
 
-### 4.2 O criador tem de bifurcar (critério 5) — **este é o item crítico**
+### 4.2 O criador bifurca — **FEITO**
 
-`createBlastPlan` (`_shared/quick-blast/blast-plan.ts:376-388`) despacha o lote 0 via
-`deps.dispatch` e **em seguida marca os destinatários como `sent`**
-(`markRecipients(planId, ..., "sent", null)`, linha 388).
+`createBlastPlan` despachava o lote 0 e **em seguida marcava os destinatários como `sent`**
+na mesma passada. No regime oficial isso seria desastroso: as linhas nasceriam enviadas sem
+ninguém ter enviado, o worker nunca as reivindicaria (ele só olha `pending`), e o Disparo
+apareceria concluído com zero mensagens entregues.
 
-No regime oficial isso é **desastroso**: as linhas nasceriam `sent` sem ninguém ter
-enviado, o worker nunca as reivindicaria, e o Disparo apareceria concluído com zero
-mensagens entregues.
+Os **quatro** sítios de despacho foram bifurcados por `ehCanalOficial(instance)`:
+criação single-número, criação multi-número, release multi-número e release single-número.
+No regime oficial nenhum deles despacha nem marca `sent`; o lote continua sendo **liberado**
+(`lots_released` avança — é o que `claim_blast_recipients` enxerga) e os ledgers de
+orçamento continuam sendo incrementados, porque o Orçamento Diário conta **pessoas
+planejadas para hoje** e isso não depende de quem carrega a mensagem.
 
-O que a bifurcação precisa fazer, no regime oficial:
-- **não** chamar `deps.dispatch` e **não** marcar `sent`;
-- ainda assim avançar `lots_released` para 1, porque o claim exige
-  `lot_index < lots_released` — sem isso o worker não enxerga nada;
-- manter os ledgers de orçamento (org e número) sendo incrementados: o Orçamento Diário
-  conta **pessoas planejadas para hoje**, e isso não muda com o regime;
-- `blast-plan-create/index.ts` precisa: aceitar `template` no corpo, calcular o regime de
-  **cada** Instance com `regimeDoProvedor`, recusar **regime misto** com 400 (decisão 2 do
-  CTO: barrado na tela **e** no servidor), recusar regime `null` (fail-closed), e no
-  oficial exigir o Template e usar o `previewText` como `message`.
-- O mesmo vale para `releaseBlastPlanLot` (linhas 734 e 774), que é o caminho dos lotes
-  seguintes.
+`blast-plan-create` recusa **regime misto** e número não-disparável, e exige o Template no
+oficial — via `regimeDoConjunto`, que é puro e tem teste próprio (a decisão do CTO era
+"barrado na tela **e** no servidor"). O front já manda o `template` no payload.
 
-O ponto de entrada já está preparado: `PlanRow.template` e `CreateBlastPlanInput.template`
-existem e são gravados.
+Provas: `tests/unit/blast-plan-canal-oficial.test.ts` (5 casos, incluindo o **controle do
+Chip**, que continua despachando e marcando `sent` na criação) e os 6 casos de
+`regimeDoConjunto`.
+
+⚠️ **Lacuna registrada, não construída**: o `post_send_target` (o "Destino" do wizard, que
+move o lead quando a mensagem DELE sai) não dispara no regime oficial. `notifyRecipientsSent`
+está dentro do ramo do Chip, e é o lugar certo — chamá-lo na criação afirmaria um envio que
+não aconteceu. Quem passa a mover o lead é o worker, quando o envio de fato sai. É trabalho
+de uma fatia própria; hoje um Disparo oficial com Destino escolhido simplesmente não move.
 
 ### 4.3 Progresso por pessoa (critério 7)
 

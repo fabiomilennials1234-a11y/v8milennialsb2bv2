@@ -48,6 +48,31 @@ export function regimeDoProvedor(provider: string | null | undefined): RegimeDoD
   return null;
 }
 
+/**
+ * O regime de um CONJUNTO de Instances — a validação que o criador do plano faz.
+ *
+ * Três respostas, e cada uma tem um motivo diferente para existir:
+ *
+ *   ok:false / "instance_nao_disparavel"  algum número que nenhum motor sabe
+ *       disparar. Fail-closed: antes isso virava a string crua do fornecedor na
+ *       tela do vendedor, no meio do envio.
+ *   ok:false / "mixed_regime"  Chip e Canal Oficial juntos. Um Disparo tem UM
+ *       conteúdo: texto livre e Template aprovado não coexistem.
+ *   ok:true  o regime único do Disparo.
+ */
+export type RegimeDoConjunto =
+  | { ok: true; regime: RegimeDoDisparo }
+  | { ok: false; erro: "instance_nao_disparavel" | "mixed_regime" };
+
+export function regimeDoConjunto(
+  providers: Array<string | null | undefined>,
+): RegimeDoConjunto {
+  const regimes = new Set(providers.map(regimeDoProvedor));
+  if (regimes.has(null)) return { ok: false, erro: "instance_nao_disparavel" };
+  if (regimes.size !== 1) return { ok: false, erro: "mixed_regime" };
+  return { ok: true, regime: [...regimes][0] as RegimeDoDisparo };
+}
+
 export type AcaoDoDisparo = "enviar" | "pular" | "recusar";
 
 export interface DecisaoDoDisparo {
