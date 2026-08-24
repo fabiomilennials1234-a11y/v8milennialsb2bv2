@@ -15,6 +15,7 @@ import { listCustomFields, listPipelines, listTags } from "../_shared/api/routes
 import { createLead } from "../_shared/api/routes/leads-create.ts";
 import { createDeal } from "../_shared/api/routes/deals-create.ts";
 import { getDeal, listDeals, listLeadDeals, patchDeal } from "../_shared/api/routes/deals.ts";
+import { moveDeal } from "../_shared/api/routes/deals-move.ts";
 import {
   addLeadTags,
   moveLeadStage,
@@ -55,8 +56,12 @@ export const routes: ApiRoute[] = [
   { method: "GET", pattern: "/api/v1/deals/{id}", scope: "deal:read", handler: getDeal },
   { method: "POST", pattern: "/api/v1/deals", scope: "deal:write", handler: createDeal },
   { method: "PATCH", pattern: "/api/v1/deals/{id}", scope: "deal:write", handler: patchDeal },
+  { method: "POST", pattern: "/api/v1/deals/{id}/move", scope: "deal:write", handler: moveDeal },
   { method: "GET", pattern: "/api/v1/leads/{id}/deals", scope: "deal:read", handler: listLeadDeals },
   { method: "PATCH", pattern: "/api/v1/leads/{id}", scope: "lead:write", handler: patchLead },
+  // DEPRECIADA: move um LEAD para uma etapa, e a decisão 1 do ADR-0023 diz que
+  // um Lead nunca tem etapa. Substituída por POST /deals/{id}/move. Mantida
+  // viva para não quebrar quem já integrou; a remoção precisa ser deliberada.
   { method: "POST", pattern: "/api/v1/leads/{id}/stage", scope: "lead:write", handler: moveLeadStage },
   { method: "POST", pattern: "/api/v1/leads/{id}/tags", scope: "lead:write", handler: addLeadTags },
   { method: "DELETE", pattern: "/api/v1/leads/{id}/tags/{tag}", scope: "lead:write", handler: removeLeadTag },

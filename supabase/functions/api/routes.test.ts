@@ -5,6 +5,7 @@ import { searchLeads } from "../_shared/api/routes/leads.ts";
 import { createLead } from "../_shared/api/routes/leads-create.ts";
 import { createDeal } from "../_shared/api/routes/deals-create.ts";
 import { getDeal, listDeals, listLeadDeals, patchDeal } from "../_shared/api/routes/deals.ts";
+import { moveDeal } from "../_shared/api/routes/deals-move.ts";
 import { API_SCOPES, hasScope } from "../_shared/api/scopes.ts";
 
 // ── A tabela de rotas ──────────────────────────────────────────
@@ -89,4 +90,21 @@ Deno.test("routes — /leads/{id}/timeline continua alcançável", () => {
   const t = matchRoute("GET", "/api/v1/leads/l-1/timeline", routes);
   assertEquals(t?.params.id, "l-1");
   assertEquals(t?.route.scope, "lead:read");
+});
+
+Deno.test("routes — POST /deals/{id}/move casa, com escopo de escrita", () => {
+  const m = matchRoute("POST", "/api/v1/deals/d-1/move", routes);
+  assertEquals(m?.route.handler, moveDeal);
+  assertEquals(m?.route.scope, "deal:write");
+  assertEquals(m?.params.id, "d-1");
+});
+
+// A rota antiga move um LEAD para uma etapa — e a decisão 1 do ADR-0023 diz que
+// um Lead NUNCA tem etapa. Ela continua funcionando para não quebrar quem já
+// integrou, marcada como depreciada na documentação (#1776). O teste existe para
+// que a remoção seja deliberada, e não um efeito colateral de alguém "limpando".
+Deno.test("routes — a rota de mover LEAD continua viva, depreciada", () => {
+  const m = matchRoute("POST", "/api/v1/leads/l-1/stage", routes);
+  assertEquals(m?.params.id, "l-1");
+  assertEquals(m?.route.scope, "lead:write");
 });
