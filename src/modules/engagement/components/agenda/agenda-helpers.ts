@@ -106,10 +106,17 @@ export function normalizeEventType(t: string | null | undefined): EventTypeKey {
 export type AgendaStatusFilter = "pending" | "all" | "done";
 
 /**
- * Status terminais das quatro fontes da agenda. Cada uma fala um dialeto:
+ * Status terminais das CINCO fontes da agenda. Cada uma fala um dialeto:
  * `meetings` usa o enum `MeetingStatus`, `follow_ups` vira `completed` na
- * própria RPC, `scheduled_user_messages` usa o ciclo de envio e
- * `pipe_confirmacao` grava a chave da etapa do kanban (`compareceu`/`perdido`).
+ * própria RPC, `scheduled_user_messages` usa o ciclo de envio,
+ * `pipe_confirmacao` grava a chave da etapa do kanban (`compareceu`/`perdido`)
+ * e `meeting_events` (Source 5, funil mergeado) devolve `completed`/`scheduled`.
+ *
+ * A Source 5 não precisou de entrada nova aqui porque REUSA `completed`, que
+ * já estava na lista por causa de `meetings` — é por isso que ela entrou em
+ * produção em 30/07 sem quebrar a aba "Pendentes". Não é sorte que se possa
+ * repetir: uma sexta fonte com vocabulário próprio precisa ser adicionada.
+ *
  * O que não estiver aqui conta como pendente — desconhecido nunca some da aba
  * "Pendentes", que é a que a pessoa abre para trabalhar.
  */
@@ -147,10 +154,10 @@ export function matchesStatusFilter(
 /**
  * `created_by` na RPC `get_agenda_events` **não é uma chave só**: para
  * `meetings` vem de `auth.users.id` (o JOIN em prod é `tm.user_id =
- * m.created_by`), e para `follow_ups`, `scheduled_user_messages` e
- * `pipe_confirmacao` vem de `team_members.id`. Por isso a comparação é contra
- * um CONJUNTO de identidades do usuário — comparar contra uma só casaria zero
- * linha em três das quatro fontes.
+ * m.created_by`), e para `follow_ups`, `scheduled_user_messages`,
+ * `pipe_confirmacao` e `meeting_events` vem de `team_members.id`. Por isso a
+ * comparação é contra um CONJUNTO de identidades do usuário — comparar contra
+ * uma só casaria zero linha em QUATRO das cinco fontes.
  */
 export function buildOwnerIdentity(
   userId: string | null,

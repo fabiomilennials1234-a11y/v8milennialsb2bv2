@@ -1,9 +1,9 @@
 /**
  * A tela "Atividades" — Agenda interna unificada.
  *
- * Mostra eventos de 4 fontes internas (meetings, follow_ups,
- * scheduled_messages, pipe_confirmacao) como dados primarios,
- * com Google Calendar como overlay opcional.
+ * Mostra eventos de 5 fontes internas (meetings, follow_ups,
+ * scheduled_messages, pipe_confirmacao e meeting_events — o funil mergeado)
+ * como dados primarios, com Google Calendar como overlay opcional.
  *
  * Vive em DOIS lugares e é o mesmo componente nos dois, de propósito:
  * - dentro do `AgendaPanel`, o painel sobreposto que o botão da lateral abre
