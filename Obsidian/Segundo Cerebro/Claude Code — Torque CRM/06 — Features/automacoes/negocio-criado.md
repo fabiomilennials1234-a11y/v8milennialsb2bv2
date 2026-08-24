@@ -48,7 +48,7 @@ Lead do workflow = `deals.source_lead_id`. Contexto: `deal_id`, `deal_title`, `d
 Filtros (`trigger_config`, validados em `matchesTriggerConfig`):
 
 - `require_lead` — **default true, fail-closed**. Negócio sem lead não tem quem receber mensagem/tag/etapa; o downstream inteiro assume lead.
-- `source` — `any` | `manual` | `workflow`
+- `source` — espelha `deals.source`: `any` | `human` | `workflow` | `api` | `import`
 - `min_value`, `filter_owner_id`
 
 ## Guard de laço
@@ -64,6 +64,17 @@ Negócio inserido já com `deleted_at` (import/backfill) não dispara.
 
 Como todo action node: só no worker `process-workflow-executions`. O trigger apenas enfileira em `workflow_executions`; os filtros de `trigger_config` são avaliados no worker antes do primeiro node.
 
+## Procedência (`deals.source`)
+
+`public.deals` exige procedência: CHECK `deals_source_check` (`human`/`workflow`/`api`/`import`/`backfill`)
+mais o trigger `fn_deals_exige_procedencia`, que recusa o INSERT com "Procedência é obrigatória ao
+abrir um Negócio". O node grava `source = 'workflow'`, e o trigger propaga `deal_source` no contexto
+(`created_by_workflow` é derivado dele, não mais de `metadata`).
+
+Isso chegou em prod **depois** do pré-voo desta feature e só apareceu no smoke em produção — o
+ensaio transacional tinha rodado contra um schema sem a regra. Migration de correção:
+`20270824050000_deal_created_trigger_usa_deals_source.sql`.
+
 ## Estado em prod (2026-08-24)
 
 Migration aplicada em prod e registrada no ledger (`supabase_migrations.schema_migrations`,
@@ -71,6 +82,11 @@ version `20270213000000`). Trigger habilitado em `public.deals` — que tem **34
 e ~150 inserções/dia em 69 orgs**, todas com `source_lead_id`. Enquanto nenhuma org tiver
 workflow com `trigger_type = 'deal_created'`, o custo por INSERT é um SELECT indexado em
 `workflows` (org + trigger_type) e zero execuções.
+
+Smoke end-to-end em prod (2026-08-24, dados removidos depois): node criou o negócio com título
+resolvido pela variável, `source=workflow`, dono herdado do lead e `metadata.workflow_execution_id`;
+o INSERT disparou `deal_created` com `chain_depth = 1` e `triggered_by_execution_id` apontando para
+a execução que o criou; ambas as execuções terminaram `completed`.
 
 O ensaio transacional contra prod (BEGIN/asserções/ROLLBACK) cobriu: insert sem workflow → 0
 execuções; com workflow ativo → 1 execução e contexto correto; `deleted_at` → pula;

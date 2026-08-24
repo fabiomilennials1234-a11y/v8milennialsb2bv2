@@ -54,6 +54,9 @@ describe("createDeal — shared action handler", () => {
     expect(inserted.value).toBe(1500);
     expect(inserted.probability).toBe(70);
     expect(inserted.owner_id).toBe("tm-1");
+    // Procedência canônica — sem ela o INSERT em prod é recusado por
+    // fn_deals_exige_procedencia (CHECK deals_source_check).
+    expect(inserted.source).toBe("workflow");
     // marca de origem — alimenta o guard de chain_depth do trigger deal_created
     expect(inserted.metadata).toMatchObject({
       created_by: "workflow",

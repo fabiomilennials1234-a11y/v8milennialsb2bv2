@@ -434,7 +434,7 @@ describe("matchesTriggerConfig", () => {
       deal_id: "deal-1",
       deal_value: 1000,
       owner_id: "tm-1",
-      created_by_workflow: false,
+      deal_source: "human",
       ...over,
     });
 
@@ -452,16 +452,19 @@ describe("matchesTriggerConfig", () => {
       ).toBe(true);
     });
 
-    it("filters by source — manual vs workflow", () => {
-      expect(matchesTriggerConfig("deal_created", { source: "manual" }, ctx())).toBe(true);
+    it("filters by deals.source — human vs workflow vs api", () => {
+      expect(matchesTriggerConfig("deal_created", { source: "human" }, ctx())).toBe(true);
       expect(
-        matchesTriggerConfig("deal_created", { source: "manual" }, ctx({ created_by_workflow: true })),
+        matchesTriggerConfig("deal_created", { source: "human" }, ctx({ deal_source: "workflow" })),
       ).toBe(false);
       expect(
-        matchesTriggerConfig("deal_created", { source: "workflow" }, ctx({ created_by_workflow: true })),
+        matchesTriggerConfig("deal_created", { source: "workflow" }, ctx({ deal_source: "workflow" })),
       ).toBe(true);
       expect(
-        matchesTriggerConfig("deal_created", { source: "any" }, ctx({ created_by_workflow: true })),
+        matchesTriggerConfig("deal_created", { source: "api" }, ctx({ deal_source: "api" })),
+      ).toBe(true);
+      expect(
+        matchesTriggerConfig("deal_created", { source: "any" }, ctx({ deal_source: "workflow" })),
       ).toBe(true);
     });
 

@@ -402,7 +402,7 @@ function DealCreatedConfig({
       </div>
 
       <div className="space-y-2">
-        <Label>Origem do negócio</Label>
+        <Label>Procedência do negócio</Label>
         <Select
           value={(cfg.source as string) || "any"}
           onValueChange={(v) => updateConfig({ source: v })}
@@ -411,9 +411,11 @@ function DealCreatedConfig({
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="any">Qualquer origem</SelectItem>
-            <SelectItem value="manual">Criado por pessoa</SelectItem>
+            <SelectItem value="any">Qualquer procedência</SelectItem>
+            <SelectItem value="human">Criado por pessoa</SelectItem>
             <SelectItem value="workflow">Criado por automação</SelectItem>
+            <SelectItem value="api">Criado pela API</SelectItem>
+            <SelectItem value="import">Importação</SelectItem>
           </SelectContent>
         </Select>
       </div>

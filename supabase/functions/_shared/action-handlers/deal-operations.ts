@@ -96,6 +96,8 @@ export async function createDeal(input: ActionInput): Promise<ActionResult> {
       probability,
       owner_id: ownerId,
       source_lead_id: leadId,
+      // Procedência canônica (CHECK deals_source_check + trigger fn_deals_exige_procedencia)
+      source: "workflow",
       expected_close_date: expectedCloseDate,
       notes: (params.dealNotes as string) || null,
       metadata: {

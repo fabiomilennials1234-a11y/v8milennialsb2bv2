@@ -334,8 +334,8 @@ export interface TriggerConfigDealCreated {
   /** Só dispara para negócios vinculados a um lead. Default: true (fail-closed —
    *  a maioria dos nós downstream precisa de lead). */
   require_lead?: boolean;
-  /** Origem do negócio: manual (tela), workflow (nó create_deal) ou qualquer uma. */
-  source?: "any" | "manual" | "workflow";
+  /** Procedência do negócio — espelha `deals.source` (CHECK: human/workflow/api/import/backfill). */
+  source?: "any" | "human" | "workflow" | "api" | "import";
   filter_owner_id?: string;
   /** Valor mínimo do negócio (R$) para disparar. */
   min_value?: number;

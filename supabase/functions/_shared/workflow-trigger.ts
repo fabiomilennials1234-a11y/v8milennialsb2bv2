@@ -417,10 +417,7 @@ export function matchesTriggerConfig(
       if (requireLead && !context.lead_id) return false;
 
       const source = (config.source as string) || "any";
-      if (source !== "any") {
-        const ctxSource = context.created_by_workflow ? "workflow" : "manual";
-        if (source !== ctxSource) return false;
-      }
+      if (source !== "any" && source !== context.deal_source) return false;
 
       if (config.filter_owner_id && config.filter_owner_id !== context.owner_id) return false;
 

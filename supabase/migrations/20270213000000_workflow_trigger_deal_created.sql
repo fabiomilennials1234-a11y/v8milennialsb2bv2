@@ -42,7 +42,8 @@ BEGIN
       'deal_title', NEW.title,
       'deal_value', COALESCE(NEW.value, 0),
       'owner_id', NEW.owner_id,
-      'created_by_workflow', (NEW.metadata->>'created_by' = 'workflow'),
+      'deal_source', NEW.source,
+      'created_by_workflow', (NEW.source = 'workflow'),
       -- aliases pt-BR consumidos por resolveVariables nos templates dos nós
       'negocio_id', NEW.id,
       'negocio_titulo', NEW.title,
