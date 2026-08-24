@@ -1,4 +1,4 @@
--- ROLLBACK de 20270824080000_lead_comments_por_negocio.sql
+-- ROLLBACK de 20270824120000_lead_comments_por_negocio.sql
 --
 -- Devolve `lead_comments` ao vínculo único com o lead.
 --

@@ -1,4 +1,4 @@
--- ROLLBACK de 20270824090000_lead_comment_entry_coerente_revoga_anon.sql
+-- ROLLBACK de 20270824130000_lead_comment_entry_coerente_revoga_anon.sql
 --
 -- CONSEQUÊNCIA CONHECIDA de rodar isto: devolve o EXECUTE de `anon` numa função
 -- `SECURITY DEFINER`. Não abre caminho de dado — `prorettype` é `trigger` e o
