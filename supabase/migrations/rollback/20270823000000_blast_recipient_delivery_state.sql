@@ -31,5 +31,10 @@ ALTER TABLE public.blast_plan_recipients
   ADD CONSTRAINT blast_plan_recipients_status_check
   CHECK (status IN ('pending', 'sent', 'skipped', 'failed'));
 
+-- VERBATIM do comentário vivo, copiado de
+-- 20260101000000_baseline_prod_schema.sql:21896. Um rollback que devolve o
+-- comentário pela metade não devolveu a tabela ao que ela era — e a asserção 13
+-- do ensaio compara índices, constraints, colunas, policies e grants, NÃO
+-- comentários, então ela passaria por cima desta perda. Achado do /code-review.
 COMMENT ON COLUMN public.blast_plan_recipients.status IS
-  'pending | sent | skipped | failed. `sent` = accepted by the sending queue at dispatch (optimistic, ADR-0016 §4).';
+  'pending | sent | skipped | failed. `sent` = accepted by the sending queue at dispatch (optimistic, ADR-0016 §4); the mass-send-status poll may reclassify it to `failed` when the provider reports a delivery failure, with `reason` = canonical failure code.';

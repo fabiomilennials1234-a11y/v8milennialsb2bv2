@@ -158,11 +158,24 @@ describe("vocabulário de blast_plan_recipients.status (#1721)", () => {
     ).toEqual([]);
 
     // E nenhum literal fora do vocabulário, que é como 'membro' nasceu no #1541.
+    //
+    // DUAS formas, porque este código escreve status das duas maneiras e uma
+    // varredura que só conhece a primeira deixa passar exatamente o filtro que
+    // mais aparece aqui:
+    //   objeto  -> .update({ status: "skipped", reason })   (blast-plan-control:144)
+    //   filtro  -> .eq("status", "sent")                    (mass-send-status:75)
+    const FORMAS_DE_STATUS = [
+      /status:\s*["'`]([a-z_]+)["'`]/g,        // { status: "x" }
+      /\.eq\(\s*["'`]status["'`]\s*,\s*["'`]([a-z_]+)["'`]/g, // .eq("status", "x")
+    ];
+
     const forasteiros: string[] = [];
     for (const { caminho, texto } of arquivos) {
-      for (const m of texto.matchAll(/status:\s*["'`]([a-z_]+)["'`]/g)) {
-        if (m[1] in NAO_E_STATUS_DE_DESTINATARIO) continue;
-        if (!vocabulario.has(m[1])) forasteiros.push(`${caminho}: status '${m[1]}'`);
+      for (const forma of FORMAS_DE_STATUS) {
+        for (const m of texto.matchAll(forma)) {
+          if (m[1] in NAO_E_STATUS_DE_DESTINATARIO) continue;
+          if (!vocabulario.has(m[1])) forasteiros.push(`${caminho}: status '${m[1]}'`);
+        }
       }
     }
     expect(forasteiros, "literal de status fora do CHECK").toEqual([]);

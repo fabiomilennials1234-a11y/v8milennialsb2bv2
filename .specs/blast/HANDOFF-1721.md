@@ -130,8 +130,11 @@ reprovaram, cada uma numa asserção diferente.
    `Obsidian/.../05 — How-to/aplicar-migration-prod.md`: rollback capturado em arquivo **e testado
    rodando**, baseline medido no alvo (235 linhas, distribuição registrada em `PLANO-1721.md §10`).
 2. **Regenerar os types** depois do apply.
-3. O `supabase migration list` vai gravar a versão real (`2026…`), que ordena abaixo do prefixo
-   fictício `2027…` deste arquivo. Isso é drift esperado neste repo — registrar, não "consertar".
+3. Conferir o ledger depois do apply. `supabase/migrations/CLAUDE.md` § "Listar migrations
+   aplicadas" avisa que a versão gravada pode não bater com o prefixo do arquivo, e que divergência
+   aí é drift a registrar, **não** a reaplicar. O `/code-review` contestou o mecanismo (sustenta que
+   `db push` grava o próprio prefixo do arquivo). **Eu não medi qual dos dois está certo** — só
+   sei que o repo documenta a primeira versão. Conferir na hora do apply, com o ledger na mão.
 
 ## O que me surpreendeu
 
@@ -148,3 +151,62 @@ reprovaram, cada uma numa asserção diferente.
   (`git ls-files` vazio); sobrevive só num commit de resgate, `9e57b89b`. **Guarda que a
   documentação promete e o repo não tem é pior que guarda nenhuma, porque as pessoas confiam nela.**
   Fora do escopo desta fatia; fica reportado. Cabe issue própria.
+
+
+## O que o /code-review mudou
+
+Dois eixos em paralelo (Standards, Spec). **Zero violações duras de padrão documentado.** O que
+saiu de lá e virou conserto:
+
+**Consertado — rollback devolvia o comentário pela metade.** O `COMMENT ON COLUMN` do rollback
+truncava o texto vivo, perdendo a segunda metade (`…the mass-send-status poll may reclassify it to
+failed…`). O arquivo afirmava no cabeçalho que devolvia a tabela "à forma medida"; devolvia quase.
+Agora é **verbatim** de `20260101000000_baseline_prod_schema.sql:21896`. E o achado expõe um limite
+real do ensaio: a asserção 13 compara índices, constraints, colunas, policies e grants — **não
+comentários** — então ela passou por cima desta perda. Quem mexer no ensaio depois: acrescentar
+`obj_description`/`col_description` ao eixo comparado.
+
+**Consertado — a guarda 4 do `ensaio-1721.sh` afirmava mais do que checava.** Ela dizia "todo INSERT
+está dentro de uma sonda" mas casava por **texto** (`grep -v 'blast_plan_recipients (plan_id'`), de
+modo que um INSERT de topo no mesmo formato passaria. Agora checa **posição**: conta as aberturas
+`$sonda$` antes de cada INSERT e recusa os de número par (fora de sonda). Mutado para provar que
+pega — e a primeira tentativa de mutação foi capturada pela guarda 1 (última instrução), o que não
+exercitava a guarda 4; refiz com o INSERT antes do `ROLLBACK` e vi a recusa certa.
+
+**Consertado — a prova não era reconferível a partir do repo.** Os `235 → 235 → 235` viviam só como
+prosa. A saída literal da execução está agora em
+[`.specs/blast/ensaio-1721-relatorio-2026-08-23.md`](./ensaio-1721-relatorio-2026-08-23.md), com a
+ressalva de proveniência: é transcrição do stdout, não arquivo que o script escreveu. O próximo
+ensaio deve fazer `tee`.
+
+**Consertado — a varredura de forasteiros só conhecia uma forma de escrever status.** Casava
+`status: "x"` e deixava passar `.eq("status", "x")`, que é justamente como `mass-send-status` filtra.
+Agora cobre as duas.
+
+**Recusado, de propósito — de-duplicar os snapshots do ensaio e renomear as variáveis (`v_a`
+reusada para duas coisas).** Os três blocos repetidos e os nomes fracos são reais. Mas os `.sql` do
+ensaio **já foram executados contra produção**: editá-los faria o arquivo em disco deixar de
+corresponder ao que rodou, e a evidência viraria ficção. Revalidar exigiria reexecutar, e a
+autorização do CTO valeu para aquela execução e se encerrou. Fica como dívida explícita para quem
+tiver o próximo ensaio autorizado. (O `.sh` é outra coisa — é o arreio, não a evidência; por isso a
+guarda 4 pôde ser apertada.)
+
+**Aceito como escopo deliberado, não creep** — a varredura de vocabulário de outras tabelas
+(`blast_plans`, `uazapi_sender_jobs`, `runtime_logs`) e o teste 4, que fixa a union em quatro
+valores. A revisão está certa que a spec não pediu nenhum dos dois. Ambos seguem o precedente do
+`tests/unit/role-vocabulary.test.ts`, e o custo de manutenção é uma linha na allowlist **com
+motivo**. O teste 4 é o estopim que obriga a próxima fatia a tratar a tela antes de gravar
+`delivered` — sem ele, o primeiro `delivered` de produção aparece como "Aguardando".
+
+**Registrado, não construído — `claimed_at` não tem índice que a sustente.** A spec pede que "a
+linha guarde" a marca, e ela guarda. Mas a consulta que o worker vai fazer
+(`claimed_at IS NULL AND status = 'pending'`, por plano e lote) não tem índice parcial que a sirva;
+o `idx_blast_plan_recipients_instance` cobre `(plan_id, lot_index, instance_id) WHERE status =
+'pending'` e serve de ponto de partida. **A fatia do worker paga essa conta** — e paga barato hoje,
+com 235 linhas.
+
+**Pendente de você, e é o único item que precisa da sua palavra:** o índice **não** concorrente
+contraria a decisão 3 do `1721-decisoes.md` ("CONCURRENTLY fora da transação"). Eu inverti com base
+em medição (235 linhas; e concorrente tornaria impossível o ensaio concatenar o arquivo real).
+A revisão observou, com razão, que inverter uma decisão fechada pede reconhecimento explícito do
+CTO, não um parágrafo de handoff. Está dito aqui e no PR.

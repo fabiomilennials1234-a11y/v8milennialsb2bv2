@@ -54,8 +54,14 @@ DML="$(grep -inE '^[[:space:]]*(UPDATE[[:space:]]|DELETE[[:space:]]+FROM|TRUNCAT
 # 4. Todo INSERT tem de estar dentro de uma sonda pg_temp (que se auto-reverte).
 #    Qualquer INSERT fora delas é escrita de verdade esperando um ROLLBACK — e
 #    ROLLBACK não é lugar de guardar coragem.
-INSERTS_FORA="$(grep -nE '^[[:space:]]*INSERT[[:space:]]+INTO' <<<"$SEM_COMENTARIO" \
-                | grep -v 'public.blast_plan_recipients (plan_id' || true)"
+# Casar pelo texto do INSERT deixaria passar um INSERT de topo com o mesmo
+# formato. O que precisa ser verdade é POSIÇÃO: todo INSERT tem de estar DENTRO
+# de um corpo `$sonda$ ... $sonda$`. Contamos as aberturas de sonda antes de cada
+# INSERT — número ímpar = está dentro de uma. Achado do /code-review.
+INSERTS_FORA="$(awk '
+  /\$sonda\$/ { n += gsub(/\$sonda\$/, "&") }
+  /^[[:space:]]*INSERT[[:space:]]+INTO/ { if (n % 2 == 0) print NR": "$0 }
+' <<<"$SEM_COMENTARIO" || true)"
 [[ -z "$INSERTS_FORA" ]] || { echo "RECUSADO: INSERT fora das sondas:$INSERTS_FORA" >&2; exit 1; }
 
 # 5. A migration concatenada tem de ser só schema (guarda F4).
