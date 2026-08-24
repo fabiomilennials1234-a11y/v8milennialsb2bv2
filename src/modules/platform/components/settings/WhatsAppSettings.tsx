@@ -90,7 +90,14 @@ export function deriveInstanceStatus(
   return instance.status ?? "disconnected";
 }
 
-function QRCodeModal({
+/**
+ * Exported for `tests/unit/whatsapp-qr-modal-rotation.test.tsx`, which drives it
+ * through a live pairing window and asserts the rendered QR follows the
+ * provider's rotation. That is the one property whose absence produced the
+ * "Escaneie o QR code novamente" screen on the customer's phone, and it is not
+ * observable from the hook alone — it lives in this component's state wiring.
+ */
+export function QRCodeModal({
   instanceId,
   instances,
   isOpen,
@@ -153,22 +160,31 @@ function QRCodeModal({
       });
   }, [isOpen, instance?.id, effectiveStatus, pairMode]);
 
-  // Reset the latch and drop the code when the modal closes, so reopening pairs
-  // afresh and a dead QR never survives to be shown again.
+  // Drop the code the moment it stops being useful — on close, and on connect.
+  //
+  // Closing: reopening must pair afresh, never flash the previous session's
+  // code, which the provider has already retired.
+  //
+  // Connecting: the code was just consumed. Before this fix lived in component
+  // state, the connect branch of the poll nulled `qr_code` in the row and the
+  // cache refresh took the image away for free; holding it locally means we own
+  // that cleanup. Leaving it on screen would park a spent pairing credential
+  // under a green "Conectado" badge.
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || effectiveStatus === "connected") {
       kickedRef.current = null;
       setLiveQr(null);
       setPairCode(null);
     }
-  }, [isOpen]);
+  }, [isOpen, effectiveStatus]);
 
   // Poll connection status every 3s — stops when connected (real connection,
   // not stale `status='connected'` + session_dead_since).
   //
-  // This poll is also what keeps the QR alive: `checkStatus` persists the
+  // This poll is also what keeps the QR alive: `checkStatus` hands back the
   // provider's current code on every tick (3s poll vs ~20s rotation, so the
-  // image on screen is never more than one tick behind).
+  // image on screen is never more than one tick behind). It is handed back, not
+  // stored — see the note on `liveQr` above for why the row is the wrong home.
   useEffect(() => {
     if (!isOpen || !instance || effectiveStatus === "connected") return;
 
@@ -239,8 +255,11 @@ function QRCodeModal({
   const isOfficial = getProviderProfile(instance.provider).official;
 
   // Prefer the freshly-polled code; fall back to whatever the row carries only
-  // as a first paint, before the first tick lands.
-  const displayedQr = liveQr ?? instance.qr_code;
+  // as a first paint, before the first tick lands. Never show anything once
+  // connected — rows that predate this fix can still carry a spent code, and the
+  // fallback would happily paint it next to a green "Conectado" badge.
+  const displayedQr =
+    effectiveStatus === "connected" ? null : liveQr ?? instance.qr_code;
   const qrCodeData = displayedQr?.startsWith("data:image")
     ? displayedQr
     : `data:image/png;base64,${displayedQr}`;
