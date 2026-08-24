@@ -491,7 +491,7 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/duplicate_leads_rpcs_test.sql" \
     "$SCRIPT_DIR/password_reset_grants_test.sql" \
     "$SCRIPT_DIR/assert_org_access_test.sql" \
-    "$SCRIPT_DIR/export_lead_data_authz_test.sql deal_procedencia_test.sql deal_last_activity_test.sql" \
+    "$SCRIPT_DIR/export_lead_data_authz_test.sql deal_procedencia_test.sql deal_last_activity_test.sql api_lead_create_search_test.sql" \
     "$SCRIPT_DIR/metric_revenue_stream_test.sql" \
     "$SCRIPT_DIR/sale_events_producer_identity_test.sql" \
     "$SCRIPT_DIR/carteira_emits_sale_events_test.sql" \
