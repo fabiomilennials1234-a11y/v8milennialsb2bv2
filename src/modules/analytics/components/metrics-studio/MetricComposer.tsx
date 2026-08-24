@@ -10,6 +10,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useMetricMeasure } from "@/modules/analytics/hooks/useMetricMeasure";
 import type { MetricCustomDefinition, MetricCustomDraft } from "@/modules/analytics/hooks/useMetricCustomDefinitions";
 import {
@@ -87,6 +95,17 @@ const ROTULO_DO_FORMATO: Record<MetricFormatId, string> = {
   ratio_2: "Razão (2 casas)",
 };
 
+/**
+ * Radix `Select` NÃO aceita `value=""` — string vazia é reservada para "limpar".
+ * Os três campos de etapa precisam de um estado "ainda não escolhi", então ele
+ * viaja como sentinela na UI e vira `undefined` no dado. O `<select>` nativo que
+ * havia aqui usava `""` direto; a troca exige esta ponte.
+ */
+const SEM_ESCOLHA = "__sem_escolha__";
+
+/** Altura única de todo controle do compositor. Havia três (h-8, h-9, h-10). */
+const ALTURA = "h-9";
+
 const NO_INICIAL: MetricTreeNode = {
   type: "op",
   op: "div",
@@ -161,7 +180,11 @@ export function MetricComposer({
 
   return (
     <Dialog open={aberto} onOpenChange={(o) => !o && onFechar()}>
-      <DialogContent className="max-w-[620px]">
+      {/* 620 → 680: o operador virou segmented control de quatro botões e a
+          linha da composição passou a ter ~100px fixos a mais. Em 620 a
+          profundidade 3 espremia os dois selects a menos de 130px, onde
+          "Leads que entraram" já não cabe. */}
+      <DialogContent className="max-w-[680px]">
         <DialogHeader>
           <DialogTitle className="text-[15px] font-extrabold tracking-[-0.02em]">
             {editando ? "Editar métrica" : "Nova métrica"}
@@ -182,7 +205,10 @@ export function MetricComposer({
               onChange={(e) => setNome(e.target.value)}
               maxLength={60}
               placeholder="Receita por lead"
-              className="h-9 w-full rounded-lg border border-border bg-card px-3 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50"
+              className={cn(
+                ALTURA,
+                "w-full rounded-lg border border-border bg-card px-3 text-[13px] outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50",
+              )}
             />
           </div>
 
@@ -198,15 +224,19 @@ export function MetricComposer({
             </div>
           </div>
 
-          {/* Resultado — o número real do período, não uma simulação. */}
-          <div className="rounded-xl border border-border/70 bg-card/50 px-3 py-2.5">
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 truncate text-[11px] text-muted-foreground/70">
+          {/* Resultado — o número real do período, não uma simulação.
+              Casca DIFERENTE da dos campos de propósito: sem borda, fundo
+              afundado. Antes ele usava `border + bg-card`, a mesma roupa do
+              input de nome e da caixa de composição, e o olho lia a saída como
+              mais um campo para preencher. */}
+          <div className="rounded-xl bg-muted/30 px-3.5 py-3">
+            <div className="flex items-baseline justify-between gap-4">
+              <span className="min-w-0 truncate text-[12px] leading-snug text-muted-foreground">
                 {ehErro(validacao)
                   ? "Composição incompleta"
                   : descreverArvore(arvore, (id) => ROTULO_DA_MEDIDA.get(id) ?? id)}
               </span>
-              <span className="shrink-0 text-[18px] font-extrabold tracking-[-0.03em] tabular-nums">
+              <span className="shrink-0 text-[22px] font-extrabold leading-none tracking-[-0.035em] tabular-nums">
                 {ehErro(validacao) || semEtapas ? EM_DASH
                   : previa.isLoading ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/40" />
                   : formatMetricValue(previa.data?.value ?? null, formatoEfetivo ?? "ratio_2")}
@@ -230,19 +260,29 @@ export function MetricComposer({
 
           {unidade && (
             <div className="space-y-1.5">
-              <label htmlFor="metrica-formato" className="text-[11px] font-semibold text-muted-foreground">
-                Como mostrar · resultado em {rotuloDaUnidade(unidade)}
+              {/* O rótulo diz o que ESCOLHER; a unidade derivada é FATO, e vira
+                  sufixo discreto em vez de dividir o label com um "·". */}
+              <label htmlFor="metrica-formato" className="flex items-baseline gap-1.5">
+                <span className="text-[11px] font-semibold text-muted-foreground">Como mostrar</span>
+                <span className="text-[11px] text-muted-foreground/50">
+                  resultado em {rotuloDaUnidade(unidade)}
+                </span>
               </label>
-              <select
-                id="metrica-formato"
-                value={formatoEfetivo ?? ""}
-                onChange={(e) => setFormato(e.target.value as MetricFormatId)}
-                className="h-9 w-full rounded-lg border border-border bg-card px-2.5 text-[13px] outline-none focus:border-primary/50"
+              <Select
+                value={formatoEfetivo ?? undefined}
+                onValueChange={(v) => setFormato(v as MetricFormatId)}
               >
-                {formatosOk.map((f) => (
-                  <option key={f} value={f}>{ROTULO_DO_FORMATO[f]}</option>
-                ))}
-              </select>
+                <SelectTrigger id="metrica-formato" className={cn(ALTURA, "text-[13px]")}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {formatosOk.map((f) => (
+                    <SelectItem key={f} value={f} className="text-[13px]">
+                      {ROTULO_DO_FORMATO[f]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
               {/* A armadilha de 100×, dita em português no único lugar onde
                   alguém pode cair nela. */}
@@ -302,8 +342,12 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
         "flex flex-col gap-1.5 rounded-lg",
         nivel > 1 && "border border-dashed border-border/60 bg-muted/20 p-1.5",
       )}>
-        <div className="flex items-center gap-1.5">
-          <div className="min-w-0 flex-1">
+        {/* `flex-wrap`: rede de segurança da recursão. Na profundidade 3 os
+            fixos (segmented + três botões) somam ~210px, e se a viewport for
+            estreita a linha quebra em vez de espremer o select até o rótulo
+            virar reticências. */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <div className="min-w-[130px] flex-1">
             <NoEditor
               node={node.left}
               nivel={nivel + 1}
@@ -312,18 +356,33 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
             />
           </div>
 
-          <select
+          {/* O operador é o CORAÇÃO da composição e era o menor controle da
+              tela — um `<select>` de 20px de largura. São quatro valores, todos
+              cabem: segmented control mostra os quatro e resolve em UM clique,
+              em vez de abrir lista e escolher.
+              `value` nunca fica vazio: ToggleGroup devolve "" ao clicar no item
+              já ativo, e ignorar esse caso é o que impede a árvore de ficar sem
+              operador. */}
+          <ToggleGroup
+            type="single"
             value={node.op}
-            onChange={(e) => onChange({ ...node, op: e.target.value as MetricTreeOp })}
+            onValueChange={(v) => v && onChange({ ...node, op: v as MetricTreeOp })}
             aria-label="Operação"
-            className="h-8 shrink-0 rounded-md border border-border bg-card px-1.5 text-[13px] font-bold outline-none focus:border-primary/50"
+            className={cn(ALTURA, "shrink-0 gap-0 rounded-lg border border-border bg-card p-0.5")}
           >
             {OPERADORES.map((op) => (
-              <option key={op} value={op}>{SIMBOLO_DO_OPERADOR[op]}</option>
+              <ToggleGroupItem
+                key={op}
+                value={op}
+                aria-label={SIMBOLO_DO_OPERADOR[op]}
+                className="h-full w-6 rounded-md px-0 text-[13px] font-bold text-muted-foreground/70 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+              >
+                {SIMBOLO_DO_OPERADOR[op]}
+              </ToggleGroupItem>
             ))}
-          </select>
+          </ToggleGroup>
 
-          <div className="min-w-0 flex-1">
+          <div className="min-w-[130px] flex-1">
             <NoEditor
               node={node.right}
               nivel={nivel + 1}
@@ -339,9 +398,12 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
             onClick={() => onChange(node.left)}
             aria-label="Desfazer esta operação"
             title="Desfazer esta operação"
-            className="shrink-0 rounded-md p-1.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-destructive"
+            className={cn(
+              ALTURA,
+              "grid w-9 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive",
+            )}
           >
-            <Minus className="h-3.5 w-3.5" />
+            <Minus className="h-4 w-4" />
           </button>
         </div>
       </div>
@@ -359,23 +421,25 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
         onChange={onChange}
       />
     )}
-    <div className="flex items-center gap-1.5">
-      <select
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Select
         value={ehLiteral ? VALOR_LITERAL : node.id}
-        onChange={(e) => {
-          const v = e.target.value;
+        onValueChange={(v) => {
           onChange(v === VALOR_LITERAL
             ? { type: "literal", value: 1 }
             : { type: "measure", id: v });
         }}
-        aria-label="Métrica"
-        className="h-8 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[12px] outline-none focus:border-primary/50"
       >
-        {MEDIDAS_ESCOLHIVEIS.map((m) => (
-          <option key={m.id} value={m.id}>{m.label}</option>
-        ))}
-        <option value={VALOR_LITERAL}>Número fixo…</option>
-      </select>
+        <SelectTrigger aria-label="Métrica" className={cn(ALTURA, "min-w-0 flex-1 text-[13px]")}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MEDIDAS_ESCOLHIVEIS.map((m) => (
+            <SelectItem key={m.id} value={m.id} className="text-[13px]">{m.label}</SelectItem>
+          ))}
+          <SelectItem value={VALOR_LITERAL} className="text-[13px]">Número fixo…</SelectItem>
+        </SelectContent>
+      </Select>
 
       {ehLiteral && (
         <input
@@ -383,7 +447,10 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
           value={node.value}
           onChange={(e) => onChange({ type: "literal", value: Number(e.target.value) })}
           aria-label="Número fixo"
-          className="h-8 w-20 shrink-0 rounded-md border border-border bg-card px-2 text-[12px] tabular-nums outline-none focus:border-primary/50"
+          className={cn(
+            ALTURA,
+            "w-20 shrink-0 rounded-lg border border-border bg-card px-2 text-[13px] tabular-nums outline-none focus:border-primary/50",
+          )}
         />
       )}
 
@@ -395,9 +462,12 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
           })}
           aria-label="Combinar com outra métrica"
           title="Combinar com outra métrica"
-          className="shrink-0 rounded-md p-1.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-foreground"
+          className={cn(
+            ALTURA,
+            "grid w-9 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground",
+          )}
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-4 w-4" />
         </button>
       )}
 
@@ -406,9 +476,12 @@ function NoEditor({ node, nivel, onChange, onRemover }: NoEditorProps) {
           type="button"
           onClick={onRemover}
           aria-label="Remover"
-          className="shrink-0 rounded-md p-1.5 text-muted-foreground/50 transition-colors hover:bg-muted hover:text-destructive"
+          className={cn(
+            ALTURA,
+            "grid w-9 shrink-0 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive",
+          )}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-4 w-4" />
         </button>
       )}
     </div>
@@ -452,51 +525,62 @@ function EscolhaDeEtapas({ node, onChange }: EscolhaDeEtapasProps) {
     onChange({ ...node, filters });
   };
 
-  const classe =
-    "h-8 min-w-0 flex-1 rounded-md border border-border bg-card px-1.5 text-[12px] outline-none focus:border-primary/50";
+  const gatilho = cn(ALTURA, "min-w-0 flex-1 text-[13px]");
 
   return (
-    <div className="flex flex-col gap-1.5 rounded-md border border-dashed border-primary/30 bg-primary/[0.03] p-1.5">
-      <select
-        value={pipelineId}
-        onChange={(e) => trocarFunil(e.target.value)}
-        aria-label="Funil"
-        className={classe}
+    <div className="flex flex-col gap-2 rounded-lg border border-dashed border-primary/30 bg-primary/[0.03] p-2">
+      <Select
+        value={pipelineId || SEM_ESCOLHA}
+        onValueChange={(v) => trocarFunil(v === SEM_ESCOLHA ? "" : v)}
       >
-        <option value="">Escolha o funil…</option>
-        {funis.map((f) => (
-          <option key={f.id} value={f.id}>{f.name}</option>
-        ))}
-      </select>
-
-      <div className="flex items-center gap-1.5">
-        <select
-          value={node.filters?.from_stage_key ?? ""}
-          onChange={(e) => trocarEtapa("from_stage_key", e.target.value)}
-          aria-label="Etapa de origem"
-          disabled={!pipelineId || isLoading}
-          className={cn(classe, "disabled:opacity-50")}
-        >
-          <option value="">De…</option>
-          {etapas.map((e) => (
-            <option key={e.stageKey} value={e.stageKey}>{e.label}</option>
+        <SelectTrigger aria-label="Funil" className={gatilho}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={SEM_ESCOLHA} className="text-[13px]">Escolha o funil…</SelectItem>
+          {/* `.filter(f => f.id)`: Radix LEVANTA se um item tiver value "".
+              O id vem do banco, então a garantia não é do tipo — é desta linha.
+              Um funil sem id derrubaria o compositor inteiro, não só a opção. */}
+          {funis.filter((f) => f.id).map((f) => (
+            <SelectItem key={f.id} value={f.id} className="text-[13px]">{f.name}</SelectItem>
           ))}
-        </select>
+        </SelectContent>
+      </Select>
 
-        <span className="shrink-0 text-[12px] text-muted-foreground">→</span>
-
-        <select
-          value={node.filters?.to_stage_key ?? ""}
-          onChange={(e) => trocarEtapa("to_stage_key", e.target.value)}
-          aria-label="Etapa de destino"
+      <div className="flex items-center gap-2">
+        <Select
+          value={node.filters?.from_stage_key ?? SEM_ESCOLHA}
+          onValueChange={(v) => trocarEtapa("from_stage_key", v === SEM_ESCOLHA ? "" : v)}
           disabled={!pipelineId || isLoading}
-          className={cn(classe, "disabled:opacity-50")}
         >
-          <option value="">Para…</option>
-          {etapas.map((e) => (
-            <option key={e.stageKey} value={e.stageKey}>{e.label}</option>
-          ))}
-        </select>
+          <SelectTrigger aria-label="Etapa de origem" className={gatilho}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SEM_ESCOLHA} className="text-[13px]">De…</SelectItem>
+            {etapas.filter((e) => e.stageKey).map((e) => (
+              <SelectItem key={e.stageKey} value={e.stageKey} className="text-[13px]">{e.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <span className="shrink-0 text-[13px] text-muted-foreground">→</span>
+
+        <Select
+          value={node.filters?.to_stage_key ?? SEM_ESCOLHA}
+          onValueChange={(v) => trocarEtapa("to_stage_key", v === SEM_ESCOLHA ? "" : v)}
+          disabled={!pipelineId || isLoading}
+        >
+          <SelectTrigger aria-label="Etapa de destino" className={gatilho}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={SEM_ESCOLHA} className="text-[13px]">Para…</SelectItem>
+            {etapas.filter((e) => e.stageKey).map((e) => (
+              <SelectItem key={e.stageKey} value={e.stageKey} className="text-[13px]">{e.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {pipelineId && !isLoading && etapas.length === 0 && (
