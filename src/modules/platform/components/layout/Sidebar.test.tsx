@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { Gauge, GitBranch, Send, Settings, Trophy, Wallet, Zap } from "lucide-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
 import type { NavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import type { NavNode, PitstopGroup } from "@/modules/platform/lib/navigation-model";
 import { Sidebar } from "./Sidebar";
@@ -199,7 +200,11 @@ describe("Sidebar", () => {
     renderSidebar(
       makeModel({
         isLocked: (path) => path === "/turbo",
-        featureKeyFor: (path) => (path === "/turbo" ? ("copilot" as never) : undefined),
+        // O mapa REAL, não um dublê. A versão anterior devolvia "copilot" na
+        // mão para "/turbo" — chave que o catálogo não tinha. O teste passava
+        // verde enquanto em produção `openUpgrade` engolia o clique e o modal
+        // nunca abria. Fixture que inventa dado não é guarda, é enfeite.
+        featureKeyFor: (path) => SIDEBAR_FEATURE_MAP[path],
       }),
     );
 

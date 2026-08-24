@@ -72,6 +72,12 @@ SIDEBAR_FEATURE_MAP["/upsell"] = "carteira";
 SIDEBAR_FEATURE_MAP["/templates"] = "message_templates";
 // Rota legada do chat — mesma feature key da rota atual
 SIDEBAR_FEATURE_MAP["/chat-whatsapp"] = "chat";
+// Turbo é grupo, não feature: nenhuma entrada do catálogo tem
+// `sidebarPath: "/turbo"`. Sem esta linha, `featureKeyFor("/turbo")` volta
+// `undefined` e o `if (key)` de `Sidebar.openUpgrade` engole o clique — o item
+// aparece com cadeado e não abre o UpgradeModal. Copilot é o add-on que o
+// produto vende com o nome "Turbo" (ver PricingSection: "Add-on Turbo").
+SIDEBAR_FEATURE_MAP["/turbo"] = "copilot";
 
 // ─── Route Path → Feature Key Map (guards de rota) ───────────
 /**

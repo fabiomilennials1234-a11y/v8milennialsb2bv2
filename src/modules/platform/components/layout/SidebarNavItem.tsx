@@ -99,6 +99,23 @@ export function SidebarNavItem({
         {inner}
       </button>
     );
+  } else if (isParent && item.expandOnly) {
+    // Pai sem tela-índice (Turbo): navegar levaria a um redirect que remonta o
+    // layout e apaga o estado de expansão. Aqui o clique só abre o grupo.
+    row = (
+      <button
+        type="button"
+        onClick={onToggleExpand}
+        onMouseEnter={onHoverPrefetch}
+        aria-expanded={expanded}
+        // Recolhida, o rótulo visível some e sobra um ícone mudo. O link tem o
+        // href pra se identificar; um botão não tem nada.
+        aria-label={item.label}
+        className={rowClasses(active, compact)}
+      >
+        {inner}
+      </button>
+    );
   } else if (isParent) {
     // O pai navega E expande no mesmo clique: a rota-índice existe, e obrigar
     // dois cliques para chegar nela é o atrito que a lateral vem matar.

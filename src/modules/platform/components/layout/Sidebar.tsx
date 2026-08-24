@@ -60,9 +60,20 @@ export function Sidebar() {
     if (model.isPitstopRoute) setPitstopOpen(true);
   }, [model.isPitstopRoute]);
 
-  const toggleExpand = useCallback((label: string) => {
-    setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
-  }, []);
+  const toggleExpand = useCallback(
+    (label: string) => {
+      // Recolhida não há onde desenhar o submenu (`isOpen` exige `!collapsed`).
+      // Um grupo que não navega precisa abrir a lateral primeiro, senão o
+      // clique não produz nada visível — botão morto.
+      if (collapsed) {
+        toggleCollapsed();
+        setExpanded((prev) => ({ ...prev, [label]: true }));
+        return;
+      }
+      setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
+    },
+    [collapsed, toggleCollapsed],
+  );
 
   const openUpgrade = useCallback(
     (path: string) => {

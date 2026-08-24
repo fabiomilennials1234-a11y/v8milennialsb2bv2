@@ -22,7 +22,12 @@ const appSource = readFileSync(resolve(__dirname, "../../src/App.tsx"), "utf-8")
 
 // Paths da sidebar que são <Navigate> (redirect) — não têm elemento pra guardar;
 // o destino (/dashboard) é core sem feature key.
-const REDIRECT_ONLY_PATHS = new Set(["/marketing", "/analytics", "/chat"]);
+//
+// `/turbo` entra aqui por outro motivo, e mais forte: é rótulo de grupo, não
+// tela, e o destino do redirect (`/automacoes`) JÁ carrega
+// `FeatureRoute feature="automations"`. A key aqui só alimenta o UpgradeModal
+// quando o grupo aparece com cadeado — não há URL a contornar.
+const REDIRECT_ONLY_PATHS = new Set(["/marketing", "/analytics", "/chat", "/turbo"]);
 
 /** Divide o JSX de rotas em chunks: cada chunk começa em `<Route` e vai até o próximo. */
 function routeChunks(): Map<string, string> {

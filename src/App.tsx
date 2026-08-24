@@ -331,9 +331,15 @@ function AppRoutes() {
         }
       />
       {/* /turbo — Turbo é grupo da lateral (Copilot + Automações), não tela.
-          O item pai navega E expande no mesmo clique (SidebarNavItem), então o
-          path do grupo precisa de destino: sem esta rota o clique cai em 404.
-          Vai pra Automações porque é o que "Turbo" nomeia no produto. */}
+          A lateral NÃO navega mais pra cá: o item é `expandOnly`, só abre o
+          grupo. Esta rota fica de rede pra link antigo e bookmark.
+          Vai pra Automações porque é o que "Turbo" nomeia no produto.
+
+          ⚠️ Não devolva a navegação ao item pai sem antes envolver esta rota
+          num LayoutWrapper. Sendo um <Navigate> nu, entrar aqui desmonta
+          MainLayout > Sidebar e zera o estado de expansão — era exatamente
+          assim que o submenu fechava no mesmo frame em que abria, deixando o
+          "Copilot" inalcançável no desktop. */}
       <Route
         path="/turbo"
         element={<Navigate to="/automacoes" replace />}

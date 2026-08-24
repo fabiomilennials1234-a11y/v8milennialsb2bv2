@@ -54,6 +54,16 @@ export interface NavNode {
   color?: string;
   /** Abre um grupo novo dentro da lista de filhos (funis customizados). */
   startsGroup?: boolean;
+  /**
+   * Pai que é só rótulo de grupo: o clique expande e NÃO navega.
+   *
+   * Funis tem tela-índice (`/funis`), então navega e expande no mesmo clique.
+   * Turbo não tem: `/turbo` é um `<Navigate>` nu em `App.tsx`, fora do
+   * `LayoutWrapper`. Navegar pra lá desmontava a árvore do layout inteira e o
+   * `useState` da lateral voltava a `{}` — o submenu fechava no mesmo frame em
+   * que abria, e o item "Copilot" era inalcançável no desktop.
+   */
+  expandOnly?: boolean;
   children?: NavNode[];
 }
 
@@ -109,7 +119,7 @@ export const SIDEBAR_PRIMARY: NavNode[] = [
   { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Leads", icon: Fuel, path: "/leads" },
-  { label: "Turbo", icon: Zap, path: "/turbo", children: TURBO_CHILDREN },
+  { label: "Turbo", icon: Zap, path: "/turbo", children: TURBO_CHILDREN, expandOnly: true },
 ];
 
 /** Agenda mora no rodapé, no lugar que o calendário ocupa em produtos comparáveis. */
