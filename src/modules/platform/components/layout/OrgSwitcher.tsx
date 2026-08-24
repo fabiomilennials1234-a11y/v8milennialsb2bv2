@@ -28,6 +28,22 @@ import { useMasterAuth } from "@/modules/identity";
  * Agenda e Notificações, que é onde moram os atalhos que não são navegação de
  * funil. Lá eles herdam o comportamento de recolher junto com o menu, que aqui
  * nunca tiveram — `Sidebar.tsx` já os escondia por inteiro no modo recolhido.
+ *
+ * ── POR QUE O GATILHO CARREGA `text-sidebar-foreground` ───────────────────
+ * `variant="ghost"` não declara cor de texto em REPOUSO — só no hover. Em
+ * repouso o rótulo herda de quem o contém, e este componente é montado sempre
+ * sobre a lateral, que é ESCURA nos dois temas (`--sidebar-background` é
+ * 36 20% 18% no tema claro, não só no escuro).
+ *
+ * Sem cor explícita, no tema claro o nome da org herdava `--foreground`
+ * (30 18% 16%) — praticamente o mesmo tom do fundo da lateral: 1.10:1, texto
+ * invisível. O único elemento que aparecia era o selo SHADOW, e só porque ele
+ * traz `text-yellow-600` próprio. No tema escuro a herança calhava de dar
+ * 18.80:1, e por isso o defeito passou despercebido.
+ *
+ * `Sidebar.tsx`/`SidebarMobileDrawer.tsx` já ancoram a herança no contêiner; a
+ * classe aqui é o que mantém o componente correto por si, em qualquer
+ * superfície onde venha a ser montado.
  */
 export function OrgSwitcher() {
   const { orgs, hasMultipleOrgs, isSwitching, switchOrg } = useOrgSwitcher();
@@ -48,7 +64,7 @@ export function OrgSwitcher() {
             <Button
               variant="ghost"
               size="sm"
-              className="gap-2 max-w-[240px]"
+              className="gap-2 max-w-[240px] text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
               disabled={isSwitching}
             >
               {isSwitching ? (
