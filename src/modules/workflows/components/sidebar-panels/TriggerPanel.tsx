@@ -489,9 +489,6 @@ function LeadRepliedConfig({
   const visiblePipelines = (pipelines || []).filter(
     (p) => p.is_active || selectedIds.includes(p.id),
   );
-  const systemPipelines = visiblePipelines.filter((p) => p.type === "system");
-  const customPipelines = visiblePipelines.filter((p) => p.type === "custom");
-
   const togglePipeline = (pipelineId: string, checked: boolean) => {
     const next = checked
       ? [...selectedIds, pipelineId]
@@ -499,9 +496,11 @@ function LeadRepliedConfig({
     updateConfig({ pipeline_ids: next });
   };
 
-  const renderGroup = (label: string, items: typeof visiblePipelines) => (
+  // Lista única: os funis eram separados em "Funis Padrão" e "Funis Custom"
+  // por `p.type`. Quem marca um filtro de gatilho escolhe UM funil pelo nome —
+  // a espécie dele nunca entrou nessa decisão.
+  const renderPipelines = (items: typeof visiblePipelines) => (
     <div className="space-y-1">
-      <p className="text-xs font-semibold text-muted-foreground uppercase">{label}</p>
       {items.map((p) => (
         <label
           key={p.id}
@@ -545,8 +544,7 @@ function LeadRepliedConfig({
         </p>
         {visiblePipelines.length > 0 ? (
           <div className="space-y-3 max-h-48 overflow-y-auto rounded-md border p-3">
-            {systemPipelines.length > 0 && renderGroup("Funis Padrão", systemPipelines)}
-            {customPipelines.length > 0 && renderGroup("Funis Custom", customPipelines)}
+            {renderPipelines(visiblePipelines)}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">Nenhum funil encontrado.</p>

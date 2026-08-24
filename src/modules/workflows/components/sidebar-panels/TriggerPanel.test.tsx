@@ -102,12 +102,14 @@ describe("TriggerPanel — lead_replied", () => {
     expect(screen.getByText("Contém texto (opcional)")).toBeInTheDocument();
   });
 
-  it("agrupa funis padrão e custom", () => {
+  it("lista todos os funis juntos, sem separar por espécie", () => {
     renderPanel();
-    expect(screen.getByText("Funis Padrão")).toBeInTheDocument();
-    expect(screen.getByText("Funis Custom")).toBeInTheDocument();
+    // Um funil da org e um criado pelo usuário, lado a lado…
     expect(screen.getByText("Qualificação")).toBeInTheDocument();
     expect(screen.getByText("Black Friday")).toBeInTheDocument();
+    // …e nenhum cabeçalho dizendo a qual grupo cada um pertence.
+    expect(screen.queryByText("Funis Padrão")).not.toBeInTheDocument();
+    expect(screen.queryByText("Funis Custom")).not.toBeInTheDocument();
   });
 
   it("marcar um funil grava o uuid em pipeline_ids", () => {

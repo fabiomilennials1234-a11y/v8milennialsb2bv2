@@ -12,7 +12,6 @@
 
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { Kanban } from "lucide-react";
 
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useFeaturePermissions, useIdentity, useOrganization, useUserRole } from "@/modules/identity";
@@ -25,9 +24,8 @@ import {
 } from "@/modules/pipelines";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
 import {
-  CUSTOM_PIPE_ICON_MAP,
+  FUNIL_ICON,
   FUNIS_PATHS,
-  PIPE_ICON_MAP,
   PIPE_PATH_MAP,
   PITSTOP_GROUPS,
   buildSettingsGroup,
@@ -111,7 +109,19 @@ export function useNavigationModel(): NavigationModel {
 
   const featureKeyFor = (path: string) => SIDEBAR_FEATURE_MAP[path];
 
-  /** Filhos de Funis: pipes visíveis da org + funis customizados. */
+  /**
+   * Filhos de Funis — uma lista só.
+   *
+   * Não há mais classe de funil na lateral: mesmo ícone, sem cor própria, sem
+   * linha separando bloco de bloco. O que existia — pipes da org primeiro,
+   * depois customizados permanentes, depois os com prazo, cada bloco abrindo
+   * com um `startsGroup` — desenhava três categorias que o produto não tem
+   * mais. A gaveta do celular (`SidebarMobileDrawer`) já ignorava o
+   * `startsGroup` e sempre mostrou a lista lisa; agora o desktop concorda.
+   *
+   * A ORDEM de concatenação fica: é a que o usuário já conhece (os da org por
+   * `position`, depois os criados por ele). Ordem não é rótulo de categoria.
+   */
   const funisChildren = useMemo<NavNode[]>(() => {
     const pipes: NavNode[] = (displayConfig ?? [])
       .filter((c) => c.is_visible)
@@ -122,25 +132,24 @@ export function useNavigationModel(): NavigationModel {
       .sort((a, b) => a.position - b.position)
       .map((c) => ({
         label: c.display_name,
-        icon: PIPE_ICON_MAP[c.pipe_type] ?? Kanban,
+        icon: FUNIL_ICON,
         path: PIPE_PATH_MAP[c.pipe_type] ?? "/funis",
       }));
 
+    // Membro de org outbound continua vendo só os pipes: este `return` é o
+    // único ponto onde a distinção carrega semântica de ACESSO, não de estilo.
     if (isOutboundMember) return pipes;
 
-    const permanentes: NavNode[] = permanentPipelines.map((pipe, index) => ({
+    const permanentes: NavNode[] = permanentPipelines.map((pipe) => ({
       label: pipe.name,
-      icon: CUSTOM_PIPE_ICON_MAP[pipe.icon] ?? Kanban,
+      icon: FUNIL_ICON,
       path: `/pipe/custom/${pipe.slug}`,
-      color: pipe.color,
-      startsGroup: index === 0,
     }));
 
-    const temporarios: NavNode[] = temporaryFunnels.map((pipe, index) => ({
+    const temporarios: NavNode[] = temporaryFunnels.map((pipe) => ({
       label: pipe.name,
-      icon: Kanban,
+      icon: FUNIL_ICON,
       path: `/pipe/custom/${pipe.slug}`,
-      startsGroup: index === 0,
     }));
 
     return [...pipes, ...permanentes, ...temporarios];

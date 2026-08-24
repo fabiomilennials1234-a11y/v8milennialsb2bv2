@@ -552,9 +552,6 @@ function ActivateHiddenFunnelDialog({
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{pipe.display_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Funil estrutural
-                  </p>
                 </div>
                 <Button
                   size="sm"

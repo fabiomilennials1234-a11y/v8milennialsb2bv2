@@ -282,7 +282,7 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
       {/* Standard pipes */}
       <Card>
         <CardHeader className="py-3 px-4">
-          <CardTitle className="text-sm">Funis Padrao</CardTitle>
+          <CardTitle className="text-sm">Funis</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-2">
           {PIPE_TYPES.map((pipe) => {
@@ -388,20 +388,11 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
               </Collapsible>
             );
           })}
-        </CardContent>
-      </Card>
-
-      {/* Custom pipelines */}
-      {customPipelines.length > 0 && (
-        <Card>
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-sm">Funis Custom</CardTitle>
-            <CardDescription className="text-xs">
-              Funis criados pela sua organizacao
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-2">
-            {customPipelines.map((pipeline) => {
+          {/* Os funis criados pela org entram na MESMA caixa e na mesma
+              lista. Tinham um Card próprio, com título "Funis Custom" e um
+              selo "Custom" em cada linha — três marcas de espécie para uma
+              escolha que só depende do nome do funil. */}
+          {customPipelines.map((pipeline) => {
               const isActive = state.activePipes.includes(pipeline.id);
               const isExpanded = expanded[pipeline.id] ?? false;
               const pipeStages = state.activeStages[pipeline.id] || [];
@@ -429,9 +420,6 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
                       <span className="text-sm font-medium">
                         {pipeline.name}
                       </span>
-                      <Badge variant="outline" className="text-[10px] h-5">
-                        Custom
-                      </Badge>
                       {isActive && pipeStages.length > 0 && (
                         <Badge variant="outline" className="text-[10px] h-5">
                           {pipeStages.length} etapa
@@ -474,9 +462,8 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
                 </Collapsible>
               );
             })}
-          </CardContent>
-        </Card>
-      )}
+        </CardContent>
+      </Card>
 
       {/* Move Rules */}
       <Card>

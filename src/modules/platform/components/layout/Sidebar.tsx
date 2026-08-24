@@ -155,7 +155,7 @@ export function Sidebar() {
                       {item.children?.map((child) => {
                         const childLocked = model.isLocked(child.path);
                         return (
-                          <div key={child.path} className={cn(child.startsGroup && "mt-1 border-t border-sidebar-border/60 pt-1")}>
+                          <div key={child.path}>
                             <SidebarNavItem
                               item={child}
                               active={model.isActive(child.path)}

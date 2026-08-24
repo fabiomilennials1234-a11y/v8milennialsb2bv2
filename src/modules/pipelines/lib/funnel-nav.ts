@@ -40,11 +40,10 @@ export interface FunnelOption {
   ended?: boolean;
 }
 
-export const FUNNEL_GROUP_LABEL: Record<FunnelGroup, string> = {
-  estrutural: "Estruturais",
-  custom: "Customizados",
-  prazo: "Com prazo",
-};
+// `FUNNEL_GROUP_LABEL` foi removido junto com os cabeçalhos do seletor. O tipo
+// `FunnelGroup` FICA: ele diz de qual fonte a linha veio (display config, funil
+// permanente, funil com prazo) e é isso que decide o `path` e o `ended`.
+// Deixou de virar rótulo na tela — o usuário escolhe funil pelo nome.
 
 interface CustomFunnelRow {
   id: string;

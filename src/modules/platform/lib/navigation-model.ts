@@ -12,13 +12,6 @@
 import {
   Bot,
   ChartNoAxesCombined,
-  Briefcase,
-  Gift,
-  Heart,
-  ShoppingBag,
-  Star,
-  Target,
-  UserCheck,
   CalendarDays,
   Copy,
   DollarSign,
@@ -29,13 +22,11 @@ import {
   GitBranch,
   Kanban,
   ListChecks,
-  MessageSquare,
   MoreHorizontal,
   Package,
   Send,
   Settings,
   Trash2,
-  TrendingUp,
   Trophy,
   Tv,
   Workflow,
@@ -61,10 +52,8 @@ export interface NavNode {
   masterOnly?: boolean;
   /** Gate de runtime resolvido pelo hook (ex.: páginas Meta conectadas). */
   gate?: "meta_pages_connected" | "metrics_studio_enabled";
-  /** Cor própria do item — só funis customizados usam. */
+  /** Cor própria do item. Nenhum item usa hoje — funil não tem mais classe. */
   color?: string;
-  /** Abre um grupo novo dentro da lista de filhos (funis customizados). */
-  startsGroup?: boolean;
   /**
    * Pai que é só rótulo de grupo: o clique expande e NÃO navega.
    *
@@ -78,26 +67,15 @@ export interface NavNode {
   children?: NavNode[];
 }
 
-/** Ícone por tipo de pipe — usado ao montar os filhos dinâmicos de Funis. */
-export const PIPE_ICON_MAP: Record<string, React.ElementType> = {
-  whatsapp: MessageSquare,
-  confirmacao: CalendarDays,
-  propostas: Kanban,
-  upsell: TrendingUp,
-};
-
-/** Ícones que um funil customizado pode escolher. */
-export const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
-  kanban: Kanban,
-  target: Target,
-  users: UserCheck,
-  "shopping-bag": ShoppingBag,
-  heart: Heart,
-  briefcase: Briefcase,
-  star: Star,
-  zap: Zap,
-  gift: Gift,
-};
+/**
+ * Ícone de funil na lateral — um só, para todos.
+ *
+ * Havia dois mapas aqui: um por `pipe_type` (WhatsApp/Agendamentos/Propostas
+ * ganhavam ícones fixos) e outro com os ícones que um funil customizado pode
+ * escolher. Juntos, faziam os funis da org parecerem de outra espécie que os
+ * criados pelo usuário. Não são: são todos funis.
+ */
+export const FUNIL_ICON: React.ElementType = Kanban;
 
 export const PIPE_PATH_MAP: Record<string, string> = {
   whatsapp: "/pipe-whatsapp",

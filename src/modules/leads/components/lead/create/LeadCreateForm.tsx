@@ -258,15 +258,14 @@ export function LeadCreateForm({
               <SelectValue placeholder="Selecione o destino" />
             </SelectTrigger>
             <SelectContent>
+              {/* Sem rótulo de espécie: funil é funil. */}
               <SelectGroup>
-                <SelectLabel>Funis Padrão</SelectLabel>
                 <SelectItem value="qualificacao">Qualificação</SelectItem>
                 <SelectItem value="confirmacao">Confirmação</SelectItem>
                 <SelectItem value="propostas">Propostas</SelectItem>
               </SelectGroup>
               {customPipelines.length > 0 && (
                 <SelectGroup>
-                  <SelectLabel>Funis Customizados</SelectLabel>
                   {customPipelines.map((pipe) => (
                     <SelectItem key={pipe.id} value={`custom:${pipe.id}`}>
                       <div className="flex items-center gap-2">

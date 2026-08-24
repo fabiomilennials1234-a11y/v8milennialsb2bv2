@@ -440,7 +440,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como crio um funil personalizado para o meu processo?",
-        "answer": "Além dos três funis padrão, você pode criar quantos quiser. No menu Funis, crie um novo definindo nome, cor e ícone, e adicione as etapas que fizerem sentido para o seu processo. Você pode editar o nome, a cor e o ícone de cada etapa, reordená-las ou excluí-las quando precisar.",
+        "answer": "Você pode criar quantos funis quiser. No menu Funis, crie um novo definindo nome, cor e ícone, e adicione as etapas que fizerem sentido para o seu processo. Você pode editar o nome, a cor e o ícone de cada etapa, reordená-las ou excluí-las quando precisar.",
         "keywords": [
           "funil personalizado",
           "criar funil",
