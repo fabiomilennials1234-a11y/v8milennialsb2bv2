@@ -39,6 +39,12 @@ vi.mock("@/modules/platform", () => ({
   useFeatureFlag: () => ({ enabled: true, isLoading: false }),
 }));
 
+// A categoria "Negócios" do picker é gateada pela feature `deals` da org
+// (o painel chama `useOrgFeatures`). Ligada para estes testes de render.
+vi.mock("@/contexts/OrgFeaturesContext", () => ({
+  useOrgFeatures: () => ({ hasFeature: (key: string) => key === "deals" }),
+}));
+
 import { ActionPanel } from "@/modules/workflows/components/sidebar-panels/ActionPanel";
 import type { ActionNodeData } from "@/types/workflow";
 
