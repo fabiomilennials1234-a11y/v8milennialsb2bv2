@@ -54,10 +54,10 @@ INSERT INTO public.pipelines (id, organization_id, name, slug, type)
 VALUES ('deadbeef-0000-4000-8000-0000000000b3', 'deadbeef-0000-4000-8000-0000000000b1', 'Qualificação', 'whatsapp', 'system')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.deals (id, organization_id, source_lead_id, title, last_activity_at, updated_at)
+INSERT INTO public.deals (id, organization_id, source_lead_id, title, last_activity_at, updated_at, source)
 VALUES ('deadbeef-0000-4000-8000-0000000000b4', 'deadbeef-0000-4000-8000-0000000000b1',
         'deadbeef-0000-4000-8000-0000000000b2', 'Negócio Atividade',
-        '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z');
+        '2020-01-01T00:00:00Z', '2020-01-01T00:00:00Z', 'human');
 
 INSERT INTO public.pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key, deal_id)
 VALUES ('deadbeef-0000-4000-8000-0000000000b5', 'deadbeef-0000-4000-8000-0000000000b1',
