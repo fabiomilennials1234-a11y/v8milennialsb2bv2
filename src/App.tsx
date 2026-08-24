@@ -27,7 +27,6 @@ import { FeatureRoute } from "@/modules/platform";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
-import { B2BSummitTicketPopup } from "@/modules/platform/components/promo/B2BSummitTicketPopup";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
 function lazyRetry<T extends { default: any }>(
@@ -197,8 +196,6 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
     <OrgFeaturesProvider>
       <OnboardingGate>
         <SubscriptionProtectedRoute>
-          {/* Promo B2B Summit (23 jul 2026) — remover após o evento */}
-          <B2BSummitTicketPopup />
           <MainLayout>{children}</MainLayout>
         </SubscriptionProtectedRoute>
       </OnboardingGate>
@@ -278,17 +275,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/* DEV-only: preview do popup B2B Summit sem auth */}
-      {import.meta.env.DEV && (
-        <Route
-          path="/b2b-summit-preview"
-          element={
-            <div className="dark min-h-screen bg-background">
-              <B2BSummitTicketPopup forceOpen />
-            </div>
-          }
-        />
-      )}
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
       <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
