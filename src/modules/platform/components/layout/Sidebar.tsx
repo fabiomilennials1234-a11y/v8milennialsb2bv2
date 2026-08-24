@@ -9,7 +9,7 @@
  * se decide forma: recolhida ou não, expandida ou não, tooltip ou rótulo.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { ChevronLeft, ChevronRight, HelpCircle, Settings } from "lucide-react";
 
@@ -29,10 +29,25 @@ import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { OrgSwitcher } from "./OrgSwitcher";
 import { SidebarBrand } from "./SidebarBrand";
 import { SidebarMasterLinks } from "./SidebarMasterLinks";
-import { AgendaPanel } from "@/modules/engagement";
 import { PitstopPanel } from "./PitstopPanel";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarUserMenu } from "./SidebarUserMenu";
+
+/**
+ * O painel da Agenda entra por caminho fundo, e NÃO pelo barril de
+ * `engagement` — como já fazem `QuickBlastProgressPanel` e `SessionDeadBanner`
+ * em `MainLayout`. Exportá-lo no barril fecha um ciclo dinâmico
+ * (`engagement/index` → `AgendaPanel` → `AgendaAtividades` → `leads` →
+ * `engagement/index`) e o `dep-cruise-ratchet` reprova com 7 violações
+ * `no-circular-dynamic` — seis delas em arquivos que esta branch nem toca, o
+ * que torna a causa difícil de enxergar depois. `lazy` mantém a Agenda fora do
+ * chunk do layout.
+ */
+const AgendaPanel = lazy(() =>
+  import("@/modules/engagement/components/agenda/AgendaPanel").then((m) => ({
+    default: m.AgendaPanel,
+  })),
+);
 
 /** Dia de hoje dentro do ícone da Agenda — mesmo gesto do calendário nativo. */
 function AgendaDateChip() {
@@ -54,6 +69,8 @@ export function Sidebar() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pitstopOpen, setPitstopOpen] = useState(false);
   const [agendaOpen, setAgendaOpen] = useState(false);
+  // Fica `true` no primeiro clique e nunca volta — ver o bloco de montagem.
+  const [agendaJaAberta, setAgendaJaAberta] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
 
   // Entrar numa rota do Pitstop abre o painel — vindo do teclado, de um link
@@ -189,7 +206,10 @@ export function Sidebar() {
               active={agendaOpen || model.isActive(model.agenda.path)}
               collapsed={collapsed}
               leading={<AgendaDateChip />}
-              onActivate={() => setAgendaOpen((v) => !v)}
+              onActivate={() => {
+                setAgendaJaAberta(true);
+                setAgendaOpen((v) => !v);
+              }}
               activateExpanded={agendaOpen}
             />
           )}
@@ -259,13 +279,24 @@ export function Sidebar() {
         isActive={model.isActive}
       />
 
-      {/* `sidebarWidth` mantém a lateral fora do capturador de clique: com a
-          Agenda aberta ainda dá para ir para outra tela num clique só. */}
-      <AgendaPanel
-        open={agendaOpen}
-        onClose={() => setAgendaOpen(false)}
-        sidebarWidth={width}
-      />
+      {/* Monta na PRIMEIRA abertura e não desmonta mais. As duas metades
+          importam: antes do primeiro clique o `lazy` nem pede o chunk; depois
+          dele, o painel precisa continuar montado para o `AnimatePresence`
+          dele conseguir animar a SAÍDA — desmontar junto com o `open` arranca
+          a camada da tela sem transição.
+          `sidebarWidth` mantém a lateral fora do capturador de clique: com a
+          Agenda aberta ainda dá para ir para outra tela num clique só.
+          Sem `fallback`: o painel fechado não desenha nada, e ele já tem o
+          próprio Suspense para o conteúdo. */}
+      {agendaJaAberta && (
+        <Suspense fallback={null}>
+          <AgendaPanel
+            open={agendaOpen}
+            onClose={() => setAgendaOpen(false)}
+            sidebarWidth={width}
+          />
+        </Suspense>
+      )}
 
       {upgradeFeature && (
         <UpgradeModal
