@@ -78,6 +78,51 @@ export async function listLeads(ctx: ApiRouteContext): Promise<Response> {
   return apiList(page.map(serializeLeadRow), nextCursor, ctx.cors);
 }
 
+/**
+ * `GET /api/v1/leads/search` — lookup por telefone ou e-mail.
+ *
+ * O passo de dedup que todo conector faz antes de criar. Com a criação de
+ * Negócio estrita (exige `lead_id` de um Lead que já existe), é esta rota que
+ * impede a integração ingênua de criar uma segunda pessoa: ela pergunta antes.
+ *
+ * Devolve LISTA, e isso é decisão, não descuido — um telefone pode casar mais de
+ * um Lead, e esconder isso atrás de um resultado único faria a rota mentir
+ * justamente onde a duplicata mora.
+ */
+export async function searchLeads(ctx: ApiRouteContext): Promise<Response> {
+  const url = new URL(ctx.req.url);
+  const phone = url.searchParams.get("phone");
+  const email = url.searchParams.get("email");
+  const limit = parseLimit(url.searchParams);
+
+  // Sem alvo, isto seria varredura, não busca — e um parâmetro escrito errado no
+  // node viraria "liste tudo" em silêncio. Quem quer a base inteira usa
+  // `GET /leads`, que é paginado por cursor.
+  if (!phone && !email) {
+    return apiError(
+      422,
+      "missing_search_criteria",
+      "Informe ao menos phone ou email",
+      ctx.cors,
+    );
+  }
+
+  const supabase = ctx.supabase as RpcClient;
+  const { data, error } = await supabase.rpc("api_search_leads", {
+    p_org: ctx.organizationId,
+    p_phone: phone,
+    p_email: email,
+    p_limit: limit,
+  });
+
+  if (error) {
+    return apiError(500, "internal_error", "Erro ao buscar leads", ctx.cors);
+  }
+
+  const rows = (data ?? []) as LeadRow[];
+  return apiList(rows.map(serializeLeadRow), null, ctx.cors);
+}
+
 /** `GET /api/v1/leads/{id}` — lead 360 (tier, tags, custom fields, pipes). */
 export async function getLead(ctx: ApiRouteContext): Promise<Response> {
   const supabase = ctx.supabase as RpcClient;

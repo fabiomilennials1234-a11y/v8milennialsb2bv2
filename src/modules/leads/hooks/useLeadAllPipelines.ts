@@ -374,6 +374,12 @@ export function useAddLeadToStandardPipe() {
           p_meeting_date: pipeType === "confirmacao" ? meetingDate ?? null : null,
           p_notes: trimmedNotes,
           p_title: null,
+          // Procedência (ADR-0030 §4): este caminho é o clique na interface.
+          // Passar explicitamente, e não deixar no default, é o que impede que o
+          // Negócio de gente fique indistinguível do de robô. O default da RPC é
+          // NULL de propósito — 'human' por omissão etiquetaria como humano tudo
+          // que esquecesse de informar.
+          p_source: "human",
         } as never);
         if (error) throw error;
       } else if (pipeType === "upsell") {

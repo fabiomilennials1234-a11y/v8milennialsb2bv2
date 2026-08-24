@@ -3,7 +3,7 @@
   "info": {
     "title": "Torque CRM — Public REST API",
     "version": "1.0.0",
-    "description": "API REST pública lead-cêntrica (ADR-0008). Auth via API Key escopada (tq_live_*)."
+    "description": "API REST pública do Torque CRM. Auth via API Key escopada (tq_live_*).\n\n## Negócio, na interface, é `deal` na API\n\nA interface diz **Negócio**. O contrato diz `deal`. É a mesma coisa.\n\n⚠️ **Se você está vindo do Kommo, atenção ao vocabulário.** Lá, \"lead\" É o negócio — o card que anda no funil. Aqui não: seguimos o modelo do Pipedrive.\n\n- **Lead** = a pessoa ou empresa. Identidade durável. **Nunca ocupa uma etapa.**\n- **Negócio** (`deal`) = uma tentativa de venda para aquele Lead. É o que ocupa etapa e anda pelo funil.\n\nUm Lead pode ter vários Negócios ao longo dos anos, **inclusive dois abertos ao mesmo tempo no mesmo funil** — é assim que recompra se representa.\n\nModelar por analogia com o Kommo leva a errar tudo.\n\n## Criar uma venda: três chamadas\n\nA criação é estrita, no estilo Pipedrive — `POST /deals` exige um Lead que já existe.\n\n```\n1) GET  /api/v1/leads/search?phone=11999990000\n   → 200 { data: [] }                       a pessoa não existe\n\n2) POST /api/v1/leads\n   { \"name\": \"João\", \"phone\": \"11999990000\" }\n   → 201 { \"id\": \"...\" }                    criada\n   → 409 lead_already_exists                JÁ EXISTIA — e o corpo traz\n                                            details.lead_id, use esse\n\n3) POST /api/v1/deals\n   { \"lead_id\": \"...\", \"pipeline\": \"whatsapp\", \"stage\": \"novo\" }\n   → 201 { \"id\": \"...\", \"source\": \"api\" }\n```\n\nO passo 2 **nunca cria uma segunda pessoa** com o mesmo telefone. Se já existe, recusa e devolve quem está lá — siga para o passo 3 com aquele `lead_id`.\n\nEnvie `Idempotency-Key` nas criações: a mesma chave devolve o mesmo recurso em vez de criar outro, o que torna retentativa segura.\n\n## Convenções\n\nListas: `{ data, next_cursor, has_more }` — pagine devolvendo `next_cursor` em `?cursor=`.\nErros: `{ error: { code, message, details? } }`.\nLimite estourado: 429 com `Retry-After`."
   },
   "servers": [
     {
@@ -17,6 +17,80 @@
         "type": "apiKey",
         "in": "header",
         "name": "X-API-Key"
+      }
+    },
+    "schemas": {
+      "Deal": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "value": {
+            "type": "number",
+            "nullable": true
+          },
+          "lead_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "owner_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "pipeline": {
+            "type": "string",
+            "nullable": true,
+            "description": "Slug do funil onde o Negócio está agora"
+          },
+          "stage": {
+            "type": "string",
+            "nullable": true,
+            "description": "Etapa atual"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "human",
+              "workflow",
+              "api",
+              "import",
+              "backfill"
+            ],
+            "nullable": true,
+            "description": "Procedência: a porta por onde este Negócio nasceu. Escrita uma vez, nunca reescrita."
+          },
+          "won": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "loss_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "closed_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "last_activity_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Quando algo aconteceu com este Negócio — edição OU mudança de posição. É a chave de updated_since e do cursor. Distinta de created_at."
+          }
+        }
       }
     }
   },
@@ -218,6 +292,120 @@
                   "error": {
                     "code": "string",
                     "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "api-create-lead",
+        "summary": "Criar lead",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Cria um Lead. **Telefone repetido NÃO cria uma segunda pessoa**: responde 409 com `details.lead_id` e `details.name` de quem já está lá — siga com esse id. Aceita `Idempotency-Key`. Escopo: lead:write.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Mesma chave dentro da janela devolve o MESMO Lead (200) em vez de criar outro (201)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "phone": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "company": {
+                    "type": "string"
+                  },
+                  "origin": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replay da mesma Idempotency-Key — nada foi criado"
+          },
+          "201": {
+            "description": "Criado"
+          },
+          "409": {
+            "description": "lead_already_exists — details.lead_id traz quem já existe",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Corpo inválido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -634,7 +822,7 @@
       "post": {
         "operationId": "api-move-stage",
         "summary": "Mover etapa",
-        "description": "Move o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, auto-Orçamentos ao compareceu). Escopo: lead:write.\n\n400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).\n\nmeeting_date não é suportado no v1.",
+        "description": "⚠️ **DEPRECIADA.** Move um *Lead* para uma etapa — e no modelo atual um Lead nunca tem etapa; quem ocupa etapa é o Negócio. Use `POST /api/v1/deals/{id}/move`. Mantida viva para não quebrar integrações existentes.\n\nMove o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, auto-Orçamentos ao compareceu). Escopo: lead:write.\n\n400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).\n\nmeeting_date não é suportado no v1.",
         "tags": [
           "REST API v1"
         ],
@@ -691,7 +879,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/v1/leads/{id}/tags": {
@@ -885,6 +1074,688 @@
               "example": {
                 "faturamento": "5M",
                 "segmento": "varejo"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/search": {
+      "get": {
+        "operationId": "api-search-leads",
+        "summary": "Buscar lead por telefone ou e-mail",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Lookup para deduplicação antes de criar. Devolve LISTA: um telefone pode casar mais de um Lead. **Sem `phone` nem `email` responde 422** — quem quer a base inteira usa `GET /leads`. Escopo: lead:read.",
+        "parameters": [
+          {
+            "name": "phone",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "email",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Leads que casam"
+          },
+          "422": {
+            "description": "missing_search_criteria",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deals": {
+      "get": {
+        "operationId": "api-list-deals",
+        "summary": "Listar negócios",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Lista Negócios da organização. Cursor keyset por `(last_activity_at, id)` — **não** por criação. Use `updated_since` para sincronização incremental: traz o que mudou, incluindo mudança de etapa. Escopo: deal:read.",
+        "parameters": [
+          {
+            "name": "pipeline",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Slug do funil"
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "owner_id",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "open",
+                "won",
+                "lost",
+                "all"
+              ]
+            }
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "ISO 8601. Traz Negócios com atividade DEPOIS deste instante — inclusive os que só mudaram de etapa. Valor ilegível responde 422, nunca a base inteira."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de Negócios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Deal"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_updated_since",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "api-create-deal",
+        "summary": "Abrir negócio",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Abre um Negócio para um Lead **que já existe**. Não aceita Lead embutido — crie a pessoa antes com `POST /leads`. A Procedência é gravada como `api`. Abrir um segundo Negócio no mesmo funil **funciona** (é recompra) e a resposta traz `warning`. Escopo: deal:write.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "lead_id",
+                  "pipeline",
+                  "stage"
+                ],
+                "properties": {
+                  "lead_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "pipeline": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "owner_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replay da mesma Idempotency-Key"
+          },
+          "201": {
+            "description": "Criado. Pode trazer `warning.code = lead_has_open_deal_in_pipeline`"
+          },
+          "404": {
+            "description": "lead_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "missing_lead_id, inline_lead_not_supported, invalid_pipeline_or_stage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deals/{id}": {
+      "get": {
+        "operationId": "api-get-deal",
+        "summary": "Ler negócio",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Devolve o Negócio com a posição atual, sem segunda chamada. Negócio de outra organização responde 404, igual a inexistente. Escopo: deal:read.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Negócio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deal_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "api-update-deal",
+        "summary": "Editar negócio",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Título, valor, dono, notas e fechamento com motivo. **Não move**: posição tem rota própria. **Não reabre Negócio fechado** — reverter venda é irreversível. Campo omitido mantém o valor atual; não há como limpar campo por esta rota. Escopo: deal:write.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "owner_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "open",
+                      "won",
+                      "lost"
+                    ]
+                  },
+                  "loss_reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Negócio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deal_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_status, no_valid_fields, stage_not_editable, invalid_value (reabrir fechado)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deals/{id}/move": {
+      "post": {
+        "operationId": "api-move-deal",
+        "summary": "Mover negócio",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Move o Negócio de etapa ou de funil. **Mover é mover, não copiar**: nenhum card novo nasce e nada fica para trás. Destino em funil customizado é recusado — o card mudaria de identidade e perderia o histórico. Escopo: deal:write.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "pipeline",
+                  "stage"
+                ],
+                "properties": {
+                  "pipeline": {
+                    "type": "string"
+                  },
+                  "stage": {
+                    "type": "string"
+                  },
+                  "owner_id": {
+                    "type": "string",
+                    "format": "uuid"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Negócio",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Deal"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "deal_not_found — inclui Negócio sem posição",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "missing_pipeline, missing_stage, custom_pipeline_not_supported, invalid_pipeline_or_stage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/leads/{id}/deals": {
+      "get": {
+        "operationId": "api-list-lead-deals",
+        "summary": "Negócios de um lead",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Todos os Negócios daquela pessoa, abertos primeiro, cada um com a própria posição. É por esta lista que a recompra fica legível. Escopo: deal:read.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lista de Negócios",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Deal"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "has_more": {
+                      "type": "boolean"
+                    }
+                  }
+                }
               }
             }
           }
