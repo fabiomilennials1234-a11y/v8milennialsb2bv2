@@ -61,6 +61,12 @@ const AVAILABLE_SCOPES = [
   { value: "pipeline:read", label: "Funis (leitura)", description: "Listar funis e etapas" },
   { value: "metadata:read", label: "Catálogos (leitura)", description: "Tags e campos customizados" },
   { value: "webhook:read", label: "Webhooks", description: "Consumir webhooks de saída" },
+  // ADR-0030: Negócio é recurso próprio, com escopo próprio. `lead:write` NÃO
+  // concede `deal:write` — permissão de editar a pessoa não é permissão de abrir
+  // venda no funil dela. Sem estas duas entradas a tela não conseguia emitir
+  // chave capaz de usar as rotas de Negócio (#1767–#1772), que estão em produção.
+  { value: "deal:read", label: "Negócios (leitura)", description: "Listar e ler negócios" },
+  { value: "deal:write", label: "Negócios (escrita)", description: "Abrir, editar e mover negócios" },
 ];
 
 // ── Component ─────────────────────────────────────────────────
