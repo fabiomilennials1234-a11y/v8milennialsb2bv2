@@ -1,6 +1,6 @@
 {
-  "count": 754,
-  "generatedFrom": "node \"/Users/gabrielaureliogipp/Dev/.maestri/floors/v8milennialsb2bv2-main--feat1721-blast-recipient-state/node_modules/eslint/bin/eslint.js\" . --format json --cache --cache-location .eslintcache",
+  "count": 756,
+  "generatedFrom": "node \"C:\\\\Users\\\\torch\\\\Desktop\\\\milennials\\\\v8-develop\\\\node_modules\\\\eslint\\\\bin\\\\eslint.js\" . --format json --cache --cache-location .eslintcache",
   "note": "Divida de lint congelada. So encolhe. Nao adicione entrada na mao — corrija o warning.",
   "errors": [
     ".storybook/preview.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
@@ -259,6 +259,7 @@
     "src/modules/leads/components/leads/LeadModal.tsx|react-hooks/exhaustive-deps|React Hook useEffect has missing dependencies: 'fieldValues' and 'lead?.id'. Either include them or remove the dependency array.",
     "src/modules/leads/components/leads/PropostaModal.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/leads/components/leads/TimelineItem.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
+    "src/modules/leads/components/leads/TimelineItem.tsx|react-refresh/only-export-components|Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.",
     "src/modules/leads/components/leads/funnel-contexts/ConfirmacaoContext.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/leads/components/leads/funnel-contexts/ConfirmacaoContext.tsx|react-hooks/exhaustive-deps|React Hook useEffect has a missing dependency: 'item'. Either include it or remove the dependency array.",
     "src/modules/leads/components/leads/funnel-contexts/PropostasContext.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
@@ -292,6 +293,7 @@
     "src/modules/leads/pipe-ops/testing.tsx|react-refresh/only-export-components|Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.",
     "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/pipelines/components/custom/CreatePipelineModal.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
+    "src/modules/pipelines/components/custom/CreatePipelineModal.tsx|react-refresh/only-export-components|Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.",
     "src/modules/pipelines/components/custom/CustomPipeSettingsDialog.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/pipelines/components/custom/CustomPipelineKanban.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "src/modules/pipelines/components/disparo/AudienceConditionsControls.tsx|react-refresh/only-export-components|Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components.",
