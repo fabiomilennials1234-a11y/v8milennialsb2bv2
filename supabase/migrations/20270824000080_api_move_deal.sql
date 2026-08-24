@@ -60,7 +60,7 @@ BEGIN
     FROM public.pipelines pip
    WHERE pip.organization_id = p_org
      AND pip.slug = p_pipeline
-     AND pip.type = 'system'
+     AND pip.type = 'system' -- metric-lint-allow: não é métrica, é resolução de rota. A R3 existe porque `type='system'` CEGA funil customizado num agregado; aqui o customizado não é cegado, é RECUSADO em voz alta 8 linhas acima, com mensagem própria e ERRCODE. Mesmo precedente de 20270729000010_pipeline_page_stalled_days_filter.sql:96.
    LIMIT 1;
 
   IF v_pipeline_id IS NULL THEN

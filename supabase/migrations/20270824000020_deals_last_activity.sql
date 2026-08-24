@@ -130,7 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_deals_org_last_activity
 UPDATE public.deals d
    SET last_activity_at = greatest(
          d.updated_at,
-         coalesce((SELECT max(pe.updated_at) FROM public.pipeline_entries pe
+         coalesce((SELECT max(pe.updated_at) FROM public.pipeline_entries pe -- metric-lint-allow: `last_activity_at` é recência de atividade, não âncora de métrica. A R4 barra `updated_at` como data DA VENDA (qualquer toque moveria o número); aqui "quando esta linha foi tocada pela última vez" é exatamente o que a coluna significa, e este UPDATE roda UMA vez para semeá-la — daí em diante quem mantém são os gatilhos acima.
                     WHERE pe.deal_id = d.id), d.updated_at))
  WHERE d.last_activity_at IS NULL;
 
