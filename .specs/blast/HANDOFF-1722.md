@@ -213,12 +213,21 @@ CORS e WhatsApp/Uazapi.
    destinatário o id da **resposta do envio** — que é o que vira `external_id`. Se o
    `providerMessageId` estável não for esse id, a #1724 casa o callback errado e a entrega
    nunca fecha. `pmid_diferente = 0` responde a pergunta.
-2. **Aplicar a migration `20270824000000`** — depois da `20270823000000` do #1721, que
+2. **Rodar `scripts/verificar-grants-1722.sql` IMEDIATAMENTE depois do apply.**
+   É o item da `/security-rubric` que **não pode ser fechado antes** — o grant é
+   concedido pelo banco no momento do `CREATE`, não pelo SQL da migration, e neste
+   projeto o EXECUTE chega por dois caminhos (PUBLIC implícito e `ALTER DEFAULT
+   PRIVILEGES` nominal) que se escondem um atrás do outro. A migration revoga dos três
+   e concede só a `service_role`; a consulta é o que prova. Esperado: `anon=false`,
+   `authenticated=false`, `service_role=true`. **`claim_blast_recipients` é SECURITY
+   DEFINER e devolve destinatários de TODAS as organizações por desenho** — um grant
+   aberto aqui é vazamento cross-tenant, não inconveniência.
+3. **Aplicar a migration `20270824000000`** — depois da `20270823000000` do #1721, que
    **também ainda não foi aplicada**. A ordem importa: a de agora depende das colunas da
    anterior (`claimed_at`).
-3. **Regenerar os types** depois do apply em prod, nunca a partir de branch.
-4. **Conferir o ledger** e o drift, como o runbook manda.
-5. **Issue para o terceiro seletor de instância** — o CTO já disse que abre (§6).
+4. **Regenerar os types** depois do apply em prod, nunca a partir de branch.
+5. **Conferir o ledger** e o drift, como o runbook manda.
+6. **Issue para o terceiro seletor de instância** — o CTO já disse que abre (§6).
 
 **Nada foi aplicado em produção. Nenhuma branch do Supabase foi criada** — a medição que eu
 precisava é read-only e não exige branch, e o que exigiria (o claim concorrente rodando de
@@ -254,6 +263,39 @@ verdade) ficou para a fatia que não coube.
 
 ---
 
+## 6-bis. `/security-rubric` — veredito
+
+**Bloqueia agora: nada.** **Bloqueia no apply: um item**, e é mecânico (abaixo).
+
+| Item | Veredito |
+|---|---|
+| RLS | Nenhuma policy nova. As duas de `blast_plan_recipients` (ambas SELECT) ficam como estavam; nenhum `SELECT ... FROM team_members` inline foi introduzido |
+| Multi-tenant | `blast-plan-create` já resolvia a org do contexto de auth; as Instances novas que eu leio já vêm validadas contra ela. O worker é cron, sem entrada de usuário |
+| EXECUTE grants | Revogados de `PUBLIC`, `anon` e `authenticated` nos **dois** — os três, porque nenhum sozinho basta. ⚠️ **A verificação não pôde ser rodada: nada foi aplicado em lugar nenhum.** `scripts/verificar-grants-1722.sql` está pronto; o item fecha no apply |
+| `search_path` | Pinado (`SET search_path = public`) nas duas funções |
+| service_role não é backstop | O worker roda como service_role e varre todos os tenants **por desenho**. Não há IDOR: não existe entrada de usuário no caminho — o único acionador é o pg_cron, autenticado por `x-cron-secret` com `timingSafeCompare`, e `CRON_SECRET` vazio devolve 401 (fail-closed) |
+| Secrets | O segredo do cron sai de `public.cron_config` dentro da função SECURITY DEFINER e nunca é logado. O log do tique carrega **só contadores** |
+| CORS / edge fn | `Deno.serve(withErrorBoundary(...))` + `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return. Nenhum header custom novo no caminho de navegador — `x-cron-secret` é servidor-para-servidor, não passa por preflight |
+| PII | Nenhum telefone em log. O erro do fornecedor vai para `reason` na linha do destinatário, que é lida sob RLS por tenant — e é exatamente o que o critério "ver por que falhou" pede |
+| Injection | Sem SQL dinâmico. Os parâmetros do RPC são `INT` |
+| Migration | Só schema. O único `UPDATE` está **dentro do corpo** de `claim_blast_recipients`, não no apply — é o falso positivo que o runbook prevê para varredura por linha |
+
+**Herdado (não bloqueia, vira issue):**
+
+- `HERDADO — supabase/functions/blast-plan-create/index.ts:207 (hoje 250) — `deno check` falha
+  com `Type 'string | undefined' is not assignable to type '"image" | "text"'` no fechamento do
+  `runUazapiSenderJob`. Confirmado idêntico na árvore limpa via `git stash`. Edge functions não
+  são type-checked no CI, então isso não é visto por ninguém hoje.
+- `HERDADO — .agent/skills/skills/radix-ui-design-system/templates/component-template.tsx — erro
+  fatal de parsing no ESLint. O diretório `.agent/` **não é rastreado pelo git** (`git ls-files`
+  vazio) e zero arquivos dele estão no meu diff. É o único `error` que o `lint:ratchet` acusa, e
+  o CI não o enxerga. **Não regenerei a baseline** — é exatamente a armadilha que o brief avisou.
+- Meu delta real de lint: **2 warnings** `no-explicit-any`, em
+  `_shared/blast-official-runner.ts` (o cliente Supabase, como no resto de `_shared`) e nas
+  fixtures de `blast-plan-canal-oficial.test.ts`. Zero erros, zero tipos introduzidos.
+
+---
+
 ## 7. Recomendação
 
 O ticket é maior que uma janela. Não por surpresa de escopo — os nove critérios estão todos
@@ -262,9 +304,12 @@ caminho do Chip em produção, e ela pede teste próprio antes de qualquer linha
 
 Sugiro **re-cortar o que falta em duas**, na ordem:
 
-1. **O criador bifurca** (§4.2) — critério 5 fechado. É o que faz a fila existir de
-   verdade; sem ela o worker é um laço sobre tabela vazia. Inclui o servidor recusando
-   regime misto.
-2. **A tela** (§4.1 + §4.3) — critérios 3, 4 e 7. Depende da 1 para ter o que mostrar.
+**A fatia 1 do re-corte foi absorvida** — o criador já bifurca (§4.2). Sobra **uma**:
 
-As duas herdam um plano escrito, seams provados e o motor pronto.
+**A tela** (§4.1 + §4.3) — critérios 3, 4 e 7. É trabalho de front com um refactor
+cross-module no meio: o painel de Template a reusar é o do nó de Workflow, que está vivo em
+produção e é usado por `send_whatsapp_rich` (#1688) e pelo escape de janela (#1689).
+Extraí-lo merece a própria fatia e os próprios testes, e não o fim de uma sessão longa —
+é o que me fez parar aqui em vez de espremer.
+
+Ela herda um plano escrito, os seams provados, o motor pronto e a fila funcionando.

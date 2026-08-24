@@ -1,4 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
 /**
  * process-blast-recipients — o worker da fila do Disparo pelo Canal Oficial (#1722).
  *
@@ -31,6 +30,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { sendTemplateViaInstance } from "../_shared/whatsapp-dispatch.ts";
+import type { WhatsAppInstance } from "../_shared/whatsapp-client.ts";
 import { processarTiqueDoDisparo } from "../_shared/blast-official-runner.ts";
 
 const FUNCTION_NAME = "process-blast-recipients";
@@ -89,7 +89,7 @@ Deno.serve(
         enviarTemplate: ({ instance, phone, template, trackSource, trackId }) =>
           sendTemplateViaInstance(
             supabase,
-            instance as any,
+            instance as unknown as WhatsAppInstance,
             phone,
             {
               name: template.name,
