@@ -12,7 +12,7 @@
 
 import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Menu, Search, Settings } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -147,15 +147,9 @@ export function SidebarMobileDrawer() {
                 </div>
               ))}
 
-              {model.pitstop && (
-                <NavLink
-                  to="/configuracoes"
-                  className="mt-2 flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                >
-                  <Settings className="h-[17px] w-[17px] shrink-0" />
-                  <span>Configurações</span>
-                </NavLink>
-              )}
+              {/* O link solto de "/configuracoes" saiu: o grupo "Configurações"
+                  do Pitstop agora lista cada aba na própria rota, e manter os
+                  dois deixava a mesma palavra duas vezes na gaveta. */}
             </nav>
           </ScrollArea>
 

@@ -542,6 +542,23 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Rota própria só para as três de uso diário — `/configuracoes/tags`,
+          `/configuracoes/notificacoes`, `/configuracoes/whatsapp` — mais
+          `/configuracoes/outros`, que guarda o resto e troca de aba por `?tab=`.
+          Um `:tab` só: a página resolve o segmento e normaliza o que não
+          reconhece. Mesmo gate da tela-mãe. */}
+      <Route
+        path="/configuracoes/:tab"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="settings.view">
+                <Configuracoes />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/tv"
         element={

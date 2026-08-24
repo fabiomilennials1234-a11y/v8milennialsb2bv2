@@ -30,6 +30,7 @@ import {
   Kanban,
   ListChecks,
   MessageSquare,
+  MoreHorizontal,
   Package,
   Send,
   Settings,
@@ -41,6 +42,16 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+
+import {
+  SETTINGS_OTHERS_LABEL,
+  SETTINGS_OTHERS_PATH,
+  SETTINGS_TAB_PATHS,
+  settingsTabPath,
+  visibleOtherSettingsTabs,
+  visiblePrimarySettingsTabs,
+  type SettingsTabVisibility,
+} from "./settings-tabs";
 
 export interface NavNode {
   label: string;
@@ -144,8 +155,9 @@ export interface PitstopGroup {
 
 /**
  * Conteúdo do Pitstop. Os grupos "Gestão" e "Rotas" são o antigo menu "Mais";
- * "Administração" são os itens que exigiam admin. As abas de configuração
- * continuam vivendo dentro de `/configuracoes` e são linkadas por `?tab=`.
+ * "Administração" são os itens que exigiam admin. O grupo "Configurações" é
+ * montado à parte (`buildSettingsGroup`) porque depende de admin e do tipo da
+ * org, que só o hook conhece.
  */
 export const PITSTOP_GROUPS: PitstopGroup[] = [
   {
@@ -188,6 +200,38 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
     ],
   },
 ];
+
+export const SETTINGS_GROUP_ID = "configuracoes";
+
+/**
+ * Grupo "Configurações" do Pitstop — Tags, Notificações e WhatsApp com rota
+ * própria, e "Outros" para todo o resto.
+ *
+ * É a correção do buraco que fechava a tela: no desktop o gatilho do Pitstop só
+ * abre o painel (não navega), então sem estes itens `/configuracoes` não tinha
+ * nenhum caminho de UI — só URL digitada na mão. O corte em três é deliberado:
+ * o painel é lateral e estreito, e listar as treze abas aqui trocaria um menu
+ * inacessível por um menu ilegível.
+ */
+export function buildSettingsGroup(visibility: SettingsTabVisibility): PitstopGroup {
+  const items: NavNode[] = visiblePrimarySettingsTabs(visibility).map((tab) => ({
+    label: tab.label,
+    icon: tab.icon,
+    path: settingsTabPath(tab),
+  }));
+
+  // "Outros" só entra se sobrou alguma coisa para ele guardar.
+  if (visibleOtherSettingsTabs(visibility).length > 0) {
+    items.push({ label: SETTINGS_OTHERS_LABEL, icon: MoreHorizontal, path: SETTINGS_OTHERS_PATH });
+  }
+
+  return {
+    id: SETTINGS_GROUP_ID,
+    title: "Configurações",
+    hint: "Ajustes da operação",
+    items,
+  };
+}
 
 /** Prefixos que ativam o item Funis. */
 export const FUNIS_PATHS = [
@@ -243,6 +287,9 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/produtos": "products.view",
   "/negocios": "deals.view",
   "/configuracoes": "settings.view",
+  // Cada aba virou rota; todas herdam o mesmo gate da tela que as hospeda —
+  // senão o Pitstop mostraria itens que a rota depois recusa.
+  ...Object.fromEntries(SETTINGS_TAB_PATHS.map((path) => [path, "settings.view"])),
 };
 
 /** Largura da lateral, em px. Mesma medida validada no estudo. */
