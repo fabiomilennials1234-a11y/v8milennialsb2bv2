@@ -837,6 +837,54 @@
         }
       }
     },
+    "/api/v1/team-members": {
+      "get": {
+        "operationId": "api-list-team-members",
+        "summary": "Listar membros da equipe",
+        "description": "Catálogo de membros da organização, para resolver os IDs usados nos campos de responsável (`owner_id` do Negócio; `responsible_id`, `sale_responsible_id` e `pre_sale_responsible_id` do Lead). Não expõe telefone nem dados de remuneração.\n\nUma lista só serve pré-venda e vendas: o Torque não marca no membro quem é o quê — isso é decidido por Lead, e a mesma pessoa pode ser pré-venda num e vendas em outro. `job_title` é texto livre e serve como dica, não como filtro.\n\nInclui inativos (`is_active: false`): seletor quer os ativos, mas quem sincroniza histórico precisa resolver o nome de quem já saiu.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "id": "t1",
+                      "name": "VIP",
+                      "color": "#F5C518"
+                    }
+                  ],
+                  "next_cursor": null,
+                  "has_more": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/leads/{id}/stage": {
       "post": {
         "operationId": "api-move-stage",

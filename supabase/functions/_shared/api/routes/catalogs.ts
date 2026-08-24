@@ -70,4 +70,13 @@ export async function listPipelines(ctx: ApiRouteContext): Promise<Response> {
   return apiList(filtrados, null, ctx.cors);
 }
 export const listTags = (ctx: ApiRouteContext) => catalog(ctx, "api_list_tags");
+/**
+ * Membros da organização, para preencher os campos de responsável.
+ *
+ * Uma lista só, de propósito: o Torque não marca no membro quem é pré-venda e
+ * quem é vendas — isso é decidido por Lead, e a mesma pessoa pode ser um num
+ * Lead e outro no seguinte. `job_title` é texto livre e serve como dica, não
+ * como filtro. É a mesma lista que a tela usa nos dois campos.
+ */
+export const listTeamMembers = (ctx: ApiRouteContext) => catalog(ctx, "api_list_team_members");
 export const listCustomFields = (ctx: ApiRouteContext) => catalog(ctx, "api_list_custom_fields");

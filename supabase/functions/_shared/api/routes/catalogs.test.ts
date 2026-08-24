@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
-import { listCustomFields, listPipelines, listTags } from "./catalogs.ts";
+import { listCustomFields, listPipelines, listTags, listTeamMembers } from "./catalogs.ts";
 import type { ApiRouteContext } from "../router.ts";
 
 const cors = { "access-control-allow-origin": "*" };
@@ -22,6 +22,7 @@ function ctxWith(rpcResult: { data?: unknown; error?: unknown }, calls: { name: 
 
 const cases = [
   { fn: listPipelines, rpc: "api_list_pipelines", label: "pipelines" },
+  { fn: listTeamMembers, rpc: "api_list_team_members", label: "team-members" },
   { fn: listTags, rpc: "api_list_tags", label: "tags" },
   { fn: listCustomFields, rpc: "api_list_custom_fields", label: "custom-fields" },
 ];

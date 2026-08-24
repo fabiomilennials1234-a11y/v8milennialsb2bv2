@@ -67,6 +67,7 @@ const AVAILABLE_SCOPES = [
   // chave capaz de usar as rotas de Negócio (#1767–#1772), que estão em produção.
   { value: "deal:read", label: "Negócios (leitura)", description: "Listar e ler negócios" },
   { value: "deal:write", label: "Negócios (escrita)", description: "Abrir, editar e mover negócios" },
+  { value: "team:read", label: "Equipe (leitura)", description: "Listar membros — resolve os IDs de responsável" },
 ];
 
 // ── Component ─────────────────────────────────────────────────

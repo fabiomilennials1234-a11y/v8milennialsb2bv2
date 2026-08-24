@@ -146,6 +146,27 @@ const endpoints: ApiEndpoint[] = [
     ],
   },
   {
+    id: "api-list-team-members",
+    name: "Listar membros da equipe",
+    description: "Catálogo de membros da organização, para resolver os IDs usados nos campos de responsável (owner_id do Negócio; responsible_id, sale_responsible_id e pre_sale_responsible_id do Lead). Não expõe telefone nem dados de remuneração. Escopo: team:read.",
+    category: "rest-api",
+    version: "v1",
+    method: "GET",
+    path: "/api/v1/team-members",
+    auth,
+    parameters: [],
+    requestExample: {},
+    responseExample: { data: [{ id: "tm1", name: "Maria Souza", email: "maria@empresa.com", job_title: "Closer", role: "member", is_active: true }], next_cursor: null, has_more: false },
+    responseFields: [
+      { name: "data", type: "object[]", required: true, description: "Membros, ativos primeiro, depois por nome." },
+    ],
+    notes: [
+      "Uma lista só serve pré-venda e vendas: o Torque não marca no membro quem é o quê — isso é decidido por Lead, e a mesma pessoa pode ser pré-venda num e vendas em outro.",
+      "job_title é texto livre (Closer, SDR, CEO…) e serve como dica na tela, não como filtro.",
+      "Inclui inativos, com is_active=false: seletor quer os ativos, mas quem sincroniza histórico precisa resolver o nome de quem já saiu.",
+    ],
+  },
+  {
     id: "api-list-tags",
     name: "Listar tags",
     description: "Catálogo de tags da organização. Escopo: metadata:read.",

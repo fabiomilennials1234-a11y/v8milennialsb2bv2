@@ -18,6 +18,10 @@ export const API_SCOPES = [
   // é permissão de abrir venda no funil dela.
   "deal:read",
   "deal:write",
+  // Catálogo de membros, para resolver os UUID de responsável. Escopo próprio e
+  // não `metadata:read`: tags e campos personalizados são vocabulário, membros
+  // são pessoas — nome e e-mail de quem trabalha na organização.
+  "team:read",
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number];
