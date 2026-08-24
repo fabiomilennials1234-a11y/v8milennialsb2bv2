@@ -1,3 +1,15 @@
+---
+type: feature
+title: "Automações — Trigger Negócio Criado + Node Criar Negócio"
+status: active
+created: 2026-08-24
+updated: 2026-08-24
+tags: [workflows, negocios, deals, automacao]
+area: automacao
+related: []
+owner: gabriel
+---
+
 # Trigger `deal_created` + Node `create_deal`
 
 Par de peças que liga o módulo **Negócios** (`deals`) ao motor de automações: um gatilho que dispara quando um negócio nasce e um node de ação que cria o negócio a partir de um lead.
