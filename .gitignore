@@ -129,3 +129,6 @@ scripts/recovery/
 .specs/project/jira-dump*.json
 .specs/project/jira-abertos*.json
 .tmp-jira-dump.json
+
+# Ensaio transacional do #1721 — artefato montado, nao versionado
+.ensaio-*.montado.sql
