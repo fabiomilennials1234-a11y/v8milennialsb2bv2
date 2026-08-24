@@ -53,6 +53,17 @@ export interface CreateAcaoDoDiaInput {
  */
 export type AcoesDoDiaEscopo = "meu" | "tudo";
 
+/**
+ * A coluna ainda não existe neste banco (migration `20270825000030` pendente).
+ * O Postgres devolve `42703`; o PostgREST às vezes embrulha como `PGRST204`.
+ * Os dois querem dizer "ainda não migrado", não "falhou".
+ */
+function isMissingColumnError(error: unknown): boolean {
+  const e = error as { code?: string; message?: string };
+  if (e?.code === "42703" || e?.code === "PGRST204") return true;
+  return /column .*organization_id.* does not exist/i.test(e?.message ?? "");
+}
+
 export function useAcoesDoDia(escopo: AcoesDoDiaEscopo = "meu") {
   const { user } = useAuth();
   const { organizationId } = useOrganization();
@@ -99,16 +110,55 @@ export function useAcoesDoDia(escopo: AcoesDoDiaEscopo = "meu") {
           follow_up:follow_ups(id, title, lead:leads(name, phone, email, company))
         `);
 
-      const { data, error } = await (
-        doTime
-          ? filtroBase.eq("organization_id", organizationId as string)
-          : filtroBase.eq("user_id", user.id)
-      )
+      // A ordenação é a mesma nos três caminhos, mas fica repetida de
+      // propósito: extrair um helper aqui exige tipar o
+      // `PostgrestFilterBuilder` na mão, e o cast que isso pede é justamente o
+      // tipo de ponte frágil que o typecheck:ratchet reprova.
+      const soAsMinhas = () =>
+        filtroBase
+          .eq("user_id", user.id)
+          .order("is_completed", { ascending: true })
+          .order("position", { ascending: true })
+          .order("created_at", { ascending: false });
+
+      if (!doTime) {
+        const { data, error } = await soAsMinhas();
+        if (error) throw error;
+        return data as AcaoDoDia[];
+      }
+
+      // 🔴 `organization_id = <uuid>` NÃO casa NULL, e não dá erro — devolve
+      // lista vazia. Como a migration cria a coluna sem DEFAULT e o backfill é
+      // um script à parte (guarda F4), existe uma janela em que TODAS as 63
+      // linhas têm org NULL. Um `.eq` puro ali zeraria o card do admin,
+      // inclusive as tarefas DELE, e a tela ainda afirmaria "Ninguém do time
+      // tem tarefa aberta" — uma frase falsa.
+      //
+      // O `.or` conserta isso pelo lado certo: "as da minha org OU as minhas".
+      // O segundo termo é o piso — o admin nunca enxerga menos do que via
+      // antes desta branch. Não afrouxa nada: quem decide se as linhas dos
+      // OUTROS aparecem continua sendo o RLS (`is_org_admin`), e para um
+      // membro comum o primeiro termo simplesmente não devolve nada.
+      //
+      // Isso também cobre a tarefa criada pelo MASTER: ele não tem assento em
+      // `team_members`, então o trigger não resolve org e a linha nasce com
+      // NULL para sempre. Sem o segundo termo ela seria invisível até para ele.
+      const { data, error } = await filtroBase
+        .or(`organization_id.eq.${organizationId},user_id.eq.${user.id}`)
         .order("is_completed", { ascending: true })
         .order("position", { ascending: true })
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
+      // ⚠️ Janela ANTERIOR ao apply: aí a coluna nem existe e o PostgREST
+      // devolve `42703`. Degradar para a lista do próprio admin é pior do que
+      // a lista do time, mas é muito melhor do que um card quebrado, e cura
+      // sozinho no apply.
+      if (error) {
+        if (!isMissingColumnError(error)) throw error;
+        const meu = await soAsMinhas();
+        if (meu.error) throw meu.error;
+        return meu.data as AcaoDoDia[];
+      }
       return data as AcaoDoDia[];
     },
     enabled: !!user?.id && (!doTime || !!organizationId),

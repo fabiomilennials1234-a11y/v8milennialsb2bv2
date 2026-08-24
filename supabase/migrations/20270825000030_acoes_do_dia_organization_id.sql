@@ -30,8 +30,17 @@
 --
 -- A tabela tolera o meio-termo com segurança: enquanto `organization_id` for
 -- NULL, a linha continua visível só para o dono (a policy nova exige
--- `organization_id IS NOT NULL`). O pior caso é o admin ver a lista incompleta
--- até o backfill rodar — nunca ver o que não devia.
+-- `organization_id IS NOT NULL`). Ninguém vê o que não devia em momento algum.
+--
+-- 🔴 MAS ATENÇÃO ao lado do CLIENTE, que é onde isso morde: `organization_id =
+-- <uuid>` **não casa NULL** e não levanta erro — devolve lista vazia. Entre
+-- este apply e o backfill, um filtro só por org zeraria o card do admin,
+-- inclusive as tarefas dele. Por isso `useAcoesDoDia` consulta
+-- `organization_id = <org> OR user_id = <eu>`: o segundo termo é o piso, e
+-- garante que o admin nunca enxergue MENOS do que via antes. Sem ele, a tela
+-- afirmaria "Ninguém do time tem tarefa aberta" — falso — e o operador
+-- despriorizaria o script manual, que é justamente como passo manual vira
+-- passo esquecido neste repo.
 --
 -- Volume medido no PROD em 2026-08-24: **63 linhas**, 20 usuários, 51 com
 -- `lead_id`. E **zero** usuários em mais de uma org ativa — ou seja, o ramo 2

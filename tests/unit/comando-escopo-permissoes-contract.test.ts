@@ -149,3 +149,39 @@ describe("tarefas — organization_id é pré-requisito da permissão", () => {
     expect(sql).not.toMatch(/^\s*UPDATE public\.acoes_do_dia/m);
   });
 });
+
+describe("tarefas — a janela entre o apply e o backfill", () => {
+  // 🔴 Regressão pega na revisão adversarial de 2026-08-24, confirmada por 3
+  // céticos independentes.
+  //
+  // `organization_id = <uuid>` NÃO casa NULL — e, ao contrário de uma coluna
+  // inexistente, não levanta erro nenhum: devolve 200 com lista vazia. Como a
+  // migration cria a coluna sem DEFAULT e o backfill é script à parte, existe
+  // uma janela em que todas as linhas têm org NULL. Um filtro só por org ali
+  // zerava o card do ADMIN — inclusive as tarefas dele, que ele via antes
+  // desta branch — e a tela ainda afirmava "Ninguém do time tem tarefa
+  // aberta".
+  //
+  // O `.or` conserta pelo lado certo, e este teste existe para que ninguém o
+  // "simplifique" de volta para um `.eq` achando que é redundante com o RLS.
+  // Não é: o RLS PERMITE a linha; quem a descartava era o WHERE do cliente.
+  const hook = readFileSync(
+    resolve(__dirname, "../../src/modules/engagement/hooks/useAcoesDoDia.ts"),
+    "utf8",
+  );
+
+  it("o modo 'tudo' inclui as próprias tarefas como piso, não só as da org", () => {
+    expect(hook).toMatch(
+      /\.or\(\s*[`'"]organization_id\.eq\.\$\{organizationId\},user_id\.eq\.\$\{user\.id\}/,
+    );
+  });
+
+  it("o modo 'tudo' NÃO filtra apenas por organization_id", () => {
+    expect(hook).not.toMatch(/\.eq\("organization_id"/);
+  });
+
+  it("continua degradando para 'as minhas' quando a coluna ainda não existe", () => {
+    expect(hook).toMatch(/isMissingColumnError/);
+    expect(hook).toMatch(/42703/);
+  });
+});
