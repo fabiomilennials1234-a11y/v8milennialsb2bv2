@@ -21,7 +21,7 @@ import type { MetricFormatId, MetricUnit } from "@/modules/analytics/lib/metric-
  * `20270813110000_metric_custom_definitions.sql`. Não "alinhe" uma à outra.
  *
  * MASTER entra por policy PRÓPRIA, não pela helper de tenant:
- * `master_ghost_all_metric_custom_definitions` (mig. `20270824070000`), no
+ * `master_ghost_all_metric_custom_definitions` (mig. `20270824100000`), no
  * padrão `master_ghost_all_*` do repositório. Sem ela o master não escrevia
  * — e nem lia, porque `get_my_organization_ids()` também é vazia para ele.
  * Gestor de portfólio continua fora das duas portas.

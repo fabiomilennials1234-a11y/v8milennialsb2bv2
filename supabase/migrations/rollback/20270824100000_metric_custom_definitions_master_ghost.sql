@@ -1,4 +1,5 @@
--- ROLLBACK de 20270824070000_metric_custom_definitions_master_ghost.sql
+-- ROLLBACK de 20270824100000_metric_custom_definitions_master_ghost.sql
+-- (nasceu 20270824070000 — renumerada por colisão no ledger de prod)
 --
 -- Devolve `metric_custom_definitions` ao isolamento de tenant puro: só admin de
 -- equipe ativo escreve, e só membro da org lê.
