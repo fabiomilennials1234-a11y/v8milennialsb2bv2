@@ -87,11 +87,17 @@ export function Sidebar() {
 
   return (
     <>
+      {/* `text-sidebar-foreground` no <aside> não é decoração. A lateral é ESCURA
+          nos DOIS temas (`--sidebar-background` = 36 20% 18% no claro), mas quem
+          não declarava cor própria herdava `--foreground` — que no tema claro é
+          30 18% 16%, praticamente o mesmo tom do fundo: 1.10:1, invisível. Era o
+          que apagava o nome da org. Ancorar a cor aqui conserta a herança de todo
+          descendente, não só a do seletor. */}
       <aside
         data-testid="sidebar"
         aria-label="Navegação principal"
         style={{ width }}
-        className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
+        className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
       >
         <div className="flex flex-col gap-3 px-3 pb-2 pt-4">
           {/* O botão de recolher mora aqui dentro, e não flutuando na borda:

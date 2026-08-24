@@ -45,7 +45,11 @@ export function SidebarMobileDrawer() {
 
   return (
     <>
-      <header className="flex h-[52px] shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar px-3">
+      {/* Terceira (e última) superfície `bg-sidebar` do app. As outras duas — o
+          <aside> do desktop e o SheetContent logo abaixo — já ancoram a cor; sem
+          a âncora aqui o sino do <AlertsDropdown /> (Button `ghost`, que não tem
+          cor em repouso) herdava `--foreground` e sumia no tema claro. */}
+      <header className="flex h-[52px] shrink-0 items-center gap-3 border-b border-sidebar-border bg-sidebar text-sidebar-foreground px-3">
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -71,9 +75,13 @@ export function SidebarMobileDrawer() {
       </header>
 
       <Sheet open={open} onOpenChange={setOpen}>
+        {/* Mesma âncora de cor do `<aside>` do desktop (ver Sidebar.tsx): a gaveta
+            também pinta `bg-sidebar`, escuro nos dois temas, então sem
+            `text-sidebar-foreground` os filhos sem cor própria herdam
+            `--foreground` e somem no tema claro. */}
         <SheetContent
           side="left"
-          className="flex w-[min(280px,86vw)] flex-col gap-0 border-r border-sidebar-border bg-sidebar p-0"
+          className="flex w-[min(280px,86vw)] flex-col gap-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground p-0"
         >
           <div className="flex flex-col gap-3 border-b border-sidebar-border px-3 py-4">
             <SidebarBrand collapsed={false} />
