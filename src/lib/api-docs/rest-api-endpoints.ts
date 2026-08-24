@@ -125,19 +125,24 @@ const endpoints: ApiEndpoint[] = [
   {
     id: "api-list-pipelines",
     name: "Listar funis",
-    description: "Catálogo de funis com etapas. Funis system trazem etapas; funis custom vêm com stages vazio no v1. Escopo: pipeline:read.",
+    description: "Catálogo de funis com etapas, de sistema e personalizados. Escopo: pipeline:read.",
     category: "rest-api",
     version: "v1",
     method: "GET",
     path: "/api/v1/pipelines",
     auth,
-    parameters: [],
+    parameters: [
+      { name: "only_active_stages", type: "boolean", required: false, description: "Com \"true\", cada funil traz apenas as etapas ativas — as mesmas que o cliente vê no kanban. Sem o parâmetro, vêm todas, inclusive as desativadas." },
+    ],
     requestExample: {},
     responseExample: { data: [{ id: "p1", name: "WhatsApp", slug: "whatsapp", type: "system", color: "#25D366", icon: "message-circle", display_order: 1, is_active: true, stages: [{ stage_key: "novo", name: "Novo", color: "#888", position: 0, is_active: true, is_final_positive: false, is_final_negative: false }] }], next_cursor: null, has_more: false },
     responseFields: [
       { name: "data", type: "object[]", required: true, description: "Funis com stages embutidos." },
     ],
-    notes: ["Catálogo sem paginação (next_cursor sempre null)."],
+    notes: [
+      "Catálogo sem paginação (next_cursor sempre null).",
+      "Etapa desativada existe no banco e é aceita pela API, mas não aparece no kanban: um Negócio aberto nela fica invisível na tela. Para montar seletor, use only_active_stages=true.",
+    ],
   },
   {
     id: "api-list-tags",

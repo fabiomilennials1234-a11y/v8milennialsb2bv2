@@ -665,7 +665,17 @@
             "ApiKeyAuth": []
           }
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "only_active_stages",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Com `true`, cada funil traz apenas as etapas ativas — as mesmas que o cliente vê no kanban. Sem o parâmetro, vêm todas, inclusive as desativadas. Etapa desativada é aceita pela API, mas um Negócio aberto nela não aparece na tela."
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",

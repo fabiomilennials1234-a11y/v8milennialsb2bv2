@@ -27,6 +27,39 @@ async function catalog(ctx: ApiRouteContext, rpc: string): Promise<Response> {
   return apiList((data ?? []) as unknown[], null, ctx.cors);
 }
 
-export const listPipelines = (ctx: ApiRouteContext) => catalog(ctx, "api_list_pipelines");
+/**
+ * `GET /pipelines?only_active_stages=true` devolve, em cada funil, apenas as
+ * etapas que o cliente enxerga na tela.
+ *
+ * O produto esconde etapa desativada: a tela filtra `is_active = true` e ordena
+ * por `position` (`usePipelineStages`). O catálogo não filtrava, então quem
+ * integra via API via etapas que não existem para o usuário — na org Milennials
+ * são 15 inativas contra 16 ativas só no funil de Qualificação, com nomes
+ * repetidos entre as duas listas ("↩️ Remarcar" aparece nas duas). Um seletor
+ * montado sobre isso deixa abrir Negócio numa etapa fora do kanban: a API aceita,
+ * o card nasce, e ninguém o encontra na tela.
+ *
+ * O default segue trazendo tudo — o parâmetro é opt-in para não mudar o contrato
+ * de quem já consome. O filtro é aqui e não no SQL de propósito: mexer na
+ * assinatura de `api_list_pipelines` criaria uma sobrecarga da função, e o
+ * PostgREST poderia resolver para a versão antiga em silêncio.
+ */
+export async function listPipelines(ctx: ApiRouteContext): Promise<Response> {
+  const somenteAtivas = new URL(ctx.req.url).searchParams.get("only_active_stages") === "true";
+  const supabase = ctx.supabase as RpcClient;
+  const { data, error } = await supabase.rpc("api_list_pipelines", { p_org: ctx.organizationId });
+  if (error) {
+    return apiError(500, "internal_error", "Erro ao buscar catálogo", ctx.cors);
+  }
+
+  const funis = (data ?? []) as Array<Record<string, unknown>>;
+  if (!somenteAtivas) return apiList(funis, null, ctx.cors);
+
+  const filtrados = funis.map((f) => {
+    const etapas = Array.isArray(f.stages) ? (f.stages as Array<Record<string, unknown>>) : [];
+    return { ...f, stages: etapas.filter((e) => e.is_active === true) };
+  });
+  return apiList(filtrados, null, ctx.cors);
+}
 export const listTags = (ctx: ApiRouteContext) => catalog(ctx, "api_list_tags");
 export const listCustomFields = (ctx: ApiRouteContext) => catalog(ctx, "api_list_custom_fields");
