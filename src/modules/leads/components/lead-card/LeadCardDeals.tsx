@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronRight, Plus, ShoppingCart, Trophy, XCircle } from "lucide-react";
+import { ChevronRight, Layers, Plus, ShoppingCart, Trophy, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { LeadCardDeal } from "./types";
@@ -49,6 +49,39 @@ function Barra({ indice, total }: { indice: number | null; total: number }) {
   );
 }
 
+/**
+ * Dois Negócios ABERTOS no mesmo funil.
+ *
+ * O modelo autoriza — é assim que recompra se representa (ADR-0023 decisão 2) —
+ * e a API cria sem barrar, devolvendo `warning.code`. Mas o caso comum não é
+ * recompra: é a mesma pessoa preenchendo o mesmo anúncio duas vezes. Sem esta
+ * marca o vendedor trabalha a mesma venda duas vezes achando que são duas.
+ *
+ * Medido em produção em 2026-08-23, logo após o backfill: ZERO Leads nessa
+ * situação. É capacidade nova, e a primeira vez que acontecer alguém precisa
+ * perceber — por isso a marca fica na LINHA, e não num contador no topo: assim
+ * ela aponta QUAIS são o par, não só que existe um.
+ *
+ * Âmbar e não vermelho de propósito: não é erro, é coincidência que merece um
+ * olhar. Vermelho aqui treinaria o vendedor a ignorar vermelho.
+ */
+function MarcaDuplicado({ quantos, funil }: { quantos: number; funil: string }) {
+  return (
+    <span
+      data-testid="negocio-duplicado-no-funil"
+      title={`Este lead tem ${quantos} negócios abertos em ${funil} ao mesmo tempo. Pode ser recompra — ou o mesmo formulário preenchido duas vezes.`}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5",
+        "border border-amber-500/30 bg-amber-500/10 text-amber-500",
+        "text-[10.5px] font-medium leading-none",
+      )}
+    >
+      <Layers className="size-3" aria-hidden />
+      {quantos} neste funil
+    </span>
+  );
+}
+
 function Metrica({ valor, rotulo }: { valor: string; rotulo: string }) {
   return (
     <div className="flex flex-col items-center gap-0.5 px-1">
@@ -62,10 +95,13 @@ function LinhaAberta({
   deal,
   onOpen,
   atual,
+  abertosNoFunil,
 }: {
   deal: LeadCardDeal;
   onOpen: (id: string) => void;
   atual?: boolean;
+  /** Quantos negócios ABERTOS este lead tem no mesmo funil deste aqui. */
+  abertosNoFunil: number;
 }) {
   return (
     <button
@@ -97,6 +133,11 @@ function LinhaAberta({
               <span className="shrink-0 rounded border border-primary/40 bg-primary/10 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
                 este
               </span>
+            )}
+            {/* Ao lado do título, e não no rodapé da linha: é onde o olho cai
+                primeiro, e o ponto é justamente ser visto sem procurar. */}
+            {abertosNoFunil > 1 && (
+              <MarcaDuplicado quantos={abertosNoFunil} funil={deal.funil} />
             )}
           </span>
           <span className="block truncate text-[11.5px] text-muted-foreground">
@@ -157,6 +198,12 @@ export function LeadCardDeals({
   const [historicoAberto, setHistoricoAberto] = useState(false);
 
   const abertos = negocios.filter((d) => d.estado === "aberto");
+
+  // Só ABERTOS contam. Um ganho e um aberto no mesmo funil é o cliente que
+  // voltou — exatamente o que o modelo existe para representar. Marcar isso
+  // transformaria a feature em alarme falso permanente.
+  const abertosPorFunil = new Map<string, number>();
+  for (const d of abertos) abertosPorFunil.set(d.funil, (abertosPorFunil.get(d.funil) ?? 0) + 1);
   const fechados = negocios.filter((d) => d.estado !== "aberto");
   const ganhos = fechados.filter((d) => d.estado === "ganho");
   const somaGanha = ganhos.reduce((s, d) => s + d.valor, 0);
@@ -188,7 +235,13 @@ export function LeadCardDeals({
       {abertos.length > 0 ? (
         <div className="flex flex-col gap-2">
           {abertos.map((d) => (
-            <LinhaAberta key={d.id} deal={d} onOpen={onOpenDeal} atual={d.id === atual} />
+            <LinhaAberta
+              key={d.id}
+              deal={d}
+              onOpen={onOpenDeal}
+              atual={d.id === atual}
+              abertosNoFunil={abertosPorFunil.get(d.funil) ?? 1}
+            />
           ))}
         </div>
       ) : (
