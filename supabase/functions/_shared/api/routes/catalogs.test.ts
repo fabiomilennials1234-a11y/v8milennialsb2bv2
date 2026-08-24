@@ -49,3 +49,57 @@ for (const c of cases) {
     assertEquals(res.status, 500);
   });
 }
+
+// ── only_active_stages ──────────────────────────────────────────────────────
+//
+// A tela do produto esconde etapa desativada (`usePipelineStages` filtra
+// `is_active = true`). O catálogo passou a saber fazer o mesmo, sob demanda.
+// O default NÃO filtra: mudar o que já é devolvido quebraria quem consome hoje.
+
+const FUNIS = [
+  {
+    slug: "whatsapp",
+    type: "system",
+    stages: [
+      { stage_key: "novo", name: "Novo Lead", is_active: true },
+      { stage_key: "disparo_1", name: "Disparo 1 (24h)", is_active: false },
+      { stage_key: "agendado", name: "Reunião Agendada", is_active: true },
+    ],
+  },
+  { slug: "sem-etapas", type: "custom", stages: [] },
+];
+
+function ctxComUrl(url: string): ApiRouteContext {
+  return {
+    req: new Request(url),
+    params: {},
+    organizationId: "org-1",
+    scopes: [],
+    supabase: { rpc: () => Promise.resolve({ data: FUNIS }) },
+    cors,
+  };
+}
+
+Deno.test("pipelines — sem o parâmetro, devolve TODAS as etapas (contrato atual)", async () => {
+  const res = await listPipelines(ctxComUrl("https://x/api/v1/pipelines"));
+  const body = await res.json();
+  assertEquals(body.data[0].stages.length, 3);
+});
+
+Deno.test("pipelines — only_active_stages=true devolve só o que aparece na tela", async () => {
+  const res = await listPipelines(ctxComUrl("https://x/api/v1/pipelines?only_active_stages=true"));
+  const body = await res.json();
+  const chaves = body.data[0].stages.map((e: { stage_key: string }) => e.stage_key);
+  assertEquals(chaves, ["novo", "agendado"]);
+  // O funil sem etapas continua na lista — filtrar etapas não some com o funil.
+  assertEquals(body.data.length, 2);
+  assertEquals(body.data[1].stages, []);
+});
+
+Deno.test("pipelines — qualquer outro valor não filtra (só o literal 'true')", async () => {
+  for (const v of ["1", "yes", "false", ""]) {
+    const res = await listPipelines(ctxComUrl(`https://x/api/v1/pipelines?only_active_stages=${v}`));
+    const body = await res.json();
+    assertEquals(body.data[0].stages.length, 3, `valor ${v} não deveria filtrar`);
+  }
+});
