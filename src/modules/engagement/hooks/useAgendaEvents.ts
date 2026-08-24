@@ -6,7 +6,19 @@ import { useOrganization } from "@/modules/identity";
 
 export interface AgendaEvent {
   id: string;
-  source: "meeting" | "follow_up" | "scheduled_message" | "pipe_confirmacao";
+  /**
+   * ⚠️ São CINCO fontes no PROD, não quatro. `meeting_event` (o funil mergeado
+   * — ADR-0004/ADR-0007) entrou na RPC em 2026-07-30 e este tipo nunca soube:
+   * a migration `20270730000000_agenda_meeting_events_source.sql` foi aplicada
+   * à mão e ficou fora do repo. O valor sempre chegou aqui em runtime — são
+   * 836 linhas no PROD — apenas tipado como algo que ele não é.
+   */
+  source:
+    | "meeting"
+    | "follow_up"
+    | "scheduled_message"
+    | "pipe_confirmacao"
+    | "meeting_event";
   title: string;
   description: string | null;
   start_at: string;

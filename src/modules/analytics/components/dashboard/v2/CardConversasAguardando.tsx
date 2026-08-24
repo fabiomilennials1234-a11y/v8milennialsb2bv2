@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { Bot, MessageSquareDot, Smartphone } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { formatContactTime } from "@/modules/communication/components/chat/list/ConversationListItem";
 import {
@@ -7,6 +8,7 @@ import {
   type ConversaAguardando,
 } from "@/modules/analytics/hooks/useConversasAguardando";
 import { ComandoCard } from "./ComandoCard";
+import { DonoDaLinha } from "./DonoDaLinha";
 
 const MOSTRAR = 10;
 
@@ -26,7 +28,7 @@ const LINHA_CLASSES =
  * uma pergunta por qual falar.
  */
 export function CardConversasAguardando() {
-  const { items, total, isLoading, isError, isDegraded } =
+  const { items, total, isLoading, isError, isDegraded, isAdmin } =
     useConversasAguardando(MOSTRAR);
 
   const restantes = Math.max(0, total - items.length);
@@ -37,12 +39,17 @@ export function CardConversasAguardando() {
       title="Aguardando resposta"
       count={total}
       tone="urgent"
+      scopeHint={isAdmin ? "Equipe" : undefined}
       action={{ label: "Abrir chat", to: "/chat-whatsapp" }}
       isLoading={isLoading}
       isError={isError}
       isEmpty={items.length === 0}
       emptyTitle="Ninguém esperando"
-      emptyHint="Todo cliente que falou já teve resposta de alguém do time. É o estado que você quer ver aqui."
+      emptyHint={
+        isAdmin
+          ? "Todo cliente que falou já teve resposta de alguém do time. É o estado que você quer ver aqui."
+          : "Todo cliente que falou com você já teve resposta. É o estado que você quer ver aqui."
+      }
       notice={
         isDegraded ? (
           <p className="border-b border-border/50 bg-muted/40 px-4 py-2 text-[10px] leading-relaxed text-muted-foreground/80">
@@ -73,7 +80,7 @@ export function CardConversasAguardando() {
                 className={LINHA_CLASSES}
                 aria-label={`Abrir conversa com ${c.displayName}`}
               >
-                <LinhaConversa conversa={c} />
+                <LinhaConversa conversa={c} mostrarDono={isAdmin} />
               </AbrirConversaButton>
             ) : (
               /* Sem lead vinculado o caminho sancionado não se aplica — ele
@@ -86,7 +93,7 @@ export function CardConversasAguardando() {
                 className={LINHA_CLASSES}
                 aria-label={`Abrir conversa com ${c.displayName}`}
               >
-                <LinhaConversa conversa={c} />
+                <LinhaConversa conversa={c} mostrarDono={isAdmin} />
               </Link>
             )}
           </li>
@@ -96,7 +103,14 @@ export function CardConversasAguardando() {
   );
 }
 
-function LinhaConversa({ conversa }: { conversa: ConversaAguardando }) {
+function LinhaConversa({
+  conversa,
+  mostrarDono,
+}: {
+  conversa: ConversaAguardando;
+  /** Só o admin: para o vendedor a fila inteira já é dele. */
+  mostrarDono: boolean;
+}) {
   return (
     <>
       {/* O ponto é o sinal de "parada aqui". Sem ele a linha some no meio da lista. */}
@@ -123,13 +137,29 @@ function LinhaConversa({ conversa }: { conversa: ConversaAguardando }) {
         <span className="block truncate text-[11px] text-muted-foreground/70">
           {conversa.lastClientMessage?.trim() || "Mensagem sem texto"}
         </span>
+        {/* Terceira linha só para admin: de quem é a conversa. Fica embaixo, e
+            não na coluna da direita, porque nome de pessoa é largo e ali
+            disputaria espaço com a hora — que é o dado que o olho procura
+            primeiro numa fila de espera. */}
+        {mostrarDono && (
+          <DonoDaLinha nome={conversa.ownerName} className="mt-0.5" />
+        )}
       </span>
 
       <span className="flex shrink-0 flex-col items-end gap-0.5">
         <span className="text-[11px] tabular-nums text-muted-foreground/70">
           {formatContactTime(conversa.lastClientMessageAt)}
         </span>
-        <span className="hidden items-center gap-1 text-[10px] text-muted-foreground/50 sm:flex">
+        {/* A instância é requisito explícito do admin ("saber qual WhatsApp
+            está vinculado"), então para ele aparece SEMPRE — inclusive no
+            estreito. Para o vendedor continua como estava: só a partir de `sm`,
+            porque ele costuma ter uma caixa só e o dado é ruído. */}
+        <span
+          className={cn(
+            "items-center gap-1 text-[10px] text-muted-foreground/50",
+            mostrarDono ? "flex" : "hidden sm:flex",
+          )}
+        >
           <Smartphone className="h-2.5 w-2.5" />
           <span className="max-w-[110px] truncate">{conversa.instanceName}</span>
         </span>

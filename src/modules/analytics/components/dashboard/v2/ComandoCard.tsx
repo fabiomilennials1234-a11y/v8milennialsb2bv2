@@ -21,6 +21,15 @@ interface ComandoCardProps {
   count?: number;
   /** `urgent` pinta o ícone e o contador com a cor de destaque. */
   tone?: "default" | "urgent";
+  /**
+   * Selo curto de abrangência — hoje só "Equipe", e só para admin.
+   *
+   * O vendedor NÃO recebe selo nenhum: o pedido é que a tela pareça
+   * naturalmente dele, sem controles que não fazem sentido no nível de acesso
+   * dele. Quem precisa saber que está vendo além do próprio trabalho é quem
+   * está vendo além.
+   */
+  scopeHint?: string;
   /** Porta para a tela completa do assunto. */
   action?: { label: string; to: string };
   isLoading?: boolean;
@@ -41,6 +50,7 @@ export function ComandoCard({
   title,
   count,
   tone = "default",
+  scopeHint,
   action,
   isLoading = false,
   isError = false,
@@ -74,6 +84,11 @@ export function ComandoCard({
             )}
           >
             {count}
+          </span>
+        )}
+        {scopeHint && (
+          <span className="rounded border border-border/70 px-1 py-px text-[9px] font-bold uppercase tracking-[0.06em] text-muted-foreground/70">
+            {scopeHint}
           </span>
         )}
         {action && (

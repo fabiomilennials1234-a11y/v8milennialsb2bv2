@@ -3,8 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { format, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarClock, MapPin, Video } from "lucide-react";
-import { useAgendaEvents, type AgendaEvent } from "@/modules/engagement";
+import {
+  useComandoAgenda,
+  type ComandoAgendaEvent,
+} from "@/modules/analytics/hooks/useComandoAgenda";
 import { ComandoCard } from "./ComandoCard";
+import { DonoDaLinha } from "./DonoDaLinha";
 
 const MOSTRAR = 6;
 /** Janela de "próximas". Curta o bastante para ser fila, longa para não vazar. */
@@ -42,10 +46,15 @@ function rotuloDoDia(inicio: Date): string {
 /**
  * Bloco 2 — o que já está marcado.
  *
- * Reusa `useAgendaEvents`, que é a MESMA fonte da tela /agenda (RPC
- * `get_agenda_events`, UNION de meetings + follow_ups + scheduled_user_messages
- * + pipe_confirmacao). Não existe segunda consulta aqui: se a agenda mudar de
- * fonte, este bloco acompanha sozinho.
+ * Lê `useComandoAgenda`, que COMPÕE sobre a mesma `get_agenda_events` da tela
+ * /agenda (UNION de meetings + follow_ups + scheduled_user_messages +
+ * pipe_confirmacao + meeting_events) e só acrescenta o recorte por usuário.
+ * Se a agenda ganhar uma sexta fonte, este bloco acompanha sozinho.
+ *
+ * ⚠️ NÃO usa `useAgendaEvents` direto de propósito: aquele hook serve a tela
+ * /agenda, que deve continuar mostrando a operação inteira. Aqui o vendedor vê
+ * só os compromissos dele (mais os que não são de ninguém — 61% das reuniões
+ * de confirmação estão nesse caso, medido no PROD). Quem recorta é a RPC.
  */
 export function CardProximasAgendas() {
   const navigate = useNavigate();
@@ -59,16 +68,19 @@ export function CardProximasAgendas() {
     return [agora, limite];
   }, []);
 
-  const { data, isLoading, isError, refetch } = useAgendaEvents(inicio, fim);
+  const { data, isLoading, isError, isAdmin, refetch } = useComandoAgenda(
+    inicio,
+    fim,
+  );
 
   const eventos = useMemo(() => {
     const agora = inicio.getTime();
     return (data ?? [])
-      .filter((e: AgendaEvent) => !STATUS_ENCERRADO.has((e.status ?? "").toLowerCase()))
+      .filter((e: ComandoAgendaEvent) => !STATUS_ENCERRADO.has((e.status ?? "").toLowerCase()))
       // A janela da RPC é assimétrica por fonte: `meetings` usa OVERLAP, então
       // devolve reunião que começou antes de agora e ainda não acabou. Numa
       // lista de "próximas" isso confunde — o corte é explícito aqui.
-      .filter((e: AgendaEvent) => new Date(e.start_at).getTime() >= agora)
+      .filter((e: ComandoAgendaEvent) => new Date(e.start_at).getTime() >= agora)
       .sort(
         (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
       );
@@ -82,12 +94,17 @@ export function CardProximasAgendas() {
       icon={CalendarClock}
       title="Próximas agendas"
       count={eventos.length}
+      scopeHint={isAdmin ? "Equipe" : undefined}
       action={{ label: "Ver agenda", to: "/agenda" }}
       isLoading={isLoading}
       isError={isError}
       isEmpty={visiveis.length === 0}
       emptyTitle="Nada marcado"
-      emptyHint={`Sem compromisso nos próximos ${DIAS_A_FRENTE} dias. Marque pela agenda ou movendo um lead para a etapa de reunião.`}
+      emptyHint={
+        isAdmin
+          ? `Sem compromisso do time nos próximos ${DIAS_A_FRENTE} dias. Marque pela agenda ou movendo um lead para a etapa de reunião.`
+          : `Você não tem compromisso nos próximos ${DIAS_A_FRENTE} dias. Marque pela agenda ou movendo um lead para a etapa de reunião.`
+      }
       onRetry={() => void refetch()}
       footer={
         restantes > 0 ? (
@@ -133,6 +150,14 @@ export function CardProximasAgendas() {
                       {e.lead_company ? ` · ${e.lead_company}` : ""}
                     </span>
                   ) : null}
+                  {/* Só o admin: para o vendedor a agenda inteira já é dele. */}
+                  {isAdmin && (
+                    <DonoDaLinha
+                      nome={e.owner_name}
+                      className="mt-0.5"
+                      semDonoLabel="Sem responsável"
+                    />
+                  )}
                 </span>
 
                 <span className="hidden shrink-0 items-center gap-1.5 text-muted-foreground/50 sm:flex">
