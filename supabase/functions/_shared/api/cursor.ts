@@ -18,17 +18,23 @@ export function encodeCursor(c: Cursor): string {
 /**
  * Splits an over-fetched result set (limit+1 rows) into a page plus the
  * next cursor. Returns `nextCursor: null` when there is no further page.
- * Rows must carry `created_at` + `id` and be ordered by the keyset.
+ * Rows must carry `id` and the sort key, e serem ordenadas pelo keyset.
+ *
+ * `sortKey` existe porque nem toda listagem ordena por criação: a de Negócio
+ * ordena por última atividade (#1767/#1771). A alternativa — contrabandear a
+ * chave dentro de `created_at` no objeto da linha — CORROMPE o corpo da
+ * resposta, porque é o mesmo objeto que vai serializado para quem integra.
  */
-export function paginateByCursor<T extends Cursor>(
+export function paginateByCursor<T extends { id: string }>(
   rows: T[],
   limit: number,
+  sortKey: keyof T & string = "created_at" as keyof T & string,
 ): { page: T[]; nextCursor: string | null } {
   const hasMore = rows.length > limit;
   const page = hasMore ? rows.slice(0, limit) : rows;
   const last = page[page.length - 1];
   const nextCursor = hasMore && last
-    ? encodeCursor({ created_at: last.created_at, id: last.id })
+    ? encodeCursor({ created_at: String(last[sortKey]), id: last.id })
     : null;
   return { page, nextCursor };
 }
