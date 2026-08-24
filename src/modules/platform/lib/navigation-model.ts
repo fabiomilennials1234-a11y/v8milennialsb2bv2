@@ -105,6 +105,20 @@ export const TURBO_CHILDREN: NavNode[] = [
  */
 export const SIDEBAR_PRIMARY: NavNode[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
+  // Métricas sai do Pitstop e vira porta de primeiro nível, entre Comando e
+  // Chat (decisão CTO 2026-08-24). O Pitstop é "consulta semanal, não diária" —
+  // e o Estúdio deixou de ser isso no momento em que passou a ser a tela onde
+  // se monta o painel de trabalho.
+  //
+  // O `gate` viaja junto e continua valendo: `primary` passa por `filterByGate`
+  // em `useNavigationModel`, exatamente como o Pitstop passava. Org fora do
+  // rollout não vê o item — o clique cairia em tela de "ainda não liberado".
+  {
+    label: "Métricas",
+    icon: ChartNoAxesCombined,
+    path: "/metricas",
+    gate: "metrics_studio_enabled",
+  },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
@@ -143,14 +157,9 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
     title: "Gestão",
     hint: "Consulta semanal, não diária",
     items: [
-      // Métricas guarda o gate de rollout por org: sem a flag o item não
-      // aparece, porque o clique cairia na tela de "ainda não liberado".
-      {
-        label: "Métricas",
-        icon: ChartNoAxesCombined,
-        path: "/metricas",
-        gate: "metrics_studio_enabled",
-      },
+      // Métricas NÃO mora mais aqui — subiu para `SIDEBAR_PRIMARY`, entre
+      // Comando e Chat (decisão CTO 2026-08-24). Não devolva o item para cá
+      // sem tirá-lo de lá: duplicado, ele aparece nos dois lugares.
       { label: "Ranking", icon: Trophy, path: "/performance" },
       { label: "Comissões", icon: DollarSign, path: "/comissoes" },
       { label: "Revisão", icon: Wrench, path: "/follow-ups" },

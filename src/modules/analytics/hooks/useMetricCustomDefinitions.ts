@@ -20,6 +20,12 @@ import type { MetricFormatId, MetricUnit } from "@/modules/analytics/lib/metric-
  * AND is_active`, e nada mais. Ver o cabeçalho da migration
  * `20270813110000_metric_custom_definitions.sql`. Não "alinhe" uma à outra.
  *
+ * MASTER entra por policy PRÓPRIA, não pela helper de tenant:
+ * `master_ghost_all_metric_custom_definitions` (mig. `20270824070000`), no
+ * padrão `master_ghost_all_*` do repositório. Sem ela o master não escrevia
+ * — e nem lia, porque `get_my_organization_ids()` também é vazia para ele.
+ * Gestor de portfólio continua fora das duas portas.
+ *
  * A validação da árvore acontece nas DUAS pontas, e nenhuma delas é este hook:
  * o compositor valida com `validarArvore` antes de habilitar o botão, e o banco
  * valida de novo no trigger. Este hook só carrega o payload — se ele passar uma
