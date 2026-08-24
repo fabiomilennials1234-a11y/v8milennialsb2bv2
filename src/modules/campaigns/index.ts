@@ -184,6 +184,7 @@ export {
   isBlastableInstance,
   isConnectedInstance,
   regimeDaInstancia,
+  rotuloDaInstancia,
   NEW_NUMBER_WINDOW_DAYS,
 } from "./lib/disparo-numbers";
 

@@ -25,6 +25,7 @@
  */
 import {
   decidirDisparoDoDestinatario,
+  regimeDoProvedor,
   type TemplateDoDisparo,
 } from "./decisao-do-disparo.ts";
 
@@ -266,9 +267,10 @@ async function carregarContexto(
     mapa.set(p.id, {
       plano: { status: p.status, template: p.template ?? null },
       instance,
-      // O regime é do provedor da Instance, e a mesma verdade do módulo do
-      // front (`campaigns/lib/disparo-numbers.ts`): oficial é `notificame`.
-      regime: instance.provider === "notificame" ? "oficial" : "chip",
+      // O regime vem da FONTE ÚNICA do servidor. Comparar o provedor à mão aqui
+      // criaria uma terceira cópia da regra — e ela ficaria FORA do teste gêmeo,
+      // que é justamente o que impede front e servidor de divergirem.
+      regime: regimeDoProvedor(instance.provider as string | null) ?? "chip",
       orgId: p.organization_id,
       postSendTarget: p.post_send_target ?? null,
     });

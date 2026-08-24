@@ -149,6 +149,10 @@ describe("pulos — a linha não vale, e ela carrega o motivo", () => {
     expect(d.acao).toBe("pular");
   });
 
+  // `delivered` e `unconfirmed` estão no CHECK desde o #1721, mas NINGUÉM os
+  // escreve ainda — quem passa a escrevê-los é o ciclo de entrega (#1724). Estão
+  // aqui de propósito: quando aquela fatia começar a gravá-los, a regra já os
+  // trata como processados, em vez de reenviar para quem já recebeu.
   it.each(["sent", "failed", "skipped", "delivered", "unconfirmed"])(
     "linha já em %s não é reprocessada — ninguém recebe duas vezes",
     (status) => {

@@ -143,6 +143,20 @@ describe("instancesToNumbers — fail-closed", () => {
     expect(instancesToNumbers([{ id: "x", status: "connected", provider: "provider_do_futuro" }], NOW)).toEqual([]);
   });
 
+  it("provider em CAIXA ALTA continua disparando — case-insensitive como sempre foi", () => {
+    // REGRESSÃO PEGA PELO /code-review. O módulo antigo normalizava o case
+    // (`instances-to-numbers.ts:49`, `BLASTABLE_PROVIDERS.has(provider.toLowerCase())`)
+    // e a minha reescrita não — um `provider: "Uazapi"` passaria a cair no
+    // fail-closed e a Organization ficaria SEM NÚMERO NENHUM, sem explicação.
+    // Critério 8 é comportamento idêntico, e isto não era.
+    expect(regimeDaInstancia({ id: "a", status: "open", provider: "UAZAPI" })).toBe("chip");
+    expect(regimeDaInstancia({ id: "b", status: "open", provider: "Evolution" })).toBe("chip");
+    expect(regimeDaInstancia({ id: "c", status: "open", provider: "NotificaMe" })).toBe("oficial");
+    expect(
+      instancesToNumbers([{ id: "a", status: "OPEN", provider: "Uazapi" }], NOW).map((n) => n.id),
+    ).toEqual(["a"]);
+  });
+
   it("meta_cloud continua fora — é oficial, mas não tem transporte de Disparo nesta fatia", () => {
     // Não é "esqueceram": o transporte desta fatia é o do NotificaMe
     // (`sendTemplateViaInstance` → `NotificameProvider.sendTemplate`). Oferecer

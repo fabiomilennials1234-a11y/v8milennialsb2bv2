@@ -103,7 +103,10 @@ export function regimeDaInstancia(i: InstanceLike): RegimeDeDisparo | null {
   const canal = String(i.channel_type ?? "whatsapp").toLowerCase();
   if (canal !== "whatsapp") return null;
 
-  const provider = i.provider ?? "";
+  // Case-insensitive, como o módulo que este sucede sempre foi. Um
+  // `provider: "Uazapi"` que caísse no fail-closed deixaria a Organization sem
+  // número nenhum, sem explicação — critério 8 é comportamento idêntico.
+  const provider = (i.provider ?? "").toLowerCase();
   if (CHIP_PROVIDERS.has(provider)) return "chip";
   if (OFICIAL_PROVIDERS.has(provider)) return "oficial";
   return null;
@@ -117,6 +120,22 @@ export function isBlastableInstance(i: InstanceLike): boolean {
 /** A Instance está conectada, no vocabulário do provedor? */
 export function isConnectedInstance(i: InstanceLike): boolean {
   return CONNECTED_STATUSES.has(String(i.status ?? "").toLowerCase());
+}
+
+/**
+ * O rótulo humano de uma Instance: nome, senão telefone, senão posição.
+ *
+ * Exportado porque o Disparo Rápido precisa dele no ramo em que NENHUMA linha
+ * está conectada — ali ele lista as desconectadas, que `instancesToNumbers` não
+ * devolve. Sem isto a fórmula existia em dois lugares, que é a mesma forma de
+ * defeito que este módulo veio acabar.
+ */
+export function rotuloDaInstancia(i: InstanceLike, idx: number): string {
+  return (
+    (i.instance_name ?? "").trim() ||
+    (i.phone_number ?? "").trim() ||
+    `Número ${idx + 1}`
+  );
 }
 
 /**
@@ -138,10 +157,7 @@ export function instancesToNumbers(
         Number.isFinite(createdMs) && nowMs - createdMs < NEW_NUMBER_WINDOW_MS;
       return {
         id: i.id,
-        label:
-          (i.instance_name ?? "").trim() ||
-          (i.phone_number ?? "").trim() ||
-          `Número ${idx + 1}`,
+        label: rotuloDaInstancia(i, idx),
         cap: effectiveCap(defaultCap, isNew),
         selected: idx === 0,
         isNew,

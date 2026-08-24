@@ -28,6 +28,10 @@ const PROVEDORES = [
   "meta_cloud",
   "provider_do_futuro",
   "",
+  // Case: os dois lados normalizam, e o gêmeo é quem prova que normalizam IGUAL.
+  "UAZAPI",
+  "NotificaMe",
+  "Meta_Cloud",
 ];
 
 describe("regime — front e servidor", () => {
@@ -43,5 +47,28 @@ describe("regime — front e servidor", () => {
     // acordo.
     expect(regimeDoProvedor("notificame")).toBe("oficial");
     expect(regimeDaInstancia({ id: "i", status: "open", provider: "notificame" })).toBe("oficial");
+  });
+});
+
+describe("guarda — nenhuma terceira cópia da regra de regime", () => {
+  it("ninguém compara o provedor à mão fora dos dois módulos de verdade", async () => {
+    // O /code-review pegou exatamente isto: o worker calculava
+    // `provider === "notificame" ? "oficial" : "chip"` inline, criando uma
+    // TERCEIRA cópia — e ela ficava fora deste gêmeo, que é o único instrumento
+    // que impede front e servidor de divergirem. Duas cópias vigiadas é
+    // decisão; três, das quais uma invisível, é o defeito que este ticket veio
+    // consertar na camada dos números.
+    const fs = await import("node:fs");
+    const suspeitos = [
+      "supabase/functions/_shared/blast-official-runner.ts",
+      "supabase/functions/blast-plan-create/index.ts",
+      "src/modules/campaigns/components/disparo-wizard/StepMessage.tsx",
+    ];
+    for (const arquivo of suspeitos) {
+      const src = fs.readFileSync(arquivo, "utf8");
+      expect(src, `${arquivo} compara o provedor à mão`).not.toMatch(
+        /===\s*["']notificame["']/,
+      );
+    }
   });
 });

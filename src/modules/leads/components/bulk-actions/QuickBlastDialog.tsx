@@ -23,6 +23,7 @@ import {
   instancesToNumbers,
   isBlastableInstance,
   regimeDaInstancia,
+  rotuloDaInstancia,
   type InstanceLike,
 } from "@/modules/campaigns";
 
@@ -118,7 +119,7 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
       .filter((i) => isBlastableInstance(i))
       .map((i, idx) => ({
         id: i.id,
-        label: (i.instance_name ?? "").trim() || (i.phone_number ?? "").trim() || `Número ${idx + 1}`,
+        label: rotuloDaInstancia(i, idx),
         regime: regimeDaInstancia(i)!,
         desconectada: true,
       }));

@@ -12,6 +12,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TemplateEscolhido } from "@/modules/campaigns/components/disparo-wizard/wizard-machine";
 import { useCurrentTeamMember } from "@/modules/identity";
 
 export type BlastPlanStatus = "active" | "paused" | "completed" | "cancelled";
@@ -75,13 +76,7 @@ export interface CreateBlastPlanInput {
    * Ausente em Disparo de Chip. O servidor recusa plano oficial sem ele, e
    * recusa regime misto — a tela barra antes, mas a garantia é do servidor.
    */
-  template?: {
-    name: string;
-    language: string;
-    components: unknown[];
-    previewText: string;
-    buttonLabels: string[];
-  } | null;
+  template?: TemplateEscolhido | null;
   delay_min_ms?: number;
   delay_max_ms?: number;
   image_url?: string;

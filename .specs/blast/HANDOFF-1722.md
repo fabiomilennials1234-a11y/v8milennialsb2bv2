@@ -136,6 +136,13 @@ issue.
   Destino → Revisão → Acompanhar`. Os mesmos seis passos, os mesmos seis rótulos; muda a
   posição de uma tela. É a única ordem em que a tela nunca pede uma decisão que o passo
   seguinte anula.
+
+  ⚠️ **Isto é uma exceção AUTORIZADA à leitura literal do critério 8**, e vale dizer com
+  todas as letras: a Organization só com Chip vê os passos em ordem diferente da de ontem.
+  O comportamento de ENVIO dela é idêntico — mesmos campos, mesma linguagem, mesmo motor,
+  mesmos ledgers —, mas a sequência visual mudou para todo mundo, não só para quem tem
+  canal oficial. O CTO fechou isso explicitamente ("muda a posição de uma tela"). Chamar de
+  "idêntico" sem a ressalva seria funcionalmente verdadeiro e visualmente falso.
 - **O "Passo N de 6" virou derivado** (`kickerDoPasso`). Eram cinco literais espalhados, e
   a reordenação fez os cinco mentirem de uma vez — "Mensagem" seguia anunciando "Passo 2"
   depois de virar o terceiro. Uma tela com número errado não reclama: ela só mente. Guarda
@@ -288,6 +295,51 @@ está de pé. É a primeira coisa a fazer se o worker duplicar envio em produç�
 - Meu delta real de lint: **2 warnings** `no-explicit-any`, em
   `_shared/blast-official-runner.ts` (o cliente Supabase, como no resto de `_shared`) e nas
   fixtures de `blast-plan-canal-oficial.test.ts`. Zero erros, zero tipos introduzidos.
+
+---
+
+## 6-ter. O que o `/code-review` mudou
+
+Dois eixos em paralelo (Padrões, Spec). **Quatro achados viraram conserto, e um deles era
+regressão de verdade.**
+
+**Consertado — REGRESSÃO no critério 8: o case do provedor.** O módulo antigo normalizava
+(`instances-to-numbers.ts:49`, `BLASTABLE_PROVIDERS.has((i.provider ?? "").toLowerCase())`)
+e a minha reescrita não. Um `provider: "Uazapi"` passaria a cair no fail-closed e a
+Organization ficaria **sem número nenhum, sem explicação**. Nenhum teste cobria — nem o
+antigo nem o meu —, então não herdei vermelho que me avisasse. Agora normalizam os dois
+lados, o teste gêmeo exercita o case, e há caso próprio dizendo de onde veio.
+
+**Consertado — uma TERCEIRA cópia da regra de regime.** `blast-official-runner.ts` calculava
+`provider === "notificame" ? "oficial" : "chip"` inline, enquanto `decisao-do-disparo.ts` se
+declara "FONTE ÚNICA" duas linhas acima. E a terceira cópia ficava **fora do teste gêmeo**,
+que é o único instrumento que impede front e servidor de divergirem. Duas cópias vigiadas é
+decisão; três, com uma invisível, é o defeito que este ticket veio consertar na camada dos
+números. Agora usa `regimeDoProvedor`, e uma guarda nova reprova `=== "notificame"` solto
+nos três arquivos suspeitos.
+
+**Consertado — `StepMessage` reimplementava o que já existia.** `rotulosDosBotoes` tinha o
+**mesmo nome** de uma função exportada em `communication/lib/template-send.ts`, e o meu
+`corpoDoTemplate` era um `previewDoTemplate` pela metade (só BODY, sem HEADER/FOOTER). Pior
+que duplicação: o texto gravado na conversa sairia **diferente** do que o nó de Workflow
+grava para o mesmo template. Agora os dois caminhos usam as mesmas funções.
+
+**Consertado — o rótulo do número tinha uma terceira fórmula** no ramo de fallback do
+Disparo Rápido. Virou `rotuloDaInstancia`, exportado do módulo único.
+
+**Registrado como ressalva, não como conserto — a ordem dos passos.** A revisão de spec
+observou, com razão, que a reordenação muda a UX de **todo** usuário, inclusive só-Chip, e
+que chamar isso de "idêntico" é funcionalmente verdadeiro e visualmente falso. O CTO fechou
+a exceção explicitamente; agora ela está escrita como exceção (§4.1), não escondida.
+
+**Aceito de propósito, não consertado — o bloco repetido 4× em `blast-plan.ts`.** A revisão
+tem razão que `if (!ehCanalOficial(x)) { dispatch + markRecipients + notify }` aparece nos
+quatro sítios de despacho. Mas os quatro diferem nos argumentos (`params.message` vs
+`plan.message`, opções inline vs `dispatchOpts`), e um helper com saco de parâmetros trocaria
+repetição legível por indireção — dentro da função mais sensível do Disparo, que é o caminho
+de produção do Chip. A parte que **precisava** ser única já é: a pergunta `ehCanalOficial`.
+Fica como dívida explícita para quem migrar o Chip para o motor próprio, que é quando os
+quatro sítios convergem de verdade.
 
 ---
 

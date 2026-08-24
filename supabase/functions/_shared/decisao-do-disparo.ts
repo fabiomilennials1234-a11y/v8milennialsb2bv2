@@ -43,8 +43,11 @@ export type RegimeDoDisparo = "chip" | "oficial";
  * transporte de Disparo (`meta_cloud`).
  */
 export function regimeDoProvedor(provider: string | null | undefined): RegimeDoDisparo | null {
-  if (provider === "uazapi" || provider === "evolution") return "chip";
-  if (provider === "notificame") return "oficial";
+  // Case-insensitive dos dois lados, senão o gêmeo passa a comparar duas
+  // respostas que só coincidem quando o dado vem minúsculo.
+  const p = (provider ?? "").toLowerCase();
+  if (p === "uazapi" || p === "evolution") return "chip";
+  if (p === "notificame") return "oficial";
   return null;
 }
 

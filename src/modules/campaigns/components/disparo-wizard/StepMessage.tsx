@@ -31,7 +31,11 @@ import { StepHeader } from "./StepHeader";
 import { cn } from "@/lib/utils";
 import type { DisparoDraft } from "./wizard-machine";
 import { regimeDoConteudo } from "./wizard-machine";
-import { useNotificameTemplates } from "@/modules/communication";
+import {
+  useNotificameTemplates,
+  previewDoTemplate,
+  rotulosDosBotoes,
+} from "@/modules/communication";
 import { apenasAprovados } from "@/modules/communication/lib/templates-aprovados";
 import { kickerDoPasso } from "./wizard-machine";
 import { resolvePreview } from "./message-preview";
@@ -369,7 +373,7 @@ function EscolhaDeTemplate({
                     name: t.name,
                     language: t.language ?? "pt_BR",
                     components: t.components ?? [],
-                    previewText: corpoDoTemplate(t),
+                    previewText: previewDoTemplate(t, {}),
                     buttonLabels: rotulosDosBotoes(t),
                   },
                 })
@@ -389,7 +393,7 @@ function EscolhaDeTemplate({
                 </span>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
-                {corpoDoTemplate(t) || "(sem corpo de texto)"}
+                {previewDoTemplate(t, {}) || "(sem corpo de texto)"}
               </p>
             </button>
           );
@@ -397,23 +401,4 @@ function EscolhaDeTemplate({
       </div>
     </div>
   );
-}
-
-/** O corpo aprovado do Template — é o que a pessoa lê. */
-function corpoDoTemplate(t: { components?: unknown[] | null }): string {
-  const comps = (t.components ?? []) as Array<{ type?: string; text?: string }>;
-  return comps.find((c) => String(c.type).toUpperCase() === "BODY")?.text ?? "";
-}
-
-/**
- * Os rótulos dos botões, na ordem.
- *
- * Viajam junto de propósito: a Meta monta a mensagem do lado dela, então a linha
- * gravada na conversa nasceria sem texto e a thread exibiria "Mensagem
- * interativa" no lugar do que o cliente recebeu.
- */
-function rotulosDosBotoes(t: { components?: unknown[] | null }): string[] {
-  const comps = (t.components ?? []) as Array<{ type?: string; buttons?: Array<{ text?: string }> }>;
-  const botoes = comps.find((c) => String(c.type).toUpperCase() === "BUTTONS")?.buttons ?? [];
-  return botoes.map((b) => b.text ?? "").filter(Boolean);
 }
