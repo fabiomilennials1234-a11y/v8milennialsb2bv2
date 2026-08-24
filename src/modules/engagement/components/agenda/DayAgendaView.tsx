@@ -16,10 +16,10 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { CalendarOff, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarOff, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import type { UnifiedEvent } from "./agenda-helpers";
-import { SOURCE_LABELS, getMonthGrid } from "./agenda-helpers";
+import { SOURCE_LABELS, getMonthGrid, outcomeOf } from "./agenda-helpers";
 
 interface DayAgendaViewProps {
   /** Currently selected day (also drives which month the mini-calendar shows). */
@@ -214,8 +214,26 @@ export function DayAgendaView({
                       borderColor: event.color,
                     }}
                   >
-                    <div className="truncate text-[11px] font-medium text-foreground">
-                      {event.title}
+                    <div className="flex items-center gap-1.5">
+                      {/* Mesmo sinal da grade do mês: ícone + rótulo lido por
+                          leitor de tela, nunca só a cor. */}
+                      {outcomeOf(event) === "compareceu" && (
+                        <Check
+                          className="h-3 w-3 shrink-0 text-emerald-700 dark:text-emerald-300"
+                          strokeWidth={3}
+                          aria-label="Compareceu"
+                        />
+                      )}
+                      {outcomeOf(event) === "nao_compareceu" && (
+                        <X
+                          className="h-3 w-3 shrink-0 text-red-700 dark:text-red-300"
+                          strokeWidth={3}
+                          aria-label="Não compareceu"
+                        />
+                      )}
+                      <div className="min-w-0 truncate text-[11px] font-medium text-foreground">
+                        {event.title}
+                      </div>
                     </div>
                     <div className="truncate text-[10px] text-muted-foreground">
                       {eventSubtitle(event, showOwner)}

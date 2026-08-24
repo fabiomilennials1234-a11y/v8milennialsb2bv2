@@ -12,10 +12,11 @@
 
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { AgendaFilterBar, ALL_OPTION } from "./AgendaFilterBar";
+import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
 import { MonthView } from "./MonthView";
 import type {
   AgendaStatusFilter,
@@ -81,6 +82,7 @@ const EVENTOS: UnifiedEvent[] = [
   }),
   ev(11, 18, "Retorno do cliente", { creatorName: "Ana Souza" }),
   ev(20, 10, "Demonstração", { status: "completed" }),
+  ev(21, 15, "Call de alinhamento", { status: "no_show" }),
   ev(27, 11, "Follow-up de proposta", {
     source: "follow_up",
     eventType: "follow_up",
@@ -218,6 +220,15 @@ function TelaAtividades({
               <span className="text-xs tabular-nums text-muted-foreground">
                 {eventos.length} atividades
               </span>
+              <div className="flex items-center gap-2.5 text-xs tabular-nums">
+                <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                  <Check className="h-3 w-3 shrink-0" strokeWidth={3} />1
+                </span>
+                <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
+                  <X className="h-3 w-3 shrink-0" strokeWidth={3} />1
+                </span>
+                <span className="text-muted-foreground">{eventos.length - 2} sem registro</span>
+              </div>
               <div className="flex gap-1 rounded-full border border-border bg-sunken p-1">
                 <button
                   type="button"
@@ -272,4 +283,23 @@ export const Admin: Story = {
 /** Mês sem nenhum compromisso. */
 export const Vazio: Story = {
   args: { eventos: [], admin: false },
+};
+
+/** O par de botões nos três estados — sem registro, compareceu, não compareceu. */
+export const Resultado: Story = {
+  render: () => (
+    <div className="min-h-screen bg-background p-8">
+      {/* `w-72` é a largura real do `EventDetailPopover`, onde o par vive. */}
+      <div className="flex flex-wrap gap-6">
+        {([null, "compareceu", "nao_compareceu"] as const).map((v) => (
+          <div key={String(v)} className="w-72 rounded-xl border border-border bg-card p-3">
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              {v === null ? "sem registro" : v}
+            </p>
+            <AgendaOutcomeToggle value={v} onChange={() => {}} />
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
 };

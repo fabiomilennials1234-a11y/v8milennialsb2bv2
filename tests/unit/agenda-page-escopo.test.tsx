@@ -11,7 +11,8 @@
  * que não é o que esta tela precisa provar.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import type { AgendaEvent } from "@/modules/engagement/hooks/useAgendaEvents";
 
@@ -52,8 +53,11 @@ vi.mock("@/modules/engagement/hooks/useAgendaEvents", () => ({
   }),
 }));
 
+const updateMeeting = vi.fn().mockResolvedValue({});
+
 vi.mock("@/modules/engagement/hooks/useMeetings", () => ({
   useDeleteMeeting: () => ({ mutateAsync: vi.fn() }),
+  useUpdateMeeting: () => ({ mutateAsync: updateMeeting }),
 }));
 
 const participacoes = new Set<string>();
@@ -108,6 +112,7 @@ function rpcEvent(over: Partial<AgendaEvent> = {}): AgendaEvent {
 beforeEach(() => {
   agendaEvents.length = 0;
   participacoes.clear();
+  updateMeeting.mockClear();
   identity.isAdmin = false;
   identity.isReady = true;
   vi.setSystemTime(new Date(2026, 7, 24, 9, 0));
@@ -259,5 +264,107 @@ describe("Agenda — quem vê o quê", () => {
 
     render(<Agenda />);
     expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Agenda — registrar o resultado do compromisso", () => {
+  /** Abre o popover do evento clicando na pílula da grade. */
+  async function abrirEvento(titulo: RegExp) {
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: titulo }));
+    return user;
+  }
+
+  it("a contagem do período separa compareceu, não compareceu e sem registro", () => {
+    agendaEvents.push(
+      rpcEvent({ id: "a", title: "Veio", status: "completed" }),
+      rpcEvent({ id: "b", title: "Faltou", status: "no_show" }),
+      rpcEvent({ id: "c", title: "Aberta", status: "scheduled" }),
+    );
+
+    render(<Agenda />);
+
+    const contagem = screen.getByLabelText("Comparecimento no período");
+    expect(contagem).toHaveTextContent("1");
+    expect(within(contagem).getByText("1 sem registro")).toBeInTheDocument();
+  });
+
+  it("sem nada registrável, a contagem some — zero sem contexto é ruído", () => {
+    agendaEvents.push(
+      rpcEvent({ id: "fu", source: "follow_up", event_type: "follow_up", title: "Ligar" }),
+    );
+    render(<Agenda />);
+    expect(screen.queryByLabelText("Comparecimento no período")).toBeNull();
+  });
+
+  it("registrar 'Compareceu' grava completed na linha certa", async () => {
+    agendaEvents.push(rpcEvent({ id: "abc-1", title: "Reunião X" }));
+    render(<Agenda />);
+
+    await abrirEvento(/Reunião X/);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Compareceu" }));
+
+    expect(updateMeeting).toHaveBeenCalledWith({ id: "abc-1", status: "completed" });
+  });
+
+  it("registrar 'Não compareceu' grava no_show", async () => {
+    agendaEvents.push(rpcEvent({ id: "abc-2", title: "Reunião Y" }));
+    render(<Agenda />);
+
+    await abrirEvento(/Reunião Y/);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Não compareceu" }));
+
+    expect(updateMeeting).toHaveBeenCalledWith({ id: "abc-2", status: "no_show" });
+  });
+
+  it("clicar no que já está marcado volta para scheduled", async () => {
+    agendaEvents.push(
+      rpcEvent({ id: "abc-3", title: "Reunião Z", status: "completed" }),
+    );
+    render(<Agenda />);
+
+    await abrirEvento(/Reunião Z/);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Compareceu" }));
+
+    expect(updateMeeting).toHaveBeenCalledWith({ id: "abc-3", status: "scheduled" });
+  });
+
+  it("o controle NÃO aparece em item que veio de outra tela", async () => {
+    agendaEvents.push(
+      rpcEvent({
+        id: "fu-1",
+        source: "follow_up",
+        event_type: "follow_up",
+        title: "Ligar amanhã",
+      }),
+    );
+    render(<Agenda />);
+
+    await abrirEvento(/Ligar amanhã/);
+    expect(screen.queryByRole("button", { name: "Compareceu" })).toBeNull();
+  });
+
+  it("funciona para os cinco tipos, com uma implementação só", async () => {
+    for (const tipo of ["meeting", "call", "follow_up", "task", "other"]) {
+      agendaEvents.length = 0;
+      updateMeeting.mockClear();
+      agendaEvents.push(
+        rpcEvent({ id: `id-${tipo}`, title: `Item ${tipo}`, event_type: tipo }),
+      );
+      const { unmount } = render(<Agenda />);
+
+      await abrirEvento(new RegExp(`Item ${tipo}`));
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Compareceu" }));
+
+      expect(updateMeeting, tipo).toHaveBeenCalledWith({
+        id: `id-${tipo}`,
+        status: "completed",
+      });
+      unmount();
+    }
   });
 });

@@ -24,8 +24,14 @@ import {
   GitBranch,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { UnifiedEvent, EventSource } from "./agenda-helpers";
-import { SOURCE_LABELS, SOURCE_COLORS } from "./agenda-helpers";
+import type { AttendanceOutcome, UnifiedEvent, EventSource } from "./agenda-helpers";
+import {
+  SOURCE_LABELS,
+  SOURCE_COLORS,
+  outcomeOf,
+  podeRegistrarResultado,
+} from "./agenda-helpers";
+import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,6 +46,14 @@ interface EventDetailPopoverProps {
   onClose: () => void;
   onDeleteMeeting: (eventId: string) => Promise<void>;
   onDeleteGoogleEvent: (event: UnifiedEvent) => Promise<void>;
+  /**
+   * Registra o resultado. Recebe `null` quando a pessoa desmarca. Ausente
+   * quando o evento não é registrável — ver `podeRegistrarResultado`.
+   */
+  onSetOutcome?: (
+    event: UnifiedEvent,
+    resultado: AttendanceOutcome | null,
+  ) => Promise<void>;
 }
 
 // ─── Source icon helper ───────────────────────────────────────────────────────
@@ -66,12 +80,39 @@ export function EventDetailPopover({
   onClose,
   onDeleteMeeting,
   onDeleteGoogleEvent,
+  onSetOutcome,
 }: EventDetailPopoverProps) {
   const { event, x, y } = state;
   const ref = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState({ left: x + 14, top: y - 16 });
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [savingOutcome, setSavingOutcome] = useState(false);
+
+  // Otimista: o par de botões precisa responder no clique. Sem isto o
+  // selecionado só mudaria depois do refetch da agenda, e a pessoa clicaria de
+  // novo achando que não pegou.
+  const [outcomeLocal, setOutcomeLocal] = useState<AttendanceOutcome | null>(
+    () => outcomeOf(event),
+  );
+
+  const podeRegistrar = podeRegistrarResultado(event) && !!onSetOutcome;
+
+  const handleOutcome = async (proximo: AttendanceOutcome | null) => {
+    if (!onSetOutcome) return;
+    const anterior = outcomeLocal;
+    setOutcomeLocal(proximo);
+    setSavingOutcome(true);
+    try {
+      await onSetOutcome(event, proximo);
+    } catch {
+      // A mutation já avisa por toast; aqui só desfaz o otimismo para a tela
+      // não mentir sobre o que está gravado.
+      setOutcomeLocal(anterior);
+    } finally {
+      setSavingOutcome(false);
+    }
+  };
 
   // Adjust position to avoid viewport overflow
   useEffect(() => {
@@ -276,6 +317,16 @@ export function EventDetailPopover({
           <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-2.5 leading-relaxed">
             {event.description}
           </p>
+        )}
+
+        {/* Resultado — vale para os cinco tipos criados pela Agenda */}
+        {podeRegistrar && (
+          <AgendaOutcomeToggle
+            value={outcomeLocal}
+            onChange={handleOutcome}
+            saving={savingOutcome}
+            disabled={deleting}
+          />
         )}
 
         {/* Delete confirm -- inline, no modal */}

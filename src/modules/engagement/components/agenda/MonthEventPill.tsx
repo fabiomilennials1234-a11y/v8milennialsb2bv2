@@ -3,8 +3,9 @@
  */
 
 import { format } from "date-fns";
+import { Check, X } from "lucide-react";
 import type { UnifiedEvent } from "./agenda-helpers";
-import { initialsOf, isFinishedEvent } from "./agenda-helpers";
+import { initialsOf, isFinishedEvent, outcomeOf } from "./agenda-helpers";
 
 interface MonthEventPillProps {
   event: UnifiedEvent;
@@ -26,6 +27,7 @@ export function MonthEventPill({
   const hora = event.allDay ? "dia todo" : format(event.start, "HH:mm");
   const owner = showOwner ? initialsOf(event.creatorName) : "";
   const done = isFinishedEvent(event);
+  const resultado = outcomeOf(event);
 
   return (
     <button
@@ -45,10 +47,33 @@ export function MonthEventPill({
       title={[
         `${hora} · ${event.title}`,
         event.creatorName ? `Responsável: ${event.creatorName}` : null,
+        resultado === "compareceu"
+          ? "Compareceu"
+          : resultado === "nao_compareceu"
+            ? "Não compareceu"
+            : null,
       ]
         .filter(Boolean)
         .join("\n")}
     >
+      {/* O resultado precisa ser legível na grade, sem abrir o evento. Ícone
+          antes do texto, e não só cor — daltônico e impressão em preto e
+          branco continuam funcionando (DESIGN.md § Cor). */}
+      {resultado === "compareceu" && (
+        <Check
+          className="h-2.5 w-2.5 shrink-0 text-emerald-700 dark:text-emerald-300"
+          strokeWidth={3}
+          aria-label="Compareceu"
+        />
+      )}
+      {resultado === "nao_compareceu" && (
+        <X
+          className="h-2.5 w-2.5 shrink-0 text-red-700 dark:text-red-300"
+          strokeWidth={3}
+          aria-label="Não compareceu"
+        />
+      )}
+
       {/* Cor sozinha não é sinal (DESIGN.md): finalizado ganha o risco no texto. */}
       <span className={`min-w-0 flex-1 truncate ${done ? "line-through opacity-70" : ""}`}>
         {hora} {event.title}
