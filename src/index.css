@@ -1134,3 +1134,34 @@
   .cmd-livepulse, .cmd-sparkpulse { animation: none; }
   .cmd-drawline { animation-duration: .01s; animation-delay: 0s !important; }
 }
+
+/* ===== Marca da lateral ===== */
+/* O logotipo abre e fecha pela largura real da arte (1fr → 0fr), não por um
+   `max-width` chutado. Ver SidebarBrand.tsx. As durações são assimétricas de
+   propósito: ao abrir, o nome só entra depois que existe espaço pra ele; ao
+   fechar, ele sai antes de ser espremido. */
+.sidebar-brand-wordmark {
+  display: grid;
+  grid-template-columns: 1fr;
+  margin-left: 0.625rem;
+  opacity: 1;
+  overflow: hidden;
+  transition:
+    grid-template-columns 200ms cubic-bezier(.32, .72, 0, 1),
+    margin-left 200ms cubic-bezier(.32, .72, 0, 1),
+    opacity 150ms linear 90ms;
+}
+.sidebar-brand-wordmark[data-collapsed="true"] {
+  grid-template-columns: 0fr;
+  margin-left: 0;
+  opacity: 0;
+  transition:
+    grid-template-columns 200ms cubic-bezier(.32, .72, 0, 1),
+    margin-left 200ms cubic-bezier(.32, .72, 0, 1),
+    opacity 110ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-brand-wordmark,
+  .sidebar-brand-wordmark[data-collapsed="true"] { transition: none; }
+}

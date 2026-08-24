@@ -137,6 +137,21 @@ describe("Sidebar", () => {
     expect(document.querySelector('a[href="/dashboard"]')).toBeInTheDocument();
   });
 
+  it("recolhe o logotipo com a lateral e mantém o hexágono", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    // Quem carrega o nome acessível é o hexágono; o logotipo é decorativo e
+    // some da árvore acessível de qualquer jeito.
+    expect(screen.getByAltText("Torque")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-wordmark")).toHaveAttribute("data-collapsed", "false");
+
+    await user.click(screen.getByRole("button", { name: "Recolher menu" }));
+
+    expect(screen.getByAltText("Torque")).toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-wordmark")).toHaveAttribute("data-collapsed", "true");
+  });
+
   it("expande Funis e revela os filhos", async () => {
     const user = userEvent.setup();
     renderSidebar();

@@ -27,6 +27,7 @@ import {
 } from "@/modules/platform/lib/navigation-model";
 import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { OrgSwitcher } from "./OrgSwitcher";
+import { SidebarBrand } from "./SidebarBrand";
 import { SidebarMasterLinks } from "./SidebarMasterLinks";
 import { PitstopPanel } from "./PitstopPanel";
 import { SidebarNavItem } from "./SidebarNavItem";
@@ -79,25 +80,13 @@ export function Sidebar() {
         data-testid="sidebar"
         aria-label="Navegação principal"
         style={{ width }}
-        className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200"
+        className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
       >
         <div className="flex flex-col gap-3 px-3 pb-2 pt-4">
           {/* O botão de recolher mora aqui dentro, e não flutuando na borda:
               na borda ele cobria o título do Pitstop quando o painel abria. */}
           <div className="flex h-7 items-center gap-2">
-            <NavLink
-              to="/dashboard"
-              className="flex min-w-0 flex-1 items-center gap-2.5 px-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-md bg-primary text-[14px] font-extrabold text-primary-foreground">
-                T
-              </span>
-              {!collapsed && (
-                <span className="truncate text-base font-bold tracking-tight text-sidebar-foreground">
-                  Torque
-                </span>
-              )}
-            </NavLink>
+            <SidebarBrand collapsed={collapsed} />
             {!collapsed && (
               <button
                 type="button"
