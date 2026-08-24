@@ -132,6 +132,7 @@ const endpoints: ApiEndpoint[] = [
     path: "/api/v1/pipelines",
     auth,
     parameters: [
+      { name: "pipeline", type: "string", required: false, description: "Devolve só um funil. Aceita o slug (sistema: whatsapp, confirmacao, propostas) ou o id (personalizado). Funil inexistente devolve lista vazia." },
       { name: "only_active_stages", type: "boolean", required: false, description: "Com \"true\", cada funil traz apenas as etapas ativas — as mesmas que o cliente vê no kanban. Sem o parâmetro, vêm todas, inclusive as desativadas." },
     ],
     requestExample: {},

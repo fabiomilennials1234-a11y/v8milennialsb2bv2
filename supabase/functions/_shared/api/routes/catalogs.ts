@@ -45,14 +45,22 @@ async function catalog(ctx: ApiRouteContext, rpc: string): Promise<Response> {
  * PostgREST poderia resolver para a versão antiga em silêncio.
  */
 export async function listPipelines(ctx: ApiRouteContext): Promise<Response> {
-  const somenteAtivas = new URL(ctx.req.url).searchParams.get("only_active_stages") === "true";
+  const params = new URL(ctx.req.url).searchParams;
+  const somenteAtivas = params.get("only_active_stages") === "true";
+  // `pipeline` aceita as duas formas de endereçar um funil: slug (sistema) e id
+  // (personalizado). Quem monta seletor de etapa quer UM funil, e filtrar aqui
+  // evita que o cliente tenha que escolher a chave certa por tentativa.
+  const funilAlvo = params.get("pipeline")?.trim() || null;
   const supabase = ctx.supabase as RpcClient;
   const { data, error } = await supabase.rpc("api_list_pipelines", { p_org: ctx.organizationId });
   if (error) {
     return apiError(500, "internal_error", "Erro ao buscar catálogo", ctx.cors);
   }
 
-  const funis = (data ?? []) as Array<Record<string, unknown>>;
+  let funis = (data ?? []) as Array<Record<string, unknown>>;
+  if (funilAlvo) {
+    funis = funis.filter((f) => f.slug === funilAlvo || f.id === funilAlvo);
+  }
   if (!somenteAtivas) return apiList(funis, null, ctx.cors);
 
   const filtrados = funis.map((f) => {
