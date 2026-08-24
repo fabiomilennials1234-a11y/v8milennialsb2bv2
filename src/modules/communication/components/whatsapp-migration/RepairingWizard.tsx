@@ -45,7 +45,10 @@ export function RepairingWizard({ open, onOpenChange, organizationId }: Props) {
   const createInstance = useCreateWhatsAppInstance();
   const deleteInstance = useDeleteWhatsAppInstance();
   const refreshQR = useRefreshQRCode();
-  const checkStatus = useCheckConnectionStatus();
+  // Destructured because TanStack Query v5 memoises `mutateAsync` but not the
+  // result object — depending on the object would rebuild the pairing interval
+  // on every render.
+  const { mutateAsync: checkInstanceStatus } = useCheckConnectionStatus();
   const setMigration = useSetMigrationStatus();
 
   // Reset state ao abrir
@@ -63,11 +66,14 @@ export function RepairingWizard({ open, onOpenChange, organizationId }: Props) {
     if (step !== "pairing" || !newInstanceId) return;
     const interval = setInterval(async () => {
       try {
-        const { data } = await supabase
-          .from("whatsapp_instances")
-          .select("status")
-          .eq("id", newInstanceId)
-          .maybeSingle();
+        // Ask the provider, don't re-read our own row. This poll used to SELECT
+        // `status` straight from the table — a column nothing in this flow ever
+        // wrote, since the wizard never probes the provider. So pairing could
+        // succeed and the wizard would sit on "pairing" forever, showing the one
+        // QR captured at provision time while the provider rotated it every ~20s.
+        // `checkStatus` probes the provider, persists the fresh QR, and returns
+        // the updated row.
+        const data = await checkInstanceStatus({ instance_id: newInstanceId });
         if (data?.status === "connected" || data?.status === "open") {
           setStep("done");
           await setMigration.mutateAsync({
@@ -76,13 +82,15 @@ export function RepairingWizard({ open, onOpenChange, organizationId }: Props) {
             completed: true,
           });
           clearInterval(interval);
+          return;
         }
+        if (data?.qrcode) setQrCode(data.qrcode);
       } catch {
         /* silent */
       }
     }, 3000);
     return () => clearInterval(interval);
-  }, [step, newInstanceId, organizationId, setMigration]);
+  }, [step, newInstanceId, organizationId, setMigration, checkInstanceStatus]);
 
   const startProvision = async () => {
     setStep("provisioning");

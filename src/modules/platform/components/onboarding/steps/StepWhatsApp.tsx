@@ -58,7 +58,14 @@ export function StepWhatsApp({ onNext }: Props) {
         if (result?.status === "connected") {
           clearInterval(pollRef.current!);
           setPhase("connected");
+          return;
         }
+        // Track the provider's QR rotation (~20s). This poll already carries the
+        // current code; before, we pinned whatever was minted at create time and
+        // left it on screen forever, so every scan after the first rotation was
+        // against a dead image. Guard the null so a mid-rotation read can't blank
+        // a code the user is pointing a camera at.
+        if (result?.qrcode) setQrCode(result.qrcode);
       } catch {
         // ignore transient poll errors
       }
@@ -179,7 +186,8 @@ export function StepWhatsApp({ onNext }: Props) {
         <div className="flex items-start gap-2 p-3 rounded-xl bg-muted/30 border border-border/40">
           <Info className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
           <p className="text-xs text-muted-foreground">
-            QR Code expira em 60 segundos. Se expirar, clique em &quot;Novo QR&quot;.
+            O QR se renova sozinho a cada poucos segundos — escaneie o que estiver
+            na tela. Se travar, clique em &quot;Novo QR&quot;.
           </p>
         </div>
 
