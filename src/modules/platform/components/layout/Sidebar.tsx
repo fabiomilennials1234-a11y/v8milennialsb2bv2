@@ -29,6 +29,7 @@ import type { FeatureKey } from "@/modules/platform/lib/feature-registry";
 import { OrgSwitcher } from "./OrgSwitcher";
 import { SidebarBrand } from "./SidebarBrand";
 import { SidebarMasterLinks } from "./SidebarMasterLinks";
+import { AgendaPanel } from "@/modules/engagement";
 import { PitstopPanel } from "./PitstopPanel";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarUserMenu } from "./SidebarUserMenu";
@@ -52,6 +53,7 @@ export function Sidebar() {
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pitstopOpen, setPitstopOpen] = useState(false);
+  const [agendaOpen, setAgendaOpen] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
 
   // Entrar numa rota do Pitstop abre o painel — vindo do teclado, de um link
@@ -176,12 +178,19 @@ export function Sidebar() {
         </ScrollArea>
 
         <div className="flex flex-col gap-0.5 border-t border-sidebar-border p-2.5">
+          {/* A Agenda não navega: abre painel por cima da tela atual, deixando
+              a página de baixo à mostra. Por isso o "ativo" vem do estado do
+              painel, e não da rota — que continua existindo para o celular e
+              para link direto. O botão, o chip de data e a posição no rodapé
+              são exatamente os mesmos. */}
           {model.agenda && (
             <SidebarNavItem
               item={model.agenda}
-              active={model.isActive(model.agenda.path)}
+              active={agendaOpen || model.isActive(model.agenda.path)}
               collapsed={collapsed}
               leading={<AgendaDateChip />}
+              onActivate={() => setAgendaOpen((v) => !v)}
+              activateExpanded={agendaOpen}
             />
           )}
 
@@ -248,6 +257,14 @@ export function Sidebar() {
         onClose={() => setPitstopOpen(false)}
         groups={model.pitstopGroups}
         isActive={model.isActive}
+      />
+
+      {/* `sidebarWidth` mantém a lateral fora do capturador de clique: com a
+          Agenda aberta ainda dá para ir para outra tela num clique só. */}
+      <AgendaPanel
+        open={agendaOpen}
+        onClose={() => setAgendaOpen(false)}
+        sidebarWidth={width}
       />
 
       {upgradeFeature && (

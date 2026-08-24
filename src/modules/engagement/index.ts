@@ -119,3 +119,13 @@ export * from "./hooks/useSDRPerformance";
 // ────────────────────────────────────────────────────────────────────────
 
 export * from "./hooks/useCommissions";
+
+// ────────────────────────────────────────────────────────────────────────
+// Components — Agenda
+// ────────────────────────────────────────────────────────────────────────
+// `AgendaPanel` é o único component do módulo com consumidor cross-module: a
+// `Sidebar` (platform) monta o painel sobreposto que o botão da Agenda abre.
+// Ele carrega a tela por `React.lazy`, então exportá-lo aqui NÃO puxa a Agenda
+// para o chunk do layout.
+
+export { AgendaPanel } from "./components/agenda/AgendaPanel";
