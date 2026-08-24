@@ -1,7 +1,7 @@
 -- Tira o EXECUTE de `anon` em `fn_lead_comment_entry_coerente()`.
 --
 -- ── O que aconteceu ───────────────────────────────────────────────────────
--- A `20270824120000` criou a função com `REVOKE ALL ... FROM PUBLIC`, copiando
+-- A `20270829000000` criou a função com `REVOKE ALL ... FROM PUBLIC`, copiando
 -- o bloco de grants das duas funções-gatilho irmãs da mesma tabela. Medido em
 -- prod depois do apply, `has_function_privilege('anon', …)` voltou **true** —
 -- enquanto a irmã `fn_log_lead_comment_event` está **false**.
