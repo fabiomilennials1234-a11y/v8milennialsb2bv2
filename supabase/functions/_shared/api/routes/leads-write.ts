@@ -41,9 +41,19 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 const TIERS = ["diamante", "ouro", "prata", "bronze", "desqualificado"];
 
-// Public field name → leads column. Custom fields (segmento, faturamento, …)
-// are NOT here — they go through PUT /custom-fields.
-const TEXT_FIELDS = ["name", "company", "email", "phone", "notes"];
+// Public field name → leads column. Campos personalizados de verdade continuam
+// fora daqui — vão por PUT /custom-fields.
+// `segment`, `faturamento` e os cinco UTM são COLUNAS de `leads`, não campos
+// personalizados — 5.181 leads com utm_campaign e 9.987 com segment nos últimos
+// 90 dias, lidos por 11 arquivos do front e 3 funções do banco. Gravá-los em
+// outro lugar deixaria a tela vazia para todo lead novo, sem erro nenhum
+// aparecendo. Entraram aqui para que a migração dos cenários do Make preserve o
+// que o `lead-webhook` já gravava.
+const TEXT_FIELDS = [
+  "name", "company", "email", "phone", "notes",
+  "segment", "faturamento",
+  "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+];
 const NUM_FIELDS = ["rating", "qualification_score"];
 const UUID_FIELDS = [
   "responsible_id", "sdr_id", "closer_id",

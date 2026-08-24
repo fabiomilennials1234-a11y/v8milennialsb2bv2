@@ -219,7 +219,7 @@ const endpoints: ApiEndpoint[] = [
   {
     id: "api-patch-lead",
     name: "Editar lead",
-    description: "Atualização parcial de campos permitidos. Campos não-allowlistados são ignorados. Escopo: lead:write.",
+    description: "Atualiza campos do Lead. Além de nome, empresa, e-mail, telefone e observações, aceita segment, faturamento e os cinco utm_* — que são colunas próprias de leads, não campos personalizados. Escopo: lead:write.",
     category: "rest-api",
     version: "v1",
     method: "PATCH",

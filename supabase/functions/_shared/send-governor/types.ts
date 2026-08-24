@@ -44,6 +44,9 @@ export type GovernorDecisionReason =
   | "per_number_cap"   // P1/P2 per-number daily cap reached
   | "cold_contact"     // P4 cold-contact gate
   | "allowed"          // evaluated, nothing tripped
+  | "subscription_blocked"  // org suspensa/cancelada/expirada sem billing_override.
+                            // Não é reputação nem frequência: a conta não está
+                            // ativa, então nada sai — inclusive 'manual'.
   | "dedup_conversational"; // #1156 — conteúdo idêntico repetido (loop travado)
                             // barrado no choke ANTES do provider. Não é decisão
                             // de reputação; é dedup por frequência (send-dedup).

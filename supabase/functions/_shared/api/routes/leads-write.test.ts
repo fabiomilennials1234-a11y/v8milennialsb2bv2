@@ -223,3 +223,37 @@ Deno.test("putCustomFields — só o literal 'true' liga a criação", async () 
     assertEquals(calls[0].name, "api_set_custom_fields", `valor ${v} não deveria criar`);
   }
 });
+
+// ── colunas que o lead-webhook já gravava ───────────────────────────────────
+//
+// A migração dos cenários do Make depende disto: UTM, segmento e faturamento são
+// COLUNAS de `leads`, lidas pelas telas e por funções de métrica. Mandá-los como
+// campo personalizado gravaria noutro lugar e deixaria a tela vazia para lead
+// novo — regressão silenciosa, que é a pior.
+
+Deno.test("patchLead — grava utm_*, segment e faturamento nas colunas", async () => {
+  const calls: RpcCall[] = [];
+  const c = ctx("PATCH", "https://x/api/v1/leads/l-1", {
+    utm_source: "facebook", utm_medium: "cpc", utm_campaign: "b2b-agosto",
+    utm_content: "criativo-3", utm_term: "distribuidora",
+    segment: "alimentos", faturamento: "R$100 mil a R$150 mil",
+  }, { data: { ok: true } }, calls);
+  const res = await patchLead(c);
+  assertEquals(res.status, 200);
+  const patch = calls[0].args.p_patch as Record<string, unknown>;
+  assertEquals(patch.utm_source, "facebook");
+  assertEquals(patch.utm_campaign, "b2b-agosto");
+  assertEquals(patch.utm_term, "distribuidora");
+  assertEquals(patch.segment, "alimentos");
+  assertEquals(patch.faturamento, "R$100 mil a R$150 mil");
+});
+
+Deno.test("patchLead — campo não enviado continua fora do patch", async () => {
+  const calls: RpcCall[] = [];
+  const c = ctx("PATCH", "https://x/api/v1/leads/l-1", { utm_source: "google" },
+    { data: { ok: true } }, calls);
+  await patchLead(c);
+  const patch = calls[0].args.p_patch as Record<string, unknown>;
+  assertEquals("utm_campaign" in patch, false);
+  assertEquals("segment" in patch, false);
+});

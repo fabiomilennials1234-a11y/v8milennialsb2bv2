@@ -19,6 +19,7 @@ import { checkAudienceGate } from "./audience-gate.ts";
 import { decideBlockedInboundAction } from "./gate-decision.ts";
 import { resolveMediaContent } from "../_shared/audio-transcription.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
+import { isOrgBlocked } from "../_shared/org-status.ts";
 
 /**
  * Webhook receptor de mensagens de leads
@@ -114,6 +115,28 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       return new Response(
         JSON.stringify({ error: "Invalid phone number in 'from' field", code: "INVALID_PHONE" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // 0.8. GATE DE ASSINATURA — org suspensa/cancelada/expirada sem override.
+    // Antes de QUALQUER side-effect (lock, lead, conversa) e antes do plan gate:
+    // o turno do Copilot é o gasto de IA mais caro do produto, e roda como
+    // service_role, fora do alcance da RLS. Sem isto, org suspensa seguia
+    // pensando e respondendo.
+    // 200 skipped (não 4xx) pelo mesmo motivo do plan gate: o chamador é hop
+    // interno e um 4xx viraria tempestade de retry/DLQ.
+    if (await isOrgBlocked(supabase, organization_id)) {
+      console.log('[agent-message] Assinatura bloqueada — turno descartado:', { organization_id });
+      await logRuntime({
+        organizationId: organization_id,
+        module: "billing",
+        action: "copilot_turno_bloqueado_assinatura",
+        status: "skipped",
+        payloadSnapshot: { channel },
+      }).catch(() => {});
+      return new Response(
+        JSON.stringify({ skipped: true, reason: "subscription_blocked", organization_id }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 

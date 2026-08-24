@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import {
   MessageSquare,
@@ -90,7 +90,14 @@ export function deriveInstanceStatus(
   return instance.status ?? "disconnected";
 }
 
-function QRCodeModal({
+/**
+ * Exported for `tests/unit/whatsapp-qr-modal-rotation.test.tsx`, which drives it
+ * through a live pairing window and asserts the rendered QR follows the
+ * provider's rotation. That is the one property whose absence produced the
+ * "Escaneie o QR code novamente" screen on the customer's phone, and it is not
+ * observable from the hook alone — it lives in this component's state wiring.
+ */
+export function QRCodeModal({
   instanceId,
   instances,
   isOpen,
@@ -104,6 +111,12 @@ function QRCodeModal({
   const refreshQR = useRefreshQRCode();
   const checkStatus = useCheckConnectionStatus();
   const [pairCode, setPairCode] = useState<string | null>(null);
+  // The QR the user is actually looking at. Held here, not in the row: the
+  // provider rotates it every ~20s and `whatsapp_instances` is SELECT-able by
+  // every member of the org, so a continuously-refreshed stored code would be a
+  // live pairing credential sitting in a table a non-admin can read. Transient
+  // state is both the safer and the simpler home for it.
+  const [liveQr, setLiveQr] = useState<string | null>(null);
   const [pairMode, setPairMode] = useState<"qr" | "code">("qr");
   const [phoneInput, setPhoneInput] = useState("");
   const [, setIsChecking] = useState(false);
@@ -113,22 +126,65 @@ function QRCodeModal({
 
   const effectiveStatus = instance ? deriveInstanceStatus(instance) : null;
 
-  // Auto-refresh QR when modal opens and instance has no valid QR
+  // Tracks which (instance, mode) pairing we have already kicked off, so the
+  // effect below runs once per opening instead of on every re-render.
+  const kickedRef = useRef<string | null>(null);
+
+  // Ask the provider to (re)start pairing when the modal opens.
+  //
+  // The guard here used to be `!instance.qr_code`, which made this a one-shot
+  // for the lifetime of the row: `useCreateWhatsAppInstance` already stores a QR
+  // at creation time, so on every subsequent open the condition was false and we
+  // rendered that original code — by then long dead — with no way for the user to
+  // tell. Keying off the instance instead means opening the modal always starts a
+  // live pairing attempt; the 3s poll below then keeps the displayed code in step
+  // with the provider's ~20s rotation.
   useEffect(() => {
     if (!isOpen || !instance?.id) return;
-    if (!instance.qr_code && effectiveStatus !== "connected" && pairMode === "qr") {
-      refreshQR
-        .mutateAsync({ instance_id: instance.id })
-        .then((res) => setPairCode(res.paircode ?? null))
-        .catch((error) => {
-          console.error("Erro ao gerar QR Code:", error);
-          toast.error(error.message || "Erro ao gerar QR Code");
-        });
+    if (effectiveStatus === "connected" || pairMode !== "qr") return;
+
+    const key = `${instance.id}:${pairMode}`;
+    if (kickedRef.current === key) return;
+    kickedRef.current = key;
+
+    refreshQR
+      .mutateAsync({ instance_id: instance.id })
+      .then((res) => {
+        setPairCode(res.paircode ?? null);
+        if (res.instance.qr_code) setLiveQr(res.instance.qr_code);
+      })
+      .catch((error) => {
+        kickedRef.current = null; // allow a retry on the next open
+        console.error("Erro ao gerar QR Code:", error);
+        toast.error(error.message || "Erro ao gerar QR Code");
+      });
+  }, [isOpen, instance?.id, effectiveStatus, pairMode]);
+
+  // Drop the code the moment it stops being useful — on close, and on connect.
+  //
+  // Closing: reopening must pair afresh, never flash the previous session's
+  // code, which the provider has already retired.
+  //
+  // Connecting: the code was just consumed. Before this fix lived in component
+  // state, the connect branch of the poll nulled `qr_code` in the row and the
+  // cache refresh took the image away for free; holding it locally means we own
+  // that cleanup. Leaving it on screen would park a spent pairing credential
+  // under a green "Conectado" badge.
+  useEffect(() => {
+    if (!isOpen || effectiveStatus === "connected") {
+      kickedRef.current = null;
+      setLiveQr(null);
+      setPairCode(null);
     }
-  }, [isOpen, instance?.id, instance?.qr_code, effectiveStatus, pairMode]);
+  }, [isOpen, effectiveStatus]);
 
   // Poll connection status every 3s — stops when connected (real connection,
-  // not stale `status='connected'` + session_dead_since)
+  // not stale `status='connected'` + session_dead_since).
+  //
+  // This poll is also what keeps the QR alive: `checkStatus` hands back the
+  // provider's current code on every tick (3s poll vs ~20s rotation, so the
+  // image on screen is never more than one tick behind). It is handed back, not
+  // stored — see the note on `liveQr` above for why the row is the wrong home.
   useEffect(() => {
     if (!isOpen || !instance || effectiveStatus === "connected") return;
 
@@ -136,7 +192,12 @@ function QRCodeModal({
       if (instance.id) {
         setIsChecking(true);
         try {
-          await checkStatus.mutateAsync({ instance_id: instance.id });
+          const res = await checkStatus.mutateAsync({ instance_id: instance.id });
+          // Null-guarded on both: a tick that lands mid-rotation and reports no
+          // code must not blank the one the user is pointing a camera at (or
+          // typing into their phone).
+          if (res?.qrcode) setLiveQr(res.qrcode);
+          if (res?.paircode) setPairCode(res.paircode);
         } catch (error) {
           console.error("Erro ao verificar status:", error);
         } finally {
@@ -153,6 +214,7 @@ function QRCodeModal({
     try {
       const res = await refreshQR.mutateAsync({ instance_id: instance.id });
       setPairCode(res.paircode ?? null);
+      if (res.instance.qr_code) setLiveQr(res.instance.qr_code);
       toast.success("QR Code atualizado!");
     } catch (error: any) {
       const errorMessage = error.message || "Erro ao atualizar QR Code";
@@ -192,9 +254,15 @@ function QRCodeModal({
   // então o aviso de banimento só faz sentido para a instância não oficial.
   const isOfficial = getProviderProfile(instance.provider).official;
 
-  const qrCodeData = instance.qr_code?.startsWith("data:image")
-    ? instance.qr_code
-    : `data:image/png;base64,${instance.qr_code}`;
+  // Prefer the freshly-polled code; fall back to whatever the row carries only
+  // as a first paint, before the first tick lands. Never show anything once
+  // connected — rows that predate this fix can still carry a spent code, and the
+  // fallback would happily paint it next to a green "Conectado" badge.
+  const displayedQr =
+    effectiveStatus === "connected" ? null : liveQr ?? instance.qr_code;
+  const qrCodeData = displayedQr?.startsWith("data:image")
+    ? displayedQr
+    : `data:image/png;base64,${displayedQr}`;
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -241,7 +309,7 @@ function QRCodeModal({
                 <Loader2 className="w-8 h-8 animate-spin text-primary" />
                 <p className="text-sm text-muted-foreground">Gerando QR Code...</p>
               </div>
-            ) : instance.qr_code ? (
+            ) : displayedQr ? (
               <>
                 <div className="p-4 bg-card rounded-lg border border-border">
                   <img src={qrCodeData} alt="QR Code WhatsApp" className="w-64 h-64" />
@@ -249,6 +317,10 @@ function QRCodeModal({
                 <p className="text-sm text-muted-foreground text-center">
                   Abra o WhatsApp → Configurações → Aparelhos conectados → Conectar um aparelho
                   e escaneie este código.
+                </p>
+                <p className="text-xs text-muted-foreground text-center">
+                  O código se renova sozinho a cada poucos segundos — escaneie sempre
+                  o que estiver na tela.
                 </p>
               </>
             ) : (

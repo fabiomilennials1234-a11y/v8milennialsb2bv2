@@ -54,6 +54,9 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
     // requisições SEM API key e resolvia a org a partir do body do chamador, permitindo
     // injeção anônima de leads cross-tenant + disparo de automações. Agora: sem chave válida = 401.
     const authResult = await validateApiKey(supabase, req);
+    if (authResult.subscriptionBlocked) {
+      return errorResponse(402, authResult.error || "Assinatura suspensa", corsHeaders, { req });
+    }
     if (!authResult.valid) {
       return errorResponse(401, authResult.error || "API key required", corsHeaders, { req });
     }
