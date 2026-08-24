@@ -53,14 +53,14 @@ INSERT INTO public.leads (id, organization_id, name, origin) VALUES
   ('1ebb0000-0000-0000-0000-00000000000b', 'bbbb0000-0000-0000-0000-00000000000b', 'Lead da Org B', 'outro')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.deals (id, organization_id, source_lead_id, title) VALUES
-  ('dea10000-0000-0000-0000-00000000000a', 'aaaa0000-0000-0000-0000-00000000000a', '1eaa0000-0000-0000-0000-00000000000a', 'Negócio da Org A'),
-  ('dea10000-0000-0000-0000-00000000000b', 'bbbb0000-0000-0000-0000-00000000000b', '1ebb0000-0000-0000-0000-00000000000b', 'Negócio da Org B')
+INSERT INTO public.deals (id, organization_id, source_lead_id, title, source) VALUES
+  ('dea10000-0000-0000-0000-00000000000a', 'aaaa0000-0000-0000-0000-00000000000a', '1eaa0000-0000-0000-0000-00000000000a', 'Negócio da Org A', 'human'),
+  ('dea10000-0000-0000-0000-00000000000b', 'bbbb0000-0000-0000-0000-00000000000b', '1ebb0000-0000-0000-0000-00000000000b', 'Negócio da Org B', 'human')
 ON CONFLICT (id) DO NOTHING;
 
 -- Um negócio na lixeira, para provar a guarda de soft-delete do USING.
-INSERT INTO public.deals (id, organization_id, source_lead_id, title, deleted_at) VALUES
-  ('dea1dead-0000-0000-0000-00000000000a', 'aaaa0000-0000-0000-0000-00000000000a', '1eaa0000-0000-0000-0000-00000000000a', 'Negócio apagado da Org A', now())
+INSERT INTO public.deals (id, organization_id, source_lead_id, title, deleted_at, source) VALUES
+  ('dea1dead-0000-0000-0000-00000000000a', 'aaaa0000-0000-0000-0000-00000000000a', '1eaa0000-0000-0000-0000-00000000000a', 'Negócio apagado da Org A', now(), 'human')
 ON CONFLICT (id) DO NOTHING;
 
 SELECT 'fixture pronta' AS etapa,

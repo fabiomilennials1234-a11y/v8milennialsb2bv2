@@ -87,9 +87,9 @@ BEGIN
   PERFORM set_config('request.jwt.claims', '{"sub":"a989b6b7-87f3-4c92-b0dc-1dd1349980a3","role":"authenticated"}', true);
   SET LOCAL ROLE authenticated;
   BEGIN
-    INSERT INTO public.deals (id, organization_id, source_lead_id, title)
+    INSERT INTO public.deals (id, organization_id, source_lead_id, title, source)
     VALUES ('dea1f00d-0000-0000-0000-00000000000b', 'bbbb0000-0000-0000-0000-00000000000b',
-            '1ebb0000-0000-0000-0000-00000000000b', 'Plantado na org errada');
+            '1ebb0000-0000-0000-0000-00000000000b', 'Plantado na org errada', 'human');
     v_erro := 'sem erro';
   EXCEPTION WHEN insufficient_privilege OR check_violation THEN
     v_erro := 'recusado';
