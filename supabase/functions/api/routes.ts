@@ -14,7 +14,7 @@ import { getLead, getLeadTimeline, listLeads, searchLeads } from "../_shared/api
 import { listCustomFields, listPipelines, listTags } from "../_shared/api/routes/catalogs.ts";
 import { createLead } from "../_shared/api/routes/leads-create.ts";
 import { createDeal } from "../_shared/api/routes/deals-create.ts";
-import { getDeal, listDeals } from "../_shared/api/routes/deals.ts";
+import { getDeal, listDeals, listLeadDeals, patchDeal } from "../_shared/api/routes/deals.ts";
 import {
   addLeadTags,
   moveLeadStage,
@@ -54,6 +54,8 @@ export const routes: ApiRoute[] = [
   { method: "GET", pattern: "/api/v1/deals", scope: "deal:read", handler: listDeals },
   { method: "GET", pattern: "/api/v1/deals/{id}", scope: "deal:read", handler: getDeal },
   { method: "POST", pattern: "/api/v1/deals", scope: "deal:write", handler: createDeal },
+  { method: "PATCH", pattern: "/api/v1/deals/{id}", scope: "deal:write", handler: patchDeal },
+  { method: "GET", pattern: "/api/v1/leads/{id}/deals", scope: "deal:read", handler: listLeadDeals },
   { method: "PATCH", pattern: "/api/v1/leads/{id}", scope: "lead:write", handler: patchLead },
   { method: "POST", pattern: "/api/v1/leads/{id}/stage", scope: "lead:write", handler: moveLeadStage },
   { method: "POST", pattern: "/api/v1/leads/{id}/tags", scope: "lead:write", handler: addLeadTags },

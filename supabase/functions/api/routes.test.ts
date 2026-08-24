@@ -4,7 +4,7 @@ import { matchRoute } from "../_shared/api/router.ts";
 import { searchLeads } from "../_shared/api/routes/leads.ts";
 import { createLead } from "../_shared/api/routes/leads-create.ts";
 import { createDeal } from "../_shared/api/routes/deals-create.ts";
-import { getDeal, listDeals } from "../_shared/api/routes/deals.ts";
+import { getDeal, listDeals, listLeadDeals, patchDeal } from "../_shared/api/routes/deals.ts";
 import { API_SCOPES, hasScope } from "../_shared/api/scopes.ts";
 
 // ── A tabela de rotas ──────────────────────────────────────────
@@ -68,4 +68,25 @@ Deno.test("routes — GET /deals e GET /deals/{id} casam, com escopo de leitura"
 Deno.test("scopes — deal:read não concede deal:write", () => {
   assertEquals(hasScope(["deal:read"], "deal:write"), false);
   assertEquals(hasScope(["deal:read"], "deal:read"), true);
+});
+
+Deno.test("routes — PATCH /deals/{id} e GET /leads/{id}/deals", () => {
+  const p = matchRoute("PATCH", "/api/v1/deals/d-1", routes);
+  assertEquals(p?.route.handler, patchDeal);
+  assertEquals(p?.route.scope, "deal:write");
+  assertEquals(p?.params.id, "d-1");
+
+  const l = matchRoute("GET", "/api/v1/leads/l-1/deals", routes);
+  assertEquals(l?.route.handler, listLeadDeals);
+  assertEquals(l?.route.scope, "deal:read");
+  assertEquals(l?.params.id, "l-1");
+});
+
+// `/leads/{id}/deals` e `/leads/{id}/timeline` têm a mesma forma. Se a de deals
+// fosse declarada depois de um `/leads/{id}/{qualquer}`, ficaria inalcançável —
+// mesma armadilha do `/leads/search`.
+Deno.test("routes — /leads/{id}/timeline continua alcançável", () => {
+  const t = matchRoute("GET", "/api/v1/leads/l-1/timeline", routes);
+  assertEquals(t?.params.id, "l-1");
+  assertEquals(t?.route.scope, "lead:read");
 });

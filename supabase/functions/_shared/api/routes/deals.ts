@@ -140,3 +140,115 @@ export async function getDeal(ctx: ApiRouteContext): Promise<Response> {
 
   return apiResource(serializeDealRow(data as DealRow), ctx.cors);
 }
+
+/** Vocabulário de situação — o MESMO da leitura (`?status=`). */
+const STATUS_ESCRITA = ["open", "won", "lost"] as const;
+
+const INVALID = Symbol("invalid-json");
+
+async function readJson(req: Request): Promise<unknown | typeof INVALID> {
+  try {
+    return await req.json();
+  } catch {
+    return INVALID;
+  }
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * `PATCH /api/v1/deals/{id}` — editar Negócio. (#1772)
+ *
+ * Cobre título, valor, dono e o fechamento com motivo. NÃO cobre posição:
+ * mover tem rota própria (#1770), porque mover é operação com regra — não pode
+ * copiar, não pode atravessar para funil customizado. Aceitar `stage` aqui daria
+ * um segundo caminho, sem nenhuma dessas regras.
+ *
+ * Reabrir Negócio fechado é recusado no banco: sair da etapa de ganho dispara
+ * `sale_reversed`, que é irreversível.
+ */
+export async function patchDeal(ctx: ApiRouteContext): Promise<Response> {
+  const body = await readJson(ctx.req);
+  if (body === INVALID || !isPlainObject(body)) {
+    return apiError(400, "invalid_body", "Corpo deve ser um objeto JSON", ctx.cors);
+  }
+
+  if ("stage" in body || "pipeline" in body) {
+    return apiError(
+      422,
+      "stage_not_editable",
+      "Posição não se edita: use POST /api/v1/deals/{id}/move",
+      ctx.cors,
+    );
+  }
+
+  let status: string | null = null;
+  if ("status" in body) {
+    const s = String(body.status);
+    if (!STATUS_ESCRITA.includes(s as typeof STATUS_ESCRITA[number])) {
+      return apiError(
+        422,
+        "invalid_status",
+        `status inválido. Válidos: ${STATUS_ESCRITA.join(", ")}`,
+        ctx.cors,
+      );
+    }
+    status = s;
+  }
+
+  const temCampo = ["title", "value", "owner_id", "notes"].some((f) => f in body) ||
+    status !== null;
+  if (!temCampo) {
+    return apiError(422, "no_valid_fields", "Nenhum campo editável fornecido", ctx.cors);
+  }
+
+  const supabase = ctx.supabase as unknown as RpcClient;
+  const { data, error } = await supabase.rpc("api_update_deal", {
+    p_org: ctx.organizationId,
+    p_deal_id: ctx.params.id,
+    p_title: "title" in body ? body.title : null,
+    p_value: "value" in body ? body.value : null,
+    p_owner_id: "owner_id" in body ? body.owner_id : null,
+    p_notes: "notes" in body ? body.notes : null,
+    p_status: status,
+    p_loss_reason: "loss_reason" in body ? body.loss_reason : null,
+  });
+
+  if (error) {
+    const e = error as { code?: string; message?: string };
+    if (e?.code === "P0002") {
+      return apiError(404, "deal_not_found", "Negócio não encontrado", ctx.cors);
+    }
+    return apiError(422, "invalid_value", e?.message ?? "Valor inválido", ctx.cors);
+  }
+
+  if (!data) {
+    return apiError(404, "deal_not_found", "Negócio não encontrado", ctx.cors);
+  }
+
+  return apiResource(serializeDealRow(data as DealRow), ctx.cors);
+}
+
+/**
+ * `GET /api/v1/leads/{id}/deals` — os Negócios de um Lead. (#1772)
+ *
+ * Abertos e fechados, cada um com a própria posição. É a recompra ficando
+ * legível de fora: é por esta lista que se vê o mesmo Lead com dois Negócios
+ * abertos no mesmo funil — que o modelo autoriza desde o ADR-0023 decisão 2.
+ */
+export async function listLeadDeals(ctx: ApiRouteContext): Promise<Response> {
+  const supabase = ctx.supabase as unknown as RpcClient;
+  const { data, error } = await supabase.rpc("api_list_lead_deals", {
+    p_org: ctx.organizationId,
+    p_lead_id: ctx.params.id,
+  });
+
+  if (error) return apiError(500, "internal_error", "Erro ao listar negócios do lead", ctx.cors);
+
+  const rows = (data ?? []) as DealRow[];
+  // Sem cursor: a lista é do Lead, e um Lead com centenas de Negócios não é um
+  // caso que exista — o maior em produção tem poucas unidades.
+  return apiList(rows.map(serializeDealRow), null, ctx.cors);
+}

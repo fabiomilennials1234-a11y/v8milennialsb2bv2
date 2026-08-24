@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
-import { getDeal, listDeals } from "./deals.ts";
+import { getDeal, listDeals, listLeadDeals, patchDeal } from "./deals.ts";
 import type { ApiRouteContext } from "../router.ts";
 import { decodeCursor } from "../cursor.ts";
 
@@ -237,4 +237,143 @@ Deno.test("listDeals — created_at no corpo é a CRIAÇÃO, não a última ativ
   const d = (await res.json()).data[0];
   assertEquals(d.created_at, "2026-01-15T00:00:00Z");
   assertEquals(d.last_activity_at, "2026-08-20T00:00:00Z");
+});
+
+// ── PATCH /deals/{id} (#1772) ──────────────────────────────────────────────
+
+
+function ctxPatch(
+  body: unknown,
+  rpcResult: { data?: unknown; error?: unknown },
+  calls: RpcCall[] = [],
+  params: Record<string, string> = { id: "d-1" },
+): ApiRouteContext {
+  return {
+    req: new Request("https://x/api/v1/deals/d-1", {
+      method: "PATCH",
+      body: typeof body === "string" ? body : JSON.stringify(body),
+    }),
+    params,
+    organizationId: "org-1",
+    scopes: ["deal:write"],
+    supabase: {
+      rpc: (name: string, args: Record<string, unknown>) => {
+        calls.push({ name, args });
+        return Promise.resolve(rpcResult);
+      },
+    },
+    cors,
+  } as unknown as ApiRouteContext;
+}
+
+const PATCHED = { data: row("d-1", "2026-08-20T00:00:00Z", { title: "Novo título" }) };
+
+Deno.test("patchDeal — edita título, valor e dono", async () => {
+  const calls: RpcCall[] = [];
+  const res = await patchDeal(ctxPatch(
+    { title: "Novo título", value: 2500, owner_id: "tm-9" },
+    PATCHED,
+    calls,
+  ));
+
+  assertEquals(res.status, 200);
+  assertEquals(calls[0].args.p_title, "Novo título");
+  assertEquals(calls[0].args.p_value, 2500);
+  assertEquals(calls[0].args.p_owner_id, "tm-9");
+});
+
+// O vocabulário de situação é o MESMO da leitura (`?status=open|won|lost`).
+// Duas linguagens para a mesma ideia — uma para ler, outra para escrever — é
+// como a documentação começa a mentir.
+Deno.test("patchDeal — marca como perdido com motivo", async () => {
+  const calls: RpcCall[] = [];
+  await patchDeal(ctxPatch({ status: "lost", loss_reason: "Preço" }, PATCHED, calls));
+
+  assertEquals(calls[0].args.p_status, "lost");
+  assertEquals(calls[0].args.p_loss_reason, "Preço");
+});
+
+Deno.test("patchDeal — situação fora do vocabulário é recusada antes do banco", async () => {
+  const calls: RpcCall[] = [];
+  const res = await patchDeal(ctxPatch({ status: "arquivado" }, PATCHED, calls));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_status");
+  assertEquals(calls.length, 0);
+});
+
+// `pipeline` e `stage` NÃO caem aqui: eles têm recusa própria, que aponta a rota
+// de mover. Este caso é o corpo que não pede nada de editável.
+Deno.test("patchDeal — corpo sem nenhum campo editável é recusado", async () => {
+  const calls: RpcCall[] = [];
+  const res = await patchDeal(ctxPatch({ cor_favorita: "azul" }, PATCHED, calls));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "no_valid_fields");
+  assertEquals(calls.length, 0);
+});
+
+// Mover de etapa NÃO é edição: tem rota própria (#1770), porque mover é uma
+// operação com regra — não pode copiar, não pode atravessar para funil custom.
+// Aceitar `stage` aqui daria um segundo caminho, sem essas regras.
+Deno.test("patchDeal — stage no corpo é recusado, com o caminho certo na mensagem", async () => {
+  const res = await patchDeal(ctxPatch({ stage: "enviada" }, PATCHED));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "stage_not_editable");
+});
+
+// Reabrir Negócio fechado é quase irreversível neste sistema: sair da etapa de
+// ganho dispara `sale_reversed`. A API recusa, e diz por quê.
+Deno.test("patchDeal — reabrir Negócio fechado é recusado", async () => {
+  const res = await patchDeal(ctxPatch(
+    { status: "open" },
+    { error: { code: "23514", message: "Negócio fechado não reabre por esta porta." } },
+  ));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_value");
+});
+
+Deno.test("patchDeal — Negócio inexistente ou de outra org devolve 404", async () => {
+  const res = await patchDeal(ctxPatch({ title: "x" }, { data: null }));
+
+  assertEquals(res.status, 404);
+  assertEquals((await res.json()).error.code, "deal_not_found");
+});
+
+// ── GET /leads/{id}/deals ──────────────────────────────────────────────────
+
+Deno.test("listLeadDeals — devolve os Negócios do Lead, abertos e fechados", async () => {
+  const calls: RpcCall[] = [];
+  const res = await listLeadDeals(ctx(
+    "https://x/api/v1/leads/l-1/deals",
+    { data: [row("d-1", "2026-08-02T00:00:00Z"), row("d-2", "2026-08-01T00:00:00Z")] },
+    calls,
+    { id: "l-1" },
+  ));
+
+  assertEquals(res.status, 200);
+  const body = await res.json();
+  assertEquals(body.data.length, 2);
+  assertEquals(calls[0].args.p_lead_id, "l-1");
+  assertEquals(calls[0].args.p_org, "org-1");
+});
+
+// É a recompra ficando legível de fora: a lista mostra a posição de cada um, e
+// é por ela que se vê o mesmo Lead com dois Negócios abertos no mesmo funil.
+Deno.test("listLeadDeals — cada Negócio traz a própria posição", async () => {
+  const res = await listLeadDeals(ctx(
+    "https://x/api/v1/leads/l-1/deals",
+    { data: [
+      row("d-1", "2026-08-02T00:00:00Z", { pipeline_slug: "whatsapp", stage_key: "novo" }),
+      row("d-2", "2026-08-01T00:00:00Z", { pipeline_slug: "propostas", stage_key: "enviada" }),
+    ] },
+    [],
+    { id: "l-1" },
+  ));
+
+  const d = (await res.json()).data;
+  assertEquals(d[0].pipeline, "whatsapp");
+  assertEquals(d[1].stage, "enviada");
 });
