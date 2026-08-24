@@ -1,0 +1,263 @@
+/**
+ * Página /agenda — a tela "Atividades" que o botão da lateral abre.
+ *
+ * Prova o que o pedido exige de ponta a ponta, sem banco:
+ *   - cabeçalho "Atividades" + descrição + "Nova atividade" na área principal;
+ *   - abas de estado e filtros;
+ *   - usuário comum vê SÓ os próprios compromissos;
+ *   - admin vê os de todo mundo, com o responsável identificável.
+ *
+ * `CreateMeetingDialog` entra dublado: ele arrasta `useLeads` e o form inteiro,
+ * que não é o que esta tela precisa provar.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+
+import type { AgendaEvent } from "@/modules/engagement/hooks/useAgendaEvents";
+
+const USER_ID = "11111111-1111-1111-1111-111111111111";
+const TEAM_MEMBER_ID = "22222222-2222-2222-2222-222222222222";
+const OUTRO_MEMBER_ID = "33333333-3333-3333-3333-333333333333";
+
+const identity = {
+  userId: USER_ID,
+  teamMemberId: TEAM_MEMBER_ID,
+  isAdmin: false,
+  isReady: true,
+};
+
+vi.mock("@/modules/identity", () => ({
+  useAuth: () => ({ session: { user: { id: USER_ID }, access_token: "t" } }),
+  useIdentity: () => identity,
+  useTeamMembers: () => ({
+    data: [
+      { id: TEAM_MEMBER_ID, user_id: USER_ID, name: "Eu Mesmo", is_active: true },
+      {
+        id: OUTRO_MEMBER_ID,
+        user_id: "44444444-4444-4444-4444-444444444444",
+        name: "Ana Souza",
+        is_active: true,
+      },
+    ],
+  }),
+}));
+
+const agendaEvents: AgendaEvent[] = [];
+
+vi.mock("@/modules/engagement/hooks/useAgendaEvents", () => ({
+  useAgendaEvents: () => ({
+    data: agendaEvents,
+    isLoading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
+vi.mock("@/modules/engagement/hooks/useMeetings", () => ({
+  useDeleteMeeting: () => ({ mutateAsync: vi.fn() }),
+}));
+
+const participacoes = new Set<string>();
+
+vi.mock("@/modules/engagement/hooks/useMyAgendaOwnership", () => ({
+  useMyAgendaOwnership: () => ({ data: participacoes }),
+}));
+
+vi.mock("@/modules/integrations/hooks/useGoogleCalendar", () => ({
+  useCalendarEvents: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }),
+  useGoogleCalendarStatus: () => ({ data: { connected: false } }),
+}));
+
+vi.mock("@/modules/integrations/hooks/useGoogleCalendarSharing", () => ({
+  useCalendarSharing: () => ({ data: { incoming: [] } }),
+}));
+
+vi.mock(
+  "@/modules/engagement/components/agenda/CreateMeetingDialog",
+  () => ({ CreateMeetingDialog: () => null }),
+);
+
+// Import depois dos mocks — a página resolve os hooks no topo do módulo.
+const { default: Agenda } = await import("@/modules/engagement/pages/Agenda");
+
+/** Um evento da RPC, no formato cru que `normalizeAgendaEvents` recebe. */
+function rpcEvent(over: Partial<AgendaEvent> = {}): AgendaEvent {
+  const start = new Date(2026, 7, 3, 16, 0);
+  return {
+    id: "e1",
+    source: "meeting",
+    title: "Reunião minha",
+    description: null,
+    start_at: start.toISOString(),
+    end_at: new Date(2026, 7, 3, 17, 0).toISOString(),
+    all_day: false,
+    event_type: "meeting",
+    status: "scheduled",
+    lead_id: null,
+    lead_name: null,
+    lead_company: null,
+    created_by: USER_ID,
+    creator_name: "Eu Mesmo",
+    location: null,
+    meet_link: null,
+    color: null,
+    google_event_id: null,
+    ...over,
+  };
+}
+
+beforeEach(() => {
+  agendaEvents.length = 0;
+  participacoes.clear();
+  identity.isAdmin = false;
+  identity.isReady = true;
+  vi.setSystemTime(new Date(2026, 7, 24, 9, 0));
+});
+
+describe("Agenda — moldura da tela", () => {
+  it("é uma página do sistema: título, descrição e ação no topo", () => {
+    render(<Agenda />);
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Atividades" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Crie, edite e gerencie/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Nova atividade/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("traz as abas de estado e a navegação do mês", () => {
+    render(<Agenda />);
+    expect(screen.getByRole("tab", { name: "Pendentes" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Todas atividades" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Finalizadas" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+      /agosto de 2026/i,
+    );
+    expect(screen.getByLabelText("Período anterior")).toBeInTheDocument();
+    expect(screen.getByLabelText("Próximo período")).toBeInTheDocument();
+  });
+
+  it("abre na grade do mês, não numa lista de um dia só", () => {
+    render(<Agenda />);
+    expect(screen.getByText("Segunda-feira")).toBeInTheDocument();
+  });
+});
+
+describe("Agenda — quem vê o quê", () => {
+  it("usuário comum vê o seu e NÃO vê o do colega", () => {
+    agendaEvents.push(
+      rpcEvent({ id: "meu", title: "Reunião minha", created_by: USER_ID }),
+      rpcEvent({
+        id: "dela",
+        title: "Reunião da Ana",
+        created_by: OUTRO_MEMBER_ID,
+        creator_name: "Ana Souza",
+      }),
+    );
+
+    render(<Agenda />);
+
+    expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
+    expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
+    expect(screen.getByText("1 atividade")).toBeInTheDocument();
+  });
+
+  it("usuário comum enxerga o próprio follow-up, que vem com id de TEAM_MEMBER", () => {
+    agendaEvents.push(
+      rpcEvent({
+        id: "fu",
+        source: "follow_up",
+        event_type: "follow_up",
+        title: "Ligar amanhã",
+        created_by: TEAM_MEMBER_ID,
+      }),
+    );
+
+    render(<Agenda />);
+    expect(screen.getByText(/Ligar amanhã/)).toBeInTheDocument();
+  });
+
+  it("follow-up SEM responsável não some — é o que a pessoa acabou de criar", () => {
+    agendaEvents.push(
+      rpcEvent({
+        id: "fu-sem-dono",
+        source: "follow_up",
+        event_type: "follow_up",
+        title: "Retornar ligação",
+        created_by: null,
+        creator_name: null,
+      }),
+    );
+
+    render(<Agenda />);
+    expect(screen.getByText(/Retornar ligação/)).toBeInTheDocument();
+  });
+
+  it("reunião marcada POR um colega COM o usuário aparece na agenda dele", () => {
+    agendaEvents.push(
+      rpcEvent({
+        id: "conv-1",
+        title: "Reunião com a Ana",
+        created_by: OUTRO_MEMBER_ID,
+        creator_name: "Ana Souza",
+      }),
+    );
+
+    // Sem a participação registrada, o convite não é dele.
+    const { unmount } = render(<Agenda />);
+    expect(screen.queryByText(/Reunião com a Ana/)).not.toBeInTheDocument();
+    unmount();
+
+    participacoes.add("conv-1");
+    render(<Agenda />);
+    expect(screen.getByText(/Reunião com a Ana/)).toBeInTheDocument();
+  });
+
+  it("usuário comum não recebe o filtro de atendente", () => {
+    render(<Agenda />);
+    expect(screen.queryByLabelText("Filtrar por atendente")).toBeNull();
+    // O filtro de tipo continua para todos.
+    expect(screen.getByLabelText("Filtrar por tipo")).toBeInTheDocument();
+  });
+
+  it("admin vê os dois e consegue identificar o responsável", () => {
+    identity.isAdmin = true;
+    agendaEvents.push(
+      rpcEvent({ id: "meu", title: "Reunião minha", created_by: USER_ID }),
+      rpcEvent({
+        id: "dela",
+        title: "Reunião da Ana",
+        created_by: OUTRO_MEMBER_ID,
+        creator_name: "Ana Souza",
+      }),
+    );
+
+    render(<Agenda />);
+
+    expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
+    expect(screen.getByText(/Reunião da Ana/)).toBeInTheDocument();
+    expect(screen.getByText("AS")).toBeInTheDocument(); // iniciais da Ana
+    expect(screen.getByText("2 atividades")).toBeInTheDocument();
+  });
+
+  it("admin recebe o filtro de atendente", () => {
+    identity.isAdmin = true;
+    render(<Agenda />);
+    expect(screen.getByLabelText("Filtrar por atendente")).toBeInTheDocument();
+  });
+
+  it("enquanto a identidade não resolve, vale a regra restrita", () => {
+    identity.isAdmin = true;
+    identity.isReady = false; // ainda carregando
+    agendaEvents.push(
+      rpcEvent({
+        id: "dela",
+        title: "Reunião da Ana",
+        created_by: OUTRO_MEMBER_ID,
+      }),
+    );
+
+    render(<Agenda />);
+    expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
+  });
+});

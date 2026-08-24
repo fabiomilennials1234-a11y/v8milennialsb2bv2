@@ -193,7 +193,7 @@ export function CreateMeetingDialog({
             <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
               <Plus className="w-3.5 h-3.5 text-primary" />
             </div>
-            Novo Evento
+            Nova atividade
           </DialogTitle>
         </DialogHeader>
 
@@ -455,7 +455,7 @@ export function CreateMeetingDialog({
                   Criando...
                 </>
               ) : (
-                "Criar Evento"
+                "Criar atividade"
               )}
             </Button>
           </div>

@@ -30,6 +30,11 @@ interface DayAgendaViewProps {
   onSelectDate: (day: Date) => void;
   /** Open the detail popover for an event. */
   onEventClick: (e: React.MouseEvent, event: UnifiedEvent) => void;
+  /**
+   * Prefixa o subtítulo com o responsável. Ligado para quem enxerga a agenda
+   * da equipe inteira — sem isso a lista vira uma pilha anônima de horários.
+   */
+  showOwner?: boolean;
 }
 
 // Single-letter weekday headers (Sun→Sat), matching the compact mini-calendar.
@@ -45,11 +50,16 @@ const ORANGE = "#ed9326";
 const PANEL_CLASS = "bg-foreground/[0.02] border border-border/50";
 
 /** Build a per-event subtitle from the richest detail available. */
-function eventSubtitle(event: UnifiedEvent): string {
-  if (event.location) return event.location;
-  const lead = [event.leadCompany, event.leadName].filter(Boolean).join(" · ");
-  if (lead) return lead;
-  return SOURCE_LABELS[event.source] ?? event.source;
+function eventSubtitle(event: UnifiedEvent, showOwner: boolean): string {
+  const detalhe = (() => {
+    if (event.location) return event.location;
+    const lead = [event.leadCompany, event.leadName].filter(Boolean).join(" · ");
+    if (lead) return lead;
+    return SOURCE_LABELS[event.source] ?? event.source;
+  })();
+
+  if (showOwner && event.creatorName) return `${event.creatorName} · ${detalhe}`;
+  return detalhe;
 }
 
 export function DayAgendaView({
@@ -57,6 +67,7 @@ export function DayAgendaView({
   events,
   onSelectDate,
   onEventClick,
+  showOwner = false,
 }: DayAgendaViewProps) {
   const monthDays = useMemo(() => getMonthGrid(date), [date]);
 
@@ -207,7 +218,7 @@ export function DayAgendaView({
                       {event.title}
                     </div>
                     <div className="truncate text-[10px] text-muted-foreground">
-                      {eventSubtitle(event)}
+                      {eventSubtitle(event, showOwner)}
                     </div>
                   </button>
                 </motion.div>

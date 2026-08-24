@@ -4,28 +4,62 @@
 
 import { format } from "date-fns";
 import type { UnifiedEvent } from "./agenda-helpers";
+import { initialsOf, isFinishedEvent } from "./agenda-helpers";
 
 interface MonthEventPillProps {
   event: UnifiedEvent;
   onClick: (e: React.MouseEvent, event: UnifiedEvent) => void;
+  /**
+   * Quem vê a agenda inteira precisa saber de quem é cada compromisso sem
+   * abrir um por um — as iniciais do responsável entram à direita da pílula.
+   * Para o usuário comum a informação é redundante (é sempre ele).
+   */
+  showOwner?: boolean;
 }
 
-export function MonthEventPill({ event, onClick }: MonthEventPillProps) {
+export function MonthEventPill({
+  event,
+  onClick,
+  showOwner = false,
+}: MonthEventPillProps) {
   const color = event.color;
+  const hora = event.allDay ? "dia todo" : format(event.start, "HH:mm");
+  const owner = showOwner ? initialsOf(event.creatorName) : "";
+  const done = isFinishedEvent(event);
+
   return (
     <button
-      className="w-full text-left px-1.5 py-px rounded text-[10px] truncate leading-snug transition-all hover:brightness-110"
+      className="flex w-full items-center gap-1 rounded border-l-2 px-1.5 py-px text-left text-[10px] leading-snug text-foreground transition-all hover:brightness-110"
       style={{
-        borderLeft: `2px solid ${color}`,
-        backgroundColor: `${color}18`,
-        color,
+        // A cor da fonte fica na borda e no banho de fundo, nunca no texto: o
+        // ouro (`meeting`) sobre o creme do tema claro dá ~1,7:1 — o mesmo
+        // motivo pelo qual DESIGN.md proíbe ouro como texto. `color-mix`
+        // tolera hex e hsl, então as 5 fontes tingem igual.
+        borderColor: color,
+        backgroundColor: `color-mix(in srgb, ${color} 16%, transparent)`,
       }}
       onClick={(e) => {
         e.stopPropagation();
         onClick(e, event);
       }}
+      title={[
+        `${hora} · ${event.title}`,
+        event.creatorName ? `Responsável: ${event.creatorName}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n")}
     >
-      {event.allDay ? "dia todo" : format(event.start, "HH:mm")} {event.title}
+      {/* Cor sozinha não é sinal (DESIGN.md): finalizado ganha o risco no texto. */}
+      <span className={`min-w-0 flex-1 truncate ${done ? "line-through opacity-70" : ""}`}>
+        {hora} {event.title}
+      </span>
+      {owner && (
+        // `text-foreground/70`, e não `text-muted-foreground`: as iniciais são
+        // o único jeito de o admin saber de quem é o compromisso na grade, e
+        // o token secundário mede ~3,6:1 sobre o banho de cor da pílula no
+        // tema claro. Aqui elas precisam ser lidas, não sussurradas.
+        <span className="shrink-0 font-semibold text-foreground/70">{owner}</span>
+      )}
     </button>
   );
 }
