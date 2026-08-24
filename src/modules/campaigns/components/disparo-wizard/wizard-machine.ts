@@ -50,6 +50,19 @@ export const DISPARO_STEPS: { id: DisparoStepId; label: string }[] = [
 export const LAST_STEP_INDEX = DISPARO_STEPS.length - 1;
 
 /**
+ * O rótulo "Passo N de 6", DERIVADO da posição real.
+ *
+ * Era literal em cada um dos cinco passos, e a reordenação do #1722 fez os cinco
+ * mentirem de uma vez — "Mensagem" seguia anunciando "Passo 2" depois de virar o
+ * terceiro. A tela não reclama de um número errado: ela só mente. Derivar é o
+ * que impede a próxima reordenação de repetir isso.
+ */
+export function kickerDoPasso(id: DisparoStepId): string {
+  const i = DISPARO_STEPS.findIndex((s) => s.id === id);
+  return `Passo ${i + 1} de ${DISPARO_STEPS.length}`;
+}
+
+/**
  * O número do Disparo e o regime que ele impõe ao conteúdo vivem no módulo
  * ÚNICO (`lib/disparo-numbers`), porque o Disparo Rápido consulta o mesmo
  * contrato (#1722). Aqui só se reexporta, para os passos do wizard não

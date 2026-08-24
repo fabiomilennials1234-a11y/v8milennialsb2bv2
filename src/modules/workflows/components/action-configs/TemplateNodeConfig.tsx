@@ -71,6 +71,10 @@ import {
   CAMPOS_DO_NO_DE_TEMPLATE,
   type CamposDeTemplate,
 } from "./campos-de-template";
+import {
+  apenasAprovados,
+  contaListaTemplates,
+} from "@/modules/communication/lib/templates-aprovados";
 
 interface Props {
   data: ActionNodeData;
@@ -115,11 +119,11 @@ export function TemplateNodeConfig({
   const perfil = getProviderProfile(instanciaDoNo?.provider);
   const temTemplates = !!instanciaDoNo && perfil.capabilities.templates;
 
-  // ⚠️ Mais estreito que `capabilities.templates` DE PROPÓSITO. `meta_cloud`
-  // também tem templates aprovados, mas os dele não saem por
-  // `useNotificameTemplates` — essa listagem é da conta do NotificaMe. Listar
-  // um pelo outro devolveria a lista errada, ou vazia, sem dizer por quê.
-  const oficial = temTemplates && perfil.id === "notificame";
+  // Quem responde "esta conta tem listagem que sabemos ler" é o módulo
+  // compartilhado (#1722). O passo de conteúdo do Disparo faz a MESMA pergunta,
+  // e duas respostas para a mesma pergunta é como nasce a divergência que o
+  // #1722 conserta na camada dos números.
+  const oficial = !!instanciaDoNo && contaListaTemplates(instanciaDoNo.provider);
 
   const { data: templates, isLoading, error } = useNotificameTemplates({
     instanceId: oficial ? data.whatsappInstanceId : null,
@@ -127,10 +131,7 @@ export function TemplateNodeConfig({
 
   // Só APROVADO aparece. Um template em análise não é opção, é espera — listá-lo
   // como escolhível entregaria uma recusa certa no dia em que o workflow rodar.
-  const aprovados = useMemo(
-    () => (templates || []).filter((t) => t.status === "APPROVED"),
-    [templates],
-  );
+  const aprovados = useMemo(() => apenasAprovados(templates), [templates]);
 
   // O que o nó guardou, remontado no formato que os helpers pedem. O painel não
   // depende da listagem para renderizar o que já foi escolhido: se a conta ficar

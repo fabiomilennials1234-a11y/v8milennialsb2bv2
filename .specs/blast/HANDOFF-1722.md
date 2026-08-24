@@ -5,10 +5,10 @@ Branch `feat/1722-disparo-canal-oficial`, empilhada em `feat/1721-blast-recipien
 Plano e medições: [`PLANO-1722.md`](./PLANO-1722.md) · Antecessor: [`HANDOFF-1721.md`](./HANDOFF-1721.md)
 Decisões do CTO: `~/Dev/.maestri/briefs/1722-decisoes.md`
 
-> **Estado: INCOMPLETO, e de propósito.** Cinco das seis fatias estão prontas e verdes —
-> incluindo a bifurcação do criador, que era o item crítico. Falta **a tela**: a seleção de
-> Template (critérios 3 e 4) e o progresso por pessoa (critério 7). O desenho está em §4;
-> não é "descobrir de novo", é executar. Ver §7 para o re-corte.
+> **Estado: COMPLETO.** Os nove critérios estão fechados e verdes: 121 testes nos arquivos
+> tocados, build de produção limpo, **zero** erros de tipo e **zero** problemas de lint
+> introduzidos. Nada aplicado em produção — migration, types e deploy são botão do humano
+> (§5).
 
 ---
 
@@ -59,13 +59,13 @@ por quê.
 
 | # | Critério | Estado |
 |---|---|---|
-| 1 | Número oficial aparece na tela, com regime visível | ✅ módulo + seletor do Disparo Rápido; o rótulo no wizard depende da fatia 5 (§4) |
+| 1 | Número oficial aparece na tela, com regime visível | ✅ nas duas telas, com o selo "Canal Oficial · Template" no passo de números |
 | 2 | Wizard e Disparo Rápido, mesmo conjunto, mesmo módulo | ✅ com **guarda mecânica** que reprova quem voltar a filtrar sozinho |
-| 3 | Número oficial troca o passo de conteúdo | 🟡 máquina de estados pronta e testada, ordem já revista; **falta a UI** (§4.1) |
-| 4 | Só Templates aprovados, sem catálogo local | 🟡 idem — o hook existe; falta o painel compartilhado |
+| 3 | Número oficial troca o passo de conteúdo | ✅ ordem revista (número antes do conteúdo) + `StepMessage` ramifica por regime |
+| 4 | Só Templates aprovados, sem catálogo local | ✅ `apenasAprovados`, com guarda mecânica nos dois consumidores |
 | 5 | Uma linha por destinatário, worker consome uma a uma | ✅ worker, claim, cron **e** a bifurcação do criador nos 4 sítios de despacho |
 | 6 | Mensagem aparece na conversa e **não** é gravada duas vezes | ✅ **provado por mutação**, não por leitura |
-| 7 | Progresso por pessoa, não contador | ❌ não construído (§4.3) |
+| 7 | Progresso por pessoa, não contador | ✅ `StepMonitor` lista pessoa a pessoa, lido da FILA — guarda proíbe voltar ao job do fornecedor |
 | 8 | Organization só com Chip: idêntico a hoje | ✅ provado — allowlist intocada, testes portados, controle explícito |
 | 9 | Decisão de enviar/pular/recusar num lugar só | ✅ `decisao-do-disparo.ts`, 17 testes, 3 mutações capturadas |
 
@@ -130,65 +130,36 @@ issue.
 
 ## 4. O que falta, com o desenho já feito
 
-### 4.1 O passo de conteúdo troca de cara (critérios 3 e 4)
+### 4.1 A tela — FEITO
 
-A **máquina de estados já está pronta e testada**: a ordem mudou (`speed` antes de
-`message`), `regimeDoConteudo(draft)` responde o regime, e `validateStep("message")` já
-exige `draft.template` quando o regime é oficial. Falta a UI:
+- **A ordem dos passos mudou** (decisão (a) do CTO): `Pra quem → Velocidade → Mensagem →
+  Destino → Revisão → Acompanhar`. Os mesmos seis passos, os mesmos seis rótulos; muda a
+  posição de uma tela. É a única ordem em que a tela nunca pede uma decisão que o passo
+  seguinte anula.
+- **O "Passo N de 6" virou derivado** (`kickerDoPasso`). Eram cinco literais espalhados, e
+  a reordenação fez os cinco mentirem de uma vez — "Mensagem" seguia anunciando "Passo 2"
+  depois de virar o terceiro. Uma tela com número errado não reclama: ela só mente. Guarda
+  mecânica reprova quem chumbar de novo.
+- **`StepMessage` ramifica por regime**: Chip mantém o editor de texto **intocado**; Canal
+  Oficial lista os Templates **aprovados** da conta, direto do servidor, sem catálogo local.
+- **A decisão "quais Templates são escolhíveis" virou módulo compartilhado**
+  (`communication/lib/templates-aprovados.ts`), consumido pelo passo de conteúdo **e** pelo
+  nó de Workflow. Era a mesma forma do defeito que este ticket conserta na camada dos
+  números — três telas decidindo sozinhas —, e não valia a pena repeti-la com Templates.
+  Guarda mecânica proíbe `status === "APPROVED"` solto nos dois arquivos.
+- **`StepSpeed` mostra o regime** no próprio número.
 
-- `StepMessage.tsx` ramifica: regime `chip` → o textarea de hoje, intocado; regime
-  `oficial` → seleção de Template aprovado.
-- O painel a reusar é `workflows/components/action-configs/TemplateNodeConfig.tsx`, e ele
-  **não** é reusável como está: amarrado a `ActionNodeData`, lê a instância de
-  `data.whatsappInstanceId` (linha 109, **fora** do mapa `campos` que já parametriza os
-  outros cinco campos), e importa `VariableInserter` de `@/modules/workflows`.
-- Caminho recomendado: extrair um `TemplateAprovadoPicker` **apresentacional** para
-  `@/modules/communication` (onde já vive `useNotificameTemplates`), props
-  `{instanceId, escolhido, onEscolher}`; `TemplateNodeConfig` passa a consumi-lo e o wizard
-  também. Uma listagem, dois consumidores.
-- ⚠️ **`listTemplates` NÃO filtra por status** (`_shared/notificame-templates.ts`): devolve
-  PENDING/REJECTED/PAUSED também. O filtro `APPROVED` é de quem chama — hoje o front faz
-  (`TemplateNodeConfig.tsx:130-133`). O picker novo tem de manter isso, ou o critério 4 cai.
+### 4.3 Progresso por pessoa — FEITO
 
-### 4.2 O criador bifurca — **FEITO**
-
-`createBlastPlan` despachava o lote 0 e **em seguida marcava os destinatários como `sent`**
-na mesma passada. No regime oficial isso seria desastroso: as linhas nasceriam enviadas sem
-ninguém ter enviado, o worker nunca as reivindicaria (ele só olha `pending`), e o Disparo
-apareceria concluído com zero mensagens entregues.
-
-Os **quatro** sítios de despacho foram bifurcados por `ehCanalOficial(instance)`:
-criação single-número, criação multi-número, release multi-número e release single-número.
-No regime oficial nenhum deles despacha nem marca `sent`; o lote continua sendo **liberado**
-(`lots_released` avança — é o que `claim_blast_recipients` enxerga) e os ledgers de
-orçamento continuam sendo incrementados, porque o Orçamento Diário conta **pessoas
-planejadas para hoje** e isso não depende de quem carrega a mensagem.
-
-`blast-plan-create` recusa **regime misto** e número não-disparável, e exige o Template no
-oficial — via `regimeDoConjunto`, que é puro e tem teste próprio (a decisão do CTO era
-"barrado na tela **e** no servidor"). O front já manda o `template` no payload.
-
-Provas: `tests/unit/blast-plan-canal-oficial.test.ts` (5 casos, incluindo o **controle do
-Chip**, que continua despachando e marcando `sent` na criação) e os 6 casos de
-`regimeDoConjunto`.
-
-⚠️ **Lacuna registrada, não construída**: o `post_send_target` (o "Destino" do wizard, que
-move o lead quando a mensagem DELE sai) não dispara no regime oficial. `notifyRecipientsSent`
-está dentro do ramo do Chip, e é o lugar certo — chamá-lo na criação afirmaria um envio que
-não aconteceu. Quem passa a mover o lead é o worker, quando o envio de fato sai. É trabalho
-de uma fatia própria; hoje um Disparo oficial com Destino escolhido simplesmente não move.
-
-### 4.3 Progresso por pessoa (critério 7)
-
-`StepMonitor.tsx:54,201-211` e `BlastPlanCard.tsx:101,300-321` mostram
-`useBlastPlanProgress` — quatro contadores (`useBlastPlans.ts:145-168`). A lista por pessoa
-já existe, mas só no drill-down `BlastPlanRecipientsSheet.tsx`. `StepMonitor` passa a
-mostrar as pessoas, com `useBlastPlanRecipients` (que já pagina e já tem realtime
-declarado em `StepMonitor.tsx:49-50`); o contador fica como resumo.
+`StepMonitor` passa a listar **pessoa a pessoa**, lido da fila (`useBlastPlanRecipients`),
+com o motivo em português quando existe. O contador continua como resumo — o critério pede
+que a tela mostre pessoas, não que esconda o total. Guarda mecânica reprova se alguém
+voltar a ler o job do fornecedor ali.
 
 ⚠️ **Dívida datada, herdada do #1721 e ainda não vencida**: `useBlastPlans.ts:162` tem
 `else p.pending += 1` — um catch-all. No dia em que `delivered` for gravado (#1724), ele
-aparece na tela como "Aguardando". O teste 3 da guarda de vocabulário é o estopim.
+aparece no CONTADOR como "Aguardando". A lista por pessoa não sofre disso (ela mostra o
+status real), mas o resumo sim. O teste 3 da guarda de vocabulário é o estopim.
 
 ### 4.4 O resto do ciclo
 
@@ -200,42 +171,66 @@ CORS e WhatsApp/Uazapi.
 
 ## 5. O que sobrou para o humano
 
-1. **Rodar a medição da decisão C** — está pronta em
-   `scripts/medicao-1722-provider-message-id.sql`, cinco SELECTs, zero escrita:
-   ```bash
-   node scripts/prod-sql.mjs --file scripts/medicao-1722-provider-message-id.sql
-   ```
-   Tentei rodar e o sandbox recusou a chamada a produção — é permissão sua, não minha.
-   **Por que importa**: descobri que a linha gravada no envio nasce com
-   `provider_message_id` **NULL** (`buildOutboundChannelMessageRow`,
-   `notificame-provider.ts:979-1003`); quem preenche essa coluna é o **primeiro callback que
-   casar** (`notificame-webhook/index.ts:1131-1174`). O worker grava na linha do
-   destinatário o id da **resposta do envio** — que é o que vira `external_id`. Se o
-   `providerMessageId` estável não for esse id, a #1724 casa o callback errado e a entrega
-   nunca fecha. `pmid_diferente = 0` responde a pergunta.
-2. **Rodar `scripts/verificar-grants-1722.sql` IMEDIATAMENTE depois do apply.**
-   É o item da `/security-rubric` que **não pode ser fechado antes** — o grant é
-   concedido pelo banco no momento do `CREATE`, não pelo SQL da migration, e neste
-   projeto o EXECUTE chega por dois caminhos (PUBLIC implícito e `ALTER DEFAULT
-   PRIVILEGES` nominal) que se escondem um atrás do outro. A migration revoga dos três
-   e concede só a `service_role`; a consulta é o que prova. Esperado: `anon=false`,
-   `authenticated=false`, `service_role=true`. **`claim_blast_recipients` é SECURITY
-   DEFINER e devolve destinatários de TODAS as organizações por desenho** — um grant
-   aberto aqui é vazamento cross-tenant, não inconveniência.
-3. **Aplicar a migration `20270824000000`** — depois da `20270823000000` do #1721, que
+Nada de código. Quatro coisas, todas de produção.
+
+1. **Rodar `scripts/verificar-grants-1722.sql` IMEDIATAMENTE depois do apply.**
+   É o item da `/security-rubric` que **não pode ser fechado antes** — o grant é concedido
+   pelo banco no momento do `CREATE`, não pelo SQL da migration, e neste projeto o EXECUTE
+   chega por dois caminhos (PUBLIC implícito e `ALTER DEFAULT PRIVILEGES` nominal) que se
+   escondem um atrás do outro. A migration revoga dos três e concede só a `service_role`; a
+   consulta é o que prova. Esperado: `anon=false`, `authenticated=false`,
+   `service_role=true`. **`claim_blast_recipients` é SECURITY DEFINER e devolve
+   destinatários de TODAS as organizações por desenho** — grant aberto ali é vazamento
+   cross-tenant, não inconveniência.
+2. **Aplicar a migration `20270824000000`** — depois da `20270823000000` do #1721, que
    **também ainda não foi aplicada**. A ordem importa: a de agora depende das colunas da
    anterior (`claimed_at`).
-4. **Regenerar os types** depois do apply em prod, nunca a partir de branch.
-5. **Conferir o ledger** e o drift, como o runbook manda.
-6. **Issue para o terceiro seletor de instância** — o CTO já disse que abre (§6).
+3. **Deployar `process-blast-recipients`** (`supabase functions deploy`). Sem o deploy, o
+   cron chama uma função que não existe e a fila não anda — e o sintoma é silêncio, não
+   erro.
+4. **Regenerar os types** depois do apply em prod, nunca a partir de branch. E conferir o
+   ledger/drift como o runbook manda.
 
 **Nada foi aplicado em produção. Nenhuma branch do Supabase foi criada** — a medição que eu
-precisava é read-only e não exige branch, e o que exigiria (o claim concorrente rodando de
-verdade) ficou para a fatia que não coube.
+precisava (§6) é read-only e não exigiu uma; o que exigiria branch (o claim concorrente
+rodando de verdade contra Postgres) está registrado como a prova que falta, abaixo.
 
----
+⚠️ **O que NÃO está provado**: o `FOR UPDATE SKIP LOCKED` do `claim_blast_recipients` foi
+provado como *desenho* (molde de `claim_pending_ai_actions`, que é o claim vivo do repo) e o
+laço foi provado com dublês — mas **duas sessões concorrentes disputando a mesma linha nunca
+rodaram**. Isso é SQL, e SQL não se prova com dublê. Pede branch efêmera, e a autorização
+está de pé. É a primeira coisa a fazer se o worker duplicar envio em produção.
 
 ## 6. O que me surpreendeu
+
+- **O id da resposta do envio NÃO é o `providerMessageId` estável — e nunca foi.** Medido
+  contra produção em 2026-08-24, somente leitura:
+
+  | | |
+  |---|---|
+  | linhas de saída com `provider_message_id` | **747** |
+  | `provider_message_id = external_id` | **0** |
+  | `external_id` no formato UUID | **747 / 747** |
+  | `provider_message_id` em base64 longo | **747 / 747** |
+
+  Não é "às vezes divergem": são **espaços de identificador diferentes**. O do envio é UUID
+  (`610d05f8-2efd-…`), o estável é base64 (`dGg3ZzQwYnh3…`). E há **10 callbacks órfãos**
+  (`status_no_match`, o mais recente 2026-08-20) — o sintoma já acontece hoje.
+
+  **Consequência para a #1724, e é a mais cara do lote**: casar o callback direto contra
+  `blast_plan_recipients.provider_message_id` pelo id estável **não acha nada, nunca**. O
+  caminho que funciona é o que o webhook já faz certo — ele resolve o callback até a linha de
+  `channel_messages` por duas chaves (`notificame-webhook/index.ts:1139-1174`), e de lá
+  `external_id` casa com o que o worker grava. Reusar aquele casamento é melhor do que
+  duplicar a dança de duas chaves numa segunda tabela. Está escrito no worker, no teste que
+  fixa a semântica, e aqui.
+
+  O que a coluna **é**, e continua sendo: a chave de idempotência do envio. Para isso o UUID
+  serve tão bem quanto o base64, e a UNIQUE parcial do #1721 segue fazendo o trabalho dela.
+
+- **Cinco telas anunciavam o próprio número de passo em literal.** A reordenação fez as cinco
+  mentirem de uma vez, e nenhuma reclama — número de passo errado não quebra nada, só engana.
+  Virou derivação com guarda.
 
 - **Existem TRÊS seletores de instância, não dois.** O brief e o ADR-0028 citam o wizard e
   o `QuickBlastDialog`. O terceiro,
@@ -296,20 +291,18 @@ verdade) ficou para a fatia que não coube.
 
 ---
 
-## 7. Recomendação
+## 7. Fechamento
 
-O ticket é maior que uma janela. Não por surpresa de escopo — os nove critérios estão todos
-mapeados —, mas porque a fatia 4.2 é uma bifurcação dentro de `createBlastPlan`, que é o
-caminho do Chip em produção, e ela pede teste próprio antes de qualquer linha.
+Os nove critérios estão fechados. O que ficou **fora é escopo de outras fatias**, não dívida
+desta: variáveis (#1723), ciclo de entrega (#1724), teto de gasto (#1725), erros da Meta como
+decisões (#1726), supressão (#1727), ritmo adaptativo (#1728), pausar/parar pelo worker
+(#1729), Disparo Rápido enviando pelo oficial (#1730) e a verdade por destinatário do Chip
+(#1731).
 
-Sugiro **re-cortar o que falta em duas**, na ordem:
+O terceiro seletor de instância (`pipelines/components/disparo/DisparoWizard.tsx:410-413`)
+seguiu **fora por decisão do CTO** e virou a issue **#1781**, bloqueada por esta. Não encostei
+nele: apontá-lo para o módulo novo o faria oferecer o número oficial numa tela que não sabe
+enviar por ele — exposição nova, não conserto.
 
-**A fatia 1 do re-corte foi absorvida** — o criador já bifurca (§4.2). Sobra **uma**:
-
-**A tela** (§4.1 + §4.3) — critérios 3, 4 e 7. É trabalho de front com um refactor
-cross-module no meio: o painel de Template a reusar é o do nó de Workflow, que está vivo em
-produção e é usado por `send_whatsapp_rich` (#1688) e pelo escape de janela (#1689).
-Extraí-lo merece a própria fatia e os próprios testes, e não o fim de uma sessão longa —
-é o que me fez parar aqui em vez de espremer.
-
-Ela herda um plano escrito, os seams provados, o motor pronto e a fila funcionando.
+A fatia seguinte mais urgente é a **#1724**, e ela começa com o achado de §6 na mão: sem
+aquilo, a entrega nunca fecha e o custo realizado nunca sobe.

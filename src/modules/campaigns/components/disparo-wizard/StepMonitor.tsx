@@ -38,6 +38,11 @@ import {
 } from "@/modules/campaigns/hooks/useBlastPlans";
 import type { DisparoDraft } from "./wizard-machine";
 import { monitorSnapshot } from "./monitor-progress";
+import { useBlastPlanRecipients } from "@/modules/campaigns/hooks/useBlastPlanRecipients";
+import {
+  skipReasonLabel,
+  failureReasonLabel,
+} from "@/modules/campaigns/lib/blast-recipient-view";
 
 interface StepMonitorProps {
   draft: DisparoDraft;
@@ -52,6 +57,15 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
   const { data: plans } = useBlastPlans();
   const plan = useMemo(() => plans?.find((p) => p.id === planId) ?? null, [plans, planId]);
   const { data: progress } = useBlastPlanProgress(planId);
+
+  // ⚠️ A verdade do Disparo é POR PESSOA, e vem da FILA — não de um contador
+  // agregado nem do job do fornecedor (ADR-0028 §4, critério 7).
+  //
+  // O defeito que o épico nomeia é exatamente este: o disparo real da Distetica
+  // terminou com `sent=1, failed=0` e ninguém conseguiu dizer QUEM recebeu,
+  // porque o estado morava num contador do lote em vez de na pessoa. O contador
+  // continua ali como resumo; o que não podia faltar é a lista.
+  const { data: destinatarios } = useBlastPlanRecipients(plan);
   const control = useBlastPlanControl();
 
   // Pure plan math drives the batch/lot copy; the real sent count comes from the
@@ -210,6 +224,44 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
         </ul>
       </div>
 
+      {/* Pessoa a pessoa — a resposta para "quem recebeu?" */}
+      <div className="rounded-2xl border border-border/70 bg-card p-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Pessoa a pessoa
+          </p>
+          <span className="text-[11px] text-muted-foreground/70">
+            {(destinatarios ?? []).length} no público
+          </span>
+        </div>
+
+        {!destinatarios && (
+          <p className="mt-3 text-sm text-muted-foreground">Carregando os destinatários…</p>
+        )}
+
+        {destinatarios && destinatarios.length === 0 && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Nenhum destinatário neste Disparo.
+          </p>
+        )}
+
+        <ul className="mt-3 max-h-80 space-y-1.5 overflow-y-auto">
+          {(destinatarios ?? []).map((r) => (
+            <li
+              key={r.id}
+              className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-sm odd:bg-muted/30"
+            >
+              <span className="min-w-0 truncate">
+                {r.name ?? r.phone ?? "Contato sem nome"}
+              </span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">
+                {estadoDoDestinatario(r)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
       <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/70">
         <Bell className="h-3.5 w-3.5" />
         Você recebe um aviso aqui no sistema quando cada lote termina.
@@ -241,4 +293,27 @@ function ReportRow({
       <span className="font-semibold tabular-nums text-foreground">{value.toLocaleString("pt-BR")}</span>
     </div>
   );
+}
+
+/**
+ * O estado de UMA pessoa, em português e com o motivo quando existe.
+ *
+ * "Falhou" sozinho manda o operador adivinhar se o problema é dele, do número da
+ * pessoa ou da Meta — e é essa adivinhação que o épico veio acabar.
+ */
+function estadoDoDestinatario(r: {
+  status: string;
+  reason: string | null;
+  lot_index: number;
+}): string {
+  switch (r.status) {
+    case "sent":
+      return "Enviado";
+    case "failed":
+      return failureReasonLabel(r.reason);
+    case "skipped":
+      return skipReasonLabel(r.reason);
+    default:
+      return r.lot_index > 0 ? `Na fila · lote ${r.lot_index + 1}` : "Na fila";
+  }
 }

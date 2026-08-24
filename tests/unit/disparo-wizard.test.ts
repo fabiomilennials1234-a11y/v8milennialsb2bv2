@@ -12,6 +12,7 @@ import {
   validateStep,
   canAdvance,
   selectedDailyCapacity,
+  kickerDoPasso,
   DISPARO_STEPS,
   LAST_STEP_INDEX,
   type DisparoDraft,
@@ -294,5 +295,46 @@ describe("validateStep('message') — o regime decide o que é conteúdo válido
     // CONTROLE do critério 8: a regra nova não pode ter encostado no Chip.
     expect(validateStep("message", freshDraft({ message: "" })).ok).toBe(false);
     expect(validateStep("message", freshDraft({ message: "Olá!" })).ok).toBe(true);
+  });
+});
+
+describe("o rótulo 'Passo N de 6' é derivado, não chumbado", () => {
+  it("kickerDoPasso responde a posição real de cada passo", () => {
+    expect(kickerDoPasso("audience")).toBe("Passo 1 de 6");
+    expect(kickerDoPasso("speed")).toBe("Passo 2 de 6");
+    expect(kickerDoPasso("message")).toBe("Passo 3 de 6");
+    expect(kickerDoPasso("postsend")).toBe("Passo 4 de 6");
+    expect(kickerDoPasso("review")).toBe("Passo 5 de 6");
+  });
+
+  it("nenhum passo chumba o próprio número", async () => {
+    // Eram cinco literais espalhados, e a reordenação do #1722 fez os cinco
+    // mentirem de uma vez: o passo "Mensagem" continuava anunciando "Passo 2"
+    // depois de virar o terceiro. Derivar é o que impede a próxima reordenação
+    // de produzir o mesmo defeito silencioso — a tela não reclama, só mente.
+    const fs = await import("node:fs");
+    const dir = "src/modules/campaigns/components/disparo-wizard";
+    const chumbados = fs
+      .readdirSync(dir)
+      .filter((f) => f.startsWith("Step") && f.endsWith(".tsx"))
+      .filter((f) => /Passo \d+ de \d+/.test(fs.readFileSync(`${dir}/${f}`, "utf8")));
+    expect(chumbados).toEqual([]);
+  });
+});
+
+describe("critério 7 — o acompanhamento mostra PESSOAS, não só contador", () => {
+  it("StepMonitor lê a fila por destinatário", async () => {
+    // O defeito que o épico nomeia: "sent=1, failed=0" e ninguém consegue dizer
+    // QUEM recebeu, porque o estado morava num contador do lote em vez de na
+    // pessoa (ADR-0028 §Context). O contador continua como resumo — o que não
+    // pode faltar é a lista.
+    const fs = await import("node:fs");
+    const src = fs.readFileSync(
+      "src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx",
+      "utf8",
+    );
+    expect(src).toMatch(/useBlastPlanRecipients/);
+    // E lê da FILA, não do job do fornecedor.
+    expect(src).not.toMatch(/uazapi_sender_jobs|useMassSendJobs/);
   });
 });

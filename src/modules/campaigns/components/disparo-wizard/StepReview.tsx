@@ -13,7 +13,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { planBlast, nextValidSendTime, DEFAULT_QUIET_WINDOW } from "@/modules/campaigns/lib/blast-planning";
 import { StepHeader } from "./StepHeader";
-import { selectedDailyCapacity, type DisparoDraft } from "./wizard-machine";
+import { selectedDailyCapacity, type DisparoDraft, kickerDoPasso } from "./wizard-machine";
 
 interface StepReviewProps {
   draft: DisparoDraft;
@@ -65,7 +65,7 @@ export function StepReview({ draft }: StepReviewProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker="Passo 5 de 6"
+        kicker={kickerDoPasso("review")}
         title="Tudo certo?"
         subtitle="Confira antes de enviar. Depois de iniciado, o disparo segue sozinho — você acompanha e pode pausar a qualquer momento."
       />

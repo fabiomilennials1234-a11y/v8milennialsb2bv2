@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 import { planBlast } from "@/modules/campaigns/lib/blast-planning";
 import { StepHeader } from "./StepHeader";
-import { selectedDailyCapacity, type DisparoDraft } from "./wizard-machine";
+import { selectedDailyCapacity, type DisparoDraft, kickerDoPasso } from "./wizard-machine";
 import {
   effectiveCap,
   capRisk,
@@ -81,7 +81,7 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker="Passo 4 de 6"
+        kicker={kickerDoPasso("speed")}
         title="Em que ritmo?"
         subtitle="Quanto mais números, mais rápido — sem queimar nenhuma linha. O envio se espalha pelos dias automaticamente."
       />
@@ -116,7 +116,17 @@ export function StepSpeed({ draft, patch }: StepSpeedProps) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <p className="truncate text-sm font-medium text-foreground">{n.label}</p>
+                <p className="truncate text-sm font-medium text-foreground">
+                  {n.label}
+                  {/* O regime fica VISÍVEL no número, não escondido no que ele
+                      permite (#1722, critério 1). É ele que decide o passo
+                      seguinte: texto livre no Chip, Template aprovado aqui. */}
+                  {n.regime === "oficial" && (
+                    <span className="ml-2 rounded-full border border-primary/40 bg-primary/5 px-2 py-0.5 align-middle text-[10px] font-medium text-primary">
+                      Canal Oficial · Template
+                    </span>
+                  )}
+                </p>
                 {n.isNew && (
                   <span className="shrink-0 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-500">
                     número novo · cuidado
