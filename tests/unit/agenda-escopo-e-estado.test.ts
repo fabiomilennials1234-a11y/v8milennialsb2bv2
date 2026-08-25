@@ -8,20 +8,26 @@
  * `filter(e => e.createdBy === userId)` de uma linha — e essa linha estaria
  * errada.
  *
- * `get_agenda_events` (baseline de prod, corpo da função) une QUATRO fontes e
- * devolve a coluna `created_by` com DOIS tipos de id diferentes conforme a
- * linha:
+ * `get_agenda_events` une CINCO fontes e devolve a coluna `created_by` com DOIS
+ * tipos de id diferentes conforme a linha:
  *
  *   meetings                 → m.created_by                       JOIN tm.user_id  → auth.users.id
  *   follow_ups               → fu.assigned_to                     JOIN tm2.id      → team_members.id
  *   scheduled_user_messages  → sm.created_by                      JOIN tm3.id      → team_members.id
  *   pipe_confirmacao         → COALESCE(pc.closer_id, pc.sdr_id)  JOIN tm.id       → team_members.id
+ *   meeting_events           → me.pre_sale_responsible_id         JOIN tm5.id      → team_members.id
  *
- * Comparar contra uma chave só casa UMA das quatro fontes e some, em silêncio,
+ * ⚠️ Este cabeçalho dizia "QUATRO fontes / baseline de prod" e ficou defasado por
+ * quase um mês: a 5ª (`meeting_events`, o funil mergeado) entrou no PROD à mão
+ * em 2026-07-30 e só foi versionada em `20270829000000`. A contagem certa está
+ * travada por `tests/unit/agenda-fontes-contract.test.ts`, que lê a definição
+ * vigente em vez de confiar em prosa como esta.
+ *
+ * Comparar contra uma chave só casa UMA das cinco fontes e some, em silêncio,
  * com os follow-ups e as confirmações da própria pessoa. Daí `buildOwnerIdentity`
  * devolver um CONJUNTO de identidades, e não um id.
  *
- * O mesmo vale para "Finalizadas": `status` não é estado de conclusão nas quatro
+ * O mesmo vale para "Finalizadas": `status` não é estado de conclusão nas cinco
  * fontes. `pipe_confirmacao.status` é a chave da etapa do kanban
  * (`reuniao_marcada`, `confirmar_d3`, `compareceu`, `perdido`), e
  * `scheduled_user_messages` já entra pré-filtrada a `('scheduled','sending')`

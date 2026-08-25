@@ -98,9 +98,13 @@ export function useAcoesDoDia(escopo: AcoesDoDiaEscopo = "meu") {
       // do erro do PostgREST, que lista os candidatos.
       // 🔒 O recorte por ORG é obrigatório no modo "tudo", e não é redundância
       // com o RLS: `is_org_admin()` devolve `true` para o MASTER em QUALQUER
-      // org, então sem este `.eq` a tela do master listaria as tarefas de
-      // todas as ~30 organizações misturadas. O RLS impede que um vendedor
-      // leia o alheio; quem mantém o master dentro de uma org só é este filtro.
+      // org, então sem ele a tela do master listaria as tarefas de todas as
+      // ~30 organizações misturadas (medido: 64 tarefas de 13 orgs sem o
+      // filtro, 16 com). O RLS impede que um vendedor leia o alheio; quem
+      // mantém o master dentro de uma org só é este filtro.
+      //
+      // Ele NÃO é um `.eq` solto — vive como o primeiro termo do `.or` da
+      // linha ~147, pelo motivo explicado lá em cima da query.
       const filtroBase = supabase
         .from("acoes_do_dia")
         .select(`

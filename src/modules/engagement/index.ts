@@ -9,7 +9,7 @@
  *
  * Domínios cobertos:
  * - Activities & Activity Log (call/email/meeting/note/task/whatsapp_msg/system)
- * - Agenda & Meetings (unified calendar de 4 fontes)
+ * - Agenda & Meetings (unified calendar de 5 fontes)
  * - Follow-ups (manual + automation rules)
  * - Call Logs (ligações manuais ou via API telefonia)
  * - Checklists & Templates (itens repetitivos do vendedor)

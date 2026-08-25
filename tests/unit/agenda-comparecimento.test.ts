@@ -80,14 +80,40 @@ describe("o resultado vale para TODOS os tipos de agenda", () => {
   it("as fontes que são leitura de outras telas NÃO recebem o controle", () => {
     // follow_ups é da tela de Follow-ups, pipe_confirmacao é etapa de kanban
     // (marcar ali moveria o card) e mensagem agendada não comparece a nada.
+    //
+    // `meeting_event` é a Source 5 (o funil mergeado), e é o caso PERIGOSO da
+    // lista: `event_type` dela é literalmente `'meeting'`, então uma guarda
+    // escrita por tipo — e não por fonte — deixaria o par de botões aparecer.
+    //
+    // O id que sai da RPC é o de `meeting_events`, e ele NÃO existe em
+    // `meetings`: medido no PROD, `meeting_events JOIN meetings ON m.id = e.id`
+    // dá 0 de 1525. O UPDATE acertaria zero linhas. Não seria silencioso —
+    // `useUpdateMeeting` fecha em `.select().single()`, então 0 linhas vira
+    // `PGRST116`, o hook faz `throw` e o `onError` mostra toast de ERRO. Ou
+    // seja: a pessoa clica em "Compareceu" numa reunião do funil e leva um erro
+    // sem explicação. Ruidoso, não silencioso — e ruim do mesmo jeito.
     for (const source of [
       "follow_up",
       "pipe_confirmacao",
       "scheduled_message",
+      "meeting_event",
       "google",
     ] as const) {
       expect(podeRegistrarResultado(evento({ source })), source).toBe(false);
     }
+  });
+
+  it("a Source 5 não aceita resultado NEM quando o tipo diz 'meeting'", () => {
+    // A combinação exata que a RPC devolve para o funil mergeado:
+    // source `meeting_event` + event_type `meeting`. Se alguém trocar a guarda
+    // de `source` para `eventType`, este teste é o que fica vermelho.
+    const source5 = evento({ source: "meeting_event", eventType: "meeting" });
+    expect(podeRegistrarResultado(source5)).toBe(false);
+    expect(outcomeOf({ ...source5, status: "completed" })).toBeNull();
+
+    // E não entra na contagem do cabeçalho — nem como "sem registro".
+    const r = resumirComparecimento([source5]);
+    expect(r.compareceu + r.naoCompareceu + r.semRegistro).toBe(0);
   });
 });
 

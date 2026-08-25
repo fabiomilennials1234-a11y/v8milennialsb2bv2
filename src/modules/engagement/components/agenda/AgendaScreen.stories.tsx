@@ -88,6 +88,18 @@ const EVENTOS: UnifiedEvent[] = [
     color: SOURCE_COLORS.pipe_confirmacao,
     status: "confirmar_d3",
   }),
+  // Source 5 — o funil mergeado. A combinação exata que a RPC devolve:
+  // `source: "meeting_event"` com `eventType: "meeting"`. Está aqui porque era
+  // a única das cinco fontes SEM representação na story, e foi justamente ela
+  // que imprimiu o identificador cru "meeting_event" na tela por um mês.
+  // Também é o caso que prova, no olho, que o par de botões de comparecimento
+  // NÃO aparece nela: `podeRegistrarResultado` olha `source`, não `eventType`.
+  ev(11, 20, "Reunião vinda do funil", {
+    source: "meeting_event",
+    eventType: "meeting",
+    color: SOURCE_COLORS.meeting_event,
+    status: "scheduled",
+  }),
   ev(11, 18, "Retorno do cliente", { creatorName: "Ana Souza" }),
   ev(20, 10, "Demonstração", { status: "completed" }),
   ev(21, 15, "Call de alinhamento", { status: "no_show" }),
