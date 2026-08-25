@@ -145,6 +145,11 @@ export async function moveLeadStage(
     supabase: ctx.supabase as any,
     organizationId: ctx.organizationId,
     leadId: ctx.params.id,
+    // `PATCH /leads/:id/pipeline` move o LEAD por definição — a rota recebe o id
+    // da pessoa e não o do negócio. Mover um negócio específico é rota própria
+    // (`/deals`), não um parâmetro escondido aqui.
+    entryId: null,
+    dealId: null,
     conversationId: null,
     params: { target_pipe: pipe, target_stage: stage },
   });
