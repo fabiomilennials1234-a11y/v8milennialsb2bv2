@@ -1,4 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
 /**
  * org-status — a org está bloqueada por assinatura?
  *
@@ -19,6 +18,51 @@ import { logRuntime } from "./logger.ts";
 
 const TTL_MS = 60_000;
 
+/**
+ * Superfície mínima do client que este módulo usa: uma RPC, e o `{ data, error }`
+ * que ela devolve. Estrutural de propósito — aceita tanto o `SupabaseClient`
+ * concreto (agent-message, whatsapp-api-proxy) quanto o `GovernorSupabaseClient`
+ * do send-governor, sem que org-status passe a depender do SDK nem do governor
+ * (que é quem importa daqui, não o contrário).
+ *
+ * ⚠️ `args` é OPCIONAL, e isso não é frouxidão — é o que faz a interface ser
+ * satisfeita pelo client de verdade. Medido contra a supabase-js **2.105.4**,
+ * que é a que o `deno.lock:20` trava (o `node_modules` do repo tem a 2.89.0,
+ * onde `Database = any` e QUALQUER interface passa trivialmente — provar por
+ * ali não prova nada). Na 2.105.4 os defaults são `Database = unknown` /
+ * `SchemaName = never`, então `Args` colapsa em `never` e a assinatura do SDK
+ * vira `args?: undefined`. Com `args` obrigatório aqui, `tsc --strict` recusa:
+ *
+ *   Type 'SupabaseClient<unknown, …, never, never, …>' is not assignable
+ *     to type 'OrgStatusClient'.
+ *       Type 'Record<string, unknown>' is not assignable to type 'undefined'.
+ *
+ * E nenhum portão pegaria: `deno check` do CI é escopado a `_shared/` e não
+ * arrasta os importadores (agent-message, whatsapp-api-proxy estão fora), e o
+ * `typecheck:ratchet` só olha `src/`. O erro só apareceria no deploy.
+ * Mesma armadilha de versão que `_shared/auth.ts:202-205` já documenta.
+ */
+export interface OrgStatusClient {
+  rpc(
+    fn: string,
+    args?: Record<string, unknown>,
+  ): PromiseLike<{ data?: unknown; error?: unknown }>;
+}
+
+/**
+ * Mensagem de um erro cru do `catch`. Cobre os dois formatos que chegam aqui:
+ * `Error` lançado pelo runtime e o objeto `{ message }` do PostgrestError, que
+ * é o que `if (error) throw error` propaga. Estreitamento real, sem cast — se
+ * não houver mensagem, o valor inteiro vira string, como antes.
+ */
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err && err.message != null) {
+    return String(err.message);
+  }
+  return String(err);
+}
+
 type CacheEntry = { blocked: boolean; at: number };
 const cache = new Map<string, CacheEntry>();
 
@@ -32,7 +76,7 @@ export function __resetOrgStatusCache(): void {
  * Resultado cacheado por 60s por instância da edge function.
  */
 export async function isOrgBlocked(
-  supabase: any,
+  supabase: OrgStatusClient,
   organizationId: string | null | undefined,
 ): Promise<boolean> {
   if (!organizationId) return false;
@@ -56,7 +100,7 @@ export async function isOrgBlocked(
       module: "billing",
       action: "org_access_blocked_check_failed",
       status: "error",
-      errorMessage: String((err as any)?.message ?? err),
+      errorMessage: errorMessage(err),
     }).catch(() => {});
     return false;
   }
@@ -76,7 +120,7 @@ export class OrgBlockedError extends Error {
 }
 
 export async function assertOrgNotBlocked(
-  supabase: any,
+  supabase: OrgStatusClient,
   organizationId: string | null | undefined,
 ): Promise<void> {
   if (await isOrgBlocked(supabase, organizationId)) {
