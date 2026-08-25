@@ -56,9 +56,17 @@ export interface OrgStatusClient {
  * `Error` lançado pelo runtime e o objeto `{ message }` do PostgrestError, que
  * é o que `if (error) throw error` propaga. Estreitamento real, sem cast — se
  * não houver mensagem, o valor inteiro vira string, como antes.
+ *
+ * O `String()` no primeiro ramo parece redundante e não é: `Error.message` é
+ * tipado `string`, mas nada impede que seja mutado para outra coisa em runtime,
+ * e aí a função devolveria não-string violando a própria assinatura — sem o
+ * `tsc` pegar. A expressão que isto substituiu (`String(err?.message ?? err)`)
+ * sempre embrulhava; manter o embrulho deixa a troca equivalente em TODOS os
+ * casos, não só nos alcançáveis. Isto alimenta o log de um catch fail-open num
+ * portão de billing: barato demais para deixar uma ponta solta.
  */
 function errorMessage(err: unknown): string {
-  if (err instanceof Error) return err.message;
+  if (err instanceof Error) return String(err.message);
   if (typeof err === "object" && err !== null && "message" in err && err.message != null) {
     return String(err.message);
   }
