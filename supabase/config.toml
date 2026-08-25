@@ -215,6 +215,12 @@ verify_jwt = false
 [functions.toth-sync-cobrancas]
 verify_jwt = false
 
+# toth-sync-pedidos: paginado (page/hasNext); resolve o cliente por CNPJ, então
+# exige toth-sync-clientes antes. O endpoint /pedidos ainda responde 404 no ERP
+# da Café Jurerê — a função devolve `endpoint_indisponivel: true` até publicarem.
+[functions.toth-sync-pedidos]
+verify_jwt = false
+
 [functions.tinyerp-proxy]
 verify_jwt = false
 

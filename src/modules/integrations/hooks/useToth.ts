@@ -54,6 +54,16 @@ export interface TothConnectionStatus {
   /** Janela em dias que define cliente ativo. null = base inteira. */
   clientes_dias_compras: number | null;
   /**
+   * Códigos de marca repassados ao ERP (ex.: "1,2,3,4,5,6").
+   *
+   * 🔑 É o que LIGA a janela de dias: medido em 25/08, `diasCompras=60` sozinho
+   * devolve 12.633 clientes (a base inteira) e, acompanhado das marcas, devolve
+   * 550. Sem marcas, a janela é decorativa.
+   */
+  clientes_marcas: string | null;
+  /** Deixar de fora quem nunca faturou nada (sem data de último pedido). */
+  clientes_somente_com_compra: boolean;
+  /**
    * Empresa do grupo a sincronizar. O Toth devolve as empresas do grupo na
    * mesma resposta e não aceita filtro por empresa — separar é trabalho nosso.
    * null = trazer todas.
@@ -63,6 +73,7 @@ export interface TothConnectionStatus {
   clientes_incluir_sem_empresa: boolean;
   last_clientes_sync_at: string | null;
   last_cobrancas_sync_at: string | null;
+  last_pedidos_sync_at: string | null;
   last_error: string | null;
 }
 
@@ -74,10 +85,13 @@ const DISCONNECTED: TothConnectionStatus = {
   connected_at: null,
   erp_sync_mode: "enrich_only",
   clientes_dias_compras: null,
+  clientes_marcas: null,
+  clientes_somente_com_compra: false,
   clientes_empresa: null,
   clientes_incluir_sem_empresa: false,
   last_clientes_sync_at: null,
   last_cobrancas_sync_at: null,
+  last_pedidos_sync_at: null,
   last_error: null,
 };
 
@@ -94,8 +108,9 @@ export function useTothStatus() {
       const { data, error } = await tothConnectionsTable()
         .select(
           "base_url, token_transport, allow_insecure_transport, connected_at, status, erp_sync_mode, " +
-            "clientes_dias_compras, clientes_empresa, clientes_incluir_sem_empresa, " +
-            "last_clientes_sync_at, last_cobrancas_sync_at, last_error",
+            "clientes_dias_compras, clientes_marcas, clientes_somente_com_compra, " +
+            "clientes_empresa, clientes_incluir_sem_empresa, " +
+            "last_clientes_sync_at, last_cobrancas_sync_at, last_pedidos_sync_at, last_error",
         )
         .eq("organization_id", organizationId)
         .maybeSingle();
@@ -115,10 +130,13 @@ export function useTothStatus() {
         connected_at: row.connected_at,
         erp_sync_mode: (row.erp_sync_mode as TothSyncMode) ?? "enrich_only",
         clientes_dias_compras: row.clientes_dias_compras ?? null,
+        clientes_marcas: row.clientes_marcas ?? null,
+        clientes_somente_com_compra: row.clientes_somente_com_compra === true,
         clientes_empresa: row.clientes_empresa ?? null,
         clientes_incluir_sem_empresa: row.clientes_incluir_sem_empresa === true,
         last_clientes_sync_at: row.last_clientes_sync_at,
         last_cobrancas_sync_at: row.last_cobrancas_sync_at,
+        last_pedidos_sync_at: row.last_pedidos_sync_at ?? null,
         last_error: row.last_error,
       };
     },
@@ -277,6 +295,71 @@ export function useSyncTothCobrancas() {
   });
 }
 
+// ─── Pedidos ────────────────────────────────────────────────────────────────
+
+export interface SyncPedidosResult {
+  success?: boolean;
+  stats?: {
+    pages: number;
+    rows: number;
+    created: number;
+    updated: number;
+    skipped: number;
+    failed: number;
+    items: number;
+    clientNotSynced: number;
+    pending: number;
+  };
+  incompleto?: boolean;
+  /** O ERP ainda não publicou `/pedidos` — 404, não credencial. */
+  endpoint_indisponivel?: boolean;
+  hint?: string;
+  skipped?: boolean;
+}
+
+/**
+ * Puxa os pedidos de venda.
+ *
+ * 🟠 Enquanto `/pedidos` responder 404 no ERP, esta chamada devolve
+ * `endpoint_indisponivel` — e a mensagem diz que a pendência é da publicação do
+ * caminho, não da conexão. A tela só mostra o botão quando o manifesto declarar
+ * a capacidade, então o caminho normal é este hook nem ser acionado.
+ */
+export function useSyncTothPedidos() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("toth-sync-pedidos", {});
+      if (error) throw await extractFunctionError(error);
+      if (data?.error) throw new Error(data.hint ? `${data.error} ${data.hint}` : data.error);
+      return data as SyncPedidosResult;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["toth-status"] });
+      // Pedido do ERP entra na Carteira: a lista de pedidos e a saúde do
+      // cliente derivam dele.
+      queryClient.invalidateQueries({ queryKey: ["upsell-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["upsell-clients"] });
+
+      const s = data?.stats;
+      toast.success(
+        s ? `Pedidos: ${s.created} novos, ${s.updated} atualizados` : "Sincronização concluída",
+        data?.incompleto
+          ? { description: "Teto de páginas por execução atingido — rode de novo para continuar." }
+          : s?.clientNotSynced
+            ? {
+                description: `${s.clientNotSynced} pedido(s) de cliente fora da carteira — confira o recorte de marcas e empresa.`,
+              }
+            : undefined,
+      );
+    },
+    onError: (error: Error) => {
+      toast.error("Erro ao sincronizar pedidos", { description: error.message });
+    },
+  });
+}
+
 // ─── Simulação (dry-run) ────────────────────────────────────────────────────
 
 export interface TothDryRunResult {
@@ -284,6 +367,12 @@ export interface TothDryRunResult {
   escreveu: false;
   modo: TothSyncMode;
   janela_dias_compras: number | null;
+  marcas: string | null;
+  /** Janela gravada sem marcas: o ERP devolve a base inteira mesmo assim. */
+  janela_inerte: boolean;
+  somente_com_compra: boolean;
+  /** Clientes sem data de último pedido faturado — recebidos e descartados. */
+  sem_ultima_compra: { recebidos: number; descartados: number };
   empresa: string | null;
   incluir_sem_empresa: boolean;
   /** Quem o filtro de empresa deixou de fora, e de quem eram. */
@@ -340,20 +429,39 @@ export function useSimulateTothClientes() {
 // ─── Janela de cliente ativo ────────────────────────────────────────────────
 
 /**
- * Grava a janela que define "cliente ativo" (vira `diasCompras` no ERP).
+ * Grava o recorte de cliente ativo: janela em dias, marcas e o corte estrito de
+ * quem já faturou.
+ *
+ * Os três andam juntos porque **a janela sozinha não filtra nada**. Medido
+ * contra o ERP em 25/08: `diasCompras=60` sem `marcas` devolve a base inteira
+ * (12.633); com as seis marcas, devolve 550. Salvar em chamadas separadas
+ * deixaria a tela num estado em que o número está gravado e não vale.
  *
  * Fica na conexão porque é regra de negócio da organização: precisa valer igual
- * no botão da tela e no cron. `null` traz a base inteira.
+ * no botão da tela e no cron.
  */
+export interface TothActiveWindowInput {
+  /** Janela em dias. `null` traz a base inteira. */
+  dias: number | null;
+  /** Códigos de marca, separados por vírgula. `null` não manda o parâmetro. */
+  marcas: string | null;
+  /** Deixar de fora quem não tem último pedido faturado. */
+  somenteComCompra: boolean;
+}
+
 export function useUpdateTothActiveWindow() {
   const { organizationId } = useOrganization();
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (dias: number | null) => {
+    mutationFn: async (input: TothActiveWindowInput) => {
       if (!organizationId) throw new Error("Sem organização");
       const { error } = await tothConnectionsTable()
-        .update({ clientes_dias_compras: dias })
+        .update({
+          clientes_dias_compras: input.dias,
+          clientes_marcas: input.marcas,
+          clientes_somente_com_compra: input.somenteComCompra,
+        })
         .eq("organization_id", organizationId);
       if (error) throw error;
     },
