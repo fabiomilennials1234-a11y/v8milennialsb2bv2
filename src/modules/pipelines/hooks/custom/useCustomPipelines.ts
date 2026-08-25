@@ -602,24 +602,98 @@ export function useUpdateCustomPipeline() {
   });
 }
 
-/** Desativar funil customizado (soft delete) */
+/**
+ * O que o hard delete vai destruir. Contagens medidas no banco, não estimadas.
+ * `eventos_etapa` é o caderno de métricas do funil (ADR-0017) — ele NÃO volta.
+ */
+export interface CustomPipelineDeleteImpact {
+  cards: number;
+  leads: number;
+  etapas: number;
+  membros: number;
+  eventos_etapa: number;
+  vendas_orfas: number;
+  negocios_orfaos: number;
+  automacoes: number;
+  disparos_em_voo: number;
+  /**
+   * Card de OUTRO funil parado numa etapa deste. `> 0` IMPEDE a exclusão, e o
+   * botão fica desabilitado — não é aviso, é bloqueio.
+   *
+   * A FK `custom_pipe_entries.stage_id` não exige que a etapa pertença ao mesmo
+   * funil da entry (3 casos medidos em prod, 25/08). Consertar sozinho não é
+   * opção: repontuar dispara `stage_changed` e pode MANDAR MENSAGEM para um
+   * lead que não tem nada a ver com este funil; apagar destrói card de um funil
+   * que pode estar ativo.
+   */
+  cards_invasores: number;
+}
+
+/** Resultado do delete: o impacto medido + o que foi neutralizado junto. */
+export interface CustomPipelineDeleteResult extends CustomPipelineDeleteImpact {
+  automacoes_desativadas: number;
+  disparos_neutralizados: number;
+}
+
+/**
+ * Prévia do estrago, para o diálogo de confirmação. Só busca com o diálogo
+ * aberto — é uma contagem cara e ninguém precisa dela antes de decidir.
+ */
+export function useCustomPipelineDeleteImpact(
+  pipelineId: string | undefined,
+  enabled: boolean,
+) {
+  return useQuery({
+    queryKey: ["custom_pipeline_delete_impact", pipelineId],
+    queryFn: async () => {
+      const { data, error } = await (supabase.rpc as any)(
+        "custom_pipeline_delete_impact",
+        { p_pipeline_id: pipelineId },
+      );
+      if (error) throw error;
+      return data as CustomPipelineDeleteImpact;
+    },
+    enabled: !!pipelineId && enabled,
+    staleTime: 0,
+  });
+}
+
+/**
+ * Excluir funil customizado — HARD DELETE (era soft delete até 2026-08-25).
+ *
+ * Via RPC, não `.delete()`: são 4 statements que precisam cair juntos, dois
+ * deles em tabelas (`workflows`, `blast_plans`) que o membro comum não
+ * necessariamente pode atualizar, e `.delete()` sem `.select()` não distingue
+ * "apagou" de "a RLS não casou com nada".
+ */
 export function useDeleteCustomPipeline() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("custom_pipelines")
-        .update({ is_active: false })
-        .eq("id", id);
-
+      const { data, error } = await (supabase.rpc as any)("delete_custom_pipeline", {
+        p_pipeline_id: id,
+      });
       if (error) throw error;
+      return data as CustomPipelineDeleteResult;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
-      queryClient.invalidateQueries({ queryKey: ["custom_pipeline"] });
-      queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages"] });
-      queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+      // As 4 primeiras já existiam. As demais são as chaves que continuavam
+      // servindo o funil excluído — a lista de Leads (`leads-deals`) e o painel
+      // do Lead (`lead-pipes`) eram os dois vazamentos mais visíveis.
+      [
+        "custom_pipelines",
+        "custom_pipeline",
+        "custom_pipeline_stages",
+        "custom_pipe_entries",
+        "custom_pipe_stage_counts",
+        "pipelines", // tabela-espelho — o trigger apagou a linha lá também
+        "lead-pipes",
+        "lead_all_pipelines",
+        "leads-deals",
+        "workflows",
+        "blast_plans",
+      ].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
     },
   });
 }

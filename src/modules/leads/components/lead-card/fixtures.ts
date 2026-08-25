@@ -136,6 +136,12 @@ export const LEAD_EXEMPLO: LeadCardData = {
         { chave: "documento", rotulo: "CNPJ", valor: null, tipo: "documento", vazio: "Informe o CNPJ" },
         { chave: "site", rotulo: "Site", valor: null, tipo: "url", vazio: "www.exemplo.com.br" },
         { chave: "nascimento", rotulo: "Data de fundação", valor: null, tipo: "data", vazio: "dd/mm/aaaa" },
+        // Campos da organização JÁ RESPONDIDOS. Sobem para o Perfil porque é o
+        // que o formulário trouxe sobre esta empresa — ver o bloco de decisão
+        // em `useLeadCardData`.
+        { chave: "c1", rotulo: "Marca própria", valor: "Sim", personalizado: true },
+        { chave: "c2", rotulo: "Comprador", valor: "Ellen (compras)", personalizado: true },
+        { chave: "c4", rotulo: "Prazo de pagamento", valor: "28 dias", personalizado: true },
       ],
     },
     {
@@ -157,12 +163,10 @@ export const LEAD_EXEMPLO: LeadCardData = {
       ],
     },
     {
-      titulo: "Campos da organização",
+      titulo: "Campos a preencher",
       campos: [
-        { chave: "c1", rotulo: "Marca própria", valor: "Sim", personalizado: true },
-        { chave: "c2", rotulo: "Comprador", valor: "Ellen (compras)", personalizado: true },
         { chave: "c3", rotulo: "Transportadora", valor: null, personalizado: true, vazio: "Não informado" },
-        { chave: "c4", rotulo: "Prazo de pagamento", valor: "28 dias", personalizado: true },
+        { chave: "c5", rotulo: "Volume por pedido", valor: null, personalizado: true, vazio: "Não informado" },
       ],
     },
   ],

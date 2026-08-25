@@ -14,6 +14,7 @@ import type {
   LeadCardData,
   LeadCardDeal,
   LeadCardEvent,
+  LeadCardField,
   LeadCardFieldGroup,
   TipoDeEvento,
 } from "./types";
@@ -100,6 +101,64 @@ function diasDesde(iso: string | null | undefined): number | null {
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return null;
   return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
+}
+
+/**
+ * ── CAMPO DA ORG RESPONDIDO SOBE PARA O PERFIL ────────────────────────────
+ * Decisão do CTO (25/08): o que veio do FORMULÁRIO — comprador, prazo, volume,
+ * o que cada org perguntou no seu funil — é dado de qualificação, e estava
+ * atrás da ÚLTIMA aba de uma coluna de 356px. Quem abre o negócio para decidir
+ * não ia até lá; na prática o lead chegava qualificado e a resposta morria a
+ * dois cliques de distância.
+ *
+ * O corte deixa de ser "de onde o campo veio" (sistema × org) e passa a ser
+ * "alguém já respondeu isto":
+ *   · respondido    → entra no Perfil, junto de nome/e-mail/telefone;
+ *   · nunca tocado  → fica em "Campos a preencher", que continua VISÍVEL pelo
+ *                     mesmo motivo de sempre (sumir é o que faz ninguém
+ *                     preencher) e agora diz na aba o que espera de quem lê.
+ *
+ * Cada campo aparece em exatamente UM dos dois. Uma aba "Campos da organização"
+ * repetindo os respondidos seria a segunda verdade que este arquivo existe para
+ * evitar.
+ *
+ * ── POR QUE "TEM LINHA" E NÃO "O VALOR NÃO ESTÁ VAZIO" ────────────────────
+ * A diferença aparece no segundo em que alguém APAGA o conteúdo de um campo do
+ * Perfil: pelo valor, o campo pularia de aba embaixo do cursor de quem acabou
+ * de editá-lo. Pela linha em `lead_custom_field_values`, ele fica onde está,
+ * vazio, e pode ser repreenchido ali mesmo. Campo nunca respondido não tem
+ * linha e continua na outra aba.
+ * O custo são 115 linhas de valor vazio em 64.397 (prod, 25/08) subindo para o
+ * Perfil — 0,2%, todas de webhook que gravou string vazia.
+ *
+ * Escala: média de 4 respondidos por lead, p90 = 9, 27 no pior lead de prod. O
+ * Perfil cresce com o que tem dado, não com os 38 rótulos vazios da maior org.
+ *
+ * ⚠️ `tipo` fica de fora de propósito. `field_type` da definição conhece
+ * `date`, e virar `tipo: "data"` poria um `<input type="date">` na frente de
+ * valor que veio de webhook em formato livre ("31/12/2024"): o input recusa,
+ * mostra vazio, e o primeiro blur GRAVA o vazio por cima. Texto não perde dado.
+ */
+export function separarCamposDaOrg(
+  definicoes: { id: string; field_name: string }[],
+  valores: { field_id: string; value: string | null }[],
+): { respondidos: LeadCardField[]; aPreencher: LeadCardField[] } {
+  const porDefinicao = new Map(valores.map((v) => [v.field_id, v.value]));
+  const respondidos: LeadCardField[] = [];
+  const aPreencher: LeadCardField[] = [];
+
+  for (const d of definicoes) {
+    const campo: LeadCardField = {
+      chave: d.id,
+      rotulo: d.field_name,
+      valor: porDefinicao.get(d.id) ?? null,
+      personalizado: true,
+      vazio: "Não informado",
+    };
+    (porDefinicao.has(d.id) ? respondidos : aPreencher).push(campo);
+  }
+
+  return { respondidos, aPreencher };
 }
 
 export interface LeadCardSource {
@@ -238,14 +297,10 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       (a, b) => new Date(b.quando).getTime() - new Date(a.quando).getTime(),
     );
 
-    const porDefinicao = new Map(valores.map((v) => [v.field_id, v.value]));
-    const camposDaOrg = definicoes.map((d) => ({
-      chave: d.id,
-      rotulo: d.field_name,
-      valor: porDefinicao.get(d.id) ?? null,
-      personalizado: true,
-      vazio: "Não informado",
-    }));
+    const { respondidos: orgPreenchidos, aPreencher: orgVazios } = separarCamposDaOrg(
+      definicoes,
+      valores,
+    );
 
     // ⚠️ A `chave` de campo do sistema É O NOME DA COLUNA em `leads` — o
     // container a usa direto no `update`. Rótulo em português aqui grava
@@ -265,6 +320,10 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
           { somenteLeitura: true, chave: "documento", rotulo: "CPF / CNPJ", valor: null, tipo: "documento", vazio: "Informe o documento" },
           { somenteLeitura: true, chave: "site", rotulo: "Site", valor: null, tipo: "url", vazio: "www.exemplo.com.br" },
           { somenteLeitura: true, chave: "nascimento", rotulo: "Nascimento / fundação", valor: null, tipo: "data", vazio: "dd/mm/aaaa" },
+          // O que a org perguntou no formulário e o lead respondeu. Vem por
+          // último para não empurrar telefone e e-mail para baixo da dobra da
+          // coluna — a ordem é "quem é" antes de "o que respondeu".
+          ...orgPreenchidos,
         ],
       },
       {
@@ -288,8 +347,8 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
           { somenteLeitura: true, chave: "qualification_tier", rotulo: "Qualificação", valor: texto(l, "qualification_tier"), tipo: "texto", vazio: "Sem qualificação" },
         ],
       },
-      ...(camposDaOrg.length > 0
-        ? [{ titulo: "Campos da organização", campos: camposDaOrg }]
+      ...(orgVazios.length > 0
+        ? [{ titulo: "Campos a preencher", campos: orgVazios }]
         : []),
     ];
 

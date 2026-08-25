@@ -104,7 +104,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       const isSystem = negocioBase!.isSystem;
       const stageType = SLUG_TO_STAGE_TYPE[negocioBase!.pipelineSlug] ?? negocioBase!.pipelineSlug;
 
-      const [entryRes, etapasRes, movRes, amostraRes, ativRes] = await Promise.all([
+      const [entryRes, etapasRes, movRes, amostraRes, ativRes, tarefasRes] = await Promise.all([
         supabase
           .from("pipeline_entries")
           // `deal_id` entra aqui para o negócio poder ser lido de `deals`.
@@ -158,6 +158,28 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
               .order("created_at", { ascending: false })
               .limit(50)
           : Promise.resolve({ data: [] as Linha[] }),
+
+        /**
+         * ── AS TAREFAS DESTE NEGÓCIO ──────────────────────────────────────
+         * Follow-up e ação do dia passaram a ser do Negócio (decisão do CTO,
+         * 2026-08-25 — mesma regra do checklist). A aba "Atividades" lia só
+         * `activities`, que tem **0 linhas em produção**: ela abria vazia para
+         * todo mundo desde que nasceu. Agora ela mostra o que existe.
+         *
+         * Filtra por ENTRADA, não por lead: tarefa presa a outro negócio da
+         * mesma pessoa é trabalho de outro card. As da pessoa
+         * (`pipeline_entry_id` nulo) também não entram aqui — elas aparecem na
+         * ficha do Lead, que é de quem elas são.
+         */
+        entryId
+          ? supabase
+              .from("follow_ups")
+              .select("id, title, description, due_date, completed_at, created_at, is_automated, priority")
+              .eq("pipeline_entry_id", entryId)
+              .is("archived_at", null)
+              .order("due_date", { ascending: true })
+              .limit(50)
+          : Promise.resolve({ data: [] as Linha[] }),
       ]);
 
       /**
@@ -192,6 +214,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         movimentos: (movRes.data ?? []) as Linha[],
         amostra: (amostraRes.data ?? []) as Linha[],
         atividades: (ativRes.data ?? []) as Linha[],
+        tarefas: (tarefasRes.data ?? []) as Linha[],
         negocio: (negocioRes?.data ?? null) as Linha | null,
         itens: (itensRes?.data ?? []) as Linha[],
         /**
@@ -412,7 +435,29 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       movimentacoes,
       nota: typeof entry?.notes === "string" ? entry.notes : "",
 
-      atividades: (extras.data?.atividades ?? []).map((a) => {
+      /**
+       * As tarefas do negócio entram na MESMA lista da aba, e antes das
+       * `activities`: as duas respondem "o que foi feito / o que falta fazer
+       * com esta pessoa neste negócio", e separá-las em duas listas obrigaria o
+       * vendedor a olhar em dois lugares para montar o dia dele.
+       */
+      atividades: ([
+        ...(extras.data?.tarefas ?? []).map((t) => {
+          const txt = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : null);
+          return {
+            id: String(t.id),
+            tipo: "task",
+            titulo: txt(t.title) ?? "Tarefa",
+            descricao: txt(t.description),
+            resultado: txt(t.priority) === "urgent" || txt(t.priority) === "high"
+              ? `prioridade ${String(t.priority)}`
+              : null,
+            automatica: t.is_automated === true,
+            quando: txt(t.completed_at) ?? txt(t.due_date) ?? String(t.created_at ?? ""),
+            concluida: txt(t.completed_at) !== null,
+          };
+        }),
+        ...(extras.data?.atividades ?? []).map((a) => {
         const txt = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : null);
         return {
           id: String(a.id),
@@ -428,7 +473,8 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
           quando: txt(a.completed_at) ?? txt(a.due_date) ?? String(a.created_at ?? ""),
           concluida: txt(a.completed_at) !== null,
         };
-      }),
+        }),
+      ]),
 
       // Mesmo mapeamento do card do Lead (`useLeadCardData.ts:123-135`), sobre a
       // MESMA lista que já está em memória — `useLeadsDeals` foi consultado no

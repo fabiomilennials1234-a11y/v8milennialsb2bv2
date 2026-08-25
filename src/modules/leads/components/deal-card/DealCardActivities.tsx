@@ -15,10 +15,23 @@ import type { DealCardActivity } from "./types";
  * moram na agenda e nos checklists, que já têm as regras de dono, prazo e
  * gamificação penduradas. Um segundo lugar de escrita aqui seria um segundo
  * conjunto dessas regras.
+ *
+ * ── O QUE ENTROU EM 25/08 ─────────────────────────────────────────────────
+ * Follow-up e ação do dia passaram a ser DO NEGÓCIO (decisão do CTO, mesma
+ * regra do checklist). Eles chegam aqui na mesma lista, com `tipo: "task"`,
+ * porque as duas coisas respondem à mesma pergunta do vendedor: o que já foi
+ * feito e o que ainda falta neste negócio.
+ *
+ * Importa registrar por que a aba precisava disso: `activities` tem **0 linhas
+ * em produção**. A aba abria vazia para todo mundo, todos os dias, desde que
+ * nasceu — uma aba que nunca mostra nada ensina a não clicar em aba nenhuma.
  */
 
 /** `activities.type` é texto livre no banco — o mapa cobre o que a org usa. */
 const ICONE: Record<string, typeof Phone> = {
+  // `task` é o follow-up / ação do dia do NEGÓCIO — a única linha desta aba que
+  // ainda vai acontecer, e não um registro do que já aconteceu.
+  task: Check,
   call: Phone,
   ligacao: Phone,
   meeting: Users,
@@ -28,7 +41,6 @@ const ICONE: Record<string, typeof Phone> = {
   message: MessageCircle,
   note: StickyNote,
   nota: StickyNote,
-  task: Check,
   tarefa: Check,
 };
 
@@ -48,7 +60,7 @@ export function DealCardActivities({ atividades }: { atividades: DealCardActivit
   if (atividades.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border py-8 text-center text-[12.5px] text-muted-foreground">
-        Nenhuma atividade registrada para este lead.
+        Nenhuma tarefa ou atividade neste negócio.
       </p>
     );
   }

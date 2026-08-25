@@ -102,7 +102,12 @@ export function useLeadDetail(leadId: string | null, isOpen: boolean) {
         supabase.from("pipe_propostas").select("*").eq("lead_id", leadId),
         supabase
           .from("custom_pipe_entries")
-          .select("*, stage:custom_pipeline_stages(name, color), pipeline:custom_pipelines(name)")
+          // `is_active` entra no embed só para peneirar abaixo. Filtrar pela
+          // coluna embutida (`.eq("pipeline.is_active", true)`) exigiria
+          // `!inner`, e embed com filtro é justamente onde o PostgREST devolve
+          // PGRST201 quando a relação fica ambígua — não vale o risco por uma
+          // peneira de 1 linha.
+          .select("*, stage:custom_pipeline_stages(name, color), pipeline:custom_pipelines(name, is_active)")
           .eq("lead_id", leadId),
         supabase.from("follow_ups").select("*").eq("lead_id", leadId),
       ]);
@@ -110,7 +115,14 @@ export function useLeadDetail(leadId: string | null, isOpen: boolean) {
         whatsapp: whatsapp.data || [],
         confirmacao: confirmacao.data || [],
         propostas: propostas.data || [],
-        customEntries: customEntries.data || [],
+        // Funil excluído não é membership — o painel do Lead listava o funil
+        // "excluído" junto com os ativos porque nada aqui filtrava.
+        // `!== false` e não `=== true`: a coluna é nullable e NULL significa
+        // "nunca foi desativado" (o default é true). Só o `false` explícito
+        // esconde o funil.
+        customEntries: (customEntries.data || []).filter(
+          (e) => e.pipeline?.is_active !== false,
+        ),
         followUps: followUps.data || [],
       };
     },
