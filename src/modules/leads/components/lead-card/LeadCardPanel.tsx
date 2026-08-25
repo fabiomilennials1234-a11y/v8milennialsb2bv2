@@ -21,7 +21,7 @@ import { LeadCardNewDeal } from "./LeadCardNewDeal";
  * Lead↔Negócio não tirar nada de ninguém.
  */
 export const LeadCardPanel = memo(function LeadCardPanel() {
-  const { isOpen, leadId, close } = useLeadSheet();
+  const { isOpen, leadId, close, comentarioDestacadoId } = useLeadSheet();
   const { openDeal } = useDealSheet();
   const { isMobile } = useViewport();
 
@@ -53,6 +53,7 @@ export const LeadCardPanel = memo(function LeadCardPanel() {
       <LeadCardContainer
         leadId={leadId}
         isOpen={isOpen}
+        comentarioDestacadoId={comentarioDestacadoId}
         /**
          * Fecha ESTE painel antes de abrir o do Negócio.
          *

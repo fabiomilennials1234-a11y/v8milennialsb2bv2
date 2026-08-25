@@ -104,6 +104,7 @@ export function LeadCard({
   onEditarComentario,
   onApagarComentario,
   comentando,
+  comentarioDestacadoId,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -125,6 +126,8 @@ export function LeadCard({
   onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
   onApagarComentario?: (id: string) => void | Promise<void>;
   comentando?: boolean;
+  /** `?comment=` da notificação de menção — rola até ele e o destaca. */
+  comentarioDestacadoId?: string | null;
 }) {
   const [aba, setAba] = useState<Aba>("historico");
   const [nota, setNota] = useState(lead.nota);
@@ -366,6 +369,7 @@ export function LeadCard({
                 onEditarComentario={onEditarComentario}
                 onApagarComentario={onApagarComentario}
                 comentando={comentando}
+                comentarioDestacadoId={comentarioDestacadoId}
               />
             )}
             {aba === "negocios" && (

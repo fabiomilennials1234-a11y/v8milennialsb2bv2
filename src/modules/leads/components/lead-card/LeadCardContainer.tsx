@@ -41,11 +41,14 @@ export function LeadCardContainer({
   onNewDeal,
   forma = "card",
   onAbrirFicha,
+  comentarioDestacadoId = null,
 }: {
   leadId: string | null;
   isOpen: boolean;
   onOpenDeal?: (entryId: string, leadId: string) => void;
   onNewDeal?: () => void;
+  /** `?comment=` da notificação de menção — rola até ele e o destaca. */
+  comentarioDestacadoId?: string | null;
   /**
    * `card` é a ficha inteira; `coluna` é a faixa de 356px que o painel do
    * Negócio encosta à esquerda (o print do DataCrazy).
@@ -250,6 +253,7 @@ export function LeadCardContainer({
       onComentar={leadId && organizacaoId ? comentar : undefined}
       onEditarComentario={leadId ? editarComentario : undefined}
       onApagarComentario={leadId ? apagarComentario : undefined}
+      comentarioDestacadoId={comentarioDestacadoId}
       comentando={criarComentario.isPending}
       onToggleCopilot={(ativo) =>
         leadId && toggleAI.mutate({ leadId, disabled: !ativo })

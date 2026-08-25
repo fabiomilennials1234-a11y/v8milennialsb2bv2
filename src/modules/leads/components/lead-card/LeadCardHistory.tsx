@@ -270,6 +270,7 @@ export function LeadCardHistory({
   onEditarComentario,
   onApagarComentario,
   comentando,
+  comentarioDestacadoId,
 }: {
   eventos: LeadCardEvent[];
   /**
@@ -281,12 +282,51 @@ export function LeadCardHistory({
   onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
   onApagarComentario?: (id: string) => void | Promise<void>;
   comentando?: boolean;
+  /**
+   * Comentário a destacar quando o card abre — é o `?comment=` que a
+   * notificação de menção carrega. Ausente na esmagadora maioria das aberturas.
+   */
+  comentarioDestacadoId?: string | null;
 }) {
   const [filtro, setFiltro] = useState<TipoDeEvento | "todos">("todos");
   const [escrevendo, setEscrevendo] = useState(false);
   const [texto, setTexto] = useState("");
   const campo = useRef<HTMLTextAreaElement>(null);
+  const lista = useRef<HTMLOListElement>(null);
   const visiveis = filtro === "todos" ? eventos : eventos.filter((e) => e.tipo === filtro);
+
+  /**
+   * Rolar até o comentário da menção e piscar nele.
+   *
+   * Depende de `visiveis` porque o histórico chega DEPOIS do card abrir: no
+   * primeiro render a lista está vazia e não há para onde rolar. O destaque
+   * dura 2s e some sozinho — deixá-lo permanente mentiria assim que a pessoa
+   * clicasse em qualquer outra coisa.
+   *
+   * `scrollIntoView` é chamado com guarda porque o jsdom não o implementa: sem
+   * o `?.`, todo teste que montar esta seção quebraria por uma animação.
+   *
+   * ⚠️ Duas armadilhas evitadas de propósito:
+   *   · a dependência é `visiveis.length`, não `visiveis`. O array é recriado a
+   *     cada render, e `setPiscando` re-renderiza — depender do array faria o
+   *     efeito se realimentar em laço;
+   *   · a busca varre os nós em vez de montar um seletor. O id vem da URL, e um
+   *     valor torto dentro de `querySelector` estoura `SyntaxError` em vez de
+   *     simplesmente não achar nada.
+   */
+  const [piscando, setPiscando] = useState<string | null>(null);
+  useEffect(() => {
+    if (!comentarioDestacadoId) return;
+    const nos = lista.current?.querySelectorAll<HTMLElement>("[data-comentario-id]");
+    const alvo = nos
+      ? Array.from(nos).find((n) => n.dataset.comentarioId === comentarioDestacadoId)
+      : undefined;
+    if (!alvo) return;
+    alvo.scrollIntoView?.({ behavior: "smooth", block: "center" });
+    setPiscando(comentarioDestacadoId);
+    const t = setTimeout(() => setPiscando(null), 2000);
+    return () => clearTimeout(t);
+  }, [comentarioDestacadoId, visiveis.length]);
 
   const publicar = async () => {
     const limpo = texto.trim();
@@ -414,12 +454,22 @@ export function LeadCardHistory({
         })}
       </div>
 
-      <ol className="flex flex-col">
+      <ol ref={lista} className="flex flex-col">
         {visiveis.map((e, i) => {
           const Icone = ICONE[e.tipo];
           const ultimo = i === visiveis.length - 1;
           return (
-            <li key={e.id} className="relative flex gap-3 pb-3 last:pb-0">
+            <li
+              key={e.id}
+              // A âncora vai no id do COMENTÁRIO, não no do evento: o evento é
+              // `comentario:<uuid>` e quem chega pela notificação traz o uuid nu.
+              data-comentario-id={e.comentario?.id}
+              className={cn(
+                "relative flex gap-3 pb-3 last:pb-0",
+                piscando && e.comentario?.id === piscando &&
+                  "-mx-2 rounded-lg bg-amber-500/15 px-2 ring-1 ring-amber-500/35 transition-colors",
+              )}
+            >
               {/* O fio herda a cor do evento de cima — a coluna vira uma leitura
                   cromática do que andou nesta relação, sem ler uma palavra. */}
               {!ultimo && (
