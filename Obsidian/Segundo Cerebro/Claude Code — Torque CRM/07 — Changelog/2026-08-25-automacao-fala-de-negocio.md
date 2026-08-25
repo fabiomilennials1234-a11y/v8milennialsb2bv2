@@ -116,8 +116,46 @@ entrada e não no negócio, aparecendo na primeira medição.
 Front conferido por literal nos três chunks (`index`, `workflow`,
 `AutomacoesEditor`) — está no ar.
 
+## Fatia 6 — follow-up e ação do dia (mesmo dia, PR #1831)
+
+Segunda decisão do CTO: *"follow-up e ação do dia seguem o checklist, do
+negócio"*. Aplicada em prod às ~15:05 UTC, ledger `20270828000030`.
+
+Duas diferenças em relação ao checklist, e as duas são de propósito:
+
+**`ON DELETE SET NULL`, não CASCADE.** Uma tarefa tem dono e prazo e está na
+agenda de alguém. Apagar o card não pode apagar o compromisso. O checklist do
+negócio morre com o card porque sem card ele não tem assunto; a tarefa não.
+
+**Aqui há backfill.** `follow_ups` já carregava meia-ponte — `source_pipe`
+(text) + `source_pipe_id` (uuid, sem FK). Medido: **373 das 1.185 linhas já
+diziam de qual card vieram**, e 63 apontavam para card que não existe mais.
+Idem `acoes_do_dia.proposta_id` (10 de 10). Copiar isso registra um fato já
+escrito; no checklist eu estaria inventando um. Números do apply, conferidos
+pelo controle positivo antes do COMMIT: **373 / 10 / 63 órfãos preservados**.
+
+### O ensaio pagou por si de novo
+
+A guarda `f.lead_id = pe.lead_id` funciona em `follow_ups` (coluna NOT NULL).
+Em `acoes_do_dia` ela descartava **as 10 linhas em silêncio**: todas têm
+`lead_id` NULO — a ação sabe de qual card veio e não sabe de qual pessoa. A
+guarda de lá virou "não contradiz", e o `lead_id` que falta é preenchido do
+card no mesmo passo.
+
+### De brinde
+
+A aba "Atividades" do card do Negócio deixa de nascer vazia. Ela lia só
+`activities`, que tem **0 linhas em produção** — abria vazia para todo mundo
+desde que nasceu. Agora mostra as tarefas do negócio.
+
+### Uma colisão de timestamp evitada
+
+A migration nasceu `20270828000010` e colidiu com
+`metrics_studio_panel_por_org`, que entrou na main enquanto isto era escrito.
+Renomeada para `...030`. Colisão de prefixo faz o CLI pular uma delas em
+silêncio, e o ledger dá falso verde.
+
 ## O que NÃO foi feito
-- Follow-up e ação do dia continuam da pessoa. É a próxima pergunta ao CTO.
 - O card entrando no funil sem virar Negócio (353 contra 14) é assunto
   separado — `lead-webhook` cria o card e ninguém abre o negócio.
 
