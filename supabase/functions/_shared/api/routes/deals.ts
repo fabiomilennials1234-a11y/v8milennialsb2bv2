@@ -8,6 +8,13 @@
  * público: o cliente guarda o cursor entre chamadas, e cursor que muda de chave
  * faz o polling pular ou repetir registro silenciosamente.
  *
+ * ── FILTRAR POR CRIAÇÃO NÃO É ORDENAR POR CRIAÇÃO ─────────────────────────
+ * `created_from`/`created_to` recortam por `created_at` e NÃO mexem na ordem —
+ * o keyset continua sendo a última atividade. Ordenar por criação só quando o
+ * filtro aparecesse daria dois contratos de cursor na mesma rota, e o cursor é
+ * opaco: quem pagina guarda a string e não tem como saber que a chave por trás
+ * dela mudou.
+ *
  * ── UM NEGÓCIO DE OUTRA ORG É 404, NÃO 403 ────────────────────────────────
  * Inexistente e alheio têm de ser indistinguíveis de fora. 403 no segundo caso
  * confirmaria ao chamador que aquele identificador existe em alguma organização
@@ -67,33 +74,62 @@ export function serializeDealRow(r: DealRow): Record<string, unknown> {
   };
 }
 
+/**
+ * Instante de recorte, ou o erro de quem escreveu a data errado.
+ *
+ * Instante ilegível NÃO pode virar "sem corte". O conector receberia a base
+ * inteira achando que recebeu só a fatia, e processaria tudo de novo — em fluxo
+ * que dispara mensagem, isso é reenvio em massa para o cliente final.
+ *
+ * Normaliza para ISO: o banco compara timestamptz, e deixar o formato do
+ * chamador chegar cru faria "2026-08-01" ser interpretado no fuso do servidor em
+ * vez de UTC, deslocando o corte em três horas sem ninguém perceber.
+ */
+function instante(
+  params: URLSearchParams,
+  nome: string,
+): { valor: string | null } | { erroCode: string } {
+  const bruto = params.get(nome);
+  if (bruto === null) return { valor: null };
+  const t = Date.parse(bruto);
+  if (Number.isNaN(t)) return { erroCode: `invalid_${nome}` };
+  return { valor: new Date(t).toISOString() };
+}
+
 export async function listDeals(ctx: ApiRouteContext): Promise<Response> {
   const url = new URL(ctx.req.url);
   const limit = parseLimit(url.searchParams);
   const cursor = decodeCursor(url.searchParams.get("cursor"));
 
-  // ── updated_since ────────────────────────────────────────────────────────
-  //
-  // Instante ilegível NÃO pode virar "sem corte". O conector receberia a base
-  // inteira achando que recebeu só o delta, e processaria tudo de novo — em
-  // fluxo que dispara mensagem, isso é reenvio em massa para o cliente final.
-  //
-  // Normaliza para ISO: o banco compara timestamptz, e deixar o formato do
-  // chamador chegar cru faria "2026-08-01" ser interpretado no fuso do servidor
-  // em vez de UTC, deslocando o corte em três horas sem ninguém perceber.
-  const desde = url.searchParams.get("updated_since");
-  let updatedSince: string | null = null;
-  if (desde !== null) {
-    const t = Date.parse(desde);
-    if (Number.isNaN(t)) {
+  // `updated_since` é ponteiro de sincronização (exclusivo, sobre a última
+  // atividade); `created_from`/`created_to` são janela de CRIAÇÃO (inclusivos).
+  // São perguntas diferentes e convivem: um Negócio criado ontem e editado hoje
+  // entra nas duas.
+  const cortes: Record<string, string | null> = {};
+  for (const nome of ["updated_since", "created_from", "created_to"]) {
+    const r = instante(url.searchParams, nome);
+    if ("erroCode" in r) {
       return apiError(
         422,
-        "invalid_updated_since",
-        "updated_since deve ser uma data ISO 8601, por exemplo 2026-08-01T00:00:00Z",
+        r.erroCode,
+        `${nome} deve ser uma data ISO 8601, por exemplo 2026-08-01T00:00:00Z`,
         ctx.cors,
       );
     }
-    updatedSince = new Date(t).toISOString();
+    cortes[nome] = r.valor;
+  }
+
+  // Janela invertida devolve lista vazia, e vazio é indistinguível de "não há
+  // Negócio nesse período" — o cenário seguiria adiante achando que terminou.
+  const de = cortes.created_from;
+  const ate = cortes.created_to;
+  if (de !== null && ate !== null && de > ate) {
+    return apiError(
+      422,
+      "invalid_created_range",
+      "created_from é posterior a created_to — a janela está invertida",
+      ctx.cors,
+    );
   }
 
   const supabase = ctx.supabase as unknown as RpcClient;
@@ -103,7 +139,9 @@ export async function listDeals(ctx: ApiRouteContext): Promise<Response> {
     p_stage: url.searchParams.get("stage"),
     p_owner_id: url.searchParams.get("owner_id"),
     p_status: url.searchParams.get("status"),
-    p_updated_since: updatedSince,
+    p_updated_since: cortes.updated_since,
+    p_created_from: de,
+    p_created_to: ate,
     p_limit: limit + 1, // +1 para saber se há próxima página
     p_cursor_last_activity: cursor?.created_at ?? null,
     p_cursor_id: cursor?.id ?? null,

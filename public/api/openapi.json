@@ -83,7 +83,8 @@
           "created_at": {
             "type": "string",
             "format": "date-time",
-            "nullable": true
+            "nullable": true,
+            "description": "Quando o NEGÓCIO foi aberto. Não é a data do Lead: o Lead é a pessoa, e pode ter Negócios de anos diferentes. Recorte por ela com `created_from`/`created_to` em GET /api/v1/deals."
           },
           "last_activity_at": {
             "type": "string",
@@ -1426,7 +1427,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "description": "Lista Negócios da organização. Cursor keyset por `(last_activity_at, id)` — **não** por criação. Use `updated_since` para sincronização incremental: traz o que mudou, incluindo mudança de etapa. Escopo: deal:read.",
+        "description": "Lista Negócios da organização. Cursor keyset por `(last_activity_at, id)` — **não** por criação. Use `updated_since` para sincronização incremental (traz o que mudou, incluindo mudança de etapa) e `created_from`/`created_to` para recortar por data de ABERTURA do Negócio. Os dois recortes convivem e respondem perguntas diferentes. Filtrar por criação **não** reordena: a paginação segue por `last_activity_at`. Escopo: deal:read.",
         "parameters": [
           {
             "name": "pipeline",
@@ -1474,6 +1475,24 @@
             "description": "ISO 8601. Traz Negócios com atividade DEPOIS deste instante — inclusive os que só mudaram de etapa. Valor ilegível responde 422, nunca a base inteira."
           },
           {
+            "name": "created_from",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "ISO 8601, INCLUSIVO. Negócios com `created_at` a partir deste instante. Recorta pela abertura do Negócio — não pela criação do Lead, e não por atividade."
+          },
+          {
+            "name": "created_to",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "ISO 8601, INCLUSIVO. Negócios criados até este instante. Janela invertida (`created_from` > `created_to`) responde 422, nunca lista vazia."
+          },
+          {
             "name": "limit",
             "in": "query",
             "schema": {
@@ -1517,7 +1536,7 @@
             }
           },
           "422": {
-            "description": "invalid_updated_since",
+            "description": "invalid_updated_since, invalid_created_from, invalid_created_to, invalid_created_range",
             "content": {
               "application/json": {
                 "schema": {
@@ -1641,6 +1660,178 @@
           },
           "422": {
             "description": "missing_lead_id, inline_lead_not_supported, invalid_pipeline_or_stage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/deals/move": {
+      "post": {
+        "operationId": "api-bulk-move-deals",
+        "summary": "Mover negócios em lote",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "description": "Move até 100 Negócios para a mesma etapa numa chamada só. Cada item passa pela **mesma** regra do move unitário: mover é mover (nenhum card novo nasce) e destino em funil customizado é recusado.\n\n**Falha parcial é 200.** Um id inválido não derruba os outros: cada Negócio traz o próprio veredito em `results`, e `moved` diz quantos andaram de verdade — confira esse número, 200 não significa que a lista inteira moveu.\n\n**Erro de destino interrompe.** Funil ou etapa inexistentes falhariam igual em todos os itens; ao primeiro, o lote para e responde 422 com `details.moved` listando o que já tinha movido. Não retente a lista inteira.\n\nFluxo típico: `GET /api/v1/deals?stage=…&created_from=…&limit=100` → junte os `id` → este endpoint. Escopo: deal:write.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "deal_ids",
+                  "pipeline",
+                  "stage"
+                ],
+                "properties": {
+                  "deal_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "uuid"
+                    },
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "description": "Identificadores dos Negócios. Repetidos são movidos uma vez só. Acima de 100 recusa sem mover nada."
+                  },
+                  "pipeline": {
+                    "type": "string",
+                    "description": "Funil de destino, o mesmo para todos"
+                  },
+                  "stage": {
+                    "type": "string",
+                    "description": "Etapa de destino, a mesma para todos"
+                  },
+                  "owner_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "Responsável no destino"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado item a item — inclusive com falhas parciais",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "requested": {
+                      "type": "integer",
+                      "description": "Quantos Negócios distintos foram tentados"
+                    },
+                    "moved": {
+                      "type": "integer",
+                      "description": "Quantos andaram de verdade"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "deal_id": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "moved",
+                              "failed"
+                            ]
+                          },
+                          "pipeline": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Posição nova, confirmada pelo banco"
+                          },
+                          "stage": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "error": {
+                            "type": "object",
+                            "nullable": true,
+                            "properties": {
+                              "code": {
+                                "type": "string"
+                              },
+                              "message": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "missing_deal_ids, invalid_deal_ids, empty_deal_ids, too_many_deals, missing_pipeline, missing_stage, invalid_pipeline_or_stage, custom_pipeline_not_supported",
             "content": {
               "application/json": {
                 "schema": {
