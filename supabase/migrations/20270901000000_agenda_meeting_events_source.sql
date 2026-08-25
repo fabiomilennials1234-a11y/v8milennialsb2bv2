@@ -1,23 +1,30 @@
 -- Agenda: `meeting_events` como fonte de eventos (Source 5) + fim do fanout da Source 1.
 --
--- ── Por que esta migration existe com data de 29/08 e conteúdo de 30/07 ────
+-- ── Por que esta migration existe com data de 01/09 e conteúdo de 30/07 ────
 -- Ela NÃO introduz a Source 5 em produção: a Source 5 já está viva lá desde
 -- 2026-07-30, aplicada À MÃO. O arquivo correspondente nunca entrou no repo —
 -- ficou solto e untracked na worktree `wt-funis-main` — e o ledger do PROD não
 -- tem linha nenhuma para ela (o `20270730000000` do ledger é
 -- `torquecalls_voip_foundation`, outra coisa).
 --
--- ⚠️ O número é o da CAUDA, e não o da data real, e a escolha custou TRÊS
--- tentativas em uma tarde — o que é a lição, não o acidente:
+-- ⚠️ O número é o da CAUDA, e não o da data real. A escolha custou QUATRO
+-- tentativas — e as quatro juntas são a lição, não o acidente:
 --
 --   20270827000000  → o `20270827000010` foi ocupado pela `automacao_sujeito_negocio`
 --                     (PR #1822) enquanto esta branch esperava
---   20270828000010  → o mesmo slot foi ocupado pela `metrics_studio_panel_por_org`
---                     (PR #1824), **no repo E no ledger do PROD**, no intervalo
---                     de vinte minutos entre duas leituras do ledger nesta mesma
---                     sessão
---   20270829000000  → dia livre, longe da escada `20270828000x0` que as métricas
---                     estão subindo
+--   20270828000010  → ocupado pela `metrics_studio_panel_por_org` (PR #1824),
+--                     **no repo E no ledger do PROD**, no intervalo de vinte
+--                     minutos entre duas leituras do ledger na MESMA sessão
+--   20270829000000  → a PR #1816 renumerou o par de comentários e caiu **no
+--                     mesmo número**, porque partiu do mesmo topo de ledger e
+--                     fez o mesmo raciocínio ("pula pro dia seguinte"). As duas
+--                     mergearam e a `main` ficou com DUAS colisões
+--   20270901000000  → mês seguinte. Distância deliberada: `cauda + 10` é o que
+--                     todo mundo escolhe, e é por isso que todo mundo colide
+--
+-- 🔑 O padrão que emerge: **o número não é seu até estar mergeado**, e escolher
+-- perto da cauda é escolher o mesmo slot que a próxima pessoa. Salte um dia (ou
+-- um mês) e reconfira na hora do merge.
 --
 -- Duas mecânicas distintas exigem a cauda, e é preciso as duas:
 --   (1) `db push` RECUSA prefixo abaixo do topo já aplicado no ledger;
