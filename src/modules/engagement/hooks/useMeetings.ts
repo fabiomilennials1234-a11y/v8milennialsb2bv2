@@ -322,13 +322,29 @@ export function useDeleteMeeting() {
     mutationFn: async (id: string) => {
       if (!organizationId) throw new Error("Organização não disponível");
 
-      const { error } = await supabase
+      // 🚨 `count: "exact"` é load-bearing, não telemetria.
+      //
+      // Um DELETE que não casa NENHUMA linha — id de outra org, linha já
+      // apagada em outra aba, RLS negando — responde 204 com `error: null`,
+      // exatamente igual a um que apagou. Sem contar as linhas, o `onSuccess`
+      // canta "Reunião excluída" e o refetch traz o compromisso de volta: a
+      // tela mente sobre o que está gravado.
+      //
+      // O vizinho `useUpdateMeeting` já não tinha esse buraco porque usa
+      // `.select().single()`, e 0 linhas ali estoura `PGRST116`. Aqui a mesma
+      // garantia custa um `count`.
+      const { error, count } = await supabase
         .from("meetings" as "leads")
-        .delete()
+        .delete({ count: "exact" })
         .eq("id", id)
         .eq("organization_id", organizationId);
 
       if (error) throw error;
+      if (!count) {
+        throw new Error(
+          "Nada foi excluído — a reunião já não existe ou você não tem permissão para removê-la.",
+        );
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meetings"] });

@@ -225,6 +225,69 @@ export function rawEventId(event: UnifiedEvent): string {
   return event.id.startsWith(prefixo) ? event.id.slice(prefixo.length) : event.id;
 }
 
+// ─── Geometria do popover de detalhe ─────────────────────────────────────────
+
+/** Folga entre o popover e as bordas direita/esquerda/inferior da janela. */
+export const POPOVER_MARGEM = 16;
+
+/** Folga do topo. Menor que a de baixo — a faixa de cima é mais disputada. */
+export const POPOVER_TOPO = 8;
+
+/** Deslocamento do popover em relação ao ponto clicado. */
+const POPOVER_OFFSET_X = 14;
+const POPOVER_OFFSET_Y = 16;
+
+export interface CaixaDoPopover {
+  /** Coordenadas do clique, em espaço de viewport (`clientX`/`clientY`). */
+  x: number;
+  y: number;
+  /** Tamanho REAL do card já renderizado. */
+  largura: number;
+  altura: number;
+  vw: number;
+  vh: number;
+}
+
+/**
+ * Onde o popover pousa para caber inteiro na janela.
+ *
+ * 🚨 Esta função é chamada TODA VEZ que o card muda de tamanho, não só quando
+ * o clique muda de lugar — e essa é a regra que o defeito original violava.
+ * O bloco de confirmação da exclusão cresce o card ~72px DEPOIS que ele já foi
+ * grudado no rodapé por `top = vh - altura - MARGEM`; sem recalcular, os
+ * botões Cancelar/Excluir nascem abaixo da borda da janela. Como o card é
+ * `position: fixed`, não existe rolagem que os alcance: a lixeira vira um
+ * botão que não faz nada.
+ *
+ * O grude é nas quatro bordas, não só na de baixo: um clique colado na
+ * esquerda com um card largo produzia `left` negativo pelo mesmo motivo.
+ */
+export function posicionarPopover({
+  x,
+  y,
+  largura,
+  altura,
+  vw,
+  vh,
+}: CaixaDoPopover): { left: number; top: number } {
+  let left = x + POPOVER_OFFSET_X;
+  // Não coube à direita: espelha para o outro lado do cursor.
+  if (left + largura > vw - POPOVER_MARGEM) left = x - largura - POPOVER_OFFSET_X;
+  if (left < POPOVER_MARGEM) left = POPOVER_MARGEM;
+
+  let top = y - POPOVER_OFFSET_Y;
+  if (top + altura > vh - POPOVER_MARGEM) top = vh - altura - POPOVER_MARGEM;
+  if (top < POPOVER_TOPO) top = POPOVER_TOPO;
+
+  return { left, top };
+}
+
+/**
+ * Teto de altura do card. Card mais alto que a janela não tem posição boa —
+ * passa a rolar por dentro em vez de vazar pela borda.
+ */
+export const POPOVER_ALTURA_MAXIMA = `calc(100vh - ${POPOVER_TOPO + POPOVER_MARGEM}px)`;
+
 /** Iniciais do responsável — identifica o dono sem gastar a largura da pílula. */
 export function initialsOf(name: string | null | undefined): string {
   if (!name) return "";
