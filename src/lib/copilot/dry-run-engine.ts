@@ -357,6 +357,70 @@ const TOOL_ID_TO_OPENROUTER: Record<
   ],
 };
 
+/** Documento da KB, no mínimo que a tool precisa. */
+export interface PreviewDocument {
+  id: string;
+  file_name: string;
+  summary?: string | null;
+  send_when?: string | null;
+  status?: string | null;
+}
+
+/**
+ * Monta a tool `send_document` do preview a partir dos documentos REAIS do agente.
+ *
+ * Sem isto o Simular não consegue enviar mídia: `TOOL_ID_TO_OPENROUTER` não tem
+ * `send_document`, então o modelo nunca recebe a ferramenta e no máximo *diz* que
+ * mandou a foto. Toda queixa de "a IA anuncia e não envia" colhida por print do
+ * Simular era, em parte, essa lacuna — e a regra "anunciou, enviou" ficava
+ * impossível de verificar na tela.
+ *
+ * O formato da lista espelha `supabase/functions/agent-message/engine/build-tools.ts`
+ * (summary cortado em 80 chars + `send_when` inteiro) para o preview refletir o
+ * que o runtime realmente mostra ao modelo. Manter os dois em sincronia.
+ */
+export function buildSendDocumentTool(
+  documents: PreviewDocument[] | undefined,
+): OpenRouterToolDef[] {
+  const ready = (documents ?? []).filter((d) => d.status === "ready");
+  if (ready.length === 0) return [];
+
+  const docList = ready
+    .map((d) => {
+      const summaryPart = d.summary ? ` — ${d.summary.substring(0, 80)}...` : "";
+      const trigger = d.send_when ? ` [Enviar quando: ${d.send_when}]` : "";
+      return `- "${d.file_name}" (id: ${d.id})${summaryPart}${trigger}`;
+    })
+    .join("\n");
+
+  return [
+    {
+      type: "function",
+      function: {
+        name: "send_document",
+        description:
+          "Envia um documento/arquivo da base de conhecimento para o lead via WhatsApp. " +
+          "Use quando o lead pedir um catalogo, proposta, tabela de precos, ou qualquer documento disponivel.\n\n" +
+          `Documentos disponiveis:\n${docList}`,
+        parameters: {
+          type: "object",
+          properties: {
+            document_id: {
+              type: "string",
+              description: "ID do documento a enviar (use os IDs listados acima)",
+            },
+            caption: {
+              type: "string",
+              description: "Mensagem curta que acompanha o arquivo (opcional, max 200 chars)",
+            },
+          },
+          required: ["document_id"],
+        },
+      },
+    },
+  ];
+}
+
 /**
  * Builds OpenRouter tool definitions from enabled playground tools.
  * Only includes tools that are enabled and have a valid mapping.

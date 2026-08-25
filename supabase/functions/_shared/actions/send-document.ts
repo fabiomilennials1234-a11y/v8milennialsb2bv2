@@ -14,6 +14,53 @@ import { resolveDispatchContext, DispatchResolutionError } from "../whatsapp-dis
 import { isCopilotCanceled, logCopilotCancellation } from "../copilot/cancellation.ts";
 import { logEvent } from "../error-boundary.ts";
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** `%`, `_` e `\` são curingas no ILIKE — escapar antes de interpolar. */
+function escapeIlikeLiteral(value: string): string {
+  return value.replace(/([\\%_])/g, "\\$1");
+}
+
+/**
+ * Resolve um `document_id` que veio como NOME de arquivo em vez de UUID.
+ *
+ * O modelo escolhe o arquivo pelo nome na descrição da tool e, sob pressão,
+ * devolve esse nome no campo do id. Sem esta resolução o envio falha em
+ * silêncio: `.eq("id", "Thermo Selagem - PRODUTO 1.jpg")` não casa nada, a ação
+ * vira "Document not found" e a bolha de texto já afirmou "te mandei a foto".
+ *
+ * Escopado por `organization_id` (fronteira de tenant). Documentos de agentes
+ * diferentes da MESMA org podem repetir `file_name` — e nesse caso apontam para
+ * o mesmo `file_path`, então o arquivo entregue é o mesmo. Match exato
+ * case-insensitive primeiro, depois parcial.
+ */
+export async function resolveDocumentIdByName(
+  supabase: SupabaseClient,
+  organizationId: string,
+  raw: string,
+): Promise<string | null> {
+  const name = (raw ?? "").trim();
+  if (!name || name.length > 300) return null;
+
+  const exact = await supabase
+    .from("copilot_agent_documents")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("status", "ready")
+    .ilike("file_name", escapeIlikeLiteral(name))
+    .limit(1);
+  if (exact.data?.[0]?.id) return exact.data[0].id as string;
+
+  const partial = await supabase
+    .from("copilot_agent_documents")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("status", "ready")
+    .ilike("file_name", `%${escapeIlikeLiteral(name)}%`)
+    .limit(1);
+  return (partial.data?.[0]?.id as string) ?? null;
+}
+
 /**
  * Checks if a document was already sent in a conversation.
  * Used as hard dedup gate before dispatching the actual send.
@@ -177,23 +224,46 @@ export async function executeSendDocument(
   conversationId: string | null = null,
   actionId: string | null = null,
 ): Promise<ActionResult> {
-  const documentId = payload.document_id as string;
+  let documentId = payload.document_id as string;
   const caption = payload.caption as string | undefined;
 
   if (!documentId) {
     return { success: false, error: "document_id is required" };
   }
 
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!UUID_RE.test(documentId)) {
-    return { success: false, error: `invalid document_id: expected UUID, got "${documentId}"` };
-  }
   if (!leadId) {
     return { success: false, error: "lead_id is required to send document" };
   }
 
   // 1. Buscar documento e metadados (antes do gate — fallback whatsapp_messages
   //    precisa do file_path pra fazer match preciso via media_url ILIKE).
+  //
+  //    O modelo às vezes manda o NOME do arquivo ("Thermo Selagem - PRODUTO 1.jpg")
+  //    no lugar do UUID listado na tool. Antes disso o envio morria aqui em
+  //    silêncio: a bolha de texto afirma "te mandei a foto" e nada sai, sem erro
+  //    visível pra ninguém. Medido em 2026-08-25 na org Forever Bella: 6 de 511
+  //    envios traziam file_name ou UUID inexistente. `resolveDocumentReference`
+  //    faz o mesmo que `decide-action.ts#resolveRecoveredMedia` já fazia para o
+  //    caminho do sanitizer — aqui cobre a tool-call direta.
+  const resolvedId = UUID_RE.test(documentId)
+    ? documentId
+    : await resolveDocumentIdByName(supabase, organizationId, documentId);
+
+  if (!resolvedId) {
+    return { success: false, error: `Document not found: no document matches "${documentId}"` };
+  }
+  if (resolvedId !== documentId) {
+    logEvent("copilot_document_id_resolved_by_name", {
+      tags: {
+        "copilot.document_raw": documentId.slice(0, 120),
+        "copilot.document_id": resolvedId,
+        "copilot.organization_id": organizationId,
+      },
+    }).catch(() => {});
+    // A partir daqui o id canônico é o resolvido: dedup, lock e payload usam ele.
+    documentId = resolvedId;
+  }
+
   const { data: doc, error: docError } = await supabase
     .from("copilot_agent_documents")
     .select("id, file_name, file_path, mime_type, organization_id, file_type")

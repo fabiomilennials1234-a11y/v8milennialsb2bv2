@@ -33,7 +33,28 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { PlaygroundToolState } from "./types";
-import { buildPreviewTools, type DryRunToolCall } from "@/lib/copilot/dry-run-engine";
+import { buildPreviewTools, buildSendDocumentTool, type DryRunToolCall } from "@/lib/copilot/dry-run-engine";
+import { useAgentDocuments } from "../../hooks/useAgentDocuments";
+
+/**
+ * Descrição do card de ferramenta no preview.
+ *
+ * Para `send_document`, troca o UUID cru pelo NOME do arquivo — sem isso não dá
+ * pra conferir na tela se saiu a foto certa, que é justamente o que se quer
+ * validar. Se o id não casar com nenhum documento da KB, diz isso em vez de
+ * imprimir o valor bruto: em produção esse caso não envia nada.
+ */
+function describeToolCall(
+  tc: DryRunToolCall,
+  documents: { id: string; file_name: string }[] | undefined,
+): string {
+  if (tc.name !== "send_document") return tc.humanDescription;
+  const id = String(tc.parameters?.document_id ?? "");
+  const doc = documents?.find((d) => d.id === id);
+  const caption = tc.parameters?.caption ? ` (${tc.parameters.caption})` : "";
+  if (doc) return `ENVIAR_DOCUMENTO → ${doc.file_name}${caption}`;
+  return `ENVIAR_DOCUMENTO → ⚠️ id não encontrado na base ("${id.slice(0, 60)}") — nada seria enviado`;
+}
 
 // ─── Media card in message bubbles ─────────────────────
 
@@ -176,10 +197,18 @@ export function LivePreviewChat({
   const anonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
   const canTest = systemPrompt.trim().length >= 30;
 
-  // Build OpenRouter tool defs from playground tool state
+  // KB do agente — alimenta a tool send_document do preview. Sem ela o Simular
+  // NÃO consegue enviar mídia: o modelo no máximo diz que mandou, e a regra
+  // "anunciou, enviou" fica impossível de verificar na tela.
+  const { data: agentDocuments } = useAgentDocuments(agentId);
+
+  // Build OpenRouter tool defs from playground tool state + KB real
   const openRouterTools = useMemo(
-    () => (playgroundTools ? buildPreviewTools(playgroundTools) : []),
-    [playgroundTools],
+    () => [
+      ...(playgroundTools ? buildPreviewTools(playgroundTools) : []),
+      ...buildSendDocumentTool(agentDocuments),
+    ],
+    [playgroundTools, agentDocuments],
   );
 
   // Scroll to bottom
@@ -502,7 +531,9 @@ export function LivePreviewChat({
                           <span className="text-xs text-amber-900 dark:text-amber-200/90">
                             <span className="font-semibold">{tc.name}</span>
                             {" "}
-                            <span className="text-amber-800/80 dark:text-amber-200/60">{tc.humanDescription}</span>
+                            <span className="text-amber-800/80 dark:text-amber-200/60">
+                              {describeToolCall(tc, agentDocuments)}
+                            </span>
                           </span>
                         </div>
                       ))}

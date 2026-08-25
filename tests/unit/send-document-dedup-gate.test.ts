@@ -41,7 +41,7 @@ vi.mock("../../supabase/functions/_shared/copilot/cancellation.ts", () => ({
   logCopilotCancellation: vi.fn(),
 }));
 
-import { checkDocumentAlreadySent, executeSendDocument } from "../../supabase/functions/_shared/actions/send-document.ts";
+import { checkDocumentAlreadySent, executeSendDocument, resolveDocumentIdByName } from "../../supabase/functions/_shared/actions/send-document.ts";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -284,10 +284,57 @@ describe("checkDocumentAlreadySent", () => {
   });
 });
 
-describe("executeSendDocument — UUID validation", () => {
-  it("rejects non-UUID document_id with error", async () => {
+describe("resolveDocumentIdByName", () => {
+  // O modelo escolhe o arquivo pelo NOME na descrição da tool e às vezes devolve
+  // esse nome no campo do id. Antes deste resolvedor o envio morria em silêncio.
+  it("resolve o nome do arquivo para o UUID do documento", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      copilot_agent_documents: { data: [{ id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }], error: null },
+    });
+    const id = await resolveDocumentIdByName(
+      supabase as any,
+      "org-111",
+      "Thermo Selagem - PRODUTO 1.jpg",
+    );
+    expect(id).toBe("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+  });
+
+  it("devolve null quando nenhum arquivo casa", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      copilot_agent_documents: { data: [], error: null },
+    });
+    const id = await resolveDocumentIdByName(supabase as any, "org-111", "arquivo inexistente.jpg");
+    expect(id).toBeNull();
+  });
+
+  it("devolve null para nome vazio (não varre a tabela)", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      copilot_agent_documents: { data: [{ id: "qualquer" }], error: null },
+    });
+    expect(await resolveDocumentIdByName(supabase as any, "org-111", "   ")).toBeNull();
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("escapa curinga de ILIKE no nome do arquivo", async () => {
+    const captured: string[] = [];
+    const builder: any = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      limit: vi.fn(() => builder),
+      ilike: vi.fn((_col: string, pattern: string) => { captured.push(pattern); return builder; }),
+      then: (resolve: any) => resolve({ data: [], error: null }),
+    };
+    const supabase = { from: vi.fn(() => builder) };
+    await resolveDocumentIdByName(supabase as any, "org-111", "100%_puro.jpg");
+    expect(captured[0]).toBe("100\\%\\_puro.jpg");
+  });
+});
+
+describe("executeSendDocument — resolução do document_id", () => {
+  it("falha com 'not found' quando o nome não casa com nenhum documento", async () => {
     const supabase = buildSupabaseMockMultiTable({
       pending_ai_actions: { data: [], error: null },
+      copilot_agent_documents: { data: [], error: null },
     });
     const result = await executeSendDocument(
       supabase as any,
@@ -297,7 +344,7 @@ describe("executeSendDocument — UUID validation", () => {
       "conv-aaa",
     );
     expect(result.success).toBe(false);
-    expect(result.error).toContain("document_id");
+    expect(result.error).toContain("not found");
   });
 
   it("accepts valid UUID document_id (fails downstream, not on validation)", async () => {
