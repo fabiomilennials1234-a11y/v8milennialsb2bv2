@@ -8,7 +8,7 @@ tags: [changelog, workflows, pipelines, leads, engagement]
 related: []
 owner: gabriel
 branch: feat/automacao-sujeito-negocio
-pr: pendente
+pr: https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/pull/1822
 ---
 
 # 2026-08-25 — A automação passa a falar de Negócio
@@ -74,9 +74,49 @@ toda ação de funil cai no critério antigo quando não há negócio declarado.
 - `deno task test` 768/768; `typecheck:ratchet`, `lint:ratchet` e
   `test:ratchet` com **0 introduzidos**; build verde.
 
-## O que NÃO foi feito
+## Aplicado em produção — 2026-08-25 ~14:05 UTC
 
-- Nenhuma migration aplicada em prod — as duas estão escritas e ensaiadas.
+PR #1822 mesclado (`2d2ad3d9`). As duas migrations foram aplicadas numa
+transação só, pela receita cirúrgica (ensaio → asserções → ledger):
+
+1. **Pré-voo**: as três funções que a migration faz `CREATE OR REPLACE` tiveram
+   o `md5(prosrc)` conferido contra o que o ensaio usou — divergência abortaria
+   antes de escrever. Colunas e índices confirmados ausentes.
+2. **`SET LOCAL lock_timeout = '3s'`**: `ALTER TABLE` pega ACCESS EXCLUSIVE, e
+   `workflow_executions` tem 28.750 linhas / 29 MB. Sem teto, a transação
+   enfileira gravação de produção enquanto espera.
+3. **Ensaio do arquivo EXATO** com `ROLLBACK`, e controle positivo provando que
+   as asserções chegaram ao fim.
+4. **Apply com `COMMIT` + ledger** — `20270827000010` e `20270827000020` em
+   `supabase_migrations.schema_migrations`, com a versão do ARQUIVO.
+
+Asserções pós-apply: 2 colunas em cada tabela, 4 FKs, 4 índices, os 3 gatilhos
+carimbando o sujeito, e **0 linhas existentes tocadas**.
+
+### Edge functions deployadas
+
+`process-workflow-executions` (o motor), `agent-message`, `process-ai-actions`,
+`webhook-new-lead`, `notificame-webhook`, `calculate-portfolio-health`.
+
+Migration ANTES do deploy, não depois: o código novo escreve nas colunas novas,
+e a ordem inversa faria todo INSERT de execução falhar.
+
+### Medido em produção, 25 min depois
+
+| | |
+|---|---|
+| `stage_changed` com o negócio gravado | **2 de 2** |
+| `lead_created` com negócio | **0 de 3** — correto, gatilho da pessoa |
+| Falhas / erros | **0** |
+
+O primeiro `stage_changed` pós-apply gravou `pipeline_entry_id` e `deal_id` nulo
+— a entrada não tem linha em `deals`. É o caso dos 26% que decidiu chavear na
+entrada e não no negócio, aparecendo na primeira medição.
+
+Front conferido por literal nos três chunks (`index`, `workflow`,
+`AutomacoesEditor`) — está no ar.
+
+## O que NÃO foi feito
 - Follow-up e ação do dia continuam da pessoa. É a próxima pergunta ao CTO.
 - O card entrando no funil sem virar Negócio (353 contra 14) é assunto
   separado — `lead-webhook` cria o card e ninguém abre o negócio.

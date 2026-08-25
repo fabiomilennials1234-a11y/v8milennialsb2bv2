@@ -496,13 +496,13 @@ export function LivePreviewChat({
                       {msg.toolCalls.map((tc, tcIdx) => (
                         <div
                           key={`tc-${idx}-${tcIdx}`}
-                          className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5"
+                          className="flex items-center gap-2 rounded-lg border border-amber-600/30 bg-amber-500/10 px-2.5 py-1.5 dark:border-amber-500/20 dark:bg-amber-500/5"
                         >
-                          <Wrench className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
-                          <span className="text-xs text-amber-200/90">
+                          <Wrench className="w-3.5 h-3.5 text-amber-600 dark:text-amber-500 flex-shrink-0" />
+                          <span className="text-xs text-amber-900 dark:text-amber-200/90">
                             <span className="font-semibold">{tc.name}</span>
                             {" "}
-                            <span className="text-amber-200/60">{tc.humanDescription}</span>
+                            <span className="text-amber-800/80 dark:text-amber-200/60">{tc.humanDescription}</span>
                           </span>
                         </div>
                       ))}
