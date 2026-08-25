@@ -53,6 +53,13 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useSaveCustomFieldValue: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
 }));
+// Ver a nota gêmea em `lead-card.test.tsx`: as mutações de comentário passam
+// por `useQueryClient` e este arquivo monta o container sem provider.
+vi.mock("@/modules/leads/components/lead-detail/hooks/useLeadComments", () => ({
+  useCreateLeadComment: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useUpdateLeadComment: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
+  useDeleteLeadComment: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
+}));
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));

@@ -100,6 +100,10 @@ export function LeadCard({
   onSaveField,
   onToggleCopilot,
   onDelete,
+  onComentar,
+  onEditarComentario,
+  onApagarComentario,
+  comentando,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -111,6 +115,16 @@ export function LeadCard({
   onSaveField?: (chave: string, valor: string) => Promise<void>;
   onToggleCopilot?: (ativo: boolean) => void;
   onDelete?: () => void;
+  /**
+   * Comentário da equipe, dentro do Histórico. As três são opcionais pela mesma
+   * razão das de cima: sem elas a ficha continua mostrando o histórico inteiro,
+   * só não deixa escrever — que é o certo quando não se sabe sob qual org
+   * gravar.
+   */
+  onComentar?: (texto: string) => void | Promise<void>;
+  onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
+  onApagarComentario?: (id: string) => void | Promise<void>;
+  comentando?: boolean;
 }) {
   const [aba, setAba] = useState<Aba>("historico");
   const [nota, setNota] = useState(lead.nota);
@@ -345,7 +359,15 @@ export function LeadCard({
           </nav>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {aba === "historico" && <LeadCardHistory eventos={lead.historico} />}
+            {aba === "historico" && (
+              <LeadCardHistory
+                eventos={lead.historico}
+                onComentar={onComentar}
+                onEditarComentario={onEditarComentario}
+                onApagarComentario={onApagarComentario}
+                comentando={comentando}
+              />
+            )}
             {aba === "negocios" && (
               <LeadCardDeals
                 negocios={lead.negocios}

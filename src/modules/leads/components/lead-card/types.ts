@@ -110,6 +110,26 @@ export type TipoDeEvento =
   | "comentario"
   | "automacao";
 
+/**
+ * O comentário em si, quando o evento é um.
+ *
+ * Vem de `lead_comments`, e **não** de `lead_history` — a linha de histórico
+ * carrega só a frase "Comentário adicionado" e um `metadata.preview` cortado em
+ * **120 caracteres**, que mutila 747 dos 2.909 comentários de prod (25,7%; o
+ * maior tem 1.885). Histórico de comentário que corta comentário não é
+ * histórico de comentário.
+ */
+export interface LeadCardComentario {
+  id: string;
+  /** O texto inteiro, sem corte. */
+  corpo: string;
+  editadoEm: string | null;
+  /** Só o autor edita o próprio; o painel do Negócio usa a mesma regra. */
+  podeEditar: boolean;
+  /** Autor ou admin. Apagar é soft-delete (`deleted_at`). */
+  podeApagar: boolean;
+}
+
 export interface LeadCardEvent {
   id: string;
   tipo: TipoDeEvento;
@@ -118,6 +138,12 @@ export interface LeadCardEvent {
   realces?: string[];
   autor: string | null;
   quando: string;
+  /**
+   * Presente só quando o evento É um comentário da equipe. Sua ausência num
+   * evento de tipo `comentario` é legítima: `note_added` também cai nesse tipo
+   * e não tem linha em `lead_comments`.
+   */
+  comentario?: LeadCardComentario;
 }
 
 export interface LeadCardTag {

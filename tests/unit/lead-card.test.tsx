@@ -46,6 +46,14 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useSaveCustomFieldValue: () => ({ mutateAsync: saveCustomFieldAsync }),
 }));
+// As três de comentário passam por `useQueryClient`, e este arquivo monta o
+// container sem `QueryClientProvider` de propósito — o alvo aqui é o roteamento
+// de escrita de CAMPO. Quem cobre o comentário é `lead-card-comentarios`.
+vi.mock("@/modules/leads/components/lead-detail/hooks/useLeadComments", () => ({
+  useCreateLeadComment: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useUpdateLeadComment: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
+  useDeleteLeadComment: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
+}));
 
 // O card de cima é grande e não é o alvo deste arquivo: aqui interessa o que o
 // container faz com `onSaveField`, não como o card desenha.
