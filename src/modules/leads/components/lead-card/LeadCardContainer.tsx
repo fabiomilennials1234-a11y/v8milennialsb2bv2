@@ -10,6 +10,11 @@ import { useLeadCardData } from "./useLeadCardData";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
 import { useSaveCustomFieldValue } from "../../hooks/useLeadCustomFields";
+import {
+  useCreateLeadComment,
+  useDeleteLeadComment,
+  useUpdateLeadComment,
+} from "../lead-detail/hooks/useLeadComments";
 
 /**
  * O Card do Lead ligado ao banco.
@@ -55,11 +60,14 @@ export function LeadCardContainer({
   /** Só na forma `coluna`: leva para a ficha inteira do lead. */
   onAbrirFicha?: () => void;
 }) {
-  const { data, isLoading, visibility } = useLeadCardData(leadId, isOpen);
+  const { data, isLoading, visibility, organizacaoId } = useLeadCardData(leadId, isOpen);
   const updateLead = useUpdateLead();
   const saveCustomField = useSaveCustomFieldValue();
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
+  const criarComentario = useCreateLeadComment();
+  const atualizarComentario = useUpdateLeadComment();
+  const removerComentario = useDeleteLeadComment();
 
   /**
    * Grava um campo do bloco Dados.
@@ -100,6 +108,54 @@ export function LeadCardContainer({
       );
     },
     [leadId, updateLead],
+  );
+
+  /**
+   * ── Comentar PELA ficha da pessoa ────────────────────────────────────────
+   * Sem `pipelineEntryId`: o comentário escrito aqui é do LEAD, não de um
+   * negócio. É a semântica que a coluna já documenta — NULL quer dizer
+   * "nasceu fora de um negócio" — e é o que os 2.867 comentários antigos de
+   * prod são. Carimbar um negócio escolhido pela ficha inventaria vínculo, e
+   * vínculo inventado faz o selo do painel do Negócio mentir.
+   */
+  const comentar = useCallback(
+    async (texto: string) => {
+      if (!leadId || !organizacaoId) return;
+      try {
+        await criarComentario.mutateAsync({ leadId, organizationId: organizacaoId, body: texto });
+      } catch {
+        toast.error("Não foi possível publicar o comentário. O texto continua na caixa.");
+        // Reergue para a caixa NÃO esvaziar — engolir aqui apagaria o texto.
+        throw new Error("comentario-nao-publicado");
+      }
+    },
+    [leadId, organizacaoId, criarComentario],
+  );
+
+  const editarComentario = useCallback(
+    async (id: string, texto: string) => {
+      if (!leadId) return;
+      try {
+        await atualizarComentario.mutateAsync({ commentId: id, leadId, body: texto });
+      } catch {
+        toast.error("Não foi possível salvar a edição do comentário.");
+        throw new Error("comentario-nao-editado");
+      }
+    },
+    [leadId, atualizarComentario],
+  );
+
+  const apagarComentario = useCallback(
+    async (id: string) => {
+      if (!leadId) return;
+      try {
+        await removerComentario.mutateAsync({ commentId: id, leadId });
+        toast.success("Comentário apagado.");
+      } catch {
+        toast.error("Não foi possível apagar o comentário.");
+      }
+    },
+    [leadId, removerComentario],
   );
 
   if (!isOpen) return null;
@@ -189,6 +245,12 @@ export function LeadCardContainer({
       onOpenDeal={onOpenDeal ? (entryId) => onOpenDeal(entryId, data.id) : undefined}
       onNewDeal={onNewDeal}
       onSaveField={salvarCampo}
+      // Sem org conhecida a caixa de escrever some: a policy de INSERT exige a
+      // org, e oferecer uma ação cujo gravar falharia é pior que não oferecer.
+      onComentar={leadId && organizacaoId ? comentar : undefined}
+      onEditarComentario={leadId ? editarComentario : undefined}
+      onApagarComentario={leadId ? apagarComentario : undefined}
+      comentando={criarComentario.isPending}
       onToggleCopilot={(ativo) =>
         leadId && toggleAI.mutate({ leadId, disabled: !ativo })
       }
