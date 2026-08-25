@@ -1,3 +1,16 @@
+---
+type: changelog
+title: "Checklists no card do Negócio"
+status: shipped
+created: 2026-08-24
+updated: 2026-08-24
+tags: [changelog, leads, pipelines, engagement]
+related: []
+owner: gabriel
+branch: feat/checklists-no-card-de-negocio
+pr: https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/pull/1818
+---
+
 # 2026-08-24 — Checklists no card do Negócio
 
 Pedido do CTO, sem issue: *"quero que nos cards de negócios apareçam os
