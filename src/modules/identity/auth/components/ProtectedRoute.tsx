@@ -1,9 +1,10 @@
 import { ReactNode } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useCurrentTeamMember } from '../../org-team/hooks/useTeamMembers';
 import { useIdentity } from '../hooks/useIdentity';
 import { useGestor } from '../../gestor/hooks/useGestor';
+import { useMfaRequired } from '../hooks/useMfaRequired';
 import { useDeactivatedMembership } from '../../org-team/hooks/useMembershipStatus';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { TorqueLoader } from '@/components/ui/branding/TorqueLoader';
@@ -20,6 +21,11 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
   const { data: teamMember, isLoading: teamMemberLoading, error: teamMemberError } = useCurrentTeamMember();
   const { isMaster, isLoading: masterLoading } = useIdentity();
   const { isGestor, isLoading: gestorLoading } = useGestor();
+  // Gate de MFA. A propria rota /seguranca/mfa fica de fora, senao o redirect
+  // aponta para si mesmo e vira loop.
+  const location = useLocation();
+  const naRotaDeMfa = location.pathname.startsWith('/seguranca/mfa');
+  const { required: precisaMfa, isLoading: mfaLoading } = useMfaRequired(isMaster, !naRotaDeMfa);
   // Só consultamos quando não há vínculo ativo — é o único caso ambíguo.
   const semVinculoAtivo = !teamMemberLoading && !teamMember?.organization_id;
   const { data: foiDesativado, isLoading: desativadoLoading } =
@@ -39,6 +45,18 @@ export function ProtectedRoute({ children, requireOrganization = true }: Protect
 
   if (!user) {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Master em aal1 nao acessa NADA do sistema ate passar pelo segundo fator.
+  // Vem antes dos gates de org de proposito: vale para o app inteiro, nao so
+  // para /master. Quem nao tem fator cadastra na mesma tela.
+  if (isMaster && !naRotaDeMfa) {
+    if (mfaLoading) {
+      return <TorqueLoader variant="full" />;
+    }
+    if (precisaMfa) {
+      return <Navigate to="/seguranca/mfa" replace />;
+    }
   }
 
   if (teamMemberLoading && requireOrganization && !isMaster) {
