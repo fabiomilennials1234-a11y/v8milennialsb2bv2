@@ -188,11 +188,25 @@ export const LEAD_EXEMPLO: LeadCardData = {
       quando: "2026-08-04T12:10:00.000Z",
     },
     {
+      // Comentário de verdade: o corpo vem em `comentario`, não em `texto`.
+      // O exemplo é longo e tem quebra de linha de propósito — é o formato real
+      // (411 dos 2.909 de prod passam de 200 caracteres) e é o que expõe na
+      // visualização se o bloco truncar ou colapsar a quebra.
       id: "h3",
       tipo: "comentario",
-      texto: "Pediu amostra da linha nova antes de fechar. Enviar até sexta.",
+      texto: "Comentário",
       autor: "Luiza Andrade",
       quando: "2026-08-03T18:02:00.000Z",
+      comentario: {
+        id: "c1",
+        corpo:
+          "Pediu amostra da linha nova antes de fechar. Enviar até sexta.\n" +
+          "Falou que o preço da concorrência veio 8% abaixo, mas que prefere " +
+          "continuar com a gente pelo prazo de entrega. Quem assina é o sócio.",
+        editadoEm: null,
+        podeEditar: true,
+        podeApagar: true,
+      },
     },
     {
       id: "h4",

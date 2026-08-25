@@ -1,7 +1,8 @@
 import { useMemo } from "react";
 
-import { useTeamMembers } from "@/modules/identity";
+import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useLeadDetail } from "../lead-detail/hooks/useLeadDetail";
+import { useLeadComments } from "../lead-detail/hooks/useLeadComments";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
 import { useLeadsCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
@@ -165,10 +166,16 @@ export interface LeadCardSource {
   isLoading: boolean;
   /** Ecoa `useLeadDetail` — quem decide o que a tela mostra quando nega. */
   visibility: ReturnType<typeof useLeadDetail>["visibility"];
+  /** Org sob a qual se grava um comentário. `null` = a ficha fica só de leitura. */
+  organizacaoId: string | null;
+  /** `team_members.id` de quem olha — é por ele que se decide quem edita. */
+  membroId: string | null;
+  souAdmin: boolean;
 }
 
 export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCardSource {
   const { lead, isLoading, visibility } = useLeadDetail(leadId, isOpen);
+  const { organizationId, teamMemberId, role } = useOrganization();
 
   // Os três hooks de lote aceitam lista; aqui a lista tem um id só. A queryKey
   // deles é ordenada, então o cache da aba de Leads não colide com o do card.
@@ -178,6 +185,21 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
   const { data: carteiraMap } = useLeadsCarteiraMetrics(ids);
 
   const timeline = useLeadTimeline(leadId ?? undefined);
+  /**
+   * ── Por que os comentários entram por FORA da timeline ───────────────────
+   * `useLeadTimeline` pagina em 20 (`PAGE_SIZE`) e esta ficha nunca chama
+   * `loadMore` — não há "carregar mais" no Histórico. Como 73% de
+   * `lead_history` é tráfego de WhatsApp, o comentário de julho cai fora da
+   * janela: medido em prod, **401 dos 2.906 comentários (13,8%) e 144 leads
+   * inteiros** não têm um único comentário dentro dos 20 eventos mais
+   * recentes. Filtrar pelo chip "Comentários" não resolve — ele filtra o que
+   * já veio cortado.
+   *
+   * Ler `lead_comments` direto conserta as duas coisas de uma vez: traz o
+   * histórico COMPLETO e traz o corpo INTEIRO (a linha de histórico só tem
+   * "Comentário adicionado" mais um preview de 120 caracteres).
+   */
+  const { data: comentarios = [] } = useLeadComments(isOpen ? leadId : null);
   const { data: definicoes = [] } = useLeadCustomFields();
   const { data: valores = [] } = useLeadCustomFieldValues(leadId);
   const { data: equipe = [] } = useTeamMembers();
@@ -221,15 +243,59 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       if (typeof m.user_id === "string") nomePorId.set(m.user_id, nome);
     }
 
-    const historico: LeadCardEvent[] = (timeline.data?.events ?? []).map((e) => ({
-      id: e.id,
-      tipo: tipoDoEvento(e.action, e.source),
-      // A frase pronta vem do banco. O card não a reescreve nem a fatia — dado
-      // com chave dentro vira bug de exibição.
-      texto: e.description ?? e.action.replace(/_/g, " "),
-      autor: (e.created_by ? nomePorId.get(e.created_by) : undefined) ?? autorDeSistema(e.source),
-      quando: e.created_at,
-    }));
+    /**
+     * `comment_added` sai da timeline e volta pela lista de comentários.
+     *
+     * Sem esta linha o mesmo comentário apareceria DUAS vezes: uma como linha
+     * de histórico sem texto, outra como comentário de verdade. Descartar a de
+     * histórico não perde nada — ela não carrega nenhum dado que a linha de
+     * `lead_comments` não tenha melhor.
+     */
+    const eventos: LeadCardEvent[] = (timeline.data?.events ?? [])
+      .filter((e) => e.action !== "comment_added")
+      .map((e) => ({
+        id: e.id,
+        tipo: tipoDoEvento(e.action, e.source),
+        // A frase pronta vem do banco. O card não a reescreve nem a fatia —
+        // dado com chave dentro vira bug de exibição.
+        texto: e.description ?? e.action.replace(/_/g, " "),
+        autor: (e.created_by ? nomePorId.get(e.created_by) : undefined) ?? autorDeSistema(e.source),
+        quando: e.created_at,
+      }));
+
+    /**
+     * Apagado é soft-delete e continua na tabela. Fica de fora pela mesma
+     * decisão já tomada no painel do Negócio: a lápide "Comentário apagado"
+     * virava ruído, e a auditoria não se perde — `fn_log_lead_comment_event`
+     * grava `comment_deleted` em `lead_history`.
+     */
+    const deComentario: LeadCardEvent[] = comentarios
+      .filter((c) => !c.deleted_at)
+      .map((c) => {
+        // Autoria pelo MEMBRO, não pelo usuário: é o mesmo critério do painel
+        // do Negócio, e falha fechada — sem membro conhecido ninguém edita.
+        const souOAutor = !!teamMemberId && c.author_team_member_id === teamMemberId;
+        return {
+          id: `comentario:${c.id}`,
+          tipo: "comentario" as const,
+          // O texto do evento existe para o chip e para a busca; quem desenha o
+          // corpo é o bloco de comentário, com quebra de linha preservada.
+          texto: "Comentário",
+          autor: c.author?.name ?? nomePorId.get(c.author_user_id ?? "") ?? null,
+          quando: c.created_at,
+          comentario: {
+            id: c.id,
+            corpo: c.body,
+            editadoEm: c.updated_at ?? null,
+            podeEditar: souOAutor,
+            podeApagar: souOAutor || role === "admin",
+          },
+        };
+      });
+
+    const historico: LeadCardEvent[] = [...eventos, ...deComentario].sort(
+      (a, b) => new Date(b.quando).getTime() - new Date(a.quando).getTime(),
+    );
 
     const { respondidos: orgPreenchidos, aPreencher: orgVazios } = separarCamposDaOrg(
       definicoes,
@@ -348,7 +414,37 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       campos,
       historico,
     };
-  }, [lead, dealsMap, vendasMap, carteiraMap, timeline.data, definicoes, valores, equipe]);
+  }, [
+    lead,
+    dealsMap,
+    vendasMap,
+    carteiraMap,
+    timeline.data,
+    comentarios,
+    definicoes,
+    valores,
+    equipe,
+    teamMemberId,
+    role,
+  ]);
 
-  return { data, isLoading, visibility };
+  /**
+   * A org do LEAD vem antes da associação de quem olha — é o que mantém o
+   * usuário master comentando: ele não está em `team_members`, então
+   * `useOrganization()` devolve `null` para ele, mas as policies de
+   * `lead_comments` têm bypass de master. Mesmo critério do `useDealCardData`.
+   */
+  const organizacaoDoLead = (() => {
+    const v = (lead as Linha | null)?.organization_id;
+    return typeof v === "string" && v !== "" ? v : null;
+  })();
+
+  return {
+    data,
+    isLoading,
+    visibility,
+    organizacaoId: organizacaoDoLead ?? organizationId ?? null,
+    membroId: teamMemberId ?? null,
+    souAdmin: role === "admin",
+  };
 }
