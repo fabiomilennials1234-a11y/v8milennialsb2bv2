@@ -18,8 +18,7 @@ function fakeSupabase(impl: (fn: string, args: unknown) => { data?: unknown; err
   const calls: Array<{ fn: string; args: unknown }> = [];
   return {
     calls,
-    // deno-lint-ignore no-explicit-any
-    rpc(fn: string, args: any) {
+    rpc(fn: string, args?: Record<string, unknown>) {
       calls.push({ fn, args });
       return Promise.resolve(impl(fn, args));
     },

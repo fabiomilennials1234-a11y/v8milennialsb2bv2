@@ -19,6 +19,7 @@ import { assert, assertEquals, assertFalse } from "jsr:@std/assert@^1.0.0";
 import { governSend, isSkippedSend } from "./gate.ts";
 import { __resetOrgStatusCache } from "../org-status.ts";
 import type { GovernSendDeps } from "./gate.ts";
+import type { GovernorSupabaseClient } from "./types.ts";
 
 const ORG = "33333333-3333-3333-3333-333333333333";
 
@@ -73,8 +74,7 @@ Deno.test("org bloqueada — o envio não acontece", async () => {
   let enviou = false;
 
   const res = await governSend(
-    // deno-lint-ignore no-explicit-any
-    supabaseComBloqueio(true) as any,
+    supabaseComBloqueio(true) as unknown as GovernorSupabaseClient,
     { orgId: ORG, category: "automation", recipientPhone: "5511999999999" },
     () => {
       enviou = true;
@@ -94,8 +94,7 @@ Deno.test("org bloqueada — nem a categoria 'manual' escapa", async () => {
   let enviou = false;
 
   const res = await governSend(
-    // deno-lint-ignore no-explicit-any
-    supabaseComBloqueio(true) as any,
+    supabaseComBloqueio(true) as unknown as GovernorSupabaseClient,
     { orgId: ORG, category: "manual", recipientPhone: "5511999999999" },
     () => {
       enviou = true;
@@ -113,8 +112,7 @@ Deno.test("controle positivo — org ativa envia", async () => {
   let enviou = false;
 
   const res = await governSend(
-    // deno-lint-ignore no-explicit-any
-    supabaseComBloqueio(false) as any,
+    supabaseComBloqueio(false) as unknown as GovernorSupabaseClient,
     { orgId: ORG, category: "automation", recipientPhone: "5511999999999" },
     () => {
       enviou = true;

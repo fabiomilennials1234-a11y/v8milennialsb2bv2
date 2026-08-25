@@ -1,4 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
 /**
  * org-status — a org está bloqueada por assinatura?
  *
@@ -22,6 +21,44 @@ const TTL_MS = 60_000;
 type CacheEntry = { blocked: boolean; at: number };
 const cache = new Map<string, CacheEntry>();
 
+/**
+ * O mínimo que este módulo usa do client: uma RPC.
+ *
+ * Estrutural de propósito — os cinco call-sites passam clients de tipos
+ * diferentes (`GovernorSupabaseClient`, o client cru do supabase-js, os fakes
+ * dos testes) e nenhum deles precisa concordar num tipo nominal para chamar uma
+ * função de banco. `data`/`error` ficam opcionais porque é assim que os fakes
+ * respondem — o client real, que sempre devolve os dois, continua atribuível.
+ *
+ * `PromiseLike`, não `Promise`: o `rpc()` do supabase-js devolve um
+ * `PostgrestFilterBuilder`, que é thenable mas não tem `catch`/`finally`. Exigir
+ * `Promise` aqui rejeita o client real — e o `await` lá embaixo só precisa do
+ * `then`.
+ */
+type ClienteComRpc = {
+  rpc(
+    fn: string,
+    params?: Record<string, unknown>,
+  ): PromiseLike<{ data?: unknown; error?: unknown }>;
+};
+
+/**
+ * Mensagem legível de um erro capturado.
+ *
+ * Trata o caso que importa aqui e não é `Error`: o erro do PostgREST chega como
+ * objeto simples (`{ message, details, hint, code }`), então um
+ * `err instanceof Error` sozinho o reduziria a "[object Object]" e apagaria a
+ * única pista útil no `runtime_logs` — justo no caminho fail-open, onde o log é
+ * tudo o que sobra.
+ */
+function mensagemDoErro(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    return String((err as { message: unknown }).message);
+  }
+  return String(err);
+}
+
 /** Só para testes — zera o cache do módulo. */
 export function __resetOrgStatusCache(): void {
   cache.clear();
@@ -32,7 +69,7 @@ export function __resetOrgStatusCache(): void {
  * Resultado cacheado por 60s por instância da edge function.
  */
 export async function isOrgBlocked(
-  supabase: any,
+  supabase: ClienteComRpc,
   organizationId: string | null | undefined,
 ): Promise<boolean> {
   if (!organizationId) return false;
@@ -56,7 +93,7 @@ export async function isOrgBlocked(
       module: "billing",
       action: "org_access_blocked_check_failed",
       status: "error",
-      errorMessage: String((err as any)?.message ?? err),
+      errorMessage: mensagemDoErro(err),
     }).catch(() => {});
     return false;
   }
@@ -76,7 +113,7 @@ export class OrgBlockedError extends Error {
 }
 
 export async function assertOrgNotBlocked(
-  supabase: any,
+  supabase: ClienteComRpc,
   organizationId: string | null | undefined,
 ): Promise<void> {
   if (await isOrgBlocked(supabase, organizationId)) {
