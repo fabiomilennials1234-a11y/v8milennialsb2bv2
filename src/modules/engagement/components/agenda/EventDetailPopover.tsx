@@ -6,7 +6,13 @@
  * scheduled_message, pipe_confirmacao, google).
  */
 
-import { useState, useRef, useEffect } from "react";
+import {
+  useState,
+  useRef,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+} from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,6 +36,8 @@ import {
   SOURCE_COLORS,
   outcomeOf,
   podeRegistrarResultado,
+  posicionarPopover,
+  POPOVER_ALTURA_MAXIMA,
 } from "./agenda-helpers";
 import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
 
@@ -114,19 +122,66 @@ export function EventDetailPopover({
     }
   };
 
-  // Adjust position to avoid viewport overflow
-  useEffect(() => {
-    if (!ref.current) return;
-    const { width, height } = ref.current.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    let left = x + 14;
-    let top = y - 16;
-    if (left + width > vw - 16) left = x - width - 14;
-    if (top + height > vh - 16) top = vh - height - 16;
-    if (top < 8) top = 8;
-    setPos({ left, top });
+  /**
+   * Recoloca o card para ele caber inteiro na janela.
+   *
+   * `offsetWidth`/`offsetHeight` e não `getBoundingClientRect()`: o rect vem
+   * com o `scale: 0.96` da animação de entrada aplicado, e mediria ~4% a menos
+   * do que o card vai realmente ocupar.
+   */
+  const reposicionar = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    setPos(
+      posicionarPopover({
+        x,
+        y,
+        largura: el.offsetWidth,
+        altura: el.offsetHeight,
+        vw: window.innerWidth,
+        vh: window.innerHeight,
+      }),
+    );
   }, [x, y]);
+
+  /**
+   * 🚨 A conta tem que refazer quando o card MUDA DE TAMANHO, não só quando o
+   * clique muda de lugar.
+   *
+   * Antes isto era um `useEffect` com dependências `[x, y]`, e o bloco de
+   * confirmação da exclusão (mais abaixo) cresce o card ~72px depois de ele já
+   * estar grudado no rodapé da tela. Medido no navegador, janela de 640px,
+   * clique em y=410: o botão "Excluir" nascia 19px ABAIXO da borda e o
+   * Playwright não conseguia clicar nele. Para quem usa, a lixeira era um
+   * botão que não fazia nada.
+   *
+   * Quem dispara o recálculo é o `ResizeObserver` — e não uma dependência em
+   * `confirmDelete` — porque o crescimento é ANIMADO (`height: 0 → auto`, 150ms
+   * em `AnimatePresence`): no instante em que o estado muda, o card ainda tem
+   * a altura antiga, e medir ali leria o valor errado.
+   *
+   * `useLayoutEffect` para o primeiro posicionamento acontecer antes da
+   * pintura — senão o card aparece no lugar errado e pula.
+   */
+  useLayoutEffect(() => {
+    reposicionar();
+
+    // Redimensionar a janela muda `vh` sem mudar o card — o `ResizeObserver`
+    // não veria isso.
+    window.addEventListener("resize", reposicionar);
+
+    const el = ref.current;
+    const observer =
+      el && typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(() => reposicionar())
+        : null;
+    observer?.observe(el as Element);
+
+    return () => {
+      window.removeEventListener("resize", reposicionar);
+      observer?.disconnect();
+    };
+  }, [reposicionar]);
 
   // Close on outside click
   useEffect(() => {
@@ -176,11 +231,22 @@ export function EventDetailPopover({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.96 }}
       transition={{ duration: 0.12 }}
-      className="fixed z-50 w-72 bg-card border border-border/50 rounded-xl shadow-2xl dark:shadow-none dark:ring-1 dark:ring-border overflow-hidden"
-      style={{ left: pos.left, top: pos.top }}
+      // `overflow-y-auto` e não `overflow-hidden`: janela baixa (ou evento com
+      // descrição longa) deixa o card mais alto que a tela, e aí não existe
+      // posição boa — o conteúdo tem que rolar por dentro em vez de ser
+      // cortado em silêncio, que era o que o `hidden` fazia.
+      className="fixed z-50 w-72 bg-card border border-border/50 rounded-xl shadow-2xl dark:shadow-none dark:ring-1 dark:ring-border overflow-y-auto"
+      style={{
+        left: pos.left,
+        top: pos.top,
+        maxHeight: POPOVER_ALTURA_MAXIMA,
+      }}
     >
-      {/* Color bar */}
-      <div className="h-[3px]" style={{ backgroundColor: color }} />
+      {/* Color bar — `sticky` para sobreviver à rolagem interna. */}
+      <div
+        className="sticky top-0 z-10 h-[3px]"
+        style={{ backgroundColor: color }}
+      />
 
       <div className="p-4 space-y-3">
         {/* Title + actions */}
