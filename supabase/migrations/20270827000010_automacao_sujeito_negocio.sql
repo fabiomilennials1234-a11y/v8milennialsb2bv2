@@ -82,7 +82,12 @@ DECLARE
 BEGIN
   SELECT pip.slug INTO v_pipe_type
   FROM public.pipelines pip
-  WHERE pip.id = NEW.pipeline_id AND pip.type = 'system';
+  -- Não é métrica, é despacho de gatilho. A linha abaixo é byte-idêntica à que já
+  -- existe em 20260101000000_baseline_prod_schema.sql:20668, na MESMA função: este
+  -- arquivo faz CREATE OR REPLACE dela, e foi isso que fez o linter enxergar código
+  -- pré-existente como novo. Conferido contra prod: a função no ar traz esse mesmo
+  -- predicado hoje, então o allow não tolera dívida nova — descreve o que já roda.
+  WHERE pip.id = NEW.pipeline_id AND pip.type = 'system';  -- metric-lint-allow: byte-idêntica ao baseline (ver acima)
 
   IF v_pipe_type IS NULL THEN RETURN NEW; END IF;
 
