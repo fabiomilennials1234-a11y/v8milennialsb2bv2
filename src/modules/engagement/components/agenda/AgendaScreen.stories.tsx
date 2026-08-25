@@ -17,16 +17,20 @@ import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, X } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { AgendaFilterBar, ALL_OPTION } from "./AgendaFilterBar";
 import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
+import { EventDetailPopover, type PopoverState } from "./EventDetailPopover";
 import { MonthView } from "./MonthView";
 import type {
   AgendaStatusFilter,
+  AttendanceOutcome,
   EventTypeKey,
   UnifiedEvent,
 } from "./agenda-helpers";
 import {
   EVENT_TYPE_KEYS,
   SOURCE_COLORS,
+  STATUS_SEM_RESULTADO,
   resumirComparecimento,
+  statusDoResultado,
 } from "./agenda-helpers";
 
 // Agosto de 2026 — o mês da referência visual.
@@ -131,7 +135,7 @@ function PaginaDeBaixo() {
 
 /** Recria a composição da tela dentro do painel sobreposto. */
 function TelaAtividades({
-  eventos,
+  eventos: iniciais,
   admin,
 }: {
   eventos: UnifiedEvent[];
@@ -149,6 +153,39 @@ function TelaAtividades({
       else next.add(t);
       return next;
     });
+
+  /**
+   * O par de botões vive DENTRO do `EventDetailPopover`, e a história montava o
+   * `MonthView` com `onEventClick={() => {}}` — um stub vazio. Resultado: o
+   * popover nunca abria e o controle desta feature era **inalcançável pela
+   * tela**, aparecendo só na história isolada `Resultado`. Quem abrisse
+   * "Tela de Atividades" para conferir concluiria, com razão, que o botão não
+   * existe.
+   *
+   * Com a efêmera de QA morta e a PR ainda fora da `main`, esta história é o
+   * único lugar onde dá para VER a feature funcionando — então ela precisa
+   * fechar o ciclo inteiro: clicar abre, gravar muda o estado, e a contagem do
+   * topo se move junto, porque é derivada da mesma lista.
+   */
+  const [eventos, setEventos] = useState(iniciais);
+  const [popover, setPopover] = useState<PopoverState | null>(null);
+
+  const gravarResultado = async (
+    alvo: UnifiedEvent,
+    resultado: AttendanceOutcome | null,
+  ) => {
+    const proximo = resultado
+      ? statusDoResultado(resultado)
+      : STATUS_SEM_RESULTADO;
+    setEventos((prev) =>
+      prev.map((e) => (e.id === alvo.id ? { ...e, status: proximo } : e)),
+    );
+    setPopover((p) =>
+      p && p.event.id === alvo.id
+        ? { ...p, event: { ...p.event, status: proximo } }
+        : p,
+    );
+  };
 
   // Mesma derivação da página real (`AgendaAtividades`): a contagem sai da
   // lista, não de um número escrito à mão.
@@ -281,13 +318,28 @@ function TelaAtividades({
             <MonthView
               date={MES}
               events={eventos}
-              onEventClick={() => {}}
+              onEventClick={(e, evento) =>
+                setPopover({ event: evento, x: e.clientX, y: e.clientY })
+              }
               onSlotClick={() => {}}
               showOwner={admin}
             />
           </div>
         </div>
       </div>
+
+      {/* Clicar numa pílula abre isto — é aqui que o par Compareceu / Não
+          compareceu aparece. `onSetOutcome` presente é o que o liga: ausente,
+          `podeRegistrar` é falso e o controle some (o caso do follow-up). */}
+      {popover && (
+        <EventDetailPopover
+          state={popover}
+          onClose={() => setPopover(null)}
+          onDeleteMeeting={async () => {}}
+          onDeleteGoogleEvent={async () => {}}
+          onSetOutcome={gravarResultado}
+        />
+      )}
     </div>
   );
 }
