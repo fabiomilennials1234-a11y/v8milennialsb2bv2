@@ -1,11 +1,33 @@
 -- Agenda: `meeting_events` como fonte de eventos (Source 5) + fim do fanout da Source 1.
 --
--- ── Por que esta migration existe com data de 27/08 e conteúdo de 30/07 ────
+-- ── Por que esta migration existe com data de 29/08 e conteúdo de 30/07 ────
 -- Ela NÃO introduz a Source 5 em produção: a Source 5 já está viva lá desde
 -- 2026-07-30, aplicada À MÃO. O arquivo correspondente nunca entrou no repo —
 -- ficou solto e untracked na worktree `wt-funis-main` — e o ledger do PROD não
 -- tem linha nenhuma para ela (o `20270730000000` do ledger é
 -- `torquecalls_voip_foundation`, outra coisa).
+--
+-- ⚠️ O número é o da CAUDA, e não o da data real, e a escolha custou TRÊS
+-- tentativas em uma tarde — o que é a lição, não o acidente:
+--
+--   20270827000000  → o `20270827000010` foi ocupado pela `automacao_sujeito_negocio`
+--                     (PR #1822) enquanto esta branch esperava
+--   20270828000010  → o mesmo slot foi ocupado pela `metrics_studio_panel_por_org`
+--                     (PR #1824), **no repo E no ledger do PROD**, no intervalo
+--                     de vinte minutos entre duas leituras do ledger nesta mesma
+--                     sessão
+--   20270829000000  → dia livre, longe da escada `20270828000x0` que as métricas
+--                     estão subindo
+--
+-- Duas mecânicas distintas exigem a cauda, e é preciso as duas:
+--   (1) `db push` RECUSA prefixo abaixo do topo já aplicado no ledger;
+--   (2) `db push` compara VERSÃO, não nome nem hash — então prefixo que já
+--       existe no ledger sob OUTRO nome é considerado aplicado e a migration é
+--       **pulada em silêncio**, com o push terminando verde. É exatamente o
+--       drift do incidente #640, que é o que esta migration veio consertar.
+--
+-- 👉 Antes de aplicar, RELEIA o topo do ledger. Ele se move sozinho:
+--    SELECT max(version) FROM supabase_migrations.schema_migrations;
 --
 -- O resultado é drift. A única definição VIVA da função no repo está dentro do
 -- baseline (`20260101000000_baseline_prod_schema.sql:5904`) — as outras duas
@@ -18,12 +40,27 @@
 -- a partir do repo apagaria a Source 5 do PROD. Esta migration fecha o buraco:
 -- depois dela, repo e PROD dizem a mesma coisa.
 --
--- ── O que ela MUDA de fato em produção ────────────────────────────────────
--- Uma linha, na Source 1: o join de `team_members` ganha o predicado de org.
--- `team_members.user_id` NÃO é único — um master tem uma linha por org em que
--- é membro —, então sem esse predicado o LEFT JOIN faz FANOUT e a mesma
--- reunião volta N vezes. As outras quatro fontes juntam por `team_members.id`
--- (PK) e nunca tiveram o problema.
+-- ── O que ela MUDA de fato em produção — TRÊS coisas, não uma ─────────────
+-- O corpo é o vivo do PROD mais UMA linha, e isso foi medido (diff LCS contra
+-- `pg_get_functiondef`, 3 hunks e nada mais). Mas o apply carrega junto duas
+-- mudanças que não são no corpo, e anunciar "uma linha" as esconderia:
+--
+--   1. CORPO — a Source 1 ganha o predicado de org no join de `team_members`.
+--      `team_members.user_id` NÃO é único (um master tem uma linha por org em
+--      que é membro), então sem ele o LEFT JOIN faz FANOUT e a mesma reunião
+--      volta N vezes. As outras quatro fontes juntam por `team_members.id`
+--      (PK) e nunca tiveram o problema.
+--
+--   2. COMMENT — hoje o PROD carrega o texto do baseline, que lista QUATRO
+--      fontes sobre um corpo de cinco. Ele já mente; a migration o reescreve.
+--
+--   3. ACL — `CREATE OR REPLACE` não reseta privilégio, então o `REVOKE`/
+--      `GRANT` do rodapé é mudança real: hoje a função está executável por
+--      `PUBLIC` e por `anon`. Depois, só `authenticated` e `service_role`.
+--
+-- As três são corretas e desejáveis. Estão aqui em vez de espalhadas porque a
+-- revisão adversarial derrubou a redação anterior — que dizia "uma linha, e
+-- mais nada" e era verdade só sobre o corpo.
 --
 -- ⚠️ O alcance é PONTUAL, e vale registrar o número honesto em vez do número
 -- impressionante. Medido em 2026-08-24 chamando `get_agenda_events` do jeito

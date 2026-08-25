@@ -1,4 +1,4 @@
--- ROLLBACK de 20270827000000_agenda_meeting_events_source.sql
+-- ROLLBACK de 20270829000000_agenda_meeting_events_source.sql
 --
 -- ⚠️ Reverter aqui NÃO significa voltar para a definição do repo anterior
 -- (`20260985000000`, 4 fontes). Voltar para ela apagaria a Source 5 e faria as

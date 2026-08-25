@@ -44,15 +44,30 @@ export const SOURCE_COLORS: Record<string, string> = {
   follow_up: "#10B981",                // emerald
   scheduled_message: "#3B82F6",        // blue
   pipe_confirmacao: "#8B5CF6",         // violet
+  // Source 5 (funil mergeado). Mesmo ouro de `meeting` DE PROPÓSITO: é o que a
+  // tela já mostra hoje, porque a chave faltava e caía no fallback da linha
+  // 371. Escrever explícito não muda pixel nenhum — só tira a cor do acaso.
+  meeting_event: "hsl(47, 100%, 50%)",
   google: "#4285F4",                   // Google blue (overlay)
 };
 
-/** Human-readable source labels (pt-BR). */
+/**
+ * Human-readable source labels (pt-BR).
+ *
+ * 🚨 `meeting_event` faltava aqui, e a falta era VISÍVEL: os três lugares que
+ * leem este mapa caem em `?? event.source` (`EventDetailPopover.tsx:229`,
+ * `TimeGridEvent.tsx:61`, `DayAgendaView.tsx:58`), então a Agenda vinha
+ * imprimindo o identificador cru **"meeting_event"** para o usuário desde que a
+ * Source 5 entrou no PROD à mão, em 30/07/2026. O fallback não deixou barulho
+ * nenhum — nem erro, nem tipo vermelho, porque `normalizeAgendaEvents` casta
+ * `e.source as EventSource` sem checar.
+ */
 export const SOURCE_LABELS: Record<string, string> = {
   meeting: "Reunião",
   follow_up: "Follow-up",
   scheduled_message: "Mensagem Agendada",
   pipe_confirmacao: "Confirmação",
+  meeting_event: "Reunião do funil",
   google: "Google Calendar",
 };
 
@@ -237,7 +252,23 @@ export const GOOGLE_EVENT_COLORS: Record<string, string> = {
 
 // ─── Unified event type ───────────────────────────────────────────────────────
 
-export type EventSource = "meeting" | "follow_up" | "scheduled_message" | "pipe_confirmacao" | "google";
+/**
+ * As fontes que `get_agenda_events` devolve, mais o overlay do Google.
+ *
+ * ⚠️ `meeting_event` (Source 5, o funil mergeado) esteve FORA desta união por
+ * quase um mês, enquanto já saía do banco: `normalizeAgendaEvents` faz
+ * `e.source as EventSource`, um cast cego, então o compilador nunca teve como
+ * reclamar. A união fechada aqui é o que faz um `switch` exaustivo e os mapas
+ * `SOURCE_*` cobrirem a fonte nova — deixá-la de fora não dava erro, dava
+ * fallback silencioso.
+ */
+export type EventSource =
+  | "meeting"
+  | "follow_up"
+  | "scheduled_message"
+  | "pipe_confirmacao"
+  | "meeting_event"
+  | "google";
 
 export interface UnifiedEvent {
   id: string;
@@ -556,9 +587,16 @@ export function statusDoResultado(resultado: AttendanceOutcome): string {
  * `meetings_event_type_check`). Uma implementação só cobre os cinco, que é o
  * que o pedido exige.
  *
- * As outras três fontes da agenda são LEITURA de telas alheias: `follow_ups`
+ * As outras QUATRO fontes da agenda são LEITURA de telas alheias: `follow_ups`
  * pertence a Follow-ups, `pipe_confirmacao` é etapa de kanban (marcar
- * comparecimento ali moveria o card), e mensagem agendada não comparece a nada.
+ * comparecimento ali moveria o card), mensagem agendada não comparece a nada, e
+ * `meeting_events` (Source 5, `source = 'meeting_event'`) é o funil mergeado —
+ * tabela IMUTÁVEL de eventos, onde não existe UPDATE de status para gravar.
+ *
+ * ⚠️ Este parágrafo dizia "três" e estava certo em 24/08 pelo repo e errado pelo
+ * PROD: a Source 5 já estava viva em produção desde 30/07 e só foi versionada em
+ * `20270829000000`. A guarda que vale é o `=== "meeting"` da linha abaixo, que
+ * exclui `meeting_event` por construção; a prosa é que precisou correr atrás.
  */
 /**
  * Reunião cancelada — o QUARTO valor do `meetings_status_check`, que a UI nunca

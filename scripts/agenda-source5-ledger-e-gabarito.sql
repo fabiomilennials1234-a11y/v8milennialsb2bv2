@@ -1,8 +1,8 @@
 -- Passo 3 de 3 do apply da Source 5 da Agenda.
 --
 -- Rodar DEPOIS de:
---   node scripts/prod-sql-win.mjs --file supabase/migrations/20270827000000_agenda_meeting_events_source.sql
---   node scripts/prod-sql-win.mjs --file supabase/migrations/20270827000010_comando_revoga_anon.sql
+--   node scripts/prod-sql-win.mjs --file supabase/migrations/20270829000000_agenda_meeting_events_source.sql
+--   node scripts/prod-sql-win.mjs --file supabase/migrations/20270829000010_comando_revoga_anon.sql
 --
 -- Este arquivo faz duas coisas:
 --   1. carimba as duas versões no ledger — foi exatamente a FALTA disso em
@@ -15,15 +15,15 @@
 BEGIN;
 
 INSERT INTO supabase_migrations.schema_migrations (version, name)
-SELECT '20270827000000', 'agenda_meeting_events_source'
+SELECT '20270829000000', 'agenda_meeting_events_source'
 WHERE NOT EXISTS (
-  SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '20270827000000'
+  SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '20270829000000'
 );
 
 INSERT INTO supabase_migrations.schema_migrations (version, name)
-SELECT '20270827000010', 'comando_revoga_anon'
+SELECT '20270829000010', 'comando_revoga_anon'
 WHERE NOT EXISTS (
-  SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '20270827000010'
+  SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = '20270829000010'
 );
 
 COMMIT;
@@ -36,8 +36,8 @@ COMMIT;
 --   anon_agenda .............. false
 --   anon_comando ............. false
 --   anon_is_org_admin ........ false
---   ledger_827000 ............ 1
---   ledger_827010 ............ 1
+--   ledger_829000 ............ 1
+--   ledger_829010 ............ 1
 SELECT
   (SELECT count(*) - count(DISTINCT e.id)
      FROM public.organizations o
@@ -55,5 +55,5 @@ SELECT
   has_function_privilege('anon', 'public.is_org_admin(uuid)',                                     'EXECUTE') AS anon_is_org_admin,
   has_function_privilege('anon', 'public.my_team_member_id(uuid)',                                'EXECUTE') AS anon_my_tm,
   has_function_privilege('anon', 'public.get_conversations_awaiting_human_reply(uuid,uuid,integer,integer)', 'EXECUTE') AS anon_conversas,
-  (SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '20270827000000') AS ledger_827000,
-  (SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '20270827000010') AS ledger_827010;
+  (SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '20270829000000') AS ledger_829000,
+  (SELECT count(*) FROM supabase_migrations.schema_migrations WHERE version = '20270829000010') AS ledger_829010;
