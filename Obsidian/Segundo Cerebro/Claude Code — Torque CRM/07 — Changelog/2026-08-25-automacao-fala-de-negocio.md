@@ -81,4 +81,5 @@ toda ação de funil cai no critério antigo quando não há negócio declarado.
 - O card entrando no funil sem virar Negócio (353 contra 14) é assunto
   separado — `lead-webhook` cria o card e ninguém abre o negócio.
 
-Ver [[ADR-0031]] e [[ADR-0023]].
+Ver `docs/adr/0031-o-sujeito-da-automacao-e-o-negocio.md` e
+`docs/adr/0023-negocio-is-the-funnel-unit.md` — os ADRs moram no repo, não no vault.
