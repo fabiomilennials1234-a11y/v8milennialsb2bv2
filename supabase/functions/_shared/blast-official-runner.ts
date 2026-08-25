@@ -62,8 +62,38 @@ export interface ResultadoDoEnvio {
   error?: string;
 }
 
+/**
+ * O recorte do cliente Supabase que este worker usa — nada além disto.
+ * Tipar o recorte em vez de `any` faz o compilador conferir as chamadas e deixa
+ * o dublê do teste ter de implementar exatamente o que a produção usa.
+ */
+export interface ClienteAdminDoWorker {
+  from(tabela: string): {
+    select(colunas: string): {
+      in(coluna: string, valores: readonly unknown[]): PromiseLike<{ data: unknown[] | null }>;
+    };
+  };
+  rpc(fn: string, args?: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
+}
+
+/** Linha de `blast_plans` como o worker a lê — só as colunas do select. */
+interface LinhaDePlano {
+  id: string;
+  organization_id: string;
+  status: string;
+  instance_id: string | null;
+  template: unknown;
+  post_send_target: unknown;
+}
+
+/** Instância como o worker a usa: opaca, exceto o id que indexa o mapa. */
+interface LinhaDeInstancia {
+  id: string;
+  [coluna: string]: unknown;
+}
+
 export interface DepsDoWorker {
-  supabaseAdmin: any;
+  supabaseAdmin: ClienteAdminDoWorker;
   /** Em produção: `sendTemplateViaInstance`, com o choke dentro. */
   enviarTemplate(params: {
     instance: Record<string, unknown>;
@@ -248,7 +278,7 @@ async function carregarContexto(
     .in("id", planIds);
 
   const instanceIds = [
-    ...new Set(((planos ?? []) as any[]).map((p) => p.instance_id).filter(Boolean)),
+    ...new Set(((planos ?? []) as LinhaDePlano[]).map((p) => p.instance_id).filter(Boolean)),
   ];
 
   const { data: instancias } = await deps.supabaseAdmin
@@ -257,11 +287,11 @@ async function carregarContexto(
     .in("id", instanceIds);
 
   const porInstancia = new Map(
-    ((instancias ?? []) as any[]).map((i) => [i.id, i]),
+    ((instancias ?? []) as LinhaDeInstancia[]).map((i) => [i.id, i]),
   );
 
   const mapa = new Map<string, ContextoDoPlano>();
-  for (const p of (planos ?? []) as any[]) {
+  for (const p of (planos ?? []) as LinhaDePlano[]) {
     const instance = porInstancia.get(p.instance_id);
     if (!instance) continue;
     mapa.set(p.id, {

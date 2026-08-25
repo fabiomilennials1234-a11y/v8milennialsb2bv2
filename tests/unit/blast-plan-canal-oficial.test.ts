@@ -1,4 +1,13 @@
 // @vitest-environment node
+/* eslint-disable @typescript-eslint/no-explicit-any --
+ * Dublês. `createBlastPlan` entra por import dinâmico e as deps são injetadas
+ * como objetos parciais de propósito: o teste implementa só a superfície que o
+ * caso exercita, e um dublê que precisasse do tipo inteiro deixaria de ser
+ * dublê. Mesmo idioma dos outros testes de dublê deste repositório
+ * (meta-*-hook.test.tsx, greeting-orchestrator.test.ts).
+ * O código de PRODUÇÃO desta fatia não tem `any`: ver `ClienteAdminDoWorker`,
+ * `LinhaDePlano` e `LinhaDeInstancia` em `_shared/blast-official-runner.ts`.
+ */
 /**
  * createBlastPlan — a bifurcação do Canal Oficial (#1722).
  *
