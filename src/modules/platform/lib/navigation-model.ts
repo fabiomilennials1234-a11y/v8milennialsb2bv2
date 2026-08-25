@@ -266,6 +266,9 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/templates": "message_templates.view",
   "/duplicatas": "leads.view",
   "/lixeira": "leads.view",
+  // SCRUM-430. A chave existe no catálogo desde a migration 20270828000000 —
+  // sem ela no banco, esta linha esconde Métricas de todo membro não-admin.
+  "/metricas": "metrics.view",
   "/performance": "performance.view",
   "/comissoes": "commissions.view",
   "/copilot": "copilot.view",

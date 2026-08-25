@@ -12,6 +12,7 @@ import {
 } from "./navigation-filters";
 import {
   FUNIS_PATHS,
+  NAV_VIEW_PERMISSIONS,
   PITSTOP_GROUPS,
   SIDEBAR_PRIMARY,
   TURBO_PATHS,
@@ -126,6 +127,21 @@ describe("inventário da navegação", () => {
 
   it("a lateral tem sete portas", () => {
     expect(SIDEBAR_PRIMARY).toHaveLength(7);
+  });
+
+  // SCRUM-430. As duas travas de Métricas são independentes e ambas precisam
+  // existir: o gate de ROLLOUT (a org entrou na feature) e o de PERMISSÃO (este
+  // membro pode ver). Perder qualquer uma passa despercebido na tela de quem
+  // testa — admin e master recebem `true` antes de qualquer camada.
+  it("Métricas exige metrics.view, além do gate de rollout", () => {
+    expect(NAV_VIEW_PERMISSIONS["/metricas"]).toBe("metrics.view");
+  });
+
+  // A chave do corte por pessoa NÃO é a mesma da tela: closer/SDR seguem em
+  // `performance.view`, a mesma trava do Ranking. Se um dia alguém "unificar",
+  // que seja por decisão, não por descuido.
+  it("Métricas e Ranking não compartilham a mesma chave", () => {
+    expect(NAV_VIEW_PERMISSIONS["/metricas"]).not.toBe(NAV_VIEW_PERMISSIONS["/performance"]);
   });
 });
 
