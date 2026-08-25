@@ -142,15 +142,28 @@ describe("contagem", () => {
     expect(r).toEqual({ compareceu: 2, naoCompareceu: 1, semRegistro: 1 });
   });
 
-  it("cada evento cai em exatamente UM balde — nunca dobra", () => {
+  it("cada evento cai em NO MÁXIMO um balde — nunca dobra", () => {
+    // O que este teste existe para pegar é contagem DOBRADA. A versão anterior
+    // afirmava `soma === eventos.length`, que é mais forte do que a função
+    // promete e mais fraco do que o nome diz: `resumirComparecimento` conta só
+    // o que PODE ter resultado, então quem não é registrável — follow-up,
+    // etapa de kanban, reunião cancelada — legitimamente conta zero.
+    //
+    // A afirmação certa tem duas metades: a soma bate com o número de
+    // REGISTRÁVEIS (nada some), e nunca passa do tamanho da lista (nada dobra).
     const eventos = [
       evento({ id: "meeting-a", status: "completed" }),
       evento({ id: "meeting-b", status: "no_show" }),
       evento({ id: "meeting-c", status: "scheduled" }),
       evento({ id: "meeting-d", status: "cancelled" }),
+      evento({ id: "follow_up-a", source: "follow_up", status: "completed" }),
     ];
+    const registraveis = eventos.filter(podeRegistrarResultado).length;
     const r = resumirComparecimento(eventos);
-    expect(r.compareceu + r.naoCompareceu + r.semRegistro).toBe(eventos.length);
+    const soma = r.compareceu + r.naoCompareceu + r.semRegistro;
+
+    expect(soma).toBe(registraveis);
+    expect(soma).toBeLessThanOrEqual(eventos.length);
   });
 
   it("trocar o resultado MOVE de balde, não soma", () => {
@@ -225,5 +238,43 @@ describe("'concluído' de outra fonte NÃO é 'compareceu'", () => {
   it("mensagem agendada e Google nunca têm resultado", () => {
     expect(outcomeOf(evento({ source: "scheduled_message", status: "completed" }))).toBeNull();
     expect(outcomeOf(evento({ source: "google", status: "completed" }))).toBeNull();
+  });
+});
+
+/**
+ * `cancelled` é o QUARTO valor do `meetings_status_check` e o único sem
+ * escritor no produto — a guarda é preventiva, e estes testes existem para que
+ * ela não seja "simplificada" de volta por quem olhar `podeRegistrarResultado`
+ * e achar que `source === "meeting"` bastava.
+ *
+ * O passo perigoso não é apagar o cancelamento; é RESSUSCITAR. Sem a guarda,
+ * marcar e desmarcar grava `scheduled` e a reunião cancelada reaparece na aba
+ * "Pendentes", que é justamente a que a pessoa abre para trabalhar.
+ */
+describe("reunião cancelada não aceita resultado", () => {
+  it("o par de botões não aparece — nas duas grafias do status", () => {
+    for (const status of ["cancelled", "canceled", "CANCELLED"]) {
+      expect(podeRegistrarResultado(evento({ status })), status).toBe(false);
+      expect(outcomeOf(evento({ status })), status).toBeNull();
+    }
+  });
+
+  it("não entra na contagem — nem como 'sem registro'", () => {
+    // Contar cancelada como "sem registro" inflaria o número com algo que
+    // ninguém pode nem deve registrar.
+    const resumo = resumirComparecimento([
+      evento({ id: "a", status: "cancelled" }),
+      evento({ id: "b", status: "completed" }),
+      evento({ id: "c", status: "scheduled" }),
+    ]);
+    expect(resumo).toEqual({ compareceu: 1, naoCompareceu: 0, semRegistro: 1 });
+  });
+
+  it("a reunião NÃO cancelada segue registrável", () => {
+    // A guarda recorta por status, não por fonte — não pode levar junto o
+    // caso normal, que é a razão de a tela existir.
+    expect(podeRegistrarResultado(evento({ status: "scheduled" }))).toBe(true);
+    expect(podeRegistrarResultado(evento({ status: "completed" }))).toBe(true);
+    expect(podeRegistrarResultado(evento({ status: "no_show" }))).toBe(true);
   });
 });

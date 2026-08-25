@@ -553,8 +553,34 @@ export function statusDoResultado(resultado: AttendanceOutcome): string {
  * pertence a Follow-ups, `pipe_confirmacao` é etapa de kanban (marcar
  * comparecimento ali moveria o card), e mensagem agendada não comparece a nada.
  */
+/**
+ * Reunião cancelada — o QUARTO valor do `meetings_status_check`, que a UI nunca
+ * mostrou e ninguém nunca escreveu.
+ *
+ * Varri o repo inteiro à procura de um escritor e não existe: os três únicos
+ * caminhos de escrita em `meetings` são `useCreateMeeting` (nunca manda
+ * `status`, cai no DEFAULT `scheduled`), `useUpdateMeeting` (um só chamador de
+ * produção, o handler desta tela, que emite `completed`/`no_show`/`scheduled`)
+ * e `useDeleteMeeting` (DELETE duro, não soft-cancel). O webhook do Google
+ * Calendar TRATA evento cancelado, mas escreve em `google_calendar_events_cache`
+ * — nunca em `meetings`. Zero `UPDATE meetings` em todas as migrations,
+ * inclusive as 840 arquivadas.
+ *
+ * Então por que a guarda existe? Porque o dia em que alguém ligar o
+ * cancelamento, o custo de não ter isto aqui é SILENCIOSO e em dois passos:
+ * `outcomeOf` devolveria `null` para a cancelada, o par de botões apareceria
+ * dizendo "Sem registro", e marcar-e-desmarcar gravaria `scheduled` — a reunião
+ * cancelada RESSUSCITA na aba "Pendentes". Uma linha aqui custa menos que esse
+ * bug.
+ */
+const CANCELLED_STATUSES = new Set(["cancelled", "canceled"]);
+
+export function isCancelledEvent(event: UnifiedEvent): boolean {
+  return CANCELLED_STATUSES.has((event.status ?? "").toLowerCase());
+}
+
 export function podeRegistrarResultado(event: UnifiedEvent): boolean {
-  return event.source === "meeting";
+  return event.source === "meeting" && !isCancelledEvent(event);
 }
 
 /**
