@@ -440,7 +440,10 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
               field: node.data.field as string || "",
               operator: node.data.operator as string || "equals",
               value: node.data.value as string || "",
-            });
+            // O negócio da execução: é ele que responde `stage`. Sem isto a
+            // condição lia o card de Oportunidades do lead, qualquer que fosse
+            // o funil do workflow.
+            }, entryId);
 
             await recordStep(supabase, executionId, node, "success",
               { field: node.data.field, operator: node.data.operator, value: node.data.value },

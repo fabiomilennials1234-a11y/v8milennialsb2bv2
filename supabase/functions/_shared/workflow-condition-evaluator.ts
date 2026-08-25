@@ -6,7 +6,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getPipeEntry } from "./pipeline-adapter.ts";
+import { getStageDoNegocio } from "./negocio-subject.ts";
 
 export interface ConditionParams {
   field: string;
@@ -46,6 +46,14 @@ export async function evaluateCondition(
   supabase: SupabaseClient,
   leadId: string,
   condition: ConditionParams,
+  /**
+   * O Negócio que disparou a execução (`pipeline_entries.id`).
+   *
+   * Opcional porque nem toda execução tem um: gatilho da pessoa
+   * (`lead_created`, `tag_added`) não declara negócio, e ali o critério antigo
+   * continua sendo o certo. Ver `ActionInput.entryId`.
+   */
+  entryId?: string | null,
 ): Promise<boolean> {
   const { field, operator, value } = condition;
 
@@ -80,10 +88,17 @@ export async function evaluateCondition(
     // automação comparando `stage` passaria a casar SEMPRE contra um estado que
     // o negócio não ocupa mais. Não é envio faltando: é envio errado, repetido,
     // sem nada na tela denunciando.
-    const waEntry = await getPipeEntry(
-      supabase, leadId, leadData.organization_id as string, "whatsapp",
+    // E, desde a fatia 3 do sujeito da automação, é a etapa do negócio QUE
+    // DISPAROU — não a do card de Oportunidades daquele lead.
+    //
+    // O `getPipeEntry` abaixo tinha o funil `whatsapp` CHUMBADO: uma condição
+    // de etapa dentro de um workflow de Orçamentos lia o card de Oportunidades
+    // e, quando ele não existia (o normal depois de um move), comparava contra
+    // string vazia. Não é envio faltando — é condição decidindo pelo motivo
+    // errado, em silêncio.
+    fieldValue = await getStageDoNegocio(
+      supabase, leadId, leadData.organization_id as string, entryId ?? null,
     );
-    fieldValue = waEntry?.stage_key || "";
   } else if (field === "score") {
     fieldValue = leadData.qualification_score ?? 0;
   } else if (field === "any_responsible") {

@@ -10,6 +10,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionInput } from "./action-handlers/types.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry } from "./pipeline-adapter.ts";
+import { getStageDoNegocio, entryIdDoContexto } from "./negocio-subject.ts";
 import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "./lead-name.ts";
 import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
 import { addTag as sharedAddTag, removeTag as sharedRemoveTag } from "./action-handlers/tag-operations.ts";
@@ -136,7 +137,15 @@ export async function resolveVariables(
 
   // ADR-0023 §10: `{estagio}` é a etapa do NEGÓCIO. Ver a nota longa em
   // `action-handlers/whatsapp-helpers.ts` — a coluna espelho congela no MOVE.
-  const waEntry = await getPipeEntry(supabase, leadId, lead.organization_id as string, "whatsapp");
+  //
+  // E, desde a fatia 3 do sujeito da automação, é a etapa do negócio QUE
+  // DISPAROU — lido do `context`, que é onde o gatilho de banco o deposita. O
+  // funil `whatsapp` era CHUMBADO aqui: uma mensagem disparada por um workflow
+  // de Orçamentos imprimia a etapa do card de Oportunidades, ou vazio quando
+  // ele já não existia.
+  const estagioDoNegocio = await getStageDoNegocio(
+    supabase, leadId, lead.organization_id as string, entryIdDoContexto(executionContext),
+  );
 
   let result = template;
 
@@ -146,7 +155,7 @@ export async function resolveVariables(
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
-    estagio:    waEntry?.stage_key || "",
+    estagio:    estagioDoNegocio,
     score:      String(lead.qualification_score ?? ""),
     rating:     String(lead.rating ?? ""),
     faturamento: String(lead.faturamento ?? ""),

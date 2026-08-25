@@ -16,6 +16,21 @@ export type ChecklistItemUpdate = TablesUpdate<"checklist_items">;
 export interface ChecklistWithCounts extends Checklist {
   total_items: number;
   completed_items: number;
+  /**
+   * O Negócio dono do checklist — `checklists.pipeline_entry_id`.
+   *
+   * **Nulo = é da PESSOA**, vale para todos os negócios dela. É o caso dos
+   * 1.338 checklists aplicados antes da coluna existir, e o de quem aplica pela
+   * ficha do lead. Preenchido = é daquele negócio só (ADR-0023 §1, decisão do
+   * CTO em 2026-08-25).
+   *
+   * Declarado à mão porque `integrations/supabase/types.ts` é gerado e ainda
+   * não foi regenerado — regerar a partir de branch efêmera corrompe o arquivo
+   * (as versões órfãs de prod não estão lá). Sai junto com o apply, num commit
+   * só. Mesmo procedimento do `mover_negocio`.
+   */
+  pipeline_entry_id?: string | null;
+  deal_id?: string | null;
 }
 
 // ─── Queries ─────────────────────────────────────────────
@@ -129,18 +144,28 @@ export function useCreateChecklist() {
   const { organizationId, teamMemberId } = useOrganization();
 
   return useMutation({
-    mutationFn: async (input: { title: string; description?: string; lead_id?: string }) => {
+    mutationFn: async (input: {
+      title: string;
+      description?: string;
+      lead_id?: string;
+      /** `pipeline_entries.id` — nasce DESTE negócio. Ausente = da pessoa. */
+      pipeline_entry_id?: string | null;
+    }) => {
       if (!organizationId) throw new Error("Organização não disponível");
 
       const { data, error } = await supabase
         .from("checklists")
+        // `as never`: `pipeline_entry_id` existe na tabela desde a migration
+        // `20270827000020` e ainda não está nos tipos gerados — ver a nota em
+        // `ChecklistWithCounts.pipeline_entry_id`.
         .insert({
           organization_id: organizationId,
           created_by: teamMemberId && !isVirtualTeamMember(teamMemberId) ? teamMemberId : null,
           title: input.title,
           description: input.description ?? null,
           lead_id: input.lead_id ?? null,
-        })
+          pipeline_entry_id: input.pipeline_entry_id ?? null,
+        } as never)
         .select()
         .single();
 
