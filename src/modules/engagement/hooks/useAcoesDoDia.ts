@@ -40,6 +40,14 @@ export interface CreateAcaoDoDiaInput {
   lead_id?: string;
   confirmacao_id?: string;
   follow_up_id?: string;
+  /**
+   * O Negócio dono da ação — `pipeline_entries.id`.
+   *
+   * **Ausente = ação da PESSOA**, vale para todos os negócios dela (decisão do
+   * CTO em 2026-08-25, mesma regra do checklist — ADR-0031). Quem cria a ação a
+   * partir de um card do funil manda o id da ENTRADA, que é o negócio.
+   */
+  pipeline_entry_id?: string | null;
 }
 
 /**
@@ -175,6 +183,8 @@ export function useCreateAcaoDoDia() {
 
       const { data, error } = await supabase
         .from("acoes_do_dia")
+        // `as never`: `pipeline_entry_id` existe desde a migration
+        // `20270828000030` e ainda não está nos tipos gerados.
         .insert({
           user_id: user.id,
           title: input.title,
@@ -183,7 +193,8 @@ export function useCreateAcaoDoDia() {
           lead_id: input.lead_id || null,
           confirmacao_id: input.confirmacao_id || null,
           follow_up_id: input.follow_up_id || null,
-        })
+          pipeline_entry_id: input.pipeline_entry_id || null,
+        } as never)
         .select()
         .single();
 

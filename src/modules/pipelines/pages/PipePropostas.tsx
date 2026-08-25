@@ -1406,7 +1406,13 @@ function PipePropostasInner() {
                   }}
                   onRemove={canDeleteCards ? () => handleOpenDeleteDialog(card.id, card.leadId || "") : undefined}
                   onQuickAction={(title) => {
-                    createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
+                    createAcaoDoDia.mutate({
+                  title,
+                  lead_id: card.leadId || undefined,
+                  // `card.id` é a ENTRADA no funil — o Negócio. A ação nasce
+                  // dele, não da pessoa: foi este card que a pessoa clicou.
+                  pipeline_entry_id: card.id,
+                });
                   }}
                   onCalorChange={(calor) => {
                     if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });

@@ -1,7 +1,19 @@
 import type { ActionInput, ActionResult } from "./types.ts";
 
+/**
+ * `create_followup` — a tarefa é DO NEGÓCIO (decisão do CTO, 2026-08-25).
+ *
+ * Mesma regra do checklist (ADR-0031): quando a execução sabe qual Negócio
+ * disparou, a tarefa nasce presa a ele. Quando não sabe (gatilho da pessoa), a
+ * tarefa é da PESSOA e vale para todos os negócios dela.
+ *
+ * `source_pipe`/`source_pipe_id` continuam onde estavam: eram a meia-ponte que
+ * já existia (373 follow-ups em prod diziam de qual card vieram, sem FK e com
+ * nome de "pipe"). `pipeline_entry_id` é a coluna canônica; aposentar as
+ * antigas é outra fatia.
+ */
 export async function createFollowup(input: ActionInput): Promise<ActionResult> {
-  const { supabase, organizationId, leadId, params } = input;
+  const { supabase, organizationId, leadId, entryId, dealId, params } = input;
 
   const title = (params.followupTitle as string) || "Follow-up";
   const description = (params.followupDescription as string) || "";
@@ -17,6 +29,8 @@ export async function createFollowup(input: ActionInput): Promise<ActionResult> 
 
   const { error } = await supabase.from("follow_ups").insert({
     lead_id: leadId,
+    pipeline_entry_id: entryId ?? null,
+    deal_id: dealId ?? null,
     assigned_to: assignedTo,
     title,
     description,
