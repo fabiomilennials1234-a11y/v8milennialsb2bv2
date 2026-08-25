@@ -347,6 +347,17 @@ describe("Agenda — registrar o resultado do compromisso", () => {
     expect(screen.queryByRole("button", { name: "Compareceu" })).toBeNull();
   });
 
+  /**
+   * Este caso monta a Agenda inteira CINCO vezes — uma por `event_type` — e o
+   * teto padrão do vitest é 5s para o `it()` todo, não por volta. Sozinho o
+   * arquivo cabia; na suíte em paralelo, não. É custo de wall clock declarado,
+   * não defeito mascarado: o que se afirma aqui (um `event_type` por volta,
+   * mesma implementação) é assertivo e independente de tempo.
+   *
+   * Mesma classe do teto que a #1810 subiu na fronteira `React.lazy` do painel.
+   */
+  const TETO_CINCO_MONTAGENS = 30_000;
+
   it("funciona para os cinco tipos, com uma implementação só", async () => {
     for (const tipo of ["meeting", "call", "follow_up", "task", "other"]) {
       agendaEvents.length = 0;
@@ -366,5 +377,5 @@ describe("Agenda — registrar o resultado do compromisso", () => {
       });
       unmount();
     }
-  });
+  }, TETO_CINCO_MONTAGENS);
 });
