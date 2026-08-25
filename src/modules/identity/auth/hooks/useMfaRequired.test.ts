@@ -1,18 +1,18 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { useMfaRequired } from "./useMfaRequired";
 
-const getAal = vi.fn();
-const onAuthStateChange = vi.fn(() => ({
+type AalResult = { data: { currentLevel: string | null; nextLevel: string | null } | null; error: { message: string } | null };
+
+const getAal = vi.fn<() => Promise<AalResult>>();
+const onAuthStateChange = vi.fn((_cb: () => void) => ({
   data: { subscription: { unsubscribe: vi.fn() } },
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     auth: {
-      mfa: {
-        getAuthenticatorAssuranceLevel: (...a: unknown[]) => getAal(...a),
-      },
-      onAuthStateChange: (...a: unknown[]) => onAuthStateChange(...a),
+      mfa: { getAuthenticatorAssuranceLevel: () => getAal() },
+      onAuthStateChange: (cb: () => void) => onAuthStateChange(cb),
     },
   },
 }));
@@ -83,8 +83,8 @@ describe("useMfaRequired", () => {
 
     // O refreshSession() da tela de MFA dispara onAuthStateChange.
     getAal.mockReturnValue(aal("aal2", "aal2"));
-    const callback = onAuthStateChange.mock.calls[0][0] as () => void;
-    callback();
+    const callback = onAuthStateChange.mock.calls[0]?.[0];
+    callback?.();
 
     await waitFor(() => expect(result.current.required).toBe(false));
   });
