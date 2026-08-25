@@ -244,3 +244,13 @@ export interface DealCardData {
    */
   outrosNegocios: LeadCardDeal[];
 }
+
+/**
+ * As abas do Card do Negócio.
+ *
+ * Mora aqui, e não dentro do `DealCard`, porque quem PEDE uma aba está longe
+ * dela: o item "Checklists" do menu do card no funil abre o negócio já na aba
+ * certa, e o pedido atravessa o `DealSheetContext`. Tipo solto em dois arquivos
+ * é como as duas listas de abas saem de sincronia.
+ */
+export type DealCardAba = "negocio" | "atividades" | "negocios" | "checklists";

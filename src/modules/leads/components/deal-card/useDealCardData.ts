@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization, useTeamMembers } from "@/modules/identity";
+import { useLeadChecklists } from "@/modules/engagement";
 import { useLeadDetail } from "../lead-detail/hooks/useLeadDetail";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
@@ -66,6 +67,28 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
   const { data: vendasMap } = useLeadsSalesMetrics(ids);
   const { data: carteiraMap } = useLeadsCarteiraMetrics(ids);
   const { data: equipe = [] } = useTeamMembers();
+
+  /**
+   * Só o SELO da aba de Checklists. O conteúdo da aba refaz a MESMA query
+   * (`["checklists","lead",leadId]`) quando é montado — o React Query serve as
+   * duas com uma requisição só, e marcar um item lá dentro atualiza o selo no
+   * mesmo frame.
+   *
+   * Mora aqui, e não no `DealCardPanel`, pelo mesmo motivo já documentado no pé
+   * deste arquivo: `useLeadChecklists` chama `useOrganization`, que passa por
+   * `useAuth` e **lança** fora do `AuthProvider`. `cards-nunca-empilham.test`
+   * monta o painel de verdade sem esse provider e mocka este hook inteiro — o
+   * selo simplesmente não vem, e a aba abre sem número, que é o certo quando
+   * não se sabe de quem é a organização.
+   */
+  const { data: checklistsDoLead } = useLeadChecklists(isOpen ? leadId : null);
+  const resumoChecklists = useMemo(() => {
+    if (!checklistsDoLead) return null;
+    return {
+      feitos: checklistsDoLead.reduce((s, c) => s + c.completed_items, 0),
+      total: checklistsDoLead.reduce((s, c) => s + c.total_items, 0),
+    };
+  }, [checklistsDoLead]);
 
   const negocioBase = useMemo(
     () => (dealsMap?.[leadId ?? ""] ?? []).find((d) => d.id === entryId) ?? null,
@@ -458,5 +481,6 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     organizacaoId: organizacaoDoLead ?? organizationId ?? null,
     membroId: teamMemberId ?? null,
     souAdmin: role === "admin",
+    resumoChecklists,
   };
 }
