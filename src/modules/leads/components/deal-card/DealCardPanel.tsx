@@ -18,6 +18,7 @@ import {
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
+import { DealCardChecklists } from "./DealCardChecklists";
 import { useDealCardData } from "./useDealCardData";
 import type { DealCardComentario } from "./types";
 
@@ -41,16 +42,13 @@ import type { DealCardComentario } from "./types";
  * coluna levam até ela, e a lista de Leads continua abrindo o lead direto.
  */
 export const DealCardPanel = memo(function DealCardPanel() {
-  const { isOpen, entryId, leadId, close, openDeal } = useDealSheet();
+  const { isOpen, entryId, leadId, aba, close, openDeal } = useDealSheet();
   const { openLead } = useLeadSheet();
   const { isMobile } = useViewport();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, organizacaoId, membroId, souAdmin } = useDealCardData(
-    entryId,
-    leadId,
-    isOpen,
-  );
+  const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists } =
+    useDealCardData(entryId, leadId, isOpen);
 
   const [adicionandoProduto, setAdicionandoProduto] = useState(false);
 
@@ -280,6 +278,11 @@ export const DealCardPanel = memo(function DealCardPanel() {
       onEditarComentario={podeComentar ? editarComentario : undefined}
       onApagarComentario={podeComentar ? apagarComentario : undefined}
       comentando={criarComentario.isPending}
+      abaInicial={aba}
+      resumoChecklists={resumoChecklists ?? null}
+      /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
+         Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
+      painelChecklists={<DealCardChecklists leadId={leadId} />}
     />
   ) : (
     <div className="flex h-full flex-1 items-center justify-center bg-background px-6 text-center">

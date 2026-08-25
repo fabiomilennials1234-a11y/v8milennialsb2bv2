@@ -1,6 +1,6 @@
 import { memo, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { CheckCircle2, CheckSquare, ChevronDown, ChevronRight } from "lucide-react";
+import { CheckCircle2, CheckSquare, ChevronDown, ChevronRight, ClipboardList, Loader2, Plus } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
@@ -10,7 +10,9 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
+  useApplyChecklistTemplate,
   useChecklistItems,
+  useChecklistTemplates,
   useToggleChecklistItem,
   useLeadChecklists,
 } from "@/modules/engagement";
@@ -80,7 +82,11 @@ export const LeadCardChecklistPopover = memo(function LeadCardChecklistPopover({
           // badge abre o popover E o modal (click borbulha pro root). Cobre
           // mouse + ativação por teclado (Enter/Space disparam click).
           onClick={(e) => e.stopPropagation()}
-          aria-label={`Checklists: ${completed} de ${total} itens concluídos`}
+          aria-label={
+            total > 0
+              ? `Checklists: ${completed} de ${total} itens concluídos`
+              : "Checklists: nenhum aplicado neste lead"
+          }
           className={cn(
             children
               ? cn("w-full min-w-0 text-left", triggerClassName)
@@ -160,23 +166,25 @@ function ChecklistPopoverBody({
             Tudo pronto
           </span>
         )}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <Progress
-            value={progress}
-            className={cn(
-              "h-px w-12 bg-muted/60",
-              done && "[&>div]:bg-emerald-500",
-            )}
-          />
-          <span
-            className={cn(
-              "text-[11px] tabular-nums",
-              done ? "text-emerald-400" : "text-muted-foreground",
-            )}
-          >
-            {completed}/{total}
-          </span>
-        </div>
+        {total > 0 && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Progress
+              value={progress}
+              className={cn(
+                "h-px w-12 bg-muted/60",
+                done && "[&>div]:bg-emerald-500",
+              )}
+            />
+            <span
+              className={cn(
+                "text-[11px] tabular-nums",
+                done ? "text-emerald-400" : "text-muted-foreground",
+              )}
+            >
+              {completed}/{total}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="p-1.5">
@@ -199,7 +207,7 @@ function ChecklistPopoverBody({
           /* Copy corrigida: o que está vazio aqui é a LISTA de checklists do
              lead, não os itens de um checklist. A frase antiga descrevia o
              outro estado vazio (o de dentro de um grupo, linha ~350). */
-          <p className="px-2 py-3 text-[11px] text-muted-foreground text-center">
+          <p className="px-2 py-2 text-[11px] text-muted-foreground text-center">
             Nenhum checklist neste lead
           </p>
         ) : single ? (
@@ -212,6 +220,83 @@ function ChecklistPopoverBody({
           </div>
         )}
       </div>
+
+      {/* Os checklists QUE A ORG TEM — os templates. Sem isto, o painel de um
+          lead sem checklist é um beco: ele diz que não há nada e não oferece
+          por onde ter. É o mesmo gesto do modal do lead ("Aplicar Template"),
+          trazido para onde o vendedor está de fato olhando: o card do funil.
+          A lista abre sozinha quando não há checklist nenhum — ali ela é a
+          única coisa a fazer. */}
+      {open && (
+        <AplicarTemplate leadId={leadId} semChecklist={checklists.length === 0} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Aplicar um template ao lead, de dentro do popover.
+ *
+ * `useApplyChecklistTemplate` é idempotente por `(lead_id, source_template_id)`
+ * — aplicar duas vezes devolve o que já existe em vez de duplicar (ADR-0016).
+ */
+function AplicarTemplate({ leadId, semChecklist }: { leadId: string; semChecklist: boolean }) {
+  const { data: templates = [] } = useChecklistTemplates();
+  const aplicar = useApplyChecklistTemplate();
+  const [aberto, setAberto] = useState(semChecklist);
+  const [aplicando, setAplicando] = useState<string | null>(null);
+
+  if (templates.length === 0) return null;
+
+  const lista = aberto || semChecklist;
+
+  return (
+    <div className="border-t border-border/40 p-1.5">
+      {!semChecklist && (
+        <button
+          type="button"
+          onClick={() => setAberto((v) => !v)}
+          className="flex w-full items-center gap-1.5 rounded-[5px] px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        >
+          <Plus className="size-3 shrink-0" />
+          Aplicar checklist do sistema
+        </button>
+      )}
+
+      {lista && (
+        <div className="mt-0.5 max-h-32 space-y-px overflow-y-auto">
+          {templates.map((t) => {
+            const emVoo = aplicando === t.id && aplicar.isPending;
+            return (
+              <button
+                key={t.id}
+                type="button"
+                disabled={aplicar.isPending}
+                onClick={() => {
+                  setAplicando(t.id);
+                  aplicar.mutate(
+                    { templateId: t.id, leadId },
+                    { onSettled: () => setAplicando(null) },
+                  );
+                }}
+                className="flex w-full items-center gap-2 rounded-[5px] px-2 py-1 text-left transition-colors hover:bg-muted/50 disabled:opacity-50"
+              >
+                {emVoo ? (
+                  <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
+                ) : (
+                  <ClipboardList className="size-3 shrink-0 text-muted-foreground/70" />
+                )}
+                <span className="min-w-0 flex-1 truncate text-[11px] text-foreground/85">
+                  {t.title}
+                </span>
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground/70">
+                  {t.total_items}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
