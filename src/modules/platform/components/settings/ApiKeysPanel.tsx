@@ -69,7 +69,16 @@ const AVAILABLE_SCOPES = [
   { value: "deal:write", label: "Negócios (escrita)", description: "Abrir, editar e mover negócios" },
   { value: "team:read", label: "Equipe (leitura)", description: "Listar membros — resolve os IDs de responsável" },
   { value: "metadata:write", label: "Catálogos (escrita)", description: "Criar campos personalizados pela API" },
-];
+] as const;
+
+/**
+ * Só existe escopo que a tela sabe desenhar. Sem esta união, `scopes` era
+ * `string[]` e aceitava um valor que nenhuma checkbox representa — o estado
+ * ficava marcado e invisível, e a chave nascia com um escopo que o servidor
+ * ignora. O compilador é o único lugar que pega isso: a tela renderiza sem
+ * reclamar, e o erro só aparece como 403 no integrador, horas depois.
+ */
+type EscopoDisponivel = (typeof AVAILABLE_SCOPES)[number]["value"];
 
 // ── Component ─────────────────────────────────────────────────
 
@@ -85,7 +94,7 @@ export function ApiKeysPanel() {
 
   // Create form
   const [name, setName] = useState("");
-  const [scopes, setScopes] = useState<string[]>(["lead:read"]);
+  const [scopes, setScopes] = useState<EscopoDisponivel[]>(["lead:read"]);
   const [rateLimit, setRateLimit] = useState(100);
   const [expiryDays, setExpiryDays] = useState("");
 
@@ -125,7 +134,12 @@ export function ApiKeysPanel() {
 
   const resetCreateForm = () => {
     setName("");
-    setScopes(["read"]);
+    // `read` não existe em API_SCOPES: era escopo fantasma. Nenhuma checkbox o
+    // representa, então ele voltava marcado e invisível — e quem fechasse o
+    // diálogo e abrisse de novo emitia chave carregando só ele. Como `/ping` não
+    // exige escopo, a conexão do Make validava e TODAS as rotas devolviam 403
+    // depois: parecia chave errada, era escopo vazio. Espelha o estado inicial.
+    setScopes(["lead:read"]);
     setRateLimit(100);
     setExpiryDays("");
     setNewKey(null);
@@ -137,7 +151,7 @@ export function ApiKeysPanel() {
     setCreateOpen(open);
   };
 
-  const toggleScope = (scope: string) => {
+  const toggleScope = (scope: EscopoDisponivel) => {
     setScopes((prev) =>
       prev.includes(scope)
         ? prev.filter((s) => s !== scope)
