@@ -1,10 +1,10 @@
--- ROLLBACK de 20270829000000_lead_comments_por_negocio.sql
+-- ROLLBACK de 20270829000001_lead_comments_por_negocio.sql
 --
 -- ⚠️ ORDEM: rollback roda em ordem DECRESCENTE. Este é o SEGUNDO do par —
--- rode rollback/20270829000010_lead_comment_entry_coerente_revoga_anon.sql
+-- rode rollback/20270829000011_lead_comment_entry_coerente_revoga_anon.sql
 -- ANTES deste, porque aqui a função `fn_lead_comment_entry_coerente` deixa de
--- existir. Na ida a ordem é a oposta (…000 cria a função, …010 revoga o grant):
--- …000 < …010 é load-bearing nos dois sentidos.
+-- existir. Na ida a ordem é a oposta (…001 cria a função, …011 revoga o grant):
+-- …001 < …011 é load-bearing nos dois sentidos.
 --
 -- Devolve `lead_comments` ao vínculo único com o lead.
 --
