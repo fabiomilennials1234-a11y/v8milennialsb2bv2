@@ -99,6 +99,34 @@ export async function evaluateCondition(
     fieldValue = await getStageDoNegocio(
       supabase, leadId, leadData.organization_id as string, entryId ?? null,
     );
+  } else if (field === "deal_value") {
+    /**
+     * O valor do NEGÓCIO da execução — `deals.value`.
+     *
+     * Nunca é o valor do lead: lead não tem valor, negócio tem (ADR-0023 §5,
+     * "`deals` carrega identidade e dinheiro"). Sem negócio na execução, ou com
+     * negócio sem linha em `deals` (26% dos cards), responde 0 — e `0` compara
+     * bem com `maior que`, que é como esta condição é usada.
+     */
+    fieldValue = await getDealValue(supabase, leadId, leadData.organization_id as string, entryId ?? null);
+  } else if (field === "has_open_deal") {
+    /**
+     * "Esta pessoa tem negócio aberto?" — a pergunta que decide se vale abrir
+     * outro (ADR-0023 §6, a Situação da ficha do Lead).
+     *
+     * Responde `"true"`/`"false"` em texto para casar com o operador `igual a`,
+     * que é o único que o editor oferece para campo de sim/não.
+     */
+    fieldValue = (await countOpenDeals(supabase, leadId)) > 0 ? "true" : "false";
+  } else if (field === "days_in_stage") {
+    /**
+     * Há quantos dias o NEGÓCIO está parado na etapa.
+     *
+     * `pipeline_entries.stage_changed_at`, não `updated_at`: o segundo se mexe
+     * quando qualquer campo do card muda (nota, responsável), e uma condição de
+     * estagnação que zera porque alguém editou uma observação não mede nada.
+     */
+    fieldValue = await daysInStage(supabase, leadId, leadData.organization_id as string, entryId ?? null);
   } else if (field === "score") {
     fieldValue = leadData.qualification_score ?? 0;
   } else if (field === "any_responsible") {
@@ -114,6 +142,84 @@ export async function evaluateCondition(
   }
 
   return compare(fieldValue, operator, value);
+}
+
+/** `deals.value` do negócio da execução; 0 quando não há negócio com identidade. */
+async function getDealValue(
+  supabase: SupabaseClient,
+  leadId: string,
+  organizationId: string,
+  entryId: string | null,
+): Promise<number> {
+  const entry = await currentEntry(supabase, leadId, organizationId, entryId);
+  if (!entry?.deal_id) return 0;
+
+  const { data } = await supabase
+    .from("deals")
+    .select("value")
+    .eq("id", entry.deal_id)
+    .eq("organization_id", organizationId)
+    .maybeSingle();
+  return Number(data?.value ?? 0) || 0;
+}
+
+/** Quantos negócios ABERTOS a pessoa tem — `closed_at` nulo é o critério. */
+async function countOpenDeals(supabase: SupabaseClient, leadId: string): Promise<number> {
+  const { count } = await supabase
+    .from("pipeline_entries")
+    .select("id", { count: "exact", head: true })
+    .eq("lead_id", leadId)
+    .is("closed_at", null);
+  return count ?? 0;
+}
+
+/** Dias desde a última troca de etapa DO NEGÓCIO. */
+async function daysInStage(
+  supabase: SupabaseClient,
+  leadId: string,
+  organizationId: string,
+  entryId: string | null,
+): Promise<number> {
+  const entry = await currentEntry(supabase, leadId, organizationId, entryId);
+  const marco = (entry?.stage_changed_at as string | null) ?? (entry?.created_at as string | null);
+  if (!marco) return 0;
+  const ms = Date.now() - new Date(marco).getTime();
+  return Number.isFinite(ms) ? Math.floor(ms / 86_400_000) : 0;
+}
+
+/**
+ * A entrada da execução — ou, sem ela, a corrente do lead.
+ *
+ * A regra de "corrente" (aberta primeiro, depois a mais recente) é a mesma de
+ * `pickActiveEntry`: divergir aqui criaria mais uma resposta para "qual
+ * negócio", e é disso que esta fatia inteira está saindo.
+ */
+async function currentEntry(
+  supabase: SupabaseClient,
+  leadId: string,
+  organizationId: string,
+  entryId: string | null,
+): Promise<Record<string, unknown> | null> {
+  if (entryId) {
+    const { data } = await supabase
+      .from("pipeline_entries")
+      .select("id, deal_id, stage_changed_at, created_at, organization_id")
+      .eq("id", entryId)
+      .maybeSingle();
+    if (data && data.organization_id === organizationId) return data as Record<string, unknown>;
+  }
+
+  const { data } = await supabase
+    .from("pipeline_entries")
+    .select("id, deal_id, stage_changed_at, created_at, closed_at")
+    .eq("lead_id", leadId)
+    .eq("organization_id", organizationId)
+    .order("closed_at", { ascending: false, nullsFirst: true })
+    .order("stage_changed_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  return (data?.[0] as Record<string, unknown>) ?? null;
 }
 
 /**

@@ -12,7 +12,7 @@ export { sendMetaMessage, sendSemiAutomatic } from "./send-meta.ts";
 export { addToCampaign, removeFromCampaign, moveCampaignStage, pauseCampaignSequence, resumeCampaignSequence } from "./campaign-operations.ts";
 export { createCalendarEvent } from "./calendar-operations.ts";
 export { createTinyerpOrder, createTinyerpUpsellOrder } from "./tinyerp-operations.ts";
-export { createDeal } from "./deal-operations.ts";
+export { createDeal, winDeal, loseDeal, setDealValue, setDealOwner } from "./deal-operations.ts";
 export { assignResponsible, assignSdr, assignCloser, notifyTeamMember } from "./team-operations.ts";
 export { createFollowup } from "./followup-operations.ts";
 export { applyChecklist } from "./checklist-operations.ts";
@@ -36,7 +36,7 @@ import { sendMetaMessage, sendSemiAutomatic } from "./send-meta.ts";
 import { addToCampaign, removeFromCampaign, moveCampaignStage, pauseCampaignSequence, resumeCampaignSequence } from "./campaign-operations.ts";
 import { createCalendarEvent } from "./calendar-operations.ts";
 import { createTinyerpOrder, createTinyerpUpsellOrder } from "./tinyerp-operations.ts";
-import { createDeal } from "./deal-operations.ts";
+import { createDeal, winDeal, loseDeal, setDealValue, setDealOwner } from "./deal-operations.ts";
 import { assignResponsible, assignSdr, assignCloser, notifyTeamMember } from "./team-operations.ts";
 import { createFollowup } from "./followup-operations.ts";
 import { applyChecklist } from "./checklist-operations.ts";
@@ -75,6 +75,12 @@ export const handlers: Record<string, ActionHandler> = {
   resume_campaign_sequence: resumeCampaignSequence,
   create_calendar_event: createCalendarEvent,
   create_deal: createDeal,
+  // O vocabulário do Negócio (fatia 5): encerrar dos dois jeitos, corrigir
+  // valor, trocar dono.
+  win_deal: winDeal,
+  lose_deal: loseDeal,
+  set_deal_value: setDealValue,
+  set_deal_owner: setDealOwner,
   create_tinyerp_order: createTinyerpOrder,
   create_tinyerp_upsell_order: createTinyerpUpsellOrder,
   assign_responsible: assignResponsible,

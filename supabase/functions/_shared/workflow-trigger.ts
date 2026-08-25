@@ -52,6 +52,52 @@ interface FireTriggerParams {
 }
 
 /**
+ * O papel da etapa de destino: `won`, `lost` ou outra coisa.
+ *
+ * É daqui que saem os gatilhos "Negócio ganho" e "Negócio perdido". Eles NÃO
+ * leem `deals.won`: medido em prod (2026-08-25), 34.662 dos 34.980 negócios têm
+ * `won = false` porque o backfill carimbou assim tudo que não estava ganho — a
+ * coluna responde "não foi ganho", não "foi perdido". Quem sabe a verdade é a
+ * POSIÇÃO (ADR-0023 §5), e ganhar/perder é chegar na etapa terminal
+ * (ADR-0023 §4, §5). É o mesmo critério que o card do Negócio usa para desenhar
+ * os botões "Ganhou" e "Perdeu".
+ */
+async function resolveStageRole(
+  supabase: SupabaseClient,
+  organizationId: string,
+  ctx: Record<string, unknown>,
+): Promise<string | null> {
+  const toStage = typeof ctx.to_stage === "string" ? ctx.to_stage : null;
+  if (!toStage) return null;
+
+  const pipeType = typeof ctx.pipe_type === "string" ? ctx.pipe_type : null;
+  if (pipeType) {
+    const { data } = await supabase
+      .from("pipeline_stages")
+      .select("stage_role")
+      .eq("organization_id", organizationId)
+      .eq("pipeline_type", pipeType)
+      .eq("stage_key", toStage)
+      .eq("is_active", true)
+      .maybeSingle();
+    return (data?.stage_role as string) ?? null;
+  }
+
+  const pipelineId = typeof ctx.pipeline_id === "string" ? ctx.pipeline_id : null;
+  if (pipelineId) {
+    const { data } = await supabase
+      .from("custom_pipeline_stages")
+      .select("stage_role")
+      .eq("pipeline_id", pipelineId)
+      .eq("stage_key", toStage)
+      .maybeSingle();
+    return (data?.stage_role as string) ?? null;
+  }
+
+  return null;
+}
+
+/**
  * `context` é jsonb livre — nada valida a forma na escrita, e o gatilho de banco
  * pode mandar `null` num `jsonb_build_object`. Só string não-vazia vira id; o
  * resto vira `null` em vez de viajar como `"null"` até um `.eq()` que não casa
@@ -165,6 +211,41 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
   const ctxObj = (context ?? {}) as Record<string, unknown>;
   const entryId = params.entryId ?? asUuidOrNull(ctxObj.pipeline_entry_id);
   const dealId = params.dealId ?? asUuidOrNull(ctxObj.deal_id);
+
+  /**
+   * ── Gatilhos derivados: "Negócio ganho" e "Negócio perdido" ─────────────
+   * Ganhar e perder são MOVIMENTOS para a etapa terminal (ADR-0023 §4/§5), e
+   * por isso o fato já chega aqui como `stage_changed`. Um gatilho próprio em
+   * `deals.won` leria uma coluna que o backfill deixou mentindo (34.662 linhas
+   * com `won = false` que ninguém perdeu) e ainda seria cego aos 26% de cards
+   * sem linha em `deals`.
+   *
+   * Roda ANTES do corpo, e não no fim: o corpo tem quatro saídas antecipadas
+   * (nenhum workflow, nenhum casou, todos deduplicados, insert falhou) e em
+   * três delas o negócio foi ganho do mesmo jeito. Derivar no fim faria
+   * "Negócio ganho" depender de existir um workflow de `stage_changed` — que é
+   * exatamente o vínculo que este gatilho existe para não ter.
+   *
+   * Sem recursão: só `stage_changed` deriva, e o derivado nunca é `stage_changed`.
+   */
+  if (triggerType === "stage_changed") {
+    try {
+      const role = await resolveStageRole(supabase, organizationId, ctxObj);
+      const derivado = role === "won" ? "deal_won" : role === "lost" ? "deal_lost" : null;
+      if (derivado) {
+        await fireTrigger({
+          ...params,
+          triggerType: derivado,
+          entryId,
+          dealId,
+          context: { ...ctxObj, trigger: derivado, stage_role: role },
+        });
+      }
+    } catch (err) {
+      // Derivado que falha não pode derrubar o `stage_changed` que o originou.
+      console.warn("[workflow-trigger] falha ao derivar deal_won/deal_lost:", err);
+    }
+  }
 
   try {
     // `selectFields` é uma UNIÃO de dois literais, e o parser de tipos do
@@ -344,6 +425,7 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     }
 
     console.log(`[workflow-trigger] Fired ${deduped.length} workflows for ${triggerType} (dedup-keyed)`);
+
     return deduped.length;
   } catch (err) {
     console.warn("[workflow-trigger] Error:", err);

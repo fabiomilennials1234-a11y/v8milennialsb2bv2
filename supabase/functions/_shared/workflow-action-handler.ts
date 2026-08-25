@@ -23,7 +23,13 @@ import { sendMetaMessage as sharedSendMetaMessage, sendSemiAutomatic as sharedSe
 import { sendToNumber as sharedSendToNumber } from "./action-handlers/send-to-number.ts";
 import { addToCampaign as sharedAddToCampaign, removeFromCampaign as sharedRemoveFromCampaign, moveCampaignStage as sharedMoveCampaignStage, pauseCampaignSequence as sharedPauseCampaignSequence, resumeCampaignSequence as sharedResumeCampaignSequence } from "./action-handlers/campaign-operations.ts";
 import { createCalendarEvent as sharedCreateCalendarEvent } from "./action-handlers/calendar-operations.ts";
-import { createDeal as sharedCreateDeal } from "./action-handlers/deal-operations.ts";
+import {
+  createDeal as sharedCreateDeal,
+  winDeal as sharedWinDeal,
+  loseDeal as sharedLoseDeal,
+  setDealValue as sharedSetDealValue,
+  setDealOwner as sharedSetDealOwner,
+} from "./action-handlers/deal-operations.ts";
 import { createTinyerpOrder as sharedCreateTinyerpOrder, createTinyerpUpsellOrder as sharedCreateTinyerpUpsellOrder } from "./action-handlers/tinyerp-operations.ts";
 import { assignResponsible as sharedAssignResponsible, assignSdr as sharedAssignSdr, assignCloser as sharedAssignCloser, notifyTeamMember as sharedNotifyTeamMember } from "./action-handlers/team-operations.ts";
 import { createFollowup as sharedCreateFollowup } from "./action-handlers/followup-operations.ts";
@@ -635,6 +641,21 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
 
     // ── Negócios ──
+    case "win_deal":
+      result = await sharedWinDeal(toActionInput(ctx));
+      break;
+    case "lose_deal":
+      result = await sharedLoseDeal({
+        ...toActionInput(ctx),
+        params: { ...ctx.nodeData, lossReason: ctx.nodeData.lossReason },
+      });
+      break;
+    case "set_deal_value":
+      result = await sharedSetDealValue(toActionInput(ctx));
+      break;
+    case "set_deal_owner":
+      result = await sharedSetDealOwner(toActionInput(ctx));
+      break;
     case "create_deal": {
       const dealTitle = await resolveVariables(
         ctx.supabase,

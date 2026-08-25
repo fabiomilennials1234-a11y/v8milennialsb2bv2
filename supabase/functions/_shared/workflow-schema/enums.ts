@@ -48,6 +48,8 @@ export const TRIGGER_TYPES = [
   "field_changed",
   "scheduled_date",
   "deal_created",
+  "deal_won",
+  "deal_lost",
 ] as const;
 
 export const ACTION_TYPES = [
@@ -83,6 +85,10 @@ export const ACTION_TYPES = [
   "create_calendar_event",
   "schedule_meeting",
   "create_deal",
+  "win_deal",
+  "lose_deal",
+  "set_deal_value",
+  "set_deal_owner",
   "create_tinyerp_order",
   "create_tinyerp_upsell_order",
   "assign_responsible",

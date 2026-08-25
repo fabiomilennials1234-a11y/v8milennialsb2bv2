@@ -93,6 +93,8 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "field_changed" ? "Campo do Lead Alterado" :
                      t === "scheduled_date" ? "Antes de uma data" :
                      t === "deal_created" ? "Negócio Criado" :
+                     t === "deal_won" ? "Negócio Ganho" :
+                     t === "deal_lost" ? "Negócio Perdido" :
                      t}
                   </SelectItem>
                 ))}
@@ -365,6 +367,18 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
           </div>
         </>
       )}
+      {/* ── deal_won / deal_lost ──
+          Sem configuração: são derivados de `stage_changed` pelo PAPEL da etapa
+          de destino (ADR-0023 §4/§5). Filtrar por funil aqui seria oferecer um
+          controle que o servidor não lê. */}
+      {(data.triggerType === "deal_won" || data.triggerType === "deal_lost") && (
+        <p className="rounded-lg border border-dashed border-border px-3 py-2 text-[12px] text-muted-foreground">
+          Dispara quando um negócio chega à etapa de{" "}
+          {data.triggerType === "deal_won" ? "ganho" : "perda"} de qualquer funil.
+          O negócio segue para os nós seguintes — as ações de funil agem sobre ele.
+        </p>
+      )}
+
       {/* ── deal_created ── */}
       {data.triggerType === "deal_created" && (
         <DealCreatedConfig cfg={cfg} updateConfig={updateConfig} />
