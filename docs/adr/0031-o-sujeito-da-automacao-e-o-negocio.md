@@ -38,6 +38,11 @@ Scale of the blind spot: **399 of the 14.185 executions in 30 days** ran on Lead
 
 **7. Checklist belongs to the Negócio, with the Lead as the wider scope.** Decision by the CTO on 2026-08-25. `checklists.pipeline_entry_id` NULL means *of the person* — valid for all their Negócios. That is what the 1.338 existing rows are, and why there is no backfill: claiming they belong to one Negócio would invent a fact. Idempotency splits accordingly: unique `(entry, template)` for the Negócio scope, and the old `(lead, template)` restricted to rows without a Negócio.
 
+**7b. Follow-up Task and Ação do Dia follow the Checklist.** Decision by the CTO on 2026-08-25, taken after §7 shipped. Same NULL-means-the-person rule. Two differences from the Checklist, both deliberate:
+
+- **They survive the card.** `ON DELETE SET NULL`, not CASCADE. A task has an owner and a due date and sits in somebody's agenda; deleting the card must not delete the appointment. A Checklist do Negócio has no subject without its card, a task still does.
+- **There is a backfill, and there was none for the Checklist.** `follow_ups` already carried an un-keyed half-bridge — `source_pipe` (text) + `source_pipe_id` (uuid, no FK). Measured: **373 of 1.185 rows already named the card they came from**, and 63 pointed at a card that no longer exists. The same holds for `acoes_do_dia.proposta_id` (10 of 10 match a real entry). Copying that into `pipeline_entry_id` records a fact that is already written down; claiming a Checklist belongs to one Negócio would have invented one. The orphans stay null.
+
 **8. "Won" and "lost" are positions, not columns.** `deal_won`/`deal_lost` are derived from `stage_changed` by the destination stage's role. They deliberately do not read `deals.won`: the backfill left **34.662 of 34.980 rows with `won = false`** for deals nobody lost — the column answers "was not won", not "was lost" — and it is blind to the 26% without a `deals` row.
 
 ## Consequences
