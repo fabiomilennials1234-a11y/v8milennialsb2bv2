@@ -15,7 +15,21 @@ interface LeadSheetState {
   isOpen: boolean;
   leadId: string | null;
   defaultExpandedPipeEntryId: string | null;
-  openLead: (leadId: string, defaultExpandedPipeEntryId?: string | null) => void;
+  /**
+   * Comentário a destacar quando o card abrir — vem do `?comment=` da
+   * notificação de menção.
+   *
+   * Por que no CONTEXTO e não lido da URL lá embaixo: `LeadCardPanel` é montado
+   * em 5 telas e `cards-nunca-empilham.test.tsx:114` o renderiza SEM Router.
+   * Um `useSearchParams()` dentro da árvore do card derrubaria esse teste. Quem
+   * lê a URL é a página, que já tem o hook; daqui para baixo é dado, não rota.
+   */
+  comentarioDestacadoId: string | null;
+  openLead: (
+    leadId: string,
+    defaultExpandedPipeEntryId?: string | null,
+    comentarioDestacadoId?: string | null,
+  ) => void;
   close: () => void;
 }
 
@@ -26,25 +40,37 @@ export function LeadPanelProvider({ children }: { children: ReactNode }) {
     isOpen: boolean;
     leadId: string | null;
     defaultExpandedPipeEntryId: string | null;
+    comentarioDestacadoId: string | null;
   }>({
     isOpen: false,
     leadId: null,
     defaultExpandedPipeEntryId: null,
+    comentarioDestacadoId: null,
   });
 
   const openLead = useCallback(
-    (leadId: string, defaultExpandedPipeEntryId?: string | null) => {
+    (
+      leadId: string,
+      defaultExpandedPipeEntryId?: string | null,
+      comentarioDestacadoId?: string | null,
+    ) => {
       setState({
         isOpen: true,
         leadId,
         defaultExpandedPipeEntryId: defaultExpandedPipeEntryId ?? null,
+        comentarioDestacadoId: comentarioDestacadoId ?? null,
       });
     },
     [],
   );
 
   const close = useCallback(() => {
-    setState({ isOpen: false, leadId: null, defaultExpandedPipeEntryId: null });
+    setState({
+      isOpen: false,
+      leadId: null,
+      defaultExpandedPipeEntryId: null,
+      comentarioDestacadoId: null,
+    });
   }, []);
 
   return (

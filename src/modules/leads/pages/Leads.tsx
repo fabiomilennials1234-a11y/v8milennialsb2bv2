@@ -240,14 +240,30 @@ function LeadsInner() {
   const { organizationId, timezone: orgTimezone } = useOrganization();
   useEffect(() => { trackModuleVisit("leads", organizationId); }, []);
 
-  // #313 — deep link via mention notification:
-  // /leads?lead=<id>&comment=<id> opens the modal automatically. The
-  // `comment` param is consumed inside ActivityFeed (highlight + scroll).
-  // Only fires once per lead-id transition to avoid reopening on hot-reload.
-  const deepLinkLeadId = searchParams.get("lead");
+  // #313 — deep link para a ficha da pessoa:
+  // /leads?lead=<id>[&comment=<id>] abre o card e, com `comment`, rola até o
+  // comentário e o destaca (o destino é o histórico da ficha, em LeadCardHistory).
+  //
+  // ⚠️ QUATRO vocabulários chegam aqui para o MESMO gesto, e só um era lido —
+  // os outros três abriam /leads e não abriam ficha nenhuma, em silêncio:
+  //   `?lead=`    11 produtores (TabSaude, UtmsTab, TabMapa, ProductivityDrill,
+  //               DisparosPanel, Revisao, os 3 kanbans de Upsell, …)
+  //   `?leadId=`  o gatilho de MENÇÃO (`fn_lead_comment_mentions`) e o
+  //               OraculoBriefing:79
+  //   `?id=`      EventDetailPopover:346 e as abas LeadTabHistory/Info/Tags
+  //   `?detail=`  CommandGroupRecents:61 (itens recentes do Cmd+K)
+  // Tolerar os quatro na LEITURA conserta os sete pontos de uma vez; reescrever
+  // o gatilho consertaria um. Nenhum dos quatro nomes tem outro significado
+  // nesta página (os params lidos aqui são view/lead/uf/from/to/atribuicao).
+  const deepLinkLeadId =
+    searchParams.get("lead") ||
+    searchParams.get("leadId") ||
+    searchParams.get("id") ||
+    searchParams.get("detail");
+  const deepLinkCommentId = searchParams.get("comment");
   useEffect(() => {
-    if (deepLinkLeadId) openLead(deepLinkLeadId);
-  }, [deepLinkLeadId, openLead]);
+    if (deepLinkLeadId) openLead(deepLinkLeadId, null, deepLinkCommentId);
+  }, [deepLinkLeadId, deepLinkCommentId, openLead]);
 
   const [page, setPage] = useState(0);
   // Filtro por estado (?uf=) — deep-link vindo da aba Mapa do Comando

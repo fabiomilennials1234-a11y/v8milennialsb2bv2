@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Zap,
   UserPlus,
+  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -29,7 +30,13 @@ import { useNavigate } from "react-router-dom";
 
 interface Alert {
   id: string;
-  type: "meeting_today" | "follow_up_due" | "meeting_soon" | "overdue" | "transfer_to_human";
+  type:
+    | "meeting_today"
+    | "follow_up_due"
+    | "meeting_soon"
+    | "overdue"
+    | "transfer_to_human"
+    | "mention";
   title: string;
   description: string;
   time: Date;
@@ -176,20 +183,37 @@ export function AlertsDropdown() {
         }
       });
 
-      // Notificações (transfer_to_human)
+      // Notificações — `transfer_to_human` e `mention`.
+      //
+      // ⚠️ `link` PRECISA estar neste select. Ele já existia na tabela e o
+      // gatilho de menção o preenche (`/leads?lead=…&comment=…`), mas o
+      // PostgREST devolve só as colunas projetadas: sem pedir a coluna,
+      // `n.link` chega `undefined` e o `||` abaixo recua SEMPRE para
+      // `/pipe-whatsapp`. O efeito era o defeito relatado — clicar numa
+      // notificação de menção não levava ao comentário, levava ao funil.
+      // O compilador sabia: `.tsc-baseline.json` carregava o
+      // `TS2339 Property 'link' does not exist` desta linha, e o Vite não
+      // typecheca, então o erro embarcava.
       const { data: unreadNotifs } = await supabase
         .from("notifications")
-        .select("id, type, title, description, lead_id, created_at")
+        .select("id, type, title, description, lead_id, created_at, link")
         .eq("user_id", user.id)
         .is("read_at", null)
         .order("created_at", { ascending: false })
         .limit(10);
 
       unreadNotifs?.forEach((n) => {
+        // O tipo vinha cravado em `transfer_to_human` para TODA notificação, o
+        // que dava à menção o ícone e o vermelho de "lead precisa de
+        // atendimento humano". Só os tipos que esta lista sabe desenhar passam;
+        // qualquer outro cai no fallback, que é o comportamento antigo.
+        const tipo: Alert["type"] = n.type === "mention" ? "mention" : "transfer_to_human";
         alerts.push({
           id: `notification-${n.id}`,
-          type: "transfer_to_human",
-          title: n.title || "Lead precisa de atendimento humano",
+          type: tipo,
+          title:
+            n.title ||
+            (tipo === "mention" ? "Mencionaram você" : "Lead precisa de atendimento humano"),
           description: n.description || "",
           time: new Date(n.created_at),
           link: n.link || "/pipe-whatsapp",
@@ -240,6 +264,10 @@ export function AlertsDropdown() {
         return <AlertTriangle className="w-4 h-4 text-destructive" />;
       case "transfer_to_human":
         return <UserPlus className="w-4 h-4 text-destructive" />;
+      case "mention":
+        // Âmbar é a cor do comentário em todo o produto (ver o histórico da
+        // ficha do lead e o bloco do Negócio) — a menção herda dela.
+        return <MessageSquare className="w-4 h-4 text-amber-400" />;
       default:
         return <Bell className="w-4 h-4 text-muted-foreground" />;
     }
@@ -257,6 +285,8 @@ export function AlertsDropdown() {
         return "bg-destructive/10";
       case "transfer_to_human":
         return "bg-red-500/10";
+      case "mention":
+        return "bg-amber-500/10";
       default:
         return "bg-muted/50";
     }
