@@ -1,6 +1,6 @@
 {
-  "count": 756,
-  "generatedFrom": "node \"C:\\\\Users\\\\torch\\\\Desktop\\\\milennials\\\\v8-develop\\\\node_modules\\\\eslint\\\\bin\\\\eslint.js\" . --format json --cache --cache-location .eslintcache",
+  "count": 759,
+  "generatedFrom": "node \"/private/tmp/claude-501/-Users-gabrielaureliogipp-Dev-v8milennialsb2bv2-main/50662062-4ee6-42de-a486-4036e79e55e8/scratchpad/wt-mfa/node_modules/eslint/bin/eslint.js\" . --format json --cache --cache-location .eslintcache",
   "note": "Divida de lint congelada. So encolhe. Nao adicione entrada na mao — corrija o warning.",
   "errors": [
     ".storybook/preview.tsx|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
@@ -415,6 +415,8 @@
     "supabase/functions/_shared/message-gateway.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "supabase/functions/_shared/natural-messaging.ts|prefer-const|'chunks' is never reassigned. Use 'const' instead.",
     "supabase/functions/_shared/onboarding-engine.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
+    "supabase/functions/_shared/org-status.test.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
+    "supabase/functions/_shared/org-status.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "supabase/functions/_shared/outbound-sender.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "supabase/functions/_shared/password-reset.ts|no-useless-escape|Unnecessary escape character: \\[.",
     "supabase/functions/_shared/pipeline-adapter.test.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
@@ -427,6 +429,7 @@
     "supabase/functions/_shared/quick-blast/refinements.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "supabase/functions/_shared/resolve-org-capabilities.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "supabase/functions/_shared/send-dedup.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
+    "supabase/functions/_shared/send-governor/gate-subscription.test.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "supabase/functions/_shared/send-governor/types.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "supabase/functions/_shared/uazapi-client.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
     "supabase/functions/_shared/validation.ts|@typescript-eslint/no-explicit-any|Unexpected any. Specify a different type.",
