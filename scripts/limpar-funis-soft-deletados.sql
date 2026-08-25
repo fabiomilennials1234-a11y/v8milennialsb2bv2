@@ -1,144 +1,89 @@
 -- limpar-funis-soft-deletados.sql
 --
--- 🚨 DESTRUTIVO E IRREVERSÍVEL. Uma org por vez.
+-- ✅ EXECUTADO EM PROD EM 25/08/2026. Os 21 funis que sobraram do soft delete
+--    foram apagados: Milennials (17), JC Atacado (2), REALSC (1), The Good
+--    Balloon (1). Gabarito final: 0 funis mortos, 0 espelhos mortos, 0 órfãos
+--    em `custom_pipeline_stages` / `custom_pipe_entries` / `pipeline_entries` /
+--    `pipeline_stage_events`; 73 funis ativos e 73 espelhos (batendo), 16.260
+--    cards e 55.754 leads intactos, 131 automações ativas (nenhuma desligada).
+--
+--    Este arquivo fica como RUNBOOK para a próxima vez que sobrar funil morto.
 --
 -- CONTEXTO: até 25/08/2026 excluir funil era soft delete (`is_active = false`).
--- Sobraram 21 funis mortos em prod, em 4 orgs. Depois da PR #1834 eles somem da
--- lista de Leads, do painel do Lead e do Estúdio — mas as `custom_pipe_entries`
--- deles continuam vivas, e o público "Todos os funis" do Disparo lê essa tabela
--- DIRETO: um lead que só existe num funil "excluído" ainda pode receber
--- mensagem. É isso que este arquivo encerra.
+-- A linha ficava no banco e as `custom_pipe_entries` continuavam vivas — e o
+-- público "Todos os funis" do Disparo lê essa tabela DIRETO, então um lead que
+-- só existia num funil "excluído" ainda podia receber mensagem.
 --
--- POR QUE NÃO USA A RPC `delete_custom_pipeline`: a autorização dela sai do JWT
--- (org do chamador ou master). Numa conexão direta pela Management API não há
--- JWT — `auth.uid()` é NULL e `current_setting('role')` vale 'none' — então a
--- RPC recusaria com 42501. Este arquivo replica os MESMOS passos, na mesma
--- ordem, com a autorização vindo do próprio acesso administrativo.
+-- ── COMO RODAR ──────────────────────────────────────────────────────────────
 --
--- MEDIDO EM PROD 25/08/2026: 21 funis, 4 orgs, 35 cards, 132 etapas,
--- 33 eventos de etapa e **ZERO vendas** — nenhuma linha de `sale_events` aponta
--- para nenhum deles. É o que torna esta limpeza barata: não há receita para
--- virar "Sem valor" no recorte por funil. ⚠️ Se rodar isto meses depois,
--- REMEÇA: um funil novo pode ter venda, e aí a conta muda.
+-- `SET LOCAL ROLE service_role` é o pulo do gato: a autorização da RPC sai do
+-- JWT, e numa conexão direta pela Management API `auth.uid()` é NULL. Sem o
+-- SET LOCAL a RPC recusa com 42501. Com ele, `current_setting('role')` casa
+-- com a cláusula de escape e a chamada passa — usando o MESMO código que o
+-- botão da tela usa, guardas incluídas.
 --
--- DECISÃO DE PRODUTO (25/08): os Negócios (`deals`) NÃO são apagados. O vínculo
--- é `custom_pipe_entries.deal_id → deals ON DELETE SET NULL` — apagar o card
--- desvincula, nunca apaga o Negócio.
+-- `SET LOCAL` vale porque a Management API já roda o corpo dentro de uma
+-- transação (provado: um ROLLBACK aqui desfaz até `CREATE TEMP TABLE`).
 --
--- USO:
---   1. Rode ANTES o inventário read-only (o SELECT no rodapé deste arquivo,
---      comentado) para saber o que vai embora nesta org.
---   2. Troque as 4 ocorrências de <ORG_ID> pelo uuid da organização.
---   3. Para ENSAIAR: deixe `ROLLBACK` na linha marcada. O gabarito vai mostrar
---      os números INALTERADOS — é isso que prova que o ensaio não gravou.
---      Para VALER: troque essa linha por `COMMIT`. O gabarito passa a zerar.
---   4. node scripts/prod-sql-win.mjs --file scripts/limpar-funis-soft-deletados.sql
---   5. Confira o gabarito e repita para a próxima org.
+--   1. ENSAIE primeiro. Com o ROLLBACK no fim, a RPC roda de verdade em todos
+--      os alvos e desfaz — é assim que se descobre se algum funil vai recusar,
+--      sem gravar nada:
 --
--- A Management API devolve só o resultado do ÚLTIMO statement — por isso o
--- gabarito vem DEPOIS do COMMIT/ROLLBACK, medindo o estado que ficou de fato.
+--        BEGIN;
+--        SET LOCAL ROLE service_role;
+--        SELECT public.delete_custom_pipeline(cp.id)
+--          FROM public.custom_pipelines cp
+--         WHERE cp.organization_id = '<ORG_ID>'::uuid AND cp.is_active = false;
+--        ROLLBACK;
+--        SELECT count(*) AS deve_continuar_igual FROM public.custom_pipelines
+--         WHERE organization_id = '<ORG_ID>'::uuid AND is_active = false;
+--
+--   2. Depois rode PRA VALER: o bloco abaixo, sem BEGIN/ROLLBACK. A API
+--      commita sozinha, e o SELECT (último statement) devolve o impacto de
+--      cada funil.
+--
+-- ⚠️ A ORDEM PODE IMPORTAR. Se um card de um funil-alvo estiver pousado numa
+--    etapa de OUTRO funil-alvo, a RPC recusa o segundo enquanto o primeiro
+--    existir. Aconteceu em 25/08: "Funil A PADRÃO" tinha um card na etapa de
+--    "Funil A | Modelo". Solução: apague primeiro o DONO do card. A mensagem de
+--    erro da RPC nomeia funil e lead, então ela mesma diz por onde começar.
+--
+-- ⚠️ REMEÇA ANTES. Em 25/08 nenhum dos 21 tinha venda (`sale_events`), e é isso
+--    que tornou a limpeza barata: nenhuma receita virou "Sem valor" no recorte
+--    por funil. Um funil morto mais novo pode ter — confira com o inventário.
 
-BEGIN;
+SET LOCAL ROLE service_role;
 
--- ── Guarda: aborta a transação inteira se o ORG_ID estiver errado ───────────
-DO $guard$
-DECLARE
-  v_mortos integer;
-  v_ativos integer;
-BEGIN
-  SELECT
-    count(*) FILTER (WHERE NOT is_active),
-    count(*) FILTER (WHERE is_active)
-    INTO v_mortos, v_ativos
-    FROM public.custom_pipelines
-   WHERE organization_id = '<ORG_ID>'::uuid;
-
-  IF v_mortos = 0 THEN
-    RAISE EXCEPTION
-      'ABORTADO: nenhum funil com is_active=false nesta org. Confira o ORG_ID.';
-  END IF;
-
-  RAISE NOTICE 'Alvos: % funil(is) morto(s). Os % ATIVO(S) não serão tocados.',
-    v_mortos, v_ativos;
-END
-$guard$;
-
--- Alvos congelados: as etapas seguintes não podem "descobrir" um funil novo no
--- meio do caminho.
-CREATE TEMP TABLE _alvos ON COMMIT DROP AS
-SELECT id
-  FROM public.custom_pipelines
- WHERE organization_id = '<ORG_ID>'::uuid
-   AND is_active = false;
-
--- ── (a) Automações que citam algum alvo ─────────────────────────────────────
---     Já estavam mortas na prática (o motor compara o uuid e devolve `false`).
---     Desativar é honesto: elas somem da lista de "ligadas" em vez de ficarem
---     ligadas e inertes. NÃO reescrevemos o JSON — mexer no grafo às cegas
---     corrompe a automação.
-UPDATE public.workflows w
-   SET is_active = false, updated_at = now()
- WHERE w.organization_id = '<ORG_ID>'::uuid
-   AND w.is_active
-   AND EXISTS (
-     SELECT 1 FROM _alvos a
-      WHERE strpos(w.definition::text, a.id::text) > 0
-         OR strpos(w.trigger_config::text, a.id::text) > 0
-   );
-
--- ── (b) Disparo em voo com destino num alvo ─────────────────────────────────
---     NULL = "mantém o lead onde está". Sem isso o release diário entregaria a
---     mensagem e não moveria ninguém, porque o destino não existe mais.
-UPDATE public.blast_plans b
-   SET post_send_target = NULL, updated_at = now()
- WHERE b.organization_id = '<ORG_ID>'::uuid
-   AND b.status IN ('active', 'paused')
-   AND EXISTS (
-     SELECT 1 FROM _alvos a
-      WHERE b.post_send_target->>'pipelineId' = a.id::text
-   );
-
--- ── (c) Filhos antes do pai ─────────────────────────────────────────────────
---     `custom_pipe_entries.stage_id → custom_pipeline_stages` é a única FK da
---     árvore sem cláusula `ON DELETE`. Apagar as entries primeiro torna a
---     ordem de avaliação irrelevante.
-DELETE FROM public.custom_pipe_entries
- WHERE pipeline_id IN (SELECT id FROM _alvos);
-
-DELETE FROM public.custom_pipeline_stages
- WHERE pipeline_id IN (SELECT id FROM _alvos);
-
--- ── (d) O pai. `trg_sync_custom_pipeline` apaga a linha-espelho em `pipelines`,
---     e daí caem `pipeline_entries` e `pipeline_stage_events` por CASCADE.
-DELETE FROM public.custom_pipelines
- WHERE id IN (SELECT id FROM _alvos);
-
--- 🚨 ENSAIO = ROLLBACK · PRA VALER = COMMIT. Troque esta linha:
-ROLLBACK;
-
--- ── GABARITO ────────────────────────────────────────────────────────────────
--- Depois de COMMIT: `funis_mortos` e `espelhos_mortos` = 0, e `funis_ativos`
--- igual ao que era antes.
--- Depois de ROLLBACK: `funis_mortos` continua no valor original — é assim que
--- se prova que o ensaio não gravou nada.
 SELECT
-  'GABARITO' AS kind,
-  (SELECT count(*) FROM public.custom_pipelines
-    WHERE organization_id = '<ORG_ID>'::uuid AND is_active = false) AS funis_mortos,
-  (SELECT count(*) FROM public.pipelines
-    WHERE organization_id = '<ORG_ID>'::uuid AND is_active = false) AS espelhos_mortos,
-  (SELECT count(*) FROM public.custom_pipelines
-    WHERE organization_id = '<ORG_ID>'::uuid AND is_active)         AS funis_ativos_intactos,
-  (SELECT count(*) FROM public.custom_pipe_entries e
-     JOIN public.custom_pipelines p ON p.id = e.pipeline_id
-    WHERE p.organization_id = '<ORG_ID>'::uuid AND p.is_active = false) AS cards_em_funil_morto;
+  cp.name                              AS funil,
+  public.delete_custom_pipeline(cp.id) AS impacto
+  FROM public.custom_pipelines cp
+ WHERE cp.organization_id = '<ORG_ID>'::uuid
+   AND cp.is_active = false
+ ORDER BY cp.name;
 
--- ── INVENTÁRIO (read-only) — rode antes, sozinho, para ver o que vai embora ──
+-- ── INVENTÁRIO (read-only) — rode antes, sozinho ────────────────────────────
 -- SELECT o.name AS org, cp.name AS funil, cp.updated_at::date AS excluido_em,
---        (SELECT count(*) FROM custom_pipe_entries e   WHERE e.pipeline_id = cp.id) AS cards,
+--        (SELECT count(*) FROM custom_pipe_entries e    WHERE e.pipeline_id = cp.id) AS cards,
 --        (SELECT count(*) FROM custom_pipeline_stages s WHERE s.pipeline_id = cp.id) AS etapas,
---        (SELECT count(*) FROM pipeline_stage_events s WHERE s.pipeline_id = cp.id) AS eventos_etapa,
---        (SELECT count(*) FROM sale_events se          WHERE se.pipeline_id = cp.id) AS vendas
+--        (SELECT count(*) FROM pipeline_stage_events s  WHERE s.pipeline_id = cp.id) AS eventos_etapa,
+--        (SELECT count(*) FROM sale_events se           WHERE se.pipeline_id = cp.id) AS vendas
 --   FROM custom_pipelines cp JOIN organizations o ON o.id = cp.organization_id
 --  WHERE cp.is_active = false
 --  ORDER BY o.name, eventos_etapa DESC;
+--
+-- ── CARDS INVASORES (read-only) — quem vai fazer a RPC recusar ──────────────
+-- SELECT pe.name AS funil_do_card, ps.name AS funil_da_etapa, s.name AS etapa,
+--        l.name AS lead
+--   FROM custom_pipe_entries e
+--   JOIN custom_pipeline_stages s ON s.id = e.stage_id
+--   JOIN custom_pipelines pe ON pe.id = e.pipeline_id
+--   JOIN custom_pipelines ps ON ps.id = s.pipeline_id
+--   LEFT JOIN leads l ON l.id = e.lead_id
+--  WHERE s.pipeline_id <> e.pipeline_id;
+--
+-- 🔴 Em 25/08 sobraram 2 desses, os dois entre funis ATIVOS
+--    ("Prospecção CNAE" × "Prospecção Ativa Presencial" e "Reativação Mercos" ×
+--    "Prospecção Mercos"). São cards INVISÍVEIS hoje — o kanban do funil deles
+--    não tem aquela coluna. Não foram tocados: consertar exige mover o card, e
+--    mover dispara automação. Fica como dívida conhecida.

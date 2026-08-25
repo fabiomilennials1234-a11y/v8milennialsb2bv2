@@ -616,6 +616,17 @@ export interface CustomPipelineDeleteImpact {
   negocios_orfaos: number;
   automacoes: number;
   disparos_em_voo: number;
+  /**
+   * Card de OUTRO funil parado numa etapa deste. `> 0` IMPEDE a exclusão, e o
+   * botão fica desabilitado — não é aviso, é bloqueio.
+   *
+   * A FK `custom_pipe_entries.stage_id` não exige que a etapa pertença ao mesmo
+   * funil da entry (3 casos medidos em prod, 25/08). Consertar sozinho não é
+   * opção: repontuar dispara `stage_changed` e pode MANDAR MENSAGEM para um
+   * lead que não tem nada a ver com este funil; apagar destrói card de um funil
+   * que pode estar ativo.
+   */
+  cards_invasores: number;
 }
 
 /** Resultado do delete: o impacto medido + o que foi neutralizado junto. */
