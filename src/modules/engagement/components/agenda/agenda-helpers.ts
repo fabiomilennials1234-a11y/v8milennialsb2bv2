@@ -658,7 +658,7 @@ export function statusDoResultado(resultado: AttendanceOutcome): string {
  *
  * ⚠️ Este parágrafo dizia "três" e estava certo em 24/08 pelo repo e errado pelo
  * PROD: a Source 5 já estava viva em produção desde 30/07 e só foi versionada em
- * `20270829000000`. A guarda que vale é o `=== "meeting"` da linha abaixo, que
+ * `20270901000000`. A guarda que vale é o `=== "meeting"` da linha abaixo, que
  * exclui `meeting_event` por construção; a prosa é que precisou correr atrás.
  */
 /**

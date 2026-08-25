@@ -19,7 +19,7 @@
  *
  * ⚠️ Este cabeçalho dizia "QUATRO fontes / baseline de prod" e ficou defasado por
  * quase um mês: a 5ª (`meeting_events`, o funil mergeado) entrou no PROD à mão
- * em 2026-07-30 e só foi versionada em `20270829000000`. A contagem certa está
+ * em 2026-07-30 e só foi versionada em `20270901000000`. A contagem certa está
  * travada por `tests/unit/agenda-fontes-contract.test.ts`, que lê a definição
  * vigente em vez de confiar em prosa como esta.
  *

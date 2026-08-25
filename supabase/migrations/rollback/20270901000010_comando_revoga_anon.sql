@@ -1,4 +1,4 @@
--- ROLLBACK de 20270829000010_comando_revoga_anon.sql
+-- ROLLBACK de 20270901000010_comando_revoga_anon.sql
 --
 -- ⚠️ Rodar isto REABRE superfície: devolve `EXECUTE` a `anon` em três funções
 -- `SECURITY DEFINER` (que bypassam RLS por construção) e numa `INVOKER`. Não há
