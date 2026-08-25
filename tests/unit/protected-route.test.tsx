@@ -30,6 +30,17 @@ vi.mock('@/modules/identity/gestor/hooks/useGestor', () => ({
   useGestor: (...args: unknown[]) => mockUseGestor(...args),
 }));
 
+// `ProtectedRoute` passou a chamar `useDeactivatedMembership` (36c837b1, #1812).
+// É `useQuery` de verdade: sem mock, os 17 casos morrem em "No QueryClient set"
+// — este arquivo monta o componente cru, sem QueryClientProvider, como os
+// outros 6 hooks aqui já pressupõem. Default `false` = membro NÃO desativado,
+// que é o caminho que os casos existentes exercitam; o "Conta Desativada" desta
+// suíte vem por `useCurrentTeamMember({ is_active: false })`, outro ramo.
+const mockUseDeactivatedMembership = vi.fn();
+vi.mock('@/modules/identity/org-team/hooks/useMembershipStatus', () => ({
+  useDeactivatedMembership: (...args: unknown[]) => mockUseDeactivatedMembership(...args),
+}));
+
 vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
@@ -118,6 +129,10 @@ function setDefaults() {
   });
   mockUseMasterAuth.mockReturnValue({
     isMaster: false,
+    isLoading: false,
+  });
+  mockUseDeactivatedMembership.mockReturnValue({
+    data: false,
     isLoading: false,
   });
   mockUseIdentity.mockReturnValue({

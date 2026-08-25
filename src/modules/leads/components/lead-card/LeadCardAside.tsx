@@ -194,10 +194,16 @@ export function LeadCardAside({
 
         {grupos.length > 0 && (
           <div className="flex flex-col border-t border-border">
-            {/* As abas Perfil | Endereço | Campos adicionais do print. Os grupos
-                já vêm prontos de `useLeadCardData`; aqui só se escolhe um por
-                vez, porque a coluna tem 356px e a pilha inteira empurrava a
-                anotação para 4 telas abaixo. */}
+            {/* As abas Perfil | Endereço | Comercial | Campos a preencher. Os
+                grupos já vêm prontos de `useLeadCardData`; aqui só se escolhe um
+                por vez, porque a coluna tem 356px e a pilha inteira empurrava a
+                anotação para 4 telas abaixo.
+
+                A PRIMEIRA aba é a que abre, e é por isso que os campos da
+                organização já RESPONDIDOS vivem dentro do "Perfil" — quem abre o
+                negócio vê o que o formulário trouxe sem clicar em nada. A última
+                aba fica só com o que ninguém preencheu ainda. Ver o bloco de
+                decisão em `useLeadCardData`. */}
             <nav className="flex items-center gap-1 overflow-x-auto border-b border-border px-3">
               {grupos.map((g, i) => {
                 const acesa = i === Math.min(grupo, grupos.length - 1);

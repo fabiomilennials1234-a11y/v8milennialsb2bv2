@@ -1,4 +1,9 @@
--- ROLLBACK de 20270824130000_lead_comment_entry_coerente_revoga_anon.sql
+-- ROLLBACK de 20270829000010_lead_comment_entry_coerente_revoga_anon.sql
+--
+-- ⚠️ ORDEM: rollback roda em ordem DECRESCENTE. Este é o PRIMEIRO do par —
+-- rode-o ANTES de rollback/20270829000000_lead_comments_por_negocio.sql, que
+-- dropa a própria função sobre a qual este arquivo faz GRANT. Invertido, este
+-- morre com 42883 (a função já não existe).
 --
 -- CONSEQUÊNCIA CONHECIDA de rodar isto: devolve o EXECUTE de `anon` numa função
 -- `SECURITY DEFINER`. Não abre caminho de dado — `prorettype` é `trigger` e o

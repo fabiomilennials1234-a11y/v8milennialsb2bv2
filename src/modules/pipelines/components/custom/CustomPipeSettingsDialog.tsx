@@ -637,7 +637,9 @@ function GeneralTabContent({
         <div className="pt-6 mt-2 border-t border-destructive/20 space-y-2">
           <p className="text-sm font-semibold text-destructive">Zona de Perigo</p>
           <p className="text-xs text-muted-foreground">
-            Excluir o funil o remove da sidebar e de todas as listagens. Os leads permanecerão no sistema.
+            Excluir apaga o funil, suas etapas e todos os cards em definitivo — junto com
+            o histórico de etapas que alimenta as métricas deste funil. Os leads
+            permanecem no sistema.
           </p>
           <Button
             variant="destructive"

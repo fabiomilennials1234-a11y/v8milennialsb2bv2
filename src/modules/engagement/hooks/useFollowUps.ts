@@ -15,6 +15,22 @@ export interface FollowUp {
   priority: "low" | "normal" | "high" | "urgent";
   source_pipe: "whatsapp" | "confirmacao" | "propostas" | null;
   source_pipe_id: string | null;
+  /**
+   * O Negócio dono da tarefa — `pipeline_entries.id`.
+   *
+   * **Nulo = tarefa da PESSOA**, vale para todos os negócios dela (decisão do
+   * CTO em 2026-08-25, mesma regra do checklist — ADR-0031).
+   *
+   * Não é o mesmo que `source_pipe_id`, que era a meia-ponte antiga: texto do
+   * funil + uuid sem FK, preenchido em 373 das 1.185 linhas e apontando para
+   * card inexistente em 63 delas. `pipeline_entry_id` é a coluna canônica, com
+   * FK; a antiga fica até ser aposentada em fatia própria.
+   *
+   * Declarado à mão: `integrations/supabase/types.ts` é gerado e ainda não foi
+   * regenerado — regerar a partir de branch efêmera corrompe o arquivo.
+   */
+  pipeline_entry_id?: string | null;
+  deal_id?: string | null;
   is_automated: boolean;
   created_at: string;
   updated_at: string;
@@ -159,13 +175,17 @@ export function useCreateFollowUp() {
       priority?: "low" | "normal" | "high" | "urgent";
       source_pipe?: "whatsapp" | "confirmacao" | "propostas";
       source_pipe_id?: string;
+      /** O Negócio dono da tarefa. Ausente = tarefa da pessoa. */
+      pipeline_entry_id?: string | null;
       is_automated?: boolean;
     }) => {
       if (!organizationId) throw new Error("Organização não disponível");
       const secured = { ...followUp, organization_id: organizationId };
       const { data, error } = await supabase
         .from("follow_ups")
-        .insert(secured)
+        // `as never`: `pipeline_entry_id` existe desde a migration
+        // `20270828000030` e ainda não está nos tipos gerados.
+        .insert(secured as never)
         .select()
         .single();
 

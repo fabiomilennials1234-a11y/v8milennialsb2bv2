@@ -102,6 +102,7 @@ const Landing = lazy(() => lazyRetry(() => import("@/modules/marketing/pages/Lan
 const TvTypeScale = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvTypeScale")));
 const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signup")));
 const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));
+const MfaSetup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/MfaSetup")));
 
 // Master Admin — lazy loaded (com retry)
 const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterDashboard")));
@@ -253,6 +254,19 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
       <Route path="/signup" element={<Signup />} />
+      {/* MFA (TOTP) — FORA do gate de master de propósito. Exige apenas sessão
+          autenticada: nem master, nem org, nem aal2. Se ficasse atrás do
+          MasterRoute (que exige aal2) o master sem fator nunca conseguiria
+          cadastrar o primeiro — deadlock. requireOrganization={false} porque
+          há masters sem team_member (entram só pelo master). */}
+      <Route
+        path="/seguranca/mfa"
+        element={
+          <ProtectedRoute requireOrganization={false}>
+            <MfaSetup />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/privacidade" element={<Privacidade />} />
       {/* #1223 — calibração da escala tipográfica da TV. Pública de propósito:
           é instrumento de medição com valores fictícios, não expõe dado algum. */}
