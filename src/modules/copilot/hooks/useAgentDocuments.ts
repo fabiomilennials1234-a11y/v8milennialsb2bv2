@@ -7,6 +7,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/modules/identity";
+import { sanitizeFileName } from "@/shared/format/storage-key";
 import { toast } from "sonner";
 
 export type AgentDocument = {
@@ -77,8 +78,10 @@ export function useUploadAgentDocument() {
     }) => {
       if (!user?.id) throw new Error("Usuário não autenticado");
 
-      // 1. Upload do arquivo para o storage
-      const filePath = `${organizationId}/${agentId}/${Date.now()}_${file.name}`;
+      // 1. Upload do arquivo para o storage.
+      // A chave passa pelo sanitizador: acento/espaço no nome do arquivo fazem
+      // o Storage devolver 400 `Invalid key`. O nome original fica em file_name.
+      const filePath = `${organizationId}/${agentId}/${Date.now()}_${sanitizeFileName(file.name)}`;
 
       const { error: uploadError } = await supabase.storage
         .from("agent-documents")
