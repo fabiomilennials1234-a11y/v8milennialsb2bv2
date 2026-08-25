@@ -52,25 +52,32 @@ export interface OrgStatusClient {
 }
 
 /**
- * Mensagem de um erro cru do `catch`. Cobre os dois formatos que chegam aqui:
- * `Error` lançado pelo runtime e o objeto `{ message }` do PostgrestError, que
- * é o que `if (error) throw error` propaga. Estreitamento real, sem cast — se
- * não houver mensagem, o valor inteiro vira string, como antes.
+ * Mensagem de um erro cru do `catch`. Espelho EXATO de `String(err?.message ?? err)`,
+ * que é o que estava aqui antes de o `any` sair — só que sem `any`.
  *
- * O `String()` no primeiro ramo parece redundante e não é: `Error.message` é
- * tipado `string`, mas nada impede que seja mutado para outra coisa em runtime,
- * e aí a função devolveria não-string violando a própria assinatura — sem o
- * `tsc` pegar. A expressão que isto substituiu (`String(err?.message ?? err)`)
- * sempre embrulhava; manter o embrulho deixa a troca equivalente em TODOS os
- * casos, não só nos alcançáveis. Isto alimenta o log de um catch fail-open num
- * portão de billing: barato demais para deixar uma ponta solta.
+ * 🚨 A forma importa, e eu já errei duas vezes tentando "melhorar" isto.
+ * Um estreitamento por ramos (`if (err instanceof Error) return err.message; …`)
+ * PARECE equivalente e não é: o `??` do original recua para o **erro inteiro**
+ * quando `message` é nullish, e `String(<Error>)` chama
+ * `Error.prototype.toString()`. Medido, 3 divergências:
+ *
+ *   Error com message=undefined   antes "Error"           ramos "undefined"
+ *   Error com message=null        antes "Error: null"     ramos "null"
+ *   função com .message           antes "boom-fn"         ramos "function alvo() {}"
+ *                                 (função é `typeof "function"`, não `"object"`)
+ *
+ * Nenhuma é alcançável via supabase-js, e nenhuma muda o retorno do portão —
+ * o `catch` devolve `false` de qualquer jeito. Mas isto alimenta o log de um
+ * catch FAIL-OPEN num portão de billing, e "equivalente" ou é medido ou não é
+ * afirmado. Se for mexer aqui, rode um diferencial das duas expressões sobre
+ * Error/objeto/função/primitivo/nulo antes de trocar.
+ *
+ * O cast é estreito e honesto — descreve o que a leitura de `.message` já faz
+ * em runtime, e não é `any`.
  */
 function errorMessage(err: unknown): string {
-  if (err instanceof Error) return String(err.message);
-  if (typeof err === "object" && err !== null && "message" in err && err.message != null) {
-    return String(err.message);
-  }
-  return String(err);
+  const message = err == null ? undefined : (err as { message?: unknown }).message;
+  return String(message ?? err);
 }
 
 type CacheEntry = { blocked: boolean; at: number };
