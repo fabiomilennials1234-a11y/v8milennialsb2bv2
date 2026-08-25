@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
+import { isVirtualTeamMember, useOrganization } from "@/modules/identity";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 // Do módulo do tipo, NÃO de "./useMetricsStudio": aquele hook importa este, e o
 // import de volta — mesmo sendo só de tipo — fecha ciclo no grafo de módulos e
@@ -14,14 +14,21 @@ import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window
  * Substitui o `usePersistedState` em localStorage, que morria ao trocar de
  * máquina, sumia com a limpeza de cache e não sobrevivia ao TTL de 30 dias.
  *
- * Tabela `metrics_studio_panels`, um painel por (org, membro). NÃO é
- * `dashboard_widgets`: aquela é grade, é admin-only e o trigger dela exige a
- * flag da TV — ver o cabeçalho da migration 20270811110000.
+ * Tabela `metrics_studio_panels`, **um painel por ORGANIZAÇÃO** desde a
+ * migration 20270828000010. Admin de equipe e master editam; todo membro da org
+ * lê o mesmo painel. Antes era um por (org, membro) — mudou junto com o gate de
+ * edição, porque "todos visualizam" precisa de um objeto comum para visualizar.
+ * NÃO é `dashboard_widgets`: aquela é grade, e o trigger dela exige a flag da TV
+ * — ver o cabeçalho da migration 20270811110000.
  *
  * ESCRITA ADIADA. Arrastar uma janela dispara dezenas de mudanças por segundo;
  * gravar cada uma seria uma requisição por quadro. O salvamento espera o
- * silêncio (debounce) e manda o layout inteiro num upsert — o painel é
- * pequeno e o conflito não existe, porque cada linha tem um dono só.
+ * silêncio (debounce) e manda o layout inteiro num upsert.
+ *
+ * ⚠️ A linha agora tem UM dono só na prática, mas vários EDITORES possíveis: se
+ * dois admins mexerem ao mesmo tempo, o último a gravar vence, sem aviso. É
+ * aceitável para um painel (o conteúdo é escolha de exibição, não dado), e é a
+ * diferença que o modelo por membro escondia.
  *
  * DEGRADA SEM QUEBRAR. Enquanto a migration não estiver em prod, a leitura
  * devolve o painel vazio e a escrita falha em silêncio: o usuário monta o
@@ -45,10 +52,19 @@ export function useMetricsStudioPanel(): PanelPersistence {
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
 
-  const ativa = isReady && !!organizationId && !!teamMemberId;
+  // O painel é DA ORGANIZAÇÃO, não do membro (mig. 20270828000010). A leitura
+  // não depende mais de haver `teamMemberId`: é isso que faz MASTER — que não
+  // tem linha em `team_members` — enxergar o painel em vez de tela vazia.
+  const ativa = isReady && !!organizationId;
+
+  // `team_member_id` deixou de ser dono e virou "quem editou por último".
+  // O id virtual do master (`master-virtual-<uuid>`) NÃO é uuid de
+  // `team_members`: mandá-lo estoura 22P02/23503. Vira NULL, que a coluna
+  // agora aceita — e era exatamente isto que impedia master de salvar painel.
+  const editorId = isVirtualTeamMember(teamMemberId) ? null : (teamMemberId ?? null);
 
   const query = useQuery({
-    queryKey: ["metrics-studio-panel", organizationId, teamMemberId],
+    queryKey: ["metrics-studio-panel", organizationId],
     queryFn: async (): Promise<StudioWindow[]> => {
       // PONTE DE COMPATIBILIDADE — some junto com o apply em prod.
       //
@@ -74,12 +90,10 @@ export function useMetricsStudioPanel(): PanelPersistence {
         from: (t: string) => {
           select: (c: string) => {
             eq: (c: string, v: string) => {
-              eq: (c: string, v: string) => {
-                maybeSingle: () => Promise<{
-                  data: { layout?: unknown } | null;
-                  error: { message: string; code?: string } | null;
-                }>;
-              };
+              maybeSingle: () => Promise<{
+                data: { layout?: unknown } | null;
+                error: { message: string; code?: string } | null;
+              }>;
             };
           };
         };
@@ -88,7 +102,6 @@ export function useMetricsStudioPanel(): PanelPersistence {
       const { data, error } = await tabela
         .select("layout")
         .eq("organization_id", organizationId!)
-        .eq("team_member_id", teamMemberId!)
         .maybeSingle();
 
       // Tabela ainda não aplicada em prod → painel vazio, sem erro na tela.
@@ -111,7 +124,7 @@ export function useMetricsStudioPanel(): PanelPersistence {
 
   const gravar = useCallback(async () => {
     const layout = pendente.current;
-    if (!layout || !organizationId || !teamMemberId) return;
+    if (!layout || !organizationId) return;
     pendente.current = null;
 
     const { error } = await supabase
@@ -120,19 +133,24 @@ export function useMetricsStudioPanel(): PanelPersistence {
       // @ts-expect-error tabela ausente de types.ts até o apply em produção
       .from("metrics_studio_panels")
       .upsert(
-        { organization_id: organizationId, team_member_id: teamMemberId, layout },
-        { onConflict: "organization_id,team_member_id" },
+        { organization_id: organizationId, team_member_id: editorId, layout },
+        { onConflict: "organization_id" },
       );
 
     setIsSaving(false);
     if (error) {
       // Falha de persistência não pode derrubar o painel que está na tela.
       // O estado local segue válido; o próximo save tenta de novo.
+      //
+      // Membro comum cai AQUI de propósito: a RLS de escrita é admin-only, e o
+      // front já esconde os controles de edição. Este ramo é a segunda barreira,
+      // não a primeira — e ela avisa no console em vez de gritar na tela, porque
+      // membro nenhum deveria conseguir chegar até aqui.
       console.warn("[metrics-studio] painel não salvo:", error.message);
       return;
     }
-    queryClient.setQueryData(["metrics-studio-panel", organizationId, teamMemberId], layout);
-  }, [organizationId, teamMemberId, queryClient]);
+    queryClient.setQueryData(["metrics-studio-panel", organizationId], layout);
+  }, [organizationId, editorId, queryClient]);
 
   const save = useCallback(
     (windows: StudioWindow[]) => {

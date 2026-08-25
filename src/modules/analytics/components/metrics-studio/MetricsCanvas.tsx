@@ -19,6 +19,12 @@ interface MetricsCanvasProps {
   range?: StudioRange | null;
   podeVerPorPessoa: boolean;
   editavel: boolean;
+  /**
+   * Se este usuário PODE entrar em edição — admin de equipe ou master.
+   * Diferente de `editavel`, que é "está editando AGORA". Sem esta distinção o
+   * painel vazio oferece "Montar painel" a quem a RLS vai recusar.
+   */
+  podeEditar: boolean;
   onEditar: () => void;
   selectedId: string | null;
   size: { width: number; height: number };
@@ -36,7 +42,7 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, byId, period, range, podeVerPorPessoa, editavel, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, byId, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
   ref,
 ) {
   const empty = windows.length === 0;
@@ -69,12 +75,16 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
             <p className="mt-0.5 max-w-[320px] text-[11px] leading-relaxed text-muted-foreground/60">
               {editavel
                 ? "Escolha uma métrica na lista ao lado. Ela vira uma janela aqui — arraste pela barra de título, redimensione pela borda e troque o corte ao selecioná-la."
-                : "Monte o painel com as métricas que você acompanha."}
+                : podeEditar
+                  ? "Monte o painel da organização com as métricas que o time acompanha."
+                  : "O painel é o mesmo para toda a organização e ainda não foi montado. Quem configura é um administrador."}
             </p>
           </div>
           {/* Em Visualização o painel vazio seria um beco sem saída: sem a
-              lista lateral, não há como adicionar nada. O convite é a saída. */}
-          {!editavel && (
+              lista lateral, não há como adicionar nada. O convite é a saída —
+              mas só para quem tem para onde ir. Oferecer "Montar painel" a
+              membro seria mandá-lo bater numa recusa da RLS. */}
+          {!editavel && podeEditar && (
             <button
               type="button"
               onClick={onEditar}

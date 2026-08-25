@@ -60,7 +60,6 @@ export default function MetricsStudio() {
   // leitura. A lista lateral só existe em Edição — em Visualização ela seria
   // um convite a mexer no que se quer só olhar, e rouba largura do painel.
   const [modo, setModo] = useState<"ver" | "editar">("ver");
-  const editando = modo === "editar";
   const [period, setPeriod] = useState<StudioPeriod>("month");
 
   // SCRUM-313. O seletor guarda `Date` porque é o que o calendário fala; a
@@ -119,6 +118,30 @@ export default function MetricsStudio() {
   const podeCompor =
     (membroAtual as { role?: string; is_active?: boolean } | null | undefined)?.role === "admin" &&
     (membroAtual as { is_active?: boolean } | null | undefined)?.is_active !== false;
+
+  /**
+   * Quem pode EDITAR o painel da organização — decisão do CTO em 2026-08-25:
+   * só admin de equipe e master; todo o resto visualiza.
+   *
+   * Espelha a RLS de `metrics_studio_panels` (mig. 20270828000010): escrita por
+   * `get_my_team_admin_organization_ids()` mais a policy própria do master.
+   * `podeCompor` já vale `true` para master, porque o team member VIRTUAL que
+   * `useCurrentTeamMember` monta para ele diz `role: 'admin'` — a mesma
+   * expressão serve para as duas coisas, e é por isso que não há um `|| isMaster`
+   * aqui.
+   *
+   * ⚠️ ISTO É COSMÉTICO. A barreira real é a RLS: esconder botão não protege
+   * nada contra quem chama o PostgREST direto. O valor daqui é não oferecer ao
+   * membro um controle que o banco vai recusar.
+   */
+  const podeEditar = podeCompor;
+
+  // `podeEditar` entra na DERIVAÇÃO do modo, não só no botão. Se ele virar
+  // false com "editar" já ligado — troca de org, membro perde admin, master
+  // saindo do ghost —, o canvas volta a travar no MESMO render, sem depender de
+  // alguém clicar em "Concluir". Mora aqui, e não junto do `useState`, porque
+  // depende de `useCurrentTeamMember`, que é resolvido acima.
+  const editando = modo === "editar" && podeEditar;
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -227,10 +250,15 @@ export default function MetricsStudio() {
         <div className="min-w-0">
           <h1 className="text-[19px] font-extrabold leading-tight tracking-[-0.03em]">Métricas</h1>
           <p className="text-[12px] text-muted-foreground/70">
+            {/* Painel vazio diz coisas DIFERENTES conforme quem olha: mandar o
+                membro "montar o painel" seria instrução que ele não tem como
+                seguir — o botão de edição nem existe para ele. */}
             {editando
               ? "Arraste, redimensione e escolha o corte de cada janela"
               : studio.windows.length === 0
-                ? "Monte o painel com as métricas que você acompanha"
+                ? podeEditar
+                  ? "Monte o painel da organização com as métricas que o time acompanha"
+                  : "O painel da organização ainda não foi montado — um administrador precisa configurá-lo"
                 : `${studio.windows.length} ${studio.windows.length === 1 ? "janela" : "janelas"} no painel`}
           </p>
         </div>
@@ -330,6 +358,11 @@ export default function MetricsStudio() {
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {/* Só admin de equipe e master editam o painel da organização. Para o
+              resto o botão NÃO aparece — em vez de aparecer desabilitado.
+              Controle morto na tela é promessa que o produto não cumpre; a
+              ausência diz a mesma coisa sem prometer nada. */}
+          {podeEditar && (
           <button
             type="button"
             onClick={() => {
@@ -346,6 +379,7 @@ export default function MetricsStudio() {
             {editando ? <Check className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
             {editando ? "Concluir" : "Editar"}
           </button>
+          )}
 
           {editando && (
           <button
@@ -405,6 +439,7 @@ export default function MetricsStudio() {
             range={rangeMotor}
             podeVerPorPessoa={podeVerPorPessoa}
             editavel={editando}
+            podeEditar={podeEditar}
             onEditar={() => setModo("editar")}
             selectedId={selectedId}
             size={canvasSize}
