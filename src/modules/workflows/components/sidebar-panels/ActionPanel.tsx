@@ -50,6 +50,46 @@ import { CampaignTemplateSelectorField } from "./CampaignTemplateSelectorField";
 import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
 import { useChecklistItems } from "@/modules/engagement/hooks/useChecklists";
 
+/**
+ * Dono do Negócio — escreve nos DOIS lugares (`deals.owner_id` e
+ * `pipeline_entries.assigned_to`), por isso o rótulo fala de negócio e não de
+ * lead: trocar o dono aqui não mexe no responsável da PESSOA.
+ */
+function SetDealOwnerConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { data: members = [] } = useTeamMembers();
+  const activeMembers = members.filter((m) => m.is_active);
+
+  return (
+    <div className="space-y-2">
+      <Label>Novo dono do negócio</Label>
+      <Select
+        value={data.dealOwnerId || ""}
+        onValueChange={(v) => onUpdate({ dealOwnerId: v })}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Selecione um membro" />
+        </SelectTrigger>
+        <SelectContent>
+          {activeMembers.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {m.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-[11px] text-muted-foreground">
+        Muda o dono do NEGÓCIO — o responsável pela pessoa continua como está.
+      </p>
+    </div>
+  );
+}
+
 function AssignResponsibleConfig({
   data,
   onUpdate,
@@ -1029,7 +1069,12 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* ═══════ EQUIPE ═══════ */}
 
-      {(at === "assign_responsible" || at === "assign_sdr" || at === "assign_closer" || at === "assign_sale_responsible") && (
+      {/* `assign_sale_responsible` saiu da lista: o tipo nunca existiu em
+          `WorkflowActionType`, então a comparação era morta — TS2367 mascarado
+          no baseline pelo TEXTO do erro, que carrega a união inteira e mudou de
+          nome quando as ações de Negócio entraram. Tirar o ramo morto é o
+          conserto; regenerar o baseline só teria escondido de novo. */}
+      {(at === "assign_responsible" || at === "assign_sdr" || at === "assign_closer") && (
         <AssignResponsibleConfig data={data} onUpdate={onUpdate} />
       )}
 
@@ -1076,6 +1121,51 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
       {/* ═══════ NEGÓCIOS ═══════ */}
 
       {at === "create_deal" && <CreateDealConfig data={data} onUpdate={onUpdate} />}
+
+      {/* Ganhar e perder não têm configuração: o destino é a etapa terminal do
+          funil DO NEGÓCIO, resolvida pelo papel da etapa (ADR-0023 §4/§5).
+          Oferecer um seletor de etapa aqui seria convidar o usuário a escolher
+          uma etapa que não encerra nada. */}
+      {(at === "win_deal" || at === "lose_deal") && (
+        <p className="rounded-lg border border-dashed border-border px-3 py-2 text-[12px] text-muted-foreground">
+          {at === "win_deal"
+            ? "Move o negócio para a etapa de ganho do funil dele."
+            : "Move o negócio para a etapa de perda do funil dele."}
+          {" "}Exige um gatilho de funil — é dele que vem qual negócio encerrar.
+        </p>
+      )}
+
+      {at === "lose_deal" && (
+        <div className="space-y-2">
+          <Label>Motivo da perda (opcional)</Label>
+          <Input
+            value={data.lossReason || ""}
+            onChange={(e) => onUpdate({ lossReason: e.target.value })}
+            placeholder="Preço, prazo, comprou do concorrente…"
+          />
+        </div>
+      )}
+
+      {at === "set_deal_value" && (
+        <div className="space-y-2">
+          <Label>Valor (R$)</Label>
+          <Input
+            type="number"
+            min={0}
+            value={data.dealValue ?? ""}
+            // `Number(...)` e não a string crua: `dealValue` é numérico no
+            // contrato do nó, e um campo de dinheiro guardado como texto é como
+            // "1.500" chega ao banco valendo 1,5.
+            onChange={(e) => onUpdate({ dealValue: e.target.value === "" ? undefined : Number(e.target.value) })}
+            placeholder="0"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Grava em <code>deals.value</code>. Negócio sem registro em Negócios não aceita valor.
+          </p>
+        </div>
+      )}
+
+      {at === "set_deal_owner" && <SetDealOwnerConfig data={data} onUpdate={onUpdate} />}
 
       {/* ═══════ FOLLOW-UP ═══════ */}
 

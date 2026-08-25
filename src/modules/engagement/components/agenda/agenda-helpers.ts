@@ -513,3 +513,131 @@ export function larguraDoPainel(
   const desejada = Math.min(viewportWidth * PROPORCAO_PAINEL, LARGURA_MAXIMA_PAINEL);
   return Math.round(Math.max(Math.min(desejada, teto), LARGURA_MINIMA_PAINEL));
 }
+
+// ─── Resultado do compromisso (compareceu × não compareceu) ───────────────────
+
+/**
+ * O resultado registrado. `null` é "ainda não registrado" — e é estado de
+ * primeira classe: o pedido diz que compromisso sem resultado não conta nem de
+ * um lado nem do outro.
+ */
+export type AttendanceOutcome = "compareceu" | "nao_compareceu";
+
+/**
+ * `meetings.status` já modelava isto antes de existir botão para gravá-lo. O
+ * CHECK da tabela é `scheduled | completed | cancelled | no_show` (baseline,
+ * `meetings_status_check`), então:
+ *
+ *   compareceu      → `completed`
+ *   não compareceu  → `no_show`
+ *   sem registro    → `scheduled`
+ *
+ * Nenhuma coluna nova, nenhuma migration. Reaproveitar o que já existe era o
+ * pedido, e aqui a estrutura existente já era exatamente a certa.
+ */
+const STATUS_POR_RESULTADO: Record<AttendanceOutcome, string> = {
+  compareceu: "completed",
+  nao_compareceu: "no_show",
+};
+
+/** Status gravado quando a pessoa DESMARCA o resultado — volta a "sem registro". */
+export const STATUS_SEM_RESULTADO = "scheduled";
+
+export function statusDoResultado(resultado: AttendanceOutcome): string {
+  return STATUS_POR_RESULTADO[resultado];
+}
+
+/**
+ * Onde os botões aparecem.
+ *
+ * Só na fonte `meeting` — que NÃO quer dizer "só reunião". Os cinco tipos do
+ * botão "Nova atividade" (reunião, ligação, follow-up, tarefa, outro) são todos
+ * linhas de `meetings`, distinguidas por `event_type` (CHECK
+ * `meetings_event_type_check`). Uma implementação só cobre os cinco, que é o
+ * que o pedido exige.
+ *
+ * As outras três fontes da agenda são LEITURA de telas alheias: `follow_ups`
+ * pertence a Follow-ups, `pipe_confirmacao` é etapa de kanban (marcar
+ * comparecimento ali moveria o card), e mensagem agendada não comparece a nada.
+ */
+/**
+ * Reunião cancelada — o QUARTO valor do `meetings_status_check`, que a UI nunca
+ * mostrou e ninguém nunca escreveu.
+ *
+ * Varri o repo inteiro à procura de um escritor e não existe: os três únicos
+ * caminhos de escrita em `meetings` são `useCreateMeeting` (nunca manda
+ * `status`, cai no DEFAULT `scheduled`), `useUpdateMeeting` (um só chamador de
+ * produção, o handler desta tela, que emite `completed`/`no_show`/`scheduled`)
+ * e `useDeleteMeeting` (DELETE duro, não soft-cancel). O webhook do Google
+ * Calendar TRATA evento cancelado, mas escreve em `google_calendar_events_cache`
+ * — nunca em `meetings`. Zero `UPDATE meetings` em todas as migrations,
+ * inclusive as 840 arquivadas.
+ *
+ * Então por que a guarda existe? Porque o dia em que alguém ligar o
+ * cancelamento, o custo de não ter isto aqui é SILENCIOSO e em dois passos:
+ * `outcomeOf` devolveria `null` para a cancelada, o par de botões apareceria
+ * dizendo "Sem registro", e marcar-e-desmarcar gravaria `scheduled` — a reunião
+ * cancelada RESSUSCITA na aba "Pendentes". Uma linha aqui custa menos que esse
+ * bug.
+ */
+const CANCELLED_STATUSES = new Set(["cancelled", "canceled"]);
+
+export function isCancelledEvent(event: UnifiedEvent): boolean {
+  return CANCELLED_STATUSES.has((event.status ?? "").toLowerCase());
+}
+
+export function podeRegistrarResultado(event: UnifiedEvent): boolean {
+  return event.source === "meeting" && !isCancelledEvent(event);
+}
+
+/**
+ * Lê o resultado de um evento. `null` = ainda não registrado.
+ *
+ * 🚨 O recorte por fonte não é zelo, é correção. `completed` significa coisas
+ * DIFERENTES em fontes diferentes: em `meetings` é o comparecimento que esta
+ * tela grava, mas em `follow_ups` a RPC fabrica `completed` a partir de
+ * `completed_at` — ou seja, "o follow-up foi concluído", que não é
+ * "compareceu". Sem esta guarda, todo follow-up concluído ganhava ✓ verde de
+ * comparecimento na grade. Encontrado olhando a tela, não o código.
+ */
+export function outcomeOf(event: UnifiedEvent): AttendanceOutcome | null {
+  if (!podeRegistrarResultado(event)) return null;
+  const status = (event.status ?? "").toLowerCase();
+  if (status === "completed") return "compareceu";
+  if (status === "no_show") return "nao_compareceu";
+  return null;
+}
+
+
+export interface ResumoComparecimento {
+  compareceu: number;
+  naoCompareceu: number;
+  semRegistro: number;
+}
+
+/**
+ * Conta o resultado sobre uma lista já recortada (período, escopo, filtros).
+ *
+ * Conta só o que PODE ter resultado: incluir follow-up e confirmação inflaria
+ * "sem registro" com item que nunca vai poder ser registrado ali, e o número
+ * viraria ruído. Cada evento cai em exatamente um balde — sem contagem dupla,
+ * e trocar o resultado apenas move de balde, porque a contagem é derivada do
+ * estado atual e não acumulada.
+ */
+export function resumirComparecimento(
+  events: UnifiedEvent[],
+): ResumoComparecimento {
+  const resumo: ResumoComparecimento = {
+    compareceu: 0,
+    naoCompareceu: 0,
+    semRegistro: 0,
+  };
+  for (const e of events) {
+    if (!podeRegistrarResultado(e)) continue;
+    const r = outcomeOf(e);
+    if (r === "compareceu") resumo.compareceu += 1;
+    else if (r === "nao_compareceu") resumo.naoCompareceu += 1;
+    else resumo.semRegistro += 1;
+  }
+  return resumo;
+}

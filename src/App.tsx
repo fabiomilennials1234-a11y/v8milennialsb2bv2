@@ -302,18 +302,22 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/* SCRUM-11 — Estúdio de Métricas. SEM PermissionProtectedRoute de
-          propósito, espelhando /dashboard: `useFeaturePermission` é fail-closed
-          (`features?.[key] === true`), então gatear numa chave que a
-          `get-member-permissions` ainda não semeia trancaria todo membro
-          não-admin. Quando `metrics.view` existir no modelo de permissão, o
-          gate entra aqui e a rota entra no NAV_VIEW_PERMISSIONS. */}
+      {/* SCRUM-11 / SCRUM-430 — Estúdio de Métricas.
+          O gate ficou de fora até agora porque `useFeaturePermission` é
+          fail-closed (`features?.[key] === true`): gatear numa chave que a
+          `get-member-permissions` não semeia trancaria todo membro não-admin.
+          `metrics.view` entrou no catálogo pela migration 20270828000000, que é
+          PRÉ-REQUISITO deste gate — aplicada em prod antes deste código subir.
+          Se um dia a chave sair do catálogo, TIRE ESTE GATE PRIMEIRO: é o bug
+          vivo de `checklists.view` (SCRUM-431). */}
       <Route
         path="/metricas"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <MetricsStudio />
+              <PermissionProtectedRoute featureKey="metrics.view">
+                <MetricsStudio />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }

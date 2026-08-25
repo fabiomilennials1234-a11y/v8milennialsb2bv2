@@ -33,6 +33,7 @@ import {
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
+  Check,
   Plus,
   RefreshCw,
   X,
@@ -43,7 +44,11 @@ import { cn } from "@/lib/utils";
 import { useAuth, useIdentity, useTeamMembers } from "@/modules/identity";
 import { useAgendaEvents } from "@/modules/engagement/hooks/useAgendaEvents";
 import { useMyAgendaOwnership } from "@/modules/engagement/hooks/useMyAgendaOwnership";
-import { useDeleteMeeting } from "@/modules/engagement/hooks/useMeetings";
+import {
+  useDeleteMeeting,
+  useUpdateMeeting,
+  type MeetingStatus,
+} from "@/modules/engagement/hooks/useMeetings";
 import {
   useCalendarEvents,
   useGoogleCalendarStatus,
@@ -52,6 +57,7 @@ import { useCalendarSharing } from "@/modules/integrations/hooks/useGoogleCalend
 
 import type {
   AgendaStatusFilter,
+  AttendanceOutcome,
   EventTypeKey,
   UnifiedEvent,
   ViewType,
@@ -65,6 +71,10 @@ import {
   buildOwnerIdentity,
   isOwnedBy,
   matchesStatusFilter,
+  rawEventId,
+  resumirComparecimento,
+  statusDoResultado,
+  STATUS_SEM_RESULTADO,
 } from "./agenda-helpers";
 import {
   AgendaFilterBar,
@@ -287,8 +297,41 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
     return allEvents.filter((e) => isSameMonth(e.start, date));
   }, [allEvents, date, view]);
 
+  /**
+   * Comparecimento do período. `total` é quantos PODEM ter resultado — só
+   * `meetings`; incluir follow-up e confirmação encheria "sem registro" de item
+   * que nunca vai poder ser registrado aqui.
+   */
+  const resumo = useMemo(() => {
+    const r = resumirComparecimento(eventosNoPeriodo);
+    return { ...r, total: r.compareceu + r.naoCompareceu + r.semRegistro };
+  }, [eventosNoPeriodo]);
+
   // ── Mutations ───────────────────────────────────────────────────────────────
   const deleteMeeting = useDeleteMeeting();
+  const updateMeeting = useUpdateMeeting();
+
+  /**
+   * Grava o resultado do compromisso.
+   *
+   * Nenhuma coluna nova: `meetings.status` já tinha `completed` e `no_show` no
+   * CHECK desde o baseline, e `useUpdateMeeting` já filtra por
+   * `organization_id` e invalida `agenda-events` — a contagem no cabeçalho se
+   * atualiza sozinha, sem somar nada à mão. Como ela é DERIVADA do estado
+   * atual e não acumulada, trocar o resultado só move o evento de balde: não
+   * existe caminho para contar duas vezes.
+   */
+  const handleSetOutcome = useCallback(
+    async (event: UnifiedEvent, resultado: AttendanceOutcome | null) => {
+      await updateMeeting.mutateAsync({
+        id: rawEventId(event),
+        status: (resultado
+          ? statusDoResultado(resultado)
+          : STATUS_SEM_RESULTADO) as MeetingStatus,
+      });
+    },
+    [updateMeeting],
+  );
 
   const handleDeleteMeeting = useCallback(
     async (meetingId: string) => {
@@ -507,6 +550,34 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
                 ? "Nenhuma atividade"
                 : `${eventosNoPeriodo.length} ${eventosNoPeriodo.length === 1 ? "atividade" : "atividades"}`}
           </span>
+
+          {/* Comparecimento do período. Some quando não há nada registrável —
+              zero sem contexto é ruído, não informação.
+              O número é DERIVADO da lista já em tela: acompanha os filtros,
+              acompanha o escopo de quem está vendo, e não pode divergir do que
+              a grade mostra. Trocar um resultado move de balde; não soma. */}
+          {!isLoading && resumo.total > 0 && (
+            <div
+              className="flex items-center gap-2.5 text-xs tabular-nums"
+              aria-label="Comparecimento no período"
+            >
+              <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
+                {resumo.compareceu}
+                <span className="sr-only">compareceram</span>
+              </span>
+              <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
+                <X className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
+                {resumo.naoCompareceu}
+                <span className="sr-only">não compareceram</span>
+              </span>
+              {resumo.semRegistro > 0 && (
+                <span className="text-muted-foreground">
+                  {resumo.semRegistro} sem registro
+                </span>
+              )}
+            </div>
+          )}
           {/* Mesma linguagem do segmentado de estado: pílula sobre superfície
               afundada. Dois segmentados com formas diferentes lado a lado leem
               como dois sistemas. */}
@@ -614,6 +685,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
             state={popover}
             onClose={() => setPopover(null)}
             onDeleteMeeting={handleDeleteMeeting}
+            onSetOutcome={handleSetOutcome}
             onDeleteGoogleEvent={handleDeleteGoogleEvent}
           />
         )}

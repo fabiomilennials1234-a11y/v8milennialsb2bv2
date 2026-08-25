@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CalendarCheck, Check, Trophy, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
@@ -9,7 +9,7 @@ import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
 import { DealCardMoney } from "./DealCardMoney";
 import { contaDoNegocio } from "./conta-do-negocio";
-import type { DealCardComentario, DealCardData } from "./types";
+import type { DealCardAba, DealCardComentario, DealCardData } from "./types";
 
 /**
  * O Card do Negócio — a coluna DIREITA do painel, no formato do print DataCrazy.
@@ -42,7 +42,7 @@ import type { DealCardComentario, DealCardData } from "./types";
  * do dobro da mediana da etapa na própria org.
  */
 
-type Aba = "negocio" | "atividades" | "negocios";
+type Aba = DealCardAba;
 type SubAba = "pipeline" | "jornada";
 type AbaDinheiro = "produtos" | "anotacao";
 
@@ -103,7 +103,12 @@ function Abas<T extends string>({
   onTrocar,
   compacta,
 }: {
-  itens: { chave: T; rotulo: string; contagem?: number }[];
+  /**
+   * `contagem` é número; `contagemTexto` existe para a aba cuja medida é uma
+   * FRAÇÃO — "3/7 feito" diz o que "7" sozinho não diz, e é a pergunta que se
+   * faz de checklist.
+   */
+  itens: { chave: T; rotulo: string; contagem?: number; contagemTexto?: string }[];
   ativa: T;
   onTrocar: (chave: T) => void;
   compacta?: boolean;
@@ -125,9 +130,9 @@ function Abas<T extends string>({
             )}
           >
             {i.rotulo}
-            {i.contagem !== undefined && (
+            {(i.contagemTexto ?? i.contagem) !== undefined && (
               <span className="ml-1.5 text-[11px] tabular-nums text-muted-foreground/60">
-                {i.contagem}
+                {i.contagemTexto ?? i.contagem}
               </span>
             )}
             {acesa && (
@@ -186,6 +191,9 @@ export function DealCard({
   onEditarComentario,
   onApagarComentario,
   comentando,
+  abaInicial,
+  resumoChecklists,
+  painelChecklists,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
@@ -209,8 +217,34 @@ export function DealCard({
   onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
   onApagarComentario?: (id: string) => void | Promise<void>;
   comentando?: boolean;
+  /**
+   * A aba pedida por quem abriu o painel. Sem isto, "Checklists" no menu do
+   * card abria na primeira aba e o item parecia não fazer nada.
+   */
+  abaInicial?: DealCardAba | null;
+  /**
+   * Contagem de checklists só para o SELO da aba. O conteúdo busca por conta
+   * própria — este número vem do painel, que já roda a query para o selo
+   * aparecer sem exigir que a aba seja aberta primeiro.
+   */
+  resumoChecklists?: { feitos: number; total: number } | null;
+  /**
+   * ── Checklists entram por SLOT, não por import ─────────────────────────
+   * O conteúdo da aba fala com banco (`@/modules/engagement` → supabase +
+   * react-query). Importá-lo daqui poria esse caminho no grafo de quem monta
+   * o `DealCard` — inclusive `/preview.html`, a tela de desenho que só é
+   * segura porque NÃO tem de onde ler (`inv:H5-17`,
+   * `preview-cards-sem-banco.test.ts`). Quem tem a dependência é o
+   * `DealCardPanel`; aqui só se escolhe onde pendurar.
+   *
+   * Sem o slot a aba não existe — é a mesma regra das outras três do print:
+   * aba que abre num "nada aqui" ensina a não clicar em nenhuma.
+   */
+  painelChecklists?: ReactNode;
 }) {
-  const [aba, setAba] = useState<Aba>("negocio");
+  const abaPedida: Aba =
+    abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
+  const [aba, setAba] = useState<Aba>(abaPedida);
   const [subAba, setSubAba] = useState<SubAba>("pipeline");
   const [abaDinheiro, setAbaDinheiro] = useState<AbaDinheiro>("produtos");
   const [nota, setNota] = useState(negocio.nota);
@@ -229,9 +263,13 @@ export function DealCard({
    * usar sumia da tela. Acontecia em 100% das gravações.
    */
   useEffect(() => {
-    setAba("negocio");
+    setAba(abaPedida);
     setSubAba("pipeline");
     setAbaDinheiro("produtos");
+    // `abaInicial` FORA da lista de propósito: ele é o pedido de QUEM ABRIU, e
+    // reagir a ele arrastaria a pessoa de volta para a aba pedida no meio da
+    // navegação — o provider zera o pedido só na próxima abertura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [negocio.id]);
 
   const aberto = negocio.estado === "aberto";
@@ -312,9 +350,11 @@ export function DealCard({
 
       {/* ── Barra de abas do print ────────────────────────────────────────
           O print tem seis: Histórico · Atividades · Negócios · Arquivos ·
-          Atendimentos · Informações do Negócio. Entram as TRÊS que têm fonte de
-          dado ligada. As outras três ficam de fora em vez de entrar vazias —
-          aba que abre num "nada aqui" ensina a não clicar em nenhuma:
+          Atendimentos · Informações do Negócio. Entram as que têm fonte de dado
+          ligada — as três do print, mais Checklists, que não está no print e
+          tem tabela própria (`checklists`/`checklist_items`) mais o número que
+          o card do funil já mostra. As outras ficam de fora em vez de entrar
+          vazias — aba que abre num "nada aqui" ensina a não clicar em nenhuma:
             · Arquivos    — não existe anexo de negócio no schema. As três
                             tabelas de arquivo do produto prendem em ticket,
                             produto e agente; nenhuma tem `deal_id`.
@@ -334,6 +374,19 @@ export function DealCard({
               rotulo: "Atividades",
               contagem: negocio.atividades.length,
             },
+            /* Checklists é aba, não bloco: é a única coisa aqui que a pessoa
+               MARCA — e o número no selo é o mesmo que o card do funil anuncia
+               como "N atividades em aberto". Até aqui o card prometia esse
+               número e o painel não tinha onde cumpri-lo. */
+            ...(painelChecklists
+              ? [{
+                  chave: "checklists" as const,
+                  rotulo: "Checklists",
+                  contagemTexto: resumoChecklists && resumoChecklists.total > 0
+                    ? `${resumoChecklists.feitos}/${resumoChecklists.total}`
+                    : undefined,
+                }]
+              : []),
             { chave: "negocios" as const, rotulo: "Negócios", contagem: negocio.outrosNegocios.length },
           ]}
         />
@@ -342,6 +395,8 @@ export function DealCard({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         {aba === "atividades" ? (
           <DealCardActivities atividades={negocio.atividades} />
+        ) : aba === "checklists" ? (
+          painelChecklists
         ) : aba === "negocios" ? (
           <LeadCardDeals
             negocios={negocio.outrosNegocios}

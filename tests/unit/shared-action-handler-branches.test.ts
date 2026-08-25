@@ -38,12 +38,20 @@ vi.mock("../../supabase/functions/_shared/whatsapp-client.ts", () => ({
 }));
 
 // Mock pipeline-adapter used by resolveVariables (whatsapp-helpers) and move-stage
+//
+// ── DUBLÊ MAIS FROUXO QUE O REAL ──────────────────────────────────────────
+// Este mock ficou 5 casos vermelhos no baseline porque não declarava
+// `upsertPipeEntryDetailed` — o handler passou a chamá-lo e o dublê explodia
+// com "No export is defined". Vermelho por dublê defasado é a pior classe de
+// vermelho: parece defeito do código e não é, então ninguém olha, e quando um
+// defeito de verdade chega ali ele entra escondido no meio dos 5.
 vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   getPipeEntry: vi.fn().mockResolvedValue(null),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
   resolvePipelineId: vi.fn().mockResolvedValue("mock-pipeline-id"),
   upsertPipeEntry: vi.fn().mockResolvedValue("mock-entry-id"),
-  updatePipeEntryById: vi.fn().mockResolvedValue(undefined),
+  upsertPipeEntryDetailed: vi.fn().mockResolvedValue({ status: "updated", entryId: "mock-entry-id" }),
+  updatePipeEntryById: vi.fn().mockResolvedValue(true),
   deletePipeEntry: vi.fn().mockResolvedValue(undefined),
 }));
 

@@ -46,7 +46,14 @@ export type WorkflowTriggerType =
   | "campaign_completed"
   | "field_changed"
   | "scheduled_date"
-  | "deal_created";
+  | "deal_created"
+  // Ganhar e perder são MOVIMENTOS para a etapa terminal (ADR-0023 §4/§5), não
+  // campos. Estes dois são DERIVADOS de `stage_changed` no servidor, pelo papel
+  // da etapa de destino — não têm gatilho de banco próprio. `deals.won` não
+  // serve de fonte: o backfill deixou 34.662 linhas com `won = false` que
+  // ninguém perdeu, e ele é cego aos 26% de cards sem linha em `deals`.
+  | "deal_won"
+  | "deal_lost";
 
 export type WorkflowNodeType =
   | "trigger"
@@ -127,6 +134,10 @@ export type WorkflowActionType =
   | "schedule_meeting"
   // Negócios
   | "create_deal"
+  | "win_deal"
+  | "lose_deal"
+  | "set_deal_value"
+  | "set_deal_owner"
   // TinyERP
   | "create_tinyerp_order"
   | "create_tinyerp_upsell_order"
@@ -514,6 +525,8 @@ export interface ActionNodeData {
   dealProbability?: number;
   dealOwnerMode?: "lead_responsible" | "specific";
   dealOwnerId?: string;
+  /** `lose_deal` — motivo gravado em `deals.loss_reason`. */
+  lossReason?: string;
   dealOwnerName?: string;
   dealExpectedCloseDays?: number;
   dealNotes?: string;
@@ -1009,6 +1022,10 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   schedule_meeting: "Agendar Reunião",
   // Negócios
   create_deal: "Criar Negócio",
+  win_deal: "Ganhar Negócio",
+  lose_deal: "Perder Negócio",
+  set_deal_value: "Definir Valor do Negócio",
+  set_deal_owner: "Definir Dono do Negócio",
   // TinyERP
   create_tinyerp_order: "Criar Pedido TinyERP",
   create_tinyerp_upsell_order: "Criar Pedido Upsell TinyERP",
@@ -1052,6 +1069,8 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   field_changed: "Campo do Lead Alterado",
   scheduled_date: "Antes de uma data",
   deal_created: "Negócio Criado",
+  deal_won: "Negócio Ganho",
+  deal_lost: "Negócio Perdido",
 };
 
 export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
@@ -1132,7 +1151,7 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
   },
   {
     label: "Negócios",
-    actions: ["create_deal"],
+    actions: ["create_deal", "win_deal", "lose_deal", "set_deal_value", "set_deal_owner"],
   },
   {
     label: "TinyERP",
@@ -1271,7 +1290,7 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   },
   {
     label: "Negócios",
-    triggers: ["deal_created"],
+    triggers: ["deal_created", "deal_won", "deal_lost"],
   },
   {
     label: "Automação",
