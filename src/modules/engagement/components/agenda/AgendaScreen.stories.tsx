@@ -23,7 +23,11 @@ import type {
   EventTypeKey,
   UnifiedEvent,
 } from "./agenda-helpers";
-import { EVENT_TYPE_KEYS, SOURCE_COLORS } from "./agenda-helpers";
+import {
+  EVENT_TYPE_KEYS,
+  SOURCE_COLORS,
+  resumirComparecimento,
+} from "./agenda-helpers";
 
 // Agosto de 2026 — o mês da referência visual.
 const MES = new Date(2026, 7, 24);
@@ -146,6 +150,14 @@ function TelaAtividades({
       return next;
     });
 
+  // Mesma derivação da página real (`AgendaAtividades`): a contagem sai da
+  // lista, não de um número escrito à mão.
+  const parcial = resumirComparecimento(eventos);
+  const resumo = {
+    ...parcial,
+    total: parcial.compareceu + parcial.naoCompareceu + parcial.semRegistro,
+  };
+
   return (
     // Espelha o painel sobreposto: lateral + página de baixo à mostra na
     // esquerda, e a Agenda ocupando a direita.
@@ -220,15 +232,34 @@ function TelaAtividades({
               <span className="text-xs tabular-nums text-muted-foreground">
                 {eventos.length} atividades
               </span>
-              <div className="flex items-center gap-2.5 text-xs tabular-nums">
-                <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
-                  <Check className="h-3 w-3 shrink-0" strokeWidth={3} />1
-                </span>
-                <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
-                  <X className="h-3 w-3 shrink-0" strokeWidth={3} />1
-                </span>
-                <span className="text-muted-foreground">{eventos.length - 2} sem registro</span>
-              </div>
+              {/* DERIVADO, nunca cravado. A versão anterior escrevia 1 / 1 /
+                  `eventos.length - 2` na mão: no mês cheio dava 7 onde a
+                  contagem real dá 3 (só a fonte `meeting` conta), e na história
+                  "Vazio" imprimia literalmente "-2 sem registro". Uma prova
+                  visual que mente sobre o número é pior que prova nenhuma —
+                  chamar a mesma função da tela é o que faz a história valer. */}
+              {resumo.total > 0 && (
+                <div
+                  className="flex items-center gap-2.5 text-xs tabular-nums"
+                  aria-label="Comparecimento no período"
+                >
+                  <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                    <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
+                    {resumo.compareceu}
+                    <span className="sr-only">compareceram</span>
+                  </span>
+                  <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
+                    <X className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
+                    {resumo.naoCompareceu}
+                    <span className="sr-only">não compareceram</span>
+                  </span>
+                  {resumo.semRegistro > 0 && (
+                    <span className="text-muted-foreground">
+                      {resumo.semRegistro} sem registro
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="flex gap-1 rounded-full border border-border bg-sunken p-1">
                 <button
                   type="button"

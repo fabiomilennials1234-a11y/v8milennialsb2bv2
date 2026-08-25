@@ -208,13 +208,21 @@ export function EventDetailPopover({
         </div>
 
         {/* Source badge */}
+        {/* A cor da fonte fica na borda e no banho de fundo, NUNCA no texto —
+            mesmo idioma de `MonthEventPill` e `DayAgendaView`, e pelo mesmo
+            motivo: `SOURCE_COLORS.meeting` é o ouro da marca, e ouro como texto
+            sobre `--card` dá ~1,5:1 no tema claro. DESIGN.md proíbe.
+
+            O sufixo hexadecimal de alfa (`${cor}50`) que estava aqui também
+            estava quebrado: três das cinco fontes são `hsl(...)`, e
+            `"hsl(47, 100%, 50%)50"` é declaração inválida, descartada em
+            silêncio. `color-mix` tolera hex E hsl, então as cinco tingem igual. */}
         <Badge
           variant="outline"
-          className="text-[10px] h-5 px-2 gap-1"
+          className="h-5 gap-1 px-2 text-[10px] text-foreground"
           style={{
-            borderColor: `${SOURCE_COLORS[event.source] ?? color}50`,
-            color: SOURCE_COLORS[event.source] ?? color,
-            backgroundColor: `${SOURCE_COLORS[event.source] ?? color}15`,
+            borderColor: SOURCE_COLORS[event.source] ?? color,
+            backgroundColor: `color-mix(in srgb, ${SOURCE_COLORS[event.source] ?? color} 16%, transparent)`,
           }}
         >
           <SourceIcon source={event.source} />
