@@ -127,8 +127,13 @@ export function useLeadsDeals(leadIds: string[]) {
           .in("lead_id", ids),
         supabase
           .from("pipelines")
+          // `is_active` faltava aqui — as duas queries vizinhas já filtravam.
+          // Sem isso, funil excluído continuava emprestando nome e cor para as
+          // colunas "Situação" e "Negócios" da lista de Leads. Vale também para
+          // os funis que já estavam soft-deletados antes do hard delete.
           .select("id, slug, name, color, type")
-          .eq("organization_id", organizationId),
+          .eq("organization_id", organizationId)
+          .eq("is_active", true),
         supabase
           .from("pipeline_stages")
           .select("pipeline_type, stage_key, name, stage_role, position")

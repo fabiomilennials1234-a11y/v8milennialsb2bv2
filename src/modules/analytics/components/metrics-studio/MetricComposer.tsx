@@ -540,8 +540,14 @@ function EscolhaDeEtapas({ node, onChange }: EscolhaDeEtapasProps) {
           <SelectItem value={SEM_ESCOLHA} className="text-[13px]">Escolha o funil…</SelectItem>
           {/* `.filter(f => f.id)`: Radix LEVANTA se um item tiver value "".
               O id vem do banco, então a garantia não é do tipo — é desta linha.
-              Um funil sem id derrubaria o compositor inteiro, não só a opção. */}
-          {funis.filter((f) => f.id).map((f) => (
+              Um funil sem id derrubaria o compositor inteiro, não só a opção.
+
+              `is_active`: `usePipelines()` traz a tabela-espelho inteira, sem
+              filtrar. Peneiramos AQUI e não na fonte porque o painel de
+              automações precisa listar o funil desativado para o usuário
+              conseguir desmarcá-lo. Aqui não: compor métrica sobre funil
+              excluído devolve vazio para sempre, sem erro que explique. */}
+          {funis.filter((f) => f.id && f.is_active !== false).map((f) => (
             <SelectItem key={f.id} value={f.id} className="text-[13px]">{f.name}</SelectItem>
           ))}
         </SelectContent>
