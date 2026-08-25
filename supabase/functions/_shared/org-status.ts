@@ -25,22 +25,24 @@ const TTL_MS = 60_000;
  * do send-governor, sem que org-status passe a depender do SDK nem do governor
  * (que é quem importa daqui, não o contrário).
  *
- * ⚠️ `args` é OPCIONAL, e isso não é frouxidão — é o que faz a interface ser
- * satisfeita pelo client de verdade. Medido contra a supabase-js **2.105.4**,
- * que é a que o `deno.lock:20` trava (o `node_modules` do repo tem a 2.89.0,
- * onde `Database = any` e QUALQUER interface passa trivialmente — provar por
- * ali não prova nada). Na 2.105.4 os defaults são `Database = unknown` /
- * `SchemaName = never`, então `Args` colapsa em `never` e a assinatura do SDK
- * vira `args?: undefined`. Com `args` obrigatório aqui, `tsc --strict` recusa:
+ * `args` é OPCIONAL porque a assinatura do SDK também é (`rpc(fn, args?)`), e
+ * uma superfície mínima não deve exigir mais do que quem a satisfaz oferece.
  *
- *   Type 'SupabaseClient<unknown, …, never, never, …>' is not assignable
- *     to type 'OrgStatusClient'.
- *       Type 'Record<string, unknown>' is not assignable to type 'undefined'.
+ * ⚠️ Nota de método, porque quase virou uma afirmação errada aqui: um probe em
+ * `tsc` contra o pacote **npm** `@supabase/supabase-js@2.105.4` diz que com
+ * `args` OBRIGATÓRIO o client concreto não seria atribuível (`Args` colapsa em
+ * `never`, e `Record<string, unknown>` não vai para `undefined`). Sob a
+ * toolchain que estas funções REALMENTE usam — `deno check` resolvendo pelo
+ * `esm.sh` do `deno.lock:20` — isso **não** se reproduz: com `args` obrigatório
+ * o `deno check` de `agent-message` e `whatsapp-api-proxy` dá exatamente os
+ * mesmos 31 e 1 erros (todos pré-existentes) e nenhum cita esta interface.
  *
- * E nenhum portão pegaria: `deno check` do CI é escopado a `_shared/` e não
- * arrasta os importadores (agent-message, whatsapp-api-proxy estão fora), e o
- * `typecheck:ratchet` só olha `src/`. O erro só apareceria no deploy.
- * Mesma armadilha de versão que `_shared/auth.ts:202-205` já documenta.
+ * A lição não é sobre `args`, é sobre onde medir: **npm e esm.sh resolvem tipos
+ * de forma diferente, e só o `deno check` da própria função prova alguma coisa.**
+ * Cuidado dobrado porque nenhum portão do CI cobre os importadores — o
+ * `deno check` do CI é escopado a `_shared/` e não arrasta quem importa, e o
+ * `typecheck:ratchet` só olha `src/`. Ver `_shared/auth.ts:202-205`, que
+ * documenta outra armadilha de versão no mesmo SDK.
  */
 export interface OrgStatusClient {
   rpc(
