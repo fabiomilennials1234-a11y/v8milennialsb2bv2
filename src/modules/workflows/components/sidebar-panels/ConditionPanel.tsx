@@ -42,6 +42,10 @@ const FIELD_OPTIONS = [
   { value: "score", label: "Score" },
   { value: "tag", label: "Tag" },
   { value: "stage", label: "Estagio" },
+  // ── Negócio ── (ADR-0023: lead não tem etapa nem valor; negócio tem)
+  { value: "deal_value", label: "Valor do negocio" },
+  { value: "has_open_deal", label: "Tem negocio aberto (true/false)" },
+  { value: "days_in_stage", label: "Dias parado na etapa" },
   { value: "pre_sale_responsible_id", label: "Responsavel Pre-vendas" },
   { value: "sale_responsible_id", label: "Responsavel Vendas" },
   { value: "any_responsible", label: "Responsavel (qualquer)" },

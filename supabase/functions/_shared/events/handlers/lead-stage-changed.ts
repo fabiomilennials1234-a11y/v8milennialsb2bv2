@@ -16,11 +16,24 @@ export async function handleLeadStageChanged(
 ): Promise<void> {
   const { payload, organization_id } = event;
 
+  /**
+   * O sujeito do evento é a ENTRADA quando o agregado é ela — `aggregate_id`
+   * de um `lead.stage_changed` de funil é `pipeline_entries.id`. Sem isto o
+   * caminho do barramento continuaria falando só da pessoa enquanto o caminho
+   * do gatilho de banco já fala do Negócio, e os dois passariam a deduplicar
+   * com escopos diferentes para o mesmo fato.
+   *
+   * `campanha_lead` fica de fora de propósito: ali o agregado é a inscrição na
+   * campanha, não um Negócio.
+   */
+  const entryId = event.aggregate_type === "pipeline_entry" ? event.aggregate_id : null;
+
   await fireTrigger({
     supabase,
     organizationId: organization_id,
     triggerType: "stage_changed",
     leadId: payload.lead_id,
+    entryId,
     context: {
       trigger: "stage_changed",
       pipe_type: payload.pipe_type,

@@ -399,8 +399,16 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                   completo (cabeçalho sticky, seções colapsáveis, itens
                   marcáveis) mas só era montado pelo ramo confortável, que
                   funil nenhum renderiza — ou seja, checklist não existia nos
-                  funis. Sem `leadId` ou sem checklist, volta a ser só texto. */}
-              {lead.leadId && totalCk > 0 ? (
+                  funis.
+
+                  O portão é só o `leadId`. Exigir `totalCk > 0` — como aqui se
+                  fazia — deixava justamente o card SEM checklist sem porta: a
+                  linha "Sem atividades" era o convite a aplicar o primeiro, e
+                  não abria nada. O ramo confortável já tinha corrigido isso
+                  (`LeadCardMetrics`, `checklistInteractive = !!leadId`); o card
+                  do funil ficou para trás. E checklist com zero itens conta
+                  0/0: existia no banco e sumia da tela. */}
+              {lead.leadId ? (
                 <LeadCardChecklistPopover
                   leadId={lead.leadId}
                   completed={feitos}

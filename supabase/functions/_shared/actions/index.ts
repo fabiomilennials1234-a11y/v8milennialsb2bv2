@@ -95,6 +95,12 @@ export async function executeAiAction(
     case "advance_stage":
       result = await moveStage({
         supabase, organizationId: organization_id, leadId: lead_id || payload.lead_id as string || null,
+        // O Copilot age a partir de uma CONVERSA, que é da pessoa: não existe
+        // negócio declarado no pedido. Cai no critério de sempre
+        // (`pickActiveEntry`) — e é por isso que os dois campos vão nulos e
+        // explícitos, em vez de opcionais: aqui a ausência é a resposta certa,
+        // e ela precisa estar escrita.
+        entryId: null, dealId: null,
         conversationId: conversation_id, params: payload,
       });
       break;
@@ -119,6 +125,8 @@ export async function executeAiAction(
     case "update_pipeline_stage":
       result = await moveStage({
         supabase, organizationId: organization_id, leadId: lead_id || payload.lead_id as string || null,
+        // Idem `advance_stage` acima: pedido do Copilot, sujeito é a pessoa.
+        entryId: null, dealId: null,
         conversationId: conversation_id,
         params: { target_stage: payload.new_stage || payload.target_stage, target_pipe: payload.target_pipe || "whatsapp" },
       });

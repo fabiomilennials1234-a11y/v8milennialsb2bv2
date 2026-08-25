@@ -352,6 +352,11 @@ async function processExecution(
       workflowId,
       organizationId,
       leadId,
+      // O sujeito completo, gravado no disparo (fatia 1). Vem nulo nas
+      // execuções antigas e nos gatilhos da pessoa — as ações de funil sabem
+      // cair no critério de sempre quando não recebem.
+      entryId: (execution.pipeline_entry_id as string | null) ?? null,
+      dealId: (execution.deal_id as string | null) ?? null,
       definition: workflow.definition as { nodes: { id: string; type: string; data: Record<string, unknown> }[]; edges: { id: string; source: string; target: string; sourceHandle?: string | null; data?: { loopLimit?: number } }[] },
       loopLimit: workflow.loop_limit || 100,
       context,

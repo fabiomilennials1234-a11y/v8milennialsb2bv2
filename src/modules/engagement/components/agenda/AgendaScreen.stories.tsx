@@ -12,17 +12,26 @@
 
 import type { Meta, StoryObj } from "@storybook/react";
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, RefreshCw } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus, RefreshCw, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { AgendaFilterBar, ALL_OPTION } from "./AgendaFilterBar";
+import { AgendaOutcomeToggle } from "./AgendaOutcomeToggle";
+import { EventDetailPopover, type PopoverState } from "./EventDetailPopover";
 import { MonthView } from "./MonthView";
 import type {
   AgendaStatusFilter,
+  AttendanceOutcome,
   EventTypeKey,
   UnifiedEvent,
 } from "./agenda-helpers";
-import { EVENT_TYPE_KEYS, SOURCE_COLORS } from "./agenda-helpers";
+import {
+  EVENT_TYPE_KEYS,
+  SOURCE_COLORS,
+  STATUS_SEM_RESULTADO,
+  resumirComparecimento,
+  statusDoResultado,
+} from "./agenda-helpers";
 
 // Agosto de 2026 — o mês da referência visual.
 const MES = new Date(2026, 7, 24);
@@ -81,6 +90,7 @@ const EVENTOS: UnifiedEvent[] = [
   }),
   ev(11, 18, "Retorno do cliente", { creatorName: "Ana Souza" }),
   ev(20, 10, "Demonstração", { status: "completed" }),
+  ev(21, 15, "Call de alinhamento", { status: "no_show" }),
   ev(27, 11, "Follow-up de proposta", {
     source: "follow_up",
     eventType: "follow_up",
@@ -125,7 +135,7 @@ function PaginaDeBaixo() {
 
 /** Recria a composição da tela dentro do painel sobreposto. */
 function TelaAtividades({
-  eventos,
+  eventos: iniciais,
   admin,
 }: {
   eventos: UnifiedEvent[];
@@ -143,6 +153,47 @@ function TelaAtividades({
       else next.add(t);
       return next;
     });
+
+  /**
+   * O par de botões vive DENTRO do `EventDetailPopover`, e a história montava o
+   * `MonthView` com `onEventClick={() => {}}` — um stub vazio. Resultado: o
+   * popover nunca abria e o controle desta feature era **inalcançável pela
+   * tela**, aparecendo só na história isolada `Resultado`. Quem abrisse
+   * "Tela de Atividades" para conferir concluiria, com razão, que o botão não
+   * existe.
+   *
+   * Com a efêmera de QA morta e a PR ainda fora da `main`, esta história é o
+   * único lugar onde dá para VER a feature funcionando — então ela precisa
+   * fechar o ciclo inteiro: clicar abre, gravar muda o estado, e a contagem do
+   * topo se move junto, porque é derivada da mesma lista.
+   */
+  const [eventos, setEventos] = useState(iniciais);
+  const [popover, setPopover] = useState<PopoverState | null>(null);
+
+  const gravarResultado = async (
+    alvo: UnifiedEvent,
+    resultado: AttendanceOutcome | null,
+  ) => {
+    const proximo = resultado
+      ? statusDoResultado(resultado)
+      : STATUS_SEM_RESULTADO;
+    setEventos((prev) =>
+      prev.map((e) => (e.id === alvo.id ? { ...e, status: proximo } : e)),
+    );
+    setPopover((p) =>
+      p && p.event.id === alvo.id
+        ? { ...p, event: { ...p.event, status: proximo } }
+        : p,
+    );
+  };
+
+  // Mesma derivação da página real (`AgendaAtividades`): a contagem sai da
+  // lista, não de um número escrito à mão.
+  const parcial = resumirComparecimento(eventos);
+  const resumo = {
+    ...parcial,
+    total: parcial.compareceu + parcial.naoCompareceu + parcial.semRegistro,
+  };
 
   return (
     // Espelha o painel sobreposto: lateral + página de baixo à mostra na
@@ -218,6 +269,34 @@ function TelaAtividades({
               <span className="text-xs tabular-nums text-muted-foreground">
                 {eventos.length} atividades
               </span>
+              {/* DERIVADO, nunca cravado. A versão anterior escrevia 1 / 1 /
+                  `eventos.length - 2` na mão: no mês cheio dava 7 onde a
+                  contagem real dá 3 (só a fonte `meeting` conta), e na história
+                  "Vazio" imprimia literalmente "-2 sem registro". Uma prova
+                  visual que mente sobre o número é pior que prova nenhuma —
+                  chamar a mesma função da tela é o que faz a história valer. */}
+              {resumo.total > 0 && (
+                <div
+                  className="flex items-center gap-2.5 text-xs tabular-nums"
+                  aria-label="Comparecimento no período"
+                >
+                  <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
+                    <Check className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
+                    {resumo.compareceu}
+                    <span className="sr-only">compareceram</span>
+                  </span>
+                  <span className="flex items-center gap-1 text-red-700 dark:text-red-300">
+                    <X className="h-3 w-3 shrink-0" strokeWidth={3} aria-hidden="true" />
+                    {resumo.naoCompareceu}
+                    <span className="sr-only">não compareceram</span>
+                  </span>
+                  {resumo.semRegistro > 0 && (
+                    <span className="text-muted-foreground">
+                      {resumo.semRegistro} sem registro
+                    </span>
+                  )}
+                </div>
+              )}
               <div className="flex gap-1 rounded-full border border-border bg-sunken p-1">
                 <button
                   type="button"
@@ -239,13 +318,28 @@ function TelaAtividades({
             <MonthView
               date={MES}
               events={eventos}
-              onEventClick={() => {}}
+              onEventClick={(e, evento) =>
+                setPopover({ event: evento, x: e.clientX, y: e.clientY })
+              }
               onSlotClick={() => {}}
               showOwner={admin}
             />
           </div>
         </div>
       </div>
+
+      {/* Clicar numa pílula abre isto — é aqui que o par Compareceu / Não
+          compareceu aparece. `onSetOutcome` presente é o que o liga: ausente,
+          `podeRegistrar` é falso e o controle some (o caso do follow-up). */}
+      {popover && (
+        <EventDetailPopover
+          state={popover}
+          onClose={() => setPopover(null)}
+          onDeleteMeeting={async () => {}}
+          onDeleteGoogleEvent={async () => {}}
+          onSetOutcome={gravarResultado}
+        />
+      )}
     </div>
   );
 }
@@ -272,4 +366,23 @@ export const Admin: Story = {
 /** Mês sem nenhum compromisso. */
 export const Vazio: Story = {
   args: { eventos: [], admin: false },
+};
+
+/** O par de botões nos três estados — sem registro, compareceu, não compareceu. */
+export const Resultado: Story = {
+  render: () => (
+    <div className="min-h-screen bg-background p-8">
+      {/* `w-72` é a largura real do `EventDetailPopover`, onde o par vive. */}
+      <div className="flex flex-wrap gap-6">
+        {([null, "compareceu", "nao_compareceu"] as const).map((v) => (
+          <div key={String(v)} className="w-72 rounded-xl border border-border bg-card p-3">
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              {v === null ? "sem registro" : v}
+            </p>
+            <AgendaOutcomeToggle value={v} onChange={() => {}} />
+          </div>
+        ))}
+      </div>
+    </div>
+  ),
 };
