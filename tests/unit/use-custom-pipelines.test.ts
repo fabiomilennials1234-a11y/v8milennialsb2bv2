@@ -96,6 +96,7 @@ import {
   useEndTemporaryFunnel,
   useUpdateCustomPipeline,
   useDeleteCustomPipeline,
+  useCustomPipelineDeleteImpact,
   useCreateCustomPipelineStage,
   useUpdateCustomPipelineStage,
   useDeleteCustomPipelineStage,
@@ -441,12 +442,68 @@ describe("useUpdateCustomPipeline", () => {
 describe("useDeleteCustomPipeline", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([])); });
 
-  it("soft-deletes a pipeline", async () => {
+  it("HARD delete: chama a RPC transacional, não um UPDATE de is_active", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: { cards: 3, leads: 2, etapas: 4, eventos_etapa: 9, automacoes_desativadas: 1 },
+      error: null,
+    } as any);
+
+    const { result } = renderHook(() => useDeleteCustomPipeline(), { wrapper: createWrapper() });
+    let retorno: any;
+    await act(async () => {
+      retorno = await result.current.mutateAsync("p1");
+    });
+
+    expect(supabase.rpc).toHaveBeenCalledWith("delete_custom_pipeline", {
+      p_pipeline_id: "p1",
+    });
+    // O guard que importa: voltar para `.from("custom_pipelines").update(...)`
+    // faria esta linha passar de novo — por isso ela é uma asserção negativa.
+    expect(mockFrom).not.toHaveBeenCalledWith("custom_pipelines");
+    // A contagem medida no banco volta para a tela (toast + diálogo).
+    expect(retorno.cards).toBe(3);
+    expect(retorno.automacoes_desativadas).toBe(1);
+  });
+
+  it("propaga o erro da RPC — negação de permissão não pode virar sucesso silencioso", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: null,
+      error: { message: "sem permissão sobre este funil", code: "42501" },
+    } as any);
+
     const { result } = renderHook(() => useDeleteCustomPipeline(), { wrapper: createWrapper() });
     await act(async () => {
-      try { await result.current.mutateAsync("p1"); } catch { /* */ }
+      await expect(result.current.mutateAsync("p1")).rejects.toBeDefined();
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+  });
+});
+
+describe("useCustomPipelineDeleteImpact", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("busca a prévia do estrago quando o diálogo abre", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: { cards: 5, leads: 4, etapas: 3, eventos_etapa: 11, automacoes: 2 },
+      error: null,
+    } as any);
+
+    const { result } = renderHook(() => useCustomPipelineDeleteImpact("p1", true), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(supabase.rpc).toHaveBeenCalledWith("custom_pipeline_delete_impact", {
+      p_pipeline_id: "p1",
+    });
+    expect(result.current.data?.eventos_etapa).toBe(11);
+  });
+
+  it("não busca nada com o diálogo fechado", () => {
+    const { result } = renderHook(() => useCustomPipelineDeleteImpact("p1", false), {
+      wrapper: createWrapper(),
+    });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 });
 

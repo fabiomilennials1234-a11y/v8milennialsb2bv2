@@ -41,6 +41,7 @@ import {
   useCustomPipeEntries,
   useRemoveLeadFromCustomPipe,
   useDeleteCustomPipeline,
+  useCustomPipelineDeleteImpact,
   useMoveLeadInCustomPipe,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { CustomPipelineKanban } from "@/modules/pipelines/components/custom/CustomPipelineKanban";
@@ -108,8 +109,16 @@ function CustomPipelinePageInner() {
 
   const removeLead = useRemoveLeadFromCustomPipe();
   const deletePipeline = useDeleteCustomPipeline();
+  // Só conta o estrago quando o diálogo abre — o usuário precisa ver o número
+  // ANTES de confirmar, e antes disso a contagem é peso morto.
+  const { data: impacto } = useCustomPipelineDeleteImpact(pipeline?.id, showDeletePipeline);
   const moveLead = useMoveLeadInCustomPipe();
-  const { allowed: canDeletePipeline } = useFeaturePermission("pipeline.delete");
+  // `pipeline.delete` NÃO existe no catálogo de features — a chave real é
+  // `pipeline.custom_delete` ("Excluir funis customizados"). Com a chave errada
+  // a permissão nunca resolvia, e a variável também nunca era aplicada: a Zona
+  // de Perigo aparecia para todo mundo. Agora que o delete é definitivo, o
+  // portão passa a valer.
+  const { allowed: canDeletePipeline } = useFeaturePermission("pipeline.custom_delete");
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
   // Pool de responsáveis = membros ATIVOS da org (mesma fonte dos funis do
   // sistema — `org_visible_members`), então a lista aqui é a mesma que o
@@ -262,11 +271,28 @@ function CustomPipelinePageInner() {
   const handleDeletePipeline = async () => {
     if (!pipeline) return;
     try {
-      await deletePipeline.mutateAsync(pipeline.id);
-      toast.success(`Funil "${pipeline.name}" excluído`);
+      const r = await deletePipeline.mutateAsync(pipeline.id);
+      // A contagem vem do próprio DELETE, medida antes de apagar — é a prova
+      // de que a linha saiu, não uma estimativa da tela.
+      const detalhe = [
+        r?.cards ? `${r.cards} card(s)` : null,
+        r?.automacoes_desativadas
+          ? `${r.automacoes_desativadas} automação(ões) desativada(s)`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      toast.success(
+        `Funil "${pipeline.name}" excluído${detalhe ? ` — ${detalhe}` : ""}`,
+      );
       navigate("/");
-    } catch {
-      toast.error("Erro ao excluir funil");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      toast.error(
+        msg.includes("permissão")
+          ? "Você não tem permissão para excluir este funil"
+          : "Erro ao excluir funil",
+      );
     }
   };
 
@@ -425,10 +451,14 @@ function CustomPipelinePageInner() {
           onOpenChange={setShowSettings}
           pipeline={pipeline}
           stages={stages}
-          onRequestDelete={() => {
-            setShowSettings(false);
-            setShowDeletePipeline(true);
-          }}
+          onRequestDelete={
+            canDeletePipeline
+              ? () => {
+                  setShowSettings(false);
+                  setShowDeletePipeline(true);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -456,9 +486,35 @@ function CustomPipelinePageInner() {
               Excluir Funil "{pipeline?.name}"?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. O funil será desativado e deixará de aparecer na sidebar e em todas as listagens.
+              Esta ação <strong>não pode ser desfeita</strong>. O funil, suas{" "}
+              {impacto ? `${impacto.etapas} etapa(s)` : "etapas"} e{" "}
+              {impacto ? `${impacto.cards} card(s)` : "todos os cards"}
+              {impacto && impacto.leads > 0 ? ` de ${impacto.leads} lead(s)` : ""}{" "}
+              serão apagados em definitivo.
+              {!!impacto?.eventos_etapa && (
+                <>
+                  {" "}Junto vai o histórico de etapas deste funil{" "}
+                  ({impacto.eventos_etapa} evento(s)) — as métricas de conversão e
+                  de tempo por etapa dele zeram.
+                </>
+              )}
               <br /><br />
-              <strong>Os leads e registros do sistema não serão apagados.</strong>
+              <strong>Os leads continuam no sistema</strong> — o que some é a posição
+              deles neste funil.
+              {!!impacto?.automacoes && (
+                <>
+                  <br /><br />
+                  ⚠️ {impacto.automacoes} automação(ões) que usam este funil{" "}
+                  <strong>serão desativadas</strong>.
+                </>
+              )}
+              {!!impacto?.disparos_em_voo && (
+                <>
+                  <br />
+                  ⚠️ {impacto.disparos_em_voo} disparo(s) em andamento perdem o destino
+                  e passam a deixar o lead onde está.
+                </>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
