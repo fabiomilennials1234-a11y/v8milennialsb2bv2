@@ -159,6 +159,10 @@ export function buildPostSendMover(
           supabase,
           organizationId: orgId,
           leadId,
+          // Disparo em massa: a lista é de PESSOAS, e o destino é uma etapa só
+          // para todas. Não há negócio por item para declarar.
+          entryId: null,
+          dealId: null,
           conversationId: null,
           params: { target_pipe: targetPipe, target_stage: target.stageKey },
         });

@@ -78,6 +78,15 @@ interface ExecuteWorkflowParams {
   workflowId: string;
   organizationId: string;
   leadId: string;
+  /**
+   * O Negócio que originou a execução — `workflow_executions.pipeline_entry_id`.
+   *
+   * ADR-0023 §1: quem se move pelo funil é o Negócio; o Lead nunca tem etapa.
+   * Nulo quando o gatilho é da pessoa (`lead_created`, `tag_added`) ou quando a
+   * execução nasceu antes da coluna existir. Ver `ActionInput.entryId`.
+   */
+  entryId?: string | null;
+  dealId?: string | null;
   definition: WorkflowDefinition;
   loopLimit: number;
   context: Record<string, unknown>;
@@ -147,6 +156,8 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
     workflowId,
     organizationId,
     leadId,
+    entryId = null,
+    dealId = null,
     definition,
     loopLimit,
     context,
@@ -284,6 +295,8 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
             supabase,
             organizationId,
             leadId,
+            entryId,
+            dealId,
             nodeData: node.data,
             executionContext: context,
             executionId,
@@ -427,7 +440,10 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
               field: node.data.field as string || "",
               operator: node.data.operator as string || "equals",
               value: node.data.value as string || "",
-            });
+            // O negócio da execução: é ele que responde `stage`. Sem isto a
+            // condição lia o card de Oportunidades do lead, qualquer que fosse
+            // o funil do workflow.
+            }, entryId);
 
             await recordStep(supabase, executionId, node, "success",
               { field: node.data.field, operator: node.data.operator, value: node.data.value },

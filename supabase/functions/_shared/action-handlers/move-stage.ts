@@ -1,5 +1,5 @@
 import type { ActionInput, ActionResult } from "./types.ts";
-import { upsertPipeEntry, upsertPipeEntryDetailed } from "../pipeline-adapter.ts";
+import { upsertPipeEntry, upsertPipeEntryDetailed, resolvePipelineId, updatePipeEntryById } from "../pipeline-adapter.ts";
 import type { PipeSlug } from "../pipeline-adapter.ts";
 
 const STANDARD_PIPES = ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao", "campanha"];
@@ -62,6 +62,93 @@ async function readActiveCustomPipeEntry(
   return rows.find((row) => !isClosed(row)) ?? rows[0] ?? null;
 }
 
+/**
+ * Mover O NEGÓCIO QUE DISPAROU, quando a execução sabe qual é.
+ *
+ * ── POR QUE ISTO EXISTE ───────────────────────────────────────────────────
+ * O caminho de sempre (`upsertPipeEntryDetailed`) trabalha por
+ * `(lead, funil de destino)`: acha a entrada daquele lead naquele funil, e se
+ * não houver, CRIA. Duas coisas erradas sob o ADR-0023:
+ *
+ *   1. **escolhe o negócio por chute.** Com dois negócios do mesmo lead, quem
+ *      decide é `pickActiveEntry` ("o aberto, senão o mais recente") — e não o
+ *      negócio cuja etapa mudou e acionou o workflow;
+ *   2. **avançar de funil vira CÓPIA.** O card de origem fica onde está e nasce
+ *      um gêmeo no destino. ADR-0023 §4 diz o contrário: "o Negócio guarda uma
+ *      posição por vez, e avançar é um MOVE, não uma cópia". A tela já move —
+ *      pela RPC `mover_negocio`, desde a fatia 2 do lead↔negócio. A automação
+ *      continuava copiando, e é ela quem roda sem ninguém olhando.
+ *
+ * Devolve `null` quando não dá para agir pelo negócio (sem `entryId`, entrada
+ * de outra org/outro lead, funil de destino inexistente). Aí o chamador cai no
+ * caminho de sempre — degradar para o comportamento antigo é sempre melhor do
+ * que não mover nada.
+ */
+async function moverNegocioQueDisparou(
+  input: ActionInput,
+  slug: PipeSlug,
+  stageKey: string,
+): Promise<ActionResult | null> {
+  const { supabase, organizationId, leadId, entryId } = input;
+  if (!entryId) return null;
+
+  const { data: entry, error } = await supabase
+    .from("pipeline_entries")
+    .select("id, organization_id, lead_id, pipeline_id, stage_key")
+    .eq("id", entryId)
+    .maybeSingle();
+
+  // Falha de LEITURA não pode virar "não tem negócio": cair no caminho antigo
+  // por causa de um erro transitório é exatamente como se cria card duplicado.
+  if (error) {
+    return { success: false, error: `Falha ao ler o negócio ${entryId}: ${error.message}`, retryable: true };
+  }
+  if (!entry) return null;
+
+  // Defesa em profundidade: este handler roda com service-role (RLS fora) e é
+  // reusado por 30 tipos de ação. O `entryId` chega de um gatilho de banco, mas
+  // conferir org e lead custa nada e fecha o caminho de um context forjado.
+  if (entry.organization_id !== organizationId) return null;
+  if (leadId && entry.lead_id !== leadId) return null;
+
+  const alvo = await resolvePipelineId(supabase, organizationId, slug);
+  if (!alvo) return null;
+
+  // Mesmo funil: é só andar de etapa. Chamar `mover_negocio` aqui gastaria uma
+  // RPC para escrever `pipeline_id` com o valor que já está lá.
+  if (entry.pipeline_id === alvo) {
+    const ok = await updatePipeEntryById(supabase, entryId, { stageKey });
+    if (!ok) return { success: false, error: `Falha ao mover o negócio ${entryId} para ${stageKey}`, retryable: true };
+    return {
+      success: true,
+      message: `Negócio movido para ${slug}/${stageKey}`,
+      data: { target_stage: stageKey, target_pipe: slug, entry_id: entryId, moved: "stage" },
+    };
+  }
+
+  // Funil diferente: MOVE de verdade, pela mesma RPC que a tela usa. Ela recusa
+  // destino custom e destino de outra org, e é ela que passa pela etapa de
+  // sucesso da origem quando o chamador pede — aqui não pedimos, porque quem
+  // chamou já está NA etapa que disparou o workflow.
+  const { error: rpcError } = await supabase.rpc("mover_negocio", {
+    p_entry_id: entryId,
+    p_target_pipeline_id: alvo,
+    p_target_stage_key: stageKey,
+    p_stage_origem: null,
+    p_assigned_to: null,
+  });
+
+  if (rpcError) {
+    return { success: false, error: `mover_negocio recusou: ${rpcError.message}`, retryable: true };
+  }
+
+  return {
+    success: true,
+    message: `Negócio movido para ${slug}/${stageKey}`,
+    data: { target_stage: stageKey, target_pipe: slug, entry_id: entryId, moved: "pipeline" },
+  };
+}
+
 export async function moveStage(input: ActionInput): Promise<ActionResult> {
   const { supabase, organizationId, leadId, params } = input;
 
@@ -104,6 +191,10 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
       // SCRUM-202: o espelho `leads.pipe_whatsapp` saiu daqui. O UPDATE em
       // `pipeline_entries` dispara `trg_sync_whatsapp_stage_to_lead` em depth 1
       // e grava a coluna com o mesmo valor — escrever de novo era duplicação.
+      // Primeiro o negócio que disparou; o caminho por lead é o fallback.
+      const doNegocio = await moverNegocioQueDisparou(input, targetPipe as PipeSlug, finalStage);
+      if (doNegocio) return doNegocio;
+
       const result = await upsertPipeEntryDetailed(supabase, {
         leadId, orgId: organizationId, slug: targetPipe as PipeSlug, stageKey: finalStage,
       });

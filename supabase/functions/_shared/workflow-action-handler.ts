@@ -10,6 +10,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { ActionInput } from "./action-handlers/types.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry } from "./pipeline-adapter.ts";
+import { getStageDoNegocio, entryIdDoContexto } from "./negocio-subject.ts";
 import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "./lead-name.ts";
 import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
 import { addTag as sharedAddTag, removeTag as sharedRemoveTag } from "./action-handlers/tag-operations.ts";
@@ -22,7 +23,13 @@ import { sendMetaMessage as sharedSendMetaMessage, sendSemiAutomatic as sharedSe
 import { sendToNumber as sharedSendToNumber } from "./action-handlers/send-to-number.ts";
 import { addToCampaign as sharedAddToCampaign, removeFromCampaign as sharedRemoveFromCampaign, moveCampaignStage as sharedMoveCampaignStage, pauseCampaignSequence as sharedPauseCampaignSequence, resumeCampaignSequence as sharedResumeCampaignSequence } from "./action-handlers/campaign-operations.ts";
 import { createCalendarEvent as sharedCreateCalendarEvent } from "./action-handlers/calendar-operations.ts";
-import { createDeal as sharedCreateDeal } from "./action-handlers/deal-operations.ts";
+import {
+  createDeal as sharedCreateDeal,
+  winDeal as sharedWinDeal,
+  loseDeal as sharedLoseDeal,
+  setDealValue as sharedSetDealValue,
+  setDealOwner as sharedSetDealOwner,
+} from "./action-handlers/deal-operations.ts";
 import { createTinyerpOrder as sharedCreateTinyerpOrder, createTinyerpUpsellOrder as sharedCreateTinyerpUpsellOrder } from "./action-handlers/tinyerp-operations.ts";
 import { assignResponsible as sharedAssignResponsible, assignSdr as sharedAssignSdr, assignCloser as sharedAssignCloser, notifyTeamMember as sharedNotifyTeamMember } from "./action-handlers/team-operations.ts";
 import { createFollowup as sharedCreateFollowup } from "./action-handlers/followup-operations.ts";
@@ -51,6 +58,9 @@ interface ActionContext {
   supabase: SupabaseClient;
   organizationId: string;
   leadId: string;
+  /** O Negócio que originou a execução — ver `ActionInput.entryId`. */
+  entryId?: string | null;
+  dealId?: string | null;
   nodeData: Record<string, unknown>;
   executionContext: Record<string, unknown>;
   /** Execução corrente — vira `metadata.workflow_execution_id` em create_deal
@@ -133,7 +143,15 @@ export async function resolveVariables(
 
   // ADR-0023 §10: `{estagio}` é a etapa do NEGÓCIO. Ver a nota longa em
   // `action-handlers/whatsapp-helpers.ts` — a coluna espelho congela no MOVE.
-  const waEntry = await getPipeEntry(supabase, leadId, lead.organization_id as string, "whatsapp");
+  //
+  // E, desde a fatia 3 do sujeito da automação, é a etapa do negócio QUE
+  // DISPAROU — lido do `context`, que é onde o gatilho de banco o deposita. O
+  // funil `whatsapp` era CHUMBADO aqui: uma mensagem disparada por um workflow
+  // de Orçamentos imprimia a etapa do card de Oportunidades, ou vazio quando
+  // ele já não existia.
+  const estagioDoNegocio = await getStageDoNegocio(
+    supabase, leadId, lead.organization_id as string, entryIdDoContexto(executionContext),
+  );
 
   let result = template;
 
@@ -143,7 +161,7 @@ export async function resolveVariables(
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
-    estagio:    waEntry?.stage_key || "",
+    estagio:    estagioDoNegocio,
     score:      String(lead.qualification_score ?? ""),
     rating:     String(lead.rating ?? ""),
     faturamento: String(lead.faturamento ?? ""),
@@ -369,11 +387,21 @@ async function logToHistory(
 // `{ _executionId: string | undefined }`: escrever `params.aiPrompt` ou
 // `params.semiAutoMessage` logo abaixo virava TS2339, sendo que em runtime a
 // chave sempre coube. Só a anotação faltava.
+/**
+ * A ÚNICA porta de `ActionContext` para `ActionInput`.
+ *
+ * Os 25 call-sites abaixo montavam o objeto à mão (`supabase, organizationId,
+ * leadId, conversationId: null`) e por isso ficaram para trás quando o contrato
+ * ganhou o sujeito do Negócio: cada literal era um lugar a mais para esquecer
+ * de repassar `entryId`. Agora todos espalham daqui e sobrescrevem só `params`.
+ */
 function toActionInput(ctx: ActionContext): ActionInput {
   return {
     supabase: ctx.supabase,
     organizationId: ctx.organizationId,
     leadId: ctx.leadId,
+    entryId: ctx.entryId ?? null,
+    dealId: ctx.dealId ?? null,
     conversationId: null as string | null,
     params: {
       ...ctx.nodeData,
@@ -497,8 +525,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       const targetStage = ctx.nodeData.targetStage as string;
       if (!targetStage) { result = { success: false, error: "No target stage configured" }; break; }
       result = await sharedMoveStage({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { target_stage: targetStage, target_pipe: pipeType },
       });
       if (result.success && result.data) {
@@ -508,15 +535,13 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     }
     case "add_tag":
       result = await sharedAddTag({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { tagId: ctx.nodeData.tagId, tagName: ctx.nodeData.tagName },
       });
       break;
     case "remove_tag":
       result = await sharedRemoveTag({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { tagId: ctx.nodeData.tagId, tagName: ctx.nodeData.tagName },
       });
       break;
@@ -524,8 +549,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       const ulfFieldValue = ctx.nodeData.fieldValue as string || "";
       const ulfResolved = await resolveVariables(ctx.supabase, ctx.leadId, ulfFieldValue);
       result = await sharedUpdateLeadField({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { fieldName: ctx.nodeData.fieldName, fieldValue: ulfResolved },
       });
       break;
@@ -534,16 +558,14 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       const ucfFieldValue = ctx.nodeData.customFieldValue as string || "";
       const ucfResolved = await resolveVariables(ctx.supabase, ctx.leadId, ucfFieldValue);
       result = await sharedUpdateCustomField({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { customFieldName: ctx.nodeData.customFieldName, customFieldValue: ucfResolved },
       });
       break;
     }
     case "update_rating":
       result = await sharedUpdateRating({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { ratingValue: ctx.nodeData.ratingValue },
       });
       break;
@@ -552,22 +574,19 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
     case "duplicate_to_pipe":
       result = await sharedDuplicateToPipe({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { targetPipeType: ctx.nodeData.targetPipeType, targetPipeStage: ctx.nodeData.targetPipeStage },
       });
       break;
     case "remove_from_pipe":
       result = await sharedRemoveFromPipe({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { pipeType: ctx.nodeData.pipeType },
       });
       break;
     case "mark_as_lost":
       result = await sharedMarkAsLost({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { pipeType: ctx.nodeData.pipeType, lostReason: ctx.nodeData.lostReason },
       });
       break;
@@ -575,22 +594,19 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     // ── Campaigns ──
     case "add_to_campaign":
       result = await sharedAddToCampaign({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { campaignId: ctx.nodeData.campaignId, campaignName: ctx.nodeData.campaignName },
       });
       break;
     case "remove_from_campaign":
       result = await sharedRemoveFromCampaign({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { campaignId: ctx.nodeData.campaignId },
       });
       break;
     case "move_campaign_stage":
       result = await sharedMoveCampaignStage({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { campaignId: ctx.nodeData.campaignId, campaignStageName: ctx.nodeData.campaignStageName, campaignStageId: ctx.nodeData.campaignStageId },
       });
       break;
@@ -599,15 +615,13 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
     case "pause_campaign_sequence":
       result = await sharedPauseCampaignSequence({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { campaignId: ctx.nodeData.campaignId },
       });
       break;
     case "resume_campaign_sequence":
       result = await sharedResumeCampaignSequence({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { campaignId: ctx.nodeData.campaignId },
       });
       break;
@@ -617,8 +631,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       const evtTitle = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.eventTitle as string || "Evento");
       const evtDesc = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.eventDescription as string || "");
       result = await sharedCreateCalendarEvent({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { eventTitle: evtTitle, eventDescription: evtDesc, eventDurationMinutes: ctx.nodeData.eventDurationMinutes },
       });
       break;
@@ -628,6 +641,21 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       break;
 
     // ── Negócios ──
+    case "win_deal":
+      result = await sharedWinDeal(toActionInput(ctx));
+      break;
+    case "lose_deal":
+      result = await sharedLoseDeal({
+        ...toActionInput(ctx),
+        params: { ...ctx.nodeData, lossReason: ctx.nodeData.lossReason },
+      });
+      break;
+    case "set_deal_value":
+      result = await sharedSetDealValue(toActionInput(ctx));
+      break;
+    case "set_deal_owner":
+      result = await sharedSetDealOwner(toActionInput(ctx));
+      break;
     case "create_deal": {
       const dealTitle = await resolveVariables(
         ctx.supabase,
@@ -640,8 +668,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
         : null;
 
       result = await sharedCreateDeal({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: {
           ...ctx.nodeData,
           dealTitleTemplate: dealTitle,
@@ -663,15 +690,13 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     // ── TinyERP ──
     case "create_tinyerp_order":
       result = await sharedCreateTinyerpOrder({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { tinyProductId: ctx.nodeData.tinyProductId },
       });
       break;
     case "create_tinyerp_upsell_order":
       result = await sharedCreateTinyerpUpsellOrder({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { tinyProductId: ctx.nodeData.tinyProductId },
       });
       break;
@@ -679,30 +704,26 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     // ── Team ──
     case "assign_responsible":
       result = await sharedAssignResponsible({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { assigneeId: ctx.nodeData.assigneeId, assignMode: ctx.nodeData.assignMode },
       });
       break;
     case "assign_sdr":
       result = await sharedAssignSdr({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { assigneeId: ctx.nodeData.assigneeId, assignMode: ctx.nodeData.assignMode, campaignId: ctx.nodeData.campaignId, pipeType: ctx.nodeData.pipeType },
       });
       break;
     case "assign_closer":
       result = await sharedAssignCloser({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { assigneeId: ctx.nodeData.assigneeId, assignMode: ctx.nodeData.assignMode, campaignId: ctx.nodeData.campaignId, pipeType: ctx.nodeData.pipeType },
       });
       break;
     case "notify_team_member": {
       const notifyMsg = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.notifyMessage as string || "");
       result = await sharedNotifyTeamMember({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { notifyMemberId: ctx.nodeData.notifyMemberId, notifyMessage: notifyMsg },
       });
       break;
@@ -713,8 +734,7 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
       const fuTitle = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupTitle as string || "Follow-up");
       const fuDesc = await resolveVariables(ctx.supabase, ctx.leadId, ctx.nodeData.followupDescription as string || "");
       result = await sharedCreateFollowup({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { followupTitle: fuTitle, followupDescription: fuDesc, followupPriority: ctx.nodeData.followupPriority },
       });
       break;
@@ -723,16 +743,14 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     // ── Checklists ──
     case "apply_checklist":
       result = await sharedApplyChecklist({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: { checklistTemplateId: ctx.nodeData.checklistTemplateId },
       });
       break;
 
     case "mark_checklist_item":
       result = await sharedMarkChecklistItem({
-        supabase: ctx.supabase, organizationId: ctx.organizationId, leadId: ctx.leadId,
-        conversationId: null,
+        ...toActionInput(ctx),
         params: {
           templateItemId: ctx.nodeData.checklistItemTemplateId,
           action: ctx.nodeData.checklistItemAction ?? "mark",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type Dispatch, type SetStateAction } from "react";
 import {
   ChevronDown,
   ChevronRight,
@@ -47,12 +47,21 @@ import { cn } from "@/lib/utils";
  * O item "Checklists" do menu do card tinha o mesmo destino, e por isso parecia
  * quebrado — abria o negócio e nada mais.
  *
- * ── ESCOPO: O CHECKLIST É DO LEAD ─────────────────────────────────────────
- * `checklists` tem `lead_id` e não tem `deal_id` nem `pipeline_entry_id`. Não é
- * omissão a corrigir aqui: mudar isso é migration e decisão de modelo. Então o
- * que esta aba mostra são os checklists da PESSOA — a mesma regra que os
- * comentários já seguem no painel (`DealCardComments`), pelo mesmo motivo: o
- * histórico existente é todo por lead, e filtrar por negócio esvaziaria a tela.
+ * ── ESCOPO: O CHECKLIST É DO NEGÓCIO (decisão do CTO, 2026-08-25) ─────────
+ * `checklists` ganhou `pipeline_entry_id` na migration `20270827000020`. A aba
+ * mostra os dois grupos, e a diferença entre eles é o que o vendedor precisa
+ * enxergar:
+ *
+ *   · **deste negócio** — nasceram de um evento de funil (o gatilho de etapa,
+ *     o nó de workflow) ou foram criados aqui dentro. Valem só para este card;
+ *   · **da pessoa** — `pipeline_entry_id` nulo. Valem para todos os negócios
+ *     do lead. São os 1.338 aplicados antes da coluna existir e os que alguém
+ *     aplica pela ficha do lead.
+ *
+ * O que pertence a OUTRO negócio do mesmo lead não é listado — seria mostrar
+ * trabalho de outro card como se fosse deste. Aparece só como contagem no pé,
+ * pela mesma razão que os comentários carregam o selo "de outro negócio":
+ * esconder que existe é pior do que dizer que existe e está noutro lugar.
  *
  * ── REALTIME ──────────────────────────────────────────────────────────────
  * `useLeadChecklists` não assina — de propósito, para não duplicar canal nas
@@ -61,15 +70,29 @@ import { cn } from "@/lib/utils";
  * enquanto isso acontece. A aba só é montada quando escolhida, então o canal
  * não pesa nas outras.
  */
-export function DealCardChecklists({ leadId }: { leadId: string | null }) {
+export function DealCardChecklists({
+  leadId,
+  entryId,
+}: {
+  leadId: string | null;
+  /** `pipeline_entries.id` — o negócio aberto no painel. */
+  entryId?: string | null;
+}) {
   useRealtimeSubscription("checklists", ["checklists", "checklist_templates"]);
   useRealtimeSubscription("checklist_items", ["checklist_items", "checklists"]);
 
-  const { data: checklists = [], isLoading } = useLeadChecklists(leadId);
+  const { data: todos = [], isLoading } = useLeadChecklists(leadId);
   const criar = useCreateChecklist();
   const [criando, setCriando] = useState(false);
   const [titulo, setTitulo] = useState("");
   const [abertos, setAbertos] = useState<Record<string, boolean>>({});
+
+  const doNegocio = entryId ? todos.filter((c) => c.pipeline_entry_id === entryId) : [];
+  const daPessoa = todos.filter((c) => !c.pipeline_entry_id);
+  // Sem `entryId` (painel sem negócio identificado) a aba degrada para a lista
+  // inteira, que é o que ela mostrava antes desta fatia.
+  const checklists = entryId ? [...doNegocio, ...daPessoa] : todos;
+  const deOutrosNegocios = todos.length - checklists.length;
 
   /**
    * Aberto por padrão, MENOS o que já está 100%.
@@ -100,7 +123,8 @@ export function DealCardChecklists({ leadId }: { leadId: string | null }) {
       return;
     }
     try {
-      const novo = await criar.mutateAsync({ title: t, lead_id: leadId });
+      // Criado DAQUI nasce deste negócio — foi este card que a pessoa abriu.
+      const novo = await criar.mutateAsync({ title: t, lead_id: leadId, pipeline_entry_id: entryId ?? null });
       setTitulo("");
       setCriando(false);
       if (novo?.id) setAbertos((a) => ({ ...a, [novo.id]: true }));
@@ -137,7 +161,7 @@ export function DealCardChecklists({ leadId }: { leadId: string | null }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <AplicarTemplate leadId={leadId} />
+          <AplicarTemplate leadId={leadId} entryId={entryId ?? null} />
           <button
             type="button"
             onClick={() => setCriando(true)}
@@ -182,20 +206,102 @@ export function DealCardChecklists({ leadId }: { leadId: string | null }) {
           </span>
         </p>
       ) : (
+        <>
+          {/* Sem `entryId` não há como separar — a aba mostra a lista inteira,
+              como fazia antes desta fatia. */}
+          {entryId ? (
+            <>
+              <Grupo
+                titulo="Deste negócio"
+                itens={doNegocio}
+                vazio="Nenhum checklist só deste negócio."
+                abertos={abertos}
+                setAbertos={setAbertos}
+              />
+              {daPessoa.length > 0 && (
+                <Grupo
+                  titulo="Da pessoa"
+                  legenda="valem para todos os negócios deste lead"
+                  itens={daPessoa}
+                  abertos={abertos}
+                  setAbertos={setAbertos}
+                />
+              )}
+            </>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {checklists.map((c) => (
+                <LinhaDoChecklist
+                  key={c.id}
+                  checklist={c}
+                  aberto={abertos[c.id] ?? abertoPorPadrao(c)}
+                  onAlternar={() =>
+                    setAbertos((a) => ({ ...a, [c.id]: !(a[c.id] ?? abertoPorPadrao(c)) }))
+                  }
+                />
+              ))}
+            </ul>
+          )}
+
+          {deOutrosNegocios > 0 && (
+            <p className="text-[11.5px] text-muted-foreground/70">
+              {deOutrosNegocios} checklist{deOutrosNegocios > 1 ? "s" : ""} em outro
+              {deOutrosNegocios > 1 ? "s" : ""} negócio{deOutrosNegocios > 1 ? "s" : ""} desta
+              pessoa — abra o negócio para ver.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Um dos dois escopos, com o rótulo que diz de quem o checklist é. */
+function Grupo({
+  titulo,
+  legenda,
+  itens,
+  vazio,
+  abertos,
+  setAbertos,
+}: {
+  titulo: string;
+  legenda?: string;
+  itens: ChecklistWithCounts[];
+  vazio?: string;
+  abertos: Record<string, boolean>;
+  setAbertos: Dispatch<SetStateAction<Record<string, boolean>>>;
+}) {
+  const padrao = (c: ChecklistWithCounts) =>
+    !(c.total_items > 0 && c.completed_items === c.total_items);
+
+  if (itens.length === 0 && !vazio) return null;
+
+  return (
+    <section className="flex flex-col gap-1">
+      <h4 className="flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        {titulo}
+        {legenda && (
+          <span className="text-[10.5px] font-normal normal-case tracking-normal text-muted-foreground/60">
+            · {legenda}
+          </span>
+        )}
+      </h4>
+      {itens.length === 0 ? (
+        <p className="text-[12px] text-muted-foreground/70">{vazio}</p>
+      ) : (
         <ul className="flex flex-col gap-1">
-          {checklists.map((c) => (
+          {itens.map((c) => (
             <LinhaDoChecklist
               key={c.id}
               checklist={c}
-              aberto={abertos[c.id] ?? abertoPorPadrao(c)}
-              onAlternar={() =>
-                setAbertos((a) => ({ ...a, [c.id]: !(a[c.id] ?? abertoPorPadrao(c)) }))
-              }
+              aberto={abertos[c.id] ?? padrao(c)}
+              onAlternar={() => setAbertos((a) => ({ ...a, [c.id]: !(a[c.id] ?? padrao(c)) }))}
             />
           ))}
         </ul>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -205,7 +311,7 @@ export function DealCardChecklists({ leadId }: { leadId: string | null }) {
  * `useApplyChecklistTemplate` é idempotente por `(lead_id, source_template_id)`:
  * aplicar de novo devolve o que já existe em vez de duplicar (ADR-0016).
  */
-function AplicarTemplate({ leadId }: { leadId: string }) {
+function AplicarTemplate({ leadId, entryId }: { leadId: string; entryId: string | null }) {
   const { data: templates = [] } = useChecklistTemplates();
   const aplicar = useApplyChecklistTemplate();
   const [aberto, setAberto] = useState(false);
@@ -239,7 +345,7 @@ function AplicarTemplate({ leadId }: { leadId: string }) {
               onClick={() => {
                 setEmVoo(t.id);
                 aplicar.mutate(
-                  { templateId: t.id, leadId },
+                  { templateId: t.id, leadId, entryId },
                   {
                     onSettled: () => setEmVoo(null),
                     onSuccess: () => setAberto(false),

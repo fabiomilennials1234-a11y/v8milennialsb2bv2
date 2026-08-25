@@ -282,7 +282,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
       resumoChecklists={resumoChecklists ?? null}
       /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
          Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
-      painelChecklists={<DealCardChecklists leadId={leadId} />}
+      painelChecklists={<DealCardChecklists leadId={leadId} entryId={entryId} />}
     />
   ) : (
     <div className="flex h-full flex-1 items-center justify-center bg-background px-6 text-center">

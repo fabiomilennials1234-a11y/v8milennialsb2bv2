@@ -36,8 +36,77 @@ interface FireTriggerParams {
   organizationId: string;
   triggerType: string;
   leadId: string;
+  /**
+   * O Negócio que disparou — `pipeline_entries.id`.
+   *
+   * Opcional porque a maioria dos gatilhos é da PESSOA (`lead_created`,
+   * `tag_added`) e ali não há negócio a declarar. Quem vem do funil manda: os
+   * dois gatilhos de etapa passaram a pôr `pipeline_entry_id` dentro do
+   * `context`, e é de lá que este campo é lido quando o chamador não o passa
+   * explicitamente — a borda HTTP (`mode: fire_trigger`) só repassa o context.
+   */
+  entryId?: string | null;
+  dealId?: string | null;
   context?: Record<string, unknown>;
   source?: string;
+}
+
+/**
+ * O papel da etapa de destino: `won`, `lost` ou outra coisa.
+ *
+ * É daqui que saem os gatilhos "Negócio ganho" e "Negócio perdido". Eles NÃO
+ * leem `deals.won`: medido em prod (2026-08-25), 34.662 dos 34.980 negócios têm
+ * `won = false` porque o backfill carimbou assim tudo que não estava ganho — a
+ * coluna responde "não foi ganho", não "foi perdido". Quem sabe a verdade é a
+ * POSIÇÃO (ADR-0023 §5), e ganhar/perder é chegar na etapa terminal
+ * (ADR-0023 §4, §5). É o mesmo critério que o card do Negócio usa para desenhar
+ * os botões "Ganhou" e "Perdeu".
+ */
+async function resolveStageRole(
+  supabase: SupabaseClient,
+  organizationId: string,
+  ctx: Record<string, unknown>,
+): Promise<string | null> {
+  const toStage = typeof ctx.to_stage === "string" ? ctx.to_stage : null;
+  if (!toStage) return null;
+
+  const pipeType = typeof ctx.pipe_type === "string" ? ctx.pipe_type : null;
+  if (pipeType) {
+    const { data } = await supabase
+      .from("pipeline_stages")
+      .select("stage_role")
+      .eq("organization_id", organizationId)
+      .eq("pipeline_type", pipeType)
+      .eq("stage_key", toStage)
+      .eq("is_active", true)
+      .maybeSingle();
+    return (data?.stage_role as string) ?? null;
+  }
+
+  const pipelineId = typeof ctx.pipeline_id === "string" ? ctx.pipeline_id : null;
+  if (pipelineId) {
+    const { data } = await supabase
+      .from("custom_pipeline_stages")
+      .select("stage_role")
+      .eq("pipeline_id", pipelineId)
+      .eq("stage_key", toStage)
+      .maybeSingle();
+    return (data?.stage_role as string) ?? null;
+  }
+
+  return null;
+}
+
+/**
+ * `context` é jsonb livre — nada valida a forma na escrita, e o gatilho de banco
+ * pode mandar `null` num `jsonb_build_object`. Só string não-vazia vira id; o
+ * resto vira `null` em vez de viajar como `"null"` até um `.eq()` que não casa
+ * com nada.
+ */
+function asUuidOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim();
+  return v && v !== "null" ? v : null;
 }
 
 /**
@@ -131,6 +200,53 @@ export async function hasActiveWorkflowsForTrigger(
 export async function fireTrigger(params: FireTriggerParams): Promise<number> {
   const { supabase, organizationId, triggerType, leadId, context, source } = params;
 
+  /**
+   * ── O SUJEITO ────────────────────────────────────────────────────────────
+   * Parâmetro explícito primeiro; `context` como fonte secundária porque a
+   * borda HTTP (`process-workflow-executions`, `mode: fire_trigger`) recebe o
+   * corpo montado pelo gatilho de banco e só repassa `context` adiante. Sem
+   * essa segunda leitura o sujeito morreria exatamente no caminho que hoje
+   * produz 85 dos 130 workflows ativos.
+   */
+  const ctxObj = (context ?? {}) as Record<string, unknown>;
+  const entryId = params.entryId ?? asUuidOrNull(ctxObj.pipeline_entry_id);
+  const dealId = params.dealId ?? asUuidOrNull(ctxObj.deal_id);
+
+  /**
+   * ── Gatilhos derivados: "Negócio ganho" e "Negócio perdido" ─────────────
+   * Ganhar e perder são MOVIMENTOS para a etapa terminal (ADR-0023 §4/§5), e
+   * por isso o fato já chega aqui como `stage_changed`. Um gatilho próprio em
+   * `deals.won` leria uma coluna que o backfill deixou mentindo (34.662 linhas
+   * com `won = false` que ninguém perdeu) e ainda seria cego aos 26% de cards
+   * sem linha em `deals`.
+   *
+   * Roda ANTES do corpo, e não no fim: o corpo tem quatro saídas antecipadas
+   * (nenhum workflow, nenhum casou, todos deduplicados, insert falhou) e em
+   * três delas o negócio foi ganho do mesmo jeito. Derivar no fim faria
+   * "Negócio ganho" depender de existir um workflow de `stage_changed` — que é
+   * exatamente o vínculo que este gatilho existe para não ter.
+   *
+   * Sem recursão: só `stage_changed` deriva, e o derivado nunca é `stage_changed`.
+   */
+  if (triggerType === "stage_changed") {
+    try {
+      const role = await resolveStageRole(supabase, organizationId, ctxObj);
+      const derivado = role === "won" ? "deal_won" : role === "lost" ? "deal_lost" : null;
+      if (derivado) {
+        await fireTrigger({
+          ...params,
+          triggerType: derivado,
+          entryId,
+          dealId,
+          context: { ...ctxObj, trigger: derivado, stage_role: role },
+        });
+      }
+    } catch (err) {
+      // Derivado que falha não pode derrubar o `stage_changed` que o originou.
+      console.warn("[workflow-trigger] falha ao derivar deal_won/deal_lost:", err);
+    }
+  }
+
   try {
     // `selectFields` é uma UNIÃO de dois literais, e o parser de tipos do
     // postgrest-js não a atravessa: devolve `ParserError`, a linha vira um tipo
@@ -198,12 +314,30 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
 
     // ── Dedup / Auto-cancel ──
     const matchingIds = matching.map((w: { id: string }) => w.id);
-    const { data: activeExecs } = await supabase
+    /**
+     * ── O SKIP PASSOU A SER POR NEGÓCIO, NÃO POR PESSOA ────────────────────
+     * Era `.eq("lead_id", leadId)` e mais nada. Sob o modelo novo (ADR-0023 §2:
+     * "um Lead pode ter vários Negócios, inclusive dois abertos no mesmo
+     * funil"), isso proibia o modelo na prática: dois Negócios do mesmo Lead
+     * entrando na mesma etapa, e o SEGUNDO era descartado como duplicata —
+     * sem erro, sem log, sem nada na tela.
+     *
+     * Quando o gatilho declara o Negócio, o escopo do skip é o Negócio. Quando
+     * não declara (gatilho da pessoa: `lead_created`, `tag_added`), continua
+     * sendo a pessoa — que ali é o sujeito certo.
+     *
+     * Custo assumido na transição: uma execução em voo criada ANTES desta
+     * fatia tem `pipeline_entry_id` nulo e não bloqueia mais o mesmo card. O
+     * teto é uma redisparada por workflow, na janela de 300s, uma única vez.
+     */
+    let activeQuery = supabase
       .from("workflow_executions")
       .select("id, workflow_id")
       .eq("lead_id", leadId)
       .in("workflow_id", matchingIds)
       .in("status", ["running", "processing", "waiting_response", "paused"]);
+    if (entryId) activeQuery = activeQuery.eq("pipeline_entry_id", entryId);
+    const { data: activeExecs } = await activeQuery;
 
     // ── Dedup: SKIP workflows that already have an in-flight execution for this
     // lead. Applies to ALL trigger types, including stage_changed.
@@ -223,7 +357,7 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     const deduped = matching.filter((w: { id: string }) => !activeWorkflowIds.has(w.id));
 
     if (deduped.length === 0) {
-      console.log(`[workflow-trigger] All ${matching.length} workflows already active for lead ${leadId}, skipping (no re-dispatch)`);
+      console.log(`[workflow-trigger] All ${matching.length} workflows already active for ${entryId ? `negócio ${entryId}` : `lead ${leadId}`}, skipping (no re-dispatch)`);
       return 0;
     }
 
@@ -245,6 +379,10 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
         workflow_id: w.id,
         organization_id: organizationId,
         lead_id: leadId,
+        // Fatia 1: gravado e ainda não lido por ninguém. O executor passa
+        // adiante a partir da fatia 3.
+        pipeline_entry_id: entryId,
+        deal_id: dealId,
         status: "running",
         // `matchContext` (e não `context`): carrega os funis do lead, que o
         // executor precisa reler para revalidar o matcher. Quando o trigger não
@@ -254,8 +392,16 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
           ? await computeTriggerDedupKey({
               // `context`, NÃO `matchContext`: a chave de dedup precisa ser
               // estável, e os funis do lead mudam com o tempo.
+              //
+              // O negócio entra na chave EXPLICITAMENTE, e não só por vir
+              // dentro do context: o índice único é
+              // `(workflow_id, lead_id, trigger_dedup_key)` — sem o id do
+              // negócio na chave, dois cards do mesmo lead na mesma etapa
+              // colidem no índice e o segundo é descartado pelo
+              // `ignoreDuplicates`. Id de entrada não muda, então a chave
+              // continua estável.
               triggerType,
-              payload: context || {},
+              payload: entryId ? { ...ctxObj, pipeline_entry_id: entryId } : ctxObj,
               now,
               windowSeconds: dedupWindowSeconds,
             })
@@ -279,6 +425,7 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     }
 
     console.log(`[workflow-trigger] Fired ${deduped.length} workflows for ${triggerType} (dedup-keyed)`);
+
     return deduped.length;
   } catch (err) {
     console.warn("[workflow-trigger] Error:", err);
