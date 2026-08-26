@@ -165,7 +165,7 @@ describe("usePipelineStages", () => {
   });
 
   /**
-   * Desde 20270831000000, `usePipelineStages` consulta primeiro
+   * Desde 20270902000000, `usePipelineStages` consulta primeiro
    * `pipeline_display_config` — o REGISTRO de quais funis de sistema a org tem.
    * Por isso o mock precisa responder por TABELA: devolver a mesma lista para
    * todo mundo faria o registro parecer conter etapas.

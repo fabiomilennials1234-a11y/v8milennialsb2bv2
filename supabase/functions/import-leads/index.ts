@@ -27,7 +27,7 @@ import { unauthorizedResponse } from "../_shared/auth.ts";
 /**
  * Explica, na linha do relatório de importação, por que a linha não entrou no funil.
  *
- * `no_pipeline` NÃO é erro: desde 20270831000000 a organização pode simplesmente
+ * `no_pipeline` NÃO é erro: desde 20270902000000 a organização pode simplesmente
  * não ter aquele funil de sistema — nunca teve (org nova não nasce mais com
  * funil) ou o excluiu. Chamar isso de "erro ao inserir" manda o usuário caçar um
  * defeito inexistente, quando o que ele precisa é ativar ou recriar o funil.
@@ -894,7 +894,7 @@ async function importToFunnel(
             assignedTo: sdrIdForLead,
           });
           // 🚨 Este resultado era capturado e NUNCA lido. Com o funil podendo
-          // não existir (20270831000010), a importação terminaria dizendo
+          // não existir (20270902000010), a importação terminaria dizendo
           // "500 leads importados" com zero card criado — e o cliente leria
           // como "sumiu". O irmão `propostas` logo abaixo já reportava; os
           // outros dois não.

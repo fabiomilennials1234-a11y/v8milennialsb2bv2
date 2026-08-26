@@ -76,7 +76,7 @@ Ver `./index.ts` para a superfície completa. Estável.
 - Display config: `usePipelineDisplayConfig`, `useAvailableSystemPipes`, `useEnabledSystemPipeTypes`, `useEnableSystemPipe`, `useTogglePipeVisibility`, `SYSTEM_PIPE_CATALOG`
 - Exclusão de funil de sistema: `useSystemPipelineDeleteImpact`, `useDeleteSystemPipeline`
 
-> 🚨 **`pipeline_display_config` é o REGISTRO de quais funis de sistema a org tem** (migration `20270831000000`).
+> 🚨 **`pipeline_display_config` é o REGISTRO de quais funis de sistema a org tem** (migration `20270902000000`).
 > Linha ausente = a org **não tem** aquele funil. Não há default e não há fallback: lista vazia é resposta legítima.
 >
 > Antes, quatro torneiras de auto-semeadura no caminho de LEITURA recriavam tudo, o que tornava a exclusão

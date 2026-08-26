@@ -1,4 +1,4 @@
--- 20270831000000_funil_sistema_deixa_de_nascer_sozinho.sql
+-- 20270902000000_funil_sistema_deixa_de_nascer_sozinho.sql
 --
 -- Funil de SISTEMA (Oportunidades/whatsapp, Agendamentos/confirmacao,
 -- Orçamentos/propostas, Carteira/upsell) deixa de nascer sozinho em org nova, e
@@ -70,7 +70,7 @@ SET search_path TO 'public'
 AS $$
 BEGIN
   -- Deliberadamente vazia. Ver cabeçalho da migration
-  -- 20270831000000_funil_sistema_deixa_de_nascer_sozinho.sql.
+  -- 20270902000000_funil_sistema_deixa_de_nascer_sozinho.sql.
   --
   -- ANTES: INSERT das 4 linhas (whatsapp/confirmacao/propostas/upsell) com
   -- is_visible = true e ON CONFLICT DO NOTHING. Era a torneira que fazia toda
@@ -83,7 +83,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.ensure_pipeline_display_config(uuid) IS
-  'NO-OP desde 20270831000000. Era a auto-semeadura dos 4 funis de sistema; funil de sistema agora nasce só por enable_system_pipeline. Mantida (não dropada) para não gerar PGRST202 em bundle antigo durante a janela de deploy.';
+  'NO-OP desde 20270902000000. Era a auto-semeadura dos 4 funis de sistema; funil de sistema agora nasce só por enable_system_pipeline. Mantida (não dropada) para não gerar PGRST202 em bundle antigo durante a janela de deploy.';
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 2. `create_default_pipelines` passa a CONSULTAR o registro.
@@ -124,7 +124,7 @@ END;
 $$;
 
 COMMENT ON FUNCTION public.create_default_pipelines(uuid) IS
-  'Repara o espelho em pipelines para os funis de sistema que a org DECLARA ter em pipeline_display_config. Desde 20270831000000 não inventa mais os 3 funis: org sem registro não ganha nada. É o que impede a exclusão de ser desfeita na leitura seguinte.';
+  'Repara o espelho em pipelines para os funis de sistema que a org DECLARA ter em pipeline_display_config. Desde 20270902000000 não inventa mais os 3 funis: org sem registro não ganha nada. É o que impede a exclusão de ser desfeita na leitura seguinte.';
 
 -- ────────────────────────────────────────────────────────────────────────────
 -- 3. `enable_system_pipeline` — o caminho de VOLTA.

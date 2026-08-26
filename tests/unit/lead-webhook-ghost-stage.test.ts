@@ -181,7 +181,7 @@ describe("lead-webhook — ghost-stage guard (place_in_pipe)", () => {
    * 🚨 A guarda do relato honesto.
    *
    * `placed_in_pipe` era `true` FIXO. Desde que o funil de sistema pode não
-   * existir na org (20270831000010), isso virou mentira: o n8n recebia 200
+   * existir na org (20270902000010), isso virou mentira: o n8n recebia 200
    * dizendo que o lead entrou no funil sem card nenhum ter sido criado, e o
    * cliente lia como "o lead sumiu".
    *

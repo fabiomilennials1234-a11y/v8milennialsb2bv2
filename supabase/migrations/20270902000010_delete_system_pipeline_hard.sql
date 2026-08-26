@@ -1,4 +1,4 @@
--- 20270831000010_delete_system_pipeline_hard.sql
+-- 20270902000010_delete_system_pipeline_hard.sql
 --
 -- Excluir funil de SISTEMA (Oportunidades, Agendamentos, Orçamentos, Carteira)
 -- passa a existir. Antes não havia botão em lugar nenhum: `delete_custom_pipeline`
@@ -6,7 +6,7 @@
 -- prod: as 3 linhas de `pipelines` type='system' da Milennials têm ZERO par em
 -- `custom_pipelines`). Não era permissão nem feature flag — era ausência.
 --
--- Depende de 20270831000000, que fechou as torneiras de auto-semeadura. SEM
+-- Depende de 20270902000000, que fechou as torneiras de auto-semeadura. SEM
 -- ELA esta RPC é inútil: apagar tudo e recarregar a página recriava o funil.
 --
 -- ── O MODELO, QUE NÃO É O DO FUNIL CUSTOM ───────────────────────────────────
@@ -344,7 +344,7 @@ BEGIN
 
   -- (i) O registro. É ESTE delete que impede o funil de voltar: sem a linha,
   --     `create_default_pipelines` não recria o espelho e o front não semeia
-  --     etapa (20270831000000).
+  --     etapa (20270902000000).
   DELETE FROM public.pipeline_display_config
    WHERE organization_id = p_org_id AND pipe_type = p_pipe_type;
   IF NOT FOUND THEN
@@ -400,7 +400,7 @@ BEGIN
         JOIN pg_namespace n ON n.oid = p.pronamespace
        WHERE n.nspname = 'public' AND p.proname = 'create_default_pipelines')
      !~* 'pipeline_display_config' THEN
-    RAISE EXCEPTION 'FALHA: 20270831000000 não está aplicada — o funil voltaria sozinho.';
+    RAISE EXCEPTION 'FALHA: 20270902000000 não está aplicada — o funil voltaria sozinho.';
   END IF;
 
   RAISE NOTICE 'VALIDATION PASSED: delete_system_pipeline + impact criadas, anon sem EXECUTE, torneira 2 fechada.';

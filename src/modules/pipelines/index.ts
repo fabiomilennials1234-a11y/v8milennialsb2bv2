@@ -128,7 +128,7 @@ export type {
 // ── Hooks: display config + metrics + dispatch + distribution ─────────────
 export {
   usePipelineDisplayConfig,
-  // `useHiddenDefaultPipes` virou `useAvailableSystemPipes` (20270831000000):
+  // `useHiddenDefaultPipes` virou `useAvailableSystemPipes` (20270902000000):
   // com a auto-semeadura morta, "não ter a linha" é o estado normal de org
   // nova, então a lista de ativáveis não pode ser só `is_visible = false`.
   useAvailableSystemPipes,

@@ -526,7 +526,7 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
             assignedTo: payload.assigned_user_id ?? null,
           });
           // Org que não tem o funil de Oportunidades não é erro: desde
-          // 20270831000000 org nova não nasce com funil, e o ADR-0030 diz que
+          // 20270902000000 org nova não nasce com funil, e o ADR-0030 diz que
           // "quem quiser entrada automática no funil desenha o Workflow". O
           // Lead JÁ FOI criado acima (linha do insert), então nada se perde —
           // ele aparece na lista de Leads, só não ganha card.
@@ -750,7 +750,7 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     //      posicionado. Silêncio aqui é exatamente o modo de falha que o ADR
     //      nomeia: "o webhook responde 200, o Lead é criado, só o card falta".
 
-    // 🚨 Desde 20270831000010 o funil de sistema pode NÃO EXISTIR na org — ou
+    // 🚨 Desde 20270902000010 o funil de sistema pode NÃO EXISTIR na org — ou
     // porque ela nunca o teve (org nova não nasce mais com funil), ou porque
     // alguém o excluiu. `upsertPipeEntry` já devolve `no_pipeline` nesse caso,
     // então o Lead continua sendo criado e nada estoura. O que faltava era
@@ -1063,7 +1063,7 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
       // 🚨 Este campo era `true` fixo. O comentário anterior justificava assim:
       // "desde #1774 não há política por organização que recuse o
       // posicionamento, então este caminho sempre posiciona". A premissa morreu
-      // em 20270831000010 — o funil de sistema passou a poder não existir na
+      // em 20270902000010 — o funil de sistema passou a poder não existir na
       // org, seja porque ela nunca o teve (org nova não nasce mais com funil),
       // seja porque foi excluído. Com `true` fixo, o n8n recebia 200 dizendo que
       // o lead entrou no funil enquanto nenhum card fora criado; o lead ficava

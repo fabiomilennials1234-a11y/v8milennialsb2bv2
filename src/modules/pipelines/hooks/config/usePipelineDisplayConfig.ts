@@ -21,7 +21,7 @@ export interface PipelineDisplayConfig {
  * Os quatro funis de sistema que EXISTEM no produto — não os que a org tem.
  *
  * 🚨 Isto é um CATÁLOGO, não um default. A distinção é o inteiro ponto da
- * migration 20270831000000: antes, esta mesma lista era o fallback devolvido
+ * migration 20270902000000: antes, esta mesma lista era o fallback devolvido
  * quando a org não tinha linha nenhuma, e por isso todo funil de sistema
  * parecia existir em toda org, sempre. Excluir um era impossível — a lista em
  * memória o trazia de volta na renderização seguinte, mesmo com o banco limpo.
@@ -58,7 +58,7 @@ export function usePipelineDisplayConfig() {
       // Não há mais `ensure_pipeline_display_config` aqui. Era a torneira nº 1:
       // a cada leitura ela reinseria os 4 funis, o que fazia toda org nova
       // nascer com eles e desfazia qualquer exclusão. A RPC virou no-op na
-      // migration 20270831000000 e a chamada saiu junto.
+      // migration 20270902000000 e a chamada saiu junto.
       const { data, error } = await supabase
         .from("pipeline_display_config")
         .select("*")

@@ -54,7 +54,7 @@ async function ensureDefaultStagesInDb(
   // a torneira nº 3: o upsert varria os três tipos incondicionalmente, então
   // apagar as etapas de um funil e recarregar a página as trazia de volta —
   // era o que tornava a exclusão impossível pelo lado do front. Ver a migration
-  // 20270831000000, que fechou as duas torneiras equivalentes no banco.
+  // 20270902000000, que fechou as duas torneiras equivalentes no banco.
   for (const pipeType of ["whatsapp", "confirmacao", "propostas"] as PipelineType[]) {
     if (!tiposHabilitados.has(pipeType)) continue;
     for (let i = 0; i < DEFAULT_STAGES[pipeType].length; i++) {
