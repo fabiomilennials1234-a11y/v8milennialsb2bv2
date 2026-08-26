@@ -12,7 +12,7 @@ Engajamento dos vendedores com o sistema. Inclui:
 - **Checklists** — itens repetitivos por vendedor (ex. revisar leads abandonados)
 - **Activities** — log de atividade (call/email/meeting/note/task/whatsapp_msg/system)
 - **Follow-ups** — agendamento de toque futuro (manual + automation rules)
-- **Agenda** — calendário interno unificado (**5 fontes**: meetings + follow_ups + scheduled_messages + pipe_confirmacao + **meeting_events**, o funil mergeado do ADR-0004/0007). A 5ª entrou no PROD à mão em 30/07/2026 e só foi versionada em `20270829000000`; contagem travada por `tests/unit/agenda-fontes-contract.test.ts`.
+- **Agenda** — calendário interno unificado (**5 fontes**: meetings + follow_ups + scheduled_messages + pipe_confirmacao + **meeting_events**, o funil mergeado do ADR-0004/0007). A 5ª entrou no PROD à mão em 30/07/2026 e só foi versionada em `20270831000020`; contagem travada por `tests/unit/agenda-fontes-contract.test.ts`.
 - **Meetings** — reuniões via dialog + participants + status
 - **Call Logs** — registro de ligações (manual ou via API telefonia)
 - **Gamification** — badges, awards, competitions, levels, streak, celebration effects
