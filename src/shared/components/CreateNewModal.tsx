@@ -4,7 +4,8 @@ import { GitBranch, Target, Plus, ArrowLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { CreatePipelineModal, useHiddenDefaultPipes, useTogglePipeVisibility } from "@/modules/pipelines";
+import { CreatePipelineModal, useAvailableSystemPipes, useEnableSystemPipe } from "@/modules/pipelines";
+import type { SystemPipeType } from "@/modules/pipelines";
 import { toast } from "sonner";
 
 interface CreateNewModalProps {
@@ -21,8 +22,8 @@ const PIPE_ROUTES: Record<string, string> = {
 export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
   const [step, setStep] = useState<"choice" | "funnel-templates" | "create-pipeline">("choice");
   const navigate = useNavigate();
-  const hiddenPipes = useHiddenDefaultPipes();
-  const toggleVisibility = useTogglePipeVisibility();
+  const hiddenPipes = useAvailableSystemPipes();
+  const enablePipe = useEnableSystemPipe();
 
   const handleClose = () => {
     onOpenChange(false);
@@ -31,7 +32,12 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
 
   const handleActivateHiddenPipe = async (pipeType: string) => {
     try {
-      await toggleVisibility.mutateAsync({ pipeType, visible: true });
+      // Era `toggleVisibility({visible:true})` — um UPDATE. Com a linha
+      // possivelmente AUSENTE (org nova, ou funil excluído), o UPDATE não
+      // casaria com nada e o supabase-js devolveria sucesso: a tela dizia
+      // "ativado" e nada era criado. A RPC insere o registro e repara o
+      // espelho em `pipelines`.
+      await enablePipe.mutateAsync(pipeType as SystemPipeType);
       toast.success("Funil ativado com sucesso!");
       const route = PIPE_ROUTES[pipeType];
       if (route) navigate(route);

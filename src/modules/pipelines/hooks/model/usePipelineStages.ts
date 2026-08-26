@@ -17,12 +17,27 @@ export { DEFAULT_STAGES };
 // Controle para garantir que etapas padrão existam no banco (uma vez por sessão)
 const defaultsEnsuredForSession = new Set<string>();
 
+/**
+ * Destrava a semeadura de etapas para a org.
+ *
+ * Necessário depois de ATIVAR um funil de sistema: a trava é por organização,
+ * não por tipo, então sem isto o funil recém-ativado nasceria sem etapa
+ * nenhuma até o usuário recarregar a aba — o `ensure` já teria rodado nesta
+ * sessão, quando aquele tipo ainda não estava no registro.
+ */
+export function resetDefaultStagesEnsureCache(organizationId: string) {
+  defaultsEnsuredForSession.delete(organizationId);
+}
+
 
 /**
  * Garante que as etapas padrão de TODOS os pipelines existam no banco para uma organização.
  * Usa upsert com ignoreDuplicates (ON CONFLICT DO NOTHING), então é idempotente e segura.
  */
-async function ensureDefaultStagesInDb(organizationId: string) {
+async function ensureDefaultStagesInDb(
+  organizationId: string,
+  tiposHabilitados: ReadonlySet<string>,
+) {
   const allStages: Record<string, unknown>[] = [];
 
   // Carteira fora da semeadura: `upsell_base`/`upsell_gestao` foram aposentados
@@ -35,7 +50,13 @@ async function ensureDefaultStagesInDb(organizationId: string) {
   // `DEFAULT_STAGES` MANTÉM as duas famílias de propósito: é o fallback em
   // memória de `buildFallbackStages` que segura `/upsell` de pé enquanto a
   // rota não for terminada ou enterrada (decisão em aberto, ADR-0005).
+  // 🚨 Só semeia o que a org DECLARA ter em `pipeline_display_config`. Esta era
+  // a torneira nº 3: o upsert varria os três tipos incondicionalmente, então
+  // apagar as etapas de um funil e recarregar a página as trazia de volta —
+  // era o que tornava a exclusão impossível pelo lado do front. Ver a migration
+  // 20270831000000, que fechou as duas torneiras equivalentes no banco.
   for (const pipeType of ["whatsapp", "confirmacao", "propostas"] as PipelineType[]) {
+    if (!tiposHabilitados.has(pipeType)) continue;
     for (let i = 0; i < DEFAULT_STAGES[pipeType].length; i++) {
       const stage = DEFAULT_STAGES[pipeType][i];
       allStages.push({
@@ -54,6 +75,8 @@ async function ensureDefaultStagesInDb(organizationId: string) {
     }
   }
 
+  if (allStages.length === 0) return;
+
   const { error } = await supabase
     .from("pipeline_stages")
     .upsert(allStages, {
@@ -64,6 +87,30 @@ async function ensureDefaultStagesInDb(organizationId: string) {
   if (error) {
     console.warn("Error ensuring default stages via upsert:", error.message);
   }
+}
+
+/**
+ * Os tipos de funil de sistema que a org tem, lidos do registro.
+ *
+ * Leitura direta (não o hook `usePipelineDisplayConfig`) de propósito: isto roda
+ * DENTRO do `queryFn`, onde não se pode chamar hook, e `pipeline_stages` não
+ * pode depender do ciclo de vida de outra query para decidir se semeia.
+ *
+ * ⚠️ Em erro devolve conjunto VAZIO, não "todos". Falhar para o lado de não
+ * semear é o certo: um erro transitório de rede não pode ressuscitar um funil
+ * que a org excluiu.
+ */
+async function lerTiposHabilitados(organizationId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("pipeline_display_config")
+    .select("pipe_type")
+    .eq("organization_id", organizationId);
+
+  if (error) {
+    console.warn("Não foi possível ler pipeline_display_config:", error.message);
+    return new Set();
+  }
+  return new Set((data ?? []).map((r) => r.pipe_type as string));
 }
 
 /**
@@ -143,14 +190,35 @@ export function usePipelineStages(pipelineType: PipelineType) {
       const fallbackStages = buildFallbackStages(pipelineType, organizationId);
 
       try {
-        // Garantir que etapas padrão existam no banco (uma vez por sessão).
-        // Resolve o cenário onde a organização não tem etapas padrão criadas,
-        // fazendo o sistema depender de um fallback em memória que não é persistido.
-        // Usa upsert direto com ignoreDuplicates (ON CONFLICT DO NOTHING).
-        const ensureKey = `${organizationId}`;
-        if (!defaultsEnsuredForSession.has(ensureKey)) {
-          defaultsEnsuredForSession.add(ensureKey);
-          await ensureDefaultStagesInDb(organizationId);
+        // ── Portão do registro ────────────────────────────────────────────
+        // Só os três tipos que a org registra em `pipeline_display_config`
+        // passam por aqui. `upsell_base`/`upsell_gestao` NÃO são tipos daquele
+        // registro (lá o tipo é `upsell`, sem sufixo) e nunca foram semeados
+        // por `ensureDefaultStagesInDb` — mantêm o comportamento antigo, com
+        // fallback. Alargar o portão para eles mudaria a rota /upsell, que não
+        // faz parte deste trabalho.
+        const tipoRegistravel =
+          pipelineType === "whatsapp" ||
+          pipelineType === "confirmacao" ||
+          pipelineType === "propostas";
+
+        if (tipoRegistravel) {
+          const tiposHabilitados = await lerTiposHabilitados(organizationId);
+
+          // 🚨 Torneira nº 4. A org não tem este funil (nunca teve, ou
+          // excluiu): devolver lista VAZIA, nunca `fallbackStages`. Enquanto
+          // este ramo caía no fallback, o funil excluído continuava
+          // renderizando com as etapas padrão em memória — o banco ficava
+          // limpo e a tela mentia.
+          if (!tiposHabilitados.has(pipelineType)) return [];
+
+          // Semeia as etapas padrão uma vez por sessão, só dos tipos que a org
+          // declara ter.
+          const ensureKey = `${organizationId}`;
+          if (!defaultsEnsuredForSession.has(ensureKey)) {
+            defaultsEnsuredForSession.add(ensureKey);
+            await ensureDefaultStagesInDb(organizationId, tiposHabilitados);
+          }
         }
 
         const { data, error } = await supabase
@@ -229,7 +297,13 @@ export function useCreatePipelineStage() {
       // Garantir que etapas padrão existam no banco antes de criar nova etapa.
       // Isso previne o bug onde criar uma etapa fazia as padrão (fallback) sumirem,
       // pois o fallback só é ativado quando não há nenhuma etapa no banco.
-      await ensureDefaultStagesInDb(teamMember.organization_id);
+      //
+      // Passa pelo mesmo portão do registro: criar uma etapa num funil não pode
+      // ressuscitar as etapas padrão de um funil VIZINHO que a org excluiu.
+      await ensureDefaultStagesInDb(
+        teamMember.organization_id,
+        await lerTiposHabilitados(teamMember.organization_id),
+      );
 
       const { data, error } = await supabase
         .from("pipeline_stages")
