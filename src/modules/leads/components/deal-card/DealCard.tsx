@@ -9,7 +9,7 @@ import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
 import { DealCardMoney } from "./DealCardMoney";
 import { contaDoNegocio } from "./conta-do-negocio";
-import type { DealCardAba, DealCardComentario, DealCardData } from "./types";
+import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
 
 /**
  * O Card do Negócio — a coluna DIREITA do painel, no formato do print DataCrazy.
@@ -185,6 +185,8 @@ export function DealCard({
   onOpenDeal,
   onNewDeal,
   onAdicionarProduto,
+  onEditarItem,
+  onRemoverItem,
   movendo,
   comentarios = [],
   onComentar,
@@ -203,6 +205,13 @@ export function DealCard({
   onOpenDeal?: (entryId: string) => void;
   onNewDeal?: () => void;
   onAdicionarProduto?: () => void;
+  /**
+   * Editar e remover item chegam por callback pela mesma razão que
+   * `onAdicionarProduto`: este arquivo está no grafo de `/preview.html` e não
+   * pode alcançar o banco (inv:H5-17). Quem escreve é o `DealCardPanel`.
+   */
+  onEditarItem?: (edicao: ItemEditado) => Promise<void>;
+  onRemoverItem?: (itemId: string) => Promise<void>;
   movendo?: string | null;
   /**
    * ── Comentários entram por FORA de `negocio` ──────────────────────────
@@ -573,6 +582,8 @@ export function DealCard({
                   valorDoNegocio={negocio.valorDoNegocio}
                   valorDoFunil={negocio.valor}
                   onAdicionarProduto={onAdicionarProduto}
+                  onEditarItem={onEditarItem}
+                  onRemoverItem={onRemoverItem}
                 />
               ) : (
                 <textarea

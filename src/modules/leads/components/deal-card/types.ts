@@ -143,13 +143,55 @@ export interface DealCardComentario {
   podeApagar: boolean;
 }
 
-/** Uma linha de `deal_items` — os produtos do negócio. */
+/**
+ * Uma linha de `deal_items` — os produtos do negócio.
+ *
+ * ── POR QUE `produtoId` E `descontoPercent` SUBIRAM ATÉ AQUI ──────────────
+ * O formato nasceu com cinco campos, e cada um dos dois que faltavam custava
+ * uma capacidade:
+ *
+ * - **`produtoId`** é o que separa item de CATÁLOGO de item AVULSO depois de
+ *   lançado. Sem ele a tabela não sabe dizer qual dos dois está olhando — e o
+ *   selo "avulso" só existia durante o cadastro, sumindo no instante em que a
+ *   linha era gravada. É também a identidade pela qual o mesmo produto
+ *   consolida em vez de duplicar.
+ * - **`descontoPercent`** é o que torna o desconto EDITÁVEL. O bloco mostrava
+ *   um "Desconto (−)" agregado que era **inferido** (bruto − líquido), nunca
+ *   lido: dava para ver que houve abatimento e não dava para saber de qual
+ *   linha veio, nem mexer nele.
+ *
+ * `ordem` é `sort_order`. Ele já era selecionado pela consulta e descartado no
+ * mapeamento, e a consulta não ordenava — a ordem das linhas na tela era a que
+ * o Postgres devolvesse, e podia mudar sozinha entre dois carregamentos.
+ */
 export interface DealCardItem {
   id: string;
   nome: string;
   quantidade: number;
   precoUnitario: number;
   total: number;
+  /** `products.id` quando veio do catálogo; `null` no produto avulso. */
+  produtoId: string | null;
+  /** Percentual 0–100 abatido nesta linha. */
+  descontoPercent: number;
+  /** `sort_order` — a ordem de lançamento. */
+  ordem: number;
+}
+
+/**
+ * O que a linha da tabela devolve quando alguém edita quantidade, preço ou
+ * desconto.
+ *
+ * Mora aqui, e não junto do componente que o emite, porque um módulo que
+ * exporta componente E outra coisa quebra o Fast Refresh do Vite
+ * (`react-refresh/only-export-components`) — mesmo motivo pelo qual
+ * `contaDoNegocio` tem arquivo próprio.
+ */
+export interface ItemEditado {
+  itemId: string;
+  quantidade: number;
+  precoUnitario: number;
+  descontoPercent: number;
 }
 
 export interface DealCardData {
