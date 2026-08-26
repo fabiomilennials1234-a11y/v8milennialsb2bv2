@@ -20,7 +20,7 @@ import {
   type AudienceSelection,
   type FunnelKind,
 } from "./audience-resolve";
-import { CAP_RECOMMENDED } from "./speed-safety";
+import { CAP_RECOMMENDED } from "@/shared/disparo/speed-safety";
 
 export type DisparoStepId =
   | "audience"
@@ -64,12 +64,12 @@ export function kickerDoPasso(id: DisparoStepId): string {
 
 /**
  * O número do Disparo e o regime que ele impõe ao conteúdo vivem no módulo
- * ÚNICO (`lib/disparo-numbers`), porque o Disparo Rápido consulta o mesmo
+ * ÚNICO (`@/shared/disparo/disparo-numbers`), porque o Disparo Rápido consulta o mesmo
  * contrato (#1722). Aqui só se reexporta, para os passos do wizard não
  * precisarem saber onde ele mora.
  */
-export type { DisparoNumber, RegimeDeDisparo } from "../../lib/disparo-numbers";
-import type { DisparoNumber, RegimeDeDisparo } from "../../lib/disparo-numbers";
+export type { DisparoNumber, RegimeDeDisparo } from "@/shared/disparo/disparo-numbers";
+import type { DisparoNumber, RegimeDeDisparo } from "@/shared/disparo/disparo-numbers";
 
 /** O Template aprovado escolhido no passo de conteúdo (Canal Oficial). */
 export interface TemplateEscolhido {

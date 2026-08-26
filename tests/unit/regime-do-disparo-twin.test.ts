@@ -3,7 +3,7 @@
  *
  * A regra "qual provedor dispara, e em que regime" existe duas vezes:
  *
- *   front    `src/modules/campaigns/lib/disparo-numbers.ts`  (navegador)
+ *   front    `src/shared/disparo/disparo-numbers.ts`  (navegador)
  *   servidor `supabase/functions/_shared/decisao-do-disparo.ts` (Deno)
  *
  * Duas, porque o repo não compartilha código entre os dois lados. Divergir aqui
@@ -15,7 +15,7 @@
  * `instance-routing-twin`, `blast-planning-twin`.
  */
 import { describe, it, expect } from "vitest";
-import { regimeDaInstancia } from "@/modules/campaigns";
+import { regimeDaInstancia } from "@/shared/disparo/disparo-numbers";
 import { regimeDoProvedor } from "../../supabase/functions/_shared/decisao-do-disparo.ts";
 
 // Todo provedor que o produto conhece, mais os dois casos de borda que a

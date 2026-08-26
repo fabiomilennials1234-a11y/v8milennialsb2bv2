@@ -25,7 +25,7 @@ import {
   regimeDaInstancia,
   rotuloDaInstancia,
   type InstanceLike,
-} from "@/modules/campaigns";
+} from "@/shared/disparo/disparo-numbers";
 
 interface QuickBlastDialogProps {
   open: boolean;

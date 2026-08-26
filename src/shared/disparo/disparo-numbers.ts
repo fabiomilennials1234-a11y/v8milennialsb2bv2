@@ -13,8 +13,17 @@
  *   oficial  → Template aprovado, motor próprio por destinatário
  *
  * Puro e sem relógio (o `now` entra por parâmetro), para ser testado sem React.
+ *
+ * Mora em `src/shared/` e não em `campaigns/` (#1846). Duas telas de bounded
+ * contexts diferentes precisam da MESMA decisão: o wizard vive em `campaigns` e
+ * o Disparo Rápido em `leads`. Publicar isto pelo barrel de `campaigns` obrigava
+ * `leads` a importar `campaigns`, e essa aresta fechava o ciclo
+ * campaigns ↔ communication que o `Dep-cruise ratchet` reprovava no PR #1811.
+ * Aqui o módulo é FOLHA do grafo — não importa módulo nenhum, logo não pode
+ * participar de ciclo. Mantenha assim: um único import de módulo aqui recria o
+ * problema.
  */
-import { effectiveCap, CAP_RECOMMENDED } from "../components/disparo-wizard/speed-safety";
+import { effectiveCap, CAP_RECOMMENDED } from "./speed-safety";
 
 /** Statuses de conexão do provedor (Uazapi `open`, genérico `connected`). */
 const CONNECTED_STATUSES = new Set(["open", "connected"]);

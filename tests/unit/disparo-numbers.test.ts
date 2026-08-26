@@ -18,11 +18,11 @@ import {
   regimeDaInstancia,
   NEW_NUMBER_WINDOW_DAYS,
   type InstanceLike,
-} from "@/modules/campaigns";
+} from "@/shared/disparo/disparo-numbers";
 import {
   NEW_NUMBER_CAP,
   CAP_RECOMMENDED,
-} from "@/modules/campaigns/components/disparo-wizard/speed-safety";
+} from "@/shared/disparo/speed-safety";
 import { getProviderProfile } from "@/modules/communication";
 
 const NOW = Date.parse("2026-08-23T12:00:00Z");

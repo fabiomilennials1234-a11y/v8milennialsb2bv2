@@ -30,7 +30,7 @@ import {
   CAP_MIN,
   CAP_MAX,
   CAP_RECOMMENDED,
-} from "./speed-safety";
+} from "@/shared/disparo/speed-safety";
 
 interface StepSpeedProps {
   draft: DisparoDraft;

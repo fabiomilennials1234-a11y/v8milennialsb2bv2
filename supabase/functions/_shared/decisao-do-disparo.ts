@@ -31,7 +31,7 @@ export type RegimeDoDisparo = "chip" | "oficial";
 
 /**
  * O provedor da Instance decide o regime — a MESMA verdade do módulo do front
- * (`src/modules/campaigns/lib/disparo-numbers.ts`).
+ * (`src/shared/disparo/disparo-numbers.ts`).
  *
  * ⚠️ São duas implementações da mesma regra, porque uma roda em Deno e a outra
  * no navegador, e o repo não compartilha código entre os dois lados. Um teste
