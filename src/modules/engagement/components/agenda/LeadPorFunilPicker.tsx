@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDebounce } from "@/shared/hooks/useDebounce";
-import { usePipelines } from "@/modules/pipelines";
+import { usePipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
 import { useLeadsPorFunil, useLeadById } from "@/modules/leads";
 
 /**
@@ -82,17 +82,47 @@ export function LeadPorFunilPicker({
     isLoading: carregandoFunis,
     isError: erroFunis,
   } = usePipelines();
+  const { data: displayConfig } = usePipelineDisplayConfig();
 
   /**
-   * `usePipelines` NÃO filtra `is_active` — funil pausado continua vindo. E
+   * O NOME que a organização usa, que não é `pipelines.name`.
+   *
+   * Para funil de SISTEMA, `pipelines.name` é fixo no seed de
+   * `create_default_pipelines()`: "Qualificação" / "Confirmação" / "Propostas".
+   * O resto do produto — navegação, hub de funis — rotula por
+   * `pipeline_display_config.display_name`, cujos padrões já são OUTROS
+   * ("Oportunidades" / "Agendamentos" / "Orçamentos") e que cada org renomeia.
+   *
+   * Sem este cruzamento o seletor da Agenda seria o único lugar do sistema a
+   * chamar os funis por nomes que a pessoa nunca viu — ela procuraria
+   * "Agendamentos" e acharia "Confirmação". O cruzamento é por
+   * `pipelines.slug` ↔ `pipeline_display_config.pipe_type`.
+   *
+   * Funil CUSTOM não entra nessa tabela: ali `pipelines.name` já é o nome que
+   * o usuário deu, e é o que as outras telas mostram.
+   */
+  const nomeDoFunil = useMemo(() => {
+    const porTipo = new Map(
+      (displayConfig ?? []).map((c) => [c.pipe_type as string, c.display_name]),
+    );
+    return (funil: { name: string; slug?: string; type?: string }) =>
+      funil.type === "system" && funil.slug && porTipo.get(funil.slug)
+        ? (porTipo.get(funil.slug) as string)
+        : funil.name;
+  }, [displayConfig]);
+
+  /**
+   * `usePipelines` NÃO filtra `is_active` — funil arquivado continua vindo. E
    * `SelectItem` com `value=""` faz o Radix levantar, então id vazio some da
    * lista em vez de derrubar a tela.
+   *
+   * ⚠️ Deliberadamente NÃO filtra `is_visible` do display config: esconder um
+   * funil da navegação não tira os leads de dentro dele, e o pedido é que
+   * TODOS os funis da organização apareçam. Esconder aqui deixaria lead
+   * inalcançável.
    */
   const funis = useMemo(
-    () =>
-      (funisRaw ?? []).filter(
-        (p) => !!p.id && p.is_active !== false,
-      ),
+    () => (funisRaw ?? []).filter((p) => !!p.id && p.is_active !== false),
     [funisRaw],
   );
 
@@ -100,6 +130,20 @@ export function LeadPorFunilPicker({
     () => funis.find((p) => p.id === pipelineId) ?? null,
     [funis, pipelineId],
   );
+
+  /**
+   * O funil GRAVADO na reunião que não está mais na lista ativa.
+   *
+   * Sem isto o `<Select>` recebe um `value` que não casa com `SelectItem`
+   * nenhum e o Radix cai no placeholder: a tela diria "Nenhum funil" numa
+   * reunião que TEM funil gravado — negando um vínculo que está no banco, e
+   * indistinguível de uma reunião realmente sem funil. Como a FK é
+   * `ON DELETE SET NULL`, arquivar (`is_active=false`) não zera a coluna.
+   */
+  const funilArquivado = useMemo(() => {
+    if (!pipelineId || funilSelecionado) return null;
+    return (funisRaw ?? []).find((p) => p.id === pipelineId) ?? null;
+  }, [funisRaw, funilSelecionado, pipelineId]);
 
   const {
     data: resultado,
@@ -162,9 +206,14 @@ export function LeadPorFunilPicker({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={SEM_FUNIL}>Nenhum funil</SelectItem>
+              {funilArquivado && (
+                <SelectItem value={funilArquivado.id}>
+                  {nomeDoFunil(funilArquivado)} (arquivado)
+                </SelectItem>
+              )}
               {funis.map((funil) => (
                 <SelectItem key={funil.id} value={funil.id}>
-                  {funil.name}
+                  {nomeDoFunil(funil)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -226,7 +275,9 @@ export function LeadPorFunilPicker({
               <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/50" />
               <Input
                 className="pl-8"
-                placeholder={`Buscar lead em ${funilSelecionado?.name ?? "este funil"}...`}
+                placeholder={`Buscar lead em ${
+                  funilSelecionado ? nomeDoFunil(funilSelecionado) : "este funil"
+                }...`}
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 disabled={disabled}

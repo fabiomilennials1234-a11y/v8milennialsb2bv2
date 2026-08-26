@@ -45,13 +45,24 @@ vi.mock("@/components/ui/select", () => ({
 // ── Dublês dos dados ────────────────────────────────────────────────────────
 
 const funis = {
-  data: [] as Array<{ id: string; name: string; is_active?: boolean }>,
+  data: [] as Array<{
+    id: string;
+    name: string;
+    slug?: string;
+    type?: string;
+    is_active?: boolean;
+  }>,
   isLoading: false,
   isError: false,
 };
 
+const displayConfig = {
+  data: [] as Array<{ pipe_type: string; display_name: string }>,
+};
+
 vi.mock("@/modules/pipelines", () => ({
   usePipelines: () => funis,
+  usePipelineDisplayConfig: () => displayConfig,
 }));
 
 const leadsDoFunil = {
@@ -106,6 +117,7 @@ beforeEach(() => {
   funis.data = [COMERCIAL, REATIVACAO];
   funis.isLoading = false;
   funis.isError = false;
+  displayConfig.data = [];
   leadsDoFunil.data = { leads: [], temMais: false };
   leadsDoFunil.isFetching = false;
   leadsDoFunil.isError = false;
@@ -138,6 +150,47 @@ describe("LeadPorFunilPicker", () => {
       "Funil Pos-venda",
       "Funil Parceiros",
     ]);
+  });
+
+  it("🚨 rotula funil de SISTEMA pelo nome que a org usa, nao pelo nome do seed", () => {
+    // `pipelines.name` de funil de sistema é fixo no seed ("Qualificação"),
+    // mas a navegação e o hub rotulam por `display_name` ("Oportunidades", e
+    // renomeável por org). Sem o cruzamento, o seletor da Agenda seria o único
+    // lugar do produto a chamar o funil por um nome que a pessoa nunca viu.
+    funis.data = [
+      { id: "p-wa", name: "Qualificação", slug: "whatsapp", type: "system" },
+      { id: "p-cus", name: "Funil do Bolívar", type: "custom" },
+    ];
+    displayConfig.data = [
+      { pipe_type: "whatsapp", display_name: "Oportunidades" },
+    ];
+    montar();
+
+    const opcoes = Array.from(
+      screen.getByTestId("select-funil").querySelectorAll("option"),
+    ).map((o) => o.textContent);
+
+    expect(opcoes).toContain("Oportunidades");
+    expect(opcoes).not.toContain("Qualificação");
+    // Funil custom não entra nessa tabela — o nome dele já é o que o usuário deu.
+    expect(opcoes).toContain("Funil do Bolívar");
+  });
+
+  it("🚨 funil ARQUIVADO que está gravado na reunião continua visível, marcado", () => {
+    // A FK é `ON DELETE SET NULL`: arquivar (`is_active=false`) NÃO zera
+    // `meetings.pipeline_id`. Sem a opção sintética o Radix cai no placeholder
+    // e a tela diz "Nenhum funil" numa reunião que TEM funil gravado.
+    funis.data = [
+      COMERCIAL,
+      { id: "p-morto", name: "Funil Antigo", is_active: false },
+    ];
+    montar({ pipelineId: "p-morto", leadId: null });
+
+    const opcoes = Array.from(
+      screen.getByTestId("select-funil").querySelectorAll("option"),
+    ).map((o) => o.textContent);
+
+    expect(opcoes).toContain("Funil Antigo (arquivado)");
   });
 
   it("esconde funil inativo — `usePipelines` nao filtra `is_active` sozinho", () => {

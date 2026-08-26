@@ -135,8 +135,22 @@ export function CreateMeetingDialog({
   const endBeforeStart =
     !form.all_day && new Date(form.end_at) <= new Date(form.start_at);
 
+  /**
+   * 🚨 HERDADO, corrigido junto porque é o mesmo defeito do diálogo de edição e
+   * a expressão é copiada entre os dois: `endBeforeStart` NÃO cobre campo
+   * vazio. `<input type="datetime-local">` devolve `""` quando a pessoa apaga a
+   * data para redigitar, e comparação com `Invalid Date` é `false` nos DOIS
+   * sentidos — o botão continuava habilitado e o clique morria em
+   * `new Date("").toISOString() → RangeError`, dentro de um event handler, que
+   * nenhum error boundary pega. Resultado: "Criar Evento" virava um botão que
+   * não faz nada e não explica.
+   */
+  const dataInvalida =
+    Number.isNaN(new Date(form.start_at).getTime()) ||
+    Number.isNaN(new Date(form.end_at).getTime());
+
   const handleSubmit = () => {
-    if (!form.title.trim() || endBeforeStart) return;
+    if (!form.title.trim() || endBeforeStart || dataInvalida) return;
 
     const input: CreateMeetingInput = {
       title: form.title.trim(),
@@ -220,8 +234,14 @@ export function CreateMeetingDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Inicio *</Label>
+              <Label
+                htmlFor="meeting-start"
+                className="text-xs text-muted-foreground"
+              >
+                Inicio *
+              </Label>
               <Input
+                id="meeting-start"
                 type={form.all_day ? "date" : "datetime-local"}
                 value={
                   form.all_day
@@ -238,8 +258,14 @@ export function CreateMeetingDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Fim *</Label>
+              <Label
+                htmlFor="meeting-end"
+                className="text-xs text-muted-foreground"
+              >
+                Fim *
+              </Label>
               <Input
+                id="meeting-end"
                 type={form.all_day ? "date" : "datetime-local"}
                 value={
                   form.all_day
@@ -256,11 +282,15 @@ export function CreateMeetingDialog({
               />
             </div>
           </div>
-          {endBeforeStart && (
+          {dataInvalida ? (
+            <p className="text-[11px] text-destructive">
+              Informe inicio e fim
+            </p>
+          ) : endBeforeStart ? (
             <p className="text-[11px] text-destructive">
               Fim deve ser depois do inicio
             </p>
-          )}
+          ) : null}
 
           {/* Location */}
           <div className="space-y-1.5">
@@ -372,7 +402,12 @@ export function CreateMeetingDialog({
             <Button
               size="sm"
               onClick={handleSubmit}
-              disabled={createMeeting.isPending || !form.title.trim() || endBeforeStart}
+              disabled={
+                createMeeting.isPending ||
+                !form.title.trim() ||
+                endBeforeStart ||
+                dataInvalida
+              }
             >
               {createMeeting.isPending ? (
                 <>

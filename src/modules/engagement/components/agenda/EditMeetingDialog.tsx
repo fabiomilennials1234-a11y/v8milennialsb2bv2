@@ -20,7 +20,7 @@
  * toca. Ficam preservados como estão — nenhum caminho desta tela os apaga.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
 import { Pencil, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -107,19 +107,39 @@ export function EditMeetingDialog({
   const [form, setForm] = useState<FormState | null>(null);
 
   /**
+   * O usuário já mexeu neste formulário? Guarda a semeadura de sobrescrever
+   * digitação. É `ref` e não `state` de propósito: mudar não deve re-renderizar.
+   */
+  const sujoRef = useRef(false);
+  /** Qual reunião o formulário atual representa. */
+  const semeadoDeRef = useRef<string | null>(null);
+
+  /**
    * Semeia o formulário a partir da reunião carregada.
    *
-   * A dependência é `meeting?.id` e não `meeting`: o objeto do TanStack Query
-   * troca de referência a cada refetch (a Agenda invalida `["meetings"]` com
-   * frequência), e depender do objeto faria a semeadura rodar de novo no meio
-   * da digitação, apagando o que a pessoa acabou de escrever.
+   * 🚨 A dependência inclui `updated_at`, e não só `id`. Com só o `id`, reabrir
+   * uma reunião já visitada semeava do CACHE do TanStack (gcTime de 30min) e a
+   * resposta fresca do refetch — mesmo `id`, deps inalteradas — NUNCA era
+   * aplicada: quem tivesse mudado o horário por outro caminho veria o valor
+   * velho no formulário e o gravaria de volta por cima do novo.
+   *
+   * E `sujoRef` impede o outro extremo: a Agenda invalida `["meetings"]` por
+   * prefixo com frequência (realtime, debounce de 2s), então sem a guarda um
+   * refetch no meio da digitação apagaria o que a pessoa acabou de escrever.
+   * Dado fresco só entra enquanto o formulário está intocado.
+   *
+   * NÃO limpa o formulário quando `open` vira false: o `DialogContent` fica
+   * montado durante os ~200ms da animação de saída, e zerar ali trocaria o
+   * formulário por um spinner justo enquanto ele desaparece — uma piscada em
+   * todo Cancelar e todo Salvar. Quem reseta é a troca de `meetingId`.
    */
   useEffect(() => {
-    if (!open) {
+    if (meetingId !== semeadoDeRef.current) {
+      semeadoDeRef.current = meetingId;
+      sujoRef.current = false;
       setForm(null);
-      return;
     }
-    if (!meeting) return;
+    if (!open || !meeting || sujoRef.current) return;
     setForm({
       title: meeting.title ?? "",
       description: meeting.description ?? "",
@@ -134,19 +154,43 @@ export function EditMeetingDialog({
       meet_link: meeting.meet_link ?? "",
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, meeting?.id]);
+  }, [open, meetingId, meeting?.id, meeting?.updated_at]);
 
-  const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+  const update = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    sujoRef.current = true;
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
 
   const endBeforeStart =
     !!form && !form.all_day && new Date(form.end_at) <= new Date(form.start_at);
+
+  /**
+   * 🚨 `endBeforeStart` NÃO cobre campo vazio: `<input type="datetime-local">`
+   * devolve `""` quando a pessoa apaga a data para redigitar, e toda comparação
+   * com `Invalid Date` é `false` — nos DOIS sentidos. Sem esta checagem o botão
+   * continuava habilitado e o clique morria em
+   * `new Date("").toISOString() → RangeError`, dentro de um event handler (que
+   * nenhum error boundary pega): salvar virava um botão que não faz nada e não
+   * explica. Mesma forma que `MergedMeetingEditor` já usa.
+   */
+  const dataInvalida =
+    !!form &&
+    (Number.isNaN(new Date(form.start_at).getTime()) ||
+      Number.isNaN(new Date(form.end_at).getTime()));
+
+  /**
+   * Reunião que abriu COM lead e está sem lead na hora de salvar. Não bloqueia
+   * — desvincular é uma edição legítima —, mas a tela avisa: trocar o funil
+   * limpa o lead, e sem aviso a pessoa gravaria a perda do vínculo sem ver.
+   */
+  const vaiDesvincularLead = !!form && !!meeting?.lead_id && !form.lead_id;
 
   // Sem formulário semeado NÃO se grava. Ver o cabeçalho: o update é cru.
   const podeSalvar =
     !!form &&
     !!form.title.trim() &&
     !endBeforeStart &&
+    !dataInvalida &&
     !isLoading &&
     !updateMeeting.isPending;
 
@@ -186,14 +230,23 @@ export function EditMeetingDialog({
           </DialogTitle>
         </DialogHeader>
 
-        {isError ? (
-          <p className="py-8 text-center text-sm text-destructive">
-            Não foi possível carregar este evento.
-          </p>
-        ) : !form ? (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
+        {/* 🚨 A ordem importa: `!form` ANTES de `isError`.
+            No TanStack v5 uma falha de REFETCH em background põe
+            `status: 'error'` mas PRESERVA o `data` anterior. Testando `isError`
+            primeiro, um erro transiente de rede — com o formulário cheio e a
+            pessoa no meio de escrever — trocava tudo pela tela de erro e
+            jogava a digitação fora. Erro só substitui a tela quando não há
+            formulário para preservar. */}
+        {!form ? (
+          isError ? (
+            <p className="py-8 text-center text-sm text-destructive">
+              Não foi possível carregar este evento.
+            </p>
+          ) : (
+            <div className="flex items-center justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          )
         ) : (
           <div className="space-y-4 pt-1">
             {/* Título */}
@@ -247,8 +300,14 @@ export function EditMeetingDialog({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Início *</Label>
+                <Label
+                  htmlFor="edit-meeting-start"
+                  className="text-xs text-muted-foreground"
+                >
+                  Início *
+                </Label>
                 <Input
+                  id="edit-meeting-start"
                   type={form.all_day ? "date" : "datetime-local"}
                   value={
                     form.all_day ? form.start_at.split("T")[0] : form.start_at
@@ -262,8 +321,14 @@ export function EditMeetingDialog({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Fim *</Label>
+                <Label
+                  htmlFor="edit-meeting-end"
+                  className="text-xs text-muted-foreground"
+                >
+                  Fim *
+                </Label>
                 <Input
+                  id="edit-meeting-end"
                   type={form.all_day ? "date" : "datetime-local"}
                   value={form.all_day ? form.end_at.split("T")[0] : form.end_at}
                   onChange={(e) =>
@@ -275,11 +340,15 @@ export function EditMeetingDialog({
                 />
               </div>
             </div>
-            {endBeforeStart && (
+            {dataInvalida ? (
+              <p className="text-[11px] text-destructive">
+                Informe início e fim
+              </p>
+            ) : endBeforeStart ? (
               <p className="text-[11px] text-destructive">
                 Fim deve ser depois do início
               </p>
-            )}
+            ) : null}
 
             {/* Local */}
             <div className="space-y-1.5">
@@ -353,6 +422,15 @@ export function EditMeetingDialog({
                 onChange={(e) => update("meet_link", e.target.value)}
               />
             </div>
+
+            {/* Aviso de desvínculo — não bloqueia, mas não deixa passar calado */}
+            {vaiDesvincularLead && (
+              <p className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
+                Ao salvar, esta reunião deixará de estar vinculada ao lead que
+                tinha. Escolha um lead no funil novo se não quiser perder o
+                vínculo.
+              </p>
+            )}
 
             {/* Ações */}
             <div className="flex justify-end gap-2 pt-1">
