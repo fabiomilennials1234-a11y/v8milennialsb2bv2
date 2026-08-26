@@ -122,7 +122,7 @@ Modelo comercial híbrido (catálogo é ponto de partida, o vendido vira snapsho
 | Situação | O que acontece |
 |---|---|
 | Fechou a aba no meio do Pix | Nada se perde. Faz login e cai no mesmo checkout, com a **mesma** cobrança. Não gera Pix novo. |
-| Não pagou e sumiu | Conta parada no paywall. Todo login volta pra lá. Nunca vira organização. |
+| Não pagou e sumiu | A Contratação fica aberta e ele cai nela no próximo login. Nunca vira organização — não consome instância, não gera custo. Isso é **primeira compra, não bloqueio**: quem nunca teve organização não está inadimplente (G9). |
 | Pix venceu | A tela diz que venceu e oferece gerar outro. É desfecho, não erro — tem que estar bonita nesse estado. |
 | Cartão recusado | Volta ao checkout com a mensagem do banco. Pode tentar outro cartão ou trocar pro Pix. |
 | Recarregou / clicou duas vezes | Não cobra de novo. Uma cobrança por (Contratação, método), reaproveitada. |
@@ -154,7 +154,7 @@ Modelo comercial híbrido (catálogo é ponto de partida, o vendido vira snapsho
 
 ### A invariante que fecha o risco do modo duplo
 
-**Um token NUNCA resolve linha de self-serve. Uma sessão NUNCA resolve linha de Master.** Dois resolvedores, cada um cego para o território do outro, um só rabo compartilhado. Sem essa regra, o modo duplo vira furo: alguém paga ou lê o pedido de outra pessoa.
+**Um token NUNCA resolve linha de self-serve. Uma sessão NUNCA resolve linha de Master.** Dois resolvedores, cada um cego para o território do outro, um só rabo compartilhado. Sem essa regra, o modo duplo vira furo: alguém paga ou lê a Contratação de outra pessoa.
 
 ### O que muda no schema
 
