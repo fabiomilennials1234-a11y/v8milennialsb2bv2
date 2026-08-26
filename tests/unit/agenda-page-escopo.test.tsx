@@ -55,9 +55,14 @@ vi.mock("@/modules/engagement/hooks/useAgendaEvents", () => ({
 
 const updateMeeting = vi.fn().mockResolvedValue({});
 
+// 🚨 Este mock é EXAUSTIVO: substitui o módulo inteiro, então todo hook de
+// `useMeetings` que a página passar a consumir tem que aparecer aqui — senão
+// ele chega como `undefined` e a página quebra na montagem, culpando a branch
+// errada. `useMeeting` entrou junto com o diálogo de edição.
 vi.mock("@/modules/engagement/hooks/useMeetings", () => ({
   useDeleteMeeting: () => ({ mutateAsync: vi.fn() }),
   useUpdateMeeting: () => ({ mutateAsync: updateMeeting }),
+  useMeeting: () => ({ data: null, isLoading: false, isError: false }),
 }));
 
 const participacoes = new Set<string>();
@@ -78,6 +83,11 @@ vi.mock("@/modules/integrations/hooks/useGoogleCalendarSharing", () => ({
 vi.mock(
   "@/modules/engagement/components/agenda/CreateMeetingDialog",
   () => ({ CreateMeetingDialog: () => null }),
+);
+
+vi.mock(
+  "@/modules/engagement/components/agenda/EditMeetingDialog",
+  () => ({ EditMeetingDialog: () => null }),
 );
 
 // Import depois dos mocks — a página resolve os hooks no topo do módulo.

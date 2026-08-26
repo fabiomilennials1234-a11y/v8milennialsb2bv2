@@ -23,6 +23,7 @@ import {
   ExternalLink,
   User,
   X,
+  Pencil,
   Trash2,
   Loader2,
   CheckCircle2,
@@ -62,6 +63,13 @@ interface EventDetailPopoverProps {
     event: UnifiedEvent,
     resultado: AttendanceOutcome | null,
   ) => Promise<void>;
+  /**
+   * Abre a edição. Só recebe reunião de verdade (`source === "meeting"`) — as
+   * outras quatro fontes da Agenda são projeções de outras tabelas
+   * (`follow_ups`, `scheduled_messages`, `pipe_confirmacao`, `meeting_events`)
+   * e não têm o que este formulário grava.
+   */
+  onEditMeeting?: (event: UnifiedEvent) => void;
 }
 
 // ─── Source icon helper ───────────────────────────────────────────────────────
@@ -89,6 +97,7 @@ export function EventDetailPopover({
   onDeleteMeeting,
   onDeleteGoogleEvent,
   onSetOutcome,
+  onEditMeeting,
 }: EventDetailPopoverProps) {
   const { event, x, y } = state;
   const ref = useRef<HTMLDivElement>(null);
@@ -218,6 +227,13 @@ export function EventDetailPopover({
   const color = event.color;
   const canDelete = event.source === "meeting" || event.source === "google";
 
+  /**
+   * Só reunião interna se edita por aqui. `google` fica de fora de propósito:
+   * o evento vive no calendário do Google e é a API deles quem o altera —
+   * gravar em `meetings` não mudaria nada lá, e a tela mentiria.
+   */
+  const podeEditar = event.source === "meeting" && !!onEditMeeting;
+
   // Delete confirmation label
   const deleteLabel =
     event.source === "google"
@@ -255,6 +271,16 @@ export function EventDetailPopover({
             {event.title}
           </h3>
           <div className="flex items-center gap-1 shrink-0 mt-0.5">
+            {podeEditar && (
+              <button
+                onClick={() => onEditMeeting?.(event)}
+                className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5"
+                title="Editar evento"
+                aria-label="Editar evento"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
             {canDelete && (
               <button
                 onClick={() => setConfirmDelete(true)}

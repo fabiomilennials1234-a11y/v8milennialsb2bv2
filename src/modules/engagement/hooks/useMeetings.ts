@@ -25,6 +25,16 @@ export interface Meeting {
   event_type: MeetingEventType;
   status: MeetingStatus;
   lead_id: string | null;
+  /**
+   * Funil de onde o lead foi escolhido. FK -> `pipelines(id)` — a UNIÃO
+   * system+custom —, `ON DELETE SET NULL`.
+   *
+   * Persistido em vez de derivado do lead porque um lead está em VÁRIOS funis
+   * ao mesmo tempo (invariante do produto) e sair de um funil é DELETE físico:
+   * derivar devolveria um funil qualquer hoje e outro amanhã, mudando dado
+   * histórico em silêncio.
+   */
+  pipeline_id: string | null;
   created_by: string;
   google_event_id: string | null;
   meet_link: string | null;
@@ -74,6 +84,8 @@ export interface CreateMeetingInput {
   event_type?: MeetingEventType;
   status?: MeetingStatus;
   lead_id?: string | null;
+  /** Funil de onde o lead veio. Ver o campo homônimo em `Meeting`. */
+  pipeline_id?: string | null;
   google_event_id?: string | null;
   meet_link?: string | null;
   color?: string | null;
@@ -94,6 +106,8 @@ export interface UpdateMeetingInput {
   event_type?: MeetingEventType;
   status?: MeetingStatus;
   lead_id?: string | null;
+  /** Funil de onde o lead veio. Ver o campo homônimo em `Meeting`. */
+  pipeline_id?: string | null;
   google_event_id?: string | null;
   meet_link?: string | null;
   color?: string | null;
