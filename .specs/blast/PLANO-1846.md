@@ -341,14 +341,18 @@ nenhuma das 3.
 equivalente de `TemplateEscolhido`, rodei o ratchet → `Dep-cruise ratchet OK` (**0 NOVAS**).
 Revertido em seguida; o diff desta branch **não** contém essa mudança.
 
-`TemplateEscolhido` é uma `interface` de 6 campos (`wizard-machine.ts:75-82`), sem
+`TemplateEscolhido` é uma `interface` de 5 campos (`wizard-machine.ts:75-82`), sem
 dependência nenhuma, com **2 consumidores**: `wizard-machine.ts:113` e `useBlastPlans.ts:79`.
 
-### 8.4 Por que eu parei aqui
+### 8.4 Perguntei antes de mexer, e o CTO aprovou
 
-O brief enumera **dois** arquivos a mover e diz *"NÃO encoste em
-`pipelines/components/disparo/DisparoWizard.tsx`"*. Mover um terceiro símbolo é escopo novo,
-e escopo não é meu. Está perguntado ao CTO (§9).
+O brief enumera **dois** arquivos a mover e proíbe encostar em
+`pipelines/…/DisparoWizard.tsx`. Mover um terceiro símbolo era escopo novo, e escopo não é do
+operário — então parei em 9→3 e perguntei, com o ensaio já feito.
+
+Aprovado em `~/Dev/.maestri/briefs/1846-decisoes.md` §1: *"consertar o próprio trabalho não é
+expandir escopo — é fechar o que se abriu"*. A aresta é do #1722, e parar em 3 deixaria o
+#1811 bloqueado por violações sem dono.
 
 ### 8.5 O resto da bateria — verde
 
@@ -366,10 +370,23 @@ Guardas do brief respeitadas: **não** rodei `lint:deps:baseline`, **não** rege
 
 ---
 
-## 9. As duas perguntas em aberto para o CTO
+## 9. Fechamento — as duas perguntas, respondidas
 
-1. **§8** — as 3 que sobraram são outro ciclo, fechado por `useBlastPlans.ts:15`. Movo
-   `TemplateEscolhido` para `src/shared/disparo/` (mesmo remédio, zero comportamento,
-   ratchet a 0) ou paro em 9→3 e abro issue separada?
-2. **§6** — rebase em `origin/main` vs. manter o `--ff-only` de `feat/1722` possível.
-   As duas instruções do brief não podem valer ao mesmo tempo.
+Ambas em `~/Dev/.maestri/briefs/1846-decisoes.md`:
+
+1. **§8.4** — mover `TemplateEscolhido`: **aprovado**. Feito no commit `9d9a9d76`, com
+   `wizard-machine` reexportando o tipo para nenhum consumidor mudar. Ratchet **9 → 0**.
+2. **§6** — o brief se contradizia, e o CTO confirmou: **não rebasear em `origin/main`.**
+   A branch fica descendente direta de `feat/1722-disparo-canal-oficial`. Conferido no fim:
+   `origin/feat/1722-disparo-canal-oficial` continua em `9541499b`, a base desta branch — não
+   andou, então nem rebase nela foi preciso, e o `merge --ff-only` do CTO é trivial.
+
+### Contagem final — a exigência da medição vale para o total
+
+| Sinal | ANTES (`9541499b`) | Depois do move 1 (`74373a82`) | **FINAL (`9d9a9d76`)** |
+|---|---|---|---|
+| `lint:deps:check` — o gate | **9 NOVAS** | 3 NOVAS | **0 NOVAS ✅** |
+| `lint:deps` — contagem crua | **112** (7 err, 105 warn) | 106 (5 err, 101 warn) | **103 (4 err, 99 warn)** |
+| módulos / dependências | 1847 / 7386 | 1847 / 7384 | 1848 / 7385 |
+
+Entrega e decisões consolidadas em [`HANDOFF-1846.md`](./HANDOFF-1846.md).
