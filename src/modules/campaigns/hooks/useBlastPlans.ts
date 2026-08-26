@@ -12,7 +12,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { TemplateEscolhido } from "@/modules/campaigns/components/disparo-wizard/wizard-machine";
+import type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
 import { useCurrentTeamMember } from "@/modules/identity";
 
 export type BlastPlanStatus = "active" | "paused" | "completed" | "cancelled";

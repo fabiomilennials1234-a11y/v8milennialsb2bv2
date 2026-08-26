@@ -71,15 +71,14 @@ export function kickerDoPasso(id: DisparoStepId): string {
 export type { DisparoNumber, RegimeDeDisparo } from "@/shared/disparo/disparo-numbers";
 import type { DisparoNumber, RegimeDeDisparo } from "@/shared/disparo/disparo-numbers";
 
-/** O Template aprovado escolhido no passo de conteúdo (Canal Oficial). */
-export interface TemplateEscolhido {
-  name: string;
-  language: string;
-  components: unknown[];
-  /** O corpo renderizado — é o que vai para `blast_plans.message`. */
-  previewText: string;
-  buttonLabels: string[];
-}
+/**
+ * O Template aprovado escolhido no passo de conteúdo também vive fora daqui
+ * (#1846): `useBlastPlans` precisa do mesmo contrato para persistir
+ * `blast_plans.template`, e importá-lo do wizard fechava o ciclo
+ * campaigns ↔ pipelines. Reexportado para os passos não mudarem de import.
+ */
+export type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
+import type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
 
 export interface DisparoMedia {
   type: BlastMediaType;
