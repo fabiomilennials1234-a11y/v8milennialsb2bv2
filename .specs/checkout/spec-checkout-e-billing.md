@@ -749,3 +749,57 @@ Dossiê completo em `.specs/pesquisa/precos-mercado-e-custo-insumo.md`.
 **Legado a aposentar:** `checkout-provision-org` e `checkout-create-payment`, ativas em produção desde 15/05/2026 e fora do desenho novo. Medir se são chamadas antes de remover.
 
 **Higiene no espelho do Jira:** SCRUM-279 e SCRUM-281 estão "A fazer" com o trabalho feito e mergeado.
+
+---
+
+## MAPA DAS TAREFAS NO JIRA — 2026-08-26
+
+A quebra virou **5 tarefas** (uma por onda) com **25 subtarefas**, para o quadro da sprint não afogar as outras frentes. Subtarefa não recebe sprint no Jira — herda a da mãe —, então o board conta os pontos só pela tarefa-mãe.
+
+**114 pontos. Marcelo 62 · Lucas 50 · CTO 2.** O corte é por risco: Marcelo pega o que quebra dinheiro ou isolamento; Lucas pega o que tem contorno claro e verificação óbvia.
+
+```
+SCRUM-486  Destravar o checkout em produção                          14 pts
+           491  deploy de billing-quote e billing-payment-status      1  Lucas
+           492  #1559 override anual cobra 12×                        3  Marcelo
+           493  #1564 assento comprado vira cota                      5  Marcelo
+           494  medir a perna do cartão e decidir A1/A2               2  Lucas
+           495  aposentar checkout-provision-org/create-payment       3  Lucas
+
+SCRUM-487  A primeira cobrança chega ao Asaas                        18 pts
+           496  motor de preço: desconto por método, parcelado, 15/20 5  Marcelo
+           497  criar a cobrança — perna Pix                          8  Marcelo
+           498  criar a cobrança — perna cartão                       5  Marcelo
+
+SCRUM-488  O cliente compra sozinho no site                          32 pts
+           499  o plano básico existe no catálogo                     2  CTO
+           500  landing: 1 comprável, 2 falar-com-vendas              3  Lucas
+           501  Cal.com embutido, demo vira lead no Torque            3  Lucas
+           502  cadastro carrega o plano e cria a Contratação         3  Lucas
+           503  paywall por ORGANIZAÇÃO, três casos                   5  Lucas
+           504  página pública de checkout, nove estados              8  Lucas
+           505  dados fiscais do Comprador e nome da organização      5  Marcelo
+           506  pagamento de teste em sandbox, ponta a ponta          3  Marcelo
+
+SCRUM-489  Cartão salvo                                              26 pts
+           507  org_payment_methods com RLS deny-all                  5  Marcelo
+           508  addon 1 clique — cobrança e cota (servidor)           2  Marcelo
+           509  addon 1 clique — a tela de comprar (front)            3  Lucas
+           510  renovação automática, avisos 30/15/3                  8  Marcelo
+           511  área de billing — cancelar e trocar cartão (servidor) 3  Marcelo
+           512  área de billing — desenho e tela                      5  Lucas
+
+SCRUM-490  Inadimplência passa a ter consequência                    24 pts
+           513  EXPAND — helper de escrita ao lado do de leitura      2  Marcelo
+           514  MIGRAR — repontar ~85 policies, em lotes              8  Lucas
+           515  CONTRACT — relaxar o helper de leitura                3  Marcelo
+           516  dispatchers de cron pulam org bloqueada               3  Lucas
+           517  régua de 7 dias — estado, retentativa, worker         5  Marcelo
+           518  avisos — faixa no app e template de WhatsApp          3  Lucas
+
+CAMINHO CRÍTICO   486 → 487 → 488 → 489 → 490   (ligados por Blocks no Jira)
+```
+
+**As chaves antigas foram fechadas** e carregam `[SUBSTITUÍDA POR SCRUM-xxx]` no título, então quem chegar por um link velho encontra o novo. As referências B1–B5 acima citam as chaves antigas de propósito — elas apontam para as novas.
+
+**O que equilibrou a carga foi a 514.** Migrar ~85 policies é o maior bloco mecânico do épico. Dar tudo ao pleno por medo de vazamento seria medo mal colocado: o expand-contract existe justamente para tornar isso seguro — o padrão e o teste saem da 513 (Marcelo), a repetição é a 514 (Lucas) com o helper antigo ainda vivo, e a remoção é a 515 (Marcelo).
