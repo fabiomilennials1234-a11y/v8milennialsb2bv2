@@ -14,7 +14,7 @@ import { getCampaignLeadAssignment, getCampaignCloserAssignment } from "../_shar
 import { logRuntime } from "../_shared/logger.ts";
 import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
-import { upsertPipeEntry, getPipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntry, upsertPipeEntryDetailed, getPipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
 import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -517,7 +517,7 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
       // Cal.com não semeia whatsapp — o lead é colocado em confirmacao pelo bloco place_in_pipe abaixo.
       if (!skipWhatsappSeed) {
         try {
-          await upsertPipeEntry(supabase, {
+          const seed = await upsertPipeEntryDetailed(supabase, {
             leadId: newLead.id,
             orgId: organizationId,
             slug: "whatsapp",
@@ -525,6 +525,25 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
             metadata: { sdr_id: payload.assigned_user_id ?? null },
             assignedTo: payload.assigned_user_id ?? null,
           });
+          // Org que não tem o funil de Oportunidades não é erro: desde
+          // 20270831000000 org nova não nasce com funil, e o ADR-0030 diz que
+          // "quem quiser entrada automática no funil desenha o Workflow". O
+          // Lead JÁ FOI criado acima (linha do insert), então nada se perde —
+          // ele aparece na lista de Leads, só não ganha card.
+          //
+          // Mas o silêncio era total: `upsertPipeEntry` devolve `null` sem
+          // levantar, então o `catch` abaixo nunca via este caso e não havia
+          // linha nenhuma no log. Quando o cliente perguntasse "cadê o card
+          // desse lead", não haveria o que ler. Agora há.
+          if (seed.status === "no_pipeline") {
+            console.log(
+              `[lead-webhook] lead ${newLead.id} criado SEM card: org ${organizationId} não tem o funil de Oportunidades (whatsapp). Esperado se a org o excluiu ou nunca o teve.`,
+            );
+          } else if (seed.status !== "created" && seed.status !== "updated") {
+            console.warn(
+              `[lead-webhook] semeadura em whatsapp falhou (${seed.status}) para lead ${newLead.id}.`,
+            );
+          }
         } catch (pipeError) {
           console.warn("[lead-webhook] pipeline_entries whatsapp insert failed:", pipeError);
         }
@@ -731,6 +750,17 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     //      posicionado. Silêncio aqui é exatamente o modo de falha que o ADR
     //      nomeia: "o webhook responde 200, o Lead é criado, só o card falta".
 
+    // 🚨 Desde 20270831000010 o funil de sistema pode NÃO EXISTIR na org — ou
+    // porque ela nunca o teve (org nova não nasce mais com funil), ou porque
+    // alguém o excluiu. `upsertPipeEntry` já devolve `no_pipeline` nesse caso,
+    // então o Lead continua sendo criado e nada estoura. O que faltava era
+    // CONTAR isso a quem integra: a resposta cravava `placed_in_pipe = true`
+    // logo abaixo, e o log dizia "Lead placed in pipeline_entries" mesmo sem
+    // ter criado card nenhum. O comentário acima descrevia esse contrato desde
+    // sempre; o código nunca o cumpriu.
+    let placedInPipe: boolean | undefined;
+    let placeInPipeError: string | undefined;
+
     // Colocar lead em um pipe (funil) em etapa específica (ex: n8n, campanha de ads)
     if (payload.place_in_pipe?.pipe && payload.place_in_pipe?.stage) {
       const { pipe, stage, meeting_date } = payload.place_in_pipe;
@@ -856,6 +886,9 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
 
       const existingEntry = await getPipeEntry(supabase, leadId, organizationId, pipeSlug);
       if (existingEntry) {
+        // Já havia card no funil: o pedido foi atendido, independentemente de a
+        // etapa ter mudado ou não.
+        placedInPipe = true;
         // Reingestão externa (Make/n8n/Meta Ads) move o lead para o stage pedido — lead que
         // reconverte volta a aparecer na coluna solicitada. Registra reconversão na timeline.
         const stageChanged = existingEntry.stage_key !== resolvedStageKey;
@@ -888,15 +921,30 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
           );
         }
       } else {
-        await upsertPipeEntry(supabase, {
+        const r = await upsertPipeEntryDetailed(supabase, {
           leadId,
           orgId: organizationId,
           slug: pipeSlug,
           stageKey: resolvedStageKey,
           metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
         });
-        await autoDistributePipe(pipeSlug);
-        console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, resolvedStageKey);
+
+        if (r.status === "created" || r.status === "updated") {
+          placedInPipe = true;
+          await autoDistributePipe(pipeSlug);
+          console.log(`[lead-webhook] Lead placed in pipeline_entries(${pipeSlug}) stage:`, resolvedStageKey);
+        } else {
+          placedInPipe = false;
+          placeInPipeError =
+            r.status === "no_pipeline"
+              ? `Funil "${pipeSlug}" não existe nesta organização`
+              : `Falha ao posicionar no funil "${pipeSlug}" (${r.status})`;
+          // `autoDistributePipe` NÃO roda: é o motivo nº 1 do comentário acima.
+          // Ele escreve responsáveis em `leads` e gasta um giro do round-robin
+          // para um card que não existe — trabalho pela metade que depois
+          // parece atribuição legítima.
+          console.warn(`[lead-webhook] place_in_pipe NÃO posicionou: ${placeInPipeError}`);
+        }
       }
     }
 
@@ -1009,11 +1057,22 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     }
     if (payload.place_in_pipe) {
       responseBody.place_in_pipe = payload.place_in_pipe;
-      // Contrato com quem integra: `place_in_pipe` é o que foi pedido,
-      // `placed_in_pipe` é o que aconteceu. Desde #1774 não há política por
-      // organização que recuse o posicionamento, então este caminho sempre
-      // posiciona — o campo fica para não quebrar quem já o lê.
-      responseBody.placed_in_pipe = true;
+      // Contrato com quem integra: `place_in_pipe` é o que foi PEDIDO,
+      // `placed_in_pipe` é o que ACONTECEU.
+      //
+      // 🚨 Este campo era `true` fixo. O comentário anterior justificava assim:
+      // "desde #1774 não há política por organização que recuse o
+      // posicionamento, então este caminho sempre posiciona". A premissa morreu
+      // em 20270831000010 — o funil de sistema passou a poder não existir na
+      // org, seja porque ela nunca o teve (org nova não nasce mais com funil),
+      // seja porque foi excluído. Com `true` fixo, o n8n recebia 200 dizendo que
+      // o lead entrou no funil enquanto nenhum card fora criado; o lead ficava
+      // só na lista de Leads e o cliente lia como "o lead sumiu".
+      //
+      // Mesmo formato de `placed_in_campaign`/`place_in_campaign_error`, que já
+      // reportava honestamente ali embaixo.
+      responseBody.placed_in_pipe = placedInPipe === true;
+      if (placeInPipeError) responseBody.place_in_pipe_error = placeInPipeError;
     }
     if (payload.place_in_campaign) {
       responseBody.place_in_campaign = payload.place_in_campaign;
