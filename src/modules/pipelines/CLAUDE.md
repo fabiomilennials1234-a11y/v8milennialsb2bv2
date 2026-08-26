@@ -73,7 +73,20 @@ Ver `./index.ts` para a superfície completa. Estável.
 - `usePipelineStages`, `useAllPipelineStages`, `stagesToColumns`, `useCreatePipelineStage`, `useUpdatePipelineStage`, `useDeletePipelineStage`, `DEFAULT_STAGES`
 
 ### Hooks — config + metrics + rules
-- Display config: `usePipelineDisplayConfig`, `useHiddenDefaultPipes`, `useTogglePipeVisibility`
+- Display config: `usePipelineDisplayConfig`, `useAvailableSystemPipes`, `useEnabledSystemPipeTypes`, `useEnableSystemPipe`, `useTogglePipeVisibility`, `SYSTEM_PIPE_CATALOG`
+- Exclusão de funil de sistema: `useSystemPipelineDeleteImpact`, `useDeleteSystemPipeline`
+
+> 🚨 **`pipeline_display_config` é o REGISTRO de quais funis de sistema a org tem** (migration `20270831000000`).
+> Linha ausente = a org **não tem** aquele funil. Não há default e não há fallback: lista vazia é resposta legítima.
+>
+> Antes, quatro torneiras de auto-semeadura no caminho de LEITURA recriavam tudo, o que tornava a exclusão
+> impossível — apagar as linhas e recarregar a página trazia o funil de volta. As quatro estão fechadas:
+> `ensure_pipeline_display_config` (virou no-op), `create_default_pipelines` (consulta o registro),
+> `ensureDefaultStagesInDb` e `buildFallbackStages` (ambas gateadas por `lerTiposHabilitados`).
+>
+> **Ao mexer aqui:** nunca reintroduza um default em memória para funil de sistema, e nunca semeie tipo que
+> não esteja no registro. `tests/unit/hooks-sprint2-pipeline-stages.test.ts` trava os dois sentidos.
+> Criar funil de sistema é ato explícito: RPC `enable_system_pipeline`.
 - Metrics: `usePipePropostasMetrics`, `usePipeConfirmacaoMetrics`, `usePipeWhatsappMetrics`, `computeConfirmacaoStats`
 - Dispatch: `usePipeDispatchRules`, `usePipeDispatchRuleSteps`, `useCreatePipeDispatchRule`, `useUpdatePipeDispatchRule`
 - Distribution: `usePipeDistributionRule`, `useSavePipeDistribution`
@@ -97,6 +110,7 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Components — shared (configuração + dispatch)
 - `PipeSettingsDialog`, `ManagePipelineStagesContent`, `ManagePipelineStagesModal`
+- `DangerZoneSystemPipe` — Zona de Perigo do funil de sistema. Montada dentro do `PipeSettingsDialog` (aba "Etapas"), então as três páginas de funil de sistema a herdam de um lugar só. Mesmo portão do custom: `pipeline.custom_delete`.
 - `PipeDispatchRulesSection`, `PipeDistributionSection`
 - `GhostLeadsBanner`
 
