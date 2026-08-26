@@ -233,6 +233,7 @@ export {
   PipeDispatchRulesSection,
   PipeDistributionSection,
   PipeSettingsDialog,
+  DangerZoneSystemPipe,
 } from "./components/shared";
 
 // ── Components: custom pipelines ──────────────────────────────────────────

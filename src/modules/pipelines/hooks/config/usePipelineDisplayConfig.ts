@@ -4,6 +4,7 @@ import { useOrganization } from "@/modules/identity";
 // Caminho relativo curto: config -> model é dentro do MESMO módulo, então não
 // passa pelo barril público (regra de boundaries do ESLint).
 import { resetDefaultStagesEnsureCache } from "../model/usePipelineStages";
+import { rpcNaoTipada } from "../../lib/rpc-nao-tipada";
 
 export type SystemPipeType = "whatsapp" | "confirmacao" | "propostas" | "upsell";
 
@@ -121,14 +122,10 @@ export function useEnableSystemPipe() {
   return useMutation({
     mutationFn: async (pipeType: SystemPipeType) => {
       if (!organizationId) throw new Error("Organização não resolvida");
-      // `as any` porque `types.ts` é gerado e só conhece a RPC depois do apply
-      // em prod + regen. Mesmo padrão de `useDeleteCustomPipeline`.
-      const { data, error } = await (supabase.rpc as any)("enable_system_pipeline", {
-        p_org_id: organizationId,
-        p_pipe_type: pipeType,
-      });
-      if (error) throw error;
-      return data;
+      return rpcNaoTipada<{ pipe_type: string; display_name: string; pipeline_id: string | null }>(
+        "enable_system_pipeline",
+        { p_org_id: organizationId, p_pipe_type: pipeType },
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipeline-display-config"] });
