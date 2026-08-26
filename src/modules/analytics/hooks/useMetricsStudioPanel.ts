@@ -39,6 +39,13 @@ import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window
 const DEBOUNCE_MS = 800;
 
 export interface PanelPersistence {
+  /**
+   * A org a que `layout` pertence — `null` enquanto o contexto não resolveu.
+   * Sai daqui, e não de um `useOrganization()` próprio no consumidor, para que
+   * painel e organização venham SEMPRE do mesmo render: dois hooks lendo a org
+   * em pontos diferentes é como a cópia de trabalho se descasa do destino.
+   */
+  organizationId: string | null;
   layout: StudioWindow[] | null;
   isLoading: boolean;
   /** Agenda a gravação. Chamadas seguidas colapsam numa só. */
@@ -120,12 +127,33 @@ export function useMetricsStudioPanel(): PanelPersistence {
   });
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendente = useRef<StudioWindow[] | null>(null);
+  /**
+   * A gravação pendente carrega o DESTINO junto, não só o conteúdo.
+   *
+   * 🚨 Antes guardava só `StudioWindow[]`, e o destino saía do closure de
+   * `gravar` no momento do disparo. Entre o agendamento e o disparo cabe uma
+   * TROCA DE ORGANIZAÇÃO — e aí o layout de uma org era carimbado em outra.
+   * Foi assim que o painel da org Milennials virou `[]` em 26/08/2026: o POST
+   * saiu no mesmo milissegundo do `invalidateQueries()` do `switchOrg`.
+   *
+   * `editorId` entra no pacote pelo mesmo motivo: ele vem de `teamMemberId`,
+   * que também muda com a org. Registrar quem editou usando o membro da org
+   * NOVA numa escrita da org VELHA seria mentir na única coluna de autoria
+   * que a tabela tem.
+   */
+  const pendente = useRef<{
+    organizationId: string;
+    editorId: string | null;
+    layout: StudioWindow[];
+  } | null>(null);
 
   const gravar = useCallback(async () => {
-    const layout = pendente.current;
-    if (!layout || !organizationId) return;
+    const alvo = pendente.current;
+    if (!alvo) return;
     pendente.current = null;
+    timer.current = null;
+
+    const { organizationId: orgAlvo, editorId: editor, layout } = alvo;
 
     const { error } = await supabase
       // PONTE DE COMPATIBILIDADE — ver o bloco na leitura, acima. Some no mesmo
@@ -133,7 +161,7 @@ export function useMetricsStudioPanel(): PanelPersistence {
       // @ts-expect-error tabela ausente de types.ts até o apply em produção
       .from("metrics_studio_panels")
       .upsert(
-        { organization_id: organizationId, team_member_id: editorId, layout },
+        { organization_id: orgAlvo, team_member_id: editor, layout },
         { onConflict: "organization_id" },
       );
 
@@ -149,31 +177,43 @@ export function useMetricsStudioPanel(): PanelPersistence {
       console.warn("[metrics-studio] painel não salvo:", error.message);
       return;
     }
-    queryClient.setQueryData(["metrics-studio-panel", organizationId], layout);
-  }, [organizationId, editorId, queryClient]);
+    queryClient.setQueryData(["metrics-studio-panel", orgAlvo], layout);
+  }, [queryClient]);
 
   const save = useCallback(
     (windows: StudioWindow[]) => {
-      if (!ativa) return;
-      pendente.current = windows;
+      if (!ativa || !organizationId) return;
+      pendente.current = { organizationId, editorId, layout: windows };
       setIsSaving(true);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void gravar(), DEBOUNCE_MS);
     },
-    [ativa, gravar],
+    [ativa, organizationId, editorId, gravar],
   );
 
-  // Sair da página com gravação pendente perderia a última mexida.
+  /**
+   * Sair da página com gravação pendente perderia a última mexida.
+   *
+   * 🚨 As dependências são `[]` DE PROPÓSITO, e `gravar` entra por ref. Com
+   * `[gravar]` no lugar, este cleanup deixava de ser "saiu da página" e virava
+   * "qualquer coisa de que `gravar` dependa mudou" — inclusive a ORGANIZAÇÃO.
+   * Trocar de org derrubava o efeito e disparava a gravação no meio da troca.
+   * Hoje `gravar` já não depende da org (o destino viaja em `pendente`), mas
+   * amarrar a intenção aqui impede que a próxima dependência ressuscite o bug.
+   */
+  const gravarRef = useRef(gravar);
+  gravarRef.current = gravar;
   useEffect(() => {
     return () => {
       if (timer.current) {
         clearTimeout(timer.current);
-        void gravar();
+        void gravarRef.current();
       }
     };
-  }, [gravar]);
+  }, []);
 
   return {
+    organizationId: ativa ? organizationId : null,
     layout: ativa ? (query.data ?? null) : [],
     isLoading: ativa && query.isLoading,
     save,
