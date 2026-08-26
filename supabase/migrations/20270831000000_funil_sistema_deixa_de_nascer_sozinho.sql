@@ -197,7 +197,7 @@ BEGIN
     'pipeline_id',  (SELECT id FROM public.pipelines
                       WHERE organization_id = p_org_id
                         AND slug = p_pipe_type
-                        AND type = 'system')
+                        AND type = 'system') -- metric-lint-allow: não é métrica — é a devolução do id da linha de REGISTRO que esta própria função acabou de garantir. O predicado `type='system'` aqui não cega funil custom: ele DESAMBIGUA, porque `pipelines` é a união dos dois modelos e um funil custom pode ter o mesmo slug (`whatsapp`) numa org. Sem ele a função devolveria o id do funil errado. Parametrizar por pipeline_id é impossível: é exatamente o id que esta linha existe para descobrir.
   );
 END;
 $$;
