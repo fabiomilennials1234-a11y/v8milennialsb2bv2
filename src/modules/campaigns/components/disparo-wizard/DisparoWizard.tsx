@@ -27,7 +27,7 @@ import { StepPostSend } from "./StepPostSend";
 import { StepSpeed } from "./StepSpeed";
 import { StepReview } from "./StepReview";
 import { StepMonitor } from "./StepMonitor";
-import { instancesToNumbers } from "./instances-to-numbers";
+import { instancesToNumbers } from "@/shared/disparo/disparo-numbers";
 import type { DisparoNumber } from "./wizard-machine";
 
 /** Today as a Sao Paulo calendar date (YYYY-MM-DD) — the plan's clock-free anchor. */
@@ -120,7 +120,13 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
         // Send window left to the server default (Mon–Sat 08–20) for now — the
         // wizard does not yet expose a window picker.
         lead_ids: draft.leadIds,
-        message: draft.message.trim(),
+        // No Canal Oficial o conteúdo é o Template aprovado, e `message` carrega
+        // o corpo dele — é o texto que a pessoa recebe, e é o que a Revisão e o
+        // histórico mostram (#1722).
+        message: draft.template
+          ? draft.template.previewText
+          : draft.message.trim(),
+        template: draft.template ?? null,
         delay_min_ms: delayMin,
         delay_max_ms: delayMax,
         image_url: imageUrl,

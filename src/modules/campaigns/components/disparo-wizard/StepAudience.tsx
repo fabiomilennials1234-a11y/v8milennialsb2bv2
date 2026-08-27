@@ -18,6 +18,7 @@ import { StepHeader } from "./StepHeader";
 import { AudienceByStage } from "./AudienceByStage";
 import { AudienceBySpreadsheet } from "./AudienceBySpreadsheet";
 import type { AudienceSourceType, DisparoDraft } from "./wizard-machine";
+import { kickerDoPasso } from "./wizard-machine";
 
 interface StepAudienceProps {
   draft: DisparoDraft;
@@ -47,7 +48,7 @@ export function StepAudience({ draft, patch }: StepAudienceProps) {
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker="Passo 1 de 6"
+        kicker={kickerDoPasso("audience")}
         title="Pra quem você vai enviar?"
         subtitle="Escolha por etapa do funil ou suba uma planilha. O grupo é congelado agora — quem entrar depois não recebe este disparo."
       />

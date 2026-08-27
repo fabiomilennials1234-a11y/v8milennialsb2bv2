@@ -28,7 +28,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { StepHeader } from "./StepHeader";
+import { cn } from "@/lib/utils";
 import type { DisparoDraft } from "./wizard-machine";
+import { regimeDoConteudo } from "./wizard-machine";
+import {
+  useNotificameTemplates,
+  previewDoTemplate,
+  rotulosDosBotoes,
+} from "@/modules/communication";
+import { apenasAprovados } from "@/modules/communication/lib/templates-aprovados";
+import { kickerDoPasso } from "./wizard-machine";
 import { resolvePreview } from "./message-preview";
 import { MOCK_PREVIEW_SAMPLES } from "./mock-disparo-data";
 
@@ -106,10 +115,19 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
 
   const preview = resolvePreview(draft.message, sample);
 
+  // A Instance escolhida no passo anterior decide o REGIME, e o regime decide o
+  // que este passo pede (ADR-0028 §1). No Chip, o editor de texto de sempre. No
+  // Canal Oficial, um Template aprovado — porque quem recebe um Disparo está,
+  // por definição, fora da janela de 24 horas, e fora dela a Meta não aceita
+  // texto livre.
+  if (regimeDoConteudo(draft) === "oficial") {
+    return <EscolhaDeTemplate draft={draft} patch={patch} />;
+  }
+
   return (
     <div className="space-y-7">
       <StepHeader
-        kicker="Passo 2 de 6"
+        kicker={kickerDoPasso("message")}
         title="O que você quer dizer?"
         subtitle="Escreva a mensagem. Use variáveis para personalizar cada contato pelo nome ou empresa."
       />
@@ -267,6 +285,119 @@ export function StepMessage({ draft, patch }: StepMessageProps) {
             Pré-visualizando com um cliente real do seu público.
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * O passo de conteúdo no regime Canal Oficial: escolher um Template aprovado.
+ *
+ * Sem variáveis nesta fatia — o mapeamento por destinatário é #1723. O que se
+ * escolhe aqui vira `draft.template`, e o corpo dele vira a `message` do plano:
+ * é o texto que a pessoa recebe, e é o que a Revisão e o histórico mostram.
+ *
+ * A listagem vem do servidor a cada abertura, SEM catálogo local: um Template
+ * pode ser pausado ou reclassificado pela Meta a qualquer momento, e um cache
+ * nosso ofereceria uma opção que já morreu.
+ */
+function EscolhaDeTemplate({
+  draft,
+  patch,
+}: {
+  draft: DisparoDraft;
+  patch: (p: Partial<DisparoDraft>) => void;
+}) {
+  const numero = draft.numbers.find((n) => n.selected) ?? null;
+  const { data: templates, isLoading, error } = useNotificameTemplates({
+    instanceId: numero?.id ?? null,
+  });
+
+  // Só APROVADO é escolhível, e a decisão mora no módulo compartilhado — o nó de
+  // Workflow faz a mesma pergunta, e duas respostas para a mesma pergunta é como
+  // nasce a divergência que este ticket conserta na camada dos números.
+  const aprovados = apenasAprovados(templates);
+  const escolhido = draft.template;
+
+  return (
+    <div className="space-y-7">
+      <StepHeader
+        kicker={kickerDoPasso("message")}
+        title="Qual mensagem aprovada?"
+        subtitle={
+          numero
+            ? `${numero.label} é um número do Canal Oficial: fora da janela de 24 horas, a Meta só entrega Template aprovado.`
+            : "Escolha um Template aprovado da sua conta."
+        }
+      />
+
+      {isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Buscando os Templates aprovados da sua conta…
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+          <div>
+            <p className="font-medium">Não deu para ler os Templates da conta.</p>
+            <p className="text-muted-foreground">{(error as Error).message}</p>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && !error && aprovados.length === 0 && (
+        // Lista vazia NÃO é erro, e dizer "nenhum template" sem dizer por quê
+        // manda o operador procurar defeito onde não há.
+        <div className="rounded-xl border border-border/70 bg-card p-5 text-sm">
+          <p className="font-medium">Nenhum Template aprovado nesta conta ainda.</p>
+          <p className="mt-1 text-muted-foreground">
+            Um Template em análise não pode ser disparado — a Meta recusaria o envio. Assim
+            que a aprovação sair, ele aparece aqui.
+          </p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {aprovados.map((t) => {
+          const ativo = escolhido?.name === t.name;
+          return (
+            <button
+              key={t.name}
+              type="button"
+              onClick={() =>
+                patch({
+                  template: {
+                    name: t.name,
+                    language: t.language ?? "pt_BR",
+                    components: t.components ?? [],
+                    previewText: previewDoTemplate(t, {}),
+                    buttonLabels: rotulosDosBotoes(t),
+                  },
+                })
+              }
+              className={cn(
+                "w-full rounded-xl border p-4 text-left transition-colors",
+                ativo
+                  ? "border-primary/60 bg-primary/5"
+                  : "border-border/70 bg-card hover:border-border",
+              )}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium">{t.name}</span>
+                <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  {t.language ?? "pt_BR"}
+                  {ativo && <Check className="h-3.5 w-3.5 text-primary" />}
+                </span>
+              </div>
+              <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                {previewDoTemplate(t, {}) || "(sem corpo de texto)"}
+              </p>
+            </button>
+          );
+        })}
       </div>
     </div>
   );
