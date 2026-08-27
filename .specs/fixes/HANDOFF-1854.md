@@ -125,11 +125,27 @@ do humano.
 
 > - [ ] Um `db reset` em ambiente limpo aplica as duas migrations — provado, não presumido
 
-Não foi feito, e é honesto dizer por quê: exige branch efêmera do Supabase (custo
-`$0.01344/h`, e o runbook manda derrubar na mesma sessão) e `psql` **não está no PATH**
-desta máquina. O que ESTÁ provado é o mecanismo que fazia a segunda ser pulada: com dois
-prefixos distintos, `db push` registra duas versões e aplica as duas. A prova empírica do
-`db reset` fica como pendência do Despachante decidir se paga.
+Não foi feito. **Fica fora do que o brief me autorizou a fazer sozinho** ("o rename no
+repo e a prova de que a guarda fica verde") — criar branch efêmera é provisionar recurso
+pago. É a pergunta que levo ao Despachante.
+
+Viabilidade medida, para a decisão ser informada:
+
+- CLI `supabase` v2.90.0 autenticada, checkout **não-linkado** (coluna `LINKED` vazia) — a
+  guarda mecânica do CLAUDE.md está de pé.
+- **`psql` ESTÁ no PATH** (`/opt/homebrew/bin/psql`). O CLAUDE.md afirma que não está
+  ("⚠️ mas `psql` não está no PATH desta máquina") — **stale, medido hoje**. Vale corrigir
+  lá, em ticket próprio.
+- **O custo NÃO é $0.02.** A branch nasce `MIGRATIONS_FAILED` e precisa de `db push` do
+  repo; e o `db push` **arrasta os 10 pendentes** do drift prod↔repo, onde
+  `20270203000000_omie_foundation.sql` **falha com `42P07`** (objeto já vem no baseline) —
+  tudo documentado no CLAUDE.md §Ambientes. Ou seja: o replay em ambiente limpo hoje morre
+  por dívida que **não tem nada a ver com a #1854**, e transformá-lo em verde é outro
+  ticket, não um passo deste.
+
+O que ESTÁ provado é o mecanismo que fazia a segunda ser pulada: com dois prefixos
+distintos, `db push` registra duas versões e enxerga as duas. O que falta é o replay
+end-to-end, e ele está bloqueado por drift alheio.
 
 ## Surpresas
 
