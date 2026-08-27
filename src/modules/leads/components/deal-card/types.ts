@@ -223,6 +223,20 @@ export interface DealCardData {
    * lugares diferentes.
    */
   pipeTable: "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas" | null;
+  /**
+   * `pipelines.type === "system"` — a FAMÍLIA do funil.
+   *
+   * ⚠️ Não é `pipeTable != null`, e a diferença tem consequência. `pipeTable`
+   * sai de um switch de SLUG que só conhece `whatsapp`/`confirmacao`/
+   * `propostas`; funil de SISTEMA com qualquer outro slug (`upsell`, e os
+   * funis de sistema novos) tem `pipeTable: null` e `funilEhSystem: true`.
+   *
+   * Quem escreve por FAMÍLIA — a exclusão, que precisa escolher entre
+   * `pipeline_entries` e `custom_pipe_entries` — tem de ler este campo. Quem
+   * escreve por TABELA de compat (`useCrossPipeMove`) continua lendo
+   * `pipeTable`, que é literalmente o nome da view.
+   */
+  funilEhSystem: boolean;
   /** Trilha completa do funil, para a barra mostrar onde ele está e o que falta. */
   etapas: DealCardStage[];
   etapaAtual: string;

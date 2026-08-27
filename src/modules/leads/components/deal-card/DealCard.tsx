@@ -1,5 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarCheck, Check, Trophy, X } from "lucide-react";
+import { CalendarCheck, Check, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { LeadCardDeals } from "../lead-card/LeadCardDeals";
@@ -196,6 +202,8 @@ export function DealCard({
   abaInicial,
   resumoChecklists,
   painelChecklists,
+  onExcluir,
+  excluindo,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
@@ -250,6 +258,21 @@ export function DealCard({
    * aba que abre num "nada aqui" ensina a não clicar em nenhuma.
    */
   painelChecklists?: ReactNode;
+  /**
+   * ── Excluir o negócio ──────────────────────────────────────────────────
+   * Só ABRE a confirmação; quem confirma e quem apaga é o `DealCardPanel`.
+   *
+   * O diálogo mora lá porque o estado dele e o acesso a banco moram lá — este
+   * arquivo é desenho. (Não porque aninhar quebraria o Radix: isso foi medido
+   * em 27/08/2026 e **não** reproduz. Ver o bloco em `DealCardPanel`.)
+   *
+   * Ausente quando a pessoa não tem `pipeline.delete_cards`. Aqui o item SOME
+   * em vez de cair num selo (o padrão do menu do card no kanban): o menu do
+   * cabeçalho tem um item só, e um menu que abre para mostrar uma ação
+   * indisponível é pior que menu nenhum.
+   */
+  onExcluir?: () => void;
+  excluindo?: boolean;
 }) {
   const abaPedida: Aba =
     abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
@@ -332,10 +355,17 @@ export function DealCard({
 
         {/* Ganhar e perder são MOVIMENTOS para a etapa terminal do funil (ADR-0023
             §5). Somem quando o funil não tem etapa terminal: 83 funis custom em
-            prod estão nesse caso, e botão que não tem para onde ir mente. */}
-        {aberto && (etapaGanha || etapaPerdida) && (
+            prod estão nesse caso, e botão que não tem para onde ir mente.
+
+            O `pr-8` da direita é o vão do "X" do `DialogContent` (`right-4
+            top-4`), e agora ele abriga também o `⋯`. Por isso o cluster deixou
+            de depender de `aberto && (etapaGanha || etapaPerdida)`: excluir um
+            negócio JÁ ganho ou perdido é o caso mais comum de faxina de funil,
+            e prender o menu à mesma condição dos dois botões o esconderia
+            justamente ali. */}
+        {((aberto && (etapaGanha || etapaPerdida)) || onExcluir) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pr-8">
-            {etapaGanha && (
+            {aberto && etapaGanha && (
               <AcaoPrimaria
                 icone={Check}
                 rotulo="Ganhou"
@@ -344,7 +374,7 @@ export function DealCard({
                 onClick={() => onMoverEtapa?.(etapaGanha.chave)}
               />
             )}
-            {etapaPerdida && (
+            {aberto && etapaPerdida && (
               <AcaoPrimaria
                 icone={X}
                 rotulo="Perdeu"
@@ -352,6 +382,45 @@ export function DealCard({
                 desabilitado={!!movendo}
                 onClick={() => onMoverEtapa?.(etapaPerdida.chave)}
               />
+            )}
+            {onExcluir && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={excluindo}
+                    aria-label="Mais opções do negócio"
+                    data-testid="deal-card-kebab"
+                    className={cn(
+                      "inline-flex size-8 shrink-0 items-center justify-center rounded-md",
+                      "text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "disabled:pointer-events-none disabled:opacity-50",
+                    )}
+                  >
+                    {excluindo ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <MoreHorizontal className="size-4" />
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                {/* `z-[60]` pelo mesmo motivo da confirmação (ver o bloco no
+                    `DealCardPanel`): no celular o painel é um `Sheet`, que é
+                    `z-[51]`, e o `DropdownMenuContent` padrão é `z-50` — o
+                    menu abriria DENTRO da área da folha e ficaria coberto por
+                    ela. O gatilho responderia ao toque e nada apareceria. */}
+                <DropdownMenuContent align="end" className="z-[60]">
+                  <DropdownMenuItem
+                    onClick={onExcluir}
+                    className="text-destructive focus:text-destructive"
+                    data-testid="deal-card-excluir"
+                  >
+                    <Trash2 className="mr-2 size-3.5" />
+                    Excluir negócio
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         )}

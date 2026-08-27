@@ -1,10 +1,21 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
+import { useFeaturePermission } from "@/modules/identity";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
@@ -20,6 +31,7 @@ import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
 import { useDealCardData } from "./useDealCardData";
+import { useExcluirNegocio } from "./useExcluirNegocio";
 import {
   useAtualizarItemDoNegocio,
   useRemoverItemDoNegocio,
@@ -135,6 +147,55 @@ export const DealCardPanel = memo(function DealCardPanel() {
     },
     [data, entryId, move],
   );
+
+  /**
+   * ── Excluir o negócio ─────────────────────────────────────────────────────
+   * A pergunta que o painel não sabia responder: "isto aqui não existe mais,
+   * como eu tiro?". Não havia caminho nenhum — nem menu, nem botão. A única
+   * porta era o `⋯` do card no kanban, que não existe em /leads nem depois que
+   * o painel está aberto por cima do board.
+   *
+   * O sujeito é o NEGÓCIO. O lead sobrevive: continua na base, nos outros
+   * funis e com a ficha dele intacta — por isso o texto da confirmação diz
+   * isso com todas as letras. "Excluir" num painel que mostra a pessoa na
+   * coluna da esquerda é ambíguo o bastante para merecer a frase inteira.
+   *
+   * ⚠️ O discriminador é `funilEhSystem`, **não** `pipeTable`. `pipeTable` é
+   * nome de VIEW e nasce `null` em funil de sistema fora dos três slugs
+   * conhecidos (`upsell`, e os funis de sistema novos) — rotear por ele
+   * mandaria a exclusão desses para `custom_pipe_entries`, onde o id não
+   * existe. `moverEtapa` acima continua com `pipeTable` de propósito: lá o
+   * destino da escrita É a view. Ver `useExcluirNegocio` para o resto.
+   */
+  const { allowed: podeExcluirCard } = useFeaturePermission("pipeline.delete_cards");
+  const { excluir, excluindo } = useExcluirNegocio();
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+
+  const confirmarExclusao = useCallback(async () => {
+    if (!data || !entryId || !leadId) return;
+    const desfecho = await excluir({
+      entryId,
+      leadId,
+      ehSystem: data.funilEhSystem,
+      titulo: data.titulo,
+      funil: data.funil,
+    });
+
+    /**
+     * A caixa fecha nos desfechos em que não há mais o que decidir; nos outros
+     * ela FICA. A versão anterior fechava sempre, o que anulava metade do
+     * `preventDefault` logo abaixo: quem levava recusa da RLS via a caixa
+     * sumir e o negócio continuar ali — de novo o "confirmei e não aconteceu
+     * nada" que o `.select()` depois do DELETE existe para eliminar.
+     *
+     * `ja-nao-existia` fecha junto com o painel: o card já não está lá, e
+     * manter a tela aberta sobre ele só produz uma segunda tentativa.
+     */
+    if (desfecho === "excluido" || desfecho === "ja-nao-existia") {
+      setConfirmandoExclusao(false);
+      close();
+    }
+  }, [data, entryId, leadId, excluir, close]);
 
   const salvarNota = useCallback(
     async (texto: string) => {
@@ -320,6 +381,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
       /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
          Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
       painelChecklists={<DealCardChecklists leadId={leadId} entryId={entryId} />}
+      onExcluir={podeExcluirCard ? () => setConfirmandoExclusao(true) : undefined}
+      excluindo={excluindo}
     />
   ) : (
     <div className="flex h-full flex-1 items-center justify-center bg-background px-6 text-center">
@@ -376,6 +439,81 @@ export const DealCardPanel = memo(function DealCardPanel() {
     />
   ) : null;
 
+  /**
+   * A confirmação fica AQUI, irmã da casca, e não dentro do `DealCard`.
+   *
+   * ⚠️ Não pelo motivo que parece. A versão anterior deste bloco dizia que
+   * aninhar "empilharia dois overlays do Radix, o de dentro roubando o foco e o
+   * Esc fechando os dois" — copiado do diálogo de produto logo acima.
+   * **Medido em 27/08/2026, aninhando de verdade: não reproduz.** O Radix
+   * empilha as camadas (`DismissableLayer`) e o Esc dismissa só a de cima; nos
+   * dois arranjos o painel sobrevive e o DOM é idêntico, porque o
+   * `AlertDialogContent` sai por portal para o `body` de qualquer jeito.
+   *
+   * O motivo real é mais modesto, e é suficiente: o estado da confirmação
+   * (`confirmandoExclusao`, `excluindo`) e quem sabe apagar vivem neste
+   * arquivo. Deixar o diálogo junto deles evita descer duas props a mais e
+   * mantém o `DealCard` sem nada além de desenho. É a mesma forma do
+   * `AdicionarProdutoDialog`, e forma repetida é o que se lê rápido.
+   *
+   * ── `z-[60]` NÃO é enfeite ────────────────────────────────────────────────
+   * Ser irmão resolve o roubo de foco por ANINHAMENTO; não resolve a ordem de
+   * PINTURA. No celular o painel é um `Sheet`, e `SheetContent` carrega
+   * `z-[51]` (ui/sheet.tsx) enquanto o overlay e o conteúdo do `AlertDialog`
+   * são `z-50` (ui/alert-dialog.tsx). Portalizados como irmãos no mesmo
+   * contexto de empilhamento, 51 vence 50 e a confirmação nasce ATRÁS do
+   * painel — modal, com o resto em `pointer-events: none`, sem Esc no celular.
+   * Ou seja: tela travada, saída só por recarregar a página. No desktop passa
+   * despercebido porque `DialogContent` também é `z-50` e o desempate cai na
+   * ordem do DOM. Subir os dois acima de 51 conserta o celular sem mexer em
+   * primitivo compartilhado.
+   *
+   * ── O texto diz o que REALMENTE acontece ─────────────────────────────────
+   * A versão anterior prometia "histórico e outros negócios intactos". Meia
+   * verdade cara: apagar a entry cascateia em `pipe_proposta_items`,
+   * `checklists` e `tinyerp_order_mappings` (o vínculo com a NF-e emitida), e
+   * zera `commissions.pipeline_entry_id`. O que sobrevive é a PESSOA, não os
+   * anexos do negócio — e é isso que a caixa passa a dizer.
+   */
+  const dialogoExclusao = data ? (
+    <AlertDialog open={confirmandoExclusao} onOpenChange={setConfirmandoExclusao}>
+      <AlertDialogContent
+        overlayClassName="z-[60]"
+        className="z-[60]"
+        data-testid="deal-card-excluir-dialogo"
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>Excluir "{data.titulo}"?</AlertDialogTitle>
+          <AlertDialogDescription>
+            O negócio sai do funil "{data.funil}" e leva junto o que está
+            pendurado nele: produtos e itens do orçamento, checklists e o
+            vínculo com a nota fiscal, se houver.{" "}
+            <strong>{data.lead.nome} continua na base</strong>, com a ficha, a
+            conversa e os outros negócios. <strong>Não há como desfazer</strong>
+            {" "}— o negócio não vai para a lixeira.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            /* `preventDefault` porque o `AlertDialogAction` fecha o diálogo no
+               clique: sem isto o "Excluindo…" nunca aparece e uma falha de RLS
+               apagaria a mensagem junto com a tela. Quem fecha é o handler. */
+            onClick={(e) => {
+              e.preventDefault();
+              void confirmarExclusao();
+            }}
+            disabled={excluindo}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            data-testid="deal-card-excluir-confirmar"
+          >
+            {excluindo ? "Excluindo…" : "Excluir negócio"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  ) : null;
+
   if (isMobile) {
     return (
       <>
@@ -385,6 +523,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
           </SheetContent>
         </Sheet>
         {dialogoProduto}
+        {dialogoExclusao}
       </>
     );
   }
@@ -407,6 +546,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
       </DialogContent>
     </Dialog>
     {dialogoProduto}
+    {dialogoExclusao}
     </>
   );
 });

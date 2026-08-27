@@ -359,6 +359,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
               ? "pipe_propostas"
               : null
         : null,
+      funilEhSystem: negocioBase.isSystem,
       etapas,
       etapaAtual: negocioBase.stageKey ?? "",
 

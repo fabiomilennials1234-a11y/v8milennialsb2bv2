@@ -121,6 +121,12 @@ export function Preview() {
                   onRemoverItem={
                     atual.chave === "neg-magro" ? undefined : async () => undefined
                   }
+                  /* O `⋯` do cabeçalho só existe quando há para onde ir. Sem
+                     esta prop ele não desenha, e o desenho que esta tela existe
+                     para julgar sairia sem ele. O clique não faz nada: a
+                     confirmação e a exclusão moram no `DealCardPanel`, que fala
+                     com banco e por isso não entra aqui (`inv:H5-17`). */
+                  onExcluir={() => undefined}
                 />
               </div>
             </div>
