@@ -218,7 +218,18 @@ export default function MetricsStudio() {
     [studio],
   );
 
+  // Desde que o painel virou DA ORGANIZAÇÃO, "Limpar" não apaga a tela de quem
+  // clica: apaga a de todo mundo da org, sem desfazer e sem histórico. O botão
+  // fica encostado no "Concluir" no modo Edição — pedir confirmação é o mínimo.
+  // Mesmo idioma de `handleRemoverMetrica`, logo abaixo.
   const handleClear = useCallback(() => {
+    if (
+      !window.confirm(
+        "Limpar o painel da organização? As janelas somem para todos os membros e não há como desfazer.",
+      )
+    ) {
+      return;
+    }
     studio.clear();
     setSelectedId(null);
   }, [studio]);

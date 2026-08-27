@@ -36,6 +36,20 @@ export type {
   PipeTypeForDelete,
 } from "./hooks/useLeads";
 
+// ── Hooks: leads de UM funil (sistema ou custom) ───────────────────────────
+// Recorte por funil com busca server-side. Consumido pelo seletor
+// Funil → Lead da Agenda. Ver o cabeçalho do arquivo para por que a raiz da
+// consulta é `leads` e não `pipeline_entries`.
+export {
+  useLeadsPorFunil,
+  LEADS_POR_FUNIL_PAGE_SIZE,
+} from "./hooks/useLeadsPorFunil";
+export type {
+  LeadDoFunil,
+  LeadsPorFunilResult,
+  UseLeadsPorFunilParams,
+} from "./hooks/useLeadsPorFunil";
+
 // ── Hooks: lead × pipelines (cross-pipe placement) ─────────────────────────
 export {
   useLeadAllPipelines,

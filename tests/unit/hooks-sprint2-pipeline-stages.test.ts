@@ -164,11 +164,25 @@ describe("usePipelineStages", () => {
     vi.clearAllMocks();
   });
 
+  /**
+   * Desde 20270902000000, `usePipelineStages` consulta primeiro
+   * `pipeline_display_config` — o REGISTRO de quais funis de sistema a org tem.
+   * Por isso o mock precisa responder por TABELA: devolver a mesma lista para
+   * todo mundo faria o registro parecer conter etapas.
+   */
+  function mockPorTabela(registro: unknown[], etapas: unknown[]) {
+    mockFrom.mockImplementation((tabela: string) =>
+      createChainMock(tabela === "pipeline_display_config" ? registro : etapas),
+    );
+  }
+
+  const REGISTRO_COM_WHATSAPP = [{ pipe_type: "whatsapp" }];
+
   it("fetches pipeline stages from DB", async () => {
     const dbStages = [
       { id: "ps-1", organization_id: "org-t", pipeline_type: "whatsapp", stage_key: "novo", name: "Novo Custom", color: "#123", position: 0, is_active: true, is_final_positive: false, is_final_negative: false, target_pipe_type: null, target_stage_key: null },
     ];
-    mockFrom.mockReturnValue(createChainMock(dbStages));
+    mockPorTabela(REGISTRO_COM_WHATSAPP, dbStages);
 
     const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
@@ -176,12 +190,55 @@ describe("usePipelineStages", () => {
   });
 
   it("returns default stages when no data from DB", async () => {
-    mockFrom.mockReturnValue(createChainMock([]));
+    // Funil que a org TEM, mas sem etapa gravada: o fallback em memória
+    // continua valendo — é reparo legítimo, não ressurreição.
+    mockPorTabela(REGISTRO_COM_WHATSAPP, []);
     const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
     if (result.current.data) {
       expect(result.current.data.length).toBeGreaterThan(0);
     }
+  });
+
+  /**
+   * 🚨 A guarda que torna a EXCLUSÃO de funil de sistema possível.
+   *
+   * Este era o quarto vazamento: sem registro, o hook caía em
+   * `buildFallbackStages` e devolvia as etapas padrão fabricadas em memória. O
+   * banco ficava limpo e a tela continuava desenhando o funil — o usuário
+   * excluía e nada acontecia.
+   *
+   * Se alguém reintroduzir o fallback neste ramo, este teste cai.
+   */
+  it("org SEM o funil no registro: devolve [] e nem consulta pipeline_stages", async () => {
+    mockPorTabela([{ pipe_type: "propostas" }], DEFAULT_STAGES.whatsapp);
+
+    const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
+
+    expect(result.current.data).toEqual([]);
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_display_config");
+    expect(mockFrom).not.toHaveBeenCalledWith("pipeline_stages");
+  });
+
+  /**
+   * Falhar para o lado de NÃO semear. Um erro transitório de rede na leitura do
+   * registro não pode ressuscitar um funil que a org excluiu — por isso
+   * `lerTiposHabilitados` devolve conjunto vazio em erro, nunca "todos".
+   */
+  it("erro ao ler o registro NÃO ressuscita o funil", async () => {
+    mockFrom.mockImplementation((tabela: string) => {
+      if (tabela !== "pipeline_display_config") return createChainMock(DEFAULT_STAGES.whatsapp);
+      const chain = createChainMock([]);
+      chain.then = (resolve: (v: unknown) => unknown) =>
+        Promise.resolve({ data: null, error: { message: "network" } }).then(resolve);
+      return chain;
+    });
+
+    const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
+
+    expect(result.current.data).toEqual([]);
   });
 });
 

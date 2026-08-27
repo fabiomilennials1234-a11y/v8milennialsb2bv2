@@ -32,10 +32,13 @@ export interface TothConnectionRow {
   status: string | null;
   erp_sync_mode: string | null;
   clientes_dias_compras: number | null;
+  clientes_marcas: string | null;
+  clientes_somente_com_compra: boolean | null;
   clientes_empresa: string | null;
   clientes_incluir_sem_empresa: boolean | null;
   last_clientes_sync_at: string | null;
   last_cobrancas_sync_at: string | null;
+  last_pedidos_sync_at: string | null;
   last_error: string | null;
 }
 

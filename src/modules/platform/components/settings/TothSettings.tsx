@@ -31,6 +31,7 @@ import {
   Lock,
   Users,
   Receipt,
+  ShoppingCart,
   FlaskConical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -63,6 +64,7 @@ import {
   useDisconnectToth,
   useSyncTothClientes,
   useSyncTothCobrancas,
+  useSyncTothPedidos,
   useUpdateTothSyncMode,
   useSimulateTothClientes,
   useUpdateTothActiveWindow,
@@ -113,6 +115,8 @@ export function TothSettings() {
   const [acceptedInsecure, setAcceptedInsecure] = useState(false);
   const [confirmCanonical, setConfirmCanonical] = useState(false);
   const [janela, setJanela] = useState("");
+  const [marcas, setMarcas] = useState("");
+  const [somenteComCompra, setSomenteComCompra] = useState(false);
   const [empresa, setEmpresa] = useState("");
   const [incluirSemEmpresa, setIncluirSemEmpresa] = useState(false);
   const [simulacao, setSimulacao] = useState<TothDryRunResult | null>(null);
@@ -122,6 +126,7 @@ export function TothSettings() {
   const disconnect = useDisconnectToth();
   const syncClientes = useSyncTothClientes();
   const syncCobrancas = useSyncTothCobrancas();
+  const syncPedidos = useSyncTothPedidos();
   const updateSyncMode = useUpdateTothSyncMode();
   const simular = useSimulateTothClientes();
   const updateJanela = useUpdateTothActiveWindow();
@@ -132,9 +137,26 @@ export function TothSettings() {
   const janelaSalva = status?.clientes_dias_compras != null
     ? String(status.clientes_dias_compras)
     : "";
+  const marcasSalvas = status?.clientes_marcas ?? "";
+  const somenteComCompraSalvo = status?.clientes_somente_com_compra === true;
   useEffect(() => {
     setJanela(janelaSalva);
-  }, [janelaSalva]);
+    setMarcas(marcasSalvas);
+    setSomenteComCompra(somenteComCompraSalvo);
+  }, [janelaSalva, marcasSalvas, somenteComCompraSalvo]);
+
+  /** O ERP aceita só dígitos e vírgulas em `marcas`. */
+  const marcasInvalidas = marcas.trim() !== "" && !/^\d+(,\d+)*$/.test(marcas.trim());
+  const recorteMudou =
+    janela !== janelaSalva ||
+    marcas.trim() !== marcasSalvas ||
+    somenteComCompra !== somenteComCompraSalvo;
+  /**
+   * Janela gravada sem marcas: o número está lá e não recorta nada. É o estado
+   * que a tela precisa denunciar — foi ele que fez a carteira da Café Jurerê
+   * receber doze mil clientes com uma "janela de 150 dias" configurada.
+   */
+  const janelaInerte = status?.clientes_dias_compras != null && !status?.clientes_marcas;
 
   // Mesmo padrão da janela: o input só assume o controle quando o valor salvo
   // chega, senão pisca vazio e parece que não havia configuração.
@@ -161,7 +183,12 @@ export function TothSettings() {
   const handleSaveJanela = async () => {
     const parsed = janela.trim() === "" ? null : Number(janela);
     if (parsed !== null && (!Number.isFinite(parsed) || parsed <= 0)) return;
-    await updateJanela.mutateAsync(parsed);
+    if (marcasInvalidas) return;
+    await updateJanela.mutateAsync({
+      dias: parsed,
+      marcas: marcas.trim() === "" ? null : marcas.trim(),
+      somenteComCompra,
+    });
     // A simulação anterior descreve outro recorte — mantê-la na tela seria
     // mostrar um número que não corresponde mais à configuração.
     setSimulacao(null);
@@ -471,26 +498,74 @@ export function TothSettings() {
                 placeholder="—"
               />
               <span className="text-xs text-muted-foreground">dias</span>
+            </div>
+
+            {/* 🔑 As marcas moram DENTRO deste bloco de propósito: sem elas, o
+                ERP ignora a janela e devolve a base inteira (medido em 25/08 —
+                12.633 linhas com `diasCompras=60` sozinho, 550 com as marcas).
+                Separá-las em outro cartão convidaria a configurar uma sem a
+                outra, que é exatamente o estado que não funciona. */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground shrink-0">das marcas</span>
+              <Input
+                id="toth-marcas"
+                className="h-8"
+                inputMode="numeric"
+                value={marcas}
+                onChange={(e) => setMarcas(e.target.value)}
+                placeholder="1,2,3,4,5,6"
+                aria-label="Códigos de marca do ERP, separados por vírgula"
+              />
+            </div>
+
+            <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={somenteComCompra}
+                onChange={(e) => setSomenteComCompra(e.target.checked)}
+              />
+              <span>
+                Só quem já faturou alguma coisa. Dentro da janela existe quem fez pedido e
+                ainda não faturou — 131 dos 550 na última medição.
+              </span>
+            </label>
+
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-8 px-2 text-[11px] ml-auto"
                 onClick={handleSaveJanela}
-                disabled={updateJanela.isPending || janela === janelaSalva}
+                disabled={updateJanela.isPending || !recorteMudou || marcasInvalidas}
               >
                 {updateJanela.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
               </Button>
             </div>
-            {/* Medido em 21/08: o ERP aceita `diasCompras` e devolve a MESMA
-                contagem com e sem a janela. Enquanto o fornecedor não confirmar
-                qual parâmetro filtra de verdade, a tela não pode prometer um
-                recorte que não acontece. */}
-            <p className="text-[11px] text-amber-500 leading-relaxed flex items-start gap-1">
-              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-              {status?.clientes_dias_compras == null
-                ? "Sem janela definida: a carga traz o cadastro inteiro do ERP, histórico incluído."
-                : "O ERP hoje IGNORA esta janela — a última medição trouxe a mesma quantidade com e sem ela. Pendente de resposta do fornecedor."}
-            </p>
+
+            {marcasInvalidas ? (
+              <p className="text-[11px] text-destructive leading-relaxed flex items-start gap-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                Só números separados por vírgula — é o formato que o ERP aceita em `marcas`.
+              </p>
+            ) : (
+              <p
+                className={`text-[11px] leading-relaxed flex items-start gap-1 ${
+                  janelaInerte || status?.clientes_dias_compras == null
+                    ? "text-amber-500"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {(janelaInerte || status?.clientes_dias_compras == null) && (
+                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                )}
+                {status?.clientes_dias_compras == null
+                  ? "Sem janela definida: a carga traz o cadastro inteiro do ERP, histórico incluído."
+                  : janelaInerte
+                    ? "A janela só vale acompanhada das marcas — sem elas o ERP devolve a base inteira, medido em 25/08. Preencha as marcas ou o número acima não recorta nada."
+                    : `Entram os clientes que compraram das marcas ${status?.clientes_marcas} nos últimos ${status?.clientes_dias_compras} dias.`}
+              </p>
+            )}
           </div>
 
           {/* Empresa do grupo */}
@@ -591,6 +666,24 @@ export function TothSettings() {
                     : undefined
                 }
               />
+              {/* Acende sozinha quando o manifesto declarar `pedidos`. Enquanto
+                  o ERP responde 404 em /pedidos, a linha não aparece — botão que
+                  só sabe falhar é pior que botão ausente. */}
+              {TOTH_CAPABILITIES.syncPedidos && (
+                <SyncRow
+                  icon={<ShoppingCart className="w-3.5 h-3.5" />}
+                  label="Pedidos"
+                  at={status?.last_pedidos_sync_at ?? null}
+                  busy={syncPedidos.isPending}
+                  onRun={() => syncPedidos.mutate()}
+                  disabled={isSyncing || neverSyncedClients}
+                  note={
+                    neverSyncedClients
+                      ? "Sincronize os clientes primeiro — o pedido é ligado ao cliente pelo CNPJ."
+                      : undefined
+                  }
+                />
+              )}
             </div>
           </div>
 
@@ -718,12 +811,47 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
             </Badge>
           )}
           {data.janela_dias_compras && (
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge
+              variant={data.janela_inerte ? "outline" : "secondary"}
+              className={`text-[10px] ${data.janela_inerte ? "text-amber-500 border-amber-500/40" : ""}`}
+            >
               últimos {data.janela_dias_compras} dias
+              {data.janela_inerte ? " · sem efeito" : ""}
+            </Badge>
+          )}
+          {data.marcas && (
+            <Badge variant="secondary" className="text-[10px]">
+              marcas {data.marcas}
             </Badge>
           )}
         </div>
       </div>
+
+      {/* A janela sem marcas devolve a base inteira. Sem este aviso, a
+          simulação mostra doze mil clientes e parece que o recorte está errado,
+          quando o que está faltando é o parâmetro que o liga. */}
+      {data.janela_inerte && (
+        <p className="text-[11px] text-amber-500 leading-relaxed">
+          A janela de {data.janela_dias_compras} dias não filtrou nada: o ERP só a aplica
+          acompanhada das marcas.
+        </p>
+      )}
+
+      {/* Quantos vieram sem último pedido faturado. É o número que diz quanto
+          da carteira nunca comprou — e ele muda a leitura de qualquer média. */}
+      {(data.sem_ultima_compra?.recebidos > 0 || data.sem_ultima_compra?.descartados > 0) && (
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">
+            {(
+              data.sem_ultima_compra.recebidos + data.sem_ultima_compra.descartados
+            ).toLocaleString("pt-BR")}
+          </span>{" "}
+          sem data de último pedido faturado no ERP
+          {data.somente_com_compra
+            ? ` — ${data.sem_ultima_compra.descartados.toLocaleString("pt-BR")} deixados de fora pelo recorte estrito.`
+            : " — entram assim mesmo; são clientes que pediram e ainda não faturaram."}
+        </p>
+      )}
 
       {/* O que o filtro de empresa descartou. Silenciar isso faria a queda na
           contagem parecer erro de leitura do ERP. */}

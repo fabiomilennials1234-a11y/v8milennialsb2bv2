@@ -7,8 +7,10 @@
 -- tem linha nenhuma para ela (o `20270730000000` do ledger é
 -- `torquecalls_voip_foundation`, outra coisa).
 --
--- ⚠️ O número é o da CAUDA, e não o da data real, e a escolha custou TRÊS
--- tentativas em uma tarde — o que é a lição, não o acidente:
+-- ⚠️ O número é o da CAUDA, e não o da data real, e a escolha custou QUATRO
+-- tentativas — o que é a lição, não o acidente. A quarta é a mais instrutiva:
+-- o prefixo escolhido estava livre no momento em que esta branch o leu, e
+-- deixou de estar duas horas e meia depois, sem que nada nela mudasse:
 --
 --   20270827000000  → o `20270827000010` foi ocupado pela `automacao_sujeito_negocio`
 --                     (PR #1822) enquanto esta branch esperava
@@ -16,8 +18,10 @@
 --                     (PR #1824), **no repo E no ledger do PROD**, no intervalo
 --                     de vinte minutos entre duas leituras do ledger nesta mesma
 --                     sessão
---   20270829000000  → dia livre, longe da escada `20270828000x0` que as métricas
---                     estão subindo
+--   20270829000000  → **também colidiu**: o PR #1816 renumerou o par de
+--                     comentários para este mesmo prefixo às 12h51, e esta
+--                     migration chegou às 15h16 sem reler a base
+--   20270831000020  → livre em 26/08, acima das duas do ERP Toth
 --
 -- Duas mecânicas distintas exigem a cauda, e é preciso as duas:
 --   (1) `db push` RECUSA prefixo abaixo do topo já aplicado no ledger;

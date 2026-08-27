@@ -24,6 +24,27 @@ import { trackEvent } from "../_shared/track.ts";
 import { upsertPipeEntryDetailed } from "../_shared/pipeline-adapter.ts";
 import { unauthorizedResponse } from "../_shared/auth.ts";
 
+/**
+ * Explica, na linha do relatório de importação, por que a linha não entrou no funil.
+ *
+ * `no_pipeline` NÃO é erro: desde 20270902000000 a organização pode simplesmente
+ * não ter aquele funil de sistema — nunca teve (org nova não nasce mais com
+ * funil) ou o excluiu. Chamar isso de "erro ao inserir" manda o usuário caçar um
+ * defeito inexistente, quando o que ele precisa é ativar ou recriar o funil.
+ *
+ * `nomeNaTela` é o rótulo que o usuário vê na lista de funis ("Oportunidades"),
+ * não o slug interno ("whatsapp") — quem lê o relatório não conhece o slug.
+ */
+function motivoFalhaDeFunil(status: string, nomeNaTela: string): string {
+  if (status === "no_pipeline") {
+    return `O funil "${nomeNaTela}" não existe nesta organização. Ative-o em Criar → Ativar funil e importe de novo.`;
+  }
+  if (status === "read_failed") {
+    return `Não foi possível ler o funil "${nomeNaTela}" para evitar duplicar o negócio. Tente de novo.`;
+  }
+  return `Falha ao inserir no funil "${nomeNaTela}".`;
+}
+
 // ─── Types ───────────────────────────────────────────────
 
 interface ParsedLead {
@@ -872,6 +893,16 @@ async function importToFunnel(
             metadata: { sdr_id: sdrIdForLead, responsible_id: sdrIdForLead },
             assignedTo: sdrIdForLead,
           });
+          // 🚨 Este resultado era capturado e NUNCA lido. Com o funil podendo
+          // não existir (20270902000010), a importação terminaria dizendo
+          // "500 leads importados" com zero card criado — e o cliente leria
+          // como "sumiu". O irmão `propostas` logo abaixo já reportava; os
+          // outros dois não.
+          if (qualifResult.status !== "created" && qualifResult.status !== "updated") {
+            report.rejected++;
+            report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil(qualifResult.status, "Oportunidades") });
+            continue;
+          }
         } else if (destination === "propostas") {
           const productNamesRaw = (lead.product_name || "").trim();
           const productNames = productNamesRaw
@@ -908,7 +939,10 @@ async function importToFunnel(
 
           if (propostaResult.status !== "created" && propostaResult.status !== "updated") {
             report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: "Erro ao inserir proposta via pipeline_entries" });
+            // A mensagem antiga ("Erro ao inserir proposta") descrevia só uma
+            // das causas. `no_pipeline` não é erro — é a org não ter o funil, e
+            // dizer "erro" manda o usuário caçar um defeito que não existe.
+            report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil(propostaResult.status, "Orçamentos") });
             continue;
           }
           const propostaEntryId = propostaResult.entryId;
@@ -944,6 +978,12 @@ async function importToFunnel(
             assignedTo: closerIdForLead || sdrIdForLead,
             notes: lead.pipe_notes ?? null,
           });
+          // Mesmo caso do `qualifResult`: capturado e nunca lido.
+          if (confirmacaoResult.status !== "created" && confirmacaoResult.status !== "updated") {
+            report.rejected++;
+            report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil(confirmacaoResult.status, "Agendamentos") });
+            continue;
+          }
         }
 
         if (formattedPhone) processedPhones.add(formattedPhone);

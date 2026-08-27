@@ -6,6 +6,7 @@ import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useLeadChecklists } from "@/modules/engagement";
 import { useLeadDetail } from "../lead-detail/hooks/useLeadDetail";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
+import { useProdutosPorNegocio } from "../lead-card/useProdutosPorNegocio";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
 import { useLeadsCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
@@ -64,6 +65,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
   const ids = useMemo(() => (leadId ? [leadId] : []), [leadId]);
   const { data: dealsMap } = useLeadsDeals(ids);
+  const { data: produtosPorNegocio } = useProdutosPorNegocio(leadId, isOpen);
   const { data: vendasMap } = useLeadsSalesMetrics(ids);
   const { data: carteiraMap } = useLeadsCarteiraMetrics(ids);
   const { data: equipe = [] } = useTeamMembers();
@@ -203,7 +205,16 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
             supabase
               .from("deal_items")
               // a coluna e `product_name`, nao `name` — o tipo gerado pegou o erro
-              .select("id, product_name, quantity, unit_price, total, sort_order")
+              .select(
+                "id, product_id, product_name, quantity, unit_price, discount_percent, total, sort_order",
+              )
+              // A ordem PRECISA ser pedida. `sort_order` já vinha na projeção e
+              // era descartado; sem `.order()` o Postgres devolve na ordem que
+              // quiser, e a tabela de produtos reembaralhava sozinha entre dois
+              // carregamentos. `created_at` desempata os itens antigos, que
+              // nasceram todos com `sort_order = 0`.
+              .order("sort_order", { ascending: true })
+              .order("created_at", { ascending: true })
               .eq("deal_id", dealId),
           ])
         : [{ data: null }, { data: [] }];
@@ -348,6 +359,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
               ? "pipe_propostas"
               : null
         : null,
+      funilEhSystem: negocioBase.isSystem,
       etapas,
       etapaAtual: negocioBase.stageKey ?? "",
 
@@ -408,6 +420,9 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
             quantidade: num(i.quantity) ?? 1,
             precoUnitario: num(i.unit_price) ?? 0,
             total: num(i.total) ?? 0,
+            produtoId: typeof i.product_id === "string" ? i.product_id : null,
+            descontoPercent: num(i.discount_percent) ?? 0,
+            ordem: num(i.sort_order) ?? 0,
           })),
         };
       })(),
@@ -495,9 +510,25 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         diasEmAberto: diasDesde(d.enteredAt),
         etapaIndice: d.stageIndex,
         etapaTotal: d.stageCount,
+        // Mesma consulta que a coluna do lead usa (`["lead-card-produtos",
+        // leadId]`): as duas ficam montadas juntas no painel de duas colunas e
+        // o react-query resolve numa busca só. A aba "Negócios" passa a dizer
+        // o que está sendo vendido em CADA negócio da pessoa, que é a pergunta
+        // que ela existe para responder ("esta pessoa tem outra coisa em
+        // aberto?" fica melhor respondida com o quê, não só com o quanto).
+        produtos: produtosPorNegocio?.[d.id] ?? [],
       })),
     };
-  }, [lead, negocioBase, dealsMap, vendasMap, carteiraMap, extras.data, equipe]);
+  }, [
+    lead,
+    negocioBase,
+    dealsMap,
+    produtosPorNegocio,
+    vendasMap,
+    carteiraMap,
+    extras.data,
+    equipe,
+  ]);
 
   /**
    * ── Quem está olhando, e sob qual org se grava ──────────────────────────

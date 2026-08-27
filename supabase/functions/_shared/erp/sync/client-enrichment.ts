@@ -29,11 +29,59 @@ export function clientEnrichmentColumns(client: CanonicalClient): Record<string,
   put("erp_status", client.erpStatus);
   put("erp_segment", client.segment);
   put("erp_registered_at", client.registeredAt);
+  put("erp_last_order_at", client.lastOrderAt);
   put("erp_city", client.city);
   put("erp_uf", client.uf);
   put("erp_metadata", client.metadata);
 
   return cols;
+}
+
+/**
+ * Data do ERP (`aaaa-mm-dd`) → instante para `upsell_clients.last_order_at`.
+ *
+ * **Meio-dia UTC, não meia-noite.** A coluna é `timestamptz` e a tela lê em
+ * horário de Brasília (UTC-3): `2026-07-29T00:00:00Z` aparece como 28/07 às 21h,
+ * e o cliente que comprou no dia 29 passa a "ter comprado no dia 28". Meio-dia
+ * mantém a data íntegra em qualquer fuso do Brasil, e o erro máximo — 12 horas
+ * numa medida contada em dias — não muda nenhuma decisão.
+ */
+export function erpDateToTimestamp(iso: string): string {
+  return `${iso}T12:00:00.000Z`;
+}
+
+/**
+ * Quando semear `last_order_at` com a data que o ERP conhece.
+ *
+ * `last_order_at` é a métrica da CARTEIRA — `calculate-portfolio-health` a
+ * recalcula a partir dos pedidos registrados e, na ausência deles, preserva o
+ * que estiver lá (é o mesmo caminho do import por CSV). Semear é o que faz
+ * "dias sem pedido", ciclo de recompra e saúde existirem para a Café Jurerê
+ * antes de haver endpoint de pedidos.
+ *
+ * Só semeia para FRENTE. Um pedido registrado no CRM depois da última fatura do
+ * ERP é informação mais nova, e sobrescrevê-la com a data do ERP faria o cliente
+ * envelhecer sozinho a cada sincronização.
+ *
+ * 🔴 A comparação é NUMÉRICA, nunca de texto. O Postgres devolve
+ * `2026-07-29T12:00:00+00:00` e nós escrevemos `2026-07-29T12:00:00.000Z` — o
+ * mesmo instante em duas grafias. Comparadas como string elas diferem sempre, e
+ * o mesmo valor seria reescrito em toda sincronização: 12 mil UPDATEs idênticos,
+ * que é exatamente o que estourou o teto de 150s do gateway em 20/08.
+ */
+export function seedLastOrderAt(
+  erpLastOrderAt: string | null | undefined,
+  currentLastOrderAt: string | null | undefined,
+): string | null {
+  if (!erpLastOrderAt) return null;
+  const candidate = erpDateToTimestamp(erpLastOrderAt);
+  if (!currentLastOrderAt) return candidate;
+
+  const current = Date.parse(currentLastOrderAt);
+  // Valor ilegível no banco: tratar como ausente perderia a data mais nova; o
+  // seguro é não mexer e deixar o que já está lá.
+  if (Number.isNaN(current)) return null;
+  return Date.parse(candidate) > current ? candidate : null;
 }
 
 /**

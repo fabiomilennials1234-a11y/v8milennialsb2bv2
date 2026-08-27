@@ -32,6 +32,8 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Hooks
 - CRUD: `useLeads`, `useLeadsCount`, `useCreateLead`, `useUpdateLead`, `useDeleteLead`, `useDeleteAllLeadsInPipe`, `useDeleteAllLeads`
+- Recorte por funil: `useLeadsPorFunil({ pipelineId, search })` — "os leads DESTE funil", busca **server-side** (reusa `applyLeadListFilters`, a mesma semântica da lista), paginado em `LEADS_POR_FUNIL_PAGE_SIZE` (25) com `temMais`. Raiz da consulta em `leads` com `pipeline_entries!inner` — não o contrário: dedup de graça (um lead pode ter N entries no mesmo funil desde `20270730000050`), RLS na ordem certa, e um único filtro cobre funil de sistema e custom. Consumido pela Agenda (`LeadPorFunilPicker`).
+  ⚠️ **Não use `useLeads()` sem argumento como fonte de um seletor** — devolve a primeira página de 50 e filtra em memória. Foi exatamente esse o bug do seletor de lead da Agenda.
 - Origens: `useLeadOrigins` — fonte única (dinâmica) de lista/label/cor via tabela registry `lead_origins`. Retorna `{ origins, labelOf, colorOf, isLoading }`. Built-ins globais (org_id NULL) + custom da org (Slice B). Fallback local `BUILTIN_LEAD_ORIGINS` (13). Substitui a antiga `src/lib/lead/lead-origins.ts` (deletada) e os maps hardcoded de label do LeadModal/LeadCreateForm/LeadSource.
 - AI: `useLeadAiStatus`, `useToggleLeadAI`, `usePhoneAiStatus`, `useToggleConversationAI`
 - Cross-pipe placement: `useLeadAllPipelines`, `useAddLeadToStandardPipe`, `useMoveLeadInStandardPipe`, `useRemoveLeadFromStandardPipe`

@@ -147,6 +147,7 @@ function abrir(y: number) {
       onClose={vi.fn()}
       onDeleteMeeting={vi.fn().mockResolvedValue(undefined)}
       onDeleteGoogleEvent={vi.fn().mockResolvedValue(undefined)}
+      onEditMeeting={vi.fn()}
     />,
   );
 }
@@ -219,5 +220,55 @@ describe("EventDetailPopover — a confirmação de exclusão cabe na tela", () 
     abrir(150);
     expect(topoDoCard()).toBe(8);
     expect(cardEl().className).toContain("overflow-y-auto");
+  });
+});
+
+/**
+ * O lápis de editar — acrescentado junto com o `EditMeetingDialog`.
+ *
+ * A regra é estreita de propósito: a Agenda junta CINCO fontes, e quatro delas
+ * são projeções de outras tabelas (`follow_ups`, `scheduled_messages`,
+ * `pipe_confirmacao`, `meeting_events`). O formulário de edição grava em
+ * `meetings` — oferecê-lo para as outras prometeria uma gravação que não
+ * aconteceria. Evento do Google fica de fora pelo mesmo motivo ao contrário: o
+ * dono do dado é a API deles.
+ */
+describe("EventDetailPopover — o botão de editar", () => {
+  it("aparece na reunião interna", () => {
+    abrir(200);
+    expect(screen.queryByTitle("Editar evento")).not.toBeNull();
+  });
+
+  it("NÃO aparece nas outras fontes da agenda", () => {
+    for (const source of [
+      "follow_up",
+      "scheduled_message",
+      "pipe_confirmacao",
+      "google",
+    ] as const) {
+      const { unmount } = render(
+        <EventDetailPopover
+          state={{ event: { ...REUNIAO, source }, x: 500, y: 200 }}
+          onClose={vi.fn()}
+          onDeleteMeeting={vi.fn().mockResolvedValue(undefined)}
+          onDeleteGoogleEvent={vi.fn().mockResolvedValue(undefined)}
+          onEditMeeting={vi.fn()}
+        />,
+      );
+      expect(screen.queryByTitle("Editar evento")).toBeNull();
+      unmount();
+    }
+  });
+
+  it("NÃO aparece quando a tela não sabe editar (sem handler)", () => {
+    render(
+      <EventDetailPopover
+        state={{ event: REUNIAO, x: 500, y: 200 }}
+        onClose={vi.fn()}
+        onDeleteMeeting={vi.fn().mockResolvedValue(undefined)}
+        onDeleteGoogleEvent={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    expect(screen.queryByTitle("Editar evento")).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useLeadDetail } from "../lead-detail/hooks/useLeadDetail";
 import { useLeadComments } from "../lead-detail/hooks/useLeadComments";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
+import { useProdutosPorNegocio } from "./useProdutosPorNegocio";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
 import { useLeadsCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import { useLeadTimeline } from "../../hooks/useLeadTimeline";
@@ -181,6 +182,11 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
   // deles é ordenada, então o cache da aba de Leads não colide com o do card.
   const ids = useMemo(() => (leadId ? [leadId] : []), [leadId]);
   const { data: dealsMap } = useLeadsDeals(ids);
+  // Os produtos de cada negócio. Consulta própria, e não mais um campo em
+  // `useLeadsDeals`: aquele hook é o de LOTE da aba de Leads, e pendurar
+  // `deal_items` nele custaria a consulta em toda listagem de lead, por uma
+  // informação que só esta ficha desenha.
+  const { data: produtosPorNegocio } = useProdutosPorNegocio(leadId, isOpen);
   const { data: vendasMap } = useLeadsSalesMetrics(ids);
   const { data: carteiraMap } = useLeadsCarteiraMetrics(ids);
 
@@ -228,6 +234,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       diasEmAberto: diasDesde(d.enteredAt),
       etapaIndice: d.stageIndex,
       etapaTotal: d.stageCount,
+      produtos: produtosPorNegocio?.[d.id] ?? [],
     }));
 
     // Autor: `lead_history.created_by` ora traz o id do membro, ora o do
@@ -417,6 +424,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
   }, [
     lead,
     dealsMap,
+    produtosPorNegocio,
     vendasMap,
     carteiraMap,
     timeline.data,

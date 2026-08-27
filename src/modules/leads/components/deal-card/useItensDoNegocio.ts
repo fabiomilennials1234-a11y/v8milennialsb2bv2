@@ -2,7 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
 
 /**
  * Escrita de `deal_items` — os produtos do negócio.
@@ -15,29 +14,69 @@ import { useOrganization } from "@/modules/identity";
  * (ADR-0023 decisão 5) — removidos por serem órfãos, não por defeito. O
  * `CLAUDE.md` da carteira ainda os anuncia como API pública; o barril não.
  *
- * O bloco "Produtos e Valores" do painel também já desenhava o botão
- * "+ Adicionar produto" e nunca o mostrava, porque `DealCardPanel` não passava
- * o `onAdicionarProduto`. Havia desenho e tabela; faltava exatamente isto.
+ * ── POR QUE AS TRÊS PASSAM POR RPC, E NÃO PELA TABELA ─────────────────────
+ * O INSERT cru que existia aqui antes funcionava, e mesmo assim deixava três
+ * buracos que a RLS **não** fecha. A policy `"Users manage deal items"` é
+ * `FOR ALL` com `organization_id IN (SELECT get_my_organization_ids())` no
+ * USING e no WITH CHECK: ela prova que a LINHA é de uma org minha, e nada
+ * além disso.
+ *
+ *   1. **`deal_id` não era checado.** Dava para gravar um item com a minha org
+ *      apontando para o negócio de outra — e como `fn_sync_deal_value_from_items`
+ *      é SECURITY DEFINER e atualiza `deals` só por `id`, o valor daquele outro
+ *      negócio seria reescrito. Na RPC a org é **derivada do negócio**.
+ *   2. **`product_id` não era checado.** Dava para pendurar produto de outra
+ *      organização num negócio meu. É literalmente o "não permitir selecionar
+ *      produtos de outra organização" do pedido, e o único lugar onde isso se
+ *      garante é no banco: o front pode ser contornado.
+ *   3. **quantidade, preço e desconto** chegavam crus do navegador. Os CHECKs
+ *      da tabela pegam o absurdo, mas devolvem `23514` sem contexto — e
+ *      "quantidade 0" precisava virar uma frase, não um código.
+ *
+ * As três RPCs são **SECURITY INVOKER**: a permissão continua sendo a mesma
+ * RLS de antes (basta ser membro ativo da org — `deal_items` não tem checagem
+ * de cargo, e não é esta mudança que vai inventar uma). O que mudou é que o
+ * ESCOPO deixou de ser escolhido por quem chama.
+ *
+ * `as never` no nome das RPCs: elas ainda não estão em
+ * `integrations/supabase/types.ts`, que é gerado e só é regenerado depois do
+ * apply em prod — mesmo precedente de `abrir_negocio`
+ * (`useLeadAllPipelines.ts:368`).
  *
  * ── O QUE O BANCO CALCULA, E QUE NÃO PODE SER MANDADO ─────────────────────
  * `deal_items.total` é coluna **GENERATED ALWAYS AS
  * ((quantity * unit_price) * (1 - discount_percent/100)) STORED** — mandá-la
- * num INSERT devolve erro `428C9`. Por isso o payload leva quantidade, preço e
- * desconto, e lê o total de volta.
+ * num INSERT ou UPDATE devolve erro `428C9`. Por isso o payload leva
+ * quantidade, preço e desconto, e o total volta pronto.
  *
  * ── E O QUE UM TRIGGER REESCREVE PELAS COSTAS ─────────────────────────────
  * `trg_deal_items_sync_value` roda AFTER INSERT/UPDATE/DELETE e faz
- * `UPDATE deals SET value = SUM(deal_items.total)`. Ele é SECURITY DEFINER, o
- * que tem duas consequências práticas:
- *   1. quem lança item **não precisa** de permissão de UPDATE em `deals`;
- *   2. escrever `deals.value` aqui seria apagado no mesmo comando.
- * Nunca somar nada em `deals.value` a partir deste caminho.
- *
- * ── PERMISSÃO ─────────────────────────────────────────────────────────────
- * A policy é `"Users manage deal items"`, sem cláusula FOR (portanto ALL) e sem
- * checagem de papel: basta a linha ser da org de quem escreve. Ou seja, membro
- * comum lança produto — o gate é de tenant, não de cargo.
+ * `UPDATE deals SET value = SUM(deal_items.total)`. É por isso que **nenhuma**
+ * destas três funções escreve `deals.value`: seria apagado no mesmo comando.
+ * Vale para as três, inclusive a de remover — tirar o último item leva
+ * `deals.value` a 0 sozinho.
  */
+
+/** A chave do painel. Uma invalidação dela acerta a lista, o Total e o ladrilho. */
+function invalidarNegocio(
+  queryClient: ReturnType<typeof useQueryClient>,
+  entryId: string | null,
+) {
+  /**
+   * Uma invalidação só, e ela acerta os DOIS números.
+   *
+   * O "Total" do bloco e o ladrilho "Valor Total" do topo saem da mesma
+   * `contaDoNegocio()` sobre `negocio.itens`, que vem desta query. Invalidar
+   * a chave do painel recarrega os itens e os dois se corrigem juntos —
+   * sem segunda conta, que é como eles começariam a divergir.
+   *
+   * A chave completa é `["deal-card-extras", entryId, pipelineId, stageKey]`;
+   * o prefixo casa por posição e cobre qualquer etapa.
+   */
+  queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
+  // `deals.value` mudou por trigger; quem lê negócio pela lista precisa saber.
+  queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
+}
 
 export interface ItemNovoDoNegocio {
   dealId: string;
@@ -46,59 +85,105 @@ export interface ItemNovoDoNegocio {
   nome: string;
   quantidade: number;
   precoUnitario: number;
-  /** Percentual, 0–100. O banco tem CHECK e recusa fora da faixa. */
+  /** Percentual, 0–100. A RPC recusa fora da faixa com mensagem legível. */
   descontoPercent?: number;
 }
 
+/**
+ * Lançar produto.
+ *
+ * ── A REGRA DE DUPLICADO É "CONSOLIDA", E ELA MORA NO BANCO ───────────────
+ * Lançar o mesmo produto duas vezes **soma na linha que já existe** em vez de
+ * criar uma segunda. Não é preferência de layout: dois itens com o mesmo
+ * `product_id` no mesmo negócio faziam o `ON CONFLICT` de
+ * `fn_deal_won_populate_lead_products` estourar `21000` e **derrubar o UPDATE
+ * que marca `won = true`** — o negócio não era ganho, e a mensagem na tela não
+ * falava de produto nenhum.
+ *
+ * A consolidação vive na RPC (com `FOR UPDATE`) e não aqui, porque duas abas
+ * lançando ao mesmo tempo passariam por duas checagens de front e criariam as
+ * duas linhas assim mesmo.
+ */
 export function useAdicionarItemDoNegocio(entryId: string | null) {
   const queryClient = useQueryClient();
-  const { organizationId } = useOrganization();
 
   return useMutation({
     mutationFn: async (item: ItemNovoDoNegocio) => {
-      if (!organizationId) {
-        throw new Error("Organização não resolvida — recarregue a página.");
-      }
+      const { data, error } = await supabase.rpc("deal_item_lancar" as never, {
+        p_deal_id: item.dealId,
+        // `product_id` opcional é o que separa item de catálogo de item avulso
+        // — e só o de catálogo alimenta `lead_products` quando o negócio for
+        // ganho (trigger `trg_deal_won_lead_products`).
+        p_product_id: item.productId,
+        p_product_name: item.nome,
+        p_quantity: item.quantidade,
+        p_unit_price: item.precoUnitario,
+        p_discount_percent: item.descontoPercent ?? 0,
+      } as never);
 
-      const { data, error } = await supabase
-        .from("deal_items")
-        .insert({
-          deal_id: item.dealId,
-          organization_id: organizationId,
-          // `product_name` é NOT NULL e é ele que a tela lê. O `product_id` é
-          // opcional de propósito: é o que separa item de catálogo de item
-          // avulso — e só o de catálogo alimenta `lead_products` quando o
-          // negócio for ganho (trigger `trg_deal_won_lead_products`).
-          product_id: item.productId,
-          product_name: item.nome,
-          quantity: item.quantidade,
-          unit_price: item.precoUnitario,
-          discount_percent: item.descontoPercent ?? 0,
-        })
-        .select("id, product_name, quantity, unit_price, total")
-        .single();
+      if (error) throw error;
+      return data as unknown as string;
+    },
+    onSuccess: () => invalidarNegocio(queryClient, entryId),
+    onError: (erro: Error) => {
+      toast.error(`Não foi possível lançar o produto: ${erro.message}`);
+    },
+  });
+}
+
+export interface ItemEditadoDoNegocio {
+  itemId: string;
+  quantidade: number;
+  precoUnitario: number;
+  descontoPercent?: number;
+}
+
+/**
+ * Editar quantidade, preço unitário ou desconto de um item já lançado.
+ *
+ * ⚠ **Quantidade 0 não é "remover".** A tabela tem `CHECK (quantity > 0)` e
+ * devolveria `23514` cru; a RPC troca isso por uma frase que manda usar o
+ * Remover. As duas ações precisam continuar distintas para quem usa — "zerei a
+ * quantidade" e "tirei o produto da proposta" são decisões diferentes.
+ */
+export function useAtualizarItemDoNegocio(entryId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (item: ItemEditadoDoNegocio) => {
+      const { data, error } = await supabase.rpc("deal_item_atualizar" as never, {
+        p_item_id: item.itemId,
+        p_quantity: item.quantidade,
+        p_unit_price: item.precoUnitario,
+        p_discount_percent: item.descontoPercent ?? 0,
+      } as never);
 
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
-      /**
-       * Uma invalidação só, e ela acerta os DOIS números.
-       *
-       * O "Total" do bloco e o ladrilho "Valor Total" do topo saem da mesma
-       * `contaDoNegocio()` sobre `negocio.itens`, que vem desta query. Invalidar
-       * a chave do painel recarrega os itens e os dois se corrigem juntos —
-       * sem segunda conta, que é como eles começariam a divergir.
-       *
-       * A chave completa é `["deal-card-extras", entryId, pipelineId, stageKey]`;
-       * o prefixo casa por posição e cobre qualquer etapa.
-       */
-      queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
-      // `deals.value` mudou por trigger; quem lê negócio pela lista precisa saber.
-      queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
-    },
+    onSuccess: () => invalidarNegocio(queryClient, entryId),
     onError: (erro: Error) => {
-      toast.error(`Não foi possível lançar o produto: ${erro.message}`);
+      toast.error(`Não foi possível salvar o produto: ${erro.message}`);
+    },
+  });
+}
+
+/** Remover um item do negócio. O valor do negócio se recalcula sozinho. */
+export function useRemoverItemDoNegocio(entryId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (itemId: string) => {
+      const { data, error } = await supabase.rpc("deal_item_remover" as never, {
+        p_item_id: itemId,
+      } as never);
+
+      if (error) throw error;
+      return data as unknown as string;
+    },
+    onSuccess: () => invalidarNegocio(queryClient, entryId),
+    onError: (erro: Error) => {
+      toast.error(`Não foi possível remover o produto: ${erro.message}`);
     },
   });
 }

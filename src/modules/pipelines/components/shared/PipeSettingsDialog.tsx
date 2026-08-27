@@ -14,6 +14,7 @@ import { ImportLeadsFunnelContent } from "@/modules/leads";
 import { ExportLeadsContent } from "@/modules/leads";
 import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
+import { DangerZoneSystemPipe } from "./DangerZoneSystemPipe";
 import type { ReactNode } from "react";
 
 const PIPE_LABELS: Record<PipelineType, string> = {
@@ -59,6 +60,9 @@ export function PipeSettingsDialog({
   const isUpsellGestao = pipeType === "upsell_gestao";
   const isUpsell = isUpsellBase || isUpsellGestao;
   const destination = PIPE_TO_DESTINATION[pipeType];
+  /** Os três tipos que existem como linha em `pipeline_display_config`. */
+  const isSystemPipe =
+    pipeType === "whatsapp" || pipeType === "confirmacao" || pipeType === "propostas";
 
   // upsell_base: Etapas + Regras + Importar (3 tabs). upsell_gestao: Etapas + Importar (2 tabs). Others: 6 tabs.
   const tabCount = isUpsellGestao ? 2 : isUpsellBase ? 3 : 6;
@@ -123,6 +127,23 @@ export function PipeSettingsDialog({
                 pipelineType={pipeType}
                 stages={stages}
               />
+              {/* Excluir o funil mora na aba "Etapas" porque é a aba da
+                  ESTRUTURA do funil — as outras são sobre o que acontece
+                  dentro dele. Mesmo lugar, mesma copy e mesmo portão de
+                  permissão do funil customizado: as duas espécies deixaram de
+                  existir, então as duas telas não podem discordar sobre onde
+                  se exclui um funil.
+
+                  Só os três tipos REGISTRÁVEIS. `upsell_base`/`upsell_gestao`
+                  ficam de fora: não são tipos de `pipeline_display_config` (lá
+                  o tipo é `upsell`, sem sufixo) e a Carteira não tem tabela de
+                  cards para apagar. */}
+              {isSystemPipe && (
+                <DangerZoneSystemPipe
+                  pipeType={pipeType}
+                  onDeleted={() => onOpenChange(false)}
+                />
+              )}
             </TabsContent>
 
             {isUpsellBase && (

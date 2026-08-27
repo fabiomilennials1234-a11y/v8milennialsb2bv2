@@ -60,6 +60,19 @@ vi.mock("@/modules/leads/components/lead-detail/hooks/useLeadComments", () => ({
   useUpdateLeadComment: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
   useDeleteLeadComment: () => ({ mutateAsync: vi.fn().mockResolvedValue({}) }),
 }));
+/* A faixa de etiquetas que o container monta lê banco (react-query) e org
+   (`useOrganization` → `AuthContext`). Esta suíte renderiza sem provider nenhum:
+   os hooks dela entram na lista pela mesma razão que `useLeads` já estava. */
+vi.mock("@/modules/leads/hooks/lead/useLeadTagsAttached", () => ({
+  useLeadTagsAttached: () => ({ data: [], isLoading: false }),
+  useAddLeadTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useRemoveLeadTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+}));
+vi.mock("@/modules/leads/hooks/useTags", () => ({
+  useTags: () => ({ data: [], isLoading: false }),
+  useCreateTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+}));
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));

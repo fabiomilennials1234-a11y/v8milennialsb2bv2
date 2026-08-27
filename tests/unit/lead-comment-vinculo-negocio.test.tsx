@@ -2,7 +2,7 @@
  * O comentário grava em QUAL negócio foi escrito.
  *
  * `lead_comments` sempre teve só `lead_id`. A coluna `pipeline_entry_id`
- * (migration `20270829000000`) é o que separa "comentário desta venda" de
+ * (migration `20270829000001`) é o que separa "comentário desta venda" de
  * "comentário desta pessoa" — e é o que o selo do painel lê para não afirmar
  * que algo dito no upsell de dezembro foi dito sobre a proposta de setembro.
  *

@@ -101,10 +101,32 @@ export function Preview() {
               <div className="flex min-w-0 flex-1 flex-col">
                 {/* O negócio "magro" abre sem comentário de propósito: é o
                     caso majoritário e é onde o estado vazio precisa ser bom. */}
+                {/* Os três callbacks de produto entram como no-op para a
+                    bancada mostrar as AFFORDANCES (o "+ Adicionar produto", o
+                    lápis e a lixeira de cada linha). Sem eles o bloco desenha
+                    a tabela sem nenhuma saída — que é exatamente o estado do
+                    card que ainda não tem negócio, e não o que se quer julgar
+                    aqui. O negócio "magro" continua sem eles de propósito: é o
+                    caso majoritário, e é onde o estado vazio precisa ser bom. */}
                 <DealCard
                   negocio={atual.dado as Parameters<typeof DealCard>[0]["negocio"]}
                   comentarios={atual.chave === "neg-magro" ? [] : COMENTARIOS_EXEMPLO}
                   onComentar={() => undefined}
+                  onAdicionarProduto={
+                    atual.chave === "neg-magro" ? undefined : () => undefined
+                  }
+                  onEditarItem={
+                    atual.chave === "neg-magro" ? undefined : async () => undefined
+                  }
+                  onRemoverItem={
+                    atual.chave === "neg-magro" ? undefined : async () => undefined
+                  }
+                  /* O `⋯` do cabeçalho só existe quando há para onde ir. Sem
+                     esta prop ele não desenha, e o desenho que esta tela existe
+                     para julgar sairia sem ele. O clique não faz nada: a
+                     confirmação e a exclusão moram no `DealCardPanel`, que fala
+                     com banco e por isso não entra aqui (`inv:H5-17`). */
+                  onExcluir={() => undefined}
                 />
               </div>
             </div>

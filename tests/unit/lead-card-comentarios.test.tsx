@@ -70,6 +70,12 @@ vi.mock("@/modules/identity", () => ({
 }));
 
 vi.mock("@/modules/leads/hooks/useLeadsDeals", () => ({ useLeadsDeals: () => ({ data: {} }) }));
+// Os produtos de cada negócio saem de uma consulta própria. Este arquivo usa
+// `renderHook` sem `QueryClientProvider` — como todos os outros hooks de dado
+// aqui, ele é dublado, senão o `useQuery` de dentro lança "No QueryClient set".
+vi.mock("@/modules/leads/components/lead-card/useProdutosPorNegocio", () => ({
+  useProdutosPorNegocio: () => ({ data: {} }),
+}));
 vi.mock("@/modules/leads/hooks/useLeadsSalesMetrics", () => ({
   useLeadsSalesMetrics: () => ({ data: {} }),
 }));

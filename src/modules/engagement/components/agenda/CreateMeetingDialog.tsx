@@ -5,12 +5,11 @@
  * with a richer internal meeting form that uses useCreateMeeting.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { format, addHours } from "date-fns";
 import {
   Plus,
   Loader2,
-  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -29,7 +28,7 @@ import {
   type CreateMeetingInput,
 } from "@/modules/engagement/hooks/useMeetings";
 import { useTeamMembers } from "@/modules/identity";
-import { useLeads } from "@/modules/leads";
+import { LeadPorFunilPicker } from "./LeadPorFunilPicker";
 
 // â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -70,11 +69,26 @@ interface FormState {
   end_at: string;
   all_day: boolean;
   event_type: MeetingEventType;
+  /** Funil de onde o lead sai. `""` = nenhum. */
+  pipeline_id: string;
   lead_id: string;
   color: string;
   meet_link: string;
   participant_ids: string[];
 }
+
+const FORM_VAZIO: Omit<FormState, "start_at" | "end_at"> = {
+  title: "",
+  description: "",
+  location: "",
+  all_day: false,
+  event_type: "meeting",
+  pipeline_id: "",
+  lead_id: "",
+  color: "",
+  meet_link: "",
+  participant_ids: [],
+};
 
 // â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -85,26 +99,13 @@ export function CreateMeetingDialog({
 }: CreateMeetingDialogProps) {
   const createMeeting = useCreateMeeting();
   const { data: teamMembers = [] } = useTeamMembers();
-  const { data: leadsRaw } = useLeads();
-  const leads = useMemo(() => leadsRaw ?? [], [leadsRaw]);
-
-  const [leadSearch, setLeadSearch] = useState("");
-  const [showLeadDropdown, setShowLeadDropdown] = useState(false);
 
   const defaultStart = initialStart ?? new Date();
 
   const [form, setForm] = useState<FormState>({
-    title: "",
-    description: "",
-    location: "",
+    ...FORM_VAZIO,
     start_at: format(defaultStart, "yyyy-MM-dd'T'HH:mm"),
     end_at: format(addHours(defaultStart, 1), "yyyy-MM-dd'T'HH:mm"),
-    all_day: false,
-    event_type: "meeting",
-    lead_id: "",
-    color: "",
-    meet_link: "",
-    participant_ids: [],
   });
 
   // Reset form when dialog opens or initialStart changes
@@ -112,43 +113,15 @@ export function CreateMeetingDialog({
     if (open) {
       const start = initialStart ?? new Date();
       setForm({
-        title: "",
-        description: "",
-        location: "",
+        ...FORM_VAZIO,
         start_at: format(start, "yyyy-MM-dd'T'HH:mm"),
         end_at: format(addHours(start, 1), "yyyy-MM-dd'T'HH:mm"),
-        all_day: false,
-        event_type: "meeting",
-        lead_id: "",
-        color: "",
-        meet_link: "",
-        participant_ids: [],
       });
-      setLeadSearch("");
-      setShowLeadDropdown(false);
     }
   }, [open, initialStart]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
-
-  const filteredLeads = useMemo(() => {
-    if (!leadSearch.trim()) return leads.slice(0, 10);
-    const q = leadSearch.toLowerCase();
-    return leads
-      .filter(
-        (l) =>
-          l.name?.toLowerCase().includes(q) ||
-          l.company?.toLowerCase().includes(q) ||
-          l.email?.toLowerCase().includes(q),
-      )
-      .slice(0, 10);
-  }, [leads, leadSearch]);
-
-  const selectedLead = useMemo(
-    () => leads.find((l) => l.id === form.lead_id),
-    [leads, form.lead_id],
-  );
 
   const toggleParticipant = (id: string) => {
     setForm((prev) => ({
@@ -162,8 +135,22 @@ export function CreateMeetingDialog({
   const endBeforeStart =
     !form.all_day && new Date(form.end_at) <= new Date(form.start_at);
 
+  /**
+   * 🚨 HERDADO, corrigido junto porque é o mesmo defeito do diálogo de edição e
+   * a expressão é copiada entre os dois: `endBeforeStart` NÃO cobre campo
+   * vazio. `<input type="datetime-local">` devolve `""` quando a pessoa apaga a
+   * data para redigitar, e comparação com `Invalid Date` é `false` nos DOIS
+   * sentidos — o botão continuava habilitado e o clique morria em
+   * `new Date("").toISOString() → RangeError`, dentro de um event handler, que
+   * nenhum error boundary pega. Resultado: "Criar Evento" virava um botão que
+   * não faz nada e não explica.
+   */
+  const dataInvalida =
+    Number.isNaN(new Date(form.start_at).getTime()) ||
+    Number.isNaN(new Date(form.end_at).getTime());
+
   const handleSubmit = () => {
-    if (!form.title.trim() || endBeforeStart) return;
+    if (!form.title.trim() || endBeforeStart || dataInvalida) return;
 
     const input: CreateMeetingInput = {
       title: form.title.trim(),
@@ -174,6 +161,9 @@ export function CreateMeetingDialog({
       all_day: form.all_day,
       event_type: form.event_type,
       lead_id: form.lead_id || null,
+      // Sem lead não há funil a guardar: gravar o funil sozinho deixaria a
+      // reunião afirmando uma origem que não aponta para ninguém.
+      pipeline_id: form.lead_id ? form.pipeline_id || null : null,
       color: form.color || null,
       meet_link: form.meet_link || null,
       participant_ids:
@@ -244,8 +234,14 @@ export function CreateMeetingDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Inicio *</Label>
+              <Label
+                htmlFor="meeting-start"
+                className="text-xs text-muted-foreground"
+              >
+                Inicio *
+              </Label>
               <Input
+                id="meeting-start"
                 type={form.all_day ? "date" : "datetime-local"}
                 value={
                   form.all_day
@@ -262,8 +258,14 @@ export function CreateMeetingDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Fim *</Label>
+              <Label
+                htmlFor="meeting-end"
+                className="text-xs text-muted-foreground"
+              >
+                Fim *
+              </Label>
               <Input
+                id="meeting-end"
                 type={form.all_day ? "date" : "datetime-local"}
                 value={
                   form.all_day
@@ -280,11 +282,15 @@ export function CreateMeetingDialog({
               />
             </div>
           </div>
-          {endBeforeStart && (
+          {dataInvalida ? (
+            <p className="text-[11px] text-destructive">
+              Informe inicio e fim
+            </p>
+          ) : endBeforeStart ? (
             <p className="text-[11px] text-destructive">
               Fim deve ser depois do inicio
             </p>
-          )}
+          ) : null}
 
           {/* Location */}
           <div className="space-y-1.5">
@@ -307,71 +313,20 @@ export function CreateMeetingDialog({
             />
           </div>
 
-          {/* Lead selector */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Lead</Label>
-            {selectedLead ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/40 bg-muted/20">
-                <span className="text-xs text-foreground flex-1 truncate">
-                  {selectedLead.name}
-                  {selectedLead.company ? ` - ${selectedLead.company}` : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    update("lead_id", "");
-                    setLeadSearch("");
-                  }}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <span className="text-xs">Limpar</span>
-                </button>
-              </div>
-            ) : (
-              <div className="relative">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
-                  <Input
-                    placeholder="Buscar lead..."
-                    className="pl-8"
-                    value={leadSearch}
-                    onChange={(e) => {
-                      setLeadSearch(e.target.value);
-                      setShowLeadDropdown(true);
-                    }}
-                    onFocus={() => setShowLeadDropdown(true)}
-                    onBlur={() =>
-                      setTimeout(() => setShowLeadDropdown(false), 200)
-                    }
-                  />
-                </div>
-                {showLeadDropdown && filteredLeads.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-card border border-border/50 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {filteredLeads.map((lead) => (
-                      <button
-                        key={lead.id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-muted/40 transition-colors"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          update("lead_id", lead.id);
-                          setLeadSearch("");
-                          setShowLeadDropdown(false);
-                        }}
-                      >
-                        <span className="text-foreground">{lead.name}</span>
-                        {lead.company && (
-                          <span className="text-muted-foreground ml-1.5">
-                            - {lead.company}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Funil → Lead */}
+          <LeadPorFunilPicker
+            value={{
+              pipelineId: form.pipeline_id || null,
+              leadId: form.lead_id || null,
+            }}
+            onChange={({ pipelineId, leadId }) =>
+              setForm((prev) => ({
+                ...prev,
+                pipeline_id: pipelineId ?? "",
+                lead_id: leadId ?? "",
+              }))
+            }
+          />
 
           {/* Participants */}
           {teamMembers.length > 0 && (
@@ -447,7 +402,12 @@ export function CreateMeetingDialog({
             <Button
               size="sm"
               onClick={handleSubmit}
-              disabled={createMeeting.isPending || !form.title.trim() || endBeforeStart}
+              disabled={
+                createMeeting.isPending ||
+                !form.title.trim() ||
+                endBeforeStart ||
+                dataInvalida
+              }
             >
               {createMeeting.isPending ? (
                 <>

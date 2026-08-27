@@ -12,6 +12,7 @@ import { ptBR } from "date-fns/locale";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { LeadCardAvatar } from "./LeadCardAvatar";
 import { LeadCardLabels } from "./LeadCardLabels";
+import { LeadEtiquetasPopover } from "../../etiquetas/LeadEtiquetasPopover";
 import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
 import { LeadCardQualificationPopover } from "./LeadCardQualificationPopover";
 // Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
@@ -507,6 +508,25 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                 <Clock className="size-[9px]" />
                 {formatDistanceToNowStrict(new Date(lead.createdAt), { addSuffix: true, locale: ptBR })}
               </Badge>
+            )}
+
+            {/* A porta das etiquetas fica NESTA linha, e não junto das pílulas
+                do rodapé, por uma razão de layout: a linha de badges existe
+                sempre (a origem nunca falta), enquanto o rodapé só aparece
+                quando o lead já tem etiqueta. No rodapé, o botão obrigaria a
+                desenhar uma faixa vazia em todo card sem etiqueta — mais 22px
+                em cada um dos 30 de uma coluna — ou a mudar de lugar conforme
+                o lead, que é pior: some a posição que a mão já decorou.
+
+                Sem `leadId` não há em quem pendurar: `id` aqui é da ENTRADA no
+                funil, não do lead. Botão que escreveria no id errado é pior que
+                botão ausente. */}
+            {lead.leadId && (
+              <LeadEtiquetasPopover
+                leadId={lead.leadId}
+                quantidade={lead.tags?.length ?? 0}
+                rotulo={lead.tags?.length ? undefined : "etiqueta"}
+              />
             )}
           </div>
 

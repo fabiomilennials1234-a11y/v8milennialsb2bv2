@@ -1,55 +1,149 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
+// Caminho relativo curto: config -> model é dentro do MESMO módulo, então não
+// passa pelo barril público (regra de boundaries do ESLint).
+import { resetDefaultStagesEnsureCache } from "../model/usePipelineStages";
+import { rpcNaoTipada } from "../../lib/rpc-nao-tipada";
+
+export type SystemPipeType = "whatsapp" | "confirmacao" | "propostas" | "upsell";
+
 export interface PipelineDisplayConfig {
   id: string;
   organization_id: string;
-  pipe_type: "whatsapp" | "confirmacao" | "propostas" | "upsell";
+  pipe_type: SystemPipeType;
   display_name: string;
   is_visible: boolean;
   position: number;
 }
 
-const DEFAULT_CONFIG: PipelineDisplayConfig[] = [
-  { id: "", organization_id: "", pipe_type: "whatsapp", display_name: "Oportunidades", is_visible: true, position: 1 },
-  { id: "", organization_id: "", pipe_type: "confirmacao", display_name: "Agendamentos", is_visible: true, position: 2 },
-  { id: "", organization_id: "", pipe_type: "propostas", display_name: "Orçamentos", is_visible: true, position: 3 },
-  { id: "", organization_id: "", pipe_type: "upsell", display_name: "Carteira", is_visible: true, position: 4 },
+/**
+ * Os quatro funis de sistema que EXISTEM no produto — não os que a org tem.
+ *
+ * 🚨 Isto é um CATÁLOGO, não um default. A distinção é o inteiro ponto da
+ * migration 20270902000000: antes, esta mesma lista era o fallback devolvido
+ * quando a org não tinha linha nenhuma, e por isso todo funil de sistema
+ * parecia existir em toda org, sempre. Excluir um era impossível — a lista em
+ * memória o trazia de volta na renderização seguinte, mesmo com o banco limpo.
+ *
+ * Agora ela serve só para responder "o que esta org PODE ativar" (ver
+ * `useAvailableSystemPipes`) e para rotular o que o banco devolve. Quem
+ * responde "o que esta org TEM" é exclusivamente `pipeline_display_config`.
+ */
+export const SYSTEM_PIPE_CATALOG: ReadonlyArray<{
+  pipe_type: SystemPipeType;
+  display_name: string;
+  position: number;
+}> = [
+  { pipe_type: "whatsapp", display_name: "Oportunidades", position: 1 },
+  { pipe_type: "confirmacao", display_name: "Agendamentos", position: 2 },
+  { pipe_type: "propostas", display_name: "Orçamentos", position: 3 },
+  { pipe_type: "upsell", display_name: "Carteira", position: 4 },
 ];
 
+/**
+ * Os funis de sistema que a organização TEM.
+ *
+ * Linha ausente = a org não tem aquele funil. Não há fallback: lista vazia é
+ * uma resposta legítima e significa "esta org não tem funil de sistema algum".
+ */
 export function usePipelineDisplayConfig() {
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
     queryKey: ["pipeline-display-config", organizationId],
     queryFn: async (): Promise<PipelineDisplayConfig[]> => {
-      if (!organizationId) return DEFAULT_CONFIG;
+      if (!organizationId) return [];
 
-      // Ensure config exists
-      await supabase.rpc("ensure_pipeline_display_config", { p_org_id: organizationId });
-
+      // Não há mais `ensure_pipeline_display_config` aqui. Era a torneira nº 1:
+      // a cada leitura ela reinseria os 4 funis, o que fazia toda org nova
+      // nascer com eles e desfazia qualquer exclusão. A RPC virou no-op na
+      // migration 20270902000000 e a chamada saiu junto.
       const { data, error } = await supabase
         .from("pipeline_display_config")
         .select("*")
         .eq("organization_id", organizationId)
         .order("position");
 
-      if (error || !data?.length) return DEFAULT_CONFIG;
-      return data as PipelineDisplayConfig[];
+      if (error) throw error;
+      return (data ?? []) as PipelineDisplayConfig[];
     },
     enabled: isReady && !!organizationId,
     staleTime: 5 * 60 * 1000,
   });
 }
 
-/** Get hidden default pipes (for "Criar novo" template list) */
-export function useHiddenDefaultPipes() {
+/**
+ * Os tipos de funil de sistema que a org tem e que estão ATIVOS.
+ * Usado por quem precisa saber "posso semear/ler etapas deste tipo?".
+ */
+export function useEnabledSystemPipeTypes(): SystemPipeType[] {
   const { data: configs } = usePipelineDisplayConfig();
-  if (!configs) return [];
-  return configs.filter((c) => !c.is_visible);
+  return (configs ?? []).map((c) => c.pipe_type);
 }
 
-/** Toggle pipe visibility */
+/**
+ * Funis de sistema que a org PODE ativar — os que ela não tem, mais os que
+ * tem porém ocultos.
+ *
+ * Antes chamava-se `useHiddenDefaultPipes` e devolvia só `is_visible = false`.
+ * Com a auto-semeadura morta, "não ter a linha" passou a ser o estado normal
+ * de uma org nova (e o estado final de um funil excluído), então a lista
+ * precisa somar os dois casos — senão o diálogo "Ativar funil" nasce vazio em
+ * toda org nova e o funil excluído fica sem caminho de volta.
+ */
+export function useAvailableSystemPipes() {
+  const { data: configs } = usePipelineDisplayConfig();
+  const existentes = new Map((configs ?? []).map((c) => [c.pipe_type, c]));
+
+  return SYSTEM_PIPE_CATALOG.filter((cat) => {
+    const atual = existentes.get(cat.pipe_type);
+    return !atual || !atual.is_visible;
+  }).map((cat) => ({
+    pipe_type: cat.pipe_type,
+    // Preserva o nome que a org personalizou, quando a linha existe.
+    display_name: existentes.get(cat.pipe_type)?.display_name ?? cat.display_name,
+    /** `false` = a org nunca teve (ou excluiu); `true` = tem, só está oculto. */
+    ja_existe: existentes.has(cat.pipe_type),
+  }));
+}
+
+/**
+ * Cria (ou reativa) um funil de sistema na org — ato explícito.
+ *
+ * Substitui o `useTogglePipeVisibility({visible:true})` dos diálogos de
+ * ativação: com a linha possivelmente ausente, um UPDATE não casaria com nada
+ * e "ativaria" em silêncio, sem criar coisa alguma.
+ */
+export function useEnableSystemPipe() {
+  const queryClient = useQueryClient();
+  const { organizationId } = useOrganization();
+
+  return useMutation({
+    mutationFn: async (pipeType: SystemPipeType) => {
+      if (!organizationId) throw new Error("Organização não resolvida");
+      return rpcNaoTipada<{ pipe_type: string; display_name: string; pipeline_id: string | null }>(
+        "enable_system_pipeline",
+        { p_org_id: organizationId, p_pipe_type: pipeType },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["pipeline-display-config"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline_id"] });
+      queryClient.invalidateQueries({ queryKey: ["pipelines"] });
+      // As etapas são semeadas pelo front na leitura seguinte (a fonte canônica
+      // é `DEFAULT_STAGES`, não a função SQL, que está defasada). A trava do
+      // ensure é por ORGANIZAÇÃO, não por tipo — invalidar a query não basta,
+      // porque o ensure já rodou nesta sessão quando o tipo recém-ativado ainda
+      // não estava no registro. Sem este reset o funil nasce sem etapa alguma
+      // até o usuário recarregar a aba.
+      if (organizationId) resetDefaultStagesEnsureCache(organizationId);
+      queryClient.invalidateQueries({ queryKey: ["pipeline_stages"] });
+    },
+  });
+}
+
+/** Liga/desliga a visibilidade de um funil de sistema que a org JÁ tem. */
 export function useTogglePipeVisibility() {
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();

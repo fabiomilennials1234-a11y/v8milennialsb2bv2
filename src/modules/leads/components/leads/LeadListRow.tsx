@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
+import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { LEAD_SORT_COLUMNS, type LeadListSort, type LeadSortKey } from "../../lib/lead-list-sort";
 import type { LeadStanding } from "../../lib/lead-relacao-situacao";
 import type { Lead } from "../../hooks/useLeads";
@@ -341,7 +342,7 @@ export function LeadListRow({
       </div>
 
       {/* tags */}
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <Badge variant="outline" className={originClassName}>
           {originLabel}
         </Badge>
@@ -355,6 +356,15 @@ export function LeadListRow({
             +{tags.length - 2}
           </Badge>
         )}
+        {/* A coluna mostrava as etiquetas e não deixava mexer: tirar uma exigia
+            abrir a ficha, uma por uma. Aqui `lead.id` é o id do LEAD mesmo (a
+            lista lê `leads`, não entradas de funil), então o botão pode ir sem
+            guarda. */}
+        <LeadEtiquetasPopover
+          leadId={lead.id}
+          quantidade={tags.length}
+          rotulo={tags.length ? undefined : "etiqueta"}
+        />
         {metrics?.segment && (
           <Badge variant="outline" className="gap-1.5 text-muted-foreground">
             <span className="size-1.5 rounded-full bg-success" />

@@ -89,6 +89,7 @@ import {
   type PopoverState,
 } from "./EventDetailPopover";
 import { CreateMeetingDialog } from "./CreateMeetingDialog";
+import { EditMeetingDialog } from "./EditMeetingDialog";
 
 // ─── Google Calendar user colors (for shared calendars overlay) ───────────────
 
@@ -126,6 +127,8 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   const [popover, setPopover] = useState<PopoverState | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitialStart, setCreateInitialStart] = useState<Date | undefined>();
+  /** Id CRU da reunião em edição (sem o prefixo de fonte). `null` = fechado. */
+  const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
 
   // ── Filtros da tela ─────────────────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<AgendaStatusFilter>("all");
@@ -439,6 +442,20 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
     setCreateOpen(true);
   }, []);
 
+  /**
+   * Abre a edição. Fecha o popover junto — deixar os dois abertos empilharia
+   * um card flutuante posicionado por coordenada de clique atrás de um modal,
+   * e o card não reposiciona quando o modal trava a rolagem do corpo.
+   *
+   * `rawEventId` porque a Agenda prefixa o id com a fonte (`meeting-<uuid>`)
+   * para as cinco tabelas não colidirem — é o mesmo corte que o registro de
+   * comparecimento já faz antes de chamar `useUpdateMeeting`.
+   */
+  const handleEditMeeting = useCallback((event: UnifiedEvent) => {
+    setEditingMeetingId(rawEventId(event));
+    setPopover(null);
+  }, []);
+
   /** "+N mais" abre o dia inteiro — a lista cronológica que já existe. */
   const handleShowMore = useCallback((day: Date) => {
     setDate(day);
@@ -687,6 +704,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
             onDeleteMeeting={handleDeleteMeeting}
             onSetOutcome={handleSetOutcome}
             onDeleteGoogleEvent={handleDeleteGoogleEvent}
+            onEditMeeting={handleEditMeeting}
           />
         )}
       </AnimatePresence>
@@ -696,6 +714,15 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
         open={createOpen}
         onOpenChange={setCreateOpen}
         initialStart={createInitialStart}
+      />
+
+      {/* Edit meeting dialog */}
+      <EditMeetingDialog
+        meetingId={editingMeetingId}
+        open={!!editingMeetingId}
+        onOpenChange={(aberto) => {
+          if (!aberto) setEditingMeetingId(null);
+        }}
       />
     </div>
   );

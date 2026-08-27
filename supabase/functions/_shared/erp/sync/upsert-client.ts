@@ -13,7 +13,12 @@
  */
 
 import { CanonicalClient } from "../types.ts";
-import { clientEnrichmentColumns, leadEnrichmentColumns } from "./client-enrichment.ts";
+import {
+  clientEnrichmentColumns,
+  erpDateToTimestamp,
+  leadEnrichmentColumns,
+  seedLastOrderAt,
+} from "./client-enrichment.ts";
 
 export type ErpSyncMode = "off" | "enrich_only" | "canonical";
 
@@ -45,9 +50,16 @@ export interface ExistingClient {
   erp_status?: string | null;
   erp_segment?: string | null;
   erp_registered_at?: string | null;
+  erp_last_order_at?: string | null;
   erp_city?: string | null;
   erp_uf?: string | null;
   erp_metadata?: Record<string, unknown> | null;
+
+  /**
+   * Métrica da carteira, não espelho do ERP. Entra aqui só para que a semeadura
+   * saiba se já existe informação mais nova — ver `seedLastOrderAt`.
+   */
+  last_order_at?: string | null;
 }
 
 /**
@@ -140,6 +152,12 @@ export async function upsertCanonicalClient(
 
   if (existing) {
     const patch: Record<string, unknown> = { ...stamp, ...enrichment };
+
+    // A data do ERP também alimenta a métrica da carteira, mas só para frente e
+    // só quando é notícia — ver `seedLastOrderAt`.
+    const seeded = seedLastOrderAt(client.lastOrderAt, existing.last_order_at);
+    if (seeded) patch.last_order_at = seeded;
+
     if (syncMode === "canonical") {
       patch.name = client.name;
       patch.company = client.company;
@@ -202,6 +220,9 @@ export async function upsertCanonicalClient(
     is_active: true,
     ...stamp,
     ...enrichment,
+    // Cliente nascendo: não há métrica anterior para preservar, então a data do
+    // ERP entra direto e o cliente já chega à carteira com recência.
+    ...(client.lastOrderAt ? { last_order_at: erpDateToTimestamp(client.lastOrderAt) } : {}),
   });
   return { action: "created", clientId };
 }
