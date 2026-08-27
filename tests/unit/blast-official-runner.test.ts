@@ -66,9 +66,20 @@ function linha(over: Record<string, unknown> = {}) {
  * prova assertando que uma escrita NÃO aconteceu, e ausência não se observa sem
  * um instrumento que registre presença.
  */
-function makeAdmin(tabelas: Record<string, Record<string, unknown>[]>) {
+function makeAdmin(
+  tabelas: Record<string, Record<string, unknown>[]>,
+  /**
+   * Erros a devolver nos UPDATEs de `blast_plan_recipients`, na ordem — um por
+   * tentativa, `null` para "essa passou". Existe porque o caminho de recuperação
+   * do 23505 (#1724) SÓ é alcançável com o banco recusando, e um dublê que nunca
+   * recusa deixa esse ramo inalcançável: o teste ficaria verde afirmando uma
+   * recuperação que nunca rodou.
+   */
+  errosDeEscrita: ({ code: string; message: string } | null)[] = [],
+) {
   const tocadas: string[] = [];
   const escritas: { tabela: string; payload: Record<string, unknown>; id?: unknown }[] = [];
+  let tentativa = 0;
 
   function builder(tabela: string) {
     tocadas.push(tabela);
@@ -105,7 +116,10 @@ function makeAdmin(tabelas: Record<string, Record<string, unknown>[]>) {
         if (patch) {
           escritas.push({ tabela, payload: patch, id: alvo });
           patch = null;
-          return Promise.resolve({ data: null, error: null }).then(resolve);
+          const erro = tabela === "blast_plan_recipients"
+            ? (errosDeEscrita[tentativa++] ?? null)
+            : null;
+          return Promise.resolve({ data: null, error: erro }).then(resolve);
         }
         return Promise.resolve({ data: linhas, error: null }).then(resolve);
       },
@@ -401,5 +415,83 @@ describe("post_send_target — mover o lead quando A MENSAGEM DELE sai", () => {
     expect(r.enviados).toBe(1);
     const marca = admin.escritas.find((e) => e.tabela === "blast_plan_recipients");
     expect(marca?.payload).toMatchObject({ status: "sent" });
+  });
+});
+
+/**
+ * O 23505 — e por que ele é caro.
+ *
+ * O índice único de `provider_message_id` é GLOBAL: `blast_plan_recipients` não
+ * tem `organization_id` (#1721, HANDOFF item B). Se o fornecedor repetir um id
+ * entre organizações, o carimbo estoura 23505 — e a mensagem JÁ SAIU.
+ *
+ * O que acontecia antes: o erro virava log, a linha ficava `pending` com
+ * `claimed_at`, e dez minutos depois o stale a devolvia à fila. Ela era
+ * REENVIADA. Duplicata cobrada, que é o que o ADR-0028 §5 manda evitar.
+ *
+ * O que a #1724 faz: fecha a linha como `sent` sem o id. Perde-se a correlação
+ * do callback — a linha vira `unconfirmed` no fim do prazo —, e é a troca certa:
+ * "uma entrega sem confirmação" custa zero; "uma mensagem paga duas vezes" custa
+ * dinheiro e incomoda o cliente.
+ *
+ * Esta fatia é a que torna a coluna carregável de peso (ela vira a chave do
+ * casamento do callback), então é aqui que a conta se paga.
+ */
+describe("colisão de provider_message_id (23505)", () => {
+  it("fecha a linha como enviada SEM o id, em vez de devolvê-la à fila", async () => {
+    const admin = makeAdmin(
+      {
+        __claim: [linha({ id: "r1" })],
+        blast_plans: [PLANO],
+        whatsapp_instances: [INSTANCIA],
+      },
+      // 1ª tentativa: o carimbo colide. 2ª: a que sai sem o id.
+      [{ code: "23505", message: "duplicate key value violates unique constraint" }],
+    );
+    const enviarTemplate = vi.fn(async () => ({ success: true, messageId: "prov-colidente" }));
+    const console_ = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await processarTiqueDoDisparo(
+      { supabaseAdmin: admin.client, enviarTemplate, esperar: async () => {}, agora: () => AGORA } as never,
+      { batchSize: 20, perOrgCap: 5, pausaMs: 0 },
+    );
+
+    const naLinha = admin.escritas.filter((e) => e.tabela === "blast_plan_recipients");
+    expect(naLinha).toHaveLength(2);
+
+    // A segunda tentativa mantém o estado e a marca de tempo, e larga só o id.
+    expect(naLinha[1].payload).toMatchObject({ status: "sent" });
+    expect(naLinha[1].payload).toHaveProperty("sent_at");
+    expect(naLinha[1].payload).not.toHaveProperty("provider_message_id");
+
+    // E o operador fica sabendo: silêncio aqui esconderia a colisão que motivou
+    // a saída de emergência registrada no HANDOFF-1721.
+    expect(console_).toHaveBeenCalledTimes(1);
+    expect(String(console_.mock.calls[0][0])).toContain("23505");
+    console_.mockRestore();
+  });
+
+  it("erro que NÃO é colisão não vira segunda tentativa", async () => {
+    // Retentar um deadlock ou um timeout com o mesmo payload não conserta nada e
+    // esconde o problema numa segunda linha de log. Só o 23505 tem saída.
+    const admin = makeAdmin(
+      {
+        __claim: [linha({ id: "r1" })],
+        blast_plans: [PLANO],
+        whatsapp_instances: [INSTANCIA],
+      },
+      [{ code: "40P01", message: "deadlock detected" }],
+    );
+    const enviarTemplate = vi.fn(async () => ({ success: true, messageId: "prov-1" }));
+    const console_ = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await processarTiqueDoDisparo(
+      { supabaseAdmin: admin.client, enviarTemplate, esperar: async () => {}, agora: () => AGORA } as never,
+      { batchSize: 20, perOrgCap: 5, pausaMs: 0 },
+    );
+
+    expect(admin.escritas.filter((e) => e.tabela === "blast_plan_recipients")).toHaveLength(1);
+    expect(console_).toHaveBeenCalledTimes(1);
+    console_.mockRestore();
   });
 });

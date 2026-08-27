@@ -15,6 +15,10 @@ import {
   useUpdateBlastPlan,
   type BlastPlan,
 } from "@/modules/campaigns/hooks/useBlastPlans";
+import {
+  processados,
+  saiuDaFila,
+} from "@/modules/campaigns/lib/blast-delivery-summary";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -98,7 +102,7 @@ interface BlastPlanCardProps {
 }
 
 export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
-  const { data: progress } = useBlastPlanProgress(plan.id);
+  const { data: progress } = useBlastPlanProgress(plan);
   const control = useBlastPlanControl();
   const update = useUpdateBlastPlan();
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -113,18 +117,26 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
 
   // Progress: prefer recipient-level counts; fall back to lot ratio while the
   // recipient query is still loading so the bar never reads empty for a live plan.
-  // `failed` (sent reclassificado pelo sync do poll, ADR-0016/#948) conta como
-  // processado — o disparo passou por ele — mas nunca soma em "enviados".
-  const { total, sent, skipped, failed, pct } = useMemo(() => {
+  // As duas derivações vivem em `blast-delivery-summary.ts`, junto do resumo:
+  // eram duas telas calculando a mesma soma, e um sétimo estado obrigaria a
+  // lembrar das duas. `saiuDaFila` deixa `failed` DE FORA de propósito — ele tem
+  // contador próprio logo ao lado, e somá-lo aqui contaria a mesma pessoa duas
+  // vezes na mesma linha.
+  const { total, saiu, delivered, skipped, failed, pct } = useMemo(() => {
     const t = progress?.total ?? plan.total_recipients ?? 0;
-    const s = progress?.sent ?? 0;
-    const sk = progress?.skipped ?? 0;
-    const f = progress?.failed ?? 0;
-    const processed = s + sk + f;
     const lotPct =
       plan.lots_total > 0 ? Math.round((plan.lots_released / plan.lots_total) * 100) : 0;
-    const recipientPct = t > 0 ? Math.round((processed / t) * 100) : 0;
-    return { total: t, sent: s, skipped: sk, failed: f, pct: progress ? recipientPct : lotPct };
+    if (!progress) {
+      return { total: t, saiu: 0, delivered: 0, skipped: 0, failed: 0, pct: lotPct };
+    }
+    return {
+      total: t,
+      saiu: saiuDaFila(progress),
+      delivered: progress.delivered,
+      skipped: progress.skipped,
+      failed: progress.failed,
+      pct: t > 0 ? Math.round((processados(progress) / t) * 100) : 0,
+    };
   }, [progress, plan.total_recipients, plan.lots_total, plan.lots_released]);
 
   const runControl = async (action: "pause" | "resume" | "cancel") => {
@@ -309,7 +321,12 @@ export function BlastPlanCard({ plan, onOpen }: BlastPlanCardProps) {
         </div>
         <div className="flex items-center justify-between text-[11px] tabular-nums text-muted-foreground">
           <span>
-            <span className="text-foreground/80">{sent.toLocaleString("pt-BR")}</span> enviados
+            <span className="text-foreground/80">{saiu.toLocaleString("pt-BR")}</span> enviados
+            {/* Só o Canal Oficial tem confirmação de entrega (#1724); no Chip
+                este número é sempre zero e o trecho não aparece. */}
+            {delivered > 0 && (
+              <span className="text-emerald-500"> · {delivered.toLocaleString("pt-BR")} entregues</span>
+            )}
             {failed > 0 && (
               <span className="text-destructive"> · {failed.toLocaleString("pt-BR")} falhas</span>
             )}

@@ -27,12 +27,26 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import type { BlastPlan } from "@/modules/campaigns/hooks/useBlastPlans";
 
 /**
- * `sent` é otimista ("aceito pela fila", ADR-0016): o poll do mass-send-status
- * pode reclassificar pra `failed` minutos depois, com `reason` = código
- * canônico de falha. Grupos mutuamente exclusivos — um lead nunca aparece em
- * Enviados e Falha ao mesmo tempo.
+ * Os SEIS estados do CHECK (`20270823000000_...sql:46`). Grupos mutuamente
+ * exclusivos — um lead nunca aparece em duas abas ao mesmo tempo.
+ *
+ * `sent` é otimista: quer dizer "aceito pela fila" (ADR-0016), não "entregue".
+ * No Chip, o poll do mass-send-status pode reclassificá-lo para `failed` minutos
+ * depois; no Canal Oficial, quem o move é o callback de status (#1724), para
+ * `delivered` ou `failed`.
+ *
+ * `unconfirmed` é o fim de linha de quem saiu e nunca teve confirmação dentro do
+ * TTL de 30 dias da Meta. NÃO é entrega e NÃO é falha: a Meta descarta em
+ * silêncio, sem callback, então o que se tem é ausência de informação — e o nome
+ * não pode alegar mais do que se sabe (#1721).
  */
-export type BlastRecipientStatus = "pending" | "sent" | "skipped" | "failed";
+export type BlastRecipientStatus =
+  | "pending"
+  | "sent"
+  | "skipped"
+  | "failed"
+  | "delivered"
+  | "unconfirmed";
 
 export interface BlastPlanRecipient {
   id: string;

@@ -14,12 +14,25 @@
  * policies intactos. Este arquivo prova o lado do código, e prova uma coisa que
  * o ensaio não alcança: **ninguém escreve os estados novos ainda**.
  *
- * É essa asserção que sustenta "nada muda". E ela é um estopim, não uma nota:
- * o dia em que alguém gravar `delivered`, ESTE teste reprova — e quem estiver
- * gravando é obrigado a olhar para `useBlastPlans.ts`, cujo `else p.pending += 1`
- * (linha ~162) hoje joga silenciosamente qualquer status desconhecido no balde
- * `pending`. Sem o estopim, o primeiro `delivered` de produção apareceria na tela
- * como "Aguardando", e ninguém saberia por quê.
+ * Era essa asserção que sustentava "nada muda", e ela era um estopim, não uma
+ * nota.
+ *
+ * ── O ESTOPIM QUEIMOU, NA #1724 ─────────────────────────────────────────────
+ * Ele funcionou. `fechar-entrega.ts` passou a gravar `delivered`, este arquivo
+ * reprovou, e a fatia foi obrigada a tratar a tela ANTES de seguir — nos três
+ * alvos que a mensagem de erro nomeava:
+ *
+ *   · o balde `else p.pending += 1` de `useBlastPlans.ts` MORREU. A agregação
+ *     virou `blast-delivery-summary.ts`, que conta os seis estados por nome e
+ *     tem um contador `desconhecidos`, para o próximo estado novo APARECER em
+ *     vez de se esconder;
+ *   · a union `BlastRecipientStatus` cobre os seis;
+ *   · o `BlastPlanRecipientsSheet` ganhou as duas abas, e o `Record` voltou a
+ *     ser exaustivo.
+ *
+ * O arquivo NÃO foi apagado quando incomodou — guarda que se apaga ao incomodar
+ * não é guarda. Ele mudou de pergunta: de "ninguém escreve os estados novos"
+ * para "só quem deve escreve, e a tela sabe de todos".
  *
  * A drift que este ticket combate já aconteceu uma vez aqui: quando `failed`
  * entrou (ADR-0016), o comentário de `blast-plan.ts:59` continuou dizendo
@@ -70,6 +83,45 @@ const NAO_E_STATUS_DE_DESTINATARIO: Record<string, string> = {
   // grava module/action/status e não tem relação com a linha do destinatário.
   success: "status do runtime_log, não da linha",
   error: "status do runtime_log, não da linha",
+  // O corpo da RESPOSTA HTTP do `notificame-webhook`. Ele entrou nesta varredura
+  // na #1724, quando passou a mencionar `blast_plan_recipients` — é o chamador do
+  // fechamento de entrega. O `status` dele é o do PROCESSAMENTO DO EVENTO, e o
+  // vocabulário não se cruza com o da linha em nenhum valor, o que é a razão de
+  // isto ser allowlist e não ambiguidade.
+  parked: "status da resposta do notificame-webhook (evento foi para a fila)",
+  updated: "status da resposta do notificame-webhook (linha de mensagem tocada)",
+  duplicate: "status da resposta do notificame-webhook (evento repetido)",
+  stored: "status da resposta do notificame-webhook (evento gravado)",
+  connected: "status da instância de WhatsApp, não da linha",
+};
+
+/**
+ * Quem pode falar de `delivered` / `unconfirmed`, e por quê (#1724).
+ *
+ * Allowlist COM MOTIVO, no molde de NAO_E_STATUS_DE_DESTINATARIO acima: lista sem
+ * motivo vira depósito, e depósito esconde o próximo defeito igual.
+ */
+const QUEM_PODE_FALAR_DE_ENTREGA: Record<string, string> = {
+  "supabase/functions/_shared/quick-blast/fechar-entrega.ts":
+    "ESCREVE. O módulo que o callback de status usa para fechar a linha (#1724)",
+  "src/modules/campaigns/hooks/useBlastPlanRecipients.ts":
+    "LÊ. A union BlastRecipientStatus, que o último teste amarra ao CHECK",
+  "src/modules/campaigns/components/BlastPlanRecipientsSheet.tsx":
+    "LÊ. As abas Entregues e Não confirmadas, e o Record exaustivo",
+  "src/modules/campaigns/hooks/useBlastPlans.ts":
+    "LÊ. O progresso por plano, agora sem balde de desconhecido",
+  "src/modules/campaigns/components/disparo-wizard/StepMonitor.tsx":
+    "LÊ. O relatório do Disparo e o estado pessoa a pessoa",
+  "src/modules/campaigns/components/BlastPlanCard.tsx":
+    "LÊ. O card do painel Disparos",
+  "src/modules/campaigns/lib/blast-recipient-view.ts":
+    "LÊ. unconfirmedLabel() — a frase que diz que o prazo venceu sem confirmação",
+  "supabase/functions/_shared/blast-official-runner.ts":
+    "NÃO escreve nem lê: CITA. O comentário do 23505 explica que a linha sem id " +
+    "termina como `unconfirmed`. A varredura casa crase também, e prosa entra — " +
+    "é bluntness deliberada: o custo é uma linha aqui, e afinar a regex para " +
+    "ignorar comentário abriria a porta para o literal de verdade se esconder " +
+    "num deles",
 };
 
 /** Extrai o vocabulário de dentro de `CHECK (status IN (...))`. */
@@ -131,7 +183,7 @@ describe("vocabulário de blast_plan_recipients.status (#1721)", () => {
     expect([...vocabulario].sort()).toEqual([...ESTADOS_VIVOS].sort());
   });
 
-  it("NINGUÉM escreve os estados novos ainda — é isto que prova que nada muda", () => {
+  it("só os escritores previstos gravam os estados novos", () => {
     const vocabulario = new Set<string>([...ESTADOS_VIVOS, ...ESTADOS_NOVOS]);
     const arquivos = arquivosQueTocamADestinatarios();
 
@@ -139,23 +191,38 @@ describe("vocabulário de blast_plan_recipients.status (#1721)", () => {
     // abaixo passariam por ausência de sujeito.
     expect(arquivos.length, "a varredura não achou nenhum arquivo da tabela").toBeGreaterThan(0);
 
-    const vazamentos: string[] = [];
+    const forasteiros: string[] = [];
     for (const { caminho, texto } of arquivos) {
       for (const estado of ESTADOS_NOVOS) {
-        if (new RegExp(`["'\`]${estado}["'\`]`).test(texto)) {
-          vazamentos.push(`${caminho} escreve '${estado}'`);
-        }
+        if (!new RegExp(`["'\`]${estado}["'\`]`).test(texto)) continue;
+        if (caminho in QUEM_PODE_FALAR_DE_ENTREGA) continue;
+        forasteiros.push(`${caminho} fala de '${estado}' sem estar na allowlist`);
       }
     }
 
     expect(
-      vazamentos,
-      `A #1721 é prefactor: expande a forma e não muda comportamento. Se você está ` +
-        `gravando um estado novo, esta fatia deixou de ser inerte — e antes de seguir, ` +
-        `trate o balde de status desconhecido em src/modules/campaigns/hooks/useBlastPlans.ts ` +
-        `(o 'else p.pending += 1'), a union BlastRecipientStatus e as abas do ` +
-        `BlastPlanRecipientsSheet. Senão o primeiro 'delivered' aparece como "Aguardando".`,
+      forasteiros,
+      `Um arquivo novo passou a falar de entrega. Se ele ESCREVE o estado, ele ` +
+        `precisa de motivo nesta allowlist — e, antes disso, de uma resposta para ` +
+        `"a tela sabe mostrar isso?". Se ele só LÊ, o motivo é igualmente barato. ` +
+        `Allowlist sem motivo vira depósito, e depósito esconde o próximo defeito.`,
     ).toEqual([]);
+
+    // CONTROLE POSITIVO — e é ele o coração deste teste depois da #1724.
+    //
+    // A versão anterior afirmava AUSÊNCIA ("ninguém escreve"), e asserção de
+    // ausência passa por vacuidade no dia em que a varredura deixa de achar o
+    // arquivo — por renomeação, por mudança de pasta, por qualquer coisa. Agora
+    // que existe um escritor, ele tem de ser ENCONTRADO.
+    const fechador = arquivos.find((a) =>
+      a.caminho.endsWith("_shared/quick-blast/fechar-entrega.ts")
+    );
+    expect(
+      fechador,
+      "o módulo que fecha a entrega sumiu da varredura — sem ele, este arquivo " +
+        "volta a provar ausência, que é o que se prova sozinho",
+    ).toBeDefined();
+    expect(fechador!.texto).toMatch(/status:\s*"delivered"/);
 
     // E nenhum literal fora do vocabulário, que é como 'membro' nasceu no #1541.
     //
@@ -169,19 +236,20 @@ describe("vocabulário de blast_plan_recipients.status (#1721)", () => {
       /\.eq\(\s*["'`]status["'`]\s*,\s*["'`]([a-z_]+)["'`]/g, // .eq("status", "x")
     ];
 
-    const forasteiros: string[] = [];
+    const desconhecidos: string[] = [];
     for (const { caminho, texto } of arquivos) {
       for (const forma of FORMAS_DE_STATUS) {
         for (const m of texto.matchAll(forma)) {
           if (m[1] in NAO_E_STATUS_DE_DESTINATARIO) continue;
-          if (!vocabulario.has(m[1])) forasteiros.push(`${caminho}: status '${m[1]}'`);
+          if (!vocabulario.has(m[1])) desconhecidos.push(`${caminho}: status '${m[1]}'`);
         }
       }
     }
-    expect(forasteiros, "literal de status fora do CHECK").toEqual([]);
+    expect(desconhecidos, "literal de status fora do CHECK").toEqual([]);
   });
 
-  it("a union do frontend segue nos quatro estados — esta fatia não toca a UI", () => {
+
+  it("a união do frontend cobre os SEIS, e a tela tem balde para cada um", () => {
     const uniao = readFileSync(
       join(RAIZ, "src/modules/campaigns/hooks/useBlastPlanRecipients.ts"),
       "utf8",
@@ -192,9 +260,40 @@ describe("vocabulário de blast_plan_recipients.status (#1721)", () => {
     const valores = [...uniao![1].matchAll(/"([^"]+)"/g)].map((m) => m[1]).sort();
     expect(
       valores,
-      "Ampliar a union aqui QUEBRA o build: BlastPlanRecipientsSheet.tsx usa " +
-        "Record<BlastRecipientStatus, number> com literal exaustivo. É trabalho da " +
-        "fatia que for tratar os estados na tela, não desta.",
-    ).toEqual([...ESTADOS_VIVOS].sort());
+      "A union e o CHECK do banco têm de dizer a mesma coisa. Divergir aqui é " +
+        "como o comentário de blast-plan.ts:59 seguiu dizendo `pending | sent | " +
+        "skipped` depois que `failed` entrou.",
+    ).toEqual([...ESTADOS_VIVOS, ...ESTADOS_NOVOS].sort());
+
+    // E a tela tem de ter um balde NOMEADO para cada um. O
+    // `Record<BlastRecipientStatus, number>` do Sheet faz o compilador reprovar
+    // quem ampliar a union e esquecer da tela — mas um status sem balde vira
+    // `undefined + 1 = NaN`, que a tela mostra sem reclamar, e o compilador não
+    // é quem roda nesta suíte.
+    const sheet = readFileSync(
+      join(RAIZ, "src/modules/campaigns/components/BlastPlanRecipientsSheet.tsx"),
+      "utf8",
+    );
+    const contadores = sheet.match(
+      /const c: Record<BlastRecipientStatus, number> = \{([^}]*)\}/,
+    );
+    expect(contadores, "o contador exaustivo do Sheet sumiu ou mudou de forma").not.toBeNull();
+
+    const comBalde = [...contadores![1].matchAll(/(\w+)\s*:/g)].map((m) => m[1]).sort();
+    expect(comBalde, "estado sem balde no Sheet vira NaN na tela").toEqual(
+      [...ESTADOS_VIVOS, ...ESTADOS_NOVOS].sort(),
+    );
+
+    // E o balde de DESCONHECIDO morreu: nenhum status pode cair num `else`.
+    const agregacao = readFileSync(
+      join(RAIZ, "src/modules/campaigns/hooks/useBlastPlans.ts"),
+      "utf8",
+    );
+    expect(
+      agregacao,
+      'o `else p.pending += 1` voltou. Ele é o balde que faria o primeiro ' +
+        '`delivered` de produção aparecer como "Aguardando".',
+    ).not.toMatch(/else\s+p\.pending\s*\+=/);
   });
+
 });
