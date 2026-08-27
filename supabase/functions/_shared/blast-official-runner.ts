@@ -63,26 +63,78 @@ export interface ResultadoDoEnvio {
 }
 
 /**
+ * O erro do supabase-js, no recorte que este worker lê.
+ *
+ * `unknown` seria mais defensivo e é o que estava aqui — mas o worker lê
+ * `.message` cru nos dois pontos que tratam erro (o `claim` em
+ * `processarTiqueDoDisparo`, e `marcar`), e `unknown` não tem `.message`. Ou o
+ * tipo descreve a leitura, ou a leitura precisa de um helper de
+ * estreitamento; descrever é o que `gestor-auth.ts:29-32` faz, e é o mínimo
+ * honesto: `PostgrestError` é um objeto plano que sempre traz `message`.
+ */
+interface ErroDaConsulta {
+  message: string;
+}
+
+/** O resultado terminal de qualquer consulta deste worker. */
+interface ResultadoDaConsulta {
+  data: unknown[] | null;
+  error: ErroDaConsulta | null;
+}
+
+/**
+ * O encadeamento de filtro que este worker usa, e nada além dele.
+ *
+ * Ele `extends PromiseLike` de propósito: é o que faz `.update(patch).eq(...)`
+ * ser encadeável E aguardável ao mesmo tempo, que é exatamente como `marcar()`
+ * o chama. Cada método devolve o próprio filtro, como o builder do postgrest-js
+ * faz — mesma forma de `GestorAuthFilter` (`gestor-auth.ts:35-39`).
+ */
+interface FiltroDoWorker extends PromiseLike<ResultadoDaConsulta> {
+  eq(coluna: string, valor: unknown): FiltroDoWorker;
+  in(coluna: string, valores: readonly unknown[]): FiltroDoWorker;
+}
+
+/**
  * O recorte do cliente Supabase que este worker usa — nada além disto.
  * Tipar o recorte em vez de `any` faz o compilador conferir as chamadas e deixa
  * o dublê do teste ter de implementar exatamente o que a produção usa.
+ *
+ * ⚠️ PRECISA LISTAR TODA CHAMADA QUE O WORKER FAZ. Nasceu (#1722) descrevendo só
+ * `select().in()` e `rpc()`, enquanto o código também chamava `.update().eq()` e
+ * lia `error.message` — e o `deno check` reprovou com quatro erros que estavam
+ * ali, mudos, desde o começo (#1851). Precisou de um método novo? ESTENDA AQUI.
+ * Não volte para `any`: foi o `any` que escondeu os quatro.
+ *
+ * O portão que prova isto é `deno check _shared/` (`npm run typecheck:edge-shared`),
+ * e só ele: `typecheck:ratchet` roda sobre `tsconfig.app.json`, que inclui apenas
+ * `src/` e nunca enxergou este arquivo.
  */
 export interface ClienteAdminDoWorker {
   from(tabela: string): {
-    select(colunas: string): {
-      in(coluna: string, valores: readonly unknown[]): PromiseLike<{ data: unknown[] | null }>;
-    };
+    select(colunas: string): FiltroDoWorker;
+    update(patch: Record<string, unknown>): FiltroDoWorker;
   };
-  rpc(fn: string, args?: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
+  rpc(
+    fn: string,
+    args?: Record<string, unknown>,
+  ): PromiseLike<{ data: unknown; error: ErroDaConsulta | null }>;
 }
 
-/** Linha de `blast_plans` como o worker a lê — só as colunas do select. */
+/**
+ * Linha de `blast_plans` como o worker a lê — só as colunas do select.
+ *
+ * `template` é a forma que ESTE módulo consome e repassa ao transporte, então é
+ * declarada; `post_send_target` continua `unknown` porque aqui ele é opaco de
+ * propósito — quem o entende é o movedor (ver `ContextoDoPlano`). A assimetria é
+ * a regra, não descuido: descreva o que você lê, deixe opaco o que só carrega.
+ */
 interface LinhaDePlano {
   id: string;
   organization_id: string;
   status: string;
   instance_id: string | null;
-  template: unknown;
+  template: TemplateDoPlano | null;
   post_send_target: unknown;
 }
 
@@ -292,7 +344,11 @@ async function carregarContexto(
 
   const mapa = new Map<string, ContextoDoPlano>();
   for (const p of (planos ?? []) as LinhaDePlano[]) {
-    const instance = porInstancia.get(p.instance_id);
+    // `instance_id` é anulável na tabela, e o mapa é chaveado pela PK de
+    // `whatsapp_instances` (nunca nula) — então `get(null)` já devolvia
+    // `undefined` e caía no `continue` abaixo. A guarda só diz isso ao
+    // compilador; o efeito em runtime é o mesmo.
+    const instance = p.instance_id ? porInstancia.get(p.instance_id) : undefined;
     if (!instance) continue;
     mapa.set(p.id, {
       plano: { status: p.status, template: p.template ?? null },
