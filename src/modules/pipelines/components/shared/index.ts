@@ -13,3 +13,4 @@ export {
 export { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 export { PipeDistributionSection } from "./PipeDistributionSection";
 export { PipeSettingsDialog } from "./PipeSettingsDialog";
+export { DangerZoneSystemPipe } from "./DangerZoneSystemPipe";
