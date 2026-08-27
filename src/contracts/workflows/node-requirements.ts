@@ -20,6 +20,8 @@
  * A config do nó mora PLANA em `node.data` — o executor faz `params: {...ctx.nodeData}`.
  */
 
+import { ehModoTemplateMeta } from "./modo-de-mensagem";
+
 export type NodeConfig = Record<string, unknown>;
 
 export interface NodeRequirement {
@@ -40,6 +42,16 @@ export function isFilled(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;
   return true;
 }
+
+/**
+ * A MESMA string que o executor devolve — copiada, e não importada, porque
+ * `supabase/functions/` é Deno e não resolve o alias `@/`. O teste âncora
+ * (`workflow-node-requirements.test.ts`) lê o fonte do executor e falha se ela
+ * deixar de existir lá, que é o que impede a cópia de virar ficção.
+ */
+const MOTIVO_LEGIVEL_SEM_TEMPLATE =
+  "Modo Template Meta selecionado, mas nenhum template aprovado foi escolhido " +
+  "neste nó. Abra o nó e escolha o template — ou volte o modo para Escrever.";
 
 const midiaDoTipo = (tipo: string) => (c: NodeConfig) =>
   (c.messageType as string | undefined) === tipo;
@@ -65,6 +77,22 @@ export const NODE_REQUIREMENTS: Record<string, NodeRequirement[]> = {
   ],
   send_whatsapp_template: [
     { anyOf: ["templateName"], label: "template", executorError: "No template configured" },
+  ],
+
+  // O nó de MENSAGEM em modo Template Meta. A regra é condicional porque o mesmo
+  // actionType manda texto na esmagadora maioria dos nós (396 ativos medidos em
+  // produção): exigir `templateName` sempre reprovaria todos eles.
+  //
+  // O caso que ela pega é exatamente o que quebrou na Chique — modo template
+  // escolhido, nenhum template selecionado, e o painel escondendo o campo de
+  // texto. Antes disso o editor deixava ativar, e o nó só falhava no envio.
+  send_whatsapp: [
+    {
+      anyOf: ["templateName"],
+      label: "template aprovado",
+      when: ehModoTemplateMeta,
+      executorError: MOTIVO_LEGIVEL_SEM_TEMPLATE,
+    },
   ],
   send_campaign_message: [
     { anyOf: ["campaignId"], label: "campanha", executorError: "No campaign configured" },
