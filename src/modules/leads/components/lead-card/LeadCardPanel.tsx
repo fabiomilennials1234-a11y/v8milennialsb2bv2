@@ -3,6 +3,7 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
+import { useOrganization } from "@/modules/identity";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { LeadCardContainer } from "./LeadCardContainer";
@@ -24,6 +25,15 @@ export const LeadCardPanel = memo(function LeadCardPanel() {
   const { isOpen, leadId, close } = useLeadSheet();
   const { openDeal } = useDealSheet();
   const { isMobile } = useViewport();
+  /**
+   * Só admin CRIA etiqueta (`tags_insert_admin_only` exige `is_user_admin()`);
+   * pendurar uma existente vale para qualquer pessoa da org. Mesma regra e
+   * mesma fonte do painel do Negócio, que lê `role` do mesmo `useOrganization`
+   * por dentro do `useDealCardData` (`souAdmin`, :529). Sem passar isto, o card
+   * do Lead — que é onde a lista de Leads e os cinco funis abrem a pessoa —
+   * mandava o próprio admin "pedir a um administrador".
+   */
+  const { role } = useOrganization();
 
   /**
    * "Criar negócio" (`inv:H5-18`) — o botão vive lá dentro, o diálogo mora aqui.
@@ -67,6 +77,7 @@ export const LeadCardPanel = memo(function LeadCardPanel() {
           openDeal(entryId, id);
         }}
         onNewDeal={() => setNovoNegocio(true)}
+        podeCriarEtiqueta={role === "admin"}
       />
       {(novoNegocio || jaAbriu.current) && (
         <LeadCardNewDeal

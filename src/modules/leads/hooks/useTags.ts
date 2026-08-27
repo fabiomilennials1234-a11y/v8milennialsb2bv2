@@ -31,10 +31,27 @@ export function useCreateTag() {
   const { organizationId } = useOrganization();
 
   return useMutation({
-    mutationFn: async (tag: TagInsert) => {
+    /**
+     * `organization_id` é OPCIONAL aqui, e o tipo agora diz isso.
+     *
+     * A linha abaixo sempre teve o recuo (`?? organizationId`) e o único
+     * chamador de produção — `Configuracoes.tsx:170` — sempre passou só
+     * `{ name, color }`. O parâmetro tipado como `TagInsert` (que exige
+     * `organization_id: string`) descrevia um contrato que ninguém cumpria:
+     * obrigava cada nova tela a repetir uma consulta de org que este hook já
+     * faz, ou a mentir com um `as`.
+     */
+    mutationFn: async (tag: Omit<TagInsert, "organization_id"> & { organization_id?: string }) => {
+      // `tags.organization_id` é NOT NULL e a policy de INSERT compara com
+      // `get_user_organization_id()`. Sem org conhecida o INSERT seria recusado
+      // pelo banco com uma mensagem sobre RLS — que descreve o sintoma e esconde
+      // a causa. Falhar aqui diz a verdade.
+      const orgId = tag.organization_id ?? organizationId;
+      if (!orgId) throw new Error("Organização não identificada — não é possível criar a etiqueta.");
+
       const { data, error } = await supabase
         .from("tags")
-        .insert({ ...tag, organization_id: tag.organization_id ?? organizationId })
+        .insert({ ...tag, organization_id: orgId })
         .select()
         .single();
 

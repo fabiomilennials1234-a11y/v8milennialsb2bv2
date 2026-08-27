@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { LeadCard } from "./LeadCard";
 import { LeadCardAside } from "./LeadCardAside";
 import { LeadCardControles } from "./LeadCardControles";
+import { LeadCardEtiquetas } from "./LeadCardEtiquetas";
 import { useLeadCardData } from "./useLeadCardData";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
@@ -41,11 +42,21 @@ export function LeadCardContainer({
   onNewDeal,
   forma = "card",
   onAbrirFicha,
+  podeCriarEtiqueta = false,
 }: {
   leadId: string | null;
   isOpen: boolean;
   onOpenDeal?: (entryId: string, leadId: string) => void;
   onNewDeal?: () => void;
+  /**
+   * Oferece criar etiqueta NOVA a partir do card, e não só pendurar uma que já
+   * existe. Só de admin: `tags_insert_admin_only` exige `is_user_admin()` no
+   * INSERT em `tags`, enquanto `lead_tags_insert_organization` deixa qualquer
+   * pessoa da org pendurar. Quem sabe a resposta passa adiante — o painel do
+   * Negócio já tem `souAdmin` em mãos — em vez de este container perguntar de
+   * novo em toda abertura de card.
+   */
+  podeCriarEtiqueta?: boolean;
   /**
    * `card` é a ficha inteira; `coluna` é a faixa de 356px que o painel do
    * Negócio encosta à esquerda (o print do DataCrazy).
@@ -222,6 +233,15 @@ export function LeadCardContainer({
         onSaveNote={salvarNota}
         onSaveField={salvarCampo}
         onAbrirFicha={onAbrirFicha}
+        editorDeEtiquetas={
+          leadId ? (
+            <LeadCardEtiquetas
+              leadId={leadId}
+              podeCriar={podeCriarEtiqueta}
+              alinhamento="centro"
+            />
+          ) : undefined
+        }
         controles={
           leadId && e ? (
             <LeadCardControles
@@ -251,6 +271,11 @@ export function LeadCardContainer({
       onEditarComentario={leadId ? editarComentario : undefined}
       onApagarComentario={leadId ? apagarComentario : undefined}
       comentando={criarComentario.isPending}
+      editorDeEtiquetas={
+        leadId ? (
+          <LeadCardEtiquetas leadId={leadId} podeCriar={podeCriarEtiqueta} />
+        ) : undefined
+      }
       onToggleCopilot={(ativo) =>
         leadId && toggleAI.mutate({ leadId, disabled: !ativo })
       }

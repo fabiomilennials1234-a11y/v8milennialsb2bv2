@@ -285,6 +285,8 @@ vi.mock("@/modules/identity", () => ({
   useResponsibleMembers: () => [{ id: "tm-1", name: "Ana" }],
   useCurrentTeamMember: () => ({ data: { id: "tm-1", organization_id: "org-1" } }),
   isVirtualTeamMember: (id: string) => String(id).startsWith("master-virtual-"),
+  // `LeadCardPanel` lê `role` para decidir se oferece CRIAR etiqueta nova.
+  useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1", role: "admin", isReady: true }),
 }));
 
 const pipelinesMock = vi.fn(() => ({ data: FUNIS as PipelineStatus[], isLoading: false }));
@@ -364,6 +366,18 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
 }));
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useSaveCustomFieldValue: () => ({ mutateAsync: vi.fn() }),
+}));
+/* A faixa de etiquetas do card lê banco e org. O mock de `@/modules/identity`
+   acima é parcial (só `useOrganization` não está nele), então `useTags` cairia
+   direto no buraco — mocke a folha, não o barril. */
+vi.mock("@/modules/leads/hooks/lead/useLeadTagsAttached", () => ({
+  useLeadTagsAttached: () => ({ data: [], isLoading: false }),
+  useAddLeadTag: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveLeadTag: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+vi.mock("@/modules/leads/hooks/useTags", () => ({
+  useTags: () => ({ data: [], isLoading: false }),
+  useCreateTag: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
 
 import { LeadCardPanel } from "@/modules/leads/components/lead-card/LeadCardPanel";

@@ -94,6 +94,42 @@ vi.mock("@/shared/hooks/useLogLeadAction", () => ({
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: () => ({ update: () => ({ eq: async () => ({ error: null }) }) }) },
 }));
+/**
+ * A faixa de etiquetas do card do Lead fala com banco — e, por `useOrganization`,
+ * com o `AuthContext`, cujo `useAuth` LANÇA fora do provider. Esta montagem não
+ * tem `AuthProvider` de propósito (o que se prova aqui é a máquina de estados
+ * dos dois painéis), então os hooks dela entram na lista de mocks pela mesma
+ * razão que `useLeads` e `useCrossPipeMove` já estavam nela.
+ */
+vi.mock("@/modules/leads/hooks/lead/useLeadTagsAttached", () => ({
+  useLeadTagsAttached: () => ({ data: [], isLoading: false }),
+  useAddLeadTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useRemoveLeadTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+}));
+vi.mock("@/modules/leads/hooks/useTags", () => ({
+  useTags: () => ({ data: [], isLoading: false }),
+  useCreateTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+}));
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+/**
+ * `LeadCardPanel` lê `role` para decidir se oferece CRIAR etiqueta nova.
+ * O mock é do MÓDULO FUNDO, não do barril `@/modules/identity`: o barril
+ * reexporta daqui, então isto basta para o painel — e o resto do barril
+ * (`useAuth`, `useMasterAuth`, tipos) continua real para quem mais precisar.
+ */
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
+  useOrganization: () => ({
+    organizationId: "org-1",
+    teamMemberId: "tm-1",
+    role: "admin",
+    orgType: "crm",
+    timezone: null,
+    isLoading: false,
+    isReady: true,
+    error: null,
+  }),
+  useRequiredOrganization: () => ({ organizationId: "org-1" }),
+}));
 vi.mock("@/shared/hooks/use-viewport", () => ({
   useViewport: () => ({ isMobile: false, isTablet: false, isDesktop: true }),
 }));
