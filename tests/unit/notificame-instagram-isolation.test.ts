@@ -57,7 +57,7 @@ import {
   instancesToNumbers,
   isBlastableInstance,
   type InstanceLike,
-} from "@/modules/campaigns/components/disparo-wizard/instances-to-numbers";
+} from "@/shared/disparo/disparo-numbers";
 
 const ORG = "org-a";
 

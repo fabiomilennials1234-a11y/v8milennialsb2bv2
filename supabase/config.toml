@@ -436,6 +436,12 @@ verify_jwt = false
 [functions.blast-plan-release]
 verify_jwt = false
 
+# process-blast-recipients: worker da fila do Disparo pelo Canal Oficial (#1722,
+# ADR-0028). Cron-only (pg_cron via pg_net, 1/min); auth x-cron-secret validado no
+# handler. Não existe caminho de usuário para cá.
+[functions.process-blast-recipients]
+verify_jwt = false
+
 # blast-plan-control: pause/resume/cancel de Blast Plan (ADR-0003 / #707). JWT validado
 # no handler (getUser); SEM role gate — qualquer membro da org controla seus planos.
 [functions.blast-plan-control]

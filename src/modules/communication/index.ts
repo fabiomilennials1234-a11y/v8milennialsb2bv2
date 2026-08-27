@@ -59,6 +59,7 @@ export {
   formatoDeMidiaDoCabecalho,
   midiaDeExemploDoCabecalho,
   previewDoTemplate,
+  rotulosDosBotoes,
   variaveisDoTemplate,
 } from "./lib/template-send";
 // ── Inbox multicanal ──────────────────────────────────────────────────────

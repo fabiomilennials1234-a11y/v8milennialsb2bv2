@@ -6,6 +6,9 @@
  * the slider (new numbers ban easiest). The slider's safe/risk zone is derived
  * from the Torque-recommended value: at or below it is safe, above it the user
  * explicitly assumes ban risk. Hard floor/ceiling bound the slider itself.
+ *
+ * Vive em `src/shared/` desde #1846: `disparo-numbers` é seu único consumidor
+ * fora do wizard e os dois andam juntos. Zero imports — mantenha assim.
  */
 
 export const CAP_MIN = 20;
