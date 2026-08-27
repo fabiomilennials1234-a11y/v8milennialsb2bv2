@@ -287,6 +287,7 @@ export async function governSend<T>(
         instanceId: ctx.instanceId ?? undefined,
         category: ctx.category,
         recipientPhone: ctx.recipientPhone ?? undefined,
+        isApprovedTemplate: ctx.isApprovedTemplate,
       }),
       STATE_TIMEOUT_MS,
     );
