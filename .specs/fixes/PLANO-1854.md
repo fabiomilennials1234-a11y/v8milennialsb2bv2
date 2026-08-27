@@ -53,16 +53,24 @@ Fora de escopo, deliberado: prod, `blast/`, `.eslint-baseline.json`.
 - **Metade (a), no checkout:** `bash scripts/check-migration-versions.sh` →
   `Duplicate version prefixes inside the checkout: 0`.
 - **Metade (b), branch × base:** o mesmo comando imprime
-  `Versions colliding with origin/main under another name: 0` e classifica o arquivo
-  movido como **renumeração**, não colisão (o script separa os dois casos pelo slug).
+  `Versions colliding with origin/main under another name: 0`. E **não** imprime linha de
+  `Versions renumbered` — medido: o par `20270901000010 erp_pedidos_itens` casa com o
+  homônimo de mesmo nome na base e sai por `continue` antes do ramo de renumeração, e
+  `20270901000011` não tem homônimo nenhum na base. Os dois caminhos silenciosos são o
+  resultado certo; a classificação explícita de renumeração é para outro formato de caso
+  (a base tem o arquivo sob a versão que ESTA branch reocupou).
 - **Merge ref — o que o CI de verdade testa:** worktree descartável, `git merge` da
   branch dentro de `origin/main`, e a guarda rodada LÁ. É o único lugar onde o
   vermelho de hoje e o verde de depois aparecem no mesmo formato que o CI vê.
 - **Self-test da guarda:** `bash scripts/check-migration-versions.test.sh` (roda no CI
   logo antes, e é o controle positivo de que a guarda não está lendo árvore vazia).
 
-Contagem só do diretório raiz — `rollback/` e `archive/` repetem prefixos de propósito.
-Usar `sed 's|.*/||'` colapsa os três diretórios e devolve ~180 falsos positivos.
+**Contagem manual de duplicatas: só o diretório raiz.** `rollback/` e `archive/` repetem
+prefixos de propósito, então um `sed 's|.*/||' | uniq -d` sobre a árvore inteira colapsa os
+três diretórios e devolve ~180 falsos positivos. Isso vale para a CONTAGEM à mão — não para
+a metade (b) da guarda, que usa o mesmo `sed` de propósito e não sofre disso: ela compara
+pares `(versão, nome)` dos DOIS lados, e o colapso acontece igual em ambos, então os
+homônimos de `rollback/`/`archive/` casam entre si e saem como iguais.
 
 ## 5. O ledger de prod — preparado, NÃO executado
 
