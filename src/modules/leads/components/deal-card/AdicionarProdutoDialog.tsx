@@ -193,7 +193,17 @@ export function AdicionarProdutoDialog({
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && aoFechar()}>
-      <DialogContent className="max-w-[460px]">
+      {/*
+        `z-[60]` nos DOIS — conteúdo e overlay — pelo mesmo motivo que a
+        confirmação de excluir o negócio já sobe: no celular o painel do Negócio
+        é um `Sheet`, e `SheetContent` é `z-[51]`. Este diálogo é IRMÃO dele no
+        `body`, então com o `z-50` do primitivo ele nasce ATRÁS da folha —
+        invisível. E não é só o desenho que quebra: o Radix põe a camada de
+        baixo em `pointer-events: none`, então o toque atravessa a folha e cai
+        num diálogo que ninguém está vendo. Medido em 390×844: o diálogo existia
+        no DOM, recebia o clique, e a tela mostrava só a folha.
+      */}
+      <DialogContent className="z-[60] max-w-[460px]" overlayClassName="z-[60]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[15px]">
             <Package className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -228,8 +238,21 @@ export function AdicionarProdutoDialog({
               </button>
             </div>
           ) : (
-            <div className="flex">
-              <ProductCombobox onAdd={escolher} />
+            <div className="flex flex-col gap-2">
+              <div className="flex">
+                <ProductCombobox onAdd={escolher} />
+              </div>
+              {/*
+                O botão "Adicionar" nasce desabilitado e não dizia por quê.
+                Digitar o nome na busca não é escolher: enquanto ninguém clica
+                num item da lista (ou confirma o avulso), o diálogo não tem
+                produto, e o clique no botão de baixo não faz nada — que é
+                exatamente como um botão quebrado se parece.
+              */}
+              <p className="text-[11.5px] text-muted-foreground/70">
+                Escolha um produto da lista para liberar a quantidade, o preço e
+                o botão de lançar. Digitar na busca ainda não escolhe.
+              </p>
             </div>
           )}
 

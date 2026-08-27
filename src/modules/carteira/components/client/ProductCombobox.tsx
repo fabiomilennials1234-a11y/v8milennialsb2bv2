@@ -98,6 +98,25 @@ export function ProductCombobox({ onAdd, disabled }: ProductComboboxProps) {
               }
             }}
           />
+          {/*
+            O botão existe porque o Enter era o ÚNICO jeito de confirmar, e nada
+            na tela dizia isso. Quem digitava o nome e ia direto no botão de
+            baixo não lançava nada: o pai só sabe do produto depois do `onAdd`,
+            então para ele nada tinha sido escolhido e o botão final ficava
+            desabilitado — mudo, sem dizer o que faltava.
+          */}
+          <button
+            type="submit"
+            disabled={disabled || !search.trim()}
+            title="Usar este nome"
+            aria-label="Usar este nome"
+            className={cn(
+              "shrink-0 rounded-md p-1 text-muted-foreground transition-colors",
+              "hover:text-foreground disabled:opacity-40 disabled:pointer-events-none",
+            )}
+          >
+            <Plus className="h-4 w-4" />
+          </button>
         </div>
       </form>
     );
@@ -111,8 +130,24 @@ export function ProductCombobox({ onAdd, disabled }: ProductComboboxProps) {
 
   const showCustomOption = search.trim() && filtered.length === 0;
 
+  /*
+   * `modal` é o que faz a lista ROLAR quando o combobox está dentro de um
+   * diálogo — e é o caso de todos os usos de hoje (NewOrderModal,
+   * EditOrderDialog, CreateProposalModal e "Adicionar produto" do Negócio).
+   *
+   * O `Dialog` do Radix monta um `react-remove-scroll`, que engole o evento
+   * `wheel` de tudo que estiver FORA do `DialogContent`. O conteúdo do Popover
+   * sai por portal para o `body`, ou seja, fora — então a roda do mouse não
+   * chegava na lista. `modal` dá ao Popover o seu próprio `RemoveScroll`
+   * aninhado, e o de dentro é quem passa a mandar.
+   *
+   * Medido em navegador com 42 produtos (`scrollHeight` 1520 para uma caixa de
+   * 300): sem `modal`, `scrollTop` ficava em 0 depois da roda; com `modal`, foi
+   * a 600. Forçar `el.scrollTop` por script funcionava nos dois casos — o
+   * elemento sempre pôde rolar, o que faltava era o evento chegar nele.
+   */
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -130,7 +165,14 @@ export function ProductCombobox({ onAdd, disabled }: ProductComboboxProps) {
           Buscar produto...
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      {/* `z-[70]` porque a lista tem de pintar acima da superfície que a abriu,
+          e algumas delas já sobem para `z-[60]` para vencer o `SheetContent`
+          (`z-[51]`) no celular. No `z-50` do primitivo, a lista de produtos
+          nasceria ATRÁS do próprio diálogo que a pediu. */}
+      <PopoverContent
+        className="z-[70] w-[--radix-popover-trigger-width] p-0"
+        align="start"
+      >
         <Command shouldFilter={false}>
           <CommandInput
             placeholder="Nome do produto..."
