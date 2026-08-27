@@ -392,7 +392,7 @@ export async function resolveGovernorState(
     let windowSource: GovernorState["windowSource"] = null;
     if (
       input.instanceId && input.recipientPhone &&
-      sessionWindowApplies(instanceProvider, input.category)
+      sessionWindowApplies(instanceProvider, input.category, input.isApprovedTemplate)
     ) {
       try {
         const w = await resolveSessionWindow(
@@ -530,7 +530,7 @@ export async function recordDecision(
         // ligar enforce nesse estado barraria 100% da automação do canal.
         provider: state.instanceProvider,
         window_applies: state.instanceProvider
-          ? sessionWindowApplies(state.instanceProvider, decision.category)
+          ? sessionWindowApplies(state.instanceProvider, decision.category, ctx.isApprovedTemplate)
           : false,
         window_resolved: state.windowResolved,
         window_open: state.windowResolved

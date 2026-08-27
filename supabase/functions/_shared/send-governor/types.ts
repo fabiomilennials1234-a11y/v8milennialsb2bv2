@@ -74,6 +74,23 @@ export interface GovernorContext {
   /** #1156 — chave de idempotência por mensagem lógica + índice de chunk. Faz
    *  chunks distintos da MESMA reply não colidirem no dedup de conteúdo. */
   idempotencyKey?: string | null;
+  /**
+   * Este envio é um TEMPLATE APROVADO pela Meta (HSM)?
+   *
+   * ⚠️ EXISTE POR CAUSA DE UM CICLO FECHADO, medido em produção em 27/08. A P5
+   * barrava o template com `outside_24h_window` — e template aprovado é a ÚNICA
+   * mensagem que a Meta aceita justamente nessa situação. Consequência: o nó de
+   * template nunca enviava, e o escape de janela (#1689) era circular — acionado
+   * pelo bloqueio, respondia com template, e batia no mesmo bloqueio.
+   *
+   * Não foi visto antes porque só UMA org está em `enforce` e o caminho manual
+   * (isento na regra 1) é o único que já tinha sido exercitado.
+   *
+   * Ausente/false = texto livre, e a P5 continua valendo integralmente. Isto NÃO
+   * é um passe-livre: quarentena (P3) e cap diário (P1/P2) seguem se aplicando
+   * ao template — ele custa dinheiro e conta para a reputação do número.
+   */
+  isApprovedTemplate?: boolean;
 }
 
 /**
@@ -170,4 +187,12 @@ export interface ResolveStateInput {
   instanceId?: string | null;
   category: SendCategory;
   recipientPhone?: string | null;
+  /**
+   * Espelha `GovernorContext.isApprovedTemplate`, e precisa existir aqui porque
+   * o io usa o MESMO predicado que o core (`sessionWindowApplies`) para decidir
+   * se PAGA a leitura da janela. Sem o campo, o io leria a janela de um envio
+   * que a P5 nem avalia — trabalho jogado fora — e, pior, a telemetria de
+   * `window_applies` diria o contrário do que a decisão fez.
+   */
+  isApprovedTemplate?: boolean;
 }
