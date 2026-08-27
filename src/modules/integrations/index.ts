@@ -33,6 +33,7 @@ export {
   useDisconnectToth,
   useSyncTothClientes,
   useSyncTothCobrancas,
+  useSyncTothPedidos,
   useSimulateTothClientes,
   useUpdateTothActiveWindow,
   useUpdateTothEmpresa,

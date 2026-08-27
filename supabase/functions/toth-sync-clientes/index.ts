@@ -169,7 +169,7 @@ Deno.serve(
       // Literal única: o supabase-js infere as colunas a partir do TEXTO do
       // select. Concatenar com `+` produz `string` genérico e o retorno degrada
       // para `GenericStringError`, quebrando o acesso a todo campo.
-      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras, clientes_empresa, clientes_incluir_sem_empresa")
+      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras, clientes_marcas, clientes_somente_com_compra, clientes_empresa, clientes_incluir_sem_empresa")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -225,12 +225,25 @@ Deno.serve(
 
     // A janela de "cliente ativo" vem da CONEXÃO, não do corpo: é decisão de
     // negócio da organização e precisa valer igual no botão e no cron. Sem ela,
-    // a carga traz a base inteira — 12.605 registros na Café Jurerê, quase todos
+    // a carga traz a base inteira — 12.632 registros na Café Jurerê, quase todos
     // histórico, o que enche a carteira de nome sem relevância comercial.
     const diasCompras = conn.clientes_dias_compras as number | null;
     if (typeof diasCompras === "number" && diasCompras > 0) {
       filtros.diasCompras = String(diasCompras);
     }
+
+    /**
+     * 🔑 `marcas` é a chave que LIGA a janela de dias.
+     *
+     * Medido contra o ERP real em 25/08: `diasCompras=60` sozinho devolve 12.633
+     * linhas — a base inteira. Acompanhado de `marcas=1,2,3,4,5,6`, devolve 550.
+     * A janela nunca esteve quebrada; faltava dizer de quais marcas.
+     *
+     * O ganho não é só de recorte: a resposta cai de 21 MB para menos de 1 MB, e
+     * é a mesma leitura que antes gastava um minuto de CPU do worker.
+     */
+    const marcas = (conn.clientes_marcas as string | null)?.trim();
+    if (marcas) filtros.marcas = marcas;
 
     // Override pontual, para diagnóstico. Allowlist estrita: parâmetro inventado
     // já provocou HTTP 500 uma vez.
@@ -265,6 +278,12 @@ Deno.serve(
         ? body.incluir_sem_empresa
         : conn.clientes_incluir_sem_empresa === true;
 
+    /** Só quem tem data de último pedido faturado. Ver o uso, no laço. */
+    const somenteComCompra =
+      typeof body.somente_com_compra === "boolean"
+        ? body.somente_com_compra
+        : conn.clientes_somente_com_compra === true;
+
     const maxEnrich =
       typeof body.max_enrich === "number" && body.max_enrich > 0
         ? Math.floor(body.max_enrich)
@@ -274,6 +293,12 @@ Deno.serve(
     const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
     /** Quantos o filtro de empresa deixou de fora, e de quem eram. */
     const foraDoFiltro = { total: 0, sem_empresa: 0, por_empresa: {} as Record<string, number> };
+    /**
+     * Clientes sem `dataEmissaoUltimoPedidoFaturado`. Contados mesmo quando
+     * entram: é o número que revela quanto da carteira nunca faturou, e ele
+     * muda a leitura de qualquer média de recência.
+     */
+    const semUltimaCompra = { recebidos: 0, descartados: 0 };
     const mappingErrors: string[] = [];
     const previews: PreviewedClient[] = [];
     const mappedClients: CanonicalClient[] = [];
@@ -353,6 +378,22 @@ Deno.serve(
             }
             continue;
           }
+
+          /**
+           * Recorte estrito: só quem já faturou alguma coisa.
+           *
+           * Desligado por padrão, e é decisão de negócio ligar. Dentro da janela
+           * do ERP existe quem pediu e ainda não faturou — 131 dos 550 na
+           * medição de 25/08 —, e esses são carteira legítima. Quem liga isto
+           * está dizendo "carteira é quem já comprou", que é uma definição
+           * defensável, não a padrão.
+           */
+          if (somenteComCompra && !canonical.lastOrderAt) {
+            semUltimaCompra.descartados++;
+            filteredInThisPage++;
+            continue;
+          }
+          if (!canonical.lastOrderAt) semUltimaCompra.recebidos++;
 
           if (seenIds.has(canonical.externalId)) continue;
           seenIds.add(canonical.externalId);
@@ -516,6 +557,13 @@ Deno.serve(
           escreveu: false,
           modo: syncMode,
           janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+          marcas: filtros.marcas ?? null,
+          // A janela só vale acompanhada de marcas — sem elas o ERP devolve a
+          // base inteira. Dizer isso aqui evita que alguém leia "janela: 60" e
+          // conclua que o recorte aconteceu.
+          janela_inerte: !!filtros.diasCompras && !filtros.marcas,
+          somente_com_compra: somenteComCompra,
+          sem_ultima_compra: semUltimaCompra,
           empresa: empresaFiltro,
           incluir_sem_empresa: incluirSemEmpresa,
           fora_do_filtro_de_empresa: foraDoFiltro,
@@ -599,6 +647,9 @@ Deno.serve(
         mapping_errors: mappingErrors.length,
         empresa: empresaFiltro,
         fora_do_filtro: foraDoFiltro.total,
+        marcas: filtros.marcas ?? null,
+        janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+        sem_ultima_compra: semUltimaCompra,
       },
     });
 
@@ -613,6 +664,10 @@ Deno.serve(
         incompleto: stopReason === "max_enrich",
         empresa: empresaFiltro,
         fora_do_filtro_de_empresa: foraDoFiltro,
+        marcas: filtros.marcas ?? null,
+        janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+        janela_inerte: !!filtros.diasCompras && !filtros.marcas,
+        sem_ultima_compra: semUltimaCompra,
         mapping_errors: mappingErrors,
       },
       cors,

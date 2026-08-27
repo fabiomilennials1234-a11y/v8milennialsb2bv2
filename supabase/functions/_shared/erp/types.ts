@@ -35,6 +35,16 @@ export interface CanonicalClient {
   segment?: string | null;
   /** Data de cadastro NO ERP (ISO). Cadastro não é venda. */
   registeredAt?: string | null;
+  /**
+   * Data do último pedido FATURADO no ERP (ISO, `aaaa-mm-dd`).
+   *
+   * É a única medida de recência que o cadastro de cliente carrega, e por isso
+   * vale mais do que parece: com ela a carteira sabe quem esfriou antes de
+   * existir sincronização de pedidos. Não confundir com a janela `diasCompras`
+   * do Toth, que filtra por **pedido** — um cliente pode estar dentro da janela
+   * e não ter esta data, porque pediu e ainda não faturou.
+   */
+  lastOrderAt?: string | null;
   city?: string | null;
   /** UF em duas letras maiúsculas, ou null. */
   uf?: string | null;
@@ -46,14 +56,47 @@ export interface CanonicalOrder {
   /** ERP's immutable order id (persisted as external_id). */
   externalId: string;
   externalRef: string | null;
-  /** ERP id of the order's client — used to resolve the Carteira Client. */
-  clientExternalId: string;
+  /**
+   * ERP id of the order's client — used to resolve the Carteira Client.
+   *
+   * Nulo quando o ERP identifica o cliente do pedido só pelo documento: é o caso
+   * do Toth, cujo `/pedidos` traz `numeroinscricao` e não `codigoCliente`. Nesse
+   * caso a resolução cai para `clientCnpj`.
+   */
+  clientExternalId: string | null;
+  /** CNPJ/CPF do cliente, só dígitos. Recuo quando não há id externo. */
+  clientCnpj?: string | null;
   saleValue: number;
   productName: string;
   /** ISO sale date, or null → let the DB default to now(). */
   soldAt: string | null;
   /** ERP-side stage (Omie's etapa). NOT the CRM pipeline stage. */
   etapa: string | null;
+  /**
+   * Situação do pedido no ERP, **crua** (Toth: `NORMAL`, `FATURADO`, ...).
+   *
+   * Guardada como veio. Ela decide se o pedido conta como receita — ver
+   * `approvalForErpStatus` em `sync/upsert-order.ts` —, e traduzir aqui
+   * esconderia o valor original de quem for auditar o número depois.
+   */
+  erpStatus?: string | null;
+  /** Itens do pedido, quando o ERP os devolve. */
+  items?: CanonicalOrderItem[];
+}
+
+/** Uma linha de pedido: produto, quantidade e preço unitário. */
+export interface CanonicalOrderItem {
+  /** Código do produto no ERP. Chave para casar com o catálogo, quando houver. */
+  productExternalId: string | null;
+  description: string;
+  quantity: number;
+  unitValue: number;
+  /**
+   * Total da linha. Calculado por nós quando o ERP não manda — o Toth manda
+   * `qtdpedido` e `valorunitario`, e a soma das linhas bateu com
+   * `valortotalliquido` em todos os pedidos da amostra.
+   */
+  totalValue: number;
 }
 
 export interface CanonicalNfe {

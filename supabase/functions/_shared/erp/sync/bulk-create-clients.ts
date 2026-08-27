@@ -17,7 +17,11 @@
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { CanonicalClient } from "../types.ts";
-import { clientEnrichmentColumns, leadEnrichmentColumns } from "./client-enrichment.ts";
+import {
+  clientEnrichmentColumns,
+  erpDateToTimestamp,
+  leadEnrichmentColumns,
+} from "./client-enrichment.ts";
 
 /** Linhas por statement. */
 export const DEFAULT_BATCH_SIZE = 500;
@@ -87,6 +91,10 @@ export function buildClientRows(
       external_id: client.externalId,
       external_ref: client.externalRef,
       ...clientEnrichmentColumns(client),
+      // Recência já na criação: sem isto o cliente entraria na carteira sem
+      // "dias sem pedido", e a saúde só existiria depois que houvesse pedido
+      // registrado no CRM — que para a Café Jurerê ainda não acontece.
+      ...(client.lastOrderAt ? { last_order_at: erpDateToTimestamp(client.lastOrderAt) } : {}),
     },
   };
 }

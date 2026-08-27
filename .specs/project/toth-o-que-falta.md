@@ -91,6 +91,27 @@ voltaram assim:
 Também confirmou que **não existe campo de situação** e que `valorDocumento` é o
 **saldo** — as duas informações que corrigiram o cálculo de inadimplência.
 
+**Segunda rodada, 21–25/08.** Ele voltou com três coisas, e as três foram
+medidas contra o servidor real em 25/08:
+
+| Entrega dele | O que a medição mostrou |
+|---|---|
+| "na café tem apenas 6 marcas cadastradas" (`marcas=1,2,3,4,5,6`) | 🔑 **É a chave que liga `diasCompras`.** Sozinha, a janela devolve 12.633 linhas — a base inteira. Com as marcas, 550. |
+| `dataEmissaoUltimoPedidoFaturado` em `/clientes` | ✅ **Vivo.** 5.091 dos 12.632 clientes (40%) têm; dentro do recorte de marcas, 78%. Sempre `aaaa-mm-dd`, anos de 2012 a 2026. |
+| Retorno de `/pedidos` com itens | 🟠 **Formato entregue, caminho ainda 404.** Ele aguarda a GON liberar um redirecionamento. |
+
+🔴 **A afirmação "o ERP ignora `diasCompras`", de 21/08, está superada.** Ela
+descrevia certo o que tinha sido medido — a janela testada sozinha — e
+generalizava errado. O parâmetro funciona; ele exige companhia.
+
+Consequência prática, além do recorte: com marcas + janela de 60 dias a resposta
+cai de **21 MB para menos de 1 MB**, e a leitura que gastava um minuto de CPU do
+worker passa a ser barata.
+
+⚠️ `diasCompras` filtra por **pedido**; o campo novo diz quando saiu o último
+pedido **faturado**. Não são a mesma pergunta: 131 dos 550 clientes da janela de
+60 dias não têm data nenhuma — pediram e ainda não faturaram.
+
 O que segue aberto, em ordem de valor:
 
 ### 2.1 `dataUltimoPagamento` no retorno de `/cobrancas`
@@ -236,7 +257,42 @@ Ou seja: terminado o bloco 3, o Toth sincroniza e **ninguém vê o resultado**.
 Esta é a fatia que transforma dado em produto — receita em risco por cliente,
 lista de atrasados, e o alerta que faz o vendedor agir.
 
-### 4.2 Pedidos de venda — 🟢 em desenvolvimento no fornecedor
+### 4.2 Pedidos de venda — 🟠 código pronto, endpoint ainda 404
+
+**Atualizado em 25/08.** O fornecedor mandou o retorno real de `/pedidos`:
+
+```json
+{ "data": [ { "numeropedido": "19400", "dataemissao": "2026-07-29T00:00:00.000Z",
+              "numeroinscricao": "67964429000501", "valortotalliquido": 884.4,
+              "statuspedido": "NORMAL",
+              "itens": [ { "codigoproduto": "3686", "descricaoproduto": "DRIP COFFEE…",
+                           "qtdpedido": 6, "valorunitario": 19.9 } ] } ],
+  "page": 1, "hasNext": true }
+```
+
+Construído contra esse contrato: `mapTothPedidoToCanonical`, `erp_order_items`,
+`toth-sync-pedidos`. **Falta o caminho existir** — `GET /pedidos` responde 404 no
+ERP, e o fornecedor aguarda a GON liberar um redirecionamento. A função devolve
+`endpoint_indisponivel: true` nesse caso, para que a pendência não seja lida como
+falha de credencial.
+
+Três coisas que só o payload real vai fechar, e por isso a ordem é
+**`toth-probe` antes de ligar a capacidade**:
+
+1. **Vocabulário de `statuspedido`.** Conhecemos `NORMAL` e `FATURADO`; não
+   sabemos como cancelado, bloqueado ou orçamento aparecem. Hoje só `FATURADO`
+   entra como receita aprovada — o resto entra pendente, que é o lado seguro.
+2. **Tamanho da página e se `page` é o nome certo do parâmetro.** A amostra tem
+   10 pedidos; o teto por execução é 20 páginas, com cursor em
+   `toth_connections.pedidos_cursor`.
+3. **Se há filtro por data.** Sem ele, cada volta relê o histórico inteiro.
+
+Quando ligar: `TOTH_CAPABILITIES.syncPedidos = true` + `tothProvider.capabilities`
+ganha `"pedidos"` → a linha "Pedidos de venda" e o botão de sincronizar acendem
+sozinhos, e aí vale agendar o cron (depois de clientes, como cobranças).
+
+<details>
+<summary>Histórico — como estava em 18/08</summary>
 
 Fecha o ciclo dos três momentos do dinheiro. Hoje temos o **quem** (clientes) e o
 **recebido** (cobranças); falta o **vendido**.
@@ -251,6 +307,17 @@ que a capacidade virar — sem edição de texto.
 mapeador. É para isso que a ferramenta existe — descreve a forma do retorno sem
 devolver dado de cliente, e evita repetir o erro de mapear por suposição (foi
 assim que `numeroInscricao` e o saldo passaram despercebidos na primeira volta).
+
+</details>
+
+### 4.3 Recorte de cliente ativo — ✅ passa a funcionar
+
+Com `marcas` + `diasCompras`, a janela da tela deixa de ser decorativa. Falta a
+**decisão de negócio**: qual janela a Café Jurerê quer (60 dias corta para 550
+clientes; 365 dias, para 1.615) e se o recorte deve exigir compra faturada.
+
+⚠️ Ligar as marcas **não apaga** quem já está na carteira: quem sai do recorte
+para de ser atualizado e permanece. Reduzir a carteira de fato é decisão à parte.
 
 ---
 
