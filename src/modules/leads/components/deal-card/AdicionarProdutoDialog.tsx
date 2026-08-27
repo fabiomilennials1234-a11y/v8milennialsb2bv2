@@ -19,6 +19,7 @@ import {
 } from "@/modules/carteira/components/client/ProductCombobox";
 
 import { useAdicionarItemDoNegocio } from "./useItensDoNegocio";
+import type { DealCardItem } from "./types";
 
 /**
  * "Adicionar produto" — lançar um item em `deal_items`.
@@ -76,6 +77,7 @@ export function AdicionarProdutoDialog({
   aoFechar,
   dealId,
   entryId,
+  itensAtuais = [],
 }: {
   aberto: boolean;
   aoFechar: () => void;
@@ -83,6 +85,14 @@ export function AdicionarProdutoDialog({
   dealId: string;
   /** `pipeline_entries.id` — a chave que o painel usa para recarregar. */
   entryId: string | null;
+  /**
+   * O que já está lançado. Serve para uma coisa só: **avisar antes** quando o
+   * produto escolhido já está no negócio, porque nesse caso a regra é
+   * CONSOLIDAR — a quantidade soma na linha existente em vez de criar uma
+   * segunda. Sem o aviso, quem lança 3 num negócio que já tinha 2 vê 5 aparecer
+   * e não entende de onde veio.
+   */
+  itensAtuais?: DealCardItem[];
 }) {
   const [escolhido, setEscolhido] = useState<ProductSelection | null>(null);
   const [quantidade, setQuantidade] = useState("1");
@@ -102,8 +112,45 @@ export function AdicionarProdutoDialog({
     setDesconto("0");
   }, [aberto]);
 
+  /**
+   * A linha que este produto vai ENGROSSAR, quando já existir.
+   *
+   * Catálogo casa por `product_id`; avulso casa por nome normalizado, que é a
+   * única identidade que ele tem. É a mesma regra que a RPC aplica no banco —
+   * repetida aqui só para poder AVISAR, nunca para decidir: duas abas lançando
+   * ao mesmo tempo passariam pelas duas checagens de tela e criariam as duas
+   * linhas assim mesmo. Quem decide é o `FOR UPDATE` lá dentro.
+   */
+  const jaLancado = escolhido
+    ? (itensAtuais.find((i) =>
+        escolhido.product_id
+          ? i.produtoId === escolhido.product_id
+          : i.produtoId === null &&
+            i.nome.trim().toLowerCase() === escolhido.product_name.trim().toLowerCase(),
+      ) ?? null)
+    : null;
+
   const escolher = (p: ProductSelection) => {
     setEscolhido(p);
+
+    // Se o produto já está no negócio, o padrão passa a ser o preço e o
+    // desconto DAQUELA linha — não o `ticket` do catálogo. Assim quem só quer
+    // somar quantidade confirma sem mexer em preço nenhum, e quem quer
+    // corrigir o preço no mesmo gesto tem o valor atual na frente para
+    // comparar.
+    const existente = itensAtuais.find((i) =>
+      p.product_id
+        ? i.produtoId === p.product_id
+        : i.produtoId === null &&
+          i.nome.trim().toLowerCase() === p.product_name.trim().toLowerCase(),
+    );
+
+    if (existente) {
+      setPreco(maskCurrencyInput(String(Math.round(existente.precoUnitario * 100))));
+      setDesconto(String(existente.descontoPercent));
+      return;
+    }
+
     // Produto de catálogo chega com `ticket`; avulso chega com 0 e o campo fica
     // para quem está lançando. Nos dois casos o preço continua editável — o
     // ticket é o padrão da org, não o preço desta venda.
@@ -114,6 +161,10 @@ export function AdicionarProdutoDialog({
   const unit = parseCurrencyInput(preco);
   const desc = Math.min(100, Math.max(0, Number(desconto.replace(",", ".")) || 0));
   const totalLinha = qtd * unit * (1 - desc / 100);
+  /** Consolidando, a linha final leva a quantidade SOMADA. */
+  const totalResultante = jaLancado
+    ? (jaLancado.quantidade + qtd) * unit * (1 - desc / 100)
+    : totalLinha;
 
   const podeAdicionar = !!escolhido && qtd > 0 && !adicionar.isPending;
 
@@ -128,7 +179,11 @@ export function AdicionarProdutoDialog({
         precoUnitario: unit,
         descontoPercent: desc,
       });
-      toast.success(`"${escolhido.product_name}" lançado no negócio.`);
+      toast.success(
+        jaLancado
+          ? `"${escolhido.product_name}" agora está com ${jaLancado.quantidade + qtd} no negócio.`
+          : `"${escolhido.product_name}" lançado no negócio.`,
+      );
       aoFechar();
     } catch {
       // O toast de erro é do `onError` da mutation — que traz a mensagem do
@@ -178,6 +233,15 @@ export function AdicionarProdutoDialog({
             </div>
           )}
 
+          {jaLancado && (
+            <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[12px] text-amber-200/90">
+              Este produto já está neste negócio ({jaLancado.quantidade} ×{" "}
+              {formatBRL(jaLancado.precoUnitario, 2)}). A quantidade vai{" "}
+              <strong className="font-semibold">somar</strong> na linha que já
+              existe — o negócio não fica com o produto duplicado.
+            </p>
+          )}
+
           {escolhido && (
             <>
               <div className="grid grid-cols-3 gap-3">
@@ -213,9 +277,16 @@ export function AdicionarProdutoDialog({
               </div>
 
               <div className="flex items-baseline justify-between border-t border-border/50 pt-3">
-                <span className="text-[13px] text-muted-foreground">Total desta linha</span>
+                <span className="text-[13px] text-muted-foreground">
+                  {/* Consolidando, a prévia mostra o RESULTADO, não a parcela.
+                      Mostrar só o que está sendo somado faria o número do
+                      diálogo não bater com o que aparece na tabela depois. */}
+                  {jaLancado
+                    ? `Como a linha vai ficar (${jaLancado.quantidade + qtd} un.)`
+                    : "Total desta linha"}
+                </span>
                 <span className="text-[17px] font-semibold tabular-nums tracking-[-0.02em]">
-                  {totalLinha > 0 ? formatBRL(totalLinha, 2) : "—"}
+                  {totalResultante > 0 ? formatBRL(totalResultante, 2) : "—"}
                 </span>
               </div>
             </>

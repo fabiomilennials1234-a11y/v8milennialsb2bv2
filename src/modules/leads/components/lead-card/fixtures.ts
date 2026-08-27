@@ -63,6 +63,13 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: 6,
       etapaIndice: 3,
       etapaTotal: 6,
+      // Um negócio COM produto e outros sem — é assim na base, e a bancada de
+      // desenho precisa mostrar os dois estados na mesma tela.
+      produtos: [
+        { nome: "Implante Unitário", quantidade: 2, precoUnitario: 4200, total: 7560, avulso: false },
+        { nome: "Enxerto ósseo", quantidade: 1, precoUnitario: 1800, total: 1800, avulso: false },
+        { nome: "Taxa de laboratório", quantidade: 1, precoUnitario: 340, total: 340, avulso: true },
+      ],
     },
     {
       id: "d2",
@@ -76,6 +83,7 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: 1,
       etapaIndice: 1,
       etapaTotal: 5,
+      produtos: [],
     },
     {
       id: "d3",
@@ -89,6 +97,7 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: null,
       etapaIndice: 5,
       etapaTotal: 6,
+      produtos: [],
     },
     {
       id: "d4",
@@ -102,6 +111,7 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: null,
       etapaIndice: 5,
       etapaTotal: 6,
+      produtos: [],
     },
     {
       id: "d5",
@@ -115,6 +125,7 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: null,
       etapaIndice: 4,
       etapaTotal: 5,
+      produtos: [],
     },
   ],
 
@@ -300,6 +311,7 @@ export const LEAD_EXEMPLO_MAGRO: LeadCardData = {
       diasEmAberto: 2,
       etapaIndice: 1,
       etapaTotal: 5,
+      produtos: [],
     },
   ],
 

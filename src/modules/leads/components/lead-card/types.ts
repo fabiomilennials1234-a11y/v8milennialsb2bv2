@@ -26,6 +26,22 @@ export type EstadoDoNegocio = "aberto" | "ganho" | "perdido";
  * edita valor. Isso é do Card do Negócio. Por isso aqui não há nada de
  * controle: só o que se lê e o `id` para abrir o outro card.
  */
+/**
+ * Uma linha de `deal_items` vista de dentro da ficha da PESSOA.
+ *
+ * É de propósito mais magra que a `DealCardItem` do painel do Negócio: aqui
+ * ninguém edita. A ficha da pessoa responde "o que está sendo vendido", e
+ * quem mexe é o painel do negócio, a um clique.
+ */
+export interface LeadCardDealProduto {
+  nome: string;
+  quantidade: number;
+  precoUnitario: number;
+  total: number;
+  /** `product_id` nulo — produto digitado na hora, fora do catálogo da org. */
+  avulso: boolean;
+}
+
 export interface LeadCardDeal {
   id: string;
   titulo: string;
@@ -46,6 +62,16 @@ export interface LeadCardDeal {
    */
   etapaIndice: number | null;
   etapaTotal: number;
+  /**
+   * Os produtos lançados NESTE negócio (`deal_items`).
+   *
+   * Vazio quer dizer duas coisas diferentes e a tela não tenta separá-las:
+   * negócio sem produto lançado, ou card sem linha em `deals` (o `deal_id`
+   * nulo dos cards que o backfill M4 não alcançou). Nos dois casos a resposta
+   * honesta na ficha da pessoa é a mesma — não há produto para mostrar —, e a
+   * explicação de por quê mora no painel do negócio, que é onde se resolve.
+   */
+  produtos: LeadCardDealProduto[];
 }
 
 /**

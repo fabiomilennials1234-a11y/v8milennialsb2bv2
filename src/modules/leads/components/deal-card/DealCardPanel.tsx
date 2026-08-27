@@ -20,7 +20,11 @@ import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
 import { useDealCardData } from "./useDealCardData";
-import type { DealCardComentario } from "./types";
+import {
+  useAtualizarItemDoNegocio,
+  useRemoverItemDoNegocio,
+} from "./useItensDoNegocio";
+import type { DealCardComentario, ItemEditado } from "./types";
 
 /**
  * A casca do painel — diálogo de DUAS COLUNAS no desktop, folha no celular.
@@ -67,6 +71,37 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * não de um efeito colateral do botão de produto.
    */
   const dealId = data?.dealId ?? null;
+
+  /**
+   * Editar e remover item.
+   *
+   * Montados sempre (e não só quando há `dealId`) porque hook não pode ser
+   * condicional — mas eles só **descem** para o card quando existe negócio,
+   * pela mesma regra do "+ Adicionar produto": oferecer uma ação que falharia
+   * é pior do que não oferecer. Custo de montá-los: dois `useMutation`
+   * ociosos, que não disparam consulta nenhuma.
+   *
+   * As duas reerguem o erro de propósito. A linha da tabela usa o `throw` para
+   * decidir se fecha o modo de edição: engolir aqui faria a linha fechar como
+   * se tivesse salvado, apagando o que a pessoa digitou.
+   */
+  const atualizarItem = useAtualizarItemDoNegocio(entryId);
+  const removerItem = useRemoverItemDoNegocio(entryId);
+
+  const editarItem = useCallback(
+    async (edicao: ItemEditado) => {
+      await atualizarItem.mutateAsync(edicao);
+    },
+    [atualizarItem],
+  );
+
+  const removerItemDoNegocio = useCallback(
+    async (itemId: string) => {
+      await removerItem.mutateAsync(itemId);
+      toast.success("Produto removido do negócio.");
+    },
+    [removerItem],
+  );
 
   /**
    * Mover de etapa — inclusive ganhar e perder, que são movimentos para a
@@ -272,6 +307,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
       onOpenDeal={trocarNegocio}
       onNewDeal={abrirFicha}
       onAdicionarProduto={dealId ? () => setAdicionandoProduto(true) : undefined}
+      onEditarItem={dealId ? editarItem : undefined}
+      onRemoverItem={dealId ? removerItemDoNegocio : undefined}
       movendo={pendingStageKey}
       comentarios={comentarios}
       onComentar={podeComentar ? comentar : undefined}
@@ -335,6 +372,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
       aoFechar={() => setAdicionandoProduto(false)}
       dealId={dealId}
       entryId={entryId}
+      itensAtuais={data?.itens ?? []}
     />
   ) : null;
 

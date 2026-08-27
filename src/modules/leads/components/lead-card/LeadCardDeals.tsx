@@ -149,6 +149,40 @@ function LinhaAberta({
         <ChevronRight className="size-4 shrink-0 text-muted-foreground/45 transition-transform group-hover:translate-x-0.5" />
       </div>
 
+      {/* ── O QUE ESTÁ SENDO VENDIDO ────────────────────────────────────────
+          A lista de negócios dizia onde cada um está e quanto vale, e nunca o
+          QUÊ. "Proposta de ago/2026 · R$ 12.400,00" não responde a pergunta que
+          faz alguém abrir a ficha da pessoa antes de ligar para ela.
+
+          Fica aqui, e não numa seção "Produtos do lead" separada, porque
+          produto pertence ao NEGÓCIO: dois negócios abertos do mesmo lead
+          costumam ter produtos diferentes, e uma lista única somaria coisas de
+          vendas diferentes num total que não existe.
+
+          ⚠ Leitura pura, e continua sendo: editar produto é do painel do
+          negócio, a um clique daqui. */}
+      {deal.produtos.length > 0 && (
+        <div className="flex flex-col gap-1 rounded-md border border-border/60 bg-muted/25 px-2.5 py-2">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+            Produtos deste negócio
+          </span>
+          {deal.produtos.map((p, i) => (
+            <span key={`${p.nome}-${i}`} className="flex items-baseline gap-2 text-[11.5px]">
+              <span className="min-w-0 flex-1 truncate text-foreground/85" title={p.nome}>
+                {p.nome}
+                {p.avulso && (
+                  <span className="ml-1.5 text-[10px] text-muted-foreground/70">avulso</span>
+                )}
+              </span>
+              <span className="shrink-0 tabular-nums text-muted-foreground">
+                {p.quantidade} × {formatBRL(p.precoUnitario, 2)}
+              </span>
+              <span className="shrink-0 tabular-nums font-medium">{formatBRL(p.total, 2)}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <span className="flex min-w-0 flex-1 flex-col gap-1.5">
           <span className="flex items-center gap-1.5">

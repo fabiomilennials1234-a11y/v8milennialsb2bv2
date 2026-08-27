@@ -137,7 +137,46 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
   previsaoFechamento: "2026-09-15",
   fechadoEm: null,
   criadoEm: "2026-04-30T09:02:00.000Z",
-  itens: [],
+  /**
+   * A bancada de desenho nunca tinha renderizado uma linha de produto: as três
+   * fixtures nasceram com `itens: []`, então a tabela, o cabeçalho de colunas,
+   * o selo "avulso", o desconto por linha e os rodapés eram desenho no escuro.
+   *
+   * Os três casos que importam estão aqui de propósito: catálogo com desconto,
+   * catálogo sem desconto e **avulso** (`produtoId: null`).
+   */
+  itens: [
+    {
+      id: "i1",
+      nome: "Implante Unitário",
+      quantidade: 2,
+      precoUnitario: 4200,
+      total: 7560,
+      produtoId: "p1",
+      descontoPercent: 10,
+      ordem: 0,
+    },
+    {
+      id: "i2",
+      nome: "Enxerto ósseo",
+      quantidade: 1,
+      precoUnitario: 1800,
+      total: 1800,
+      produtoId: "p2",
+      descontoPercent: 0,
+      ordem: 1,
+    },
+    {
+      id: "i3",
+      nome: "Taxa de laboratório",
+      quantidade: 1,
+      precoUnitario: 340,
+      total: 340,
+      produtoId: null,
+      descontoPercent: 0,
+      ordem: 2,
+    },
+  ],
   atividades: [
     {
       id: "a1",
@@ -173,6 +212,7 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
       diasEmAberto: 96,
       etapaIndice: 1,
       etapaTotal: 3,
+      produtos: [],
     },
     {
       id: "e0",
@@ -186,6 +226,7 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
       diasEmAberto: 240,
       etapaIndice: null,
       etapaTotal: 4,
+      produtos: [],
     },
   ],
 };
@@ -265,6 +306,7 @@ export const NEGOCIO_MAGRO: DealCardData = {
       diasEmAberto: 2,
       etapaIndice: 1,
       etapaTotal: 4,
+      produtos: [],
     },
   ],
 };
