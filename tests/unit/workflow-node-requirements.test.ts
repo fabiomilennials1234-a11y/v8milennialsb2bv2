@@ -10,7 +10,13 @@ import {
 /** Todo o código do executor, concatenado — onde as regras de verdade moram. */
 function fonteDoExecutor(): string {
   const raiz = join(__dirname, "../../supabase/functions/_shared");
-  const partes: string[] = [readFileSync(join(raiz, "workflow-action-handler.ts"), "utf8")];
+  const partes: string[] = [
+    readFileSync(join(raiz, "workflow-action-handler.ts"), "utf8"),
+    // A decisão do nó de mensagem (texto vs. template, e a janela de 24h) foi
+    // extraída para cá: o handler é adaptador dela. Sem este arquivo a âncora
+    // deixaria de ver os motivos que o executor realmente devolve.
+    readFileSync(join(raiz, "decisao-de-envio.ts"), "utf8"),
+  ];
   for (const pasta of ["action-handlers", "actions"]) {
     const dir = join(raiz, pasta);
     for (const f of readdirSync(dir)) {
@@ -19,7 +25,13 @@ function fonteDoExecutor(): string {
       }
     }
   }
-  return partes.join("\n");
+  // Junta os literais que o executor quebra em várias linhas
+  // (`"parte um " +\n  "parte dois"`). Sem isto a âncora dá VERMELHO FALSO para
+  // toda mensagem longa: a string existe, mas não como uma sequência contígua
+  // de bytes no arquivo. Une só o par aspas-mais-aspas — qualquer outra
+  // concatenação (com variável, com template literal) continua invisível aqui,
+  // e é isso que mantém a âncora exigindo a frase escrita por extenso.
+  return partes.join("\n").replace(/"\s*\+\s*\n\s*"/g, "");
 }
 
 describe("regra não pode divergir do executor", () => {

@@ -16,10 +16,18 @@ const cfg = z.record(z.unknown());
 
 // Tiered: required-config checks for curated, high-frequency actions → error string | null.
 const CURATED_ACTION_CHECK: Record<string, (c: Record<string, unknown>) => string | null> = {
-  send_whatsapp: (c) =>
-    c.messageTemplate || c.templateId
-      ? null
-      : "send_whatsapp requires messageTemplate or templateId",
+  // O nó de mensagem tem DOIS modos, e cada um exige um campo diferente.
+  // `templateId` saiu da conta: era um id de catálogo local que nunca existiu em
+  // produção, e aceitá-lo fazia o validador dar verde num nó que o executor
+  // reprovava no envio — verde por ausência, com o cliente pagando a conta.
+  send_whatsapp: (c) => {
+    if (c.templateMode === "meta_template" || (!c.templateMode && c.useTemplate === true)) {
+      return c.templateName
+        ? null
+        : "send_whatsapp in meta_template mode requires templateName";
+    }
+    return c.messageTemplate ? null : "send_whatsapp requires messageTemplate";
+  },
   send_whatsapp_template: (
     c,
     // `templateName` desde o #1688: o nó passou a guardar o NOME do template

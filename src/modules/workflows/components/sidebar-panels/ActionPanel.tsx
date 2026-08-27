@@ -21,11 +21,13 @@ import { cn } from "@/lib/utils";
 import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
 import {
+  CAMPOS_DO_NO_DE_TEMPLATE,
   EscapeDeJanelaConfig,
   MenuNodeConfig,
   PixButtonNodeConfig,
   TemplateNodeConfig,
 } from "@/modules/workflows/components/action-configs";
+import { modoDeMensagemDoNo } from "@/contracts/workflows/modo-de-mensagem";
 import { useFeatureFlag } from "@/modules/platform";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
@@ -1546,10 +1548,10 @@ function WhatsAppTextPanel({
 }) {
   const taRef = useRef<TemplateTextareaHandle>(null);
 
-  // Backward compat: derive templateMode from legacy useTemplate flag
-  const templateMode =
-    (data.templateMode as string) ||
-    (data.useTemplate ? "meta_template" : "free");
+  // A derivação mora em `@/contracts/workflows/modo-de-mensagem`, junto com a
+  // do validador — e presa à do executor por teste gêmeo. Antes havia uma cópia
+  // aqui, e o executor não tinha nenhuma: era ele quem ignorava o modo.
+  const templateMode = modoDeMensagemDoNo(data as unknown as Record<string, unknown>);
 
   const { data: templates, isLoading: templatesLoading, isError: templatesError } =
     useCampaignTemplatesByType("text");
@@ -1607,19 +1609,23 @@ function WhatsAppTextPanel({
         </div>
       </div>
 
-      {/* Template Meta mode */}
+      {/*
+        Modo Template Meta — o MESMO painel do escape de janela, apontado para o
+        outro conjunto de campos (`CAMPOS_DO_NO_DE_TEMPLATE`).
+
+        O que havia aqui era um campo de texto livre "ID do Template Meta", que
+        gravava `templateId` e não era lido por handler nenhum: o nó falhava com
+        "Empty message template" porque este mesmo bloco escondia o campo de
+        mensagem. Reusar o painel — em vez de reconstruir um seletor — é o que
+        dá de graça a listagem dos aprovados, o mapa de variáveis por posição, a
+        mídia do cabeçalho e a prévia, tudo já testado.
+      */}
       {templateMode === "meta_template" && (
-        <div className="space-y-2">
-          <Label>ID do Template Meta</Label>
-          <Input
-            value={data.templateId || ""}
-            onChange={(e) => onUpdate({ templateId: e.target.value })}
-            placeholder="ID do template aprovado pela Meta"
-          />
-          <p className="text-xs text-muted-foreground">
-            Templates aprovados pela Meta para envio em massa.
-          </p>
-        </div>
+        <TemplateNodeConfig
+          data={data}
+          onUpdate={onUpdate}
+          campos={CAMPOS_DO_NO_DE_TEMPLATE}
+        />
       )}
 
       {/* Gerar com IA mode (ADR-0012) — prompt gera em variável, node envia */}
@@ -1722,8 +1728,16 @@ function WhatsAppTextPanel({
         </div>
       )}
 
-      {/* Escape de janela — só aparece quando o nó nomeia o canal oficial (#1689) */}
-      <EscapeDeJanelaConfig data={data} onUpdate={onUpdate} />
+      {/*
+        Escape de janela — só aparece quando o nó nomeia o canal oficial (#1689),
+        e só no modo TEXTO. No modo template o nó já manda a forma aprovada, que
+        é justamente o que a Meta aceita com a janela fechada: oferecer um
+        "template para quando a janela fechar" ali seria pedir ao operador que
+        configurasse duas vezes a mesma coisa, e o executor ignora o segundo.
+      */}
+      {templateMode !== "meta_template" && (
+        <EscapeDeJanelaConfig data={data} onUpdate={onUpdate} />
+      )}
     </>
   );
 }
