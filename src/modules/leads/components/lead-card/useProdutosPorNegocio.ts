@@ -24,7 +24,7 @@ import type { LeadCardDealProduto } from "./types";
  * ── POR QUE DUAS CONSULTAS E NÃO UM EMBED ─────────────────────────────────
  * O caminho natural seria `deal_items` embutindo `deals`. Não dá, e por dois
  * motivos independentes: `deal_items` não tinha FK para `deals` (a migration
- * `20270901000010` cria, mas como NOT VALID e só depois do apply), e embed
+ * `20270901000011` cria, mas como NOT VALID e só depois do apply), e embed
  * ambíguo no PostgREST derruba a consulta INTEIRA com `PGRST201` em vez de
  * degradar. Duas consultas encadeadas não dependem de FK nenhuma e falham no
  * pior caso devolvendo lista vazia.
