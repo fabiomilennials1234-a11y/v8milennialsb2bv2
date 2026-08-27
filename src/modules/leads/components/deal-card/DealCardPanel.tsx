@@ -27,6 +27,7 @@ import {
   useUpdateLeadComment,
 } from "../lead-detail/hooks/useLeadComments";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
+import { LeadCardEtiquetas } from "../lead-card/LeadCardEtiquetas";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
 import { DealCardChecklists } from "./DealCardChecklists";
@@ -356,39 +357,58 @@ export const DealCardPanel = memo(function DealCardPanel() {
     [openDeal, leadId],
   );
 
-  const negocio = isLoading ? (
-    <div className="flex h-full flex-1 items-center justify-center bg-background">
-      <span className="text-[13px] text-muted-foreground">Carregando…</span>
-    </div>
-  ) : data ? (
-    <DealCard
-      negocio={data}
-      onSaveNote={salvarNota}
-      onMoverEtapa={moverEtapa}
-      onOpenDeal={trocarNegocio}
-      onNewDeal={abrirFicha}
-      onAdicionarProduto={dealId ? () => setAdicionandoProduto(true) : undefined}
-      onEditarItem={dealId ? editarItem : undefined}
-      onRemoverItem={dealId ? removerItemDoNegocio : undefined}
-      movendo={pendingStageKey}
-      comentarios={comentarios}
-      onComentar={podeComentar ? comentar : undefined}
-      onEditarComentario={podeComentar ? editarComentario : undefined}
-      onApagarComentario={podeComentar ? apagarComentario : undefined}
-      comentando={criarComentario.isPending}
-      abaInicial={aba}
-      resumoChecklists={resumoChecklists ?? null}
-      /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
-         Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
-      painelChecklists={<DealCardChecklists leadId={leadId} entryId={entryId} />}
-      onExcluir={podeExcluirCard ? () => setConfirmandoExclusao(true) : undefined}
-      excluindo={excluindo}
-    />
-  ) : (
-    <div className="flex h-full flex-1 items-center justify-center bg-background px-6 text-center">
-      <span className="text-[13px] text-muted-foreground">Negócio não encontrado.</span>
-    </div>
-  );
+  /**
+   * ── A faixa de etiquetas tem UM lugar por vez ──────────────────────────
+   * Etiqueta é do lead (`lead_tags` é a única junção do schema), então a casa
+   * dela é a coluna da pessoa. Quando a coluna não cabe — o celular monta
+   * `conteudo(false)` — ela migra para o cabeçalho do negócio, senão etiquetar
+   * seria impossível no telefone. Nunca as duas: `deal-card.test.tsx` guarda a
+   * regra de que a pessoa não é reestampada dentro do negócio.
+   *
+   * `souAdmin` decide se dá para CRIAR etiqueta nova, e não só pendurar uma
+   * existente: `tags_insert_admin_only` exige `is_user_admin()` no INSERT em
+   * `tags`. O painel já tem a resposta em mãos — perguntar de novo lá dentro
+   * seria uma segunda consulta para um fato que ele acabou de ler.
+   */
+  const negocio = (comLead: boolean) =>
+    isLoading ? (
+      <div className="flex h-full flex-1 items-center justify-center bg-background">
+        <span className="text-[13px] text-muted-foreground">Carregando…</span>
+      </div>
+    ) : data ? (
+      <DealCard
+        negocio={data}
+        etiquetas={
+          !comLead && leadId ? (
+            <LeadCardEtiquetas leadId={leadId} podeCriar={!!souAdmin} />
+          ) : undefined
+        }
+        onSaveNote={salvarNota}
+        onMoverEtapa={moverEtapa}
+        onOpenDeal={trocarNegocio}
+        onNewDeal={abrirFicha}
+        onAdicionarProduto={dealId ? () => setAdicionandoProduto(true) : undefined}
+        onEditarItem={dealId ? editarItem : undefined}
+        onRemoverItem={dealId ? removerItemDoNegocio : undefined}
+        movendo={pendingStageKey}
+        comentarios={comentarios}
+        onComentar={podeComentar ? comentar : undefined}
+        onEditarComentario={podeComentar ? editarComentario : undefined}
+        onApagarComentario={podeComentar ? apagarComentario : undefined}
+        comentando={criarComentario.isPending}
+        abaInicial={aba}
+        resumoChecklists={resumoChecklists ?? null}
+        /* O elemento é criado aqui, montado lá — e só quando a aba está aberta.
+           Ver o bloco `painelChecklists` no `DealCard` para o porquê do slot. */
+        painelChecklists={<DealCardChecklists leadId={leadId} entryId={entryId} />}
+        onExcluir={podeExcluirCard ? () => setConfirmandoExclusao(true) : undefined}
+        excluindo={excluindo}
+      />
+    ) : (
+      <div className="flex h-full flex-1 items-center justify-center bg-background px-6 text-center">
+        <span className="text-[13px] text-muted-foreground">Negócio não encontrado.</span>
+      </div>
+    );
 
   /**
    * `comLead` é o corte de largura, não de importância.
@@ -408,9 +428,10 @@ export const DealCardPanel = memo(function DealCardPanel() {
           isOpen={isOpen}
           forma="coluna"
           onAbrirFicha={abrirFicha}
+          podeCriarEtiqueta={!!souAdmin}
         />
       )}
-      <div className="flex min-w-0 flex-1 flex-col">{negocio}</div>
+      <div className="flex min-w-0 flex-1 flex-col">{negocio(comLead)}</div>
     </div>
   );
 

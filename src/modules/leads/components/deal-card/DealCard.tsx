@@ -204,6 +204,7 @@ export function DealCard({
   painelChecklists,
   onExcluir,
   excluindo,
+  etiquetas,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
@@ -273,6 +274,20 @@ export function DealCard({
    */
   onExcluir?: () => void;
   excluindo?: boolean;
+  /**
+   * A faixa de etiquetas — SÓ quando a coluna da pessoa não está na tela.
+   *
+   * Etiqueta é do LEAD (a única junção no schema é `lead_tags`), e por isso o
+   * lugar dela é a coluna da esquerda: `deal-card.test.tsx` proíbe o card do
+   * Negócio de reestampar quem é a pessoa, justamente para a tela não dizer a
+   * mesma coisa duas vezes a 40cm de distância.
+   *
+   * No celular, porém, não há coluna: `DealCardPanel` monta `conteudo(false)` e
+   * o negócio ocupa tudo. Sem este slot, etiquetar seria impossível no telefone
+   * — a mesma ausência que este trabalho veio consertar. Quem decide é o painel,
+   * que é quem sabe se a coluna existe; aqui só se escolhe onde pendurar.
+   */
+  etiquetas?: ReactNode;
 }) {
   const abaPedida: Aba =
     abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
@@ -351,6 +366,7 @@ export function DealCard({
             </span>
             {negocio.dono ? <span>{negocio.dono}</span> : <span className="opacity-70">sem dono</span>}
           </div>
+          {etiquetas && <div className="mt-2">{etiquetas}</div>}
         </div>
 
         {/* Ganhar e perder são MOVIMENTOS para a etapa terminal do funil (ADR-0023

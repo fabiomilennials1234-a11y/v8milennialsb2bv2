@@ -104,6 +104,7 @@ export function LeadCard({
   onEditarComentario,
   onApagarComentario,
   comentando,
+  editorDeEtiquetas,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -125,6 +126,19 @@ export function LeadCard({
   onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
   onApagarComentario?: (id: string) => void | Promise<void>;
   comentando?: boolean;
+  /**
+   * A faixa de etiquetas QUE ESCREVE, montada pronta pelo `LeadCardContainer`.
+   *
+   * Aqui havia um `+ etiqueta` sem `onClick` — botão morto desde o primeiro
+   * commit do card. Ele não podia ser ligado neste arquivo: `LeadCard.tsx` é
+   * alcançável a partir de `src/preview/main.tsx`, e
+   * `preview-cards-sem-banco.test.ts` reprova qualquer arquivo daquele grafo
+   * que alcance react-query ou o Supabase. Mesmo escape de `onSaveField`: quem
+   * tem o banco entrega o controle pronto. Sem a prop ficam só as pílulas de
+   * leitura — e nenhum botão, porque botão que não faz nada é pior que a
+   * ausência dele.
+   */
+  editorDeEtiquetas?: React.ReactNode;
 }) {
   const [aba, setAba] = useState<Aba>("historico");
   const [nota, setNota] = useState(lead.nota);
@@ -265,7 +279,10 @@ export function LeadCard({
 
         {/* Sempre visível, mesmo sem dono e sem etiqueta. Escondendo a faixa
             quando está vazia, o lead novo — 94% da base — perde justamente os
-            dois convites que ele mais precisa: atribuir dono e etiquetar. */}
+            dois convites que ele mais precisa: atribuir dono e etiquetar.
+
+            O convite de etiquetar só é convite quando `editorDeEtiquetas` vem:
+            até então este lugar tinha um "+ etiqueta" que não abria nada. */}
         <div className="flex flex-wrap items-center gap-1.5">
             {lead.dono ? (
               <span
@@ -280,24 +297,15 @@ export function LeadCard({
                 Sem dono
               </span>
             )}
-            {lead.tags.map((t) => (
-              <span
-                key={t.id}
-                className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-[3px] text-[12px] text-muted-foreground"
-              >
-                {t.nome}
-              </span>
-            ))}
-            <button
-              type="button"
-              className={cn(
-                "inline-flex rounded-full border border-dashed border-border px-2.5 py-[3px] text-[12px] text-muted-foreground",
-                "transition-colors hover:border-muted-foreground/40 hover:text-foreground",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              )}
-            >
-              + etiqueta
-            </button>
+            {editorDeEtiquetas ??
+              lead.tags.map((t) => (
+                <span
+                  key={t.id}
+                  className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-[3px] text-[12px] text-muted-foreground"
+                >
+                  {t.nome}
+                </span>
+              ))}
         </div>
       </header>
 
