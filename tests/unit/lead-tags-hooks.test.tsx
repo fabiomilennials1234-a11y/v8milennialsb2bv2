@@ -110,6 +110,13 @@ describe("A invalidação cobre TODAS as telas que desenham etiqueta", () => {
    * `custom_pipe_entries` são os QUADROS, cujo card é o ponto de partida do
    * painel. Deixar qualquer uma de fora põe duas listas diferentes da mesma
    * coisa na mesma tela.
+   *
+   * 🚨 `pipeline-page` e `pipeline-stage-counts` (com HÍFEN) não são variação
+   * de nome das duas acima: são a RPC `get_pipeline_page`, que é de onde o
+   * quadro de funil de sistema lê os cards HOJE. `pipeline_entries` (com
+   * underscore) é o hook antigo, que a tela do funil não usa mais — invalidar
+   * só ele deixa o card com a lista velha até um F5, e etiquetar a partir do
+   * próprio card foi exatamente a superfície que este trabalho abriu.
    */
   const ESPERADAS = [
     "lead-tags",
@@ -118,6 +125,9 @@ describe("A invalidação cobre TODAS as telas que desenham etiqueta", () => {
     "lead-timeline",
     "pipeline_entries",
     "custom_pipe_entries",
+    "pipeline-page",
+    "pipeline-stage-counts",
+    "custom_pipe_stage_counts",
   ];
 
   it("ao adicionar", async () => {

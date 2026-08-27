@@ -43,6 +43,24 @@ function invalidarEtiquetasDoLead(qc: ReturnType<typeof useQueryClient>, leadId:
   qc.invalidateQueries({ queryKey: ["lead-timeline", leadId] });
   qc.invalidateQueries({ queryKey: ["pipeline_entries"] });
   qc.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
+  /**
+   * ⚠️ O QUADRO NÃO LÊ `pipeline_entries` — lê a RPC `get_pipeline_page`, sob a
+   * chave `["pipeline-page", …]` (`usePaginatedPipeline.ts:181`), e o número da
+   * coluna sai de `["pipeline-stage-counts", …]`. As duas linhas acima
+   * invalidam o hook antigo, que a tela do funil não usa mais.
+   *
+   * Sem estas quatro, etiquetar de dentro do card grava no banco e o card
+   * ATRÁS continua com a lista velha até alguém recarregar a página — que é
+   * indistinguível, para quem está olhando, de "não funcionou". Mesmo motivo e
+   * mesmas chaves de `LeadCardQualificationPopover`, que passou por isto antes.
+   *
+   * As chaves vão como string em vez de importar o helper do módulo
+   * `pipelines`: esse import reabriria o ciclo leads↔pipelines que o
+   * dependency-cruiser barra.
+   */
+  qc.invalidateQueries({ queryKey: ["pipeline-page"] });
+  qc.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
+  qc.invalidateQueries({ queryKey: ["custom_pipe_stage_counts"] });
 }
 
 /**

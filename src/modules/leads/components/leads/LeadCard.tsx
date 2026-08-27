@@ -26,6 +26,7 @@ import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
 import { LeadCardCalor } from "./card/LeadCardCalor";
 import { LeadCardCompact } from "./card/LeadCardCompact";
+import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { usePipeOpsOptional } from "../../pipe-ops";
 import { useDealSheetOpcional } from "../deal-detail/deal-sheet-context";
@@ -874,8 +875,25 @@ export const LeadCard = memo(function LeadCard({
 
           {/* ── Etiquetas, ABAIXO do negócio ──
                Saíram do topo do card (onde eram riscos de 1,5px sem rótulo) e
-               vieram para cá, com o nome legível, como no card do DataCrazy. */}
-          <LeadCardLabels tags={lead.tags} />
+               vieram para cá, com o nome legível, como no card do DataCrazy.
+
+               A porta para MEXER nelas fica ao lado, e não dentro do menu: o
+               menu "Etiquetas" leva à ficha, e trocar uma etiqueta era abrir a
+               ficha para cada lead. Sem `leadId` o botão não aparece — `id`
+               aqui é o da ENTRADA no funil, e pendurar etiqueta nele escreveria
+               num lead que não existe. */}
+          {lead.leadId ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <LeadCardLabels tags={lead.tags} />
+              <LeadEtiquetasPopover
+                leadId={lead.leadId}
+                quantidade={lead.tags?.length ?? 0}
+                rotulo={lead.tags?.length ? undefined : "etiqueta"}
+              />
+            </div>
+          ) : (
+            <LeadCardLabels tags={lead.tags} />
+          )}
 
           {/* ── Footer: Inline metrics (Trello-style) ── */}
           <div className="flex items-center justify-between pt-2 mt-auto border-t border-border/40">
