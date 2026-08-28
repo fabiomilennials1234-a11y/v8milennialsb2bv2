@@ -161,10 +161,9 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * o que grava no caderno de vendas, append-only; e 26,6% das entradas não têm
    * linha em `deals`, que a RPC materializa na mesma transação.
    *
-   * O cast repete `pipelines/lib/rpc-nao-tipada.ts` em vez de importá-lo: o
-   * helper não está no barrel de `@/modules/pipelines` e deep-import
-   * cross-module é barrado pelo ESLint `boundaries`. Sai quando `gen types`
-   * rodar depois do apply.
+   * O ramo de `isMissingSchemaError` FICA mesmo com a migration já aplicada em
+   * prod: branch efêmera e checkout local ficam atrás do ledger, e é lá que o
+   * botão voltaria a estourar erro cru.
    */
   const [decidindo, setDecidindo] = useState(false);
 
@@ -173,12 +172,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
       if (!entryId || decidindo) return;
       setDecidindo(true);
       try {
-        const chamar = supabase.rpc as unknown as (
-          nome: string,
-          args: Record<string, unknown>,
-        ) => Promise<{ data: unknown; error: { message: string } | null }>;
-
-        const { error } = await chamar("definir_desfecho_da_entrada", {
+        const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
           p_entry_id: entryId,
           p_outcome: desfecho,
           p_loss_reason: null,

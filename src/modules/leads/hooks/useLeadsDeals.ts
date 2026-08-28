@@ -214,9 +214,7 @@ export function useLeadsDeals(leadIds: string[]) {
 
         const { data: outcomeRows, error: outcomeError } = await supabase
           .from("deals")
-          // Coluna ausente de `types.ts` até o apply + `gen types`. Mesma ponte
-          // que `raw as { deal_id?: ... }` mais adiante neste arquivo.
-          .select("id, outcome" as "id")
+          .select("id, outcome")
           .in("id", dealIds);
 
         // Silêncio DELIBERADO e estreito: só para migration pendente. Qualquer
@@ -226,10 +224,8 @@ export function useLeadsDeals(leadIds: string[]) {
           console.warn("[useLeadsDeals] desfecho não lido:", outcomeError.message);
         }
         for (const d of outcomeRows ?? []) {
-          const desfecho = (d as { outcome?: string | null }).outcome;
-          const id = (d as { id?: string }).id;
-          if (id && (desfecho === "won" || desfecho === "lost" || desfecho === "open")) {
-            dealOutcomeById.set(id, desfecho);
+          if (d.id && (d.outcome === "won" || d.outcome === "lost" || d.outcome === "open")) {
+            dealOutcomeById.set(d.id, d.outcome);
           }
         }
       }
