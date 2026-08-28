@@ -15,6 +15,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { useFeaturePermission } from "@/modules/identity";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";

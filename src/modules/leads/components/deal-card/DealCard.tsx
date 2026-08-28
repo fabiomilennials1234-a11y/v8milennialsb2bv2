@@ -330,8 +330,9 @@ export function DealCard({
   }, [negocio.id]);
 
   const aberto = negocio.estado === "aberto";
-  const etapaGanha = negocio.etapas.find((e) => e.papel === "ganho");
-  const etapaPerdida = negocio.etapas.find((e) => e.papel === "perdido");
+  // `etapaGanha`/`etapaPerdida` moravam aqui e morreram quando os dois botões
+  // de desfecho deixaram de ser condicionados às etapas terminais — o comentário
+  // do cabeçalho, abaixo, conta o porquê. Ficaram como cálculo sem leitor.
   const estagnado =
     aberto &&
     negocio.diasNaEtapa !== null &&
