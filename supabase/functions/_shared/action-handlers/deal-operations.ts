@@ -129,59 +129,34 @@ export async function createDeal(input: ActionInput): Promise<ActionResult> {
 // era desenhável. Estas quatro ações fecham o mínimo: encerrar (dos dois
 // jeitos), corrigir o valor e trocar o dono.
 //
-// ── GANHAR E PERDER SÃO MOVIMENTOS, NÃO CAMPOS ─────────────────────────────
-// ADR-0023 §4/§5: a posição mora no card e avançar é um move. Encerrar é chegar
-// na etapa terminal do funil — é o que os botões "Ganhou"/"Perdeu" do card do
-// Negócio fazem. Escrever `deals.won` sem mover deixaria o card parado numa
-// etapa aberta com o negócio marcado como fechado: duas verdades sobre a mesma
-// coisa, que é o defeito que o ADR foi escrito para matar.
+// ── DESFECHO É FATO DO NEGÓCIO, POSIÇÃO É FATO DO CARD ─────────────────────
+// ADR-0023, Emenda 1 (2026-08-28). O bloco anterior dizia o contrário —
+// "ganhar e perder são movimentos, não campos; encerrar é chegar na etapa
+// terminal" — e aquilo era verdade enquanto o desfecho fosse DERIVADO da etapa.
 //
-// `deals.won` é atualizado JUNTO quando existe linha em `deals`, porque a
-// Carteira e o ledger leem de lá. Mas ele é consequência, não a fonte.
-
-/** A etapa terminal do funil do negócio, pelo papel. */
-async function etapaTerminal(
-  supabase: ActionInput["supabase"],
-  pipelineId: string,
-  organizationId: string,
-  papel: "won" | "lost",
-): Promise<string | null> {
-  const { data: pipeline } = await supabase
-    .from("pipelines")
-    .select("slug, type")
-    .eq("id", pipelineId)
-    .maybeSingle();
-
-  if (pipeline?.type === "system") {
-    const { data } = await supabase
-      .from("pipeline_stages")
-      .select("stage_key")
-      .eq("organization_id", organizationId)
-      .eq("pipeline_type", pipeline.slug)
-      .eq("stage_role", papel)
-      .eq("is_active", true)
-      .order("position")
-      .limit(1)
-      .maybeSingle();
-    return (data?.stage_key as string) ?? null;
-  }
-
-  const { data } = await supabase
-    .from("custom_pipeline_stages")
-    .select("stage_key")
-    .eq("pipeline_id", pipelineId)
-    .eq("stage_role", papel)
-    .order("position")
-    .limit(1)
-    .maybeSingle();
-  return (data?.stage_key as string) ?? null;
-}
+// Deixou de ser. `deals.outcome` (open|won|lost) é a fonte, e o card não se
+// move ao ganhar. As duas perguntas são diferentes e cada uma tem UMA resposta:
+//
+//   Onde está o Negócio?     pipeline_entries.stage_key
+//   Ganhou ou perdeu?        deals.outcome
+//
+// O "duas verdades" que o ADR original combatia era duas respostas para a MESMA
+// pergunta — foi por isso que `deals.pipeline_id`/`stage_id` caíram. Desfecho
+// nunca foi posição.
+//
+// O que forçou: 283 dos 396 funis ativos (71%) não têm etapa `won`, e a versão
+// anterior desta ação — que movia o card para a etapa terminal — falhava em
+// todos eles, pedindo ao usuário que remodelasse o funil para caber na
+// ferramenta.
+//
+// `deals.won` continua atualizado, por TRIGGER, porque oito arquivos do front o
+// leem. Ele é espelho, nunca fonte.
 
 async function encerrarNegocio(input: ActionInput, papel: "won" | "lost"): Promise<ActionResult> {
-  const { supabase, organizationId, entryId, params } = input;
+  const { supabase, organizationId, entryId, dealId: dealIdDaExecucao, params } = input;
   const rotulo = papel === "won" ? "ganhar" : "perder";
 
-  if (!entryId) {
+  if (!entryId && !dealIdDaExecucao) {
     // Sem negócio declarado não há o que encerrar — e escolher um por chute é
     // o erro mais caro possível aqui: fecharia a venda errada.
     return {
@@ -191,58 +166,109 @@ async function encerrarNegocio(input: ActionInput, papel: "won" | "lost"): Promi
     };
   }
 
-  const { data: entry, error } = await supabase
-    .from("pipeline_entries")
-    .select("id, organization_id, pipeline_id, stage_key, deal_id")
-    .eq("id", entryId)
+  // ── O negócio, materializando a linha se preciso ──────────────────────────
+  //
+  // ANTES desta versão, a ação movia o card para a etapa terminal do funil. Ela
+  // falhava em 283 dos 396 funis ativos (71%), que não têm etapa `won` — e a
+  // mensagem "o funil não tem etapa de ganho" pedia ao usuário que remodelasse
+  // o funil para caber na ferramenta.
+  //
+  // Agora o desfecho mora no NEGÓCIO (migration 20270904000000). O card NÃO se
+  // move: ganhar é um fato sobre o negócio, não uma posição no board, e é isso
+  // que permite ganhar em qualquer etapa.
+  let dealId = dealIdDaExecucao ?? null;
+  // Nomeado em vez de inline: com `| null` na inicialização, `typeof entry`
+  // colapsa para `never` e o acesso a `deal_id` lá embaixo não compila.
+  type EntradaMinima = { id: string; organization_id: string; deal_id: string | null };
+  let entry: EntradaMinima | null = null;
+
+  if (!dealId && entryId) {
+    const { data, error } = await supabase
+      .from("pipeline_entries")
+      .select("id, organization_id, deal_id")
+      .eq("id", entryId)
+      .maybeSingle();
+
+    if (error) return { success: false, error: error.message, retryable: true };
+    if (!data || data.organization_id !== organizationId) {
+      return { success: false, error: `Negócio ${entryId} não encontrado nesta organização`, retryable: false };
+    }
+    entry = data as EntradaMinima;
+    dealId = (data.deal_id as string | null) ?? null;
+
+    if (!dealId) {
+      // 26,6% das entradas em prod não têm linha em `deals`. Decisão do CTO
+      // (2026-08-28): materializar em vez de falhar — o workflow não pode
+      // quebrar por um detalhe de modelagem que o usuário não conhece.
+      const { data: novoId, error: gerErr } = await supabase
+        .rpc("garantir_negocio_da_entrada", { p_entry_id: entryId });
+      if (gerErr) return { success: false, error: gerErr.message, retryable: true };
+      dealId = novoId as unknown as string;
+    }
+  }
+
+  if (!dealId) {
+    return { success: false, error: `Não foi possível resolver o negócio para ${rotulo}`, retryable: false };
+  }
+
+  // ── Idempotência ──────────────────────────────────────────────────────────
+  //
+  // Lida ANTES de escrever, e não por conta do custo: escrever `outcome` que já
+  // vale dispara a transição, e a transição é o que grava no caderno de vendas.
+  // Como o caderno é append-only (ADR-0017 §4), um retry do motor viraria uma
+  // segunda venda que ninguém consegue apagar.
+  const { data: atual, error: leituraErr } = await supabase
+    .from("deals")
+    .select("id, outcome, organization_id")
+    .eq("id", dealId)
+    .eq("organization_id", organizationId)
     .maybeSingle();
 
-  if (error) return { success: false, error: error.message, retryable: true };
-  if (!entry || entry.organization_id !== organizationId) {
-    return { success: false, error: `Negócio ${entryId} não encontrado nesta organização`, retryable: false };
+  if (leituraErr) return { success: false, error: leituraErr.message, retryable: true };
+  if (!atual) {
+    return { success: false, error: `Negócio ${dealId} não encontrado nesta organização`, retryable: false };
   }
 
-  const destino = await etapaTerminal(supabase, entry.pipeline_id as string, organizationId, papel);
-  if (!destino) {
-    // 83 funis custom em prod não têm etapa terminal. Falhar explícito é melhor
-    // que inventar uma: o card ficaria num limbo que ninguém desenhou.
-    return {
-      success: false,
-      error: `O funil deste negócio não tem etapa de ${papel === "won" ? "ganho" : "perda"}`,
-      retryable: false,
-    };
-  }
-
-  if (entry.stage_key === destino) {
+  if (atual.outcome === papel) {
     return {
       success: true,
-      message: `Negócio já estava em ${destino}`,
-      data: { entry_id: entryId, stage: destino, idempotent: true },
+      message: `Negócio já estava como ${papel === "won" ? "ganho" : "perdido"}`,
+      data: { deal_id: dealId, outcome: papel, idempotent: true },
     };
+  }
+
+  const patch: Record<string, unknown> = {
+    outcome: papel,
+    outcome_source: "workflow",
+    outcome_at: new Date().toISOString(),
+  };
+  if (papel === "lost" && typeof params.lossReason === "string" && params.lossReason.trim()) {
+    patch.loss_reason = params.lossReason.trim();
   }
 
   const { error: upErr } = await supabase
-    .from("pipeline_entries")
-    .update({ stage_key: destino })
-    .eq("id", entryId);
-  if (upErr) return { success: false, error: upErr.message, retryable: true };
+    .from("deals")
+    .update(patch)
+    .eq("id", dealId)
+    .eq("organization_id", organizationId)
+    // Trava de concorrência: se outro caminho decidiu o desfecho entre a leitura
+    // e esta escrita, o UPDATE não pega linha nenhuma e nada é gravado no
+    // caderno. Sem isso, dois workflows no mesmo negócio emitem duas vendas.
+    .eq("outcome", atual.outcome);
 
-  if (entry.deal_id) {
-    const patch: Record<string, unknown> = { won: papel === "won", closed_at: new Date().toISOString() };
-    if (papel === "lost" && typeof params.lossReason === "string" && params.lossReason.trim()) {
-      patch.loss_reason = params.lossReason.trim();
-    }
-    // Falha aqui NÃO derruba a ação: a posição — que é a verdade (ADR-0023 §5)
-    // — já foi escrita, e reportar erro faria o motor retentar um move que já
-    // aconteceu.
-    const { error: dealErr } = await supabase.from("deals").update(patch).eq("id", entry.deal_id);
-    if (dealErr) console.warn(`[deal-operations] ${rotulo}: posição movida mas deals não atualizou:`, dealErr.message);
-  }
+  if (upErr) return { success: false, error: upErr.message, retryable: true };
 
   return {
     success: true,
-    message: `Negócio movido para ${destino}`,
-    data: { entry_id: entryId, stage: destino, deal_id: entry.deal_id ?? null },
+    message: `Negócio marcado como ${papel === "won" ? "ganho" : "perdido"}`,
+    data: {
+      deal_id: dealId,
+      entry_id: entryId ?? null,
+      outcome: papel,
+      // O card fica onde está — ganhar não é mais uma posição no board.
+      moved: false,
+      deal_materializado: entry?.deal_id === null,
+    },
   };
 }
 
