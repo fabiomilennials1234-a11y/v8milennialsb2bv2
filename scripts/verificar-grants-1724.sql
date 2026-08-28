@@ -1,5 +1,5 @@
 -- VERIFICAÇÃO DE GRANTS — #1724. Rodar CONTRA O ALVO DO APPLY, logo depois de
--- aplicar `20270903000000_blast_ciclo_de_entrega.sql`. Somente leitura.
+-- aplicar `20270903000030_blast_ciclo_de_entrega.sql`. Somente leitura.
 --
 -- POR QUE ISTO EXISTE, e por que a migration verde não substitui:
 -- o grant é concedido pelo BANCO no momento do `CREATE`, não pelo seu SQL. Neste

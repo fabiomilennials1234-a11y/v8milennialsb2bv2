@@ -68,7 +68,7 @@ ADR é imutável: **o CTO abre a errata.**
 | `src/modules/campaigns/hooks/useBlastPlans.ts` | `useBlastPlanProgress` paginado, ordenado e fail-closed por org |
 | `src/modules/campaigns/hooks/useBlastPlanRecipients.ts` | A union com os seis |
 | `BlastPlanRecipientsSheet` · `StepMonitor` · `BlastPlanCard` · `blast-recipient-view` | Abas Entregues / Não confirmadas, rótulos, os dois custos, `Record` exaustivo |
-| `supabase/migrations/20270903000000_blast_ciclo_de_entrega.sql` + rollback | Índice parcial, `encerrar_entregas_vencidas()`, cron diário versionado, grants |
+| `supabase/migrations/20270903000030_blast_ciclo_de_entrega.sql` + rollback | Índice parcial, `encerrar_entregas_vencidas()`, cron diário versionado, grants |
 | `scripts/verificar-grants-1724.sql` | A prova de grant, que só fecha no apply |
 | 5 arquivos de teste | 104 casos |
 
@@ -166,10 +166,13 @@ Nada de código. Cinco coisas, todas de produção.
    momento do `CREATE`, não pelo SQL da migration, e neste projeto o EXECUTE chega por dois
    caminhos que se escondem um atrás do outro. Esperado: `anon=false`,
    `authenticated=false`, `service_role=true`.
-2. **Aplicar `20270903000000_blast_ciclo_de_entrega.sql`.** Timestamp acima do topo vivo
-   (`20270902000010`) e sem colisão. ⚠️ Há uma colisão **viva** na main em
-   `20270901000010` (dois arquivos), do #1854 — a minha não encosta nela, mas ela reprova
-   dois testes de contrato até ser resolvida (§7).
+2. **Aplicar `20270903000030_blast_ciclo_de_entrega.sql`.** ⚠️ **O número mudou, e a frase
+   que estava aqui expirou.** Este item dizia `20270903000000` e *"sem colisão"* — era
+   verdade quando foi escrito, e deixou de ser quando a main andou 14 commits e trouxe
+   `20270903000000_metrica_por_etapa_para_de_degradar.sql`. Renumerado para `...000030` pela
+   #1863 (§11). ⚠️ Há uma colisão **viva** na main em `20270901000010` (dois arquivos), do
+   #1854 — a minha não encosta nela, mas ela reprova dois testes de contrato até ser
+   resolvida (§7).
 3. **Deployar `notificame-webhook`.** Sem o deploy, o callback continua sem fechar a linha —
    e o sintoma é silêncio, não erro.
 4. **Regenerar os types depois do apply em prod**, nunca a partir de branch.

@@ -328,7 +328,7 @@ de eco, o park. O bloco já está certo; eu penduro nele.
 
 ### 4.5 Fatia 5 — a migration (uma só)
 
-`supabase/migrations/20270903000000_blast_ciclo_de_entrega.sql` + rollback.
+`supabase/migrations/20270903000030_blast_ciclo_de_entrega.sql` + rollback.
 Timestamp acima do topo vivo (`20270902000010`) e sem colisão — há uma colisão viva na main
 em `20270901000010` (dois arquivos), sendo consertada pelo #1854 em paralelo; a minha não
 encosta nela.
