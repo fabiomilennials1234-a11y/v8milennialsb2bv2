@@ -41,6 +41,22 @@ vi.mock('@/modules/identity/org-team/hooks/useMembershipStatus', () => ({
   useDeactivatedMembership: (...args: unknown[]) => mockUseDeactivatedMembership(...args),
 }));
 
+// `ProtectedRoute` passou a chamar `useMfaRequired` (cfce0903, #1838) — todo
+// master precisa estar em aal2 para acessar qualquer rota.
+//
+// Sem este mock o hook REAL roda, e ele nasce `isLoading: true`: para master, o
+// efeito aguarda `supabase.auth.mfa.getAuthenticatorAssuranceLevel()`, que em
+// jsdom nunca resolve. O gate de MFA vem ANTES dos gates de org, então o
+// componente para no TorqueLoader e todo caso de master afirma sobre uma tela
+// de carregamento. Era o que derrubava "master bypasses all org checks".
+//
+// Default `{ required: false, isLoading: false }` = sessão já em aal2, que é a
+// pré-condição de todos os casos desta suíte — nenhum deles é sobre MFA.
+const mockUseMfaRequired = vi.fn();
+vi.mock('@/modules/identity/auth/hooks/useMfaRequired', () => ({
+  useMfaRequired: (...args: unknown[]) => mockUseMfaRequired(...args),
+}));
+
 vi.mock('@/modules/identity/permissions/hooks/useUserRole', () => ({
   useUserRole: () => ({ data: { role: "admin" }, isLoading: false }),
   useIsAdmin: () => ({ isAdmin: true, isLoading: false }),
@@ -146,6 +162,7 @@ function setDefaults() {
     isLoading: false,
     isReady: true,
   });
+  mockUseMfaRequired.mockReturnValue({ required: false, isLoading: false });
   mockUseLocation.mockReturnValue({ pathname: '/dashboard' });
   mockUseGestor.mockReturnValue({ isGestor: false, gestorId: null, isLoading: false });
 }
@@ -206,7 +223,19 @@ describe('ProtectedRoute', () => {
   });
 
   // 4
-  it('redirects to /checkout when pending_payment metadata', () => {
+    // PULADO — afirma um gate que NÃO EXISTE no código desde cc8fc0a7
+  // (2026-05-19, "remove checkout system — orgs provisioned via master admin").
+  // `pending_payment` não aparece em nenhum arquivo de `src/` hoje; o
+  // componente nunca redireciona para `/checkout`.
+  //
+  // Não é teste quebrado, é teste órfão: ficou vermelho por três meses afirmando
+  // comportamento deletado de propósito, e foi o que escondeu a falha REAL deste
+  // arquivo (o `useMfaRequired` sem mock, de 25/08).
+  //
+  // NÃO apagar. SCRUM-486…490 reconstroem o checkout nesta sprint, e este bloco
+  // é o registro de como o gate se comportava — inclusive as duas exceções de
+  // rota, que são a parte que se esquece ao reescrever.
+  it.skip('redirects to /checkout when pending_payment metadata', () => {
     mockUseAuth.mockReturnValue({
       user: makeUser({ subscription_status: 'pending_payment' }),
       loading: false,
@@ -225,7 +254,19 @@ describe('ProtectedRoute', () => {
   });
 
   // 5
-  it('does NOT redirect when pending_payment and on /checkout', () => {
+    // PULADO — afirma um gate que NÃO EXISTE no código desde cc8fc0a7
+  // (2026-05-19, "remove checkout system — orgs provisioned via master admin").
+  // `pending_payment` não aparece em nenhum arquivo de `src/` hoje; o
+  // componente nunca redireciona para `/checkout`.
+  //
+  // Não é teste quebrado, é teste órfão: ficou vermelho por três meses afirmando
+  // comportamento deletado de propósito, e foi o que escondeu a falha REAL deste
+  // arquivo (o `useMfaRequired` sem mock, de 25/08).
+  //
+  // NÃO apagar. SCRUM-486…490 reconstroem o checkout nesta sprint, e este bloco
+  // é o registro de como o gate se comportava — inclusive as duas exceções de
+  // rota, que são a parte que se esquece ao reescrever.
+  it.skip('does NOT redirect when pending_payment and on /checkout', () => {
     mockUseAuth.mockReturnValue({
       user: makeUser({ subscription_status: 'pending_payment' }),
       loading: false,
@@ -246,7 +287,19 @@ describe('ProtectedRoute', () => {
   });
 
   // 6
-  it('does NOT redirect when pending_payment and on /checkout/success', () => {
+    // PULADO — afirma um gate que NÃO EXISTE no código desde cc8fc0a7
+  // (2026-05-19, "remove checkout system — orgs provisioned via master admin").
+  // `pending_payment` não aparece em nenhum arquivo de `src/` hoje; o
+  // componente nunca redireciona para `/checkout`.
+  //
+  // Não é teste quebrado, é teste órfão: ficou vermelho por três meses afirmando
+  // comportamento deletado de propósito, e foi o que escondeu a falha REAL deste
+  // arquivo (o `useMfaRequired` sem mock, de 25/08).
+  //
+  // NÃO apagar. SCRUM-486…490 reconstroem o checkout nesta sprint, e este bloco
+  // é o registro de como o gate se comportava — inclusive as duas exceções de
+  // rota, que são a parte que se esquece ao reescrever.
+  it.skip('does NOT redirect when pending_payment and on /checkout/success', () => {
     mockUseAuth.mockReturnValue({
       user: makeUser({ subscription_status: 'pending_payment' }),
       loading: false,
@@ -280,7 +333,12 @@ describe('ProtectedRoute', () => {
   });
 
   // 8
-  it('redirects to /checkout when no teamMember + requireOrganization + !master', () => {
+  // Era "redirects to /checkout". O checkout saiu do produto em cc8fc0a7
+  // (2026-05-19, "remove checkout system — orgs provisioned via master admin")
+  // e `ProtectedRoute` passou a mostrar "Aguardando Ativação" no lugar do
+  // redirect. O caso continua valendo — quem não tem vínculo NÃO entra no app —,
+  // então ele afirma o comportamento de hoje em vez de ser pulado.
+  it('sem team member, não entra no app: mostra "Aguardando Ativação"', () => {
     mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: false, error: null });
     mockUseLocation.mockReturnValue({ pathname: '/dashboard' });
 
@@ -290,12 +348,19 @@ describe('ProtectedRoute', () => {
       </ProtectedRoute>,
     );
 
-    const nav = screen.getByTestId('navigate');
-    expect(nav).toHaveAttribute('data-to', '/checkout');
+    expect(screen.getByText('Aguardando Ativação')).toBeInTheDocument();
+    expect(screen.queryByText('protected')).not.toBeInTheDocument();
   });
 
   // 9
-  it('renders children when no teamMember + already on /checkout path', () => {
+  // PULADO — a premissa deixou de existir. `/checkout` era rota especial: sem
+  // vínculo, o componente deixava passar quem já estivesse nela. O checkout foi
+  // removido em cc8fc0a7 (2026-05-19) e não há mais caminho privilegiado.
+  //
+  // NÃO apagar: SCRUM-488 ("O cliente compra sozinho no site") reconstrói o
+  // checkout nesta sprint. Quem o reconstruir decide se o gate volta a ter
+  // exceção de rota — e este caso é o registro de que ela já existiu e por quê.
+  it.skip('renders children when no teamMember + already on /checkout path', () => {
     mockUseCurrentTeamMember.mockReturnValue({ data: null, isLoading: false, error: null });
     mockUseLocation.mockReturnValue({ pathname: '/checkout' });
 
@@ -310,7 +375,10 @@ describe('ProtectedRoute', () => {
   });
 
   // 10
-  it('redirects to /checkout when teamMember has no organization_id', () => {
+  // Era "redirects to /checkout" — mesma troca do caso 8 (cc8fc0a7). Vínculo sem
+  // organização é indistinguível de vínculo ausente para o gate, e este caso é o
+  // que trava isso.
+  it('team member sem organization_id também não entra no app', () => {
     mockUseCurrentTeamMember.mockReturnValue({
       data: makeTeamMember({ organization_id: null }),
       isLoading: false,
@@ -324,8 +392,8 @@ describe('ProtectedRoute', () => {
       </ProtectedRoute>,
     );
 
-    const nav = screen.getByTestId('navigate');
-    expect(nav).toHaveAttribute('data-to', '/checkout');
+    expect(screen.getByText('Aguardando Ativação')).toBeInTheDocument();
+    expect(screen.queryByText('protected')).not.toBeInTheDocument();
   });
 
   // 11
@@ -351,7 +419,23 @@ describe('ProtectedRoute', () => {
   });
 
   // 12
-  it('shows error UI when teamMemberError + no teamMember', () => {
+    // PULADO — o bloco que este caso tenta exercitar é INALCANÇÁVEL, e o próprio
+  // teste chegou a essa conclusão: o corpo original era um despejo de raciocínio
+  // que terminava em "Dead code confirmed" e mesmo assim afirmava algo.
+  //
+  // O achado é real e vale mais que o teste. Em `ProtectedRoute`:
+  //   · o gate de vínculo (`requireOrganization && !isMaster` → `!teamMember`)
+  //     retorna "Aguardando Ativação" ANTES;
+  //   · o bloco de erro exige `teamMemberError && !teamMember && requireOrganization
+  //     && !isMaster` — o mesmo `!teamMember` que já foi capturado acima.
+  // Como as duas condições são avaliadas no MESMO render síncrono, com os mesmos
+  // valores, a segunda nunca é alcançada. "Erro ao Carregar" não aparece nunca:
+  // falha de rede ao buscar o team member é mostrada como "Aguardando Ativação".
+  //
+  // HERDADO — não é defeito desta branch e o conserto é no COMPONENTE (ordenar
+  // o gate de erro antes do de vínculo), não no teste. Fica registrado aqui em
+  // vez de virar uma asserção que passa sem exercitar nada.
+  it.skip('shows error UI when teamMemberError + no teamMember', () => {
     mockUseCurrentTeamMember.mockReturnValue({
       data: null,
       isLoading: false,
