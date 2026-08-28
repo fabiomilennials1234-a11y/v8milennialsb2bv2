@@ -170,9 +170,13 @@ Nada de código. Cinco coisas, todas de produção.
    que estava aqui expirou.** Este item dizia `20270903000000` e *"sem colisão"* — era
    verdade quando foi escrito, e deixou de ser quando a main andou 14 commits e trouxe
    `20270903000000_metrica_por_etapa_para_de_degradar.sql`. Renumerado para `...000030` pela
-   #1863 (§11). ⚠️ Há uma colisão **viva** na main em `20270901000010` (dois arquivos), do
-   #1854 — a minha não encosta nela, mas ela reprova dois testes de contrato até ser
-   resolvida (§7).
+   #1863 (§11). ⚠️ Há uma colisão em `20270901000010` (dois arquivos) **viva NESTA BRANCH,
+   não na main** — a main já a resolveu no #1854, renumerando `produtos_do_negocio` para
+   `20270901000011`, e esta branch está 14 commits atrás. A minha não encosta nela, ela some
+   no merge, mas reprova dois testes de contrato no checkout local até a main entrar (§7,
+   §11.1). *(Esta frase dizia "viva na main" até a #1863 medir: era falso — `git ls-tree
+   origin/main` mostra `...000010_erp_pedidos_itens` e `...000011_produtos_do_negocio`. O §7
+   ainda carrega a versão errada, e ficou como está por ser texto já revisado no #1861.)*
 3. **Deployar `notificame-webhook`.** Sem o deploy, o callback continua sem fechar a linha —
    e o sintoma é silêncio, não erro.
 4. **Regenerar os types depois do apply em prod**, nunca a partir de branch.
@@ -344,3 +348,61 @@ transforma ratchet em decoração.
 - **O formato "N enviados" está triplicado** com `toLocaleString("pt-BR")` inline em `:180`,
   `:236` e `BlastPlanCard.tsx:324`. O número foi extraído para a lib; o formato não — e foi
   nessa duplicação que o `sent` órfão sobreviveu em um dos três lugares.
+
+### 11.1 — A renumeração da migration, e por que ela entrou na mesma issue
+
+`20270903000000_blast_ciclo_de_entrega.sql` virou **`20270903000030`** (`0afa968b`), com o
+rollback junto e as quatro referências textuais, em três arquivos: a tabela do §3 e o item 2
+do §6 deste handoff, `PLANO-1724.md:331` e `scripts/verificar-grants-1724.sql:2`.
+
+**Por que.** O número foi escolhido em `e7b4f247` quando estava livre. A main andou 14
+commits e trouxe `20270903000000_metrica_por_etapa_para_de_degradar.sql` — mesmo número,
+outro arquivo. O guarda de colisão diz o custo melhor do que eu diria:
+
+> `supabase db push` would SKIP one of them in silence — it would merge, CI would stay
+> green, and the migration would never reach production.
+
+Não é CI vermelho. É a migration **não chegar em produção sem ninguém perceber** — o mesmo
+formato de falha que o §9 já catalogou nesta fatia: falha para dentro, silenciosa.
+
+**Por que foi seguro.** O §6 registra que nada foi aplicado em produção. Sem ledger, não há
+divergência. Renumerar migration **já aplicada** é outro problema, e não é este.
+
+**Por que não é expansão de escopo.** Sem isto, o job `Lint & Build` morre em
+`check-migration-versions.sh`, que roda **três passos antes** do `typecheck:ratchet` — o
+gate que a #1863 existe para deixar verde. O conserto do `sent` ficava indemonstrável no CI.
+Consertar o que impede a própria prova não é ampliar a tarefa; é terminá-la. Ainda assim, foi
+**perguntado antes**, e a decisão foi do CTO.
+
+**As duas metades do guarda pegam coisas diferentes, e as duas foram exercitadas:**
+
+| Metade | O que lê | Antes | Depois |
+|---|---|---|---|
+| (a) duplicados no checkout | `ls` do diretório | 1 no **merge ref** (`20270903000000`) — invisível de cada lado isolado | **0 no merge ref** |
+| (b) colisão com a base | `git ls-tree` de `HEAD` vs `origin/main` | 1 (`...000000` sob outro nome) | **0** |
+
+⚠️ **A metade (a) só é verdadeira sobre o MERGE.** Os dois lados passam separados e a
+colisão nasce no merge — foi assim na #1854 e foi assim aqui. Verificar no seu checkout
+responde a pergunta errada; a árvore do merge é a que o CI monta:
+
+```bash
+T=$(git merge-tree --write-tree HEAD origin/main | head -1)
+git ls-tree --name-only "$T" supabase/migrations/ | sed 's|.*/||' \
+  | grep -oE '^[0-9]{14}' | sort | uniq -d     # vazio = limpo
+```
+
+⚠️ **O guarda lê `HEAD`, não a working tree** (`scripts/check-migration-versions.sh:70-74`,
+`git ls-tree`). Renomear e rodar o guarda **sem commitar** devolve o resultado antigo, com
+cara de que o rename não funcionou. Commite primeiro, depois prove.
+
+**Resto de dívida, não meu e não consertado:** o checkout local ainda reprova a metade (a)
+por `20270901000010` (dois arquivos). É o #1854, que a main já resolveu renumerando
+`produtos_do_negocio`; esta branch está 14 commits atrás e ainda carrega o par. **Some no
+merge** — provado: lá só existe `20270901000010_erp_pedidos_itens.sql`. Resolver exigiria
+trazer a main para dentro da branch, e rebase/merge num PR já revisado é decisão do CTO, não
+minha.
+
+**A lição que o §6 pagou:** ele dizia *"sem colisão"* e **era verdade quando foi escrito**.
+Aqui, afirmação sobre estado do repositório tem prazo de validade curto — a main anda. Por
+isso o item 2 do §6 foi reescrito dizendo que expirou e por quê, em vez de só trocar o
+número em silêncio.
