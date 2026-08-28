@@ -183,7 +183,31 @@ export const DealCardPanel = memo(function DealCardPanel() {
           p_outcome: desfecho,
           p_loss_reason: null,
         });
-        if (error) throw new Error(error.message);
+
+        if (error) {
+          // ── A migration ainda não rodou ────────────────────────────────────
+          //
+          // O front é mergeado antes do apply, por desenho. Sem este ramo, o
+          // botão aparece e o clique cai num toast de erro — e para os 113
+          // funis que TINHAM etapa terminal isso é regressão pura: eles
+          // fechavam negócio ontem e parariam hoje.
+          //
+          // Então degrada para o comportamento anterior: mover para a etapa
+          // terminal, quando ela existe. Some sozinho quando a RPC responder.
+          if (isMissingSchemaError(error)) {
+            const papel = desfecho === "won" ? "ganho" : "perdido";
+            const terminal = data?.etapas.find((e) => e.papel === papel);
+            if (terminal) {
+              await moverEtapa(terminal.chave);
+              return;
+            }
+            // Os 283 funis (71%) sem etapa terminal nunca tiveram este botão.
+            // Dizer o que falta é melhor que um erro de banco cru.
+            toast.error("Disponível assim que a atualização do funil for aplicada.");
+            return;
+          }
+          throw new Error(error.message);
+        }
 
         toast.success(desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
         // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
@@ -196,7 +220,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         setDecidindo(false);
       }
     },
-    [entryId, decidindo, queryClient],
+    [entryId, decidindo, queryClient, data, moverEtapa],
   );
 
   /**

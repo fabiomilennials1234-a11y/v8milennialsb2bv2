@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { useOrganization } from "@/modules/identity";
 
 /**
@@ -188,20 +189,47 @@ export function useLeadsDeals(leadIds: string[]) {
       const dealTitleById = new Map<string, string>();
       const dealOutcomeById = new Map<string, DealOutcome>();
       if (dealIds.length > 0) {
+        // 🔴 DUAS CONSULTAS, E A SEPARAÇÃO É O PONTO.
+        //
+        // A primeira versão pedia `select("id, title, outcome")` numa consulta
+        // só. `outcome` nasce na migration 20270904000000, que é aplicada
+        // DEPOIS do merge do front — e enquanto ela não roda, o PostgREST
+        // responde 42703/PGRST204 para a projeção inteira. Com o `throw` logo
+        // abaixo, isso derrubava `leads-deals` por completo: não era o botão de
+        // desfecho que parava de funcionar, era o CARD que sumia.
+        //
+        // O título é obrigatório e continua podendo estourar. O desfecho é
+        // opcional por natureza — antes de 20270904000000 ele não existe, e
+        // depois dele 26,6% das entradas seguem sem linha em `deals` — então a
+        // falta dele degrada para a queda por papel de etapa, que é exatamente
+        // o comportamento anterior a esta feature.
         const { data: dealRows, error: dealsError } = await supabase
           .from("deals")
-          // `outcome` não está em `types.ts` até o apply de 20270904000000 +
-          // `gen types`. O `select` é string em runtime, então a coluna vem; o
-          // cast abaixo é o que o compilador precisa. Mesma ponte que
-          // `raw as { deal_id?: ... }` mais adiante neste arquivo.
-          .select("id, title, outcome" as "id, title")
+          .select("id, title")
           .in("id", dealIds);
         if (dealsError) throw dealsError;
         for (const d of dealRows ?? []) {
           if (d.id && d.title) dealTitleById.set(d.id, d.title);
+        }
+
+        const { data: outcomeRows, error: outcomeError } = await supabase
+          .from("deals")
+          // Coluna ausente de `types.ts` até o apply + `gen types`. Mesma ponte
+          // que `raw as { deal_id?: ... }` mais adiante neste arquivo.
+          .select("id, outcome" as "id")
+          .in("id", dealIds);
+
+        // Silêncio DELIBERADO e estreito: só para migration pendente. Qualquer
+        // outro erro (rede, RLS, timeout) continua invisível aqui porque o
+        // desfecho é opcional — mas não vira exceção que apaga o card.
+        if (outcomeError && !isMissingSchemaError(outcomeError)) {
+          console.warn("[useLeadsDeals] desfecho não lido:", outcomeError.message);
+        }
+        for (const d of outcomeRows ?? []) {
           const desfecho = (d as { outcome?: string | null }).outcome;
-          if (d.id && (desfecho === "won" || desfecho === "lost" || desfecho === "open")) {
-            dealOutcomeById.set(d.id, desfecho);
+          const id = (d as { id?: string }).id;
+          if (id && (desfecho === "won" || desfecho === "lost" || desfecho === "open")) {
+            dealOutcomeById.set(id, desfecho);
           }
         }
       }
