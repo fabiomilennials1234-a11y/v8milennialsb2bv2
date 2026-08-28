@@ -61,10 +61,10 @@ import {
   PLAYGROUND_TOOLS,
   createDefaultPlaygroundData,
   DEFAULT_PROMPT_SECTIONS,
-  filterLegacyTools,
   type PlaygroundData,
   type PromptSections,
 } from "./types";
+import { wizardToolsState } from "./tools-mapping";
 import { composeSystemPrompt, type ComposeInput } from "@/modules/copilot/lib/compose-system-prompt";
 
 import {
@@ -340,17 +340,6 @@ export function CopilotPlayground() {
       ? { ...DEFAULT_PROMPT_SECTIONS, ...wd.promptSections }
       : { ...DEFAULT_PROMPT_SECTIONS, instructions: legacyPrompt };
 
-    // Helper to build tool state with instruction
-    const toolState = (enabled: boolean, toolId: string, config: Record<string, any> = {}): { enabled: boolean; config: Record<string, any>; instruction: string } => {
-      const savedInstruction = wd.toolInstructions?.[toolId] || "";
-      const def = PLAYGROUND_TOOLS.find((t) => t.id === toolId);
-      return {
-        enabled,
-        config,
-        instruction: savedInstruction || (enabled && def ? def.defaultInstruction : ""),
-      };
-    };
-
     setData((prev) => ({
       ...prev,
       name: wd.name,
@@ -383,22 +372,7 @@ export function CopilotPlayground() {
         active_stages: wd.activeStages || {},
         move_rules: wd.moveRules || [],
       }),
-      tools: filterLegacyTools({
-        QUALIFICAR_LEAD: toolState(wd.canQualifyLead, "QUALIFICAR_LEAD"),
-        AGENDAR_REUNIAO: toolState(wd.canScheduleMeeting, "AGENDAR_REUNIAO"),
-        MOVER_CARD: toolState(wd.canMoveCards, "MOVER_CARD"),
-        TRANSFERIR_HUMANO: toolState(wd.canTransferHuman, "TRANSFERIR_HUMANO"),
-        CRIAR_LEAD: toolState(wd.canCreateLead, "CRIAR_LEAD"),
-        PREENCHER_CAMPOS: toolState(true, "PREENCHER_CAMPOS"),
-        CRIAR_CAMPO: toolState(false, "CRIAR_CAMPO"),
-        TRANSFERIR_SZ_CHAT: toolState(false, "TRANSFERIR_SZ_CHAT"),
-        ENVIAR_DOCUMENTO: toolState(false, "ENVIAR_DOCUMENTO"),
-        PAUSAR_ATENDIMENTO_HUMANO: {
-          enabled: wd.humanPauseEnabled ?? true,
-          config: { durationMinutes: wd.humanPauseDurationMinutes ?? 60 },
-          instruction: wd.toolInstructions?.PAUSAR_ATENDIMENTO_HUMANO ?? "",
-        },
-      }),
+      tools: wizardToolsState(wd),
       documents: (editData.existingDocuments || []).map((d: any) => ({
         id: d.id,
         name: d.file_name,

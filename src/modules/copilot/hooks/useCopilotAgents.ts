@@ -835,6 +835,8 @@ export function useCopilotAgentForEdit(agentId?: string) {
         canCreateLead: (agent as any).can_create_lead ?? true,
         canTransferHuman: (agent as any).can_transfer_human ?? true,
         canMoveCards: agent.can_move_cards ?? false,
+        canSendDocument: (agent as any).can_send_document ?? false,
+        canTransferSzChat: (agent as any).can_transfer_sz_chat ?? false,
         humanPauseEnabled: (agent as any).human_pause_enabled ?? true,
         humanPauseDurationMinutes: (agent as any).human_pause_duration_minutes ?? 60,
         maxConversationTurns: (agent as any).max_conversation_turns ?? 20,
@@ -953,6 +955,14 @@ export function useUpdateCopilotAgentFromWizard() {
       agentUpdate.can_create_lead = data.canCreateLead ?? true;
       agentUpdate.can_transfer_human = data.canTransferHuman ?? true;
       agentUpdate.can_move_cards = data.canMoveCards ?? false;
+      // Só escreve quando o chamador declarou a flag. `?? false` aqui apagaria
+      // can_send_document de agente configurado fora da UI (a Loo era um).
+      if (data.canSendDocument !== undefined) {
+        agentUpdate.can_send_document = data.canSendDocument;
+      }
+      if (data.canTransferSzChat !== undefined) {
+        agentUpdate.can_transfer_sz_chat = data.canTransferSzChat;
+      }
       agentUpdate.human_pause_enabled = data.humanPauseEnabled ?? true;
       agentUpdate.human_pause_duration_minutes = data.humanPauseDurationMinutes ?? 60;
       agentUpdate.max_conversation_turns = data.maxConversationTurns ?? 20;
