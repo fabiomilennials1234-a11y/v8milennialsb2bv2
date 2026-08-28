@@ -177,7 +177,7 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
 
           <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              <span className="font-medium tabular-nums text-foreground">{sent.toLocaleString("pt-BR")}</span> enviados
+              <span className="font-medium tabular-nums text-foreground">{saiu.toLocaleString("pt-BR")}</span> enviados
             </span>
             <span>
               <span className="font-medium tabular-nums text-foreground">{pending.toLocaleString("pt-BR")}</span> na fila
