@@ -36,8 +36,23 @@ export function ProductCombobox({
   const [open, setOpen] = useState(false);
   const selected = products.find((p) => p.id === value);
 
+  /*
+   * `modal` é o que faz a lista ROLAR — este combobox só é usado DENTRO de
+   * diálogo (`CreateProposalModal`, e `BudgetFieldBlock` dentro do
+   * `DealDetailDialog` e do `CrossPipePanel`).
+   *
+   * O `Dialog` do Radix monta um `react-remove-scroll` que engole o `wheel` de
+   * tudo que estiver FORA do `DialogContent`. O conteúdo do Popover sai por
+   * portal para o `body` — fora, portanto — e a roda do mouse não chegava na
+   * lista. `modal` dá ao Popover o seu próprio `RemoveScroll` aninhado, e o de
+   * dentro é quem passa a mandar.
+   *
+   * Mesmo conserto da #1862, que cobriu só o combobox de `client/`. Medido aqui
+   * com 42 produtos (`scrollHeight` 1436 numa caixa de 300): sem `modal`,
+   * `scrollTop` ficava em 0 depois da roda.
+   */
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -68,7 +83,13 @@ export function ProductCombobox({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+      {/* `z-[70]` porque a lista tem de pintar acima da superfície que a abriu:
+          no celular o `DealDetailDialog` vira `SheetContent`, que é `z-[51]`.
+          No `z-50` do primitivo a lista nasce ATRÁS da folha. */}
+      <PopoverContent
+        className="z-[70] w-[--radix-popover-trigger-width] p-0"
+        align="start"
+      >
         <Command>
           <CommandInput placeholder="Digitar nome ou SKU..." />
           <CommandList>

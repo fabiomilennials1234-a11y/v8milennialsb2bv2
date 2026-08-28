@@ -132,8 +132,13 @@ export function ProductCombobox({ onAdd, disabled }: ProductComboboxProps) {
 
   /*
    * `modal` é o que faz a lista ROLAR quando o combobox está dentro de um
-   * diálogo — e é o caso de todos os usos de hoje (NewOrderModal,
-   * EditOrderDialog, CreateProposalModal e "Adicionar produto" do Negócio).
+   * diálogo — e é o caso de todos os usos de hoje: `NewOrderModal`,
+   * `EditOrderDialog` e "Adicionar produto" do Negócio.
+   *
+   * ⚠️ `CreateProposalModal` NÃO usa este arquivo: ele importa
+   * `../proposal/ProductCombobox`, que é outro componente. A primeira versão
+   * deste comentário o listava aqui, e por isso ele passou meses sem o
+   * conserto. Ao mexer no combobox, confira o import de cada tela.
    *
    * O `Dialog` do Radix monta um `react-remove-scroll`, que engole o evento
    * `wheel` de tudo que estiver FORA do `DialogContent`. O conteúdo do Popover
