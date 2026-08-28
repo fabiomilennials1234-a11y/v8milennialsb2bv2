@@ -52,7 +52,7 @@ function funilCompleto() {
   mock.mockTable("pipeline_entries", [
     { id: ENTRY, organization_id: "org-1", lead_id: "lead-1", pipeline_id: PIPE, stage_key: "enviada", deal_id: DEAL, closed_at: null },
   ]);
-  mock.mockTable("deals", [{ id: DEAL, organization_id: "org-1", value: 1000, won: null }]);
+  mock.mockTable("deals", [{ id: DEAL, organization_id: "org-1", value: 1000, won: null, outcome: "open" }]);
   return mock;
 }
 
@@ -136,54 +136,85 @@ describe("deal_won / deal_lost — derivados do papel da etapa", () => {
 
 // ─── Ações ──────────────────────────────────────────────────────────────────
 
-describe("win_deal / lose_deal — encerrar é mover", () => {
-  it("ganhar move o card para a etapa de papel `won`", async () => {
+describe("win_deal / lose_deal — desfecho é do negócio, não da etapa", () => {
+  // ADR-0023 Emenda 1 (2026-08-28). Este bloco AFIRMAVA o contrário —
+  // "encerrar é mover" — e estava certo enquanto o desfecho fosse derivado da
+  // etapa. Deixou de estar: `deals.outcome` é a fonte e o card não se move.
+  //
+  // Os casos não foram apagados nem pulados: o comportamento continua
+  // existindo, mudou. Cada um passou a afirmar o que a ação faz hoje.
+
+  it("ganhar marca o negócio e NÃO move o card", async () => {
     const mock = funilCompleto();
     const r = await winDeal(entrada(mock));
 
     expect(r.success).toBe(true);
-    expect(r.data?.stage).toBe("vendido");
-    expect(mock.getUpdated("pipeline_entries")[0]).toMatchObject({ stage_key: "vendido" });
-    // `deals.won` é consequência, não fonte — mas é escrito, porque a Carteira lê de lá.
-    expect(mock.getUpdated("deals")[0]).toMatchObject({ won: true });
+    expect(r.data?.outcome).toBe("won");
+    expect(r.data?.moved).toBe(false);
+    // O card fica na etapa `enviada` — é isto que permite ganhar em qualquer
+    // etapa, e o que destrava os 283 funis (71%) sem etapa `won`.
+    expect(mock.getUpdated("pipeline_entries")).toHaveLength(0);
+    expect(mock.getUpdated("deals")[0]).toMatchObject({
+      outcome: "won", outcome_source: "workflow",
+    });
   });
 
-  it("perder move para `lost` e grava o motivo", async () => {
+  it("perder marca o desfecho e grava o motivo", async () => {
     const mock = funilCompleto();
     const r = await loseDeal(entrada(mock, { params: { lossReason: "Preço" } }));
 
-    expect(r.data?.stage).toBe("perdido");
-    expect(mock.getUpdated("deals")[0]).toMatchObject({ won: false, loss_reason: "Preço" });
-  });
-
-  it("sem negócio na execução, RECUSA — fechar a venda errada é o erro mais caro", async () => {
-    const mock = funilCompleto();
-    const r = await winDeal(entrada(mock, { entryId: null }));
-
-    expect(r.success).toBe(false);
-    expect(r.error).toMatch(/gatilho de funil/);
+    expect(r.data?.outcome).toBe("lost");
+    expect(mock.getUpdated("deals")[0]).toMatchObject({
+      outcome: "lost", loss_reason: "Preço",
+    });
     expect(mock.getUpdated("pipeline_entries")).toHaveLength(0);
   });
 
-  it("funil sem etapa terminal falha explícito — 83 funis custom estão assim", async () => {
+  it("sem entrada MAS com negócio na execução, encerra — o sujeito é o negócio", async () => {
+    // Mudou de sentido junto com a feature. Antes, sem `entryId` não havia como
+    // achar a etapa terminal e a ação recusava. Agora o desfecho é do negócio:
+    // se a execução carrega `dealId`, há o que encerrar.
+    const mock = funilCompleto();
+    const r = await winDeal(entrada(mock, { entryId: null }));
+
+    expect(r.success).toBe(true);
+    expect(mock.getUpdated("deals")[0]).toMatchObject({ outcome: "won" });
+  });
+
+  it("sem entrada E sem negócio, RECUSA — fechar a venda errada é o erro mais caro", async () => {
+    const mock = funilCompleto();
+    const r = await winDeal(entrada(mock, { entryId: null, dealId: null }));
+
+    expect(r.success).toBe(false);
+    expect(r.retryable).toBe(false);
+    expect(r.error).toMatch(/gatilho de funil/);
+    expect(mock.getUpdated("deals")).toHaveLength(0);
+  });
+
+  it("🔴 funil SEM etapa terminal agora funciona — era a falha em 71% dos funis", async () => {
+    // O caso anterior afirmava o oposto: "falha explícito — 83 funis custom
+    // estão assim". Hoje são 283 de 396 (71%), e essa falha era a razão desta
+    // mudança existir. A ausência de etapa `won` deixou de importar: o
+    // desfecho não precisa de etapa nenhuma.
     const mock = funilCompleto();
     mock.mockTable("pipeline_stages", [
       { organization_id: "org-1", pipeline_type: "propostas", stage_key: "enviada", stage_role: "open", is_active: true, position: 0 },
     ]);
 
     const r = await winDeal(entrada(mock));
-    expect(r.success).toBe(false);
-    expect(r.error).toMatch(/não tem etapa de ganho/);
+    expect(r.success).toBe(true);
+    expect(mock.getUpdated("deals")[0]).toMatchObject({ outcome: "won" });
   });
 
-  it("negócio já na etapa terminal é no-op idempotente", async () => {
+  it("🔴 negócio já ganho é no-op — o caderno de vendas é append-only", async () => {
     const mock = funilCompleto();
-    mock.mockTable("pipeline_entries", [
-      { id: ENTRY, organization_id: "org-1", lead_id: "lead-1", pipeline_id: PIPE, stage_key: "vendido", deal_id: DEAL, closed_at: null },
-    ]);
+    mock.mockTable("deals", [{ id: DEAL, organization_id: "org-1", value: 1000, won: true, outcome: "won" }]);
 
     const r = await winDeal(entrada(mock));
     expect(r.data?.idempotent).toBe(true);
+    // Zero escrita. Um UPDATE aqui dispararia a transição de `outcome`, que é
+    // o que grava em `sale_events` — e uma venda duplicada não se apaga.
+    expect(mock.getUpdated("deals")).toHaveLength(0);
     expect(mock.getUpdated("pipeline_entries")).toHaveLength(0);
   });
 });

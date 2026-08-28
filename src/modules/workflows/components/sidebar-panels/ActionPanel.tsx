@@ -1124,16 +1124,21 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {at === "create_deal" && <CreateDealConfig data={data} onUpdate={onUpdate} />}
 
-      {/* Ganhar e perder não têm configuração: o destino é a etapa terminal do
-          funil DO NEGÓCIO, resolvida pelo papel da etapa (ADR-0023 §4/§5).
-          Oferecer um seletor de etapa aqui seria convidar o usuário a escolher
-          uma etapa que não encerra nada. */}
+      {/* Ganhar e perder não têm configuração de destino, e agora por um motivo
+          diferente: NÃO EXISTE destino. O desfecho é campo do negócio
+          (`deals.outcome`, ADR-0023 Emenda 1) e o card não se move.
+
+          O texto anterior dizia "move o negócio para a etapa de ganho do funil
+          dele" — era verdade e deixou de ser. Descrever o comportamento velho
+          numa tela de configuração é pior que não descrever nada: o usuário
+          monta o workflow esperando o card mudar de coluna. */}
       {(at === "win_deal" || at === "lose_deal") && (
         <p className="rounded-lg border border-dashed border-border px-3 py-2 text-[12px] text-muted-foreground">
           {at === "win_deal"
-            ? "Move o negócio para a etapa de ganho do funil dele."
-            : "Move o negócio para a etapa de perda do funil dele."}
-          {" "}Exige um gatilho de funil — é dele que vem qual negócio encerrar.
+            ? "Marca o negócio como ganho, na etapa em que ele estiver."
+            : "Marca o negócio como perdido, na etapa em que ele estiver."}
+          {" "}O card não muda de coluna. Exige um gatilho de funil — é dele que
+          vem qual negócio encerrar.
         </p>
       )}
 
