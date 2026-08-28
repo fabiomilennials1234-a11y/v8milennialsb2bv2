@@ -97,40 +97,80 @@ describe("DealCard — ganhar e perder são movimentos, não estado", () => {
     expect(screen.getByRole("button", { name: /perdeu/i })).toBeInTheDocument();
   });
 
-  it("Ganhou move para a chave da etapa de papel ganho", () => {
+  // ── Desfecho é do NEGÓCIO, não da etapa (ADR-0023 Emenda 1) ──────────────
+  //
+  // Este bloco afirmava "Ganhou move para a chave da etapa de papel ganho" e
+  // "esconde as duas ações no funil sem etapa terminal (83 funis custom)".
+  // Estava certo enquanto o desfecho fosse derivado da posição.
+  //
+  // O que mudou o veredito foi o número: medido em 2026-08-28, são 283 dos 396
+  // funis ativos (71%) sem etapa `won`. Esconder o botão ali significava que,
+  // em quase três quartos dos funis, o vendedor não tinha como dizer que
+  // vendeu. O botão passou a existir sempre, porque não há mais para onde ir.
+
+  it("Ganhou marca o desfecho e NÃO move o card", () => {
+    const onDefinirDesfecho = vi.fn();
     const onMoverEtapa = vi.fn();
-    render(<DealCard negocio={negocio()} onMoverEtapa={onMoverEtapa} />);
+    render(
+      <DealCard negocio={negocio()} onDefinirDesfecho={onDefinirDesfecho} onMoverEtapa={onMoverEtapa} />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /ganhou/i }));
 
-    expect(onMoverEtapa).toHaveBeenCalledWith("vendido");
+    expect(onDefinirDesfecho).toHaveBeenCalledWith("won");
+    // A garantia que permite ganhar em qualquer etapa.
+    expect(onMoverEtapa).not.toHaveBeenCalled();
   });
 
-  it("Perdeu move para a chave da etapa de papel perdido", () => {
+  it("Perdeu marca o desfecho e NÃO move o card", () => {
+    const onDefinirDesfecho = vi.fn();
     const onMoverEtapa = vi.fn();
-    render(<DealCard negocio={negocio()} onMoverEtapa={onMoverEtapa} />);
+    render(
+      <DealCard negocio={negocio()} onDefinirDesfecho={onDefinirDesfecho} onMoverEtapa={onMoverEtapa} />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /perdeu/i }));
 
-    expect(onMoverEtapa).toHaveBeenCalledWith("perdido");
+    expect(onDefinirDesfecho).toHaveBeenCalledWith("lost");
+    expect(onMoverEtapa).not.toHaveBeenCalled();
   });
 
-  it("esconde as duas ações no funil sem etapa terminal (83 funis custom em prod)", () => {
-    render(<DealCard negocio={negocio({ etapas: ETAPAS_SEM_DESFECHO, etapaAtual: "s1" })} />);
+  it("🔴 funil SEM etapa terminal oferece as duas ações — era o buraco de 71%", () => {
+    const onDefinirDesfecho = vi.fn();
+    render(
+      <DealCard
+        negocio={negocio({ etapas: ETAPAS_SEM_DESFECHO, etapaAtual: "s1" })}
+        onDefinirDesfecho={onDefinirDesfecho}
+      />,
+    );
 
-    expect(screen.queryByRole("button", { name: /ganhou/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /perdeu/i })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /ganhou/i }));
+    expect(onDefinirDesfecho).toHaveBeenCalledWith("won");
+    expect(screen.getByRole("button", { name: /perdeu/i })).toBeInTheDocument();
   });
 
-  it("mostra só Ganhou quando o funil tem ganho mas não tem perdido", () => {
+  it("funil com ganho e sem perdido oferece as duas mesmo assim", () => {
     const etapas: DealCardStage[] = [
       { chave: "s1", chaveEntry: "s1", nome: "Triagem", papel: "aberto" },
       { chave: "ok", chaveEntry: "ok", nome: "Fechado", papel: "ganho" },
     ];
     render(<DealCard negocio={negocio({ etapas, etapaAtual: "s1" })} />);
 
+    // O desenho do funil deixou de governar quais desfechos existem.
     expect(screen.getByRole("button", { name: /ganhou/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /perdeu/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /perdeu/i })).toBeInTheDocument();
+  });
+
+  it("desfecho em voo trava os dois botões — venda duplicada não se apaga", () => {
+    const onDefinirDesfecho = vi.fn();
+    render(
+      <DealCard negocio={negocio()} onDefinirDesfecho={onDefinirDesfecho} decidindo />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /ganhou/i }));
+    fireEvent.click(screen.getByRole("button", { name: /perdeu/i }));
+
+    expect(onDefinirDesfecho).not.toHaveBeenCalled();
   });
 
   it("negócio já fechado não oferece ação de desfecho", () => {

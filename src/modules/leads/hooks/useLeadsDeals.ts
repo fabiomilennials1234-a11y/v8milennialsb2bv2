@@ -91,6 +91,13 @@ function daysSince(iso: string | null): number | null {
   return Math.max(0, Math.floor((Date.now() - then) / 86_400_000));
 }
 
+/**
+ * Desfecho derivado do PAPEL DA ETAPA — o modelo anterior a 20270904000000.
+ *
+ * Continua existindo como QUEDA, não como fonte: entre o merge do front e o
+ * apply da migration, `deals.outcome` não existe e este é o único sinal. Some
+ * quando a coluna estiver preenchida em toda linha.
+ */
 function outcomeOf(role: string | null | undefined): DealOutcome {
   return role === "won" || role === "lost" ? role : "open";
 }
@@ -179,14 +186,23 @@ export function useLeadsDeals(leadIds: string[]) {
       );
 
       const dealTitleById = new Map<string, string>();
+      const dealOutcomeById = new Map<string, DealOutcome>();
       if (dealIds.length > 0) {
         const { data: dealRows, error: dealsError } = await supabase
           .from("deals")
-          .select("id, title")
+          // `outcome` não está em `types.ts` até o apply de 20270904000000 +
+          // `gen types`. O `select` é string em runtime, então a coluna vem; o
+          // cast abaixo é o que o compilador precisa. Mesma ponte que
+          // `raw as { deal_id?: ... }` mais adiante neste arquivo.
+          .select("id, title, outcome" as "id, title")
           .in("id", dealIds);
         if (dealsError) throw dealsError;
         for (const d of dealRows ?? []) {
           if (d.id && d.title) dealTitleById.set(d.id, d.title);
+          const desfecho = (d as { outcome?: string | null }).outcome;
+          if (d.id && (desfecho === "won" || desfecho === "lost" || desfecho === "open")) {
+            dealOutcomeById.set(d.id, desfecho);
+          }
         }
       }
 
@@ -303,6 +319,7 @@ export function useLeadsDeals(leadIds: string[]) {
         const posicaoNaTrilha = chaveNaTrilha ? trilha.indexOf(chaveNaTrilha) : -1;
 
         const dealId = (raw as { deal_id?: string | null }).deal_id ?? null;
+        const desfechoDoNegocio = dealId ? dealOutcomeById.get(dealId) ?? null : null;
 
         const deal: LeadDeal = {
           id: raw.id,
@@ -320,8 +337,14 @@ export function useLeadsDeals(leadIds: string[]) {
           stagePosition: stage?.position ?? null,
           stageIndex: posicaoNaTrilha >= 0 ? posicaoNaTrilha : null,
           stageCount: trilha.length,
-          outcome: outcomeOf(stage?.role),
-          won: outcomeOf(stage?.role) === "won",
+          // 🔴 A ORDEM IMPORTA. O desfecho é do NEGÓCIO (ADR-0023 Emenda 1), e a
+          // etapa é só queda para quem ainda não tem linha em `deals` — 26,6%
+          // das entradas — e para o intervalo entre este merge e o apply.
+          //
+          // Invertido, um negócio ganho numa etapa comum voltaria a aparecer
+          // como aberto, que é exatamente o que a feature existe para permitir.
+          outcome: desfechoDoNegocio ?? outcomeOf(stage?.role),
+          won: (desfechoDoNegocio ?? outcomeOf(stage?.role)) === "won",
           value: toNumber(metadata.sale_value),
           meetingDate: typeof metadata.meeting_date === "string" ? metadata.meeting_date : null,
           enteredAt: raw.entered_at,
