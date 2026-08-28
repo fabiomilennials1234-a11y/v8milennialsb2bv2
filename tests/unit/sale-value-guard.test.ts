@@ -4,6 +4,7 @@ import {
   hasUsableSaleValue,
   isWonStageKey,
   shouldPromptForSaleValue,
+  stageRequiresSaleValue,
   type WonStageResolvable,
 } from "@/modules/pipelines/lib/sale-value-guard";
 
@@ -87,5 +88,64 @@ describe("shouldPromptForSaleValue", () => {
     expect(shouldPromptForSaleValue("proposta_enviada", null, governed)).toBe(false);
     expect(shouldPromptForSaleValue("perdido", null, governed)).toBe(false);
     expect(shouldPromptForSaleValue("negociando", null, renamedWon)).toBe(false);
+  });
+});
+
+// ── SCRUM-545 fatia 3 — a exigência vira configuração da etapa ──────────────
+//
+// Antes, "exige valor" era sinônimo de "é etapa de ganho". A coluna
+// `requires_sale_value` (migration 20270903000020) separa as duas coisas: a
+// etapa passa a dizer por si se exige valor, e o ganho vira só o default do
+// backfill.
+//
+// O ponto frágil, e o motivo destes testes existirem: a diferença entre
+// `false` (o admin desligou) e `undefined` (a coluna não chegou neste cliente).
+// Tratar as duas igual apagaria o guard num board com tipos velhos — e o
+// caderno de vendas é append-only, então uma venda capturada com NULL fica NULL
+// para sempre (ADR-0017 §4).
+const exigeSemSerGanho: WonStageResolvable[] = [
+  { stage_key: "proposta_enviada", stage_role: "open", is_final_positive: false, requires_sale_value: true },
+  { stage_key: "novo", stage_role: "open", is_final_positive: false, requires_sale_value: false },
+  { stage_key: "vendido", stage_role: "won", is_final_positive: true, requires_sale_value: true },
+];
+
+describe("stageRequiresSaleValue — a flag manda, a ausência dela não", () => {
+  it("exige valor em etapa que NÃO é de ganho, quando a flag pede", () => {
+    expect(stageRequiresSaleValue("proposta_enviada", exigeSemSerGanho)).toBe(true);
+    expect(shouldPromptForSaleValue("proposta_enviada", null, exigeSemSerGanho)).toBe(true);
+  });
+
+  it("respeita o desligamento explícito, inclusive em etapa de ganho", () => {
+    const ganhoDesligado: WonStageResolvable[] = [
+      { stage_key: "vendido", stage_role: "won", is_final_positive: true, requires_sale_value: false },
+    ];
+    // `false` é resposta do admin, não ausência de dado — e vence o legado.
+    expect(stageRequiresSaleValue("vendido", ganhoDesligado)).toBe(false);
+    expect(shouldPromptForSaleValue("vendido", null, ganhoDesligado)).toBe(false);
+  });
+
+  it("🔴 flag AUSENTE não desliga o guard: cai no legado e segue exigindo no ganho", () => {
+    // É o board hidratado antes da migration, ou um select() mais estreito.
+    // Se este teste virar `false`, uma venda fecha sem valor e o caderno grava
+    // NULL para sempre.
+    expect(stageRequiresSaleValue("vendido", governed)).toBe(true);
+    expect(shouldPromptForSaleValue("vendido", null, governed)).toBe(true);
+  });
+
+  it("flag ausente também não INVENTA exigência fora do ganho", () => {
+    expect(stageRequiresSaleValue("proposta_enviada", governed)).toBe(false);
+  });
+
+  it("não exige quando o valor já veio junto", () => {
+    expect(shouldPromptForSaleValue("proposta_enviada", 1500, exigeSemSerGanho)).toBe(false);
+  });
+
+  it("etapa marcada como não-exigente não pede valor", () => {
+    expect(shouldPromptForSaleValue("novo", null, exigeSemSerGanho)).toBe(false);
+  });
+
+  it("sem board carregado, o fallback legado continua valendo", () => {
+    expect(stageRequiresSaleValue("vendido", null)).toBe(true);
+    expect(stageRequiresSaleValue("qualquer_outra", null)).toBe(false);
   });
 });
