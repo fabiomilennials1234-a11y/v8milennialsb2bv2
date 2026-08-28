@@ -231,6 +231,10 @@ export interface CopilotWizardData {
   canCreateLead: boolean;
   canTransferHuman: boolean;
   canMoveCards: boolean;
+  // Opcionais: o Playground é a única superfície que edita estas duas. Ausente
+  // significa "não mexa na flag do banco" — nunca false.
+  canSendDocument?: boolean;
+  canTransferSzChat?: boolean;
   maxConversationTurns: number;
   responseDelayMs: number;
 
