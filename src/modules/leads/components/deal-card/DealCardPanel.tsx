@@ -150,6 +150,56 @@ export const DealCardPanel = memo(function DealCardPanel() {
   );
 
   /**
+   * ── Ganhar / perder ───────────────────────────────────────────────────────
+   *
+   * Desfecho é fato do NEGÓCIO (ADR-0023 Emenda 1). Não move o card: o
+   * vendedor decide na etapa em que estiver, que é o que destrava os 283 funis
+   * (71%) sem etapa terminal.
+   *
+   * Vai por RPC, não por `.update()`, por três razões — e a terceira decide:
+   * `deals.outcome` ainda não existe em `types.ts`; a transição de `outcome` é
+   * o que grava no caderno de vendas, append-only; e 26,6% das entradas não têm
+   * linha em `deals`, que a RPC materializa na mesma transação.
+   *
+   * O cast repete `pipelines/lib/rpc-nao-tipada.ts` em vez de importá-lo: o
+   * helper não está no barrel de `@/modules/pipelines` e deep-import
+   * cross-module é barrado pelo ESLint `boundaries`. Sai quando `gen types`
+   * rodar depois do apply.
+   */
+  const [decidindo, setDecidindo] = useState(false);
+
+  const definirDesfecho = useCallback(
+    async (desfecho: "won" | "lost") => {
+      if (!entryId || decidindo) return;
+      setDecidindo(true);
+      try {
+        const chamar = supabase.rpc as unknown as (
+          nome: string,
+          args: Record<string, unknown>,
+        ) => Promise<{ data: unknown; error: { message: string } | null }>;
+
+        const { error } = await chamar("definir_desfecho_da_entrada", {
+          p_entry_id: entryId,
+          p_outcome: desfecho,
+          p_loss_reason: null,
+        });
+        if (error) throw new Error(error.message);
+
+        toast.success(desfecho === "won" ? "Negócio ganho" : "Negócio perdido");
+        // `leads-deals` é de onde sai `estado` do card. Sem invalidar, o botão
+        // some do jeito certo mas o cabeçalho segue dizendo "aberto".
+        await queryClient.invalidateQueries({ queryKey: ["leads-deals"] });
+        queryClient.invalidateQueries({ queryKey: ["deal-card-extras", entryId] });
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Não foi possível registrar o desfecho");
+      } finally {
+        setDecidindo(false);
+      }
+    },
+    [entryId, decidindo, queryClient],
+  );
+
+  /**
    * ── Excluir o negócio ─────────────────────────────────────────────────────
    * A pergunta que o painel não sabia responder: "isto aqui não existe mais,
    * como eu tiro?". Não havia caminho nenhum — nem menu, nem botão. A única
@@ -385,6 +435,8 @@ export const DealCardPanel = memo(function DealCardPanel() {
         }
         onSaveNote={salvarNota}
         onMoverEtapa={moverEtapa}
+        onDefinirDesfecho={definirDesfecho}
+        decidindo={decidindo}
         onOpenDeal={trocarNegocio}
         onNewDeal={abrirFicha}
         onAdicionarProduto={dealId ? () => setAdicionandoProduto(true) : undefined}

@@ -188,6 +188,8 @@ export function DealCard({
   negocio,
   onSaveNote,
   onMoverEtapa,
+  onDefinirDesfecho,
+  decidindo,
   onOpenDeal,
   onNewDeal,
   onAdicionarProduto,
@@ -208,8 +210,16 @@ export function DealCard({
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
-  /** Move o negócio. Ganhar e perder são movimentos para etapa terminal. */
+  /** Move o negócio entre etapas. NÃO decide desfecho — ver `onDefinirDesfecho`. */
   onMoverEtapa?: (chave: string) => void;
+  /**
+   * Marca o negócio como ganho ou perdido, na etapa em que ele estiver
+   * (ADR-0023 Emenda 1). Quem escreve é o `DealCardPanel`: este arquivo está no
+   * grafo de `/preview.html` e não pode alcançar o banco (inv:H5-17).
+   */
+  onDefinirDesfecho?: (desfecho: "won" | "lost") => void;
+  /** Desfecho em voo — trava os dois botões para não emitir venda duplicada. */
+  decidindo?: boolean;
   /** Abre OUTRO negócio do mesmo lead, na aba "Negócios". */
   onOpenDeal?: (entryId: string) => void;
   onNewDeal?: () => void;
@@ -369,34 +379,39 @@ export function DealCard({
           {etiquetas && <div className="mt-2">{etiquetas}</div>}
         </div>
 
-        {/* Ganhar e perder são MOVIMENTOS para a etapa terminal do funil (ADR-0023
-            §5). Somem quando o funil não tem etapa terminal: 83 funis custom em
-            prod estão nesse caso, e botão que não tem para onde ir mente.
+        {/* Ganhar e perder são fatos do NEGÓCIO (ADR-0023 Emenda 1), não posições.
+            O card NÃO se move: o desfecho pode ser dado em qualquer etapa.
+
+            O bloco anterior condicionava os dois botões a `etapaGanha`/
+            `etapaPerdida` e argumentava que "botão que não tem para onde ir
+            mente". O argumento estava certo e a conclusão envelheceu: medido em
+            2026-08-28, 283 dos 396 funis ativos (71%) não têm etapa `won` — em
+            quase três quartos dos funis o vendedor não tinha botão nenhum para
+            dizer que vendeu. Agora não há para onde ir, e é por isso que o botão
+            aparece sempre.
 
             O `pr-8` da direita é o vão do "X" do `DialogContent` (`right-4
-            top-4`), e agora ele abriga também o `⋯`. Por isso o cluster deixou
-            de depender de `aberto && (etapaGanha || etapaPerdida)`: excluir um
-            negócio JÁ ganho ou perdido é o caso mais comum de faxina de funil,
-            e prender o menu à mesma condição dos dois botões o esconderia
-            justamente ali. */}
-        {((aberto && (etapaGanha || etapaPerdida)) || onExcluir) && (
+            top-4`), e ele abriga também o `⋯`. O cluster não depende do estado
+            do negócio: excluir um negócio JÁ ganho ou perdido é o caso mais
+            comum de faxina de funil. */}
+        {(aberto || onExcluir) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pr-8">
-            {aberto && etapaGanha && (
+            {aberto && (
               <AcaoPrimaria
                 icone={Check}
                 rotulo="Ganhou"
                 tom="ganho"
-                desabilitado={!!movendo}
-                onClick={() => onMoverEtapa?.(etapaGanha.chave)}
+                desabilitado={!!movendo || !!decidindo}
+                onClick={() => onDefinirDesfecho?.("won")}
               />
             )}
-            {aberto && etapaPerdida && (
+            {aberto && (
               <AcaoPrimaria
                 icone={X}
                 rotulo="Perdeu"
                 tom="perda"
-                desabilitado={!!movendo}
-                onClick={() => onMoverEtapa?.(etapaPerdida.chave)}
+                desabilitado={!!movendo || !!decidindo}
+                onClick={() => onDefinirDesfecho?.("lost")}
               />
             )}
             {onExcluir && (
