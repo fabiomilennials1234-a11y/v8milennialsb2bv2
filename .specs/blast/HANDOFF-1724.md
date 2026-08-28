@@ -285,3 +285,59 @@ alcançável pelo mesmo `external_id` que esta fatia usa como ponte (§5).
 
 **Para a #1731**: a varredura filtra por `p.template IS NOT NULL` de propósito. Se você der
 `sent_at` ao Chip, confira `encerrar_entregas_vencidas()` **antes** (§4.2).
+
+---
+
+## 11. Adendo — #1863: o `sent` órfão que o rename deixou para trás
+
+Escrito por outro operário, depois que o PR #1861 já estava aberto e revisado. Uma linha
+(`bd3030aa`), sem branch nova, sem tocar em mais nada do `StepMonitor`.
+
+**O que era.** O rename das contagens por derivações nomeadas (§3) trocou seis nomes em
+`StepMonitor.tsx:95-102`, e `StepMonitor.tsx:180` ficou apontando para `sent`, que deixou de
+existir. `TS2552 — Cannot find name 'sent'`. A linha irmã (`:183`) já usava `pending` e
+compilava, e é por isso que o buraco passou: **metade de um par foi renomeada e a outra
+metade tinha cara de estar certa.**
+
+**Por que `saiu`, e não `processed`.** A escolha estava em aberto no ticket, com `saiu` como
+hipótese explícita a verificar. Três leituras independentes concordam:
+
+1. `blast-delivery-summary.ts` documenta `saiuDaFila` como *"quantas pessoas RECEBERAM O
+   ENVIO — o número que a tela chama de 'enviados'"*. `processados` é outra coisa declarada:
+   a base da barra de progresso, somando `skipped`, `failed` e `desconhecidos`.
+2. `StepMonitor.tsx:236`, **no mesmo componente**, já renderizava `saiu` sob `ReportRow
+   label="Enviados"`. Com `processed`, o card em andamento contradiria o relatório 55 linhas
+   abaixo dele — a tela discordando de si mesma.
+3. `BlastPlanCard.tsx:324` imprime `{saiu} enviados`. As duas derivações vivem na lib
+   justamente para as duas telas não divergirem (§4).
+
+O critério 7 do #1722 ("progresso por pessoa, lido da fila") **não decide** entre os dois:
+ambos derivam de linhas por destinatário via `useBlastPlanProgress` → `resumirDestinatarios`.
+Quem decide é a docstring.
+
+E `failed` fica fora de "enviados" pela mesma razão registrada no §9: a falha tem contador
+próprio ao lado (`:238`), e somá-la contaria a mesma pessoa duas vezes na mesma linha. **A
+armadilha de §9 continua armada para quem mexer aqui.**
+
+**O gate, medido.** `typecheck:ratchet` foi de 81 para 80 introduzidos, e o `TS2552` sumiu
+(provado por `git stash` + re-run). Os 80 restantes são drift de baseline local — o
+`node_modules` de um clone não bate com o do CI, que reprovava com **um** erro. `lint:ratchet`
+acusa 14, todos sob `.agent/skills/**`, que é gitignored (`.gitignore:5`) e não chega ao CI.
+**Nenhuma baseline foi regenerada** — o erro era da branch, e baselinar erro próprio é o que
+transforma ratchet em decoração.
+
+`tests/unit/{disparo-wizard,blast-delivery-summary,blast-recipient-status-vocabulary}` →
+45 verdes.
+
+**Herdado, reportado, não consertado** (nasceu antes da #1863; vira issue, não diff):
+
+- **Nada renderiza o `StepMonitor`.** `blast-delivery-summary.test.ts` cobre a derivação pura
+  — e foi exatamente por isso que os testes passaram com a tela quebrada em render. Um smoke
+  render do card em andamento pega esta classe inteira de erro; a cobertura de hoje não pega.
+- **A legenda do card não fecha com a barra.** `pct` usa `processed` (`:107`), a legenda usa
+  `saiu` + `pending` (`:180`, `:183`), e com `failed`/`skipped` > 0 os dois não somam `total`.
+  O `BlastPlanCard` amortece imprimindo "· falhas · ignorados" inline (`:326-334`); o card em
+  andamento não imprime. Mesma matemática nas duas telas — só a exibição difere.
+- **O formato "N enviados" está triplicado** com `toLocaleString("pt-BR")` inline em `:180`,
+  `:236` e `BlastPlanCard.tsx:324`. O número foi extraído para a lib; o formato não — e foi
+  nessa duplicação que o `sent` órfão sobreviveu em um dos três lugares.
