@@ -6,6 +6,7 @@ import { createLead } from "../_shared/api/routes/leads-create.ts";
 import { createDeal } from "../_shared/api/routes/deals-create.ts";
 import { getDeal, listDeals, listLeadDeals, patchDeal } from "../_shared/api/routes/deals.ts";
 import { moveDeal } from "../_shared/api/routes/deals-move.ts";
+import { moveDealsBulk } from "../_shared/api/routes/deals-move-bulk.ts";
 import { API_SCOPES, hasScope } from "../_shared/api/scopes.ts";
 
 // ── A tabela de rotas ──────────────────────────────────────────
@@ -107,4 +108,23 @@ Deno.test("routes — a rota de mover LEAD continua viva, depreciada", () => {
   const m = matchRoute("POST", "/api/v1/leads/l-1/stage", routes);
   assertEquals(m?.params.id, "l-1");
   assertEquals(m?.route.scope, "lead:write");
+});
+
+// O lote mora em `/deals/move`, e a literal precisa vencer qualquer
+// `POST /deals/{id}` que venha a existir — `matchRoute` devolve o primeiro
+// casamento e não prefere literal sobre parâmetro. Hoje não há POST com essa
+// forma; o teste existe para o dia em que houver.
+Deno.test("routes — POST /deals/move casa o lote, não uma leitura por id", () => {
+  const m = matchRoute("POST", "/api/v1/deals/move", routes);
+  assertEquals(m?.route.handler, moveDealsBulk);
+  assertEquals(m?.route.scope, "deal:write");
+  assertEquals(m?.params.id, undefined);
+});
+
+// E o move unitário continua alcançável: as duas rotas têm formas distintas
+// (`/deals/move` e `/deals/{id}/move`) e não competem.
+Deno.test("routes — o lote não engoliu o move unitário", () => {
+  const m = matchRoute("POST", "/api/v1/deals/d-1/move", routes);
+  assertEquals(m?.route.handler, moveDeal);
+  assertEquals(m?.params.id, "d-1");
 });

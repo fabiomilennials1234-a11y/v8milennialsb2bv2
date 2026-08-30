@@ -377,3 +377,92 @@ Deno.test("listLeadDeals — cada Negócio traz a própria posição", async () 
   assertEquals(d[0].pipeline, "whatsapp");
   assertEquals(d[1].stage, "enviada");
 });
+
+// ── created_from / created_to — janela de CRIAÇÃO ──────────────────────────
+//
+// O relato que originou isto: "a API não puxa a data de criação do negócio, só
+// a do lead, e por isso não consigo movimentar em massa". O campo ia no corpo
+// desde sempre — o que faltava era poder RECORTAR por ele. Sem recorte, "os
+// Negócios abertos ontem" obriga a varrer a base inteira e peneirar no cliente,
+// e como a paginação é por última atividade o cliente nem sabe quando parar.
+
+Deno.test("listDeals — a janela de criação chega ao banco, normalizada", async () => {
+  const calls: RpcCall[] = [];
+  await listDeals(ctx(
+    "https://x/api/v1/deals?created_from=2026-08-01&created_to=2026-08-02T23:59:59Z",
+    { data: [] },
+    calls,
+  ));
+
+  assertEquals(calls[0].args.p_created_from, "2026-08-01T00:00:00.000Z");
+  assertEquals(calls[0].args.p_created_to, "2026-08-02T23:59:59.000Z");
+});
+
+Deno.test("listDeals — sem janela, os dois cortes vão nulos", async () => {
+  const calls: RpcCall[] = [];
+  await listDeals(ctx("https://x/api/v1/deals", { data: [] }, calls));
+
+  assertEquals(calls[0].args.p_created_from, null);
+  assertEquals(calls[0].args.p_created_to, null);
+});
+
+// Mesma disciplina do updated_since: data ilegível não pode virar "sem corte".
+Deno.test("listDeals — created_from ilegível recusa, e não consulta o banco", async () => {
+  const calls: RpcCall[] = [];
+  const res = await listDeals(ctx(
+    "https://x/api/v1/deals?created_from=ontem",
+    { data: [] },
+    calls,
+  ));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_created_from");
+  assertEquals(calls.length, 0);
+});
+
+// Janela invertida devolveria lista vazia, e vazio é indistinguível de "não há
+// Negócio nesse período" — o cenário seguiria adiante achando que terminou.
+Deno.test("listDeals — janela invertida é recusada, não devolvida vazia", async () => {
+  const calls: RpcCall[] = [];
+  const res = await listDeals(ctx(
+    "https://x/api/v1/deals?created_from=2026-08-10&created_to=2026-08-01",
+    { data: [] },
+    calls,
+  ));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_created_range");
+  assertEquals(calls.length, 0);
+});
+
+// Filtrar por criação NÃO reordena. O cursor é opaco para quem chama: ele guarda
+// a string entre chamadas e não teria como saber que a chave por trás dela mudou
+// — o resultado seria pular ou repetir registro em silêncio.
+Deno.test("listDeals — com janela de criação, o cursor continua pela última atividade", async () => {
+  const res = await listDeals(ctx(
+    "https://x/api/v1/deals?created_from=2026-01-01&limit=1",
+    { data: [
+      row("d-1", "2026-08-20T00:00:00Z", { created_at: "2026-01-15T00:00:00Z" }),
+      row("d-2", "2026-08-19T00:00:00Z", { created_at: "2026-01-14T00:00:00Z" }),
+    ] },
+  ));
+
+  const body = await res.json();
+  assertEquals(body.has_more, true);
+  assertEquals(decodeCursor(body.next_cursor)?.created_at, "2026-08-20T00:00:00Z");
+});
+
+// As duas perguntas convivem: um Negócio criado ontem e editado hoje entra em
+// `created_from=ontem` E em `updated_since=hoje`. Responder uma pela outra é o
+// que o chamador não consegue desfazer do lado dele.
+Deno.test("listDeals — janela de criação e updated_since viajam juntos", async () => {
+  const calls: RpcCall[] = [];
+  await listDeals(ctx(
+    "https://x/api/v1/deals?created_from=2026-08-01&updated_since=2026-08-20",
+    { data: [] },
+    calls,
+  ));
+
+  assertEquals(calls[0].args.p_created_from, "2026-08-01T00:00:00.000Z");
+  assertEquals(calls[0].args.p_updated_since, "2026-08-20T00:00:00.000Z");
+});

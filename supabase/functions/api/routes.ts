@@ -16,6 +16,7 @@ import { createLead } from "../_shared/api/routes/leads-create.ts";
 import { createDeal } from "../_shared/api/routes/deals-create.ts";
 import { getDeal, listDeals, listLeadDeals, patchDeal } from "../_shared/api/routes/deals.ts";
 import { moveDeal } from "../_shared/api/routes/deals-move.ts";
+import { moveDealsBulk } from "../_shared/api/routes/deals-move-bulk.ts";
 import {
   addLeadTags,
   moveLeadStage,
@@ -57,6 +58,10 @@ export const routes: ApiRoute[] = [
   { method: "GET", pattern: "/api/v1/deals", scope: "deal:read", handler: listDeals },
   { method: "GET", pattern: "/api/v1/deals/{id}", scope: "deal:read", handler: getDeal },
   { method: "POST", pattern: "/api/v1/deals", scope: "deal:write", handler: createDeal },
+  // ⚠️ ANTES de qualquer `POST /api/v1/deals/{algo}` que venha a existir — mesma
+  // armadilha do `/leads/search`: `matchRoute` não prefere literal sobre
+  // parâmetro, e esta rota ficaria inalcançável com `id` valendo "move".
+  { method: "POST", pattern: "/api/v1/deals/move", scope: "deal:write", handler: moveDealsBulk },
   { method: "PATCH", pattern: "/api/v1/deals/{id}", scope: "deal:write", handler: patchDeal },
   { method: "POST", pattern: "/api/v1/deals/{id}/move", scope: "deal:write", handler: moveDeal },
   { method: "GET", pattern: "/api/v1/leads/{id}/deals", scope: "deal:read", handler: listLeadDeals },

@@ -51,7 +51,7 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
  * para quem mandou um funil que não existe, e que faria o node do n8n retentar
  * em laço contra uma requisição que nunca vai dar certo.
  */
-function traduzErro(err: unknown): { status: number; code: string; message: string } {
+export function traduzErro(err: unknown): { status: number; code: string; message: string } {
   const e = err as { code?: string; message?: string };
   const msg = e?.message ?? "";
 
