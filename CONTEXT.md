@@ -164,6 +164,16 @@ Canonical terms used across the system. No implementation details here — this 
 
 - **Dead Letter Event**: A domain event that was emitted but had no handler, or whose handler failed/timed out. Stored for audit and manual resolution.
 
+## Avisos
+
+- **Aviso (Notification)**: A living row addressed to one Team Member inside one Organization, born from a single domain event and **mutable until read**. Unlike an event, it absorbs its successors: the second, third and tenth message of the same conversation raise its counter instead of creating siblings. Read closes it forever — a later event of the same kind starts a new Aviso. Every Aviso is recorded regardless of the recipient's preferences; preferences govern **delivery** (sound, toast, push), never the record. _Avoid_: notificação, alerta, alert.
+
+- **Group Key**: The identity an Aviso coalesces on — `msg:<lead_id>` for a conversation, `wf:<workflow_id>` for a failing automation, `fup:<id>:<date>` for a materialized daily reminder. It is what "the same thing happening again" means for that kind of Aviso, and it is deliberately not the entity the Aviso opens: a failing automation groups by Workflow but opens on the Execution. Unique per recipient **only while unread**.
+
+- **Dono do Aviso (Recipient)**: The single Team Member an Aviso is addressed to. Derived, never chosen: for a conversation it is the Lead's `responsible → closer → sdr`, first one set; for an automation failure it is every `admin` of the Organization; for a meeting it is the Closer named on the booking. **A Lead with no owner produces no Aviso** — absent ownership is an assignment problem, and broadcasting to everyone converts it into noise for everyone.
+
+- **Canal Quente / Canal Frio (Hot / Cold Channel)**: The two delivery surfaces of an Aviso. **Quente** = toast plus sound, reserved for what changes if you learn it now rather than in forty minutes (a blocked automation, a message from your Lead, a Lead just assigned to you). **Frio** = the bell badge, for everything true but not urgent. The split is temporal, not by importance: a meeting booked for tomorrow is important and cold.
+
 ## Intelligence
 
 - **Oraculo Comercial**: A specialized Copilot variant that provides sales coaching and metric analysis. Not a separate domain — it's a Copilot agent type.
