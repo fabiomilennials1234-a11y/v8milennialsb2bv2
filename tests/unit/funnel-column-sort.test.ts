@@ -31,14 +31,13 @@ describe("ordenação da coluna", () => {
     expect(items.map((i) => i.id)).toEqual(before);
   });
 
-  it("valor e calor ordenam do maior pro menor", () => {
+  it("valor ordena do maior pro menor", () => {
     const items = [
-      card({ id: "medio", value: 500, rating: 5 }),
-      card({ id: "alto", value: 900, rating: 9 }),
-      card({ id: "baixo", value: 100, rating: 1 }),
+      card({ id: "medio", value: 500 }),
+      card({ id: "alto", value: 900 }),
+      card({ id: "baixo", value: 100 }),
     ];
     expect(sortColumnItems(items, "value").map((i) => i.id)).toEqual(["alto", "medio", "baixo"]);
-    expect(sortColumnItems(items, "heat").map((i) => i.id)).toEqual(["alto", "medio", "baixo"]);
   });
 
   it("campo ausente ou nulo vai pro fim, não pro topo", () => {
@@ -119,12 +118,39 @@ describe("ordenação da coluna", () => {
     expect(sortColumnItems(items, "stalled").at(-1)?.id).toBe("sem-data");
   });
 
-  it("o menu não oferece mais ordenar por nome", () => {
-    // Decisão de produto (2026-08-31). Guarda contra reintrodução silenciosa —
-    // ordenar a etapa em A–Z não responde pergunta nenhuma do operador.
+  it("o menu não oferece mais ordenar por nome nem por calor", () => {
+    // Decisões de produto (2026-08-31), guardadas contra reintrodução silenciosa.
+    // "Nome": ordenar a etapa em A–Z não responde pergunta nenhuma do operador.
+    // "Calor": o rótulo mentia — lia `rating` (que o filtro chama "Prioridade"),
+    // não `pipe_propostas.calor`.
     const keys = COLUMN_SORT_OPTIONS.map((o) => o.key as string);
     expect(keys).not.toContain("name");
-    expect(COLUMN_SORT_OPTIONS.map((o) => o.label)).not.toContain("Nome");
+    expect(keys).not.toContain("heat");
+    const labels = COLUMN_SORT_OPTIONS.map((o) => o.label);
+    expect(labels).not.toContain("Nome");
+    expect(labels).not.toContain("Calor");
+  });
+
+  it("ordenar não lê mais `rating` de card nenhum", () => {
+    // O campo continua vivo no card e no filtro "Prioridade" — o que morreu foi
+    // ORDENAR por ele. Um getter que estoura prova que nenhuma opção o toca.
+    // Construídos um a um: espalhar (`{...armadilha}`) INVOCA o getter e a
+    // armadilha pegaria a si mesma antes de a ordenação rodar.
+    const armadilha = (id: string, value: number, quando: string) => ({
+      id,
+      value,
+      stageEnteredAt: quando,
+      get rating(): number {
+        throw new Error("ordenação leu `rating` — a opção Calor voltou?");
+      },
+    });
+    const items = [
+      armadilha("x", 10, "2026-07-01T12:00:00Z"),
+      armadilha("y", 20, "2026-08-01T12:00:00Z"),
+    ];
+    for (const opt of COLUMN_SORT_OPTIONS) {
+      expect(() => sortColumnItems(items, opt.key)).not.toThrow();
+    }
   });
 
   it("data inválida não quebra a ordenação", () => {
@@ -139,9 +165,7 @@ describe("ordenação da coluna", () => {
   });
 
   it("toda opção do menu é ordenável, e o default é 'manual'", () => {
-    const items = [
-      card({ id: "a", value: 1, rating: 1, stageEnteredAt: "2026-07-01T12:00:00Z" }),
-    ];
+    const items = [card({ id: "a", value: 1, stageEnteredAt: "2026-07-01T12:00:00Z" })];
     for (const opt of COLUMN_SORT_OPTIONS) {
       expect(() => sortColumnItems(items, opt.key as ColumnSortKey)).not.toThrow();
     }

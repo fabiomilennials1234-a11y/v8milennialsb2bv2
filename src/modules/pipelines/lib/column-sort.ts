@@ -2,10 +2,24 @@
  * Ordenação dos cards dentro de uma coluna do board.
  *
  * O protótipo (`.specs/mockups/funis-redesign/`) punha "Ordenar por" no menu `…`
- * da coluna com cinco opções: manual, valor, calor, parado e **nome**. "Nome"
- * saiu a pedido do produto em 2026-08-31 e deu lugar a "Última movimentação" —
- * ordenar uma etapa de Kanban em A–Z não responde nenhuma pergunta que o
- * operador faça diante do board.
+ * da coluna com cinco opções: manual, valor, **calor**, parado e **nome**. As
+ * duas em negrito saíram a pedido do produto em 2026-08-31: "Nome" deu lugar a
+ * "Última movimentação" (ordenar uma etapa em A–Z não responde pergunta que o
+ * operador faça diante do board) e "Calor" foi embora sem substituta.
+ *
+ * ## 🚨 "Calor" não ordenava por calor — o rótulo mentia
+ *
+ * Ela lia `rating`, que é `leads.rating`. O `calor` de verdade é outra coluna,
+ * `pipe_propostas.calor`, e vive só no funil de Propostas. Prova no vizinho:
+ * `lib/kanbanFilterParams` mapeia a faixa **"Prioridade"** para `rating` (alta
+ * `>=8`) e a faixa **"Calor"** para `calor` (quente `>=7`) — campos distintos,
+ * defaults distintos (`rating||0` contra `calor??5`). Ou seja, esta opção
+ * ordenava por *prioridade* sob o nome de *calor*, nos quatro boards, inclusive
+ * nos três que não têm `calor` nenhum.
+ *
+ * **Ao reintroduzir ordenação por qualquer uma das duas, escolha o campo antes
+ * do rótulo** — e note que `calor` só existiria em Propostas, o que a tornaria
+ * uma opção que precisa ser escondida nos demais, como já acontece com o filtro.
  *
  * ## "Parado há" e "Última movimentação" são a MESMA leitura, invertida
  *
@@ -29,12 +43,11 @@
  * quebrar a ordem.
  */
 
-export type ColumnSortKey = "manual" | "value" | "heat" | "stalled" | "moved";
+export type ColumnSortKey = "manual" | "value" | "stalled" | "moved";
 
 export const COLUMN_SORT_OPTIONS: { key: ColumnSortKey; label: string }[] = [
   { key: "manual", label: "Manual" },
   { key: "value", label: "Valor" },
-  { key: "heat", label: "Calor" },
   { key: "stalled", label: "Parado há" },
   // Vizinha da anterior de propósito: é o mesmo dado lido ao contrário.
   { key: "moved", label: "Última movimentação" },
@@ -42,9 +55,13 @@ export const COLUMN_SORT_OPTIONS: { key: ColumnSortKey; label: string }[] = [
 
 export const DEFAULT_COLUMN_SORT: ColumnSortKey = "manual";
 
+/**
+ * `rating` saiu junto com a opção "Calor" — era seu único leitor aqui. O campo
+ * continua existindo no card e no filtro "Prioridade"; o que deixou de existir é
+ * a ordenação por ele.
+ */
 interface SortableCardShape {
   value?: number | null;
-  rating?: number | null;
   stageEnteredAt?: string | null;
   createdAt?: string | null;
 }
@@ -98,9 +115,6 @@ export function sortColumnItems<T>(items: T[], sortKey: ColumnSortKey): T[] {
   switch (sortKey) {
     case "value":
       return copy.sort((a, b) => compareNullLast(num(get(a).value), num(get(b).value), -1));
-
-    case "heat":
-      return copy.sort((a, b) => compareNullLast(num(get(a).rating), num(get(b).rating), -1));
 
     // Mais parado primeiro = movimentação mais antiga primeiro.
     case "stalled":
