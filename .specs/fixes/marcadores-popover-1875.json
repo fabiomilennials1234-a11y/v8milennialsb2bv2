@@ -1,0 +1,56 @@
+{
+  "_comentario": "Marcadores da PR #1875 (sweep sistemico de Popover, merge dc32b19e). Os 3 do modo `exato` foram provados novos: `git grep -c` da 0 em 24693285 e 1 em origin/main. Os 3 do modo `perto` cobrem os consertos que so levaram `modal` — `modal:!0` aparece 9x no bundle, entao so vale medido contra a ancora.",
+  "url": "https://torquecrm.com.br",
+  "marcadores": [
+    {
+      "nome": "DealCardChecklists — z-[70]",
+      "modo": "exato",
+      "texto": "z-[70] w-64 p-1.5"
+    },
+    {
+      "nome": "ResponsibleSlot — z-[70]",
+      "modo": "exato",
+      "texto": "z-[70] w-64 p-2"
+    },
+    {
+      "nome": "LeadCardEtiquetas — z-[70]",
+      "modo": "exato",
+      "texto": "z-[70] w-60 p-2"
+    },
+    {
+      "nome": "ClientChipSelector — modal",
+      "modo": "perto",
+      "ancora": "Buscar cliente...",
+      "texto": "modal:!0",
+      "janela": 600
+    },
+    {
+      "nome": "LeadChecklistSection — modal",
+      "modo": "perto",
+      "ancora": "Selecionar template",
+      "texto": "modal:!0",
+      "janela": 900
+    },
+    {
+      "nome": "LeadCardEtiquetas — modal",
+      "modo": "perto",
+      "ancora": "Escolher etiqueta",
+      "texto": "modal:!0",
+      "janela": 900
+    }
+  ],
+  "controles": [
+    {
+      "nome": "Adicionar etiqueta",
+      "texto": "Adicionar etiqueta"
+    },
+    {
+      "nome": "Nenhum cliente encontrado",
+      "texto": "Nenhum cliente encontrado"
+    },
+    {
+      "nome": "Digitar nome ou SKU (marcador da #1867, ja no ar)",
+      "texto": "Digitar nome ou SKU"
+    }
+  ]
+}
