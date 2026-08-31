@@ -89,6 +89,9 @@ export { OnboardingQuestion } from "./components/onboarding/OnboardingQuestion";
 
 // Components — Notifications + System alerts
 export { AlertsDropdown } from "./components/notifications/AlertsDropdown";
+export { useAvisos } from "./hooks/useAvisos";
+export { aplicarEventoDeAviso, contarNaoLidos, instanteDoAviso } from "./lib/aviso-stream";
+export type { Aviso, EventoDeAviso } from "./lib/aviso-stream";
 export { AlertsBanner } from "./components/system-alerts/AlertsBanner";
 
 // Components — Feature Lock / Feature Route
