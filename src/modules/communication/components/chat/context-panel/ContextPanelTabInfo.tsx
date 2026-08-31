@@ -107,7 +107,13 @@ type LeadShape = Partial<
   >
 > & {
   responsible?: { id?: string; name?: string } | null;
-  lead_tags?: Array<{ tag: { id: string; name: string; color: string } }>;
+  /**
+   * `lead_tags(tag:tags(id, name, color))` — embed do PostgREST, e ele tipa
+   * relação encaixada como POSSIVELMENTE NULA (só `!inner` garante presença).
+   * Declarar `tag` não-nulo aqui era o que impedia a linha real de `leads` de
+   * ser atribuída a esta forma (TS2322). O nulo é filtrado no consumo.
+   */
+  lead_tags?: Array<{ tag: { id: string; name: string; color: string } | null }> | null;
 };
 
 export interface ContextPanelTabInfoProps {
@@ -550,7 +556,11 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
   const { data: allTags = [] } = useTags();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const current = (lead.lead_tags ?? []).map((lt) => lt.tag);
+  // O `filter` não é cerimônia de tipo: embed do PostgREST vem nulo quando a
+  // linha encaixada não resolve, e sem isto um `null` viraria chip sem nome.
+  const current = (lead.lead_tags ?? [])
+    .map((lt) => lt.tag)
+    .filter((t): t is { id: string; name: string; color: string } => t !== null);
 
   const toggle = async (tagId: string) => {
     if (!lead.id) return;
