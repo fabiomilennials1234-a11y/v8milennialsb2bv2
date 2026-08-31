@@ -101,6 +101,11 @@ verify_jwt = false
 [functions.oraculo-comercial]
 verify_jwt = false
 
+# oraculo-turno: o JWT é validado dentro (requireAuth), porque o Escopo — quem
+# alcança o quê — é derivado dele e não do corpo da requisição (ADR-0032 §4).
+[functions.oraculo-turno]
+verify_jwt = false
+
 [functions.calculate-lead-score]
 verify_jwt = false
 

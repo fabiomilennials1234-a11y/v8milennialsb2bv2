@@ -170,8 +170,8 @@ describe('permissions — useJobTitle and useMetricType logic (pure)', () => {
 });
 
 describe('ACTION_TO_FEATURE — canonical map', () => {
-  it('all 17 actions are mapped', () => {
-    expect(Object.keys(ACTION_TO_FEATURE)).toHaveLength(17);
+  it('all 18 actions are mapped', () => {
+    expect(Object.keys(ACTION_TO_FEATURE)).toHaveLength(18);
   });
 
   it('key actions map to correct feature keys', () => {

@@ -142,6 +142,10 @@ Deno.serve(withErrorBoundary('send-meta-message', async (req) => {
       media_url: mediaUrl || null,
       status: "sent",
       timestamp: new Date().toISOString(),
+      // Autoria (SCRUM-593, ADR-0033 §4). Aqui a linha nasce no próprio envio,
+      // então o autor é gravado direto — sem depender do eco do provedor.
+      // NULL quando o ator não tem cadeira na org (Master, Gestor).
+      sent_by_team_member_id: auth.teamMemberId || null,
     });
 
     if (insertError) {

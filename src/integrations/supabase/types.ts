@@ -2969,6 +2969,7 @@ export type Database = {
           provider_message_id: string | null
           raw_payload: Json | null
           remote_jid: string | null
+          sent_by_team_member_id: string | null
           sender_id: string | null
           sender_name: string | null
           sender_profile_pic: string | null
@@ -2996,6 +2997,7 @@ export type Database = {
           provider_message_id?: string | null
           raw_payload?: Json | null
           remote_jid?: string | null
+          sent_by_team_member_id?: string | null
           sender_id?: string | null
           sender_name?: string | null
           sender_profile_pic?: string | null
@@ -3023,6 +3025,7 @@ export type Database = {
           provider_message_id?: string | null
           raw_payload?: Json | null
           remote_jid?: string | null
+          sent_by_team_member_id?: string | null
           sender_id?: string | null
           sender_name?: string | null
           sender_profile_pic?: string | null
@@ -12589,6 +12592,133 @@ export type Database = {
           },
         ]
       }
+      oraculo_conversations: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          last_message_at: string | null
+          organization_id: string
+          summary: string | null
+          team_member_id: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          organization_id: string
+          summary?: string | null
+          team_member_id?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          organization_id?: string
+          summary?: string | null
+          team_member_id?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oraculo_conversations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oraculo_conversations_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oraculo_conversations_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      oraculo_turns: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          hit_tool_ceiling: boolean
+          id: string
+          input_tokens: number | null
+          latency_ms: number | null
+          model: string | null
+          organization_id: string
+          output_tokens: number | null
+          rejected_tools: string[]
+          role: string
+          tools_used: string[]
+          user_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          hit_tool_ceiling?: boolean
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          organization_id: string
+          output_tokens?: number | null
+          rejected_tools?: string[]
+          role: string
+          tools_used?: string[]
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          hit_tool_ceiling?: boolean
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          organization_id?: string
+          output_tokens?: number | null
+          rejected_tools?: string[]
+          role?: string
+          tools_used?: string[]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oraculo_turns_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "oraculo_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oraculo_turns_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       organizations: {
         Row: {
           auto_create_lead_on_inbound: boolean
@@ -12612,6 +12742,7 @@ export type Database = {
           limit_overrides: Json | null
           metrics_studio_enabled: boolean
           name: string
+          oraculo_daily_turn_limit: number | null
           onboarding_answers: Json | null
           onboarding_completed_at: string | null
           onboarding_state: string
@@ -12660,6 +12791,7 @@ export type Database = {
           limit_overrides?: Json | null
           metrics_studio_enabled?: boolean
           name: string
+          oraculo_daily_turn_limit?: number | null
           onboarding_answers?: Json | null
           onboarding_completed_at?: string | null
           onboarding_state?: string
@@ -12708,6 +12840,7 @@ export type Database = {
           limit_overrides?: Json | null
           metrics_studio_enabled?: boolean
           name?: string
+          oraculo_daily_turn_limit?: number | null
           onboarding_answers?: Json | null
           onboarding_completed_at?: string | null
           onboarding_state?: string
@@ -18732,6 +18865,7 @@ export type Database = {
           remote_jid: string
           search_tsv: unknown
           sent_by_ai: boolean | null
+          sent_by_team_member_id: string | null
           sent_source: string
           status: string | null
           timestamp: string
@@ -18763,6 +18897,7 @@ export type Database = {
           remote_jid: string
           search_tsv?: unknown
           sent_by_ai?: boolean | null
+          sent_by_team_member_id?: string | null
           sent_source?: string
           status?: string | null
           timestamp?: string
@@ -18794,6 +18929,7 @@ export type Database = {
           remote_jid?: string
           search_tsv?: unknown
           sent_by_ai?: boolean | null
+          sent_by_team_member_id?: string | null
           sent_source?: string
           status?: string | null
           timestamp?: string
