@@ -287,7 +287,28 @@ export const copilotSetSectionsTool: ToolDef = {
       if (typeof raw[k] === "string") (patch as Record<string, string>)[k] = raw[k] as string;
     }
 
-    const rawTools = (args.tool_instructions ?? {}) as Record<string, unknown>;
+    // Cliente MCP com o schema em cache (deploy novo, sessão velha) manda o objeto
+    // como STRING — e aí Object.entries itera os índices do texto. Aceita os dois.
+    let rawTools: Record<string, unknown>;
+    if (typeof args.tool_instructions === "string") {
+      try {
+        const parsed = JSON.parse(args.tool_instructions);
+        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+          throw new Error("not an object");
+        }
+        rawTools = parsed as Record<string, unknown>;
+      } catch {
+        return {
+          content: [{
+            type: "text",
+            text: "tool_instructions must be an object (or a JSON string encoding one).",
+          }],
+          isError: true,
+        };
+      }
+    } else {
+      rawTools = (args.tool_instructions ?? {}) as Record<string, unknown>;
+    }
     const toolPatch: Record<string, string> = {};
     const unknownTools: string[] = [];
     for (const [k, v] of Object.entries(rawTools)) {
@@ -298,10 +319,14 @@ export const copilotSetSectionsTool: ToolDef = {
       else unknownTools.push(k);
     }
     if (unknownTools.length > 0) {
+      // Trunca: uma string mal-parseada vira milhares de "chaves" e a mensagem
+      // inteira vira ruído que esconde a lista de ids válidos.
+      const shown = unknownTools.slice(0, 5).join(", ") +
+        (unknownTools.length > 5 ? ` (+${unknownTools.length - 5})` : "");
       return {
         content: [{
           type: "text",
-          text: `Unknown tool id(s): ${unknownTools.join(", ")}. Valid: ` +
+          text: `Unknown tool id(s): ${shown}. Valid: ` +
             TOOLS_CATALOG.map((t) => t.id).join(", "),
         }],
         isError: true,

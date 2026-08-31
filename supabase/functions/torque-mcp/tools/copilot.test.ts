@@ -282,6 +282,39 @@ Deno.test("copilot.set_sections — tool_instructions alone is a valid edit", as
   assertEquals(parsed.plan.tools_changed, ["QUALIFICAR_LEAD"]);
 });
 
+Deno.test("copilot.set_sections — tool_instructions as JSON string is accepted", async () => {
+  // Cliente MCP com schema em cache manda objeto como string; sem isso,
+  // Object.entries itera os índices do texto e tudo vira "chave desconhecida".
+  const db = makeStub({
+    agent: {
+      id: "a1",
+      organization_id: "o1",
+      name: "Loo",
+      can_qualify_lead: true,
+      conversation_style: { promptSections: { personality: "Sou a Loo." } },
+    },
+  });
+  const res = await copilotSetSectionsTool.handler(
+    { agent_id: "a1", tool_instructions: JSON.stringify({ QUALIFICAR_LEAD: "nova regra" }) },
+    ctxOf(db),
+  );
+  const parsed = JSON.parse(res.content[0].text);
+  assertEquals(parsed.plan.tools_changed, ["QUALIFICAR_LEAD"]);
+  assertStringIncludes(String(parsed.plan.update.system_prompt), "nova regra");
+});
+
+Deno.test("copilot.set_sections — tool_instructions string that isn't an object is refused", async () => {
+  const db = makeStub({
+    agent: { id: "a1", organization_id: "o1", name: "Loo", conversation_style: {} },
+  });
+  const res = await copilotSetSectionsTool.handler(
+    { agent_id: "a1", tool_instructions: "QUALIFICAR_LEAD: nova regra" },
+    ctxOf(db),
+  );
+  assertEquals(res.isError, true);
+  assertStringIncludes(res.content[0].text, "must be an object");
+});
+
 Deno.test("copilot.set_sections — unknown tool id is refused, not silently dropped", async () => {
   const db = makeStub({
     agent: { id: "a1", organization_id: "o1", name: "Loo", conversation_style: {} },
