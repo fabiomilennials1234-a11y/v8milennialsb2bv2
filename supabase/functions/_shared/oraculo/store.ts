@@ -64,7 +64,7 @@ export function createTurnStore(db: SupabaseClient): TurnStore {
         }
       }
 
-      const { data: nova } = await db
+      const { data: nova, error } = await db
         .from("oraculo_conversations")
         .insert({
           organization_id: actor.organizationId,
@@ -73,6 +73,12 @@ export function createTurnStore(db: SupabaseClient): TurnStore {
         })
         .select("id, summary")
         .single();
+
+      // Sem conversa não há onde pendurar o turno. Falhar aqui, com o motivo,
+      // é melhor que seguir e estourar um TypeError na hora de gravar.
+      if (error || !nova) {
+        throw new Error(`oraculo: conversa não pôde ser criada — ${error?.message ?? "sem retorno"}`);
+      }
 
       return { id: nova.id, summary: null, history: [] };
     },
