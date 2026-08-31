@@ -13,17 +13,25 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import type { Tables } from "@/integrations/supabase/types";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 
+/**
+ * A forma do lead é DERIVADA da tabela, não redeclarada.
+ *
+ * A versão anterior escrevia os seis campos à mão, com `name: string` e
+ * `origin: string`. As duas colunas são anuláveis em `leads`, e os tipos
+ * antigos — frouxos — deixavam passar. Com os tipos gerados de prod, atribuir
+ * a linha real a esta forma parou de compilar (TS2322).
+ *
+ * `Pick` sobre `Tables<"leads">` resolve e não volta a divergir: se uma coluna
+ * mudar de tipo, o erro aparece aqui em vez de num cast silencioso.
+ */
 interface PriorityLead {
-  lead: {
-    id: string;
-    name: string;
-    company: string | null;
-    phone: string | null;
-    origin: string;
-    created_at: string;
-  };
+  lead: Pick<
+    Tables<"leads">,
+    "id" | "name" | "company" | "phone" | "origin" | "created_at"
+  >;
   score: LeadScore;
 }
 

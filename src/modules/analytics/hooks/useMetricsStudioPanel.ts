@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { isVirtualTeamMember, useOrganization } from "@/modules/identity";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
+import type { Json } from "@/integrations/supabase/types";
 // Do módulo do tipo, NÃO de "./useMetricsStudio": aquele hook importa este, e o
 // import de volta — mesmo sendo só de tipo — fecha ciclo no grafo de módulos e
 // reprova o dep-cruiser. Foi o que derrubou o Lint & Build do #1497.
@@ -73,40 +74,17 @@ export function useMetricsStudioPanel(): PanelPersistence {
   const query = useQuery({
     queryKey: ["metrics-studio-panel", organizationId],
     queryFn: async (): Promise<StudioWindow[]> => {
-      // PONTE DE COMPATIBILIDADE — some junto com o apply em prod.
+      // As duas PONTES DE COMPATIBILIDADE deste arquivo foram removidas em
+      // 2026-08-31, seguindo o runbook que o próprio comentário delas descrevia:
+      // apply em prod → `gen types` apontando para PROD → apagar as pontes.
       //
-      // `metrics_studio_panels` nasce na migration 20270811110000, que ainda
-      // NÃO está em produção. `src/integrations/supabase/types.ts` é gerado A
-      // PARTIR DE PROD (`supabase gen types`), então a tabela não existe para o
-      // cliente tipado. Sem assinatura conhecida, o TypeScript percorre a cadeia
-      // do PostgrestBuilder sem fim e estoura TS2589 "Type instantiation is
-      // excessively deep" — que reprovava o TSC ratchet do job `Lint & Build`
-      // e, com ele, os outros SEIS jobs (`needs: [quality]`) e os cinco PRs
-      // empilhados sobre esta branch.
-      //
-      // A chamada é ISOLADA numa variável e a resposta é lida como forma PLANA:
-      // não basta silenciar o erro na linha do `.from`, porque o tipo profundo
-      // continua fluindo para a anotação de retorno da queryFn (o erro reaparece
-      // ali, e foi o que aconteceu na primeira tentativa). Cortar aqui é o que
-      // impede a cadeia de sair deste bloco.
-      //
-      // Ordem correta (runbook): apply em prod → `gen types` apontando para
-      // PROD → apagar as duas pontes deste arquivo. Nunca gerar types a partir
-      // de branch efêmera: faltam a ela as versões órfãs de prod.
-      const tabela = (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (c: string, v: string) => {
-              maybeSingle: () => Promise<{
-                data: { layout?: unknown } | null;
-                error: { message: string; code?: string } | null;
-              }>;
-            };
-          };
-        };
-      }).from("metrics_studio_panels");
-
-      const { data, error } = await tabela
+      // `metrics_studio_panels` (migration 20270811110000) já está em produção e
+      // é tipada. O `as unknown as { from: ... }` que existia aqui era para
+      // evitar TS2589 ("Type instantiation is excessively deep") enquanto o
+      // cliente não conhecia a tabela; com a assinatura real, ele deixou de ser
+      // necessário — e passou a ser nocivo, porque escondia a checagem.
+      const { data, error } = await supabase
+        .from("metrics_studio_panels")
         .select("layout")
         .eq("organization_id", organizationId!)
         .maybeSingle();
@@ -156,12 +134,17 @@ export function useMetricsStudioPanel(): PanelPersistence {
     const { organizationId: orgAlvo, editorId: editor, layout } = alvo;
 
     const { error } = await supabase
-      // PONTE DE COMPATIBILIDADE — ver o bloco na leitura, acima. Some no mesmo
-      // commit, depois do apply em prod e do `gen types`.
-      // @ts-expect-error tabela ausente de types.ts até o apply em produção
       .from("metrics_studio_panels")
       .upsert(
-        { organization_id: orgAlvo, team_member_id: editor, layout },
+        {
+          organization_id: orgAlvo,
+          team_member_id: editor,
+          // `layout` é `Json` na coluna e `StudioWindow[]` aqui. A dupla
+          // conversão é necessária: `Json` é recursivo e não aceita uma
+          // interface nominal direto, mesmo sendo estruturalmente compatível.
+          // É a única forma que o tipo gerado admite — não é frouxidão.
+          layout: layout as unknown as Json,
+        },
         { onConflict: "organization_id" },
       );
 

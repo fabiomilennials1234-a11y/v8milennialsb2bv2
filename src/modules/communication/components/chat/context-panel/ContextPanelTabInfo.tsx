@@ -10,6 +10,7 @@
  * outros lugares do produto.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { Tables } from "@/integrations/supabase/types";
 import {
   AtSign,
   Check,
@@ -75,23 +76,50 @@ const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "outro", label: "Outro", dot: "hsl(var(--muted-foreground))" },
 ];
 
-type LeadShape = {
-  id?: string;
-  email?: string | null;
-  phone?: string | null;
-  origin?: string | null;
-  rating?: number | null;
-  responsible_id?: string | null;
-  organization_id?: string | null;
-  updated_at?: string | null;
+/**
+ * Forma DERIVADA de `leads`, não redeclarada.
+ *
+ * A versão anterior escrevia catorze campos à mão, todos opcionais. Enquanto os
+ * tipos eram frouxos isso passava; com os gerados de prod, atribuir a linha real
+ * a esta forma parou de compilar (TS2322) porque campos declarados aqui como
+ * `string | null` são de outro tipo na tabela.
+ *
+ * `Partial<Pick<...>>` mantém o que este painel precisa — tudo opcional, porque
+ * ele também recebe leads parciais vindos do chat — e passa a acompanhar a
+ * tabela sozinho. `responsible` e `lead_tags` continuam à mão: são JOINs, não
+ * colunas, e não existem em `Tables<"leads">`.
+ */
+type LeadShape = Partial<
+  Pick<
+    Tables<"leads">,
+    | "id"
+    | "email"
+    | "phone"
+    | "origin"
+    | "rating"
+    | "responsible_id"
+    | "organization_id"
+    | "updated_at"
+    | "pre_sale_responsible_id"
+    | "sale_responsible_id"
+    | "qualification_tier"
+    | "pre_qualification_tier"
+  >
+> & {
   responsible?: { id?: string; name?: string } | null;
-  /** Modelo novo de responsáveis (substitui responsible_id no painel). */
-  pre_sale_responsible_id?: string | null;
-  sale_responsible_id?: string | null;
-  /** Tiers de (pré-)qualificação. */
-  qualification_tier?: string | null;
-  pre_qualification_tier?: string | null;
-  lead_tags?: Array<{ tag: { id: string; name: string; color: string } }>;
+  /**
+   * `lead_tags(tag:tags(id, name, color))`.
+   *
+   * A forma da tag é DERIVADA de `tags`, não escrita à mão — foi a mão que
+   * causou o TS2322 daqui: declarava `color: string`, e **`tags.color` é
+   * `string | null`** no schema. Errei o diagnóstico duas vezes antes de olhar
+   * a coluna (apostei em `name` do `team_members`, que é não-nulo, e no embed
+   * nulo). A lição é a mesma dos outros sete: não redeclarar forma de tabela.
+   *
+   * `tag` continua podendo ser nulo — embed do PostgREST só é garantido com
+   * `!inner` —, e o nulo é filtrado no consumo.
+   */
+  lead_tags?: Array<{ tag: Pick<Tables<"tags">, "id" | "name" | "color"> | null }> | null;
 };
 
 export interface ContextPanelTabInfoProps {
@@ -534,7 +562,11 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
   const { data: allTags = [] } = useTags();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const current = (lead.lead_tags ?? []).map((lt) => lt.tag);
+  // O `filter` não é cerimônia de tipo: embed do PostgREST vem nulo quando a
+  // linha encaixada não resolve, e sem isto um `null` viraria chip sem nome.
+  const current = (lead.lead_tags ?? [])
+    .map((lt) => lt.tag)
+    .filter((t): t is Pick<Tables<"tags">, "id" | "name" | "color"> => t !== null);
 
   const toggle = async (tagId: string) => {
     if (!lead.id) return;
@@ -571,10 +603,13 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
             <Badge
               variant="outline"
               className="text-[11px] h-5 px-1.5 gap-1 group cursor-pointer"
+              // `tags.color` é anulável no schema. Sem o `?? undefined`, um
+              // `null` viraria a string "null20" no CSS — cor inválida, chip
+              // sem estilo. `undefined` deixa o Badge usar o próprio default.
               style={{
-                backgroundColor: `${t.color}20`,
-                borderColor: `${t.color}40`,
-                color: t.color,
+                backgroundColor: t.color ? `${t.color}20` : undefined,
+                borderColor: t.color ? `${t.color}40` : undefined,
+                color: t.color ?? undefined,
               }}
               onClick={() => toggle(t.id)}
               title="Remover tag"
@@ -629,7 +664,7 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
                   >
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ background: t.color }}
+                      style={{ background: t.color ?? undefined }}
                     />
                     <span className="flex-1 truncate text-foreground">{t.name}</span>
                     {active && <Check className="w-3.5 h-3.5 text-primary" />}

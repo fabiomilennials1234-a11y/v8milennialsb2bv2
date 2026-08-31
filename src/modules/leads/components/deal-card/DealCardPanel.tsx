@@ -15,6 +15,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
+import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { useFeaturePermission } from "@/modules/identity";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
@@ -175,7 +176,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         const { error } = await supabase.rpc("definir_desfecho_da_entrada", {
           p_entry_id: entryId,
           p_outcome: desfecho,
-          p_loss_reason: null,
+          p_loss_reason: undefined,
         });
 
         if (error) {

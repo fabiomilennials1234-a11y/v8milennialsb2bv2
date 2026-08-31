@@ -56,9 +56,13 @@ export function useCreateApiKey() {
         p_org_id: organizationId!,
         p_name: input.name,
         p_created_by: user!.id,
-        p_scopes: input.scopes ?? null,
-        p_rate_limit_per_minute: input.rate_limit_per_minute ?? null,
-        p_expires_at: input.expires_at ?? null,
+        // `?? null` passava com os tipos antigos, em que os parâmetros
+        // opcionais da RPC chegavam como `any`. Nos tipos gerados de prod eles
+        // são `T | undefined`: "não informado" em argumento de RPC é ausência,
+        // não nulo.
+        p_scopes: input.scopes ?? undefined,
+        p_rate_limit_per_minute: input.rate_limit_per_minute ?? undefined,
+        p_expires_at: input.expires_at ?? undefined,
       });
       if (error) throw error;
 

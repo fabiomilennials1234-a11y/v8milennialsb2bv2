@@ -16,21 +16,20 @@ export type ChecklistItemUpdate = TablesUpdate<"checklist_items">;
 export interface ChecklistWithCounts extends Checklist {
   total_items: number;
   completed_items: number;
-  /**
-   * O Negócio dono do checklist — `checklists.pipeline_entry_id`.
-   *
-   * **Nulo = é da PESSOA**, vale para todos os negócios dela. É o caso dos
-   * 1.338 checklists aplicados antes da coluna existir, e o de quem aplica pela
-   * ficha do lead. Preenchido = é daquele negócio só (ADR-0023 §1, decisão do
-   * CTO em 2026-08-25).
-   *
-   * Declarado à mão porque `integrations/supabase/types.ts` é gerado e ainda
-   * não foi regenerado — regerar a partir de branch efêmera corrompe o arquivo
-   * (as versões órfãs de prod não estão lá). Sai junto com o apply, num commit
-   * só. Mesmo procedimento do `mover_negocio`.
-   */
-  pipeline_entry_id?: string | null;
-  deal_id?: string | null;
+  // `pipeline_entry_id` e `deal_id` eram declarados à mão AQUI porque
+  // `types.ts` ainda não tinha sido regenerado. O comentário original dizia
+  // "sai junto com o apply, num commit só" — é este.
+  //
+  // Não é só limpeza: declarados como OPCIONAIS (`?`), eles ESTREITAVAM o tipo
+  // gerado, onde as duas colunas são obrigatórias (`string | null`). Uma
+  // interface não pode estender outra afrouxando um campo, e era isso o
+  // TS2430.
+  //
+  // O significado continua valendo e vale repetir, porque agora ele não mora
+  // mais em lugar nenhum: **`pipeline_entry_id` nulo = o checklist é da
+  // PESSOA**, vale para todos os negócios dela — o caso dos 1.338 aplicados
+  // antes de a coluna existir. Preenchido = é daquele negócio só
+  // (ADR-0023 §1, decisão do CTO em 2026-08-25).
 }
 
 // ─── Queries ─────────────────────────────────────────────
