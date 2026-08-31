@@ -22,9 +22,12 @@ describe("ordenação da coluna", () => {
   });
 
   it("nunca muta o array de entrada — ele vem do cache do React Query", () => {
-    const items = [card({ id: "a", name: "Zeca" }), card({ id: "b", name: "Ana" })];
+    const items = [
+      card({ id: "a", stageEnteredAt: "2026-06-01T12:00:00Z" }),
+      card({ id: "b", stageEnteredAt: "2026-08-01T12:00:00Z" }),
+    ];
     const before = items.map((i) => i.id);
-    sortColumnItems(items, "name");
+    sortColumnItems(items, "moved");
     expect(items.map((i) => i.id)).toEqual(before);
   });
 
@@ -75,14 +78,53 @@ describe("ordenação da coluna", () => {
     expect(sortColumnItems(items, "stalled")[0].id).toBe("velho-sem-etapa");
   });
 
-  it("nome ordena com acento e número como o pt-BR espera", () => {
+  it("'última movimentação' é o inverso EXATO de 'parado há'", () => {
+    // As duas lêem a mesma âncora. Se alguém mexer na de uma só, este teste cai
+    // antes de a coluna passar a dar duas respostas incompatíveis.
     const items = [
-      card({ id: "c", name: "Item 10" }),
-      card({ id: "a", name: "Ápice" }),
-      card({ id: "b", name: "Item 2" }),
+      card({ id: "ontem", stageEnteredAt: "2026-07-28T12:00:00Z" }),
+      card({ id: "mes-passado", stageEnteredAt: "2026-06-20T12:00:00Z" }),
+      card({ id: "hoje", stageEnteredAt: "2026-07-29T12:00:00Z" }),
     ];
-    // "Ápice" antes de "Item"; "Item 2" antes de "Item 10" (numérico, não ASCII).
-    expect(sortColumnItems(items, "name").map((i) => i.id)).toEqual(["a", "b", "c"]);
+    expect(sortColumnItems(items, "moved").map((i) => i.id)).toEqual([
+      "hoje",
+      "ontem",
+      "mes-passado",
+    ]);
+    expect(sortColumnItems(items, "moved").map((i) => i.id)).toEqual(
+      sortColumnItems(items, "stalled").map((i) => i.id).reverse(),
+    );
+  });
+
+  it("'última movimentação' conta quem entrou no funil e nunca trocou de etapa", () => {
+    // Entry antiga tem `stage_changed_at` nulo (é anterior ao trigger), e o card
+    // só traz `createdAt`. Sem o fallback ela seria lida como "sem data" e cairia
+    // pro fim — o negócio adicionado hoje sumiria do topo da lista.
+    const items = [
+      card({ id: "trocou-em-junho", stageEnteredAt: "2026-06-01T12:00:00Z" }),
+      card({ id: "entrou-ontem-sem-trocar", createdAt: "2026-07-28T12:00:00Z" }),
+    ];
+    expect(sortColumnItems(items, "moved")[0].id).toBe("entrou-ontem-sem-trocar");
+  });
+
+  it("card sem data nenhuma fica no FIM nos dois sentidos", () => {
+    const items = [
+      card({ id: "sem-data" }),
+      card({ id: "velho", stageEnteredAt: "2026-01-01T12:00:00Z" }),
+      card({ id: "novo", stageEnteredAt: "2026-08-01T12:00:00Z" }),
+    ];
+    // Ausência não é "época 0" nem "agora": inverter a direção não pode fazer o
+    // desconhecido saltar pro topo.
+    expect(sortColumnItems(items, "moved").at(-1)?.id).toBe("sem-data");
+    expect(sortColumnItems(items, "stalled").at(-1)?.id).toBe("sem-data");
+  });
+
+  it("o menu não oferece mais ordenar por nome", () => {
+    // Decisão de produto (2026-08-31). Guarda contra reintrodução silenciosa —
+    // ordenar a etapa em A–Z não responde pergunta nenhuma do operador.
+    const keys = COLUMN_SORT_OPTIONS.map((o) => o.key as string);
+    expect(keys).not.toContain("name");
+    expect(COLUMN_SORT_OPTIONS.map((o) => o.label)).not.toContain("Nome");
   });
 
   it("data inválida não quebra a ordenação", () => {
@@ -92,10 +134,14 @@ describe("ordenação da coluna", () => {
     ];
     expect(() => sortColumnItems(items, "stalled")).not.toThrow();
     expect(sortColumnItems(items, "stalled")[0].id).toBe("ok");
+    expect(() => sortColumnItems(items, "moved")).not.toThrow();
+    expect(sortColumnItems(items, "moved")[0].id).toBe("ok");
   });
 
   it("toda opção do menu é ordenável, e o default é 'manual'", () => {
-    const items = [card({ id: "a", value: 1, rating: 1, name: "A" })];
+    const items = [
+      card({ id: "a", value: 1, rating: 1, stageEnteredAt: "2026-07-01T12:00:00Z" }),
+    ];
     for (const opt of COLUMN_SORT_OPTIONS) {
       expect(() => sortColumnItems(items, opt.key as ColumnSortKey)).not.toThrow();
     }
