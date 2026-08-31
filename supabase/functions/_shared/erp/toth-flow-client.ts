@@ -14,7 +14,7 @@
  * | resposta do login | `{login, user, token}` | `{success, data:"<JWT>", elapsed, count}` |
  * | token | query string `?token=` | `Authorization: Bearer` |
  * | leitura | GET com query params | **POST com corpo JSON** |
- * | erro de auth | 200 com `[{"error":"Acesso nao autorizado! "}]` | a medir (ver abaixo) |
+ * | erro de auth | 200 com `[{"error":"Acesso nao autorizado! "}]` | **HTTP 401 + `{error:{message,status,providerStatus}}`** |
  *
  * O token é um **JWT**, então a expiração é legível antes de gastar uma
  * chamada — diferente do Toth, cujo TTL o fornecedor descreveu como
@@ -23,13 +23,26 @@
  * emissor pode revogar antes da hora, então o 401 continua sendo tratado e
  * ainda dispara uma reautenticação.
  *
- * ⚠️ **Nada aqui foi exercitado contra o serviço real.** Medido em 28/08 da
- * máquina do CTO: a porta 3000 aceita a conexão TCP e fecha sem devolver um
- * único byte de HTTP — em qualquer caminho, qualquer método, com ou sem
- * credencial —, enquanto a 8080 do mesmo host responde 200 normalmente. O
- * contrato acima vem das capturas do Postman do fornecedor, que funcionam de
- * dentro da rede dele. Ligar a capacidade exige antes rodar contra o serviço
- * de verdade.
+ * ✅ **O serviço RESPONDE desde 31/08** — a linha anterior ("nada aqui foi
+ * exercitado, a porta 3000 aceita a conexão e fecha muda") descrevia certo o
+ * que tinha sido medido em 28/08 e está superada: a GON bloqueava por IP de
+ * origem e liberou. O que o serviço real ensinou, e a captura do Postman não
+ * mostrava:
+ *
+ *  - **O erro NÃO vem no envelope `{success,data}`.** Vem como
+ *    `{"error":{"message":…,"status":401,"providerStatus":401}}` — objeto, não
+ *    string. Ver `FlowEnvelope.error`.
+ *  - **`/flow/crm` é um GATEWAY na frente do Toth**, não o ERP. É o que
+ *    `providerStatus` denuncia, e é a diferença entre "o gateway falhou" e "o
+ *    ERP recusou".
+ *  - `GET /auth` devolve **404 em HTML** (só POST existe); `POST /pedidos` sem
+ *    Bearer devolve **401**.
+ *
+ * ⚠️ **O que continua não exercitado é a leitura autenticada** — falta a
+ * credencial real. E há um risco de rede ainda aberto: a GON bloqueia IP de
+ * fora do Brasil, e a Edge Function do Supabase **não sai do IP do escritório**
+ * nem tem IP de saída fixo. Que o teste da máquina do CTO passe NÃO prova que a
+ * sincronização vai passar.
  */
 
 import { assertSafeErpBaseUrl, FLOW_ENDPOINT_SUFFIXES, type BaseUrlPolicy } from "./toth-url.ts";
@@ -94,7 +107,29 @@ export function readJwtExpiry(token: string): number | null {
 export interface FlowEnvelope<T = unknown> {
   success?: boolean;
   data?: T;
-  error?: string;
+  /**
+   * 🔴 **É objeto, não string** — medido contra o serviço real em 31/08:
+   *
+   * ```json
+   * {"error":{"message":"Credenciais rejeitadas pelo ERP",
+   *           "status":401,"providerStatus":401}}
+   * ```
+   *
+   * A versão anterior deste tipo declarava `error?: string`, e a leitura
+   * silenciosa que isso produzia era o modo de falha mais caro possível: um
+   * HTTP 200 com `{"error":{…}}` passaria como sucesso, `data` viria
+   * `undefined`, `extractRows` devolveria zero linha, e a sincronização
+   * registraria "página vazia — acabou" sobre uma chamada que o servidor
+   * REJEITOU. "Não há pedidos" e "eu não consegui perguntar" viram a mesma
+   * frase no relatório.
+   *
+   * `providerStatus` merece registro à parte: o `/flow/crm` é um **gateway na
+   * frente do Toth**, não o ERP. `status` é o que o gateway devolveu;
+   * `providerStatus` é o que o ERP respondeu para ele. Quando os dois divergem,
+   * o problema é do gateway; quando batem, é do ERP. Sem esse campo na
+   * mensagem, as duas falhas ficam idênticas na tela.
+   */
+  error?: string | { message?: string; status?: number; providerStatus?: number };
   message?: string;
   elapsed?: number;
   count?: number;
@@ -102,6 +137,15 @@ export interface FlowEnvelope<T = unknown> {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** JSON que pode não ser JSON — devolve `null` em vez de estourar. */
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -139,10 +183,26 @@ export function scrubCredentials(text: string): string {
 export function extractFlowError(payload: unknown): string | null {
   if (!isRecord(payload)) return null;
   const env = payload as FlowEnvelope;
-  const texto =
-    (typeof env.error === "string" && env.error.trim()) ||
-    (typeof env.message === "string" && env.message.trim()) ||
-    "";
+
+  let texto = "";
+  if (typeof env.error === "string") {
+    texto = env.error.trim();
+  } else if (isRecord(env.error)) {
+    // Forma real do serviço. `providerStatus` entra na mensagem porque é o que
+    // separa "o gateway falhou" de "o ERP atrás dele recusou" — sem ele as duas
+    // falhas ficam com o mesmo texto e a investigação começa do zero.
+    const err = env.error as { message?: unknown; status?: unknown; providerStatus?: unknown };
+    const msg = typeof err.message === "string" ? err.message.trim() : "";
+    const provider =
+      typeof err.providerStatus === "number" ? ` (ERP respondeu ${err.providerStatus})` : "";
+    texto = msg ? `${msg}${provider}` : provider.trim();
+    // `error` presente como objeto JÁ é erro, mesmo sem texto dentro. Sem esta
+    // linha, um `{"error":{}}` voltaria `null` e seria lido como sucesso.
+    if (!texto) texto = "O serviço devolveu um erro sem descrição.";
+  }
+
+  if (!texto && typeof env.message === "string") texto = env.message.trim();
+
   if (env.success === false) return texto || "O serviço recusou a chamada sem detalhar o motivo.";
   return texto || null;
 }
@@ -220,7 +280,15 @@ export class TothFlowClient {
 
     const text = await res.text();
     if (res.status === 401 || res.status === 403) {
-      throw new TothAuthError("O serviço de pedidos recusou client_id/client_secret.");
+      // Detalhe extraído por CAMPO, nunca por eco do corpo. `extractFlowError`
+      // só lê `error.message` e `providerStatus`; um 401 não carrega token, mas
+      // a regra de não ecoar o corpo do login continua valendo por construção.
+      const motivo = extractFlowError(safeParse(text));
+      throw new TothAuthError(
+        motivo
+          ? `O serviço de pedidos recusou o login: ${scrubCredentials(motivo)}`
+          : "O serviço de pedidos recusou client_id/client_secret.",
+      );
     }
     if (!res.ok) {
       // Sem eco do corpo: é a única resposta que sabidamente carrega credencial
@@ -321,7 +389,14 @@ export class TothFlowClient {
     const text = await res.text();
 
     if (res.status === 401 || res.status === 403) {
-      return { kind: "auth", message: `HTTP ${res.status}` };
+      // O motivo do corpo entra aqui: depois da reautenticação falhar, esta é a
+      // mensagem que chega ao operador. "HTTP 401" sozinho não distingue
+      // credencial errada de token revogado de ERP fora do ar.
+      const motivo = extractFlowError(safeParse(text));
+      return {
+        kind: "auth",
+        message: motivo ? `HTTP ${res.status} — ${scrubCredentials(motivo)}` : `HTTP ${res.status}`,
+      };
     }
     if (!res.ok) {
       // `scrubCredentials` ANTES de qualquer corte: a página de erro pode

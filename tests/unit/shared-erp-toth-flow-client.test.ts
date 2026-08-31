@@ -241,6 +241,32 @@ describe("readJwtExpiry", () => {
 });
 
 describe("extractFlowError", () => {
+  /**
+   * 🔴 Forma REAL, medida contra o serviço em 31/08. `error` é OBJETO.
+   *
+   * O tipo antigo declarava `error?: string`, e a leitura silenciosa que isso
+   * produzia era o pior modo de falha desta integração: um HTTP 200 com
+   * `{"error":{…}}` passaria como sucesso, `data` viria `undefined`,
+   * `extractRows` devolveria zero linha, e a sincronização registraria
+   * "página vazia — acabou" sobre uma chamada REJEITADA pelo servidor.
+   */
+  it("lê `error` como objeto e inclui o status do ERP atrás do gateway", () => {
+    const real = {
+      error: { message: "Credenciais rejeitadas pelo ERP", status: 401, providerStatus: 401 },
+    };
+    expect(extractFlowError(real)).toBe("Credenciais rejeitadas pelo ERP (ERP respondeu 401)");
+  });
+
+  it("`error` objeto vazio ainda é erro — nunca `null`", () => {
+    expect(extractFlowError({ error: {} })).toBeTruthy();
+  });
+
+  it("200 com `error` objeto NÃO passa como sucesso", () => {
+    expect(extractFlowError({ error: { message: "período inválido", status: 400 } })).toContain(
+      "período inválido",
+    );
+  });
+
   it("success:false sem texto ainda é erro", () => {
     expect(extractFlowError({ success: false })).toBeTruthy();
   });
@@ -320,5 +346,32 @@ describe("🔒 vazamento de token em resposta de erro", () => {
     const client = new TothFlowClient(CREDS, { fetchImpl: impl });
 
     await expect(client.postEnvelope("pedidos", {})).rejects.not.toThrow(/eyJ/);
+  });
+});
+
+describe("401 real do serviço (medido 31/08)", () => {
+  const CORPO_401 = {
+    error: { message: "Credenciais rejeitadas pelo ERP", status: 401, providerStatus: 401 },
+  };
+
+  it("o login leva o motivo do servidor para a mensagem, não só 'HTTP 401'", async () => {
+    const { impl } = fakeFetch([res(CORPO_401, 401)]);
+    const client = new TothFlowClient(CREDS, { fetchImpl: impl });
+    await expect(client.login()).rejects.toThrow(/Credenciais rejeitadas pelo ERP/);
+  });
+
+  it("o motivo distingue gateway de ERP pelo providerStatus", async () => {
+    const { impl } = fakeFetch([res(CORPO_401, 401)]);
+    const client = new TothFlowClient(CREDS, { fetchImpl: impl });
+    await expect(client.login()).rejects.toThrow(/ERP respondeu 401/);
+  });
+
+  it("200 com `error` objeto vira falha, não página vazia", async () => {
+    const { impl } = fakeFetch([
+      OK_LOGIN(),
+      res({ error: { message: "período inválido", status: 400, providerStatus: 400 } }),
+    ]);
+    const client = new TothFlowClient(CREDS, { fetchImpl: impl });
+    await expect(client.postEnvelope("pedidos", {})).rejects.toThrow(/período inválido/);
   });
 });
