@@ -45,6 +45,7 @@ import {
   composeSystemPrompt,
   DEFAULT_PROMPT_SECTIONS,
   mergeSections,
+  TOOLS_CATALOG,
 } from "../../_shared/copilot-prompt/index.ts";
 
 export interface PromptSectionsInput {
@@ -203,27 +204,44 @@ const SET_SECTIONS_COLS =
   "id,organization_id,name,conversation_style,can_qualify_lead,can_schedule_meeting,can_move_cards," +
   "can_transfer_human,can_create_lead,can_update_lead,can_send_document,can_transfer_sz_chat,human_pause_enabled";
 
-/** Recompila system_prompt fiel + monta update dos 3 lugares + prompt_hash null. */
+/**
+ * Recompila system_prompt fiel + monta update dos 3 lugares + prompt_hash null.
+ *
+ * `toolPatch` edita `conversation_style.toolInstructions` — o texto de cada bloco
+ * `## <Ferramenta>` do prompt. Sem ele, uma seção nova convivia com um texto de
+ * ferramenta velho que ninguém conseguia alcançar: em 2026-08-31 o bloco da Loo
+ * ainda mandava "Desqualifique ... fora da região" depois de o cliente ter
+ * removido essa regra, porque a única porta de escrita era a UI.
+ */
 export function buildSetSectionsUpdate(
   patch: Partial<ComposePromptSections>,
   currentStyle: Record<string, unknown> | null,
   docs: Parameters<typeof agentRowToComposeInput>[1],
   agentRow: Parameters<typeof agentRowToComposeInput>[0],
+  toolPatch: Record<string, string> = {},
 ): Record<string, unknown> {
-  const cs = (currentStyle ?? {}) as { promptSections?: Partial<ComposePromptSections> };
+  const cs = (currentStyle ?? {}) as {
+    promptSections?: Partial<ComposePromptSections>;
+    toolInstructions?: Record<string, string>;
+  };
   const merged = mergeSections(
     { ...DEFAULT_PROMPT_SECTIONS, ...(cs.promptSections ?? {}) },
     patch,
   );
+  const mergedTools = { ...(cs.toolInstructions ?? {}), ...toolPatch };
   const input = agentRowToComposeInput(
-    { ...agentRow, conversation_style: { ...cs, promptSections: merged } },
+    { ...agentRow, conversation_style: { ...cs, promptSections: merged, toolInstructions: mergedTools } },
     docs,
   );
   const systemPrompt = composeSystemPrompt(input);
   return {
     system_prompt: systemPrompt,
     custom_instructions: systemPrompt, // = sectionsToFlatText (paridade Playground)
-    conversation_style: { ...(currentStyle ?? {}), promptSections: merged },
+    conversation_style: {
+      ...(currentStyle ?? {}),
+      promptSections: merged,
+      toolInstructions: mergedTools,
+    },
     prompt_hash: null,
   };
 }
@@ -232,8 +250,9 @@ export const copilotSetSectionsTool: ToolDef = {
   name: "copilot.set_sections",
   description:
     "Edit any of a Copilot agent's 5 UI prompt sections (personality|objective|flow|products|" +
-    "instructions), recompile system_prompt faithfully (tools+media), write all 3 storage places + " +
-    "null prompt_hash so it takes effect at runtime. Partial merge; empty string clears a section. " +
+    "instructions) and/or the per-tool instruction texts (tool_instructions), recompile " +
+    "system_prompt faithfully (tools+media), write all 3 storage places + null prompt_hash so it " +
+    "takes effect at runtime. Partial merge; empty string clears a section. " +
     "Dry-run shows diff + confirm_token; re-call with confirm_token to apply.",
   readonly: false,
   inputSchema: {
@@ -246,9 +265,17 @@ export const copilotSetSectionsTool: ToolDef = {
         properties: Object.fromEntries(SECTION_KEYS.map((k) => [k, { type: "string" }])),
         additionalProperties: false,
       },
+      tool_instructions: {
+        type: "object",
+        description:
+          "Partial: text of each '## <Tool>' block, keyed by catalog id (" +
+          TOOLS_CATALOG.map((t) => t.id).join("|") + "). Empty string restores the catalog default.",
+        properties: Object.fromEntries(TOOLS_CATALOG.map((t) => [t.id, { type: "string" }])),
+        additionalProperties: false,
+      },
       confirm_token: { type: "string" },
     },
-    required: ["agent_id", "sections"],
+    required: ["agent_id"],
     additionalProperties: false,
   },
   handler: async (args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> => {
@@ -259,9 +286,35 @@ export const copilotSetSectionsTool: ToolDef = {
     for (const k of SECTION_KEYS) {
       if (typeof raw[k] === "string") (patch as Record<string, string>)[k] = raw[k] as string;
     }
-    if (Object.keys(patch).length === 0) {
+
+    const rawTools = (args.tool_instructions ?? {}) as Record<string, unknown>;
+    const toolPatch: Record<string, string> = {};
+    const unknownTools: string[] = [];
+    for (const [k, v] of Object.entries(rawTools)) {
+      if (typeof v !== "string") continue;
+      // Chave fora do catálogo não vira bloco nenhum no prompt: seria uma escrita
+      // que "deu certo" e não mudou nada. Recusa alto em vez de gravar lixo.
+      if (TOOLS_CATALOG.some((t) => t.id === k)) toolPatch[k] = v;
+      else unknownTools.push(k);
+    }
+    if (unknownTools.length > 0) {
       return {
-        content: [{ type: "text", text: "Provide at least one of: " + SECTION_KEYS.join(", ") }],
+        content: [{
+          type: "text",
+          text: `Unknown tool id(s): ${unknownTools.join(", ")}. Valid: ` +
+            TOOLS_CATALOG.map((t) => t.id).join(", "),
+        }],
+        isError: true,
+      };
+    }
+
+    if (Object.keys(patch).length === 0 && Object.keys(toolPatch).length === 0) {
+      return {
+        content: [{
+          type: "text",
+          text: "Provide at least one of: " + SECTION_KEYS.join(", ") + " (sections), " +
+            "or a tool_instructions entry.",
+        }],
         isError: true,
       };
     }
@@ -283,13 +336,16 @@ export const copilotSetSectionsTool: ToolDef = {
         // persist a degraded system_prompt. Throwing in plan() aborts before any token/write.
         if (docsErr) throw new Error(docsErr.message);
         const docs = (docsData ?? []) as Parameters<typeof agentRowToComposeInput>[1];
-        const cur =
-          (agent.conversation_style as { promptSections?: Partial<ComposePromptSections> }) ?? {};
+        const cur = (agent.conversation_style as {
+          promptSections?: Partial<ComposePromptSections>;
+          toolInstructions?: Record<string, string>;
+        }) ?? {};
         const update = buildSetSectionsUpdate(
           patch,
           agent.conversation_style as Record<string, unknown>,
           docs,
           agent,
+          toolPatch,
         );
         return {
           action: "set_sections",
@@ -297,8 +353,15 @@ export const copilotSetSectionsTool: ToolDef = {
           name: agent.name,
           organization_id: agent.organization_id,
           changed: Object.keys(patch),
+          tools_changed: Object.keys(toolPatch),
           sections_before: { ...DEFAULT_PROMPT_SECTIONS, ...(cur.promptSections ?? {}) },
           sections_after: (update.conversation_style as { promptSections: unknown }).promptSections,
+          tool_instructions_before: Object.fromEntries(
+            Object.keys(toolPatch).map((k) => [k, (cur.toolInstructions ?? {})[k] ?? null]),
+          ),
+          tool_instructions_after: Object.fromEntries(
+            Object.keys(toolPatch).map((k) => [k, toolPatch[k]]),
+          ),
           system_prompt_preview: String(update.system_prompt).slice(0, 1200),
           update,
         };
