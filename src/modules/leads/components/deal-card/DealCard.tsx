@@ -330,8 +330,6 @@ export function DealCard({
   }, [negocio.id]);
 
   const aberto = negocio.estado === "aberto";
-  const etapaGanha = negocio.etapas.find((e) => e.papel === "ganho");
-  const etapaPerdida = negocio.etapas.find((e) => e.papel === "perdido");
   const estagnado =
     aberto &&
     negocio.diasNaEtapa !== null &&

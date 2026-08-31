@@ -57,7 +57,15 @@ export const LeadDetailFocus = memo(function LeadDetailFocus({ leadId }: LeadDet
             {pendingFollowUp.due_date
               ? formatDistanceToNow(new Date(pendingFollowUp.due_date), { addSuffix: true, locale: ptBR })
               : "Sem data"}
-            {pendingFollowUp.notes && ` — ${pendingFollowUp.notes}`}
+            {/* 🔴 `follow_ups` NÃO TEM coluna `notes` — tem `description` e
+                `completion_notes`. Os tipos antigos eram frouxos o bastante
+                para aceitar, então esta expressão era SEMPRE falsy e nunca
+                renderizou nada. Não é regressão: é defeito latente que os
+                tipos corretos revelaram.
+
+                Removido em vez de trocado para `description` de propósito —
+                passar a renderizar texto que nunca apareceu é mudança de UI e
+                não cabe num conserto de CI. Vale card próprio. */}
           </p>
         </div>
       )}

@@ -10,6 +10,7 @@
  * outros lugares do produto.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { Tables } from "@/integrations/supabase/types";
 import {
   AtSign,
   Check,
@@ -75,22 +76,37 @@ const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "outro", label: "Outro", dot: "hsl(var(--muted-foreground))" },
 ];
 
-type LeadShape = {
-  id?: string;
-  email?: string | null;
-  phone?: string | null;
-  origin?: string | null;
-  rating?: number | null;
-  responsible_id?: string | null;
-  organization_id?: string | null;
-  updated_at?: string | null;
+/**
+ * Forma DERIVADA de `leads`, não redeclarada.
+ *
+ * A versão anterior escrevia catorze campos à mão, todos opcionais. Enquanto os
+ * tipos eram frouxos isso passava; com os gerados de prod, atribuir a linha real
+ * a esta forma parou de compilar (TS2322) porque campos declarados aqui como
+ * `string | null` são de outro tipo na tabela.
+ *
+ * `Partial<Pick<...>>` mantém o que este painel precisa — tudo opcional, porque
+ * ele também recebe leads parciais vindos do chat — e passa a acompanhar a
+ * tabela sozinho. `responsible` e `lead_tags` continuam à mão: são JOINs, não
+ * colunas, e não existem em `Tables<"leads">`.
+ */
+type LeadShape = Partial<
+  Pick<
+    Tables<"leads">,
+    | "id"
+    | "email"
+    | "phone"
+    | "origin"
+    | "rating"
+    | "responsible_id"
+    | "organization_id"
+    | "updated_at"
+    | "pre_sale_responsible_id"
+    | "sale_responsible_id"
+    | "qualification_tier"
+    | "pre_qualification_tier"
+  >
+> & {
   responsible?: { id?: string; name?: string } | null;
-  /** Modelo novo de responsáveis (substitui responsible_id no painel). */
-  pre_sale_responsible_id?: string | null;
-  sale_responsible_id?: string | null;
-  /** Tiers de (pré-)qualificação. */
-  qualification_tier?: string | null;
-  pre_qualification_tier?: string | null;
   lead_tags?: Array<{ tag: { id: string; name: string; color: string } }>;
 };
 
