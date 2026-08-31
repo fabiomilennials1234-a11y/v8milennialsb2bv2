@@ -225,7 +225,10 @@ function ConditionRow({
         <span className="text-sm leading-none text-foreground">{label}</span>
       </div>
 
-      <Popover open={open} onOpenChange={setOpen}>
+      {/* `modal`: este Popover vive dentro de um Dialog, cujo `react-remove-scroll`
+          engole o `wheel` de tudo que sai por portal — sem isto a lista nao rola
+          com a roda do mouse. Mesmo conserto das #1862/#1867. */}
+      <Popover open={open} onOpenChange={setOpen} modal>
         <PopoverTrigger asChild>
           <button
             type="button"

@@ -85,7 +85,11 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
 
   return (
     <TooltipProvider delayDuration={300}>
-      <Popover open={open} onOpenChange={setOpen}>
+      {/* `modal` + `z-[70]`: este Popover vive dentro de um Dialog (e de um Sheet no
+          celular). Sem `modal`, o `react-remove-scroll` do Dialog engole o `wheel`
+          e a lista nao rola; sem `z-[70]`, o `z-50` do primitivo perde para o
+          `z-[51]` do `SheetContent` e ela nao pinta. #1862/#1867. */}
+      <Popover open={open} onOpenChange={setOpen} modal>
         <Tooltip>
           <TooltipTrigger asChild>
             <PopoverTrigger asChild>
@@ -123,7 +127,7 @@ export const ResponsibleSlot = memo(function ResponsibleSlot({
               : `${label}${hasMember ? `: ${currentMember.name}` : ""}`}
           </TooltipContent>
         </Tooltip>
-        <PopoverContent align="end" className="w-64 p-2">
+        <PopoverContent align="end" className="z-[70] w-64 p-2">
           <div className="space-y-2">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold px-1">
               {label}
