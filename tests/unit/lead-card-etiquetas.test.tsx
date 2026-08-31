@@ -57,6 +57,7 @@ vi.mock("sonner", () => ({
   toast: { error: avisos.erro, success: avisos.sucesso, info: avisos.info },
 }));
 
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { LeadCardEtiquetas } from "@/modules/leads/components/lead-card/LeadCardEtiquetas";
 import { LeadCard } from "@/modules/leads/components/lead-card/LeadCard";
 import { LeadCardAside } from "@/modules/leads/components/lead-card/LeadCardAside";
@@ -327,5 +328,72 @@ describe("O card do Lead usa o slot de etiquetas", () => {
 
     expect(screen.getByText("sem etiqueta")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^\+?\s*etiqueta$/i })).toBeNull();
+  });
+});
+
+/**
+ * O terceiro caso de [[popover-dentro-de-dialog-nao-rola]].
+ *
+ * A #1862 consertou `client/ProductCombobox`, a #1867 consertou
+ * `proposal/ProductCombobox`. Esta faixa é o mesmo defeito num terceiro
+ * arquivo — e no mesmo painel: `LeadCardEtiquetas` é montada por
+ * `DealCardPanel.tsx:451` (o painel do Negócio) e por `LeadCardPanel.tsx:63`
+ * (o painel do Lead), e **os dois** são `Dialog` acima de 768px e `Sheet`
+ * abaixo.
+ *
+ * Os dois defeitos que vêm juntos:
+ *
+ *   1. **a lista não rola.** O `Dialog` monta um `react-remove-scroll` que
+ *      engole o `wheel` de tudo fora do `DialogContent`, e o conteúdo do
+ *      Popover sai por portal para o `body`. O que não rola aqui é o
+ *      `max-h-52 overflow-y-auto` do `SeletorDeEtiquetas`
+ *      (`SeletorDeEtiquetas.tsx:104`) — numa org com muitas etiquetas, a roda
+ *      do mouse não passa da primeira dezena;
+ *   2. **no celular a lista nasce ATRÁS da folha.** O `PopoverContent` do
+ *      primitivo é `z-50` (`components/ui/popover.tsx:22`) e `SheetContent` é
+ *      `z-[51]`.
+ *
+ * jsdom não tem layout nem rolagem, então aqui se trava a CAUSA de cada um —
+ * o mesmo par de observáveis de `proposta-combobox-produto.test.tsx`.
+ */
+describe("LeadCardEtiquetas dentro do painel — o defeito sistêmico do Popover", () => {
+  /** Mesmo arranjo de `DealCardPanel`: a faixa DENTRO do diálogo. */
+  function abrirDentroDoDialogo() {
+    return render(
+      <Dialog open onOpenChange={() => {}}>
+        <DialogContent>
+          <LeadCardEtiquetas leadId="lead-1" />
+        </DialogContent>
+      </Dialog>,
+    );
+  }
+
+  it("a lista pinta ACIMA da superfície que a abriu", async () => {
+    abrirDentroDoDialogo();
+    abrirSeletor();
+    await screen.findByRole("button", { name: "Ouro" });
+
+    const painel = document.querySelector<HTMLElement>(
+      "[data-radix-popper-content-wrapper] > *",
+    )!;
+
+    expect(painel.className).toContain("z-[70]");
+  });
+
+  it("o Popover é `modal` — que é o que devolve a roda do mouse à lista", async () => {
+    abrirDentroDoDialogo();
+    abrirSeletor();
+    await screen.findByRole("button", { name: "Ouro" });
+
+    /*
+     * Observável de `modal`: o Radix chama `hideOthers` a partir do conteúdo do
+     * Popover, e o diálogo — que é IRMÃO dele no `body`, não ancestral — leva
+     * `aria-hidden`. Sem `modal` esse `hideOthers` não roda e o diálogo fica
+     * sem o atributo.
+     */
+    const dialogo = document.querySelector<HTMLElement>(
+      "[role='dialog'][data-state='open']",
+    )!;
+    expect(dialogo.getAttribute("aria-hidden")).toBe("true");
   });
 });
