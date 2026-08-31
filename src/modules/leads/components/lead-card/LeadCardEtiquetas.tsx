@@ -122,12 +122,21 @@ export function LeadCardEtiquetas({
         </span>
       )}
 
+      {/* `modal`: esta faixa é montada dentro do painel do Negócio
+          (`DealCardPanel.tsx:451`) e do painel do Lead (`LeadCardPanel.tsx:63`)
+          — os dois são `Dialog` no desktop e `Sheet` no celular. O Radix monta
+          ali um `react-remove-scroll` que engole o `wheel` de tudo fora do
+          conteúdo do diálogo, e o conteúdo do Popover sai por portal para o
+          `body`. Sem `modal`, a lista do `SeletorDeEtiquetas` — que é
+          `max-h-52 overflow-y-auto` — não rola com a roda do mouse. Mesmo
+          conserto das #1862/#1867. */}
       <Popover
         open={aberto}
         onOpenChange={(v) => {
           setAberto(v);
           if (!v) setBusca("");
         }}
+        modal
       >
         <PopoverTrigger asChild>
           <button
@@ -155,8 +164,16 @@ export function LeadCardEtiquetas({
         </PopoverTrigger>
 
         {/* O conteúdo do Popover do Radix tem `role="dialog"`, e diálogo sem
-            nome é anunciado como "dialog" e mais nada. */}
-        <PopoverContent align="start" aria-label="Escolher etiqueta" className="w-60 p-2">
+            nome é anunciado como "dialog" e mais nada.
+
+            `z-[70]`: o primitivo nasce `z-50` e `SheetContent` é `z-[51]` — no
+            celular os dois painéis viram folha, e a lista existiria no DOM sem
+            nunca pintar. */}
+        <PopoverContent
+          align="start"
+          aria-label="Escolher etiqueta"
+          className="z-[70] w-60 p-2"
+        >
           {/* `mostrarPresas={false}`: as pílulas já estão na faixa, a um
               centímetro daqui. Duas listas da mesma coisa lado a lado — uma que
               reage ao clique e outra que não — é pior do que uma só. */}

@@ -321,8 +321,16 @@ function AplicarTemplate({ leadId, entryId }: { leadId: string; entryId: string 
   // do zero continua ao lado.
   if (templates.length === 0) return null;
 
+  /*
+   * `modal` + `z-[70]`: isto vive dentro do painel do Negócio, que é `Dialog`
+   * acima de 768px (`DealCardPanel.tsx:635`) e `Sheet` abaixo (`:612`).
+   * Sem `modal`, o `react-remove-scroll` do Dialog engole o `wheel` e o
+   * `max-h-56 overflow-y-auto` da lista de templates não rola; sem `z-[70]`, o
+   * `z-50` do primitivo perde para o `z-[51]` do `SheetContent` e ela nem pinta
+   * no celular. Mesmo par de defeitos das #1862/#1867.
+   */
   return (
-    <Popover open={aberto} onOpenChange={setAberto}>
+    <Popover open={aberto} onOpenChange={setAberto} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -332,7 +340,7 @@ function AplicarTemplate({ leadId, entryId }: { leadId: string; entryId: string 
           Aplicar checklist
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-64 p-1.5">
+      <PopoverContent align="end" className="z-[70] w-64 p-1.5">
         <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           Checklists da operação
         </p>

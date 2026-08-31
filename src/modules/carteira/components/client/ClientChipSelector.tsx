@@ -103,8 +103,18 @@ export function ClientChipSelector({
     );
   }
 
+  /*
+   * `modal`: os dois únicos usos deste seletor são dentro de diálogo —
+   * `NewOrderModal.tsx:275` e `EditOrderDialog.tsx:254`, ambos dentro do próprio
+   * `DialogContent`. O `react-remove-scroll` do Dialog engole o `wheel` de tudo
+   * que sai por portal, e a lista aqui é a carteira INTEIRA de clientes ativos
+   * (`CommandList`, `max-h-[300px] overflow-y-auto` em `ui/command.tsx:63`).
+   *
+   * É o mesmo conserto que o `ProductCombobox.tsx:155` — que fica ao lado dele,
+   * no mesmo `DialogContent` — já tinha desde a #1862. Este ficou para trás.
+   */
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
