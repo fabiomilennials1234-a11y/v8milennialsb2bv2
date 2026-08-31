@@ -23,6 +23,10 @@ import {
   LEAD_LIST_MIN_WIDTH,
   type LeadListItem,
 } from "../components/leads/LeadListRow";
+import { LeadListRowV2, LeadListHeaderV2 } from "../components/leads/LeadListRowV2";
+import { LeadsStatsV2 } from "../components/leads/LeadsStatsV2";
+import { LeadsUiVersionToggle } from "../components/leads/LeadsUiVersionToggle";
+import { useLeadsUiVersion } from "../hooks/useLeadsUiVersion";
 import { useLeadsCarteiraMetrics } from "../hooks/useLeadsCarteiraMetrics";
 import { mergeDataMetrics } from "../lib/data-metrics";
 import {
@@ -32,7 +36,7 @@ import {
   type LeadSortKey,
 } from "../lib/lead-list-sort";
 import { deriveLeadStandings } from "../lib/lead-relacao-situacao";
-import { useLeadsStats } from "../hooks/useLeadsStats";
+import { useLeadsStats, monthStartInTz } from "../hooks/useLeadsStats";
 import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
 import {
@@ -426,10 +430,14 @@ function LeadsInner() {
    * O corte de "deste mês" também mudou de fuso: era o do navegador, virou o da
    * org, que é o que o resto do produto usa.
    */
-  const { data: orgStats } = useLeadsStats({
+  const { data: orgStats, isLoading: isLoadingStats } = useLeadsStats({
     searchQuery, filterOrigin, filterRating, filterQualification,
     filterUf: ufFilter, createdFrom, createdTo,
   });
+
+  // Antes / Depois — validação visual do CTO. "antes" é o código intocado.
+  const [uiVersion, setUiVersion] = useLeadsUiVersion();
+  const isV2 = uiVersion === "depois";
 
   const stats = useMemo(() => ({
     total: totalLeads ?? leads.length,
@@ -574,20 +582,70 @@ function LeadsInner() {
           </p>
         </div>
 
-        <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
-          <History className="w-4 h-4" />
-        </Button>
-        <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
-          <FileDown className="w-4 h-4" />
-          Exportar
-        </Button>
-        <Button onClick={() => handleOpenDialog()} className="gap-2" disabled={!canCreateLead}>
-          <Plus className="w-4 h-4" />
-          Novo Lead
-        </Button>
+        {/* Grupo de ações alinhado à direita. O toggle Antes/Depois é temporário
+            (validação do CTO); quando sair, o grupo continua exatamente aqui. */}
+        <div className="flex flex-wrap items-center gap-2">
+          <LeadsUiVersionToggle value={uiVersion} onChange={setUiVersion} />
+          {isV2 ? (
+            <Button variant="ghost" onClick={() => setIsImportHistoryOpen(true)} className="gap-2 text-muted-foreground hover:text-foreground">
+              <History className="w-4 h-4" />
+              Importações
+            </Button>
+          ) : (
+            <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
+              <History className="w-4 h-4" />
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
+            <FileDown className="w-4 h-4" />
+            Exportar
+          </Button>
+          <Button onClick={() => handleOpenDialog()} className="gap-2" disabled={!canCreateLead}>
+            <Plus className="w-4 h-4" />
+            Novo Lead
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
+      {isV2 ? (
+        <LeadsStatsV2
+          total={stats.total}
+          highRating={stats.highRating}
+          thisMonth={stats.thisMonth}
+          withOwner={stats.withSDR}
+          isLoading={isLoadingStats}
+          filters={{
+            highRating: {
+              active: filterRating === "high",
+              toggle: () => setFilterRating(filterRating === "high" ? "all" : "high"),
+            },
+            thisMonth: {
+              active: hasCreatedRange,
+              toggle: () => {
+                if (hasCreatedRange) return clearCreatedRange();
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("from", monthStartInTz(orgTimezone || "America/Sao_Paulo").toISOString());
+                  next.delete("to");
+                  return next;
+                }, { replace: true });
+              },
+            },
+            unassigned: {
+              active: hasAssignmentFilter,
+              toggle: () => {
+                if (hasAssignmentFilter) return clearAssignmentFilter();
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set("atribuicao", "sem-responsavel");
+                  return next;
+                }, { replace: true });
+              },
+            },
+          }}
+        />
+      ) : (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -625,6 +683,7 @@ function LeadsInner() {
           <p className="text-xl font-bold text-success">{stats.withSDR}</p>
         </motion.div>
       </div>
+      )}
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
@@ -693,6 +752,14 @@ function LeadsInner() {
           activeViewId={activeViewId}
           onActiveViewChange={handleActiveViewChange}
         />
+        {/* Contagem do recorte ao lado dos filtros — o rodapé só aparece com
+            mais de uma página, e o número é a resposta que o filtro dá. */}
+        {isV2 && totalLeads !== undefined && (
+          <span className="self-center whitespace-nowrap text-xs tabular-nums text-muted-foreground sm:ml-auto">
+            {new Intl.NumberFormat("pt-BR").format(totalLeads)} {totalLeads === 1 ? "lead" : "leads"}
+            {totalPages > 1 && ` · página ${page + 1} de ${totalPages}`}
+          </span>
+        )}
       </div>
 
       {/* Chip da janela de criação — sem isso o deep-link do Comando filtra a
@@ -740,7 +807,7 @@ function LeadsInner() {
       )}
 
       {/* Table (desktop) / Card list (mobile) */}
-      <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border")}>
+      <div className={cn("rounded-lg overflow-hidden", !isMobile && "border border-border", !isMobile && isV2 && "rounded-xl bg-card")}>
         {isMobile ? (
           <div className="space-y-2.5 py-0.5">
             {/* Ordenação do celular: no desktop quem ordena é o cabeçalho da
@@ -779,8 +846,21 @@ function LeadsInner() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto pb-1">
+          <div className={cn("overflow-x-auto", !isV2 && "pb-1")}>
             <div className={LEAD_LIST_MIN_WIDTH}>
+              {isV2 ? (
+                <LeadListHeaderV2
+                  sort={sort}
+                  onSortChange={handleSortChange}
+                  selectAll={
+                    <Checkbox
+                      checked={allLeadIds.length > 0 && allLeadIds.every(id => bulk.isSelected(id))}
+                      onCheckedChange={() => bulk.selectAll(allLeadIds)}
+                      aria-label="Selecionar todos os leads da página"
+                    />
+                  }
+                />
+              ) : (
               <LeadListHeader
                 sort={sort}
                 onSortChange={handleSortChange}
@@ -792,16 +872,75 @@ function LeadsInner() {
                   />
                 }
               />
+              )}
               {isLoading ? (
+                isV2 ? (
+                  <div className="divide-y divide-border/70">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="flex h-14 items-center gap-4 px-4">
+                        <Skeleton className="size-4 rounded" />
+                        <Skeleton className="size-8 rounded-full" />
+                        <Skeleton className="h-3.5 w-40" />
+                        <Skeleton className="ml-auto h-3.5 w-24" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                 <div className="space-y-2.5">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Skeleton key={i} className="h-[70px] w-full rounded-lg" />
                   ))}
                 </div>
+                )
               ) : leads.length === 0 ? (
-                <div className="rounded-lg border border-dashed border-border bg-card py-10 text-center text-sm text-muted-foreground">
+                <div className={cn(
+                  "py-10 text-center text-sm text-muted-foreground",
+                  isV2 ? "px-4" : "rounded-lg border border-dashed border-border bg-card",
+                )}>
                   Nenhum lead encontrado
                 </div>
+              ) : isV2 ? (
+                leads.map((lead: Lead) => (
+                  <LeadListRowV2
+                    key={lead.id}
+                    lead={lead as LeadListItem}
+                    metrics={dataMetrics[lead.id]}
+                    deals={leadDeals?.[lead.id]}
+                    standing={standings[lead.id]}
+                    selected={bulk.isSelected(lead.id)}
+                    onToggleSelect={() => bulk.toggle(lead.id)}
+                    onOpen={() => openLead(lead.id)}
+                    createdLabel={formatDayInTz(lead.created_at, orgTimezone)}
+                    originLabel={originLabels[lead.origin] || lead.origin}
+                    originClassName={originColors[lead.origin] || originColors.outro}
+                    actions={
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleOpenDialog(lead)}>
+                            <Edit2 className="w-4 h-4 mr-2" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setLeadToDelete(lead);
+                              setDeleteConfirmOpen(true);
+                            }}
+                            className="text-destructive focus:text-destructive"
+                            disabled={!canDeleteLead}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    }
+                  />
+                ))
               ) : (
                 leads.map((lead: Lead) => (
                   <LeadListRow

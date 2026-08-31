@@ -40,7 +40,7 @@ export interface LeadsStats {
 }
 
 /** Início do mês corrente no fuso informado, como instante UTC. */
-function monthStartInTz(timeZone: string): Date {
+export function monthStartInTz(timeZone: string): Date {
   const now = new Date();
   // `en-CA` devolve YYYY-MM-DD, que é o formato que dá pra fatiar sem regex.
   const [y, m] = new Intl.DateTimeFormat("en-CA", {
