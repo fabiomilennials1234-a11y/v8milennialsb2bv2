@@ -6,6 +6,7 @@
  * ficção — e é ela que torna "o Oráculo disse" auditável.
  */
 
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import type { OracleActor } from "./scope.ts";
 import type { Turn } from "./memory.ts";
 import type { TurnResult } from "./loop.ts";
@@ -14,8 +15,7 @@ import type { ConversationState, TurnStore } from "./turn-handler.ts";
 /** Turnos carregados por conversa. O resto vive no resumo. */
 const HISTORICO_MAX = 20;
 
-// deno-lint-ignore no-explicit-any
-export function createTurnStore(db: any): TurnStore {
+export function createTurnStore(db: SupabaseClient): TurnStore {
   return {
     async turnsToday(userId: string): Promise<number> {
       const desde = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
