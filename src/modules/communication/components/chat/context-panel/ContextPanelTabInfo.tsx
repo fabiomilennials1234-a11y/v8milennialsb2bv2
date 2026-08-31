@@ -108,12 +108,18 @@ type LeadShape = Partial<
 > & {
   responsible?: { id?: string; name?: string } | null;
   /**
-   * `lead_tags(tag:tags(id, name, color))` — embed do PostgREST, e ele tipa
-   * relação encaixada como POSSIVELMENTE NULA (só `!inner` garante presença).
-   * Declarar `tag` não-nulo aqui era o que impedia a linha real de `leads` de
-   * ser atribuída a esta forma (TS2322). O nulo é filtrado no consumo.
+   * `lead_tags(tag:tags(id, name, color))`.
+   *
+   * A forma da tag é DERIVADA de `tags`, não escrita à mão — foi a mão que
+   * causou o TS2322 daqui: declarava `color: string`, e **`tags.color` é
+   * `string | null`** no schema. Errei o diagnóstico duas vezes antes de olhar
+   * a coluna (apostei em `name` do `team_members`, que é não-nulo, e no embed
+   * nulo). A lição é a mesma dos outros sete: não redeclarar forma de tabela.
+   *
+   * `tag` continua podendo ser nulo — embed do PostgREST só é garantido com
+   * `!inner` —, e o nulo é filtrado no consumo.
    */
-  lead_tags?: Array<{ tag: { id: string; name: string; color: string } | null }> | null;
+  lead_tags?: Array<{ tag: Pick<Tables<"tags">, "id" | "name" | "color"> | null }> | null;
 };
 
 export interface ContextPanelTabInfoProps {
@@ -560,7 +566,7 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
   // linha encaixada não resolve, e sem isto um `null` viraria chip sem nome.
   const current = (lead.lead_tags ?? [])
     .map((lt) => lt.tag)
-    .filter((t): t is { id: string; name: string; color: string } => t !== null);
+    .filter((t): t is Pick<Tables<"tags">, "id" | "name" | "color"> => t !== null);
 
   const toggle = async (tagId: string) => {
     if (!lead.id) return;
@@ -597,10 +603,13 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
             <Badge
               variant="outline"
               className="text-[11px] h-5 px-1.5 gap-1 group cursor-pointer"
+              // `tags.color` é anulável no schema. Sem o `?? undefined`, um
+              // `null` viraria a string "null20" no CSS — cor inválida, chip
+              // sem estilo. `undefined` deixa o Badge usar o próprio default.
               style={{
-                backgroundColor: `${t.color}20`,
-                borderColor: `${t.color}40`,
-                color: t.color,
+                backgroundColor: t.color ? `${t.color}20` : undefined,
+                borderColor: t.color ? `${t.color}40` : undefined,
+                color: t.color ?? undefined,
               }}
               onClick={() => toggle(t.id)}
               title="Remover tag"
@@ -655,7 +664,7 @@ function TagsEditor({ lead }: { lead: LeadShape }) {
                   >
                     <span
                       className="w-2.5 h-2.5 rounded-full shrink-0"
-                      style={{ background: t.color }}
+                      style={{ background: t.color ?? undefined }}
                     />
                     <span className="flex-1 truncate text-foreground">{t.name}</span>
                     {active && <Check className="w-3.5 h-3.5 text-primary" />}
