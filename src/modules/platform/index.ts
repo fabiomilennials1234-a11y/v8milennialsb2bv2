@@ -91,6 +91,8 @@ export { OnboardingQuestion } from "./components/onboarding/OnboardingQuestion";
 export { AlertsDropdown } from "./components/notifications/AlertsDropdown";
 export { useAvisos } from "./hooks/useAvisos";
 export { aplicarEventoDeAviso, contarNaoLidos, instanteDoAviso } from "./lib/aviso-stream";
+export { FAMILIAS, agruparPorTempo, contarPorFamilia, familiaDoAviso, filtrarPorFamilia } from "./lib/aviso-agrupamento";
+export type { Familia, GrupoDeAvisos } from "./lib/aviso-agrupamento";
 export type { Aviso, EventoDeAviso } from "./lib/aviso-stream";
 export { AlertsBanner } from "./components/system-alerts/AlertsBanner";
 

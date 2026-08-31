@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
@@ -16,7 +16,6 @@ import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
@@ -26,11 +25,19 @@ import {
 import { cn } from "@/lib/utils";
 
 import { instanteDoAviso, type Aviso } from "../../lib/aviso-stream";
+import {
+  FAMILIAS,
+  agruparPorTempo,
+  contarPorFamilia,
+  filtrarPorFamilia,
+  type Familia,
+} from "../../lib/aviso-agrupamento";
 import { useAvisos } from "../../hooks/useAvisos";
 
 /**
- * O sino. A lista vem inteira do banco (ADR-0035): nada é derivado aqui, e o
- * "não lido" é estado da linha, não memória do navegador.
+ * O sino. Lê a lista pronta do hook e não consulta banco: aqui só se decide
+ * como o que já existe aparece — filtro por família, agrupamento por tempo,
+ * e o que está por ler.
  */
 
 const ICONES: Record<string, { icone: typeof Bell; classe: string; fundo: string }> = {
@@ -47,13 +54,20 @@ const ICONES: Record<string, { icone: typeof Bell; classe: string; fundo: string
 
 const PADRAO = { icone: Bell, classe: "text-muted-foreground", fundo: "bg-muted/50" };
 
-/** Os tipos que valem interromper alguém — o resto conta, mas não grita. */
+/** Os tipos que valem pintar o badge de vermelho — o resto conta, mas não grita. */
 const URGENTES = new Set(["workflow_alert", "cron_drift", "lead_message", "transfer_to_human"]);
 
 export function AlertsDropdown() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [familia, setFamilia] = useState<Familia>("tudo");
   const { avisos, naoLidos, marcarComoLido, marcarTodosComoLidos } = useAvisos();
+
+  const contagem = useMemo(() => contarPorFamilia(avisos), [avisos]);
+  const grupos = useMemo(
+    () => agruparPorTempo(filtrarPorFamilia(avisos, familia), new Date()),
+    [avisos, familia],
+  );
 
   const urgentesNaoLidos = avisos.filter(
     (a) => a.read_at === null && URGENTES.has(a.type),
@@ -79,7 +93,7 @@ export function AlertsDropdown() {
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               className={cn(
-                "absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
+                "absolute -top-0.5 -right-0.5 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold tabular-nums",
                 urgentesNaoLidos > 0
                   ? "bg-destructive text-destructive-foreground"
                   : "bg-primary text-primary-foreground",
@@ -91,86 +105,109 @@ export function AlertsDropdown() {
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="end" className="w-80 p-0">
-        <div className="p-3 border-b border-border flex items-center justify-between">
+      <DropdownMenuContent align="end" className="w-[368px] p-0">
+        <div className="p-3 border-b border-border flex items-center justify-between gap-2">
           <h3 className="font-semibold">Notificações</h3>
           {naoLidos > 0 && (
-            <Badge variant="outline" className="text-xs">
-              {naoLidos} {naoLidos === 1 ? "não lida" : "não lidas"}
-            </Badge>
+            <button
+              type="button"
+              onClick={() => marcarTodosComoLidos()}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Marcar todas como lidas
+            </button>
           )}
         </div>
 
-        {avisos.length > 0 ? (
-          <ScrollArea className="h-[300px]">
-            <div className="p-2 space-y-1">
+        <div className="flex gap-1 px-2 py-2 border-b border-border overflow-x-auto scrollbar-hide">
+          {FAMILIAS.map(({ chave, rotulo }) => (
+            <button
+              key={chave}
+              type="button"
+              onClick={() => setFamilia(chave)}
+              aria-pressed={familia === chave}
+              className={cn(
+                "shrink-0 rounded-full border px-2.5 py-1 text-xs transition-colors",
+                familia === chave
+                  ? "border-border bg-muted text-foreground"
+                  : "border-transparent text-muted-foreground hover:bg-muted/50",
+              )}
+            >
+              {rotulo}
+              {contagem[chave] > 0 && (
+                <span className="ml-1.5 tabular-nums text-muted-foreground">{contagem[chave]}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {grupos.length > 0 ? (
+          <ScrollArea className="h-[320px]">
+            <div className="p-2">
               <AnimatePresence mode="popLayout">
-                {avisos.map((aviso, index) => {
-                  const visual = ICONES[aviso.type] ?? PADRAO;
-                  const Icone = visual.icone;
-                  return (
-                    <motion.div
-                      key={aviso.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ delay: Math.min(index, 6) * 0.05 }}
-                      onClick={() => aoClicar(aviso)}
-                      className={cn(
-                        "p-3 rounded-lg cursor-pointer transition-colors hover:bg-muted/50",
-                        aviso.read_at === null ? visual.fundo : "opacity-60",
-                      )}
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="mt-0.5">
-                          <Icone className={cn("w-4 h-4", visual.classe)} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm">
-                            {aviso.title}
-                            {aviso.event_count > 1 && (
-                              <span className="ml-1.5 text-xs font-semibold text-muted-foreground tabular-nums">
-                                ×{aviso.event_count}
-                              </span>
-                            )}
-                          </p>
-                          {aviso.description && (
-                            <p className="text-xs text-muted-foreground truncate">
-                              {aviso.description}
-                            </p>
+                {grupos.map((grupo) => (
+                  <div key={grupo.rotulo}>
+                    <p className="px-3 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {grupo.rotulo}
+                    </p>
+                    {grupo.avisos.map((aviso, index) => {
+                      const visual = ICONES[aviso.type] ?? PADRAO;
+                      const Icone = visual.icone;
+                      const naoLido = aviso.read_at === null;
+                      return (
+                        <motion.div
+                          key={aviso.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          transition={{ delay: Math.min(index, 6) * 0.04 }}
+                          onClick={() => aoClicar(aviso)}
+                          className={cn(
+                            "mb-1 flex cursor-pointer items-start gap-3 rounded-lg border-l-2 p-3 transition-colors hover:bg-muted/50",
+                            naoLido ? cn(visual.fundo, "border-l-primary") : "border-l-transparent opacity-60",
                           )}
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {formatDistanceToNow(new Date(instanteDoAviso(aviso)), {
-                              addSuffix: true,
-                              locale: ptBR,
-                            })}
-                          </p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground mt-1" />
-                      </div>
-                    </motion.div>
-                  );
-                })}
+                        >
+                          <Icone className={cn("mt-0.5 h-4 w-4 shrink-0", visual.classe)} />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium">
+                              {aviso.title}
+                              {aviso.event_count > 1 && (
+                                <span className="ml-1.5 text-xs font-semibold tabular-nums text-muted-foreground">
+                                  ×{aviso.event_count}
+                                </span>
+                              )}
+                            </p>
+                            {aviso.description && (
+                              <p className="truncate text-xs text-muted-foreground">
+                                {aviso.description}
+                              </p>
+                            )}
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {formatDistanceToNow(new Date(instanteDoAviso(aviso)), {
+                                addSuffix: true,
+                                locale: ptBR,
+                              })}
+                            </p>
+                          </div>
+                          {naoLido && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                          <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                ))}
               </AnimatePresence>
             </div>
           </ScrollArea>
         ) : (
           <div className="p-8 text-center">
-            <CheckCircle className="w-12 h-12 text-success/30 mx-auto mb-3" />
+            <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success/30" />
             <p className="text-sm text-muted-foreground">
-              Tudo em dia! Nenhuma notificação pendente.
+              {familia === "tudo"
+                ? "Tudo em dia! Nenhuma notificação pendente."
+                : "Nada nesta aba. Tente outra família."}
             </p>
           </div>
-        )}
-
-        {naoLidos > 0 && (
-          <button
-            type="button"
-            onClick={() => marcarTodosComoLidos()}
-            className="w-full p-2.5 text-xs text-muted-foreground border-t border-border hover:bg-muted/50 transition-colors"
-          >
-            Marcar todas como lidas
-          </button>
         )}
       </DropdownMenuContent>
     </DropdownMenu>
