@@ -6,7 +6,14 @@
  * cifrado no cofre deny-all. Admin da org apenas.
  *
  * Body: { base_url, user, password, token_transport?: "query"|"header",
- *         allow_insecure_transport?: boolean }
+ *         allow_insecure_transport?: boolean,
+ *         flow_base_url?, flow_client_id?, flow_client_secret? }
+ *
+ * Os três campos `flow_*` configuram o **serviço de pedidos**, que é outro
+ * servidor do mesmo ERP (porta 3000, `/flow/crm`), com login próprio por
+ * `client_id`/`client_secret` e token em Bearer. São opcionais: só a Café
+ * Jurerê tem esse serviço publicado. Quando vêm, valem a mesma regra do resto
+ * desta função — login de verdade antes de gravar.
  *
  * `allow_insecure_transport` é o aceite consciente de tráfego sem TLS. O ERP da
  * Café Jurerê está publicado em http:// puro, então sem esse aceite a conexão é
@@ -23,8 +30,13 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { resolveAdminOrg } from "../_shared/erp/erp-admin-auth.ts";
 import { TothClient, TothAuthError, TothRequestError } from "../_shared/erp/toth-client.ts";
+import { TothFlowClient } from "../_shared/erp/toth-flow-client.ts";
 import { UnsafeErpUrlError } from "../_shared/erp/toth-url.ts";
-import { storeTothCredentials, tothUrlPolicy } from "../_shared/erp/toth-credentials.ts";
+import {
+  storeTothCredentials,
+  storeTothFlowCredentials,
+  tothUrlPolicy,
+} from "../_shared/erp/toth-credentials.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -55,8 +67,27 @@ Deno.serve(
     const tokenTransport = body.token_transport === "header" ? "header" : "query";
     const allowInsecureTransport = body.allow_insecure_transport === true;
 
+    const flowBaseUrl = typeof body.flow_base_url === "string" ? body.flow_base_url.trim() : "";
+    const flowClientId = typeof body.flow_client_id === "string" ? body.flow_client_id.trim() : "";
+    const flowClientSecret =
+      typeof body.flow_client_secret === "string" ? body.flow_client_secret : "";
+
     if (!baseUrl || !user || !password) {
       return json({ error: "Endereço, usuário e senha são obrigatórios" }, cors);
+    }
+
+    // Serviço de pedidos: ou vem completo, ou não vem. Meio par produziria uma
+    // conexão que a tela mostra como configurada e que falha na primeira
+    // sincronização — o modo de falha que esta função inteira existe para evitar.
+    const querFlow = Boolean(flowBaseUrl || flowClientId || flowClientSecret);
+    if (querFlow && !(flowBaseUrl && flowClientId && flowClientSecret)) {
+      return json(
+        {
+          error:
+            "Para o serviço de pedidos, informe endereço, client_id e client_secret — ou deixe os três em branco.",
+        },
+        cors,
+      );
     }
 
     let client: TothClient;
@@ -98,6 +129,34 @@ Deno.serve(
       return json({ error: `Falha ao validar a conexão com o ERP: ${msg}` }, cors);
     }
 
+    /**
+     * Mesma prova de vida para o serviço de pedidos, e pelo mesmo motivo.
+     *
+     * Vale registrar por que a validação NÃO é opcional aqui, mesmo sabendo
+     * que o serviço está inalcançável de fora hoje (porta 3000 aceita a
+     * conexão e fecha muda, medido em 28/08): aceitar a configuração sem
+     * provar o login faria a tela dizer "pedidos configurados" enquanto toda
+     * sincronização falha em silêncio. A recusa com a mensagem de porta é
+     * informação; o "salvo com sucesso" seria mentira.
+     */
+    let flowClient: TothFlowClient | null = null;
+    if (querFlow) {
+      try {
+        flowClient = new TothFlowClient(
+          { baseUrl: flowBaseUrl, clientId: flowClientId, clientSecret: flowClientSecret },
+          { urlPolicy: tothUrlPolicy({ allowInsecureTransport }) },
+        );
+        await flowClient.login();
+      } catch (err) {
+        if (err instanceof UnsafeErpUrlError) return json({ error: err.message }, cors);
+        if (err instanceof TothAuthError || err instanceof TothRequestError) {
+          return json({ error: `Serviço de pedidos: ${err.message}` }, cors);
+        }
+        const msg = err instanceof Error ? err.message : "Erro ao conectar";
+        return json({ error: `Falha ao validar o serviço de pedidos: ${msg}` }, cors);
+      }
+    }
+
     const { data: conn, error: connErr } = await admin
       .from("toth_connections")
       .upsert(
@@ -106,6 +165,7 @@ Deno.serve(
           user_id: userId,
           status: "connected",
           base_url: client.baseUrl,
+          ...(flowClient ? { flow_base_url: flowClient.baseUrl } : {}),
           token_transport: tokenTransport,
           allow_insecure_transport: allowInsecureTransport,
           connected_at: new Date().toISOString(),
@@ -125,6 +185,16 @@ Deno.serve(
         user,
         password,
       });
+      // Depois do par do Toth, sempre: `storeTothFlowCredentials` faz UPDATE e
+      // precisa da linha de segredo já existindo.
+      if (querFlow) {
+        await storeTothFlowCredentials(admin, {
+          connectionId: conn.id,
+          organizationId,
+          clientId: flowClientId,
+          clientSecret: flowClientSecret,
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro ao salvar credenciais";
       return json({ error: msg }, cors);
@@ -141,6 +211,7 @@ Deno.serve(
       {
         success: true,
         base_url: client.baseUrl,
+        flow_base_url: flowClient?.baseUrl ?? null,
         // A UI mostra esse aviso ao lado do status "conectado": quem olha a tela
         // precisa saber que a credencial vai em claro, não só quem marcou o
         // aceite no dia da configuração.

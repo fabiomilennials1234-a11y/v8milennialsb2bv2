@@ -33,6 +33,7 @@ import {
   Receipt,
   ShoppingCart,
   FlaskConical,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ import {
   useUpdateTothEmpresa,
   readTothEndpoint,
   canSubmitTothConnection,
+  isFlowPartValid,
   TOTH_CAPABILITIES,
   type TothSyncMode,
   type TothDryRunResult,
@@ -96,23 +98,34 @@ const SYNC_MODE_LABELS: Record<TothSyncMode, { label: string; hint: string }> = 
 const PLACEHOLDER = "https://erp.suaempresa.com.br/toth/services";
 
 /**
- * A lista sai do manifesto, não de texto solto: quando o fornecedor entregar o
- * endpoint de pedidos e `TOTH_CAPABILITIES.syncPedidos` virar `true`, a tela
- * acompanha sozinha. Duas listas separadas divergem — e a que mente é sempre a
- * da tela, porque ninguém a relê.
+ * A lista sai do manifesto, não de texto solto: quando uma capacidade virar
+ * `true`, a tela acompanha sozinha. Duas listas separadas divergem — e a que
+ * mente é sempre a da tela, porque ninguém a relê.
+ *
+ * Pedidos é a exceção e por um motivo estrutural: não é uma capacidade do
+ * provider, é uma capacidade **da instalação**. O serviço roda em outro
+ * servidor, e ter ou não esse servidor publicado varia por organização — coisa
+ * que um manifesto estático não consegue representar. Por isso a linha lê a
+ * conexão, e o restante lê o manifesto.
  */
-const CAPABILITY_LINES = [
-  { text: "Clientes do ERP, casados por CNPJ", live: TOTH_CAPABILITIES.syncClientes },
-  { text: "Cobranças em aberto, pagas e atrasadas", live: TOTH_CAPABILITIES.receivables },
-  { text: "Pedidos de venda", live: TOTH_CAPABILITIES.syncPedidos },
-  { text: "Faturamento (NF-e)", live: TOTH_CAPABILITIES.fetchNfe },
-];
+function capabilityLines(flowConfigurado: boolean) {
+  return [
+    { text: "Clientes do ERP, casados por CNPJ", live: TOTH_CAPABILITIES.syncClientes },
+    { text: "Cobranças em aberto, pagas e atrasadas", live: TOTH_CAPABILITIES.receivables },
+    { text: "Pedidos de venda (servidor separado)", live: flowConfigurado },
+    { text: "Faturamento (NF-e)", live: TOTH_CAPABILITIES.fetchNfe },
+  ];
+}
 
 export function TothSettings() {
   const [endpoint, setEndpoint] = useState("");
   const [user, setUser] = useState("");
   const [password, setPassword] = useState("");
   const [acceptedInsecure, setAcceptedInsecure] = useState(false);
+  // Serviço de pedidos (Flow) — outro servidor do mesmo ERP, credencial própria.
+  const [flowEndpoint, setFlowEndpoint] = useState("");
+  const [flowClientId, setFlowClientId] = useState("");
+  const [flowClientSecret, setFlowClientSecret] = useState("");
   const [confirmCanonical, setConfirmCanonical] = useState(false);
   const [janela, setJanela] = useState("");
   const [marcas, setMarcas] = useState("");
@@ -200,7 +213,16 @@ export function TothSettings() {
   };
 
   const reading = readTothEndpoint(endpoint);
-  const canSubmit = canSubmitTothConnection({ endpoint, user, password, acceptedInsecure });
+  const flowReading = readTothEndpoint(flowEndpoint);
+  const canSubmit = canSubmitTothConnection({
+    endpoint,
+    user,
+    password,
+    acceptedInsecure,
+    flowEndpoint,
+    flowClientId,
+    flowClientSecret,
+  });
   const isConnected = status?.connected ?? false;
 
   const handleConnect = async () => {
@@ -209,12 +231,25 @@ export function TothSettings() {
       baseUrl: endpoint.trim(),
       user: user.trim(),
       password,
-      allowInsecureTransport: reading.insecure,
+      // Um aceite só para os dois serviços: mesma máquina, mesma rede, mesmo
+      // risco. `flowReading.insecure` entra no OU porque o admin pode apontar o
+      // principal para https e o de pedidos para http.
+      allowInsecureTransport: reading.insecure || flowReading.insecure,
+      ...(flowEndpoint.trim()
+        ? {
+            flowBaseUrl: flowEndpoint.trim(),
+            flowClientId: flowClientId.trim(),
+            flowClientSecret,
+          }
+        : {}),
     });
     setEndpoint("");
     setUser("");
     setPassword("");
     setAcceptedInsecure(false);
+    setFlowEndpoint("");
+    setFlowClientId("");
+    setFlowClientSecret("");
   };
 
   // Cobranças são consultadas por CNPJ de cliente já casado, então a ordem
@@ -352,8 +387,96 @@ export function TothSettings() {
             </div>
           </div>
 
-          {/* Aceite de tráfego sem TLS — aparece só quando o risco é real */}
-          {reading.verdict === "inseguro" && (
+          {/* Serviço de pedidos — servidor separado, credencial separada.
+              Fica depois das credenciais principais porque é opcional: só a
+              org que tem o Flow publicado preenche. */}
+          <div className="rounded-lg border border-border/60 p-3 space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                Serviço de pedidos (opcional)
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Pedidos de venda vêm de um <span className="text-foreground">servidor separado</span>{" "}
+                do Toth, com endereço e credencial próprios. Deixe em branco se o seu ERP não tem
+                esse serviço publicado.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="toth-flow-endpoint" className="text-xs">
+                Endereço do serviço de pedidos
+              </Label>
+              <Input
+                id="toth-flow-endpoint"
+                type="url"
+                inputMode="url"
+                placeholder="http://seu-erp.ddns.net:3000/flow/crm"
+                value={flowEndpoint}
+                onChange={(e) => {
+                  setFlowEndpoint(e.target.value);
+                  setAcceptedInsecure(false);
+                }}
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={flowReading.verdict === "invalido"}
+                className={cn(
+                  flowReading.verdict === "invalido" &&
+                    "border-destructive focus-visible:ring-destructive",
+                  flowReading.verdict === "inseguro" &&
+                    "border-amber-500/60 focus-visible:ring-amber-500",
+                )}
+              />
+              {flowReading.verdict === "invalido" && (
+                <p className="text-[11px] text-destructive flex items-start gap-1">
+                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                  {flowReading.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="toth-flow-client-id" className="text-xs">
+                  client_id
+                </Label>
+                <Input
+                  id="toth-flow-client-id"
+                  placeholder="Identificador da integração"
+                  value={flowClientId}
+                  onChange={(e) => setFlowClientId(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="toth-flow-client-secret" className="text-xs">
+                  client_secret
+                </Label>
+                <Input
+                  id="toth-flow-client-secret"
+                  type="password"
+                  placeholder="••••••••"
+                  value={flowClientSecret}
+                  onChange={(e) => setFlowClientSecret(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {!isFlowPartValid({ flowEndpoint, flowClientId, flowClientSecret }) && (
+              <p className="text-[11px] text-amber-500 flex items-start gap-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                Preencha os três campos do serviço de pedidos — ou deixe os três em branco.
+              </p>
+            )}
+          </div>
+
+          {/* Aceite de tráfego sem TLS — aparece quando QUALQUER um dos dois
+              endereços vai sem criptografia. Cobrar um aceite só é decisão: é a
+              mesma máquina e a mesma rede; dois consentimentos para o mesmo
+              fato seriam duas chances de divergir. */}
+          {(reading.verdict === "inseguro" || flowReading.verdict === "inseguro") && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -364,7 +487,8 @@ export function TothSettings() {
                 Este endereço não usa criptografia
               </p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {reading.message} Peça ao responsável pela rede um endereço{" "}
+                {(reading.insecure ? reading : flowReading).message} Peça ao responsável pela rede um
+                endereço{" "}
                 <span className="font-medium text-foreground">https://</span> — um túnel reverso ou
                 um proxy com certificado resolve sem abrir porta no firewall.
               </p>
@@ -666,16 +790,18 @@ export function TothSettings() {
                     : undefined
                 }
               />
-              {/* Acende sozinha quando o manifesto declarar `pedidos`. Enquanto
-                  o ERP responde 404 em /pedidos, a linha não aparece — botão que
-                  só sabe falhar é pior que botão ausente. */}
-              {TOTH_CAPABILITIES.syncPedidos && (
+              {/* Gate por CONFIGURAÇÃO, não por manifesto estático.
+                  Pedidos vêm de um servidor separado que a maioria das orgs não
+                  tem — o manifesto não sabe disso, a conexão sabe. Mostrar a
+                  linha só para quem configurou o Flow é a diferença entre um
+                  botão que funciona e um que só sabe falhar. */}
+              {status?.flow_base_url && (
                 <SyncRow
                   icon={<ShoppingCart className="w-3.5 h-3.5" />}
                   label="Pedidos"
                   at={status?.last_pedidos_sync_at ?? null}
                   busy={syncPedidos.isPending}
-                  onRun={() => syncPedidos.mutate()}
+                  onRun={() => syncPedidos.mutate({})}
                   disabled={isSyncing || neverSyncedClients}
                   note={
                     neverSyncedClients
@@ -754,7 +880,7 @@ export function TothSettings() {
           <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg p-3 text-xs text-muted-foreground space-y-2">
             <p className="font-medium text-sky-500">O que o Toth traz para a Carteira:</p>
             <ul className="space-y-1">
-              {CAPABILITY_LINES.map((line) => (
+              {capabilityLines(Boolean(status?.flow_base_url)).map((line) => (
                 <li key={line.text} className="flex items-start gap-1.5">
                   <span className={line.live ? "text-sky-500" : "text-muted-foreground/40"}>•</span>
                   <span className={line.live ? "" : "text-muted-foreground/60"}>

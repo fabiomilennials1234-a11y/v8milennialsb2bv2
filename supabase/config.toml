@@ -220,9 +220,11 @@ verify_jwt = false
 [functions.toth-sync-cobrancas]
 verify_jwt = false
 
-# toth-sync-pedidos: paginado (page/hasNext); resolve o cliente por CNPJ, então
-# exige toth-sync-clientes antes. O endpoint /pedidos ainda responde 404 no ERP
-# da Café Jurerê — a função devolve `endpoint_indisponivel: true` até publicarem.
+# toth-sync-pedidos: fala com o serviço Flow (:3000/flow/crm), que é OUTRO
+# servidor do mesmo ERP — não o /toth/services das outras duas. Paginado
+# (page/hasNext) e com janela de datas obrigatória; resolve o cliente por CNPJ,
+# então exige toth-sync-clientes antes. Enquanto a porta 3000 não estiver
+# publicada para fora, devolve `servico_mudo: true` — publicação, não credencial.
 [functions.toth-sync-pedidos]
 verify_jwt = false
 
