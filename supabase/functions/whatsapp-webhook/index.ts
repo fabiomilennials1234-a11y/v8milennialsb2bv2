@@ -25,6 +25,7 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
+import { authorFromWebhookEcho } from "../_shared/message-authorship.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../_shared/copilot/cancellation.ts";
 import {
   downloadAndPersistMedia,
@@ -546,6 +547,13 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     timestamp: new Date(tsSeconds * 1000).toISOString(),
     raw_payload: data as Record<string, unknown>,
     is_group: isGroup,
+    // Autoria (SCRUM-593): quem enviou pela caixa de entrada volta no eco do
+    // `track_id`. Robô e envio espelhado do aparelho continuam sem autor.
+    sent_by_team_member_id: authorFromWebhookEcho(
+      data as Record<string, unknown>,
+      direction as "incoming" | "outgoing",
+      instance.id,
+    ),
   };
 }
 

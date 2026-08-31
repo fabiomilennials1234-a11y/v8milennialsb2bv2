@@ -70,6 +70,7 @@ const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Fu
 const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
 const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
+const Oraculo = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Oraculo")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
 const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communication/pages/AtendimentoMeta")));
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
@@ -598,6 +599,18 @@ function AppRoutes() {
               <PermissionProtectedRoute featureKey="products.view">
                 <FeatureRoute feature="products"><Produtos /></FeatureRoute>
               </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Oráculo Comercial — endereço próprio (SCRUM-594). O recorte de quem
+          alcança o quê é do servidor: a tela não filtra nada. */}
+      <Route
+        path="/oraculo"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Oraculo />
             </LayoutWrapper>
           </ProtectedRoute>
         }

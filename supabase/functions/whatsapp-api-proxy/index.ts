@@ -296,6 +296,9 @@ Deno.serve(
     const isMaster = !!masterRow;
 
     let callerOrgId: string;
+    // NULL quando o ator não tem cadeira na org alvo (Master, Gestor de
+    // Portfólio): a mensagem sai, apenas sem autor.
+    let callerTeamMemberId: string | null = null;
 
     if (isMaster) {
       // Master can act on any org. Require explicit target so we never assume.
@@ -327,7 +330,7 @@ Deno.serve(
     } else {
       const { data: userOrg, error: orgErr } = await supabaseAdmin
         .from("team_members")
-        .select("organization_id")
+        .select("id, organization_id")
         .eq("user_id", user.id)
         .eq("is_active", true)
         .maybeSingle();
@@ -336,6 +339,10 @@ Deno.serve(
         return jsonResponse(403, { error: "No organization" }, corsHeaders);
       }
       callerOrgId = userOrg.organization_id;
+      // Autoria da mensagem enviada (SCRUM-593, ADR-0033 §4). Viaja com o
+      // envio em `track_id` e volta no webhook — não há backfill, e casar dois
+      // espaços de id depois já rendeu zero coincidências nesta base.
+      callerTeamMemberId = userOrg.id;
 
       // If a target org was supplied, it must match the user's own org —
       // prevents a regular user from acting on another tenant via the param.
@@ -996,6 +1003,7 @@ Deno.serve(
             delay,
             replyid,
             trackSource: "whatsapp-api-proxy",
+            trackId: callerTeamMemberId ?? undefined,
           });
           break;
         }
@@ -1020,6 +1028,7 @@ Deno.serve(
             caption,
             delay,
             trackSource: "whatsapp-api-proxy",
+            trackId: callerTeamMemberId ?? undefined,
           });
           break;
         }
@@ -1039,6 +1048,7 @@ Deno.serve(
             file,
             delay,
             trackSource: "whatsapp-api-proxy",
+            trackId: callerTeamMemberId ?? undefined,
           });
           break;
         }
