@@ -128,7 +128,19 @@ BEGIN
   --     `meeting_events` e NÃO cria linha em `meetings`, então cada origem
   --     produz um agendamento e só um.
   IF v_booked_id IS NULL THEN
-    SELECT COALESCE(l.pre_sale_responsible_id, l.sdr_id) INTO v_presale
+    -- UMA chave canônica, sem cadeia de fallback (ADR-0017 R5).
+    --
+    -- A primeira versão encadeava a coluna canônica com `sdr_id` por fallback,
+    -- copiando `fn_capture_meeting_event` — que carrega isso por herança. O
+    -- lint de métrica reprovou, e com razão: `sdr_id` é o NOME ANTIGO da coluna
+    -- canônica, então o encadeamento não é fallback, é ambiguidade sobre qual
+    -- das duas manda.
+    --
+    -- Medido em prod: 57.895 leads, ZERO com `sdr_id` preenchido e
+    -- `pre_sale_responsible_id` nulo. O fallback nunca dispararia. Nulo aqui é
+    -- honesto — reunião sem pré-venda atribuída existe, e inventar dono seria
+    -- pior que não ter.
+    SELECT l.pre_sale_responsible_id INTO v_presale
     FROM public.leads l WHERE l.id = NEW.lead_id;
 
     INSERT INTO public.meeting_events
