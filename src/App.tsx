@@ -883,11 +883,16 @@ const App = () => {
           <TooltipProvider>
             <Toaster />
             <Sonner />
-            <PilhaDeCartoes />
             <ServiceWorkerUpdater />
             <BrowserRouter>
               <AuthProvider>
                 <TorqueIntro />
+                {/* PilhaDeCartoes usa useNavigate() para abrir o link do
+                    cartão, então PRECISA ficar dentro do BrowserRouter.
+                    Montado fora, o hook lança no primeiro render e derruba a
+                    árvore inteira: tela branca em todas as rotas, para todos
+                    os usuários. Foi exatamente o que quebrou a produção. */}
+                <PilhaDeCartoes />
                 <RealtimeOrgBridge>
                   <PipeOpsProvider>
                     <GlobalErrorBoundary>
