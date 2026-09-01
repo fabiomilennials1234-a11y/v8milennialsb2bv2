@@ -90,6 +90,10 @@ export { OnboardingQuestion } from "./components/onboarding/OnboardingQuestion";
 // Components — Notifications + System alerts
 export { AlertsDropdown } from "./components/notifications/AlertsDropdown";
 export { useAvisos } from "./hooks/useAvisos";
+export { usePreferenciasDeAviso } from "./hooks/usePreferenciasDeAviso";
+export { PADROES, entregaDoTipo, resolverPreferencias } from "./lib/preferencias-de-aviso";
+export type { PreferenciasDeAviso as PreferenciasDeAvisoValores, EntregaDoTipo } from "./lib/preferencias-de-aviso";
+export { PreferenciasDeAviso } from "./components/notifications/PreferenciasDeAviso";
 export { aplicarEventoDeAviso, contarNaoLidos, instanteDoAviso } from "./lib/aviso-stream";
 export { FAMILIAS, agruparPorTempo, contarPorFamilia, familiaDoAviso, filtrarPorFamilia } from "./lib/aviso-agrupamento";
 export type { Familia, GrupoDeAvisos } from "./lib/aviso-agrupamento";
