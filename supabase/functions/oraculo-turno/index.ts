@@ -9,8 +9,7 @@
  * A função antiga continua no ar até a Onda 5 (SCRUM-606): remover antes de o
  * substituto estar em produção deixaria buraco na tela de quem usa.
  *
- * ADR-0032: o raciocínio nunca escreve. O catálogo desta onda tem uma
- * ferramenta, e ela é somente-leitura.
+ * ADR-0032: o raciocínio nunca escreve. O catálogo é somente-leitura.
  */
 
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
@@ -22,9 +21,8 @@ import { ACTION_TO_FEATURE } from "../_shared/permission-actions.ts";
 import { handleTurn } from "../_shared/oraculo/turn-handler.ts";
 import { createOpenRouterLlm } from "../_shared/oraculo/openrouter.ts";
 import { createTurnStore, TurnConflictError } from "../_shared/oraculo/store.ts";
-import { metricasTool } from "../_shared/oraculo/tools/metricas.ts";
+import { TOOL_SCHEMAS, criarFerramentas } from "../_shared/oraculo/catalogo.ts";
 import { DEFAULT_MAX_TOOL_CALLS } from "../_shared/oraculo/loop.ts";
-import type { OracleScope } from "../_shared/oraculo/scope.ts";
 import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
 
 const SYSTEM_PROMPT = `Você é o Oráculo Comercial do Torque CRM: um analista da operação de vendas.
@@ -36,25 +34,6 @@ Regras que não se negociam:
 - Responda em português do Brasil, direto, sem preâmbulo. Números em reais quando forem dinheiro.
 - Você tem no máximo ${DEFAULT_MAX_TOOL_CALLS} consultas por resposta. Escolha bem.`;
 
-const TOOL_SCHEMAS = [
-  {
-    type: "function",
-    function: {
-      name: "metricas",
-      description:
-        "Números do período: leads criados, vendas, perdas, receita líquida de estornos, ticket médio e conversão. O recorte de quem pode ver o quê já vem aplicado.",
-      parameters: {
-        type: "object",
-        properties: {
-          periodo_dias: {
-            type: "integer",
-            description: "Janela em dias (padrão 30, máximo 365).",
-          },
-        },
-      },
-    },
-  },
-];
 
 Deno.serve(withErrorBoundary("oraculo-turno", async (req) => {
   const cors = withSecurityHeaders(getCorsHeaders(req.headers.get("origin") ?? undefined));
@@ -100,11 +79,10 @@ Deno.serve(withErrorBoundary("oraculo-turno", async (req) => {
           systemPrompt: SYSTEM_PROMPT,
           toolSchemas: TOOL_SCHEMAS,
         }),
-        tools: [{
-          name: metricasTool.name,
-          execute: (args: Record<string, unknown>, scope: OracleScope) =>
-            metricasTool.execute(args, scope, { db }),
-        }],
+        // Catálogo e executores vêm do mesmo módulo: um teste garante que os
+        // dois lados batem, senão o modelo pede uma ferramenta que ninguém
+        // executa e a chamada é rejeitada em silêncio.
+        tools: criarFerramentas(db),
         store: createTurnStore(db),
       },
       cors,
