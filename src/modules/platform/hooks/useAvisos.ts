@@ -29,6 +29,7 @@ import {
 import { conversaAberta } from "../lib/conversa-aberta";
 import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
 import { motorDeSom } from "../lib/motor-de-som";
+import { mostrarCartao } from "../lib/cartoes-store";
 import { usePreferenciasDeAviso } from "./usePreferenciasDeAviso";
 
 /** Teto do que o sino carrega. Varrer o histórico é trabalho do Inbox (#1889). */
@@ -127,9 +128,10 @@ export function useAvisos(): UseAvisosResult {
       if (evento.aviso.read_at !== null) return;
 
       const agora = Date.now();
+      const abaVisivel = typeof document === "undefined" || document.visibilityState === "visible";
       const decisao: Entrega = decidirEntrega(evento.aviso, evento.tipo, {
         preferencias: preferenciasRef.current,
-        abaVisivel: typeof document === "undefined" || document.visibilityState === "visible",
+        abaVisivel,
         conversaAbertaLeadId: conversaAberta(),
         ultimoSomPorChave: ultimoSomPorChave.current,
         horaLocal: horaLocalDeSaoPaulo(agora),
@@ -141,6 +143,10 @@ export function useAvisos(): UseAvisosResult {
         if (evento.aviso.group_key) {
           ultimoSomPorChave.current[evento.aviso.group_key] = agora;
         }
+      }
+
+      if (decisao.cartao) {
+        mostrarCartao(evento.aviso, agora, abaVisivel);
       }
     },
   });

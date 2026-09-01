@@ -148,6 +148,8 @@ export function WebhookSettings() {
       return;
     }
 
+    // organization_id entra na construção, não depois: o tipo do insert o exige,
+    // e preenchê-lo em seguida deixava o literal inválido perante o compilador.
     const payload: WebhookInsert = {
       name: formData.name.trim(),
       url: formData.url.trim(),
@@ -155,12 +157,8 @@ export function WebhookSettings() {
       http_method: formData.http_method,
       custom_headers: headersToObject(formData.custom_headers),
       is_active: formData.is_active,
+      organization_id: editingWebhook ? editingWebhook.organization_id : organizationId!,
     };
-    if (editingWebhook) {
-      payload.organization_id = editingWebhook.organization_id;
-    } else {
-      payload.organization_id = organizationId!;
-    }
 
     try {
       if (editingWebhook) {
