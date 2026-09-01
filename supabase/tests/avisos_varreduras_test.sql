@@ -48,7 +48,9 @@ SELECT 'c5555555-5555-5555-5555-555555555555'::uuid, org, lead, membro,
        'Mandar proposta revisada', now() - interval '2 days', NULL::timestamptz FROM _v_fix
 UNION ALL
 SELECT 'c6666666-6666-6666-6666-666666666666'::uuid, org, lead, membro,
-       'Confirmar recebimento', date_trunc('day', timezone('America/Sao_Paulo', now())) + interval '23 hours 59 minutes', NULL::timestamptz FROM _v_fix
+       'Confirmar recebimento',
+       (date_trunc('day', timezone('America/Sao_Paulo', now())) + interval '23 hours 59 minutes')
+         AT TIME ZONE 'America/Sao_Paulo', NULL::timestamptz FROM _v_fix
 UNION ALL
 SELECT 'c7777777-7777-7777-7777-777777777777'::uuid, org, lead, membro,
        'Ligar para o comprador', now() - interval '1 day', now() FROM _v_fix;

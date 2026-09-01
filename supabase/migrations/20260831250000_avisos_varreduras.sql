@@ -21,8 +21,14 @@ DECLARE
   r      record;
   v_dono uuid;
   v_dia  text := to_char(timezone('America/Sao_Paulo', now()), 'YYYY-MM-DD');
-  v_fim  timestamptz := date_trunc('day', timezone('America/Sao_Paulo', now()))
-                        + interval '1 day' - interval '1 microsecond';
+  -- `timezone(tz, timestamptz)` devolve timestamp SEM fuso — relógio de parede.
+  -- Atribuir isso a um timestamptz faz o Postgres reinterpretá-lo no fuso da
+  -- SESSÃO (UTC no servidor), e o "fim do dia em São Paulo" viraria 21h de São
+  -- Paulo. Follow-up marcado para as 22h ficaria fora da varredura do próprio
+  -- dia. O `AT TIME ZONE` de volta é o que fecha o ciclo.
+  v_fim  timestamptz := (date_trunc('day', timezone('America/Sao_Paulo', now()))
+                        + interval '1 day') AT TIME ZONE 'America/Sao_Paulo'
+                        - interval '1 microsecond';
   v_total integer := 0;
 BEGIN
   FOR r IN
