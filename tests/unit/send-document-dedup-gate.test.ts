@@ -112,6 +112,72 @@ describe("checkDocumentAlreadySent", () => {
     expect(result).toBe(true);
   });
 
+  // ── O ciclo que se auto-alimentava ──────────────────────────────────────
+  // A supressão devolvia `success:true`, o worker gravava `status='completed'`,
+  // e ESTE gate lê exatamente as linhas `completed` da conversa. A supressão
+  // virava a prova que suprimia a próxima tentativa — para sempre. Medido em
+  // prod 2026-09-01: 353 de 769 envios `completed` eram repetição; numa amostra
+  // de 30, só 3 tinham mensagem de mídia correspondente.
+
+  it("NÃO bloqueia quando a ação anterior foi suprimida (não entregou)", async () => {
+    const supabase = buildSupabaseMock({
+      data: [
+        {
+          id: "action-1",
+          payload: {
+            document_id: "doc-111",
+            suppressed_at: "2026-09-01T14:06:01.000Z",
+            suppressed_reason: "duplicate_document",
+          },
+        },
+      ],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
+    expect(result).toBe(false);
+  });
+
+  it("bloqueia quando a ação anterior foi ENTREGUE de fato", async () => {
+    const supabase = buildSupabaseMock({
+      data: [
+        {
+          id: "action-1",
+          payload: {
+            document_id: "doc-111",
+            file_name: "Banho de Verniz - PRODUTO 1.png",
+            delivered_at: "2026-09-01T14:04:08.000Z",
+          },
+        },
+      ],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
+    expect(result).toBe(true);
+  });
+
+  it("uma entrega real prevalece sobre supressões anteriores do mesmo doc", async () => {
+    const supabase = buildSupabaseMock({
+      data: [
+        { id: "a1", payload: { document_id: "doc-111", suppressed_at: "2026-09-01T14:03:52Z" } },
+        { id: "a2", payload: { document_id: "doc-111", delivered_at: "2026-09-01T14:04:08Z" } },
+      ],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
+    expect(result).toBe(true);
+  });
+
+  it("linha ANTIGA (sem carimbo) segue bloqueando — conservador por desenho", async () => {
+    // Sem carimbo não dá pra saber se entregou. Assumir "não entregou" faria a
+    // IA reenviar material que o lead já recebeu antes do conserto.
+    const supabase = buildSupabaseMock({
+      data: [{ id: "action-legado", payload: { document_id: "doc-111" } }],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
+    expect(result).toBe(true);
+  });
+
   it("returns false when same doc sent in DIFFERENT conversation (query scoped)", async () => {
     // The function filters by conversation_id, so different conv → empty result.
     const supabase = buildSupabaseMock({ data: [], error: null });
