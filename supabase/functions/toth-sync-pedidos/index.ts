@@ -64,6 +64,10 @@ import {
   resolvePedidosWindow,
   type PedidosWindow,
 } from "../_shared/erp/toth-pedidos-window.ts";
+import {
+  mesclarFatias,
+  numeroDoPedido,
+} from "../_shared/erp/toth-pedidos-montagem.ts";
 import { TOTH_PROVIDER_ID } from "../_shared/erp/toth-provider.ts";
 import { supabaseOrderStore } from "../_shared/erp/sync/order-store.ts";
 import { upsertCanonicalOrder } from "../_shared/erp/sync/upsert-order.ts";
@@ -75,14 +79,21 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 /**
  * Páginas por execução.
  *
- * Conservador de propósito enquanto o tamanho da página do serviço é
- * desconhecido — a captura do fornecedor trouxe cerca de dez pedidos, mas
- * captura não é contrato. Com `hasNext` verdadeiro ao fim, o cursor guarda onde
- * parou e a próxima execução continua; nada se perde por parar cedo.
+ * Era 20 enquanto o tamanho da página fosse desconhecido. **Agora é conhecido**
+ * (medido 01/09): a página traz 25 itens, o que dá 9 a 13 pedidos, e a chamada
+ * volta em ~50 ms. Com `PAGE_DELAY_MS`, cada página custa ~450 ms — 60 páginas
+ * são ~27 s, folgados dentro do teto de 150 s do gateway que já matou o sync de
+ * clientes uma vez.
+ *
+ * 60 páginas ≈ 600 pedidos por volta. A janela padrão de 90 dias tem ~1.900
+ * pedidos (medição: ~21/dia), então fecha em 3 ou 4 execuções em vez de 10.
+ * Com `hasNext` verdadeiro ao fim, o cursor guarda onde parou; nada se perde
+ * por parar cedo.
  */
-const MAX_PAGES_PER_RUN = 20;
+const MAX_PAGES_PER_RUN = 60;
 /** Pausa entre páginas: o alvo é o servidor de UMA empresa, não uma nuvem. */
 const PAGE_DELAY_MS = 400;
+
 /**
  * Teto de documentos enviados em `numeroInscricao`.
  *
@@ -261,11 +272,107 @@ Deno.serve(
       clientNotSynced: 0,
       /** Pedidos que entraram como pendentes por não estarem faturados. */
       pending: 0,
+      /**
+       * Pedidos sem valor. `upsell_orders` tem `CHECK (sale_value > 0)`, então
+       * eles são pulados — 11 em 554 na medição de jun–ago, quase todos
+       * CANCELADO. Contar em vez de engolir: zero silencioso vira "sumiu".
+       */
+      zeroValue: 0,
+      /** Pedido retido por poder continuar na próxima página. Ver `emMontagem`. */
+      retidos: 0,
     };
     const errors: string[] = [];
     const amostra: Array<Record<string, unknown>> = [];
     let stopReason = "max_pages";
     let hasNext: boolean | null = null;
+
+    /**
+     * 🔴 A página do Flow é de 25 **ITENS**, não de 25 pedidos — e por isso um
+     * pedido é PARTIDO na fronteira entre páginas.
+     *
+     * Medido em 01/09 contra o serviço real: em TODAS as fronteiras testadas
+     * (1×2, 2×3, 3×4, 4×5) exatamente um `numeropedido` aparece nas duas
+     * páginas, com os itens repartidos e o `valortotalliquido` **repetido
+     * inteiro** em cada fatia. O pedido 24243 vem com 6 itens na página 2 e 8
+     * na página 3; o total, 32.031, vem nas duas. Contando os itens de cada
+     * página: sempre 25, com 9 a 13 pedidos — a variação que denuncia o
+     * agrupamento.
+     *
+     * Isso é fatal para `replaceOrderItems`, que APAGA os itens do pedido antes
+     * de inserir a fatia nova: a segunda passagem deixaria 8 de 14 itens, com
+     * `line_no` reiniciado em 1 — sem erro, sem log, com cara de íntegro. A
+     * receita não sofre (o upsert é idempotente em `external_id` e o total
+     * repete igual), mas a composição do pedido fica errada em cerca de um
+     * pedido a cada dez.
+     *
+     * Solução: montar o pedido por número ao longo da volta e **segurar o
+     * último pedido de cada página** até a página seguinte dizer se ele
+     * continua. O que ficar retido ao fim da execução NÃO é gravado — o cursor
+     * volta para a página em que ele começou, e a próxima volta o remonta
+     * inteiro. Custo: uma página relida por execução.
+     */
+    const emMontagem = new Map<string, Record<string, unknown>>();
+    const paginaDeEntrada = new Map<string, number>();
+
+    /** Retomar daqui não perde nada: é a página de entrada do que está pela metade. */
+    const paginaDeRetomada = () => {
+      let menor: number | null = null;
+      for (const numero of emMontagem.keys()) {
+        const p = paginaDeEntrada.get(numero);
+        if (p !== undefined && (menor === null || p < menor)) menor = p;
+      }
+      return menor ?? page;
+    };
+
+    const processar = async (row: Record<string, unknown>) => {
+      stats.rows++;
+      try {
+        const canonical = mapTothPedidoToCanonical(row);
+        stats.items += canonical.items?.length ?? 0;
+
+        if (dryRun) {
+          if (amostra.length < 5) {
+            amostra.push({
+              pedido: canonical.externalId,
+              emitido_em: canonical.soldAt,
+              situacao: canonical.erpStatus,
+              valor: canonical.saleValue,
+              itens: canonical.items?.length ?? 0,
+              // Só a contagem de dígitos: a prévia responde "casou?", e
+              // documento inteiro em resposta de diagnóstico é PII à toa.
+              cnpj_digitos: canonical.clientCnpj?.length ?? 0,
+              produto: canonical.productName,
+            });
+          }
+          return;
+        }
+
+        const result = await upsertCanonicalOrder(store, {
+          organizationId,
+          source: TOTH_PROVIDER_ID,
+          order: canonical,
+        });
+        if (result.action === "created") stats.created++;
+        else if (result.action === "updated") stats.updated++;
+        else {
+          stats.skipped++;
+          if (result.reason === "client_not_synced") stats.clientNotSynced++;
+          if (result.reason === "zero_value") stats.zeroValue++;
+        }
+        if (
+          result.action !== "skipped" &&
+          canonical.erpStatus &&
+          canonical.erpStatus.trim().toUpperCase() !== "FATURADO"
+        ) {
+          stats.pending++;
+        }
+      } catch (err) {
+        stats.failed++;
+        if (errors.length < 3) {
+          errors.push(err instanceof TothMappingError ? err.message : String(err));
+        }
+      }
+    };
 
     try {
       for (let i = 0; i < maxPages; i++) {
@@ -283,52 +390,27 @@ Deno.serve(
         }
 
         for (const row of rows) {
-          stats.rows++;
-          try {
-            const canonical = mapTothPedidoToCanonical(row);
-            stats.items += canonical.items?.length ?? 0;
-
-            if (dryRun) {
-              if (amostra.length < 5) {
-                amostra.push({
-                  pedido: canonical.externalId,
-                  emitido_em: canonical.soldAt,
-                  situacao: canonical.erpStatus,
-                  valor: canonical.saleValue,
-                  itens: canonical.items?.length ?? 0,
-                  // Só a contagem de dígitos: a prévia responde "casou?", e
-                  // documento inteiro em resposta de diagnóstico é PII à toa.
-                  cnpj_digitos: canonical.clientCnpj?.length ?? 0,
-                  produto: canonical.productName,
-                });
-              }
-              continue;
-            }
-
-            const result = await upsertCanonicalOrder(store, {
-              organizationId,
-              source: TOTH_PROVIDER_ID,
-              order: canonical,
-            });
-            if (result.action === "created") stats.created++;
-            else if (result.action === "updated") stats.updated++;
-            else {
-              stats.skipped++;
-              if (result.reason === "client_not_synced") stats.clientNotSynced++;
-            }
-            if (
-              result.action !== "skipped" &&
-              canonical.erpStatus &&
-              canonical.erpStatus.trim().toUpperCase() !== "FATURADO"
-            ) {
-              stats.pending++;
-            }
-          } catch (err) {
-            stats.failed++;
-            if (errors.length < 3) {
-              errors.push(err instanceof TothMappingError ? err.message : String(err));
-            }
+          const numero = numeroDoPedido(row);
+          if (numero === null) {
+            // Sem número não dá para montar nem deduplicar — o mapeador é quem
+            // sabe reclamar disso, e a contagem de falha sai de lá.
+            await processar(row);
+            continue;
           }
+          if (!emMontagem.has(numero)) paginaDeEntrada.set(numero, page);
+          emMontagem.set(numero, mesclarFatias(emMontagem.get(numero), row));
+        }
+
+        // O último pedido da página é o único que pode continuar na próxima.
+        // Com `hasNext` falso não há próxima, então ninguém fica retido.
+        const ultimo = numeroDoPedido(rows[rows.length - 1]);
+        const retido = hasNext === false ? null : ultimo;
+
+        for (const [numero, completo] of [...emMontagem]) {
+          if (numero === retido) continue;
+          emMontagem.delete(numero);
+          paginaDeEntrada.delete(numero);
+          await processar(completo);
         }
 
         // `hasNext: false` é o fim declarado pelo serviço. `null` é silêncio —
@@ -339,6 +421,7 @@ Deno.serve(
           break;
         }
 
+        stats.retidos = emMontagem.size;
         page++;
         await sleep(PAGE_DELAY_MS);
       }
@@ -361,8 +444,10 @@ Deno.serve(
           .update({
             last_error: message,
             ...(err instanceof TothAuthError ? { status: "expired" } : {}),
-            // Cursor congela onde parou: a próxima execução retoma a página.
-            pedidos_cursor: page,
+            // Cursor congela onde o que está pela metade COMEÇOU, não onde a
+            // falha aconteceu: retomar da página do erro deixaria o pedido
+            // retido com só a cauda dele.
+            pedidos_cursor: paginaDeRetomada(),
           })
           .eq("id", conn.id);
       }
@@ -406,6 +491,10 @@ Deno.serve(
           pedidos_lidos: stats.rows,
           itens_lidos: stats.items,
           sem_numero: stats.failed,
+          // Pedido cortado na fronteira e segurado para a próxima volta. Zero
+          // aqui com `has_next: true` é sinal de que a montagem não está agindo.
+          retidos: emMontagem.size,
+          valor_zero: stats.zeroValue,
           amostra,
           erros: errors,
         },
@@ -416,10 +505,12 @@ Deno.serve(
     await admin
       .from("toth_connections")
       .update({
-        // Parou no teto com mais adiante → guarda a página. Acabou a volta →
+        // Parou no teto com mais adiante → guarda a página em que o pedido
+        // retido COMEÇOU, não a última lida: ele não foi gravado, e retomar
+        // depois dele o deixaria pela metade para sempre. Acabou a volta →
         // zera, porque pedido muda de situação (NORMAL vira FATURADO) e
         // revisitar é o comportamento desejado.
-        pedidos_cursor: stopReason === "max_pages" && hasNext !== false ? page : 1,
+        pedidos_cursor: stopReason === "max_pages" && hasNext !== false ? paginaDeRetomada() : 1,
         last_pedidos_sync_at: new Date().toISOString(),
         ...(errors.length > 0 ? { last_error: errors[0] } : {}),
       })
