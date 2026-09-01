@@ -2,6 +2,7 @@ import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { OpenRouterClient } from "./openrouter-client.ts";
 import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
+import { isDeliveredSend, sentDocumentLabel } from "../_shared/copilot/document-delivery.ts";
 import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
 import { logRuntime } from "../_shared/logger.ts";
@@ -248,10 +249,15 @@ export class AgentEngine {
           .eq("action_type", "send_document")
           .eq("status", "completed");
 
-        sentDocuments = (sentDocs || []).map((d: any) => ({
-          fileName: d.payload?.file_name || d.payload?.document_id || "unknown",
-          documentId: d.payload?.document_id || "",
-        }));
+        // Só entra na seção "já enviados" o que REALMENTE chegou ao lead.
+        // Antes, uma supressão do dedup gravava `completed` e entrava aqui:
+        // o prompt mandava o modelo confirmar ao lead um envio que não houve.
+        sentDocuments = (sentDocs || [])
+          .filter((d: any) => isDeliveredSend(d.payload))
+          .map((d: any) => ({
+            fileName: sentDocumentLabel(d.payload),
+            documentId: d.payload?.document_id || "",
+          }));
       } catch (e) {
         console.warn("[AgentEngine] Failed to load sent documents (non-fatal):", e);
       }

@@ -76,6 +76,18 @@ export function buildIdempotencyKey(
       return `create_field_${organizationId}_${params.field_name}`;
     case "update_qualification_score":
       return `update_score_${leadId}_${params.score}_${turnOrTs}`;
+    case "send_document":
+      // Sem o document_id a chave cai no `default` e fica IGUAL para todas as
+      // fotos do mesmo turno (a principal e as extras compartilham o mesmo
+      // turnCount — agent-engine.ts:800 e :836). O índice único parcial
+      // rejeitava a 2ª com 23505 e `ai-queue.ts` engolia como duplicata:
+      // o cliente pedia 3 fotos e recebia 1 (relatado Forever Bella 2026-07-20;
+      // em prod, 546 pares consecutivos de send_document e NENHUM com menos de
+      // 2s de intervalo — a marca de que as extras nunca chegavam à fila).
+      // Repetir o MESMO documento no mesmo turno continua colapsando.
+      // `leadId || organizationId` espelha o ramo `default` — sem isso a chave
+      // perde o escopo quando a ação chega sem lead.
+      return `send_document_${leadId || organizationId}_${params.document_id}_${turnOrTs}`;
     default:
       return `${actionType}_${leadId || organizationId}_${turnOrTs}`;
   }
