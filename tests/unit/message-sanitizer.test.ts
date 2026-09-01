@@ -525,6 +525,133 @@ describe("sanitizeAssistantMessage", () => {
     expect(r.text).toBe(raw);
     expect(r.droppedBlocks).toBe(0);
   });
+
+  // ============================================================
+  // Passo 1f — NARRAÇÃO DE MÍDIA ENTRE COLCHETES
+  // Texto pt-BR: sem `<...>`, sem JSON, sem "action", sem namespace.
+  // Payloads copiados verbatim de conversation_messages em PROD.
+  // ============================================================
+
+  it("strips the exact Forever Bella bracket leak (2026-09-01, chegou no WhatsApp do lead)", () => {
+    const raw =
+      "[Enviando Banho de Verniz - PRODUTO 1.png]  \n" +
+      "[Enviando Banho de Verniz - EXPLICACAO 1.png] O Banho de Verniz é perfeito " +
+      "para reconstruir e dar brilho, com ativos que fortalecem e protegem. " +
+      "Quer que eu te mande o modo de uso completo?";
+    const r = sanitizeAssistantMessage(raw, true);
+    expect(r.text).toBe(
+      "O Banho de Verniz é perfeito para reconstruir e dar brilho, com ativos que " +
+        "fortalecem e protegem. Quer que eu te mande o modo de uso completo?",
+    );
+    expect(r.text).not.toContain("[");
+    expect(r.text).not.toContain(".png");
+    expect(r.droppedBlocks).toBe(2);
+  });
+
+  it("recovers the announced file name so the engine can actually send it", () => {
+    const raw = "[Enviando Banho de Verniz - PRODUTO 1.png] Olha que lindo!";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.recoveredMediaByName).toEqual({
+      file_name: "Banho de Verniz - PRODUTO 1.png",
+    });
+  });
+
+  it("strips bracket narration with no file name at all (2026-08-06)", () => {
+    const raw =
+      "[Enviando imagem dos modelos BP MINI e BP INOX 8,5L] Aqui estão os modelos " +
+      "BP MINI 4,7L e BP INOX 8,5L.";
+    const r = sanitizeAssistantMessage(raw, true);
+    expect(r.text).toBe("Aqui estão os modelos BP MINI 4,7L e BP INOX 8,5L.");
+    expect(r.recoveredMediaByName).toBeNull();
+    expect(r.droppedBlocks).toBe(1);
+  });
+
+  it("strips the catalog label form `[video] Arquivo.mp4` (2026-08-06)", () => {
+    const raw = "[video] Video BP FARINA em ação.mp4 Aqui está o vídeo da BP FARINA!";
+    const r = sanitizeAssistantMessage(raw, true);
+    expect(r.text).toBe("Aqui está o vídeo da BP FARINA!");
+    expect(r.text).not.toContain(".mp4");
+    expect(r.droppedBlocks).toBe(1);
+  });
+
+  it("keeps the file name intact when the label is also the first word of the file", () => {
+    const raw = "[video] Video BP FARINA em ação.mp4";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.recoveredMediaByName).toEqual({
+      file_name: "Video BP FARINA em ação.mp4",
+    });
+  });
+
+  it("drops the media-type word that follows the verb (`[Enviando imagem X.png]`)", () => {
+    const raw = "[Enviando imagem Kit Reconstrutor - PRODUTO 1.png]";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.recoveredMediaByName).toEqual({
+      file_name: "Kit Reconstrutor - PRODUTO 1.png",
+    });
+  });
+
+  it("strips the bare catalog label `[imagem]` used as a narration marker", () => {
+    const raw = "Olha só [imagem] que resultado!";
+    const r = sanitizeAssistantMessage(raw, true);
+    expect(r.text).toBe("Olha só que resultado!");
+  });
+
+  it("strips `[Anexo: catalogo.pdf]` (verb form with colon)", () => {
+    const raw = "Segue tudo. [Anexo: catalogo.pdf]";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe("Segue tudo.");
+    expect(r.recoveredMediaByName).toEqual({ file_name: "catalogo.pdf" });
+  });
+
+  it("does NOT eat a markdown link whose label starts with a send verb", () => {
+    const raw = "[Enviar pedido](https://loja.com/checkout) é só clicar aí.";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+  });
+
+  it("does NOT eat a markdown image `![imagem](url)`", () => {
+    const raw = "Olha: ![imagem](https://cdn.site.com/a.png)";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+  });
+
+  it("does NOT eat legitimate bracketed text that is not media narration", () => {
+    const raw = "O prazo [conforme combinado] é de 5 dias úteis. [Obs: sem frete]";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+  });
+
+  it("does NOT eat a bracket whose closing ] is only on the next line", () => {
+    const raw = "Enviar amanhã:\n[enviar\ntudo junto]";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+  });
+
+  it("does not disturb text with no brackets at all (fast path)", () => {
+    const raw = "Bom dia! O Banho de Verniz custa R$ 89,90 e o frete sai grátis.";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.text).toBe(raw);
+    expect(r.droppedBlocks).toBe(0);
+  });
+
+  it("does not overwrite a recoveredMediaByName already captured from a call-tag", () => {
+    const raw =
+      "<send_media(file='Tamanhos.jpeg')>\n[Enviando Outro Arquivo.png] pronto!";
+    const r = sanitizeAssistantMessage(raw, false);
+    expect(r.recoveredMediaByName).toEqual({ file_name: "Tamanhos.jpeg" });
+    expect(r.text).toBe("pronto!");
+  });
+
+  it("strips narration exposed only after a tool_call block is removed (defensive pass)", () => {
+    const raw =
+      '<tool_call>{"tool_name":"send_document","tool_arguments":{}}</tool_call>[Enviando Foto.png]';
+    const r = sanitizeAssistantMessage(raw, true);
+    expect(r.text).toBe("");
+  });
 });
 
 describe("splitByDelimiter", () => {

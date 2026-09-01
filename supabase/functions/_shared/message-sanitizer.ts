@@ -21,10 +21,15 @@
  *    Sem chave "action", escapava de TODOS os filtros (que só matcham
  *    `"action":"..."`) e chegava cru ao cliente. Mitigação: Passo 2b remove
  *    objetos JSON balanceados cujas chaves ⊆ allowlist de mídia.
+ * 5. Leak de NARRAÇÃO DE MÍDIA entre colchetes — o modelo escreve o envio em
+ *    português (`[Enviando Banho de Verniz - PRODUTO 1.png]`, `[video] X.mp4`)
+ *    em vez de só chamar o tool. Não tem `<...>`, não é JSON, não tem "action"
+ *    nem namespace: escapava de todos os passos acima. Mitigação: Passo 1f.
  *
  * Incidentes-fonte: Barulhinho Bom 2026-04-24 (JSON ReAct), 2026-05-21
- * (XML tool_call com gemini-3-flash-preview) e VitrineVET 2026-06-01
- * (diretiva `{"file":...}` sem action — documento preso em processing).
+ * (XML tool_call com gemini-3-flash-preview), VitrineVET 2026-06-01
+ * (diretiva `{"file":...}` sem action — documento preso em processing) e
+ * Forever Bella/Jefferson 2026-09-01 (narração entre colchetes).
  */
 
 /** Mapa tool_name (snake_case) → action token (UPPER_CASE) usado pelo executor. */
@@ -581,6 +586,124 @@ function stripNamespacedToolCalls(
   return { cleaned, dropped };
 }
 
+/**
+ * Vocabulário de VERBO de envio que pode abrir uma narração entre colchetes.
+ * Curado de propósito. "segue"/"seguem" ficam FORA: o prompt manda o agente
+ * escrever link, e `[Segue o link](https://...)` é markdown legítimo.
+ */
+const MEDIA_SEND_VERB_ALT =
+  "enviando|enviar|enviei|envio|envie|mandando|mandar|mandei|mando|" +
+  "anexando|anexar|anexado|anexo|compartilhando|compartilhar";
+
+/** Rótulos de TIPO de mídia — o formato que o próprio prompt usa no catálogo. */
+const MEDIA_TYPE_LABEL_ALT =
+  "imagem|imagens|image|foto|fotos|photo|v[ií]deo|videos|v[ií]deos|video|" +
+  "[áa]udio|audio|arquivo|documento|document|file|m[ií]dia|arte|cat[áa]logo";
+
+/** Extensões de arquivo de mídia (mesma lista de MEDIA_FILENAME_IN_ARG_RE). */
+const MEDIA_EXT_ALT =
+  "jpe?g|png|gif|webp|bmp|svg|mp4|mov|avi|mkv|webm|mp3|ogg|opus|wav|m4a|" +
+  "pdf|docx?|xlsx?|pptx?|csv";
+
+/**
+ * (A) `[<verbo de envio> ...]` — ex. `[Enviando Banho de Verniz - PRODUTO 1.png]`,
+ * `[Enviando imagem dos modelos BP MINI e BP INOX 8,5L]`, `[Anexo: catalogo.pdf]`.
+ */
+const MEDIA_NARRATION_VERB_RE = new RegExp(
+  `\\[\\s*(?:${MEDIA_SEND_VERB_ALT})\\b[^\\]\\n]{0,200}\\](?!\\()`,
+  "gi",
+);
+
+/**
+ * (B) rótulo de tipo `[imagem]` / `[video: X.mp4]`, arrastando junto o nome de
+ * arquivo que venha logo depois — ex. `[video] Video BP FARINA em ação.mp4`.
+ * É o formato literal da seção "MÍDIA DISPONÍVEL PARA ENVIAR" do system_prompt
+ * (`## [imagem] <nome>.png`), que o modelo copia ao narrar.
+ */
+const MEDIA_TYPE_LABEL_RE = new RegExp(
+  `\\[\\s*(?:${MEDIA_TYPE_LABEL_ALT})\\s*(?::[^\\]\\n]{0,200})?\\s*\\](?!\\()` +
+    `(?:[^\\n]{0,120}?\\.(?:${MEDIA_EXT_ALT})\\b)?`,
+  "gi",
+);
+
+/** Nome de arquivo dentro de uma narração (sem atravessar `[`/`]`/aspas). */
+const MEDIA_FILENAME_IN_NARRATION_RE = new RegExp(
+  `([^\\[\\]'"<>|\\n]*?\\.(?:${MEDIA_EXT_ALT}))\\b`,
+  "i",
+);
+
+/** Verbo/rótulo colado no começo do filename extraído (`Enviando X.png`). */
+const LEADING_SEND_VERB_RE = new RegExp(`^\\s*(?:${MEDIA_SEND_VERB_ALT})\\b[:\\s]*`, "i");
+const LEADING_TYPE_LABEL_RE = new RegExp(`^\\s*(?:${MEDIA_TYPE_LABEL_ALT})\\b(?:\\s+d[eoa]s?)?[:\\s]*`, "i");
+
+/**
+ * Extrai o filename de uma narração entre colchetes, tirando o verbo (e, se
+ * houve verbo, também o rótulo de tipo logo em seguida). O rótulo NÃO é
+ * removido sozinho: em `[video] Video BP FARINA em ação.mp4` a palavra "Video"
+ * faz parte do nome real do arquivo.
+ */
+function extractMediaFileNameFromNarration(match: string): string | null {
+  const m = match.match(MEDIA_FILENAME_IN_NARRATION_RE);
+  if (!m) return null;
+  let name = m[1].trim();
+  const withoutVerb = name.replace(LEADING_SEND_VERB_RE, "").trim();
+  if (withoutVerb !== name) {
+    name = withoutVerb;
+    // O rótulo só sai se sobrar nome de arquivo — em `[Anexo: catalogo.pdf]`
+    // "catalogo" É o arquivo, não o rótulo, e removê-lo deixaria ".pdf".
+    const withoutLabel = name.replace(LEADING_TYPE_LABEL_RE, "").trim();
+    if (withoutLabel.length > 0 && !withoutLabel.startsWith(".")) name = withoutLabel;
+  }
+  name = name.trim();
+  return name.length > 0 ? name : null;
+}
+
+/**
+ * Passo 1f — NARRAÇÃO DE MÍDIA ENTRE COLCHETES.
+ *
+ * O modelo descreve o envio em português corrente, em vez de (ou além de)
+ * chamar o tool nativo, e a narração chega crua ao WhatsApp do cliente:
+ *   `[Enviando Banho de Verniz - PRODUTO 1.png]`  Forever Bella 2026-09-01
+ *   `[Enviando imagem dos modelos BP MINI e BP INOX 8,5L]`      2026-08-06
+ *   `[video] Video BP FARINA em ação.mp4`                       2026-08-06
+ *
+ * Escapa de TODOS os passos anteriores: sem `<...>`, sem JSON, sem `"action"`,
+ * sem namespace. É texto pt-BR entre colchetes.
+ *
+ * Ancorado em vocabulário curado (NÃO regex genérica `\[.*\]`) pra não comer
+ * texto legítimo. Guardas: `]` na MESMA linha, miolo ≤ 200 chars, e nunca casa
+ * link markdown `[texto](url)` — daí o `(?!\()` nas duas formas.
+ */
+function stripMediaNarrationBrackets(
+  input: string,
+): { cleaned: string; dropped: number; mediaFileName: string | null } {
+  if (!input || input.indexOf("[") === -1) {
+    return { cleaned: input, dropped: 0, mediaFileName: null };
+  }
+  let dropped = 0;
+  let mediaFileName: string | null = null;
+  let cleaned = input;
+
+  for (const re of [MEDIA_NARRATION_VERB_RE, MEDIA_TYPE_LABEL_RE]) {
+    re.lastIndex = 0;
+    cleaned = cleaned.replace(re, (match) => {
+      dropped += 1;
+      if (!mediaFileName) {
+        const name = extractMediaFileNameFromNarration(match);
+        if (name) mediaFileName = name;
+      }
+      return "";
+    });
+    re.lastIndex = 0;
+  }
+
+  if (dropped > 0) {
+    // A remoção deixa buraco no meio da frase e linha só de espaços.
+    cleaned = cleaned.replace(/[ \t]{2,}/g, " ").replace(/^[ \t]+$/gm, "");
+  }
+  return { cleaned, dropped, mediaFileName };
+}
+
 export function sanitizeAssistantMessage(
   raw: string,
   alreadyHasAction: boolean,
@@ -664,6 +787,18 @@ export function sanitizeAssistantMessage(
   text = nsStrip.cleaned;
   droppedBlocks += nsStrip.dropped;
 
+  // Passo 1f: narração de mídia entre colchetes (`[Enviando X.png]`,
+  // `[video] X.mp4`). Texto pt-BR — escapa de tudo acima. Incidentes Forever
+  // Bella 2026-09-01 e 2026-08-06. Captura o filename como candidato a
+  // recovery pelo MESMO caminho da tag-de-chamada (KomBag): quando o modelo
+  // narrou em vez de chamar o tool, o engine ainda consegue mandar o arquivo.
+  const narrationStrip = stripMediaNarrationBrackets(text);
+  text = narrationStrip.cleaned;
+  droppedBlocks += narrationStrip.dropped;
+  if (narrationStrip.mediaFileName && !recoveredMediaByName) {
+    recoveredMediaByName = { file_name: narrationStrip.mediaFileName };
+  }
+
   // Passo 2: objetos JSON soltos contendo "action":"..."
   const blocks = extractActionJsonBlocks(text);
   if (blocks.length > 0) {
@@ -724,6 +859,9 @@ export function sanitizeAssistantMessage(
     // head órfão `[prefixo:]default_api:tool` sem grupo balanceado (LLM cortou)
     .replace(NAMESPACED_HEAD_RE, "")
     .trim();
+  // Defensivo: narração entre colchetes que só ficou visível depois dos strips
+  // acima (ex. `<tool_call>...</tool_call> [Enviando X.png]`). Idempotente.
+  text = stripMediaNarrationBrackets(text).cleaned.trim();
   INLINE_TOOL_TAG_RE.lastIndex = 0;
   FUNCTION_CALL_TAG_RE.lastIndex = 0;
   NAMESPACED_HEAD_RE.lastIndex = 0;
