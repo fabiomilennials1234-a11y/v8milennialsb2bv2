@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Torque — CRM de Gestão Comercial especializado em B2B</title>
+  <meta name="description" content="Tenha controle do seu comercial com um CRM especializado em B2B. Assista ao vídeo e agende uma demonstração ao vivo de 30 minutos." />
+  <meta property="og:title" content="Torque — CRM de Gestão Comercial 100% B2B" />
+  <meta property="og:description" content="Acompanhe seus vendedores, organize oportunidades e aumente a produtividade da sua operação B2B." />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#161519" />
+  <meta name="robots" content="noindex" />
+
+  <link rel="icon" type="image/png" href="assets/TORQUE_Logo_Icone.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://app.cal.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css?v=20260907" />
+  <link rel="stylesheet" href="css/prints.css?v=20260907" />
+</head>
+<body>
+
+  <!-- ============ TOPO MÍNIMO ============ -->
+  <header class="top">
+    <img src="assets/TORQUE_Logo_Claro_Horizontal.png" alt="Torque" width="132" height="21" />
+  </header>
+
+  <!-- ============ 01 · HERO — texto + VSL vertical ============ -->
+  <section class="hero hero--wide" id="topo">
+    <canvas id="bgCanvas" class="hero__canvas" aria-hidden="true"></canvas>
+    <div class="hero__grid-bg" aria-hidden="true"></div>
+
+    <div class="container hero__inner">
+      <div class="hero__copy">
+        <p class="eyebrow" data-hero-fade>
+          <span class="eyebrow__hex" aria-hidden="true"></span>
+          CRM de Gestão Comercial · Especializado em B2B
+        </p>
+        <h1 class="hero__title" data-hero-fade>
+          Tenha controle do seu comercial com um CRM <em>especializado em B2B</em>
+        </h1>
+        <p class="hero__sub" data-hero-fade>
+          Acompanhe o que seus vendedores estão fazendo, saiba quais oportunidades estão
+          paradas e dê ao seu time ferramentas para falar com mais leads, fazer mais
+          follow-ups e vender mais.
+        </p>
+        <p class="hero__sub hero__sub--video" data-hero-fade>
+          <strong>Assista ao vídeo abaixo e veja como o Torque coloca sua operação comercial na sua mão.</strong>
+        </p>
+        <div class="hero__cta" data-hero-fade>
+          <a href="#agendar" class="btn btn--primary btn--lg">
+            <span>Agendar minha demonstração →</span>
+          </a>
+          <p class="hero__cta-note">Demonstração ao vivo · 30 minutos · Sem compromisso</p>
+        </div>
+      </div>
+
+      <!-- VSL: arquivo VSL-Curta_Torque.mp4 na raiz do site (public_html) → /VSL-Curta_Torque.mp4 -->
+      <div class="hero__video" data-hero-fade>
+        <div class="vsl vsl--wide" id="vslWrap">
+          <!-- Com src definido, o vídeo dá autoplay mudo e o overlay reinicia com áudio ao clique. -->
+          <video id="vslVideo" class="vsl__video" src="https://lightseagreen-goat-143541.hostingersite.com/torque/VSL-Curta_Torque.mp4" playsinline muted loop preload="metadata" poster="assets/vsl-torque-poster.jpg"></video>
+
+          <div class="vsl__placeholder" id="vslPlaceholder" aria-hidden="true">
+            <img src="assets/TORQUE_Logo_Icone.png" alt="" width="64" height="56" />
+            <span>VSL Torque</span>
+          </div>
+
+          <button class="vsl__overlay" id="vslOverlay" type="button" aria-label="Ativar o som do vídeo">
+            <span class="vsl__card">
+              <span class="vsl__card-title">Seu vídeo já começou</span>
+              <span class="vsl__card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="30" height="30"><path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+              </span>
+              <span class="vsl__card-hint">Clique para ouvir</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 03 · AGENDAMENTO ============ -->
+  <section class="section section--agendar" id="agendar">
+    <div class="container agendar">
+      <div class="agendar__copy" data-reveal>
+        <p class="eyebrow"><span class="eyebrow__hex" aria-hidden="true"></span>O próximo passo</p>
+        <h2 class="h2">Agende sua demonstração com quem entende de <em>operação comercial B2B</em></h2>
+        <p class="prose">
+          Não é uma apresentação genérica de software. Primeiro entendemos como sua empresa vende.
+          Depois mostramos como o Torque pode entrar na sua operação.
+        </p>
+        <ul class="checks">
+          <li data-reveal>
+            <span class="checks__mark" aria-hidden="true">✓</span>
+            <div>
+              <h3>Especialistas em B2B</h3>
+              <p>Converse com quem entende de venda consultiva, prospecção, follow-up,
+              negociação, carteira e gestão de equipe comercial.</p>
+            </div>
+          </li>
+          <li data-reveal>
+            <span class="checks__mark" aria-hidden="true">✓</span>
+            <div>
+              <h3>Demonstração aplicada à sua operação</h3>
+              <p>Veja como o Torque pode ser utilizado no seu processo, em vez de assistir
+              a uma apresentação cheia de funcionalidades que você nunca vai usar.</p>
+            </div>
+          </li>
+          <li data-reveal>
+            <span class="checks__mark" aria-hidden="true">✓</span>
+            <div>
+              <h3>Enxergue onde sua operação pode melhorar</h3>
+              <p>Entenda como acompanhar vendedores, encontrar oportunidades paradas,
+              aumentar a produtividade do time e ter mais controle sobre seu comercial.</p>
+            </div>
+          </li>
+          <li data-reveal>
+            <span class="checks__mark" aria-hidden="true">✓</span>
+            <div>
+              <h3>Veja a discadora funcionando</h3>
+              <p>Entenda como seu vendedor pode fazer mais tentativas de contato sem precisar
+              passar boa parte do dia ligando lead por lead e esperando alguém atender.</p>
+            </div>
+          </li>
+        </ul>
+      </div>
+
+      <div class="agendar__form" data-reveal>
+        <div class="formcard">
+          <h3 class="formcard__title">Agende sua demonstração do Torque</h3>
+          <p class="formcard__sub" id="formSub">Preencha seus dados para continuar:</p>
+
+          <form class="form" id="demoForm" novalidate>
+
+            <div class="form__progress">
+              <div class="form__progress-top">
+                <span class="form__progress-label" id="stepLabel">Passo 01 · Seus dados</span>
+                <span class="form__progress-count" id="stepCount">1/2</span>
+              </div>
+              <div class="form__progress-bar"><span id="stepBar" style="width:50%"></span></div>
+            </div>
+
+            <!-- PASSO 01 -->
+            <div class="form__step is-active" data-step="0">
+              <div class="form__field">
+                <label for="f-nome">Seu nome *</label>
+                <input type="text" id="f-nome" name="nome" autocomplete="name" required placeholder="Como podemos te chamar?" />
+              </div>
+              <div class="form__field">
+                <label for="f-whats">WhatsApp — DDD + número *</label>
+                <div class="form__phone">
+                  <span class="form__ddi">+55</span>
+                  <input type="tel" id="f-whats" name="whatsapp" autocomplete="tel-national" inputmode="tel" required placeholder="(00) 00000-0000" />
+                </div>
+              </div>
+              <div class="form__field">
+                <label for="f-email">Seu melhor e-mail *</label>
+                <input type="email" id="f-email" name="email" autocomplete="email" required placeholder="voce@empresa.com.br" />
+              </div>
+              <div class="form__nav">
+                <button type="button" class="btn btn--primary btn--lg btn--full" data-next><span>Continuar →</span></button>
+              </div>
+              <p class="form__hint">Leva menos de 1 minuto.</p>
+            </div>
+
+            <!-- PASSO 02 · QUALIFICAÇÃO -->
+            <div class="form__step" data-step="1">
+              <div class="form__field">
+                <label for="f-segmento">Qual é o segmento da sua empresa? *</label>
+                <select id="f-segmento" name="segmento" required>
+                  <option value="" disabled selected>Selecione o segmento</option>
+                  <option>Alumínio</option>
+                  <option>Agro</option>
+                  <option>Metalúrgico</option>
+                  <option>Plásticos e Embalagens</option>
+                  <option>Farmacêutica e Cosmética</option>
+                  <option>Móveis planejados e marcenaria em escala</option>
+                  <option>Alimentos e Bebidas</option>
+                  <option>Distribuidora</option>
+                  <option>Serviços B2B</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+              <fieldset class="form__field">
+                <legend>Quantas pessoas trabalham no seu comercial? *</legend>
+                <div class="chips" role="radiogroup">
+                  <label class="chip"><input type="radio" name="pessoas" value="1 a 2" required /><span>1 a 2</span></label>
+                  <label class="chip"><input type="radio" name="pessoas" value="3 a 5" /><span>3 a 5</span></label>
+                  <label class="chip"><input type="radio" name="pessoas" value="6 a 10" /><span>6 a 10</span></label>
+                  <label class="chip"><input type="radio" name="pessoas" value="11 a 20" /><span>11 a 20</span></label>
+                  <label class="chip"><input type="radio" name="pessoas" value="Mais de 20" /><span>Mais de 20</span></label>
+                </div>
+              </fieldset>
+              <div class="form__field">
+                <label for="f-desafio">Qual é o principal desafio do seu comercial hoje? *</label>
+                <select id="f-desafio" name="desafio" required>
+                  <option value="" disabled selected>Selecione uma opção</option>
+                  <option>Acompanhar os vendedores</option>
+                  <option>Fazer mais contatos com os leads</option>
+                  <option>Aumentar a produtividade do time</option>
+                  <option>Melhorar follow-up</option>
+                  <option>Organizar o funil</option>
+                  <option>Ter métricas confiáveis</option>
+                  <option>Aumentar conversão</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+              <div class="form__nav form__nav--split">
+                <button type="button" class="form__back" data-prev>← Voltar</button>
+                <button type="submit" class="btn btn--primary btn--lg"><span>Ver horários disponíveis →</span></button>
+              </div>
+            </div>
+
+            <p class="form__success" id="formSuccess" hidden>✓ Dados recebidos. Agora escolhe o melhor horário para a demonstração.</p>
+          <p class="form__error" id="formError" hidden>Não conseguimos enviar agora. Tenta de novo em alguns segundos — se persistir, fala com a gente pelo WhatsApp.</p>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 02 · BLOCO DE APOIO ============ -->
+  <section class="section section--apoio">
+    <div class="container">
+      <h2 class="apoio__title" data-reveal>
+        Mais <em>controle</em> para quem gerencia. Mais <em>produtividade</em> para quem vende.
+      </h2>
+      <div class="apoio" data-reveal-group>
+        <article class="apoio__card" data-reveal>
+          <div class="apoio__print">
+            <div class="pm" role="img" aria-label="Tela de funil do Torque com negócios em Contato, Proposta e Fechamento">
+              <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Funil · Vendas B2B</span></div>
+              <div class="pm__body">
+                <div class="pm__cols">
+                  <div>
+                    <div class="pm__colhead"><span><i></i>Contato</span><b>14</b></div>
+                    <div class="pm__card"><b>Metalúrgica Andrade</b><small>2 tentativas · hoje</small></div>
+                    <div class="pm__card"><b>AgroSul Insumos</b><small>sem contato · <span class="c-red">2d</span></small></div>
+                  </div>
+                  <div>
+                    <div class="pm__colhead"><span><i style="background:#ED9227"></i>Proposta</span><b>6</b></div>
+                    <div class="pm__card pm__card--hot"><b>Embalagens Rio Claro</b><small class="c-orange">R$ 48.000 · follow-up amanhã</small></div>
+                    <div class="pm__card"><b>Distribuidora Pampa</b><small>R$ 22.500 · <span class="c-yellow">parado 6d</span></small></div>
+                  </div>
+                  <div>
+                    <div class="pm__colhead"><span><i style="background:#22c55e"></i>Fechamento</span><b>3</b></div>
+                    <div class="pm__card pm__card--won"><b>Móveis Planalto</b><small class="c-green">R$ 61.200 · contrato enviado</small></div>
+                  </div>
+                </div>
+                <div class="pm__foot"><span>Vendedor: <b>Ana</b> · 23 negócios ativos</span><span class="c-orange">Ver todos →</span></div>
+              </div>
+            </div>
+          </div>
+          <svg class="apoio__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5"/><circle cx="17" cy="9" r="2.2"/><path d="M15.5 14.6c2.6-.3 4.5 1 5 3.4"/></svg>
+          <h3>Gestão do time</h3>
+          <p>Saiba o que está acontecendo com vendedores, oportunidades, atividades e follow-ups.</p>
+        </article>
+        <article class="apoio__card" data-reveal>
+          <div class="apoio__print">
+            <div class="pm" role="img" aria-label="Tela da discadora do Torque discando vários leads e conectando o vendedor com o primeiro que atende">
+              <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Discadora · Fila da Ana</span></div>
+              <div class="pm__body">
+                <div class="pm__kpis">
+                  <div class="pm__kpi"><small>Tentativas hoje</small><b>84</b><i>▲ 3x o manual</i></div>
+                  <div class="pm__kpi"><small>Conversas</small><b>19</b><i>22,6% atendem</i></div>
+                  <div class="pm__kpi"><small>Tempo em fila</small><b>0s</b><i style="color:#8a857a">sem espera</i></div>
+                </div>
+                <div class="pm__row pm__row--hot"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.78.65 2.63a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.45-1.22a2 2 0 0 1 2.11-.45c.85.31 1.73.53 2.63.65A2 2 0 0 1 22 16.92z"/></svg><span><b>Embalagens Rio Claro</b> <em>· em conversa</em></span><i class="pm__tag pm__tag--ok pm__timer">00:42</i></div>
+                <div class="pm__row"><span><em>Discando</em> Distribuidora Pampa</span><em class="pm__dots"></em></div>
+                <div class="pm__row"><span><em>Discando</em> AgroSul Insumos</span><em class="pm__dots"></em></div>
+                <div class="pm__row"><span><em>Próximo</em> Metalúrgica Andrade</span><em>fila</em></div>
+                <div class="pm__live">Vendedor na linha com o primeiro que atender</div>
+              </div>
+            </div>
+          </div>
+          <svg class="apoio__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.12.9.34 1.78.65 2.63a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.45-1.22a2 2 0 0 1 2.11-.45c.85.31 1.73.53 2.63.65A2 2 0 0 1 22 16.92z"/></svg>
+          <h3>Mais conversas</h3>
+          <p>Use ferramentas como a discadora para reduzir o tempo perdido em tentativas de contato
+          e colocar o vendedor mais tempo falando com potenciais clientes.</p>
+        </article>
+        <article class="apoio__card" data-reveal>
+          <div class="apoio__print">
+            <div class="pm" role="img" aria-label="Tela de automações do Torque com workflows ativos">
+              <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Automações · Workflows</span></div>
+              <div class="pm__body">
+                <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Lead sem contato em 24h → <em>criar tarefa p/ vendedor</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+                <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg><span>Proposta parada 5 dias → <em>follow-up automático</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+                <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFD400" stroke-width="2"><path d="M20 8a8 8 0 1 0 1.5 6.5"/><path d="M21 3v5h-5"/></svg><span>Base fria 90 dias → <em>campanha de reativação</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+                <div class="pm__row pm__row--hot"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><rect x="5" y="7" width="14" height="11" rx="2"/><path d="M12 7V4M9 12h.01M15 12h.01"/></svg><span>Copilot: novo lead → <em>qualifica e encaminha</em></span><i class="pm__tag pm__tag--ia">IA</i></div>
+                <div class="pm__live">Executando · 247 ações processadas hoje</div>
+              </div>
+            </div>
+          </div>
+          <svg class="apoio__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8L4 5z"/></svg>
+          <h3>Processo comercial</h3>
+          <p>Organize funil, follow-ups, automações e métricas dentro de uma operação pensada
+          para vendas B2B.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 04 · POSICIONAMENTO ============ -->
+  <section class="section section--why">
+    <div class="container container--narrow">
+      <div class="section__head section__head--center" data-reveal>
+        <p class="eyebrow eyebrow--center"><span class="eyebrow__hex" aria-hidden="true"></span>100% B2B</p>
+        <h2 class="h2">Não fizemos um CRM que também serve para B2B.<br /><em>Fizemos um CRM para B2B.</em></h2>
+      </div>
+      <p class="prose prose--center" data-reveal>Venda B2B tem outro ritmo.</p>
+    </div>
+
+    <div class="container hive-wrap" data-reveal>
+      <div class="hive" id="hive" role="tablist" aria-label="Etapas da venda B2B">
+        <div class="hive__row">
+          <button class="hex is-on" type="button" role="tab" aria-selected="true" data-hex="0"><span class="hex__n">01</span><span class="hex__t">Prospecção</span></button>
+          <button class="hex" type="button" role="tab" aria-selected="false" data-hex="1"><span class="hex__n">02</span><span class="hex__t">Tentativa<br />de contato</span></button>
+          <button class="hex" type="button" role="tab" aria-selected="false" data-hex="2"><span class="hex__n">03</span><span class="hex__t">Diagnóstico</span></button>
+          <button class="hex" type="button" role="tab" aria-selected="false" data-hex="3"><span class="hex__n">04</span><span class="hex__t">Reunião</span></button>
+        </div>
+        <div class="hive__row hive__row--offset">
+          <button class="hex" type="button" role="tab" aria-selected="false" data-hex="4"><span class="hex__n">05</span><span class="hex__t">Proposta</span></button>
+          <button class="hex" type="button" role="tab" aria-selected="false" data-hex="5"><span class="hex__n">06</span><span class="hex__t">Negociação</span></button>
+          <button class="hex" type="button" role="tab" aria-selected="false" data-hex="6"><span class="hex__n">07</span><span class="hex__t">Follow-up</span></button>
+          <button class="hex" type="button" role="tab" aria-selected="false" data-hex="7"><span class="hex__n">08</span><span class="hex__t">Ciclo<br />comercial</span></button>
+        </div>
+        <p class="hive__hint" aria-hidden="true"><span></span> passe o mouse sobre uma etapa</p>
+      </div>
+
+      <div class="hive__panel" id="hivePanel">
+
+        <div class="hive__item is-on" data-panel="0" role="tabpanel">
+          <p class="hive__label"><b>01</b> Prospecção</p>
+          <p class="hive__desc">Leads entram de várias fontes e caem na base já com origem e responsável.</p>
+          <div class="pm" role="img" aria-label="Lista de leads recém-captados com origem">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Leads · Entradas de hoje</span></div>
+            <div class="pm__body">
+              <div class="pm__kpis">
+                <div class="pm__kpi"><small>Novos hoje</small><b>12</b><i>▲ 4 vs ontem</i></div>
+                <div class="pm__kpi"><small>Meta Ads</small><b>7</b><i style="color:#93c5fd">58%</i></div>
+                <div class="pm__kpi"><small>Sem contato</small><b class="c-red">3</b><i style="color:#8a857a">há +2h</i></div>
+              </div>
+              <div class="pm__row pm__row--hot"><span><b>Cintya Sousa</b> <em>· Magic Color</em></span><i class="pm__tag" style="background:rgba(59,130,246,.12);color:#93c5fd">Meta Ads</i></div>
+              <div class="pm__row"><span><b>Washington Nascimento</b> <em>· WN Alimentos</em></span><i class="pm__tag pm__tag--ok">Indicação</i></div>
+              <div class="pm__row"><span><b>Max Holanda</b> <em>· Mimbo Açaí</em></span><i class="pm__tag" style="background:rgba(237,147,38,.12);color:#f0a94f">Site</i></div>
+              <div class="pm__live">Distribuição automática por round-robin</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hive__item" data-panel="1" role="tabpanel">
+          <p class="hive__label"><b>02</b> Tentativa de contato</p>
+          <p class="hive__desc">A discadora liga para vários leads e coloca o vendedor na linha com quem atender primeiro.</p>
+          <div class="pm" role="img" aria-label="Discadora ligando para vários leads">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Discadora · Fila da Ana</span></div>
+            <div class="pm__body">
+              <div class="pm__kpis">
+                <div class="pm__kpi"><small>Tentativas hoje</small><b>84</b><i>▲ 3x o manual</i></div>
+                <div class="pm__kpi"><small>Conversas</small><b>19</b><i>22,6% atendem</i></div>
+                <div class="pm__kpi"><small>Tempo em fila</small><b>0s</b><i style="color:#8a857a">sem espera</i></div>
+              </div>
+              <div class="pm__row pm__row--hot"><span><b>Embalagens Rio Claro</b> <em>· em conversa</em></span><i class="pm__tag pm__tag--ok pm__timer">00:42</i></div>
+              <div class="pm__row"><span><em>Discando</em> Distribuidora Pampa</span><em class="pm__dots"></em></div>
+              <div class="pm__row"><span><em>Discando</em> AgroSul Insumos</span><em class="pm__dots"></em></div>
+              <div class="pm__live">Vendedor na linha com o primeiro que atender</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hive__item" data-panel="2" role="tabpanel">
+          <p class="hive__label"><b>03</b> Diagnóstico</p>
+          <p class="hive__desc">A ficha do lead concentra qualificação, campos do segmento e score — sem planilha paralela.</p>
+          <div class="pm" role="img" aria-label="Ficha de qualificação do lead com score">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Lead · Metalúrgica Andrade</span></div>
+            <div class="pm__body">
+              <div class="pm__fields">
+                <div class="pm__field"><small>Segmento</small><b>Metalúrgico</b></div>
+                <div class="pm__field"><small>Funcionários</small><b>45</b></div>
+                <div class="pm__field"><small>Orçamento</small><b class="c-orange">R$ 150.000</b></div>
+                <div class="pm__field"><small>Decisor</small><b>Ricardo Tavares</b></div>
+              </div>
+              <div class="pm__score"><small>Score de qualificação</small><span><i style="width:78%"></i></span><b>78</b></div>
+              <div class="pm__insight"><span>★</span><span><b>Copilot:</b> perfil ideal — indústria com time comercial de 6 pessoas e ERP integrado. Sugerir reunião de diagnóstico.</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hive__item" data-panel="3" role="tabpanel">
+          <p class="hive__label"><b>04</b> Reunião</p>
+          <p class="hive__desc">Reuniões agendadas, lembretes automáticos e no-show rastreado por vendedor.</p>
+          <div class="pm" role="img" aria-label="Agenda com reunião de diagnóstico marcada">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Agenda · Quinta, 14 de ago</span></div>
+            <div class="pm__body">
+              <div class="pm__card pm__card--hot"><b>14:00 · Reunião de diagnóstico</b><small>Embalagens Rio Claro · Paula Lima · Google Meet</small><small class="c-green">✓ lembrete enviado por WhatsApp</small></div>
+              <div class="pm__card"><b>15:30 · Apresentação da proposta</b><small>Móveis Planalto · Sérgio Dias · presencial</small></div>
+              <div class="pm__card"><b>17:00 · Follow-up de negociação</b><small>Distribuidora Pampa · Jorge Ruas · ligação</small></div>
+              <div class="pm__foot"><span>No-show do mês: <b class="c-green">4%</b></span><span class="c-orange">Ver agenda →</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hive__item" data-panel="4" role="tabpanel">
+          <p class="hive__label"><b>05</b> Proposta</p>
+          <p class="hive__desc">Cada proposta com valor, status e rastreio de visualização — e follow-up a um clique.</p>
+          <div class="pm" role="img" aria-label="Proposta enviada com valor e status">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Proposta #1042 · Embalagens Rio Claro</span></div>
+            <div class="pm__body">
+              <div class="pm__kpis">
+                <div class="pm__kpi"><small>Valor</small><b class="c-orange">R$ 48.000</b><i style="color:#8a857a">12 meses</i></div>
+                <div class="pm__kpi"><small>Enviada</small><b>há 2d</b><i style="color:#8a857a">por e-mail</i></div>
+                <div class="pm__kpi"><small>Visualizada</small><b>3x</b><i>última há 1h</i></div>
+              </div>
+              <div class="pm__row pm__row--hot"><span><b>Aguardando retorno</b> <em>· follow-up programado para amanhã 09:00</em></span><i class="pm__tag" style="background:rgba(255,212,0,.12);color:#ffd400">PENDENTE</i></div>
+              <div class="pm__row"><span><em>Itens:</em> Plano Pro · 6 usuários · Discadora</span><em>R$ 4.000/mês</em></div>
+              <div class="pm__foot"><span>Probabilidade: <b class="c-green">65%</b></span><span class="c-orange">Enviar follow-up →</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hive__item" data-panel="5" role="tabpanel">
+          <p class="hive__label"><b>06</b> Negociação</p>
+          <p class="hive__desc">Histórico completo do negócio: cada concessão, aprovação e objeção registrada.</p>
+          <div class="pm" role="img" aria-label="Linha do tempo de negociação de um negócio">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Negócio · Distribuidora Pampa</span></div>
+            <div class="pm__body">
+              <div class="pm__kpis">
+                <div class="pm__kpi"><small>Valor</small><b>R$ 22.500</b><i style="color:#8a857a">etapa Negociação</i></div>
+                <div class="pm__kpi"><small>Probabilidade</small><b class="c-orange">60%</b><i style="color:#8a857a">IA</i></div>
+                <div class="pm__kpi"><small>Na etapa há</small><b class="c-yellow">6d</b><i class="c-red">acima da média</i></div>
+              </div>
+              <ul class="pm__tl">
+                <li><i></i><span><b>Proposta enviada</b> <em>· R$ 24.400 · há 9 dias</em></span></li>
+                <li><i></i><span><b>Cliente pediu 8% de desconto</b> <em>· há 6 dias</em></span></li>
+                <li class="is-hot"><i></i><span><b>Desconto em aprovação</b> <em>· gestor notificado</em></span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="hive__item" data-panel="6" role="tabpanel">
+          <p class="hive__label"><b>07</b> Follow-up</p>
+          <p class="hive__desc">Automações mantêm o processo andando mesmo quando a rotina aperta.</p>
+          <div class="pm" role="img" aria-label="Automações de follow-up ativas">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Automações · Follow-ups</span></div>
+            <div class="pm__body">
+              <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Lead sem contato em 24h → <em>criar tarefa p/ vendedor</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+              <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg><span>Proposta parada 5 dias → <em>follow-up automático</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+              <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFD400" stroke-width="2"><path d="M20 8a8 8 0 1 0 1.5 6.5"/><path d="M21 3v5h-5"/></svg><span>Base fria 90 dias → <em>campanha de reativação</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+              <div class="pm__row pm__row--hot"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><rect x="5" y="7" width="14" height="11" rx="2"/><path d="M12 7V4M9 12h.01M15 12h.01"/></svg><span>Copilot: novo lead → <em>qualifica e encaminha</em></span><i class="pm__tag pm__tag--ia">IA</i></div>
+              <div class="pm__live">Executando · 247 ações processadas hoje</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="hive__item" data-panel="7" role="tabpanel">
+          <p class="hive__label"><b>08</b> Ciclo comercial</p>
+          <p class="hive__desc">Quanto tempo cada etapa leva — e onde o ciclo está travando.</p>
+          <div class="pm" role="img" aria-label="Duração média de cada etapa do ciclo comercial">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Métricas · Ciclo comercial</span></div>
+            <div class="pm__body">
+              <div class="pm__kpis">
+                <div class="pm__kpi"><small>Ciclo médio</small><b>38d</b><i>▼ 6d vs trimestre</i></div>
+                <div class="pm__kpi"><small>Conversão</small><b>11,4%</b><i>▲ 2,1pp</i></div>
+                <div class="pm__kpi"><small>Gargalo</small><b class="c-red">Negociação</b><i style="color:#8a857a">16d</i></div>
+              </div>
+              <div class="pm__stages">
+                <div class="pm__stage"><small>Contato</small><span><i style="width:11%"></i></span><b>4d</b></div>
+                <div class="pm__stage"><small>Diagnóstico</small><span><i style="width:16%"></i></span><b>6d</b></div>
+                <div class="pm__stage"><small>Proposta</small><span><i style="width:32%"></i></span><b>12d</b></div>
+                <div class="pm__stage pm__stage--hot"><small>Negociação</small><span><i style="width:42%"></i></span><b>16d</b></div>
+              </div>
+              <div class="pm__insight"><span>★</span><span><b>Oráculo:</b> negócios acima de R$ 20k ficam 2x mais tempo em Negociação — alçada de desconto pode encurtar o ciclo.</span></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="container container--narrow">
+      <p class="prose prose--center" data-reveal>
+        E tem uma equipe que precisa ser acompanhada durante todo esse processo.
+        <strong>O Torque foi desenvolvido para ajudar empresas B2B a gerenciar vendedores,
+        organizar oportunidades, aumentar produtividade e ter mais controle sobre a
+        operação comercial.</strong>
+      </p>
+      <p class="statement" data-reveal><em>Gestão comercial feita por quem entende de B2B.</em></p>
+    </div>
+  </section>
+
+  <!-- ============ 05 · CTA FINAL ============ -->
+  <section class="final">
+    <div class="final__glow" aria-hidden="true"></div>
+    <div class="container container--narrow final__inner">
+      <p class="eyebrow eyebrow--center" data-reveal><span class="eyebrow__hex" aria-hidden="true"></span>Veja o Torque funcionando</p>
+      <h2 class="final__title" data-reveal>Pronto para ter mais controle sobre o <em>seu comercial</em>?</h2>
+      <p class="prose prose--center" data-reveal>
+        Agende uma demonstração e veja como o Torque pode ajudar sua empresa a acompanhar
+        vendedores, trabalhar mais oportunidades e aumentar a produtividade da sua operação B2B.
+      </p>
+      <div class="final__cta" data-reveal>
+        <a href="#agendar" class="btn btn--primary btn--lg"><span>Agendar minha demonstração →</span></a>
+        <p>30 minutos · Demonstração ao vivo · Sem compromisso</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 · RODAPÉ ============ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+      <img src="assets/TORQUE_Logo_Claro_Horizontal.png" alt="Torque" width="140" height="22" class="footer__logo" />
+      <p class="footer__legal">© 2026 Milennials · Torque. Todos os direitos reservados.</p>
+      <p class="footer__links">
+        <a href="#">Política de Privacidade</a> · <a href="#">Termos de Uso</a>
+      </p>
+    </div>
+  </footer>
+
+  <!-- ============ AGENDAMENTO CAL.COM (após o formulário) ============ -->
+  <div class="calmodal" id="calModal" role="dialog" aria-modal="true" aria-labelledby="calTitle" hidden>
+    <div class="calmodal__backdrop" data-close-cal></div>
+    <div class="calmodal__card">
+      <button class="calmodal__close" type="button" data-close-cal aria-label="Fechar">✕</button>
+      <div class="calmodal__head">
+        <p class="eyebrow eyebrow--center"><span class="eyebrow__hex" aria-hidden="true"></span>Último passo</p>
+        <h2 class="calmodal__title" id="calTitle">Agora é só escolher o <em>melhor horário</em></h2>
+        <p class="calmodal__sub">Demonstração ao vivo de 30 minutos com <b id="calHost">nosso time</b>. Sem compromisso.</p>
+      </div>
+      <div class="calmodal__stage" id="calInline"></div>
+      <div class="calmodal__done" id="calDone" hidden>
+        <div class="calmodal__done-check" aria-hidden="true">✓</div>
+        <h3>Reunião marcada!</h3>
+        <p id="calDoneWhen">Reunião marcada.</p>
+        <p>Você vai receber a confirmação por e-mail com o link da reunião. Até lá!</p>
+        <button class="btn btn--primary btn--lg" type="button" data-close-cal><span>Fechar</span></button>
+      </div>
+      <p class="calmodal__fallback">A agenda não carregou? <a id="calFallback" href="#" target="_blank" rel="noopener">Abrir em uma nova aba →</a></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/ScrollTrigger.min.js" defer></script>
+  <script src="js/main.js?v=20260907" defer></script>
+</body>
+</html>

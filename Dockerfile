@@ -59,6 +59,17 @@ RUN printf '%s\n' \
   "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.supabase.co https://connect.facebook.net; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://generativelanguage.googleapis.com https://*.sentry.io https://openrouter.ai https://graph.facebook.com https://www.facebook.com https://fonts.googleapis.com https://calls.torquecrm.com.br; img-src 'self' data: https: blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; media-src 'self' blob: https:; frame-src 'self' https://www.facebook.com https://web.facebook.com https://staticxx.facebook.com https://connect.facebook.net; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
   > /etc/nginx/security-headers.conf && \
 printf '%s\n' \
+  '# Landing pages estáticas em /lp/ (public/lp/v1, v2, v3): CSP própria, mais permissiva' \
+  '# que a do app — GSAP/Tailwind via CDN, Cal.com embutido, formulário → webhook n8n,' \
+  '# fontes Google e VSL hospedada fora. Não afeta as rotas do SPA.' \
+  'add_header X-Content-Type-Options "nosniff" always;' \
+  'add_header X-Frame-Options "DENY" always;' \
+  'add_header Referrer-Policy "strict-origin-when-cross-origin" always;' \
+  'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;' \
+  'add_header Permissions-Policy "geolocation=(), payment=()" always;' \
+  "add_header Content-Security-Policy \"default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.tailwindcss.com https://app.cal.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: https:; media-src 'self' blob: https:; connect-src 'self' https://n8nwebhook.v3l8jq.easypanel.host https://app.cal.com https://cal.com; frame-src https://app.cal.com https://cal.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self';\" always;" \
+  > /etc/nginx/lp-headers.conf && \
+printf '%s\n' \
   'server {' \
   '  listen 8080;' \
   '  server_tokens off;' \
@@ -82,6 +93,14 @@ printf '%s\n' \
   '    include /etc/nginx/security-headers.conf;' \
   '    add_header Cache-Control "public, max-age=31536000, immutable" always;' \
   '    try_files $uri =404;' \
+  '  }' \
+  '  # Landing pages do Torque: torquecrm.com.br/lp/v1/, /lp/v2/, /lp/v3/ (estáticas, public/lp).' \
+  '  # `^~` vence o regex de /assets/ e o fallback do SPA; sem index.html no caminho → 404.' \
+  '  # Os HTML das LPs fazem cache-busting com ?v= nos css/js, então cache curto basta.' \
+  '  location ^~ /lp/ {' \
+  '    include /etc/nginx/lp-headers.conf;' \
+  '    add_header Cache-Control "public, max-age=600, must-revalidate" always;' \
+  '    try_files $uri $uri/ =404;' \
   '  }' \
   '  location = /sobre {' \
   '    include /etc/nginx/security-headers.conf;' \
