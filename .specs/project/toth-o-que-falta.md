@@ -257,7 +257,78 @@ Ou seja: terminado o bloco 3, o Toth sincroniza e **ninguém vê o resultado**.
 Esta é a fatia que transforma dado em produto — receita em risco por cliente,
 lista de atrasados, e o alerta que faz o vendedor agir.
 
-### 4.2 Pedidos de venda — 🟠 código pronto, endpoint ainda 404
+### 4.2 Pedidos de venda — OUTRO SERVIDOR, já alcançável; falta a credencial
+
+**Atualizado em 28/08, e esta atualização inverte a anterior.** `/pedidos` nunca
+foi um caminho faltante do `/toth/services`: o fornecedor publicou pedidos num
+**serviço separado**, com endereço, credencial e contrato próprios.
+
+| | `/toth/services` (clientes, cobranças) | `/flow/crm` (pedidos) |
+|---|---|---|
+| endereço | `http://cafejurere.ddns.net:8080/toth/services` | `http://cafejurere.ddns.net:3000/flow/crm` |
+| login | `POST /users/login`, form urlencoded | `POST /auth`, JSON |
+| credencial | `user` + `password` | `client_id` + `client_secret` |
+| resposta do login | `{login, user, token}` | `{success, data:"<JWT>", elapsed, count}` |
+| token viaja | query string `?token=` | `Authorization: Bearer` |
+| leitura | GET com query params | **POST com corpo JSON** |
+| filtro de data | não tem | **obrigatório** (`dataInicial`, `dataFinal`) |
+
+Corpo real da chamada, das capturas do Postman do fornecedor:
+
+```json
+{ "dataInicial": "2025-01-01", "dataFinal": "2026-07-31",
+  "numeroInscricao": ["44750277000107", "06320524000146"], "page": 1 }
+```
+
+**Consequência prática:** o `endpoint_indisponivel: true` que a função devolvia
+era uma leitura errada da mesma medição. O 404 estava certo — aquele caminho não
+existe naquele servidor e nunca vai existir. Nenhum "redirecionamento da GON"
+faria o `/toth/services` servir pedidos.
+
+✅ **A porta 3000 ABRIU — medido 01/09, 13:00 UTC.** Isto supera o parágrafo de
+28/08 ("aceita TCP e fecha sem devolver um byte"). Do mesmo lugar, hoje:
+
+| chamada | 28/08 | 01/09 |
+|---|---|---|
+| `GET :3000/` | TCP aceito, 0 byte, `curl exit 52` | **302** |
+| `POST :3000/flow/crm/auth` | idem | **401, com corpo JSON** |
+
+O 401 veio com envelope real do serviço — `nginx/1.29.7`, `x-powered-by:
+Total.js`, corpo
+`{"error":{"message":"Credenciais rejeitadas pelo ERP","status":401,"providerStatus":401}}`
+— com `client_id`/`client_secret` propositalmente falsos. **É aplicação
+recusando credencial, não silêncio de rede.** A pergunta que estava aberta com a
+GON está respondida; o item sai da lista deles.
+
+⚠️ **Esse 401 prova alcance, não contrato.** O caminho de leitura
+(`POST /pedidos` com janela) segue sem nunca ter rodado com credencial válida.
+
+🔴 **O bloqueio agora é a credencial, e ela não está em nada nosso.**
+`loadTothFlowCredentials` lê só do cofre (`toth_connection_secrets`), preenchido
+pela tela de conexão — sem fallback de env, de propósito. Sem o par
+`client_id`/`client_secret` do fornecedor, o dry-run não sai do lugar.
+
+Construído contra esse contrato (PR desta sessão): `TothFlowClient`,
+`resolvePedidosWindow`, colunas `flow_base_url` / `pedidos_janela_dias` /
+`pedidos_data_inicial`, par `client_id`/`client_secret` no mesmo cofre cifrado,
+campos na tela de conexão, e `toth-sync-pedidos` reescrito para o transporte
+novo. O mapeador **não mudou** — `pickField` normaliza a chave, então a caixa
+baixa colada de `numeropedido` já casava.
+
+⚠️ **Nada disso foi exercitado contra o serviço real.** Com a porta aberta, a
+ordem ao receber a credencial: aplicar `20270906000000` → gravar o par pela tela
+→ `{"dry_run": true}` → conferir a amostra contra a tela do Toth → só então
+ligar o cron.
+
+⚠️ **A migration foi renumerada `20270905000000` → `20270906000000` (01/09).**
+Não foi capricho: `20270905000000` **já estava aplicada em prod** como
+`oraculo_autoria_da_mensagem`, junto de `...010` e `...020`. Com o número
+antigo, `db push` trataria esta migration como já aplicada e a **pularia em
+silêncio** — a terceira vez que essa armadilha aparece no projeto. O guarda do
+CI pegou a colisão repo×repo; o ledger de prod é que deu o número certo.
+
+<details>
+<summary>Histórico — como estava em 25/08 (o retorno de `/pedidos`)</summary>
 
 **Atualizado em 25/08.** O fornecedor mandou o retorno real de `/pedidos`:
 
@@ -272,24 +343,28 @@ lista de atrasados, e o alerta que faz o vendedor agir.
 
 Construído contra esse contrato: `mapTothPedidoToCanonical`, `erp_order_items`,
 `toth-sync-pedidos`. **Falta o caminho existir** — `GET /pedidos` responde 404 no
-ERP, e o fornecedor aguarda a GON liberar um redirecionamento. A função devolve
-`endpoint_indisponivel: true` nesse caso, para que a pendência não seja lida como
-falha de credencial.
+ERP, e o fornecedor aguarda a GON liberar um redirecionamento.
 
-Três coisas que só o payload real vai fechar, e por isso a ordem é
-**`toth-probe` antes de ligar a capacidade**:
+</details>
+
+Três coisas que só o payload real vai fechar:
 
 1. **Vocabulário de `statuspedido`.** Conhecemos `NORMAL` e `FATURADO`; não
    sabemos como cancelado, bloqueado ou orçamento aparecem. Hoje só `FATURADO`
    entra como receita aprovada — o resto entra pendente, que é o lado seguro.
-2. **Tamanho da página e se `page` é o nome certo do parâmetro.** A amostra tem
-   10 pedidos; o teto por execução é 20 páginas, com cursor em
-   `toth_connections.pedidos_cursor`.
-3. **Se há filtro por data.** Sem ele, cada volta relê o histórico inteiro.
+2. **Tamanho da página.** A captura tem cerca de 10 pedidos; o teto por execução
+   é 20 páginas, com cursor em `toth_connections.pedidos_cursor`.
+3. 🔑 **`numeroInscricao` é obrigatório?** A captura manda uma lista de dois
+   CNPJs; outra captura do mesmo endpoint devolve um documento fora dessa lista,
+   o que **sugere** que o filtro é opcional. O padrão do código é OMITIR a
+   lista — filtro que ninguém pediu vira "não houve vendas". Se o serviço
+   exigir, `{"cnpj_da_carteira": true}` preenche com os documentos da carteira.
 
-Quando ligar: `TOTH_CAPABILITIES.syncPedidos = true` + `tothProvider.capabilities`
-ganha `"pedidos"` → a linha "Pedidos de venda" e o botão de sincronizar acendem
-sozinhos, e aí vale agendar o cron (depois de clientes, como cobranças).
+Quando ligar: a linha "Pedidos de venda" e o botão de sincronizar acendem
+sozinhos assim que `flow_base_url` estiver preenchida — o gate passou a ser a
+**configuração da org**, não o manifesto estático. Ter o serviço publicado varia
+por instalação, e isso um manifesto de provider não representa. Aí vale agendar
+o cron (depois de clientes, como cobranças).
 
 <details>
 <summary>Histórico — como estava em 18/08</summary>

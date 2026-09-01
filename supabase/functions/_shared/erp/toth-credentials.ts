@@ -72,6 +72,126 @@ export async function storeTothCredentials(
   if (error) throw new Error(`Falha ao salvar credenciais do Toth: ${error.message}`);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Serviço Flow (pedidos) — MESMO ERP, outro servidor, outra credencial
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * O par do Flow é `client_id` + `client_secret`, e não o `user`/`password` do
+ * `/toth/services`. Guardar no mesmo cofre é decisão de custo: a tabela já é
+ * deny-all, já está atrelada à conexão e já tem trigger de `updated_at` —
+ * duplicar tudo isso para o segundo serviço do mesmo ERP não compraria
+ * isolamento nenhum.
+ *
+ * O que NÃO se reaproveita é o valor: mesmo que o fornecedor entregue as
+ * mesmas letras nos dois serviços, são credenciais de sistemas distintos e
+ * rotacionam separado. Coluna própria, sempre.
+ */
+export interface TothFlowStoredCredentials {
+  connectionId: string;
+  /** Base do serviço Flow — `toth_connections.flow_base_url`. */
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+  allowInsecureTransport: boolean;
+}
+
+export async function storeTothFlowCredentials(
+  admin: SupabaseClient,
+  params: {
+    connectionId: string;
+    organizationId: string;
+    clientId: string;
+    clientSecret: string;
+  },
+): Promise<void> {
+  if (!TOTH_ENCRYPTION_KEY_HEX) {
+    throw new Error("TOTH_ENCRYPTION_KEY não configurada");
+  }
+  const id = await encryptSecret(params.clientId, TOTH_ENCRYPTION_KEY_HEX);
+  const secret = await encryptSecret(params.clientSecret, TOTH_ENCRYPTION_KEY_HEX);
+
+  // `update`, não `upsert`: a linha de segredo já existe (o Toth conectou
+  // antes), e um upsert sem `user_ciphertext` esbarraria no NOT NULL da coluna
+  // do outro serviço. Conectar o Flow não pode exigir redigitar a senha do Toth.
+  const { data, error } = await admin
+    .from("toth_connection_secrets")
+    .update({
+      flow_client_id_ciphertext: id.ciphertext,
+      flow_client_id_nonce: id.nonce,
+      flow_client_secret_ciphertext: secret.ciphertext,
+      flow_client_secret_nonce: secret.nonce,
+    })
+    .eq("connection_id", params.connectionId)
+    .eq("organization_id", params.organizationId)
+    // `.select()` não é enfeite: um UPDATE que não casa linha nenhuma devolve
+    // `error: null`. Sem conferir, a conexão gravaria `flow_base_url`, a tela
+    // diria "pedidos configurados" e a sincronização falharia com
+    // "credenciais indisponíveis" — sem ninguém saber que a gravação nunca
+    // aconteceu. Silêncio é o modo de falha que este cofre não pode ter.
+    .select("connection_id");
+  if (error) throw new Error(`Falha ao salvar credenciais do serviço de pedidos: ${error.message}`);
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Não há linha de segredo para esta conexão — grave o usuário/senha do Toth antes das credenciais do serviço de pedidos.",
+    );
+  }
+}
+
+/**
+ * Carrega as credenciais do Flow, ou `null` quando a org não tem o serviço
+ * configurado.
+ *
+ * `null` aqui é o estado NORMAL, não uma falha: das orgs com Toth, só a Café
+ * Jurerê tem o serviço de pedidos publicado. Quem chama distingue "não
+ * configurado" de "erro" pela mensagem, não por este retorno.
+ */
+export async function loadTothFlowCredentials(
+  admin: SupabaseClient,
+  organizationId: string,
+): Promise<TothFlowStoredCredentials | null> {
+  const { data: conn, error: connErr } = await admin
+    .from("toth_connections")
+    .select("id, flow_base_url, allow_insecure_transport")
+    .eq("organization_id", organizationId)
+    .eq("status", "connected")
+    .maybeSingle();
+  if (connErr || !conn || !conn.flow_base_url) return null;
+
+  const { data: sec, error: secErr } = await admin
+    .from("toth_connection_secrets")
+    // Literal única: concatenar alarga o tipo para `string` e o supabase-js
+    // devolve `GenericStringError` em vez da linha tipada.
+    .select("flow_client_id_ciphertext, flow_client_id_nonce, flow_client_secret_ciphertext, flow_client_secret_nonce")
+    .eq("connection_id", conn.id)
+    .maybeSingle();
+  if (secErr || !sec || !sec.flow_client_id_ciphertext || !sec.flow_client_secret_ciphertext) {
+    return null;
+  }
+
+  try {
+    const clientId = await decryptSecret(
+      sec.flow_client_id_ciphertext,
+      sec.flow_client_id_nonce,
+      TOTH_ENCRYPTION_KEY_HEX,
+    );
+    const clientSecret = await decryptSecret(
+      sec.flow_client_secret_ciphertext,
+      sec.flow_client_secret_nonce,
+      TOTH_ENCRYPTION_KEY_HEX,
+    );
+    return {
+      connectionId: conn.id as string,
+      baseUrl: conn.flow_base_url as string,
+      clientId,
+      clientSecret,
+      allowInsecureTransport: conn.allow_insecure_transport === true,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Carrega e decifra as credenciais do Toth conectado da org, ou `null` quando
  * não há conexão ativa ou a decifra falha (chave rotacionada sem re-conectar).

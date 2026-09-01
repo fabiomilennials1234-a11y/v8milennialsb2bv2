@@ -71,6 +71,19 @@ export interface TothConnectionStatus {
   clientes_empresa: string | null;
   /** Trazer também quem não tem atendimento em empresa nenhuma. */
   clientes_incluir_sem_empresa: boolean;
+  /**
+   * Endereço do serviço **Flow** (pedidos). `null` = não configurado.
+   *
+   * 🔴 É outro servidor, não outro caminho do mesmo: porta 3000, login por
+   * `client_id`/`client_secret`, token em Bearer e leitura por POST JSON.
+   * Tratar como "o `/pedidos` do Toth" foi o que manteve a sincronização
+   * batendo num 404 que nenhum ajuste nosso resolveria.
+   */
+  flow_base_url: string | null;
+  /** Dias relidos a cada sincronização de pedidos. null = padrão do servidor. */
+  pedidos_janela_dias: number | null;
+  /** Piso do backfill de pedidos (`aaaa-mm-dd`). Vence a janela enquanto existir. */
+  pedidos_data_inicial: string | null;
   last_clientes_sync_at: string | null;
   last_cobrancas_sync_at: string | null;
   last_pedidos_sync_at: string | null;
@@ -89,6 +102,9 @@ const DISCONNECTED: TothConnectionStatus = {
   clientes_somente_com_compra: false,
   clientes_empresa: null,
   clientes_incluir_sem_empresa: false,
+  flow_base_url: null,
+  pedidos_janela_dias: null,
+  pedidos_data_inicial: null,
   last_clientes_sync_at: null,
   last_cobrancas_sync_at: null,
   last_pedidos_sync_at: null,
@@ -110,6 +126,7 @@ export function useTothStatus() {
           "base_url, token_transport, allow_insecure_transport, connected_at, status, erp_sync_mode, " +
             "clientes_dias_compras, clientes_marcas, clientes_somente_com_compra, " +
             "clientes_empresa, clientes_incluir_sem_empresa, " +
+            "flow_base_url, pedidos_janela_dias, pedidos_data_inicial, " +
             "last_clientes_sync_at, last_cobrancas_sync_at, last_pedidos_sync_at, last_error",
         )
         .eq("organization_id", organizationId)
@@ -134,6 +151,9 @@ export function useTothStatus() {
         clientes_somente_com_compra: row.clientes_somente_com_compra === true,
         clientes_empresa: row.clientes_empresa ?? null,
         clientes_incluir_sem_empresa: row.clientes_incluir_sem_empresa === true,
+        flow_base_url: row.flow_base_url ?? null,
+        pedidos_janela_dias: row.pedidos_janela_dias ?? null,
+        pedidos_data_inicial: row.pedidos_data_inicial ?? null,
         last_clientes_sync_at: row.last_clientes_sync_at,
         last_cobrancas_sync_at: row.last_cobrancas_sync_at,
         last_pedidos_sync_at: row.last_pedidos_sync_at ?? null,
@@ -154,6 +174,14 @@ export interface TothConnectInput {
   tokenTransport?: TothTokenTransport;
   /** Aceite explícito de tráfego sem TLS. */
   allowInsecureTransport?: boolean;
+  /**
+   * Serviço de pedidos (Flow). Opcional, mas **tudo ou nada**: os três juntos
+   * ou nenhum. O servidor recusa meio par — configuração pela metade produz
+   * uma tela que diz "pedidos ligados" e uma sincronização que falha calada.
+   */
+  flowBaseUrl?: string;
+  flowClientId?: string;
+  flowClientSecret?: string;
 }
 
 export function useConnectToth() {
@@ -168,11 +196,23 @@ export function useConnectToth() {
           password: input.password,
           token_transport: input.tokenTransport ?? "query",
           allow_insecure_transport: input.allowInsecureTransport ?? false,
+          ...(input.flowBaseUrl
+            ? {
+                flow_base_url: input.flowBaseUrl,
+                flow_client_id: input.flowClientId ?? "",
+                flow_client_secret: input.flowClientSecret ?? "",
+              }
+            : {}),
         },
       });
       if (error) throw await extractFunctionError(error);
       if (data?.error) throw new Error(data.error);
-      return data as { success: boolean; base_url: string; insecure_transport: boolean };
+      return data as {
+        success: boolean;
+        base_url: string;
+        flow_base_url: string | null;
+        insecure_transport: boolean;
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["toth-status"] });
@@ -311,26 +351,53 @@ export interface SyncPedidosResult {
     pending: number;
   };
   incompleto?: boolean;
-  /** O ERP ainda não publicou `/pedidos` — 404, não credencial. */
-  endpoint_indisponivel?: boolean;
+  /** Intervalo efetivamente pedido ao serviço — a resposta não deixa deduzir. */
+  janela?: { dataInicial: string; dataFinal: string; origem: string; dias: number };
+  documentos_filtrados?: number;
+  /** O host aceitou a conexão e fechou sem responder — publicação, não credencial. */
+  servico_mudo?: boolean;
+  /** A org não tem o serviço Flow configurado. */
+  nao_configurado?: boolean;
   hint?: string;
   skipped?: boolean;
 }
 
+export interface SyncPedidosInput {
+  /** Sobrepõem a janela configurada. `aaaa-mm-dd`. */
+  dataInicial?: string;
+  dataFinal?: string;
+  /** Restringe a chamada a estes documentos. Vazio = sem filtro. */
+  numeroInscricao?: string[];
+  /** Lê e relata sem escrever. */
+  dryRun?: boolean;
+}
+
 /**
- * Puxa os pedidos de venda.
+ * Puxa os pedidos de venda do serviço **Flow**.
  *
- * 🟠 Enquanto `/pedidos` responder 404 no ERP, esta chamada devolve
- * `endpoint_indisponivel` — e a mensagem diz que a pendência é da publicação do
- * caminho, não da conexão. A tela só mostra o botão quando o manifesto declarar
- * a capacidade, então o caminho normal é este hook nem ser acionado.
+ * 🔴 Serviço separado do `/toth/services` — outra porta, outra credencial. A
+ * chamada exige janela de datas; sem configuração, o servidor usa 90 dias.
+ *
+ * ⚠️ Nunca exercitado contra o serviço real: em 28/08 a porta 3000 aceita a
+ * conexão e fecha sem responder de fora da rede do cliente. Enquanto isso,
+ * `servico_mudo` é a resposta esperada — e ela aponta para a GON, não para a
+ * credencial.
  */
 export function useSyncTothPedidos() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async () => {
-      const { data, error } = await supabase.functions.invoke("toth-sync-pedidos", {});
+    mutationFn: async (input: SyncPedidosInput = {}) => {
+      const { data, error } = await supabase.functions.invoke("toth-sync-pedidos", {
+        body: {
+          ...(input.dataInicial ? { data_inicial: input.dataInicial } : {}),
+          ...(input.dataFinal ? { data_final: input.dataFinal } : {}),
+          ...(input.numeroInscricao?.length
+            ? { numero_inscricao: input.numeroInscricao }
+            : {}),
+          ...(input.dryRun ? { dry_run: true } : {}),
+        },
+      });
       if (error) throw await extractFunctionError(error);
       if (data?.error) throw new Error(data.hint ? `${data.error} ${data.hint}` : data.error);
       return data as SyncPedidosResult;

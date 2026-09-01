@@ -48,6 +48,7 @@ export {
 export {
   readTothEndpoint,
   canSubmitTothConnection,
+  isFlowPartValid,
   type TothEndpointReading,
   type TothEndpointVerdict,
 } from "./lib/toth-endpoint";
