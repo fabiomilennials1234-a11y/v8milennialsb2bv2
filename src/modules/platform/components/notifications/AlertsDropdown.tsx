@@ -22,6 +22,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Volume2, VolumeX } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import { instanteDoAviso, type Aviso } from "../../lib/aviso-stream";
@@ -33,6 +34,7 @@ import {
   type Familia,
 } from "../../lib/aviso-agrupamento";
 import { useAvisos } from "../../hooks/useAvisos";
+import { usePreferenciasDeAviso } from "../../hooks/usePreferenciasDeAviso";
 
 /**
  * O sino. Lê a lista pronta do hook e não consulta banco: aqui só se decide
@@ -62,6 +64,7 @@ export function AlertsDropdown() {
   const [open, setOpen] = useState(false);
   const [familia, setFamilia] = useState<Familia>("tudo");
   const { avisos, naoLidos, marcarComoLido, marcarTodosComoLidos } = useAvisos();
+  const { preferencias, salvar } = usePreferenciasDeAviso();
 
   const contagem = useMemo(() => contarPorFamilia(avisos), [avisos]);
   const grupos = useMemo(
@@ -107,7 +110,24 @@ export function AlertsDropdown() {
 
       <DropdownMenuContent align="end" className="w-[368px] p-0">
         <div className="p-3 border-b border-border flex items-center justify-between gap-2">
-          <h3 className="font-semibold">Notificações</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold">Notificações</h3>
+            {/* Silenciar tudo em um clique: numa reunião, ninguém vai procurar
+                a tela de configurações. */}
+            <button
+              type="button"
+              onClick={() => void salvar({ sound_enabled: !preferencias.sound_enabled })}
+              aria-pressed={!preferencias.sound_enabled}
+              title={preferencias.sound_enabled ? "Silenciar tudo" : "Voltar a tocar"}
+              className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              {preferencias.sound_enabled ? (
+                <Volume2 className="h-3.5 w-3.5" />
+              ) : (
+                <VolumeX className="h-3.5 w-3.5 text-destructive" />
+              )}
+            </button>
+          </div>
           {naoLidos > 0 && (
             <button
               type="button"

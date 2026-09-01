@@ -13,7 +13,7 @@
  * Vocabulário: CONTEXT.md, seção "Avisos". Modelo: ADR-0035.
  */
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +26,10 @@ import {
   type Aviso,
   type EventoDeAviso,
 } from "../lib/aviso-stream";
+import { conversaAberta } from "../lib/conversa-aberta";
+import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
+import { motorDeSom } from "../lib/motor-de-som";
+import { usePreferenciasDeAviso } from "./usePreferenciasDeAviso";
 
 /** Teto do que o sino carrega. Varrer o histórico é trabalho do Inbox (#1889). */
 const TETO = 50;
@@ -44,10 +48,33 @@ export interface UseAvisosResult {
   marcarTodosComoLidos: () => Promise<void>;
 }
 
+/** Hora local de quem recebe — o horário silencioso é do relógio dele, não do UTC. */
+function horaLocalDeSaoPaulo(instante: number): number {
+  return Number(
+    new Intl.DateTimeFormat("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      hour: "2-digit",
+      hour12: false,
+    }).format(new Date(instante)),
+  );
+}
+
 export function useAvisos(): UseAvisosResult {
   const { user } = useAuth();
   const { organizationId, isReady } = useOrganization();
   const queryClient = useQueryClient();
+  const { preferencias } = usePreferenciasDeAviso();
+
+  /**
+   * Último som por chave de agrupamento. Vive num ref, não em estado: mudar
+   * isto não pode repintar o sino, e ele não sobrevive ao recarregar de
+   * propósito — quem acabou de abrir a aba merece ser avisado.
+   */
+  const ultimoSomPorChave = useRef<Record<string, number>>({});
+  const preferenciasRef = useRef(preferencias);
+  preferenciasRef.current = preferencias;
+
+  useEffect(() => motorDeSom.destravarNoPrimeiroGesto(), []);
 
   const queryKey = useMemo(() => ["avisos", organizationId, user?.id], [organizationId, user?.id]);
   const habilitado = isReady && !!organizationId && !!user?.id;
@@ -93,6 +120,28 @@ export function useAvisos(): UseAvisosResult {
       queryClient.setQueryData<Aviso[]>(queryKey, (atual = []) =>
         aplicarEventoDeAviso(atual, evento, organizationId),
       );
+
+      if (evento.tipo === "DELETE") return;
+      if (evento.aviso.organization_id !== organizationId) return;
+      // Aviso que já nasceu lido (o próprio usuário agindo noutra aba) não toca.
+      if (evento.aviso.read_at !== null) return;
+
+      const agora = Date.now();
+      const decisao: Entrega = decidirEntrega(evento.aviso, evento.tipo, {
+        preferencias: preferenciasRef.current,
+        abaVisivel: typeof document === "undefined" || document.visibilityState === "visible",
+        conversaAbertaLeadId: conversaAberta(),
+        ultimoSomPorChave: ultimoSomPorChave.current,
+        horaLocal: horaLocalDeSaoPaulo(agora),
+        agora,
+      });
+
+      if (decisao.som) {
+        motorDeSom.tocar(decisao.som, preferenciasRef.current.volume);
+        if (evento.aviso.group_key) {
+          ultimoSomPorChave.current[evento.aviso.group_key] = agora;
+        }
+      }
     },
   });
 
