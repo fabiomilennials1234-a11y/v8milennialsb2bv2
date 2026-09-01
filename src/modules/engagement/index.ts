@@ -133,5 +133,9 @@ export * from "./hooks/useCommissions";
  * Export NOMEADO, não `export *`: o barrel é dublado em teste
  * (`vi.mock("@/modules/engagement")`) e `export *` de um componente arrasta
  * junto tipos e constantes internas que a fábrica do dublê teria de repetir.
+ *
+ * ⚠️ Sai a fronteira PREGUIÇOSA, não o diálogo real. Exportar o real daqui
+ * colava `@/modules/pipelines` e `@/modules/leads` no grafo estático de todo
+ * consumidor deste barrel — ver o cabeçalho de `CreateMeetingDialogLazy`.
  */
-export { CreateMeetingDialog } from "./components/agenda/CreateMeetingDialog";
+export { CreateMeetingDialog } from "./components/agenda/CreateMeetingDialogLazy";
