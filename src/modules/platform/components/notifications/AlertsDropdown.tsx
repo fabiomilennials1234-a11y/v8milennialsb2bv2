@@ -16,7 +16,6 @@ import { ptBR } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +33,7 @@ import {
   type Familia,
 } from "../../lib/aviso-agrupamento";
 import { useAvisos } from "../../hooks/useAvisos";
+import { motorDeSom } from "../../lib/motor-de-som";
 import { usePreferenciasDeAviso } from "../../hooks/usePreferenciasDeAviso";
 
 /**
@@ -59,7 +59,12 @@ const PADRAO = { icone: Bell, classe: "text-muted-foreground", fundo: "bg-muted/
 /** Os tipos que valem pintar o badge de vermelho — o resto conta, mas não grita. */
 const URGENTES = new Set(["workflow_alert", "cron_drift", "lead_message", "transfer_to_human"]);
 
-export function AlertsDropdown() {
+export interface AlertsDropdownProps {
+  /** Texto ao lado do sino. Faz parte do gatilho: clicar na palavra abre. */
+  rotulo?: string;
+}
+
+export function AlertsDropdown({ rotulo }: AlertsDropdownProps = {}) {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [familia, setFamilia] = useState<Familia>("tudo");
@@ -87,10 +92,24 @@ export function AlertsDropdown() {
   };
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu
+      open={open}
+      onOpenChange={(proximo) => {
+        // Abrir o sino é um gesto do usuário — o único momento garantido para
+        // destravar o áudio no navegador. Sem isto, o primeiro Aviso da sessão
+        // chega mudo.
+        if (proximo) motorDeSom.destravar();
+        setOpen(proximo);
+      }}
+    >
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative" aria-label="Notificações">
-          <Bell className="w-5 h-5" />
+        <Button
+          variant="ghost"
+          size={rotulo ? "default" : "icon"}
+          className={cn("relative", rotulo && "w-full justify-start gap-3 px-2.5")}
+          aria-label="Notificações"
+        >
+          <Bell className="w-5 h-5 shrink-0" />
           {naoLidos > 0 && (
             <motion.span
               initial={{ scale: 0 }}
@@ -105,6 +124,7 @@ export function AlertsDropdown() {
               {naoLidos > 9 ? "9+" : naoLidos}
             </motion.span>
           )}
+          {rotulo && <span className="flex-1 truncate text-left font-normal">{rotulo}</span>}
         </Button>
       </DropdownMenuTrigger>
 
@@ -140,7 +160,7 @@ export function AlertsDropdown() {
         </div>
 
         <div className="flex gap-1 px-2 py-2 border-b border-border overflow-x-auto scrollbar-hide">
-          {FAMILIAS.map(({ chave, rotulo }) => (
+          {FAMILIAS.map(({ chave, rotulo: nomeDaFamilia }) => (
             <button
               key={chave}
               type="button"
@@ -153,7 +173,7 @@ export function AlertsDropdown() {
                   : "border-transparent text-muted-foreground hover:bg-muted/50",
               )}
             >
-              {rotulo}
+              {nomeDaFamilia}
               {contagem[chave] > 0 && (
                 <span className="ml-1.5 tabular-nums text-muted-foreground">{contagem[chave]}</span>
               )}
@@ -161,8 +181,11 @@ export function AlertsDropdown() {
           ))}
         </div>
 
+        {/* Rolagem simples em vez de ScrollArea: o viewport do Radix usa
+            display:table, o que anula `truncate` nos filhos — a descrição
+            vazava a largura do painel e era cortada no meio da palavra. */}
         {grupos.length > 0 ? (
-          <ScrollArea className="h-[320px]">
+          <div className="max-h-[320px] overflow-y-auto overscroll-contain">
             <div className="p-2">
               <AnimatePresence mode="popLayout">
                 {grupos.map((grupo) => (
@@ -198,7 +221,7 @@ export function AlertsDropdown() {
                               )}
                             </p>
                             {aviso.description && (
-                              <p className="truncate text-xs text-muted-foreground">
+                              <p className="line-clamp-2 break-words text-xs text-muted-foreground">
                                 {aviso.description}
                               </p>
                             )}
@@ -218,7 +241,7 @@ export function AlertsDropdown() {
                 ))}
               </AnimatePresence>
             </div>
-          </ScrollArea>
+          </div>
         ) : (
           <div className="p-8 text-center">
             <CheckCircle className="mx-auto mb-3 h-12 w-12 text-success/30" />

@@ -64,31 +64,50 @@ const fabricaPadrao: FabricaDeContexto = () => {
 export class MotorDeSom {
   private contexto: AudioContext | null = null;
   private destravado = false;
+  private escutando = false;
 
   constructor(private readonly fabrica: FabricaDeContexto = fabricaPadrao) {}
 
   /**
-   * O navegador só deixa tocar depois de a pessoa ter interagido com a página.
-   * Destravar no primeiro clique da sessão é o único caminho — sem isto, o
-   * primeiro Aviso do dia é sempre mudo.
+   * O navegador só deixa tocar depois de um gesto da pessoa. Chamar isto DENTRO
+   * do gesto (um clique no sino, por exemplo) é o que destrava o áudio.
+   */
+  destravar(): void {
+    const ctx = this.contextoAtivo();
+    this.destravado = ctx?.state === "running";
+  }
+
+  /**
+   * Arma a escuta de gestos.
+   *
+   * A primeira versão disto usava `{ once: true }` e removia os ouvintes no
+   * cleanup do efeito. Dois problemas, e os dois deixam o produto MUDO em
+   * produção: o componente que armava a escuta desmonta (o sino existe na barra
+   * e na gaveta móvel), levando os ouvintes junto antes de qualquer clique; e um
+   * `resume()` recusado marcava como destravado assim mesmo.
+   *
+   * Agora os ouvintes ficam até o contexto estar de fato `running`, e o estado
+   * é lido do próprio AudioContext em vez de ser presumido.
    */
   destravarNoPrimeiroGesto(): () => void {
-    if (typeof window === "undefined" || this.destravado) return () => {};
+    if (typeof window === "undefined" || this.escutando) return () => {};
+    this.escutando = true;
 
-    const destravar = () => {
-      this.destravado = true;
-      void this.contextoAtivo();
-      window.removeEventListener("pointerdown", destravar);
-      window.removeEventListener("keydown", destravar);
+    const aoGesto = () => {
+      this.destravar();
+      if (this.destravado) {
+        window.removeEventListener("pointerdown", aoGesto);
+        window.removeEventListener("keydown", aoGesto);
+        this.escutando = false;
+      }
     };
 
-    window.addEventListener("pointerdown", destravar, { once: true });
-    window.addEventListener("keydown", destravar, { once: true });
+    window.addEventListener("pointerdown", aoGesto);
+    window.addEventListener("keydown", aoGesto);
 
-    return () => {
-      window.removeEventListener("pointerdown", destravar);
-      window.removeEventListener("keydown", destravar);
-    };
+    // Sem cleanup de propósito: desarmar a escuta ao desmontar um componente
+    // qualquer foi exatamente o que emudeceu o sino.
+    return () => {};
   }
 
   /** Toca o timbre. Volume de 0 a 100. Silencioso e sem exceção onde não há áudio. */
@@ -96,6 +115,20 @@ export class MotorDeSom {
     const ctx = this.contextoAtivo();
     if (!ctx) return;
 
+    // Contexto suspenso toca no vazio: os osciladores rodam, ninguém ouve. Só
+    // vale agendar as notas depois que ele estiver de fato correndo.
+    if (ctx.state === "suspended") {
+      void ctx.resume().then(
+        () => this.agendar(ctx, timbre, volume),
+        () => undefined,
+      );
+      return;
+    }
+
+    this.agendar(ctx, timbre, volume);
+  }
+
+  private agendar(ctx: AudioContext, timbre: Timbre, volume: number): void {
     const mestre = ctx.createGain();
     mestre.gain.value = Math.max(0.0001, (volume / 100) * 0.9);
     const compressor = ctx.createDynamicsCompressor();
@@ -127,7 +160,8 @@ export class MotorDeSom {
   private contextoAtivo(): AudioContext | null {
     try {
       if (!this.contexto) this.contexto = this.fabrica();
-      if (this.contexto?.state === "suspended") void this.contexto.resume();
+      // A retomada acontece num lugar só (`tocar`), porque ela é ASSÍNCRONA:
+      // pedir aqui e agendar em seguida agendaria com o contexto ainda suspenso.
       return this.contexto;
     } catch {
       // Áudio indisponível não pode derrubar o sino.

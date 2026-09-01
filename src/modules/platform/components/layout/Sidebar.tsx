@@ -214,17 +214,16 @@ export function Sidebar() {
             />
           )}
 
-          {/* O AlertsDropdown traz botão e padding próprios; sem neutralizar,
-              o sino desalinha dos outros ícones do rodapé. */}
+          {/* A palavra "Notificações" era um <span> inerte ao lado do sino:
+              clicar nela não fazia nada, e é onde a mão vai primeiro. Agora o
+              rótulo faz parte do próprio gatilho. */}
           <div
             className={cn(
-              "flex items-center gap-3 rounded-lg py-2 text-sm text-sidebar-foreground/70",
-              "[&_button]:h-auto [&_button]:w-auto [&_button]:p-0 [&_button]:hover:bg-transparent",
-              collapsed ? "justify-center" : "px-2.5",
+              "flex items-center rounded-lg text-sm text-sidebar-foreground/70",
+              collapsed && "justify-center",
             )}
           >
-            <AlertsDropdown />
-            {!collapsed && <span className="flex-1 truncate">Notificações</span>}
+            <AlertsDropdown rotulo={collapsed ? undefined : "Notificações"} />
           </div>
 
           {/* Master, Gestor e "Ativos agora" — só para quem é master. Vieram do
