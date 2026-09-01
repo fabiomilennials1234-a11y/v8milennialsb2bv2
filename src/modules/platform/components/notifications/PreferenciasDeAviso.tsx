@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 
 import { usePreferenciasDeAviso } from "../../hooks/usePreferenciasDeAviso";
+import { usePushSubscription } from "../../hooks/use-push-subscription";
 import type { PreferenciasDeAviso as Preferencias } from "../../lib/preferencias-de-aviso";
 
 /**
@@ -53,6 +54,7 @@ const HORAS = Array.from({ length: 24 }, (_, h) => h);
 
 export function PreferenciasDeAviso() {
   const { preferencias, carregando, salvar } = usePreferenciasDeAviso();
+  const { isSupported, permission, requestPermission, unsubscribe } = usePushSubscription();
   const [volumeLocal, setVolumeLocal] = useState<number | null>(null);
 
   const aplicar = async (mudanca: Partial<Preferencias>) => {
@@ -196,12 +198,34 @@ export function PreferenciasDeAviso() {
           <div className="space-y-0.5">
             <Label>Avisar no celular</Label>
             <p className="text-sm text-muted-foreground">
-              Só quando você estiver longe do CRM, e só para o que é urgente.
+              {isSupported
+                ? "Só quando você estiver longe do CRM, e só para o que é urgente."
+                : "Este navegador não suporta notificação no aparelho."}
             </p>
+            {permission === "denied" && (
+              <p className="text-sm text-destructive">
+                A permissão está bloqueada no navegador — libere nas configurações do site.
+              </p>
+            )}
           </div>
           <Switch
             checked={preferencias.push_enabled}
-            onCheckedChange={(v) => aplicar({ push_enabled: v })}
+            disabled={!isSupported}
+            onCheckedChange={async (v) => {
+              // Guardar a preferência sem a permissão do navegador produziria um
+              // interruptor ligado que não entrega nada — o defeito que esta
+              // tela inteira veio corrigir.
+              if (v) {
+                await requestPermission();
+                if (globalThis.Notification?.permission !== "granted") {
+                  toast.error("O navegador negou a permissão de notificação.");
+                  return;
+                }
+              } else {
+                await unsubscribe();
+              }
+              await aplicar({ push_enabled: v });
+            }}
           />
         </div>
       </div>

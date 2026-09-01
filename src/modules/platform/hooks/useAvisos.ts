@@ -31,6 +31,7 @@ import { decidirEntrega, type Entrega } from "../lib/decisao-de-entrega";
 import { motorDeSom } from "../lib/motor-de-som";
 import { mostrarCartao } from "../lib/cartoes-store";
 import { usePreferenciasDeAviso } from "./usePreferenciasDeAviso";
+import { usePresenca } from "./usePresenca";
 
 /** Teto do que o sino carrega. Varrer o histórico é trabalho do Inbox (#1889). */
 const TETO = 50;
@@ -76,6 +77,10 @@ export function useAvisos(): UseAvisosResult {
   preferenciasRef.current = preferencias;
 
   useEffect(() => motorDeSom.destravarNoPrimeiroGesto(), []);
+
+  // O sino vive no cabeçalho de toda tela autenticada: é o lugar natural para
+  // carimbar "tem alguém olhando".
+  usePresenca();
 
   const queryKey = useMemo(() => ["avisos", organizationId, user?.id], [organizationId, user?.id]);
   const habilitado = isReady && !!organizationId && !!user?.id;

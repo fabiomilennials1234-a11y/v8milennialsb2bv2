@@ -413,6 +413,10 @@ verify_jwt = false
 [functions.history-sync-worker]
 verify_jwt = false
 
+# send-push: chamado por pg_cron via pg_net; auth via x-cron-secret (#1893)
+[functions.send-push]
+verify_jwt = false
+
 # infra-watchdog: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.infra-watchdog]
 verify_jwt = false

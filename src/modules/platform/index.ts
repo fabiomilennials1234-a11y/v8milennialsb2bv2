@@ -91,6 +91,7 @@ export { OnboardingQuestion } from "./components/onboarding/OnboardingQuestion";
 export { AlertsDropdown } from "./components/notifications/AlertsDropdown";
 export { useAvisos } from "./hooks/useAvisos";
 export { usePreferenciasDeAviso } from "./hooks/usePreferenciasDeAviso";
+export { usePresenca } from "./hooks/usePresenca";
 export { PADROES, entregaDoTipo, resolverPreferencias } from "./lib/preferencias-de-aviso";
 export { JANELA_DE_REPIQUE_MS, decidirEntrega, timbreDoTipo } from "./lib/decisao-de-entrega";
 export type { ContextoDeEntrega, Entrega, Timbre } from "./lib/decisao-de-entrega";
