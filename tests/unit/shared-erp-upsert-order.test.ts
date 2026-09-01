@@ -5,6 +5,7 @@
 import { describe, it, expect } from "vitest";
 import {
   upsertCanonicalOrder,
+  approvalForErpStatus,
   type OrderStore,
 } from "../../supabase/functions/_shared/erp/sync/upsert-order";
 import type { CanonicalOrder } from "../../supabase/functions/_shared/erp/types";
@@ -93,5 +94,47 @@ describe("upsertCanonicalOrder", () => {
     expect(calls.creates).toHaveLength(0);
     expect(calls.updates[0].patch.external_id).toBe("555");
     expect(calls.updates[0].patch.sale_value).toBe(1234.56);
+  });
+});
+
+/**
+ * Vocabulário completo de `StatusPedido`, entregue pelo fornecedor em 01/09 a
+ * partir do fonte do Toth. Até então o código conhecia dois valores — os que
+ * apareceram numa amostra de dez pedidos.
+ */
+describe("approvalForErpStatus — as três situações da Carteira", () => {
+  it("fatura consumada entra aprovada", () => {
+    expect(approvalForErpStatus("FATURADO")).toBe("approved");
+    expect(approvalForErpStatus("APROVADO")).toBe("approved");
+    expect(approvalForErpStatus("  faturado  ")).toBe("approved");
+  });
+
+  it("cancelado e devolvido ficam ENCERRADOS, fora de toda métrica", () => {
+    expect(approvalForErpStatus("CANCELADO")).toBe("rejected");
+    expect(approvalForErpStatus("DEVOLVIDO")).toBe("rejected");
+    expect(approvalForErpStatus("cancelado")).toBe("rejected");
+  });
+
+  it("o resto do enum é carteira em formação, não receita", () => {
+    for (const s of ["NORMAL", "BLOQUEADO", "BAIXADO", "PENDENTE_ANALISE", "DEVOLVIDO_PARCIAL"]) {
+      expect(approvalForErpStatus(s)).toBe("pending");
+    }
+  });
+
+  /**
+   * O CTO decidiu que parcial entraria proporcional. A API não permite: o item
+   * traz `qtdpedido` e `valorunitario`, e nenhum campo de quantidade faturada.
+   * Sem esse dado a proporção seria inventada — este teste trava a decisão até
+   * o fornecedor expor `qtdFaturada`/`valorFaturado`.
+   */
+  it("FATURADO_PARCIAL fica pendente enquanto a API não disser quanto faturou", () => {
+    expect(approvalForErpStatus("FATURADO_PARCIAL")).toBe("pending");
+    expect(approvalForErpStatus("FATURADO_COMPATIBILIDADE")).toBe("pending");
+  });
+
+  it("provider sem situação (Omie) segue aprovado", () => {
+    expect(approvalForErpStatus(null)).toBe("approved");
+    expect(approvalForErpStatus(undefined)).toBe("approved");
+    expect(approvalForErpStatus("")).toBe("approved");
   });
 });
