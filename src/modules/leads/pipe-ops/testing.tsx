@@ -22,6 +22,11 @@ export function makeMockPipeOps(overrides: Partial<PipeOpsPort> = {}): PipeOpsPo
   const base: PipeOpsPort = {
     usePipelineStages: noopQuery,
     useAllPipelineStageOptions: () => ({ stagesByPipe: {}, isLoading: false }),
+    // Default inerte = org SEM funil de sistema. É o pior caso e o mais
+    // honesto: teste que espera ver "Oportunidades" no cadastro tem de dizer
+    // qual funil a org tem, em vez de herdar três opções de graça — que foi
+    // justamente a suposição que produziu o SCRUM-608.
+    useSystemPipes: noopQuery,
     useCustomPipelines: noopQuery,
     useCustomPipelineStages: noopQuery,
     // SCRUM-633 — modelo unificado por pipeline_id (bulk sem sentinela).

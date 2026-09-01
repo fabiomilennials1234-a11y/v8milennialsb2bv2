@@ -223,3 +223,26 @@ export interface PipelineStageInsert {
 
 /** Modo de agendamento usado pelo RescheduleModal (slot do PipeOpsPort). */
 export type ReschedulingMode = "schedule" | "reschedule";
+
+/**
+ * O funil de sistema COMO A ORGANIZAÇÃO O CHAMA — a linha de
+ * `pipeline_display_config`.
+ *
+ * Vive em `contracts` porque `leads` precisa dela para montar o cadastro e não
+ * pode importar `@/modules/pipelines` (o barrel arrasta o PipeOpsProvider). É
+ * um subconjunto estrutural de `PipelineDisplayConfig`: só o que atravessa a
+ * fronteira, sem `id` nem `organization_id`.
+ *
+ * 🚨 Este é o nome CANÔNICO. `pipelines.name` NÃO é: para funil de sistema ele
+ * fica congelado no seed de `create_default_pipelines()` ("Qualificação",
+ * "Confirmação", "Propostas") enquanto a navegação, o hub de funis e o que a
+ * org renomeou vivem aqui. Rotular por `pipelines.name` — ou pior, por string
+ * cravada no JSX — é como o cadastro de lead passou a oferecer "Qualificação"
+ * para uma org cujo funil se chama "Oportunidades" (SCRUM-608).
+ */
+export interface SystemPipeDisplay {
+  pipe_type: string;
+  display_name: string;
+  is_visible: boolean;
+  position: number;
+}
