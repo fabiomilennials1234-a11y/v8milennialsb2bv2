@@ -315,10 +315,74 @@ campos na tela de conexão, e `toth-sync-pedidos` reescrito para o transporte
 novo. O mapeador **não mudou** — `pickField` normaliza a chave, então a caixa
 baixa colada de `numeropedido` já casava.
 
-⚠️ **Nada disso foi exercitado contra o serviço real.** Com a porta aberta, a
-ordem ao receber a credencial: aplicar `20270906000000` → gravar o par pela tela
-→ `{"dry_run": true}` → conferir a amostra contra a tela do Toth → só então
-ligar o cron.
+## ✅ Contrato de `/flow/crm/pedidos` — MEDIDO em 01/09, não mais suposto
+
+Com a credencial do fornecedor (`client_id: milennialstech`, entregue por print
+no WhatsApp — **par a rotar**, ele ofereceu ligar para passar outro), o serviço
+foi sondado de verdade pela primeira vez.
+
+| fato | valor |
+|---|---|
+| Login | `200 OK`, JWT de 725 chars |
+| Validade do token | **5 dias**, e pedir um novo **expira o velho** (palavra dele) |
+| `numeroInscricao` | **não é obrigatório** — só o período. Confirmado por ele E medido |
+| Tamanho da página | **25 ITENS**, não 25 pedidos → 9 a 13 pedidos por página |
+| Volume | 145 pedidos em 12 páginas numa janela de 7 dias (~21/dia) |
+| Encoding | **UTF-8 correto** (`CAF\xc3\x89`); `?` no terminal é o console do Windows |
+
+🔴 **Campo desconhecido no corpo ZERA o resultado, com `HTTP 200`.** Mandar
+`limit`, `pageSize`, `rows`, `per_page`, `porPagina` ou `tamanho` devolve
+`data: []` onde o corpo limpo devolve 10 pedidos — sem erro, sem aviso. "Zero
+pedidos" é indistinguível de "não houve vendas". `buildPedidosBody` monta só
+`dataInicial`/`dataFinal`/`page` (+`numeroInscricao` quando há documentos), então
+está imune — **mas nunca acrescente campo "por via das dúvidas" nesse corpo.**
+
+### 🔴 O bug que a medição destapou (corrigido no PR #1910)
+
+Como a página é de 25 **itens**, **um pedido é partido na fronteira**. Em todas
+as fronteiras testadas (1×2, 2×3, 3×4, 4×5) um `numeropedido` aparece nas duas
+páginas, com os itens repartidos e o `valortotalliquido` **repetido inteiro** em
+cada fatia:
+
+| pedido | itens pág. N | itens pág. N+1 | total |
+|---|---:|---:|---|
+| 23974 | 2 | 3 | 1.073,60 nas duas |
+| 24243 | 6 | 8 | 32.031,00 nas duas |
+| 24252 | 1 | 3 | 20.836,00 nas duas |
+| 24264 | 2 | 6 | 2.128,52 nas duas |
+
+`replaceOrderItems` **apaga** os itens do pedido antes de inserir a fatia nova —
+o 24243 terminaria com 8 de 14 itens, `line_no` reiniciado em 1, sem erro e sem
+log. A receita não sofria (upsert idempotente, total repetido e não rateado); a
+composição do pedido, sim, em ~1 pedido a cada 10. **Nada foi corrompido:
+`flow_base_url` estava `NULL` e o sync nunca rodou.**
+
+Correção: montar por número ao longo da volta e segurar o último pedido de cada
+página até a seguinte confirmar que ele acabou; o cursor aponta para onde o
+pedido **começou**, inclusive no caminho de erro.
+
+### Situação do pedido — enum completo
+
+O fornecedor mandou o fonte do `StatusPedido`: NORMAL(0) · BLOQUEADO(1) ·
+DEVOLVIDO(2) · CANCELADO(3) · FATURADO(4) · BAIXADO(5) · PENDENTE_ANALISE(6) ·
+FATURADO_PARCIAL(7) · DEVOLVIDO_PARCIAL(8) · FATURADO_COMPATIBILIDADE(9).
+Conhecíamos **dois**.
+
+Peso real em 554 pedidos (jun–ago): FATURADO 405 · **CANCELADO 122** · NORMAL 39
+· DEVOLVIDO 8 · FATURADO_PARCIAL 2.
+
+- `CANCELADO`/`DEVOLVIDO` → **`rejected`** (decisão do CTO, 01/09): são desfecho,
+  não pendência. Eram 22% do volume pendurado como "carteira em formação" morta.
+- ⏳ **`FATURADO_PARCIAL` deveria entrar proporcional — a API não permite.** O
+  item traz `qtdpedido` e `valorunitario` e **nenhum campo de quantidade
+  faturada** (verificado nos 554). Fica `pending` até o fornecedor expor
+  `qtdFaturada`/`valorFaturado`. **Pedir junto com a rotação da credencial.**
+
+⚠️ **Ainda não exercitado de dentro da edge function.** A sondagem acima rodou da
+máquina do CTO. O fornecedor avisou em 31/08 que **bloqueiam IP de fora do
+Brasil**; o projeto é `sa-east-1` (São Paulo), então a expectativa é boa, mas
+expectativa não é medição. Ordem: gravar o par pela tela → `{"dry_run": true}` →
+conferir a amostra contra a tela do Toth **no mesmo dia** → só então ligar o cron.
 
 ⚠️ **A migration foi renumerada `20270905000000` → `20270906000000` (01/09).**
 Não foi capricho: `20270905000000` **já estava aplicada em prod** como
