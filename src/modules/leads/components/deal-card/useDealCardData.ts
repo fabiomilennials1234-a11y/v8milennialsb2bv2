@@ -92,6 +92,56 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     };
   }, [checklistsDoLead]);
 
+  /**
+   * ── AS NOTAS ANTIGAS, AS QUE SUMIRAM DA TELA ──────────────────────────────
+   * `lead_history` com `action = 'note_added'`: 1.250 linhas em 851 leads
+   * (prod, 01/09/2026), escritas à mão pela equipe pelo bloco de notas do chat
+   * e pelos modais antigos de Confirmação e Propostas. Elas nunca tiveram
+   * caminho de tela dentro do Negócio — nem antes nem depois do painel de duas
+   * colunas — e para **750 leads que têm negócio e nenhum comentário vivo** o
+   * bloco "Comentários" abre hoje dizendo "Nenhum comentário ainda" enquanto o
+   * texto existe no banco.
+   *
+   * ── POR QUE `limit(20)` BASTA, E NÃO É CHUTE ─────────────────────────────
+   * Medida a distribuição POR LEAD: mediana 1, p99 5, **máximo 7**, e ZERO
+   * leads acima de 20. Uma consulta dedicada por `action` devolve 100% das
+   * notas de 100% dos leads dentro do teto de 20 — que é o teto que o dono do
+   * produto pediu para manter. O corte de `useLeadTimeline` (`PAGE_SIZE = 20`)
+   * é que engolia a nota, porque lá os 20 disputam espaço com as ~530 mil
+   * linhas de tráfego de WhatsApp. Aqui não há disputa.
+   *
+   * ── POR QUE CONSULTA PRÓPRIA, E NÃO MAIS UMA PROMESSA DO `extras` ────────
+   * `extras` tem chave por ENTRY (`["deal-card-extras", entryId, …]`) e é
+   * invalidada a cada desfecho e a cada anotação gravada. Nota é do LEAD, e
+   * 356 dos 851 leads têm mais de um negócio: pendurar aqui faria a mesma
+   * lista ser buscada uma vez por negócio e refeita a cada mudança de etapa.
+   *
+   * 🔑 A chave começa com `["lead-history", leadId]` DE PROPÓSITO: é o prefixo
+   * que `useLogLeadAction.ts:126` já invalida ao gravar uma nota nova. Sem
+   * isso, nota escrita pelo chat não apareceria aqui até o `staleTime` vencer.
+   */
+  const notas = useQuery({
+    queryKey: ["lead-history", leadId, "note_added"],
+    enabled: isOpen && !!leadId,
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("lead_history")
+        .select("id, description, created_at, created_by")
+        .eq("lead_id", leadId!)
+        .eq("action", "note_added")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        description: string | null;
+        created_at: string;
+        created_by: string | null;
+      }>;
+    },
+  });
+
   const negocioBase = useMemo(
     () => (dealsMap?.[leadId ?? ""] ?? []).find((d) => d.id === entryId) ?? null,
     [dealsMap, leadId, entryId],
@@ -559,5 +609,14 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     membroId: teamMemberId ?? null,
     souAdmin: role === "admin",
     resumoChecklists,
+    /**
+     * As notas antigas do LEAD, cruas. Sai como IRMÃ e não dentro de
+     * `DealCardData` de propósito: `DealCardData` é o formato que o `DealCard`
+     * desenha, e ele está no grafo de `/preview.html`. Entrar lá obrigaria as
+     * fixtures de desenho a inventar notas, e faria uma nota nova custar a
+     * releitura de etapas, mediana e produtos — o mesmo motivo pelo qual os
+     * comentários também entram por fora (ver `DealCard.tsx`).
+     */
+    notas: notas.data,
   };
 }

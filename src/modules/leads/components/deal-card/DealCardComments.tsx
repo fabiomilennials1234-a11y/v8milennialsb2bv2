@@ -184,6 +184,17 @@ function Comentario({
               {comentario.deOutroNegocio}
             </span>
           )}
+          {/* Ver `origem` em `types.ts` para o porquê do selo. O `title` diz o
+              que o rótulo curto não cabe: por que esta linha não tem os botões
+              que a de cima tem. */}
+          {comentario.origem === "nota" && (
+            <span
+              className="shrink-0 rounded border border-border bg-muted px-1.5 text-[10.5px] font-medium text-muted-foreground"
+              title="Anotação registrada no histórico do lead. Fica como está — histórico não se edita."
+            >
+              Anotação
+            </span>
+          )}
 
           {(podeEditar || podeApagar) && !editando && !confirmandoApagar && (
             <span className="ml-auto flex items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">

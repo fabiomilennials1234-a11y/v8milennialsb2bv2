@@ -14,6 +14,7 @@ import {
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
+import { lerNotaDoHistorico } from "@/shared/format/nota-de-historico";
 import { supabase } from "@/integrations/supabase/client";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { useFeaturePermission } from "@/modules/identity";
@@ -65,7 +66,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const { isMobile } = useViewport();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists } =
+  const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists, notas } =
     useDealCardData(entryId, leadId, isOpen);
 
   const [adicionandoProduto, setAdicionandoProduto] = useState(false);
@@ -311,8 +312,47 @@ export const DealCardPanel = memo(function DealCardPanel() {
     return mapa;
   }, [data?.outrosNegocios]);
 
+  /**
+   * ── AS ANOTAÇÕES ANTIGAS ENTRAM NA MESMA LISTA ────────────────────────────
+   * São as linhas `note_added` de `lead_history` (ver o porquê e as medições
+   * em `useDealCardData`). Elas entram AQUI, no bloco que já existe, e não numa
+   * aba "Histórico" — e isso não é economia de trabalho, é a decisão do dono do
+   * produto de 24/08 registrada em `DealCard.tsx:703-713`: texto escrito por
+   * pessoa fica no PÉ da aba, à vista, porque `leads.notes` está preenchido em
+   * 74,9% dos leads e `lead_comments` em 4,4%, e a diferença mais provável
+   * entre os dois é que a nota estava na cara e o comentário atrás de uma aba.
+   * Devolver a anotação e escondê-la atrás de uma aba nova seria repetir o
+   * experimento sabendo o resultado.
+   *
+   * São somente leitura: `lead_history` é log e não tem caminho de edição em
+   * lugar nenhum do produto. O selo "Anotação" (`origem`) é o que explica a
+   * ausência dos botões — ver `types.ts`.
+   */
+  const comentariosDeNota = useMemo<DealCardComentario[]>(() => {
+    return (notas ?? []).map((n) => {
+      const { autor, corpo } = lerNotaDoHistorico(n.description);
+      return {
+        // Prefixo de namespace: `lead_history.id` e `lead_comments.id` são
+        // uuids de tabelas diferentes e poderiam, em tese, colidir como chave
+        // de React. Também é o que deixa a origem legível no DOM ao depurar.
+        id: `nota:${n.id}`,
+        corpo,
+        // Sem prefixo de autor a linha continua valendo — o texto é o que
+        // importa. "Usuário" é o mesmo rótulo que o resto do bloco usa.
+        autor: autor ?? "Usuário",
+        autorAvatar: null,
+        criadoEm: n.created_at,
+        editadoEm: null,
+        deOutroNegocio: null,
+        podeEditar: false,
+        podeApagar: false,
+        origem: "nota" as const,
+      };
+    });
+  }, [notas]);
+
   const comentarios = useMemo<DealCardComentario[]>(() => {
-    return (comentariosBrutos ?? [])
+    const doBloco = (comentariosBrutos ?? [])
       // Apagado é soft-delete e continua na tabela. A lápide "Comentário
       // apagado" do modal antigo virava ruído num bloco que agora divide
       // espaço com produtos e etapas — e a auditoria não se perde: o gatilho
@@ -345,9 +385,23 @@ export const DealCardPanel = memo(function DealCardPanel() {
           deOutroNegocio,
           podeEditar: souOAutor,
           podeApagar: souOAutor || !!souAdmin,
+          origem: "comentario" as const,
         };
       });
-  }, [comentariosBrutos, entryId, tituloPorNegocio, membroId, souAdmin]);
+
+    /**
+     * 🚨 O `sort` é OBRIGATÓRIO a partir daqui, e é a regressão mais fácil de
+     * introduzir neste arquivo. `DealCardComments` desenha na ordem em que
+     * recebe (`DealCardComments.tsx:374-378`, sem `sort`), e até hoje a ordem
+     * "mais recente primeiro" vinha de graça do `.order(...)` de
+     * `useLeadComments.ts:24`. Com duas fontes concatenadas, sem ordenar aqui a
+     * lista sairia com todos os comentários e depois todas as anotações — uma
+     * linha de agosto embaixo de uma de fevereiro.
+     */
+    return [...doBloco, ...comentariosDeNota].sort(
+      (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime(),
+    );
+  }, [comentariosBrutos, comentariosDeNota, entryId, tituloPorNegocio, membroId, souAdmin]);
 
   const comentar = useCallback(
     async (texto: string) => {

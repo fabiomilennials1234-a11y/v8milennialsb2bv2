@@ -141,6 +141,21 @@ export interface DealCardComentario {
   deOutroNegocio: string | null;
   podeEditar: boolean;
   podeApagar: boolean;
+  /**
+   * De onde a linha veio.
+   *
+   * `"comentario"` (o padrão) é `lead_comments` — escrito pelo bloco, editável
+   * e apagável por quem tem direito. `"nota"` é uma linha antiga de
+   * `lead_history` (`action = 'note_added'`), escrita pelo bloco de notas do
+   * chat ou pelos modais antigos de Confirmação e Propostas.
+   *
+   * A distinção não é enfeite: a nota é **somente leitura** — `lead_history` é
+   * log, não tem caminho de edição em lugar nenhum do produto e nem deveria
+   * ter. Sem o selo, uma linha sem os botões de editar/apagar ao lado de outra
+   * que os tem parece defeito de permissão, e a primeira reação de quem lê é
+   * abrir chamado. O selo responde antes da pergunta.
+   */
+  origem?: "comentario" | "nota";
 }
 
 /**

@@ -11,6 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Tables } from "@/integrations/supabase/types";
+import { lerNotaDoHistorico } from "@/shared/format/nota-de-historico";
 import {
   AtSign,
   Check,
@@ -755,11 +756,18 @@ function useAddLeadNote(leadId: string, organizationId: string | null) {
   });
 }
 
+/**
+ * O leitor do formato mora em `@/shared/format/nota-de-historico` desde 01/09.
+ *
+ * O painel do Negócio passou a mostrar estas mesmas notas (`note_added`), e um
+ * segundo `indexOf(":")` copiado para lá significaria duas telas discordando
+ * sobre onde termina o autor no dia em que o formato mudasse. O `"—"` continua
+ * sendo o rótulo desta tela para nota sem prefixo — quem decide como exibir a
+ * ausência é quem desenha, não quem lê.
+ */
 function parseNote(desc: string | null): { author: string; body: string } {
-  if (!desc) return { author: "—", body: "" };
-  const idx = desc.indexOf(":");
-  if (idx === -1) return { author: "—", body: desc };
-  return { author: desc.slice(0, idx).trim(), body: desc.slice(idx + 1).trim() };
+  const { autor, corpo } = lerNotaDoHistorico(desc);
+  return { author: autor ?? "—", body: corpo };
 }
 
 function NotesBlock({
