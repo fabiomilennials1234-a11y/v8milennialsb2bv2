@@ -13,6 +13,44 @@ import type { ActionResult } from "./types.ts";
 import { resolveDispatchContext, DispatchResolutionError } from "../whatsapp-dispatch.ts";
 import { isCopilotCanceled, logCopilotCancellation } from "../copilot/cancellation.ts";
 import { logEvent } from "../error-boundary.ts";
+import {
+  DELIVERED_AT_KEY,
+  isDeliveredSend,
+  SUPPRESSED_AT_KEY,
+  SUPPRESSED_REASON_KEY,
+} from "../copilot/document-delivery.ts";
+
+/**
+ * Carimba o desfecho REAL do envio no payload da própria ação.
+ *
+ * `process-ai-actions` grava `status='completed'` sempre que `result.success`
+ * é true — e a supressão devolve `success: true`. Sem este carimbo, entregue e
+ * suprimido ficam indistinguíveis no banco, o gate de dedup passa a se
+ * alimentar das próprias supressões, e a seção "Documentos já enviados" do
+ * prompt manda o modelo AFIRMAR ao lead um envio que nunca aconteceu.
+ *
+ * Fire-and-forget de propósito: falha em carimbar não pode derrubar um envio
+ * que já saiu no WhatsApp do lead.
+ */
+async function stampActionOutcome(
+  supabase: SupabaseClient,
+  actionId: string | null,
+  basePayload: Record<string, unknown>,
+  outcome: Record<string, unknown>,
+): Promise<void> {
+  if (!actionId) return;
+  try {
+    const { error } = await supabase
+      .from("pending_ai_actions")
+      .update({ payload: { ...basePayload, ...outcome } })
+      .eq("id", actionId);
+    if (error) {
+      console.warn("[executeSendDocument] Failed to stamp action outcome:", error.message);
+    }
+  } catch (e) {
+    console.warn("[executeSendDocument] Failed to stamp action outcome:", e);
+  }
+}
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -102,8 +140,14 @@ export async function checkDocumentAlreadySent(
   const { data } = await query;
 
   if (data && data.length > 0) {
+    // Só conta como duplicata a ação que REALMENTE entregou. Antes daqui,
+    // uma supressão gravava `completed` e virava a prova que suprimia a
+    // próxima — o gate se auto-alimentava e a conversa nunca mais recebia
+    // aquele arquivo. Ver _shared/copilot/document-delivery.ts.
     const isDuplicate = data.some(
-      (row: any) => (row.payload as Record<string, unknown>)?.document_id === documentId,
+      (row: any) =>
+        (row.payload as Record<string, unknown>)?.document_id === documentId &&
+        isDeliveredSend(row.payload as Record<string, unknown>),
     );
 
     if (isDuplicate) {
@@ -287,6 +331,11 @@ export async function executeSendDocument(
     );
     if (alreadySent) {
       console.debug("[executeSendDocument] Duplicate document skipped:", { conversationId, documentId });
+      await stampActionOutcome(supabase, actionId, payload, {
+        document_id: documentId,
+        [SUPPRESSED_AT_KEY]: new Date().toISOString(),
+        [SUPPRESSED_REASON_KEY]: "duplicate_document",
+      });
       return {
         success: true,
         message: "Document already sent in this conversation — skipped",
@@ -388,6 +437,11 @@ export async function executeSendDocument(
     console.debug("[executeSendDocument] Send already in-flight/done (lock held), skipping:", {
       lockKey,
     });
+    await stampActionOutcome(supabase, actionId, payload, {
+      document_id: documentId,
+      [SUPPRESSED_AT_KEY]: new Date().toISOString(),
+      [SUPPRESSED_REASON_KEY]: "send_lock_held",
+    });
     return {
       success: true,
       message: "Document send already in-flight or completed — skipped",
@@ -447,6 +501,16 @@ export async function executeSendDocument(
     } catch (e) {
       console.warn("[executeSendDocument] Failed to log outgoing message:", e);
     }
+
+    // Carimba a ENTREGA: é este carimbo que autoriza o gate a barrar um
+    // reenvio e a seção "Documentos já enviados" a citar o arquivo pelo nome.
+    // Grava também o `document_id` canônico — quando o modelo manda o NOME do
+    // arquivo, o payload original guarda o nome e o gate nunca casava.
+    await stampActionOutcome(supabase, actionId, payload, {
+      document_id: documentId,
+      file_name: doc.file_name,
+      [DELIVERED_AT_KEY]: new Date().toISOString(),
+    });
 
     return {
       success: true,

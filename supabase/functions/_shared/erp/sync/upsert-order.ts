@@ -45,23 +45,52 @@ export interface OrderStore {
 }
 
 /**
+ * Situações que encerram o pedido — não viraram receita e não vão virar.
+ *
+ * O vocabulário completo veio do enum `StatusPedido` do fonte do Toth, que o
+ * fornecedor enviou em 01/09: NORMAL(0) · BLOQUEADO(1) · DEVOLVIDO(2) ·
+ * CANCELADO(3) · FATURADO(4) · BAIXADO(5) · PENDENTE_ANALISE(6) ·
+ * FATURADO_PARCIAL(7) · DEVOLVIDO_PARCIAL(8) · FATURADO_COMPATIBILIDADE(9).
+ * Até então conhecíamos DOIS valores, os que apareceram numa amostra de dez.
+ *
+ * Peso real, medido em 554 pedidos da Café Jurerê (jun–ago/2026):
+ * FATURADO 405 · **CANCELADO 122** · NORMAL 39 · DEVOLVIDO 8 ·
+ * FATURADO_PARCIAL 2. Cancelado é 22% do volume — deixá-lo em `pending`
+ * encheria a ficha do cliente de "carteira em formação" que já morreu.
+ */
+const SITUACOES_ENCERRADAS = new Set(["CANCELADO", "DEVOLVIDO"]);
+
+/**
  * Situação do ERP → `approval_status` da Carteira.
  *
- * 🔴 É aqui que se decide o que conta como receita. O Toth devolve pedidos
- * `NORMAL` (emitido, ainda não faturado) junto com `FATURADO`, e a Carteira soma
- * `upsell_orders` aprovados. Aprovar tudo inflaria o faturamento com pedido que
- * pode ser cancelado antes de virar nota; recusar tudo esconderia a carteira em
- * formação.
+ * 🔴 É aqui que se decide o que conta como receita. A Carteira soma
+ * `upsell_orders` aprovados, e são três destinos:
  *
- * Faturado entra aprovado — é venda consumada. Qualquer outra situação entra
- * como pendente: aparece na ficha do cliente, não entra na conta.
+ * - **`approved`** — `FATURADO`/`APROVADO`: venda consumada, entra na conta.
+ * - **`rejected`** — `CANCELADO`/`DEVOLVIDO`: encerrado sem receita. Continua
+ *   registrado, porque o histórico do cliente é informação, mas fora da conta.
+ * - **`pending`** — o resto (`NORMAL`, `BLOQUEADO`, `PENDENTE_ANALISE`,
+ *   `BAIXADO`, os parciais): carteira em formação. Aparece na ficha, não conta.
+ *
+ * ⚠️ **`FATURADO_PARCIAL` fica em `pending`, e isso é limitação da API, não
+ * escolha de produto.** A decisão do CTO em 01/09 foi que parcial entrasse
+ * proporcional — mas o payload de `/flow/crm/pedidos` traz só `qtdpedido` e
+ * `valorunitario`, **sem nenhum campo de quantidade ou valor FATURADO**
+ * (verificado nos 554 pedidos: os campos de item são exatamente
+ * `codigoproduto`, `descricaoproduto`, `qtdpedido`, `valorunitario`). Sem saber
+ * quanto do pedido virou nota, qualquer proporção seria inventada — e receita
+ * inventada é pior que receita adiada. Enquanto o fornecedor não expuser
+ * `qtdFaturada`/`valorFaturado`, `pending` é a resposta honesta; custa 2
+ * pedidos em 554 (0,4%).
  *
  * Provider sem situação (Omie) segue aprovado, como sempre foi.
  */
 export function approvalForErpStatus(erpStatus: string | null | undefined): string {
   if (!erpStatus) return "approved";
   const normalized = erpStatus.trim().toUpperCase();
-  return normalized === "FATURADO" || normalized === "APROVADO" ? "approved" : "pending";
+  if (normalized === "FATURADO" || normalized === "APROVADO") return "approved";
+  if (SITUACOES_ENCERRADAS.has(normalized)) return "rejected";
+  return "pending";
 }
 
 export interface UpsertOrderParams {

@@ -50,10 +50,17 @@ export function buildSentDocumentsSection(
   if (!sentDocuments || sentDocuments.length === 0) return "";
 
   const lines: string[] = [];
-  lines.push("## Documentos já enviados nesta conversa");
+  lines.push("## Documentos já entregues nesta conversa");
   lines.push("");
+  // A redação anterior mandava "confirme que já enviou" e proibia reenviar.
+  // Como a lista era montada de `status='completed'` — que incluía os envios
+  // que o dedup engoliu —, o modelo era instruído a INSISTIR com o lead que
+  // mandou um arquivo que nunca saiu, e ficava proibido de corrigir. Medido em
+  // prod 2026-09-01: de 20 leads que disseram "não chegou", em 12 o agente nem
+  // tentou de novo. A lista agora só traz o que foi de fato entregue, e a
+  // instrução deixa de forçar a insistência.
   lines.push(
-    "Os seguintes documentos já foram enviados ao lead nesta conversa. Não reenvie os mesmos documentos. Se o lead perguntar novamente sobre o conteúdo, confirme que já enviou e ofereça esclarecer dúvidas.",
+    "Os arquivos abaixo já chegaram ao lead nesta conversa — não os mande de novo sem motivo. Se o lead disser que não recebeu, ou pedir de novo, reenvie na hora: não afirme que já mandou nem peça para ele procurar no histórico.",
   );
   lines.push("");
   for (const doc of sentDocuments) {

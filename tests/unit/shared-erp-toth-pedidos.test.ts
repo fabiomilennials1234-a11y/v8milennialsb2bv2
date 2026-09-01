@@ -195,7 +195,20 @@ describe("approvalForErpStatus", () => {
   it("só FATURADO conta como receita", () => {
     expect(approvalForErpStatus("FATURADO")).toBe("approved");
     expect(approvalForErpStatus("NORMAL")).toBe("pending");
-    expect(approvalForErpStatus("CANCELADO")).toBe("pending");
+  });
+
+  /**
+   * Este caso mudou de propósito em 01/09, por decisão do CTO. Antes
+   * `CANCELADO` caía em `pending` — o balde de "tudo que não é faturado" — e
+   * ficava lá para sempre, aparecendo na ficha do cliente como carteira em
+   * formação. Com o enum completo em mãos (o fornecedor mandou o fonte) e a
+   * medição de que cancelado é **22% do volume** (122 de 554 pedidos entre
+   * junho e agosto), pendurar um quinto da base em "quase vendeu" deixou de ser
+   * defensável: cancelado e devolvido são desfechos, não etapas.
+   */
+  it("CANCELADO e DEVOLVIDO são desfecho, não pendência", () => {
+    expect(approvalForErpStatus("CANCELADO")).toBe("rejected");
+    expect(approvalForErpStatus("DEVOLVIDO")).toBe("rejected");
   });
 
   it("provider sem situação segue aprovado, como sempre foi", () => {
