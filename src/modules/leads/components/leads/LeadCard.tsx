@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
+import { CreateMeetingDialog } from "@/modules/engagement";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { AbrirConversaMenuItem } from "@/modules/communication/components/chat/AbrirConversaMenuItem";
@@ -311,6 +312,7 @@ export const LeadCard = memo(function LeadCard({
   density = "comfortable", ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [reuniaoOpen, setReuniaoOpen] = useState(false);
   const [addFunilOpen, setAddFunilOpen] = useState(false);
   // Resiliente: `null` quando o card monta fora de um PipeOpsProvider — nesse
   // caso o item "Adicionar a funil" e o dialog simplesmente não aparecem.
@@ -480,9 +482,26 @@ export const LeadCard = memo(function LeadCard({
           </span>
         )}
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={abrirFicha}>
-        <CalendarDays className="w-4 h-4 mr-2" /> Reunião {selo}
-      </DropdownMenuItem>
+      {/* "Reunião" ABRE o diálogo de marcar, em vez de levar à ficha.
+          Marcar reunião é a porta canônica da métrica (a agenda é a fonte),
+          então o caminho tem de ser um clique — e não "abre a ficha, acha a
+          aba, marca lá".
+
+          Cai para a ficha quando não há `leadId`: `lead.id` aqui é o id da
+          ENTRADA no funil, e `meetings.lead_id` é FK de `leads`. Marcar com o
+          id errado gravaria reunião para um lead que não existe — o mesmo
+          motivo pelo qual `LeadEtiquetasPopover` já se esconde sem `leadId`. */}
+      {lead.leadId ? (
+        <DropdownMenuItem
+          onClick={(e) => { e.stopPropagation(); setReuniaoOpen(true); }}
+        >
+          <CalendarDays className="w-4 h-4 mr-2" /> Reunião
+        </DropdownMenuItem>
+      ) : (
+        <DropdownMenuItem onClick={abrirFicha}>
+          <CalendarDays className="w-4 h-4 mr-2" /> Reunião {selo}
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem onClick={abrirFicha}>
         <Wallet className="w-4 h-4 mr-2" /> Orçamento {selo}
       </DropdownMenuItem>
@@ -532,6 +551,15 @@ export const LeadCard = memo(function LeadCard({
           leadId={lead.leadId || ""}
           leadName={lead.name}
           phoneNumber={lead.phone || ""}
+        />
+      )}
+
+      {reuniaoOpen && lead.leadId && (
+        <CreateMeetingDialog
+          open={reuniaoOpen}
+          onOpenChange={setReuniaoOpen}
+          initialLeadId={lead.leadId}
+          initialLeadName={lead.name}
         />
       )}
       {pipeOps && addFunilOpen && (
@@ -923,6 +951,15 @@ export const LeadCard = memo(function LeadCard({
           leadId={lead.leadId || ""}
           leadName={lead.name}
           phoneNumber={lead.phone || ""}
+        />
+      )}
+
+      {reuniaoOpen && lead.leadId && (
+        <CreateMeetingDialog
+          open={reuniaoOpen}
+          onOpenChange={setReuniaoOpen}
+          initialLeadId={lead.leadId}
+          initialLeadName={lead.name}
         />
       )}
 
