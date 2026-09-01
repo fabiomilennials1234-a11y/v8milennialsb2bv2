@@ -82,4 +82,44 @@ describe("motor de som", () => {
 
     expect(() => motor.tocar("sistema", 55)).not.toThrow();
   });
+
+  it("contexto suspenso é retomado antes de agendar — senão toca no vazio", async () => {
+    const falso = contextoFalso();
+    const ctx = falso.ctx as unknown as { state: string; resume: () => Promise<void> };
+    ctx.state = "suspended";
+    let retomou = false;
+    // No navegador, resume() é assíncrono: o estado só vira "running" quando a
+    // promessa resolve. Um dublê que muda na hora esconderia o defeito.
+    ctx.resume = () => {
+      retomou = true;
+      return Promise.resolve().then(() => {
+        ctx.state = "running";
+      });
+    };
+
+    const motor = new MotorDeSom(() => falso.ctx);
+    motor.tocar("mensagem", 55);
+
+    // Nada é agendado antes da retomada: o navegador ignoraria as notas.
+    expect(falso.osciladores).toHaveLength(0);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(retomou).toBe(true);
+    expect(falso.osciladores).toHaveLength(2);
+  });
+
+  it("retomada recusada não explode nem marca o áudio como destravado", async () => {
+    const falso = contextoFalso();
+    const ctx = falso.ctx as unknown as { state: string; resume: () => Promise<void> };
+    ctx.state = "suspended";
+    ctx.resume = () => Promise.reject(new Error("gesto ausente"));
+
+    const motor = new MotorDeSom(() => falso.ctx);
+
+    expect(() => motor.tocar("erro", 55)).not.toThrow();
+    await Promise.resolve();
+    expect(falso.osciladores).toHaveLength(0);
+  });
 });

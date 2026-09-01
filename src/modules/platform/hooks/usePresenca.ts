@@ -42,9 +42,16 @@ export function usePresenca(): void {
     const carimbar = () => {
       if (!vivo) return;
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void (supabase as unknown as ClienteComPresenca).rpc("fn_registrar_presenca", {
-        p_organization_id: organizationId,
-      });
+      // `void builder` NÃO dispara requisição: o construtor do PostgREST é
+      // preguiçoso — o fetch acontece dentro do `then`. A primeira versão disto
+      // nunca chamou o servidor, e a tabela de presença ficou vazia em produção
+      // com 90 leituras do sino no mesmo minuto. Precisa de `.then`.
+      void (supabase as unknown as ClienteComPresenca)
+        .rpc("fn_registrar_presenca", { p_organization_id: organizationId })
+        .then(
+          () => undefined,
+          () => undefined,
+        );
     };
 
     carimbar();

@@ -14,6 +14,8 @@ import {
 
 import { usePreferenciasDeAviso } from "../../hooks/usePreferenciasDeAviso";
 import { usePushSubscription } from "../../hooks/use-push-subscription";
+import { motorDeSom } from "../../lib/motor-de-som";
+import { timbreDoTipo } from "../../lib/decisao-de-entrega";
 import type { PreferenciasDeAviso as Preferencias } from "../../lib/preferencias-de-aviso";
 
 /**
@@ -238,11 +240,27 @@ export function PreferenciasDeAviso() {
               <Label>{rotulo}</Label>
               <p className="text-sm text-muted-foreground">{descricao}</p>
             </div>
-            <Switch
-              checked={somDoGrupo(tipos)}
-              disabled={!preferencias.sound_enabled}
-              onCheckedChange={(v) => alternarGrupo(tipos, v)}
-            />
+            <div className="flex items-center gap-2">
+              {/* Ouvir o timbre é a única forma de escolher com informação — e
+                  serve de diagnóstico: se o teste toca e o Aviso não, o problema
+                  está na entrega, não no áudio. */}
+              <button
+                type="button"
+                onClick={() => {
+                  motorDeSom.destravar();
+                  motorDeSom.tocar(timbreDoTipo(tipos[0]), preferencias.volume);
+                }}
+                disabled={!preferencias.sound_enabled || !somDoGrupo(tipos)}
+                className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+              >
+                Ouvir
+              </button>
+              <Switch
+                checked={somDoGrupo(tipos)}
+                disabled={!preferencias.sound_enabled}
+                onCheckedChange={(v) => alternarGrupo(tipos, v)}
+              />
+            </div>
           </div>
         ))}
       </div>
