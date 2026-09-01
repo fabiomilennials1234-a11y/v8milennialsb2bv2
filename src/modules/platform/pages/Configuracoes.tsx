@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PreferenciasDeAviso } from "@/modules/platform/components/notifications/PreferenciasDeAviso";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -338,61 +339,6 @@ function TagsSettings() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function NotificationSettings() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">Notificações</h3>
-        <p className="text-sm text-muted-foreground">
-          Configure quando e como receber notificações
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label>Novas reuniões agendadas</Label>
-            <p className="text-sm text-muted-foreground">
-              Receba uma notificação quando um lead agendar uma reunião
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label>Vendas fechadas</Label>
-            <p className="text-sm text-muted-foreground">
-              Receba uma notificação quando uma venda for fechada
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label>Lembrete de reuniões</Label>
-            <p className="text-sm text-muted-foreground">
-              Receba lembretes 1 hora antes das reuniões
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label>Metas atingidas</Label>
-            <p className="text-sm text-muted-foreground">
-              Receba uma notificação quando atingir uma meta
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-      </div>
     </div>
   );
 }
@@ -736,7 +682,7 @@ export default function Configuracoes() {
           <TabsContent value="notifications">
             <Card className="glass-card">
               <CardContent className="pt-6">
-                <NotificationSettings />
+                <PreferenciasDeAviso />
               </CardContent>
             </Card>
           </TabsContent>

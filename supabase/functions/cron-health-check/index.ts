@@ -64,6 +64,48 @@ function buildTableSecretFetcher(
   };
 }
 
+
+/**
+ * Drift de segredo de cron para o sino de quem opera a plataforma (#1886).
+ *
+ * Detectar não é alertar: até aqui esta função só escrevia em runtime_logs, que
+ * ninguém lê — e o incidente que ela existe para pegar para TODAS as automações
+ * em silêncio.
+ *
+ * O segredo é global, não por organização, então o Aviso vai para a organização
+ * que OPERA a plataforma, e só para ela: nenhum administrador de cliente pode
+ * consertar isto, e 30 sinos tocando por um incidente nosso é ruído, não
+ * transparência. Sem AVISOS_OPS_ORG_ID configurado, nada é emitido — e isso é
+ * exatamente o defeito de hoje, então a variável é parte da entrega, não um
+ * opcional.
+ */
+async function avisarOperacao(
+  supabase: ReturnType<typeof createClient>,
+  mensagem: string,
+): Promise<void> {
+  const orgOperacao = Deno.env.get("AVISOS_OPS_ORG_ID") ?? "";
+  if (!orgOperacao) {
+    console.warn("[cron-health-check] AVISOS_OPS_ORG_ID ausente — drift sem destinatário");
+    return;
+  }
+
+  const hoje = new Date().toISOString().slice(0, 10);
+  const { error } = await supabase.rpc("fn_emit_aviso_admins", {
+    p_organization_id: orgOperacao,
+    p_type: "cron_drift",
+    // Um Aviso por dia: enquanto ninguém lê, o contador cresce em vez de a
+    // caixa encher — o cron roda de 5 em 5 minutos.
+    p_group_key: `cron_drift:${hoje}`,
+    p_title: "O motor de automações parou",
+    p_description: mensagem,
+    p_link: "/automacoes",
+  });
+
+  if (error) {
+    console.error("[cron-health-check] aviso de drift falhou:", error.message);
+  }
+}
+
 Deno.serve(
   withErrorBoundary("cron-health-check", async (req: Request): Promise<Response> => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -103,6 +145,7 @@ Deno.serve(
 
     if (!report.healthy) {
       console.error("[cron-health-check] UNHEALTHY:", report.message);
+      await avisarOperacao(supabase, report.message);
     }
 
     return new Response(JSON.stringify(report), { status: 200, headers });

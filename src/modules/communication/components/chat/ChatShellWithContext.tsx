@@ -28,6 +28,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { definirConversaAberta } from "@/modules/platform";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
@@ -171,6 +172,13 @@ function ChatView({
   );
   const { leadId: effectiveLeadId, leadName: effectiveLeadName } =
     resolveEffectiveLead(selectedContact, leadByPhone);
+
+  // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
+  // daqui é o único ponto que sabe qual lead está aberto.
+  useEffect(() => {
+    definirConversaAberta(effectiveLeadId ?? null);
+    return () => definirConversaAberta(null);
+  }, [effectiveLeadId]);
 
   const {
     data: messages = [],

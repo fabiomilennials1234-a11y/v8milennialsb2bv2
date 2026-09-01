@@ -643,49 +643,49 @@ async function checkWorkflowFailureAlert(
   organizationId: string,
   workflowName: string,
 ): Promise<void> {
+  // O Aviso nasce na PRIMEIRA falha (#1886, ADR-0035). O limiar de três falhas
+  // por hora existia só para não repetir aviso; o coalescing por chave de
+  // agrupamento resolve isso melhor — e sem esconder a primeira falha, que é
+  // justamente quando dá para agir antes da fila engrossar.
+  //
+  // A supressão anterior era por organização + tipo: dois workflows quebrados na
+  // mesma hora e o segundo NUNCA notificava ninguém. Agora a chave é o workflow.
   try {
     const oneHourAgo = new Date(Date.now() - 3_600_000).toISOString();
-    const { count } = await supabase
+    const { count: falhas } = await supabase
       .from("workflow_executions")
       .select("*", { count: "exact", head: true })
       .eq("workflow_id", workflowId)
       .eq("status", "failed")
       .gte("completed_at", oneHourAgo);
 
-    const ALERT_THRESHOLD = 3;
-    if ((count ?? 0) < ALERT_THRESHOLD) return;
-
-    const { count: recentAlerts } = await supabase
-      .from("notifications")
+    const { count: parados } = await supabase
+      .from("workflow_executions")
       .select("*", { count: "exact", head: true })
-      .eq("organization_id", organizationId)
-      .eq("type", "workflow_alert")
-      .gte("created_at", oneHourAgo);
+      .eq("workflow_id", workflowId)
+      .in("status", ["running", "waiting"]);
 
-    if ((recentAlerts ?? 0) > 0) return;
+    const n = falhas ?? 1;
+    const descricao = [
+      `${n} ${n === 1 ? "falha" : "falhas"} na última hora`,
+      (parados ?? 0) > 0 ? `${parados} ${parados === 1 ? "lead parado" : "leads parados"}` : null,
+    ].filter(Boolean).join(" · ");
 
-    const { data: members } = await supabase
-      .from("team_members")
-      .select("user_id")
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .not("user_id", "is", null)
-      .limit(10);
+    const { error } = await supabase.rpc("fn_emit_aviso_admins", {
+      p_organization_id: organizationId,
+      p_type: "workflow_alert",
+      p_group_key: `wf:${workflowId}`,
+      p_title: `Automação parou: ${workflowName}`,
+      p_description: descricao,
+      p_link: "/automacoes",
+      p_entity_id: workflowId,
+    });
 
-    const userIds = (members ?? []).map((m: { user_id: string }) => m.user_id).filter(Boolean);
-    if (userIds.length === 0) return;
-
-    await supabase.from("notifications").insert(
-      userIds.map((userId: string) => ({
-        organization_id: organizationId,
-        user_id: userId,
-        type: "workflow_alert",
-        title: "Alerta de Workflow",
-        description: `Workflow "${workflowName}" falhou ${count} vezes na última hora`,
-        link: "/automacoes",
-      })),
-    );
-    console.log(`[workflow-trigger] Alert: ${workflowName} failed ${count}x/1h, notified ${userIds.length} users`);
+    if (error) {
+      console.warn("[process-workflow-executions] aviso de automação falhou:", error.message);
+      return;
+    }
+    console.log(`[workflow-alert] ${workflowName}: ${descricao}`);
   } catch (err) {
     console.warn("[process-workflow-executions] Alert check failed:", err);
   }
