@@ -11,7 +11,16 @@
 import type { OracleScope } from "../scope.ts";
 
 export interface ToolDb {
-  rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: unknown }>;
+  /**
+   * `PromiseLike` e não `Promise`: o `rpc` do supabase-js devolve um
+   * `PostgrestFilterBuilder`, que é thenable mas não é uma Promise. Declarar
+   * `Promise` fazia o cliente real não caber no próprio tipo — o `await`
+   * funcionava em runtime e só o `deno check` acusava.
+   */
+  rpc(
+    name: string,
+    args: Record<string, unknown>,
+  ): PromiseLike<{ data: unknown; error: unknown }>;
 }
 
 export interface ToolDeps {
