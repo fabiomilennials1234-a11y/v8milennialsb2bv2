@@ -257,7 +257,7 @@ Ou seja: terminado o bloco 3, o Toth sincroniza e **ninguém vê o resultado**.
 Esta é a fatia que transforma dado em produto — receita em risco por cliente,
 lista de atrasados, e o alerta que faz o vendedor agir.
 
-### 4.2 Pedidos de venda — 🔴 é OUTRO SERVIDOR, e ele não responde de fora
+### 4.2 Pedidos de venda — OUTRO SERVIDOR, já alcançável; falta a credencial
 
 **Atualizado em 28/08, e esta atualização inverte a anterior.** `/pedidos` nunca
 foi um caminho faltante do `/toth/services`: o fornecedor publicou pedidos num
@@ -285,13 +285,28 @@ era uma leitura errada da mesma medição. O 404 estava certo — aquele caminho
 existe naquele servidor e nunca vai existir. Nenhum "redirecionamento da GON"
 faria o `/toth/services` servir pedidos.
 
-🔴 **E o serviço novo não responde de fora.** Medido em 28/08 da máquina do CTO,
-com `curl` e com socket cru: a porta 3000 de `cafejurere.ddns.net` **aceita a
-conexão TCP e fecha sem devolver um único byte de HTTP** — em `/`, em
-`/flow/crm/auth`, em GET e em POST, com ou sem credencial —, enquanto a 8080 do
-mesmo host responde 200 normalmente. As capturas do Postman do fornecedor
-funcionam de dentro da rede dele. **Pergunta para a GON: a 3000 está publicada
-para fora, ou tem restrição por IP de origem?** Sem isso, nada roda.
+✅ **A porta 3000 ABRIU — medido 01/09, 13:00 UTC.** Isto supera o parágrafo de
+28/08 ("aceita TCP e fecha sem devolver um byte"). Do mesmo lugar, hoje:
+
+| chamada | 28/08 | 01/09 |
+|---|---|---|
+| `GET :3000/` | TCP aceito, 0 byte, `curl exit 52` | **302** |
+| `POST :3000/flow/crm/auth` | idem | **401, com corpo JSON** |
+
+O 401 veio com envelope real do serviço — `nginx/1.29.7`, `x-powered-by:
+Total.js`, corpo
+`{"error":{"message":"Credenciais rejeitadas pelo ERP","status":401,"providerStatus":401}}`
+— com `client_id`/`client_secret` propositalmente falsos. **É aplicação
+recusando credencial, não silêncio de rede.** A pergunta que estava aberta com a
+GON está respondida; o item sai da lista deles.
+
+⚠️ **Esse 401 prova alcance, não contrato.** O caminho de leitura
+(`POST /pedidos` com janela) segue sem nunca ter rodado com credencial válida.
+
+🔴 **O bloqueio agora é a credencial, e ela não está em nada nosso.**
+`loadTothFlowCredentials` lê só do cofre (`toth_connection_secrets`), preenchido
+pela tela de conexão — sem fallback de env, de propósito. Sem o par
+`client_id`/`client_secret` do fornecedor, o dry-run não sai do lugar.
 
 Construído contra esse contrato (PR desta sessão): `TothFlowClient`,
 `resolvePedidosWindow`, colunas `flow_base_url` / `pedidos_janela_dias` /
@@ -300,8 +315,17 @@ campos na tela de conexão, e `toth-sync-pedidos` reescrito para o transporte
 novo. O mapeador **não mudou** — `pickField` normaliza a chave, então a caixa
 baixa colada de `numeropedido` já casava.
 
-⚠️ **Nada disso foi exercitado contra o serviço real.** A ordem ao destravar a
-porta: `{"dry_run": true}` → conferir a amostra → só então ligar o cron.
+⚠️ **Nada disso foi exercitado contra o serviço real.** Com a porta aberta, a
+ordem ao receber a credencial: aplicar `20270906000000` → gravar o par pela tela
+→ `{"dry_run": true}` → conferir a amostra contra a tela do Toth → só então
+ligar o cron.
+
+⚠️ **A migration foi renumerada `20270905000000` → `20270906000000` (01/09).**
+Não foi capricho: `20270905000000` **já estava aplicada em prod** como
+`oraculo_autoria_da_mensagem`, junto de `...010` e `...020`. Com o número
+antigo, `db push` trataria esta migration como já aplicada e a **pularia em
+silêncio** — a terceira vez que essa armadilha aparece no projeto. O guarda do
+CI pegou a colisão repo×repo; o ledger de prod é que deu o número certo.
 
 <details>
 <summary>Histórico — como estava em 25/08 (o retorno de `/pedidos`)</summary>
