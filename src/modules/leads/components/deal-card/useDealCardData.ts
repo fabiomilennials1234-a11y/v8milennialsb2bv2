@@ -602,6 +602,25 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     return typeof v === "string" && v !== "" ? v : null;
   })();
 
+  /**
+   * ── A ANOTAÇÃO DA PESSOA (`leads.notes`) ──────────────────────────────────
+   * Sai daqui de graça: `useLeadDetail` já trouxe a linha do lead, então ler
+   * `notes` não custa consulta nenhuma. Existe para o CELULAR — ver
+   * `DealCardPanel.conteudo`, que não monta a coluna da pessoa abaixo de 768px
+   * e com ela leva embora o único lugar onde este texto aparecia. É o campo
+   * mais preenchido do produto: **29.190 leads (74,9%)**, contra 379 em
+   * `pipeline_entries.notes`.
+   *
+   * ⚠️ NÃO é a anotação do negócio. `DealCardData.nota` é
+   * `pipeline_entries.notes`, uma por negócio; esta é uma por PESSOA e vale
+   * para todos os negócios dela. Quem monta as duas na mesma tela tem de
+   * rotular — ver o bloco no `DealCard`.
+   */
+  const notaDoLead = (() => {
+    const v = (lead as Linha | null)?.notes;
+    return typeof v === "string" ? v : "";
+  })();
+
   return {
     data,
     isLoading: carregandoLead || extras.isLoading,
@@ -618,5 +637,6 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
      * comentários também entram por fora (ver `DealCard.tsx`).
      */
     notas: notas.data,
+    notaDoLead,
   };
 }

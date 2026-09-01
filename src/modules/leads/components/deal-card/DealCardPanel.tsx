@@ -30,8 +30,10 @@ import {
 } from "../lead-detail/hooks/useLeadComments";
 import { LeadCardContainer } from "../lead-card/LeadCardContainer";
 import { LeadCardEtiquetas } from "../lead-card/LeadCardEtiquetas";
+import { useUpdateLead } from "../../hooks/useLeads";
 import { AdicionarProdutoDialog } from "./AdicionarProdutoDialog";
 import { DealCard } from "./DealCard";
+import { DealCardAnotacaoDoLead } from "./DealCardAnotacaoDoLead";
 import { DealCardChecklists } from "./DealCardChecklists";
 import { useDealCardData } from "./useDealCardData";
 import { useExcluirNegocio } from "./useExcluirNegocio";
@@ -66,8 +68,9 @@ export const DealCardPanel = memo(function DealCardPanel() {
   const { isMobile } = useViewport();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists, notas } =
+  const { data, isLoading, organizacaoId, membroId, souAdmin, resumoChecklists, notas, notaDoLead } =
     useDealCardData(entryId, leadId, isOpen);
+  const atualizarLead = useUpdateLead();
 
   const [adicionandoProduto, setAdicionandoProduto] = useState(false);
 
@@ -267,6 +270,28 @@ export const DealCardPanel = memo(function DealCardPanel() {
       close();
     }
   }, [data, entryId, leadId, excluir, close]);
+
+  /**
+   * A anotação da PESSOA — outra coluna, outra tabela, outro escopo.
+   *
+   * Mesmo caminho que a coluna da esquerda usa (`LeadCardContainer.salvarNota`):
+   * `useUpdateLead`, que já invalida `["lead-detail", id]` e `["leads"]`. Passar
+   * por aqui em vez de um `supabase.from("leads").update()` local é o que faz o
+   * texto aparecer atualizado quando a pessoa gira o telefone e a coluna volta.
+   */
+  const salvarNotaDoLead = useCallback(
+    (texto: string) => {
+      if (!leadId) return;
+      atualizarLead.mutate(
+        { id: leadId, notes: texto },
+        {
+          onError: () =>
+            toast.error("Não foi possível salvar a anotação. O texto continua na tela."),
+        },
+      );
+    },
+    [leadId, atualizarLead],
+  );
 
   const salvarNota = useCallback(
     async (texto: string) => {
@@ -504,6 +529,26 @@ export const DealCardPanel = memo(function DealCardPanel() {
         etiquetas={
           !comLead && leadId ? (
             <LeadCardEtiquetas leadId={leadId} podeCriar={!!souAdmin} />
+          ) : undefined
+        }
+        /**
+         * Mesma regra da faixa de etiquetas, e pela mesma razão: a anotação da
+         * PESSOA (`leads.notes`, 29.190 leads) mora na coluna da esquerda, e
+         * `conteudo(false)` não monta essa coluna. Sem isto, o campo de texto
+         * mais preenchido do produto não existe no celular.
+         *
+         * 🚨 Nunca as duas ao mesmo tempo: com a coluna na tela, repetir a
+         * caixa aqui daria DOIS campos gravando na MESMA coluna do banco a 30cm
+         * um do outro — e `leads.notes` não tem histórico para desfazer o que o
+         * perdedor sobrescrevesse.
+         */
+        anotacaoDoLead={
+          !comLead && leadId ? (
+            <DealCardAnotacaoDoLead
+              nome={data.lead.nome}
+              valor={notaDoLead ?? ""}
+              onSalvar={salvarNotaDoLead}
+            />
           ) : undefined
         }
         onSaveNote={salvarNota}

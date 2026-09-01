@@ -207,6 +207,7 @@ export function DealCard({
   onExcluir,
   excluindo,
   etiquetas,
+  anotacaoDoLead,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
@@ -298,6 +299,17 @@ export function DealCard({
    * que é quem sabe se a coluna existe; aqui só se escolhe onde pendurar.
    */
   etiquetas?: ReactNode;
+  /**
+   * A caixa da anotação da PESSOA (`leads.notes`) — SÓ quando a coluna da
+   * esquerda não está na tela, exatamente como `etiquetas`.
+   *
+   * Vem por slot e não por par `valor`/`onSave` porque gravar aqui é
+   * `useUpdateLead`, que fala com o banco — e este arquivo está no grafo de
+   * `/preview.html`, onde a palavra `supabase` reprova por TEXTO
+   * (`preview-cards-sem-banco.test.ts`). Quem monta é o `DealCardPanel`, que é
+   * também quem sabe se a coluna existe; aqui só se escolhe onde pendurar.
+   */
+  anotacaoDoLead?: ReactNode;
 }) {
   const abaPedida: Aba =
     abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
@@ -684,19 +696,38 @@ export function DealCard({
                   onRemoverItem={onRemoverItem}
                 />
               ) : (
-                <textarea
-                  value={nota}
-                  onChange={(e) => setNota(e.target.value)}
-                  onBlur={() => nota !== negocio.nota && onSaveNote?.(nota)}
-                  placeholder="O que precisa ser lembrado sobre este negócio…"
-                  rows={4}
-                  className={cn(
-                    "w-full resize-none rounded-lg border border-border bg-card px-3.5 py-2.5",
-                    "text-[13px] leading-relaxed placeholder:text-muted-foreground/70",
-                    "transition-colors hover:border-muted-foreground/30",
-                    "focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30",
-                  )}
-                />
+                <div className="flex flex-col gap-4">
+                  <textarea
+                    value={nota}
+                    onChange={(e) => setNota(e.target.value)}
+                    onBlur={() => nota !== negocio.nota && onSaveNote?.(nota)}
+                    aria-label="Anotação deste negócio"
+                    placeholder="O que precisa ser lembrado sobre este negócio…"
+                    rows={4}
+                    className={cn(
+                      "w-full resize-none rounded-lg border border-border bg-card px-3.5 py-2.5",
+                      "text-[13px] leading-relaxed placeholder:text-muted-foreground/70",
+                      "transition-colors hover:border-muted-foreground/30",
+                      "focus:border-primary/50 focus:outline-none focus:ring-1 focus:ring-primary/30",
+                    )}
+                  />
+
+                  {/* ── A anotação da PESSOA, só quando não há coluna ────────
+                      Ela mora na coluna da esquerda, e no celular essa coluna
+                      não é montada (`DealCardPanel.conteudo(false)`) — some o
+                      único lugar do produto onde este texto aparece, e ele é o
+                      campo mais preenchido que existe: 29.190 leads (74,9%),
+                      contra 379 em `pipeline_entries.notes`.
+
+                      🚨 O RÓTULO NÃO É ENFEITE. São duas anotações diferentes a
+                      dois centímetros uma da outra: a de cima é deste negócio,
+                      esta vale para TODOS os negócios da pessoa. Sem dizer isso
+                      na tela, escrever na caixa errada é o desfecho provável, e
+                      quem sobrescreve não descobre — `leads.notes` é campo
+                      único, não tem histórico e o texto anterior só sobrevive
+                      no `lead_history`. */}
+                  {anotacaoDoLead}
+                </div>
               )}
             </div>
 
