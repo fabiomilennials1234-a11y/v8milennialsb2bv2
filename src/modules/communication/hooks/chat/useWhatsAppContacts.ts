@@ -21,6 +21,7 @@ import {
 } from "@/shared/supabase/selectInChunks";
 import { resolveChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
 import { nomeDoLeadNaLista } from "@/modules/communication/lib/nomeDoLeadNaLista";
+import { useFeatureFlag } from "@/modules/platform";
 import {
   useWhatsAppRealtimeFallback,
   FALLBACK_POLL_INTERVAL_MS,
@@ -67,6 +68,19 @@ export function useWhatsAppContacts(
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
   const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
+
+  /**
+   * Mesma flag do rótulo (`ConversationList`): a queda por telefone só existe
+   * para dar nome de CRM à linha, então acende junto.
+   *
+   * NÃO entra na `queryKey`. A chave é a identidade do RECORTE (org, chip,
+   * filtro), e `contactsPrefix` é como realtime e invalidações alcançam todas as
+   * variantes — um segmento a mais fragmentaria o cache que a bolha e o command
+   * palette dividem com o inbox. O React Query recria `queryFn` a cada render,
+   * então o refetch seguinte (≤20s) já lê o valor novo: ligar a flag converge
+   * sozinho, sem F5 e sem invalidação manual.
+   */
+  const { enabled: nomeDoLeadPrimeiro } = useFeatureFlag("chat_nome_do_lead_na_lista");
 
   const filterArgs = serverFilter?.args ?? null;
   const pageLimit = serverFilter?.limit ?? UNFILTERED_PAGE_LIMIT;
@@ -192,14 +206,16 @@ export function useWhatsAppContacts(
          * normalized_phone)`, e `idx_leads_org_phone_unique` garante no máximo um
          * lead vivo por telefone na org — sem ambiguidade de qual nome usar.
          */
-        const telefonesSemLead = [
-          ...new Set(
-            contacts
-              .filter((c) => !c.lead_id)
-              .map((c) => normalizadoPorTelefone.get(c.phone_number))
-              .filter((p): p is string => !!p),
-          ),
-        ];
+        const telefonesSemLead = nomeDoLeadPrimeiro
+          ? [
+              ...new Set(
+                contacts
+                  .filter((c) => !c.lead_id)
+                  .map((c) => normalizadoPorTelefone.get(c.phone_number))
+                  .filter((p): p is string => !!p),
+              ),
+            ]
+          : [];
 
         const [leadNameRows, leadsPorTelefone, leadTagRows, convTagRows] = await Promise.all([
           soft(

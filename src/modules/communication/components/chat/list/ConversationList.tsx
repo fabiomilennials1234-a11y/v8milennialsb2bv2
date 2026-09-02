@@ -35,6 +35,7 @@ import {
   type InboxContact,
 } from "@/modules/communication/hooks/chat/types";
 import { ChannelBadge } from "../ChannelBadge";
+import { useFeatureFlag } from "@/modules/platform";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
 import { MobileConversationRow } from "./MobileConversationRow";
 import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
@@ -210,6 +211,19 @@ export function ConversationList({
     [stageLabelIndex],
   );
 
+  /**
+   * `chat_nome_do_lead_na_lista` — a org decide se a linha mostra o nome do CRM
+   * ou o `push_name` do perfil do WhatsApp. Lida UMA vez aqui e descida como
+   * prop: a lista chega a 500+ linhas, e ler por linha seria uma assinatura de
+   * query por conversa renderizada.
+   *
+   * O hook é fail-closed enquanto carrega (`enabled=false`), então a org flagada
+   * pinta a primeira frame com a ordem antiga e troca quando a flag chega. É uma
+   * troca de texto num nome, não de layout — e o custo alternativo (segurar a
+   * lista inteira num skeleton até a flag resolver) é pior.
+   */
+  const { enabled: nomeDoLeadPrimeiro } = useFeatureFlag("chat_nome_do_lead_na_lista");
+
   // ── Caixa social: só busca local. ─────────────────────────────────────────
   // Nenhuma das dimensões do filtro tem dado para avaliar aqui, e o `activeTab`
   // não existe (não há arquivamento). Uma lista curta e honesta.
@@ -217,8 +231,10 @@ export function ConversationList({
     if (!isSocialBox) return [] as InboxContact[];
     const q = searchQuery.trim().toLowerCase();
     if (!q) return contacts;
-    return contacts.filter((c) => contactDisplayName(c).toLowerCase().includes(q));
-  }, [isSocialBox, contacts, searchQuery]);
+    return contacts.filter((c) =>
+      contactDisplayName(c, { nomeDoLeadPrimeiro }).toLowerCase().includes(q),
+    );
+  }, [isSocialBox, contacts, searchQuery, nomeDoLeadPrimeiro]);
 
   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
   const whatsappFiltered = useMemo(() => {
@@ -237,10 +253,12 @@ export function ConversationList({
       if (c.is_group) return false;
       if (mobileFilter === "unread" && c.unread_count <= 0) return false;
       if (c.archived_at) return false;
-      const name = contactDisplayName(c).toLowerCase();
+      // A busca casa com o que a linha EXIBE. Se o rótulo mudou de ordem pela
+      // flag, buscar pelo nome antigo não pode achar a linha que já mostra outro.
+      const name = contactDisplayName(c, { nomeDoLeadPrimeiro }).toLowerCase();
       return c.phone_number.includes(searchQuery) || name.includes(search);
     });
-  }, [isMobile, whatsappContacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, resolveContactVendorId, currentTeamMemberId]);
+  }, [isMobile, whatsappContacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, resolveContactVendorId, currentTeamMemberId, nomeDoLeadPrimeiro]);
 
   const filteredContacts: InboxContact[] = isSocialBox ? socialContacts : whatsappFiltered;
 
@@ -525,6 +543,7 @@ export function ConversationList({
                     onAddTag={onAddTag}
                     onRemoveTag={onRemoveTag}
                     stageLabel={stageLabelFor(contact)}
+                    nomeDoLeadPrimeiro={nomeDoLeadPrimeiro}
                   />
                 </div>
               );
@@ -540,6 +559,7 @@ export function ConversationList({
                   contact={contact}
                   isSelected={selectedKey === contactKey(contact)}
                   onPress={onSelectContact}
+                  nomeDoLeadPrimeiro={nomeDoLeadPrimeiro}
                 />
               ) : (
                 <ConversationListItem
@@ -559,6 +579,7 @@ export function ConversationList({
                   onAddTag={onAddTag}
                   onRemoveTag={onRemoveTag}
                   stageLabel={stageLabelFor(contact)}
+                    nomeDoLeadPrimeiro={nomeDoLeadPrimeiro}
                 />
               ),
             )}

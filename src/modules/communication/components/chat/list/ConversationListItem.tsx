@@ -43,6 +43,7 @@ import {
   contactKey,
   contactLabel,
   type InboxContact,
+  type OpcoesDeRotulo,
 } from "@/modules/communication/hooks/chat/types";
 import { ChannelBadge } from "../ChannelBadge";
 import { getAvatarGradient } from "./avatarGradient";
@@ -54,8 +55,8 @@ import { getAvatarGradient } from "./avatarGradient";
  * nomear conversa de cada canal — este export continua existindo porque a lista
  * e a linha do mobile já o importam por este nome.
  */
-export function contactDisplayName(c: InboxContact): string {
-  return contactLabel(c);
+export function contactDisplayName(c: InboxContact, opcoes: OpcoesDeRotulo = {}): string {
+  return contactLabel(c, opcoes);
 }
 
 export function formatContactTime(timestamp: string): string {
@@ -245,6 +246,12 @@ export interface ConversationListItemProps {
   onRemoveTag: (conversationId: string, tagId: string) => void;
   /** Rótulo da etapa atual do lead (primeiro funil), resolvido pela lista. */
   stageLabel?: string | null;
+  /**
+   * Flag por org `chat_nome_do_lead_na_lista`, resolvida em `ConversationList`.
+   * Desce como prop porque a lista chega a 500+ linhas: ler a flag por linha
+   * seria uma assinatura de query por conversa renderizada.
+   */
+  nomeDoLeadPrimeiro?: boolean;
 }
 
 export function ConversationListItem({
@@ -262,8 +269,9 @@ export function ConversationListItem({
   onAddTag,
   onRemoveTag,
   stageLabel,
+  nomeDoLeadPrimeiro,
 }: ConversationListItemProps) {
-  const displayName = contactDisplayName(contact);
+  const displayName = contactDisplayName(contact, { nomeDoLeadPrimeiro });
   const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
   const key = contactKey(contact);
   // Ações de conversa (arquivar/excluir/etiquetar) vivem em

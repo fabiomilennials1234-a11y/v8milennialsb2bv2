@@ -21,6 +21,8 @@ export interface MobileConversationRowProps {
   onLongPress?: (key: string) => void;
   stageName?: string | null;
   stageColor?: string | null;
+  /** Flag por org `chat_nome_do_lead_na_lista` — ver `ConversationListItemProps`. */
+  nomeDoLeadPrimeiro?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -32,8 +34,9 @@ export function MobileConversationRow({
   onLongPress,
   stageName,
   stageColor,
+  nomeDoLeadPrimeiro,
 }: MobileConversationRowProps) {
-  const name = contactDisplayName(contact);
+  const name = contactDisplayName(contact, { nomeDoLeadPrimeiro });
   const initials = (name.replace("@", "").charAt(0) || "?").toUpperCase();
   const hasUnread = contact.unread_count > 0 && !isSelected;
   const key = contactKey(contact);

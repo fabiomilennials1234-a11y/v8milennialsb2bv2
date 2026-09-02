@@ -240,7 +240,21 @@ export function contactKey(c: InboxContact): string {
  * um rótulo genérico — dois contatos sem nome precisam continuar distinguíveis
  * na lista.
  */
-export function contactLabel(c: InboxContact): string {
+export interface OpcoesDeRotulo {
+  /**
+   * Liga a ordem nova no WhatsApp: nome do lead na frente do `push_name`.
+   *
+   * Vem da flag por org `chat_nome_do_lead_na_lista`
+   * (`organizations.feature_flags`), lida uma vez em `ConversationList` e
+   * descida como prop — e não lida aqui dentro, porque este é um módulo puro,
+   * chamado uma vez por linha em lista que passa de 500.
+   *
+   * Ausente/`false` reproduz `main` byte-a-byte: org não flagada não muda.
+   */
+  nomeDoLeadPrimeiro?: boolean;
+}
+
+export function contactLabel(c: InboxContact, opcoes: OpcoesDeRotulo = {}): string {
   if (c.channel === "whatsapp") {
     // O NOME DO LEAD GANHA DO `push_name`.
     //
@@ -262,10 +276,17 @@ export function contactLabel(c: InboxContact): string {
     // título JÁ é o nome do lead). Com `push_name` na frente, o nome do CRM não
     // aparecia em lugar nenhum da lista.
     //
-    // O `trim` é POR CANDIDATO, e não no fim. Nome só de espaços chega de import
-    // e de edição pela UI; com um `.trim()` único no final ele vencia os
-    // seguintes e a linha caía direto em "Contato", escondendo o `push_name` que
-    // existia.
+    // ─── Org NÃO flagada: a expressão de `main`, intacta ────────────────────
+    // Repetida literal, e não derivada da de baixo, porque "sem a flag nada
+    // muda" é a promessa desta entrega. Um `.trim()` só no fim tem um defeito
+    // real (nome só de espaços vence os seguintes e derruba a linha em
+    // "Contato"), mas consertá-lo aqui mudaria org que não pediu mudança.
+    if (!opcoes.nomeDoLeadPrimeiro) {
+      return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
+    }
+
+    // O `trim` é POR CANDIDATO, e não no fim — o defeito descrito acima, que na
+    // ordem nova fica consertado.
     const nome = [c.lead_name, c.push_name, c.phone_number]
       .map((valor) => valor?.trim())
       .find((valor) => valor);
