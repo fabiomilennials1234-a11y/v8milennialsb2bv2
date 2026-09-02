@@ -24,6 +24,9 @@ export function makeMockPipeOps(overrides: Partial<PipeOpsPort> = {}): PipeOpsPo
     useAllPipelineStageOptions: () => ({ stagesByPipe: {}, isLoading: false }),
     useCustomPipelines: noopQuery,
     useCustomPipelineStages: noopQuery,
+    // SCRUM-633 — modelo unificado por pipeline_id (bulk sem sentinela).
+    useFunnels: noopQuery,
+    useFunnelStages: noopQuery,
     useAddLeadToCustomPipe: noopMutation,
     useMoveLeadInCustomPipe: noopMutation,
     useRemoveLeadFromCustomPipe: noopMutation,

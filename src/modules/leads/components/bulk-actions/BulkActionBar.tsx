@@ -9,6 +9,7 @@ import {
   Loader2,
   CheckCircle2,
   Send,
+  FileDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,14 +29,13 @@ import {
 import { useTeamMembers } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { usePipeOps } from "../../pipe-ops";
-import type { PipelineType } from "@/contracts/pipe";
 import {
-  useBulkMoveStage,
-  useBulkMoveToCustomPipe,
+  useBulkMoveToPipeline,
   useBulkAssign,
   useBulkTag,
   useBulkDelete,
 } from "@/modules/leads/hooks/useBulkActions";
+import { useExportLeads } from "@/modules/leads/hooks/useExportLeads";
 import { QuickBlastDialog } from "./QuickBlastDialog";
 
 interface BulkActionBarProps {
@@ -60,6 +60,7 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar }: Bul
   const [tagOpen, setTagOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [blastOpen, setBlastOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   if (count === 0) return null;
 
@@ -98,6 +99,10 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar }: Bul
             <Send className="mr-1.5 h-3.5 w-3.5" />
             Disparar
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setExportOpen(true)}>
+            <FileDown className="mr-1.5 h-3.5 w-3.5" />
+            Exportar
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -118,6 +123,7 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar }: Bul
       <BulkAssignDialog open={assignOpen} onOpenChange={setAssignOpen} leadIds={ids} onSuccess={onClear} />
       <BulkTagDialog open={tagOpen} onOpenChange={setTagOpen} leadIds={ids} onSuccess={onClear} />
       <BulkDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} leadIds={ids} count={count} onSuccess={onClear} />
+      <BulkExportDialog open={exportOpen} onOpenChange={setExportOpen} leadIds={ids} />
       {/* In-bar QuickBlast only when the host did NOT take over "Disparar". */}
       {!onDisparar && (
         <QuickBlastDialog open={blastOpen} onOpenChange={setBlastOpen} leadIds={ids} onDone={onClear} />
@@ -137,45 +143,38 @@ function BulkMoveDialog({
   leadIds: string[];
   onSuccess: () => void;
 }) {
-  const CUSTOM_PREFIX = "custom:";
-  const { usePipelineStages, useCustomPipelines, useCustomPipelineStages } = usePipeOps();
+  // SCRUM-633: um funil, um id. O sentinela `custom:<id>` e o hack
+  // `(isCustom ? "whatsapp" : pipe)` morreram — o seletor lista TODOS os funis
+  // da org (sistema + custom) por `pipelines.id`, as etapas vêm da fonte única
+  // `pipeline_stages` e o submit é sempre `bulk_add_to_pipeline` (motor único
+  // da 20270908003000, SCRUM-626).
+  const { useFunnels, useFunnelStages } = usePipeOps();
 
-  // `pipe` carrega tanto os 3 pipes system (values whatsapp/confirmacao/propostas)
-  // quanto os funis custom, sinalizados pelo sentinela `custom:<pipeline.id>`.
-  const [pipe, setPipe] = useState<string>("whatsapp");
-  const [stage, setStage] = useState("");
+  const [pipelineId, setPipelineId] = useState<string>("");
+  const [stageId, setStageId] = useState("");
 
-  const isCustom = pipe.startsWith(CUSTOM_PREFIX);
-  const customPipelineId = isCustom ? pipe.slice(CUSTOM_PREFIX.length) : undefined;
+  const { data: funnels = [] } = useFunnels();
+  const activeFunnels = funnels.filter((f) => f.is_active);
+  const systemFunnels = activeFunnels.filter((f) => f.type === "system");
+  const customFunnels = activeFunnels.filter((f) => f.type === "custom");
 
-  const { data: customPipelines = [] } = useCustomPipelines();
-  // Ambos os hooks de stages são chamados incondicionalmente (regras de hooks);
-  // só o relevante ao tipo selecionado alimenta o dropdown de etapas.
-  const { data: systemStages = [] } = usePipelineStages(
-    (isCustom ? "whatsapp" : pipe) as PipelineType,
-  );
-  const { data: customStages = [] } = useCustomPipelineStages(customPipelineId);
+  // Default: primeiro funil de sistema (paridade com o antigo "whatsapp"),
+  // senão o primeiro ativo — sem estado até a lista carregar.
+  const effectivePipelineId =
+    pipelineId || systemFunnels[0]?.id || activeFunnels[0]?.id || "";
 
-  const moveStage = useBulkMoveStage();
-  const moveCustom = useBulkMoveToCustomPipe();
-  const isPending = moveStage.isPending || moveCustom.isPending;
+  const { data: stages = [] } = useFunnelStages(effectivePipelineId || undefined);
+
+  const move = useBulkMoveToPipeline();
 
   const handleSubmit = async () => {
-    if (!stage) return;
+    if (!stageId || !effectivePipelineId) return;
     try {
-      if (isCustom && customPipelineId) {
-        await moveCustom.mutateAsync({
-          lead_ids: leadIds,
-          pipeline_id: customPipelineId,
-          stage_id: stage,
-        });
-      } else {
-        await moveStage.mutateAsync({
-          lead_ids: leadIds,
-          target_pipe: pipe,
-          target_stage: stage,
-        });
-      }
+      await move.mutateAsync({
+        lead_ids: leadIds,
+        pipeline_id: effectivePipelineId,
+        stage_id: stageId,
+      });
       toast.success(`${leadIds.length} leads movidos`);
       onOpenChange(false);
       onSuccess();
@@ -192,25 +191,28 @@ function BulkMoveDialog({
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Pipeline</label>
-            <Select value={pipe} onValueChange={(v) => { setPipe(v); setStage(""); }}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+            <label className="text-sm font-medium">Funil</label>
+            <Select
+              value={effectivePipelineId}
+              onValueChange={(v) => { setPipelineId(v); setStageId(""); }}
+            >
+              <SelectTrigger><SelectValue placeholder="Selecionar funil" /></SelectTrigger>
               <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Padrao</SelectLabel>
-                  <SelectItem value="whatsapp">Qualificacao</SelectItem>
-                  <SelectItem value="confirmacao">Confirmacao</SelectItem>
-                  <SelectItem value="propostas">Propostas</SelectItem>
-                </SelectGroup>
-                {customPipelines.length > 0 && (
+                {systemFunnels.length > 0 && (
+                  <SelectGroup>
+                    <SelectLabel>Padrão</SelectLabel>
+                    {systemFunnels.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
+                {customFunnels.length > 0 && (
                   <>
-                    <SelectSeparator />
+                    {systemFunnels.length > 0 && <SelectSeparator />}
                     <SelectGroup>
                       <SelectLabel>Personalizados</SelectLabel>
-                      {customPipelines.map((p) => (
-                        <SelectItem key={p.id} value={`${CUSTOM_PREFIX}${p.id}`}>
-                          {p.name}
-                        </SelectItem>
+                      {customFunnels.map((f) => (
+                        <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                       ))}
                     </SelectGroup>
                   </>
@@ -220,27 +222,21 @@ function BulkMoveDialog({
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium">Etapa</label>
-            <Select value={stage} onValueChange={setStage}>
+            <Select value={stageId} onValueChange={setStageId}>
               <SelectTrigger><SelectValue placeholder="Selecionar etapa" /></SelectTrigger>
               <SelectContent>
-                {isCustom
-                  ? customStages.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))
-                  : systemStages.map((s: any) => (
-                      <SelectItem key={s.id || s.stage_key} value={s.stage_key}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
+                {stages.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={handleSubmit} disabled={!stage || isPending}>
-            {isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+          <Button onClick={handleSubmit} disabled={!stageId || move.isPending}>
+            {move.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
             Mover
           </Button>
         </DialogFooter>
@@ -434,5 +430,61 @@ function BulkDeleteDialog({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  );
+}
+
+function BulkExportDialog({
+  open,
+  onOpenChange,
+  leadIds,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  leadIds: string[];
+}) {
+  // Exporta a SELEÇÃO manual (SCRUM-633) — recorte por lead_ids explícitos,
+  // agnóstico de funil por construção. Mesmo schema de arquivo da exportação
+  // global (lead + 3 pipes); cabeçalho dinâmico por funil fica pra W6.
+  const [format, setFormat] = useState<"csv" | "xlsx">("csv");
+  const { exportLeads, isExporting } = useExportLeads();
+
+  const handleExport = async () => {
+    try {
+      const { count } = await exportLeads({ format, leadIds });
+      if (count === 0) {
+        toast.message("Nenhum lead exportado.");
+      } else {
+        toast.success(`${count} lead${count === 1 ? "" : "s"} exportado${count === 1 ? "" : "s"}`);
+      }
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao exportar leads");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!isExporting) onOpenChange(o); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Exportar {leadIds.length} leads</DialogTitle>
+        </DialogHeader>
+        <div className="py-4 space-y-2">
+          <label className="text-sm font-medium">Formato</label>
+          <Select value={format} onValueChange={(v) => setFormat(v as "csv" | "xlsx")}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="csv">CSV</SelectItem>
+              <SelectItem value="xlsx">Excel (.xlsx)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <DialogFooter>
+          <Button onClick={handleExport} disabled={isExporting || leadIds.length === 0}>
+            {isExporting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            Exportar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

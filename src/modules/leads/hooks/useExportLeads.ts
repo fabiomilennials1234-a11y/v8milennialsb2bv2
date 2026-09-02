@@ -67,11 +67,20 @@ type ExportFormat = "csv" | "xlsx";
  * etapa indicada do pipe especificado. Para pipes fixos (whatsapp/confirmacao/
  * propostas) `stageId` é o `status` enum. Para `custom`, `stageId` é o UUID
  * da stage em `custom_pipelines_stages` e `customPipelineId` é obrigatório.
+ *
+ * `pipe: "pipeline"` (SCRUM-633) é o modo UNIFICADO: `pipelineId` endereça
+ * QUALQUER funil (sistema ou custom) e `stageId` é o uuid de
+ * `pipeline_stages`; resolve direto em `pipeline_entries`, sem view de compat.
+ * É o modo que a página unificada `/funil/:slug` usa. Os quatro modos legados
+ * seguem vivos até a W6 (os cabeçalhos do arquivo continuam os dos 3 pipes —
+ * export com cabeçalho dinâmico por funil fica documentado pra W6).
  */
 export interface ExportStageFilter {
-  pipe: "whatsapp" | "confirmacao" | "propostas" | "custom";
+  pipe: "whatsapp" | "confirmacao" | "propostas" | "custom" | "pipeline";
   stageId: string;
   customPipelineId?: string;
+  /** Obrigatório quando pipe === "pipeline". */
+  pipelineId?: string;
 }
 
 /** Filtros ativos da lista de leads (busca, origem, rating, qualificação, UF).
@@ -89,6 +98,12 @@ export interface ExportLeadsOptions {
   /** Filtros ativos da lista — aplicados à exportação para espelhar o que o
    * usuário vê na tela (busca, origem, rating, qualificação, UF). */
   listFilters?: ExportListFilters;
+  /**
+   * Restringe a exportação a um conjunto EXPLÍCITO de leads — a seleção
+   * manual do bulk (SCRUM-633). Compõe por interseção com stageFilter e
+   * listFilters quando presentes. Lista vazia exporta nada.
+   */
+  leadIds?: string[];
 }
 
 export interface UseExportLeadsResult {
@@ -150,7 +165,26 @@ export function useExportLeads(): UseExportLeadsResult {
       let stageLeadIds: string[] | null = null;
       if (options.stageFilter) {
         const sf = options.stageFilter;
-        if (sf.pipe === "custom") {
+        if (sf.pipe === "pipeline") {
+          // SCRUM-633 — modo unificado: qualquer funil por pipeline_id, etapa
+          // por uuid de pipeline_stages, direto na fonte única pipeline_entries.
+          if (!sf.pipelineId) {
+            throw new Error("pipelineId é obrigatório quando pipe='pipeline'");
+          }
+          // Ponte de tipo: pipeline_entries.stage_id (20270906002000) ainda
+          // não está no types.ts gerado — a tabela entra como `never` (sem
+          // `any`) e o shape do retorno é assertado abaixo.
+          const { data: entries, error: entriesError } = await supabase
+            .from("pipeline_entries" as unknown as never)
+            .select("lead_id")
+            .eq("organization_id", organizationId)
+            .eq("pipeline_id", sf.pipelineId)
+            .eq("stage_id", sf.stageId);
+          if (entriesError) throw entriesError;
+          stageLeadIds = Array.from(
+            new Set(((entries ?? []) as Array<{ lead_id: string | null }>).map((e) => e.lead_id)),
+          ).filter(Boolean) as string[];
+        } else if (sf.pipe === "custom") {
           if (!sf.customPipelineId) {
             throw new Error("customPipelineId é obrigatório quando pipe='custom'");
           }
@@ -197,6 +231,18 @@ export function useExportLeads(): UseExportLeadsResult {
         }
 
         // Etapa vazia: nada a exportar — retorna sem gerar arquivo.
+        if (stageLeadIds.length === 0) {
+          return { count: 0 };
+        }
+      }
+
+      // 0.5) Seleção manual (bulk, SCRUM-633): interseção explícita com o que
+      // o stageFilter resolveu (ou o recorte inteiro quando não há stageFilter).
+      if (options.leadIds) {
+        const sel = new Set(options.leadIds);
+        stageLeadIds = stageLeadIds
+          ? stageLeadIds.filter((id) => sel.has(id))
+          : Array.from(sel);
         if (stageLeadIds.length === 0) {
           return { count: 0 };
         }

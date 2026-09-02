@@ -283,7 +283,7 @@ export { LeadTabHistory } from "./components/lead/tabs/LeadTabHistory";
 
 // ── PipeOpsPort: inversão de dependência leads↔pipelines (arch-deepening F7) ─
 // leads define a abstração (DIP); pipelines implementa+injeta via context.
-export type { PipeOpsPort, RescheduleModalSlotProps, MergedMeetingEditorSlotProps } from "./pipe-ops";
+export type { PipeOpsPort, RescheduleModalSlotProps, MergedMeetingEditorSlotProps, FunnelOption, FunnelStageOption } from "./pipe-ops";
 export { PipeOpsContextProvider, usePipeOps } from "./pipe-ops";
 
 // CompareceuModal: apresentacional (só identity + onConfirm), movido de

@@ -9,6 +9,7 @@
  */
 export * from "./usePipelineDisplayConfig";
 export * from "./usePipeMetrics";
+export * from "./useFunilMetrics";
 export * from "./usePipeDispatchRules";
 export * from "./usePipeDistribution";
 export * from "./useLossReasons";
