@@ -235,13 +235,19 @@ describe("condição de etapa — lê o Negócio da execução, não o card de O
     expect(ok).toBe(false);
   });
 
-  it("sem negócio declarado, continua lendo o card de Oportunidades", async () => {
+  it("sem negócio declarado, cai no negócio CORRENTE (ADR-0031: aberto > mais recente), não no card de Oportunidades", async () => {
+    // SCRUM-627: o fallback deixou de ser o card de whatsapp chumbado. Com dois
+    // negócios abertos, responde o que mexeu por último — aqui, o de Orçamentos.
     const org = novaOrg();
     const mock = comDoisCards(org);
+    mock.mockTable("pipeline_entries", [
+      { id: ENTRY, organization_id: org, lead_id: "lead-1", pipeline_id: PIPE_WA, stage_key: "abordado", closed_at: null, stage_changed_at: "2026-08-01T10:00:00Z", created_at: "2026-08-01T10:00:00Z" },
+      { id: OUTRA_ENTRY, organization_id: org, lead_id: "lead-1", pipeline_id: PIPE_PROP, stage_key: "proposta_enviada", closed_at: null, stage_changed_at: "2026-08-20T10:00:00Z", created_at: "2026-08-20T10:00:00Z" },
+    ]);
 
     const ok = await evaluateCondition(
       mock.sb, "lead-1",
-      { field: "stage", operator: "equals", value: "abordado" },
+      { field: "stage", operator: "equals", value: "proposta_enviada" },
       null,
     );
 

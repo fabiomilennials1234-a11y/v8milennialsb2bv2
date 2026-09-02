@@ -234,10 +234,20 @@ export interface TriggerConfigLeadCreated {
 }
 
 export interface TriggerConfigStageChanged {
-  pipe_type?: string;       // "whatsapp" | "confirmacao" | "propostas" | etc.
-  pipeline_id?: string;     // UUID for custom pipelines
+  /**
+   * O funil (`pipelines.id`) — canônico para QUALQUER funil, sistema ou custom
+   * (SCRUM-627). O editor grava sempre este; o par redundante com `pipe_type`
+   * colapsou.
+   */
+  pipeline_id?: string;
+  /**
+   * @deprecated Legado (slug de funil de sistema, ex.: "whatsapp"). O editor
+   * não grava mais; configs salvas continuam casando via o eco `pipe_type` do
+   * contexto do gatilho até a W6. Medido em prod 2026-09-02: 67 ativos.
+   */
+  pipe_type?: string;
   campanha_id?: string;     // UUID for campaigns
-  from_stage?: string;
+  from_stage?: string;      // stage_key (id de etapa também é aceito pelo matcher)
   to_stage?: string;
   stages?: string[];        // multiple target stages (replaces to_stage for multi-select)
 }
@@ -330,8 +340,10 @@ export interface ScheduledDispatchBefore {
 export type ScheduledDispatchItem = ScheduledDispatchOnBook | ScheduledDispatchBefore;
 
 export interface TriggerConfigScheduledDate {
-  pipe_type?: string;       // slug do pipe de sistema: "whatsapp" | "confirmacao" | "propostas"
-  pipeline_id?: string;     // UUID para funis custom (alternativa a pipe_type)
+  /** O funil (`pipelines.id`) — canônico para qualquer funil (SCRUM-627). */
+  pipeline_id?: string;
+  /** @deprecated Legado: slug do pipe de sistema. O editor não grava mais. */
+  pipe_type?: string;
   stages?: string[];        // etapa(s) selecionada(s); vazio = qualquer etapa do pipe
   filter_origin?: string;   // origem opcional
   dispatches: ScheduledDispatchItem[];
@@ -485,7 +497,15 @@ export interface ActionNodeData {
   notifyPhones?: string[];
   includeConversationSummary?: boolean;
   // Move stage
+  /** O funil de destino (`pipelines.id`) — canônico, qualquer funil (SCRUM-627). */
+  pipelineId?: string;
+  /**
+   * @deprecated Legado dos nós salvos: slug de sistema ("whatsapp") OU uuid de
+   * funil custom. O executor ainda aceita (e assume "whatsapp" quando nem isto
+   * existe — default histórico); o editor grava só `pipelineId`.
+   */
   pipeType?: string;
+  /** Etapa de destino: stage_key (legado) ou `pipeline_stages.id` — os dois valem. */
   targetStage?: string;
   // Tag
   tagId?: string;

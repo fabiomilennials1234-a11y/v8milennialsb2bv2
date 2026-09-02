@@ -1,8 +1,68 @@
 import type { ActionInput, ActionResult } from "./types.ts";
-import { upsertPipeEntry, upsertPipeEntryDetailed, tryResolvePipelineId, updatePipeEntryById } from "../pipeline-adapter.ts";
-import type { PipeSlug } from "../pipeline-adapter.ts";
+import {
+  upsertPipeEntry,
+  upsertPipeEntryDetailed,
+  updatePipeEntryById,
+  resolvePipeline,
+  isPipelineResolutionError,
+} from "../pipeline-adapter.ts";
+import type { PipeSlug, ResolvedPipeline } from "../pipeline-adapter.ts";
 
-const STANDARD_PIPES = ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao", "campanha"];
+/** Slugs de funil de SISTEMA que têm caminho próprio (mover_negocio/upsert por slug). */
+const SYSTEM_PIPE_SLUGS = ["whatsapp", "confirmacao", "propostas"];
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+interface StageRow {
+  id: string;
+  stage_key: string;
+  is_final_positive: boolean | null;
+  target_pipeline_id: string | null;
+  target_stage_id: string | null;
+  target_pipe_type: string | null;
+  target_stage_key: string | null;
+}
+
+const STAGE_COLUMNS =
+  "id, stage_key, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key";
+
+/**
+ * Resolve a etapa-alvo DENTRO do funil resolvido — aceita o UUID da etapa
+ * (`pipeline_stages.id`, o que o editor novo grava) OU a `stage_key` legada
+ * (o que todos os nós salvos carregam). `pipeline_stages` é a tabela ÚNICA de
+ * etapas pós-20270906001000 — cobre funil de sistema e custom com uma consulta.
+ *
+ * Devolve `null` quando a etapa não existe no funil (o chamador decide se isso
+ * é erro — paridade com o comportamento antigo: sistema só reprova quando o
+ * funil TEM etapas cadastradas).
+ */
+async function resolveStageDoFunil(
+  supabase: ActionInput["supabase"],
+  organizationId: string,
+  pipelineId: string,
+  stageRef: string,
+): Promise<{ match: StageRow | null; activeCount: number; activeKeys: string[] }> {
+  const { data: rows } = await supabase
+    .from("pipeline_stages")
+    .select(STAGE_COLUMNS + ", is_active")
+    .eq("pipeline_id", pipelineId)
+    .eq("organization_id", organizationId);
+
+  // `as unknown as`: o select é string dinâmica (STAGE_COLUMNS + is_active) e o
+  // parser do postgrest-js não infere as colunas — a asserção descreve o runtime.
+  const all = (rows ?? []) as unknown as Array<StageRow & { is_active: boolean | null }>;
+  const ativas = all.filter((s) => s.is_active !== false);
+  const wanted = stageRef.trim();
+
+  // Por UUID casa qualquer linha (paridade com o `.eq("id", ...)` antigo do
+  // ramo custom, que não filtrava is_active); por key só etapa ATIVA (paridade
+  // com o validador antigo do ramo sistema), case-insensitive.
+  const match = UUID_RE.test(wanted)
+    ? all.find((s) => s.id === wanted) ?? null
+    : ativas.find((s) => s.stage_key?.toLowerCase() === wanted.toLowerCase()) ?? null;
+
+  return { match, activeCount: ativas.length, activeKeys: ativas.map((s) => s.stage_key) };
+}
 
 /** Teto de linhas lidas por `(pipeline_id, lead_id)` — espelha `PIPELINE_ENTRY_READ_CAP`. */
 const CUSTOM_PIPE_ENTRY_READ_CAP = 50;
@@ -86,10 +146,11 @@ async function readActiveCustomPipeEntry(
  */
 async function moverNegocioQueDisparou(
   input: ActionInput,
-  slug: PipeSlug,
+  alvo: ResolvedPipeline,
   stageKey: string,
 ): Promise<ActionResult | null> {
   const { supabase, organizationId, leadId, entryId } = input;
+  const slug: PipeSlug = alvo.slug;
   if (!entryId) return null;
 
   const { data: entry, error } = await supabase
@@ -111,12 +172,9 @@ async function moverNegocioQueDisparou(
   if (entry.organization_id !== organizationId) return null;
   if (leadId && entry.lead_id !== leadId) return null;
 
-  const alvo = await tryResolvePipelineId(supabase, organizationId, slug);
-  if (!alvo) return null;
-
   // Mesmo funil: é só andar de etapa. Chamar `mover_negocio` aqui gastaria uma
   // RPC para escrever `pipeline_id` com o valor que já está lá.
-  if (entry.pipeline_id === alvo) {
+  if (entry.pipeline_id === alvo.id) {
     const ok = await updatePipeEntryById(supabase, entryId, { stageKey });
     if (!ok) return { success: false, error: `Falha ao mover o negócio ${entryId} para ${stageKey}`, retryable: true };
     return {
@@ -132,7 +190,7 @@ async function moverNegocioQueDisparou(
   // chamou já está NA etapa que disparou o workflow.
   const { error: rpcError } = await supabase.rpc("mover_negocio", {
     p_entry_id: entryId,
-    p_target_pipeline_id: alvo,
+    p_target_pipeline_id: alvo.id,
     p_target_stage_key: stageKey,
     p_stage_origem: null,
     p_assigned_to: null,
@@ -161,142 +219,182 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
     return { success: false, error: "target_stage é obrigatório" };
   }
 
-  const targetPipe = (params.target_pipe as string) || "whatsapp";
-  const normalizedStage = String(targetStage).trim().toLowerCase();
+  // Default legado DELIBERADO: nós salvos antes do editor gravar funil sempre
+  // assumiam Oportunidades — tanto aqui quanto no mapeamento do action-handler.
+  // O editor NOVO (SCRUM-627) grava `pipelineId` sempre; este fallback existe
+  // só para os nós antigos não quebrarem, e morre quando o último for migrado.
+  const targetPipeRef = String((params.target_pipe as string) || "whatsapp");
+  const rawStageRef = String(targetStage).trim();
+  const normalizedStage = rawStageRef.toLowerCase();
 
-  // Stage validation for standard pipes
-  if (STANDARD_PIPES.includes(targetPipe) && targetPipe !== "upsell_base" && targetPipe !== "upsell_gestao" && targetPipe !== "campanha") {
-    const { data: stages } = await supabase
-      .from("pipeline_stages")
-      .select("stage_key")
-      .eq("organization_id", organizationId)
-      .eq("pipeline_type", targetPipe)
-      .eq("is_active", true);
-
-    const validKeys = (stages || []).map((s: { stage_key: string }) => s.stage_key);
-    if (validKeys.length > 0 && !validKeys.some((k: string) => k.toLowerCase() === normalizedStage)) {
-      return {
-        success: false,
-        error: `Etapa inválida para funil ${targetPipe}. Válidas: ${validKeys.join(", ")}`,
-      };
+  // ── Destinos que NÃO são funil (fora do adapter, comportamento inalterado) ──
+  if (targetPipeRef === "upsell_base") {
+    await supabase.from("upsell_clients").update({ tipo_cliente_tempo: normalizedStage }).eq("lead_id", leadId);
+    return {
+      success: true,
+      message: `Lead movido para ${normalizedStage} no funil ${targetPipeRef}`,
+      data: { target_stage: normalizedStage, target_pipe: targetPipeRef },
+    };
+  }
+  if (targetPipeRef === "upsell_gestao") {
+    await supabase.from("upsell_clients").update({ gestao_stage: normalizedStage }).eq("lead_id", leadId);
+    return {
+      success: true,
+      message: `Lead movido para ${normalizedStage} no funil ${targetPipeRef}`,
+      data: { target_stage: normalizedStage, target_pipe: targetPipeRef },
+    };
+  }
+  if (targetPipeRef === "campanha") {
+    const { data: campStage } = await supabase
+      .from("campanha_stages")
+      .select("id")
+      .ilike("name", normalizedStage)
+      .limit(1)
+      .maybeSingle();
+    if (campStage) {
+      await supabase.from("campanha_leads").update({ stage_id: campStage.id }).eq("lead_id", leadId);
     }
+    return {
+      success: true,
+      message: `Lead movido para ${normalizedStage} no funil ${targetPipeRef}`,
+      data: { target_stage: normalizedStage, target_pipe: targetPipeRef },
+    };
   }
 
-  const finalStage = normalizedStage;
-
-  switch (targetPipe) {
-    case "whatsapp":
-    case "confirmacao":
-    case "propostas": {
-      // SCRUM-202: o espelho `leads.pipe_whatsapp` saiu daqui. O UPDATE em
-      // `pipeline_entries` dispara `trg_sync_whatsapp_stage_to_lead` em depth 1
-      // e grava a coluna com o mesmo valor — escrever de novo era duplicação.
-      // Primeiro o negócio que disparou; o caminho por lead é o fallback.
-      const doNegocio = await moverNegocioQueDisparou(input, targetPipe as PipeSlug, finalStage);
-      if (doNegocio) return doNegocio;
-
-      const result = await upsertPipeEntryDetailed(supabase, {
-        leadId, orgId: organizationId, slug: targetPipe as PipeSlug, stageKey: finalStage,
-      });
-      if (result.status !== "created" && result.status !== "updated") {
-        return { success: false, error: `Falha ao atualizar pipeline_entries para ${targetPipe}/${finalStage}` };
-      }
-      break;
+  // ── Funil de verdade: UMA resolução para qualquer ref (SCRUM-627) ──────────
+  // uuid (sistema OU custom), slug, alias legado (`pipe_whatsapp`,
+  // `qualificacao`) — tudo passa pelo `resolvePipeline` do adapter (SCRUM-623).
+  //
+  // Degradações que MUDARAM aqui, de propósito:
+  //   · uuid/slug inexistente: antes caía no ramo custom e morria em "Etapa
+  //     customizada não encontrada"; agora o erro é tipado e nomeia o funil.
+  //   · funil INATIVO: antes o ramo custom movia mesmo assim; agora recusa
+  //     (`pipeline_inactive`) — mover card para funil desligado é escrever onde
+  //     ninguém olha.
+  //   · falha transitória de lookup: `retryable: true`, o pool tenta de novo.
+  let pipeline: ResolvedPipeline;
+  try {
+    pipeline = await resolvePipeline(supabase, organizationId, targetPipeRef);
+  } catch (e) {
+    if (isPipelineResolutionError(e)) {
+      return {
+        success: false,
+        error: `Funil de destino não resolvido (${e.code}): "${targetPipeRef}"`,
+        retryable: e.code === "pipeline_lookup_failed",
+      };
     }
-    case "upsell_base":
-      await supabase.from("upsell_clients").update({ tipo_cliente_tempo: finalStage }).eq("lead_id", leadId);
-      break;
-    case "upsell_gestao":
-      await supabase.from("upsell_clients").update({ gestao_stage: finalStage }).eq("lead_id", leadId);
-      break;
-    case "campanha": {
-      const { data: campStage } = await supabase
-        .from("campanha_stages")
-        .select("id")
-        .ilike("name", finalStage)
-        .limit(1)
-        .maybeSingle();
-      if (campStage) {
-        await supabase.from("campanha_leads").update({ stage_id: campStage.id }).eq("lead_id", leadId);
-      }
-      break;
+    throw e;
+  }
+
+  const { match: stageRow, activeCount, activeKeys } = await resolveStageDoFunil(
+    supabase, organizationId, pipeline.id, rawStageRef,
+  );
+
+  // Funil de sistema com caminho próprio: mover_negocio cobre sistema→sistema;
+  // o destino custom é o passo 5c da fatia lead↔negócio e a RPC o recusa — por
+  // isso o ramo custom continua sendo upsert (posição no destino; a origem não
+  // se move). O gate é por SLUG, não por `type` (ADR-0034: type não decide
+  // comportamento; o slug de sistema é único por org).
+  if (SYSTEM_PIPE_SLUGS.includes(pipeline.slug)) {
+    // Paridade com o validador antigo: funil sem NENHUMA etapa cadastrada não
+    // reprova (o executor sempre foi permissivo aqui — ver node-requirements).
+    if (!stageRow && activeCount > 0) {
+      return {
+        success: false,
+        error: `Etapa inválida para funil ${pipeline.slug}. Válidas: ${activeKeys.join(", ")}`,
+      };
     }
-    default: {
-      // Custom pipeline — targetPipe is the pipeline UUID
-      const customPipelineId = targetPipe;
-      const { data: stageRow } = await supabase
-        .from("custom_pipeline_stages")
-        .select("id, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
-        .eq("id", targetStage)
-        .eq("pipeline_id", customPipelineId)
-        .eq("organization_id", organizationId)
-        .maybeSingle();
+    const finalStage = stageRow?.stage_key ?? normalizedStage;
 
-      if (!stageRow) {
-        return { success: false, error: `Etapa customizada ${targetStage} não encontrada no pipeline ${customPipelineId}` };
-      }
+    // SCRUM-202: o espelho `leads.pipe_whatsapp` saiu daqui. O UPDATE em
+    // `pipeline_entries` dispara `trg_sync_whatsapp_stage_to_lead` em depth 1
+    // e grava a coluna com o mesmo valor — escrever de novo era duplicação.
+    // Primeiro o negócio que disparou; o caminho por lead é o fallback.
+    const doNegocio = await moverNegocioQueDisparou(input, pipeline, finalStage);
+    if (doNegocio) return doNegocio;
 
-      const existingEntry = await readActiveCustomPipeEntry(supabase, customPipelineId, leadId);
+    const result = await upsertPipeEntryDetailed(supabase, {
+      leadId, orgId: organizationId, slug: pipeline.id, stageKey: finalStage,
+    });
+    if (result.status !== "created" && result.status !== "updated") {
+      return { success: false, error: `Falha ao atualizar pipeline_entries para ${pipeline.slug}/${finalStage}` };
+    }
+    return {
+      success: true,
+      message: `Lead movido para ${finalStage} no funil ${pipeline.slug}`,
+      data: { target_stage: finalStage, target_pipe: targetPipeRef },
+    };
+  }
 
-      const now = new Date().toISOString();
-      if (existingEntry) {
-        await supabase
-          .from("custom_pipe_entries")
-          .update({ stage_id: targetStage, stage_changed_at: now })
-          .eq("id", existingEntry.id);
+  // ── Funil custom ────────────────────────────────────────────────────────────
+  // A etapa aqui é obrigatória de verdade (o INSERT/UPDATE grava `stage_id`):
+  // sem linha, o comportamento antigo já era erro — mantido, agora aceitando
+  // stage_key além do uuid.
+  if (!stageRow) {
+    return {
+      success: false,
+      error: `Etapa customizada ${rawStageRef} não encontrada no pipeline ${pipeline.id}`,
+    };
+  }
+
+  const existingEntry = await readActiveCustomPipeEntry(supabase, pipeline.id, leadId);
+
+  const now = new Date().toISOString();
+  if (existingEntry) {
+    await supabase
+      .from("custom_pipe_entries")
+      .update({ stage_id: stageRow.id, stage_changed_at: now })
+      .eq("id", existingEntry.id);
+  } else {
+    await supabase.from("custom_pipe_entries").insert({
+      lead_id: leadId,
+      organization_id: organizationId,
+      pipeline_id: pipeline.id,
+      stage_id: stageRow.id,
+      entered_at: now,
+      stage_changed_at: now,
+    });
+  }
+
+  // Auto-transition on is_final_positive
+  if (stageRow.is_final_positive) {
+    if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
+      const targetEntry = await readActiveCustomPipeEntry(
+        supabase,
+        stageRow.target_pipeline_id,
+        leadId,
+      );
+      if (targetEntry) {
+        await supabase.from("custom_pipe_entries")
+          .update({ stage_id: stageRow.target_stage_id, stage_changed_at: now })
+          .eq("id", targetEntry.id);
       } else {
         await supabase.from("custom_pipe_entries").insert({
-          lead_id: leadId,
-          organization_id: organizationId,
-          pipeline_id: customPipelineId,
-          stage_id: targetStage,
-          entered_at: now,
-          stage_changed_at: now,
+          lead_id: leadId, organization_id: organizationId,
+          pipeline_id: stageRow.target_pipeline_id, stage_id: stageRow.target_stage_id,
+          entered_at: now, stage_changed_at: now,
         });
       }
-
-      // Auto-transition on is_final_positive
-      if (stageRow.is_final_positive) {
-        if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
-          const targetEntry = await readActiveCustomPipeEntry(
-            supabase,
-            stageRow.target_pipeline_id,
-            leadId,
-          );
-          if (targetEntry) {
-            await supabase.from("custom_pipe_entries")
-              .update({ stage_id: stageRow.target_stage_id, stage_changed_at: now })
-              .eq("id", targetEntry.id);
-          } else {
-            await supabase.from("custom_pipe_entries").insert({
-              lead_id: leadId, organization_id: organizationId,
-              pipeline_id: stageRow.target_pipeline_id, stage_id: stageRow.target_stage_id,
-              entered_at: now, stage_changed_at: now,
-            });
-          }
-        } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
-          const transPipe = stageRow.target_pipe_type;
-          const transStage = stageRow.target_stage_key;
-          if (transPipe === "whatsapp" || transPipe === "confirmacao" || transPipe === "propostas") {
-            // SCRUM-202: espelho `leads.pipe_whatsapp` removido — o
-            // `upsertPipeEntry` abaixo já dispara o gatilho de sync.
-            await upsertPipeEntry(supabase, {
-              leadId, orgId: organizationId, slug: transPipe as PipeSlug, stageKey: transStage,
-            });
-          } else if (transPipe === "upsell_base") {
-            await supabase.from("upsell_clients").update({ tipo_cliente_tempo: transStage }).eq("lead_id", leadId);
-          } else if (transPipe === "upsell_gestao") {
-            await supabase.from("upsell_clients").update({ gestao_stage: transStage }).eq("lead_id", leadId);
-          }
-        }
+    } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
+      const transPipe = stageRow.target_pipe_type;
+      const transStage = stageRow.target_stage_key;
+      if (transPipe === "whatsapp" || transPipe === "confirmacao" || transPipe === "propostas") {
+        // SCRUM-202: espelho `leads.pipe_whatsapp` removido — o
+        // `upsertPipeEntry` abaixo já dispara o gatilho de sync.
+        await upsertPipeEntry(supabase, {
+          leadId, orgId: organizationId, slug: transPipe as PipeSlug, stageKey: transStage,
+        });
+      } else if (transPipe === "upsell_base") {
+        await supabase.from("upsell_clients").update({ tipo_cliente_tempo: transStage }).eq("lead_id", leadId);
+      } else if (transPipe === "upsell_gestao") {
+        await supabase.from("upsell_clients").update({ gestao_stage: transStage }).eq("lead_id", leadId);
       }
-      break;
     }
   }
 
   return {
     success: true,
-    message: `Lead movido para ${finalStage} no funil ${targetPipe}`,
-    data: { target_stage: finalStage, target_pipe: targetPipe },
+    message: `Lead movido para ${stageRow.stage_key || stageRow.id} no funil ${pipeline.name}`,
+    data: { target_stage: rawStageRef, target_pipe: targetPipeRef },
   };
 }

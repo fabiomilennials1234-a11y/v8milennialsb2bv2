@@ -71,6 +71,89 @@ describe("matchesTriggerConfig", () => {
         { pipeline_id: "pipe-2" }
       )).toBe(false);
     });
+
+    // ── SCRUM-627: contexto ÚNICO dos gatilhos × formatos de config vivos ──
+    // Medido em prod 2026-09-02 (82 stage_changed ativos): 67 com pipe_type
+    // slug ("whatsapp"/"propostas"), 15 com pipeline_id uuid, 0 campanha.
+    describe("SCRUM-627 — config legada e nova contra o contexto unificado", () => {
+      // O que os gatilhos de banco emitem desde a 20270908006000:
+      const ctxSystem = {
+        trigger: "stage_changed",
+        pipeline_id: "11111111-1111-4111-8111-111111111111",
+        pipe_type: "whatsapp", // eco legado — só funil de sistema
+        pipeline_entry_id: "e1",
+        deal_id: null,
+        stage_id: "aaaaaaaa-0000-4000-8000-000000000001",
+        stage_key: "abordado",
+        from_stage: "novo",
+        from_stage_id: "aaaaaaaa-0000-4000-8000-000000000000",
+        to_stage: "abordado",
+      };
+      const ctxCustom = {
+        trigger: "stage_changed",
+        pipeline_id: "22222222-2222-4222-8222-222222222222",
+        pipeline_entry_id: "e2",
+        deal_id: "d2",
+        stage_id: "bbbbbbbb-0000-4000-8000-000000000002",
+        stage_key: "triagem",
+        from_stage: "entrada",
+        from_stage_id: null,
+        to_stage: "triagem",
+      };
+
+      it("config legada (pipe_type slug, formato dominante em prod) casa com o contexto novo", () => {
+        expect(matchesTriggerConfig("stage_changed",
+          { pipe_type: "whatsapp", pipeline_id: "", stages: ["abordado"] },
+          ctxSystem,
+        )).toBe(true);
+      });
+
+      it("config legada de sistema NÃO casa com move em funil custom (fail-closed — antes passava em silêncio)", () => {
+        expect(matchesTriggerConfig("stage_changed",
+          { pipe_type: "whatsapp", pipeline_id: "" },
+          ctxCustom,
+        )).toBe(false);
+      });
+
+      it("config nova (pipeline_id) casa com funil de sistema E custom", () => {
+        expect(matchesTriggerConfig("stage_changed",
+          { pipeline_id: "11111111-1111-4111-8111-111111111111", pipe_type: "" },
+          ctxSystem,
+        )).toBe(true);
+        expect(matchesTriggerConfig("stage_changed",
+          { pipeline_id: "22222222-2222-4222-8222-222222222222", pipe_type: "" },
+          ctxCustom,
+        )).toBe(true);
+      });
+
+      it("config de funil custom (formato vivo: pipeline_id + pipe_type vazio) segue casando", () => {
+        // Amostra real de prod: { pipe_type: "", pipeline_id: uuid, stages: [...] }
+        expect(matchesTriggerConfig("stage_changed",
+          { pipe_type: "", pipeline_id: "22222222-2222-4222-8222-222222222222", stages: ["triagem"], to_stage: "", from_stage: "", campanha_id: "" },
+          ctxCustom,
+        )).toBe(true);
+      });
+
+      it("stages aceita o ID da etapa além da key", () => {
+        expect(matchesTriggerConfig("stage_changed",
+          { stages: ["bbbbbbbb-0000-4000-8000-000000000002"] },
+          ctxCustom,
+        )).toBe(true);
+        expect(matchesTriggerConfig("stage_changed",
+          { to_stage: "bbbbbbbb-0000-4000-8000-000000000002" },
+          ctxCustom,
+        )).toBe(true);
+        expect(matchesTriggerConfig("stage_changed",
+          { from_stage: "aaaaaaaa-0000-4000-8000-000000000000" },
+          ctxSystem,
+        )).toBe(true);
+      });
+
+      it("sem filtro nenhum continua casando qualquer funil", () => {
+        expect(matchesTriggerConfig("stage_changed", {}, ctxSystem)).toBe(true);
+        expect(matchesTriggerConfig("stage_changed", {}, ctxCustom)).toBe(true);
+      });
+    });
   });
 
   // lead_created

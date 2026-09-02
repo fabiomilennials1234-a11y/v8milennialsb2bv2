@@ -67,6 +67,21 @@ async function resolveStageRole(
   organizationId: string,
   ctx: Record<string, unknown>,
 ): Promise<string | null> {
+  // Caminho canônico (SCRUM-627): o contexto unificado carrega o UUID da etapa
+  // (`pipeline_stages.id` — tabela ÚNICA pós-20270906001000, cobre sistema e
+  // custom). Resolve direto, sem depender de slug nem de qual funil é.
+  const stageId = asUuidOrNull(ctx.stage_id);
+  if (stageId) {
+    const { data } = await supabase
+      .from("pipeline_stages")
+      .select("stage_role, organization_id")
+      .eq("id", stageId)
+      .maybeSingle();
+    if (data && data.organization_id === organizationId) {
+      return (data.stage_role as string) ?? null;
+    }
+  }
+
   const toStage = typeof ctx.to_stage === "string" ? ctx.to_stage : null;
   if (!toStage) return null;
 
@@ -443,16 +458,52 @@ export function matchesTriggerConfig(
 ): boolean {
   switch (triggerType) {
     case "stage_changed": {
-      if (config.pipe_type && context.pipe_type && config.pipe_type !== context.pipe_type) return false;
-      if (config.pipeline_id && context.pipeline_id && config.pipeline_id !== context.pipeline_id) return false;
+      // ── Filtro por funil (SCRUM-627) ──
+      // Formatos VIVOS de config em prod (medido 2026-09-02, 82 ativos):
+      //   · pipe_type slug sem prefixo ("whatsapp"/"propostas"), pipeline_id
+      //     vazio — 67 ativos (funil de sistema, formato legado);
+      //   · pipeline_id uuid, pipe_type vazio — 15 ativos (funil custom);
+      //   · nenhum dos dois — "qualquer funil".
+      // O contexto UNIFICADO dos gatilhos de banco (20270908006000) manda
+      // `pipeline_id` SEMPRE e `pipe_type` como eco legado (slug, só quando o
+      // funil é de sistema — some na W6). O casamento é por pipeline_id OU
+      // pelo slug legado.
+      const cfgPipelineId = asUuidOrNull(config.pipeline_id);
+      const cfgPipeType = typeof config.pipe_type === "string" && config.pipe_type.trim() ? config.pipe_type.trim() : null;
+      const ctxPipelineId = asUuidOrNull(context.pipeline_id);
+      const ctxPipeType = typeof context.pipe_type === "string" && context.pipe_type.trim() ? context.pipe_type.trim() : null;
+
+      if (cfgPipelineId && ctxPipelineId && cfgPipelineId !== ctxPipelineId) return false;
+      if (cfgPipeType) {
+        if (ctxPipeType) {
+          if (cfgPipeType !== ctxPipeType) return false;
+        } else if (ctxPipelineId) {
+          // Config legada de funil de SISTEMA vs. move num funil que não ecoa
+          // slug (custom). Antes isto passava em silêncio — o filtro
+          // simplesmente não era aplicado e o workflow disparava para o funil
+          // errado. Fail-closed: não é o funil configurado.
+          return false;
+        }
+      }
+
       if (config.campanha_id && context.campanha_id && config.campanha_id !== context.campanha_id) return false;
-      if (config.from_stage && context.from_stage && config.from_stage !== context.from_stage) return false;
+
+      // ── Filtro por etapa ──
+      // Configs vivas guardam stage_key em `stages`/`from_stage`/`to_stage`;
+      // o editor novo pode gravar stage ID (uuid de `pipeline_stages`). O
+      // contexto unificado manda os dois lados (`stage_key`+`stage_id`,
+      // `from_stage`+`from_stage_id`) — aceitar id OU key cobre os dois.
+      const ctxStageId = asUuidOrNull(context.stage_id);
+      const ctxFromStageId = asUuidOrNull(context.from_stage_id);
+      if (config.from_stage && context.from_stage
+          && config.from_stage !== context.from_stage
+          && config.from_stage !== ctxFromStageId) return false;
       const stages = config.stages as string[] | undefined;
       const toStage = context.to_stage as string;
       if (stages && stages.length > 0 && toStage) {
-        if (!stages.includes(toStage)) return false;
+        if (!stages.includes(toStage) && !(ctxStageId && stages.includes(ctxStageId))) return false;
       } else if (config.to_stage && toStage) {
-        if (config.to_stage !== toStage) return false;
+        if (config.to_stage !== toStage && config.to_stage !== ctxStageId) return false;
       }
       return true;
     }
