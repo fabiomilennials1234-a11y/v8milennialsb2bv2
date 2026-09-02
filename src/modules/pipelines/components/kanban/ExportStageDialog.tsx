@@ -31,8 +31,10 @@ interface ExportStageDialogProps {
 
 /**
  * Diálogo para exportar leads de uma única etapa do Kanban.
- * Reusa `useExportLeads` com `stageFilter` para garantir o mesmo schema CSV
- * (lead + 3 pipes) usado pela exportação global.
+ * Reusa `useExportLeads` com `stageFilter` para garantir o mesmo schema do
+ * arquivo da exportação global (SCRUM-635: bloco do lead + um bloco por funil
+ * REAL da org — não mais os 3 pipes fixos). Todo modo de `pipe` colapsa em
+ * `pipeline_id` dentro do motor; os valores legados seguem aceitos até a W6.
  */
 export function ExportStageDialog({
   open,

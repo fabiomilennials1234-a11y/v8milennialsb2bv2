@@ -347,6 +347,27 @@ export interface ImportLeadsToCustomPipelineOptions {
   sdrId?: string | null;
 }
 
+/**
+ * Destino canônico unificado (SCRUM-635): QUALQUER funil por `pipelines.id`.
+ * É o formato que a UI unificada (`/funil/:slug`) usa; os dois formatos
+ * legados acima seguem aceitos pela edge até a W6.
+ */
+export interface ImportLeadsToPipelineOptions {
+  /** `pipelines.id` do funil de destino (sistema ou custom). */
+  pipelineId: string;
+  /** Etapa padrão: uuid de `pipeline_stages` OU stage_key. */
+  stage: string;
+  /** Vendedores para mapear a coluna Vendedor (nome → id). */
+  members?: { id: string; name: string }[];
+  /** Produtos (nome → id) — usados quando o destino é o funil de Orçamentos. */
+  products?: { id: string; name: string }[];
+  userColumnMapping?: Record<string, string>;
+  sdrId?: string | null;
+  closerId?: string | null;
+  metricsPeriodMonth?: number;
+  metricsPeriodYear?: number;
+}
+
 export interface ImportLeadsToFunnelOptions {
   destination: FunnelDestination;
   /** Etapa padrão quando a linha não tem coluna Etapa ou o valor não corresponde a nenhuma etapa. */
@@ -1378,6 +1399,70 @@ export function useImportLeads() {
     }
   };
 
+  /**
+   * Caminho CANÔNICO (SCRUM-635): importa para QUALQUER funil por
+   * `pipelines.id`. `importLeadsToFunnel` e `importLeadsToCustomPipeline`
+   * seguem enviando os formatos legados (a edge colapsa os três no mesmo
+   * motor `importToPipeline`) — este é o que a UI unificada consome.
+   */
+  const importLeadsToPipeline = async (
+    file: File,
+    options: ImportLeadsToPipelineOptions,
+  ): Promise<ImportFunnelResult> => {
+    if (!organizationId) {
+      throw new Error("Organização não encontrada");
+    }
+
+    setIsImporting(true);
+    setProgress(0);
+    setResult(null);
+
+    try {
+      const parsedLeads = await parseCSV(file, options.userColumnMapping);
+      if (parsedLeads.length === 0) {
+        throw new Error("Nenhum lead válido encontrado no arquivo");
+      }
+
+      setProgress(20);
+
+      const { report } = await callImportEdgeFunction(parsedLeads, {
+        destination: "pipeline",
+        pipeline_id: options.pipelineId,
+        pipeline_stage: options.stage,
+        members: options.members,
+        products: options.products,
+        sdr_id: options.sdrId,
+        closer_id: options.closerId,
+        metrics_period_month: options.metricsPeriodMonth,
+        metrics_period_year: options.metricsPeriodYear,
+      });
+
+      setLastReport(report);
+
+      const duplicatePattern = /duplicado|ja existe|já existe|sem dados novos/i;
+      const duplicates = report.errors.filter((e) => duplicatePattern.test(e.reason)).length;
+      const invalid = report.rejected - duplicates;
+
+      const importResult: ImportFunnelResult = {
+        total: report.total,
+        imported: report.created,
+        duplicates,
+        updated: report.updated,
+        invalid: invalid < 0 ? report.rejected : invalid,
+        incomplete: report.incomplete ?? 0,
+      };
+
+      setProgress(100);
+      setResult(importResult as ImportResult);
+      return importResult;
+    } catch (error) {
+      console.error("Import pipeline error:", error);
+      throw error;
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const resetImport = () => {
     setProgress(0);
     setResult(null);
@@ -1470,6 +1555,7 @@ export function useImportLeads() {
     importLeads,
     importLeadsToFunnel,
     importLeadsToCustomPipeline,
+    importLeadsToPipeline,
     resetImport,
     fixExistingLeadNames,
     isImporting,

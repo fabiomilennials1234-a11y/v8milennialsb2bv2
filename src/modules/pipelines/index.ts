@@ -184,6 +184,7 @@ export type {
 // ── Hooks: custom pipelines + temporary funnels + members ─────────────────
 export {
   useCustomPipelines,
+  useCreateCustomPipeline,
   useCustomPipelineStages,
   useAddLeadToCustomPipe,
   useMoveLeadInCustomPipe,
@@ -246,7 +247,8 @@ export {
   PipeDispatchRulesSection,
   PipeDistributionSection,
   PipeSettingsDialog,
-  DangerZoneSystemPipe,
+  DeletePipelineDialog,
+  FunnelIdentitySection,
 } from "./components/shared";
 
 // ── Components: custom pipelines ──────────────────────────────────────────

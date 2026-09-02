@@ -21,7 +21,12 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { trackEvent } from "../_shared/track.ts";
-import { upsertPipeEntryDetailed } from "../_shared/pipeline-adapter.ts";
+import {
+  isPipelineResolutionError,
+  resolvePipeline,
+  upsertPipeEntryDetailed,
+  type ResolvedPipeline,
+} from "../_shared/pipeline-adapter.ts";
 import { unauthorizedResponse } from "../_shared/auth.ts";
 
 /**
@@ -78,7 +83,7 @@ interface ParsedLead {
 interface ImportPayload {
   leads: ParsedLead[];
   organization_id: string;
-  destination: "campaign" | "funnel" | "custom_pipeline";
+  destination: "campaign" | "funnel" | "custom_pipeline" | "pipeline";
 
   // Campaign-specific
   campanha_id?: string;
@@ -105,6 +110,14 @@ interface ImportPayload {
   custom_pipeline_id?: string;
   custom_stage_id?: string;
   custom_stages?: { id: string; name: string }[];
+
+  // Destino canônico unificado (SCRUM-635, W4): QUALQUER funil por id.
+  // Os formatos legados acima (funnel_destination / custom_pipeline_id)
+  // seguem aceitos e colapsam neste caminho dentro de `importToPipeline`.
+  /** `pipelines.id` do funil de destino (sistema ou custom). */
+  pipeline_id?: string;
+  /** Etapa padrão: uuid de `pipeline_stages` OU stage_key. */
+  pipeline_stage?: string;
 }
 
 interface ImportReport {
@@ -713,7 +726,62 @@ async function resolveDistribution(
 
 // ─── Funnel Import ──────────────────────────────────────
 
-async function importToFunnel(
+// ─── Import to ANY pipeline — motor único (SCRUM-635, W4) ───────────────────
+//
+// Substitui `importToFunnel` + `importToCustomPipeline`: todo destino colapsa
+// em `pipeline_id` e a escrita passa pelo choke `upsertPipeEntryDetailed`
+// (pipeline-adapter), que já aceita id/slug de QUALQUER funil (SCRUM-623).
+//
+// Formatos legados preservados (aditivo):
+//   · destination "funnel" + funnel_destination qualificacao|propostas|
+//     confirmacao + stage_key → slug do funil de sistema;
+//   · destination "custom_pipeline" + custom_pipeline_id + custom_stage_id
+//     (pós-inversão do silo, o id do funil custom É `pipelines.id`);
+//   · destination "pipeline" (canônico) + pipeline_id + pipeline_stage
+//     (uuid de pipeline_stages ou stage_key).
+//
+// O caminho custom usava a RPC `import_lead_into_custom_pipeline` para
+// suprimir o trigger `trg_auto_assign_lead_default_pipe` (corrida que duplicava
+// o card em Oportunidades). MEDIDO em prod 2026-09-02: o trigger NÃO EXISTE
+// mais (dropado por 20270824060000, em prod desde 24/08) — o insert direto do
+// lead deixou de correr contra qualquer semeadura automática, então os dois
+// caminhos convergem no mesmo insert + upsert do adapter.
+
+const FUNNEL_DESTINATION_SLUG: Record<string, string> = {
+  qualificacao: "whatsapp",
+  propostas: "propostas",
+  confirmacao: "confirmacao",
+};
+
+/** Nome que o usuário vê no relatório quando o funil de sistema não existe. */
+const FUNNEL_DESTINATION_LABEL: Record<string, string> = {
+  qualificacao: "Oportunidades",
+  propostas: "Orçamentos",
+  confirmacao: "Agendamentos",
+};
+
+interface PipelineStageRow {
+  id: string;
+  stage_key: string;
+  name: string;
+}
+
+/**
+ * Resolve a etapa por linha da planilha (coluna Etapa) para um stage_key.
+ * Aliases do cliente (formatos legados `stages`/`custom_stages`) têm
+ * precedência quando enviados — mesmo contrato de antes; as etapas reais do
+ * funil (DB) cobrem o resto.
+ */
+function resolveRowStageKey(
+  stageName: string | undefined,
+  aliases: { stage_key: string; name: string }[],
+  defaultStageKey: string,
+): string {
+  if (!aliases.length) return defaultStageKey;
+  return resolveStageFromName(stageName, aliases, defaultStageKey);
+}
+
+async function importToPipeline(
   supabase: ReturnType<typeof createClient>,
   leads: ParsedLead[],
   payload: ImportPayload,
@@ -721,9 +789,6 @@ async function importToFunnel(
 ): Promise<void> {
   const {
     organization_id: organizationId,
-    funnel_destination: destination,
-    stage_key: defaultStageKey,
-    stages,
     members,
     products: productsInput,
     sdr_id: defaultSdrId,
@@ -732,8 +797,95 @@ async function importToFunnel(
     metrics_period_year,
   } = payload;
 
-  if (!destination) throw new Error("funnel_destination é obrigatório para importação em funil");
-  if (!defaultStageKey) throw new Error("stage_key é obrigatório para importação em funil");
+  // ── 1. Colapsa o destino em (pipelineRef, etapa padrão) ────────────────────
+  let pipelineRef: string | null = null;
+  let defaultStageRaw: string | null = null;
+  let legacyFunnelLabel: string | null = null;
+
+  if (payload.destination === "funnel") {
+    const dest = payload.funnel_destination;
+    if (!dest) throw new Error("funnel_destination é obrigatório para importação em funil");
+    if (!payload.stage_key) throw new Error("stage_key é obrigatório para importação em funil");
+    pipelineRef = FUNNEL_DESTINATION_SLUG[dest] ?? dest;
+    defaultStageRaw = payload.stage_key;
+    legacyFunnelLabel = FUNNEL_DESTINATION_LABEL[dest] ?? dest;
+  } else if (payload.destination === "custom_pipeline") {
+    if (!payload.custom_pipeline_id) throw new Error("custom_pipeline_id é obrigatório para importação em pipeline custom");
+    if (!payload.custom_stage_id) throw new Error("custom_stage_id é obrigatório para importação em pipeline custom");
+    pipelineRef = payload.custom_pipeline_id;
+    defaultStageRaw = payload.custom_stage_id;
+  } else {
+    if (!payload.pipeline_id) throw new Error("pipeline_id é obrigatório para importação em funil (destination='pipeline')");
+    if (!payload.pipeline_stage) throw new Error("pipeline_stage é obrigatório para importação em funil (destination='pipeline')");
+    pipelineRef = payload.pipeline_id;
+    defaultStageRaw = payload.pipeline_stage;
+  }
+
+  // ── 2. Resolve o funil (id ou slug, qualquer funil ativo da org) ───────────
+  let pipeline: ResolvedPipeline;
+  try {
+    pipeline = await resolvePipeline(supabase, organizationId, pipelineRef);
+  } catch (err) {
+    if (isPipelineResolutionError(err) && legacyFunnelLabel) {
+      // Contrato legado do destino "funnel": org sem o funil de sistema não é
+      // erro HTTP — cada linha sai rejeitada com a explicação de como ativar.
+      for (let i = 0; i < leads.length; i++) {
+        report.rejected++;
+        report.errors.push({ row: i + 1, reason: motivoFalhaDeFunil("no_pipeline", legacyFunnelLabel) });
+      }
+      return;
+    }
+    if (isPipelineResolutionError(err)) {
+      // Contrato legado do destino custom (e o canônico segue igual).
+      throw new Error("Pipeline não encontrado ou não pertence a esta organização");
+    }
+    throw err;
+  }
+  const funnelLabel = pipeline.name || legacyFunnelLabel || pipeline.slug;
+  // Família de metadata por SLUG (ADR-0034: `type` nunca decide comportamento;
+  // slug é único por org, medido 2026-09-02). Os 3 slugs históricos carregam a
+  // semântica legada de vendedor/metadata; qualquer outro funil é genérico.
+  const family: "whatsapp" | "confirmacao" | "propostas" | "generic" =
+    pipeline.slug === "whatsapp" || pipeline.slug === "confirmacao" || pipeline.slug === "propostas"
+      ? (pipeline.slug as "whatsapp" | "confirmacao" | "propostas")
+      : "generic";
+
+  // ── 3. Etapas reais do funil + etapa padrão ────────────────────────────────
+  const { data: stageRows } = await supabase
+    .from("pipeline_stages")
+    .select("id, stage_key, name")
+    .eq("organization_id", organizationId)
+    .eq("pipeline_id", pipeline.id)
+    .eq("is_active", true)
+    .order("position");
+  const dbStages = (stageRows ?? []) as PipelineStageRow[];
+  const stageById = new Map(dbStages.map((st) => [st.id, st]));
+  const stageByKey = new Map(dbStages.map((st) => [st.stage_key, st]));
+
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  let defaultStageKey: string;
+  if (UUID_RE.test(defaultStageRaw)) {
+    const st = stageById.get(defaultStageRaw);
+    if (!st) throw new Error("Etapa padrão não encontrada ou não pertence a este pipeline");
+    defaultStageKey = st.stage_key;
+  } else {
+    // stage_key legado passa direto (contrato do destino "funnel": nunca
+    // validou a key — o adapter grava o que veio).
+    defaultStageKey = defaultStageRaw;
+  }
+
+  // Aliases nome→stage_key para a coluna Etapa da planilha: lista do cliente
+  // (formatos legados) tem precedência; sem ela, as etapas reais do funil.
+  let stageAliases: { stage_key: string; name: string }[] = [];
+  if (payload.stages?.length) {
+    stageAliases = payload.stages;
+  } else if (payload.custom_stages?.length) {
+    stageAliases = payload.custom_stages
+      .map((cs) => ({ stage_key: stageById.get(cs.id)?.stage_key ?? "", name: cs.name }))
+      .filter((a) => a.stage_key);
+  } else {
+    stageAliases = dbStages.map((st) => ({ stage_key: st.stage_key, name: st.name }));
+  }
 
   const customFieldMap = await loadCustomFieldMap(supabase, organizationId);
 
@@ -742,37 +894,35 @@ async function importToFunnel(
       ? new Date(Date.UTC(metrics_period_year, metrics_period_month - 1, 1)).toISOString()
       : undefined;
 
-  // Load products for propostas if not provided
+  // Produtos só interessam ao funil de Orçamentos (propostas).
   let productsForPropostas = productsInput ?? [];
-  if (destination === "propostas" && productsForPropostas.length === 0) {
+  if (family === "propostas" && productsForPropostas.length === 0) {
     const { data: productsFromDb } = await supabase
       .from("products").select("id, name").eq("organization_id", organizationId).order("name");
     productsForPropostas = (productsFromDb || []).map((p: any) => ({ id: p.id, name: p.name || "" }));
   }
 
-  // Pre-fetch existing leads by phone
+  // ── 4. Pré-carrega leads existentes (telefone; email pra quem não tem) ─────
   const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
-  const { data: existingLeads } = await supabase
-    .from("leads")
-    .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-    .eq("organization_id", organizationId)
-    .in("phone", phones);
-
-  const existingMap = new Map<string, NonNullable<typeof existingLeads>[number]>();
-  existingLeads?.forEach((l) => { if (l.phone) existingMap.set(l.phone, l); });
-
-  // Pre-fetch existing leads by email for leads without phone
-  const emailsOnlyFunnel = leads
-    .filter((l) => !l.phone && l.email)
-    .map((l) => l.email!.toLowerCase().trim());
-  const existingEmailMapFunnel = new Map<string, NonNullable<typeof existingLeads>[number]>();
-  if (emailsOnlyFunnel.length > 0) {
-    const { data: existingByEmailFunnel } = await supabase
+  const existingMap = new Map<string, any>();
+  if (phones.length > 0) {
+    const { data: existingLeads } = await supabase
       .from("leads")
       .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
       .eq("organization_id", organizationId)
-      .in("email", emailsOnlyFunnel);
-    existingByEmailFunnel?.forEach((l) => { if (l.email) existingEmailMapFunnel.set(l.email.toLowerCase(), l); });
+      .in("phone", phones);
+    existingLeads?.forEach((l: any) => { if (l.phone) existingMap.set(l.phone, l); });
+  }
+
+  const emailsOnly = leads.filter((l) => !l.phone && l.email).map((l) => l.email!.toLowerCase().trim());
+  const existingEmailMap = new Map<string, any>();
+  if (emailsOnly.length > 0) {
+    const { data: existingByEmail } = await supabase
+      .from("leads")
+      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
+      .eq("organization_id", organizationId)
+      .in("email", emailsOnly);
+    existingByEmail?.forEach((l: any) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
   }
 
   const processedPhones = new Set<string>();
@@ -796,11 +946,12 @@ async function importToFunnel(
       const existingLead = formattedPhone
         ? existingMap.get(formattedPhone)
         : lead.email
-          ? existingEmailMapFunnel.get(lead.email.toLowerCase().trim())
+          ? existingEmailMap.get(lead.email.toLowerCase().trim())
           : null;
 
       try {
         let leadId: string;
+        let leadWasCreated = false;
 
         if (existingLead) {
           leadId = existingLead.id;
@@ -846,10 +997,11 @@ async function importToFunnel(
 
           if (leadError) {
             report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: `Erro ao inserir lead: ${leadError.message}` });
+            report.errors.push({ row: rowIndex + 1, reason: `Erro ao inserir lead: ${truncateErr(leadError.message)}` });
             continue;
           }
           leadId = newLead.id;
+          leadWasCreated = true;
           report.created++;
           createdLeadIds.push(newLead.id);
         }
@@ -857,133 +1009,116 @@ async function importToFunnel(
         // Campos personalizados → lead_custom_field_values (upsert por lead+field)
         await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
 
-        // Resolve stage
-        const stageKeyForLead =
-          stages?.length
-            ? resolveStageFromName(lead.stage, stages, defaultStageKey)
-            : defaultStageKey;
+        // Etapa da linha (coluna Etapa da planilha) → stage_key
+        const stageKeyForLead = resolveRowStageKey(lead.stage, stageAliases, defaultStageKey);
 
-        // Resolve seller
-        const sdrIdForLead = destination !== "propostas"
+        // Vendedor(es) — semântica por família preservada dos caminhos legados.
+        const sdrIdForLead = family !== "propostas"
           ? resolveSellerToId(lead.seller_name, membersList, defaultSdrId ?? null)
           : null;
-        const closerIdForLead = destination !== "qualificacao"
+        const closerIdForLead = family !== "whatsapp" && family !== "generic"
           ? resolveSellerToId(lead.seller_name, membersList, defaultCloserId ?? null)
           : null;
 
-        // Update lead with assigned SDR/closer
+        // Atualiza os papéis no lead — funis de sistema gravam o conjunto
+        // completo (sdr/closer/responsible/pre_sale/sale); o genérico grava
+        // responsible+sdr (contrato legado do caminho custom).
         const leadUpdates: Record<string, unknown> = {};
-        if (sdrIdForLead) leadUpdates.sdr_id = sdrIdForLead;
-        if (closerIdForLead) leadUpdates.closer_id = closerIdForLead;
-        const responsibleIdForLead = closerIdForLead || sdrIdForLead;
-        if (responsibleIdForLead) leadUpdates.responsible_id = responsibleIdForLead;
-        if (sdrIdForLead) leadUpdates.pre_sale_responsible_id = sdrIdForLead;
-        if (closerIdForLead) leadUpdates.sale_responsible_id = closerIdForLead;
+        if (family === "generic") {
+          if (sdrIdForLead) {
+            leadUpdates.responsible_id = sdrIdForLead;
+            leadUpdates.sdr_id = sdrIdForLead;
+          }
+        } else {
+          if (sdrIdForLead) leadUpdates.sdr_id = sdrIdForLead;
+          if (closerIdForLead) leadUpdates.closer_id = closerIdForLead;
+          const responsibleIdForLead = closerIdForLead || sdrIdForLead;
+          if (responsibleIdForLead) leadUpdates.responsible_id = responsibleIdForLead;
+          if (sdrIdForLead) leadUpdates.pre_sale_responsible_id = sdrIdForLead;
+          if (closerIdForLead) leadUpdates.sale_responsible_id = closerIdForLead;
+        }
         if (Object.keys(leadUpdates).length > 0) {
           await supabase.from("leads").update(leadUpdates).eq("id", leadId);
         }
 
-        // Insert into pipeline via adapter.
-        if (destination === "qualificacao") {
-          const qualifResult = await upsertPipeEntryDetailed(supabase, {
-            leadId,
-            orgId: organizationId,
-            slug: "whatsapp",
-            stageKey: stageKeyForLead,
-            metadata: { sdr_id: sdrIdForLead, responsible_id: sdrIdForLead },
-            assignedTo: sdrIdForLead,
-          });
-          // 🚨 Este resultado era capturado e NUNCA lido. Com o funil podendo
-          // não existir (20270902000010), a importação terminaria dizendo
-          // "500 leads importados" com zero card criado — e o cliente leria
-          // como "sumiu". O irmão `propostas` logo abaixo já reportava; os
-          // outros dois não.
-          if (qualifResult.status !== "created" && qualifResult.status !== "updated") {
-            report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil(qualifResult.status, "Oportunidades") });
-            continue;
-          }
-        } else if (destination === "propostas") {
+        // Metadata + responsável da entry, por família.
+        let entryMetadata: Record<string, unknown> = {};
+        let entryAssignedTo: string | null = null;
+        let entryNotes: string | null | undefined = undefined;
+        let productIds: string[] = [];
+        let totalValue: number | null = null;
+
+        if (family === "whatsapp") {
+          entryMetadata = { sdr_id: sdrIdForLead, responsible_id: sdrIdForLead };
+          entryAssignedTo = sdrIdForLead;
+        } else if (family === "confirmacao") {
+          entryMetadata = {
+            sdr_id: sdrIdForLead,
+            closer_id: closerIdForLead,
+            meeting_date: lead.commitment_date ?? null,
+          };
+          if (metricsPeriodAt != null) entryMetadata.metrics_period_at = metricsPeriodAt;
+          entryAssignedTo = closerIdForLead || sdrIdForLead;
+          entryNotes = lead.pipe_notes ?? null;
+        } else if (family === "propostas") {
           const productNamesRaw = (lead.product_name || "").trim();
           const productNames = productNamesRaw
             ? productNamesRaw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean)
             : [];
-          const productIds: string[] = [];
           for (const name of productNames) {
             const id = resolveProductToId(name, productsForPropostas, null);
             if (id) productIds.push(id);
           }
-          const firstProductId = productIds.length > 0 ? productIds[0] : null;
-          const totalValue = lead.valor_proposta ?? null;
-
-          const propostaMetadata: Record<string, unknown> = {
+          totalValue = lead.valor_proposta ?? null;
+          entryMetadata = {
             closer_id: closerIdForLead,
             responsible_id: closerIdForLead,
             sale_value: totalValue,
             calor: lead.calor ?? null,
             commitment_date: lead.commitment_date ?? null,
             contract_duration: lead.contract_duration ?? null,
-            product_id: firstProductId,
+            product_id: productIds.length > 0 ? productIds[0] : null,
           };
-          if (metricsPeriodAt != null) propostaMetadata.metrics_period_at = metricsPeriodAt;
-
-          const propostaResult = await upsertPipeEntryDetailed(supabase, {
-            leadId,
-            orgId: organizationId,
-            slug: "propostas",
-            stageKey: stageKeyForLead,
-            metadata: propostaMetadata,
-            assignedTo: closerIdForLead,
-            notes: lead.pipe_notes ?? null,
-          });
-
-          if (propostaResult.status !== "created" && propostaResult.status !== "updated") {
-            report.rejected++;
-            // A mensagem antiga ("Erro ao inserir proposta") descrevia só uma
-            // das causas. `no_pipeline` não é erro — é a org não ter o funil, e
-            // dizer "erro" manda o usuário caçar um defeito que não existe.
-            report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil(propostaResult.status, "Orçamentos") });
-            continue;
-          }
-          const propostaEntryId = propostaResult.entryId;
-
-          // Insert product items (still uses pipe_proposta_items with entry id)
-          if (productIds.length > 0) {
-            const n = productIds.length;
-            const valuePerItem = totalValue != null && n > 0 ? Math.floor(totalValue / n) : null;
-            const remainder = totalValue != null && n > 0 ? totalValue - (valuePerItem ?? 0) * n : 0;
-            const itemsToInsert = productIds.map((product_id, index) => ({
-              pipe_proposta_id: propostaEntryId,
-              product_id,
-              sale_value: totalValue != null && valuePerItem != null
-                ? (index < n - 1 ? valuePerItem : valuePerItem + remainder)
-                : null,
-            }));
-            await supabase.from("pipe_proposta_items").insert(itemsToInsert);
-          }
+          if (metricsPeriodAt != null) entryMetadata.metrics_period_at = metricsPeriodAt;
+          entryAssignedTo = closerIdForLead;
+          entryNotes = lead.pipe_notes ?? null;
         } else {
-          // confirmacao
-          const confirmacaoMetadata: Record<string, unknown> = {
-            sdr_id: sdrIdForLead,
-            closer_id: closerIdForLead,
-            meeting_date: lead.commitment_date ?? null,
-          };
-          if (metricsPeriodAt != null) confirmacaoMetadata.metrics_period_at = metricsPeriodAt;
-          const confirmacaoResult = await upsertPipeEntryDetailed(supabase, {
-            leadId,
-            orgId: organizationId,
-            slug: "confirmacao",
-            stageKey: stageKeyForLead,
-            metadata: confirmacaoMetadata,
-            assignedTo: closerIdForLead || sdrIdForLead,
-            notes: lead.pipe_notes ?? null,
-          });
-          // Mesmo caso do `qualifResult`: capturado e nunca lido.
-          if (confirmacaoResult.status !== "created" && confirmacaoResult.status !== "updated") {
-            report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil(confirmacaoResult.status, "Agendamentos") });
-            continue;
-          }
+          entryAssignedTo = sdrIdForLead;
+        }
+
+        // Escrita da entry — choke único (adapter, por pipeline_id).
+        const entryResult = await upsertPipeEntryDetailed(supabase, {
+          leadId,
+          orgId: organizationId,
+          slug: pipeline.id,
+          stageKey: stageKeyForLead,
+          metadata: entryMetadata,
+          assignedTo: entryAssignedTo,
+          ...(entryNotes !== undefined ? { notes: entryNotes } : {}),
+        });
+
+        if (entryResult.status !== "created" && entryResult.status !== "updated") {
+          report.rejected++;
+          report.errors.push({ row: rowIndex + 1, reason: motivoFalhaDeFunil(entryResult.status, funnelLabel) });
+          // Lead novo que não entrou no funil não conta como importado — o
+          // caminho custom já fazia esta contabilidade; agora vale pra todos.
+          if (leadWasCreated) report.created = Math.max(0, report.created - 1);
+          continue;
+        }
+
+        // Itens de produto (só Orçamentos) — ainda por pipe_proposta_items.
+        if (family === "propostas" && productIds.length > 0) {
+          const n = productIds.length;
+          const valuePerItem = totalValue != null && n > 0 ? Math.floor(totalValue / n) : null;
+          const remainder = totalValue != null && n > 0 ? totalValue - (valuePerItem ?? 0) * n : 0;
+          const itemsToInsert = productIds.map((product_id, index) => ({
+            pipe_proposta_id: entryResult.entryId,
+            product_id,
+            sale_value: totalValue != null && valuePerItem != null
+              ? (index < n - 1 ? valuePerItem : valuePerItem + remainder)
+              : null,
+          }));
+          await supabase.from("pipe_proposta_items").insert(itemsToInsert);
         }
 
         if (formattedPhone) processedPhones.add(formattedPhone);
@@ -999,343 +1134,13 @@ async function importToFunnel(
     const historyRows = createdLeadIds.map((id) => ({
       lead_id: id,
       action: "lead_created",
-      description: "Sistema: Lead importado via funil",
+      description: payload.destination === "custom_pipeline"
+        ? "Sistema: Lead importado via pipeline custom"
+        : "Sistema: Lead importado via funil",
       created_by: null,
     }));
     await supabase.from("lead_history").insert(historyRows);
   }
-}
-
-// ─── Import to Custom Pipeline ──────────────────────────
-
-async function importToCustomPipeline(
-  supabase: ReturnType<typeof createClient>,
-  leads: ParsedLead[],
-  payload: ImportPayload,
-  report: ImportReport,
-): Promise<void> {
-  const {
-    organization_id: organizationId,
-    custom_pipeline_id: pipelineId,
-    custom_stage_id: defaultStageId,
-    custom_stages: stages,
-    sdr_id: defaultSdrId,
-    members,
-  } = payload;
-
-  if (!pipelineId) throw new Error("custom_pipeline_id é obrigatório para importação em pipeline custom");
-  if (!defaultStageId) throw new Error("custom_stage_id é obrigatório para importação em pipeline custom");
-
-  // Validate pipeline belongs to this organization and is active
-  const { data: pipelineRow } = await supabase
-    .from("custom_pipelines")
-    .select("id")
-    .eq("id", pipelineId)
-    .eq("organization_id", organizationId)
-    .eq("is_active", true)
-    .maybeSingle();
-  if (!pipelineRow) throw new Error("Pipeline custom não encontrado ou não pertence a esta organização");
-
-  // Validate default stage belongs to this pipeline
-  const { data: stageRow } = await supabase
-    .from("custom_pipeline_stages")
-    .select("id")
-    .eq("id", defaultStageId)
-    .eq("pipeline_id", pipelineId)
-    .eq("is_active", true)
-    .maybeSingle();
-  if (!stageRow) throw new Error("Etapa padrão não encontrada ou não pertence a este pipeline");
-
-  const customFieldMap = await loadCustomFieldMap(supabase, organizationId);
-
-  // Pre-fetch existing leads by phone (skip .in() with empty array — PostgREST rejects it)
-  const phones = leads.filter((l) => l.phone).map((l) => formatPhone(l.phone!));
-  const existingMap = new Map<string, { id: string; phone: string | null; name: string; company: string | null; email: string | null; faturamento: string | null; segment: string | null }>();
-  if (phones.length > 0) {
-    const { data: existingLeads } = await supabase
-      .from("leads")
-      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-      .eq("organization_id", organizationId)
-      .in("phone", phones);
-    existingLeads?.forEach((l: any) => { if (l.phone) existingMap.set(l.phone, l); });
-  }
-
-  // Pre-fetch existing leads by email for leads without phone
-  const emailsOnly = leads.filter((l) => !l.phone && l.email).map((l) => l.email!.toLowerCase().trim());
-  const existingEmailMap = new Map<string, any>();
-  if (emailsOnly.length > 0) {
-    const { data: existingByEmail } = await supabase
-      .from("leads")
-      .select("id, phone, name, company, email, faturamento, segment, notes, rating, utm_campaign, utm_source, utm_medium, utm_content, utm_term")
-      .eq("organization_id", organizationId)
-      .in("email", emailsOnly);
-    existingByEmail?.forEach((l: any) => { if (l.email) existingEmailMap.set(l.email.toLowerCase(), l); });
-  }
-
-  const processedPhones = new Set<string>();
-  const createdLeadIds: string[] = [];
-  const BATCH_SIZE = 50;
-  const membersList = members ?? [];
-
-  for (let i = 0; i < leads.length; i += BATCH_SIZE) {
-    const batch = leads.slice(i, i + BATCH_SIZE);
-
-    for (const lead of batch) {
-      const rowIndex = leads.indexOf(lead);
-      const formattedPhone = lead.phone ? formatPhone(lead.phone) : undefined;
-
-      if (formattedPhone && processedPhones.has(formattedPhone)) {
-        report.rejected++;
-        report.errors.push({ row: rowIndex + 1, reason: "Telefone duplicado neste arquivo" });
-        continue;
-      }
-
-      const existingLead = formattedPhone
-        ? existingMap.get(formattedPhone)
-        : lead.email
-          ? existingEmailMap.get(lead.email.toLowerCase().trim())
-          : null;
-
-      // Resolve stage — match by name if stages provided, fallback to default
-      const stageIdForLead = stages?.length
-        ? resolveCustomStageFromName(lead.stage, stages, defaultStageId)
-        : defaultStageId;
-
-      // Resolve seller
-      const assignedTo = resolveSellerToId(lead.seller_name, membersList, defaultSdrId ?? null);
-
-      try {
-        let leadId: string;
-        // Lead novo já entra no funil dentro da própria RPC — sem isto o bloco
-        // de upsert abaixo gravaria a entry uma segunda vez.
-        let entryAlreadyCreated = false;
-
-        if (existingLead) {
-          leadId = existingLead.id;
-          const updates: Record<string, unknown> = {};
-          if (shouldReplaceValue(existingLead.name, lead.name, "name")) updates.name = lead.name;
-          if (shouldReplaceValue(existingLead.company, lead.company, "company")) updates.company = lead.company;
-          if (shouldReplaceValue(existingLead.email, lead.email, "email")) updates.email = lead.email;
-          if (shouldReplaceValue(existingLead.phone, formattedPhone, "phone")) updates.phone = formattedPhone;
-          if (shouldReplaceValue(existingLead.faturamento, lead.faturamento ? normalizeFaturamento(lead.faturamento) : undefined, "faturamento"))
-            updates.faturamento = normalizeFaturamento(lead.faturamento!);
-          if (shouldReplaceValue(existingLead.segment, lead.segment, "segment")) updates.segment = lead.segment;
-
-          if (Object.keys(updates).length > 0) {
-            await supabase.from("leads").update(updates).eq("id", existingLead.id);
-            report.updated++;
-          } else {
-            report.rejected++;
-            report.errors.push({ row: rowIndex + 1, reason: "Lead já existe sem dados novos para atualizar" });
-          }
-
-          // Responsável só é sobrescrito no caminho do lead já existente; no
-          // lead novo a RPC já grava responsible_id/sdr_id no INSERT.
-          if (assignedTo) {
-            await supabase.from("leads").update({ responsible_id: assignedTo, sdr_id: assignedTo }).eq("id", leadId);
-          }
-        } else {
-          // Lead + entry do funil custom na MESMA transação, com o seed
-          // automático em whatsapp/novo suprimido. Inserir o lead direto aqui
-          // faria o trigger trg_auto_assign_lead_default_pipe vencer a corrida
-          // e duplicar o card em Oportunidades (migration 20270729000000).
-          const { data: newLeadId, error: rpcError } = await supabase.rpc(
-            "import_lead_into_custom_pipeline",
-            {
-              p_organization_id: organizationId,
-              p_lead: {
-                name: lead.name,
-                company: lead.company,
-                phone: formattedPhone,
-                email: lead.email,
-                faturamento: lead.faturamento ? normalizeFaturamento(lead.faturamento) : null,
-                segment: lead.segment,
-                notes: mergeNotes(undefined, lead.notes, lead.kommoBlock),
-                origin: "outro",
-                rating: lead.rating || 0,
-                utm_campaign: lead.utm_campaign,
-                utm_source: lead.utm_source,
-                utm_medium: lead.utm_medium,
-                utm_content: lead.utm_content,
-                utm_term: lead.utm_term,
-              },
-              p_pipeline_id: pipelineId,
-              p_stage_id: stageIdForLead,
-              p_assigned_to: assignedTo,
-            },
-          );
-
-          if (rpcError || !newLeadId) {
-            report.rejected++;
-            report.errors.push({
-              row: rowIndex + 1,
-              reason: `Erro ao inserir lead: ${truncateErr(rpcError?.message ?? "RPC não retornou id")}`,
-            });
-            continue;
-          }
-          leadId = newLeadId as string;
-          entryAlreadyCreated = true;
-          report.created++;
-          createdLeadIds.push(leadId);
-        }
-
-        // Campos personalizados → lead_custom_field_values (upsert por lead+field)
-        await applyCustomFields(supabase, leadId, lead.customFields, customFieldMap);
-
-        if (entryAlreadyCreated) {
-          // Mesmo bookkeeping do fim do caminho normal: sem isto, duas linhas
-          // com o mesmo telefone no arquivo criariam dois leads.
-          if (formattedPhone) processedPhones.add(formattedPhone);
-          continue;
-        }
-
-        // Upsert into custom_pipe_entries
-        //
-        // NÃO usar `.maybeSingle()` aqui. A constraint
-        // `custom_pipe_entries_pipeline_id_lead_id_key` caiu em
-        // `20270730000050_deal_por_lead_destrava` — ADR-0023 decisão 2 permite
-        // ao mesmo Lead ter mais de um Negócio no MESMO funil, que é o que
-        // representa a recompra.
-        //
-        // Com 2+ linhas, o postgrest-js zera `data` e devolve `PGRST116`. O
-        // swallow que vira "vazio" só cobre `details` com "0 rows", então
-        // "existem 2" ficava indistinguível de "não existe" — e aqui isso não
-        // criava linha nova, caía no ramo de erro abaixo e REJEITAVA a linha da
-        // planilha com "Falha ao verificar funil existente". Importação
-        // silenciosamente incompleta, sem ninguém para desfazer.
-        //
-        // Mesma forma que a `develop` já aplicou nos irmãos
-        // (`usePipelineEntries.readActivePipelineEntry`,
-        // `useCustomPipelines`, `stageTransition`, `move-stage`): lê a fila
-        // ordenada com teto e escolhe a corrente — a mais recentemente movida.
-        const CUSTOM_PIPE_ENTRY_READ_CAP = 50;
-        const { data: existingEntries, error: existingEntryError } = await supabase
-          .from("custom_pipe_entries")
-          .select("id")
-          .eq("lead_id", leadId)
-          .eq("pipeline_id", pipelineId)
-          .order("stage_changed_at", { ascending: false, nullsFirst: false })
-          .order("created_at", { ascending: false, nullsFirst: false })
-          .order("id", { ascending: false })
-          .limit(CUSTOM_PIPE_ENTRY_READ_CAP);
-
-        const entryRows = existingEntries ?? [];
-        if (entryRows.length > 1) {
-          // Sinal explícito de "existem N" — o que `.maybeSingle()` apagava.
-          console.warn(
-            `[import-leads] ${entryRows.length} entries em custom_pipe_entries para pipeline=${pipelineId} lead=${leadId}; atualizando a mais recente.`,
-          );
-        }
-        const existingEntry = entryRows[0] ?? null;
-
-        if (existingEntryError) {
-          report.errors.push({
-            row: rowIndex + 1,
-            reason: `Falha ao verificar funil existente: ${truncateErr(existingEntryError.message)}`,
-          });
-          if (!existingLead) {
-            report.created = Math.max(0, report.created - 1);
-            report.rejected++;
-          }
-          continue;
-        }
-
-        let pipeEntryError: { message: string } | null = null;
-
-        if (existingEntry) {
-          const { error: updateError } = await supabase
-            .from("custom_pipe_entries")
-            .update({
-              stage_id: stageIdForLead,
-              assigned_to: assignedTo,
-              stage_changed_at: new Date().toISOString(),
-            })
-            .eq("id", existingEntry.id)
-            .select("id")
-            .single();
-          pipeEntryError = updateError;
-        } else {
-          const { error: insertError } = await supabase
-            .from("custom_pipe_entries")
-            .insert({
-              lead_id: leadId,
-              organization_id: organizationId,
-              pipeline_id: pipelineId,
-              stage_id: stageIdForLead,
-              assigned_to: assignedTo,
-              entered_at: new Date().toISOString(),
-              stage_changed_at: new Date().toISOString(),
-            })
-            .select("id")
-            .single();
-          pipeEntryError = insertError;
-        }
-
-        if (pipeEntryError) {
-          console.error("[import-leads] custom_pipe_entries write failed", {
-            row: rowIndex + 1,
-            leadId,
-            pipelineId,
-            stageId: stageIdForLead,
-            assignedTo,
-            error: pipeEntryError.message,
-          });
-          report.errors.push({
-            row: rowIndex + 1,
-            reason: `Lead criado mas não entrou no funil: ${truncateErr(pipeEntryError.message)}`,
-          });
-          if (!existingLead) {
-            report.created = Math.max(0, report.created - 1);
-            report.rejected++;
-          }
-          continue;
-        }
-
-        if (formattedPhone) processedPhones.add(formattedPhone);
-      } catch (err) {
-        report.rejected++;
-        report.errors.push({ row: rowIndex + 1, reason: `Erro inesperado: ${(err as Error).message}` });
-      }
-    }
-  }
-
-  // Bulk insert lead_history for created leads
-  if (createdLeadIds.length > 0) {
-    const historyRows = createdLeadIds.map((id) => ({
-      lead_id: id,
-      action: "lead_created",
-      description: "Sistema: Lead importado via pipeline custom",
-      created_by: null,
-    }));
-    await supabase.from("lead_history").insert(historyRows);
-  }
-}
-
-/** Resolve stage name to custom stage ID (with accent normalization and fuzzy match) */
-function resolveCustomStageFromName(
-  stageName: string | undefined,
-  stages: { id: string; name: string }[],
-  defaultStageId: string,
-): string {
-  if (!stageName?.trim()) return defaultStageId;
-  const inputNorm = stageComparable(stageName);
-  if (!inputNorm) return defaultStageId;
-  // 1) Exact match
-  const exact = stages.find((s) => stageComparable(s.name) === inputNorm);
-  if (exact) return exact.id;
-  // 2) Contains match
-  const contains = stages.find((s) => {
-    const n = stageComparable(s.name);
-    return n.includes(inputNorm) || inputNorm.includes(n);
-  });
-  if (contains) return contains.id;
-  // 3) Starts with match
-  const startsWith = stages.find((s) => {
-    const n = stageComparable(s.name);
-    return inputNorm.startsWith(n) || n.startsWith(inputNorm);
-  });
-  if (startsWith) return startsWith.id;
-  return defaultStageId;
 }
 
 // ─── Main Handler ───────────────────────────────────────
@@ -1433,9 +1238,9 @@ Deno.serve(
       );
     }
 
-    if (!body.destination || !["campaign", "funnel", "custom_pipeline"].includes(body.destination)) {
+    if (!body.destination || !["campaign", "funnel", "custom_pipeline", "pipeline"].includes(body.destination)) {
       return new Response(
-        JSON.stringify({ success: false, error: "destination deve ser 'campaign', 'funnel' ou 'custom_pipeline'" }),
+        JSON.stringify({ success: false, error: "destination deve ser 'campaign', 'funnel', 'custom_pipeline' ou 'pipeline'" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -1461,10 +1266,10 @@ Deno.serve(
     try {
       if (body.destination === "campaign") {
         await importToCampaign(supabase, validLeads, { ...body, organization_id: organizationId }, report);
-      } else if (body.destination === "custom_pipeline") {
-        await importToCustomPipeline(supabase, validLeads, { ...body, organization_id: organizationId }, report);
       } else {
-        await importToFunnel(supabase, validLeads, { ...body, organization_id: organizationId }, report);
+        // funnel | custom_pipeline | pipeline — os três colapsam no motor
+        // único por pipeline_id (SCRUM-635).
+        await importToPipeline(supabase, validLeads, { ...body, organization_id: organizationId }, report);
       }
     } catch (err) {
       console.error("[import-leads] Processing error:", err);

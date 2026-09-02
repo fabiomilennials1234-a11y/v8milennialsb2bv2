@@ -1,10 +1,11 @@
 /**
- * Maps onboarding quiz answers to pipeline_display_config entries.
- * Ready to be called from the onboarding wizard when it's implemented.
+ * Traduz as respostas do quiz de onboarding no plano de funis de sistema da
+ * org e o aplica pelo caminho CANÔNICO (`enable_system_pipeline`, que registra,
+ * espelha em `pipelines` e semeia etapas server-side — SCRUM-618/635).
  *
- * Usage (future):
+ * Uso (OnboardingWizard.handleApplyConfig):
  *   const config = generatePipelineDisplayConfig(quizAnswers);
- *   await supabase.from("pipeline_display_config").upsert(config);
+ *   await applyPipelineDisplayConfig(supabase, organizationId, config);
  */
 
 export interface QuizAnswers {
@@ -103,26 +104,51 @@ export function generatePipelineDisplayConfig(answers: QuizAnswers): PipelineDis
 }
 
 /**
- * Applies the generated config to the database.
- * Call this from the onboarding wizard's handleApplyConfig().
+ * Aplica a configuração do quiz — CAMINHO CANÔNICO (SCRUM-635, W4).
+ *
+ * Antes: upsert de linhas em `pipeline_display_config` por tipo — criava o
+ * REGISTRO mas nenhum funil de fato (nem linha em `pipelines`, nem etapa), e
+ * inventava linha `is_visible=false` para funil que a org nunca teve.
+ *
+ * Agora cada funil visível NASCE pela RPC `enable_system_pipeline` (registro +
+ * espelho em `pipelines` + etapas semeadas server-side, SCRUM-618). O batismo
+ * do quiz (display_name/position) entra por UPDATE depois — a RPC preserva
+ * nome personalizado de propósito. Funil não-visível NÃO é criado: linha
+ * ausente = "a org não tem este funil" (20270902000000); se já existir, só é
+ * ocultado.
  */
 export async function applyPipelineDisplayConfig(
   supabase: any,
   organizationId: string,
   config: PipelineDisplayConfigEntry[]
 ) {
-  const rows = config.map((c) => ({
-    organization_id: organizationId,
-    pipe_type: c.pipe_type,
-    display_name: c.display_name,
-    is_visible: c.is_visible,
-    position: c.position,
-    updated_at: new Date().toISOString(),
-  }));
+  for (const c of config) {
+    if (c.is_visible) {
+      const { error } = await supabase.rpc("enable_system_pipeline", {
+        p_org_id: organizationId,
+        p_pipe_type: c.pipe_type,
+      });
+      if (error) throw error;
 
-  const { error } = await supabase
-    .from("pipeline_display_config")
-    .upsert(rows, { onConflict: "organization_id,pipe_type" });
-
-  if (error) throw error;
+      const { error: renameError } = await supabase
+        .from("pipeline_display_config")
+        .update({
+          display_name: c.display_name,
+          position: c.position,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("organization_id", organizationId)
+        .eq("pipe_type", c.pipe_type);
+      if (renameError) throw renameError;
+    } else {
+      // UPDATE puro: não casa com nada quando a org nunca teve o funil — que
+      // é exatamente o estado desejado (nenhuma linha fantasma).
+      const { error } = await supabase
+        .from("pipeline_display_config")
+        .update({ is_visible: false, updated_at: new Date().toISOString() })
+        .eq("organization_id", organizationId)
+        .eq("pipe_type", c.pipe_type);
+      if (error) throw error;
+    }
+  }
 }

@@ -5,8 +5,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings2, Layers, Type, Upload, FileDown, Send, Shuffle, Clock } from "lucide-react";
+import {
+  Settings2,
+  Layers,
+  Type,
+  Upload,
+  FileDown,
+  Send,
+  Shuffle,
+  Clock,
+  Palette,
+} from "lucide-react";
 import { type StageFamily, type PipelineStage } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
+import { usePipelineDisplayConfig } from "../../hooks/config/usePipelineDisplayConfig";
 import { type FunnelDestination } from "@/modules/leads";
 import { ManagePipelineStagesContent } from "./ManagePipelineStagesModal";
 import { CustomFieldsManager } from "@/modules/leads";
@@ -14,7 +26,7 @@ import { ImportLeadsFunnelContent } from "@/modules/leads";
 import { ExportLeadsContent } from "@/modules/leads";
 import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
-import { DangerZoneSystemPipe } from "./DangerZoneSystemPipe";
+import { FunnelIdentitySection } from "./FunnelIdentitySection";
 import type { ReactNode } from "react";
 
 // StageFamily, não PipelineType: este diálogo também veste a Carteira (via
@@ -31,6 +43,13 @@ const PIPE_TO_DESTINATION: Partial<Record<StageFamily, FunnelDestination>> = {
   whatsapp: "qualificacao",
   confirmacao: "confirmacao",
   propostas: "propostas",
+};
+
+// Tailwind JIT só compila classe escrita por extenso — nada de template string.
+const TAB_GRID: Record<number, string> = {
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+  7: "grid-cols-7",
 };
 
 interface PipeSettingsDialogProps {
@@ -66,8 +85,27 @@ export function PipeSettingsDialog({
   const isSystemPipe =
     pipeType === "whatsapp" || pipeType === "confirmacao" || pipeType === "propostas";
 
-  // upsell_base: Etapas + Regras + Importar (3 tabs). upsell_gestao: Etapas + Importar (2 tabs). Others: 6 tabs.
-  const tabCount = isUpsellGestao ? 2 : isUpsellBase ? 3 : 6;
+  // Linha canônica do funil em `pipelines` (626): afina o editor de etapas por
+  // id e alimenta a aba Geral (identidade + Zona de Perigo). slug é único por
+  // org; type=system desambigua funil custom homônimo.
+  const { data: pipelines = [] } = usePipelines();
+  const pipelineRow = isSystemPipe
+    ? pipelines.find((p) => p.slug === pipeType && p.type === "system")
+    : undefined;
+
+  // Título com o nome que a ORG vê ("Oportunidades" ou o rename dela), não o
+  // rótulo interno. display_name vence onde existir (precedência D4/636).
+  const { data: displayConfigs = [] } = usePipelineDisplayConfig();
+  const displayName = isSystemPipe
+    ? displayConfigs.find((c) => c.pipe_type === pipeType)?.display_name
+    : undefined;
+  const titulo = displayName ?? PIPE_LABELS[pipeType];
+
+  // upsell_base: Etapas + Regras + Importar (3 tabs). upsell_gestao: Etapas +
+  // Importar (2 tabs). Sistema: 7 tabs (Geral entrou na SCRUM-636 — identidade
+  // e exclusão no MESMO lugar do funil custom, para as duas telas nunca
+  // discordarem sobre onde se renomeia ou se exclui um funil).
+  const tabCount = isUpsellGestao ? 2 : isUpsellBase ? 3 : 7;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,12 +113,12 @@ export function PipeSettingsDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings2 className="w-5 h-5 text-primary" />
-            Configurações — {PIPE_LABELS[pipeType]}
+            Configurações — {titulo}
           </DialogTitle>
         </DialogHeader>
 
         <Tabs defaultValue={defaultTab}>
-          <TabsList className={`grid w-full grid-cols-${tabCount}`}>
+          <TabsList className={`grid w-full ${TAB_GRID[tabCount]}`}>
             <TabsTrigger value="etapas" className="gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5" />
               Etapas
@@ -119,6 +157,10 @@ export function PipeSettingsDialog({
                   <Send className="w-3.5 h-3.5" />
                   Disparos
                 </TabsTrigger>
+                <TabsTrigger value="geral" className="gap-1.5 text-xs">
+                  <Palette className="w-3.5 h-3.5" />
+                  Geral
+                </TabsTrigger>
               </>
             )}
           </TabsList>
@@ -127,25 +169,9 @@ export function PipeSettingsDialog({
             <TabsContent value="etapas" className="mt-0">
               <ManagePipelineStagesContent
                 pipelineType={pipeType}
+                pipelineId={pipelineRow?.id}
                 stages={stages}
               />
-              {/* Excluir o funil mora na aba "Etapas" porque é a aba da
-                  ESTRUTURA do funil — as outras são sobre o que acontece
-                  dentro dele. Mesmo lugar, mesma copy e mesmo portão de
-                  permissão do funil customizado: as duas espécies deixaram de
-                  existir, então as duas telas não podem discordar sobre onde
-                  se exclui um funil.
-
-                  Só os três tipos REGISTRÁVEIS. `upsell_base`/`upsell_gestao`
-                  ficam de fora: não são tipos de `pipeline_display_config` (lá
-                  o tipo é `upsell`, sem sufixo) e a Carteira não tem tabela de
-                  cards para apagar. */}
-              {isSystemPipe && (
-                <DangerZoneSystemPipe
-                  pipeType={pipeType}
-                  onDeleted={() => onOpenChange(false)}
-                />
-              )}
             </TabsContent>
 
             {isUpsellBase && (
@@ -185,6 +211,31 @@ export function PipeSettingsDialog({
                     pipeType={pipeType}
                     stages={stages}
                   />
+                </TabsContent>
+
+                {/* Identidade (nome/ícone/cor — D4) + Zona de Perigo (exclusão
+                    via DeletePipelineDialog — D3). MESMO lugar, mesma copy e
+                    mesmo portão de permissão do funil customizado: as duas
+                    espécies deixaram de existir, então as duas telas não podem
+                    discordar sobre onde se renomeia ou se exclui um funil.
+
+                    Só os três tipos com linha em `pipelines`. upsell_* fica de
+                    fora: resíduo D9, sem linha canônica e sem cards próprios. */}
+                <TabsContent value="geral" className="mt-0">
+                  {pipelineRow && (
+                    <FunnelIdentitySection
+                      pipeline={{
+                        id: pipelineRow.id,
+                        slug: pipelineRow.slug,
+                        type: "system",
+                        name: pipelineRow.name,
+                        icon: pipelineRow.icon,
+                        color: pipelineRow.color,
+                      }}
+                      displayName={displayName}
+                      onDeleted={() => onOpenChange(false)}
+                    />
+                  )}
                 </TabsContent>
               </>
             )}

@@ -28,6 +28,14 @@ vi.mock("@/modules/pipelines/components/shared/TransitionSelector", () => ({
 vi.mock("@/modules/pipelines/components/custom/ImportCustomPipelineContent", () => ({
   ImportCustomPipelineContent: () => null,
 }));
+// SCRUM-636: a aba Etapas virou o editor único (hooks de sistema + custom +
+// TanStack Query). Este teste é da aba DISPAROS — o editor entra como stub.
+vi.mock("@/modules/pipelines/components/shared/ManagePipelineStagesModal", () => ({
+  ManagePipelineStagesContent: () => <div data-testid="stages-editor" />,
+}));
+vi.mock("@/modules/pipelines/components/shared/FunnelIdentitySection", () => ({
+  FunnelIdentitySection: () => null,
+}));
 vi.mock("@/modules/pipelines/components/custom/CreatePipelineModal", () => ({
   PIPELINE_COLORS: ["#3b82f6"],
   PIPELINE_ICONS: [],
