@@ -79,40 +79,90 @@ describe('get_lead_360', () => {
 });
 
 describe('list_pipeline_stages', () => {
-  it('queries active stages of the org, filtered by pipe, ordered by position', async () => {
-    const sb = mockSupabase({ pipeline_stages: [{ stage_key: 'novo_lead', position: 0 }] });
+  it('queries active stages of the org, filtered by pipe (resolvido via adapter → pipeline_id), ordered by position', async () => {
+    const sb = mockSupabase({
+      pipelines: { id: 'pipe-wpp', slug: 'whatsapp', name: 'WhatsApp', type: 'system', is_active: true },
+      pipeline_stages: [{ stage_key: 'novo_lead', position: 0 }],
+    });
     const out = await createToolExecutor(sb, ctx)('list_pipeline_stages', { pipe: 'whatsapp' });
     expect(out).toEqual([{ stage_key: 'novo_lead', position: 0 }]);
     const q = sb.queries.find((x) => x.table === 'pipeline_stages')!;
     expect(q.filters).toContainEqual(['organization_id', 'org-1']);
     expect(q.filters).toContainEqual(['is_active', true]);
-    expect(q.filters).toContainEqual(['pipeline_type', 'whatsapp']);
+    // SCRUM-628: o filtro por funil é pelo pipeline_id REAL (cobre funil
+    // custom, cujo pipeline_type é NULL) — não mais por pipeline_type.
+    expect(q.filters).toContainEqual(['pipeline_id', 'pipe-wpp']);
     expect(q.order).toEqual(['position', { ascending: true }]);
+  });
+
+  it('sem filtro de pipe lista as etapas da org inteira (sem resolver funil)', async () => {
+    const sb = mockSupabase({ pipeline_stages: [{ stage_key: 'x', position: 0 }] });
+    const out = await createToolExecutor(sb, ctx)('list_pipeline_stages', {});
+    expect(out).toEqual([{ stage_key: 'x', position: 0 }]);
+    expect(sb.queries.some((x) => x.table === 'pipelines')).toBe(false);
   });
 });
 
-describe('move_lead_stage (write)', () => {
-  it('updates the system pipe status filtered by org + lead', async () => {
-    const sb = mockSupabase();
+describe('move_lead_stage (write) — SCRUM-628: qualquer funil, via pipeline_entries', () => {
+  const baseResults = () => ({
+    pipelines: { id: 'pipe-wpp', slug: 'whatsapp', name: 'WhatsApp', type: 'system', is_active: true },
+    pipeline_stages: [
+      { id: 'st-novo', stage_key: 'novo', name: 'Novo' },
+      { id: 'st-abordado', stage_key: 'abordado', name: 'Abordado' },
+    ],
+    pipeline_entries: [
+      { id: 'entry-1', pipeline_id: 'pipe-wpp', lead_id: 'lead-1', stage_key: 'novo', closed_at: null, metadata: {} },
+    ],
+  });
+
+  it('moves the current entry via pipeline_entries (nunca as views pipe_*)', async () => {
+    const sb = mockSupabase(baseResults());
     const out = await createToolExecutor(sb, ctx)('move_lead_stage', { pipe: 'whatsapp', stage: 'abordado' });
-    expect(out).toEqual({ moved: true, pipe: 'whatsapp', stage: 'abordado' });
-    const q = sb.queries.find((x) => x.table === 'pipe_whatsapp')!;
-    expect((q as any).update).toMatchObject({ status: 'abordado' });
-    expect(q.filters).toContainEqual(['organization_id', 'org-1']);
-    expect(q.filters).toContainEqual(['lead_id', 'lead-1']);
+    expect(out).toMatchObject({ moved: true, pipe: 'whatsapp', stage: 'abordado', entry_id: 'entry-1' });
+    const upd = sb.queries.find((x) => x.table === 'pipeline_entries' && (x as any).update)!;
+    expect((upd as any).update).toMatchObject({ stage_key: 'abordado' });
+    expect(upd.filters).toContainEqual(['id', 'entry-1']);
+    expect(sb.queries.some((x) => x.table === 'pipe_whatsapp')).toBe(false);
   });
 
   it('never takes org from args on a write', async () => {
-    const sb = mockSupabase();
-    await createToolExecutor(sb, ctx)('move_lead_stage', { pipe: 'confirmacao', stage: 'd1', organization_id: 'EVIL' });
-    const q = sb.queries.find((x) => x.table === 'pipe_confirmacao')!;
-    expect(q.filters).toContainEqual(['organization_id', 'org-1']);
-    expect(q.filters).not.toContainEqual(['organization_id', 'EVIL']);
+    const sb = mockSupabase(baseResults());
+    await createToolExecutor(sb, ctx)('move_lead_stage', { pipe: 'whatsapp', stage: 'abordado', organization_id: 'EVIL' });
+    const stagesQ = sb.queries.find((x) => x.table === 'pipeline_stages')!;
+    expect(stagesQ.filters).toContainEqual(['organization_id', 'org-1']);
+    expect(stagesQ.filters).not.toContainEqual(['organization_id', 'EVIL']);
   });
 
-  it('throws not_implemented for a custom pipe (stored differently — later slice)', async () => {
+  it('erro tipado do adapter vira ToolError claro (funil inexistente)', async () => {
     const exec = createToolExecutor(mockSupabase(), ctx);
-    await expect(exec('move_lead_stage', { pipe: 'custom-xyz', stage: 's' })).rejects.toMatchObject({ code: 'not_implemented' });
+    await expect(exec('move_lead_stage', { pipe: 'funil-que-nao-existe', stage: 's' }))
+      .rejects.toMatchObject({ code: 'pipeline_not_found' });
+  });
+
+  it('funil custom resolve por slug/uuid e move igual (não é mais not_implemented)', async () => {
+    const sb = mockSupabase({
+      pipelines: { id: 'pipe-custom', slug: 'pos-venda', name: 'Pós-venda', type: 'custom', is_active: true },
+      pipeline_stages: [{ id: 'cs-1', stage_key: 'entrada', name: 'Entrada' }],
+      pipeline_entries: [
+        { id: 'entry-c', pipeline_id: 'pipe-custom', lead_id: 'lead-1', stage_key: 'outra', closed_at: null, metadata: {} },
+      ],
+    });
+    const out = await createToolExecutor(sb, ctx)('move_lead_stage', { pipe: 'pos-venda', stage: 'entrada' });
+    expect(out).toMatchObject({ moved: true, pipe: 'pos-venda', stage: 'entrada' });
+  });
+
+  it('etapa que não existe no funil → ToolError stage_not_found', async () => {
+    const sb = mockSupabase(baseResults());
+    await expect(createToolExecutor(sb, ctx)('move_lead_stage', { pipe: 'whatsapp', stage: 'fantasma' }))
+      .rejects.toMatchObject({ code: 'stage_not_found' });
+  });
+
+  it('lead sem negócio no funil → não cria (ADR-0023 §3), devolve estado honesto', async () => {
+    const sb = mockSupabase({ ...baseResults(), pipeline_entries: [] });
+    const out = await createToolExecutor(sb, ctx)('move_lead_stage', { pipe: 'whatsapp', stage: 'abordado' });
+    expect(out).toMatchObject({ moved: false, reason: 'lead_sem_negocio_no_funil' });
+    expect(sb.queries.some((x) => x.table === 'pipeline_entries' && (x as any).update)).toBe(false);
+    expect(sb.queries.some((x) => (x as any).upsert)).toBe(false);
   });
 });
 

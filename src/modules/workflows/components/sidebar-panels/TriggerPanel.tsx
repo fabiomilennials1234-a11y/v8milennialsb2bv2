@@ -17,7 +17,7 @@ import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
-import { usePipelineStages, type PipelineType, usePipelines, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
+import { usePipelines, useEtapasDoFunil, useCustomPipelines } from "@/modules/pipelines";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { useLeadOrigins } from "@/modules/leads";
 import { CampaignSelectorField } from "./CampaignSelectorField";
@@ -683,16 +683,14 @@ function LeadCreatedConfig({
 
 // ── Sub-componente para stage_changed com carregamento dinâmico de etapas ──
 
-// SCRUM-618 (D9/ADR-0034): opções upsell_* removidas — Carteira não é funil e
-// gatilho de etapa nela nunca dispara (o board da Carteira não escreve em
-// pipeline_entries). Medido em prod (2026-09-01): 0 workflows com upsell_* em
-// trigger_config/definition.
-const STANDARD_PIPES: { value: string; label: string }[] = [
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "propostas", label: "Propostas" },
-];
-
+// SCRUM-627: o seletor opera por FUNIL REAL — a lista de `pipelines` da org
+// (sistema + custom, um grupo só), gravando sempre `pipeline_id`. O par
+// redundante pipe_type/pipeline_id colapsou: `pipe_type` sobrevive só como
+// LEITURA legada (config antiga com slug resolve para o funil da org com
+// aquele slug), e o fallback silencioso "whatsapp" morreu — sem funil
+// escolhido, nenhuma etapa é carregada.
+// (SCRUM-618: upsell_* fora — Carteira não é funil, o board dela não escreve
+// em pipeline_entries.)
 function StageChangedConfig({
   cfg,
   updateConfig,
@@ -700,49 +698,37 @@ function StageChangedConfig({
   cfg: Record<string, unknown>;
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
-  const pipeType = (cfg.pipe_type as string) || "";
-  const pipelineId = (cfg.pipeline_id as string) || "";
   const campanhaId = (cfg.campanha_id as string) || "";
   const selectedStages = (cfg.stages as string[]) || [];
-  const isCustom = !!pipelineId;
   const isCampaign = !!campanhaId;
 
-  // Load custom pipelines and campaigns
-  const { data: customPipelines } = useCustomPipelines();
+  const { data: pipelines } = usePipelines();
   const { data: campanhas } = useCampanhas();
 
-  // Load stages for selected pipe/campaign
-  const isStandardPipe = STANDARD_PIPES.some((p) => p.value === pipeType);
-  const { data: standardStages } = usePipelineStages(
-    isStandardPipe ? (pipeType as PipelineType) : "whatsapp"
-  );
-  const { data: customStages } = useCustomPipelineStages(
-    isCustom ? pipelineId : undefined
-  );
+  const legacySlug = (cfg.pipe_type as string) || "";
+  const pipelineId =
+    ((cfg.pipeline_id as string) || "") ||
+    (legacySlug ? pipelines?.find((p) => p.slug === legacySlug)?.id ?? "" : "");
+
+  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+
+  const { etapas } = useEtapasDoFunil(!isCampaign && pipelineId ? pipelineId : null);
   const { data: campanhaStages } = useCampanhaStages(
     isCampaign ? campanhaId : undefined
   );
 
   const stages = isCampaign
     ? (campanhaStages || []).map((s) => ({ key: s.id, name: s.name }))
-    : isCustom
-    ? (customStages || []).map((s) => ({ key: s.stage_key || s.id, name: s.name }))
-    : isStandardPipe
-    ? (standardStages || []).map((s) => ({
-        key: "stage_key" in s ? s.stage_key : s.id,
-        name: s.name,
-      }))
-    : [];
+    : etapas.map((e) => ({ key: e.stageKey, name: e.label }));
 
   const handlePipeChange = (value: string) => {
-    const isCustomPipe = customPipelines?.some((p) => p.id === value);
     const isCampanhaPipe = campanhas?.some((c) => c.id === value);
     if (isCampanhaPipe) {
       updateConfig({ pipe_type: "", pipeline_id: "", campanha_id: value, stages: [], from_stage: "", to_stage: "" });
-    } else if (isCustomPipe) {
-      updateConfig({ pipe_type: "", pipeline_id: value, campanha_id: "", stages: [], from_stage: "", to_stage: "" });
     } else {
-      updateConfig({ pipe_type: value, pipeline_id: "", campanha_id: "", stages: [], from_stage: "", to_stage: "" });
+      // Sempre pipeline_id — funil de sistema incluso. `pipe_type` zera para a
+      // config legada não continuar mandando um slug que pode divergir.
+      updateConfig({ pipe_type: "", pipeline_id: value, campanha_id: "", stages: [], from_stage: "", to_stage: "" });
     }
   };
 
@@ -757,7 +743,7 @@ function StageChangedConfig({
     updateConfig({ stages: current });
   };
 
-  const currentPipeValue = isCampaign ? campanhaId : isCustom ? pipelineId : pipeType || "__none__";
+  const currentPipeValue = isCampaign ? campanhaId : pipelineId || "__none__";
 
   return (
     <>
@@ -773,26 +759,14 @@ function StageChangedConfig({
           <SelectContent>
             <SelectGroup>
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                Pipes Padrão
+                Funis
               </SelectLabel>
-              {STANDARD_PIPES.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
-                  {p.label}
+              {funis.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
                 </SelectItem>
               ))}
             </SelectGroup>
-            {customPipelines && customPipelines.length > 0 && (
-              <SelectGroup>
-                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                  Pipes Custom
-                </SelectLabel>
-                {customPipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            )}
             {campanhas && campanhas.length > 0 && (
               <SelectGroup>
                 <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
@@ -849,12 +823,9 @@ function StageChangedConfig({
 // ── Sub-componente para scheduled_date ("Antes de uma data") ──
 // Alvo = data da reunião marcada de cada lead. Audiência = 1 pipe + etapa(s) + lista de disparos.
 
-const SCHEDULED_PIPES: { value: string; label: string }[] = [
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "propostas", label: "Propostas" },
-];
-
+// SCRUM-627: mesmo colapso do StageChangedConfig — seletor por funil real
+// (`pipelines` da org), gravando `pipeline_id`; `pipe_type` é só leitura
+// legada e o fallback silencioso ("confirmacao" aqui) morreu.
 function ScheduledDateConfig({
   cfg,
   updateConfig,
@@ -862,32 +833,23 @@ function ScheduledDateConfig({
   cfg: Record<string, unknown>;
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
-  const pipeType = (cfg.pipe_type as string) || "";
-  const pipelineId = (cfg.pipeline_id as string) || "";
   const selectedStages = (cfg.stages as string[]) || [];
   const dispatches = (cfg.dispatches as ScheduledDispatchItem[]) || [];
-  const isCustom = !!pipelineId;
 
-  const { data: customPipelines } = useCustomPipelines();
+  const { data: pipelines } = usePipelines();
 
-  const isStandardPipe = SCHEDULED_PIPES.some((p) => p.value === pipeType);
-  const { data: standardStages } = usePipelineStages(
-    isStandardPipe ? (pipeType as PipelineType) : "confirmacao"
-  );
-  const { data: customStages } = useCustomPipelineStages(isCustom ? pipelineId : undefined);
+  const legacySlug = (cfg.pipe_type as string) || "";
+  const pipelineId =
+    ((cfg.pipeline_id as string) || "") ||
+    (legacySlug ? pipelines?.find((p) => p.slug === legacySlug)?.id ?? "" : "");
 
-  const stages = isCustom
-    ? (customStages || []).map((s) => ({ key: s.stage_key || s.id, name: s.name }))
-    : isStandardPipe
-    ? (standardStages || []).map((s) => ({ key: "stage_key" in s ? s.stage_key : s.id, name: s.name }))
-    : [];
+  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+
+  const { etapas } = useEtapasDoFunil(pipelineId || null);
+  const stages = etapas.map((e) => ({ key: e.stageKey, name: e.label }));
 
   const handlePipeChange = (value: string) => {
-    if (customPipelines?.some((p) => p.id === value)) {
-      updateConfig({ pipe_type: "", pipeline_id: value, stages: [] });
-    } else {
-      updateConfig({ pipe_type: value, pipeline_id: "", stages: [] });
-    }
+    updateConfig({ pipe_type: "", pipeline_id: value, stages: [] });
   };
 
   const handleStageToggle = (stageKey: string, checked: boolean) => {
@@ -918,7 +880,7 @@ function ScheduledDateConfig({
     updateConfig({ dispatches: dispatches.filter((_, i) => i !== index) });
   };
 
-  const currentPipeValue = isCustom ? pipelineId : pipeType || "__none__";
+  const currentPipeValue = pipelineId || "__none__";
 
   return (
     <>
@@ -931,26 +893,14 @@ function ScheduledDateConfig({
           <SelectContent>
             <SelectGroup>
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                Pipes Padrão
+                Funis
               </SelectLabel>
-              {SCHEDULED_PIPES.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
-                  {p.label}
+              {funis.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
                 </SelectItem>
               ))}
             </SelectGroup>
-            {customPipelines && customPipelines.length > 0 && (
-              <SelectGroup>
-                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                  Pipes Custom
-                </SelectLabel>
-                {customPipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            )}
           </SelectContent>
         </Select>
       </div>

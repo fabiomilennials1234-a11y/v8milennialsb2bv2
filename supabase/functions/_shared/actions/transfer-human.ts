@@ -12,17 +12,22 @@ import {
   loadAgentTimeContext,
   resolveActiveWindow,
 } from "../copilot/time-context.ts";
-import { upsertPipeEntry } from "../pipeline-adapter.ts";
+import { getPipeEntry, tryResolvePipelineId, updatePipeEntryById } from "../pipeline-adapter.ts";
+import type { PipelineRef } from "../pipeline-adapter.ts";
 import type { ActionResult } from "./types.ts";
 
 /**
  * Transferência atômica via RPC. Usada pelo agent-engine antes de enfileirar
  * side-effects (notificação, history). Mantém leads.ai_disabled e
  * conversations.state em sync.
+ *
+ * `pipelineRef` (SCRUM-628): funil onde procurar a etapa de "atendimento
+ * humano" — vem das kanban rules do agente. Ausente → "whatsapp" (legado).
  */
 export async function immediateTransferHuman(
   supabase: SupabaseClient,
   leadId: string,
+  pipelineRef?: PipelineRef,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const { error } = await supabase.rpc("transfer_lead_to_human", {
@@ -36,8 +41,8 @@ export async function immediateTransferHuman(
 
     console.log("[immediateTransferHuman] Transfer executed atomically for lead:", leadId);
 
-    // Move lead to human-handoff stage in whatsapp pipeline (if org has one)
-    await moveLeadToHumanStage(supabase, leadId);
+    // Move lead to human-handoff stage in the agent's pipeline (if org has one)
+    await moveLeadToHumanStage(supabase, leadId, pipelineRef ?? "whatsapp");
 
     return { success: true };
   } catch (err) {
@@ -51,6 +56,7 @@ const HUMAN_STAGE_KEYS = ["atendimento_humano", "aguardando_humano", "aguardando
 async function moveLeadToHumanStage(
   supabase: SupabaseClient,
   leadId: string,
+  pipelineRef: PipelineRef,
 ): Promise<void> {
   try {
     const { data: lead } = await supabase
@@ -61,6 +67,15 @@ async function moveLeadToHumanStage(
 
     if (!lead?.organization_id) return;
 
+    // SCRUM-628: o funil deixou de ser `pipeline_type='whatsapp'` fixo — a ref
+    // (uuid ou slug, qualquer funil da org) resolve via adapter e a busca de
+    // etapa passa a ser por `pipeline_id`, que cobre também funil custom.
+    const pipelineId = await tryResolvePipelineId(supabase, lead.organization_id, pipelineRef);
+    if (!pipelineId) {
+      console.log("[moveLeadToHumanStage] Funil não resolvido, skipping pipeline move", { pipelineRef });
+      return;
+    }
+
     // Find human-handoff stage: first by known keys, then by name pattern
     let stage: { stage_key: string } | null = null;
 
@@ -68,7 +83,7 @@ async function moveLeadToHumanStage(
       .from("pipeline_stages")
       .select("stage_key")
       .eq("organization_id", lead.organization_id)
-      .eq("pipeline_type", "whatsapp")
+      .eq("pipeline_id", pipelineId)
       .eq("is_active", true)
       .in("stage_key", HUMAN_STAGE_KEYS)
       .limit(1)
@@ -81,7 +96,7 @@ async function moveLeadToHumanStage(
         .from("pipeline_stages")
         .select("stage_key")
         .eq("organization_id", lead.organization_id)
-        .eq("pipeline_type", "whatsapp")
+        .eq("pipeline_id", pipelineId)
         .eq("is_active", true)
         .or("name.ilike.%humano%,name.ilike.%atendimento human%")
         .limit(1)
@@ -95,17 +110,21 @@ async function moveLeadToHumanStage(
       return;
     }
 
-    await upsertPipeEntry(supabase, {
-      leadId,
-      orgId: lead.organization_id,
-      slug: "whatsapp",
-      stageKey: stage.stage_key,
-    });
+    // ADR-0023 §3: MOVE, nunca upsert — o `upsertPipeEntry` antigo CRIAVA o
+    // negócio quando o lead não tinha entry no funil, a partir de uma
+    // transferência. Sem negócio → só a transferência acontece (ai_disabled +
+    // WAITING_HUMAN já foram feitos pela RPC), o funil não muda.
+    const entry = await getPipeEntry(supabase, leadId, lead.organization_id, pipelineId);
+    if (!entry) {
+      console.log("[moveLeadToHumanStage] Lead sem negócio no funil; transferência sem move (§3).", { leadId, pipelineId });
+      return;
+    }
+    if (entry.stage_key === stage.stage_key) return;
 
-    // SCRUM-202: espelho `leads.pipe_whatsapp` removido — `upsertPipeEntry`
-    // acima já dispara `trg_sync_whatsapp_stage_to_lead` (depth 1) com o mesmo
-    // valor.
-    console.log(`[moveLeadToHumanStage] Lead ${leadId} moved to stage ${stage.stage_key}`);
+    const ok = await updatePipeEntryById(supabase, entry.id, { stageKey: stage.stage_key });
+    if (ok) {
+      console.log(`[moveLeadToHumanStage] Lead ${leadId} moved to stage ${stage.stage_key}`);
+    }
   } catch (err) {
     // Non-fatal: transfer already succeeded, pipeline move is best-effort
     console.warn("[moveLeadToHumanStage] Failed (non-fatal):", err);

@@ -521,15 +521,21 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 
     // ── Lead Management ──
     case "move_stage": {
-      const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
+      // SCRUM-627: o editor grava `pipelineId` (uuid — qualquer funil, via
+      // adapter). `pipeType` é o campo legado dos nós salvos; o "whatsapp"
+      // final é o default histórico dos nós que nunca gravaram funil nenhum —
+      // morre quando o último nó legado for migrado, não antes.
+      const pipeRef = (ctx.nodeData.pipelineId as string)
+        || (ctx.nodeData.pipeType as string)
+        || "whatsapp";
       const targetStage = ctx.nodeData.targetStage as string;
       if (!targetStage) { result = { success: false, error: "No target stage configured" }; break; }
       result = await sharedMoveStage({
         ...toActionInput(ctx),
-        params: { target_stage: targetStage, target_pipe: pipeType },
+        params: { target_stage: targetStage, target_pipe: pipeRef },
       });
       if (result.success && result.data) {
-        result.data = { pipeType, targetStage: result.data.target_stage };
+        result.data = { pipeType: pipeRef, targetStage: result.data.target_stage };
       }
       break;
     }

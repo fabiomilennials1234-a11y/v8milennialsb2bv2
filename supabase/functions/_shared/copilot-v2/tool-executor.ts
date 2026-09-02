@@ -14,6 +14,12 @@
 
 import { TOOL_REGISTRY } from "./tool-registry.ts";
 import { mapSignalsToTier, type Rubric, type Signals } from "./rubric-engine.ts";
+import {
+  getPipeEntry,
+  isPipelineResolutionError,
+  resolvePipeline,
+  updatePipeEntryById,
+} from "../pipeline-adapter.ts";
 
 export interface ToolContext {
   organizationId: string;
@@ -24,11 +30,19 @@ export interface ToolContext {
   agentId?: string | null;
 }
 
-export type ToolErrorCode = "unknown_tool" | "not_implemented" | "missing_context";
+export type ToolErrorCode =
+  | "unknown_tool"
+  | "not_implemented"
+  | "missing_context"
+  /** SCRUM-628 — erros tipados do pipeline-adapter atravessam como ToolError claro. */
+  | "pipeline_not_found"
+  | "pipeline_inactive"
+  | "pipeline_lookup_failed"
+  | "stage_not_found";
 
 export class ToolError extends Error {
-  constructor(public code: ToolErrorCode, public tool: string) {
-    super(`${code}: ${tool}`);
+  constructor(public code: ToolErrorCode, public tool: string, detail?: string) {
+    super(`${code}: ${tool}${detail ? ` — ${detail}` : ""}`);
     this.name = "ToolError";
   }
 }
@@ -51,13 +65,23 @@ const getLead360: Handler = async (supabase, ctx) => {
   return data;
 };
 
+/**
+ * SCRUM-628: o filtro por funil resolve a ref via pipeline-adapter (uuid, slug,
+ * alias legado — qualquer funil da org) e filtra por `pipeline_id`. O filtro
+ * antigo por `pipeline_type` era cego para funil custom (coluna NULL pós-W2).
+ */
 const listPipelineStages: Handler = async (supabase, ctx, args) => {
+  let pipelineId: string | null = null;
+  if (typeof args.pipe === "string" && args.pipe.trim()) {
+    const pipeline = await resolvePipelineOrThrow(supabase, ctx, "list_pipeline_stages", args.pipe);
+    pipelineId = pipeline.id;
+  }
   let query = supabase
     .from("pipeline_stages")
-    .select("stage_key, name, position, is_final_positive, is_final_negative")
+    .select("stage_key, name, position, stage_role, is_final_positive, is_final_negative")
     .eq("organization_id", ctx.organizationId)
     .eq("is_active", true);
-  if (typeof args.pipe === "string") query = query.eq("pipeline_type", args.pipe);
+  if (pipelineId) query = query.eq("pipeline_id", pipelineId);
   const { data, error } = await query.order("position", { ascending: true });
   if (error) throw new Error(`list_pipeline_stages: ${error.message}`);
   return data ?? [];
@@ -89,27 +113,72 @@ const getConversationHistory: Handler = async (supabase, ctx, args) => {
 
 // ── Write handlers (gated by capability + write-after-introspect upstream) ──
 
-const SYSTEM_PIPE_TABLE: Record<string, string> = {
-  whatsapp: "pipe_whatsapp",
-  confirmacao: "pipe_confirmacao",
-  propostas: "pipe_propostas",
-};
+/** Resolve a pipeline ref via adapter, converting typed errors into clear ToolErrors. */
+async function resolvePipelineOrThrow(
+  supabase: unknown,
+  ctx: ToolContext,
+  tool: string,
+  ref: string,
+) {
+  try {
+    return await resolvePipeline(supabase as never, ctx.organizationId, ref);
+  } catch (e) {
+    if (isPipelineResolutionError(e)) {
+      throw new ToolError(e.code, tool, `funil "${ref}"`);
+    }
+    throw e;
+  }
+}
 
+/**
+ * SCRUM-628: move em QUALQUER funil da org, via `pipeline_entries` (fonte
+ * única pós-W2), não mais nas views pipe_* dos 3 seeds.
+ *
+ *   - `pipe` (uuid/slug/alias) resolve via adapter — erro tipado vira ToolError;
+ *   - `stage` casa contra as etapas ATIVAS do funil (stage_key, id ou nome, ci);
+ *   - o move é `updatePipeEntryById` na entry corrente do lead — NUNCA upsert:
+ *     ADR-0023 §3, agente não cria Negócio. Lead sem negócio no funil devolve
+ *     `{moved:false, reason:"lead_sem_negocio_no_funil"}` (estado do mundo, não
+ *     erro de ferramenta — o LLM decide o que fazer com isso).
+ *
+ * O espelho stage_id/stage_key fica por conta do trigger `trg_pe_stage_mirror`.
+ */
 const moveLeadStage: Handler = async (supabase, ctx, args) => {
-  const pipe = String(args.pipe ?? "whatsapp");
-  const table = SYSTEM_PIPE_TABLE[pipe];
-  // Custom pipelines store stage on custom_pipe_entries.stage_id (FK) — later slice.
-  if (!table) throw new ToolError("not_implemented", `move_lead_stage:${pipe}`);
   if (!ctx.leadId) throw new ToolError("missing_context", "move_lead_stage");
-  const stage = String(args.stage ?? "");
-  if (!stage) throw new ToolError("missing_context", "move_lead_stage:stage");
-  const { error } = await supabase
-    .from(table)
-    .update({ status: stage, updated_at: new Date().toISOString() })
+  const stageRef = String(args.stage ?? "").trim();
+  if (!stageRef) throw new ToolError("missing_context", "move_lead_stage:stage");
+  const pipeRef = String(args.pipe ?? "whatsapp").trim() || "whatsapp";
+
+  const pipeline = await resolvePipelineOrThrow(supabase, ctx, "move_lead_stage", pipeRef);
+
+  const { data: stages, error: stagesError } = await supabase
+    .from("pipeline_stages")
+    .select("id, stage_key, name")
     .eq("organization_id", ctx.organizationId)
-    .eq("lead_id", ctx.leadId);
-  if (error) throw new Error(`move_lead_stage: ${error.message}`);
-  return { moved: true, pipe, stage };
+    .eq("pipeline_id", pipeline.id)
+    .eq("is_active", true);
+  if (stagesError) throw new Error(`move_lead_stage: ${stagesError.message}`);
+
+  const lowered = stageRef.toLowerCase();
+  const stage = (stages ?? []).find(
+    (s: { id: string; stage_key: string; name: string }) =>
+      s.id === stageRef || s.stage_key.toLowerCase() === lowered || (s.name ?? "").toLowerCase() === lowered,
+  );
+  if (!stage) {
+    throw new ToolError("stage_not_found", "move_lead_stage", `etapa "${stageRef}" @ funil ${pipeline.slug}`);
+  }
+
+  const entry = await getPipeEntry(supabase as never, ctx.leadId, ctx.organizationId, pipeline.id);
+  if (!entry) {
+    // ADR-0023 §3: mover só o negócio EXISTENTE. Sem entry, nada nasce daqui.
+    return { moved: false, reason: "lead_sem_negocio_no_funil", pipe: pipeline.slug, stage: stage.stage_key };
+  }
+
+  if (entry.stage_key !== stage.stage_key) {
+    const ok = await updatePipeEntryById(supabase as never, entry.id, { stageKey: stage.stage_key });
+    if (!ok) throw new Error(`move_lead_stage: falha ao mover entry ${entry.id}`);
+  }
+  return { moved: true, pipe: pipeline.slug, stage: stage.stage_key, entry_id: entry.id };
 };
 
 const setQualificationTier: Handler = async (supabase, ctx, args) => {

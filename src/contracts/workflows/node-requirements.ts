@@ -203,19 +203,25 @@ export function findNodeConfigIssues(nodes: WorkflowNodeLike[]): NodeConfigIssue
 // em 8+ workflows por essa causa.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Funis cujo destino o executor confere contra `pipeline_stages`.
- * Espelha `move-stage.ts`: os demais (upsell_base, upsell_gestao, campanha) são
- * explicitamente pulados lá, e cobrar aqui seria falso positivo.
- */
-export const PIPES_COM_ETAPA_VALIDADA = ["whatsapp", "confirmacao", "propostas"] as const;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Nós que apontam para etapa inexistente.
  *
- * `stageKeysByPipe` vem de `pipeline_stages` (ativas) da org. Pipe sem nenhuma
- * etapa cadastrada NÃO acusa — é exatamente o que o executor faz
- * (`if (validKeys.length > 0 && ...)`), e divergir aqui geraria alarme falso.
+ * SCRUM-627: a validação é POR FUNIL REAL — morreu a lista fixa
+ * `PIPES_COM_ETAPA_VALIDADA` (que só cobria os 3 funis de sistema e deixava
+ * etapa podre de funil custom invisível). `stageKeysByPipe` vem da RPC
+ * `master_workflow_config_scan`, que chaveia as etapas ativas por TRÊS refs do
+ * mesmo funil: `pipelines.slug` (nó legado de sistema), `pipeline_id` (nó
+ * novo, qualquer funil) e `pipeline_type` fantasma. O nó é procurado pela
+ * própria ref — `pipelineId` novo, `pipeType` legado (slug OU uuid custom), ou
+ * o default histórico "whatsapp" dos nós que nunca gravaram funil.
+ *
+ * Permissividade em paridade com o executor (`move-stage.ts`):
+ *   · ref sem chave no mapa (funil sem etapa cadastrada, upsell_*, campanha,
+ *     funil apagado) NÃO acusa;
+ *   · targetStage em UUID (`pipeline_stages.id`) NÃO acusa — o mapa carrega
+ *     keys, e reprovar um id válido por não ser key seria alarme falso.
  */
 export function findStageIssues(
   nodes: WorkflowNodeLike[],
@@ -230,13 +236,14 @@ export function findStageIssues(
     const alvo = config.targetStage;
     if (!isFilled(alvo)) continue; // campo vazio é a outra regra, não esta
 
-    const pipe = (config.pipeType as string) || "whatsapp";
-    if (!(PIPES_COM_ETAPA_VALIDADA as readonly string[]).includes(pipe)) continue;
+    const normalizado = String(alvo).trim().toLowerCase();
+    if (UUID_RE.test(normalizado)) continue; // id de etapa — o executor resolve por id
+
+    const pipe = (config.pipelineId as string) || (config.pipeType as string) || "whatsapp";
 
     const validas = stageKeysByPipe[pipe] ?? [];
     if (validas.length === 0) continue;
 
-    const normalizado = String(alvo).trim().toLowerCase();
     if (validas.some((k) => k.trim().toLowerCase() === normalizado)) continue;
 
     issues.push({

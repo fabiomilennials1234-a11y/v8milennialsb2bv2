@@ -1,6 +1,4 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getPipeEntry } from "./pipeline-adapter.ts";
-import type { PipeSlug } from "./pipeline-adapter.ts";
 
 /**
  * O SUJEITO DA AUTOMAÇÃO — quem é o Negócio de uma execução.
@@ -24,11 +22,20 @@ import type { PipeSlug } from "./pipeline-adapter.ts";
  * A etapa do NEGÓCIO da execução — a resposta de `{{estagio}}` e da condição
  * `stage`.
  *
- * Ordem:
+ * Ordem (ADR-0031):
  *   1. o negócio que disparou a execução. Vale para qualquer funil;
- *   2. sem negócio declarado (gatilho da pessoa), o card de Oportunidades —
- *      exatamente o que os três faziam antes, para não mudar o veredito de
- *      nenhum workflow que já roda hoje.
+ *   2. sem negócio declarado (gatilho da pessoa), o negócio CORRENTE do lead —
+ *      o aberto, senão o mais recente, em QUALQUER funil. É a mesma regra de
+ *      `pickActiveEntry` e do `currentEntry` do avaliador de condição, de
+ *      propósito: divergir criaria mais uma resposta para "qual negócio".
+ *
+ *      (Até o SCRUM-627 este fallback era o card de OPORTUNIDADES, chumbado:
+ *      um lead cujo único negócio vive num funil custom respondia "" — e a
+ *      condição de etapa decidia pelo motivo errado, em silêncio.)
+ *   3. lead sem negócio em funil NENHUM → `""` (decisão SCRUM-627, pelo
+ *      menos-surpresa: era o que o caminho antigo já devolvia quando não havia
+ *      card de Oportunidades — variável não renderiza, `is_empty` casa, e
+ *      nenhum valor congelado/mentiroso viaja numa mensagem).
  *
  * A conferência de org não é paranoia: estes caminhos rodam com service-role
  * (RLS fora) e o `entryId` chega por `context`, que é jsonb livre.
@@ -38,7 +45,6 @@ export async function getStageDoNegocio(
   leadId: string,
   organizationId: string,
   entryId: string | null | undefined,
-  fallbackSlug: PipeSlug = "whatsapp",
 ): Promise<string> {
   if (entryId) {
     const { data } = await supabase
@@ -51,8 +57,20 @@ export async function getStageDoNegocio(
     }
   }
 
-  const entry = await getPipeEntry(supabase, leadId, organizationId, fallbackSlug);
-  return entry?.stage_key || "";
+  // Fallback ADR-0031 — negócio corrente: aberto primeiro (closed_at nulo),
+  // depois o que trocou de etapa por último, depois o criado por último.
+  // O filtro por org é obrigatório: service-role bypassa a RLS.
+  const { data } = await supabase
+    .from("pipeline_entries")
+    .select("stage_key, closed_at, stage_changed_at, created_at")
+    .eq("lead_id", leadId)
+    .eq("organization_id", organizationId)
+    .order("closed_at", { ascending: false, nullsFirst: true })
+    .order("stage_changed_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  return ((data?.[0] as { stage_key?: string | null } | undefined)?.stage_key) || "";
 }
 
 /**

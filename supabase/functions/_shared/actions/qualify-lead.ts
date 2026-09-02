@@ -9,8 +9,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { promoveShadowLead } from "../lead-service.ts";
 import type { ActionResult } from "./types.ts";
-import { upsertPipeEntry, upsertPipeEntryDetailed, deletePipeEntry } from "../pipeline-adapter.ts";
-import type { PipeSlug } from "../pipeline-adapter.ts";
+import { upsertPipeEntry, upsertPipeEntryDetailed, deletePipeEntry, resolveActiveStageKey, tryResolvePipelineId } from "../pipeline-adapter.ts";
 
 export async function executeUpdateQualificationScore(
   supabase: SupabaseClient,
@@ -39,18 +38,29 @@ export async function executeAutomation(
 
   if (!actionConfig) return { success: false, error: "action_config ausente no payload" };
 
+  // SCRUM-628: o funil da automação deixa de ser o WhatsApp fixo. A ref chega
+  // no payload (`pipeline_ref` — primeira kanban rule de eixo-funil do agente,
+  // uuid ou slug; o adapter resolve os dois). Payload antigo sem a chave cai no
+  // legado "whatsapp" — ações já enfileiradas continuam válidas.
+  const pipelineRef = (payload.pipeline_ref as string) || "whatsapp";
+
   // Promover shadow lead antes de executar ações
   if (actionType === "qualify" || actionType === "disqualify") {
     const moveToPipe = actionConfig.moveToPipe as { pipe?: string; stage?: string } | undefined;
-    const destination =
-      moveToPipe && moveToPipe.stage
-        ? { pipe: moveToPipe.pipe || "whatsapp", stage: moveToPipe.stage }
-        : {
-            pipe: "whatsapp",
-            stage:
-              (actionConfig.moveToStage as string) ||
-              (actionType === "qualify" ? "respondeu" : "esfriou"),
-          };
+    let destination: { pipe: string; stage: string };
+    if (moveToPipe && moveToPipe.stage) {
+      destination = { pipe: moveToPipe.pipe || pipelineRef, stage: moveToPipe.stage };
+    } else {
+      // Os defaults "respondeu"/"esfriou" são stage_keys do funil WhatsApp
+      // semeado — num funil custom seriam etapa fantasma. O guard do adapter
+      // coage para uma etapa ATIVA real do funil (a pedida se existir, senão a
+      // primeira por position).
+      const requested =
+        (actionConfig.moveToStage as string) ||
+        (actionType === "qualify" ? "respondeu" : "esfriou");
+      const stage = await resolveActiveStageKey(supabase, organizationId, pipelineRef, requested);
+      destination = { pipe: pipelineRef, stage: stage ?? requested };
+    }
 
     await promoveShadowLead(supabase, leadId, organizationId, destination);
   }
@@ -86,12 +96,18 @@ export async function executeAutomation(
   }
 
   if (actionConfig.moveToStage) {
+    // SCRUM-628: escreve no funil do agente (pipeline_ref), com o ghost-stage
+    // guard do adapter — moveToStage configurado num funil e aplicado noutro
+    // não pode inventar etapa que o kanban não renderiza.
+    const guarded = await resolveActiveStageKey(
+      supabase, organizationId, pipelineRef, actionConfig.moveToStage as string,
+    );
     const result = await upsertPipeEntryDetailed(supabase, {
-      leadId, orgId: organizationId, slug: "whatsapp",
-      stageKey: actionConfig.moveToStage as string,
+      leadId, orgId: organizationId, slug: pipelineRef,
+      stageKey: guarded ?? (actionConfig.moveToStage as string),
     });
     if (result.status !== "created" && result.status !== "updated") {
-      console.error("[executeAutomation] Failed to upsert pipeline_entries for whatsapp");
+      console.error(`[executeAutomation] Failed to upsert pipeline_entries for ${pipelineRef}`);
     }
   }
 
@@ -154,12 +170,25 @@ export async function executeAutomation(
   // Mover para outro pipe
   const moveToPipe = actionConfig.moveToPipe as { pipe?: string; stage?: string } | undefined;
   if (moveToPipe && moveToPipe.stage) {
-    if (moveToPipe.pipe === "confirmacao" || moveToPipe.pipe === "propostas") {
-      const slug = moveToPipe.pipe as PipeSlug;
-      await upsertPipeEntry(supabase, {
-        leadId, orgId: organizationId, slug, stageKey: moveToPipe.stage,
-      });
-      await deletePipeEntry(supabase, leadId, organizationId, "whatsapp");
+    const carteira = moveToPipe.pipe === "upsell_base" || moveToPipe.pipe === "upsell_gestao";
+    // SCRUM-628: qualquer FUNIL da org vale como destino (uuid ou slug — o
+    // adapter resolve; antes só confirmacao/propostas). Carteira segue à parte
+    // (não é funil). Destino que não resolve → não move nada (nem deleta a
+    // origem: mover não pode virar sumiço).
+    if (!carteira && moveToPipe.pipe !== "campanha") {
+      const targetId = await tryResolvePipelineId(supabase, organizationId, moveToPipe.pipe || "");
+      if (targetId) {
+        const guardedStage = await resolveActiveStageKey(
+          supabase, organizationId, targetId, moveToPipe.stage,
+        );
+        await upsertPipeEntry(supabase, {
+          leadId, orgId: organizationId, slug: targetId,
+          stageKey: guardedStage ?? moveToPipe.stage,
+        });
+        await deletePipeEntry(supabase, leadId, organizationId, pipelineRef);
+      } else {
+        console.warn("[executeAutomation] moveToPipe com funil não resolvível; nada movido:", moveToPipe.pipe);
+      }
     } else if (moveToPipe.pipe === "upsell_base") {
       await supabase
         .from("upsell_clients")

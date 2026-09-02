@@ -2,6 +2,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createMockSupabase } from "../helpers/supabase-mock";
 import { moveStage } from "../../supabase/functions/_shared/action-handlers/move-stage";
+import { __clearPipelineResolutionCache } from "../../supabase/functions/_shared/pipeline-adapter";
+
+// SCRUM-627: moveStage resolve o funil pelo adapter (cache module-level por
+// org+ref) e a etapa por `pipeline_stages`. Cache limpo entre casos para as
+// seeds de cada um valerem.
+beforeEach(() => __clearPipelineResolutionCache());
 
 function makeInput(overrides: Record<string, unknown> = {}) {
   const { sb } = createMockSupabase();
@@ -31,8 +37,8 @@ describe("moveStage — shared action handler", () => {
   it("moves lead in whatsapp pipe — upserts pipeline_entries and updates leads.pipe_whatsapp", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     mockTable("pipeline_stages", [
-      { stage_key: "novo", organization_id: "org-1", pipeline_type: "whatsapp", is_active: true },
-      { stage_key: "agendado", organization_id: "org-1", pipeline_type: "whatsapp", is_active: true },
+      { id: "st-novo", stage_key: "novo", organization_id: "org-1", pipeline_id: "pipe-wpp-id", pipeline_type: "whatsapp", is_active: true },
+      { id: "st-agendado", stage_key: "agendado", organization_id: "org-1", pipeline_id: "pipe-wpp-id", pipeline_type: "whatsapp", is_active: true },
     ]);
     mockTable("pipelines", [{ id: "pipe-wpp-id", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
     mockTable("pipeline_entries", []);
@@ -56,7 +62,7 @@ describe("moveStage — shared action handler", () => {
   it("moves lead in confirmacao pipe — upserts pipeline_entries only (no leads update)", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     mockTable("pipeline_stages", [
-      { stage_key: "marcada", organization_id: "org-1", pipeline_type: "confirmacao", is_active: true },
+      { id: "st-marcada", stage_key: "marcada", organization_id: "org-1", pipeline_id: "pipe-conf-id", pipeline_type: "confirmacao", is_active: true },
     ]);
     mockTable("pipelines", [{ id: "pipe-conf-id", organization_id: "org-1", slug: "confirmacao", type: "system" }]);
     mockTable("pipeline_entries", []);
@@ -129,8 +135,11 @@ describe("moveStage — shared action handler", () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
     const customPipeId = "custom-pipe-uuid";
     const stageId = "custom-stage-uuid";
-    mockTable("custom_pipeline_stages", [{
-      id: stageId, pipeline_id: customPipeId, organization_id: "org-1",
+    // SCRUM-627: o funil resolve pelo adapter (`pipelines`) e a etapa pela
+    // tabela unificada `pipeline_stages` — as seeds acompanham.
+    mockTable("pipelines", [{ id: customPipeId, organization_id: "org-1", slug: customPipeId, type: "custom", is_active: true }]);
+    mockTable("pipeline_stages", [{
+      id: stageId, stage_key: stageId, pipeline_id: customPipeId, organization_id: "org-1", is_active: true,
       is_final_positive: false, target_pipeline_id: null, target_stage_id: null,
       target_pipe_type: null, target_stage_key: null,
     }]);
@@ -158,8 +167,9 @@ describe("moveStage — shared action handler", () => {
     const sourceStageId = "source-stage-final";
     const targetStageId = "target-stage-initial";
 
-    mockTable("custom_pipeline_stages", [{
-      id: sourceStageId, pipeline_id: sourcePipeId, organization_id: "org-1",
+    mockTable("pipelines", [{ id: sourcePipeId, organization_id: "org-1", slug: sourcePipeId, type: "custom", is_active: true }]);
+    mockTable("pipeline_stages", [{
+      id: sourceStageId, stage_key: sourceStageId, pipeline_id: sourcePipeId, organization_id: "org-1", is_active: true,
       is_final_positive: true, target_pipeline_id: targetPipeId, target_stage_id: targetStageId,
       target_pipe_type: null, target_stage_key: null,
     }]);
@@ -182,9 +192,10 @@ describe("moveStage — shared action handler", () => {
 
   it("rejects invalid stage for standard pipe", async () => {
     const { sb, mockTable } = createMockSupabase();
+    mockTable("pipelines", [{ id: "pipe-wpp-id", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
     mockTable("pipeline_stages", [
-      { stage_key: "novo", organization_id: "org-1", pipeline_type: "whatsapp", is_active: true },
-      { stage_key: "agendado", organization_id: "org-1", pipeline_type: "whatsapp", is_active: true },
+      { id: "st-novo", stage_key: "novo", organization_id: "org-1", pipeline_id: "pipe-wpp-id", pipeline_type: "whatsapp", is_active: true },
+      { id: "st-agendado", stage_key: "agendado", organization_id: "org-1", pipeline_id: "pipe-wpp-id", pipeline_type: "whatsapp", is_active: true },
     ]);
 
     const result = await moveStage({
@@ -201,7 +212,8 @@ describe("moveStage — shared action handler", () => {
 
   it("returns error for custom pipeline with invalid stage ID", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("custom_pipeline_stages", []);
+    mockTable("pipelines", [{ id: "some-uuid-pipeline", organization_id: "org-1", slug: "some-uuid-pipeline", type: "custom", is_active: true }]);
+    mockTable("pipeline_stages", []);
     mockTable("custom_pipe_entries", []);
 
     const result = await moveStage({
@@ -214,6 +226,46 @@ describe("moveStage — shared action handler", () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toContain("não encontrada");
+  });
+
+  it("SCRUM-627: funil de destino inexistente devolve erro tipado do adapter", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("pipelines", []);
+
+    const result = await moveStage({
+      supabase: sb,
+      organizationId: "org-1",
+      leadId: "lead-1",
+      conversationId: null,
+      params: { target_stage: "x", target_pipe: "funil-que-nao-existe" },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("pipeline_not_found");
+  });
+
+  it("SCRUM-627: funil custom aceita a etapa por STAGE_KEY além do uuid", async () => {
+    const { sb, mockTable, getInserted } = createMockSupabase();
+    mockTable("pipelines", [{ id: "pipe-orc", organization_id: "org-1", slug: "orcamentos", type: "custom", is_active: true }]);
+    mockTable("pipeline_stages", [{
+      id: "st-triagem-id", stage_key: "triagem", pipeline_id: "pipe-orc", organization_id: "org-1", is_active: true,
+      is_final_positive: false, target_pipeline_id: null, target_stage_id: null,
+      target_pipe_type: null, target_stage_key: null,
+    }]);
+    mockTable("custom_pipe_entries", []);
+
+    const result = await moveStage({
+      supabase: sb,
+      organizationId: "org-1",
+      leadId: "lead-1",
+      conversationId: null,
+      params: { target_stage: "triagem", target_pipe: "orcamentos" },
+    });
+
+    expect(result.success).toBe(true);
+    const inserted = getInserted("custom_pipe_entries");
+    expect(inserted.length).toBe(1);
+    expect(inserted[0]).toMatchObject({ pipeline_id: "pipe-orc", stage_id: "st-triagem-id" });
   });
 });
 
@@ -314,9 +366,35 @@ function createCustomPipeDb(opts: {
     let mode: "select" | "insert" | "update" = "select";
     let payload: Record<string, unknown> | null = null;
 
+    // SCRUM-627: moveStage resolve o funil por `pipelines` e a etapa por
+    // `pipeline_stages` (tabela unificada). O fake serve as duas derivando das
+    // MESMAS stages — id vira slug/stage_key, então os refs dos casos valem
+    // tanto como uuid quanto como key.
+    const pipelineRows = (): Record<string, unknown>[] => {
+      const ids = [...new Set(stages.map((st) => st.pipeline_id))];
+      return ids.map((id) => ({
+        id, slug: id, name: id, type: "custom", is_active: true,
+        organization_id: stages.find((st) => st.pipeline_id === id)!.organization_id,
+      }));
+    };
+    const unifiedStageRows = (): Record<string, unknown>[] =>
+      stages.map((st) => ({
+        stage_key: st.id, is_active: true,
+        is_final_positive: st.is_final_positive ?? false,
+        target_pipeline_id: st.target_pipeline_id ?? null,
+        target_stage_id: st.target_stage_id ?? null,
+        target_pipe_type: st.target_pipe_type ?? null,
+        target_stage_key: st.target_stage_key ?? null,
+        ...st,
+      }));
+
     const source = (): Record<string, unknown>[] =>
       table === "custom_pipeline_stages"
         ? (stages as unknown as Record<string, unknown>[])
+        : table === "pipeline_stages"
+          ? unifiedStageRows()
+        : table === "pipelines"
+          ? pipelineRows()
         : table === "custom_pipe_entries"
           ? (entries as unknown as Record<string, unknown>[])
           : table === "organizations"
