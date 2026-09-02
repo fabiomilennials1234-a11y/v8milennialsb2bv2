@@ -26,6 +26,7 @@ import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
 import { getNextCadenceStep, type CadenceStep, type StepLogEntry } from "../_shared/copilot/followup-cadence.ts";
 import { isLeadEligibleForTrigger, type TriggerLead } from "../_shared/copilot/followup-triggers.ts";
 import { sleepJitter } from "../_shared/anti-ban-jitter.ts";
+import { personalizationFirstName } from "../_shared/lead-name.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -407,6 +408,7 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
           const tmpl = effectiveTemplate || "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
           messageContent = replaceVariables(tmpl, {
             nome: lead.name || "você",
+            primeiro_nome: personalizationFirstName(lead.name) || "você",
             empresa: lead.company || "",
             email: lead.email || "",
             telefone: lead.phone || "",
@@ -422,6 +424,7 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
         const tmpl = effectiveTemplate || "Oi {nome}! Vi que ficamos sem conversar. Posso te ajudar em algo?";
         messageContent = replaceVariables(tmpl, {
           nome: lead.name || "você",
+          primeiro_nome: personalizationFirstName(lead.name) || "você",
           empresa: lead.company || "",
           email: lead.email || "",
           telefone: lead.phone || "",

@@ -207,7 +207,7 @@ export const DEFAULT_ACTIVATION_TRIGGERS: ActivationTriggers = {
 export const DEFAULT_OUTBOUND_CONFIG: OutboundConfig = {
   delayMinutes: 5,
   firstMessageTemplate: "",
-  availableVariables: ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
+  availableVariables: ["nome", "primeiro_nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
   maxRetries: 3,
   retryIntervalMinutes: 30,
   audioEnabled: false,

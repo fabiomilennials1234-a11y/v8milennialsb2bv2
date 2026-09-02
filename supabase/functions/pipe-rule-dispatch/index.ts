@@ -33,6 +33,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
+import { personalizationFirstName } from "../_shared/lead-name.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -485,6 +486,7 @@ async function processPipeQueue(
         const timeVars = getTimeBasedVariables();
         const messageContent = isAudio ? "[Áudio]" : replaceVariables(template.content || "", {
           nome: lead.name || "você",
+          primeiro_nome: personalizationFirstName(lead.name) || "você",
           empresa: lead.company || "",
           email: lead.email || "",
           telefone: lead.phone || "",
@@ -904,7 +906,7 @@ async function processExpiredTimeouts(
             const isAudio = tmpl.message_type === "audio" && tmpl.audio_url;
             const timeVars = getTimeBasedVariables();
             const content = isAudio ? "[Áudio]" : replaceVariables(tmpl.content || "", {
-              nome: lead.name || "você", empresa: "", email: "", telefone: lead.phone || "",
+              nome: lead.name || "você", primeiro_nome: personalizationFirstName(lead.name) || "você", empresa: "", email: "", telefone: lead.phone || "",
               origem: "", segmento: "", faturamento: "",
               saudacao: timeVars.saudacao, data: timeVars.data, hora: timeVars.hora,
             });

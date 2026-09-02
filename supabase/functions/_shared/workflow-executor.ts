@@ -35,7 +35,7 @@ import { logRuntime } from "./logger.ts";
 import { validateExternalUrl } from "./url-validator.ts";
 import { fetchWithTimeout } from "./fetch-utils.ts";
 import { getPipeEntry } from "./pipeline-adapter.ts";
-import { personalizationName } from "./lead-name.ts";
+import { personalizationName, personalizationFirstName } from "./lead-name.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -1613,6 +1613,7 @@ async function resolveWebhookBody(supabase: SupabaseClient, leadId: string, temp
   let result = template;
   const vars: Record<string, string> = {
     nome: personalizationName(lead.name),
+    primeiro_nome: personalizationFirstName(lead.name),
     empresa: lead.company || "",
     email: lead.email || "",
     telefone: lead.phone || "",
