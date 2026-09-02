@@ -473,7 +473,7 @@ function RuleCard({
                         <Info className="w-3 h-3 ml-1 inline text-muted-foreground" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Variáveis: {"{nome}"}, {"{empresa}"}, {"{ultimo_assunto}"}</p>
+                        <p>Variáveis: {"{nome}"}, {"{primeiro_nome}"}, {"{empresa}"}, {"{ultimo_assunto}"}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

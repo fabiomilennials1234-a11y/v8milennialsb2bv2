@@ -700,7 +700,7 @@ export function useCopilotAgentForEdit(agentId?: string) {
       const outboundConfig = {
         delayMinutes: rawOutboundConfig.delayMinutes ?? 5,
         firstMessageTemplate: rawOutboundConfig.firstMessageTemplate ?? "",
-        availableVariables: rawOutboundConfig.availableVariables ?? ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
+        availableVariables: rawOutboundConfig.availableVariables ?? ["nome", "primeiro_nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
         maxRetries: rawOutboundConfig.maxRetries ?? 3,
         retryIntervalMinutes: rawOutboundConfig.retryIntervalMinutes ?? 30,
         audioEnabled: rawOutboundConfig.audioEnabled ?? false,

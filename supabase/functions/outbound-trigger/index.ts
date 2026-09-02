@@ -13,6 +13,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { sendOutboundDispatch } from "../_shared/outbound-sender.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { personalizationFirstName } from "../_shared/lead-name.ts";
 
 interface OutboundTriggerPayload {
   lead_id: string;
@@ -221,6 +222,7 @@ serve(withErrorBoundary('outbound-trigger', async (req) => {
     const timeVars = getTimeBasedVariables();
     const templateVars = {
       nome: lead.name || "você",
+      primeiro_nome: personalizationFirstName(lead.name) || "você",
       empresa: lead.company || "",
       email: lead.email || "",
       telefone: lead.phone || "",
