@@ -1,4 +1,4 @@
--- 20270915000000_escalonar_crons_purga_e_indices.sql
+-- 20270915000010_escalonar_crons_purga_e_indices.sql
 --
 -- Incidente 2026-09-02, 18:21–18:31 UTC: produção fora do ar por ~10 minutos.
 --
