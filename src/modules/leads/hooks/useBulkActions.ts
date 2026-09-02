@@ -36,7 +36,10 @@ export function useBulkMoveToCustomPipe() {
       pipeline_id: string;
       stage_id: string;
     }) => {
-      const { data, error } = await supabase.rpc("bulk_add_to_custom_pipe" as any, {
+      // SCRUM-626: caminho por id — bulk_add_to_pipeline é o motor único
+      // (funciona para QUALQUER funil; o wrapper bulk_add_to_custom_pipe
+      // segue vivo até a W6).
+      const { data, error } = await supabase.rpc("bulk_add_to_pipeline" as any, {
         p_lead_ids: lead_ids,
         p_pipeline_id: pipeline_id,
         p_stage_id: stage_id,

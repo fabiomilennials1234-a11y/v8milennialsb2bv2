@@ -22,7 +22,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { createMetaGraphClient } from "../_shared/meta/graph-client.ts";
 import { planLeadgenImport } from "../_shared/meta/leadgen-import.ts";
-import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntry, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -132,13 +132,19 @@ async function getPageToken(systemToken: string, pageId: string): Promise<string
   return data?.access_token ?? null;
 }
 
-/** First (lowest-position) active stage of the Org's WhatsApp funnel; falls back to 'novo'. */
+/**
+ * First (lowest-position) active stage of the Org's WhatsApp funnel; falls
+ * back to 'novo'.
+ *
+ * SCRUM-624: a consulta inline por `pipeline_type = 'whatsapp'` morreu — a
+ * resolução vai pelo adapter (`resolveActiveStageKey`), que lê as etapas por
+ * `pipeline_id` (FK real, W1) a partir do slug do funil semeado. Esta porta
+ * não tem configuração de destino própria (o binding Meta→org não declara
+ * funil), então o destino segue o default histórico 'whatsapp' — destino
+ * configurável por binding fica registrado como incremento.
+ */
 async function resolveFirstWhatsappStage(supabase: any, orgId: string): Promise<string> {
-  const { data } = await supabase
-    .from("pipeline_stages").select("stage_key")
-    .eq("organization_id", orgId).eq("pipeline_type", "whatsapp").eq("is_active", true)
-    .order("position", { ascending: true }).limit(1).maybeSingle();
-  return data?.stage_key ?? "novo";
+  return (await resolveActiveStageKey(supabase, orgId, "whatsapp")) ?? "novo";
 }
 
 /** Creates the Lead (deduped by meta_lead_id / phone / email) in the first WhatsApp stage. */

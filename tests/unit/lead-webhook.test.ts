@@ -12,6 +12,11 @@ import "../../tests/helpers/deno-mock";
 import { setDenoEnv, clearDenoEnv } from "../../tests/helpers/deno-mock";
 import { createMockSupabase } from "../helpers/supabase-mock";
 
+// Funis semeados da org-1 — o pipeline-adapter REAL roda nestes testes.
+const PIPE_WA_ID = "aaaaaaaa-0000-4000-8000-000000000001";
+const PIPE_CONF_ID = "aaaaaaaa-0000-4000-8000-000000000002";
+const PIPE_PROP_ID = "aaaaaaaa-0000-4000-8000-000000000003";
+
 // ─── Capture the handler registered by serve() ────────────────────────────
 
 const capture = vi.hoisted(() => ({
@@ -96,7 +101,11 @@ globalThis.fetch = mockFetch as any;
 // Import target (triggers serve/capture)
 import "../../supabase/functions/lead-webhook/index";
 
-beforeEach(() => {
+beforeEach(async () => {
+  // O cache do adapter é module-level e indexa por org:ref — entre testes o
+  // mock troca, então o cache tem de zerar junto.
+  const adapter = await import("../../supabase/functions/_shared/pipeline-adapter.ts");
+  adapter.__clearPipelineResolutionCache();
   clearDenoEnv();
   setDenoEnv("WEBHOOK_API_KEY", "secret");
   setDenoEnv("SUPABASE_URL", "https://test.supabase.co");
@@ -110,6 +119,17 @@ beforeEach(() => {
   mockTable("team_members", [{ id: "tm-1", organization_id: "org-1", is_active: true }]);
   mockTable("leads", []);
   mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
   mockTable("pipe_confirmacao", []);
   mockTable("pipe_propostas", []);
   mockTable("campanhas", []);
@@ -305,6 +325,17 @@ describe("lead-webhook — custom fields", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     mockTable("lead_custom_fields", [
       { id: "cf-id", field_name: "cnpj", organization_id: "org-1" },
     ]);
@@ -329,6 +360,17 @@ describe("lead-webhook — field name normalization", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
 
     const res = await invoke({
@@ -346,6 +388,17 @@ describe("lead-webhook — field name normalization", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
 
     const res = await invoke({
@@ -362,6 +415,17 @@ describe("lead-webhook — field name normalization", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     mockTable("lead_custom_fields", []);
     mockTable("lead_custom_field_values", []);
     state.mock = { sb, mockTable } as any;
@@ -382,6 +446,17 @@ describe("lead-webhook — field name normalization", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
 
     // Send only "Telefone:" (no "phone") — should still pass validation
@@ -397,6 +472,17 @@ describe("lead-webhook — field name normalization", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
 
     const res = await invoke({
@@ -413,6 +499,17 @@ describe("lead-webhook — field name normalization", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     mockTable("lead_custom_fields", [
       { id: "cf-id", field_name: "Qual seu cargo?", organization_id: "org-1" },
     ]);
@@ -504,6 +601,17 @@ describe("lead-webhook — update_existing_if_match", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
 
     const res = await invoke({
@@ -525,6 +633,17 @@ describe("lead-webhook — Meta dummy/test lead skips dedup", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     mockTable("lead_custom_fields", []);
     mockTable("lead_custom_field_values", []);
     state.mock = { sb, mockTable } as any;
@@ -602,6 +721,13 @@ describe("lead-webhook — place_in_pipe", () => {
     mockTable("organizations", [{ id: "org-1" }]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", [{ id: "pw-existing", lead_id: "lead-existing", organization_id: "org-1" }]);
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", [
+      { id: "pe-existing", pipeline_id: PIPE_WA_ID, lead_id: "lead-existing", organization_id: "org-1", stage_key: "novo", closed_at: null, metadata: {} },
+    ]);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
 
     const res = await invoke({
@@ -738,6 +864,17 @@ describe("lead-webhook — place_in_campaign", () => {
     mockTable("campanha_leads", []);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
 
     const res = await invoke({
@@ -759,6 +896,17 @@ describe("lead-webhook — place_in_campaign", () => {
     mockTable("campanha_leads", []);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
     mockGetCampaignLead.mockResolvedValueOnce("tm-sdr");
     mockGetCampaignCloser.mockResolvedValueOnce("tm-closer");
@@ -784,6 +932,17 @@ describe("lead-webhook — place_in_campaign", () => {
     ]);
     mockTable("leads", []);
     mockTable("pipe_whatsapp", []);
+    // SCRUM-624: o adapter REAL resolve o funil na tabela `pipelines` (id ou
+    // slug, qualquer funil) e lê/escreve em `pipeline_entries`. Sem estas
+    // linhas, place_in_pipe agora responde 404 (funil inexistente) — que é o
+    // contrato D6, não um detalhe de mock.
+    mockTable("pipelines", [
+      { id: PIPE_WA_ID, organization_id: "org-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+      { id: PIPE_CONF_ID, organization_id: "org-1", slug: "confirmacao", name: "Agendamentos", type: "system", is_active: true },
+      { id: PIPE_PROP_ID, organization_id: "org-1", slug: "propostas", name: "Propostas", type: "system", is_active: true },
+    ]);
+    mockTable("pipeline_entries", []);
+    mockTable("pipeline_stages", []);
     state.mock = { sb, mockTable } as any;
 
     const res = await invoke({

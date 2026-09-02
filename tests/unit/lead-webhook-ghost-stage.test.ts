@@ -56,6 +56,12 @@ const mockUpsertPipeEntryDetailed = vi.hoisted(() =>
 const mockGetPipeEntry = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockUpdatePipeEntryById = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockResolveActiveStageKey = vi.hoisted(() => vi.fn());
+// SCRUM-624 (D6): o webhook resolve o funil ANTES de criar o lead. Aqui o
+// resolver é mockado como sucesso (funil whatsapp) — o 4xx de funil
+// inexistente tem suite própria (lead-webhook-funil-destino.test.ts).
+const mockResolvePipeline = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ id: "pipe-wa", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true }),
+);
 
 vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   upsertPipeEntry: mockUpsertPipeEntry,
@@ -63,6 +69,8 @@ vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   getPipeEntry: mockGetPipeEntry,
   updatePipeEntryById: mockUpdatePipeEntryById,
   resolveActiveStageKey: mockResolveActiveStageKey,
+  resolvePipeline: mockResolvePipeline,
+  isPipelineResolutionError: (e: unknown) => (e as { name?: string } | null)?.name === "PipelineResolutionError",
 }));
 
 const mockGetOrCreateLead = vi.hoisted(() => vi.fn());
@@ -124,9 +132,11 @@ beforeEach(() => {
   mockTable("leads", []);
   mockTable("pipe_whatsapp", []);
   // Active stages do NOT include "novo" — first active is "novo_lead".
+  // SCRUM-624: o webhook lê as etapas por pipeline_id (FK da W1), não mais por
+  // pipeline_type — as linhas carregam o id do funil mockado pelo resolver.
   mockTable("pipeline_stages", [
-    { organization_id: "org-1", pipeline_type: "whatsapp", stage_key: "novo_lead", name: "🆕 Novo Lead", is_active: true, position: 0 },
-    { organization_id: "org-1", pipeline_type: "whatsapp", stage_key: "pago", name: "✅ Pago", is_active: true, position: 3 },
+    { organization_id: "org-1", pipeline_id: "pipe-wa", pipeline_type: "whatsapp", stage_key: "novo_lead", name: "🆕 Novo Lead", is_active: true, position: 0 },
+    { organization_id: "org-1", pipeline_id: "pipe-wa", pipeline_type: "whatsapp", stage_key: "pago", name: "✅ Pago", is_active: true, position: 3 },
   ]);
   mockTable("tags", []);
   mockTable("lead_tags", []);
@@ -188,7 +198,11 @@ describe("lead-webhook — ghost-stage guard (place_in_pipe)", () => {
    * O LEAD continua sendo criado — é só o card que não existe. Por isso a
    * resposta segue 200 e `lead_id` continua vindo.
    */
-  it("funil inexistente na org: 200 com placed_in_pipe FALSO e o motivo", async () => {
+  // SCRUM-624: funil inexistente NA RESOLUÇÃO agora é 4xx antes do lead nascer
+  // (suite lead-webhook-funil-destino). Este caso passou a cobrir a CORRIDA:
+  // o funil resolveu, mas foi deletado antes do upsert → o lead já existe,
+  // então a resposta segue 200 com o relato honesto.
+  it("funil some entre resolução e upsert (corrida): 200 com placed_in_pipe FALSO e o motivo", async () => {
     mockUpsertPipeEntryDetailed.mockResolvedValueOnce({ status: "no_pipeline" });
 
     const res = await invoke({

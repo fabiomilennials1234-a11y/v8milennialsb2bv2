@@ -15,7 +15,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getPipeEntry, getPipeEntriesByLeads, resolvePipelineId } from "../pipeline-adapter.ts";
+import { getPipeEntry, getPipeEntriesByLeads } from "../pipeline-adapter.ts";
 
 const SELECT_AGENT = "*, copilot_agent_faqs(*), copilot_agent_kanban_rules(*)";
 

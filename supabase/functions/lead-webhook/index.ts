@@ -14,15 +14,21 @@ import { getCampaignLeadAssignment, getCampaignCloserAssignment } from "../_shar
 import { logRuntime } from "../_shared/logger.ts";
 import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
-import { upsertPipeEntry, upsertPipeEntryDetailed, getPipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
-import type { PipeSlug } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntryDetailed, getPipeEntry, updatePipeEntryById, resolveActiveStageKey, resolvePipeline, isPipelineResolutionError } from "../_shared/pipeline-adapter.ts";
+import type { ResolvedPipeline } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare, checkRateLimitPersistent, getClientIdentifier, checkRateLimit, rateLimitedResponse } from "../_shared/auth.ts";
 
-// Destino opcional: colocar o lead em um pipe (funil) em uma etapa específica
+// Destino opcional: colocar o lead em um funil em uma etapa específica.
+// D6 (SCRUM-624 / ADR-0034): `pipe` aceita o **id (uuid) ou slug de QUALQUER
+// funil da org** — custom incluído. Os 3 nomes históricos (`whatsapp`,
+// `confirmacao`, `propostas`) seguem funcionando: são os slugs dos funis
+// semeados; aliases legados (`pipe_whatsapp`, `qualificacao`, …) resolvem via
+// adapter. Funil inexistente/inativo → 4xx ANTES de criar o lead (fim do
+// 200 + descarte silencioso).
 interface PlaceInPipe {
-  pipe: "whatsapp" | "confirmacao" | "propostas";
+  pipe: string; // id (uuid) ou slug de qualquer funil da org
   stage: string; // ex: "novo", "abordado", "reuniao_marcada", "marcar_compromisso"
   meeting_date?: string; // ISO 8601 — salva no pipe (meeting_date) e no lead (compromisso_date)
 }
@@ -386,7 +392,7 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     // Leads de Cal.com já entram em pipe_confirmacao (reunião agendada) — nunca devem
     // ser semeados em whatsapp/novo. Sem isso o lead aparece duplicado na coluna "Novo"
     // do funil WhatsApp (incomoda no fluxo cal.com, onde toda entrada é reunião marcada).
-    const skipWhatsappSeed = origin === "cal";
+    const skipDefaultSeed = origin === "cal";
 
     // ── Cal.com bypass ──────────────────────────────────────────────────
     // Leads vindos do Cal.com já têm reunião agendada — pulam pipe_whatsapp
@@ -442,6 +448,93 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
       );
     }
 
+    // ── D6: resolve o destino ANTES de criar qualquer coisa ───────────────
+    // `place_in_pipe.pipe` aceita id (uuid) ou slug de qualquer funil da org
+    // (aliases legados inclusos — ver adapter). Funil que não resolve → 4xx
+    // AQUI, antes do INSERT do lead: quem integra vê o erro na hora e o retry
+    // não duplica nada. Fica DEPOIS do descarte do dummy do Meta de propósito
+    // — a Testing Tool só precisa do 200, e um payload de teste com funil
+    // inválido não pode reprovar a validação do webhook no painel do Meta.
+    // `organizationId` foi resolvido acima (payload ou fallback) — narrow p/ string.
+    const orgIdResolved = organizationId as string;
+    let resolvedPipeline: ResolvedPipeline | null = null;
+    if (payload.place_in_pipe?.pipe && payload.place_in_pipe?.stage) {
+      try {
+        resolvedPipeline = await resolvePipeline(supabase, orgIdResolved, String(payload.place_in_pipe.pipe));
+      } catch (e) {
+        if (isPipelineResolutionError(e)) {
+          if (e.code === "pipeline_lookup_failed") {
+            // Transitório: não sabemos se o funil existe. 503 para o caller
+            // retentar — nada foi escrito ainda.
+            console.warn("[lead-webhook] resolução de funil falhou (transitório):", e.message);
+            return errorResponse(503, "Falha temporária ao resolver o funil de destino. Tente novamente.", corsHeaders, { req });
+          }
+          const ref = String(payload.place_in_pipe.pipe);
+          const msg = e.code === "pipeline_inactive"
+            ? `Funil "${ref}" está inativo nesta organização`
+            : `Funil "${ref}" não existe nesta organização. Use o id (uuid) ou o slug de um funil da organização.`;
+          console.warn(`[lead-webhook] place_in_pipe recusado (${e.code}): funil "${ref}" @ org ${organizationId}`);
+          return errorResponse(e.code === "pipeline_inactive" ? 409 : 404, msg, corsHeaders, {
+            req,
+            details: { code: e.code },
+          });
+        }
+        throw e;
+      }
+    }
+
+    // ── D4: semeadura pelo funil PADRÃO da org (substitui o hardcode
+    // whatsapp/novo). Etapa = 1ª ativa do funil padrão. Org sem funil padrão
+    // (`default_pipeline_id` NULL — 2/108 em prod no backfill) = comportamento
+    // definido: lead criado SEM card, com log explícito (o mesmo destino que
+    // essas orgs já tinham quando o funil semeado não existia).
+    const seedDefaultPipeline = async (leadId: string) => {
+      try {
+        const { data: orgRow, error: orgErr } = await supabase
+          .from("organizations")
+          .select("default_pipeline_id")
+          .eq("id", orgIdResolved)
+          .maybeSingle();
+        if (orgErr) {
+          console.warn("[lead-webhook] leitura de default_pipeline_id falhou; lead fica sem card:", orgErr.message);
+          return;
+        }
+        const defaultRef = (orgRow as { default_pipeline_id?: string | null } | null)?.default_pipeline_id;
+        if (!defaultRef) {
+          console.log(
+            `[lead-webhook] lead ${leadId} criado SEM card: org ${organizationId} não tem funil padrão (Configurações → Geral).`,
+          );
+          return;
+        }
+        const stageKey = await resolveActiveStageKey(supabase, orgIdResolved, defaultRef);
+        if (!stageKey) {
+          // Funil padrão sem NENHUMA etapa ativa: gravar um literal criaria um
+          // card fantasma invisível no kanban — pior que não criar.
+          console.warn(
+            `[lead-webhook] funil padrão ${defaultRef} da org ${organizationId} sem etapas ativas; lead ${leadId} fica sem card.`,
+          );
+          return;
+        }
+        const seed = await upsertPipeEntryDetailed(supabase, {
+          leadId,
+          orgId: orgIdResolved,
+          slug: defaultRef,
+          stageKey,
+          metadata: { sdr_id: payload.assigned_user_id ?? null },
+          assignedTo: payload.assigned_user_id ?? null,
+        });
+        if (seed.status === "no_pipeline") {
+          console.warn(
+            `[lead-webhook] funil padrão ${defaultRef} não resolveu no upsert (corrida com deleção?); lead ${leadId} sem card.`,
+          );
+        } else if (seed.status !== "created" && seed.status !== "updated") {
+          console.warn(`[lead-webhook] semeadura no funil padrão falhou (${seed.status}) para lead ${leadId}.`);
+        }
+      } catch (pipeError) {
+        console.warn("[lead-webhook] semeadura no funil padrão falhou:", pipeError);
+      }
+    };
+
     // Padrão: sempre criar novo lead. Só busca por telefone/email quando o cliente envia update_existing_if_match = true.
     // Aceita boolean true ou string "true" (n8n body fields envia como string).
     // Dummy do Meta nunca deduplica (senão atualiza um lead de teste pré-existente).
@@ -454,7 +547,10 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
         email: email || null,
         name: name || "Lead sem nome",
         origin,
-        skipPipeSeed: skipWhatsappSeed,
+        // SCRUM-624 (D4): a semeadura sai do lead-service (que hardcoda o
+        // funil 'whatsapp') e passa a ser feita AQUI pelo funil padrão da org
+        // — ver seedDefaultPipeline. skipPipeSeed sempre true nesta porta.
+        skipPipeSeed: true,
       });
 
       if (!result) {
@@ -468,6 +564,13 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
         });
       }
       console.log("[lead-webhook] update_existing_if_match: lead resolved:", result.lead.id, "created:", result.created);
+
+      // Lead NOVO no caminho deduplicado: mesma semeadura do caminho de
+      // criação direta — funil padrão da org (não mais whatsapp hardcoded).
+      // Lead reaproveitado não é ressemeado (comportamento inalterado).
+      if (result.created && !skipDefaultSeed) {
+        await seedDefaultPipeline(result.lead.id);
+      }
     } else {
       // Sempre criar novo lead (padrão do sistema)
       const leadName = name || "Lead sem nome";
@@ -514,39 +617,14 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
         return errorResponse(500, "Failed to create lead", corsHeaders, { req, details: createError.message });
       }
 
-      // Cal.com não semeia whatsapp — o lead é colocado em confirmacao pelo bloco place_in_pipe abaixo.
-      if (!skipWhatsappSeed) {
-        try {
-          const seed = await upsertPipeEntryDetailed(supabase, {
-            leadId: newLead.id,
-            orgId: organizationId,
-            slug: "whatsapp",
-            stageKey: "novo",
-            metadata: { sdr_id: payload.assigned_user_id ?? null },
-            assignedTo: payload.assigned_user_id ?? null,
-          });
-          // Org que não tem o funil de Oportunidades não é erro: desde
-          // 20270902000000 org nova não nasce com funil, e o ADR-0030 diz que
-          // "quem quiser entrada automática no funil desenha o Workflow". O
-          // Lead JÁ FOI criado acima (linha do insert), então nada se perde —
-          // ele aparece na lista de Leads, só não ganha card.
-          //
-          // Mas o silêncio era total: `upsertPipeEntry` devolve `null` sem
-          // levantar, então o `catch` abaixo nunca via este caso e não havia
-          // linha nenhuma no log. Quando o cliente perguntasse "cadê o card
-          // desse lead", não haveria o que ler. Agora há.
-          if (seed.status === "no_pipeline") {
-            console.log(
-              `[lead-webhook] lead ${newLead.id} criado SEM card: org ${organizationId} não tem o funil de Oportunidades (whatsapp). Esperado se a org o excluiu ou nunca o teve.`,
-            );
-          } else if (seed.status !== "created" && seed.status !== "updated") {
-            console.warn(
-              `[lead-webhook] semeadura em whatsapp falhou (${seed.status}) para lead ${newLead.id}.`,
-            );
-          }
-        } catch (pipeError) {
-          console.warn("[lead-webhook] pipeline_entries whatsapp insert failed:", pipeError);
-        }
+      // Cal.com não semeia — o lead é colocado em confirmacao pelo bloco place_in_pipe abaixo.
+      //
+      // SCRUM-624 (D4): a semeadura hardcoded whatsapp/novo morreu. O lead novo
+      // cai no FUNIL PADRÃO da org (etapa = 1ª ativa); org sem padrão = lead
+      // sem card, logado (o destino que "org sem funil de Oportunidades" já
+      // tinha — agora é configuração explícita, não acidente de seed).
+      if (!skipDefaultSeed) {
+        await seedDefaultPipeline(newLead.id);
       }
 
       result = { lead: newLead, created: true, source: "created" };
@@ -761,13 +839,19 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
     let placedInPipe: boolean | undefined;
     let placeInPipeError: string | undefined;
 
-    // Colocar lead em um pipe (funil) em etapa específica (ex: n8n, campanha de ads)
-    if (payload.place_in_pipe?.pipe && payload.place_in_pipe?.stage) {
-      const { pipe, stage, meeting_date } = payload.place_in_pipe;
+    // Colocar lead em um funil em etapa específica (ex: n8n, campanha de ads).
+    // `resolvedPipeline` já foi resolvido (e errou 4xx se não existia) LÁ EM
+    // CIMA, antes do lead nascer — aqui só se usa.
+    if (payload.place_in_pipe?.pipe && payload.place_in_pipe?.stage && resolvedPipeline) {
+      const { stage, meeting_date } = payload.place_in_pipe;
       const stageVal = stage as string;
 
-      // Helper: auto-distribuir SDR/Closer após inserir novo registro no pipe
-      const autoDistributePipe = async (pipeSlug: PipeSlug) => {
+      // Helper: auto-distribuir SDR/Closer após inserir novo registro no pipe.
+      // As RPCs de round-robin são keyed por slug de funil semeado; para funil
+      // custom devolvem null e nada é distribuído (paridade de distribuição de
+      // funil custom fica registrada como incremento — não é regressão: custom
+      // nunca teve round-robin nesta porta).
+      const autoDistributePipe = async (pipeSlug: string) => {
         try {
           const { data: sdrId } = await supabase.rpc("get_next_pipe_sdr", {
             p_pipe_type: pipeSlug,
@@ -840,7 +924,9 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
         }
       };
 
-      const pipeSlug = pipe as PipeSlug;
+      // Slug canônico do funil resolvido: é o que vai para RPCs de round-robin,
+      // logs e lead_history — mesmo quando o caller mandou uuid ou alias.
+      const pipeSlug = resolvedPipeline.slug;
       const metadata: Record<string, unknown> = {};
       if (meeting_date) metadata.meeting_date = meeting_date;
 
@@ -849,11 +935,14 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
       // costumam ter espaço duplo ("📥  Novo Lead") que diverge do que o caller digita ("📥 Novo Lead").
       const normalizeLabel = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
       let resolvedStageKey = stageVal;
+      // SCRUM-624: etapas lidas por pipeline_id (FK real, W1) — não mais por
+      // pipeline_type = slug. É o que faz o casamento por rótulo funcionar
+      // também para funil custom e para ref por uuid.
       const { data: orgStages } = await supabase
         .from("pipeline_stages")
         .select("stage_key, name")
         .eq("organization_id", organizationId)
-        .eq("pipeline_type", pipeSlug)
+        .eq("pipeline_id", resolvedPipeline.id)
         .eq("is_active", true);
       if (orgStages && orgStages.length > 0) {
         const requested = normalizeLabel(stageVal);
@@ -1128,7 +1217,18 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
         status: "success",
         entityType: "lead",
         entityId: leadId,
-        payloadSnapshot: { source: payload.source, is_new: isNewLead },
+        payloadSnapshot: {
+          source: payload.source,
+          is_new: isNewLead,
+          // D6: grava a INTENÇÃO do caller (o destino pedido, como veio) e o
+          // desfecho — é a matéria-prima para medir quem pede o quê e quantos
+          // pedidos não viram card (antes só o console via isso).
+          place_in_pipe: payload.place_in_pipe
+            ? { pipe: payload.place_in_pipe.pipe, stage: payload.place_in_pipe.stage }
+            : null,
+          placed_in_pipe: placedInPipe ?? null,
+          resolved_pipeline_id: resolvedPipeline?.id ?? null,
+        },
       }).catch((e) => console.warn("[lead-webhook] logRuntime failed:", e)),
     );
 

@@ -49,6 +49,7 @@ vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   getPipeEntry: vi.fn().mockResolvedValue(null),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
   resolvePipelineId: vi.fn().mockResolvedValue("mock-pipeline-id"),
+  tryResolvePipelineId: vi.fn().mockResolvedValue("mock-pipeline-id"),
   upsertPipeEntry: vi.fn().mockResolvedValue("mock-entry-id"),
   upsertPipeEntryDetailed: vi.fn().mockResolvedValue({ status: "updated", entryId: "mock-entry-id" }),
   updatePipeEntryById: vi.fn().mockResolvedValue(true),

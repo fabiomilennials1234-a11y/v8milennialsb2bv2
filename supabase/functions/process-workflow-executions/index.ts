@@ -20,7 +20,7 @@ import { trackEvent } from "../_shared/track.ts";
 import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
 import { executeWorkflow } from "../_shared/workflow-executor.ts";
 import { fireTrigger, processCronTriggers, processScheduledDateTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
-import { resolvePipelineId } from "../_shared/pipeline-adapter.ts";
+import { tryResolvePipelineId } from "../_shared/pipeline-adapter.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 import {
@@ -545,7 +545,7 @@ async function processPeriodicTriggers(
         const windowEnd = new Date(Date.now() + hoursBefore * 3_600_000).toISOString();
 
         // Resolve confirmacao pipeline id for this org
-        const confirmacaoPipelineId = await resolvePipelineId(supabase, wf.organization_id, "confirmacao");
+        const confirmacaoPipelineId = await tryResolvePipelineId(supabase, wf.organization_id, "confirmacao");
         if (!confirmacaoPipelineId) continue;
 
         // Query pipeline_entries for unconfirmed meetings

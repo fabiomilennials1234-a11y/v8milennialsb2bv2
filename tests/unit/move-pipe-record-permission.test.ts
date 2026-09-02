@@ -22,9 +22,11 @@ vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
   createClient: vi.fn().mockReturnValue({}),
 }));
 
-// Mock pipeline-adapter (avoid real DB calls)
+// Mock pipeline-adapter (avoid real DB calls) — assinatura SCRUM-623: ref por
+// id/slug (string), upsertPipeEntryDetailed com status tipado.
 vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   upsertPipeEntry: vi.fn().mockResolvedValue("entry-123"),
+  upsertPipeEntryDetailed: vi.fn().mockResolvedValue({ status: "updated", entryId: "entry-123" }),
 }));
 
 setDenoEnv("SUPABASE_URL", "https://test.supabase.co");

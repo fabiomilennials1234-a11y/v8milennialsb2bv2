@@ -35,7 +35,11 @@ vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
     async (_sb: unknown, _leadId: string, _orgId: string, slug: string) => pipeEntries[slug] ?? null,
   ),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
-  resolvePipelineId: vi.fn().mockResolvedValue(null),
+  // SCRUM-623: o contrato novo LANÇA em funil não resolvido — null saiu do tipo.
+  resolvePipelineId: vi.fn(async () => {
+    throw new Error("pipeline_not_found (mock — contrato SCRUM-623 lança, não devolve null)");
+  }),
+  tryResolvePipelineId: vi.fn().mockResolvedValue(null),
 }));
 
 import { AgentRouter } from "../../../supabase/functions/_shared/copilot/agent-router.ts";

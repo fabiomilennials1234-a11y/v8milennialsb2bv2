@@ -4,11 +4,190 @@
  * Replaces direct reads/writes to legacy pipe_whatsapp, pipe_confirmacao,
  * pipe_propostas tables. The reverse sync trigger keeps legacy tables
  * in sync during the migration period.
+ *
+ * SCRUM-623 (ADR-0034 "funil é funil"): o adapter deixou de ser system-only.
+ * A resolução aceita **id (uuid) OU slug de qualquer funil ativo da org** —
+ * sem filtro `type='system'`. Funil inexistente/inativo vira erro TIPADO
+ * (`PipelineResolutionError`), nunca `null` silencioso. Os 3 slugs históricos
+ * (`whatsapp`, `confirmacao`, `propostas`) continuam resolvendo igual: são os
+ * funis semeados, que seguem existindo com esses slugs.
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-export type PipeSlug = "whatsapp" | "confirmacao" | "propostas";
+/**
+ * @deprecated A união `"whatsapp" | "confirmacao" | "propostas"` morreu no
+ * SCRUM-623 (ADR-0034 D1): funil não é tipo no código. O alias sobrevive só
+ * para os importadores legados compilarem até a F6; use `PipelineRef`.
+ */
+export type PipeSlug = string;
+
+/** Id (uuid) OU slug de um funil da org. Aliases legados são aceitos (ver `LEGACY_SLUG_ALIASES`). */
+export type PipelineRef = string;
+
+export interface ResolvedPipeline {
+  id: string;
+  slug: string;
+  name: string;
+  /** Marca de origem do seed (`system` | `custom`). ADR-0034: NUNCA use para comportamento. */
+  type: string;
+  is_active: boolean;
+}
+
+export type PipelineResolutionFailureCode =
+  /** Nenhum funil da org casa com o ref (nem por id, nem por slug, nem por alias). */
+  | "pipeline_not_found"
+  /** O funil existe mas está com `is_active = false`. */
+  | "pipeline_inactive"
+  /** A consulta ao banco falhou — transitório; não diz nada sobre a existência do funil. */
+  | "pipeline_lookup_failed";
+
+/**
+ * Erro TIPADO de resolução de funil (SCRUM-623). O contrato substitui o
+ * `null` silencioso de `resolvePipelineId`: quem precisa errar alto (webhook
+ * 4xx da D6, tool do Copilot) captura por `isPipelineResolutionError` e lê
+ * `code`/`ref`/`orgId`. Quem quer degradar de propósito usa
+ * `tryResolvePipelineId`.
+ */
+export class PipelineResolutionError extends Error {
+  readonly code: PipelineResolutionFailureCode;
+  readonly orgId: string;
+  readonly ref: string;
+
+  constructor(code: PipelineResolutionFailureCode, orgId: string, ref: string, detail?: string) {
+    super(`[pipeline-adapter] ${code}: funil "${ref}" @ org ${orgId}${detail ? ` (${detail})` : ""}`);
+    this.name = "PipelineResolutionError";
+    this.code = code;
+    this.orgId = orgId;
+    this.ref = ref;
+  }
+}
+
+export function isPipelineResolutionError(e: unknown): e is PipelineResolutionError {
+  return e instanceof PipelineResolutionError;
+}
+
+/**
+ * Nomes legados que chamadores externos usam até hoje e que NÃO são slug de
+ * funil nenhum. Só entram em jogo quando a busca direta por slug não achou
+ * nada — um funil real da org com um desses slugs sempre ganha do alias.
+ * Evidência de uso: `import-leads` fala `qualificacao` no vocabulário de
+ * destino; `saved_views.entity_type` e integrações antigas falam `pipe_*`.
+ */
+const LEGACY_SLUG_ALIASES: Record<string, string> = {
+  qualificacao: "whatsapp",
+  pipe_whatsapp: "whatsapp",
+  pipe_confirmacao: "confirmacao",
+  pipe_propostas: "propostas",
+};
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Cache por org mantido (funil é estável; invalidação por cold start é ok —
+ * decisão do ticket). Só sucessos entram; cada acerto é indexado por ref de
+ * entrada, por id e por slug, então uuid, slug e alias batem no mesmo registro.
+ */
+const pipelineCache = new Map<string, ResolvedPipeline>();
+
+/** Exposto para testes — zera o cache module-level. */
+export function __clearPipelineResolutionCache(): void {
+  pipelineCache.clear();
+}
+
+const PIPELINE_COLUMNS = "id, slug, name, type, is_active";
+
+function cachePut(orgId: string, ref: string, pipeline: ResolvedPipeline): void {
+  pipelineCache.set(`${orgId}:${ref}`, pipeline);
+  pipelineCache.set(`${orgId}:${pipeline.id}`, pipeline);
+  pipelineCache.set(`${orgId}:${pipeline.slug}`, pipeline);
+}
+
+/**
+ * Resolve um funil da org por **id (uuid) ou slug** — qualquer funil, sem
+ * filtro de `type`. Lança `PipelineResolutionError` quando o funil não existe,
+ * está inativo ou a consulta falhou. Nunca devolve null.
+ *
+ * `is_active`: só `false` explícito conta como inativo — linha legada com
+ * `NULL` (0 em prod, medido 2026-09-02) trata como ativa para não inventar
+ * indisponibilidade.
+ */
+export async function resolvePipeline(
+  supabase: SupabaseClient,
+  orgId: string,
+  ref: PipelineRef,
+): Promise<ResolvedPipeline> {
+  const wanted = (ref ?? "").trim();
+  if (!wanted) throw new PipelineResolutionError("pipeline_not_found", orgId, String(ref), "ref vazio");
+
+  const cached = pipelineCache.get(`${orgId}:${wanted}`);
+  if (cached) return cached;
+
+  const lookup = async (column: "id" | "slug", value: string) => {
+    const { data, error } = await supabase
+      .from("pipelines")
+      .select(PIPELINE_COLUMNS)
+      .eq("organization_id", orgId)
+      .eq(column, value)
+      .maybeSingle();
+    if (error) {
+      throw new PipelineResolutionError("pipeline_lookup_failed", orgId, wanted, String(error.message ?? error));
+    }
+    return data as ResolvedPipeline | null;
+  };
+
+  let found: ResolvedPipeline | null;
+  if (UUID_RE.test(wanted)) {
+    found = await lookup("id", wanted);
+  } else {
+    found = await lookup("slug", wanted);
+    if (!found) {
+      const alias = LEGACY_SLUG_ALIASES[wanted.toLowerCase()];
+      if (alias) found = await lookup("slug", alias);
+    }
+  }
+
+  if (!found) throw new PipelineResolutionError("pipeline_not_found", orgId, wanted);
+  if (found.is_active === false) throw new PipelineResolutionError("pipeline_inactive", orgId, wanted);
+
+  cachePut(orgId, wanted, found);
+  return found;
+}
+
+/**
+ * Contrato novo (SCRUM-623): devolve o id ou LANÇA `PipelineResolutionError`
+ * — o `string | null` histórico morreu junto com o `type='system'`. Aceita
+ * uuid direto além de slug. Quem quer o comportamento antigo (degradar em
+ * silêncio) usa `tryResolvePipelineId` e assume isso no call site.
+ */
+export async function resolvePipelineId(
+  supabase: SupabaseClient,
+  orgId: string,
+  ref: PipelineRef,
+): Promise<string> {
+  return (await resolvePipeline(supabase, orgId, ref)).id;
+}
+
+/**
+ * Versão graceful de `resolvePipelineId`: erro de resolução (tipado) vira
+ * `null` com warn — o comportamento que os chamadores de leitura sempre
+ * tiveram. Erro que NÃO é de resolução continua subindo.
+ */
+export async function tryResolvePipelineId(
+  supabase: SupabaseClient,
+  orgId: string,
+  ref: PipelineRef,
+): Promise<string | null> {
+  try {
+    return await resolvePipelineId(supabase, orgId, ref);
+  } catch (e) {
+    if (isPipelineResolutionError(e)) {
+      console.warn(`[pipeline-adapter] tryResolvePipelineId degradou para null (${e.code}):`, e.message);
+      return null;
+    }
+    throw e;
+  }
+}
 
 export interface PipelineEntry {
   id: string;
@@ -26,10 +205,8 @@ export interface PipelineEntry {
   updated_at: string;
 }
 
-const pipelineIdCache = new Map<string, string>();
-
 /**
- * Resolve a target stage_key against the org's ACTIVE pipeline_stages.
+ * Resolve a target stage_key against the pipeline's ACTIVE stages.
  *
  * Root-cause guard for "ghost stages": external ingest (Make/n8n/Meta) sends a
  * stage slug as a fixed string. If that slug was deactivated/renamed in the org
@@ -37,28 +214,49 @@ const pipelineIdCache = new Map<string, string>();
  * Kanban does not render — invisible. This resolver coerces the target to a real
  * active stage so a lead can never enter a ghost stage from ingest.
  *
+ * SCRUM-623: as etapas agora são lidas por `pipeline_id` (FK real, W1/W2), não
+ * mais por `pipeline_type = slug` — o que faz o guard funcionar também para
+ * funil custom. Medido em prod 2026-09-02: 0 etapas ATIVAS sem `pipeline_id`
+ * em org que tenha o funil correspondente, então o filtro por FK é completo.
+ *
  * Resolution order:
  *   1. `requested` if it matches an active stage_key → use as-is.
  *   2. else → first active stage (min position).
  *   3. else (org has no active stages — never seeded) → `null`; caller decides
  *      a last-resort fallback (e.g. the static DEFAULT seed slug).
+ *
+ * Funil que não resolve (inexistente/inativo/consulta falhou) degrada como a
+ * falha de query sempre degradou aqui: devolve `requested ?? null` com warn —
+ * este é caminho de ingest, e derrubar o lead seria pior que confiar no pedido.
+ * Quem precisa errar alto resolve o funil antes, via `resolvePipeline`.
  */
 export async function resolveActiveStageKey(
   supabase: SupabaseClient,
   orgId: string,
-  slug: PipeSlug,
+  pipelineRef: PipelineRef,
   requested?: string | null,
 ): Promise<string | null> {
+  let pipeline: ResolvedPipeline;
+  try {
+    pipeline = await resolvePipeline(supabase, orgId, pipelineRef);
+  } catch (e) {
+    if (isPipelineResolutionError(e)) {
+      console.warn(`[pipeline-adapter] resolveActiveStageKey sem funil resolvível (${e.code}) para ${pipelineRef}@${orgId}; confiando no requested.`);
+      return requested ?? null;
+    }
+    throw e;
+  }
+
   const { data, error } = await supabase
     .from("pipeline_stages")
     .select("stage_key, position")
     .eq("organization_id", orgId)
-    .eq("pipeline_type", slug)
+    .eq("pipeline_id", pipeline.id)
     .eq("is_active", true)
     .order("position", { ascending: true });
 
   if (error) {
-    console.warn(`[pipeline-adapter] resolveActiveStageKey query failed for ${slug}@${orgId}:`, error);
+    console.warn(`[pipeline-adapter] resolveActiveStageKey query failed for ${pipelineRef}@${orgId}:`, error);
     // On query failure, trust the requested value rather than dropping the lead.
     return requested ?? null;
   }
@@ -73,36 +271,10 @@ export async function resolveActiveStageKey(
   const fallback = active[0].stage_key;
   if (requested && requested !== fallback) {
     console.warn(
-      `[pipeline-adapter] stage "${requested}" not active in ${slug}@${orgId}; remapping to first active stage "${fallback}" (ghost-stage guard).`,
+      `[pipeline-adapter] stage "${requested}" not active in ${pipelineRef}@${orgId}; remapping to first active stage "${fallback}" (ghost-stage guard).`,
     );
   }
   return fallback;
-}
-
-export async function resolvePipelineId(
-  supabase: SupabaseClient,
-  orgId: string,
-  slug: PipeSlug,
-): Promise<string | null> {
-  const key = `${orgId}:${slug}`;
-  const cached = pipelineIdCache.get(key);
-  if (cached) return cached;
-
-  const { data, error } = await supabase
-    .from("pipelines")
-    .select("id")
-    .eq("organization_id", orgId)
-    .eq("slug", slug)
-    .eq("type", "system")
-    .maybeSingle();
-
-  if (error || !data) {
-    console.warn(`[pipeline-adapter] resolvePipelineId failed for ${slug}@${orgId}:`, error);
-    return null;
-  }
-
-  pipelineIdCache.set(key, data.id);
-  return data.id;
 }
 
 /**
@@ -219,9 +391,9 @@ export async function getPipeEntry(
   supabase: SupabaseClient,
   leadId: string,
   orgId: string,
-  slug: PipeSlug,
+  pipelineRef: PipelineRef,
 ): Promise<PipelineEntry | null> {
-  const pipelineId = await resolvePipelineId(supabase, orgId, slug);
+  const pipelineId = await tryResolvePipelineId(supabase, orgId, pipelineRef);
   if (!pipelineId) return null;
 
   const read = await readPipeEntries(supabase, pipelineId, leadId);
@@ -275,11 +447,11 @@ export async function getPipeEntriesByLeads(
   supabase: SupabaseClient,
   leadIds: string[],
   orgId: string,
-  slug: PipeSlug,
+  pipelineRef: PipelineRef,
 ): Promise<PipelineEntry[]> {
   if (leadIds.length === 0) return [];
 
-  const pipelineId = await resolvePipelineId(supabase, orgId, slug);
+  const pipelineId = await tryResolvePipelineId(supabase, orgId, pipelineRef);
   if (!pipelineId) return [];
 
   const { data, error } = await supabase
@@ -341,6 +513,17 @@ export type UpsertPipeEntryResult =
   | { status: "read_failed" }
   | { status: "write_failed" };
 
+export interface UpsertPipeEntryParams {
+  leadId: string;
+  orgId: string;
+  /** Id (uuid) ou slug do funil — qualquer funil ativo da org (SCRUM-623). */
+  slug: PipelineRef;
+  stageKey: string;
+  metadata?: Record<string, unknown>;
+  assignedTo?: string | null;
+  notes?: string | null;
+}
+
 /**
  * Versão fina de `upsertPipeEntryDetailed`: devolve o id ou `null`.
  *
@@ -350,15 +533,7 @@ export type UpsertPipeEntryResult =
  */
 export async function upsertPipeEntry(
   supabase: SupabaseClient,
-  params: {
-    leadId: string;
-    orgId: string;
-    slug: PipeSlug;
-    stageKey: string;
-    metadata?: Record<string, unknown>;
-    assignedTo?: string | null;
-    notes?: string | null;
-  },
+  params: UpsertPipeEntryParams,
 ): Promise<string | null> {
   const result = await upsertPipeEntryDetailed(supabase, params);
   return result.status === "created" || result.status === "updated" ? result.entryId : null;
@@ -366,17 +541,13 @@ export async function upsertPipeEntry(
 
 export async function upsertPipeEntryDetailed(
   supabase: SupabaseClient,
-  params: {
-    leadId: string;
-    orgId: string;
-    slug: PipeSlug;
-    stageKey: string;
-    metadata?: Record<string, unknown>;
-    assignedTo?: string | null;
-    notes?: string | null;
-  },
+  params: UpsertPipeEntryParams,
 ): Promise<UpsertPipeEntryResult> {
-  const pipelineId = await resolvePipelineId(supabase, params.orgId, params.slug);
+  // Resolução graceful de propósito: o status `no_pipeline` JÁ É o erro tipado
+  // deste caminho, e os chamadores existentes o distinguem. Erro transitório de
+  // lookup também degrada para `no_pipeline` — comportamento INALTERADO
+  // (o resolvePipelineId antigo devolvia null nos dois casos).
+  const pipelineId = await tryResolvePipelineId(supabase, params.orgId, params.slug);
   if (!pipelineId) return { status: "no_pipeline" };
 
   // Lê direto (não via getPipeEntry) porque aqui a diferença entre "a leitura
@@ -505,9 +676,9 @@ export async function deletePipeEntry(
   supabase: SupabaseClient,
   leadId: string,
   orgId: string,
-  slug: PipeSlug,
+  pipelineRef: PipelineRef,
 ): Promise<boolean> {
-  const pipelineId = await resolvePipelineId(supabase, orgId, slug);
+  const pipelineId = await tryResolvePipelineId(supabase, orgId, pipelineRef);
   if (!pipelineId) return false;
 
   const { error } = await supabase

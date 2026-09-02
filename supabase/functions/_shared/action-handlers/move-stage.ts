@@ -1,5 +1,5 @@
 import type { ActionInput, ActionResult } from "./types.ts";
-import { upsertPipeEntry, upsertPipeEntryDetailed, resolvePipelineId, updatePipeEntryById } from "../pipeline-adapter.ts";
+import { upsertPipeEntry, upsertPipeEntryDetailed, tryResolvePipelineId, updatePipeEntryById } from "../pipeline-adapter.ts";
 import type { PipeSlug } from "../pipeline-adapter.ts";
 
 const STANDARD_PIPES = ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao", "campanha"];
@@ -111,7 +111,7 @@ async function moverNegocioQueDisparou(
   if (entry.organization_id !== organizationId) return null;
   if (leadId && entry.lead_id !== leadId) return null;
 
-  const alvo = await resolvePipelineId(supabase, organizationId, slug);
+  const alvo = await tryResolvePipelineId(supabase, organizationId, slug);
   if (!alvo) return null;
 
   // Mesmo funil: é só andar de etapa. Chamar `mover_negocio` aqui gastaria uma
