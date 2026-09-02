@@ -242,8 +242,14 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
 
     // Merge Agendamentos→Oportunidades (ADR-0004): org com flag ON recebe a reunião
     // no funil whatsapp em `agendado`; o funil de Oportunidades NÃO é mais removido.
+    //
+    // SCRUM-624: o destino desta porta é decidido pela flag acima — a única
+    // "config da porta" que existe hoje. Os dois valores são SLUGS DE FUNIL
+    // SEMEADO resolvidos pelo adapter (qualquer funil por id/slug, sem filtro
+    // de type) — a união de 3 literais morreu com o PipeSlug (ADR-0034 D1).
+    // Destino livre por org (qualquer funil) fica registrado como incremento.
     const useMergedFunnel = await isFeatureFlagEnabled(supabase, targetOrganizationId, "merged_opportunity_funnel");
-    const mSlug: "whatsapp" | "confirmacao" = useMergedFunnel ? "whatsapp" : "confirmacao";
+    const mSlug: string = useMergedFunnel ? "whatsapp" : "confirmacao";
     const mStage = useMergedFunnel ? "agendado" : "reuniao_marcada";
 
     // 1. First, try to find by email (case-insensitive)
