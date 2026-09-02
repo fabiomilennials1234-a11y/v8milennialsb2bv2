@@ -12,7 +12,15 @@ export interface BuildToolsParams {
   organizationId: string;
   capabilities: any;
   orgCustomFields?: Array<{ field_name: string }>;
-  pipelineStages?: Array<{ stage_key: string; name: string; pipeline_type: string }>;
+  /** Etapas ativas da org com a identidade REAL do funil (ver loadPipelineStages, SCRUM-628). */
+  pipelineStages?: Array<{
+    stage_key: string;
+    name: string;
+    pipeline_type?: string | null;
+    pipeline_id?: string | null;
+    pipeline_slug?: string | null;
+    pipeline_name?: string | null;
+  }>;
 }
 
 export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]> {
@@ -161,40 +169,43 @@ export async function buildDynamicTools(params: BuildToolsParams): Promise<any[]
         required: [],
       },
     });
-    const pipeLabelsForTool: Record<string, string> = {
-      whatsapp: "WhatsApp",
-      confirmacao: "Confirmação",
-      propostas: "Propostas",
-      upsell_base: "Carteira Base",
-      upsell_gestao: "Carteira Gestão",
-      campanha: "Campanhas",
-    };
+    // SCRUM-628: o funil deixa de ser um enum fixo — a ferramenta lista os
+    // funis REAIS da org (slug + etapas), incluindo funis custom. O agrupamento
+    // usa `pipeline_slug` (identidade real, cobre custom), não mais
+    // `pipeline_type` (NULL em etapa custom — lumpava tudo como WhatsApp).
     let stageDescription = "";
+    const funnelSlugs: string[] = [];
     if (pipelineStages.length > 0) {
-      const grouped: Record<string, string[]> = {};
+      const grouped = new Map<string, { label: string; stages: string[] }>();
       for (const s of pipelineStages) {
-        const key = s.pipeline_type || "whatsapp";
-        if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(s.stage_key);
+        const slug = s.pipeline_slug || s.pipeline_type || "whatsapp";
+        const group = grouped.get(slug) ?? { label: s.pipeline_name || slug, stages: [] };
+        group.stages.push(s.stage_key);
+        grouped.set(slug, group);
       }
-      const parts = Object.entries(grouped).map(
-        ([pipe, stages]) => `${pipeLabelsForTool[pipe] || pipe}: ${stages.join(", ")}`,
-      );
+      const parts: string[] = [];
+      for (const [slug, group] of grouped) {
+        funnelSlugs.push(slug);
+        parts.push(`"${slug}" (${group.label}): ${group.stages.join(", ")}`);
+      }
       stageDescription = parts.join(" | ");
     } else {
-      stageDescription = "WhatsApp: novo, abordado, respondeu, esfriou, agendado";
+      stageDescription = '"whatsapp": novo, abordado, respondeu, esfriou, agendado';
+      funnelSlugs.push("whatsapp");
     }
+    // `campanha` é outro eixo (etapas da campanha, não de funil) e continua aceito.
+    if (!funnelSlugs.includes("campanha")) funnelSlugs.push("campanha");
     tools.push({
       name: "advance_stage",
-      description: `Avança o lead para outra etapa do funil. Etapas disponíveis por funil: ${stageDescription}. Use quando o lead progredir na jornada.`,
+      description: `Avança o lead para outra etapa do funil. Funis desta organização e suas etapas: ${stageDescription}. Use quando o lead progredir na jornada.`,
       input_schema: {
         type: "object",
         properties: {
-          target_stage: { type: "string", description: "Etapa de destino" },
+          target_stage: { type: "string", description: "Etapa de destino (stage_key listado acima)" },
           target_pipe: {
             type: "string",
-            description: `Funil de destino (whatsapp, confirmacao, propostas, upsell_base, upsell_gestao, campanha). Padrão: whatsapp`,
-            enum: ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao", "campanha"],
+            description: `Funil de destino — use o identificador entre aspas listado acima. Padrão: whatsapp`,
+            enum: funnelSlugs,
           },
         },
         required: ["target_stage"],

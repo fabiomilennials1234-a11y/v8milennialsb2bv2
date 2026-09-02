@@ -93,7 +93,7 @@ export function useFunnelOptions(): { options: FunnelOption[]; isLoading: boolea
         key: `custom:${row.id}`,
         label: row.name,
         color: row.color ?? "#64748b",
-        path: `/pipe/custom/${row.slug}`,
+        path: `/funil/${row.slug}`,
         group,
         ended: row.status === "ended",
       });

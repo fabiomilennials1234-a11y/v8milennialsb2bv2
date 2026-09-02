@@ -15,7 +15,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getPipeEntry, getPipeEntriesByLeads, resolvePipelineId } from "../pipeline-adapter.ts";
+import { getPipeEntry, getPipeEntriesByLeads } from "../pipeline-adapter.ts";
 
 const SELECT_AGENT = "*, copilot_agent_faqs(*), copilot_agent_kanban_rules(*)";
 
@@ -234,23 +234,84 @@ export async function loadOrgCustomFields(
 /**
  * Carrega stages de TODOS os pipelines ativos da org.
  */
+export interface LoadedPipelineStage {
+  stage_key: string;
+  name: string;
+  /** Espelho transitório — NULL nas etapas de funil custom (W2). Não use para agrupar. */
+  pipeline_type: string | null;
+  pipeline_id: string | null;
+  /** Slug real do funil dono da etapa (via `pipelines`). NULL para etapa órfã. */
+  pipeline_slug: string | null;
+  /** Nome humano do funil. */
+  pipeline_name: string | null;
+}
+
+/**
+ * SCRUM-628: as etapas passam a vir com a identidade REAL do funil
+ * (`pipeline_id` + slug + nome via `pipelines`), não só o espelho
+ * `pipeline_type` — que é NULL em toda etapa de funil custom (W2) e fazia o
+ * build-tools agrupar etapa custom como se fosse do WhatsApp. Etapa sem
+ * `pipeline_id` (órfã — SCRUM-618) sai da lista: o agente não pode oferecer
+ * etapa de funil que não existe.
+ */
 export async function loadPipelineStages(
   supabase: SupabaseClient,
   organizationId: string,
-): Promise<{ stage_key: string; name: string; pipeline_type: string }[]> {
+): Promise<LoadedPipelineStage[]> {
   try {
-    const { data, error } = await supabase
-      .from("pipeline_stages")
-      .select("stage_key, name, pipeline_type")
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .order("pipeline_type", { ascending: true })
-      .order("position", { ascending: true });
-    if (error) {
-      console.warn("[context-loader] loadPipelineStages error:", error.message);
+    const [stagesRes, pipelinesRes] = await Promise.all([
+      supabase
+        .from("pipeline_stages")
+        .select("stage_key, name, pipeline_type, pipeline_id, position")
+        .eq("organization_id", organizationId)
+        .eq("is_active", true)
+        .order("position", { ascending: true }),
+      supabase
+        .from("pipelines")
+        .select("id, slug, name, is_active, display_order")
+        .eq("organization_id", organizationId)
+        .order("display_order", { ascending: true }),
+    ]);
+    if (stagesRes.error) {
+      console.warn("[context-loader] loadPipelineStages error:", stagesRes.error.message);
       return [];
     }
-    return (data ?? []) as { stage_key: string; name: string; pipeline_type: string }[];
+    if (pipelinesRes.error) {
+      console.warn("[context-loader] loadPipelineStages pipelines error:", pipelinesRes.error.message);
+    }
+
+    const pipelines = new Map<string, { slug: string; name: string; is_active: boolean; order: number }>();
+    const pipelineRows = (pipelinesRes.data ?? []) as Array<{
+      id: string; slug: string; name: string; is_active: boolean | null;
+    }>;
+    pipelineRows.forEach((p, i) => {
+      pipelines.set(p.id, { slug: p.slug, name: p.name, is_active: p.is_active !== false, order: i });
+    });
+
+    const rows = ((stagesRes.data ?? []) as Array<{
+      stage_key: string; name: string; pipeline_type: string | null; pipeline_id: string | null;
+    }>)
+      .filter((s) => {
+        if (!s.pipeline_id) return false;
+        const p = pipelines.get(s.pipeline_id);
+        return !!p && p.is_active;
+      })
+      .map((s) => {
+        const p = pipelines.get(s.pipeline_id!)!;
+        return {
+          stage_key: s.stage_key,
+          name: s.name,
+          pipeline_type: s.pipeline_type,
+          pipeline_id: s.pipeline_id,
+          pipeline_slug: p.slug,
+          pipeline_name: p.name,
+        };
+      });
+
+    // Ordena por funil (display_order) preservando position dentro do funil.
+    rows.sort((a, b) =>
+      (pipelines.get(a.pipeline_id!)?.order ?? 0) - (pipelines.get(b.pipeline_id!)?.order ?? 0));
+    return rows;
   } catch (e) {
     console.warn("[context-loader] loadPipelineStages exception:", e);
     return [];

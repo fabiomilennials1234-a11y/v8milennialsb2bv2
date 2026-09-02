@@ -32,6 +32,7 @@ import {
   executeCreateCustomField,
 } from "./update-lead.ts";
 import { moveStage } from "../action-handlers/move-stage.ts";
+import { executeMoveEntryStage } from "./move-card.ts";
 import {
   executeUpdateQualificationScore,
   executeAutomation,
@@ -93,6 +94,9 @@ export async function executeAiAction(
       result = await executeUpdateQualificationScore(supabase, payload);
       break;
     case "advance_stage":
+      // SCRUM-628: target_pipe aceita QUALQUER funil da org — a resolução
+      // (uuid, slug custom, alias legado; etapa por stage_key ou uuid) vive no
+      // próprio moveStage compartilhado (SCRUM-627), com erro tipado claro.
       result = await moveStage({
         supabase, organizationId: organization_id, leadId: lead_id || payload.lead_id as string || null,
         // O Copilot age a partir de uma CONVERSA, que é da pessoa: não existe
@@ -123,6 +127,14 @@ export async function executeAiAction(
       result = await executeAutomation(supabase, payload, organization_id, lead_id);
       break;
     case "update_pipeline_stage":
+      // SCRUM-628: o auto-avanço do turn passou a mandar o NEGÓCIO que leu
+      // (`entry_id` + `stage_id`) — move-only, qualquer funil, sem upsert.
+      // Payload legado sem entry_id (fila antiga, callers externos) segue no
+      // caminho por lead+slug do moveStage compartilhado.
+      if (payload.entry_id) {
+        result = await executeMoveEntryStage(supabase, payload, organization_id);
+        break;
+      }
       result = await moveStage({
         supabase, organizationId: organization_id, leadId: lead_id || payload.lead_id as string || null,
         // Idem `advance_stage` acima: pedido do Copilot, sujeito é a pessoa.

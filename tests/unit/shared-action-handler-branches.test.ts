@@ -49,6 +49,18 @@ vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   getPipeEntry: vi.fn().mockResolvedValue(null),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
   resolvePipelineId: vi.fn().mockResolvedValue("mock-pipeline-id"),
+  tryResolvePipelineId: vi.fn().mockResolvedValue("mock-pipeline-id"),
+  // SCRUM-627: moveStage resolve o funil pelo adapter. O dublê espelha o
+  // contrato: system pros 3 slugs, custom pro resto, `is_active` sempre.
+  resolvePipeline: vi.fn(async (_sb: unknown, _org: string, ref: string) => ({
+    id: ref,
+    slug: ref,
+    name: ref,
+    type: ["whatsapp", "confirmacao", "propostas"].includes(ref) ? "system" : "custom",
+    is_active: true,
+  })),
+  isPipelineResolutionError: (e: unknown) =>
+    (e as { name?: string } | null)?.name === "PipelineResolutionError",
   upsertPipeEntry: vi.fn().mockResolvedValue("mock-entry-id"),
   upsertPipeEntryDetailed: vi.fn().mockResolvedValue({ status: "updated", entryId: "mock-entry-id" }),
   updatePipeEntryById: vi.fn().mockResolvedValue(true),
@@ -475,7 +487,7 @@ describe("handleMoveStage — all pipe types", () => {
 
   it("custom pipeline — target stage not found returns error", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("custom_pipeline_stages", []);
+    mockTable("pipeline_stages", []);
     mockTable("custom_pipe_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
@@ -494,11 +506,14 @@ describe("handleMoveStage — all pipe types", () => {
 
   it("custom pipeline — inserts new entry on first move", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("custom_pipeline_stages", [
+    // SCRUM-627: a etapa resolve pela tabela unificada `pipeline_stages`.
+    mockTable("pipeline_stages", [
       {
         id: "stage-target",
+        stage_key: "stage-target",
         pipeline_id: "pipe-custom",
         organization_id: "org-1",
+        is_active: true,
         is_final_positive: false,
       },
     ]);
@@ -519,11 +534,13 @@ describe("handleMoveStage — all pipe types", () => {
 
   it("custom pipeline — is_final_positive triggers auto-transition to standard pipe", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("custom_pipeline_stages", [
+    mockTable("pipeline_stages", [
       {
         id: "stage-target",
+        stage_key: "stage-target",
         pipeline_id: "pipe-custom",
         organization_id: "org-1",
+        is_active: true,
         is_final_positive: true,
         target_pipe_type: "propostas",
         target_stage_key: "proposta_enviada",
@@ -550,11 +567,13 @@ describe("handleMoveStage — all pipe types", () => {
 
   it("custom pipeline — is_final_positive with target_pipeline_id transitions to another custom pipeline", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("custom_pipeline_stages", [
+    mockTable("pipeline_stages", [
       {
         id: "stage-target",
+        stage_key: "stage-target",
         pipeline_id: "pipe-A",
         organization_id: "org-1",
+        is_active: true,
         is_final_positive: true,
         target_pipeline_id: "pipe-B",
         target_stage_id: "stage-B-start",

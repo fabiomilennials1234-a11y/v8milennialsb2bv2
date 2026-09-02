@@ -51,7 +51,7 @@ interface CreateEventPayload {
   calendar_owner_id?: string;   // user_id do dono do calendário (para criar no calendário de outro)
   color_id?: string;            // Google Calendar colorId ("1"–"11", vazio = padrão)
   with_meet?: boolean;          // Gerar link do Google Meet (default: true)
-  pipe_slug?: string;           // Pipe destino do meet_link (default "confirmacao"; merge ADR-0004 usa "whatsapp")
+  pipe_slug?: string;           // Funil destino do meet_link: id (uuid) ou slug de QUALQUER funil da org (default "confirmacao"; merge ADR-0004 usa "whatsapp")
   pipe_stage_key?: string;      // Stage destino caso a entry não exista (default "reuniao_marcada"; merge usa "agendado")
 }
 
@@ -140,7 +140,10 @@ async function saveMeetLinkToPipe(
   if (!meetLink) return;
   // If we have leadId + orgId, use the pipeline adapter (preferred path)
   if (leadId && orgId) {
-    const existing = await getPipeEntry(supabase, leadId, orgId, pipeSlug as "whatsapp" | "confirmacao" | "propostas");
+    // SCRUM-624: o cast para a união de 3 literais morreu (ADR-0034 D1) — o
+    // adapter resolve id (uuid) ou slug de QUALQUER funil da org. `pipe_slug`
+    // já era a config de destino desta porta; agora aceita funil custom.
+    const existing = await getPipeEntry(supabase, leadId, orgId, pipeSlug);
     if (existing) {
       // Only update metadata, preserve current stage
       await updatePipeEntryById(supabase, existing.id, {
@@ -150,7 +153,7 @@ async function saveMeetLinkToPipe(
       await upsertPipeEntry(supabase, {
         leadId,
         orgId,
-        slug: pipeSlug as "whatsapp" | "confirmacao" | "propostas",
+        slug: pipeSlug,
         stageKey: pipeStageKey,
         metadata: { meet_link: meetLink },
       });

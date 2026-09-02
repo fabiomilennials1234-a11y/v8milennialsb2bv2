@@ -49,6 +49,8 @@ import { useLossReasons } from "./hooks/config/useLossReasons";
 import { RescheduleModal } from "./components/legacy/confirmacao/RescheduleModal";
 import { MergedMeetingEditor } from "./components/kanban/MergedMeetingEditor";
 import { usePipelineId } from "./hooks/model/usePipelineEntries";
+import { usePipelines } from "./hooks/model/usePipelines";
+import { useStagesDoFunil } from "./hooks/model/useStagesDoFunil";
 import { moverNegocio, invalidateAfterMove } from "./lib/moverNegocio";
 
 /**
@@ -64,6 +66,9 @@ const port: PipeOpsPort = {
   invalidateAfterMove,
   usePipelineStages,
   useAllPipelineStageOptions,
+  // SCRUM-633 — modelo unificado por pipeline_id (bulk sem sentinela custom:)
+  useFunnels: usePipelines,
+  useFunnelStages: useStagesDoFunil,
   useCustomPipelines,
   useCustomPipelineStages,
   useAddLeadToCustomPipe,

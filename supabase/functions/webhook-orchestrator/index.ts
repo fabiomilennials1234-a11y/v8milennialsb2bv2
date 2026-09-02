@@ -323,6 +323,13 @@ async function handleProcessLead(supabase: any, data: any, tenantId: string | nu
   }
 
   // Resolve contra etapas ativas da org (guard fantasma — ver pipeline-adapter).
+  //
+  // SCRUM-624: auditada e mantida — esta porta JÁ resolve tudo via adapter
+  // (etapas por pipeline_id a partir do slug), sem consulta inline por
+  // pipeline_type. "whatsapp"/"confirmacao" aqui são os DEFAULTS históricos da
+  // porta (funis semeados): não existe config de destino no contrato dela, e
+  // criá-la é incremento, não parte da unificação (spec D4: "onde não existe
+  // config, mantém o default resolvido por slug de funil semeado").
   const entryStage =
     (await resolveActiveStageKey(supabase, tenantId!, "whatsapp")) ?? "novo";
   await upsertPipeEntry(supabase, {

@@ -15,6 +15,11 @@ export * from "./useStageLeadIds";
 export * from "./useFilteredLeadIds";
 export * from "./useCustomFilteredLeadIds";
 export * from "./useAllFunnelsLeadIds";
+// SCRUM-633 — blocos por pipeline_id (paridade W4): público filtrado,
+// etapas da fonte única e controller de filtros do board unificado.
+export * from "./usePipelineLeadIds";
+export * from "./useStagesDoFunil";
+export * from "./useFunilFilters";
 
 // `usePipelineEntries` existe em ./usePipelines (versão por pipelineId) e em
 // ./usePipelineEntries (versão slug-typed). O conflito entre os dois `export *`

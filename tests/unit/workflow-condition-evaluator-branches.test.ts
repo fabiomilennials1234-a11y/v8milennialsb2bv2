@@ -17,7 +17,11 @@ vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
     async (_sb: unknown, _leadId: string, _orgId: string, slug: string) => pipeEntries[slug] ?? null,
   ),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
-  resolvePipelineId: vi.fn().mockResolvedValue(null),
+  // SCRUM-623: o contrato novo LANÇA em funil não resolvido — null saiu do tipo.
+  resolvePipelineId: vi.fn(async () => {
+    throw new Error("pipeline_not_found (mock — contrato SCRUM-623 lança, não devolve null)");
+  }),
+  tryResolvePipelineId: vi.fn().mockResolvedValue(null),
 }));
 
 import { evaluateCondition } from "../../supabase/functions/_shared/workflow-condition-evaluator";
@@ -63,15 +67,50 @@ describe("evaluateCondition — field resolution", () => {
     expect(result).toBe(true);
   });
 
-  it("field='stage' resolve a etapa do negócio no funil WhatsApp", async () => {
-    pipeEntries.whatsapp = { id: "entry-1", stage_key: "abordado" };
+  it("field='stage' resolve a etapa do negócio corrente (ADR-0031: aberto > mais recente)", async () => {
+    // SCRUM-627: o fallback sem entry declarada deixou de ser o card de
+    // Oportunidades chumbado — é o negócio corrente em QUALQUER funil.
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD]);
+    mockTable("pipeline_entries", [
+      { id: "entry-1", lead_id: "lead-1", organization_id: "org-1", stage_key: "abordado", closed_at: null },
+    ]);
     const result = await evaluateCondition(sb, "lead-1", {
       field: "stage",
       operator: "in_stage",
       value: "abordado",
     });
+    expect(result).toBe(true);
+  });
+
+  it("SCRUM-627: condição de etapa casa em funil CUSTOM sem card de Oportunidades", async () => {
+    // O caso que mentia: workflow de funil custom, lead sem card de whatsapp.
+    // O fallback antigo respondia "" e a condição decidia pelo motivo errado.
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("pipeline_entries", [
+      { id: "entry-c1", lead_id: "lead-1", organization_id: "org-1", pipeline_id: "pipe-custom-1", stage_key: "triagem", closed_at: null },
+    ]);
+    const result = await evaluateCondition(sb, "lead-1", {
+      field: "stage",
+      operator: "in_stage",
+      value: "triagem",
+    });
+    expect(result).toBe(true);
+  });
+
+  it("SCRUM-627: entry declarada no contexto vence o fallback", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("pipeline_entries", [
+      { id: "entry-a", lead_id: "lead-1", organization_id: "org-1", stage_key: "aberta", closed_at: null },
+      { id: "entry-b", lead_id: "lead-1", organization_id: "org-1", stage_key: "proposta_enviada", closed_at: null },
+    ]);
+    const result = await evaluateCondition(sb, "lead-1", {
+      field: "stage",
+      operator: "in_stage",
+      value: "proposta_enviada",
+    }, "entry-b");
     expect(result).toBe(true);
   });
 

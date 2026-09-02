@@ -18,14 +18,23 @@ interface ExportStageDialogProps {
   pipe: ExportStageFilter["pipe"];
   /** Obrigatório quando pipe === "custom". */
   customPipelineId?: string;
+  /**
+   * SCRUM-633 — modo unificado: com `pipelineId` presente E `pipe="pipeline"`,
+   * a etapa é endereçada por (pipelines.id, pipeline_stages.id) e o resolve
+   * acontece direto em `pipeline_entries`, servindo QUALQUER funil. É o modo
+   * da página unificada `/funil/:slug`; os modos por slug seguem até a W6.
+   */
+  pipelineId?: string;
   /** Quantidade de leads visíveis no Kanban para exibir no diálogo. */
   leadCount: number;
 }
 
 /**
  * Diálogo para exportar leads de uma única etapa do Kanban.
- * Reusa `useExportLeads` com `stageFilter` para garantir o mesmo schema CSV
- * (lead + 3 pipes) usado pela exportação global.
+ * Reusa `useExportLeads` com `stageFilter` para garantir o mesmo schema do
+ * arquivo da exportação global (SCRUM-635: bloco do lead + um bloco por funil
+ * REAL da org — não mais os 3 pipes fixos). Todo modo de `pipe` colapsa em
+ * `pipeline_id` dentro do motor; os valores legados seguem aceitos até a W6.
  */
 export function ExportStageDialog({
   open,
@@ -34,6 +43,7 @@ export function ExportStageDialog({
   stageTitle,
   pipe,
   customPipelineId,
+  pipelineId,
   leadCount,
 }: ExportStageDialogProps) {
   const [format, setFormat] = useState<ExportFormat>("csv");
@@ -61,6 +71,7 @@ export function ExportStageDialog({
           pipe,
           stageId,
           ...(pipe === "custom" && customPipelineId ? { customPipelineId } : {}),
+          ...(pipe === "pipeline" && pipelineId ? { pipelineId } : {}),
         },
         stageTitle,
       });

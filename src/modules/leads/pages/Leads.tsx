@@ -160,6 +160,8 @@ type LeadsFilterState = {
   filterOrigin: string;
   filterRating: string;
   filterQualification: string;
+  /** Dono da conta: id de `team_member`, `"all"` ou `"none"` (sem dono). */
+  filterResponsible: string;
 };
 
 const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
@@ -167,6 +169,7 @@ const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   filterOrigin: "all",
   filterRating: "all",
   filterQualification: "all",
+  filterResponsible: "all",
 };
 
 /**
@@ -206,6 +209,9 @@ function LeadsInner() {
 
   const { searchQuery, filterOrigin, filterRating } = filterState;
   const filterQualification = filterState.filterQualification ?? "all";
+  // Visão salva gravada antes deste filtro existir não traz a chave — o `??`
+  // é o que impede o Select de virar não-controlado no meio do uso.
+  const filterResponsible = filterState.filterResponsible ?? "all";
 
   const setSearchQuery = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchQuery: v })),
@@ -221,6 +227,10 @@ function LeadsInner() {
   );
   const setFilterQualification = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, filterQualification: v })),
+    [setFilterState]
+  );
+  const setFilterResponsible = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })),
     [setFilterState]
   );
 
@@ -300,9 +310,9 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, sort };
+  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -412,7 +422,7 @@ function LeadsInner() {
   // página 5 da nova, e ficar nela devolve um pedaço arbitrário da lista.
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterRating, filterQualification, createdFrom, createdTo, sort.key, sort.direction]);
+  }, [searchQuery, filterOrigin, filterRating, filterQualification, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
@@ -427,7 +437,7 @@ function LeadsInner() {
    * org, que é o que o resto do produto usa.
    */
   const { data: orgStats } = useLeadsStats({
-    searchQuery, filterOrigin, filterRating, filterQualification,
+    searchQuery, filterOrigin, filterRating, filterQualification, filterResponsible,
     filterUf: ufFilter, createdFrom, createdTo,
   });
 
@@ -685,6 +695,25 @@ function LeadsInner() {
             </SelectItem>
           </SelectContent>
         </Select>
+        {/* Dono da conta — casa exatamente o que a coluna homônima da lista
+            mostra (`sale ?? pre_sale ?? responsible`, ver lead-list-filters). */}
+        <Select value={filterResponsible} onValueChange={setFilterResponsible}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Dono da conta" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os donos</SelectItem>
+            <SelectItem value="none">
+              <span className="flex items-center gap-2">
+                <UserX className="w-3.5 h-3.5 text-muted-foreground" />
+                Sem dono
+              </span>
+            </SelectItem>
+            {responsibleMembers.map((m) => (
+              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <SavedViewsDropdown
           entityType="leads"
           currentFilters={filterState}
@@ -880,7 +909,7 @@ function LeadsInner() {
       <ExportLeadsModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        listFilters={{ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo }}
+        listFilters={{ searchQuery, filterOrigin, filterRating, filterQualification, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
       />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>

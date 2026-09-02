@@ -5,6 +5,7 @@ import { Clock, Loader2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useSalesCycleAnalysis, type SalesCycleStage } from "@/modules/analytics/hooks/useAnalytics";
 import { useAnalyticsFilters } from "@/modules/analytics/hooks/useAnalyticsFilters";
+import { useAnalyticsPipelineOptions } from "@/modules/analytics/hooks/useAnalyticsPipelineOptions";
 import { AT } from "./analytics-tokens";
 import { AnalyticsEmptyState } from "./AnalyticsEmptyState";
 
@@ -20,8 +21,13 @@ const BAR_COLORS = ["#6366f1", "#3b82f6", "#f59e0b", "#22c55e", "#ef4444", "#8b5
 
 export function SalesCycleChart() {
   const [groupBy, setGroupBy] = useState<GroupBy>("transition");
+  // SCRUM-631: o funil deixa de ser o slug fixo "propostas" — qualquer funil
+  // da org, por pipeline_id. Default: funil de fechamento (comportamento legado).
+  const { options, closingDefault } = useAnalyticsPipelineOptions();
+  const [pipeline, setPipeline] = useState<string | null>(null);
+  const selectedPipeline = pipeline ?? closingDefault;
   const { startStr, endStr } = useAnalyticsFilters();
-  const { data: stages, isLoading } = useSalesCycleAnalysis("propostas", startStr, endStr);
+  const { data: stages, isLoading } = useSalesCycleAnalysis(selectedPipeline, startStr, endStr);
 
   const chartData = useMemo(() => {
     if (!stages || stages.length === 0) return [];
@@ -60,15 +66,29 @@ export function SalesCycleChart() {
             <Clock className="h-4 w-4" />
             Ciclo de Vendas
           </CardTitle>
-          <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="transition">Por Transição</SelectItem>
-              <SelectItem value="summary">Por Etapa</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            <Select value={selectedPipeline ?? undefined} onValueChange={setPipeline}>
+              <SelectTrigger className="w-[150px] h-8 text-xs">
+                <SelectValue placeholder="Funil" />
+              </SelectTrigger>
+              <SelectContent>
+                {options.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id}>
+                    {opt.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+              <SelectTrigger className="w-[140px] h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="transition">Por Transição</SelectItem>
+                <SelectItem value="summary">Por Etapa</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <p className={AT.chartSubtitle}>
           Tempo médio entre movimentações no pipeline

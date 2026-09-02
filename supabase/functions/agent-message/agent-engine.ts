@@ -4,6 +4,7 @@ import { generateEmbedding } from "../_shared/embeddings.ts";
 import { enqueueAiAction } from "../_shared/ai-queue.ts";
 import { isDeliveredSend, sentDocumentLabel } from "../_shared/copilot/document-delivery.ts";
 import { immediateTransferHuman } from "../_shared/ai-action-executor.ts";
+import { funnelRefsFromRules } from "../_shared/copilot/kanban-rules.ts";
 import { sanitizeAssistantMessage, splitByDelimiter } from "../_shared/message-sanitizer.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import {
@@ -740,7 +741,14 @@ export class AgentEngine {
       try {
         // TRANSFER_HUMAN: execute immediately, enqueue only side-effects
         if (currentAction.action === 'TRANSFER_HUMAN') {
-          const transferResult = await immediateTransferHuman(this.supabase, this.currentLeadId!);
+          const transferResult = await immediateTransferHuman(
+            this.supabase,
+            this.currentLeadId!,
+            // SCRUM-628: a etapa "atendimento humano" é procurada no funil
+            // primário do agente (primeira kanban rule de eixo-funil), não mais
+            // no WhatsApp fixo. Sem regra → fallback legado dentro do handler.
+            funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0],
+          );
           if (!transferResult.success) {
             console.warn('[AgentEngine] Immediate transfer failed, will rely on queue:', transferResult.error);
           }
@@ -781,7 +789,11 @@ export class AgentEngine {
           executionResult = { success: true, queued: true, immediate: true };
         } else if (currentAction.action === 'TRANSFER_SZ_CHAT') {
           // TRANSFER_SZ_CHAT: disable AI immediately, enqueue SZ.chat transfer
-          const transferResult = await immediateTransferHuman(this.supabase, this.currentLeadId!);
+          const transferResult = await immediateTransferHuman(
+            this.supabase,
+            this.currentLeadId!,
+            funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0],
+          );
           if (!transferResult.success) {
             console.warn('[AgentEngine] Immediate SZ.chat transfer (ai_disabled) failed:', transferResult.error);
           }
@@ -866,6 +878,7 @@ export class AgentEngine {
       leadId,
       conversation.turn_count,
       actionToExecute,
+      capabilities,
     );
 
     // 12. Enqueue Automation Actions (if configured)
@@ -1105,7 +1118,7 @@ export class AgentEngine {
   }
 
   /** T3B.8: delegado pra context-loader.ts */
-  private async loadPipelineStages(): Promise<{ stage_key: string; name: string; pipeline_type: string }[]> {
+  private async loadPipelineStages() {
     return loadPipelineStagesExternal(this.supabase, this.organizationId);
   }
 

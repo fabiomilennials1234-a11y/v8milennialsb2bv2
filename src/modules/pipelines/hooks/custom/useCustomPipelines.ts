@@ -243,9 +243,11 @@ export function useCustomPipelineStages(pipelineId: string | undefined) {
 
 /** Busca leads de um funil customizado com joins */
 export function useCustomPipeEntries(pipelineId: string | undefined) {
-  // Realtime: detecta INSERT/UPDATE/DELETE em custom_pipe_entries e invalida
-  // o cache. Cobre import-leads, mutations no UI, triggers do banco etc.
-  useRealtimeSubscription("custom_pipe_entries", ["custom_pipe_entries", pipelineId ?? ""]);
+  // Realtime: a fonte única é pipeline_entries (SCRUM-621) — custom_pipe_entries
+  // virou view e view não emite postgres_changes (aliás, nunca esteve na
+  // publication: a subscription antiga era um no-op medido). Assinar a fonte
+  // cobre import-leads, mutations no UI, triggers do banco etc.
+  useRealtimeSubscription("pipeline_entries", ["custom_pipe_entries", pipelineId ?? ""]);
 
   return useQuery({
     queryKey: ["custom_pipe_entries", pipelineId],
@@ -268,7 +270,7 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
             lead_tags(tag:tags(id, name, color))
           ),
           stage:custom_pipeline_stages(id, name, color, stage_key, position),
-          assigned_member:team_members!custom_pipe_entries_assigned_to_fkey(
+          assigned_member:team_members!pipeline_entries_assigned_to_fkey(
             id, name, user_id
           )
         `)
@@ -321,8 +323,9 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
  *
  * `useCustomPipeEntries` busca sem `.range()`, então o PostgREST corta em 1000
  * rows e o badge da coluna (que caía em `items.length`) travava em 1000. Este
- * hook chama a RPC `get_custom_pipeline_stage_counts` (COUNT server-side) pra o
- * total real por stage — espelha o board canônico (`get_pipeline_stage_counts`).
+ * hook chama a RPC `get_pipeline_stage_counts_by_id` (SCRUM-626: o motor único
+ * de contagem por pipeline_id que fundiu o par system/custom) pra o total real
+ * por stage — o MESMO motor que serve o board canônico.
  *
  * Sem busca → conta TODAS as entries por stage (inclusive lead_id null), igual
  * ao comportamento atual do badge. Com busca → narrow server-side por
@@ -346,19 +349,27 @@ export function useCustomPipeStageCounts(
     queryFn: async () => {
       if (!pipelineId || !organizationId) return {} as Record<string, number>;
 
-      const { data, error } = await supabase.rpc("get_custom_pipeline_stage_counts", {
-        p_pipeline_id: pipelineId,
-        p_org_id: organizationId,
-        // `search` chega `string | null` (null = sem filtro); o arg da RPC é
-        // opcional (`string | undefined`). Ambos significam "sem filtro".
-        p_search: search ?? undefined,
-      });
+      // SCRUM-626: caminho por id — motor único get_pipeline_stage_counts_by_id
+      // (funde o par system/custom; o wrapper get_custom_pipeline_stage_counts
+      // segue vivo até a W6). `as any` no nome: RPC mais nova que o types.ts
+      // gerado de prod (regen após a janela) — mesmo padrão de useFilteredLeadIds.
+      const { data, error } = await supabase.rpc(
+        "get_pipeline_stage_counts_by_id" as any,
+        {
+          p_pipeline_id: pipelineId,
+          p_org_id: organizationId,
+          // `search` chega `string | null` (null = sem filtro no motor).
+          p_search: search,
+        },
+      );
 
       if (error) throw error;
 
+      // O motor devolve (stage_id, stage_key, cnt) e separa linhas fantasma
+      // (stage_id NULL); o badge é por stage_id — soma por segurança.
       const counts: Record<string, number> = {};
-      for (const row of data || []) {
-        if (row.stage_id) counts[row.stage_id] = Number(row.cnt);
+      for (const row of (data || []) as Array<{ stage_id: string | null; cnt: number }>) {
+        if (row.stage_id) counts[row.stage_id] = (counts[row.stage_id] ?? 0) + Number(row.cnt);
       }
       return counts;
     },
@@ -646,8 +657,10 @@ export function useCustomPipelineDeleteImpact(
   return useQuery({
     queryKey: ["custom_pipeline_delete_impact", pipelineId],
     queryFn: async () => {
+      // SCRUM-626: caminho por id — pipeline_delete_impact é o motor único
+      // (ramo custom devolve o MESMO shape do wrapper antigo).
       const { data, error } = await (supabase.rpc as any)(
-        "custom_pipeline_delete_impact",
+        "pipeline_delete_impact",
         { p_pipeline_id: pipelineId },
       );
       if (error) throw error;
@@ -671,7 +684,9 @@ export function useDeleteCustomPipeline() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await (supabase.rpc as any)("delete_custom_pipeline", {
+      // SCRUM-626: caminho por id — delete_pipeline é o motor único (para um
+      // funil custom o comportamento é idêntico ao wrapper delete_custom_pipeline).
+      const { data, error } = await (supabase.rpc as any)("delete_pipeline", {
         p_pipeline_id: id,
       });
       if (error) throw error;
@@ -715,6 +730,7 @@ export function useCreateCustomPipelineStage() {
       position,
       is_final_positive,
       is_final_negative,
+      stage_role,
     }: {
       pipeline_id: string;
       name: string;
@@ -722,6 +738,13 @@ export function useCreateCustomPipelineStage() {
       position: number;
       is_final_positive?: boolean;
       is_final_negative?: boolean;
+      /**
+       * ADR-0017 §1 — papel semântico governado. Vindo do editor único de
+       * etapas (SCRUM-636) é sempre escolha explícita do admin (won/lost
+       * permitido — confirmação humana). Omitido, o INSTEAD OF da view aplica
+       * o default 'open'.
+       */
+      stage_role?: import("@/contracts/pipe").StageRole;
     }) => {
       if (!teamMember?.organization_id) {
         throw new Error("Organização não encontrada");
@@ -738,6 +761,7 @@ export function useCreateCustomPipelineStage() {
           position,
           is_final_positive: is_final_positive || false,
           is_final_negative: is_final_negative || false,
+          ...(stage_role ? { stage_role } : {}),
         })
         .select()
         .single();
@@ -752,6 +776,9 @@ export function useCreateCustomPipelineStage() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
+      // Chaves unificadas por id (SCRUM-633/636) — a página /funil/:slug lê por elas.
+      queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }
@@ -778,6 +805,8 @@ export function useUpdateCustomPipelineStage() {
       target_pipe_type?: string | null;
       target_stage_key?: string | null;
       checklist_template_id?: string | null;
+      /** ADR-0017 §1 — só chega aqui por escolha explícita no editor único. */
+      stage_role?: import("@/contracts/pipe").StageRole;
     }) => {
       const { data, error } = await supabase
         .from("custom_pipeline_stages")
@@ -791,11 +820,21 @@ export function useUpdateCustomPipelineStage() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }
 
-/** Desativar etapa */
+/**
+ * Desativar etapa — SUPERADO (SCRUM-636).
+ *
+ * @deprecated O editor único de etapas usa `useDeletePipelineStage`
+ * (`../model/usePipelineStages`) com `pipelineId` explícito, que migra os
+ * cards e respeita a guarda de regra de disparo — este aqui desativava a
+ * etapa SEM migrar (cards fantasmas). Sem chamador vivo; morre na W6 junto
+ * com as views de compat.
+ */
 export function useDeleteCustomPipelineStage() {
   const queryClient = useQueryClient();
 
@@ -837,6 +876,8 @@ export function useReorderCustomPipelineStages() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }

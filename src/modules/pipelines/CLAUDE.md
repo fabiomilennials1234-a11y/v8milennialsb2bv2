@@ -74,7 +74,7 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Hooks — config + metrics + rules
 - Display config: `usePipelineDisplayConfig`, `useAvailableSystemPipes`, `useEnabledSystemPipeTypes`, `useEnableSystemPipe`, `useTogglePipeVisibility`, `SYSTEM_PIPE_CATALOG`
-- Exclusão de funil de sistema: `useSystemPipelineDeleteImpact`, `useDeleteSystemPipeline`
+- Exclusão de funil (qualquer espécie, por id — SCRUM-626/636): `usePipelineDeleteImpact`, `useDeletePipelineById` (`hooks/config/usePipelineDelete.ts`) + `DeletePipelineDialog` (impacto medido, bloqueio por cards invasores, substituto do funil padrão da org antes do delete)
 
 > 🚨 **`pipeline_display_config` é o REGISTRO de quais funis de sistema a org tem** (migration `20270902000000`).
 > Linha ausente = a org **não tem** aquele funil. Não há default e não há fallback: lista vazia é resposta legítima.
@@ -115,7 +115,7 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Components — shared (configuração + dispatch)
 - `PipeSettingsDialog`, `ManagePipelineStagesContent`, `ManagePipelineStagesModal`
-- `DangerZoneSystemPipe` — Zona de Perigo do funil de sistema. Montada dentro do `PipeSettingsDialog` (aba "Etapas"), então as três páginas de funil de sistema a herdam de um lugar só. Mesmo portão do custom: `pipeline.custom_delete`.
+- `FunnelIdentitySection` — identidade do funil (nome/ícone/cor, escreve em `pipelines` e sincroniza `display_name` do registro no sistema) + Zona de Perigo, na aba "Geral" dos DOIS diálogos de configurações (sistema e custom) desde SCRUM-636. Portão de exclusão: `pipeline.custom_delete`. A confirmação é o `DeletePipelineDialog` único (substituiu `DangerZoneSystemPipe`, demolido).
 - `PipeDispatchRulesSection`, `PipeDistributionSection`
 - `GhostLeadsBanner`
 

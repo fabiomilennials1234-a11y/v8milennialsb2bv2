@@ -1,8 +1,15 @@
 /**
  * Aba de Regras por Etapa (Kanban Rules)
  *
- * Configura goal, behavior, allowed_actions e forbidden_actions por etapa
- * do funil WhatsApp. Essas regras são injetadas no prompt do AgentEngine.
+ * Configura goal, behavior, allowed_actions e forbidden_actions por etapa de
+ * QUALQUER funil da organização (SCRUM-628 — antes era preso ao funil
+ * WhatsApp). As regras são injetadas no prompt do AgentEngine quando o negócio
+ * do lead está na etapa correspondente.
+ *
+ * Formato: regras novas gravam `pipe_type = uuid do funil` e `stage_name =
+ * uuid da etapa`; regras legadas (slug + stage_key) são resolvidas na leitura
+ * e regravadas no formato novo ao salvar. Regras de campanha e regras cujo
+ * funil/etapa não existe mais são preservadas intactas no save.
  */
 
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -24,27 +31,55 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { usePipelineStageOptions } from "@/modules/pipelines";
+import { usePipelines } from "@/modules/pipelines";
 import {
   useAgentKanbanRules,
   useUpsertKanbanRules,
   type KanbanRuleForm,
 } from "@/modules/copilot/hooks/useAgentKanbanRules";
+import { useOrgFunnelStages, type OrgFunnelStage } from "@/modules/copilot/hooks/useOrgFunnelStages";
+import {
+  isFunnelRule,
+  resolveRuleFunnel,
+  resolveRuleStage,
+} from "@/modules/copilot/lib/kanban-rule-refs";
 
-const createEmptyRule = (stage: { value: string; label: string }): KanbanRuleForm => ({
-  pipe_type: "whatsapp",
-  stage_name: stage.value,
+/** Conteúdo editável de uma regra (a referência funil/etapa vive na chave). */
+interface RuleDraft {
+  goal: string;
+  behavior: string;
+  allowed_actions: string[];
+  forbidden_actions: string[];
+  needs_review?: boolean;
+}
+
+const EMPTY_DRAFT: RuleDraft = {
   goal: "",
   behavior: "",
   allowed_actions: [],
   forbidden_actions: [],
-});
+};
+
+const draftKey = (pipelineId: string, stageId: string) => `${pipelineId}:${stageId}`;
+
+const draftHasContent = (draft: RuleDraft) =>
+  !!draft.goal.trim() ||
+  !!draft.behavior.trim() ||
+  draft.allowed_actions.length > 0 ||
+  draft.forbidden_actions.length > 0;
 
 /** Ações disponíveis para o agente - valor técnico e label amigável */
 const AVAILABLE_ACTIONS = [
@@ -102,33 +137,27 @@ function StageCollapsible({
   onUpdate,
   isExpanded,
   onToggle,
-  needsReview,
 }: {
-  stage: { value: string; label: string };
-  rule: KanbanRuleForm;
-  onUpdate: (updates: Partial<KanbanRuleForm>) => void;
+  stage: OrgFunnelStage;
+  rule: RuleDraft;
+  onUpdate: (updates: Partial<RuleDraft>) => void;
   isExpanded: boolean;
   onToggle: () => void;
-  needsReview?: boolean;
 }) {
-  const hasContent =
-    (rule.goal && rule.goal.trim()) ||
-    (rule.behavior && rule.behavior.trim()) ||
-    (rule.allowed_actions?.length ?? 0) > 0 ||
-    (rule.forbidden_actions?.length ?? 0) > 0;
+  const hasContent = draftHasContent(rule);
 
   return (
     <Collapsible open={isExpanded} onOpenChange={onToggle}>
       <CollapsibleTrigger asChild>
         <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
           <div className="flex items-center gap-2">
-            <span className="font-medium">{stage.label}</span>
+            <span className="font-medium">{stage.name || stage.stage_key}</span>
             {hasContent ? (
               <Badge variant="outline" className="text-xs">
                 Configurado
               </Badge>
             ) : null}
-            {needsReview && (
+            {rule.needs_review && (
               <Badge variant="outline" className="text-xs text-amber-500 border-amber-500">
                 Auto-gerada
               </Badge>
@@ -139,9 +168,9 @@ function StageCollapsible({
       <CollapsibleContent>
         <div className="p-4 pt-2 space-y-4 border border-t-0 rounded-b-lg bg-muted/30">
           <div className="space-y-2">
-            <Label htmlFor={`goal-${stage.value}`}>Objetivo desta etapa</Label>
+            <Label htmlFor={`goal-${stage.id}`}>Objetivo desta etapa</Label>
             <Textarea
-              id={`goal-${stage.value}`}
+              id={`goal-${stage.id}`}
               value={rule.goal}
               onChange={(e) => onUpdate({ goal: e.target.value })}
               placeholder="Ex.: Qualificar o lead e coletar informações mínimas"
@@ -150,11 +179,11 @@ function StageCollapsible({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor={`behavior-${stage.value}`}>
+            <Label htmlFor={`behavior-${stage.id}`}>
               Comportamento esperado
             </Label>
             <Textarea
-              id={`behavior-${stage.value}`}
+              id={`behavior-${stage.id}`}
               value={rule.behavior}
               onChange={(e) => onUpdate({ behavior: e.target.value })}
               placeholder="Ex.: Seja cordial, faça no máximo 1 pergunta por mensagem"
@@ -168,7 +197,7 @@ function StageCollapsible({
               Selecione as ações que a IA pode executar nesta etapa
             </p>
             <ActionsMultiSelect
-              selected={rule.allowed_actions || []}
+              selected={rule.allowed_actions}
               onChange={(arr) => onUpdate({ allowed_actions: arr })}
             />
           </div>
@@ -178,7 +207,7 @@ function StageCollapsible({
               Selecione as ações que a IA não deve executar nesta etapa
             </p>
             <ActionsMultiSelect
-              selected={rule.forbidden_actions || []}
+              selected={rule.forbidden_actions}
               onChange={(arr) => onUpdate({ forbidden_actions: arr })}
             />
           </div>
@@ -189,73 +218,124 @@ function StageCollapsible({
 }
 
 export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
-  const { options: whatsappStageOptions } = usePipelineStageOptions("whatsapp");
-  const WHATSAPP_STAGES = useMemo(() => [
-    ...whatsappStageOptions,
-    { value: "aguardando_humano", label: "Aguardando Humano" },
-    { value: "descartado", label: "Descartado" },
-  ], [whatsappStageOptions]);
-
-  const { data: rules, isLoading } = useAgentKanbanRules(agentId);
+  const { data: pipelines = [], isLoading: loadingPipelines } = usePipelines();
+  const { byPipelineId, isLoading: loadingStages } = useOrgFunnelStages();
+  const { data: rules, isLoading: loadingRules } = useAgentKanbanRules(agentId);
   const upsert = useUpsertKanbanRules(agentId);
 
-  const [localRules, setLocalRules] = useState<Record<string, KanbanRuleForm>>(
-    () =>
-      WHATSAPP_STAGES.reduce(
-        (acc, s) => {
-          acc[s.value] = createEmptyRule(s);
-          return acc;
-        },
-        {} as Record<string, KanbanRuleForm>
-      )
-  );
-  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>(
-    {}
+  const activeFunnels = useMemo(
+    () => pipelines.filter((p) => p.is_active !== false),
+    [pipelines]
   );
 
+  const [selectedFunnelId, setSelectedFunnelId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, RuleDraft>>({});
+  const [expandedStages, setExpandedStages] = useState<Record<string, boolean>>({});
+  const [hydrated, setHydrated] = useState(false);
+
+  // Regras que esta aba NÃO edita (campanha; funil/etapa que não existe mais).
+  // Preservadas byte-a-byte no save — salvar um funil não pode apagar as outras.
+  const passthroughRules = useMemo<KanbanRuleForm[]>(() => {
+    if (!rules) return [];
+    return rules
+      .filter((r) => {
+        if (!isFunnelRule(r)) return true;
+        const funnel = resolveRuleFunnel(r, activeFunnels);
+        if (!funnel) return true;
+        const stage = resolveRuleStage(r, byPipelineId.get(funnel.id) ?? []);
+        return !stage;
+      })
+      .map((r) => ({
+        pipe_type: r.pipe_type,
+        stage_name: r.stage_name,
+        goal: r.goal ?? "",
+        behavior: r.behavior ?? "",
+        allowed_actions: (r.allowed_actions as string[]) ?? [],
+        forbidden_actions: (r.forbidden_actions as string[]) ?? [],
+      }));
+  }, [rules, activeFunnels, byPipelineId]);
+
+  // Hidratação: resolve cada regra salva (formato novo OU legado) para o par
+  // (funil, etapa) real e semeia os drafts. Roda uma vez, com tudo carregado.
   useEffect(() => {
-    if (!rules || rules.length === 0) return;
+    if (hydrated || loadingPipelines || loadingStages || loadingRules) return;
 
-    const byStage = WHATSAPP_STAGES.reduce(
-      (acc, s) => {
-        const existing = rules.find(
-          (r) => r.pipe_type === "whatsapp" && r.stage_name === s.value
-        );
-        acc[s.value] = {
-          pipe_type: "whatsapp",
-          stage_name: s.value,
-          goal: existing?.goal ?? "",
-          behavior: existing?.behavior ?? "",
-          allowed_actions: existing?.allowed_actions ?? [],
-          forbidden_actions: existing?.forbidden_actions ?? [],
-        };
-        return acc;
-      },
-      {} as Record<string, KanbanRuleForm>
-    );
-    setLocalRules(byStage);
-  }, [rules, WHATSAPP_STAGES]);
+    const seeded: Record<string, RuleDraft> = {};
+    let firstRuleFunnel: string | null = null;
 
-  const updateRule = useCallback((stageValue: string, updates: Partial<KanbanRuleForm>) => {
-    setLocalRules((prev) => ({
-      ...prev,
-      [stageValue]: { ...prev[stageValue], ...updates },
-    }));
+    for (const rule of rules ?? []) {
+      if (!isFunnelRule(rule)) continue;
+      const funnel = resolveRuleFunnel(rule, activeFunnels);
+      if (!funnel) continue;
+      const stage = resolveRuleStage(rule, byPipelineId.get(funnel.id) ?? []);
+      if (!stage) continue;
+      if (!firstRuleFunnel) firstRuleFunnel = funnel.id;
+      seeded[draftKey(funnel.id, stage.id)] = {
+        goal: rule.goal ?? "",
+        behavior: rule.behavior ?? "",
+        allowed_actions: (rule.allowed_actions as string[]) ?? [],
+        forbidden_actions: (rule.forbidden_actions as string[]) ?? [],
+        needs_review: rule.needs_review ?? false,
+      };
+    }
+
+    setDrafts(seeded);
+    setSelectedFunnelId((prev) => prev ?? firstRuleFunnel ?? activeFunnels[0]?.id ?? null);
+    setHydrated(true);
+  }, [hydrated, loadingPipelines, loadingStages, loadingRules, rules, activeFunnels, byPipelineId]);
+
+  const selectedStages = useMemo(
+    () => (selectedFunnelId ? byPipelineId.get(selectedFunnelId) ?? [] : []),
+    [selectedFunnelId, byPipelineId]
+  );
+
+  const updateDraft = useCallback(
+    (stageId: string, updates: Partial<RuleDraft>) => {
+      if (!selectedFunnelId) return;
+      const key = draftKey(selectedFunnelId, stageId);
+      setDrafts((prev) => ({
+        ...prev,
+        [key]: { ...(prev[key] ?? EMPTY_DRAFT), ...updates, needs_review: false },
+      }));
+    },
+    [selectedFunnelId]
+  );
+
+  const toggleStage = useCallback((stageId: string) => {
+    setExpandedStages((prev) => ({ ...prev, [stageId]: !prev[stageId] }));
   }, []);
 
-  const toggleStage = useCallback((stageValue: string) => {
-    setExpandedStages((prev) => ({
-      ...prev,
-      [stageValue]: !prev[stageValue],
-    }));
-  }, []);
+  const configuredByFunnel = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const [key, draft] of Object.entries(drafts)) {
+      if (!draftHasContent(draft)) continue;
+      const pipelineId = key.split(":")[0];
+      counts.set(pipelineId, (counts.get(pipelineId) ?? 0) + 1);
+    }
+    return counts;
+  }, [drafts]);
 
   const handleSave = useCallback(() => {
-    const toSave = WHATSAPP_STAGES.map((s) => localRules[s.value] ?? createEmptyRule(s));
-    upsert.mutate(toSave);
-  }, [localRules, upsert, WHATSAPP_STAGES]);
+    // Formato NOVO no save: pipe_type = uuid do funil, stage_name = uuid da
+    // etapa — sobrevive a rename de slug/stage_key. Regras legadas resolvidas
+    // na hidratação são regravadas já no formato novo.
+    const funnelRules: KanbanRuleForm[] = Object.entries(drafts)
+      .filter(([, draft]) => draftHasContent(draft))
+      .map(([key, draft]) => {
+        const [pipelineId, stageId] = key.split(":");
+        return {
+          pipe_type: pipelineId,
+          stage_name: stageId,
+          goal: draft.goal,
+          behavior: draft.behavior,
+          allowed_actions: draft.allowed_actions,
+          forbidden_actions: draft.forbidden_actions,
+        };
+      });
+    upsert.mutate([...funnelRules, ...passthroughRules]);
+  }, [drafts, passthroughRules, upsert]);
 
-  if (isLoading) {
+  if (loadingRules || loadingPipelines || loadingStages) {
     return (
       <div className="flex items-center justify-center py-12">
         <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
@@ -268,12 +348,13 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <LayoutList className="w-5 h-5" />
-          Regras por Etapa do Funil WhatsApp
+          Regras por Etapa do Funil
         </CardTitle>
         <CardDescription className="flex items-start gap-2">
           <span>
-            Configure o objetivo e comportamento da IA em cada etapa. Essas regras
-            são injetadas no prompt quando o lead está na etapa correspondente.
+            Escolha um funil e configure o objetivo e o comportamento da IA em
+            cada etapa. As regras são injetadas no prompt quando o negócio do
+            lead está na etapa correspondente.
           </span>
           <TooltipProvider>
             <Tooltip>
@@ -282,7 +363,8 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 As regras orientam a IA sobre o que priorizar e o que evitar em
-                cada etapa do funil.
+                cada etapa — em qualquer funil da organização, inclusive funis
+                personalizados.
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -290,23 +372,56 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          {WHATSAPP_STAGES.map((stage) => (
-            <StageCollapsible
-              key={stage.value}
-              stage={stage}
-              rule={localRules[stage.value] ?? createEmptyRule(stage)}
-              onUpdate={(updates) => updateRule(stage.value, updates)}
-              isExpanded={expandedStages[stage.value] ?? false}
-              onToggle={() => toggleStage(stage.value)}
-              needsReview={rules?.find(r => r.pipe_type === "whatsapp" && r.stage_name === stage.value)?.needs_review ?? false}
-            />
-          ))}
-        </div>
-        <div className="pt-4">
-          <Button
-            onClick={handleSave}
-            disabled={upsert.isPending}
+          <Label htmlFor="kanban-rules-funnel">Funil</Label>
+          <Select
+            value={selectedFunnelId ?? undefined}
+            onValueChange={(value) => setSelectedFunnelId(value)}
           >
+            <SelectTrigger id="kanban-rules-funnel" className="w-full sm:w-80">
+              <SelectValue placeholder="Selecione um funil" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeFunnels.map((funnel) => {
+                const count = configuredByFunnel.get(funnel.id) ?? 0;
+                return (
+                  <SelectItem key={funnel.id} value={funnel.id}>
+                    {funnel.name}
+                    {count > 0 ? ` — ${count} regra${count > 1 ? "s" : ""}` : ""}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {activeFunnels.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            Nenhum funil ativo na organização.
+          </p>
+        ) : selectedStages.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            Este funil não tem etapas ativas.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {selectedStages.map((stage) => (
+              <StageCollapsible
+                key={stage.id}
+                stage={stage}
+                rule={
+                  (selectedFunnelId && drafts[draftKey(selectedFunnelId, stage.id)]) ||
+                  EMPTY_DRAFT
+                }
+                onUpdate={(updates) => updateDraft(stage.id, updates)}
+                isExpanded={expandedStages[stage.id] ?? false}
+                onToggle={() => toggleStage(stage.id)}
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="pt-4">
+          <Button onClick={handleSave} disabled={upsert.isPending}>
             {upsert.isPending ? (
               <Loader2 className="w-4 h-4 animate-spin mr-2" />
             ) : (

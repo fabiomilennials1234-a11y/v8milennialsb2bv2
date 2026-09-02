@@ -136,7 +136,7 @@ vi.mock("../../supabase/functions/_shared/followup-sender.ts", () => ({
 // adapter é coberta por `supabase/functions/_shared/pipeline-adapter*.test.ts`.
 vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   getPipeEntriesByLeads: vi.fn(
-    async (_sb: any, leadIds: string[], orgId: string, slug: "whatsapp" | "confirmacao" | "propostas") => {
+    async (_sb: any, leadIds: string[], orgId: string, slug: string) => {
       state.adapterCalls.push({ leadIds: [...leadIds], orgId, slug });
       return state.entries[slug].filter((e) => leadIds.includes(e.lead_id));
     },

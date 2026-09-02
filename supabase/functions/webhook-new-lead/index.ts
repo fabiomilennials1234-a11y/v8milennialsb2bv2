@@ -8,7 +8,7 @@ import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
-import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -356,7 +356,19 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
     // ============================================
     // CREATE NEW LEAD (NO DUPLICATE FOUND)
     // Atomic lead + pipe creation via RPC (single transaction)
+    //
+    // SCRUM-624: esta porta não tem config de destino própria — mantém os
+    // destinos históricos (funis SEMEADOS 'whatsapp'/'confirmacao', resolvidos
+    // por slug via adapter nos caminhos de unificação acima; destino
+    // configurável fica registrado como incremento). O que muda: a etapa de
+    // entrada do ramo whatsapp deixa de ser o literal 'novo' e passa a ser a
+    // 1ª etapa ATIVA do funil (ghost-stage guard via adapter) — paridade com
+    // lead-webhook/lead-service/webhook-orchestrator, que já faziam isso.
+    // 'reuniao_marcada' do ramo confirmacao é semântico (reunião) e fica.
     const pipeType = compromisso_date ? 'confirmacao' : 'whatsapp';
+    const whatsappEntryStage = pipeType === 'whatsapp'
+      ? ((await resolveActiveStageKey(supabase, organization_id, 'whatsapp')) ?? 'novo')
+      : null;
 
     const { data: result, error: rpcError } = await supabase.rpc('create_lead_with_pipe', {
       p_name: name,
@@ -380,7 +392,7 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
       p_utm_term: utm_term || null,
       p_utm_content: utm_content || null,
       p_pipe_type: pipeType,
-      p_pipe_status: pipeType === null ? null : (pipeType === 'confirmacao' ? 'reuniao_marcada' : 'novo'),
+      p_pipe_status: pipeType === 'confirmacao' ? 'reuniao_marcada' : whatsappEntryStage,
       p_pipe_meeting_date: compromisso_date || null,
     });
 

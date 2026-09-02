@@ -25,7 +25,6 @@ import {
 import { useCampaignTemplates, type CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
 import { useTeamMembers } from "@/modules/identity";
 import { useWhatsAppInstances } from "@/modules/communication/hooks/useWhatsAppInstances";
-import type { PipelineType, PipelineStage } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import {
   Send, Plus, Trash2, Loader2, ListOrdered, Play, Pencil,
   CheckCircle2, Clock, XCircle, MessageSquare, ArrowRightLeft, UserPlus, Ban, Hourglass,
@@ -100,12 +99,27 @@ function defaultStep(): StepFormState {
   };
 }
 
-interface PipeDispatchRulesSectionProps {
-  pipeType: PipelineType;
-  stages: PipelineStage[];
+/**
+ * O que a seção precisa de uma etapa — shape estrutural que tanto
+ * `PipelineStage` (sistema) quanto `CustomPipelineStage` satisfazem.
+ */
+export interface DispatchStageOption {
+  id: string;
+  name: string;
 }
 
-export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRulesSectionProps) {
+interface PipeDispatchRulesSectionProps {
+  /** Slug do funil (system: whatsapp/confirmacao/propostas; custom: slug). */
+  pipeType: string;
+  /**
+   * SCRUM-629: id do funil. Obrigatório para funil custom (chave real das
+   * regras); opcional nos call sites de sistema (trigger do banco resolve).
+   */
+  pipelineId?: string | null;
+  stages: DispatchStageOption[];
+}
+
+export function PipeDispatchRulesSection({ pipeType, pipelineId = null, stages }: PipeDispatchRulesSectionProps) {
   const [addOpen, setAddOpen] = useState(false);
   const [processingQueue, setProcessingQueue] = useState(false);
   const [triggerType, setTriggerType] = useState<PipeDispatchRuleTriggerType>("lead_added");
@@ -115,7 +129,7 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
   const queryClient = useQueryClient();
   const { organizationId } = useOrganization();
 
-  const { data: rules = [], isLoading, isError, error: queryError } = usePipeDispatchRules(pipeType);
+  const { data: rules = [], isLoading, isError, error: queryError } = usePipeDispatchRules(pipeType, pipelineId);
   const { data: orgTemplates = [] } = useCampaignTemplates();
   const { data: teamMembers = [] } = useTeamMembers();
   const { data: whatsappInstances = [] } = useWhatsAppInstances();
@@ -126,23 +140,27 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
   const [editingRule, setEditingRule] = useState<PipeDispatchRule | null>(null);
   const [queueSheetStatus, setQueueSheetStatus] = useState<string | null>(null);
 
-  // Queue items for the detail sheet
-  const { data: queueItems = [], isLoading: queueLoading } = usePipeQueueItems(organizationId, pipeType, queueSheetStatus);
+  // Queue items for the detail sheet — escopo por funil quando há pipelineId.
+  const { data: queueItems = [], isLoading: queueLoading } = usePipeQueueItems(organizationId, pipeType, queueSheetStatus, pipelineId);
   const retryMutation = useRetryDispatchItems("scheduled_pipe_messages", [
-    ["pipe_dispatch_metrics", organizationId, pipeType],
-    ["pipe_queue_items", organizationId, pipeType, queueSheetStatus],
+    ["pipe_dispatch_metrics", organizationId, pipelineId ?? pipeType],
+    ["pipe_queue_items", organizationId, pipelineId ?? pipeType, queueSheetStatus],
   ]);
 
   // --- Dispatch metrics ---
   const { data: dispatchMetrics } = useQuery({
-    queryKey: ["pipe_dispatch_metrics", organizationId, pipeType],
+    queryKey: ["pipe_dispatch_metrics", organizationId, pipelineId ?? pipeType],
     queryFn: async () => {
       if (!organizationId) return null;
-      const { data, error } = await supabase
+      // pipeline_id fora do types.ts gerado (20270908008000) — cast até o regen.
+      let metricsQuery = (supabase as any)
         .from("scheduled_pipe_messages")
         .select("status")
-        .eq("organization_id", organizationId)
-        .eq("pipe_type", pipeType);
+        .eq("organization_id", organizationId);
+      metricsQuery = pipelineId
+        ? metricsQuery.eq("pipeline_id", pipelineId)
+        : metricsQuery.eq("pipe_type", pipeType);
+      const { data, error } = await metricsQuery;
       if (error) throw error;
       const counts = { scheduled: 0, processing: 0, sent: 0, failed: 0, waiting_response: 0, executed: 0 };
       for (const row of data || []) {
@@ -193,6 +211,7 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
     try {
       const rule = await createRule.mutateAsync({
         pipe_type: pipeType,
+        pipeline_id: pipelineId,
         trigger_type: triggerType,
         pipeline_stage_id: triggerType === "lead_moved_to_stage" ? selectedStageId : null,
         whatsapp_instance_id: selectedInstanceId || null,
@@ -231,7 +250,7 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
 
   const handleDelete = async (r: PipeDispatchRule) => {
     try {
-      await deleteRule.mutateAsync({ id: r.id, pipe_type: pipeType });
+      await deleteRule.mutateAsync({ id: r.id, pipe_type: pipeType, pipeline_id: pipelineId });
       toast.success("Regra removida");
     } catch {
       toast.error("Erro ao remover regra");
@@ -259,6 +278,7 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
       await updateRule.mutateAsync({
         id: ruleId,
         pipe_type: pipeType,
+        pipeline_id: pipelineId,
         trigger_type: trigType,
         pipeline_stage_id: trigType === "lead_moved_to_stage" ? stageId : null,
         whatsapp_instance_id: instanceId || null,
@@ -303,8 +323,10 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
   const handleProcessQueue = async () => {
     setProcessingQueue(true);
     try {
+      // SCRUM-629: por funil quando conhecemos o id (custom exige — o edge
+      // pré-checa o toggle D11); slug só no caminho legado de sistema.
       const { data, error } = await supabase.functions.invoke("pipe-rule-dispatch", {
-        body: { pipe_type: pipeType },
+        body: pipelineId ? { pipeline_id: pipelineId } : { pipe_type: pipeType },
       });
       if (error) {
         toast.error(error.message || "Erro ao processar fila");
@@ -320,7 +342,7 @@ export function PipeDispatchRulesSection({ pipeType, stages }: PipeDispatchRules
       } else {
         toast.success("Fila processada");
       }
-      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_metrics", organizationId, pipeType] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_metrics", organizationId, pipelineId ?? pipeType] });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erro ao processar fila");
     } finally {
@@ -470,7 +492,7 @@ function RuleRow({
   rule, stages, getStageName, onEdit, onDelete, isDeleting,
 }: {
   rule: PipeDispatchRule;
-  stages: PipelineStage[];
+  stages: DispatchStageOption[];
   getStageName: (id: string) => string;
   onEdit: () => void;
   onDelete: () => void;
@@ -511,7 +533,7 @@ function StepEditorRow({
 }: {
   step: StepFormState;
   index: number;
-  stages: PipelineStage[];
+  stages: DispatchStageOption[];
   templates: CampaignTemplate[];
   teamMembers: { id: string; name: string; role?: string }[];
   onChange: (updates: Partial<StepFormState>) => void;
@@ -668,7 +690,7 @@ function RuleForm({
   setSelectedInstanceId: (v: string) => void;
   steps: StepFormState[];
   setSteps: React.Dispatch<React.SetStateAction<StepFormState[]>>;
-  stages: PipelineStage[];
+  stages: DispatchStageOption[];
   templates: CampaignTemplate[];
   teamMembers: { id: string; name: string; role?: string }[];
   whatsappInstances: { id: string; instance_name: string; status?: string }[];
@@ -755,7 +777,7 @@ function EditRuleModal({
   rule, stages, templates, teamMembers, whatsappInstances, onClose, onSave, isSaving,
 }: {
   rule: PipeDispatchRule;
-  stages: PipelineStage[];
+  stages: DispatchStageOption[];
   templates: CampaignTemplate[];
   teamMembers: { id: string; name: string; role?: string }[];
   whatsappInstances: { id: string; instance_name: string; status?: string }[];

@@ -11,7 +11,7 @@ import type { ActionInput } from "./action-handlers/types.ts";
 import { getTimeBasedVariables } from "./time-variables.ts";
 import { getPipeEntry } from "./pipeline-adapter.ts";
 import { getStageDoNegocio, entryIdDoContexto } from "./negocio-subject.ts";
-import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "./lead-name.ts";
+import { personalizationName, personalizationFirstName, isPlaceholderLeadName, tidyEmptyVarGaps } from "./lead-name.ts";
 import { moveStage as sharedMoveStage } from "./action-handlers/move-stage.ts";
 import { addTag as sharedAddTag, removeTag as sharedRemoveTag } from "./action-handlers/tag-operations.ts";
 import { updateLeadField as sharedUpdateLeadField, updateCustomField as sharedUpdateCustomField, updateRating as sharedUpdateRating } from "./action-handlers/lead-field-operations.ts";
@@ -158,6 +158,7 @@ export async function resolveVariables(
   // Standard variables
   const vars: Record<string, string> = {
     nome:       personalizationName(lead.name),
+    primeiro_nome: personalizationFirstName(lead.name),
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
@@ -521,15 +522,21 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 
     // ── Lead Management ──
     case "move_stage": {
-      const pipeType = ctx.nodeData.pipeType as string || "whatsapp";
+      // SCRUM-627: o editor grava `pipelineId` (uuid — qualquer funil, via
+      // adapter). `pipeType` é o campo legado dos nós salvos; o "whatsapp"
+      // final é o default histórico dos nós que nunca gravaram funil nenhum —
+      // morre quando o último nó legado for migrado, não antes.
+      const pipeRef = (ctx.nodeData.pipelineId as string)
+        || (ctx.nodeData.pipeType as string)
+        || "whatsapp";
       const targetStage = ctx.nodeData.targetStage as string;
       if (!targetStage) { result = { success: false, error: "No target stage configured" }; break; }
       result = await sharedMoveStage({
         ...toActionInput(ctx),
-        params: { target_stage: targetStage, target_pipe: pipeType },
+        params: { target_stage: targetStage, target_pipe: pipeRef },
       });
       if (result.success && result.data) {
-        result.data = { pipeType, targetStage: result.data.target_stage };
+        result.data = { pipeType: pipeRef, targetStage: result.data.target_stage };
       }
       break;
     }

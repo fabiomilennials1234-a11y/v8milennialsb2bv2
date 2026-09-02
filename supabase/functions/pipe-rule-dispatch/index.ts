@@ -7,8 +7,17 @@ import { getTimeBasedVariables } from '../_shared/time-variables.ts';
  * Pipe Rule Dispatch - Processa fila scheduled_pipe_messages
  *
  * Modos de chamada:
- * - Com body { pipe_type, organization_id? }: processa esse funil (UI button, pg_net trigger)
- * - Sem body: descobre pipes com mensagens pendentes e processa cada um (pg_cron)
+ * - Com body { pipeline_id }: processa a fila desse funil (qualquer tipo — SCRUM-629/W3)
+ * - Com body { pipe_type, organization_id? }: legado — processa por slug (UI antiga, pg_net antigo)
+ * - Sem body: descobre funis com mensagens pendentes e processa cada um (pg_cron)
+ *
+ * D11 (SCRUM-629) — freio triplo do disparo por etapa em funil custom:
+ *   1. `pipelines.stage_dispatch_enabled` default false — pré-check aqui + gate
+ *      no claim RPC (claim_pipe_dispatch_batch[_by_pipeline]).
+ *   2. Nunca retroativo — o claim só entrega item criado após
+ *      `stage_dispatch_enabled_at`; desligar o toggle cancela a fila (trigger PG).
+ *   3. Todo envio passa pelo send-governor: sendTextViaInstance/sendAudioViaInstance
+ *      (_shared/whatsapp-dispatch.ts) → governSend. Este arquivo não abre rota nova.
  *
  * Action types suportados:
  * - send_template: envia mensagem via Evolution API (texto/áudio)
@@ -24,6 +33,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
+import { personalizationFirstName } from "../_shared/lead-name.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -35,14 +45,27 @@ const MAX_SENDS_PER_RUN = 3;
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
+/**
+ * Chave de processamento da fila (SCRUM-629): por funil (pipeline_id) quando o
+ * item/chamador carrega o id; por pipe_type só no legado (linhas históricas
+ * sem funil resolvível). Ações por linha decidem pelo row.pipeline_id — a
+ * chave existe só para batching/throttle.
+ */
+interface QueueKey {
+  pipelineId: string | null;
+  pipeType: string;
+}
+
 interface ProcessResult {
   pipe_type: string;
+  pipeline_id?: string | null;
   organization_id?: string;
   processed: number;
   sent: number;
   failed: number;
   actions_executed: number;
   timeouts_processed: number;
+  skipped_reason?: string;
   error?: string;
 }
 
@@ -96,26 +119,34 @@ Deno.serve(withErrorBoundary('pipe-rule-dispatch', async (req) => {
 
   // --- Parse body ---
   let pipeType: string | null = null;
+  let pipelineId: string | null = null;
   try {
     const body = await req.json();
     if (body?.pipe_type && typeof body.pipe_type === "string") {
       pipeType = body.pipe_type;
+    }
+    // SCRUM-629: chave canônica. Quando presente, vence o pipe_type.
+    if (body?.pipeline_id && typeof body.pipeline_id === "string") {
+      pipelineId = body.pipeline_id;
     }
   } catch {
     // No body - process all
   }
 
   try {
-    if (pipeType) {
-      console.log("[pipe-rule-dispatch] Single pipe mode:", pipeType);
-      const result = await processPipeQueue(supabase, pipeType);
+    if (pipelineId || pipeType) {
+      console.log("[pipe-rule-dispatch] Single pipe mode:", pipelineId ?? pipeType);
+      const result = await processPipeQueue(supabase, {
+        pipelineId,
+        pipeType: pipeType ?? "",
+      });
       await logRuntime({
         organizationId: result.organization_id,
         module: 'pipe_dispatch',
         action: 'execute_rule',
         status: 'success',
         entityType: 'pipe_record',
-        payloadSnapshot: { pipe_type: pipeType, processed: result.processed, sent: result.sent, failed: result.failed },
+        payloadSnapshot: { pipe_type: result.pipe_type, pipeline_id: result.pipeline_id, processed: result.processed, sent: result.sent, failed: result.failed },
       });
       return new Response(
         JSON.stringify({ success: true, ...result }),
@@ -139,20 +170,26 @@ Deno.serve(withErrorBoundary('pipe-rule-dispatch', async (req) => {
 
       const { data: pendingScheduled } = await supabase
         .from("scheduled_pipe_messages")
-        .select("pipe_type")
+        .select("pipe_type, pipeline_id")
         .eq("status", "scheduled")
         .lte("scheduled_at", new Date().toISOString());
 
       const { data: pendingTimeouts } = await supabase
         .from("scheduled_pipe_messages")
-        .select("pipe_type")
+        .select("pipe_type, pipeline_id")
         .eq("status", "waiting_response")
         .lte("wait_timeout_at", new Date().toISOString());
 
-      const allPending = [...(pendingScheduled || []), ...(pendingTimeouts || [])];
-      const uniquePipeTypes = [...new Set(allPending.map((r) => r.pipe_type))];
+      const allPending = [...(pendingScheduled || []), ...(pendingTimeouts || [])] as Array<{ pipe_type: string; pipeline_id: string | null }>;
+      // SCRUM-629: agrupa por funil (id) quando presente; pipe_type só pro legado.
+      const keyMap = new Map<string, QueueKey>();
+      for (const row of allPending) {
+        const k = row.pipeline_id ?? `pt:${row.pipe_type}`;
+        if (!keyMap.has(k)) keyMap.set(k, { pipelineId: row.pipeline_id, pipeType: row.pipe_type });
+      }
+      const uniqueKeys = [...keyMap.values()];
 
-      if (uniquePipeTypes.length === 0) {
+      if (uniqueKeys.length === 0) {
         return new Response(
           JSON.stringify({ success: true, message: "No pending messages", pipes: 0, processed: 0 }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -162,8 +199,8 @@ Deno.serve(withErrorBoundary('pipe-rule-dispatch', async (req) => {
       const results: ProcessResult[] = [];
       let totalSent = 0, totalFailed = 0, totalProcessed = 0;
 
-      for (const pt of uniquePipeTypes) {
-        const result = await processPipeQueue(supabase, pt);
+      for (const key of uniqueKeys) {
+        const result = await processPipeQueue(supabase, key);
         results.push(result);
         totalSent += result.sent;
         totalFailed += result.failed;
@@ -174,12 +211,12 @@ Deno.serve(withErrorBoundary('pipe-rule-dispatch', async (req) => {
         module: 'pipe_dispatch',
         action: 'execute_rule',
         status: 'success',
-        payloadSnapshot: { pipes: uniquePipeTypes.length, processed: totalProcessed, sent: totalSent, failed: totalFailed },
+        payloadSnapshot: { pipes: uniqueKeys.length, processed: totalProcessed, sent: totalSent, failed: totalFailed },
       });
       return new Response(
         JSON.stringify({
           success: true,
-          pipes: uniquePipeTypes.length,
+          pipes: uniqueKeys.length,
           processed: totalProcessed,
           sent: totalSent,
           failed: totalFailed,
@@ -195,20 +232,50 @@ Deno.serve(withErrorBoundary('pipe-rule-dispatch', async (req) => {
       action: 'execute_rule',
       status: 'error',
       errorMessage: error instanceof Error ? error.message : String(error),
-      payloadSnapshot: { pipe_type: pipeType },
+      payloadSnapshot: { pipe_type: pipeType, pipeline_id: pipelineId },
     });
     throw error;
   }
 }));
 
 // ============================================================
-// Process queue for a pipe_type
+// Process queue for a QueueKey (pipeline_id canônico; pipe_type legado)
 // ============================================================
 async function processPipeQueue(
   supabase: SupabaseClient,
-  pipeType: string
+  key: QueueKey
 ): Promise<ProcessResult> {
   let sent = 0, failed = 0, actionsExecuted = 0, timeoutsProcessed = 0;
+  const pipelineId = key.pipelineId;
+  let pipeType = key.pipeType;
+  // true só para funil custom: ações de card vão direto em pipeline_entries.
+  // System mantém o caminho da view pipe_<slug> — comportamento intocado.
+  let keyIsCustom = false;
+
+  // --- Freio 3/3 do D11 (pré-check, camada edge): funil com disparo por etapa
+  // desligado não processa NADA — nem o claim é tentado. O claim RPC repete o
+  // gate (fonte de verdade transacional); este check corta cedo e resolve o
+  // slug quando o chamador mandou só pipeline_id.
+  if (pipelineId) {
+    const { data: pipe } = await supabase
+      .from("pipelines")
+      .select("id, slug, type, stage_dispatch_enabled, stage_dispatch_enabled_at")
+      .eq("id", pipelineId)
+      .maybeSingle();
+    if (!pipe) {
+      return { pipe_type: pipeType, pipeline_id: pipelineId, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: 0, skipped_reason: "pipeline_not_found" };
+    }
+    pipeType = (pipe as any).slug as string;
+    keyIsCustom = (pipe as any).type === "custom";
+    if (!(pipe as any).stage_dispatch_enabled || !(pipe as any).stage_dispatch_enabled_at) {
+      console.log(`[pipe-rule-dispatch][${pipeType}] stage dispatch OFF for pipeline ${pipelineId} — skipping (D11)`);
+      return { pipe_type: pipeType, pipeline_id: pipelineId, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: 0, skipped_reason: "stage_dispatch_disabled" };
+    }
+  }
+
+  // Filtro da fila pela chave: por funil quando há id; por slug no legado.
+  // deno-lint-ignore no-explicit-any
+  const byKey = (q: any) => (pipelineId ? q.eq("pipeline_id", pipelineId) : q.eq("pipe_type", pipeType));
 
   // --- 0a. Trilha 3.A A2: cancel scheduled items for rules migrated to workflow wrappers ---
   // Rules com wrapper workflow são processadas pelo workflow engine — items pendentes
@@ -221,10 +288,11 @@ async function processPipeQueue(
 
     if (wrapperRuleIds && wrapperRuleIds.length > 0) {
       const ruleIds = (wrapperRuleIds as Array<{ wrapper_source_id: string }>).map((r) => r.wrapper_source_id);
-      const { data: cancelled } = await supabase
-        .from("scheduled_pipe_messages")
-        .update({ status: "cancelled", error_message: "Rule migrated to workflow wrapper (Trilha 3.A)" })
-        .eq("pipe_type", pipeType)
+      const { data: cancelled } = await byKey(
+        supabase
+          .from("scheduled_pipe_messages")
+          .update({ status: "cancelled", error_message: "Rule migrated to workflow wrapper (Trilha 3.A)" })
+      )
         .eq("status", "scheduled")
         .in("rule_id", ruleIds)
         .select("id");
@@ -240,10 +308,11 @@ async function processPipeQueue(
   // --- 0. Reset stale "processing" items (stuck from crashed/timed-out runs) ---
   const STALE_MINUTES = 2;
   const staleThreshold = new Date(Date.now() - STALE_MINUTES * 60 * 1000).toISOString();
-  const { data: staleReset } = await supabase
-    .from("scheduled_pipe_messages")
-    .update({ status: "scheduled", scheduled_at: new Date().toISOString() })
-    .eq("pipe_type", pipeType)
+  const { data: staleReset } = await byKey(
+    supabase
+      .from("scheduled_pipe_messages")
+      .update({ status: "scheduled", scheduled_at: new Date().toISOString() })
+  )
     .eq("status", "processing")
     .lt("scheduled_at", staleThreshold)
     .select("id");
@@ -252,25 +321,28 @@ async function processPipeQueue(
   }
 
   // --- 1. Process expired wait_response timeouts ---
-  timeoutsProcessed = await processExpiredTimeouts(supabase, pipeType);
+  timeoutsProcessed = await processExpiredTimeouts(supabase, pipeType, { keyIsCustom, byKey });
 
   // --- 2. Atomically claim scheduled items (prevents concurrent processing) ---
+  // O claim carrega o gate D11 (freio 2/3): item de funil desligado ou criado
+  // antes da ativação NÃO sai — mesmo que algo o tenha enfileirado.
   let claimedIds: string[] = [];
 
   // Try RPC claim first (atomic, concurrent-safe)
-  const { data: claimedRows, error: claimError } = await supabase.rpc(
-    "claim_pipe_dispatch_batch",
-    { p_pipe_type: pipeType, p_limit: BATCH_SIZE }
-  );
+  const { data: claimedRows, error: claimError } = pipelineId
+    ? await supabase.rpc("claim_pipe_dispatch_batch_by_pipeline", { p_pipeline_id: pipelineId, p_limit: BATCH_SIZE })
+    : await supabase.rpc("claim_pipe_dispatch_batch", { p_pipe_type: pipeType, p_limit: BATCH_SIZE });
 
   if (claimError) {
     console.warn(`[pipe-rule-dispatch][${pipeType}] RPC claim failed (falling back to direct query):`, claimError.message);
 
-    // Fallback: direct SELECT + UPDATE (less safe for concurrency but works without RPC/CHECK fix)
-    const { data: fallbackRows, error: fallbackErr } = await supabase
-      .from("scheduled_pipe_messages")
-      .select("id")
-      .eq("pipe_type", pipeType)
+    // Fallback: direct SELECT + UPDATE (less safe for concurrency but works without RPC/CHECK fix).
+    // No caminho por pipeline o pré-check acima já barrou funil desligado (D11).
+    const { data: fallbackRows, error: fallbackErr } = await byKey(
+      supabase
+        .from("scheduled_pipe_messages")
+        .select("id")
+    )
       .eq("status", "scheduled")
       .lte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true })
@@ -278,13 +350,13 @@ async function processPipeQueue(
 
     if (fallbackErr || !fallbackRows || fallbackRows.length === 0) {
       console.error(`[pipe-rule-dispatch][${pipeType}] Fallback also failed:`, fallbackErr?.message);
-      return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: claimError.message };
+      return { pipe_type: pipeType, pipeline_id: pipelineId, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: claimError.message };
     }
 
     claimedIds = fallbackRows.map((r: { id: string }) => r.id);
     console.log(`[pipe-rule-dispatch][${pipeType}] Fallback claimed ${claimedIds.length} item(s)`);
   } else if (!claimedRows || claimedRows.length === 0) {
-    return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
+    return { pipe_type: pipeType, pipeline_id: pipelineId, processed: 0, sent: 0, failed: 0, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
   } else {
     claimedIds = claimedRows.map((r: { claimed_id: string }) => r.claimed_id);
   }
@@ -297,6 +369,7 @@ async function processPipeQueue(
       id,
       organization_id,
       pipe_type,
+      pipeline_id,
       rule_id,
       pipe_record_id,
       lead_id,
@@ -323,11 +396,11 @@ async function processPipeQueue(
     await supabase.from("scheduled_pipe_messages")
       .update({ status: "scheduled" })
       .in("id", claimedIds);
-    return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: fetchError.message };
+    return { pipe_type: pipeType, pipeline_id: pipelineId, processed: 0, sent: 0, failed: 0, actions_executed: 0, timeouts_processed: timeoutsProcessed, error: fetchError.message };
   }
 
   if (!rows || rows.length === 0) {
-    return { pipe_type: pipeType, processed: 0, sent: 0, failed: 0, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
+    return { pipe_type: pipeType, pipeline_id: pipelineId, processed: 0, sent: 0, failed: 0, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
   }
 
   console.log(`[pipe-rule-dispatch][${pipeType}] Processing ${rows.length} item(s)`);
@@ -413,6 +486,7 @@ async function processPipeQueue(
         const timeVars = getTimeBasedVariables();
         const messageContent = isAudio ? "[Áudio]" : replaceVariables(template.content || "", {
           nome: lead.name || "você",
+          primeiro_nome: personalizationFirstName(lead.name) || "você",
           empresa: lead.company || "",
           email: lead.email || "",
           telefone: lead.phone || "",
@@ -559,7 +633,7 @@ async function processPipeQueue(
         // Resolve stage_key from pipeline_stages
         const { data: stageData } = await supabase
           .from("pipeline_stages")
-          .select("stage_key, name")
+          .select("id, stage_key, name, pipeline_id")
           .eq("id", targetStageId)
           .single();
 
@@ -570,11 +644,32 @@ async function processPipeQueue(
           continue;
         }
 
-        const pipeTable = `pipe_${pipeType}`;
-        const { error: stageErr } = await supabase
-          .from(pipeTable)
-          .update({ status: stageData.stage_key })
-          .eq("id", row.pipe_record_id);
+        // SCRUM-629: funil CUSTOM move o card na fonte única (pipeline_entries,
+        // stage_id canônico + eco stage_key) — não existe view pipe_<slug> pra
+        // ele. System segue na view, byte-idêntico ao de antes.
+        const rowPipelineId = (row as any).pipeline_id as string | null;
+        let stageErr: { message: string } | null = null;
+        if (keyIsCustom && rowPipelineId) {
+          if ((stageData as any).pipeline_id && (stageData as any).pipeline_id !== rowPipelineId) {
+            await markFailed(supabase, row.id, "Target stage belongs to another pipeline");
+            if (jobId) await failJob(supabase, jobId, "Target stage belongs to another pipeline");
+            failed++;
+            continue;
+          }
+          const { error } = await supabase
+            .from("pipeline_entries")
+            .update({ stage_id: stageData.id, stage_key: stageData.stage_key })
+            .eq("id", row.pipe_record_id)
+            .eq("pipeline_id", rowPipelineId);
+          stageErr = error;
+        } else {
+          const pipeTable = `pipe_${pipeType}`;
+          const { error } = await supabase
+            .from(pipeTable)
+            .update({ status: stageData.stage_key })
+            .eq("id", row.pipe_record_id);
+          stageErr = error;
+        }
 
         if (stageErr) {
           await markFailed(supabase, row.id, `change_stage failed: ${stageErr.message}`);
@@ -616,11 +711,25 @@ async function processPipeQueue(
           continue;
         }
 
-        const pipeTable = `pipe_${pipeType}`;
-        const { error: sdrErr } = await supabase
-          .from(pipeTable)
-          .update({ sdr_id: sdrId, responsible_id: sdrId, pre_sale_responsible_id: sdrId })
-          .eq("id", row.pipe_record_id);
+        // SCRUM-629: funil CUSTOM atribui na fonte única
+        // (pipeline_entries.assigned_to); system segue na view pipe_<slug>.
+        const sdrRowPipelineId = (row as any).pipeline_id as string | null;
+        let sdrErr: { message: string } | null = null;
+        if (keyIsCustom && sdrRowPipelineId) {
+          const { error } = await supabase
+            .from("pipeline_entries")
+            .update({ assigned_to: sdrId })
+            .eq("id", row.pipe_record_id)
+            .eq("pipeline_id", sdrRowPipelineId);
+          sdrErr = error;
+        } else {
+          const pipeTable = `pipe_${pipeType}`;
+          const { error } = await supabase
+            .from(pipeTable)
+            .update({ sdr_id: sdrId, responsible_id: sdrId, pre_sale_responsible_id: sdrId })
+            .eq("id", row.pipe_record_id);
+          sdrErr = error;
+        }
 
         if (sdrErr) {
           await markFailed(supabase, row.id, `assign_sdr failed: ${sdrErr.message}`);
@@ -695,7 +804,7 @@ async function processPipeQueue(
 
   const totalProcessed = rows.length;
   console.log(`[pipe-rule-dispatch][${pipeType}] Done: ${sent} sent, ${actionsExecuted} actions, ${failed} failed, ${timeoutsProcessed} timeouts`);
-  return { pipe_type: pipeType, processed: totalProcessed, sent, failed, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
+  return { pipe_type: pipeType, pipeline_id: pipelineId, processed: totalProcessed, sent, failed, actions_executed: actionsExecuted, timeouts_processed: timeoutsProcessed };
 }
 
 // ============================================================
@@ -703,17 +812,24 @@ async function processPipeQueue(
 // ============================================================
 async function processExpiredTimeouts(
   supabase: SupabaseClient,
-  pipeType: string
+  pipeType: string,
+  opts: {
+    keyIsCustom: boolean;
+    // deno-lint-ignore no-explicit-any
+    byKey: (q: any) => any;
+  }
 ): Promise<number> {
-  const { data: expired, error } = await supabase
-    .from("scheduled_pipe_messages")
-    .select(`
-      id, organization_id, pipe_type, rule_id, pipe_record_id, lead_id,
-      whatsapp_instance_id, step_position,
-      timeout_action, timeout_target_stage_id, timeout_template_id,
-      leads(id, name, phone)
-    `)
-    .eq("pipe_type", pipeType)
+  const { keyIsCustom, byKey } = opts;
+  const { data: expired, error } = await byKey(
+    supabase
+      .from("scheduled_pipe_messages")
+      .select(`
+        id, organization_id, pipe_type, pipeline_id, rule_id, pipe_record_id, lead_id,
+        whatsapp_instance_id, step_position,
+        timeout_action, timeout_target_stage_id, timeout_template_id,
+        leads(id, name, phone)
+      `)
+  )
     .eq("status", "waiting_response")
     .lte("wait_timeout_at", new Date().toISOString())
     .limit(BATCH_SIZE);
@@ -746,15 +862,25 @@ async function processExpiredTimeouts(
       if (timeoutAction === "change_stage" && row.timeout_target_stage_id) {
         const { data: stageData } = await supabase
           .from("pipeline_stages")
-          .select("stage_key")
+          .select("id, stage_key")
           .eq("id", row.timeout_target_stage_id)
           .single();
 
         if (stageData?.stage_key) {
-          await supabase
-            .from(`pipe_${pipeType}`)
-            .update({ status: stageData.stage_key })
-            .eq("id", row.pipe_record_id);
+          // SCRUM-629: custom move na fonte única; system segue na view.
+          const timeoutRowPipelineId = (row as any).pipeline_id as string | null;
+          if (keyIsCustom && timeoutRowPipelineId) {
+            await supabase
+              .from("pipeline_entries")
+              .update({ stage_id: stageData.id, stage_key: stageData.stage_key })
+              .eq("id", row.pipe_record_id)
+              .eq("pipeline_id", timeoutRowPipelineId);
+          } else {
+            await supabase
+              .from(`pipe_${pipeType}`)
+              .update({ status: stageData.stage_key })
+              .eq("id", row.pipe_record_id);
+          }
         }
         console.log(`[pipe-rule-dispatch][${pipeType}] Timeout: changed stage for lead ${lead?.name}`);
 
@@ -780,7 +906,7 @@ async function processExpiredTimeouts(
             const isAudio = tmpl.message_type === "audio" && tmpl.audio_url;
             const timeVars = getTimeBasedVariables();
             const content = isAudio ? "[Áudio]" : replaceVariables(tmpl.content || "", {
-              nome: lead.name || "você", empresa: "", email: "", telefone: lead.phone || "",
+              nome: lead.name || "você", primeiro_nome: personalizationFirstName(lead.name) || "você", empresa: "", email: "", telefone: lead.phone || "",
               origem: "", segmento: "", faturamento: "",
               saudacao: timeVars.saudacao, data: timeVars.data, hora: timeVars.hora,
             });

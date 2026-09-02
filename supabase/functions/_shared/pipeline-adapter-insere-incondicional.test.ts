@@ -68,7 +68,12 @@ function fakeSupabase(state: FakeState): SupabaseClient {
     let lastEqId = "";
 
     const resolve = (): QueryResult => {
-      if (table === "pipelines") return { data: { id: "pipe-1" }, error: null };
+      if (table === "pipelines") {
+        return {
+          data: { id: "pipe-1", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true },
+          error: null,
+        };
+      }
       if (table === "organizations") {
         state.leuOrganizations = true;
         return { data: { feature_flags: state.flagsDaOrg }, error: null };

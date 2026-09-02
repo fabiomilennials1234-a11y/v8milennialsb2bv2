@@ -138,7 +138,7 @@ describe("detecção de nó incompleto", () => {
   });
 });
 
-import { findStageIssues, PIPES_COM_ETAPA_VALIDADA } from "../../src/contracts/workflows/node-requirements";
+import { findStageIssues } from "../../src/contracts/workflows/node-requirements";
 
 describe("etapa que apodreceu", () => {
   const etapas = { whatsapp: ["novo", "abordado", "respondeu"], propostas: ["enviada"] };
@@ -163,9 +163,31 @@ describe("etapa que apodreceu", () => {
   });
 
   it("funil que o executor não valida também não é cobrado aqui", () => {
+    // SCRUM-627: sem lista fixa — "não validado" agora é "ref sem chave no
+    // mapa" (campanha, upsell_*, funil apagado). Permissividade em paridade.
     const r = findStageIssues([moveStage({ targetStage: "seja_o_que_for", pipeType: "campanha" })], etapas);
     expect(r).toHaveLength(0);
-    expect(PIPES_COM_ETAPA_VALIDADA).not.toContain("campanha");
+  });
+
+  it("SCRUM-627: valida funil CUSTOM pelo pipelineId — etapa podre acusa", () => {
+    const mapa = { ...etapas, "6f0a4e6e-0000-4000-8000-000000000001": ["triagem", "fechado"] };
+    const noCustom = moveStage({ targetStage: "sumida", pipelineId: "6f0a4e6e-0000-4000-8000-000000000001" });
+    const r = findStageIssues([noCustom], mapa);
+    expect(r).toHaveLength(1);
+    expect(r[0].missing).toContain("sumida");
+    // etapa válida no mesmo funil custom passa
+    expect(findStageIssues([moveStage({ targetStage: "triagem", pipelineId: "6f0a4e6e-0000-4000-8000-000000000001" })], mapa)).toHaveLength(0);
+  });
+
+  it("SCRUM-627: pipeType legado com uuid custom continua resolvendo pelo mapa", () => {
+    const mapa = { "6f0a4e6e-0000-4000-8000-000000000001": ["triagem"] };
+    const r = findStageIssues([moveStage({ targetStage: "podre", pipeType: "6f0a4e6e-0000-4000-8000-000000000001" })], mapa);
+    expect(r).toHaveLength(1);
+  });
+
+  it("SCRUM-627: targetStage em UUID (id de etapa) não acusa — o executor resolve por id", () => {
+    const r = findStageIssues([moveStage({ targetStage: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", pipeType: "whatsapp" })], etapas);
+    expect(r).toHaveLength(0);
   });
 
   it("campo vazio é da outra regra, não desta", () => {

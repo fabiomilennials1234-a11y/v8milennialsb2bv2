@@ -14,12 +14,14 @@ import { toast } from "sonner";
 /**
  * Modelos de funil (kanban) para novas organizações.
  *
- * Ao criar uma org, o Master pode escolher um modelo. Os kanbans
- * (linhas de `pipeline_stages` de todos os pipes) são clonados AO VIVO da
- * organização-base correspondente — sempre refletem a configuração atual da base.
+ * Ao criar uma org, o Master pode escolher um modelo. Os FUNIS (`pipelines` +
+ * `pipeline_stages` por FK + o registro em `pipeline_display_config`) são
+ * clonados AO VIVO da organização-base correspondente — sempre refletem a
+ * configuração atual da base (SCRUM-635).
  *
- * Requer usuário Master: a policy RLS `master_all_pipeline_stages`
- * (FOR ALL USING is_master_user()) permite ler/gravar stages de qualquer org.
+ * Requer usuário Master: as policies `master_all_pipelines`,
+ * `master_all_pipeline_stages` e `master_ghost_all_pipeline_display_config`
+ * (FOR ALL USING is_master_user()) permitem ler/gravar em qualquer org.
  */
 export type FunnelTemplateKey = "funil_a" | "funil_b";
 
@@ -42,49 +44,109 @@ export const FUNNEL_TEMPLATES: Record<
 };
 
 // Colunas seguras para clonar entre orgs. Excluídas de propósito:
-// id / organization_id / created_at / updated_at (gerados) e
-// checklist_template_id / sla_escalate_to (uuid org-specific — apontariam pra
-// registros da org-base; ficam nulos no clone).
+// id / organization_id / pipeline_id / created_at / updated_at (gerados ou
+// remapeados) e checklist_template_id / sla_escalate_to (uuid org-specific —
+// apontariam pra registros da org-base; ficam nulos no clone).
+// `pipeline_type` segue no clone como espelho de compat (morre na F6).
 const CLONEABLE_STAGE_COLUMNS =
   "pipeline_type, stage_key, name, color, position, is_active, is_final_positive, is_final_negative, auto_move_min_days, auto_move_max_days, target_pipe_type, target_stage_key, default_probability, sla_hours, sla_action, max_days_in_stage";
 
 /**
- * Clona os `pipeline_stages` de uma org-base para a org-alvo.
+ * Clona os FUNIS de uma org-base para a org-alvo — modelo único pós-W3
+ * (SCRUM-635): `pipelines` (FK) + `pipeline_stages` por `pipeline_id`
+ * remapeado + o registro em `pipeline_display_config` (o portão que autoriza
+ * funil de sistema a existir desde 20270902000000).
  *
- * O trigger `trigger_create_default_stages` já cria etapas padrão quando a org
- * é criada — por isso removemos essas antes de inserir as do modelo, evitando
- * conflito de unique key (organization_id, pipeline_type, stage_key) e mistura
- * de etapas padrão com as do modelo.
+ * A versão anterior clonava SÓ `pipeline_stages` pela chave composta
+ * (organization_id, pipeline_type, stage_key): nenhuma linha de `pipelines`
+ * nascia, as etapas chegavam com `pipeline_id` NULL e funil custom da base
+ * virava linha órfã. Pós-W3 (entries por stage_id/FK) isso é um clone quebrado.
+ *
+ * MEDIDO 2026-09-02 (prod): o clone roda no BROWSER com o usuário Master —
+ * mecanismo preservado; as policies `master_all_pipelines`,
+ * `master_all_pipeline_stages` e `master_ghost_all_pipeline_display_config`
+ * (FOR ALL USING is_master_user()) cobrem leitura e escrita nas 3 tabelas.
+ * A org-alvo nasce SEM funil algum (auto-seed morto desde 20270824060000) —
+ * os deletes abaixo são guarda de idempotência, esperados no-op.
  */
 async function cloneFunnelStages(sourceOrgId: string, targetOrgId: string) {
-  const read = await supabase
-    .from("pipeline_stages")
-    .select(CLONEABLE_STAGE_COLUMNS)
-    .eq("organization_id", sourceOrgId);
+  // 1. Lê a org-base: funis, registro e etapas (só as vivas — com FK).
+  const [pipesRead, cfgRead, stagesRead] = await Promise.all([
+    supabase
+      .from("pipelines")
+      .select("id, name, slug, type, description, icon, color, display_order, is_active, config")
+      .eq("organization_id", sourceOrgId),
+    supabase
+      .from("pipeline_display_config")
+      .select("pipe_type, display_name, is_visible, position")
+      .eq("organization_id", sourceOrgId),
+    // `as any` no from: pipeline_stages.pipeline_id (20270906001000) ainda
+    // não está no types.ts gerado — mesmo padrão de usePipelines.
+    (supabase.from as any)("pipeline_stages")
+      .select(`pipeline_id, ${CLONEABLE_STAGE_COLUMNS}`)
+      .eq("organization_id", sourceOrgId)
+      .not("pipeline_id", "is", null),
+  ]);
+  if (pipesRead.error) throw pipesRead.error;
+  if (cfgRead.error) throw cfgRead.error;
+  if (stagesRead.error) throw stagesRead.error;
 
-  if (read.error) throw read.error;
-
-  const srcStages = (read.data ?? []) as Record<string, unknown>[];
-  if (srcStages.length === 0) {
-    console.warn("Modelo de funil: org-base sem etapas, clone ignorado:", sourceOrgId);
+  const srcPipelines = (pipesRead.data ?? []) as Record<string, unknown>[];
+  if (srcPipelines.length === 0) {
+    console.warn("Modelo de funil: org-base sem funis, clone ignorado:", sourceOrgId);
     return;
   }
 
-  // Remove as etapas padrão auto-criadas pelo trigger de criação da org.
-  const del = await supabase
-    .from("pipeline_stages")
-    .delete()
-    .eq("organization_id", targetOrgId);
-  if (del.error) throw del.error;
+  // 2. Limpa o alvo (ordem FK: etapas antes dos funis).
+  const delStages = await supabase.from("pipeline_stages").delete().eq("organization_id", targetOrgId);
+  if (delStages.error) throw delStages.error;
+  const delPipes = await supabase.from("pipelines").delete().eq("organization_id", targetOrgId);
+  if (delPipes.error) throw delPipes.error;
 
-  // Insere as etapas clonadas, reapontando para a org nova.
-  const rows = srcStages.map((s) => ({
-    ...s,
+  // 3. Registro primeiro — é o portão dos funis de sistema.
+  const cfgRows = (cfgRead.data ?? []).map((c: Record<string, unknown>) => ({
+    ...c,
     organization_id: targetOrgId,
-  })) as TablesInsert<"pipeline_stages">[];
+    updated_at: new Date().toISOString(),
+  }));
+  if (cfgRows.length > 0) {
+    const cfgIns = await supabase
+      .from("pipeline_display_config")
+      .upsert(cfgRows as TablesInsert<"pipeline_display_config">[], {
+        onConflict: "organization_id,pipe_type",
+      });
+    if (cfgIns.error) throw cfgIns.error;
+  }
 
-  const ins = await supabase.from("pipeline_stages").insert(rows);
-  if (ins.error) throw ins.error;
+  // 4. Funis: insere reapontando a org e mapeia id-base → id-novo por slug
+  //    (slug é único por org — medido 2026-09-02).
+  const pipelineRows = srcPipelines.map(({ id: _id, ...rest }) => ({
+    ...rest,
+    organization_id: targetOrgId,
+  })) as TablesInsert<"pipelines">[];
+  const pipeIns = await supabase.from("pipelines").insert(pipelineRows).select("id, slug");
+  if (pipeIns.error) throw pipeIns.error;
+  const newIdBySlug = new Map(
+    ((pipeIns.data ?? []) as { id: string; slug: string }[]).map((p) => [p.slug, p.id]),
+  );
+  const newIdByOldId = new Map(
+    srcPipelines.map((p) => [p.id as string, newIdBySlug.get(p.slug as string) ?? null]),
+  );
+
+  // 5. Etapas: remapeia a FK. Etapa cuja FK não resolveu não entra — melhor
+  //    faltar visível do que nascer órfã de novo.
+  const stageRows = ((stagesRead.data ?? []) as Record<string, unknown>[])
+    .map(({ pipeline_id, ...rest }) => ({
+      ...rest,
+      organization_id: targetOrgId,
+      pipeline_id: newIdByOldId.get(pipeline_id as string) ?? null,
+    }))
+    .filter((r) => r.pipeline_id != null) as unknown as TablesInsert<"pipeline_stages">[];
+
+  if (stageRows.length > 0) {
+    const ins = await supabase.from("pipeline_stages").insert(stageRows);
+    if (ins.error) throw ins.error;
+  }
 }
 
 /**

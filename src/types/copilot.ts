@@ -389,8 +389,11 @@ export interface AgentTemplate {
 export interface AgentContext {
   leadName?: string;
   leadCompany?: string;
-  currentPipe: string; // 'confirmacao', 'propostas', 'whatsapp', 'campanha'
-  currentStage: string; // Status específico da etapa
+  currentPipe: string; // slug do funil ('whatsapp', 'confirmacao', ..., ou slug de funil custom) ou 'campanha'
+  currentStage: string; // Status específico da etapa (stage_key)
+  /** SCRUM-628: identidade real do funil/etapa — permite casar regras salvas no formato novo (uuid). */
+  currentPipelineId?: string;
+  currentStageId?: string;
   leadHistory?: string[]; // Histórico de ações do lead
   leadTags?: string[]; // Tags associadas ao lead
   leadScore?: number; // Score de 0-100

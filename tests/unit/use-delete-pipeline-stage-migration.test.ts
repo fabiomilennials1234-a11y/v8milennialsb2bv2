@@ -195,6 +195,46 @@ describe("useDeletePipelineStage — migration guard", () => {
     expect(recorded.filter((r) => r.op === "update").length).toBe(0);
   });
 
+  it("explicit pipelineId (custom funnel): migrates by the GIVEN id without resolving pipelines", async () => {
+    // SCRUM-636: o editor único passa o id do funil — o hook serve funil
+    // custom (sem família) com a mesma migração + guarda de dispatch.
+    scenario.entryCount = 4;
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync({
+      id: "s9",
+      stageKey: "em_andamento",
+      migrateToStageKey: "concluido",
+      pipelineId: "custom-pipe-42",
+    });
+
+    // Não consultou `pipelines` para resolver por (org, slug, system).
+    expect(recorded.some((r) => r.table === "pipelines")).toBe(false);
+
+    const migrate = recorded.find((r) => r.op === "update" && r.table === "pipeline_entries");
+    expect(migrate).toBeTruthy();
+    expect(migrate!.filters.pipeline_id).toBe("custom-pipe-42");
+    expect((migrate!.payload as { stage_key: string }).stage_key).toBe("concluido");
+
+    expect(recorded.some((r) => r.op === "update" && r.table === "pipeline_stages")).toBe(true);
+  });
+
+  it("explicit pipelineId: dispatch-rule guard still fires first", async () => {
+    scenario.dispatchRuleCount = 1;
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await expect(
+      result.current.mutateAsync({
+        id: "s9",
+        stageKey: "em_andamento",
+        migrateToStageKey: "concluido",
+        pipelineId: "custom-pipe-42",
+      }),
+    ).rejects.toThrow(/1 regra/);
+
+    expect(recorded.filter((r) => r.op === "update").length).toBe(0);
+  });
+
   it("destination equal to deleted stage: throws", async () => {
     scenario.entryCount = 3;
     const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
@@ -207,6 +247,34 @@ describe("useDeletePipelineStage — migration guard", () => {
         migrateToStageKey: "novo",
       }),
     ).rejects.toThrow(/diferente/);
+  });
+});
+
+describe("usePipelineStageLeadCounts — explicit pipelineId", () => {
+  it("counts by the given id without touching pipelines", async () => {
+    mockFrom.mockImplementation((table: string) => {
+      const chain: Record<string, any> = {};
+      ["select", "eq"].forEach((m) => (chain[m] = () => chain));
+      chain.maybeSingle = () => Promise.resolve({ data: null, error: null });
+      chain.then = (resolve: (v: unknown) => unknown) => {
+        recorded.push({ table, op: "select", filters: {} });
+        return Promise.resolve(
+          table === "pipeline_entries"
+            ? { data: [{ stage_key: "novo" }, { stage_key: "feito" }], error: null }
+            : { data: [], error: null },
+        ).then(resolve);
+      };
+      return chain;
+    });
+
+    const { result } = renderHook(
+      () => usePipelineStageLeadCounts(null, "custom-pipe-42"),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ novo: 1, feito: 1 });
+    expect(recorded.some((r) => r.table === "pipelines")).toBe(false);
   });
 });
 

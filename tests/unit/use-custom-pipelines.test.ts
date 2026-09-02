@@ -313,7 +313,7 @@ describe("useCustomPipeStageCounts", () => {
     } as any);
     const { result } = renderHook(() => useCustomPipeStageCounts("p1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(supabase.rpc).toHaveBeenCalledWith("get_custom_pipeline_stage_counts", {
+    expect(supabase.rpc).toHaveBeenCalledWith("get_pipeline_stage_counts_by_id", {
       p_pipeline_id: "p1",
       p_org_id: "org-t",
       p_search: null,
@@ -325,7 +325,7 @@ describe("useCustomPipeStageCounts", () => {
     vi.mocked(supabase.rpc).mockResolvedValueOnce({ data: [], error: null } as any);
     const { result } = renderHook(() => useCustomPipeStageCounts("p1", "  ana  "), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(supabase.rpc).toHaveBeenCalledWith("get_custom_pipeline_stage_counts", {
+    expect(supabase.rpc).toHaveBeenCalledWith("get_pipeline_stage_counts_by_id", {
       p_pipeline_id: "p1",
       p_org_id: "org-t",
       p_search: "ana",
@@ -454,7 +454,7 @@ describe("useDeleteCustomPipeline", () => {
       retorno = await result.current.mutateAsync("p1");
     });
 
-    expect(supabase.rpc).toHaveBeenCalledWith("delete_custom_pipeline", {
+    expect(supabase.rpc).toHaveBeenCalledWith("delete_pipeline", {
       p_pipeline_id: "p1",
     });
     // O guard que importa: voltar para `.from("custom_pipelines").update(...)`
@@ -492,7 +492,7 @@ describe("useCustomPipelineDeleteImpact", () => {
     });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(supabase.rpc).toHaveBeenCalledWith("custom_pipeline_delete_impact", {
+    expect(supabase.rpc).toHaveBeenCalledWith("pipeline_delete_impact", {
       p_pipeline_id: "p1",
     });
     expect(result.current.data?.eventos_etapa).toBe(11);

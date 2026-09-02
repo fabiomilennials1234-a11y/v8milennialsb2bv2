@@ -44,7 +44,7 @@ import {
   type TemplateTextareaHandle,
 } from "@/modules/workflows/components/TemplateTextarea";
 import type { CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
-import { usePipelineStages, type PipelineType, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
+import { usePipelines, useEtapasDoFunil } from "@/modules/pipelines";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
@@ -1279,15 +1279,12 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
 // ── Move Stage (com seletor dinâmico de etapas) ───────────────────────────────
 
-// SCRUM-618 (D9/ADR-0034): opções upsell_* removidas — Carteira não é funil e
-// saiu de `PipelineType`. Medido em prod (2026-09-01): 0 workflows com nó
-// move_stage apontando para upsell_*.
-const PIPE_OPTIONS: { value: PipelineType; label: string }[] = [
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "propostas", label: "Propostas" },
-];
-
+// SCRUM-627: o seletor opera por FUNIL REAL — a lista de `pipelines` da org,
+// um grupo só (sistema + custom), gravando sempre `pipelineId` (uuid). O
+// fallback silencioso "whatsapp" morreu: nó sem funil escolhido não carrega
+// etapa nenhuma. `pipeType` sobrevive só como LEITURA legada (slug de sistema
+// OU uuid custom dos nós salvos) e é zerado na primeira troca.
+// (SCRUM-618: upsell_* fora — Carteira não é funil.)
 function MoveStageFields({
   data,
   onUpdate,
@@ -1295,68 +1292,47 @@ function MoveStageFields({
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
 }) {
-  const pipeType = (data.pipeType as string) || "whatsapp";
-  const isCustomPipe = !PIPE_OPTIONS.some((p) => p.value === pipeType);
+  const { data: pipelines, isLoading: pipelinesLoading } = usePipelines();
 
-  // Standard pipeline stages
-  const { data: standardStages, isLoading: standardLoading } = usePipelineStages(
-    isCustomPipe ? "whatsapp" : (pipeType as PipelineType)
-  );
-  // Custom pipelines list
-  const { data: customPipelines } = useCustomPipelines();
-  // Custom pipeline stages
-  const { data: customStages, isLoading: customLoading } = useCustomPipelineStages(
-    isCustomPipe ? pipeType : undefined
-  );
+  const legacyRef = (data.pipeType as string) || "";
+  const pipelineId =
+    ((data.pipelineId as string) || "") ||
+    (legacyRef
+      ? pipelines?.find((p) => p.id === legacyRef || p.slug === legacyRef)?.id ?? ""
+      : "");
 
-  const stagesLoading = isCustomPipe ? customLoading : standardLoading;
-  const activeStages = isCustomPipe
-    ? (customStages || []).filter((s) => s.is_active).map((s) => ({
-        key: s.id,
-        name: s.name,
-        color: s.color || "#888",
-      }))
-    : (standardStages || []).filter((s) => s.is_active).map((s) => ({
-        key: s.stage_key,
-        name: s.name,
-        color: s.color || "#888",
-      }));
+  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+
+  const { etapas, isLoading: stagesLoading } = useEtapasDoFunil(pipelineId || null);
+  const activeStages = etapas.map((e) => ({
+    key: e.stageKey,
+    name: e.label,
+    color: "#888",
+  }));
 
   const handlePipeChange = (value: string) => {
-    onUpdate({ pipeType: value, targetStage: "" });
+    onUpdate({ pipelineId: value, pipeType: "", targetStage: "" });
   };
 
   return (
     <>
       <div className="space-y-2">
-        <Label>Tipo de Pipe</Label>
-        <Select value={pipeType} onValueChange={handlePipeChange}>
+        <Label>Funil</Label>
+        <Select value={pipelineId} onValueChange={handlePipeChange}>
           <SelectTrigger>
-            <SelectValue placeholder="Selecione" />
+            <SelectValue placeholder={pipelinesLoading ? "Carregando funis..." : "Selecione o funil"} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                Pipes Padrão
+                Funis
               </SelectLabel>
-              {PIPE_OPTIONS.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
-                  {p.label}
+              {funis.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
                 </SelectItem>
               ))}
             </SelectGroup>
-            {customPipelines && customPipelines.length > 0 && (
-              <SelectGroup>
-                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                  Pipes Custom
-                </SelectLabel>
-                {customPipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            )}
           </SelectContent>
         </Select>
       </div>
