@@ -35,6 +35,59 @@ export interface LeadListFilterValues {
    * produto considera atribuído — e o admin atribuiria por cima do dono real.
    */
   filterAssignment?: "all" | "unassigned";
+  /**
+   * Recorte pelo **Dono da conta** — a coluna que a lista exibe. Aceita o id de
+   * um `team_member`, ou os sentinels `"all"` (sem filtro) e `"none"` (leads sem
+   * dono).
+   *
+   * Distinto de `filterAssignment`, e de propósito: `filterAssignment` responde
+   * "quem enxerga este lead?" (as quatro colunas que o RLS e o chat consideram —
+   * pre_sale, sale, sdr, closer) e serve ao deep-link da política de isolamento.
+   * Este responde "de quem é este lead na tela?", que é a precedência
+   * `sale ?? pre_sale ?? responsible` renderizada em `LeadListRow`. Unificar os
+   * dois faria um dos lados mentir: filtrar por Fulano devolveria linha cuja
+   * célula diz outro nome, ou "sem dono" esconderia linha que a tela mostra
+   * vazia.
+   */
+  filterResponsible?: string;
+}
+
+/**
+ * Colunas do "Dono da conta", na MESMA ordem de precedência que a lista pinta
+ * (`LeadListRow`: `sale_responsible ?? pre_sale_responsible ?? responsible`).
+ *
+ * Mudou a precedência lá? Muda aqui junto — senão o filtro passa a devolver
+ * linha cujo nome na célula é outro.
+ */
+const OWNER_COLUMNS = [
+  "sale_responsible_id",
+  "pre_sale_responsible_id",
+  "responsible_id",
+] as const;
+
+/** Sentinel do filtro de dono: leads sem nenhuma das colunas de `OWNER_COLUMNS`. */
+const OWNER_NONE = "none";
+
+/**
+ * Um id de `team_member` só entra no `or()` do PostgREST depois de provado
+ * UUID. O valor vem de um Select nosso, mas também de localStorage (visão
+ * salva persistida) — e ali é texto que o usuário pode editar. Sem esta
+ * checagem, uma vírgula ou parêntese no valor reescreve a árvore de filtros.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Predicado PostgREST que casa EXATAMENTE as linhas cuja célula "Dono da conta"
+ * mostra `memberId` — não basta `col.eq.X` nas três, porque um lead com
+ * `sale_responsible = A` e `responsible = B` exibe "A" e não pode aparecer ao
+ * filtrar por B. Por isso cada nível carrega o `is.null` dos anteriores.
+ */
+function buildOwnerMatch(memberId: string): string {
+  return OWNER_COLUMNS.map((col, i) => {
+    const anteriores = OWNER_COLUMNS.slice(0, i).map((c) => `${c}.is.null`);
+    const igual = `${col}.eq.${memberId}`;
+    return anteriores.length ? `and(${[...anteriores, igual].join(",")})` : igual;
+  }).join(",");
 }
 
 /**
@@ -77,6 +130,17 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
 
   if (filters.filterAssignment === "unassigned") {
     for (const col of RESPONSIBLE_COLUMNS) q = q.is(col, null);
+  }
+
+  const owner = filters.filterResponsible;
+  if (owner && owner !== "all") {
+    if (owner === OWNER_NONE) {
+      for (const col of OWNER_COLUMNS) q = q.is(col, null);
+    } else if (UUID_RE.test(owner)) {
+      q = q.or(buildOwnerMatch(owner));
+    }
+    // Valor fora do contrato (visão salva adulterada): ignorado — mesma escolha
+    // de `parseInstantParam` na página. Não vira predicado cru.
   }
 
   const search = filters.searchQuery?.trim();
