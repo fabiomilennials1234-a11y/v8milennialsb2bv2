@@ -242,7 +242,34 @@ export function contactKey(c: InboxContact): string {
  */
 export function contactLabel(c: InboxContact): string {
   if (c.channel === "whatsapp") {
-    return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
+    // O NOME DO LEAD GANHA DO `push_name`.
+    //
+    // `push_name` é o que o interlocutor escreveu no perfil DELE — o CRM não o
+    // controla e renomear o lead nunca o altera. O nome do lead é o que a
+    // organização curou (código interno, razão social, apelido combinado com o
+    // time), e é o único dos dois que o vendedor consegue corrigir.
+    //
+    // Medido em produção (02/09, Envase Carolini): lead renomeado para
+    // "6627 - Fernando Porto" aparecia assim no CABEÇALHO da thread e continuava
+    // "Fernando Porto" na LISTA — o cabeçalho já resolve nesta ordem
+    // (`ChatShellWithContext`: `effectiveLeadName ?? push_name ?? phone`), e só a
+    // lista divergia. A mesma ordem daqui já valia no filtro de busca
+    // (`inboxFilter`), na bolha do kanban, no composer e no command palette:
+    // buscar pelo nome do CRM achava a linha, que então exibia outro nome.
+    //
+    // ⚠️ A linha do WhatsApp NÃO tem chip de lead (`ConversationListItem` só
+    // renderiza o chip quando `!isWhatsApp`, justamente porque assume que o
+    // título JÁ é o nome do lead). Com `push_name` na frente, o nome do CRM não
+    // aparecia em lugar nenhum da lista.
+    //
+    // O `trim` é POR CANDIDATO, e não no fim. Nome só de espaços chega de import
+    // e de edição pela UI; com um `.trim()` único no final ele vencia os
+    // seguintes e a linha caía direto em "Contato", escondendo o `push_name` que
+    // existia.
+    const nome = [c.lead_name, c.push_name, c.phone_number]
+      .map((valor) => valor?.trim())
+      .find((valor) => valor);
+    return nome || "Contato";
   }
   // O NOME primeiro, e o @ como queda.
   //
