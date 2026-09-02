@@ -56,3 +56,21 @@ Rejected: a key inside the existing `metadata` jsonb. Provenance is a trail, not
 
 - Two organizations lose automatic funnel entry until the Workflow node ships. This is a visible regression for their sellers and needs to be told to them, not discovered by them.
 - The wider door means the funnel count can be inflated by a badly drawn Workflow. The brake is deferred on purpose; `source` is what makes the damage measurable when it happens, and it is what a per-organisation flag would not have given.
+
+---
+
+## Amendment 1 — Entering a funnel *is* the explicit decision (2026-09-01)
+
+**Status:** accepted (grill com o CTO, 2026-09-01) · **Narrows nothing, widens the doors:** the prohibition this ADR protects — no automatic birth — stands untouched. See **ADR-0034** ("Funil é funil"), whose D2 this amendment records.
+
+### What changes
+
+**1. Entering a funnel IS the explicit decision that creates the Negócio.** Under the original text a card and a Negócio were separable: a card could sit in a funnel with no `deals` row behind it — and 12.598 of 47.270 cards (26,6%, measured 2026-08-28) did. ADR-0034 unifies the funnels, and with one kind of funnel there is one kind of card: **every card is a Negócio**, value optional (a R$ 0 Negócio is normal — a qualification funnel is a funnel of deals that have no value yet). The decision that opens the Negócio is the decision to put it in a funnel; there is no second, later moment at which someone "upgrades" a card into a Negócio.
+
+**2. The door that lets it into the funnel records the Procedência.** The doors, in the vocabulary of ADR-0034 D2: `manual` (a click), `import` (a spreadsheet), `webhook` (an ingest payload whose `place_in_pipe` someone configured), `workflow` (a node somebody drew and switched on), `api` (a scoped key), `backfill_funil_custom` (the one-Negócio-per-custom-card backfill this wave runs, value null). On `webhook`: §4 of this ADR left `ingest` deliberately absent *"until it has a case"* — it now has one, and the case satisfies the original test: the destination funnel in a webhook payload is configuration a human wrote down in advance, in the n8n flow or the form settings, not a blind automatism. The naming seam with the existing CHECK (`human` in the column, `manual` in the spec) is settled by the F1 migration, not here.
+
+**3. What stays forbidden is unchanged: the purely automatic birth.** A Lead entering the system creates nothing — no funnel entry, no Negócio. The auto-seed stays dead (§3), no default Workflow is seeded in its place, and "every card is a Negócio" never means "every Lead gets a card".
+
+### Why this is not a reversal
+
+This ADR's §1 already held that the decision may be pre-authorised — the Workflow is the decision, the key is the decision. The amendment moves one thing: the *object* of the decision. Before, the decision was "open a Negócio" and the card followed; now the decision is "put this into a funnel" and the Negócio is what that means. Same door-keeper, same prohibition, one fewer way for a card to exist outside the model — which is the gap ADR-0031 §2 had to engineer around when it keyed the execution subject on `pipeline_entries.id` because 26% of cards had no `deals` row.

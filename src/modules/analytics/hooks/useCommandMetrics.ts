@@ -232,8 +232,11 @@ export function useCommandMetrics(
   const startStr = range.start.toISOString();
   const endStr = range.end.toISOString();
 
-  useRealtimeSubscription("pipe_propostas", ["command-metrics"]);
-  useRealtimeSubscription("pipe_confirmacao", ["command-metrics"]);
+  // Assina pipeline_entries (tabela base, publicada na supabase_realtime),
+  // NÃO pipe_propostas/pipe_confirmacao — essas são VIEWS compat e não emitem
+  // postgres_changes (a assinatura era no-op silencioso). Mesmo padrão de
+  // useDashboardMetrics; pipeline_entries cobre todos os stages dos pipes.
+  useRealtimeSubscription("pipeline_entries", ["command-metrics"]);
   useRealtimeSubscription("leads", ["command-metrics"]);
 
   return useQuery({

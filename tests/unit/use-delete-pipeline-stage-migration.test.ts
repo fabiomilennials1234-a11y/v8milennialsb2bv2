@@ -12,9 +12,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 // Per-test scenario knobs + recorded calls.
-const scenario: { entryCount: number; pipelineId: string | null } = {
+const scenario: {
+  entryCount: number;
+  pipelineId: string | null;
+  dispatchRuleCount: number;
+  dispatchRuleError: { message: string } | null;
+} = {
   entryCount: 0,
   pipelineId: "pipe-1",
+  dispatchRuleCount: 0,
+  dispatchRuleError: null,
 };
 const recorded: { table: string; op: string; payload?: unknown; filters: Record<string, unknown> }[] = [];
 
@@ -54,7 +61,12 @@ function makeChain(table: string) {
     if (op === "update") {
       result = { error: null };
     } else if (countMode) {
-      result = { count: scenario.entryCount, error: null };
+      // Counts are per-table: pipe_dispatch_rules feeds the interim delete
+      // guard (F0 funis-unificacao); pipeline_entries feeds the lead migration.
+      result =
+        table === "pipe_dispatch_rules"
+          ? { count: scenario.dispatchRuleCount, error: scenario.dispatchRuleError }
+          : { count: scenario.entryCount, error: null };
     } else {
       result = { data: [], error: null };
     }
@@ -93,6 +105,8 @@ beforeEach(() => {
   recorded.length = 0;
   scenario.entryCount = 0;
   scenario.pipelineId = "pipe-1";
+  scenario.dispatchRuleCount = 0;
+  scenario.dispatchRuleError = null;
   mockFrom.mockClear();
 });
 
@@ -139,6 +153,46 @@ describe("useDeletePipelineStage — migration guard", () => {
     expect(migrate!.filters.pipeline_id).toBe("pipe-1");
 
     expect(recorded.some((r) => r.op === "update" && r.table === "pipeline_stages")).toBe(true);
+  });
+
+  it("stage referenced by active dispatch rules: throws and does NOT migrate or deactivate", async () => {
+    // Interim guard (F0 funis-unificacao §4.4): stage slugs/ids feed dispatch
+    // rules downstream; deleting the stage would orphan the automation.
+    scenario.dispatchRuleCount = 2;
+    scenario.entryCount = 7; // even with leads + destination, the rule guard wins first
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await expect(
+      result.current.mutateAsync({
+        id: "s1",
+        pipeline_type: "whatsapp",
+        stageKey: "novo",
+        migrateToStageKey: "novo_lead",
+      }),
+    ).rejects.toThrow(/2 regra/);
+
+    const updates = recorded.filter((r) => r.op === "update");
+    expect(updates.length).toBe(0); // nothing migrated, nothing deactivated
+
+    // The guard queried the rules scoped to org + stage + active only.
+    const ruleQuery = recorded.find((r) => r.table === "pipe_dispatch_rules");
+    expect(ruleQuery).toBeTruthy();
+    expect(ruleQuery!.filters).toMatchObject({
+      organization_id: "org-1",
+      pipeline_stage_id: "s1",
+      is_active: true,
+    });
+  });
+
+  it("dispatch-rule check fails: blocks deletion instead of proceeding blind", async () => {
+    scenario.dispatchRuleError = { message: "permission denied" };
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await expect(
+      result.current.mutateAsync({ id: "s1", pipeline_type: "whatsapp", stageKey: "novo" }),
+    ).rejects.toThrow(/bloqueada por segurança/i);
+
+    expect(recorded.filter((r) => r.op === "update").length).toBe(0);
   });
 
   it("destination equal to deleted stage: throws", async () => {

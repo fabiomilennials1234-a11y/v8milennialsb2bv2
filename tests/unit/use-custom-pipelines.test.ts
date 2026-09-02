@@ -555,7 +555,7 @@ describe("useDeleteCustomPipelineStage", () => {
 describe("useReorderCustomPipelineStages", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([])); });
 
-  it("reorders stages", async () => {
+  it("reorders stages via RPC de statement único (SCRUM-616)", async () => {
     const { result } = renderHook(() => useReorderCustomPipelineStages(), { wrapper: createWrapper() });
     await act(async () => {
       try {
@@ -568,7 +568,11 @@ describe("useReorderCustomPipelineStages", () => {
         });
       } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipeline_stages");
+    // UNIQUE (pipeline_id, position): a permutação vai numa RPC única, ids na
+    // ordem final (position asc), nunca em UPDATEs por linha.
+    expect(supabase.rpc).toHaveBeenCalledWith("reorder_pipeline_stages", {
+      p_stage_ids: ["s2", "s1"],
+    });
   });
 });
 

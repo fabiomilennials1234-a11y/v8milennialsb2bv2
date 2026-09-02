@@ -459,6 +459,30 @@ export function useDeletePipelineStage() {
       const organizationId = teamMember?.organization_id;
       if (!organizationId) throw new Error("Organização não encontrada");
 
+      // Guarda interina (F0 funis-unificacao §4.4): etapa referenciada por
+      // regra de disparo automático não pode ser removida — o slug/id dela é
+      // consumido a jusante (dispatch de WhatsApp). Bloqueia ANTES de migrar
+      // leads, com mensagem dizendo o que existe. O diálogo definitivo de
+      // deleção chega na D3.
+      const { count: dispatchRuleCount, error: rulesError } = await supabase
+        .from("pipe_dispatch_rules")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .eq("pipeline_stage_id", id)
+        .eq("is_active", true);
+
+      if (rulesError) {
+        throw new Error(
+          `Não foi possível verificar regras de disparo desta etapa (${rulesError.message}). Remoção bloqueada por segurança.`,
+        );
+      }
+      if ((dispatchRuleCount ?? 0) > 0) {
+        throw new Error(
+          `Esta etapa é alvo de ${dispatchRuleCount} regra(s) de disparo automático ativa(s). ` +
+            `Desative ou reaponte essas regras nas configurações do funil antes de remover a etapa.`,
+        );
+      }
+
       const pipelineId = await resolveSystemPipelineId(organizationId, pipeline_type);
 
       // Migrar leads que ainda estão nesta etapa antes de desativar.
@@ -522,19 +546,15 @@ export function useReorderPipelineStages() {
       pipeline_type: PipelineType;
       stages: { id: string; position: number }[];
     }) => {
-      const updates = stages.map((stage) =>
-        supabase
-          .from("pipeline_stages")
-          .update({ position: stage.position, updated_at: new Date().toISOString() })
-          .eq("id", stage.id)
-      );
-
-      const results = await Promise.all(updates);
-      const errors = results.filter((r) => r.error);
-
-      if (errors.length > 0) {
-        throw errors[0].error;
-      }
+      // SCRUM-616: UNIQUE (pipeline_id, position) tornou o UPDATE por linha
+      // inviável (cada request é uma transação; a permutação transita por
+      // posições ocupadas). A RPC faz a permutação em statement único e já
+      // grava updated_at.
+      const ordered = [...stages].sort((a, b) => a.position - b.position);
+      const { error } = await supabase.rpc("reorder_pipeline_stages" as never, {
+        p_stage_ids: ordered.map((s) => s.id),
+      } as never);
+      if (error) throw error;
 
       return true;
     },

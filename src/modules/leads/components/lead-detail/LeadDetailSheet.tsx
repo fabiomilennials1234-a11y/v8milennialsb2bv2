@@ -53,7 +53,9 @@ export const LeadDetailSheet = memo(function LeadDetailSheet() {
           .from("pipeline_stages")
           .select("id, name")
           .eq("organization_id", lead.organization_id)
-          .eq("pipe_type", "whatsapp")
+          // Coluna real em pipeline_stages é `pipeline_type` (`pipe_type` não
+          // existe — a query morria com erro de coluna e a barra ficava vazia).
+          .eq("pipeline_type", "whatsapp")
           .order("position");
         return data || [];
       }
