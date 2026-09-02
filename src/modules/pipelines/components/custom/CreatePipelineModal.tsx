@@ -69,7 +69,7 @@ export function CreatePipelineModal({ open, onOpenChange }: CreatePipelineModalP
       toast.success(`Funil "${pipeline.name}" criado com sucesso`);
       onOpenChange(false);
       resetForm();
-      navigate(`/pipe/custom/${pipeline.slug}`);
+      navigate(`/funil/${pipeline.slug}`);
     } catch (error: any) {
       toast.error(error.message || "Erro ao criar funil");
     }

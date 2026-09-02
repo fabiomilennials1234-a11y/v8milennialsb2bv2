@@ -140,16 +140,20 @@ export function useNavigationModel(): NavigationModel {
     // único ponto onde a distinção carrega semântica de ACESSO, não de estilo.
     if (isOutboundMember) return pipes;
 
+    // SCRUM-632: custom navega pela rota única `/funil/:slug` (a página
+    // unificada já é upgrade de paridade pra ele — paginação real). Os itens
+    // de SISTEMA acima continuam nas rotas antigas via PIPE_PATH_MAP até a
+    // paridade fechar; viram `/funil/` na SCRUM-637.
     const permanentes: NavNode[] = permanentPipelines.map((pipe) => ({
       label: pipe.name,
       icon: FUNIL_ICON,
-      path: `/pipe/custom/${pipe.slug}`,
+      path: `/funil/${pipe.slug}`,
     }));
 
     const temporarios: NavNode[] = temporaryFunnels.map((pipe) => ({
       label: pipe.name,
       icon: FUNIL_ICON,
-      path: `/pipe/custom/${pipe.slug}`,
+      path: `/funil/${pipe.slug}`,
     }));
 
     return [...pipes, ...permanentes, ...temporarios];

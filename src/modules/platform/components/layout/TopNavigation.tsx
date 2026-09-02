@@ -199,7 +199,7 @@ const bottomNavItems: NavItem[] = [
   { label: "Pitstop", icon: Settings, path: "/configuracoes" },
 ];
 
-const FUNIS_PATHS = ["/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/funis", "/pipe/custom"] as const;
+const FUNIS_PATHS = ["/funil", "/pipe-whatsapp", "/pipe-confirmacao", "/pipe-propostas", "/funis", "/pipe/custom"] as const;
 const TURBO_PATHS = ["/copilot", "/automacoes"] as const;
 
 const OUTBOUND_MEMBER_ALLOWED_PATHS = [
@@ -511,7 +511,7 @@ export function TopNavigation() {
               <div className="h-px bg-border/40 my-1.5" />
               {permanentPipelines.map((pipe) => {
                 const PipeIcon = CUSTOM_PIPE_ICON_MAP[pipe.icon] || Kanban;
-                const pipePath = `/pipe/custom/${pipe.slug}`;
+                const pipePath = `/funil/${pipe.slug}`;
                 return (
                   <NavLink
                     key={pipe.id}
@@ -530,7 +530,7 @@ export function TopNavigation() {
             <>
               <div className="h-px bg-border/40 my-1.5" />
               {temporaryFunnels.map((pipe) => {
-                const pipePath = `/pipe/custom/${pipe.slug}`;
+                const pipePath = `/funil/${pipe.slug}`;
                 return (
                   <NavLink
                     key={pipe.id}
@@ -658,7 +658,7 @@ export function TopNavigation() {
             })}
             {isFunis && !isOutboundMember && permanentPipelines.length > 0 && permanentPipelines.map((pipe) => {
               const PipeIcon = CUSTOM_PIPE_ICON_MAP[pipe.icon] || Kanban;
-              const pipePath = `/pipe/custom/${pipe.slug}`;
+              const pipePath = `/funil/${pipe.slug}`;
               return (
                 <NavLink
                   key={pipe.id}

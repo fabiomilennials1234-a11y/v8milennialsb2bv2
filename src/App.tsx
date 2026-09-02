@@ -6,7 +6,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { PilhaDeCartoes } from "@/modules/platform/components/notifications/PilhaDeCartoes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/modules/identity/auth";
 import { useOrganization } from "@/modules/identity/org-team/hooks/useOrganization";
 import { RealtimeOrgProvider } from "@/shared/realtime/realtime-org-context";
@@ -80,7 +80,11 @@ import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkelet
 import { VoiceCallProvider } from "@/modules/communication";
 const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
-const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
+// CustomPipeline saiu das rotas (redirect → /funil/:slug, SCRUM-632); o
+// arquivo segue no repo até a demolição (SCRUM-637).
+// SCRUM-632 (F4, expand-contract): a página ÚNICA de funil. Convive com as 4
+// páginas antigas atrás das rotas até a paridade fechar (morrem na SCRUM-637).
+const Funil = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Funil")));
 const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
 const Faq = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Faq")));
@@ -703,18 +707,25 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* SCRUM-632 — rota ÚNICA de funil (F4). Aceita slug OU uuid; serve
+          qualquer funil pela via canônica (get_pipeline_page por pipeline_id).
+          As 3 rotas /pipe-* seguem nas páginas antigas até a paridade de
+          sistema (633/634) — mas /funil/whatsapp já funciona p/ A/B manual. */}
       <Route
-        path="/pipe/custom/:slug"
+        path="/funil/:slug"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="pipeline.view">
-                <CustomPipeline />
+                <FeatureRoute feature="funnels"><Funil /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
       />
+      {/* Rota antiga do funil custom — redirect permanente pra página nova.
+          A página CustomPipeline.tsx segue no repo (morre na SCRUM-637). */}
+      <Route path="/pipe/custom/:slug" element={<RedirectPipeCustomParaFunil />} />
       <Route
         path="/agenda"
         element={
@@ -869,6 +880,20 @@ function AppRoutes() {
 function NavigateComQuery({ to }: { to: string }) {
   const { search, hash } = useLocation();
   return <Navigate to={`${to}${search}${hash}`} replace />;
+}
+
+/**
+ * `/pipe/custom/:slug` → `/funil/:slug` (SCRUM-632, expand-contract).
+ *
+ * O funil custom é o primeiro a usar a página unificada — é upgrade de
+ * paridade (ganha paginação real por coluna). Preserva query/hash pelo mesmo
+ * motivo de `NavigateComQuery`. A navegação interna já aponta direto para
+ * `/funil/…`; este redirect segura bookmark e link antigo.
+ */
+function RedirectPipeCustomParaFunil() {
+  const { slug } = useParams<{ slug: string }>();
+  const { search, hash } = useLocation();
+  return <Navigate to={`/funil/${slug}${search}${hash}`} replace />;
 }
 
 const App = () => {

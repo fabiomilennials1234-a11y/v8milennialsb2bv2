@@ -83,7 +83,7 @@ export default function FunisHub() {
     ...permanentFunnels.map((pipe) => ({
       key: pipe.id,
       name: pipe.name,
-      path: `/pipe/custom/${pipe.slug}`,
+      path: `/funil/${pipe.slug}`,
       color: pipe.color ?? FALLBACK_COLOR,
     })),
     ...activeTemporary.map((pipe) => {
@@ -104,7 +104,7 @@ export default function FunisHub() {
       return {
         key: pipe.id,
         name: pipe.name,
-        path: `/pipe/custom/${pipe.slug}`,
+        path: `/funil/${pipe.slug}`,
         color: pipe.color ?? FALLBACK_COLOR,
         meta: partes.length > 0 ? partes.join(" · ") : undefined,
       };
@@ -188,7 +188,7 @@ export default function FunisHub() {
               {endedTemporary.map((pipe) => (
                 <button
                   key={pipe.id}
-                  onClick={() => navigate(`/pipe/custom/${pipe.slug}`)}
+                  onClick={() => navigate(`/funil/${pipe.slug}`)}
                   className="p-4 rounded-xl border border-border/50 bg-card text-left"
                 >
                   <div className="flex items-center gap-2">

@@ -6,13 +6,15 @@ import { usePipelineId, flattenMetadata, type PipelineType } from "./usePipeline
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { PipelineStage } from "./usePipelineStages";
 
-const PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 300;
+// Exportados p/ o hook irmão `usePaginatedFunil` (SCRUM-632): mesma cadência de
+// página/debounce/slots nos dois boards até a W6 fundir os hooks.
+export const PAGE_SIZE = 20;
+export const SEARCH_DEBOUNCE_MS = 300;
 // Fixed-slots cap: always call this many useStageSlot hooks, enable only the
 // active ones (see loop below). Boards with more active stages than this hide
 // the overflow columns' cards entirely. Raised 20→40 because orgs like Basic4u
 // run 25+ active stages (leads in stages 21-25 were invisible on the board).
-const MAX_STAGES = 40;
+export const MAX_STAGES = 40;
 
 /**
  * Filters applied to a paginated board. `search`, `responsibleId` and `tagIds`
@@ -106,12 +108,31 @@ export function sharedRpcParams(
   search: string,
   filters: PaginatedFilters
 ) {
+  return {
+    p_pipeline_slug: slug,
+    ...sharedRpcFilterParams(orgId, search, filters),
+  };
+}
+
+/**
+ * O bloco de filtros SEM o seletor de funil (slug/id).
+ *
+ * Extraído de `sharedRpcParams` na SCRUM-632: a página unificada (`/funil/:slug`)
+ * fala com as MESMAS RPCs mas endereça o funil por `p_pipeline_id` (caminho
+ * canônico da SCRUM-626), não por slug. O mapeamento filtro→parâmetro fica num
+ * lugar só — duplicá-lo divergiria badge e cards entre as duas famílias de
+ * board na primeira mudança de filtro.
+ */
+export function sharedRpcFilterParams(
+  orgId: string,
+  search: string,
+  filters: PaginatedFilters
+) {
   const stalled = {
     min: orNull(filters.stalledMinDays),
     max: orNull(filters.stalledMaxDays),
   };
   return {
-    p_pipeline_slug: slug,
     p_org_id: orgId,
     p_search: search || null,
     p_responsible_id:
