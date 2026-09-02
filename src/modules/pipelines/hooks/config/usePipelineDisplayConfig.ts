@@ -3,7 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 // Caminho relativo curto: config -> model é dentro do MESMO módulo, então não
 // passa pelo barril público (regra de boundaries do ESLint).
-import { resetDefaultStagesEnsureCache } from "../model/usePipelineStages";
 import { rpcNaoTipada } from "../../lib/rpc-nao-tipada";
 
 export type SystemPipeType = "whatsapp" | "confirmacao" | "propostas" | "upsell";
@@ -131,13 +130,8 @@ export function useEnableSystemPipe() {
       queryClient.invalidateQueries({ queryKey: ["pipeline-display-config"] });
       queryClient.invalidateQueries({ queryKey: ["pipeline_id"] });
       queryClient.invalidateQueries({ queryKey: ["pipelines"] });
-      // As etapas são semeadas pelo front na leitura seguinte (a fonte canônica
-      // é `DEFAULT_STAGES`, não a função SQL, que está defasada). A trava do
-      // ensure é por ORGANIZAÇÃO, não por tipo — invalidar a query não basta,
-      // porque o ensure já rodou nesta sessão quando o tipo recém-ativado ainda
-      // não estava no registro. Sem este reset o funil nasce sem etapa alguma
-      // até o usuário recarregar a aba.
-      if (organizationId) resetDefaultStagesEnsureCache(organizationId);
+      // SCRUM-618: as etapas são semeadas pelo PRÓPRIO `enable_system_pipeline`
+      // (server-side, migration 20270906003000) — o front só refaz a leitura.
       queryClient.invalidateQueries({ queryKey: ["pipeline_stages"] });
     },
   });

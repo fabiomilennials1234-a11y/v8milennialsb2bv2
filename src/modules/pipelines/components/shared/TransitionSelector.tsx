@@ -22,12 +22,15 @@ export interface TransitionTarget {
   targetStageKey: string | null;
 }
 
+// SCRUM-618 (D9/ADR-0034): Carteira saiu das opções de destino — o funil dela
+// está aposentado (20270805000010) e as etapas-alvo não existem mais como
+// funil. Medido em prod (2026-09-01): 1 etapa custom ainda aponta
+// target_pipe_type='upsell_base'; a EXECUÇÃO dessa transição segue intacta
+// (useCustomPipelines), só não dá mais para criar/editar apontando pra lá.
 const STANDARD_PIPES: { value: string; label: string }[] = [
   { value: "whatsapp", label: "Qualificação" },
   { value: "confirmacao", label: "Confirmação" },
   { value: "propostas", label: "Propostas" },
-  { value: "upsell_base", label: "Carteira Base" },
-  { value: "upsell_gestao", label: "Carteira Gestão" },
 ];
 
 /**

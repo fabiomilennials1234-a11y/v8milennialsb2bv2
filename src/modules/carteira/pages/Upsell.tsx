@@ -14,7 +14,8 @@ import { UpsellGestaoKanban } from "@/modules/carteira/components/upsell/UpsellG
 import { CreateClientModal } from "@/modules/carteira/components/upsell/CreateClientModal";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
-import { usePipelineStages, DisparoWizard, type PipelineType } from "@/modules/pipelines";
+import { DisparoWizard } from "@/modules/pipelines";
+import { useCarteiraStages, type CarteiraStageFamily } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useAutoMoveUpsellClients } from "@/modules/carteira/hooks/useAutoMoveUpsellClients";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { usePortfolioKPIs } from "@/modules/carteira/hooks/usePortfolioKPIs";
@@ -87,8 +88,8 @@ export default function Upsell() {
   // Tab + Import dialog
   const [activeTab, setActiveTab] = useState<"base" | "gestao">("base");
   const [importOpen, setImportOpen] = useState(false);
-  const importPipeType: PipelineType = activeTab === "gestao" ? "upsell_gestao" : "upsell_base";
-  const { data: importStages = [] } = usePipelineStages(importPipeType);
+  const importPipeType: CarteiraStageFamily = activeTab === "gestao" ? "upsell_gestao" : "upsell_base";
+  const { data: importStages = [] } = useCarteiraStages(importPipeType);
 
   // Portfolio (carteira) state — only used when isPortfolio
   const [quickOrderClientId, setQuickOrderClientId] = useState<string | null>(null);

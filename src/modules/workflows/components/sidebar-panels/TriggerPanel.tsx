@@ -681,12 +681,14 @@ function LeadCreatedConfig({
 
 // ── Sub-componente para stage_changed com carregamento dinâmico de etapas ──
 
+// SCRUM-618 (D9/ADR-0034): opções upsell_* removidas — Carteira não é funil e
+// gatilho de etapa nela nunca dispara (o board da Carteira não escreve em
+// pipeline_entries). Medido em prod (2026-09-01): 0 workflows com upsell_* em
+// trigger_config/definition.
 const STANDARD_PIPES: { value: string; label: string }[] = [
   { value: "whatsapp", label: "Qualificação" },
   { value: "confirmacao", label: "Confirmação" },
   { value: "propostas", label: "Propostas" },
-  { value: "upsell_base", label: "Carteira Base" },
-  { value: "upsell_gestao", label: "Carteira Gestão" },
 ];
 
 function StageChangedConfig({

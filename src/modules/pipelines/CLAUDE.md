@@ -82,7 +82,12 @@ Ver `./index.ts` para a superfície completa. Estável.
 > Antes, quatro torneiras de auto-semeadura no caminho de LEITURA recriavam tudo, o que tornava a exclusão
 > impossível — apagar as linhas e recarregar a página trazia o funil de volta. As quatro estão fechadas:
 > `ensure_pipeline_display_config` (virou no-op), `create_default_pipelines` (consulta o registro),
-> `ensureDefaultStagesInDb` e `buildFallbackStages` (ambas gateadas por `lerTiposHabilitados`).
+> `buildFallbackStages` (gateada por `lerTiposHabilitados`; só render-only em erro/sem-org) e
+> `ensureDefaultStagesInDb` (REMOVIDA — SCRUM-618: o seed é 100% server-side via
+> `enable_system_pipeline` → `create_default_pipeline_stages`, migration `20270906003000`;
+> funil habilitado sem etapa renderiza VAZIO, não fallback). Etapas da Carteira (resíduo
+> `upsell_*`, fora de `PipelineType` desde SCRUM-618) são lidas pelo módulo carteira via
+> `useCarteiraStages`.
 >
 > **Ao mexer aqui:** nunca reintroduza um default em memória para funil de sistema, e nunca semeie tipo que
 > não esteja no registro. `tests/unit/hooks-sprint2-pipeline-stages.test.ts` trava os dois sentidos.

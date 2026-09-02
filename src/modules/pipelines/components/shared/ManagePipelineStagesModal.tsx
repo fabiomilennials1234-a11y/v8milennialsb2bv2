@@ -20,12 +20,14 @@ import {
 import {
   PipelineStage,
   PipelineType,
+  StageFamily,
   useCreatePipelineStage,
   useUpdatePipelineStage,
   useDeletePipelineStage,
   useReorderPipelineStages,
   usePipelineStageLeadCounts,
   getPipelineTypeName,
+  getStageFamilyName,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { useCustomPipelines } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import {
@@ -81,7 +83,7 @@ import {
 interface ManagePipelineStagesModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  pipelineType: PipelineType;
+  pipelineType: StageFamily;
   stages: PipelineStage[];
 }
 
@@ -196,7 +198,7 @@ function SortableStageItem({
   onChecklistTemplateChange,
 }: {
   stage: PipelineStage;
-  pipelineType: PipelineType;
+  pipelineType: StageFamily;
   onEdit: () => void;
   onDelete: () => void;
   isEditing: boolean;
@@ -441,7 +443,7 @@ function SortableStageItem({
 }
 
 interface ManagePipelineStagesContentProps {
-  pipelineType: PipelineType;
+  pipelineType: StageFamily;
   stages: PipelineStage[];
 }
 
@@ -674,7 +676,7 @@ export function ManagePipelineStagesContent({
     }
   };
 
-  const pipelineName = getPipelineTypeName(pipelineType);
+  const pipelineName = getStageFamilyName(pipelineType);
 
   return (
     <>
@@ -927,7 +929,7 @@ export function ManagePipelineStagesModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Gerenciar Etapas - {getPipelineTypeName(pipelineType)}</DialogTitle>
+          <DialogTitle>Gerenciar Etapas - {getStageFamilyName(pipelineType)}</DialogTitle>
           <DialogDescription>
             Crie, edite, reordene ou remova etapas do funil. Arraste para reordenar.
           </DialogDescription>

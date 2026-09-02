@@ -5,7 +5,8 @@
  * da reunião ao funil de Oportunidades (whatsapp) de uma org SEM tocar nas
  * etapas de qualificação que a org já tem — algumas orgs customizaram as suas.
  *
- * A migration SQL e o seed (`ensureDefaultStagesInDb`) espelham esta regra.
+ * A migration SQL e o seed server-side (`create_default_pipeline_stages`,
+ * único desde SCRUM-618) espelham esta regra.
  */
 import type { DefaultStage } from "./pipe-defaults";
 
