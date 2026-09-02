@@ -11,13 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useCreateSavedView, useUpdateSavedView } from "@/modules/platform/hooks/useSavedViews";
-import type { SavedView } from "@/types/saved-views";
+import type { SavedView, SavedViewEntityType } from "@/types/saved-views";
 import { toast } from "sonner";
 
 interface SaveViewDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  entityType: string;
+  entityType: SavedViewEntityType;
   currentFilters: Record<string, unknown>;
   editingView?: SavedView | null;
 }

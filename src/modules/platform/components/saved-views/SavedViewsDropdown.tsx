@@ -18,11 +18,12 @@ import { useSavedViews, useDeleteSavedView } from "@/modules/platform/hooks/useS
 import { useOrganization } from "@/modules/identity";
 import { resolveFilters } from "@/types/saved-views";
 import { SaveViewDialog } from "./SaveViewDialog";
-import type { SavedView } from "@/types/saved-views";
+import type { SavedView, SavedViewEntityType } from "@/types/saved-views";
 import { toast } from "sonner";
 
 interface SavedViewsDropdownProps<T extends Record<string, unknown>> {
-  entityType: string;
+  /** `"leads"` ou `pipeline:{uuid}` (via `pipelineEntityType`). */
+  entityType: SavedViewEntityType;
   currentFilters: T;
   defaultFilters: T;
   onApplyFilters: (filters: T) => void;
