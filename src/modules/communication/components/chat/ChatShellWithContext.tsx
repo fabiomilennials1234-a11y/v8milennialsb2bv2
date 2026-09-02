@@ -28,7 +28,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
-import { definirConversaAberta } from "@/modules/platform";
+import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
+import { nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
@@ -90,6 +91,7 @@ import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInbo
 import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
 import { toServerFilter } from "@/modules/communication/lib/inboxFilterServer";
+import { DEFAULT_INBOX_FILTER } from "@/modules/communication/lib/inboxFilter";
 import { inboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import {
   useArchiveConversation,
@@ -111,7 +113,12 @@ import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDens
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
-type ConversationTab = "active" | "archived";
+/**
+ * `"grupos"` só é alcançável na org com a flag `chat_abas_de_grupos` — a aba não
+ * é renderizada sem ela, e o estado nasce sempre em `"active"` (não é
+ * persistido). Ver `lib/inboxFilter.ts`.
+ */
+type ConversationTab = "active" | "archived" | "grupos";
 
 /**
  * Monta a subscription de Realtime dos canais sociais SÓ enquanto a caixa
@@ -172,6 +179,20 @@ function ChatView({
   );
   const { leadId: effectiveLeadId, leadName: effectiveLeadName } =
     resolveEffectiveLead(selectedContact, leadByPhone);
+
+  /**
+   * `chat_nome_do_whatsapp` — a org escolhe quem nomeia a conversa no topo: o
+   * perfil do interlocutor (`push_name`) ou o nome curado no CRM.
+   *
+   * Lido AQUI, junto dos outros hooks, e não perto do uso: abaixo há o early
+   * return de "Selecione uma conversa", e hook depois de return condicional
+   * muda a ordem entre renders.
+   *
+   * Fail-closed enquanto carrega — a org flagada pinta a primeira frame com o
+   * nome do CRM e troca quando a flag chega. Trocar o texto de um nome é melhor
+   * que segurar a thread inteira num skeleton esperando a flag.
+   */
+  const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
 
   // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
   // daqui é o único ponto que sabe qual lead está aberto.
@@ -251,8 +272,17 @@ function ChatView({
     );
   }
 
-  const contactName =
-    effectiveLeadName ?? selectedContact?.push_name ?? phoneNumber ?? "";
+  // A LISTA (`contactLabel`) já resolve `push_name → lead_name → telefone`. Aqui
+  // era o inverso, e por isso a mesma conversa aparecia com dois nomes: o topo
+  // com o do CRM, a linha com o do WhatsApp. A flag alinha as duas telas.
+  const contactName = nomeDaConversa(
+    {
+      pushName: selectedContact?.push_name ?? null,
+      nomeDoLead: effectiveLeadName,
+      telefone: phoneNumber ?? null,
+    },
+    { nomeDoWhatsappPrimeiro },
+  );
 
   // A lista já afirmou que existe mensagem com este contato. Se a thread volta
   // vazia mesmo assim, "Comece a conversa" seria uma afirmação falsa — ver
@@ -686,12 +716,34 @@ export function ChatShellWithContext() {
   const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState();
   const { isMobile } = useViewport();
 
-  // Mobile tem header próprio (all/unread/groups + vendedor) e ignora o resto do
+  /**
+   * `chat_abas_de_grupos` — a org decide se a lista tem a aba de grupos. Lida
+   * AQUI, e não na lista, porque a decisão tem duas pontas que precisam
+   * concordar: o que a RPC traz (`p_include_groups`) e o que a UI oferece. Se só
+   * a UI soubesse, a aba existiria sobre uma página sem uma linha de grupo.
+   *
+   * Fail-closed enquanto carrega: a primeira frame não tem a aba e a lista não
+   * pede grupo. Quando a flag chega, a `queryKey` muda (a `cacheKey` carrega o
+   * argumento) e a lista refaz a busca — uma vez, no load.
+   */
+  const { enabled: abasDeGrupos } = useFeatureFlag("chat_abas_de_grupos");
+
+  // Mobile tem header próprio (all/unread/grupos + vendedor) e ignora o resto do
   // estado persistido — empurrar essas dimensões pro servidor sumiria com
   // conversa que a UI mobile deveria mostrar. Lá o recorte fica só no cliente.
+  //
+  // A exceção é o grupo, porque não é recorte e sim universo: o mobile precisa
+  // mandar `p_include_groups` ou o chip "Grupos" filtraria uma página que nunca
+  // teve grupo. Vai sozinho, sobre o filtro default — nenhuma outra dimensão
+  // atravessa.
   const serverFilter = useMemo(
-    () => (isMobile ? undefined : toServerFilter(filter, teamMember?.id ?? null)),
-    [isMobile, filter, teamMember?.id],
+    () =>
+      isMobile
+        ? abasDeGrupos
+          ? toServerFilter(DEFAULT_INBOX_FILTER, null, { incluirGrupos: true })
+          : undefined
+        : toServerFilter(filter, teamMember?.id ?? null, { incluirGrupos: abasDeGrupos }),
+    [isMobile, filter, teamMember?.id, abasDeGrupos],
   );
 
   // ── Contatos ────────────────────────────────────────────────────────────────
@@ -989,6 +1041,12 @@ export function ChatShellWithContext() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ConversationTab>("active");
 
+  // Flag desligada com a aba aberta (rollback, ou troca de org na mesma sessão):
+  // a aba some do topo e a lista ficaria presa num escopo sem botão de saída.
+  useEffect(() => {
+    if (!abasDeGrupos && activeTab === "grupos") setActiveTab("active");
+  }, [abasDeGrupos, activeTab]);
+
   // ── Filtro por vendedor ─────────────────────────────────────────────────────
   // Conversa não tem vendedor próprio: deriva do responsável do lead
   // (leads.responsible_id). "all" = todos; "mine" = do usuário; "unassigned" =
@@ -1167,6 +1225,9 @@ export function ChatShellWithContext() {
             waitingHumanLeadIds={waitingHumanLeadIds}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            // A lista NÃO relê a flag: quem manda `p_include_groups` na busca é
+            // este componente, e as duas pontas têm que ser a mesma leitura.
+            abasDeGrupos={abasDeGrupos}
             onArchive={handleArchive}
             onUnarchive={handleUnarchive}
             onDelete={handleDelete}

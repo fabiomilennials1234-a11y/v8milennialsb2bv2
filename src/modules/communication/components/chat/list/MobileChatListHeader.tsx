@@ -19,7 +19,11 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type MobileChatFilter = "all" | "unread";
+/**
+ * `"grupos"` só é alcançável na org com a flag `chat_abas_de_grupos` — sem ela o
+ * chip não é renderizado. É o par mobile da aba "Grupos" do desktop.
+ */
+export type MobileChatFilter = "all" | "unread" | "grupos";
 
 export interface MobileChatListHeaderProps {
   instanceName: string;
@@ -40,6 +44,10 @@ export interface MobileChatListHeaderProps {
   activeFilter: MobileChatFilter;
   onFilterChange: (filter: MobileChatFilter) => void;
   unreadCount: number;
+  /** Org com a flag `chat_abas_de_grupos`: acrescenta o chip "Grupos". */
+  mostrarGrupos?: boolean;
+  /** Nº de conversas de grupo — só rende quando `mostrarGrupos`. */
+  gruposCount?: number;
   // ─── Filtro por vendedor ────────────────────────────────────────────────────
   /** Valor atual: "all" | "mine" | "unassigned" | <teamMemberId>. */
   vendorFilter: string;
@@ -71,6 +79,8 @@ export function MobileChatListHeader({
   activeFilter,
   onFilterChange,
   unreadCount,
+  mostrarGrupos = false,
+  gruposCount = 0,
   vendorFilter,
   onVendorFilterChange,
   vendorOptions,
@@ -96,6 +106,9 @@ export function MobileChatListHeader({
   const chips: ChipDef[] = [
     { key: "all", label: "Todas" },
     { key: "unread", label: "Não lidas", count: unreadCount },
+    // Sem a flag o chip nem entra na fileira: a lista da org não tem grupo, e um
+    // chip que sempre leva a "nenhuma conversa" ensina a desconfiar do resto.
+    ...(mostrarGrupos ? ([{ key: "grupos", label: "Grupos", count: gruposCount }] as ChipDef[]) : []),
   ];
 
   // Label curta pro chip de vendedor (o valor completo fica no dropdown).
