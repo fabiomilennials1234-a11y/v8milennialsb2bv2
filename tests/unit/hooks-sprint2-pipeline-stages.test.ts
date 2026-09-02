@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 // ---- Chain mock helper ----
 
@@ -319,7 +320,7 @@ describe("useReorderPipelineStages", () => {
     mockFrom.mockReturnValue(createChainMock());
   });
 
-  it("reorders stages", async () => {
+  it("reorders stages via RPC de statement único (SCRUM-616)", async () => {
     const { result } = renderHook(() => useReorderPipelineStages(), { wrapper: createWrapper() });
     await act(async () => {
       try {
@@ -332,7 +333,11 @@ describe("useReorderPipelineStages", () => {
         });
       } catch {}
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
+    // UNIQUE (pipeline_id, position): a permutação vai numa RPC única, ids na
+    // ordem final (position asc), nunca em UPDATEs por linha.
+    expect(supabase.rpc).toHaveBeenCalledWith("reorder_pipeline_stages", {
+      p_stage_ids: ["ps-2", "ps-1"],
+    });
   });
 });
 

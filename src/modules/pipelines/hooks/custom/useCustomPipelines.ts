@@ -826,16 +826,14 @@ export function useReorderCustomPipelineStages() {
       pipeline_id: string;
       stages: { id: string; position: number }[];
     }) => {
-      const updates = stages.map((stage) =>
-        supabase
-          .from("custom_pipeline_stages")
-          .update({ position: stage.position })
-          .eq("id", stage.id)
-      );
-
-      const results = await Promise.all(updates);
-      const errors = results.filter((r) => r.error);
-      if (errors.length > 0) throw errors[0].error;
+      // SCRUM-616: UNIQUE (pipeline_id, position) tornou o UPDATE por linha
+      // inviável (cada request é uma transação; a permutação transita por
+      // posições ocupadas). A RPC faz a permutação em statement único.
+      const ordered = [...stages].sort((a, b) => a.position - b.position);
+      const { error } = await supabase.rpc("reorder_pipeline_stages" as never, {
+        p_stage_ids: ordered.map((s) => s.id),
+      } as never);
+      if (error) throw error;
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
