@@ -53,7 +53,7 @@ export function LeadTabTags({ leadId, leadTags = [] }: LeadTabTagsProps) {
           variant="outline"
           size="sm"
           className="w-full"
-          onClick={() => window.open(`/leads?id=${leadId}`, "_blank")}
+          onClick={() => window.open(`/leads?lead=${leadId}`, "_blank")}
         >
           <ExternalLink className="w-4 h-4 mr-2" />
           Editar tags em /leads

@@ -369,7 +369,7 @@ export function EventDetailPopover({
         {/* Lead link */}
         {event.leadId && (
           <a
-            href={`/leads?id=${event.leadId}`}
+            href={`/leads?lead=${event.leadId}`}
             className="flex items-center gap-2 text-xs text-primary hover:text-primary/80 transition-colors"
           >
             <ExternalLink className="w-3.5 h-3.5 shrink-0" />

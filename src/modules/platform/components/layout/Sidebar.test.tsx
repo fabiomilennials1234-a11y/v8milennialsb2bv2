@@ -30,8 +30,18 @@ vi.mock("./SidebarMasterLinks", () => ({
   SidebarMasterLinks: () => <div data-testid="master-links" />,
 }));
 vi.mock("./SidebarUserMenu", () => ({ SidebarUserMenu: () => <div data-testid="user-menu" /> }));
+// O dublê HONRA `rotulo` porque o real também honra
+// (`AlertsDropdown.tsx`: `{rotulo && <span>{rotulo}</span>}`).
+//
+// Ele ignorava a prop, e isso quebrou a asserção de "Notificações" no rodapé
+// no dia em que o Sidebar parou de renderizar a palavra num <span> inerte e
+// passou a entregá-la ao componente. O teste ficou vermelho na main sem que
+// nada no PRODUTO tivesse regredido: dublê mais frouxo que o real transforma
+// refatoração correta em falha.
 vi.mock("@/modules/platform/components/notifications/AlertsDropdown", () => ({
-  AlertsDropdown: () => <div data-testid="alerts" />,
+  AlertsDropdown: ({ rotulo }: { rotulo?: string }) => (
+    <div data-testid="alerts">{rotulo}</div>
+  ),
 }));
 vi.mock("@/shared/components/UpgradeModal", () => ({
   UpgradeModal: ({ featureKey }: { featureKey: string }) => {

@@ -405,11 +405,35 @@ function PipeWhatsappInner() {
     return stagesToColumns(pipelineStages);
   }, [pipelineStages]);
 
-  // Stage final_negative da org — destino do "Marcar perdido" (funil mergeado).
-  const lostStageKey = useMemo(
-    () => pipelineStages.find((s) => s.is_final_negative)?.stage_key ?? null,
-    [pipelineStages],
-  );
+  /**
+   * Destino do "Marcar perdido" (funil mergeado).
+   *
+   * Ordem: papel primeiro, flag depois, e só etapa ATIVA nas duas.
+   *
+   * A versão anterior era `find(s => s.is_final_negative)` sobre a lista
+   * ordenada por `position`, e isso escolhia por ACIDENTE DE POSIÇÃO. Nas duas
+   * orgs que tinham a etapa de falta marcada como final_negative, ela vinha
+   * antes da etapa de perda de verdade (12 antes de 14; 9 antes de 912) e
+   * ganhava o `find` — o botão "Perdido" movia o card para a etapa onde ele já
+   * estava, gravando o motivo da perda sem sair do lugar.
+   *
+   * `stage_role === "lost"` é o critério certo porque é o mesmo que a métrica
+   * usa para contar perda: o botão passa a mandar o card para onde a conta de
+   * perdidos realmente olha. `is_final_negative` fica como segundo critério —
+   * é o sinal fraco, e org antiga pode ter só ele.
+   *
+   * O filtro de `is_active` é o que faltava nos dois: mover um card para
+   * coluna desativada o REMOVE do board sem apagá-lo — some da tela e não está
+   * perdido em lugar nenhum. Numa das duas orgs a etapa "Perdido" está
+   * inativa, então lá o botão some (`null`) em vez de esconder o lead. Botão
+   * ausente é honesto; botão que engole o card não.
+   */
+  const lostStageKey = useMemo(() => {
+    const ativas = pipelineStages.filter((s) => s.is_active !== false);
+    const porPapel = ativas.find((s) => s.stage_role === "lost");
+    if (porPapel) return porPapel.stage_key;
+    return ativas.find((s) => s.is_final_negative)?.stage_key ?? null;
+  }, [pipelineStages]);
 
   // Build columns from server-paginated stageData
   const columns = useMemo((): KanbanColumn<LeadCardData>[] => {
