@@ -46,11 +46,13 @@ import {
   type StageRoleSuggestionRow,
 } from "../lib/stage-role-review";
 
-function pipeLabel(pipelineType: string): string {
+function pipeLabel(row: StageRoleSuggestionRow): string {
+  // Etapa custom (pós-SCRUM-616): pipeline_type é NULL — o rótulo é o funil.
+  if (!row.pipeline_type) return row.pipeline?.name ?? "Funil custom";
   try {
-    return getPipelineTypeName(pipelineType as PipelineType);
+    return getPipelineTypeName(row.pipeline_type as PipelineType);
   } catch {
-    return pipelineType;
+    return row.pipeline_type;
   }
 }
 
@@ -85,7 +87,7 @@ function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {
         <div className="min-w-0">
           <p className="font-medium text-sm truncate">{row.name}</p>
           <p className="text-xs text-muted-foreground truncate">
-            {pipeLabel(row.pipeline_type)}
+            {pipeLabel(row)}
             <span className="mx-1.5 opacity-40">·</span>
             <span className="font-mono opacity-70">{row.stage_key}</span>
           </p>

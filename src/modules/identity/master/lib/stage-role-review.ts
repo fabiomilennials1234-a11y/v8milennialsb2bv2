@@ -14,7 +14,8 @@ import type { StageRole, SuggestableStageRole, StageRoleSuggestionSource } from 
 export interface StageRoleSuggestionRow {
   id: string;
   organization_id: string;
-  pipeline_type: string;
+  /** NULL nas etapas de funil custom (pós-SCRUM-616 todas vivem em pipeline_stages). */
+  pipeline_type: string | null;
   stage_key: string;
   name: string;
   color: string | null;
@@ -23,6 +24,8 @@ export interface StageRoleSuggestionRow {
   stage_role_suggested_at: string | null;
   stage_role_suggestion_source: StageRoleSuggestionSource | null;
   organization: { name: string } | null;
+  /** Funil dono da etapa — é o rótulo quando pipeline_type é NULL (custom). */
+  pipeline: { name: string } | null;
 }
 
 export interface OrgSuggestionGroup {
@@ -54,7 +57,9 @@ export function groupSuggestionsByOrg(
   for (const group of groups) {
     group.suggestions.sort(
       (a, b) =>
-        a.pipeline_type.localeCompare(b.pipeline_type) || a.name.localeCompare(b.name),
+        (a.pipeline_type ?? a.pipeline?.name ?? "").localeCompare(
+          b.pipeline_type ?? b.pipeline?.name ?? "",
+        ) || a.name.localeCompare(b.name),
     );
   }
   return groups.sort((a, b) => a.orgName.localeCompare(b.orgName));
