@@ -41,7 +41,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useAuth, useIdentity, useTeamMembers } from "@/modules/identity";
+import { useAuth, useCanDo, useIdentity, useTeamMembers } from "@/modules/identity";
 import { useAgendaEvents } from "@/modules/engagement/hooks/useAgendaEvents";
 import { useMyAgendaOwnership } from "@/modules/engagement/hooks/useMyAgendaOwnership";
 import {
@@ -150,9 +150,30 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   }, []);
 
   // ── Escopo de visibilidade ──────────────────────────────────────────────────
-  // Enquanto a identidade não resolve, vale a regra restrita: quem ainda não
-  // provou ser admin vê só o que é seu. Falhar fechado é o lado barato do erro.
-  const seesEveryone = identityReady && isAdmin;
+  // A agenda é da OPERAÇÃO por padrão: todo mundo vê os compromissos de todo
+  // mundo. O recorte "só os meus" existe, mas agora é POLÍTICA — a permissão
+  // `agenda.view_all`, que nasce ligada e um admin desliga por membro (ou por
+  // org). Antes o recorte era o CARGO: `seesEveryone = isAdmin`, e nenhum admin
+  // tinha escolhido isso.
+  //
+  // `useCanDo` já devolve `true` para master e para admin da org, então o
+  // `isAdmin` daqui é redundância deliberada: `useCanDo` depende do mapa da
+  // edge function `get-member-permissions`, e essa edge function ainda NÃO lê
+  // `organization_feature_defaults` (lê só o override do membro e o default
+  // global). O admin não pode perder a operação por causa desse buraco.
+  //
+  // ⚠️ Isto NÃO é a fronteira. Quem decide é `get_agenda_events_scoped`, no
+  // banco. Aqui o filtro é o que rotula a tela, cobre o evento do Google (que
+  // não passa pela RPC) e sustenta o caminho degradado enquanto a migration não
+  // estiver aplicada.
+  const { allowed: podeVerTodos, isLoading: permissaoCarregando } =
+    useCanDo("agenda.view_all");
+
+  // Falhar fechado enquanto carrega: a lista abre recortada e completa em
+  // seguida. O inverso — nascer completa e encolher — mostraria compromisso
+  // alheio a quem não podia, mesmo que por meio segundo.
+  const seesEveryone =
+    identityReady && !permissaoCarregando && (isAdmin || podeVerTodos);
 
   const ownIdentity = useMemo(
     () => buildOwnerIdentity(userId, teamMemberId),
