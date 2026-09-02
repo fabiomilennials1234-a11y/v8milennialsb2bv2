@@ -240,57 +240,9 @@ export function contactKey(c: InboxContact): string {
  * um rótulo genérico — dois contatos sem nome precisam continuar distinguíveis
  * na lista.
  */
-export interface OpcoesDeRotulo {
-  /**
-   * Liga a ordem nova no WhatsApp: nome do lead na frente do `push_name`.
-   *
-   * Vem da flag por org `chat_nome_do_lead_na_lista`
-   * (`organizations.feature_flags`), lida uma vez em `ConversationList` e
-   * descida como prop — e não lida aqui dentro, porque este é um módulo puro,
-   * chamado uma vez por linha em lista que passa de 500.
-   *
-   * Ausente/`false` reproduz `main` byte-a-byte: org não flagada não muda.
-   */
-  nomeDoLeadPrimeiro?: boolean;
-}
-
-export function contactLabel(c: InboxContact, opcoes: OpcoesDeRotulo = {}): string {
+export function contactLabel(c: InboxContact): string {
   if (c.channel === "whatsapp") {
-    // O NOME DO LEAD GANHA DO `push_name`.
-    //
-    // `push_name` é o que o interlocutor escreveu no perfil DELE — o CRM não o
-    // controla e renomear o lead nunca o altera. O nome do lead é o que a
-    // organização curou (código interno, razão social, apelido combinado com o
-    // time), e é o único dos dois que o vendedor consegue corrigir.
-    //
-    // Medido em produção (02/09, Envase Carolini): lead renomeado para
-    // "6627 - Fernando Porto" aparecia assim no CABEÇALHO da thread e continuava
-    // "Fernando Porto" na LISTA — o cabeçalho já resolve nesta ordem
-    // (`ChatShellWithContext`: `effectiveLeadName ?? push_name ?? phone`), e só a
-    // lista divergia. A mesma ordem daqui já valia no filtro de busca
-    // (`inboxFilter`), na bolha do kanban, no composer e no command palette:
-    // buscar pelo nome do CRM achava a linha, que então exibia outro nome.
-    //
-    // ⚠️ A linha do WhatsApp NÃO tem chip de lead (`ConversationListItem` só
-    // renderiza o chip quando `!isWhatsApp`, justamente porque assume que o
-    // título JÁ é o nome do lead). Com `push_name` na frente, o nome do CRM não
-    // aparecia em lugar nenhum da lista.
-    //
-    // ─── Org NÃO flagada: a expressão de `main`, intacta ────────────────────
-    // Repetida literal, e não derivada da de baixo, porque "sem a flag nada
-    // muda" é a promessa desta entrega. Um `.trim()` só no fim tem um defeito
-    // real (nome só de espaços vence os seguintes e derruba a linha em
-    // "Contato"), mas consertá-lo aqui mudaria org que não pediu mudança.
-    if (!opcoes.nomeDoLeadPrimeiro) {
-      return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
-    }
-
-    // O `trim` é POR CANDIDATO, e não no fim — o defeito descrito acima, que na
-    // ordem nova fica consertado.
-    const nome = [c.lead_name, c.push_name, c.phone_number]
-      .map((valor) => valor?.trim())
-      .find((valor) => valor);
-    return nome || "Contato";
+    return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
   }
   // O NOME primeiro, e o @ como queda.
   //

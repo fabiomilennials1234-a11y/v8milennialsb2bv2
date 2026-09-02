@@ -28,7 +28,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
-import { definirConversaAberta } from "@/modules/platform";
+import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
+import { nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
@@ -173,6 +174,20 @@ function ChatView({
   const { leadId: effectiveLeadId, leadName: effectiveLeadName } =
     resolveEffectiveLead(selectedContact, leadByPhone);
 
+  /**
+   * `chat_nome_do_whatsapp` — a org escolhe quem nomeia a conversa no topo: o
+   * perfil do interlocutor (`push_name`) ou o nome curado no CRM.
+   *
+   * Lido AQUI, junto dos outros hooks, e não perto do uso: abaixo há o early
+   * return de "Selecione uma conversa", e hook depois de return condicional
+   * muda a ordem entre renders.
+   *
+   * Fail-closed enquanto carrega — a org flagada pinta a primeira frame com o
+   * nome do CRM e troca quando a flag chega. Trocar o texto de um nome é melhor
+   * que segurar a thread inteira num skeleton esperando a flag.
+   */
+  const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
+
   // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
   // daqui é o único ponto que sabe qual lead está aberto.
   useEffect(() => {
@@ -251,8 +266,17 @@ function ChatView({
     );
   }
 
-  const contactName =
-    effectiveLeadName ?? selectedContact?.push_name ?? phoneNumber ?? "";
+  // A LISTA (`contactLabel`) já resolve `push_name → lead_name → telefone`. Aqui
+  // era o inverso, e por isso a mesma conversa aparecia com dois nomes: o topo
+  // com o do CRM, a linha com o do WhatsApp. A flag alinha as duas telas.
+  const contactName = nomeDaConversa(
+    {
+      pushName: selectedContact?.push_name ?? null,
+      nomeDoLead: effectiveLeadName,
+      telefone: phoneNumber ?? null,
+    },
+    { nomeDoWhatsappPrimeiro },
+  );
 
   // A lista já afirmou que existe mensagem com este contato. Se a thread volta
   // vazia mesmo assim, "Comece a conversa" seria uma afirmação falsa — ver

@@ -8,25 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { contactLabel, type ChatContact, type SocialContact } from "./types";
-
-const whatsapp = (over: Partial<ChatContact>): ChatContact => ({
-  channel: "whatsapp",
-  phone_number: "553499254544",
-  push_name: null,
-  last_message: null,
-  last_message_time: "2026-09-02T11:54:00Z",
-  last_message_direction: null,
-  last_message_sent_source: null,
-  unread_count: 0,
-  lead_id: null,
-  lead_name: null,
-  conversation_id: null,
-  archived_at: null,
-  tags: [],
-  is_group: false,
-  ...over,
-});
+import { contactLabel, type SocialContact } from "./types";
 
 const social = (over: Partial<SocialContact>): SocialContact => ({
   channel: "whatsapp_oficial",
@@ -44,78 +26,6 @@ const social = (over: Partial<SocialContact>): SocialContact => ({
   lead_name: null,
   tags: [],
   ...over,
-});
-
-const COM_FLAG = { nomeDoLeadPrimeiro: true };
-
-describe("contactLabel — WhatsApp COM a flag: o nome do CRM manda", () => {
-  it("o nome do lead ganha do push_name", () => {
-    // Medido em 02/09 (Envase Carolini): o lead foi renomeado no CRM para
-    // "6627 - Fernando Porto" e a LISTA continuou "Fernando Porto" — o
-    // `push_name`, que é o perfil do interlocutor e nenhum vendedor consegue
-    // editar. O cabeçalho da thread já mostrava o nome novo, e a lista, não.
-    expect(
-      contactLabel(
-        whatsapp({ push_name: "Fernando Porto", lead_name: "6627 - Fernando Porto" }),
-        COM_FLAG,
-      ),
-    ).toBe("6627 - Fernando Porto");
-  });
-
-  it("mesma ordem do cabeçalho da thread", () => {
-    // `ChatShellWithContext` monta `effectiveLeadName ?? push_name ?? phone`.
-    // Duas ordens diferentes para a MESMA conversa foi o defeito.
-    const c = whatsapp({ push_name: "Zap", lead_name: "Cliente do CRM" });
-    expect(contactLabel(c, COM_FLAG)).toBe(c.lead_name);
-  });
-
-  it("sem lead, o push_name segue valendo", () => {
-    expect(contactLabel(whatsapp({ push_name: "Fernando Porto" }), COM_FLAG)).toBe(
-      "Fernando Porto",
-    );
-  });
-
-  it("sem nome nenhum, cai no telefone", () => {
-    expect(contactLabel(whatsapp({}), COM_FLAG)).toBe("553499254544");
-  });
-
-  it("nome do lead em branco não vence o push_name", () => {
-    // `""` e `"   "` chegam de import e de edição pela UI; ambos precisam cair
-    // para o próximo, não virar linha sem rótulo.
-    expect(
-      contactLabel(whatsapp({ lead_name: "   ", push_name: "Fernando" }), COM_FLAG),
-    ).toBe("Fernando");
-  });
-});
-
-describe("contactLabel — WhatsApp SEM a flag: nada muda", () => {
-  // A entrega é por org (`chat_nome_do_lead_na_lista`). Para as outras ~30 orgs
-  // o rótulo tem que ser byte-a-byte o de `main` — inclusive nos cantos feios.
-
-  it("o push_name continua ganhando do nome do lead", () => {
-    expect(
-      contactLabel(whatsapp({ push_name: "Fernando Porto", lead_name: "6627 - Fernando Porto" })),
-    ).toBe("Fernando Porto");
-  });
-
-  it("sem push_name, o nome do lead aparece", () => {
-    expect(contactLabel(whatsapp({ lead_name: "6627 - Fernando Porto" }))).toBe(
-      "6627 - Fernando Porto",
-    );
-  });
-
-  it("push_name só de espaços continua derrubando a linha em 'Contato'", () => {
-    // O defeito do `.trim()` único no fim. Preservado de propósito: consertá-lo
-    // aqui mudaria org que não pediu mudança. Com a flag ligada, sai "Fernando".
-    expect(contactLabel(whatsapp({ push_name: "   ", lead_name: "Fernando" }))).toBe("Contato");
-    expect(contactLabel(whatsapp({ push_name: "   ", lead_name: "Fernando" }), COM_FLAG)).toBe(
-      "Fernando",
-    );
-  });
-
-  it("sem nome nenhum, cai no telefone", () => {
-    expect(contactLabel(whatsapp({}))).toBe("553499254544");
-  });
 });
 
 describe("contactLabel — canal oficial", () => {
