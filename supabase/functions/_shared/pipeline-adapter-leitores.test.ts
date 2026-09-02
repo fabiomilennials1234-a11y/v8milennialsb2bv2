@@ -50,7 +50,16 @@ function fakeSupabase(opts: {
           Promise.resolve(
             opts.pipelineId === null
               ? { data: null, error: { message: "sem funil" } }
-              : { data: { id: opts.pipelineId ?? "pipe-1" }, error: null },
+              : {
+                data: {
+                  id: opts.pipelineId ?? "pipe-1",
+                  slug: "whatsapp",
+                  name: "Oportunidades",
+                  type: "system",
+                  is_active: true,
+                },
+                error: null,
+              },
           ),
         then: (resolve: (v: { data: Linha[] | null; error: unknown }) => unknown) =>
           resolve(

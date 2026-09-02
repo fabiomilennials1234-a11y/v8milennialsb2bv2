@@ -16,7 +16,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { requireAuth, AuthError, authErrorResponse } from "../_shared/user-auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
-import { resolvePipelineId } from "../_shared/pipeline-adapter.ts";
+import { tryResolvePipelineId } from "../_shared/pipeline-adapter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -56,9 +56,9 @@ Deno.serve(
 
       // ── Step 1: Resolve pipeline IDs + get entries + follow-ups in parallel ──
       const [waId, confId, propId] = await Promise.all([
-        resolvePipelineId(supabase, orgId, "whatsapp"),
-        resolvePipelineId(supabase, orgId, "confirmacao"),
-        resolvePipelineId(supabase, orgId, "propostas"),
+        tryResolvePipelineId(supabase, orgId, "whatsapp"),
+        tryResolvePipelineId(supabase, orgId, "confirmacao"),
+        tryResolvePipelineId(supabase, orgId, "propostas"),
       ]);
 
       const pipeQueries: Promise<{ data: any[] | null }>[] = [];
