@@ -34,3 +34,4 @@ owner: claude-agent
 - [[ADR-2026-06-26-master-insights-unit-economics|Unit economics master-only por org]]
 - [[ADR-2026-06-29-dna-almas-tag-driven-routing|Roteamento tag-driven canônico (partner webhooks)]]
 - [[ADR-2026-06-29-send-to-number-workflow-node|Workflow node send_to_number — envio p/ número fixo + resumo da conversa]]
+- [[ADR-2026-09-01-funil-e-funil|Funil é funil — um tipo de funil, comportamento por stage_role, nunca por slug]]
