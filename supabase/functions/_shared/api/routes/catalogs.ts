@@ -47,9 +47,10 @@ async function catalog(ctx: ApiRouteContext, rpc: string): Promise<Response> {
 export async function listPipelines(ctx: ApiRouteContext): Promise<Response> {
   const params = new URL(ctx.req.url).searchParams;
   const somenteAtivas = params.get("only_active_stages") === "true";
-  // `pipeline` aceita as duas formas de endereçar um funil: slug (sistema) e id
-  // (personalizado). Quem monta seletor de etapa quer UM funil, e filtrar aqui
-  // evita que o cliente tenha que escolher a chave certa por tentativa.
+  // `pipeline` aceita as duas formas de endereçar um funil — id (uuid) ou slug
+  // — para QUALQUER funil, sistema ou personalizado (todo funil tem slug, único
+  // por org). Quem monta seletor de etapa quer UM funil, e filtrar aqui evita
+  // que o cliente tenha que escolher a chave certa por tentativa.
   const funilAlvo = params.get("pipeline")?.trim() || null;
   const supabase = ctx.supabase as RpcClient;
   const { data, error } = await supabase.rpc("api_list_pipelines", { p_org: ctx.organizationId });
