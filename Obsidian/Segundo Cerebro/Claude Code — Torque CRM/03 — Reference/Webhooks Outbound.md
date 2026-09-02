@@ -3,7 +3,7 @@ type: reference
 title: Webhooks Outbound
 status: draft
 created: 2026-05-15
-updated: 2026-06-30
+updated: 2026-09-02
 tags: [reference, webhooks, outbound]
 related: ["[[Cron Jobs]]", "[[Runbook — Cron e Webhooks]]", "[[Edge Functions]]", "[[Schema]]"]
 owner: gabriel
@@ -78,13 +78,16 @@ Edge functions também podem enfileirar via helper
 Grounded em `20260211000001_webhooks_leads_trigger.sql` +
 `20260212000000_webhooks_triggers_pipes_followups_campaigns_etc.sql`:
 
+> **Aposentados (SCRUM-630, `20270908005000`)**: os 6 eventos
+> `pipe_{whatsapp,confirmacao,propostas}.{created,updated}` morreram quando as
+> tabelas `pipe_*` viraram views (Wave 1) — os enqueuers ficaram órfãos (0
+> triggers) e foram dropados. Substituto: `negocio.stage_changed`.
+
 | Event type | Origem (tabela / trigger) | Quando |
 |---|---|---|
 | `lead.created` | `leads` | AFTER INSERT |
 | `lead.updated` | `leads` | AFTER UPDATE |
-| `pipe_whatsapp.created` / `.updated` | `pipe_whatsapp` | INSERT / UPDATE |
-| `pipe_confirmacao.created` / `.updated` | `pipe_confirmacao` | INSERT / UPDATE |
-| `pipe_propostas.created` / `.updated` | `pipe_propostas` | INSERT / UPDATE |
+| `negocio.stage_changed` | `pipeline_entries` / `trg_pe_webhook_stage_changed` | AFTER UPDATE OF `stage_key, stage_id` quando a etapa muda — qualquer funil (sistema ou custom) |
 | `follow_up.created` | `follow_ups` | INSERT |
 | `follow_up.completed` | `follow_ups` | UPDATE quando `completed_at` passa a não-nulo |
 | `follow_up.updated` | `follow_ups` | outros UPDATE |
@@ -112,12 +115,30 @@ Todo evento usa o mesmo envelope:
 
 `timestamp` é UTC, formato `YYYY-MM-DD"T"HH24:MI:SS.MS"Z"`.
 
+> **Exceção — `negocio.stage_changed`** (SCRUM-630, F3/D10): payload FLAT, sem o
+> envelope acima (contrato novo nasceu limpo — em 2026-09-02 `webhooks` tinha
+> 0 linhas em prod, então não havia consumidor do envelope legado):
+>
+> ```json
+> {
+>   "event": "negocio.stage_changed",
+>   "organization_id": "uuid", "pipeline_id": "uuid",
+>   "pipeline_slug": "...", "pipeline_name": "...",
+>   "stage_id": "uuid|null", "stage_key": "...",
+>   "stage_name": "...|null", "stage_role": "...|null",
+>   "previous_stage_id": "uuid|null", "previous_stage_key": "...",
+>   "deal_id": "uuid|null", "lead_id": "uuid|null", "entry_id": "uuid",
+>   "moved_at": "2026-09-02T12:34:56.789Z"
+> }
+> ```
+>
+> `stage_name`/`stage_role` vêm NULL quando a etapa é fantasma (`stage_id`
+> NULL). Enfileirado por `enqueue_negocio_stage_changed_webhooks()`
+> (`20270908005000`), com fast-path EXISTS por org antes de montar o payload.
+
 `data` por família (campos confirmados nas triggers):
 
 - **lead.\***: `id, name, email, phone, company, organization_id, origin`
-- **pipe_whatsapp.\***: `id, lead_id, status, sdr_id, scheduled_date, notes`
-- **pipe_confirmacao.\***: `id, lead_id, status, sdr_id, closer_id, meeting_date, is_confirmed, notes`
-- **pipe_propostas.\***: `id, lead_id, status, closer_id, calor, sale_value, commitment_date, closed_at, notes`
 - **follow_up.\***: `id, lead_id, organization_id, title, due_date, completed_at, assigned_to, priority, source_pipe`
 - **campaign_dispatch.scheduled**: `id, organization_id, campanha_id, template_id, scheduled_at, status`
 - **campaign_dispatch.completed**: `id, organization_id, campanha_id, status, total_leads, sent_count, failed_count`
