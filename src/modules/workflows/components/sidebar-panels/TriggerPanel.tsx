@@ -79,6 +79,8 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "lead_no_reply" ? "Lead Não Respondeu" :
                      t === "meeting_confirmed" ? "Reunião Confirmada" :
                      t === "meeting_not_confirmed" ? "Reunião Não Confirmada" :
+                     t === "meeting_held" ? "Compareceu à Reunião" :
+                     t === "meeting_no_show" ? "Não Compareceu à Reunião" :
                      t === "proposal_accepted" ? "Proposta Aceita" :
                      t === "proposal_lost" ? "Proposta Perdida" :
                      t === "followup_overdue" ? "Follow-up Vencido" :

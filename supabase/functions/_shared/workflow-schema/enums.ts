@@ -32,8 +32,12 @@ export const TRIGGER_TYPES = [
   "cron",
   "lead_replied",
   "lead_no_reply",
+  // Mortos, mantidos para paridade com a união do front — ver a nota lá.
   "meeting_confirmed",
   "meeting_not_confirmed",
+  // Comparecimento (20270907000040), disparados por `meeting_events`.
+  "meeting_held",
+  "meeting_no_show",
   "proposal_accepted",
   "proposal_lost",
   "followup_overdue",
