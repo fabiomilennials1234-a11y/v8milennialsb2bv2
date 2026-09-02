@@ -243,9 +243,11 @@ export function useCustomPipelineStages(pipelineId: string | undefined) {
 
 /** Busca leads de um funil customizado com joins */
 export function useCustomPipeEntries(pipelineId: string | undefined) {
-  // Realtime: detecta INSERT/UPDATE/DELETE em custom_pipe_entries e invalida
-  // o cache. Cobre import-leads, mutations no UI, triggers do banco etc.
-  useRealtimeSubscription("custom_pipe_entries", ["custom_pipe_entries", pipelineId ?? ""]);
+  // Realtime: a fonte única é pipeline_entries (SCRUM-621) — custom_pipe_entries
+  // virou view e view não emite postgres_changes (aliás, nunca esteve na
+  // publication: a subscription antiga era um no-op medido). Assinar a fonte
+  // cobre import-leads, mutations no UI, triggers do banco etc.
+  useRealtimeSubscription("pipeline_entries", ["custom_pipe_entries", pipelineId ?? ""]);
 
   return useQuery({
     queryKey: ["custom_pipe_entries", pipelineId],
@@ -268,7 +270,7 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
             lead_tags(tag:tags(id, name, color))
           ),
           stage:custom_pipeline_stages(id, name, color, stage_key, position),
-          assigned_member:team_members!custom_pipe_entries_assigned_to_fkey(
+          assigned_member:team_members!pipeline_entries_assigned_to_fkey(
             id, name, user_id
           )
         `)
