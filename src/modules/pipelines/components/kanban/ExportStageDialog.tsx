@@ -18,6 +18,13 @@ interface ExportStageDialogProps {
   pipe: ExportStageFilter["pipe"];
   /** Obrigatório quando pipe === "custom". */
   customPipelineId?: string;
+  /**
+   * SCRUM-633 — modo unificado: com `pipelineId` presente E `pipe="pipeline"`,
+   * a etapa é endereçada por (pipelines.id, pipeline_stages.id) e o resolve
+   * acontece direto em `pipeline_entries`, servindo QUALQUER funil. É o modo
+   * da página unificada `/funil/:slug`; os modos por slug seguem até a W6.
+   */
+  pipelineId?: string;
   /** Quantidade de leads visíveis no Kanban para exibir no diálogo. */
   leadCount: number;
 }
@@ -34,6 +41,7 @@ export function ExportStageDialog({
   stageTitle,
   pipe,
   customPipelineId,
+  pipelineId,
   leadCount,
 }: ExportStageDialogProps) {
   const [format, setFormat] = useState<ExportFormat>("csv");
@@ -61,6 +69,7 @@ export function ExportStageDialog({
           pipe,
           stageId,
           ...(pipe === "custom" && customPipelineId ? { customPipelineId } : {}),
+          ...(pipe === "pipeline" && pipelineId ? { pipelineId } : {}),
         },
         stageTitle,
       });

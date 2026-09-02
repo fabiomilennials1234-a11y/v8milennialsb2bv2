@@ -216,6 +216,11 @@ describe("isRouteActive", () => {
     expect(isRouteActive("/pipe-propostas/abc", "/funis", FUNIS_PATHS)).toBe(true);
   });
 
+  it("ativa Funis a partir da rota única /funil/:slug (SCRUM-632)", () => {
+    expect(isRouteActive("/funil/prospeccao-cnae", "/funis", FUNIS_PATHS)).toBe(true);
+    expect(isRouteActive("/funil/whatsapp", "/funis", FUNIS_PATHS)).toBe(true);
+  });
+
   it("ativa Turbo a partir de Copilot e Automações", () => {
     expect(isRouteActive("/copilot", "/turbo", TURBO_PATHS)).toBe(true);
     expect(isRouteActive("/automacoes/novo", "/turbo", TURBO_PATHS)).toBe(true);

@@ -82,8 +82,15 @@ function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; proj
  * Métricas do pipe de Propostas.
  * range === null → totais históricos ("Geral").
  * range !== null → filtra por intervalo (mês, semana ou custom).
+ *
+ * `options.enabled` (SCRUM-633): gate real de query — `useFunilMetrics` chama
+ * os 3 hooks legados incondicionalmente (regra de hooks) e liga só o do slug
+ * resolvido. Mesmo padrão de `useAllFunnelsLeadIds`.
  */
-export function usePipePropostasMetrics(range: DateRange | null) {
+export function usePipePropostasMetrics(
+  range: DateRange | null,
+  options: { enabled?: boolean } = {},
+) {
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
@@ -230,7 +237,7 @@ export function usePipePropostasMetrics(range: DateRange | null) {
         conversionRate,
       };
     },
-    enabled: isReady && !!organizationId,
+    enabled: isReady && !!organizationId && (options.enabled ?? true),
     staleTime: 60000,
   });
 }
@@ -240,7 +247,10 @@ export function usePipePropostasMetrics(range: DateRange | null) {
  * range === null → totais históricos ("Geral").
  * range !== null → filtra por intervalo.
  */
-export function usePipeConfirmacaoMetrics(range: DateRange | null) {
+export function usePipeConfirmacaoMetrics(
+  range: DateRange | null,
+  options: { enabled?: boolean } = {},
+) {
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
@@ -295,7 +305,7 @@ export function usePipeConfirmacaoMetrics(range: DateRange | null) {
       const list = [...(conf1.data || []), ...(conf2.data || [])];
       return computeConfirmacaoStats(list, isOverdue);
     },
-    enabled: isReady && !!organizationId,
+    enabled: isReady && !!organizationId && (options.enabled ?? true),
     staleTime: 60000,
   });
 }
@@ -354,7 +364,10 @@ export function computeConfirmacaoStats(
  * range === null → totais do pipe ("Geral").
  * range !== null → filtra por created_at no intervalo.
  */
-export function usePipeWhatsappMetrics(range: DateRange | null) {
+export function usePipeWhatsappMetrics(
+  range: DateRange | null,
+  options: { enabled?: boolean } = {},
+) {
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
@@ -385,7 +398,7 @@ export function usePipeWhatsappMetrics(range: DateRange | null) {
         pending: list.filter((r) => r.status === "novo").length,
       };
     },
-    enabled: isReady && !!organizationId,
+    enabled: isReady && !!organizationId && (options.enabled ?? true),
     staleTime: 60000,
   });
 }

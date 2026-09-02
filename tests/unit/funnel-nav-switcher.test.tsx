@@ -141,7 +141,8 @@ describe("useFunnelOptions — o que entra na navegação", () => {
 
     const custom = result.current.options.filter((o) => o.group === "custom");
     expect(custom).toHaveLength(1);
-    expect(custom[0]).toMatchObject({ key: "custom:c2", path: "/pipe/custom/parcerias" });
+    // SCRUM-632: custom navega pela rota única.
+    expect(custom[0]).toMatchObject({ key: "custom:c2", path: "/funil/parcerias" });
   });
 
   it("marca como encerrado o funil com prazo vencido", () => {

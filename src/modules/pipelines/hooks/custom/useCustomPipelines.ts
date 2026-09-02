@@ -730,6 +730,7 @@ export function useCreateCustomPipelineStage() {
       position,
       is_final_positive,
       is_final_negative,
+      stage_role,
     }: {
       pipeline_id: string;
       name: string;
@@ -737,6 +738,13 @@ export function useCreateCustomPipelineStage() {
       position: number;
       is_final_positive?: boolean;
       is_final_negative?: boolean;
+      /**
+       * ADR-0017 §1 — papel semântico governado. Vindo do editor único de
+       * etapas (SCRUM-636) é sempre escolha explícita do admin (won/lost
+       * permitido — confirmação humana). Omitido, o INSTEAD OF da view aplica
+       * o default 'open'.
+       */
+      stage_role?: import("@/contracts/pipe").StageRole;
     }) => {
       if (!teamMember?.organization_id) {
         throw new Error("Organização não encontrada");
@@ -753,6 +761,7 @@ export function useCreateCustomPipelineStage() {
           position,
           is_final_positive: is_final_positive || false,
           is_final_negative: is_final_negative || false,
+          ...(stage_role ? { stage_role } : {}),
         })
         .select()
         .single();
@@ -767,6 +776,9 @@ export function useCreateCustomPipelineStage() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
+      // Chaves unificadas por id (SCRUM-633/636) — a página /funil/:slug lê por elas.
+      queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }
@@ -793,6 +805,8 @@ export function useUpdateCustomPipelineStage() {
       target_pipe_type?: string | null;
       target_stage_key?: string | null;
       checklist_template_id?: string | null;
+      /** ADR-0017 §1 — só chega aqui por escolha explícita no editor único. */
+      stage_role?: import("@/contracts/pipe").StageRole;
     }) => {
       const { data, error } = await supabase
         .from("custom_pipeline_stages")
@@ -806,11 +820,21 @@ export function useUpdateCustomPipelineStage() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }
 
-/** Desativar etapa */
+/**
+ * Desativar etapa — SUPERADO (SCRUM-636).
+ *
+ * @deprecated O editor único de etapas usa `useDeletePipelineStage`
+ * (`../model/usePipelineStages`) com `pipelineId` explícito, que migra os
+ * cards e respeita a guarda de regra de disparo — este aqui desativava a
+ * etapa SEM migrar (cards fantasmas). Sem chamador vivo; morre na W6 junto
+ * com as views de compat.
+ */
 export function useDeleteCustomPipelineStage() {
   const queryClient = useQueryClient();
 
@@ -852,6 +876,8 @@ export function useReorderCustomPipelineStages() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
+      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }
