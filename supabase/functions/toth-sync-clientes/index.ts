@@ -46,6 +46,7 @@ import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
 import { deferredEnrichStore } from "../_shared/erp/sync/deferred-enrich-store.ts";
 import { bulkCreateClients } from "../_shared/erp/sync/bulk-create-clients.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
+import { loadOwnerMap } from "../_shared/erp/sync/owner-map.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
 import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import {
@@ -197,6 +198,22 @@ Deno.serve(
       TOTH_PROVIDER_ID,
       supabaseClientStore(admin, TOTH_PROVIDER_ID),
     );
+
+    /**
+     * De-para de representante, carregado uma vez.
+     *
+     * 🔴 **Mapa vazio não escreve nada.** 216 representantes distintos no ERP da
+     * Café Jurerê contra 8 team members na org, com nomes ambíguos, grafias
+     * divergentes e seis "representantes" que são canais e não pessoas — não há
+     * correspondência a descobrir, há decisão humana a registrar. Enquanto
+     * `erp_owner_map` estiver vazia, `responsible_id` não é tocado em cliente
+     * nenhum, e a sincronização se comporta exatamente como antes.
+     *
+     * O cuidado é deliberado: dono de lead é o que a regra de visibilidade do
+     * Torque lê. Atribuir 11 mil donos por engano não dá erro — dá gente que
+     * deixou de enxergar a própria carteira.
+     */
+    const ownerMap = await loadOwnerMap(admin, organizationId, TOTH_PROVIDER_ID);
 
     // Enriquecimento vai para uma fila e é escrito em paralelo no fim.
     //
@@ -445,6 +462,7 @@ Deno.serve(
                 source: TOTH_PROVIDER_ID,
                 client: canonical,
                 syncMode,
+                ownerMap,
               });
               if (result.action === "enriched") {
                 stats.enriched++;
@@ -618,11 +636,36 @@ Deno.serve(
         clients: toCreate,
         usedPhones,
         normalizePhone: normalizePhoneForSearch,
+        ownerMap,
       });
       stats.created = bulk.created;
       stats.failed += bulk.failed;
       for (const e of bulk.errors) {
         if (mappingErrors.length < 3) mappingErrors.push(e);
+      }
+    }
+
+    /**
+     * Desce o dono do cliente para o lead ligado.
+     *
+     * Só faz sentido rodar se houver mapa: sem ele nenhum `responsible_id` foi
+     * escrito, e a chamada seria uma varredura em 12 mil linhas para não mudar
+     * nada. A função em si já é idempotente e só escreve o que difere.
+     */
+    let leadsComDonoNovo = 0;
+    if (ownerMap.size > 0) {
+      const { data: propagados, error: propErr } = await admin.rpc(
+        "propagate_erp_owner_to_leads",
+        { p_organization_id: organizationId },
+      );
+      if (propErr) {
+        // Não derruba a sincronização: os clientes já estão gravados, e o dono
+        // do lead é derivado — a próxima volta desce de novo.
+        if (mappingErrors.length < 3) {
+          mappingErrors.push(`propagate_erp_owner_to_leads: ${propErr.message}`);
+        }
+      } else {
+        leadsComDonoNovo = typeof propagados === "number" ? propagados : 0;
       }
     }
 
@@ -650,6 +693,8 @@ Deno.serve(
         marcas: filtros.marcas ?? null,
         janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
         sem_ultima_compra: semUltimaCompra,
+        representantes_mapeados: ownerMap.size,
+        leads_com_dono_novo: leadsComDonoNovo,
       },
     });
 

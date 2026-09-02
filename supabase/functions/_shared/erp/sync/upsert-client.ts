@@ -13,6 +13,7 @@
  */
 
 import { CanonicalClient } from "../types.ts";
+import { type OwnerMap } from "./owner-map.ts";
 import {
   clientEnrichmentColumns,
   erpDateToTimestamp,
@@ -112,6 +113,15 @@ export interface UpsertClientParams {
   source: string;
   client: CanonicalClient;
   syncMode: ErpSyncMode;
+  /**
+   * De-para de representante do ERP → team member.
+   *
+   * Ausente = `responsible_id` não é tocado, que é o comportamento de sempre.
+   * Pesa mais aqui do que na criação: a reconciliação passa por TODOS os
+   * clientes a cada volta, então mapa mal preenchido redistribuiria a carteira
+   * inteira toda madrugada — e mudança de dono é mudança de visibilidade.
+   */
+  ownerMap?: OwnerMap;
 }
 
 export type UpsertClientResult =
@@ -148,7 +158,7 @@ export async function upsertCanonicalClient(
    * congelaria o representante na primeira sincronização e o cliente ficaria
    * com o vendedor errado para sempre.
    */
-  const enrichment = clientEnrichmentColumns(client);
+  const enrichment = clientEnrichmentColumns(client, params.ownerMap);
 
   if (existing) {
     const patch: Record<string, unknown> = { ...stamp, ...enrichment };

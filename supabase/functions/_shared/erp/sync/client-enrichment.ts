@@ -9,6 +9,7 @@
  */
 
 import { CanonicalClient } from "../types.ts";
+import { type OwnerMap, resolveResponsible } from "./owner-map.ts";
 
 /**
  * Campos que a sincronização escreve em `upsell_clients`.
@@ -17,7 +18,19 @@ import { CanonicalClient } from "../types.ts";
  * não produz o campo (Omie) não deve apagar o que já está lá, mas ERP que
  * devolveu vazio deve limpar.
  */
-export function clientEnrichmentColumns(client: CanonicalClient): Record<string, unknown> {
+export function clientEnrichmentColumns(
+  client: CanonicalClient,
+  /**
+   * De-para de representante. **Ausente = não mexer em `responsible_id`.**
+   *
+   * `resolveResponsible` devolve `undefined` quando não há decisão registrada
+   * para aquele `codigoRepresentante`, e o `put` abaixo faz `undefined` sumir do
+   * objeto — é assim que mapa vazio deixa a base intocada. Só linha explícita
+   * escreve, inclusive quando escreve `null`, que é como um canal
+   * (`TORREFAÇÃO`) fica deliberadamente sem dono.
+   */
+  ownerMap?: OwnerMap,
+): Record<string, unknown> {
   const cols: Record<string, unknown> = {};
   const put = (key: string, value: unknown) => {
     if (value !== undefined) cols[key] = value;
@@ -26,6 +39,7 @@ export function clientEnrichmentColumns(client: CanonicalClient): Record<string,
   put("erp_company", client.erpCompany);
   put("erp_owner_name", client.ownerName);
   put("erp_owner_external_id", client.ownerExternalId);
+  put("responsible_id", resolveResponsible(ownerMap, client.ownerExternalId));
   put("erp_status", client.erpStatus);
   put("erp_segment", client.segment);
   put("erp_registered_at", client.registeredAt);
