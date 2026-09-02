@@ -69,6 +69,13 @@ export function useWhatsAppContacts(
 
   const filterArgs = serverFilter?.args ?? null;
   const pageLimit = serverFilter?.limit ?? UNFILTERED_PAGE_LIMIT;
+  /**
+   * A org tem a aba de grupos. Sai do próprio `serverFilter` (quem decide é a
+   * flag, lida no shell) e não de um parâmetro novo do hook: assim os outros
+   * consumidores da RPC — bolha do kanban, command palette — continuam sem
+   * saber que grupo existe, que é o comportamento de hoje.
+   */
+  const incluirGrupos = filterArgs?.p_include_groups === true;
 
   return useQuery({
     queryKey: chatQueryKeys.contacts(organizationId, instanceId, serverFilter?.cacheKey),
@@ -110,15 +117,45 @@ export function useWhatsAppContacts(
         localStorage.getItem("v3_server_contacts") !== "0";
 
       if (useServerList) {
-        const { data: rows, error: rpcError } = await supabase.rpc(
+        const baseArgs = {
+          p_org: organizationId,
+          p_instance: instanceId,
+          p_limit: pageLimit,
+          ...(filterArgs ?? {}),
+        };
+
+        let { data: rows, error: rpcError } = await supabase.rpc(
           "get_whatsapp_conversation_list",
-          {
-            p_org: organizationId,
-            p_instance: instanceId,
-            p_limit: pageLimit,
-            ...(filterArgs ?? {}),
-          } as any
+          baseArgs as any
         );
+
+        /**
+         * QUEDA PARA A ASSINATURA ANTIGA — só para `p_include_groups`.
+         *
+         * O argumento só existe depois da migration
+         * `20270909000000_conversation_list_grupos_por_org`, e apply em prod é
+         * botão do humano. Se o front chegar primeiro, o PostgREST não acha a
+         * função (`PGRST202`) e o inbox INTEIRO da org flagada fica vazio — por
+         * causa de uma aba. Aqui ele perde a aba e mantém a lista.
+         *
+         * O retry é estreito de propósito: só quando o argumento foi mandado e
+         * só nesse código. Qualquer outro erro sobe, como antes.
+         */
+        if (
+          rpcError &&
+          (rpcError as { code?: string }).code === "PGRST202" &&
+          incluirGrupos
+        ) {
+          console.warn(
+            "[inbox] `p_include_groups` não existe nesta base — migration " +
+              "20270909000000 ainda não aplicada. Lista segue sem grupo.",
+          );
+          const { p_include_groups: _descartado, ...semGrupos } = baseArgs as Record<string, unknown>;
+          ({ data: rows, error: rpcError } = await supabase.rpc(
+            "get_whatsapp_conversation_list",
+            semGrupos as any
+          ));
+        }
         if (rpcError) throw rpcError;
 
         // unread: server-side (read_state) por padrão; localStorage coarse no escape hatch.
@@ -240,18 +277,22 @@ export function useWhatsAppContacts(
       const instanceIds = await resolveChipInstanceIds(organizationId, instanceId);
 
       // Query 1: mensagens recentes (limitadas) + metadados de conversas em paralelo
+      //
+      // O recorte de grupo continua sendo no servidor, e não depois do
+      // .limit(8000): grupo é 40% das mensagens, então baixá-lo para descartar no
+      // navegador gastava 40% do payload e ainda empurrava conversa individual
+      // para fora da janela (#1632). A org com a aba paga esse preço de propósito
+      // — sem as linhas de grupo aqui, a aba dela nasceria vazia neste caminho.
+      const mensagensQuery = supabase
+        .from("whatsapp_messages")
+        .select("phone_number, push_name, content, timestamp, direction, lead_id, sent_source, is_group")
+        .eq("organization_id", organizationId)
+        .in("instance_id", [...instanceIds])
+        .is("deleted_at", null);
+      if (!incluirGrupos) mensagensQuery.eq("is_group", false);
+
       const [{ data: msgData, error: msgError }, { data: convMeta }] = await Promise.all([
-        supabase
-          .from("whatsapp_messages")
-          .select("phone_number, push_name, content, timestamp, direction, lead_id, sent_source, is_group")
-          .eq("organization_id", organizationId)
-          .in("instance_id", [...instanceIds])
-          .is("deleted_at", null)
-          // Grupo sai do produto (#1632). O recorte é no servidor, não depois
-          // do .limit(8000): grupo é 40% das mensagens, então baixá-lo para
-          // descartar no navegador gastava 40% do payload e ainda empurrava
-          // conversa individual para fora da janela.
-          .eq("is_group", false)
+        mensagensQuery
           .order("timestamp", { ascending: false })
           .limit(8000),
         // `whatsapp_conversations` fica na instância viva de propósito: a FK dela

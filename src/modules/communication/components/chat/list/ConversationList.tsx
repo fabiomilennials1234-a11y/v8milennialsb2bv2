@@ -13,7 +13,7 @@
  */
 import { useRef, useCallback, useMemo, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Loader2, Search, MessageSquare, Archive, Settings } from "lucide-react";
+import { Loader2, Search, MessageSquare, Archive, Settings, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -45,6 +45,7 @@ import {
   applyInboxFilters,
   type InboxFilterState,
   type InboxFilterContext,
+  type InboxTab,
 } from "@/modules/communication/lib/inboxFilter";
 import type { InboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import type { FunnelOption } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
@@ -79,8 +80,15 @@ interface ConversationListProps {
   boxes?: InboxBox[];
   selectedBoxId?: string | null;
   onSelectBox?: (boxId: string) => void;
-  activeTab: "active" | "archived";
-  onTabChange: (tab: "active" | "archived") => void;
+  activeTab: InboxTab;
+  onTabChange: (tab: InboxTab) => void;
+  /**
+   * Flag por org `chat_abas_de_grupos`, resolvida no shell (é lá que ela também
+   * decide o `p_include_groups` da busca). Falsa = a aba "Grupos" não existe, o
+   * chip do mobile não existe, e nenhuma linha de grupo chega — o comportamento
+   * de #1632, intacto para toda org que não pediu a aba.
+   */
+  abasDeGrupos?: boolean;
   onArchive: (phone: string) => void;
   onUnarchive: (conversationId: string) => void;
   onDelete: (phone: string) => void;
@@ -128,6 +136,7 @@ export function ConversationList({
   onSelectBox,
   activeTab,
   onTabChange,
+  abasDeGrupos = false,
   onArchive,
   onUnarchive,
   onDelete,
@@ -233,8 +242,13 @@ export function ConversationList({
         else if (filter.vendor === "unassigned") { if (vendorId) return false; }
         else if (vendorId !== filter.vendor) return false;
       }
-      // Grupo não é exibido em caminho nenhum (#1632).
-      if (c.is_group) return false;
+      // Grupo só no chip "Grupos", que só existe na org flagada. Nos outros dois
+      // chips a recusa é a de #1632.
+      if (mobileFilter === "grupos") {
+        if (!c.is_group) return false;
+      } else if (c.is_group) {
+        return false;
+      }
       if (mobileFilter === "unread" && c.unread_count <= 0) return false;
       if (c.archived_at) return false;
       const name = contactDisplayName(c).toLowerCase();
@@ -253,6 +267,20 @@ export function ConversationList({
     () => applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "archived" }).length,
     [whatsappContacts, filter, filterCtx, searchQuery],
   );
+  /**
+   * Org sem a flag não paga nem a varredura: a lista dela não tem grupo nenhum e
+   * o número seria sempre 0.
+   *
+   * O mobile conta por fora do engine porque o mobile FILTRA por fora dele — lá
+   * só o vendedor atravessa, e usar o engine aqui daria um número menor que a
+   * lista que o chip abre (as dimensões persistidas do desktop cortariam a
+   * contagem sem cortar a lista).
+   */
+  const gruposCount = useMemo(() => {
+    if (!abasDeGrupos) return 0;
+    if (isMobile) return whatsappContacts.filter((c) => c.is_group && !c.archived_at).length;
+    return applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "grupos" }).length;
+  }, [abasDeGrupos, isMobile, whatsappContacts, filter, filterCtx, searchQuery]);
   const unreadCount = useMemo(
     () =>
       isSocialBox
@@ -266,6 +294,13 @@ export function ConversationList({
     (n: number) => (filterGate === "ok" ? String(n) : "—"),
     [filterGate],
   );
+
+  /**
+   * O menu de ações da linha só conhece dois estados, e é o certo: na aba de
+   * grupos a conversa está ATIVA (arquivada some dali), então arquivar e
+   * excluir continuam valendo e "desarquivar" não teria o que desfazer.
+   */
+  const tabDoMenu: "active" | "archived" = activeTab === "archived" ? "archived" : "active";
 
   const shouldVirtualize = filteredContacts.length > VIRTUALIZE_THRESHOLD;
 
@@ -309,6 +344,8 @@ export function ConversationList({
           activeFilter={mobileFilter}
           onFilterChange={setMobileFilter}
           unreadCount={unreadCount}
+          mostrarGrupos={abasDeGrupos}
+          gruposCount={gruposCount}
           vendorFilter={filter.vendor}
           onVendorFilterChange={(value) => patch({ vendor: value })}
           vendorOptions={vendorOptions}
@@ -450,6 +487,23 @@ export function ConversationList({
             >
               Arquivadas ({fmtCount(archivedCount)})
             </button>
+            {/* Terceira aba, e não um chip no "+ Filtro": grupo não se soma às
+                dimensões, ele TROCA o universo da lista. Nasce só na org com a
+                flag — para as outras o topo continua com duas abas. */}
+            {abasDeGrupos && (
+              <button
+                type="button"
+                onClick={() => onTabChange("grupos")}
+                className={cn(
+                  "flex-1 text-xs py-1.5 rounded-sm transition-colors font-medium",
+                  activeTab === "grupos"
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                Grupos ({fmtCount(gruposCount)})
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -472,6 +526,23 @@ export function ConversationList({
               <>
                 <Archive className="w-12 h-12 text-muted-foreground/50 mb-4" />
                 <p className="text-sm text-muted-foreground">Nenhuma conversa arquivada</p>
+              </>
+            ) : !isSocialBox && activeTab === "grupos" ? (
+              <>
+                <Users className="w-12 h-12 text-muted-foreground/50 mb-4" />
+                {/* Vazio aqui quase nunca é "não há grupo": é `capture_groups`
+                    desligada na org, e aí o webhook derruba a mensagem de grupo
+                    antes de gravar. Dizer só "nenhum grupo" mandaria o vendedor
+                    procurar no aparelho o que o servidor nunca guardou. */}
+                <p className="text-sm text-muted-foreground">
+                  {searchQuery ? "Nenhum grupo encontrado" : "Nenhuma conversa de grupo ainda"}
+                </p>
+                {!searchQuery && (
+                  <p className="mt-1 text-xs text-muted-foreground/70 max-w-[240px]">
+                    Se a organização não captura mensagens de grupo, elas não chegam a
+                    ser gravadas — fale com o suporte para ligar a captura.
+                  </p>
+                )}
               </>
             ) : (
               <>
@@ -514,7 +585,7 @@ export function ConversationList({
                     isSelected={selectedKey === contactKey(contact)}
                     onSelect={onSelectContact}
                     waitingHumanLeadIds={waitingHumanLeadIds}
-                    activeTab={activeTab}
+                    activeTab={tabDoMenu}
                     isAdmin={isAdmin}
                     instanceId={instanceId}
                     organizationId={organizationId}
@@ -548,7 +619,7 @@ export function ConversationList({
                   isSelected={selectedKey === contactKey(contact)}
                   onSelect={onSelectContact}
                   waitingHumanLeadIds={waitingHumanLeadIds}
-                  activeTab={activeTab}
+                  activeTab={tabDoMenu}
                   isAdmin={isAdmin}
                   instanceId={instanceId}
                   organizationId={organizationId}

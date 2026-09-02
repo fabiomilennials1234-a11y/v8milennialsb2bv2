@@ -16,7 +16,13 @@
  *   - **Aba ativas/arquivadas** — os dois contadores ("Ativas (N)"/"Arquivadas
  *     (N)") saem da MESMA lista carregada. Filtrar a aba no servidor zeraria o
  *     contador da outra. Segue no cliente, coberto pelo teto maior.
- *   - **Grupo** — o engine do cliente sempre remove; a RPC não precisa saber.
+ *   - **Grupo** — era "o cliente sempre remove, a RPC não precisa saber". Deixou
+ *     de ser: a aba de grupos (flag `chat_abas_de_grupos`, por org) precisa que
+ *     a linha de grupo CHEGUE. Como o recorte da RPC é anterior ao LIMIT, filtrar
+ *     só no cliente traria a página cheia de conversa individual e a aba nasceria
+ *     vazia. Então `p_include_groups` é a única dimensão daqui que AMPLIA o
+ *     conjunto em vez de estreitá-lo — e o cliente continua sendo quem escolhe
+ *     qual das duas metades mostrar, por aba.
  */
 import type { InboxFilterState } from "./inboxFilter";
 
@@ -33,6 +39,16 @@ export interface InboxServerFilterArgs {
   p_unread: boolean | null;
   p_waiting: boolean | null;
   p_source: "ia" | "humano" | null;
+  /**
+   * `true` = a página pode conter grupo (a org tem a aba). `null` = comportamento
+   * de sempre, e é o que TODO outro consumidor da RPC continua mandando.
+   *
+   * ⚠️ Depende da migration `20270909000000_conversation_list_grupos_por_org`.
+   * Enquanto ela não estiver em prod, mandar este argumento leva `PGRST202` —
+   * `useWhatsAppContacts` tem queda para a chamada sem ele, senão o inbox
+   * INTEIRO da org flagada ficaria vazio por causa de uma aba.
+   */
+  p_include_groups: boolean | null;
 }
 
 /** Página sem filtro: o mesmo teto de sempre. */
@@ -67,6 +83,7 @@ const EMPTY_ARGS: InboxServerFilterArgs = {
   p_unread: null,
   p_waiting: null,
   p_source: null,
+  p_include_groups: null,
 };
 
 /** Ordena pra a chave de cache não mudar só porque o usuário clicou noutra ordem. */
@@ -75,12 +92,20 @@ const orNull = (xs: string[]): string[] | null => (xs.length ? [...xs].sort() : 
 /**
  * @param state  filtro do inbox (persistido por org+usuário).
  * @param currentTeamMemberId  resolve `vendor: "mine"`.
+ * @param opcoes.incluirGrupos  a org tem a aba de grupos (`chat_abas_de_grupos`).
+ *   Não é dimensão de filtro: é o universo que a página pode conter. Entra na
+ *   `cacheKey` porque muda o CONJUNTO devolvido — sem isso a lista com grupo e a
+ *   lista sem grupo dividiriam a mesma entrada de cache com a bolha do kanban e
+ *   o command palette, e qual das duas ganharia dependeria de quem montou antes.
  */
 export function toServerFilter(
   state: InboxFilterState,
   currentTeamMemberId: string | null,
+  opcoes: { incluirGrupos?: boolean } = {},
 ): InboxServerFilter {
   const args: InboxServerFilterArgs = { ...EMPTY_ARGS };
+
+  if (opcoes.incluirGrupos) args.p_include_groups = true;
 
   args.p_funnels = orNull(state.funnels);
   args.p_stages = orNull(state.stages);
@@ -110,6 +135,11 @@ export function toServerFilter(
   if (active.length === 0) {
     return { args: null, limit: UNFILTERED_PAGE_LIMIT, cacheKey: "" };
   }
+  // Org com a aba, sem nenhum chip: `p_include_groups` sozinho já tira a lista do
+  // teto de 500 e leva pro de 1000. É o que se quer — grupo é ~40% das mensagens,
+  // então uma página de 500 com grupo dentro mostraria MENOS conversa individual
+  // que a de hoje. O teto da RPC é 1000; acima disso volta a truncar (paginação
+  // continua pendente, como no resto do filtro).
   return {
     args,
     limit: FILTERED_PAGE_LIMIT,

@@ -91,6 +91,7 @@ import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInbo
 import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
 import { toServerFilter } from "@/modules/communication/lib/inboxFilterServer";
+import { DEFAULT_INBOX_FILTER } from "@/modules/communication/lib/inboxFilter";
 import { inboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import {
   useArchiveConversation,
@@ -112,7 +113,12 @@ import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDens
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
-type ConversationTab = "active" | "archived";
+/**
+ * `"grupos"` só é alcançável na org com a flag `chat_abas_de_grupos` — a aba não
+ * é renderizada sem ela, e o estado nasce sempre em `"active"` (não é
+ * persistido). Ver `lib/inboxFilter.ts`.
+ */
+type ConversationTab = "active" | "archived" | "grupos";
 
 /**
  * Monta a subscription de Realtime dos canais sociais SÓ enquanto a caixa
@@ -710,12 +716,34 @@ export function ChatShellWithContext() {
   const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState();
   const { isMobile } = useViewport();
 
-  // Mobile tem header próprio (all/unread/groups + vendedor) e ignora o resto do
+  /**
+   * `chat_abas_de_grupos` — a org decide se a lista tem a aba de grupos. Lida
+   * AQUI, e não na lista, porque a decisão tem duas pontas que precisam
+   * concordar: o que a RPC traz (`p_include_groups`) e o que a UI oferece. Se só
+   * a UI soubesse, a aba existiria sobre uma página sem uma linha de grupo.
+   *
+   * Fail-closed enquanto carrega: a primeira frame não tem a aba e a lista não
+   * pede grupo. Quando a flag chega, a `queryKey` muda (a `cacheKey` carrega o
+   * argumento) e a lista refaz a busca — uma vez, no load.
+   */
+  const { enabled: abasDeGrupos } = useFeatureFlag("chat_abas_de_grupos");
+
+  // Mobile tem header próprio (all/unread/grupos + vendedor) e ignora o resto do
   // estado persistido — empurrar essas dimensões pro servidor sumiria com
   // conversa que a UI mobile deveria mostrar. Lá o recorte fica só no cliente.
+  //
+  // A exceção é o grupo, porque não é recorte e sim universo: o mobile precisa
+  // mandar `p_include_groups` ou o chip "Grupos" filtraria uma página que nunca
+  // teve grupo. Vai sozinho, sobre o filtro default — nenhuma outra dimensão
+  // atravessa.
   const serverFilter = useMemo(
-    () => (isMobile ? undefined : toServerFilter(filter, teamMember?.id ?? null)),
-    [isMobile, filter, teamMember?.id],
+    () =>
+      isMobile
+        ? abasDeGrupos
+          ? toServerFilter(DEFAULT_INBOX_FILTER, null, { incluirGrupos: true })
+          : undefined
+        : toServerFilter(filter, teamMember?.id ?? null, { incluirGrupos: abasDeGrupos }),
+    [isMobile, filter, teamMember?.id, abasDeGrupos],
   );
 
   // ── Contatos ────────────────────────────────────────────────────────────────
@@ -1013,6 +1041,12 @@ export function ChatShellWithContext() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ConversationTab>("active");
 
+  // Flag desligada com a aba aberta (rollback, ou troca de org na mesma sessão):
+  // a aba some do topo e a lista ficaria presa num escopo sem botão de saída.
+  useEffect(() => {
+    if (!abasDeGrupos && activeTab === "grupos") setActiveTab("active");
+  }, [abasDeGrupos, activeTab]);
+
   // ── Filtro por vendedor ─────────────────────────────────────────────────────
   // Conversa não tem vendedor próprio: deriva do responsável do lead
   // (leads.responsible_id). "all" = todos; "mine" = do usuário; "unassigned" =
@@ -1191,6 +1225,9 @@ export function ChatShellWithContext() {
             waitingHumanLeadIds={waitingHumanLeadIds}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            // A lista NÃO relê a flag: quem manda `p_include_groups` na busca é
+            // este componente, e as duas pontas têm que ser a mesma leitura.
+            abasDeGrupos={abasDeGrupos}
             onArchive={handleArchive}
             onUnarchive={handleUnarchive}
             onDelete={handleDelete}
