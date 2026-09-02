@@ -39,10 +39,45 @@ export interface AgendaEvent {
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
+/** A RPC com recorte ainda não está no `types.ts` (gerado do PROD). */
+type RpcName = Parameters<typeof supabase.rpc>[0];
+const RPC_COM_RECORTE = "get_agenda_events_scoped" as RpcName;
+const RPC_BASE = "get_agenda_events" as RpcName;
+
+/** `PGRST202`: a função não existe no schema cache — migration ainda não aplicada. */
+function isMissingFunctionError(error: unknown): boolean {
+  const e = error as PgError;
+  return (
+    e?.code === "PGRST202" ||
+    /Could not find the function|schema cache/i.test(e?.message ?? "")
+  );
+}
+
 /**
  * Unified agenda feed that aggregates meetings, follow-ups,
- * scheduled messages, and pipe_confirmacao events via the
- * get_agenda_events RPC.
+ * scheduled messages, pipe_confirmacao and meeting_events.
+ *
+ * ─── Por que `get_agenda_events_scoped` e não a base ─────────────────────────
+ *
+ * A base é org-wide de propósito (o COMMENT dela diz isso) e NUNCA recortou por
+ * pessoa: quem recortava era o filtro de tela em `AgendaAtividades`. Filtro de
+ * tela não é fronteira — o compromisso do colega atravessava a rede e era
+ * descartado no navegador.
+ *
+ * A `_scoped` compõe sobre a base e decide o escopo DENTRO do banco: org
+ * inteira para admin e para quem tem `agenda.view_all` (que nasce ligada);
+ * "os meus + os órfãos + os que me convidaram" para quem está com ela
+ * desligada. Nenhum parâmetro de escopo viaja na requisição — não há o que o
+ * cliente adulterar.
+ *
+ * ─── Os dois caminhos degradados ─────────────────────────────────────────────
+ *
+ * 1. `PGRST202` — a migration ainda não foi aplicada. Cai na base, e o filtro
+ *    de tela volta a ser o único recorte (o comportamento de antes desta
+ *    mudança). Remendo para o intervalo entre deploy do front e apply, que foi
+ *    como um parâmetro novo derrubou o board inteiro na #1774.
+ * 2. `42P01` — banco parcialmente migrado (dev sem `scheduled_user_messages`).
+ *    Reconstrói o feed a partir das tabelas que existem. Inerte em produção.
  */
 export function useAgendaEvents(startDate?: Date, endDate?: Date) {
   const { organizationId, isReady } = useOrganization();
@@ -57,11 +92,17 @@ export function useAgendaEvents(startDate?: Date, endDate?: Date) {
     queryFn: async () => {
       if (!organizationId || !startDate || !endDate) return [];
 
-      const { data, error } = await supabase.rpc("get_agenda_events", {
+      const args = {
         p_organization_id: organizationId,
         p_start: startDate.toISOString(),
         p_end: endDate.toISOString(),
-      });
+      } as never;
+
+      let { data, error } = await supabase.rpc(RPC_COM_RECORTE, args);
+
+      if (error && isMissingFunctionError(error)) {
+        ({ data, error } = await supabase.rpc(RPC_BASE, args));
+      }
 
       if (error) {
         // Dev-environment drift fallback: get_agenda_events UNIONs several
