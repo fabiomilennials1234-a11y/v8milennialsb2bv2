@@ -59,6 +59,7 @@ for (const c of cases) {
 
 const FUNIS = [
   {
+    id: "9f0e1d2c-0000-4000-8000-aaaaaaaaaaaa",
     slug: "whatsapp",
     type: "system",
     stages: [
@@ -67,7 +68,7 @@ const FUNIS = [
       { stage_key: "agendado", name: "Reunião Agendada", is_active: true },
     ],
   },
-  { slug: "sem-etapas", type: "custom", stages: [] },
+  { id: "9f0e1d2c-0000-4000-8000-bbbbbbbbbbbb", slug: "sem-etapas", type: "custom", stages: [] },
 ];
 
 function ctxComUrl(url: string): ApiRouteContext {
@@ -125,6 +126,24 @@ Deno.test("pipelines — pipeline=<slug> combina com only_active_stages", async 
   const body = await res.json();
   assertEquals(body.data.length, 1);
   assertEquals(body.data[0].stages.map((e: { stage_key: string }) => e.stage_key), ["novo", "agendado"]);
+});
+
+// Endereçamento por id vale para QUALQUER funil (SCRUM-625): o Make manda o
+// que tiver na mão — uuid do catálogo ou slug — e o filtro casa os dois.
+Deno.test("pipelines — pipeline=<uuid> devolve o funil custom pedido", async () => {
+  const res = await listPipelines(
+    ctxComUrl("https://x/api/v1/pipelines?pipeline=9f0e1d2c-0000-4000-8000-bbbbbbbbbbbb"),
+  );
+  const body = await res.json();
+  assertEquals(body.data.length, 1);
+  assertEquals(body.data[0].slug, "sem-etapas");
+});
+
+Deno.test("pipelines — pipeline=<slug de funil custom> também casa (todo funil tem slug)", async () => {
+  const res = await listPipelines(ctxComUrl("https://x/api/v1/pipelines?pipeline=sem-etapas"));
+  const body = await res.json();
+  assertEquals(body.data.length, 1);
+  assertEquals(body.data[0].type, "custom");
 });
 
 Deno.test("pipelines — funil inexistente devolve lista vazia, não erro", async () => {

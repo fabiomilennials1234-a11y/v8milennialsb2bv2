@@ -94,19 +94,83 @@ Deno.test("moveDeal — sem funil é recusado antes do banco", async () => {
   assertEquals(calls.length, 0);
 });
 
-// Funil customizado como DESTINO é recusado pela função de banco, de propósito:
-// card de funil custom vive em outra tabela, espelhada por chave primária, e a
-// sincronia nunca reescreve o funil. Atravessar essa fronteira obrigaria apagar
-// e recriar — o Negócio sobrevive, mas o card perde o id e leva o histórico
-// junto. A função recusa em vez de fingir que resolve.
-Deno.test("moveDeal — destino em funil customizado vira 422 legível", async () => {
+// ── Qualquer funil é destino válido (SCRUM-625) ────────────────────────────
+//
+// A recusa de funil custom morreu com a inversão do silo (SCRUM-621): o card
+// vive em `pipeline_entries` seja qual for o funil, mover é o mesmo UPDATE na
+// mesma linha. O handler repassa o endereço CRU — uuid, slug ou o legado
+// `custom:<uuid>` — e o banco resolve.
+
+const MOVIDO_CUSTOM = {
+  data: {
+    ...MOVIDO.data,
+    pipeline_slug: "pos-venda",
+    stage_key: "onboarding",
+  },
+};
+
+Deno.test("moveDeal — destino em funil custom por uuid é repassado e devolve a posição nova", async () => {
+  const calls: RpcCall[] = [];
   const res = await moveDeal(ctx(
-    { pipeline: "custom:abc", stage: "x" },
-    { error: { code: "22023", message: "Destino em funil customizado não é suportado." } },
+    { pipeline: "3a4a1a6e-9c1e-4f0a-8a2b-111111111111", stage: "onboarding" },
+    MOVIDO_CUSTOM,
+    calls,
+  ));
+
+  assertEquals(res.status, 200);
+  assertEquals(calls[0].args.p_pipeline, "3a4a1a6e-9c1e-4f0a-8a2b-111111111111");
+  const d = await res.json();
+  assertEquals(d.pipeline, "pos-venda");
+  assertEquals(d.stage, "onboarding");
+});
+
+Deno.test("moveDeal — destino em funil custom por slug funciona (todo funil tem slug)", async () => {
+  const calls: RpcCall[] = [];
+  const res = await moveDeal(ctx({ pipeline: "pos-venda", stage: "onboarding" }, MOVIDO_CUSTOM, calls));
+
+  assertEquals(res.status, 200);
+  assertEquals(calls[0].args.p_pipeline, "pos-venda");
+  assertEquals((await res.json()).pipeline, "pos-venda");
+});
+
+Deno.test("moveDeal — funil que não existe vira 404 pipeline_not_found, como no lead-webhook", async () => {
+  const res = await moveDeal(ctx(
+    { pipeline: "nao-existe", stage: "x" },
+    { error: { code: "22023", message: 'Funil "nao-existe" não existe nesta organização. Use o id (uuid) ou o slug de um funil da organização.' } },
+  ));
+
+  assertEquals(res.status, 404);
+  assertEquals((await res.json()).error.code, "pipeline_not_found");
+});
+
+Deno.test("moveDeal — funil inativo vira 409 pipeline_inactive", async () => {
+  const res = await moveDeal(ctx(
+    { pipeline: "pausado", stage: "x" },
+    { error: { code: "55000", message: 'Funil "pausado" está inativo nesta organização.' } },
+  ));
+
+  assertEquals(res.status, 409);
+  assertEquals((await res.json()).error.code, "pipeline_inactive");
+});
+
+Deno.test("moveDeal — etapa que não existe no funil de destino vira 422, não 404", async () => {
+  const res = await moveDeal(ctx(
+    { pipeline: "pos-venda", stage: "etapa-fantasma" },
+    { error: { code: "22023", message: 'Etapa "etapa-fantasma" não existe no funil 3a4a1a6e-9c1e-4f0a-8a2b-111111111111.' } },
   ));
 
   assertEquals(res.status, 422);
-  assertEquals((await res.json()).error.code, "custom_pipeline_not_supported");
+  assertEquals((await res.json()).error.code, "invalid_pipeline_or_stage");
+});
+
+Deno.test("moveDeal — Negócio órfão (sem posição em funil nenhum) vira 404", async () => {
+  const res = await moveDeal(ctx(
+    { pipeline: "propostas", stage: "enviada" },
+    { error: { code: "P0002", message: "Negócio d-1 não tem posição em nenhum funil — não há o que mover." } },
+  ));
+
+  assertEquals(res.status, 404);
+  assertEquals((await res.json()).error.code, "deal_not_found");
 });
 
 Deno.test("moveDeal — Negócio inexistente ou de outra org devolve 404", async () => {

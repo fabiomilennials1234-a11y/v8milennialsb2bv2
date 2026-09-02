@@ -45,9 +45,10 @@ interface DealRow {
 /**
  * `pipeline_slug`/`stage_key` viram `pipeline`/`stage` no corpo.
  *
- * Os nomes de coluna do banco carregam história (`stage_key` é chave textual
- * porque o funil de sistema não tem tabela de etapas própria). O contrato
- * público não precisa herdar isso.
+ * Os nomes de coluna do banco carregam história. O contrato público não precisa
+ * herdar isso. Todo funil — sistema ou personalizado — tem slug (único por org,
+ * 0 sem slug em prod, medido 2026-09-02): `pipeline: null` aqui significa
+ * Negócio ÓRFÃO (sem posição em funil nenhum), nunca "funil custom sem slug".
  */
 export function serializeDealRow(r: DealRow): Record<string, unknown> {
   return {
