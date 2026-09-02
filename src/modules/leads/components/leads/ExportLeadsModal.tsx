@@ -32,6 +32,7 @@ function hasActiveListFilters(f?: ExportListFilters): boolean {
     (!!f.filterOrigin && f.filterOrigin !== "all") ||
     (!!f.filterRating && f.filterRating !== "all") ||
     (!!f.filterQualification && f.filterQualification !== "all") ||
+    (!!f.filterResponsible && f.filterResponsible !== "all") ||
     !!f.filterUf ||
     !!f.createdFrom ||
     !!f.createdTo
