@@ -32,13 +32,13 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
 
   const handleActivateHiddenPipe = async (pipeType: string) => {
     try {
-      // Era `toggleVisibility({visible:true})` — um UPDATE. Com a linha
-      // possivelmente AUSENTE (org nova, ou funil excluído), o UPDATE não
-      // casaria com nada e o supabase-js devolveria sucesso: a tela dizia
-      // "ativado" e nada era criado. A RPC insere o registro e repara o
-      // espelho em `pipelines`.
+      // Caminho canônico dos funis semeados (SCRUM-618/635): a RPC
+      // `enable_system_pipeline` cria o registro, repara o espelho em
+      // `pipelines` E semeia as etapas server-side — o funil nasce pronto.
+      // (Era `toggleVisibility({visible:true})`, um UPDATE que com a linha
+      // ausente "ativava" sem criar nada.)
       await enablePipe.mutateAsync(pipeType as SystemPipeType);
-      toast.success("Funil ativado com sucesso!");
+      toast.success("Funil criado com sucesso!");
       const route = PIPE_ROUTES[pipeType];
       if (route) navigate(route);
       handleClose();
@@ -103,28 +103,36 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setStep("choice")}>
                       <ArrowLeft className="w-4 h-4" />
                     </Button>
-                    <DialogTitle>Criar Funil</DialogTitle>
+                    <DialogTitle>Criar funil</DialogTitle>
                   </div>
                 </DialogHeader>
-                <div className="grid grid-cols-2 gap-3 mt-4">
+                <p className="text-xs text-muted-foreground mt-2">
+                  Comece em branco ou a partir de um modelo — modelos já nascem com as etapas prontas.
+                </p>
+                <div className="grid grid-cols-2 gap-3 mt-3">
                   <button
                     onClick={handleOpenCreatePipeline}
                     className="bg-primary/5 border border-primary/20 rounded-lg p-4 text-left hover:border-primary/40 transition-colors"
                   >
                     <Plus className="w-5 h-5 text-primary mb-2" />
                     <p className="font-semibold text-sm">Em branco</p>
-                    <p className="text-xs text-muted-foreground mt-1">Stages personalizados</p>
+                    <p className="text-xs text-muted-foreground mt-1">Etapas personalizadas</p>
                   </button>
 
                   {hiddenPipes.map((pipe) => (
                     <button
                       key={pipe.pipe_type}
                       onClick={() => handleActivateHiddenPipe(pipe.pipe_type)}
-                      className="bg-muted/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors"
+                      disabled={enablePipe.isPending}
+                      className="bg-muted/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors disabled:opacity-50"
                     >
                       <p className="font-semibold text-sm">{pipe.display_name}</p>
-                      <p className="text-xs text-muted-foreground mt-1">Oculto no seu perfil</p>
-                      <p className="text-xs text-primary mt-1">Clique para ativar</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {pipe.ja_existe ? "Você já teve este funil — está oculto" : "Modelo do sistema"}
+                      </p>
+                      <p className="text-xs text-primary mt-1">
+                        {pipe.ja_existe ? "Clique para reativar" : "Criar com etapas prontas"}
+                      </p>
                     </button>
                   ))}
                 </div>

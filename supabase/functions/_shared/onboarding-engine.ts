@@ -54,6 +54,41 @@ export async function verifyWhatsAppConnected(supabase: SupabaseClient, orgId: s
   return !!data;
 }
 
+const SYSTEM_PIPE_SLUGS = ["whatsapp", "confirmacao", "propostas", "upsell"] as const;
+
+function slugFromConfigKey(key: string): string | null {
+  const slug = key.startsWith("pipe_") ? key.slice(5) : key;
+  return (SYSTEM_PIPE_SLUGS as readonly string[]).includes(slug) ? slug : null;
+}
+
+function slugify(name: string, sep: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, sep)
+    .replace(new RegExp(`^\\${sep}+|\\${sep}+$`, "g"), "");
+}
+
+/**
+ * Aplica os templates de funil na org — CAMINHO CANÔNICO (SCRUM-635, W4).
+ *
+ * `default_pipelines_config` (chaves `pipe_whatsapp`/`pipe_confirmacao`/
+ * `pipe_propostas`/… com `{visible, label}`): cada funil visível nasce pela
+ * RPC `enable_system_pipeline` — registro em `pipeline_display_config` +
+ * espelho em `pipelines` + etapas semeadas server-side (SCRUM-618). O `label`
+ * entra por UPDATE depois (a RPC preserva nome personalizado).
+ *
+ * ⚠️ A versão anterior upsertava `pipeline_display_config` com uma coluna
+ * `config` QUE NÃO EXISTE (onConflict "organization_id", que também não é
+ * chave) e engolia o erro — o bloco default nunca aplicou nada em produção.
+ *
+ * `custom_pipelines` do template: escreve nas tabelas-base `pipelines` +
+ * `pipeline_stages` (modelo único pós-W3) espelhando o fluxo de criação do
+ * front (`useCreateCustomPipeline`): slug/stage_key canônicos, org nas
+ * etapas, rollback do funil se as etapas falharem. A versão anterior inseria
+ * `custom_pipeline_stages` SEM organization_id/stage_key.
+ */
 export async function applyPipelineTemplates(
   supabase: SupabaseClient,
   orgId: string,
@@ -62,26 +97,47 @@ export async function applyPipelineTemplates(
   const created: any[] = [];
 
   for (const tpl of templates) {
-    if (tpl.default_pipelines_config) {
-      const { error } = await supabase
-        .from("pipeline_display_config")
-        .upsert({
-          organization_id: orgId,
-          config: tpl.default_pipelines_config,
-        }, { onConflict: "organization_id" });
-
-      if (!error) {
-        created.push({ type: "default_config", name: tpl.name, config: tpl.default_pipelines_config });
+    const defaultConfig = (tpl.default_pipelines_config ?? {}) as Record<
+      string,
+      { visible?: boolean; label?: string }
+    >;
+    const applied: { slug: string; label?: string }[] = [];
+    for (const [key, cfg] of Object.entries(defaultConfig)) {
+      const slug = slugFromConfigKey(key);
+      if (!slug || !cfg?.visible) continue;
+      const { error } = await supabase.rpc("enable_system_pipeline", {
+        p_org_id: orgId,
+        p_pipe_type: slug,
+      });
+      if (error) {
+        console.error("[onboarding-engine] enable_system_pipeline falhou:", slug, error.message);
+        continue;
       }
+      if (cfg.label) {
+        const { error: renameError } = await supabase
+          .from("pipeline_display_config")
+          .update({ display_name: cfg.label, updated_at: new Date().toISOString() })
+          .eq("organization_id", orgId)
+          .eq("pipe_type", slug);
+        if (renameError) {
+          console.error("[onboarding-engine] rename do funil falhou:", slug, renameError.message);
+        }
+      }
+      applied.push({ slug, label: cfg.label });
+    }
+    if (applied.length > 0) {
+      created.push({ type: "default_config", name: tpl.name, enabled: applied });
     }
 
     const customs = tpl.custom_pipelines ?? [];
     for (const cp of customs) {
       const { data: pipeline, error: pipeErr } = await supabase
-        .from("custom_pipelines")
+        .from("pipelines")
         .insert({
           organization_id: orgId,
           name: cp.name,
+          slug: slugify(cp.name ?? "", "-"),
+          type: "custom",
           icon: cp.icon ?? null,
           color: cp.color ?? null,
           is_active: true,
@@ -89,19 +145,31 @@ export async function applyPipelineTemplates(
         .select("id, name")
         .single();
 
-      if (pipeErr || !pipeline) continue;
+      if (pipeErr || !pipeline) {
+        console.error("[onboarding-engine] criação de funil custom falhou:", cp.name, pipeErr?.message);
+        continue;
+      }
 
       const stages = (cp.stages ?? []).map((s: any, idx: number) => ({
+        organization_id: orgId,
         pipeline_id: pipeline.id,
+        stage_key: slugify(s.name ?? "", "_"),
         name: s.name,
         color: s.color ?? null,
         position: s.position ?? idx,
+        is_active: true,
         is_final_positive: s.is_final_positive ?? false,
         is_final_negative: s.is_final_negative ?? false,
       }));
 
       if (stages.length > 0) {
-        await supabase.from("custom_pipeline_stages").insert(stages);
+        const { error: stagesError } = await supabase.from("pipeline_stages").insert(stages);
+        if (stagesError) {
+          // Mesmo contrato do front: funil sem etapa não fica pela metade.
+          console.error("[onboarding-engine] etapas do funil custom falharam:", cp.name, stagesError.message);
+          await supabase.from("pipelines").delete().eq("id", pipeline.id);
+          continue;
+        }
       }
 
       created.push({ type: "custom_pipeline", id: pipeline.id, name: pipeline.name, stages: cp.stages });

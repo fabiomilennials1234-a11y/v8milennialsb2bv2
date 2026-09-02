@@ -175,6 +175,7 @@ export type {
   FunnelDestination,
   ImportLeadsToCustomPipelineOptions,
   ImportLeadsToFunnelOptions,
+  ImportLeadsToPipelineOptions,
   ImportFunnelResult,
 } from "./hooks/useImportLeads";
 

@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
 // ─── Supabase mock — table-aware chain registry ─────────────────────────────
+// SCRUM-635: o motor de export colapsou em pipeline_id — todo stageFilter
+// resolve em `pipeline_entries` (fonte única pós-W3). Os fixtures abaixo
+// refletem o novo contrato: `pipelines` + `pipeline_stages` são lidos sempre
+// (cabeçalho dinâmico) e os slugs legados viram lookup em `pipelines`.
 type AnyRow = Record<string, unknown>;
 
 interface QueryRecord {
@@ -15,8 +19,6 @@ interface QueryRecord {
 
 const queries: QueryRecord[] = [];
 
-// Per-table fixtures keyed on filter conjunction so different tests can
-// override the dataset for the same table without mutual interference.
 const tableData = new Map<string, AnyRow[]>();
 
 function setTableData(table: string, rows: AnyRow[]) {
@@ -111,6 +113,20 @@ vi.mock("exceljs", () => ({
   },
 }));
 
+const STAGE_UUID = "11111111-2222-4333-8444-555555555555";
+
+/** Funis padrão dos testes: 1 system (whatsapp) + 1 custom. */
+function seedFunnels() {
+  setTableData("pipelines", [
+    { id: "pl-w", name: "Oportunidades", slug: "whatsapp", type: "system" },
+    { id: "pl-c", name: "Radar", slug: "radar", type: "custom" },
+  ]);
+  setTableData("pipeline_stages", [
+    { id: STAGE_UUID, pipeline_id: "pl-w", stage_key: "novo", name: "Novo" },
+  ]);
+  setTableData("team_members", []);
+}
+
 // jsdom doesn't ship URL.createObjectURL — stub it so the CSV branch runs.
 beforeEach(() => {
   queries.length = 0;
@@ -130,13 +146,11 @@ function findQueriesFor(table: string) {
   return queries.filter((q) => q.table === table);
 }
 
-describe("useExportLeads — stageFilter", () => {
-  it("pipe=whatsapp: filters pipe_whatsapp by status + organization_id, then leads .in(id, [...])", async () => {
-    setTableData("pipe_whatsapp", [{ lead_id: "L1" }, { lead_id: "L2" }, { lead_id: "L1" }]);
+describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-635)", () => {
+  it("pipe=whatsapp (slug legado): resolve pipeline_id em `pipelines` e filtra pipeline_entries por stage_key", async () => {
+    seedFunnels();
+    setTableData("pipeline_entries", [{ lead_id: "L1" }, { lead_id: "L2" }, { lead_id: "L1" }]);
     setTableData("leads", [{ id: "L1", name: "Foo" }, { id: "L2", name: "Bar" }]);
-    setTableData("team_members", []);
-    setTableData("pipe_confirmacao", []);
-    setTableData("pipe_propostas", []);
 
     const { result } = renderHook(() => useExportLeads());
 
@@ -150,12 +164,13 @@ describe("useExportLeads — stageFilter", () => {
       count = r.count;
     });
 
-    const stageQ = findQueriesFor("pipe_whatsapp")[0];
+    const stageQ = findQueriesFor("pipeline_entries")[0];
     expect(stageQ).toBeDefined();
     expect(stageQ.eqs).toEqual(
       expect.arrayContaining([
         ["organization_id", "org-123"],
-        ["status", "novo"],
+        ["pipeline_id", "pl-w"],
+        ["stage_key", "novo"],
       ]),
     );
 
@@ -170,61 +185,28 @@ describe("useExportLeads — stageFilter", () => {
     expect(count).toBe(2);
   });
 
-  it("pipe=confirmacao: filters pipe_confirmacao by status", async () => {
-    setTableData("pipe_confirmacao", [{ lead_id: "L9" }]);
+  it("pipe=confirmacao sem o funil na org: devolve {count:0} sem consultar leads (semântica da view vazia)", async () => {
+    seedFunnels(); // org só tem whatsapp + custom
+    setTableData("pipeline_entries", [{ lead_id: "L9" }]);
     setTableData("leads", [{ id: "L9", name: "Baz" }]);
-    setTableData("team_members", []);
-    setTableData("pipe_whatsapp", []);
-    setTableData("pipe_propostas", []);
 
     const { result } = renderHook(() => useExportLeads());
+    let res = { count: -1 };
     await act(async () => {
-      await result.current.exportLeads({
+      res = await result.current.exportLeads({
         format: "csv",
         stageFilter: { pipe: "confirmacao", stageId: "reuniao_marcada" },
       });
     });
 
-    const stageQ = findQueriesFor("pipe_confirmacao")[0];
-    expect(stageQ.eqs).toEqual(
-      expect.arrayContaining([
-        ["organization_id", "org-123"],
-        ["status", "reuniao_marcada"],
-      ]),
-    );
+    expect(res.count).toBe(0);
+    expect(findQueriesFor("leads").length).toBe(0);
   });
 
-  it("pipe=propostas: filters pipe_propostas by status", async () => {
-    setTableData("pipe_propostas", [{ lead_id: "L3" }]);
-    setTableData("leads", [{ id: "L3", name: "Qux" }]);
-    setTableData("team_members", []);
-    setTableData("pipe_whatsapp", []);
-    setTableData("pipe_confirmacao", []);
-
-    const { result } = renderHook(() => useExportLeads());
-    await act(async () => {
-      await result.current.exportLeads({
-        format: "csv",
-        stageFilter: { pipe: "propostas", stageId: "vendido" },
-      });
-    });
-
-    const stageQ = findQueriesFor("pipe_propostas")[0];
-    expect(stageQ.eqs).toEqual(
-      expect.arrayContaining([
-        ["organization_id", "org-123"],
-        ["status", "vendido"],
-      ]),
-    );
-  });
-
-  it("pipe=custom: queries custom_pipe_entries with pipeline_id + stage_id + organization_id", async () => {
-    setTableData("custom_pipe_entries", [{ lead_id: "C1" }]);
+  it("pipe=custom: customPipelineId vira pipeline_id e etapa uuid filtra por stage_id", async () => {
+    seedFunnels();
+    setTableData("pipeline_entries", [{ lead_id: "C1" }]);
     setTableData("leads", [{ id: "C1", name: "Ix" }]);
-    setTableData("team_members", []);
-    setTableData("pipe_whatsapp", []);
-    setTableData("pipe_confirmacao", []);
-    setTableData("pipe_propostas", []);
 
     const { result } = renderHook(() => useExportLeads());
     await act(async () => {
@@ -232,24 +214,47 @@ describe("useExportLeads — stageFilter", () => {
         format: "csv",
         stageFilter: {
           pipe: "custom",
-          stageId: "stage-uuid-1",
-          customPipelineId: "pipeline-uuid-1",
+          stageId: STAGE_UUID,
+          customPipelineId: "pl-c",
         },
       });
     });
 
-    const stageQ = findQueriesFor("custom_pipe_entries")[0];
+    const stageQ = findQueriesFor("pipeline_entries")[0];
     expect(stageQ).toBeDefined();
     expect(stageQ.eqs).toEqual(
       expect.arrayContaining([
         ["organization_id", "org-123"],
-        ["pipeline_id", "pipeline-uuid-1"],
-        ["stage_id", "stage-uuid-1"],
+        ["pipeline_id", "pl-c"],
+        ["stage_id", STAGE_UUID],
+      ]),
+    );
+  });
+
+  it("pipe=pipeline (canônico, SCRUM-633): pipelineId endereça qualquer funil", async () => {
+    seedFunnels();
+    setTableData("pipeline_entries", [{ lead_id: "P1" }]);
+    setTableData("leads", [{ id: "P1", name: "Uni" }]);
+
+    const { result } = renderHook(() => useExportLeads());
+    await act(async () => {
+      await result.current.exportLeads({
+        format: "csv",
+        stageFilter: { pipe: "pipeline", stageId: STAGE_UUID, pipelineId: "pl-w" },
+      });
+    });
+
+    const stageQ = findQueriesFor("pipeline_entries")[0];
+    expect(stageQ.eqs).toEqual(
+      expect.arrayContaining([
+        ["pipeline_id", "pl-w"],
+        ["stage_id", STAGE_UUID],
       ]),
     );
   });
 
   it("pipe=custom: throws when customPipelineId is missing", async () => {
+    seedFunnels();
     const { result } = renderHook(() => useExportLeads());
     await expect(
       result.current.exportLeads({
@@ -259,8 +264,20 @@ describe("useExportLeads — stageFilter", () => {
     ).rejects.toThrow(/customPipelineId/);
   });
 
+  it("pipe=pipeline: throws when pipelineId is missing", async () => {
+    seedFunnels();
+    const { result } = renderHook(() => useExportLeads());
+    await expect(
+      result.current.exportLeads({
+        format: "csv",
+        stageFilter: { pipe: "pipeline", stageId: STAGE_UUID },
+      }),
+    ).rejects.toThrow(/pipelineId/);
+  });
+
   it("returns { count: 0 } and skips leads query when stage is empty", async () => {
-    setTableData("pipe_whatsapp", []); // no entries in this stage
+    seedFunnels();
+    setTableData("pipeline_entries", []); // no entries in this stage
     setTableData("leads", [{ id: "should-not-appear" }]);
 
     const { result } = renderHook(() => useExportLeads());
@@ -272,29 +289,29 @@ describe("useExportLeads — stageFilter", () => {
       });
     });
     expect(res.count).toBe(0);
-    // Did NOT query leads or any other tables
+    // Did NOT query leads or team_members
     expect(findQueriesFor("leads").length).toBe(0);
     expect(findQueriesFor("team_members").length).toBe(0);
   });
 
   it("without stageFilter: preserves global behaviour (no stage prefilter, leads query runs)", async () => {
+    seedFunnels();
+    setTableData("pipeline_entries", []);
     setTableData("leads", [{ id: "G1" }, { id: "G2" }]);
-    setTableData("team_members", []);
-    setTableData("pipe_whatsapp", []);
-    setTableData("pipe_confirmacao", []);
-    setTableData("pipe_propostas", []);
 
     const { result } = renderHook(() => useExportLeads());
     await act(async () => {
       await result.current.exportLeads({ format: "csv" });
     });
 
-    // No stage prefilter query: pipe_whatsapp/confirmacao/propostas only
-    // appear inside the per-batch lead-id loop, NOT before leads.
     const leadsQ = findQueriesFor("leads")[0];
     expect(leadsQ).toBeDefined();
     expect(leadsQ.eqs).toEqual(expect.arrayContaining([["organization_id", "org-123"]]));
     // No .in("id", ...) added when stageFilter absent
     expect(leadsQ.ins.find(([c]) => c === "id")).toBeUndefined();
+    // Entries de TODOS os funis são lidas por lote de leads (cabeçalho dinâmico)
+    const batchQ = findQueriesFor("pipeline_entries")[0];
+    expect(batchQ).toBeDefined();
+    expect(batchQ.ins.find(([c]) => c === "lead_id")).toBeDefined();
   });
 });
