@@ -42,33 +42,43 @@ export interface WinLossItem {
   pct: number;
 }
 
-export function useFunnelConversion(pipelineType: string, startDate?: string, endDate?: string) {
+// SCRUM-631: os gráficos endereçam o funil por pipeline_id (qualquer funil da
+// org, custom incluído). p_pipeline_type virou alias legado na RPC; o front só
+// envia id. p_org_id fixa a org do contexto (usuário multi-org deixa de cair
+// na "primeira org" arbitrária do lookup antigo).
+export function useFunnelConversion(pipelineId: string | null | undefined, startDate?: string, endDate?: string) {
+  const { organizationId } = useOrganization();
   return useQuery<FunnelStage[]>({
-    queryKey: ["funnel-conversion", pipelineType, startDate, endDate],
+    queryKey: ["funnel-conversion", organizationId, pipelineId, startDate, endDate],
     queryFn: async () => {
       const { data, error } = await (supabase.rpc as any)("get_funnel_conversion", {
-        p_pipeline_type: pipelineType,
+        p_org_id: organizationId,
+        p_pipeline_id: pipelineId,
         p_start_date: startDate ?? null,
         p_end_date: endDate ?? null,
       });
       if (error) throw error;
       return (data ?? []) as FunnelStage[];
     },
+    enabled: !!organizationId && !!pipelineId,
   });
 }
 
-export function usePipelineVelocity(pipelineType: string, startDate?: string, endDate?: string) {
+export function usePipelineVelocity(pipelineId: string | null | undefined, startDate?: string, endDate?: string) {
+  const { organizationId } = useOrganization();
   return useQuery<PipelineVelocity>({
-    queryKey: ["pipeline-velocity", pipelineType, startDate, endDate],
+    queryKey: ["pipeline-velocity", organizationId, pipelineId, startDate, endDate],
     queryFn: async () => {
       const { data, error } = await (supabase.rpc as any)("get_pipeline_velocity", {
-        p_pipeline_type: pipelineType,
+        p_org_id: organizationId,
+        p_pipeline_id: pipelineId,
         p_start_date: startDate ?? null,
         p_end_date: endDate ?? null,
       });
       if (error) throw error;
       return (data ?? {}) as PipelineVelocity;
     },
+    enabled: !!organizationId && !!pipelineId,
   });
 }
 
@@ -86,16 +96,16 @@ export function useRevenueAttribution(startDate?: string, endDate?: string) {
   });
 }
 
-export function useSalesCycleAnalysis(pipelineType?: string, startDate?: string, endDate?: string) {
+export function useSalesCycleAnalysis(pipelineId?: string | null, startDate?: string, endDate?: string) {
   const { organizationId } = useOrganization();
   return useQuery<SalesCycleStage[]>({
-    queryKey: ["sales-cycle", organizationId, pipelineType, startDate, endDate],
+    queryKey: ["sales-cycle", organizationId, pipelineId, startDate, endDate],
     queryFn: async () => {
       const { data, error } = await (supabase.rpc as any)("get_sales_cycle_analysis", {
         p_org_id: organizationId,
-        // null = todas as transições (jornada cross-pipe); consumidores que
-        // querem um pipe específico passam o nome explícito
-        p_pipeline_type: pipelineType ?? null,
+        // null/undefined = todas as transições (jornada cross-funil);
+        // consumidores que querem um funil específico passam o pipeline_id.
+        p_pipeline_id: pipelineId ?? null,
         p_start_date: startDate ?? null,
         p_end_date: endDate ?? null,
       });

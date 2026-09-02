@@ -4,14 +4,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Zap, Loader2, TrendingUp, Target, Timer, DollarSign } from "lucide-react";
 import { usePipelineVelocity } from "@/modules/analytics/hooks/useAnalytics";
 import { useAnalyticsFilters } from "@/modules/analytics/hooks/useAnalyticsFilters";
+import { useAnalyticsPipelineOptions } from "@/modules/analytics/hooks/useAnalyticsPipelineOptions";
 import { AT } from "./analytics-tokens";
 import { AnalyticsEmptyState } from "./AnalyticsEmptyState";
-
-const PIPELINE_OPTIONS = [
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "propostas", label: "Propostas" },
-];
 
 function formatCurrency(value: number): string {
   if (value >= 1_000_000) return `R$ ${(value / 1_000_000).toFixed(1)}M`;
@@ -20,9 +15,14 @@ function formatCurrency(value: number): string {
 }
 
 export function PipelineVelocity() {
-  const [pipeline, setPipeline] = useState("propostas");
+  // SCRUM-631: funis reais da org por pipeline_id. Default: o funil de
+  // fechamento (slug 'propostas' enquanto existir — comportamento legado),
+  // senão o funil padrão da org.
+  const { options, closingDefault } = useAnalyticsPipelineOptions();
+  const [pipeline, setPipeline] = useState<string | null>(null);
+  const selectedPipeline = pipeline ?? closingDefault;
   const { startStr, endStr } = useAnalyticsFilters();
-  const { data: velocity, isLoading } = usePipelineVelocity(pipeline, startStr, endStr);
+  const { data: velocity, isLoading } = usePipelineVelocity(selectedPipeline, startStr, endStr);
 
   const isEmpty = !velocity || velocity.total_closed === 0;
 
@@ -42,14 +42,14 @@ export function PipelineVelocity() {
             <Zap className="h-4 w-4" />
             Velocidade do Pipeline
           </CardTitle>
-          <Select value={pipeline} onValueChange={setPipeline}>
+          <Select value={selectedPipeline ?? undefined} onValueChange={setPipeline}>
             <SelectTrigger className="w-[160px] h-8 text-xs">
-              <SelectValue />
+              <SelectValue placeholder="Funil" />
             </SelectTrigger>
             <SelectContent>
-              {PIPELINE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
+              {options.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  {opt.name}
                 </SelectItem>
               ))}
             </SelectContent>
