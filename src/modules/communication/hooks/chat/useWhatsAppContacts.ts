@@ -20,6 +20,7 @@ import {
   IN_CHUNK_SIZE_FANOUT,
 } from "@/shared/supabase/selectInChunks";
 import { resolveChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
+import { nomeDoLeadNaLista } from "@/modules/communication/lib/nomeDoLeadNaLista";
 import {
   useWhatsAppRealtimeFallback,
   FALLBACK_POLL_INTERVAL_MS,
@@ -125,7 +126,12 @@ export function useWhatsAppContacts(
         const useServerUnread =
           typeof localStorage === "undefined" || localStorage.getItem("v3_server_unread") !== "0";
         const lastSeen = useServerUnread ? {} : getLastSeenMap();
+        // `normalized_phone` é o que a RPC já devolve e o que `leads` indexa
+        // (`idx_leads_org_normalized_phone`). Guardar aqui evita re-normalizar
+        // depois com uma função do cliente que pode divergir da do banco.
+        const normalizadoPorTelefone = new Map<string, string>();
         const contacts: ChatContact[] = (rows ?? []).map((r: any) => {
+          if (r.normalized_phone) normalizadoPorTelefone.set(r.phone_number, r.normalized_phone);
           const key = normalizePhone(r.phone_number);
           const unread = useServerUnread
             ? (r.unread_count ?? 0)
@@ -165,7 +171,37 @@ export function useWhatsAppContacts(
           ...new Set(contacts.map((c) => c.conversation_id).filter((id): id is string => !!id)),
         ];
 
-        const [leadNameRows, leadTagRows, convTagRows] = await Promise.all([
+        /**
+         * Conversa SEM `lead_id` no resumo também precisa do nome do CRM.
+         *
+         * `whatsapp_conversation_summary.lead_id` só é gravado quando a mensagem
+         * entrou já sabendo o lead, ou quando `trg_leads_adopt_orphan_messages`
+         * adotou a conversa (INSERT do lead, ou UPDATE do telefone dele). Fora
+         * desses dois momentos — lead que ganhou telefone por outro caminho,
+         * conversa cujo vínculo nunca foi refeito — o resumo fica NULL para
+         * sempre, e a linha exibiria `push_name` ou o número enquanto o
+         * CABEÇALHO da mesma conversa mostra o nome do lead: o cabeçalho tem
+         * `useLeadByPhone`, a lista não tinha nada equivalente. É a mesma
+         * divergência que este arquivo acabou de fechar, entrando por outra porta.
+         *
+         * O caminho de escape (`v3_server_contacts='0'`, adiante) já resolvia por
+         * telefone — só o caminho servidor, que é o DEFAULT, não resolvia.
+         *
+         * Custa uma consulta a mais, e só quando existe linha sem lead. Bate no
+         * índice parcial `idx_leads_org_normalized_phone (organization_id,
+         * normalized_phone)`, e `idx_leads_org_phone_unique` garante no máximo um
+         * lead vivo por telefone na org — sem ambiguidade de qual nome usar.
+         */
+        const telefonesSemLead = [
+          ...new Set(
+            contacts
+              .filter((c) => !c.lead_id)
+              .map((c) => normalizadoPorTelefone.get(c.phone_number))
+              .filter((p): p is string => !!p),
+          ),
+        ];
+
+        const [leadNameRows, leadsPorTelefone, leadTagRows, convTagRows] = await Promise.all([
           soft(
             selectInChunks<{ id: string; name: string | null }>(
               leadIds,
@@ -174,6 +210,22 @@ export function useWhatsAppContacts(
             ),
             "leads",
           ),
+          telefonesSemLead.length > 0
+            ? soft(
+                selectInChunks<{ name: string | null; normalized_phone: string | null }>(
+                  telefonesSemLead,
+                  (chunk) =>
+                    supabase
+                      .from("leads")
+                      .select("name, normalized_phone")
+                      .eq("organization_id", organizationId)
+                      .is("deleted_at", null)
+                      .in("normalized_phone", chunk),
+                  IN_CHUNK_SIZE,
+                ),
+                "leads_por_telefone",
+              )
+            : Promise.resolve([] as { name: string | null; normalized_phone: string | null }[]),
           softTags(
             selectInChunks<any>(
               leadIds,
@@ -202,6 +254,10 @@ export function useWhatsAppContacts(
 
         const leadNameMap = new Map<string, string>();
         for (const row of leadNameRows) if (row.name) leadNameMap.set(row.id, row.name);
+        const nomePorTelefone = new Map<string, string>();
+        for (const row of leadsPorTelefone) {
+          if (row.normalized_phone && row.name) nomePorTelefone.set(row.normalized_phone, row.name);
+        }
         const leadTagsMap = new Map<string, ChatContactTag[]>();
         for (const row of leadTagRows as any[]) {
           const tag = (row as { tags: ChatContactTag }).tags;
@@ -214,7 +270,16 @@ export function useWhatsAppContacts(
         }
 
         for (const c of contacts) {
-          if (c.lead_id) c.lead_name = leadNameMap.get(c.lead_id) ?? null;
+          // Só o NOME sai daqui — `lead_id` continua sendo o que o servidor disse.
+          // A RPC filtra `p_lead_presence='sem'` por `s.lead_id IS NULL`; preencher
+          // o id no cliente faria a linha aparecer como vinculada dentro do filtro
+          // que pediu justamente as não-vinculadas, e apagaria a bolinha "Novo"
+          // que existe pra alguém ir lá vincular.
+          c.lead_name = nomeDoLeadNaLista(c, {
+            porId: leadNameMap,
+            porTelefone: nomePorTelefone,
+            normalizadoPorTelefone,
+          });
           const tagIds = new Set<string>();
           const merged: ChatContactTag[] = [];
           for (const t of (c.lead_id ? leadTagsMap.get(c.lead_id) : undefined) || [])
