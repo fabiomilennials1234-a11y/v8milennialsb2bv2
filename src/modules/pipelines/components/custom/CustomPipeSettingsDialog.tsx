@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import {
   Settings2,
   Layers,
@@ -24,6 +25,7 @@ import {
   Palette,
   FileSpreadsheet,
   ClipboardList,
+  Send,
 } from "lucide-react";
 import {
   AlertDialog,
@@ -74,6 +76,11 @@ import { TransitionSelector } from "@/modules/pipelines/components/shared/Transi
 import { PIPELINE_COLORS, PIPELINE_ICONS } from "./CreatePipelineModal";
 import { ImportCustomPipelineContent } from "./ImportCustomPipelineContent";
 import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
+import { PipeDispatchRulesSection } from "@/modules/pipelines/components/shared/PipeDispatchRulesSection";
+import {
+  useStageDispatchEnabled,
+  useSetStageDispatchEnabled,
+} from "@/modules/pipelines/hooks/config/useStageDispatchToggle";
 
 const STAGE_COLORS = [
   "#3b82f6", "#22c55e", "#eab308", "#f97316", "#ef4444",
@@ -554,6 +561,72 @@ function StagesTabContent({
 }
 
 // ────────────────────────────────────────────────────────────
+// Dispatch Tab — Mensagens automáticas por etapa (SCRUM-629, D11)
+// ────────────────────────────────────────────────────────────
+
+function DispatchTabContent({
+  pipeline,
+  stages,
+}: {
+  pipeline: CustomPipeline;
+  stages: CustomPipelineStage[];
+}) {
+  const { data: dispatchState, isLoading } = useStageDispatchEnabled(pipeline.id);
+  const setEnabled = useSetStageDispatchEnabled();
+  const enabled = dispatchState?.enabled ?? false;
+
+  const handleToggle = async (next: boolean) => {
+    try {
+      await setEnabled.mutateAsync({ pipelineId: pipeline.id, enabled: next });
+      toast.success(
+        next
+          ? "Mensagens automáticas por etapa ativadas neste funil"
+          : "Mensagens automáticas desativadas — envios pendentes deste funil foram cancelados"
+      );
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao atualizar disparo por etapa");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+        <div className="space-y-1">
+          <Label htmlFor="stage-dispatch-toggle" className="text-sm font-medium">
+            Mensagens automáticas por etapa
+          </Label>
+          <p className="text-xs text-muted-foreground">
+            Quando ligado, mover ou adicionar um card neste funil pode disparar
+            mensagens de WhatsApp e ações automáticas conforme as regras abaixo.
+            Vale só para movimentos feitos <span className="font-medium text-foreground">depois</span> de
+            ligar — cards que já estavam nas etapas não recebem nada.
+            Desligar cancela os envios pendentes deste funil.
+          </p>
+        </div>
+        <Switch
+          id="stage-dispatch-toggle"
+          checked={enabled}
+          disabled={isLoading || setEnabled.isPending}
+          onCheckedChange={handleToggle}
+        />
+      </div>
+
+      {enabled ? (
+        <PipeDispatchRulesSection
+          pipeType={pipeline.slug}
+          pipelineId={pipeline.id}
+          stages={stages.map((s) => ({ id: s.id, name: s.name }))}
+        />
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Ative o disparo por etapa para configurar regras de envio neste funil.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
 // General Settings Tab
 // ────────────────────────────────────────────────────────────
 
@@ -685,10 +758,14 @@ export function CustomPipeSettingsDialog({
         </DialogHeader>
 
         <Tabs defaultValue="etapas">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="etapas" className="gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5" />
               Etapas
+            </TabsTrigger>
+            <TabsTrigger value="disparos" className="gap-1.5 text-xs">
+              <Send className="w-3.5 h-3.5" />
+              Disparos
             </TabsTrigger>
             <TabsTrigger value="importar" className="gap-1.5 text-xs">
               <FileSpreadsheet className="w-3.5 h-3.5" />
@@ -703,6 +780,9 @@ export function CustomPipeSettingsDialog({
           <div className="overflow-y-auto max-h-[calc(85vh-12rem)] mt-4 pr-1">
             <TabsContent value="etapas" className="mt-0">
               <StagesTabContent pipeline={pipeline} stages={stages} />
+            </TabsContent>
+            <TabsContent value="disparos" className="mt-0">
+              <DispatchTabContent pipeline={pipeline} stages={stages} />
             </TabsContent>
             <TabsContent value="importar" className="mt-0">
               <ImportCustomPipelineContent

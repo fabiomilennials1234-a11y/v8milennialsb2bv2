@@ -4,7 +4,12 @@ import { useOrganization } from "@/modules/identity";
 import { useAnalyticsFilters } from "./useAnalyticsFilters";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 
-export type PipelineSelectorType = "whatsapp" | "confirmacao" | "propostas" | null;
+/**
+ * SCRUM-631: o seletor passou de 3 slugs fixos para o pipeline_id de qualquer
+ * funil da org (null = "Todos"). O slug legado segue aceito pela RPC como
+ * alias (p_pipeline_type), mas o front só envia id.
+ */
+export type PipelineSelectorType = string | null;
 
 // â”€â”€â”€ Shape types returned by the RPC â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -70,7 +75,7 @@ const EMPTY: PipelineFunnelMetrics = {
   forecast_total: 0,
 };
 
-export function useAnalyticsPipesFunis(pipelineType: PipelineSelectorType = null) {
+export function useAnalyticsPipesFunis(pipelineId: PipelineSelectorType = null) {
   const { organizationId, isReady } = useOrganization();
   const { filters, startStr, endStr } = useAnalyticsFilters();
 
@@ -81,7 +86,7 @@ export function useAnalyticsPipesFunis(pipelineType: PipelineSelectorType = null
       startStr,
       endStr,
       filters.memberId,
-      pipelineType,
+      pipelineId,
     ],
     queryFn: async (): Promise<PipelineFunnelMetrics> => {
       const { data, error } = await supabase.rpc(
@@ -90,8 +95,8 @@ export function useAnalyticsPipesFunis(pipelineType: PipelineSelectorType = null
           p_org_id: organizationId,
           p_start_date: startStr,
           p_end_date: endStr,
-          p_pipeline_type: pipelineType ?? null,
           p_member_id: filters.memberId ?? null,
+          p_pipeline_id: pipelineId ?? null,
         },
       );
 
