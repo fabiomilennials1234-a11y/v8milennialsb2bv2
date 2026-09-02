@@ -1,8 +1,10 @@
 /**
  * Hook para gerenciar regras de Kanban (goal, behavior, allowed/forbidden actions por etapa)
  *
- * CRUD de regras por etapa do funil WhatsApp.
- * Usado na aba "Regras" do AgentConfigModal.
+ * CRUD de regras por etapa de QUALQUER funil da org (SCRUM-628). As referências
+ * viajam nas colunas de texto `pipe_type`/`stage_name` em dois formatos:
+ * novo = uuid do funil + uuid da etapa; legado = slug + stage_key (aceito na
+ * leitura — ver `lib/kanban-rule-refs.ts`). Usado na aba "Regras" do agente.
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";

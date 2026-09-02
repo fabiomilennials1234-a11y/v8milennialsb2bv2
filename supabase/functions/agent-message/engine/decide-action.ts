@@ -16,7 +16,8 @@ import {
   mapToolToAction as mapToolToActionExternal,
 } from "../../_shared/copilot/dispatcher.ts";
 import { determineNextState as determineNextStateExternal } from "../../_shared/copilot/state-machine.ts";
-import { getPipeEntry } from "../../_shared/pipeline-adapter.ts";
+import { getPipeEntry, type PipelineEntry } from "../../_shared/pipeline-adapter.ts";
+import { funnelRefsFromRules } from "../../_shared/copilot/kanban-rules.ts";
 
 export interface ProcessLLMResponseResult {
   nextState: string;
@@ -292,6 +293,11 @@ export async function enqueueAutomationActions(
     const automationActionType = `automation_${actionType}` as string;
     const idempotencyKey = `auto_${actionType}_${leadId}_${currentState}`;
 
+    // SCRUM-628: a automação deixa de assumir o funil WhatsApp — vai junto a
+    // ref do funil primário do agente (primeira regra de kanban de eixo-funil).
+    // Sem regra configurada, o executor cai no legado "whatsapp".
+    const pipelineRef = funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0] ?? null;
+
     console.log("[engine/decide-action] Enqueuing automation action:", automationActionType);
     await enqueueAiAction(supabase, {
       organizationId,
@@ -301,6 +307,7 @@ export async function enqueueAutomationActions(
         action_type: actionType,
         action_config: actionConfig,
         current_state: currentState,
+        ...(pipelineRef ? { pipeline_ref: pipelineRef } : {}),
       },
       idempotencyKey,
     });
@@ -309,14 +316,70 @@ export async function enqueueAutomationActions(
   }
 }
 
-const STANDARD_WHATSAPP_STAGES = ["novo", "abordado", "respondeu", "esfriou", "agendado"];
+interface EngineStageRow {
+  id: string;
+  stage_key: string;
+  position: number;
+  stage_role: string | null;
+}
 
+/**
+ * Etapas ATIVAS do funil da entry, na ordem de position. Falha de leitura vira
+ * `null` (não avança nada) — nunca lista vazia fingindo "funil sem etapas".
+ */
+async function loadStagesOfPipeline(
+  supabase: SupabaseClient,
+  organizationId: string,
+  pipelineId: string,
+): Promise<EngineStageRow[] | null> {
+  const { data, error } = await supabase
+    .from("pipeline_stages")
+    .select("id, stage_key, position, stage_role")
+    .eq("organization_id", organizationId)
+    .eq("pipeline_id", pipelineId)
+    .eq("is_active", true)
+    .order("position", { ascending: true });
+  if (error) {
+    console.warn("[engine/decide-action] Falha ao ler etapas do funil:", { pipelineId, error });
+    return null;
+  }
+  return (data ?? []) as EngineStageRow[];
+}
+
+/**
+ * Avanço automático de etapa pelo turn do Copilot — em QUALQUER funil (SCRUM-628).
+ *
+ * O funil deixa de ser o WhatsApp hardcoded: o Sujeito é procurado nos funis
+ * que as kanban rules do agente citam (na ordem), com fallback "whatsapp" para
+ * agente sem regra — comportamento histórico preservado. A trilha fixa
+ * ["novo","abordado","respondeu",...] morreu junto:
+ *
+ *   - avanço por turn = PRÓXIMA etapa `stage_role='open'` na ordem de position
+ *     do funil da entry. Regras (a mesma semântica da trilha antiga, por
+ *     posição): turn 1 na primeira etapa open → segunda; segunda etapa open →
+ *     terceira. Da terceira em diante ninguém avança sozinho (a antiga
+ *     respondeu→esfriou nunca foi automática, e esfriou deixa de ser um alvo
+ *     acidental por estar na trilha).
+ *   - SCHEDULE_MEETING → etapa `stage_role='meeting_booked'` do funil (a
+ *     primeira por position). Funil sem etapa meeting_booked → NÃO move.
+ *   - entry em etapa não-open (meeting_booked/held/won/lost) → não move.
+ *
+ * ADR-0023 §10: a etapa corrente é do NEGÓCIO (`pipeline_entries`), nunca de
+ * `leads.pipe_whatsapp`. ADR-0023 §3 (guard preservado): sem negócio, NADA é
+ * enfileirado — automação não abre negócio.
+ *
+ * O payload agora carrega `entry_id` + `stage_id` + `target_pipe` (uuid do
+ * funil): o executor (`executeMoveEntryStage`) move O NEGOCIO LIDO AQUI, por id,
+ * sem upsert — o caminho legado `{lead_id, new_stage}` continua aceito para
+ * ações antigas ainda na fila.
+ */
 export async function enqueuePipelineStageUpdate(
   supabase: SupabaseClient,
   organizationId: string,
   leadId: string,
   turnCount: number,
   actionToExecute: any,
+  capabilities?: any,
 ): Promise<void> {
   try {
     // advance_stage será enfileirado como tool call — não duplicar
@@ -324,51 +387,75 @@ export async function enqueuePipelineStageUpdate(
       return;
     }
 
-    // ADR-0023 §10: a etapa corrente é do NEGÓCIO, não do lead. `leads.pipe_whatsapp`
-    // sobrevive como espelho legado e não é mais lido aqui — em L2 um gatilho passa a
-    // zerá-lo quando o negócio sai de Oportunidades, e continuar lendo dali mudaria o
-    // comportamento do agente em silêncio (1.885 leads em 34 orgs já divergem hoje).
-    const entry = await getPipeEntry(supabase, leadId, organizationId, "whatsapp");
+    const refs = funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules);
+    if (refs.length === 0) refs.push("whatsapp");
+
+    let entry: PipelineEntry | null = null;
+    for (const ref of refs) {
+      entry = await getPipeEntry(supabase, leadId, organizationId, ref);
+      if (entry) break;
+    }
 
     if (!entry) {
-      // Sem negócio no funil não há posição para avançar. Antes daqui saía um
-      // `update_pipeline_stage`, e `executeUpdatePipelineStage` faz `upsertPipeEntry`,
-      // que INSERE a entry quando não existe — ou seja, o agente CRIAVA o negócio.
-      // ADR-0023 §3: negócio nasce só por clique humano. Nenhuma automação abre um.
+      // Sem negócio em nenhum funil do agente não há posição para avançar.
+      // ADR-0023 §3: negócio nasce só por clique humano — nenhuma automação
+      // abre um (era por aqui que o agente criava, via upsert do executor).
       console.log(
-        "[engine/decide-action] Lead sem negócio no funil WhatsApp; nada a avançar.",
-        { leadId },
+        "[engine/decide-action] Lead sem negócio nos funis do agente; nada a avançar.",
+        { leadId, refs },
       );
       return;
     }
 
-    const currentStage = entry.stage_key;
-    let newStage: string | null = null;
+    const stages = await loadStagesOfPipeline(supabase, organizationId, entry.pipeline_id);
+    if (!stages || stages.length === 0) return;
 
-    const isStandardStage = STANDARD_WHATSAPP_STAGES.includes(currentStage || "");
+    const entryStageId = (entry as unknown as { stage_id?: string | null }).stage_id ?? null;
+    const currentIdx = stages.findIndex((s) =>
+      entryStageId ? s.id === entryStageId : s.stage_key === entry!.stage_key,
+    );
+    const current = currentIdx >= 0 ? stages[currentIdx] : null;
+
+    let target: EngineStageRow | null = null;
 
     if (actionToExecute?.action === "SCHEDULE_MEETING") {
-      newStage = "agendado";
-    } else if (isStandardStage) {
-      if (turnCount <= 1 && currentStage === "novo") {
-        newStage = "abordado";
-      } else if (currentStage === "abordado") {
-        newStage = "respondeu";
+      target = stages.find((s) => s.stage_role === "meeting_booked") ?? null;
+      if (!target) {
+        console.log(
+          "[engine/decide-action] Funil sem etapa meeting_booked; SCHEDULE_MEETING não move.",
+          { pipelineId: entry.pipeline_id },
+        );
+      }
+    } else if (current && (current.stage_role ?? "open") === "open") {
+      const open = stages.filter((s) => (s.stage_role ?? "open") === "open");
+      const openIdx = open.findIndex((s) => s.id === current.id);
+      if (turnCount <= 1 && openIdx === 0 && open.length > 1) {
+        target = open[1];
+      } else if (openIdx === 1 && open.length > 2) {
+        target = open[2];
       }
     }
 
-    if (newStage && newStage !== currentStage) {
+    if (target && target.stage_key !== entry.stage_key) {
       console.log("[engine/decide-action] Enqueuing pipeline stage update:", {
         leadId,
-        from: currentStage,
-        to: newStage,
+        pipelineId: entry.pipeline_id,
+        from: entry.stage_key,
+        to: target.stage_key,
       });
       await enqueueAiAction(supabase, {
         organizationId,
         leadId,
         actionType: "update_pipeline_stage",
-        payload: { lead_id: leadId, new_stage: newStage, previous_stage: currentStage },
-        idempotencyKey: `pipeline_${leadId}_${newStage}`,
+        payload: {
+          lead_id: leadId,
+          entry_id: entry.id,
+          target_pipe: entry.pipeline_id,
+          new_stage: target.stage_key,
+          stage_id: target.id,
+          previous_stage: entry.stage_key,
+        },
+        idempotencyKey: `pipeline_${leadId}_${entry.pipeline_id}_${target.stage_key}`,
       });
     }
   } catch (e) {

@@ -77,8 +77,10 @@ function arquivosTs(dir: string, acc: string[] = []): string[] {
  * diff.
  */
 const NAO_E_A_COLUNA: Record<string, string> = {
-  "supabase/functions/_shared/copilot-v2/tool-executor.ts":
-    'SYSTEM_PIPE_TABLE mapeia o funil para o nome da VIEW `pipe_whatsapp` (usada em `.from(table)`), não para a coluna de `leads`. A view é construída sobre `pipeline_entries` e sobrevive ao DROP COLUMN.',
+  // (SCRUM-628: o SYSTEM_PIPE_TABLE do tool-executor morreu — move_lead_stage
+  // escreve via pipeline-adapter. A entrada antiga saiu junto.)
+  "supabase/functions/_shared/pipeline-adapter.ts":
+    'LEGACY_SLUG_ALIASES (SCRUM-623) usa `pipe_whatsapp` como CHAVE de alias — nome legado que chamadores externos mandam como ref de funil e que o resolver traduz para o slug `whatsapp`. É literal de mapa, não leitura/escrita da coluna de `leads`.',
 };
 
 /**

@@ -64,19 +64,43 @@ describe("loadOrgCustomFields", () => {
 });
 
 describe("loadPipelineStages", () => {
-  it("retorna stages ativos", async () => {
+  // SCRUM-628: as etapas voltam com a identidade REAL do funil (pipeline_id +
+  // slug + nome via `pipelines`) — cobre funil custom, cujo pipeline_type é NULL.
+  it("retorna stages ativos com slug/nome do funil dono (sistema E custom)", async () => {
     const { sb, mockTable } = createMockSupabase();
+    mockTable("pipelines", [
+      { id: "pipe-wpp", organization_id: ORG, slug: "whatsapp", name: "WhatsApp", is_active: true, display_order: 0 },
+      { id: "pipe-custom", organization_id: ORG, slug: "pos-venda", name: "Pós-venda", is_active: true, display_order: 1 },
+    ]);
     mockTable("pipeline_stages", [
-      { stage_key: "novo", name: "Novo", pipeline_type: "whatsapp", organization_id: ORG, is_active: true, position: 1 },
-      { stage_key: "abordado", name: "Abordado", pipeline_type: "whatsapp", organization_id: ORG, is_active: true, position: 2 },
+      { stage_key: "novo", name: "Novo", pipeline_type: "whatsapp", pipeline_id: "pipe-wpp", organization_id: ORG, is_active: true, position: 1 },
+      { stage_key: "abordado", name: "Abordado", pipeline_type: "whatsapp", pipeline_id: "pipe-wpp", organization_id: ORG, is_active: true, position: 2 },
+      { stage_key: "entrada", name: "Entrada", pipeline_type: null, pipeline_id: "pipe-custom", organization_id: ORG, is_active: true, position: 1 },
     ]);
     const result = await loadPipelineStages(sb, ORG);
-    expect(result.length).toBe(2);
+    expect(result.length).toBe(3);
     expect(result[0].stage_key).toBe("novo");
+    expect(result[0].pipeline_slug).toBe("whatsapp");
+    const custom = result.find((s) => s.stage_key === "entrada")!;
+    expect(custom.pipeline_slug).toBe("pos-venda");
+    expect(custom.pipeline_name).toBe("Pós-venda");
+  });
+
+  it("etapa órfã (sem pipeline_id) e etapa de funil inativo saem da lista", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("pipelines", [
+      { id: "pipe-off", organization_id: ORG, slug: "desligado", name: "Desligado", is_active: false, display_order: 0 },
+    ]);
+    mockTable("pipeline_stages", [
+      { stage_key: "orfa", name: "Órfã", pipeline_type: "upsell_base", pipeline_id: null, organization_id: ORG, is_active: true, position: 1 },
+      { stage_key: "morta", name: "Morta", pipeline_type: null, pipeline_id: "pipe-off", organization_id: ORG, is_active: true, position: 1 },
+    ]);
+    expect(await loadPipelineStages(sb, ORG)).toEqual([]);
   });
 
   it("retorna [] se org sem stages", async () => {
     const { sb, mockTable } = createMockSupabase();
+    mockTable("pipelines", []);
     mockTable("pipeline_stages", []);
     expect(await loadPipelineStages(sb, ORG)).toEqual([]);
   });

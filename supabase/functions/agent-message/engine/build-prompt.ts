@@ -9,6 +9,13 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveActiveWindow, formatTemporalAnchor, formatDateTimeInTz, formatDateInTz } from "../../_shared/copilot/time-context.ts";
 import { parseCustomInstructions } from "./utils.ts";
+import { getPipeEntry, resolvePipeline, isPipelineResolutionError } from "../../_shared/pipeline-adapter.ts";
+import {
+  funnelRefsFromRules,
+  isCampaignRule,
+  isFunnelRule,
+  ruleMatchesStage,
+} from "../../_shared/copilot/kanban-rules.ts";
 
 interface ConversationContextSummary {
   lastTopic?: string;
@@ -246,10 +253,10 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
         "- disqualify_lead: quando o lead não se encaixa (sem necessidade, fora do perfil, sem orçamento, desistiu)",
       );
       sections.push(
-        "- advance_stage: quando o lead progrediu na jornada — especifique target_stage e target_pipe (whatsapp, confirmacao, propostas, upsell_base, upsell_gestao, campanha)",
+        "- advance_stage: quando o lead progrediu na jornada — especifique target_stage e target_pipe (os funis e etapas disponíveis desta organização estão listados na própria ferramenta advance_stage)",
       );
       sections.push(
-        "O lead pode estar em MÚLTIPLOS funis simultaneamente (WhatsApp + Carteira + Confirmação etc). Movimente no funil correto.",
+        "O lead pode estar em MÚLTIPLOS funis simultaneamente. Movimente no funil correto.",
       );
       sections.push(
         "Essencial: movimente o lead conforme a conversa evolui. Não deixe leads qualificados ou desqualificados sem usar a ferramenta.",
@@ -764,46 +771,80 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
 
   // =====================================================
   // 4.1 REGRAS DA ETAPA ATUAL (Kanban)
+  //
+  // SCRUM-628: as regras deixam de casar contra a união hardcoded
+  // whatsapp/confirmacao/propostas/upsell — cada regra aponta um FUNIL (uuid ou
+  // slug, formato novo e legado — ver _shared/copilot/kanban-rules.ts) e a
+  // posição do lead vem da entry dele em `pipeline_entries` NAQUELE funil, o
+  // que cobre funil custom. Campanha segue como eixo próprio (nome da etapa da
+  // campanha, comportamento histórico); Carteira saiu (não é funil).
   // =====================================================
   const kanbanRules = capabilities?.copilot_agent_kanban_rules;
-  if (kanbanRules && Array.isArray(kanbanRules) && kanbanRules.length > 0) {
-    const pipeLabels: Record<string, string> = {
-      whatsapp: "WhatsApp",
-      confirmacao: "Confirmação",
-      propostas: "Propostas",
-      upsell_base: "Carteira Base",
-      upsell_gestao: "Carteira Gestão",
-      campanha: "Campanhas",
-    };
-    const currentStages: Array<{ pipe: string; stage: string }> = [];
-    if (leadData?.whatsapp_status?.trim())
-      currentStages.push({ pipe: "whatsapp", stage: leadData.whatsapp_status.trim() });
-    if (leadData?.confirmacao_status?.trim())
-      currentStages.push({ pipe: "confirmacao", stage: leadData.confirmacao_status.trim() });
-    if (leadData?.propostas_status?.trim())
-      currentStages.push({ pipe: "propostas", stage: leadData.propostas_status.trim() });
-    if (leadData?.upsell_base_stage?.trim())
-      currentStages.push({ pipe: "upsell_base", stage: leadData.upsell_base_stage.trim() });
-    if (leadData?.upsell_gestao_stage?.trim())
-      currentStages.push({ pipe: "upsell_gestao", stage: leadData.upsell_gestao_stage.trim() });
-    if (leadData?.campanha_stage?.trim())
-      currentStages.push({ pipe: "campanha", stage: leadData.campanha_stage.trim() });
+  if (kanbanRules && Array.isArray(kanbanRules) && kanbanRules.length > 0 && currentLeadId) {
+    const orgId: string | null =
+      (leadData?.organization_id as string) ??
+      (conversation?.organization_id as string) ??
+      (capabilities?.organization_id as string) ??
+      null;
 
-    const matchedRules: Array<{ rule: any; pipe: string; stage: string }> = [];
-    for (const cs of currentStages) {
-      const rule = kanbanRules.find(
-        (r: { pipe_type?: string; stage_name?: string }) =>
-          r?.pipe_type === cs.pipe && r?.stage_name?.toLowerCase() === cs.stage.toLowerCase(),
-      );
-      if (rule) matchedRules.push({ rule, pipe: cs.pipe, stage: cs.stage });
+    const matchedRules: Array<{ rule: any; pipeLabel: string; stageLabel: string }> = [];
+
+    // Eixo funil: resolve cada ref citada pelas regras (uuid, slug ou alias —
+    // refs diferentes podem apontar o MESMO funil, então agrupa-se por
+    // pipeline.id: uma leitura de entry por funil, sem seção duplicada).
+    if (orgId) {
+      const rulesByPipelineId = new Map<
+        string,
+        { pipeline: { id: string; slug: string; name: string }; rules: any[] }
+      >();
+      for (const ref of funnelRefsFromRules(kanbanRules)) {
+        try {
+          const pipeline = await resolvePipeline(supabase, orgId, ref);
+          const group = rulesByPipelineId.get(pipeline.id) ?? { pipeline, rules: [] };
+          for (const rule of kanbanRules) {
+            if (isFunnelRule(rule) && rule.pipe_type === ref) group.rules.push(rule);
+          }
+          rulesByPipelineId.set(pipeline.id, group);
+        } catch (e) {
+          if (isPipelineResolutionError(e)) {
+            // Regra apontando funil que a org não tem mais — regra fica muda,
+            // o prompt não pode quebrar por config órfã.
+            console.warn("[engine/build-prompt] kanban rule com funil não resolvível:", e.message);
+            continue;
+          }
+          throw e;
+        }
+      }
+
+      for (const { pipeline, rules } of rulesByPipelineId.values()) {
+        const entry = await getPipeEntry(supabase, currentLeadId, orgId, pipeline.id);
+        if (!entry) continue;
+        const entryStageId =
+          ((entry as unknown as { stage_id?: string | null }).stage_id ?? null);
+        for (const rule of rules) {
+          if (ruleMatchesStage(rule, { id: entryStageId, key: entry.stage_key })) {
+            matchedRules.push({ rule, pipeLabel: pipeline.name || pipeline.slug, stageLabel: entry.stage_key });
+          }
+        }
+      }
+    }
+
+    // Eixo campanha (outro eixo — matching histórico por nome da etapa).
+    const campanhaStage = leadData?.campanha_stage?.trim();
+    if (campanhaStage) {
+      for (const rule of kanbanRules) {
+        if (!isCampaignRule(rule)) continue;
+        if (rule.stage_name?.toLowerCase() === campanhaStage.toLowerCase()) {
+          matchedRules.push({ rule, pipeLabel: "Campanhas", stageLabel: campanhaStage });
+        }
+      }
     }
 
     if (matchedRules.length > 0) {
       sections.push("# REGRAS DA ETAPA ATUAL (Kanban)");
       sections.push("");
-      for (const { rule, pipe } of matchedRules) {
-        const pipeLabel = pipeLabels[pipe] || pipe;
-        sections.push(`Você está conversando com um lead na etapa "${rule.stage_name}" do funil ${pipeLabel}.`);
+      for (const { rule, pipeLabel, stageLabel } of matchedRules) {
+        sections.push(`Você está conversando com um lead na etapa "${stageLabel}" do funil ${pipeLabel}.`);
         sections.push("");
         if (rule.goal) sections.push(`**Objetivo desta etapa:** ${rule.goal}`);
         if (rule.behavior) sections.push(`**Comportamento esperado:** ${rule.behavior}`);
