@@ -97,8 +97,26 @@ mapa é maior que esta fatia.
   linha real e o catálogo grava com `default_value = true`. Confirmado depois que a chave
   e a função NÃO ficaram em prod.
 
+## Aplicado em PROD — 2026-09-02
+
+`20270914000000_agenda_de_todos_por_permissao`, ledger escrito na mesma transação (topo do
+ledger; o anterior era `20270909001000`). Asserções pós-apply na própria transação:
+função existe, `anon` sem EXECUTE, `authenticated` com, chave ligada e não-admin-only.
+
+Medido impersonando um membro real (não-admin, org Milennials, janela de ±60 dias):
+
+| medida | linhas |
+|---|---|
+| base org-wide sob RLS | 169 |
+| com recorte, permissão LIGADA | 169 — md5 idêntico ao da base |
+| com recorte, permissão desligada só para ele | 71 (as dele + as órfãs) |
+| linhas de terceiro sobreviventes ao recorte | **0** |
+
+Ao vivo depois do COMMIT: o mesmo membro vê 169 linhas, 165 com dono resolvido.
+
 ## Pendências
 
-- Aplicar a migration em prod e deployar o front (nesta ordem — o front tem queda para a
-  base, o contrário não).
+- **A tela ainda não mudou.** O banco está liberado, mas quem troca `isAdmin` por
+  `useCanDo("agenda.view_all")` é o front desta branch — sem o merge/deploy, a Agenda em
+  prod continua recortando por cargo.
 - Regerar `types.ts`: a RPC nova não está lá (mesma situação da `get_comando_agenda_events`).
