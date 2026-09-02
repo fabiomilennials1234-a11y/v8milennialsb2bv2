@@ -459,6 +459,30 @@ export function useDeletePipelineStage() {
       const organizationId = teamMember?.organization_id;
       if (!organizationId) throw new Error("Organização não encontrada");
 
+      // Guarda interina (F0 funis-unificacao §4.4): etapa referenciada por
+      // regra de disparo automático não pode ser removida — o slug/id dela é
+      // consumido a jusante (dispatch de WhatsApp). Bloqueia ANTES de migrar
+      // leads, com mensagem dizendo o que existe. O diálogo definitivo de
+      // deleção chega na D3.
+      const { count: dispatchRuleCount, error: rulesError } = await supabase
+        .from("pipe_dispatch_rules")
+        .select("id", { count: "exact", head: true })
+        .eq("organization_id", organizationId)
+        .eq("pipeline_stage_id", id)
+        .eq("is_active", true);
+
+      if (rulesError) {
+        throw new Error(
+          `Não foi possível verificar regras de disparo desta etapa (${rulesError.message}). Remoção bloqueada por segurança.`,
+        );
+      }
+      if ((dispatchRuleCount ?? 0) > 0) {
+        throw new Error(
+          `Esta etapa é alvo de ${dispatchRuleCount} regra(s) de disparo automático ativa(s). ` +
+            `Desative ou reaponte essas regras nas configurações do funil antes de remover a etapa.`,
+        );
+      }
+
       const pipelineId = await resolveSystemPipelineId(organizationId, pipeline_type);
 
       // Migrar leads que ainda estão nesta etapa antes de desativar.
