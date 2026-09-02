@@ -51,6 +51,14 @@ const candidatas = await sql(`
     AND s.stage_role = 'open'
     AND s.suggested_stage_role IS NULL
     AND s.stage_role_reviewed_at IS NULL
+    -- Etapa sem pipeline_type fica DE FORA. Nao e zelo defensivo: o papel dela
+    -- e inalcancavel pela metrica -- metric_stage_role resolve por
+    -- ps.pipeline_type = p.slug, entao tipo nulo nunca casa e aprovar a
+    -- sugestao nao mudaria numero nenhum. Enfileirar isso encheria a fila do
+    -- master de trabalho sem efeito; numa fila parada ha dois meses, e a pior
+    -- coisa a acrescentar. Medido em 2026-09-02: 438 etapas ATIVAS com tipo
+    -- nulo em prod.
+    AND s.pipeline_type IS NOT NULL
   ORDER BY o.name, s.pipeline_type, s.name
 `);
 
@@ -81,7 +89,11 @@ const porRole = fila.reduce((a, f) => ((a[f.role] = (a[f.role] ?? 0) + 1), a), {
 console.log('por papel sugerido:', porRole);
 console.log('orgs alcançadas:', new Set(fila.map((f) => f.org)).size, '\n');
 for (const f of fila) {
-  console.log(`  ${f.org.slice(0, 22).padEnd(22)} | ${f.pipeline_type.padEnd(12)} | ${f.name.slice(0, 30).padEnd(30)} → ${f.role} (${f.source})`);
+  // `?? ''` porque foi exatamente um `pipeline_type` nulo que derrubou este
+  // loop com `Cannot read properties of null (reading 'padEnd')`. O filtro do
+  // SQL já exclui esses, mas relatório não pode ser o que quebra um script de
+  // escrita — mesmo falhando ANTES do UPDATE, como falhou.
+  console.log(`  ${f.org.slice(0, 22).padEnd(22)} | ${(f.pipeline_type ?? '—').padEnd(12)} | ${f.name.slice(0, 30).padEnd(30)} → ${f.role} (${f.source})`);
 }
 
 if (!aplicar) {
