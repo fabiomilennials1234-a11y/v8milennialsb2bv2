@@ -323,8 +323,9 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
  *
  * `useCustomPipeEntries` busca sem `.range()`, então o PostgREST corta em 1000
  * rows e o badge da coluna (que caía em `items.length`) travava em 1000. Este
- * hook chama a RPC `get_custom_pipeline_stage_counts` (COUNT server-side) pra o
- * total real por stage — espelha o board canônico (`get_pipeline_stage_counts`).
+ * hook chama a RPC `get_pipeline_stage_counts_by_id` (SCRUM-626: o motor único
+ * de contagem por pipeline_id que fundiu o par system/custom) pra o total real
+ * por stage — o MESMO motor que serve o board canônico.
  *
  * Sem busca → conta TODAS as entries por stage (inclusive lead_id null), igual
  * ao comportamento atual do badge. Com busca → narrow server-side por
@@ -348,19 +349,27 @@ export function useCustomPipeStageCounts(
     queryFn: async () => {
       if (!pipelineId || !organizationId) return {} as Record<string, number>;
 
-      const { data, error } = await supabase.rpc("get_custom_pipeline_stage_counts", {
-        p_pipeline_id: pipelineId,
-        p_org_id: organizationId,
-        // `search` chega `string | null` (null = sem filtro); o arg da RPC é
-        // opcional (`string | undefined`). Ambos significam "sem filtro".
-        p_search: search ?? undefined,
-      });
+      // SCRUM-626: caminho por id — motor único get_pipeline_stage_counts_by_id
+      // (funde o par system/custom; o wrapper get_custom_pipeline_stage_counts
+      // segue vivo até a W6). `as any` no nome: RPC mais nova que o types.ts
+      // gerado de prod (regen após a janela) — mesmo padrão de useFilteredLeadIds.
+      const { data, error } = await supabase.rpc(
+        "get_pipeline_stage_counts_by_id" as any,
+        {
+          p_pipeline_id: pipelineId,
+          p_org_id: organizationId,
+          // `search` chega `string | null` (null = sem filtro no motor).
+          p_search: search,
+        },
+      );
 
       if (error) throw error;
 
+      // O motor devolve (stage_id, stage_key, cnt) e separa linhas fantasma
+      // (stage_id NULL); o badge é por stage_id — soma por segurança.
       const counts: Record<string, number> = {};
-      for (const row of data || []) {
-        if (row.stage_id) counts[row.stage_id] = Number(row.cnt);
+      for (const row of (data || []) as Array<{ stage_id: string | null; cnt: number }>) {
+        if (row.stage_id) counts[row.stage_id] = (counts[row.stage_id] ?? 0) + Number(row.cnt);
       }
       return counts;
     },
@@ -648,8 +657,10 @@ export function useCustomPipelineDeleteImpact(
   return useQuery({
     queryKey: ["custom_pipeline_delete_impact", pipelineId],
     queryFn: async () => {
+      // SCRUM-626: caminho por id — pipeline_delete_impact é o motor único
+      // (ramo custom devolve o MESMO shape do wrapper antigo).
       const { data, error } = await (supabase.rpc as any)(
-        "custom_pipeline_delete_impact",
+        "pipeline_delete_impact",
         { p_pipeline_id: pipelineId },
       );
       if (error) throw error;
@@ -673,7 +684,9 @@ export function useDeleteCustomPipeline() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await (supabase.rpc as any)("delete_custom_pipeline", {
+      // SCRUM-626: caminho por id — delete_pipeline é o motor único (para um
+      // funil custom o comportamento é idêntico ao wrapper delete_custom_pipeline).
+      const { data, error } = await (supabase.rpc as any)("delete_pipeline", {
         p_pipeline_id: id,
       });
       if (error) throw error;
