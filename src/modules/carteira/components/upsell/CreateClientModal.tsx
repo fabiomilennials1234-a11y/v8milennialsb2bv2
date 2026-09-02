@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreateUpsellClient } from "@/modules/carteira/hooks/useUpsellClients";
 import { useOrganization } from "@/modules/identity";
-import { usePipelineStages } from "@/modules/pipelines";
+import { useCarteiraStages } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useLeads } from "@/modules/leads";
 import { toast } from "sonner";
@@ -22,7 +22,7 @@ export function CreateClientModal({ open, onOpenChange }: CreateClientModalProps
   const createClient = useCreateUpsellClient();
   const responsibleMembers = useResponsibleMembers();
   const { data: leads = [] } = useLeads();
-  const { data: baseStages = [] } = usePipelineStages("upsell_base");
+  const { data: baseStages = [] } = useCarteiraStages("upsell_base");
   const defaultBaseStageKey = baseStages.find(s => s.position === 0)?.stage_key || baseStages[0]?.stage_key || "0-3m";
 
   const [formData, setFormData] = useState({

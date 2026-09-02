@@ -3,7 +3,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Settings, Plus, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { usePipelineStages, stagesToColumns, type PipelineStage } from "@/modules/pipelines";
+import { stagesToColumns, type PipelineStage } from "@/modules/pipelines";
+import { useCarteiraStages } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useUpsellClients, useUpdateUpsellClient } from "@/modules/carteira/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
@@ -32,7 +33,7 @@ function formatCurrency(value: number): string {
 }
 
 function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: UpsellBaseKanbanProps) {
-  const { data: stages = [] } = usePipelineStages("upsell_base");
+  const { data: stages = [] } = useCarteiraStages("upsell_base");
   const { data: clients = [] } = useUpsellClients();
   const { data: orders = [] } = useUpsellOrders();
   const updateClient = useUpdateUpsellClient();

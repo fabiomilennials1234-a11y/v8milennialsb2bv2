@@ -14,12 +14,23 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
 import { DEFAULT_STAGES, type PipelineType } from "@/modules/pipelines/hooks/model/usePipelineStages";
 
 describe("DEFAULT_STAGES", () => {
-  it("has stages for all 5 pipeline types", () => {
-    const types: PipelineType[] = ["whatsapp", "confirmacao", "propostas", "upsell_base", "upsell_gestao"];
+  it("has stages for the 3 pipeline types (funis)", () => {
+    const types: PipelineType[] = ["whatsapp", "confirmacao", "propostas"];
     types.forEach((type) => {
       expect(DEFAULT_STAGES[type], `Missing stages for ${type}`).toBeDefined();
       expect(DEFAULT_STAGES[type].length).toBeGreaterThan(0);
     });
+  });
+
+  /**
+   * SCRUM-618 (D9/ADR-0034): Carteira não é funil. As famílias upsell_* saíram
+   * do vocabulário — o fallback delas mora no módulo carteira
+   * (CARTEIRA_DEFAULT_STAGES em useCarteiraStages). Se alguém as reintroduzir
+   * aqui, este teste cai.
+   */
+  it("não contém as famílias aposentadas da Carteira", () => {
+    expect(DEFAULT_STAGES).not.toHaveProperty("upsell_base");
+    expect(DEFAULT_STAGES).not.toHaveProperty("upsell_gestao");
   });
 
   it("whatsapp pipeline has standard stages", () => {

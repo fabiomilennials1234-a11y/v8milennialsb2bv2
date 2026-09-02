@@ -1,5 +1,5 @@
 /**
- * Contracts — etapas padrão (DEFAULT_STAGES) dos pipes canônicos + upsell.
+ * Contracts — etapas padrão (DEFAULT_STAGES) dos pipes canônicos.
  *
  * Constante PURA (zero side-effect, zero React/Supabase) compartilhada entre
  * `pipelines` (seed + fallback de stages) e consumidores cross-module
@@ -22,7 +22,15 @@ export interface DefaultStage {
   target_stage_key?: string;
 }
 
-/** Etapas padrão por tipo de pipeline (fallback de UI + seed no banco). */
+/**
+ * Etapas padrão por tipo de pipeline — fallback de EXIBIÇÃO apenas.
+ *
+ * SCRUM-618: o seed no banco é 100% server-side (`create_default_pipeline_
+ * stages`, alinhada a esta constante na migration 20270906003000) — o front
+ * NÃO semeia mais. As famílias `upsell_*` saíram daqui (D9/ADR-0034): o
+ * fallback render-only da Carteira mora no módulo carteira
+ * (`useCarteiraStages`).
+ */
 export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
   whatsapp: [
     { id: "novo", title: "Novo", color: "#6366f1" },
@@ -51,20 +59,5 @@ export const DEFAULT_STAGES: Record<PipelineType, DefaultStage[]> = {
     { id: "futuro", title: "Futuro", color: "#8B5CF6" },
     { id: "vendido", title: "Vendido ✓", color: "#22C55E", is_final_positive: true },
     { id: "perdido", title: "Perdido", color: "#EF4444", is_final_negative: true },
-  ],
-  upsell_base: [
-    { id: "0-3m", title: "0-3 meses", color: "#3B82F6" },
-    { id: "3-6m", title: "3-6 meses", color: "#22C55E" },
-    { id: "6-9m", title: "6-9 meses", color: "#F59E0B" },
-    { id: "9-12m", title: "9-12 meses", color: "#EF4444" },
-    { id: "12-18m", title: "12-18 meses", color: "#8B5CF6" },
-    { id: "18m+", title: "18+ meses", color: "#EC4899" },
-  ],
-  upsell_gestao: [
-    { id: "campeoes", title: "Campeões", color: "#22C55E" },
-    { id: "fieis", title: "Fiéis", color: "#3B82F6" },
-    { id: "primeira_compra", title: "Primeira Compra", color: "#8B5CF6" },
-    { id: "em_risco", title: "Em Risco", color: "#F59E0B" },
-    { id: "inativos", title: "Inativos", color: "#EF4444" },
   ],
 };

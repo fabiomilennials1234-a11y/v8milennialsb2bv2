@@ -66,6 +66,7 @@ import {
   stagesToColumns,
   stagesToSelectOptions,
   getPipelineTypeName,
+  getStageFamilyName,
   getSuccessStageTransition,
   DEFAULT_STAGES,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
@@ -77,8 +78,14 @@ describe("getPipelineTypeName", () => {
     expect(getPipelineTypeName("whatsapp")).toBe("Qualificação");
     expect(getPipelineTypeName("confirmacao")).toBe("Confirmação");
     expect(getPipelineTypeName("propostas")).toBe("Propostas");
-    expect(getPipelineTypeName("upsell_base")).toBe("Carteira Base");
-    expect(getPipelineTypeName("upsell_gestao")).toBe("Carteira Gestão");
+  });
+});
+
+describe("getStageFamilyName", () => {
+  it("resolve funis e o resíduo Carteira (editor compartilhado)", () => {
+    expect(getStageFamilyName("whatsapp")).toBe("Qualificação");
+    expect(getStageFamilyName("upsell_base")).toBe("Carteira Base");
+    expect(getStageFamilyName("upsell_gestao")).toBe("Carteira Gestão");
   });
 });
 
@@ -141,12 +148,12 @@ describe("getSuccessStageTransition", () => {
 });
 
 describe("DEFAULT_STAGES", () => {
-  it("has all pipeline types", () => {
+  it("has all pipeline types (e nada de Carteira — SCRUM-618)", () => {
     expect(DEFAULT_STAGES).toHaveProperty("whatsapp");
     expect(DEFAULT_STAGES).toHaveProperty("confirmacao");
     expect(DEFAULT_STAGES).toHaveProperty("propostas");
-    expect(DEFAULT_STAGES).toHaveProperty("upsell_base");
-    expect(DEFAULT_STAGES).toHaveProperty("upsell_gestao");
+    expect(DEFAULT_STAGES).not.toHaveProperty("upsell_base");
+    expect(DEFAULT_STAGES).not.toHaveProperty("upsell_gestao");
   });
 
   it("whatsapp has correct stages", () => {
@@ -190,14 +197,23 @@ describe("usePipelineStages", () => {
     expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
   });
 
-  it("returns default stages when no data from DB", async () => {
-    // Funil que a org TEM, mas sem etapa gravada: o fallback em memória
-    // continua valendo — é reparo legítimo, não ressurreição.
+  /**
+   * SCRUM-618: lista vazia é estado LEGÍTIMO. O seed é 100% server-side
+   * (enable_system_pipeline → create_default_pipeline_stages) e o front nem
+   * semeia nem fabrica etapa para funil habilitado — devolver o fallback aqui
+   * faria a tela mentir sobre o banco de novo. Se alguém reintroduzir o
+   * fallback (ou o upsert do ensureDefaultStagesInDb), este teste cai.
+   */
+  it("funil habilitado sem etapa: devolve [] e NÃO semeia nada", async () => {
     mockPorTabela(REGISTRO_COM_WHATSAPP, []);
     const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
-    if (result.current.data) {
-      expect(result.current.data.length).toBeGreaterThan(0);
+    expect(result.current.data).toEqual([]);
+    // Nenhuma escrita: o caminho de seed do cliente morreu (SCRUM-618).
+    const chains = mockFrom.mock.results.map((r) => r.value);
+    for (const chain of chains) {
+      expect(chain.upsert).not.toHaveBeenCalled();
+      expect(chain.insert).not.toHaveBeenCalled();
     }
   });
 

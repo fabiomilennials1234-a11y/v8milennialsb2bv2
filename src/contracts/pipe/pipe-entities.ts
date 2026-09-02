@@ -11,7 +11,7 @@
  * leads pode importar direto sem criar edge para pipelines.
  */
 
-import type { PipelineType } from "./pipe-status";
+import type { StageFamily } from "./pipe-status";
 
 export type LifecycleType = "permanent" | "temporary";
 export type FunnelStatus = "draft" | "active" | "paused" | "ended";
@@ -164,11 +164,17 @@ export type SuggestableStageRole = Exclude<StageRole, "open">;
 /** Origem de uma sugestão do classifier (#991). */
 export type StageRoleSuggestionSource = "deterministic" | "ai" | "flag";
 
-/** Etapa de pipeline canônico (tabela `pipeline_stages`). */
+/**
+ * Etapa de pipeline canônico (tabela `pipeline_stages`).
+ *
+ * `pipeline_type` é `StageFamily` (não `PipelineType`): a tabela ainda guarda
+ * as famílias `upsell_*` do resíduo Carteira (D9/ADR-0034) — o union de FUNIL
+ * não as contém, mas as linhas existem e o editor compartilhado as edita.
+ */
 export interface PipelineStage {
   id: string;
   organization_id: string;
-  pipeline_type: PipelineType;
+  pipeline_type: StageFamily;
   stage_key: string;
   name: string;
   color: string | null;
@@ -200,7 +206,7 @@ export interface PipelineStage {
 }
 
 export interface PipelineStageInsert {
-  pipeline_type: PipelineType;
+  pipeline_type: StageFamily;
   stage_key: string;
   name: string;
   color?: string;

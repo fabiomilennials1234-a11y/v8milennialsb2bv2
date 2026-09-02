@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Settings2, Layers, Type, Upload, FileDown, Send, Shuffle, Clock } from "lucide-react";
-import { type PipelineType, type PipelineStage } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { type StageFamily, type PipelineStage } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { type FunnelDestination } from "@/modules/leads";
 import { ManagePipelineStagesContent } from "./ManagePipelineStagesModal";
 import { CustomFieldsManager } from "@/modules/leads";
@@ -17,7 +17,9 @@ import { PipeDistributionSection } from "./PipeDistributionSection";
 import { DangerZoneSystemPipe } from "./DangerZoneSystemPipe";
 import type { ReactNode } from "react";
 
-const PIPE_LABELS: Record<PipelineType, string> = {
+// StageFamily, não PipelineType: este diálogo também veste a Carteira (via
+// slots) — as famílias upsell_* são resíduo D9, não funil (SCRUM-618).
+const PIPE_LABELS: Record<StageFamily, string> = {
   whatsapp: "Qualificação",
   confirmacao: "Confirmação",
   propostas: "Propostas",
@@ -25,7 +27,7 @@ const PIPE_LABELS: Record<PipelineType, string> = {
   upsell_gestao: "Carteira Gestão",
 };
 
-const PIPE_TO_DESTINATION: Partial<Record<PipelineType, FunnelDestination>> = {
+const PIPE_TO_DESTINATION: Partial<Record<StageFamily, FunnelDestination>> = {
   whatsapp: "qualificacao",
   confirmacao: "confirmacao",
   propostas: "propostas",
@@ -34,7 +36,7 @@ const PIPE_TO_DESTINATION: Partial<Record<PipelineType, FunnelDestination>> = {
 interface PipeSettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  pipeType: PipelineType;
+  pipeType: StageFamily;
   stages: PipelineStage[];
   defaultTab?: string;
   /**

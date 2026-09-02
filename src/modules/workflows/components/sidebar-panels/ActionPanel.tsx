@@ -1279,12 +1279,13 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
 // ── Move Stage (com seletor dinâmico de etapas) ───────────────────────────────
 
+// SCRUM-618 (D9/ADR-0034): opções upsell_* removidas — Carteira não é funil e
+// saiu de `PipelineType`. Medido em prod (2026-09-01): 0 workflows com nó
+// move_stage apontando para upsell_*.
 const PIPE_OPTIONS: { value: PipelineType; label: string }[] = [
   { value: "whatsapp", label: "Qualificação" },
   { value: "confirmacao", label: "Confirmação" },
   { value: "propostas", label: "Propostas" },
-  { value: "upsell_base", label: "Upsell (Tempo)" },
-  { value: "upsell_gestao", label: "Upsell (Gestão)" },
 ];
 
 function MoveStageFields({
