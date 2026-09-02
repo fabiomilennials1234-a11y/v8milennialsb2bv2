@@ -94,10 +94,12 @@ export function useCampaignQueueItems(campanhaId: string, status: string | null)
 export function usePipeQueueItems(
   organizationId: string | null,
   pipeType: string,
-  status: string | null
+  status: string | null,
+  // SCRUM-629: escopo por funil (id) — obrigatório pra custom; slug no legado.
+  pipelineId?: string | null
 ) {
   return useQuery({
-    queryKey: ["pipe_queue_items", organizationId, pipeType, status],
+    queryKey: ["pipe_queue_items", organizationId, pipelineId ?? pipeType, status],
     queryFn: async () => {
       // scheduled_pipe_messages not in generated types — use (supabase as any)
       let query = (supabase as any)
@@ -107,9 +109,9 @@ export function usePipeQueueItems(
            target_stage_id, target_sdr_id, template_id, lead_id`
         )
         .eq("organization_id", organizationId)
-        .eq("pipe_type", pipeType)
         .order("scheduled_at", { ascending: false })
         .limit(200);
+      query = pipelineId ? query.eq("pipeline_id", pipelineId) : query.eq("pipe_type", pipeType);
 
       if (status) {
         if (status === "scheduled") {
