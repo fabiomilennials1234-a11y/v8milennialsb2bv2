@@ -1,8 +1,27 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useOrganization } from "@/modules/identity";
 export type ProductType = "mrr" | "projeto" | "unitario";
+
+/**
+ * Raízes de cache que listam produto. São DUAS árvores irmãs, não uma:
+ * o match do TanStack Query v5 é por prefixo elemento a elemento, então
+ * `["products"]` NÃO alcança `["products-with-variants", orgId]` — só
+ * `["products", "active", orgId]`. Invalidar só a primeira é o que fazia a
+ * página /produtos (que lê a segunda) não mostrar o produto recém-cadastrado
+ * até um F5, agravado pelo `staleTime` de 5min + `refetchOnWindowFocus:false`
+ * de `App.tsx`.
+ *
+ * Quem escreve em `products`/`product_variants` invalida por aqui, nunca inline.
+ */
+export const PRODUCT_LIST_QUERY_KEYS = [["products"], ["products-with-variants"]] as const;
+
+export function invalidateProductQueries(queryClient: QueryClient) {
+  for (const queryKey of PRODUCT_LIST_QUERY_KEYS) {
+    queryClient.invalidateQueries({ queryKey });
+  }
+}
 
 export interface Product {
   id: string;
@@ -132,7 +151,7 @@ export function useCreateProduct() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      invalidateProductQueries(queryClient);
       toast.success("Produto criado com sucesso!");
     },
     onError: (error) => {
@@ -157,7 +176,7 @@ export function useUpdateProduct() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      invalidateProductQueries(queryClient);
       toast.success("Produto atualizado com sucesso!");
     },
     onError: (error) => {
@@ -179,7 +198,7 @@ export function useDeleteProduct() {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      invalidateProductQueries(queryClient);
       toast.success("Produto excluído com sucesso!");
     },
     onError: (error) => {
