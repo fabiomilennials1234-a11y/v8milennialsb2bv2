@@ -1,27 +1,28 @@
 import { Button } from "@/components/ui/button";
 import { type PipelineSelectorType } from "@/modules/analytics/hooks/useAnalyticsPipesFunis";
-
-interface PipelineSelectorOption {
-  label: string;
-  value: PipelineSelectorType;
-}
-
-const OPTIONS: PipelineSelectorOption[] = [
-  { label: "Todos", value: null },
-  { label: "Qualificação", value: "whatsapp" },
-  { label: "Confirmação", value: "confirmacao" },
-  { label: "Propostas", value: "propostas" },
-];
+import { useAnalyticsPipelineOptions } from "@/modules/analytics/hooks/useAnalyticsPipelineOptions";
 
 interface Props {
   selected: PipelineSelectorType;
   onChange: (value: PipelineSelectorType) => void;
 }
 
+/**
+ * Seletor de funil da seção Pipeline (SCRUM-631): lista os funis REAIS e
+ * ativos da org (custom incluído) no lugar da lista fixa de 3 slugs de
+ * sistema. Valor = pipeline_id; null = "Todos".
+ */
 export function PipelineSelector({ selected, onChange }: Props) {
+  const { options } = useAnalyticsPipelineOptions();
+
+  const pills: { label: string; value: PipelineSelectorType }[] = [
+    { label: "Todos", value: null },
+    ...options.map((opt) => ({ label: opt.name, value: opt.id as PipelineSelectorType })),
+  ];
+
   return (
     <div className="flex flex-wrap gap-2">
-      {OPTIONS.map((opt) => {
+      {pills.map((opt) => {
         const isActive = selected === opt.value;
         return (
           <Button

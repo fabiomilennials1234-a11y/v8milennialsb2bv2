@@ -27,7 +27,7 @@
  */
 import { buildRecipients, type BlastLead, type BlastRecipient } from "./recipients.ts";
 import { resolveBlastMessage } from "./message-resolver.ts";
-import { personalizationName } from "../lead-name.ts";
+import { personalizationName, personalizationFirstName } from "../lead-name.ts";
 import {
   refineBlastAudience,
   type BlastActivitySource,
@@ -877,7 +877,7 @@ function snapshotVars(lead: BlastLead): Record<string, unknown> {
   const safeName = personalizationName(lead.name);
   return {
     nome: safeName,
-    primeiro_nome: safeName.trim().split(/\s+/)[0] ?? "",
+    primeiro_nome: personalizationFirstName(lead.name),
     empresa: lead.company ?? "",
   };
 }

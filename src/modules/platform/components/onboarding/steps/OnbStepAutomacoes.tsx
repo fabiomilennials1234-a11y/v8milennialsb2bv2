@@ -159,7 +159,7 @@ export function OnbStepAutomacoes() {
                         className="mt-1 text-sm resize-none"
                       />
                       <p className="text-[10px] text-muted-foreground/60 mt-0.5">
-                        Variáveis: {"{{nome}}"}, {"{{empresa}}"}
+                        Variáveis: {"{{nome}}"}, {"{{primeiro_nome}}"}, {"{{empresa}}"}
                       </p>
                     </div>
                   ))}

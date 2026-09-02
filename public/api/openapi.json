@@ -733,7 +733,7 @@
       "get": {
         "operationId": "api-list-pipelines",
         "summary": "Listar funis",
-        "description": "Catálogo de funis com etapas. Funis system trazem etapas; funis custom vêm com stages vazio no v1. Escopo: pipeline:read.\n\nCatálogo sem paginação (next_cursor sempre null).",
+        "description": "Catálogo de funis com etapas — TODOS os funis, de sistema e personalizados, vêm com `stages` completo (cada etapa traz `id` e `stage_key`; os dois são aceitos como `stage` nos POSTs de Negócio em funil personalizado). Escopo: pipeline:read.\n\nCatálogo sem paginação (next_cursor sempre null).",
         "tags": [
           "REST API v1"
         ],
@@ -750,7 +750,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Devolve só um funil. Aceita o slug (funil de sistema: whatsapp, confirmacao, propostas) ou o id (funil personalizado). Funil inexistente devolve lista vazia."
+            "description": "Devolve só um funil. Aceita o id (uuid) OU o slug de qualquer funil, de sistema ou personalizado — todo funil tem slug, único na organização. Funil inexistente devolve lista vazia."
           },
           {
             "name": "only_active_stages",
@@ -996,7 +996,7 @@
             }
           },
           "422": {
-            "description": "missing_lead_id, inline_lead_not_supported, invalid_pipeline_or_stage",
+            "description": "invalid_request ou o código devolvido pelo banco (ex.: invalid_field_type)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1555,7 +1555,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "description": "Abre um Negócio para um Lead **que já existe**. Não aceita Lead embutido — crie a pessoa antes com `POST /leads`. A Procedência é gravada como `api`. Abrir um segundo Negócio no mesmo funil **funciona** (é recompra) e a resposta traz `warning`. Escopo: deal:write.",
+        "description": "Abre um Negócio para um Lead **que já existe**. Não aceita Lead embutido — crie a pessoa antes com `POST /leads`. A Procedência é gravada como `api`. `pipeline` aceita o id (uuid) ou o slug de **qualquer** funil da organização, de sistema ou personalizado; em funil personalizado, `stage` aceita o `stage_key` ou o `id` da etapa (os dois vêm no catálogo `GET /pipelines`). Abrir um segundo Negócio no mesmo funil **funciona** (é recompra) e a resposta traz `warning`. Escopo: deal:write.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -1583,10 +1583,12 @@
                     "format": "uuid"
                   },
                   "pipeline": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Id (uuid) ou slug de qualquer funil da organização."
                   },
                   "stage": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Etapa de destino: stage_key; em funil personalizado, o id (uuid) da etapa também é aceito."
                   },
                   "title": {
                     "type": "string"
@@ -1615,6 +1617,32 @@
           },
           "404": {
             "description": "lead_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "pipeline_inactive — o funil de destino está inativo",
             "content": {
               "application/json": {
                 "schema": {
@@ -1868,7 +1896,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "description": "Move o Negócio de etapa ou de funil. **Mover é mover, não copiar**: nenhum card novo nasce e nada fica para trás. Destino em funil customizado é recusado — o card mudaria de identidade e perderia o histórico. Escopo: deal:write.",
+        "description": "Move o Negócio de etapa ou de funil. **Mover é mover, não copiar**: nenhum card novo nasce e nada fica para trás — o mesmo card muda de posição, com histórico preservado, seja o destino um funil de sistema ou personalizado. `pipeline` aceita o id (uuid) ou o slug de qualquer funil da organização; em funil personalizado, `stage` aceita o `stage_key` ou o `id` da etapa. Funil inexistente é 404 `pipeline_not_found`; funil inativo é 409 `pipeline_inactive`. Escopo: deal:write.",
         "parameters": [
           {
             "name": "id",
@@ -1892,10 +1920,12 @@
                 ],
                 "properties": {
                   "pipeline": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Id (uuid) ou slug de qualquer funil da organização."
                   },
                   "stage": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Etapa de destino: stage_key; em funil personalizado, o id (uuid) da etapa também é aceito."
                   },
                   "owner_id": {
                     "type": "string",
@@ -1918,7 +1948,33 @@
             }
           },
           "404": {
-            "description": "deal_not_found — inclui Negócio sem posição",
+            "description": "deal_not_found (inclui Negócio sem posição) ou pipeline_not_found (funil inexistente)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "pipeline_inactive — o funil de destino está inativo",
             "content": {
               "application/json": {
                 "schema": {
@@ -1944,7 +2000,7 @@
             }
           },
           "422": {
-            "description": "missing_pipeline, missing_stage, custom_pipeline_not_supported, invalid_pipeline_or_stage",
+            "description": "missing_pipeline, missing_stage, invalid_pipeline_or_stage",
             "content": {
               "application/json": {
                 "schema": {

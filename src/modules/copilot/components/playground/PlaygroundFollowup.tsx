@@ -524,7 +524,7 @@ function FollowupRuleCard({
                           <Info className="w-3 h-3 ml-1 inline text-muted-foreground" />
                         </TooltipTrigger>
                         <TooltipContent>
-                          <p>Variaveis: {"{nome}"}, {"{empresa}"}, {"{ultimo_assunto}"}</p>
+                          <p>Variaveis: {"{nome}"}, {"{primeiro_nome}"}, {"{empresa}"}, {"{ultimo_assunto}"}</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>

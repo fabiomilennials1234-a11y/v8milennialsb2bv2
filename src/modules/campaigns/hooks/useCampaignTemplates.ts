@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
+import { personalizationFirstName } from "@/shared/format/first-name";
 // ============================================
 // Types
 // ============================================
@@ -79,6 +80,7 @@ export interface DispatchBatchInsert {
 // Variáveis disponíveis para templates
 export const TEMPLATE_VARIABLES = [
   { key: 'nome', label: 'Nome do Lead', example: 'João Silva' },
+  { key: 'primeiro_nome', label: 'Primeiro Nome', example: 'João' },
   { key: 'empresa', label: 'Empresa', example: 'Acme Corp' },
   { key: 'email', label: 'Email', example: 'joao@acme.com' },
   { key: 'telefone', label: 'Telefone', example: '11999998888' },
@@ -211,6 +213,7 @@ export function replaceVariablesWithLeadData(
 ): string {
   const time = getTimeBasedVariables();
   return content
+    .replace(/\{primeiro_nome\}/gi, personalizationFirstName(lead.name))
     .replace(/\{nome\}/gi, lead.name || '')
     .replace(/\{empresa\}/gi, lead.company || '')
     .replace(/\{email\}/gi, lead.email || '')

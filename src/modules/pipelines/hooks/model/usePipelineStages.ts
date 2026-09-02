@@ -314,19 +314,31 @@ async function resolveSystemPipelineId(
  * antes de desativar (senão os leads viram "fantasmas" — caem numa etapa que
  * o Kanban não renderiza). Ver `useDeletePipelineStage`.
  */
-export function usePipelineStageLeadCounts(pipelineType: StageFamily) {
+export function usePipelineStageLeadCounts(
+  pipelineType: StageFamily | null,
+  /**
+   * SCRUM-636 (D3): id explícito do funil — o caminho canônico pós-626. Quando
+   * presente, dispensa a resolução por família e serve QUALQUER funil (custom
+   * incluso, que não tem família). Sem ele, o comportamento antigo permanece.
+   */
+  explicitPipelineId?: string | null,
+) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
 
   return useQuery({
-    queryKey: ["pipeline_stage_lead_counts", pipelineType, organizationId],
+    queryKey: [
+      "pipeline_stage_lead_counts",
+      explicitPipelineId ?? pipelineType,
+      organizationId,
+    ],
     queryFn: async () => {
       if (!organizationId) return {} as Record<string, number>;
 
-      const systemType = asSystemPipelineType(pipelineType);
-      const pipelineId = systemType
-        ? await resolveSystemPipelineId(organizationId, systemType)
-        : null;
+      const systemType = pipelineType ? asSystemPipelineType(pipelineType) : null;
+      const pipelineId =
+        explicitPipelineId ??
+        (systemType ? await resolveSystemPipelineId(organizationId, systemType) : null);
       if (!pipelineId) return {} as Record<string, number>;
 
       const { data, error } = await supabase
@@ -368,20 +380,32 @@ export function useDeletePipelineStage() {
       pipeline_type,
       stageKey,
       migrateToStageKey,
+      pipelineId: explicitPipelineId,
     }: {
       id: string;
-      pipeline_type: StageFamily;
+      /**
+       * Família de sistema/carteira — usada como chave de cache e, na ausência
+       * de `pipelineId`, para resolver o funil. Funil custom não tem família:
+       * passa `pipelineId` e omite esta.
+       */
+      pipeline_type?: StageFamily;
       stageKey: string;
       migrateToStageKey?: string;
+      /**
+       * SCRUM-636 (D3): id explícito do funil — serve qualquer espécie. Com
+       * ele, a migração de cards e a contagem valem também para funil custom
+       * (antes o delete custom desativava a etapa SEM migrar os cards).
+       */
+      pipelineId?: string | null;
     }) => {
       const organizationId = teamMember?.organization_id;
       if (!organizationId) throw new Error("Organização não encontrada");
 
-      // Guarda interina (F0 funis-unificacao §4.4): etapa referenciada por
-      // regra de disparo automático não pode ser removida — o slug/id dela é
-      // consumido a jusante (dispatch de WhatsApp). Bloqueia ANTES de migrar
-      // leads, com mensagem dizendo o que existe. O diálogo definitivo de
-      // deleção chega na D3.
+      // Guarda F0 (funis-unificacao §4.4): etapa referenciada por regra de
+      // disparo automático não pode ser removida — o slug/id dela é consumido
+      // a jusante (dispatch de WhatsApp). Bloqueia ANTES de migrar leads. O
+      // editor único (D3/SCRUM-636) mostra o bloqueio na UI antes de chegar
+      // aqui; esta recusa segue como cinto para qualquer outro chamador.
       const { count: dispatchRuleCount, error: rulesError } = await supabase
         .from("pipe_dispatch_rules")
         .select("id", { count: "exact", head: true })
@@ -401,10 +425,10 @@ export function useDeletePipelineStage() {
         );
       }
 
-      const systemType = asSystemPipelineType(pipeline_type);
-      const pipelineId = systemType
-        ? await resolveSystemPipelineId(organizationId, systemType)
-        : null;
+      const systemType = pipeline_type ? asSystemPipelineType(pipeline_type) : null;
+      const pipelineId =
+        explicitPipelineId ??
+        (systemType ? await resolveSystemPipelineId(organizationId, systemType) : null);
 
       // Migrar leads que ainda estão nesta etapa antes de desativar.
       if (pipelineId) {
@@ -445,10 +469,26 @@ export function useDeletePipelineStage() {
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["pipeline_stages", variables.pipeline_type] });
+      // Chaves de SISTEMA (por família) — comportamento histórico.
+      if (variables.pipeline_type) {
+        queryClient.invalidateQueries({ queryKey: ["pipeline_stages", variables.pipeline_type] });
+        queryClient.invalidateQueries({ queryKey: ["pipeline_entries", variables.pipeline_type] });
+      }
       queryClient.invalidateQueries({ queryKey: ["all_pipeline_stages"] });
-      queryClient.invalidateQueries({ queryKey: ["pipeline_stage_lead_counts", variables.pipeline_type] });
-      queryClient.invalidateQueries({ queryKey: ["pipeline_entries", variables.pipeline_type] });
+      queryClient.invalidateQueries({
+        queryKey: ["pipeline_stage_lead_counts", variables.pipelineId ?? variables.pipeline_type],
+      });
+      // Chaves UNIFICADAS/CUSTOM (por id) — SCRUM-636: o mesmo delete serve o
+      // funil custom, cujas telas leem por estas chaves. Sem elas, a etapa
+      // removida continuaria renderizando até o debounce do realtime.
+      if (variables.pipelineId) {
+        queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", variables.pipelineId] });
+      }
     },
   });
 }

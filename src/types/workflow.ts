@@ -1264,6 +1264,7 @@ export interface WorkflowVariable {
 export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   // Lead
   { key: "{{nome}}",          label: "Nome do lead",                  category: "Lead" },
+  { key: "{{primeiro_nome}}", label: "Primeiro nome do lead",         category: "Lead" },
   { key: "{{empresa}}",       label: "Empresa",                       category: "Lead" },
   { key: "{{email}}",         label: "Email",                         category: "Lead" },
   { key: "{{telefone}}",      label: "Telefone",                      category: "Lead" },

@@ -95,6 +95,8 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/atendimento/meta": "chat",
   // funis (CRM core — true nos 3 planos; guard fecha a porta pra plano futuro)
   "/funis": "funnels",
+  // Rota única SCRUM-632; /pipe-* seguem até a demolição (SCRUM-637)
+  "/funil/:slug": "funnels",
   "/pipe-whatsapp": "funnels",
   "/pipe-confirmacao": "funnels",
   "/pipe-propostas": "funnels",

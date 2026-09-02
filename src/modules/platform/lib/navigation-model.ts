@@ -77,6 +77,13 @@ export interface NavNode {
  */
 export const FUNIL_ICON: React.ElementType = Kanban;
 
+/**
+ * COMPAT (SCRUM-632, expand-contract): mapeia os funis de SISTEMA para as
+ * rotas antigas, que seguem vivas até a paridade da página unificada fechar
+ * (633/634). Na SCRUM-637 os itens de sistema passam a apontar `/funil/:slug`
+ * e este mapa morre. NÃO adicione entradas — funil novo é custom e navega por
+ * `/funil/:slug` direto.
+ */
 export const PIPE_PATH_MAP: Record<string, string> = {
   whatsapp: "/pipe-whatsapp",
   confirmacao: "/pipe-confirmacao",
@@ -220,8 +227,15 @@ export function buildSettingsGroup(visibility: SettingsTabVisibility): PitstopGr
   };
 }
 
-/** Prefixos que ativam o item Funis. */
+/**
+ * Prefixos que ativam o item Funis.
+ *
+ * `/funil` é o prefixo canônico da rota única (SCRUM-632); os demais são
+ * compat do expand-contract — `/pipe-*` cai na SCRUM-637 e `/pipe/custom`
+ * hoje é só redirect. NÃO cresce além disso.
+ */
 export const FUNIS_PATHS = [
+  "/funil",
   "/pipe-whatsapp",
   "/pipe-confirmacao",
   "/pipe-propostas",

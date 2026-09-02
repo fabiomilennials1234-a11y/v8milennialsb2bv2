@@ -113,6 +113,11 @@ export {
   useFilteredLeadIds,
   useCustomFilteredLeadIds,
   useAllFunnelsLeadIds,
+  // SCRUM-633 — blocos por pipeline_id (paridade W4)
+  usePipelineLeadIds,
+  useStagesDoFunil,
+  useFunilFilters,
+  createInitialFunilFilterState,
 } from "./hooks/model";
 export type {
   Pipeline,
@@ -123,6 +128,10 @@ export type {
   FilteredLeadIdsParams,
   CustomFilteredLeadIdsParams,
   AllFunnelsLeadIdsParams,
+  PipelineLeadIdsParams,
+  StageDoFunil,
+  FunilFilterState,
+  FunilFiltersController,
 } from "./hooks/model";
 
 // ── Hooks: display config + metrics + dispatch + distribution ─────────────
@@ -139,6 +148,7 @@ export {
   usePipePropostasMetrics,
   usePipeConfirmacaoMetrics,
   usePipeWhatsappMetrics,
+  useFunilMetrics,
   computeConfirmacaoStats,
   usePipeDispatchRules,
   usePipeDispatchRuleSteps,
@@ -154,6 +164,9 @@ export type {
   PipePropostasMetrics,
   PipeConfirmacaoMetrics,
   PipeWhatsappMetrics,
+  FunilMetrics,
+  FunilGenericMetrics,
+  FunilMetricsKind,
   MetricsPeriod,
   DateRange,
   MetricsPeriodState,
@@ -171,6 +184,7 @@ export type {
 // ── Hooks: custom pipelines + temporary funnels + members ─────────────────
 export {
   useCustomPipelines,
+  useCreateCustomPipeline,
   useCustomPipelineStages,
   useAddLeadToCustomPipe,
   useMoveLeadInCustomPipe,
@@ -233,7 +247,8 @@ export {
   PipeDispatchRulesSection,
   PipeDistributionSection,
   PipeSettingsDialog,
-  DangerZoneSystemPipe,
+  DeletePipelineDialog,
+  FunnelIdentitySection,
 } from "./components/shared";
 
 // ── Components: custom pipelines ──────────────────────────────────────────
