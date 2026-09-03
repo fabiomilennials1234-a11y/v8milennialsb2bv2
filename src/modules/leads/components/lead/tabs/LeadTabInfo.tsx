@@ -134,7 +134,7 @@ export function LeadTabInfo({
           variant="outline"
           size="sm"
           className="flex-1"
-          onClick={() => window.open(`/leads?id=${leadId}`, "_blank")}
+          onClick={() => window.open(`/leads?lead=${leadId}`, "_blank")}
         >
           <ExternalLink className="w-4 h-4 mr-2" />
           Ver Completo

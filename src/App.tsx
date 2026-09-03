@@ -74,7 +74,8 @@ const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communicati
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
 import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
-import { VoiceCallProvider } from "@/modules/communication";
+import { VoiceCallButton, VoiceCallProvider } from "@/modules/communication";
+import { LeadCallActionProvider, type LeadCallActionRenderer } from "@/shared/components/LeadCallActionSlot";
 const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
 // CustomPipeline saiu das rotas (redirect → /funil/:slug, SCRUM-632); o
@@ -870,6 +871,16 @@ function RedirectPipeCustomParaFunil() {
   return <Navigate to={`/funil/${slug}${search}${hash}`} replace />;
 }
 
+
+/**
+ * Vê o lead → pode ligar. O botão some sozinho sem número de voz ao alcance; a
+ * única condição sobre o lead é ele estar na tela. Constante de módulo para a
+ * identidade não mudar a cada render da raiz.
+ */
+const renderLeadCallAction: LeadCallActionRenderer = (lead) => (
+  <VoiceCallButton variant="icon" leadId={lead.id} leadName={lead.nome} />
+);
+
 const App = () => {
   const hasSupabaseEnv = Boolean(SUPABASE_URL?.trim() && SUPABASE_ANON_KEY?.trim());
   if (!hasSupabaseEnv) {
@@ -906,10 +917,16 @@ const App = () => {
                                   sobrevive à navegação e ao fechamento do modal
                                   do lead que a originou. */}
                               <VoiceCallProvider>
-                                <AppRoutes />
-                                <CommandPaletteComponent />
-                                <SupportPanel />
-                                <SupportAnnouncement />
+                                {/* O botão de ligar dos cards de `leads` é
+                                    injetado daqui: `leads` não pode importar
+                                    `communication` sem fechar ciclo entre os
+                                    dois módulos. Ver LeadCallActionSlot. */}
+                                <LeadCallActionProvider value={renderLeadCallAction}>
+                                  <AppRoutes />
+                                  <CommandPaletteComponent />
+                                  <SupportPanel />
+                                  <SupportAnnouncement />
+                                </LeadCallActionProvider>
                               </VoiceCallProvider>
                             </GlobalShortcutsProvider>
                           </CommandPaletteProvider>

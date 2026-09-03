@@ -2,6 +2,7 @@
  * template-variables.ts — resolve variáveis {nome}, {empresa}, etc.
  * em templates de mensagem usando dados do lead e atendente.
  */
+import { personalizationFirstName } from "@/shared/format/first-name";
 
 export interface TemplateVariableMeta {
   name: string;
@@ -11,6 +12,7 @@ export interface TemplateVariableMeta {
 /** Variáveis disponíveis para uso nos templates (exibidas na UI como badges clicáveis) */
 export const TEMPLATE_VARIABLES: TemplateVariableMeta[] = [
   { name: "{nome}", description: "Nome do lead" },
+  { name: "{primeiro_nome}", description: "Primeiro nome do lead" },
   { name: "{empresa}", description: "Empresa do lead" },
   { name: "{email}", description: "Email do lead" },
   { name: "{telefone}", description: "Telefone do lead" },
@@ -50,6 +52,7 @@ export function resolveVariables(
 
   const replacements: Record<string, string> = {
     "{nome}": lead.name ?? "",
+    "{primeiro_nome}": personalizationFirstName(lead.name),
     "{empresa}": lead.company ?? "",
     "{email}": lead.email ?? "",
     "{telefone}": lead.phone ?? "",

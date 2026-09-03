@@ -605,7 +605,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como uso o nome do lead e outros dados dentro das mensagens?",
-        "answer": "Use variáveis entre chaves duplas e o Turbo troca pelo valor real na hora do envio. As mais usadas são {{nome}}, {{empresa}}, {{telefone}}, {{estagio}}, {{responsavel}} e {{saudacao}} (que vira Bom dia ou Boa tarde automaticamente). Para campos personalizados, use {{custom.nome_do_campo}}. As variáveis só preenchem valores, não fazem contas.",
+        "answer": "Use variáveis entre chaves duplas e o Turbo troca pelo valor real na hora do envio. As mais usadas são {{nome}}, {{primeiro_nome}} (só o primeiro nome do lead), {{empresa}}, {{telefone}}, {{estagio}}, {{responsavel}} e {{saudacao}} (que vira Bom dia ou Boa tarde automaticamente). Para campos personalizados, use {{custom.nome_do_campo}}. As variáveis só preenchem valores, não fazem contas.",
         "keywords": [
           "variável",
           "nome do lead",
@@ -675,7 +675,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como uso o nome do lead e outros dados na mensagem do disparo?",
-        "answer": "Use variáveis entre chaves duplas e o sistema troca pelo valor real de cada lead no envio: {{nome}}, {{empresa}}, {{saudacao}} (que vira Bom dia ou Boa tarde) e campos personalizados com {{custom.nome_do_campo}}. Personalizar a mensagem, em vez de mandar um texto idêntico para todo mundo, deixa o disparo mais natural e ajuda a proteger o seu número.",
+        "answer": "Use variáveis entre chaves duplas e o sistema troca pelo valor real de cada lead no envio: {{nome}}, {{primeiro_nome}} (só o primeiro nome do lead), {{empresa}}, {{saudacao}} (que vira Bom dia ou Boa tarde) e campos personalizados com {{custom.nome_do_campo}}. Personalizar a mensagem, em vez de mandar um texto idêntico para todo mundo, deixa o disparo mais natural e ajuda a proteger o seu número.",
         "keywords": [
           "variável",
           "personalizar",

@@ -5,8 +5,8 @@ import {
   zonedDateParts,
   zonedDayStartOfYMD,
   zonedDayEndOfYMD,
-} from "@/modules/analytics/lib/zoned-day";
-import { startOfUTCDay, endOfUTCDay } from "@/modules/analytics/lib/utc-day";
+} from "@/shared/time/zoned-day";
+import { startOfUTCDay, endOfUTCDay } from "@/shared/time/utc-day";
 
 /**
  * Cortes de dia no fuso da org (DST-safe). Cobre a borda BRT que motivou o fix

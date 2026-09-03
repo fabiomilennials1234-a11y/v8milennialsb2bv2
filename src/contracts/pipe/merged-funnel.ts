@@ -15,7 +15,13 @@ export const MEETING_STAGES: DefaultStage[] = [
   { id: "agendado", title: "Agendado", color: "#6366f1" },
   { id: "remarcar", title: "Remarcar", color: "#f97316" },
   { id: "compareceu", title: "Compareceu", color: "#22c55e", is_final_positive: true },
-  { id: "nao_compareceu", title: "Não compareceu", color: "#ef4444", is_final_negative: true },
+  // SEM `is_final_negative`. Faltar não encerra o negócio — e a flag não era
+  // só rótulo: `PipeWhatsapp` deriva o destino do "Marcar perdido" com
+  // `stages.find(s => s.is_final_negative)` sobre a lista ordenada por
+  // posição, e a etapa de FALTA vem antes da de PERDA. O botão "Perdido" do
+  // card mandava o lead para a etapa onde ele já estava — gravava o motivo e
+  // não saía do lugar. Medido em prod nas duas orgs que tinham a marcação.
+  { id: "nao_compareceu", title: "Não compareceu", color: "#ef4444" },
 ];
 
 /**

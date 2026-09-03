@@ -1,4 +1,4 @@
-import { startOfUTCDay, endOfUTCDay } from "./utc-day";
+import { startOfUTCDay, endOfUTCDay } from "@/shared/time/utc-day";
 
 /**
  * Resolução de período do painel "Movimentações no período" (Performance).

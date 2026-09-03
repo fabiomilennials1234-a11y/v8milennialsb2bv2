@@ -57,17 +57,36 @@ describe("appendMeetingStages", () => {
     expect(agendado.target_stage_key).toBeUndefined();
   });
 
-  it("marks compareceu as the positive terminal and nao_compareceu as negative", () => {
+  /**
+   * `nao_compareceu` afirmava `is_final_negative === true` e essa asserção era
+   * o defeito escrito em teste.
+   *
+   * A flag não era rótulo: `PipeWhatsapp` deriva o destino do "Marcar perdido"
+   * pegando a PRIMEIRA etapa `is_final_negative` da lista ordenada por
+   * posição, e a etapa de falta vem antes da etapa de perda. Em produção isso
+   * fazia o botão "Perdido" mover o card para a etapa onde ele já estava —
+   * gravava o motivo e não saía do lugar. Só faltar não encerra negócio
+   * nenhum: o lead segue vivo e precisa de nova data.
+   */
+  it("compareceu é o terminal positivo; nenhuma etapa de reunião é terminal negativo", () => {
     const result = appendMeetingStages([]);
     const byId = Object.fromEntries(result.map((s) => [s.id, s]));
 
     expect(byId.compareceu.is_final_positive).toBe(true);
-    expect(byId.nao_compareceu.is_final_negative).toBe(true);
-    // agendado/remarcar are mid-funnel — neither terminal
+    expect(byId.nao_compareceu.is_final_negative).toBeFalsy();
+    // agendado/remarcar são meio de funil — nenhum dos dois é terminal
     expect(byId.agendado.is_final_positive).toBeFalsy();
     expect(byId.agendado.is_final_negative).toBeFalsy();
     expect(byId.remarcar.is_final_positive).toBeFalsy();
     expect(byId.remarcar.is_final_negative).toBeFalsy();
+  });
+
+  it("nenhuma etapa anexada carrega is_final_negative", () => {
+    // Guarda de conjunto: pega a flag voltando em QUALQUER das quatro, não só
+    // na que já causou o defeito.
+    for (const stage of appendMeetingStages([])) {
+      expect(stage.is_final_negative ?? false).toBe(false);
+    }
   });
 
   it("is idempotent — applying twice yields the same funnel (no duplicates)", () => {

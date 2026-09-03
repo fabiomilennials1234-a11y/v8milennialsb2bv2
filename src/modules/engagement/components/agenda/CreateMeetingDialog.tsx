@@ -59,6 +59,25 @@ interface CreateMeetingDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Pre-filled slot start (set when clicking a time grid slot). */
   initialStart?: Date;
+  /**
+   * Lead já escolhido — quando o diálogo é aberto de FORA da Agenda (card do
+   * funil, ficha do lead) e a pessoa já disse de quem é a reunião.
+   *
+   * O `LeadPorFunilPicker` resolve o chip sozinho por `useLeadById`, então
+   * mandar só o id basta: o funil fica em branco e continua editável. Vem sem
+   * `pipeline_id` de propósito — o card sabe o lead, e adivinhar o funil
+   * gravaria uma origem que a pessoa não escolheu.
+   */
+  initialLeadId?: string | null;
+  /**
+   * Nome do lead, só para semear o título.
+   *
+   * `handleSubmit` EXIGE título não-vazio (`!form.title.trim()` bloqueia). Sem
+   * semear, quem abre pelo card cai num diálogo com o botão morto e sem dizer
+   * por quê — o mesmo defeito de "botão que não faz nada" que o campo de data
+   * já teve aqui.
+   */
+  initialLeadName?: string | null;
 }
 
 interface FormState {
@@ -90,12 +109,26 @@ const FORM_VAZIO: Omit<FormState, "start_at" | "end_at"> = {
   participant_ids: [],
 };
 
+/**
+ * Título inicial quando a reunião nasce de um lead conhecido.
+ *
+ * "Reunião - <lead>" é o mesmo formato que a Agenda já mostra no popover, e
+ * fica editável. Sem lead, volta a string vazia — o campo é obrigatório e o
+ * placeholder pede o título.
+ */
+function tituloSemeado(leadName: string | null | undefined): string {
+  const nome = (leadName ?? "").trim();
+  return nome ? `Reuniao - ${nome}` : "";
+}
+
 // â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function CreateMeetingDialog({
   open,
   onOpenChange,
   initialStart,
+  initialLeadId,
+  initialLeadName,
 }: CreateMeetingDialogProps) {
   const createMeeting = useCreateMeeting();
   const { data: teamMembers = [] } = useTeamMembers();
@@ -104,21 +137,30 @@ export function CreateMeetingDialog({
 
   const [form, setForm] = useState<FormState>({
     ...FORM_VAZIO,
+    lead_id: initialLeadId ?? "",
+    title: tituloSemeado(initialLeadName),
     start_at: format(defaultStart, "yyyy-MM-dd'T'HH:mm"),
     end_at: format(addHours(defaultStart, 1), "yyyy-MM-dd'T'HH:mm"),
   });
 
-  // Reset form when dialog opens or initialStart changes
+  // Reset form when dialog opens or the seeded values change.
+  //
+  // ⚠️ `initialLeadId`/`initialLeadName` PRECISAM estar nas deps: o mesmo
+  // diálogo é montado uma vez por superfície e reaberto para leads diferentes.
+  // Sem elas, abrir pelo segundo card traria o lead do primeiro — e o campo é
+  // editável, então nada na tela denunciaria a troca.
   useEffect(() => {
     if (open) {
       const start = initialStart ?? new Date();
       setForm({
         ...FORM_VAZIO,
+        lead_id: initialLeadId ?? "",
+        title: tituloSemeado(initialLeadName),
         start_at: format(start, "yyyy-MM-dd'T'HH:mm"),
         end_at: format(addHours(start, 1), "yyyy-MM-dd'T'HH:mm"),
       });
     }
-  }, [open, initialStart]);
+  }, [open, initialStart, initialLeadId, initialLeadName]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));

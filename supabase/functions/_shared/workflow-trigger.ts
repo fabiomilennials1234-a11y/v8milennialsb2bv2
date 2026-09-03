@@ -594,6 +594,16 @@ export function matchesTriggerConfig(
       return true;
     }
 
+    case "meeting_held":
+    case "meeting_no_show": {
+      // Sem filtro de config, igual ao `ELSE RETURN TRUE` de
+      // `matches_workflow_trigger_config` no banco. Os dois lados precisam
+      // concordar: o gatilho é disparado por trigger SQL
+      // (`trg_workflow_meeting_outcome`), e um matcher mais restrito aqui faria
+      // o mesmo desfecho executar no banco e ser descartado no executor.
+      return true;
+    }
+
     case "proposal_accepted":
     case "proposal_lost": {
       return true;

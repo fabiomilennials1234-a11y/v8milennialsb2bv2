@@ -8,7 +8,7 @@ import { getTimeBasedVariables } from "../time-variables.ts";
 import { getPipeEntry } from "../pipeline-adapter.ts";
 import { getStageDoNegocio, entryIdDoContexto } from "../negocio-subject.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
-import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "../lead-name.ts";
+import { personalizationName, personalizationFirstName, isPlaceholderLeadName, tidyEmptyVarGaps } from "../lead-name.ts";
 import { normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import type { ActionResult } from "./types.ts";
 import {
@@ -487,6 +487,7 @@ export async function resolveVariables(
 
   const vars: Record<string, string> = {
     nome:       personalizationName(lead.name),
+    primeiro_nome: personalizationFirstName(lead.name),
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",

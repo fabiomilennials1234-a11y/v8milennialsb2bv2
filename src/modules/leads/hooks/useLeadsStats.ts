@@ -66,12 +66,12 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
   const { organizationId, isReady, timezone } = useOrganization();
   const timeZone = timezone || "America/Sao_Paulo";
 
-  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo } = filters;
+  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterResponsible } = filters;
 
   return useQuery<LeadsStats>({
     queryKey: [
       "leads-stats", organizationId, timeZone,
-      searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo,
+      searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterResponsible,
     ],
     queryFn: async () => {
       if (!organizationId) return { highRating: 0, thisMonth: 0, withOwner: 0 };
@@ -96,7 +96,7 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
         // contagem diferente do que estava na tela.
         return applyLeadListFilters(q, {
           searchQuery, filterOrigin, filterRating, filterQualification,
-          filterUf, createdFrom, createdTo,
+          filterUf, createdFrom, createdTo, filterResponsible,
         });
       };
 

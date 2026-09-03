@@ -31,8 +31,19 @@ export type WorkflowTriggerType =
   // Novos triggers
   | "lead_replied"
   | "lead_no_reply"
+  // ⚠️ MORTOS. Nunca dispararam: a função de banco foi escrita para
+  // `pipe_confirmacao.is_confirmed` e `pipe_confirmacao` virou VIEW compat, então
+  // nenhum trigger jamais esteve anexado. Medido em prod: 0 workflows usando os
+  // dois. Ficam na união para que um workflow gravado no passado ainda renderize
+  // um NOME em vez do identificador cru — mas saíram do seletor
+  // (`TRIGGER_CATEGORIES`), para ninguém criar um nó novo que não faz nada.
+  // Quem quer reagir a reunião usa `meeting_held` / `meeting_no_show`.
   | "meeting_confirmed"
   | "meeting_not_confirmed"
+  // Comparecimento — disparados por `meeting_events` (20270907000040), que é
+  // onde AS DUAS origens de desfecho desembocam: a Agenda e o movimento de card.
+  | "meeting_held"
+  | "meeting_no_show"
   | "proposal_accepted"
   | "proposal_lost"
   | "followup_overdue"
@@ -1075,6 +1086,8 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   lead_no_reply: "Lead Não Respondeu",
   meeting_confirmed: "Reunião Confirmada",
   meeting_not_confirmed: "Reunião Não Confirmada",
+  meeting_held: "Compareceu à Reunião",
+  meeting_no_show: "Não Compareceu à Reunião",
   proposal_accepted: "Proposta Aceita",
   proposal_lost: "Proposta Perdida",
   followup_overdue: "Follow-up Vencido",
@@ -1251,6 +1264,7 @@ export interface WorkflowVariable {
 export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   // Lead
   { key: "{{nome}}",          label: "Nome do lead",                  category: "Lead" },
+  { key: "{{primeiro_nome}}", label: "Primeiro nome do lead",         category: "Lead" },
   { key: "{{empresa}}",       label: "Empresa",                       category: "Lead" },
   { key: "{{email}}",         label: "Email",                         category: "Lead" },
   { key: "{{telefone}}",      label: "Telefone",                      category: "Lead" },
@@ -1302,7 +1316,10 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
   },
   {
     label: "Pipeline",
-    triggers: ["stage_changed", "meeting_confirmed", "meeting_not_confirmed", "scheduled_date", "proposal_accepted", "proposal_lost"],
+    // `meeting_confirmed`/`meeting_not_confirmed` SAÍRAM daqui: nunca
+    // dispararam (ver a nota na união de tipos) e ofereciam um nó que não faz
+    // nada, ao lado de dois que fazem.
+    triggers: ["stage_changed", "meeting_held", "meeting_no_show", "scheduled_date", "proposal_accepted", "proposal_lost"],
   },
   {
     label: "Campanhas",

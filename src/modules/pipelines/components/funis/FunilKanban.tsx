@@ -140,10 +140,17 @@ export function FunilKanban({
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
   const bulk = useBulkSelection();
 
-  // Stage final_negative/lost da org — destino do "Marcar perdido" (merge).
+  // Destino do "Marcar perdido": papel PRIMEIRO, flag depois — em duas
+  // passadas. Um `find` único com OR escolhe por acidente de posição: etapa de
+  // falta marcada final_negative que vem antes ganharia da etapa `lost` real,
+  // e o botão moveria o card pra onde ele já está (fix portado da main,
+  // 46f27b2f — "falta a reunião deixa de contar como perda"). `stage_role` é o
+  // mesmo critério que a métrica usa pra contar perda. Stages já chegam só
+  // ativas (usePaginatedFunil filtra is_active).
   const lostStageKey = useMemo(
     () =>
-      stages.find((s) => s.stage_role === "lost" || ((s.stage_role ?? "open") === "open" && s.is_final_negative))
+      (stages.find((s) => s.stage_role === "lost") ??
+        stages.find((s) => (s.stage_role ?? "open") === "open" && s.is_final_negative))
         ?.stage_key ?? null,
     [stages],
   );

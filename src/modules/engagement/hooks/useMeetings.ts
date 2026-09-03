@@ -288,6 +288,10 @@ export function useCreateMeeting() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meetings"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
+      // Criar reunião na Agenda passa a contar como REUNIÃO MARCADA — o
+      // trigger grava o `meeting_booked`. Mesma razão do update acima.
+      queryClient.invalidateQueries({ queryKey: ["meeting_events"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       toast.success("Reunião criada com sucesso");
     },
     onError: (error: Error) => {
@@ -319,6 +323,14 @@ export function useUpdateMeeting() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meetings"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
+      // A partir de `20270907000030` esta linha ESCREVE em `meeting_events`
+      // por trigger, e é de lá que a métrica lê. Sem estas duas invalidações o
+      // número existiria no banco e não na tela: `useSDRPerformance` só
+      // recarrega a cada 60s (`refetchInterval`) e o Comando espera o realtime
+      // de `pipeline_entries`, que este caminho não toca. O vendedor marcaria
+      // "compareceu" e veria o painel parado.
+      queryClient.invalidateQueries({ queryKey: ["meeting_events"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       toast.success("Reunião atualizada");
     },
     onError: (error: Error) => {
@@ -364,6 +376,10 @@ export function useDeleteMeeting() {
       queryClient.invalidateQueries({ queryKey: ["meetings"] });
       queryClient.invalidateQueries({ queryKey: ["meeting-participants"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
+      // Apagar desfaz os `meeting_events` que a agenda escreveu
+      // (`trg_meeting_delete_cleans_events`), então a métrica muda aqui também.
+      queryClient.invalidateQueries({ queryKey: ["meeting_events"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       toast.success("Reunião excluída");
     },
     onError: (error: Error) => {

@@ -68,11 +68,49 @@ describe("classifyStageNameDeterministic — sinônimos pt-BR", () => {
     expect(classifyStageNameDeterministic(name)).toBe(expected);
   });
 
-  it("negação de comparecimento vence: Não Compareceu / No-show → lost", () => {
-    expect(classifyStageNameDeterministic("Não Compareceu")).toBe("lost");
-    expect(classifyStageNameDeterministic("Sem comparecimento")).toBe("lost");
-    expect(classifyStageNameDeterministic("No-show")).toBe("lost");
-    expect(classifyStageNameDeterministic("No Show")).toBe("lost");
+  /**
+   * Este teste AFIRMAVA `lost` para os quatro nomes, e era a versão em teste do
+   * próprio defeito: em prod, 140 leads da Milennials contavam como perdidos
+   * por terem faltado a uma reunião. O teste passava porque descrevia o que o
+   * código fazia, não o que ele devia fazer.
+   *
+   * O contrato certo: falta não sugere NADA. `SuggestableStageRole` exclui
+   * `open` por tipo, então "sem sugestão" é `null` — e a etapa fica com o
+   * `open` que já é o padrão. O que se preserva da intenção original é a
+   * PRECEDÊNCIA: "não compareceu" contém "compareceu" e não pode cair na regra
+   * de `meeting_held`.
+   */
+  it("falta não sugere papel nenhum — e não vira meeting_held", () => {
+    expect(classifyStageNameDeterministic("Não Compareceu")).toBeNull();
+    expect(classifyStageNameDeterministic("Sem comparecimento")).toBeNull();
+    expect(classifyStageNameDeterministic("No-show")).toBeNull();
+    expect(classifyStageNameDeterministic("No Show")).toBeNull();
+  });
+
+  it("'Compareceu' sozinho continua meeting_held — o veto não pode comer o positivo", () => {
+    expect(classifyStageNameDeterministic("Compareceu")).toBe("meeting_held");
+    expect(classifyStageNameDeterministic("Comparecimento")).toBe("meeting_held");
+  });
+
+  /**
+   * O caso que produziu as duas linhas erradas em PROD: as etapas de falta
+   * tinham `is_final_negative = true` junto com o nome. Vetar só o nome
+   * deixaria o fallback de flag reconduzir ao mesmo `lost`.
+   */
+  it("falta com is_final_negative não vira lost pela flag", () => {
+    expect(
+      classifyStageRole({ name: "Não Compareceu", isFinalNegative: true }),
+    ).toBeNull();
+    expect(
+      classifyStageRole({ name: "No-show", isFinalNegative: true }),
+    ).toBeNull();
+  });
+
+  it("perda de verdade com a flag continua lost", () => {
+    expect(classifyStageRole({ name: "Arquivado", isFinalNegative: true })).toEqual({
+      role: "lost",
+      source: "flag",
+    });
   });
 
   it("nomes não-óbvios não classificam (resíduo pra IA)", () => {

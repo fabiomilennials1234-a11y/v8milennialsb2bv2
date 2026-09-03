@@ -2969,10 +2969,10 @@ export type Database = {
           provider_message_id: string | null
           raw_payload: Json | null
           remote_jid: string | null
-          sent_by_team_member_id: string | null
           sender_id: string | null
           sender_name: string | null
           sender_profile_pic: string | null
+          sent_by_team_member_id: string | null
           status: string | null
           timestamp: string
         }
@@ -2997,10 +2997,10 @@ export type Database = {
           provider_message_id?: string | null
           raw_payload?: Json | null
           remote_jid?: string | null
-          sent_by_team_member_id?: string | null
           sender_id?: string | null
           sender_name?: string | null
           sender_profile_pic?: string | null
+          sent_by_team_member_id?: string | null
           status?: string | null
           timestamp?: string
         }
@@ -3025,10 +3025,10 @@ export type Database = {
           provider_message_id?: string | null
           raw_payload?: Json | null
           remote_jid?: string | null
-          sent_by_team_member_id?: string | null
           sender_id?: string | null
           sender_name?: string | null
           sender_profile_pic?: string | null
+          sent_by_team_member_id?: string | null
           status?: string | null
           timestamp?: string
         }
@@ -3066,6 +3066,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_messages_sent_by_team_member_id_fkey"
+            columns: ["sent_by_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "channel_messages_sent_by_team_member_id_fkey"
+            columns: ["sent_by_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -10438,6 +10452,7 @@ export type Database = {
           color: string | null
           created_at: string
           created_by: string | null
+          deal_id: string | null
           description: string | null
           end_at: string
           event_type: string
@@ -10461,6 +10476,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           created_by?: string | null
+          deal_id?: string | null
           description?: string | null
           end_at: string
           event_type?: string
@@ -10484,6 +10500,7 @@ export type Database = {
           color?: string | null
           created_at?: string
           created_by?: string | null
+          deal_id?: string | null
           description?: string | null
           end_at?: string
           event_type?: string
@@ -10503,6 +10520,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "meetings_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "deals"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "meetings_lead_id_fkey"
             columns: ["lead_id"]
@@ -11859,15 +11883,72 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          mute_active_conversation: boolean
+          organization_id: string
+          overrides: Json
+          push_enabled: boolean
+          quiet_hours_end: number | null
+          quiet_hours_start: number | null
+          sound_enabled: boolean
+          updated_at: string | null
+          user_id: string
+          volume: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mute_active_conversation?: boolean
+          organization_id: string
+          overrides?: Json
+          push_enabled?: boolean
+          quiet_hours_end?: number | null
+          quiet_hours_start?: number | null
+          sound_enabled?: boolean
+          updated_at?: string | null
+          user_id: string
+          volume?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mute_active_conversation?: boolean
+          organization_id?: string
+          overrides?: Json
+          push_enabled?: boolean
+          quiet_hours_end?: number | null
+          quiet_hours_start?: number | null
+          sound_enabled?: boolean
+          updated_at?: string | null
+          user_id?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string | null
           description: string | null
           entity_id: string | null
+          event_count: number
+          group_key: string | null
           id: string
+          last_event_at: string | null
           lead_id: string | null
           link: string | null
           organization_id: string
+          pushed_at: string | null
           read_at: string | null
           title: string
           type: string
@@ -11877,10 +11958,14 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           entity_id?: string | null
+          event_count?: number
+          group_key?: string | null
           id?: string
+          last_event_at?: string | null
           lead_id?: string | null
           link?: string | null
           organization_id: string
+          pushed_at?: string | null
           read_at?: string | null
           title: string
           type: string
@@ -11890,10 +11975,14 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           entity_id?: string | null
+          event_count?: number
+          group_key?: string | null
           id?: string
+          last_event_at?: string | null
           lead_id?: string | null
           link?: string | null
           organization_id?: string
+          pushed_at?: string | null
           read_at?: string | null
           title?: string
           type?: string
@@ -12143,6 +12232,133 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      oraculo_conversations: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          id: string
+          last_message_at: string | null
+          organization_id: string
+          summary: string | null
+          team_member_id: string | null
+          title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          organization_id: string
+          summary?: string | null
+          team_member_id?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string | null
+          organization_id?: string
+          summary?: string | null
+          team_member_id?: string | null
+          title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oraculo_conversations_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oraculo_conversations_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oraculo_conversations_team_member_id_fkey"
+            columns: ["team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      oraculo_turns: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          hit_tool_ceiling: boolean
+          id: string
+          input_tokens: number | null
+          latency_ms: number | null
+          model: string | null
+          organization_id: string
+          output_tokens: number | null
+          rejected_tools: string[]
+          role: string
+          tools_used: string[]
+          user_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          hit_tool_ceiling?: boolean
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          organization_id: string
+          output_tokens?: number | null
+          rejected_tools?: string[]
+          role: string
+          tools_used?: string[]
+          user_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          hit_tool_ceiling?: boolean
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string | null
+          organization_id?: string
+          output_tokens?: number | null
+          rejected_tools?: string[]
+          role?: string
+          tools_used?: string[]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "oraculo_turns_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "oraculo_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "oraculo_turns_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       oraculo_usage: {
         Row: {
@@ -12592,133 +12808,6 @@ export type Database = {
           },
         ]
       }
-      oraculo_conversations: {
-        Row: {
-          archived_at: string | null
-          created_at: string
-          id: string
-          last_message_at: string | null
-          organization_id: string
-          summary: string | null
-          team_member_id: string | null
-          title: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          archived_at?: string | null
-          created_at?: string
-          id?: string
-          last_message_at?: string | null
-          organization_id: string
-          summary?: string | null
-          team_member_id?: string | null
-          title?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          archived_at?: string | null
-          created_at?: string
-          id?: string
-          last_message_at?: string | null
-          organization_id?: string
-          summary?: string | null
-          team_member_id?: string | null
-          title?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "oraculo_conversations_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "oraculo_conversations_team_member_id_fkey"
-            columns: ["team_member_id"]
-            isOneToOne: false
-            referencedRelation: "org_visible_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "oraculo_conversations_team_member_id_fkey"
-            columns: ["team_member_id"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      oraculo_turns: {
-        Row: {
-          content: string
-          conversation_id: string
-          created_at: string
-          hit_tool_ceiling: boolean
-          id: string
-          input_tokens: number | null
-          latency_ms: number | null
-          model: string | null
-          organization_id: string
-          output_tokens: number | null
-          rejected_tools: string[]
-          role: string
-          tools_used: string[]
-          user_id: string
-        }
-        Insert: {
-          content: string
-          conversation_id: string
-          created_at?: string
-          hit_tool_ceiling?: boolean
-          id?: string
-          input_tokens?: number | null
-          latency_ms?: number | null
-          model?: string | null
-          organization_id: string
-          output_tokens?: number | null
-          rejected_tools?: string[]
-          role: string
-          tools_used?: string[]
-          user_id: string
-        }
-        Update: {
-          content?: string
-          conversation_id?: string
-          created_at?: string
-          hit_tool_ceiling?: boolean
-          id?: string
-          input_tokens?: number | null
-          latency_ms?: number | null
-          model?: string | null
-          organization_id?: string
-          output_tokens?: number | null
-          rejected_tools?: string[]
-          role?: string
-          tools_used?: string[]
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "oraculo_turns_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "oraculo_conversations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "oraculo_turns_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       organizations: {
         Row: {
           auto_create_lead_on_inbound: boolean
@@ -12742,10 +12831,10 @@ export type Database = {
           limit_overrides: Json | null
           metrics_studio_enabled: boolean
           name: string
-          oraculo_daily_turn_limit: number | null
           onboarding_answers: Json | null
           onboarding_completed_at: string | null
           onboarding_state: string
+          oraculo_daily_turn_limit: number | null
           org_type: Database["public"]["Enums"]["org_type"]
           payment_customer_id: string | null
           payment_subscription_id: string | null
@@ -12791,10 +12880,10 @@ export type Database = {
           limit_overrides?: Json | null
           metrics_studio_enabled?: boolean
           name: string
-          oraculo_daily_turn_limit?: number | null
           onboarding_answers?: Json | null
           onboarding_completed_at?: string | null
           onboarding_state?: string
+          oraculo_daily_turn_limit?: number | null
           org_type?: Database["public"]["Enums"]["org_type"]
           payment_customer_id?: string | null
           payment_subscription_id?: string | null
@@ -12840,10 +12929,10 @@ export type Database = {
           limit_overrides?: Json | null
           metrics_studio_enabled?: boolean
           name?: string
-          oraculo_daily_turn_limit?: number | null
           onboarding_answers?: Json | null
           onboarding_completed_at?: string | null
           onboarding_state?: string
+          oraculo_daily_turn_limit?: number | null
           org_type?: Database["public"]["Enums"]["org_type"]
           payment_customer_id?: string | null
           payment_subscription_id?: string | null
@@ -16742,6 +16831,10 @@ export type Database = {
           connection_id: string
           created_at: string
           encryption_key_id: string
+          flow_client_id_ciphertext: string | null
+          flow_client_id_nonce: string | null
+          flow_client_secret_ciphertext: string | null
+          flow_client_secret_nonce: string | null
           organization_id: string
           password_ciphertext: string
           password_nonce: string
@@ -16753,6 +16846,10 @@ export type Database = {
           connection_id: string
           created_at?: string
           encryption_key_id?: string
+          flow_client_id_ciphertext?: string | null
+          flow_client_id_nonce?: string | null
+          flow_client_secret_ciphertext?: string | null
+          flow_client_secret_nonce?: string | null
           organization_id: string
           password_ciphertext: string
           password_nonce: string
@@ -16764,6 +16861,10 @@ export type Database = {
           connection_id?: string
           created_at?: string
           encryption_key_id?: string
+          flow_client_id_ciphertext?: string | null
+          flow_client_id_nonce?: string | null
+          flow_client_secret_ciphertext?: string | null
+          flow_client_secret_nonce?: string | null
           organization_id?: string
           password_ciphertext?: string
           password_nonce?: string
@@ -16802,6 +16903,7 @@ export type Database = {
           connected_at: string | null
           created_at: string
           erp_sync_mode: string
+          flow_base_url: string | null
           id: string
           last_clientes_sync_at: string | null
           last_cobrancas_sync_at: string | null
@@ -16809,6 +16911,8 @@ export type Database = {
           last_pedidos_sync_at: string | null
           organization_id: string
           pedidos_cursor: number | null
+          pedidos_data_inicial: string | null
+          pedidos_janela_dias: number | null
           status: string
           token_transport: string
           updated_at: string
@@ -16827,6 +16931,7 @@ export type Database = {
           connected_at?: string | null
           created_at?: string
           erp_sync_mode?: string
+          flow_base_url?: string | null
           id?: string
           last_clientes_sync_at?: string | null
           last_cobrancas_sync_at?: string | null
@@ -16834,6 +16939,8 @@ export type Database = {
           last_pedidos_sync_at?: string | null
           organization_id: string
           pedidos_cursor?: number | null
+          pedidos_data_inicial?: string | null
+          pedidos_janela_dias?: number | null
           status?: string
           token_transport?: string
           updated_at?: string
@@ -16852,6 +16959,7 @@ export type Database = {
           connected_at?: string | null
           created_at?: string
           erp_sync_mode?: string
+          flow_base_url?: string | null
           id?: string
           last_clientes_sync_at?: string | null
           last_cobrancas_sync_at?: string | null
@@ -16859,6 +16967,8 @@ export type Database = {
           last_pedidos_sync_at?: string | null
           organization_id?: string
           pedidos_cursor?: number | null
+          pedidos_data_inicial?: string | null
+          pedidos_janela_dias?: number | null
           status?: string
           token_transport?: string
           updated_at?: string
@@ -17710,6 +17820,32 @@ export type Database = {
             columns: ["team_member_id"]
             isOneToOne: false
             referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_presence: {
+        Row: {
+          last_seen_at: string
+          organization_id: string
+          user_id: string
+        }
+        Insert: {
+          last_seen_at?: string
+          organization_id: string
+          user_id: string
+        }
+        Update: {
+          last_seen_at?: string
+          organization_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_presence_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -18954,6 +19090,20 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_sent_by_team_member_id_fkey"
+            columns: ["sent_by_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "org_visible_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_sent_by_team_member_id_fkey"
+            columns: ["sent_by_team_member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
         ]
@@ -21100,6 +21250,10 @@ export type Database = {
         Returns: Json
       }
       delete_custom_pipeline: { Args: { p_pipeline_id: string }; Returns: Json }
+      delete_system_pipeline: {
+        Args: { p_org_id: string; p_pipe_type: string }
+        Returns: Json
+      }
       distribute_campaign_round_robin: {
         Args: { p_campaign_id: string; p_member_ids: string[] }
         Returns: string
@@ -21111,6 +21265,10 @@ export type Database = {
           p_pipe_type: string
         }
         Returns: string
+      }
+      enable_system_pipeline: {
+        Args: { p_org_id: string; p_pipe_type: string }
+        Returns: Json
       }
       enqueue_webhook_deliveries_for_org: {
         Args: { p_event: string; p_organization_id: string; p_payload: Json }
@@ -21154,6 +21312,23 @@ export type Database = {
         }
         Returns: number
       }
+      fn_avisos_pendentes_de_push: {
+        Args: {
+          p_idade_maxima?: string
+          p_janela_de_presenca?: string
+          p_limite?: number
+        }
+        Returns: {
+          aviso_id: string
+          description: string
+          group_key: string
+          link: string
+          organization_id: string
+          title: string
+          type: string
+          user_id: string
+        }[]
+      }
       fn_backfill_carteira_orders: {
         Args: {
           p_dry_run?: boolean
@@ -21188,6 +21363,35 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_dono_do_lead: { Args: { p_lead_id: string }; Returns: string }
+      fn_emit_aviso: {
+        Args: {
+          p_description?: string
+          p_entity_id?: string
+          p_group_key: string
+          p_lead_id?: string
+          p_link?: string
+          p_occurred_at?: string
+          p_organization_id: string
+          p_title: string
+          p_type: string
+          p_user_id: string
+        }
+        Returns: string
+      }
+      fn_emit_aviso_admins: {
+        Args: {
+          p_description?: string
+          p_entity_id?: string
+          p_group_key: string
+          p_link?: string
+          p_occurred_at?: string
+          p_organization_id: string
+          p_title: string
+          p_type: string
+        }
+        Returns: number
+      }
       fn_funnel_flow_step: {
         Args: {
           p_cohort_size: number
@@ -21196,6 +21400,31 @@ export type Database = {
           p_role: string
         }
         Returns: Json
+      }
+      fn_limpar_avisos: {
+        Args: {
+          p_lote?: number
+          p_max_lotes?: number
+          p_prazo_lido?: string
+          p_prazo_nao_lido?: string
+        }
+        Returns: number
+      }
+      fn_marcar_push_enviado: {
+        Args: { p_aviso_ids: string[] }
+        Returns: number
+      }
+      fn_medicao_de_ruido: {
+        Args: { p_dias?: number }
+        Returns: {
+          avisos: number
+          dia: string
+          eventos: number
+          lidos: number
+          organization_id: string
+          type: string
+          user_id: string
+        }[]
       }
       fn_metric_catalog: { Args: never; Returns: Json }
       fn_metric_measure: {
@@ -21217,6 +21446,19 @@ export type Database = {
         Returns: string
       }
       fn_phone_match_forms: { Args: { p_canonical: string }; Returns: string[] }
+      fn_pico_de_avisos_quentes: {
+        Args: { p_dias?: number }
+        Returns: {
+          hora: string
+          organization_id: string
+          quentes: number
+          user_id: string
+        }[]
+      }
+      fn_preferencias_de_aviso: {
+        Args: { p_organization_id: string; p_user_id: string }
+        Returns: Json
+      }
       fn_publish_dashboard_page: {
         Args: { p_org_id: string; p_page_id: string }
         Returns: Json
@@ -21231,6 +21473,10 @@ export type Database = {
           reescritas: number
           valor_movido: number
         }[]
+      }
+      fn_registrar_presenca: {
+        Args: { p_organization_id: string }
+        Returns: undefined
       }
       fn_reserve_send: {
         Args: {
@@ -21252,6 +21498,8 @@ export type Database = {
         Returns: number
       }
       fn_seed_default_dashboard: { Args: { p_org_id: string }; Returns: Json }
+      fn_varredura_avisos_followups: { Args: never; Returns: number }
+      fn_varredura_avisos_reuniao_proxima: { Args: never; Returns: number }
       fn_voip_apply_vps_event: {
         Args: {
           p_epoch: number
@@ -22423,6 +22671,7 @@ export type Database = {
       invoke_process_workflow_executions: { Args: never; Returns: undefined }
       invoke_refresh_meta_tokens: { Args: never; Returns: undefined }
       invoke_retry_dead_letter_jobs: { Args: never; Returns: undefined }
+      invoke_send_push: { Args: never; Returns: undefined }
       invoke_torquecalls_recording_maintenance: {
         Args: never
         Returns: undefined
@@ -22714,6 +22963,14 @@ export type Database = {
       }
       normalize_br_mobile: { Args: { digits: string }; Returns: string }
       normalize_brazilian_phone: { Args: { phone: string }; Returns: string }
+      oraculo_metricas: {
+        Args: {
+          p_organization_id: string
+          p_periodo_dias: number
+          p_team_member_id: string
+        }
+        Returns: Json
+      }
       org_access_blocked: { Args: { p_org_id: string }; Returns: boolean }
       org_check_limit: {
         Args: { p_limit_key: string; p_org_id: string }
@@ -22899,6 +23156,10 @@ export type Database = {
       sync_org_quotas_from_plan: {
         Args: { p_org_id: string }
         Returns: undefined
+      }
+      system_pipeline_delete_impact: {
+        Args: { p_org_id: string; p_pipe_type: string }
+        Returns: Json
       }
       system_stage_role: {
         Args: { p_pipeline_type: string; p_stage_key: string }

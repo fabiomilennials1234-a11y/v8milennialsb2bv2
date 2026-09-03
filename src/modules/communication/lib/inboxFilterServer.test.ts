@@ -110,3 +110,35 @@ describe("toServerFilter — chave de cache", () => {
     expect(a.cacheKey).not.toBe(b.cacheKey);
   });
 });
+
+describe("toServerFilter — aba de grupos (flag por org)", () => {
+  it("sem a flag, a chamada é byte a byte a de hoje", () => {
+    const r = toServerFilter(state(), "tm-1", {});
+    expect(r.args).toBeNull();
+    expect(r.limit).toBe(UNFILTERED_PAGE_LIMIT);
+    expect(r.cacheKey).toBe("");
+  });
+
+  it("com a flag, empurra p_include_groups mesmo sem nenhum chip", () => {
+    const r = toServerFilter(state(), "tm-1", { incluirGrupos: true });
+    expect(r.args?.p_include_groups).toBe(true);
+    // Grupo é ~40% das mensagens: uma página de 500 com grupo dentro mostraria
+    // MENOS conversa individual que a de hoje.
+    expect(r.limit).toBe(FILTERED_PAGE_LIMIT);
+  });
+
+  it("a org com grupo não divide cache com a org sem grupo", () => {
+    // As duas listas dividiriam a mesma entrada com a bolha do kanban e o
+    // command palette, e qual delas ganharia dependeria de quem montou antes.
+    const sem = toServerFilter(state({ stages: ["novo"] }), null);
+    const com = toServerFilter(state({ stages: ["novo"] }), null, { incluirGrupos: true });
+    expect(com.cacheKey).not.toBe(sem.cacheKey);
+  });
+
+  it("convive com as outras dimensões sem apagá-las", () => {
+    const r = toServerFilter(state({ tags: ["t1"], unread: true }), null, { incluirGrupos: true });
+    expect(r.args?.p_tags).toEqual(["t1"]);
+    expect(r.args?.p_unread).toBe(true);
+    expect(r.args?.p_include_groups).toBe(true);
+  });
+});
