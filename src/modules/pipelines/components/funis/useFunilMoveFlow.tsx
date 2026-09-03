@@ -74,7 +74,7 @@ import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransitio
 import { moverNegocio, invalidateAfterMove } from "@/modules/pipelines/lib/moverNegocio";
 import { isWonStageKey, parseSaleValue } from "@/modules/pipelines/lib/sale-value-guard";
 import { useSaleValueGuard } from "@/modules/pipelines/hooks/useSaleValueGuard";
-import { SaleValueRequiredModal } from "@/modules/pipelines/components/shared/SaleValueRequiredModal";
+import { SaleValueRequiredModal } from "@/shared/components/SaleValueRequiredModal";
 import { useLossReasons } from "@/modules/pipelines/hooks/config/useLossReasons";
 import {
   exigeTextoLivre,

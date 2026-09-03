@@ -124,3 +124,4 @@ export function shouldPromptForSaleValue(
 ): boolean {
   return stageRequiresSaleValue(targetStageKey, stages) && !hasUsableSaleValue(currentValue);
 }
+

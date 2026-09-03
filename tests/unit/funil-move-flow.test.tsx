@@ -110,7 +110,7 @@ vi.mock("@/modules/pipelines/hooks/config/useLossReasons", () => ({
     ],
   }),
 }));
-vi.mock("@/modules/pipelines/components/shared/SaleValueRequiredModal", () => ({
+vi.mock("@/shared/components/SaleValueRequiredModal", () => ({
   SaleValueRequiredModal: (props: Record<string, unknown>) =>
     props.open ? (
       <button type="button" onClick={() => (props.onConfirm as (v: number) => void)(1234)}>
