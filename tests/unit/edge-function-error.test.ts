@@ -78,8 +78,59 @@ describe("friendlyWhatsAppSendError", () => {
       "Uazapi server error 500 on POST /send/text: error sending message: WhatsApp server error 463: WhatsApp reported that the currently connected account is under a temporary restriction for starting new conversations, usually related to sending volume or quality.";
     const friendly = friendlyWhatsAppSendError(raw);
     expect(friendly).toContain("bloqueou temporariamente");
-    expect(friendly).toContain("Pare os disparos");
+    expect(friendly).toContain("pare os disparos");
     expect(friendly).not.toContain("Uazapi");
+  });
+
+  /**
+   * Carol Distribuidora, 2026-08-05: os 4 envios que deram 463 FORAM entregues
+   * (reapareceram no history sync com o timestamp original). O vendedor leu
+   * "não enviada", reenviou, e dois leads receberam a mensagem duplicada.
+   * A microcópia tem de frear o reenvio antes de explicar o bloqueio.
+   */
+  it("warns that the 463 message may already have been delivered — before anything else", () => {
+    const raw =
+      "Uazapi server error 500 on POST /send/text: error sending message: WhatsApp server error 463: temporary restriction for starting new conversations";
+    const friendly = friendlyWhatsAppSendError(raw);
+    expect(friendly).toContain("pode ter sido entregue");
+    expect(friendly).toContain("antes de reenviar");
+    // o aviso precisa vir primeiro: é a única parte que muda o que a pessoa faz agora
+    expect(friendly.indexOf("pode ter sido entregue")).toBeLessThan(
+      friendly.indexOf("bloqueou temporariamente"),
+    );
+  });
+
+  it("warns about ambiguous delivery on an unmapped Uazapi 5xx", () => {
+    const friendly = friendlyWhatsAppSendError(
+      "Uazapi server error 502 on POST /send/media: bad gateway",
+    );
+    expect(friendly).toContain("pode ter sido entregue");
+  });
+
+  it("warns about ambiguous delivery on a timeout", () => {
+    expect(friendlyWhatsAppSendError("timeout after 15000ms on POST /send/text")).toContain(
+      "pode ter sido entregue",
+    );
+  });
+
+  /**
+   * O circuit breaker abre ANTES da requisição sair, então aqui dizer "pode ter
+   * sido entregue" seria mentira — e mentira que trava um reenvio legítimo.
+   */
+  it("does NOT warn about delivery when the circuit breaker blocked the request", () => {
+    const friendly = friendlyWhatsAppSendError(
+      "Circuit breaker open for /send/text until 2026-08-03T18:47:55.882Z",
+    );
+    expect(friendly).not.toContain("pode ter sido entregue");
+    expect(friendly).toContain("não chegou a sair");
+  });
+
+  it("keeps the deterministic 'not on WhatsApp' case free of the ambiguity warning", () => {
+    // chega como 500 igual aos ambíguos, mas aqui sabemos que NÃO foi entregue
+    const friendly = friendlyWhatsAppSendError(
+      "Uazapi server error 500 on POST /send/text: the number 5514796612277@s.whatsapp.net is not on WhatsApp",
+    );
+    expect(friendly).not.toContain("pode ter sido entregue");
   });
 
   it("does not mistake a phone number containing 463 for the restriction error", () => {
