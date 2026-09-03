@@ -8,7 +8,10 @@ import {
   type MetricsPeriodState,
 } from "@/lib/metrics-period";
 import { getStalledBucket, STALLED_ALL } from "@/modules/pipelines/lib/stalled-buckets";
-import type { FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
+// O tipo vem de `lib/`, não do componente: modelo não depende de apresentação.
+// Ver `lib/filter-sections.ts` para o porquê — era este import que fechava o
+// ciclo acusado pelo `dep-cruise`.
+import type { FilterSectionConfig } from "@/modules/pipelines/lib/filter-sections";
 import type { PaginatedFilters } from "./usePaginatedPipeline";
 import type { PipelineLeadIdsParams } from "./usePipelineLeadIds";
 

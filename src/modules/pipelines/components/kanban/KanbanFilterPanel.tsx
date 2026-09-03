@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { FilterSectionConfig } from "@/modules/pipelines/lib/filter-sections";
 import {
   Filter,
   User,
@@ -107,41 +108,12 @@ const URGENCY_OPTIONS = [
   { value: "6-meses", label: "6+ meses" },
 ];
 
-// ─── Section types ───────────────────���──────────────────────────────���────────
-export type FilterSectionConfig =
-  | { type: "responsible"; value: string; onChange: (v: string) => void; members: { id: string; name: string }[] }
-  | { type: "origin-single"; value: string; onChange: (v: string) => void }
-  | { type: "origin-multi"; value: string[]; onChange: (v: string[]) => void }
-  | { type: "tags"; value: string[]; onChange: (v: string[]) => void; tags: { id: string; name: string; color: string | null }[] }
-  | { type: "product-type"; value: string; onChange: (v: string) => void }
-  | { type: "calor"; value: string; onChange: (v: string) => void }
-  | { type: "priority"; value: string; onChange: (v: string) => void }
-  | { type: "urgency"; value: string; onChange: (v: string) => void }
-  | { type: "status-multi"; value: string[]; onChange: (v: string[]) => void; options: { id: string; title: string; color: string }[] }
-  | { type: "qualification-tier"; value: string[]; onChange: (v: string[]) => void }
-  | { type: "pre-qualification-tier"; value: string[]; onChange: (v: string[]) => void }
-  | { type: "scheduled"; value: boolean; onChange: (v: boolean) => void }
-  /** Data de criação do lead. Voltou do cabeçalho pro painel — é aqui que compõe com o resto. */
-  | { type: "created-period"; value: MetricsPeriodState; onChange: (v: MetricsPeriodState) => void }
-  /** Dias na etapa atual — "quem está encalhado?". Ver `lib/stalled-buckets`. */
-  | { type: "stalled-days"; value: string; onChange: (v: string) => void }
-  /**
-   * Escolha única genérica, pra dimensão que só um funil tem — a faixa de tempo
-   * da reunião em Confirmação é o primeiro caso. Existe pra esse tipo de filtro
-   * ter casa no painel em vez de virar mais uma fileira de botões no cabeçalho,
-   * que é justamente o que o Modelo 1 veio desfazer. `allValue` é o valor que
-   * significa "sem filtro" (não conta no badge nem vira chip).
-   */
-  | {
-      type: "single-choice";
-      id: string;
-      label: string;
-      value: string;
-      onChange: (v: string) => void;
-      options: { value: string; label: string }[];
-      allValue?: string;
-      icon?: React.ElementType;
-    };
+// ─── Section types ───────────────────────────────────────────────────────────
+//
+// O tipo mora em `lib/filter-sections` porque o hook de modelo também precisa
+// dele, e modelo não pode depender de componente (ver o comentário de lá).
+// Re-exportado para as páginas que já importavam daqui.
+export type { FilterSectionConfig };
 
 // Ordered tier labels for chips (canonical labels come from the leads module).
 function tierChipLabel(value: string[]): string {
