@@ -61,6 +61,15 @@
 --
 -- Reaplicar é no-op.
 
+-- Contagem de etapas de reunião ANTES da troca, para a guarda comparar. Uma
+-- tabela temporária porque os dois blocos DO não compartilham variável.
+-- Sem `ON COMMIT DROP`: isso amarraria a migration a rodar dentro de uma
+-- transação, e nem todo caminho de aplicação garante isso. Solta ao final.
+DROP TABLE IF EXISTS _b2d_antes;
+CREATE TEMP TABLE _b2d_antes AS
+SELECT count(*) AS reuniao FROM public.pipeline_stages
+ WHERE stage_role IN ('meeting_booked','meeting_held');
+
 DO $$
 DECLARE v_sem_negocio integer; v_discordam integer;
 BEGIN
@@ -98,7 +107,7 @@ UPDATE public.pipeline_stages
  WHERE stage_role IN ('won', 'lost');
 
 DO $$
-DECLARE v_restam integer; v_reuniao integer;
+DECLARE v_restam integer; v_reuniao integer; v_antes integer;
 BEGIN
   SELECT count(*) INTO v_restam FROM public.pipeline_stages
    WHERE stage_role IN ('won','lost');
@@ -108,10 +117,19 @@ BEGIN
 
   -- Os papéis de REUNIÃO não podem ter ido junto: a agenda depende deles, e é
   -- o outro arco deste mesmo trabalho.
+  --
+  -- A pergunta é se o número MUDOU, não se ele é maior que zero. A primeira
+  -- versão exigia `> 0` e derrubava o `supabase start` de todo ambiente novo,
+  -- onde não há etapa nenhuma — reprovava por falta de dado, não por defeito.
+  -- Comparar com o antes também é uma asserção mais forte: pega o caso em que
+  -- alguns papéis de reunião somem, que `> 0` deixaria passar.
   SELECT count(*) INTO v_reuniao FROM public.pipeline_stages
    WHERE stage_role IN ('meeting_booked','meeting_held');
-  IF v_reuniao = 0 THEN
-    RAISE EXCEPTION 'os papeis de reuniao sumiram junto — isso quebra a agenda';
+  SELECT reuniao INTO v_antes FROM _b2d_antes;
+  IF v_reuniao <> v_antes THEN
+    RAISE EXCEPTION 'papeis de reuniao mudaram de % para % — a troca vazou para a agenda', v_antes, v_reuniao;
   END IF;
   RAISE NOTICE 'papeis de reuniao preservados: %', v_reuniao;
 END $$;
+
+DROP TABLE IF EXISTS _b2d_antes;
