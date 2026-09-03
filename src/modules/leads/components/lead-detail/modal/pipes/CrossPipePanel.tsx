@@ -56,11 +56,6 @@ import {
  * `propostas`, custom pipe ids) are migrated transparently on first read.
  */
 
-const SYSTEM_RAIL_REF: Record<string, "whatsapp" | "confirmacao" | "propostas"> = {
-  qualificacao: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-};
 
 type ExpandedAction = "meeting" | "budget" | null;
 
@@ -125,9 +120,9 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   const hasConfirmacao = activeSystem.some((p) => p.pipeType === "confirmacao");
   const hasPropostas = activeSystem.some((p) => p.pipeType === "propostas");
 
-  // Funil mergeado (ADR-0004): a reunião vive na entry whatsapp (qualificacao)
+  // Funil mergeado (ADR-0004): a reunião vive na entry whatsapp
   // num stage de reunião. Habilita o editor de data dentro do modal.
-  const whatsappEntry = activeSystem.find((p) => p.pipeType === "qualificacao") as StandardPipelineStatus | undefined;
+  const whatsappEntry = activeSystem.find((p) => p.pipeType === "whatsapp") as StandardPipelineStatus | undefined;
   const mergedMeeting =
     hasFeature("merged_opportunity_funnel") &&
     !!whatsappEntry?.pipeId &&
@@ -191,7 +186,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     const list: StageRailPipe[] = activeSystem.map((p) => ({
       kind: "system" as const,
       recordId: p.pipeId!,
-      pipeRef: SYSTEM_RAIL_REF[p.pipeType],
+      pipeRef: p.pipeType,
       shortLabel: SYSTEM_PIPE_SHORT_LABEL[p.pipeType] ?? p.label,
       color: p.color,
       stages: p.stages.map((s) => ({ key: s.id, label: s.label })),

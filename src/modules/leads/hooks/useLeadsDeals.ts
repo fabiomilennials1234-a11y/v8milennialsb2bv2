@@ -70,14 +70,6 @@ export interface LeadDeal {
 
 export type LeadDealsMap = Record<string, LeadDeal[]>;
 
-/** `pipelines.slug` → `pipeline_stages.pipeline_type` dos funis system. */
-const SLUG_TO_STAGE_TYPE: Record<string, string> = {
-  whatsapp: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-  upsell: "upsell_base",
-};
-
 const FALLBACK_COLOR = "#64748b";
 
 const toNumber = (v: unknown): number => {
@@ -127,7 +119,7 @@ export function useLeadsDeals(leadIds: string[]) {
     queryFn: async () => {
       if (!organizationId || ids.length === 0) return {};
 
-      const [entriesRes, pipelinesRes, stagesRes, customStagesRes] = await Promise.all([
+      const [entriesRes, pipelinesRes, stagesRes] = await Promise.all([
         supabase
           .from("pipeline_entries")
           .select("id, lead_id, pipeline_id, stage_key, entered_at, stage_changed_at, metadata, deal_id")
@@ -142,22 +134,21 @@ export function useLeadsDeals(leadIds: string[]) {
           .select("id, slug, name, color, type")
           .eq("organization_id", organizationId)
           .eq("is_active", true),
+        // Pós-F1 (20270906001000) TODA etapa — system ou custom — vive em
+        // `pipeline_stages` com FK `pipeline_id`. Uma query serve as duas
+        // famílias; morreram a leitura da view `custom_pipeline_stages` e o
+        // mapa slug→pipeline_type (SCRUM-637).
         supabase
           .from("pipeline_stages")
-          .select("pipeline_type, stage_key, name, stage_role, position")
-          .eq("organization_id", organizationId)
-          .eq("is_active", true),
-        supabase
-          .from("custom_pipeline_stages")
           .select("id, pipeline_id, stage_key, name, stage_role, position")
           .eq("organization_id", organizationId)
-          .eq("is_active", true),
+          .eq("is_active", true)
+          .not("pipeline_id", "is", null),
       ]);
 
       if (entriesRes.error) throw entriesRes.error;
       if (pipelinesRes.error) throw pipelinesRes.error;
       if (stagesRes.error) throw stagesRes.error;
-      if (customStagesRes.error) throw customStagesRes.error;
 
       const pipelineById = new Map((pipelinesRes.data ?? []).map((p) => [p.id, p]));
 
@@ -232,79 +223,48 @@ export function useLeadsDeals(leadIds: string[]) {
 
       type StageInfo = { name: string; role: string | null; position: number | null };
 
-      // Stages de funil system são chaveadas por (pipeline_type, stage_key).
-      const systemStage = new Map<string, StageInfo>();
-      for (const s of stagesRes.data ?? []) {
-        const row = s as {
-          pipeline_type: string;
-          stage_key: string;
-          name: string;
-          stage_role: string | null;
-          position: number | null;
-        };
-        systemStage.set(`${row.pipeline_type}::${row.stage_key}`, {
-          name: row.name,
-          role: row.stage_role ?? null,
-          position: row.position ?? null,
-        });
-      }
-
-      // Custom: a entry grava ora o uuid da stage, ora o stage_key. Indexa os dois
-      // (mesma tolerância de `useLeadAllPipelines`).
-      const customStage = new Map<string, StageInfo>();
       /**
-       * `${pipeline_id}::${stage_key}` → uuid da etapa. A trilha custom é
-       * indexada por uuid (é o que `custom_pipe_entries` guarda na maioria das
-       * linhas), mas parte das entries guarda o `stage_key`. Sem esta tradução
-       * o `indexOf` devolve -1 e o card fica SEM barra de progresso — some em
-       * silêncio, que é como o defeito sobreviveu.
+       * Etapa indexada por `${pipeline_id}::<chave>` — nas DUAS chaves que uma
+       * entry pode carregar (`stage_key` e uuid), porque a entry grava ora um,
+       * ora outro (tolerância herdada de `useLeadAllPipelines`). Sem a dupla
+       * indexação o card fica sem etapa/barra de progresso — some em silêncio,
+       * que é como o defeito sobreviveu da última vez.
        */
+      const stageInfo = new Map<string, StageInfo>();
+      /** `${pipeline_id}::${stage_key}` → uuid da etapa (chave da trilha). */
       const uuidPorStageKey = new Map<string, string>();
-      for (const s of customStagesRes.data ?? []) {
-        const row = s as {
-          id: string;
-          pipeline_id: string;
-          stage_key: string | null;
-          name: string;
-          stage_role: string | null;
-          position: number | null;
-        };
-        const value: StageInfo = {
-          name: row.name,
-          role: row.stage_role ?? null,
-          position: row.position ?? null,
-        };
-        customStage.set(`${row.pipeline_id}::${row.id}`, value);
-        if (row.stage_key) {
-          customStage.set(`${row.pipeline_id}::${row.stage_key}`, value);
-          uuidPorStageKey.set(`${row.pipeline_id}::${row.stage_key}`, row.id);
-        }
-      }
-
-      /**
-       * Etapas ativas de cada funil, em ordem, para o progresso do negócio.
-       * Chave: `pipeline_type` nos funis system, `pipeline_id` nos custom —
-       * a mesma dualidade que os dois mapas de etapa acima já carregam.
-       */
+      /** Etapas ativas de cada funil (uuid, em ordem) — o progresso do negócio. */
       const trilhaPorFunil = new Map<string, string[]>();
-      for (const s of stagesRes.data ?? []) {
-        const row = s as { pipeline_type: string; stage_key: string; position: number | null };
-        const lista = trilhaPorFunil.get(row.pipeline_type) ?? [];
-        lista.push(`${row.position ?? 0}::${row.stage_key}`);
-        trilhaPorFunil.set(row.pipeline_type, lista);
-      }
-      for (const s of customStagesRes.data ?? []) {
-        const row = s as { pipeline_id: string; id: string; position: number | null };
-        const lista = trilhaPorFunil.get(row.pipeline_id) ?? [];
-        lista.push(`${row.position ?? 0}::${row.id}`);
-        trilhaPorFunil.set(row.pipeline_id, lista);
-      }
-      for (const [chave, lista] of trilhaPorFunil) {
-        lista.sort((a, b) => Number(a.split("::")[0]) - Number(b.split("::")[0]));
-        trilhaPorFunil.set(
-          chave,
-          lista.map((item) => item.split("::").slice(1).join("::")),
-        );
+      {
+        const porPosicao = new Map<string, { pos: number; id: string }[]>();
+        for (const s of stagesRes.data ?? []) {
+          // `pipeline_id` ainda não está no types.ts gerado (regen → SCRUM-639).
+          const row = s as unknown as {
+            id: string;
+            pipeline_id: string;
+            stage_key: string | null;
+            name: string;
+            stage_role: string | null;
+            position: number | null;
+          };
+          const value: StageInfo = {
+            name: row.name,
+            role: row.stage_role ?? null,
+            position: row.position ?? null,
+          };
+          stageInfo.set(`${row.pipeline_id}::${row.id}`, value);
+          if (row.stage_key) {
+            stageInfo.set(`${row.pipeline_id}::${row.stage_key}`, value);
+            uuidPorStageKey.set(`${row.pipeline_id}::${row.stage_key}`, row.id);
+          }
+          const lista = porPosicao.get(row.pipeline_id) ?? [];
+          lista.push({ pos: row.position ?? 0, id: row.id });
+          porPosicao.set(row.pipeline_id, lista);
+        }
+        for (const [pid, lista] of porPosicao) {
+          lista.sort((a, b) => a.pos - b.pos);
+          trilhaPorFunil.set(pid, lista.map((x) => x.id));
+        }
       }
 
       const map: LeadDealsMap = {};
@@ -316,30 +276,20 @@ export function useLeadsDeals(leadIds: string[]) {
 
         const isSystem = pipeline.type === "system";
         const slug = pipeline.slug ?? "";
-        const stageType = SLUG_TO_STAGE_TYPE[slug] ?? slug;
 
         const stage = raw.stage_key
-          ? isSystem
-            ? systemStage.get(`${stageType}::${raw.stage_key}`)
-            : customStage.get(`${raw.pipeline_id}::${raw.stage_key}`)
+          ? stageInfo.get(`${raw.pipeline_id}::${raw.stage_key}`)
           : undefined;
 
         const metadata = asObject(raw.metadata);
         const stageChangedAt = raw.stage_changed_at ?? raw.entered_at ?? null;
 
-        // Custom guarda ora o uuid da etapa, ora o `stage_key`; a trilha é
-        // indexada por uuid, então tenta os dois antes de desistir.
-        const trilha = trilhaPorFunil.get(isSystem ? stageType : raw.pipeline_id) ?? [];
-        // Funil system indexa a trilha por `stage_key`; custom, por uuid. A
-        // entry custom guarda ora um, ora outro — daí a tradução antes de
-        // procurar. O comentário acima sempre disse "tenta os dois"; o código
-        // só tentava um, e todo card cuja entry guardava `stage_key` perdia a
-        // barra de progresso.
+        // A trilha é indexada por uuid; a entry guarda ora o `stage_key`, ora o
+        // próprio uuid — traduz antes de procurar (fallback: já era uuid).
+        const trilha = trilhaPorFunil.get(raw.pipeline_id) ?? [];
         const chaveNaTrilha = !raw.stage_key
           ? null
-          : isSystem
-            ? raw.stage_key
-            : (uuidPorStageKey.get(`${raw.pipeline_id}::${raw.stage_key}`) ?? raw.stage_key);
+          : (uuidPorStageKey.get(`${raw.pipeline_id}::${raw.stage_key}`) ?? raw.stage_key);
         const posicaoNaTrilha = chaveNaTrilha ? trilha.indexOf(chaveNaTrilha) : -1;
 
         const dealId = (raw as { deal_id?: string | null }).deal_id ?? null;

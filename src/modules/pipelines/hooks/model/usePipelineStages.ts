@@ -484,7 +484,6 @@ export function useDeletePipelineStage() {
       if (variables.pipelineId) {
         queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipelineId] });
         queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipelineId] });
-        queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipelineId] });
         queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipelineId] });
         queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipelineId] });
         queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", variables.pipelineId] });

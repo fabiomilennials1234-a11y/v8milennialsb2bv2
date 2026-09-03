@@ -42,6 +42,12 @@ vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({
   useTemporaryFunnels: () => ({ data: temporaryRef.value, isLoading: temporaryRef.loading }),
 }));
 
+// Registro único `pipelines` — de onde saem cor/ícone reais (SCRUM-637).
+const pipelinesRef: { value: unknown[] } = { value: [] };
+vi.mock("@/modules/pipelines/hooks/model/usePipelines", () => ({
+  usePipelines: () => ({ data: pipelinesRef.value, isLoading: false }),
+}));
+
 // ── Dependências do FunnelSwitcher ──────────────────────────────────────────
 const navigate = vi.fn();
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
@@ -82,6 +88,7 @@ beforeEach(() => {
   permanentRef.loading = false;
   temporaryRef.value = [];
   temporaryRef.loading = false;
+  pipelinesRef.value = [];
 });
 
 describe("useFunnelOptions — o que entra na navegação", () => {
@@ -95,6 +102,19 @@ describe("useFunnelOptions — o que entra na navegação", () => {
     ]);
     expect(result.current.options[0].path).toBe("/pipe-whatsapp");
     expect(result.current.options[0].group).toBe("estrutural");
+  });
+
+  it("a cor vem do registro `pipelines` — funil de sistema personalizado reflete (SCRUM-637)", () => {
+    pipelinesRef.value = [
+      { id: "p1", slug: "whatsapp", color: "#ff0000", icon: "target", is_active: true },
+    ];
+
+    const { result } = renderHook(() => useFunnelOptions());
+
+    expect(result.current.options[0].color).toBe("#ff0000");
+    // Sem linha no registro (org ainda carregando), cai no fallback neutro —
+    // nunca mais na tabela hardcoded por espécie.
+    expect(result.current.options[1].color).toBe("#64748b");
   });
 
   it("mantém a Carteira FORA — upsell é faceta do lead, não funil (D6)", () => {

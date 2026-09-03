@@ -37,7 +37,9 @@ const PORTAS = [
   { rotulo: "funil WhatsApp (Oportunidades)", arquivo: "src/modules/pipelines/pages/PipeWhatsapp.tsx" },
   { rotulo: "funil Confirmação (Agendamentos)", arquivo: "src/modules/pipelines/pages/PipeConfirmacao.tsx" },
   { rotulo: "funil Propostas (fechamento)", arquivo: "src/modules/pipelines/pages/PipePropostas.tsx" },
-  { rotulo: "funil customizado", arquivo: "src/modules/pipelines/pages/CustomPipeline.tsx" },
+  // SCRUM-637: a página CustomPipeline.tsx morreu (rota já redirecionava
+  // desde a 632) — a porta do funil custom é a página unificada.
+  { rotulo: "página unificada /funil/:slug", arquivo: "src/modules/pipelines/pages/Funil.tsx" },
   { rotulo: "aba de Leads", arquivo: "src/modules/leads/pages/Leads.tsx" },
 ];
 

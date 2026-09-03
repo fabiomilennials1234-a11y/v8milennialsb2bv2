@@ -20,7 +20,6 @@ import {
   Fuel,
   Gauge,
   GitBranch,
-  Kanban,
   ListChecks,
   MoreHorizontal,
   Package,
@@ -67,15 +66,9 @@ export interface NavNode {
   children?: NavNode[];
 }
 
-/**
- * Ícone de funil na lateral — um só, para todos.
- *
- * Havia dois mapas aqui: um por `pipe_type` (WhatsApp/Agendamentos/Propostas
- * ganhavam ícones fixos) e outro com os ícones que um funil customizado pode
- * escolher. Juntos, faziam os funis da org parecerem de outra espécie que os
- * criados pelo usuário. Não são: são todos funis.
- */
-export const FUNIL_ICON: React.ElementType = Kanban;
+// `FUNIL_ICON` (ícone fixo para todo funil) morreu na SCRUM-637: a lateral
+// resolve por `funilIcon(pipelines.icon)` — a identidade que o USUÁRIO deu ao
+// funil, igual para os de fábrica e os criados por ele.
 
 /**
  * COMPAT (SCRUM-632, expand-contract): mapeia os funis de SISTEMA para as

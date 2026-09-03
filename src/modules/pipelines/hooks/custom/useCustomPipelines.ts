@@ -778,7 +778,6 @@ export function useCreateCustomPipelineStage() {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
       // Chaves unificadas por id (SCRUM-633/636) — a página /funil/:slug lê por elas.
       queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
-      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }
@@ -821,7 +820,6 @@ export function useUpdateCustomPipelineStage() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
       queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
-      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }
@@ -877,7 +875,6 @@ export function useReorderCustomPipelineStages() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
       queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipeline_id] });
-      queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipeline_id] });
     },
   });
 }

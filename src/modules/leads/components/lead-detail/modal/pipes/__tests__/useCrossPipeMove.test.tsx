@@ -37,7 +37,6 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 const WHATSAPP: CrossPipeMoveTarget = {
   kind: "system",
-  pipeTable: "pipe_whatsapp",
   pipeId: "entry-1",
   stageKey: "abordado",
   stageLabel: "Abordado",
@@ -91,8 +90,10 @@ describe("useCrossPipeMove — invalidação (funil system)", () => {
         ["lead-pipes", "lead-1"],
         ["lead-timeline", "lead-1"],
         ["pipe_whatsapp"],
-        ["pipeline-page", "whatsapp"],
-        ["pipeline-stage-counts", "whatsapp"],
+        ["pipe_confirmacao"],
+        ["pipe_propostas"],
+        ["pipeline-page"],
+        ["pipeline-stage-counts"],
         ["leads-deals"],
         ["leads-sales-metrics"],
       ]),
@@ -103,32 +104,15 @@ describe("useCrossPipeMove — invalidação (funil system)", () => {
     // O contador (`pipeline-stage-counts`) não tem assinatura de Realtime e tem
     // staleTime 30s: sem esta invalidação ele fica errado até a janela reganhar
     // foco. O card se curaria via Realtime em ~2s; o número, não.
+    //
+    // SCRUM-637: o alvo system não carrega mais a view — a invalidação é por
+    // PREFIXO, que casa tanto as chaves por slug do board legado quanto as por
+    // pipeline_id da página unificada (match parcial do TanStack v5).
     const { keys, move } = setup();
     await move(WHATSAPP);
 
-    expect(has(keys, ["pipeline-page", "whatsapp"])).toBe(true);
-    expect(has(keys, ["pipeline-stage-counts", "whatsapp"])).toBe(true);
-  });
-
-  it("deriva o slug do board a partir da view em cada funil system", async () => {
-    const cases = [
-      { pipeTable: "pipe_confirmacao", slug: "confirmacao" },
-      { pipeTable: "pipe_propostas", slug: "propostas" },
-    ] as const;
-
-    for (const { pipeTable, slug } of cases) {
-      const { keys, move } = setup();
-      await move({
-        kind: "system",
-        pipeTable,
-        pipeId: "entry-9",
-        stageKey: "etapa",
-        stageLabel: "Etapa",
-      });
-
-      expect(has(keys, ["pipeline-page", slug])).toBe(true);
-      expect(has(keys, ["pipeline-stage-counts", slug])).toBe(true);
-    }
+    expect(has(keys, ["pipeline-page"])).toBe(true);
+    expect(has(keys, ["pipeline-stage-counts"])).toBe(true);
   });
 
   it("não toca carteira — nenhuma mutação de card escreve em upsell_*", async () => {

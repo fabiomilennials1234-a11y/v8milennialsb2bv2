@@ -225,12 +225,11 @@ export { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "./hooks/useTa
 export type { Tag, TagInsert, TagUpdate } from "./hooks/useTags";
 
 // ── Components: lead-detail (modal redesign — ADR-2026-05-17) ──────────────
-// V2 é o modal redesenhado (feature-flag `new_lead_modal_v2`). V1 = legado.
+// Sempre V2 desde a SCRUM-637 (V1 demolido; 108/108 orgs já migradas).
 // LeadDetailSheet é alias de LeadDetailDialog para compat com call sites antigos.
 export {
   LeadDetailDialog,
   LeadDetailSheet,
-  LeadDetailDialogV1,
   LeadDetailDialogV2,
   LeadPanelProvider,
   useLeadSheet,

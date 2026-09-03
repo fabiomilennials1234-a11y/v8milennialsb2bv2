@@ -913,7 +913,7 @@ describe("useLeadAllPipelines", () => {
       const qualificacao = data[0];
       expect(qualificacao.type).toBe("standard");
       if (qualificacao.type === "standard") {
-        expect(qualificacao.pipeType).toBe("qualificacao");
+        expect(qualificacao.pipeType).toBe("whatsapp");
         expect(qualificacao.pipeId).toBe("pw1");
         expect(qualificacao.currentStage).toBe("respondeu");
       }
@@ -949,7 +949,7 @@ describe("useLeadAllPipelines", () => {
         try {
           await result.current.mutateAsync({
             leadId: "l1",
-            pipeType: "qualificacao",
+            pipeType: "whatsapp",
             stageId: "novo_lead",
           });
         } catch { /* ok */ }
@@ -1027,7 +1027,7 @@ describe("useLeadAllPipelines", () => {
         try {
           await result.current.mutateAsync({
             pipeId: "pw1",
-            pipeType: "qualificacao",
+            pipeType: "whatsapp",
             newStageId: "agendado",
           });
         } catch { /* ok */ }
@@ -1103,7 +1103,7 @@ describe("useLeadAllPipelines", () => {
 
       await act(async () => {
         try {
-          await result.current.mutateAsync({ pipeId: "pw1", pipeType: "qualificacao" });
+          await result.current.mutateAsync({ pipeId: "pw1", pipeType: "whatsapp" });
         } catch { /* ok */ }
       });
 

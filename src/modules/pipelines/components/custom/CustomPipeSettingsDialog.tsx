@@ -103,14 +103,6 @@ interface CustomPipeSettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   pipeline: CustomPipeline;
   stages: CustomPipelineStage[];
-  /**
-   * @deprecated SCRUM-636 — a exclusão vive DENTRO do diálogo agora (aba
-   * "Geral" → `FunnelIdentitySection` → `DeletePipelineDialog`, com impacto,
-   * bloqueio por cards invasores e o substituto do funil padrão da org).
-   * Aceito e ignorado para as páginas antigas compilarem até a demolição
-   * (SCRUM-637); os AlertDialog inline delas viram código morto.
-   */
-  onRequestDelete?: () => void;
 }
 
 /**
@@ -128,7 +120,6 @@ export function CustomPipeSettingsDialog({
   onOpenChange,
   pipeline,
   stages,
-  onRequestDelete: _onRequestDelete,
 }: CustomPipeSettingsDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
