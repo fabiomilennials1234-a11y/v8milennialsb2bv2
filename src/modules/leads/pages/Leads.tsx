@@ -94,6 +94,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
 import { trackModuleVisit } from "@/lib/analytics";
+import { checkPhoneBeforeCreate, phoneConflictMessage } from "../lib/phone-conflict";
 
 const originLabels: Record<string, string> = {
   whatsapp: "WhatsApp",
@@ -524,6 +525,24 @@ function LeadsInner() {
         await updateLead.mutateAsync({ id: editingLead.id, ...payload });
         toast.success("Lead atualizado!");
       } else {
+        // Mesma pré-checagem do LeadModal: quem barra é o índice único do banco,
+        // e a checagem daqui usa a mesma chave. Sem isso, este formulário —
+        // que é o da página de Leads, não o modal — continuava despejando a
+        // mensagem crua do Postgres na tela.
+        const phoneGate = await checkPhoneBeforeCreate(
+          currentTeamMember.organization_id,
+          formData.phone
+        );
+
+        if (phoneGate?.kind === "block") {
+          toast.error(phoneGate.message, { duration: 10000 });
+          return;
+        }
+
+        if (phoneGate?.kind === "confirm" && !window.confirm(phoneGate.message)) {
+          return;
+        }
+
         const newLead = await createLead.mutateAsync(payload);
 
         // Insert lead into selected funnel/stage
@@ -561,7 +580,18 @@ function LeadsInner() {
         fullError: error,
       });
       
-      if (error?.code === '42501' || error?.message?.includes('permission denied')) {
+      // Rede de segurança do índice único: a pré-checagem pode não ter visto o
+      // conflito (duas abas, webhook no meio do caminho, ou edição trocando o
+      // telefone — esta última nem passa pela pré-checagem).
+      const phoneMessage = await phoneConflictMessage(
+        error,
+        currentTeamMember?.organization_id,
+        formData.phone
+      );
+
+      if (phoneMessage) {
+        toast.error(phoneMessage, { duration: 10000 });
+      } else if (error?.code === '42501' || error?.message?.includes('permission denied')) {
         toast.error("Erro de permissão. Verifique as políticas RLS no Supabase.");
       } else if (error?.code === '23503' || error?.message?.includes('foreign key')) {
         toast.error("Erro: organização não encontrada. Execute o script SQL de vinculação.");

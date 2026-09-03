@@ -34,6 +34,7 @@ import {
   type CustomField,
 } from "../../hooks/useLeadCustomFields";
 import { useLeadHistory } from "../../hooks/useLeadTimeline";
+import { checkPhoneBeforeCreate, phoneConflictMessage } from "../../lib/phone-conflict";
 import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { usePipeOps } from "../../pipe-ops";
 import { destinosDeSistema } from "@/contracts/pipe";
@@ -351,24 +352,41 @@ export function LeadModal({
           logAction({ leadId: lead.id, action: "responsible_assigned", description: `Responsavel alterado para "${responsibleName}"` });
         }
       } else {
-        // Dedup check: verify if lead with same phone/email already exists
-        if (formData.phone || formData.email) {
-          const filters: string[] = [];
-          if (formData.phone) filters.push(`phone.eq.${formData.phone}`);
-          if (formData.email) filters.push(`email.eq.${formData.email}`);
+        // Dedup de telefone: quem barra é o índice único do banco, então a
+        // checagem daqui usa a MESMA chave (`normalized_phone`). Avisar sobre
+        // algo que o banco aceita, ou deixar passar o que ele recusa, é o que
+        // fazia o cadastro morrer num erro cru.
+        const phoneGate = await checkPhoneBeforeCreate(
+          currentTeamMember.organization_id,
+          formData.phone
+        );
 
+        if (phoneGate?.kind === "block") {
+          // Bloqueio de verdade: insistir só produziria o 23505.
+          toast.error(phoneGate.message, { duration: 10000 });
+          return;
+        }
+
+        // Lixeira não ocupa o índice — dá pra criar, mas o usuário precisa saber
+        // que o lead citado existe e some da lista.
+        if (phoneGate?.kind === "confirm" && !window.confirm(phoneGate.message)) {
+          return;
+        }
+
+        // E-mail não tem índice único: segue como aviso, mas agora ignorando a
+        // lixeira, que não impede nada.
+        if (formData.email) {
           const { data: existingLeads } = await supabase
             .from("leads")
-            .select("id, name, phone, email")
+            .select("id, name, email")
             .eq("organization_id", currentTeamMember.organization_id)
-            .or(filters.join(","))
+            .eq("email", formData.email)
+            .is("deleted_at", null)
             .limit(1);
 
           if (existingLeads && existingLeads.length > 0) {
-            const existing = existingLeads[0];
-            const matchField = existing.phone === formData.phone ? "telefone" : "email";
             const confirmed = window.confirm(
-              `Já existe um lead com este ${matchField}: "${existing.name}". Deseja criar mesmo assim?`
+              `Já existe um lead com este email: "${existingLeads[0].name}". Deseja criar mesmo assim?`
             );
             if (!confirmed) return;
           }
@@ -424,7 +442,21 @@ export function LeadModal({
         fullError: error,
       });
 
-      if (error?.code === '42501' || error?.message?.includes('permission denied')) {
+      // O índice único do banco é a garantia real — a pré-checagem só antecipa.
+      // Ela pode não ter visto o conflito: duas abas cadastrando junto, lead
+      // criado por webhook no meio do caminho, ou EDIÇÃO trocando o telefone
+      // para um número já ocupado (esse caminho nem passa pela pré-checagem).
+      // Nesses casos o usuário via a mensagem crua do Postgres, sem saber qual
+      // lead segura o número.
+      const phoneMessage = await phoneConflictMessage(
+        error,
+        currentTeamMember?.organization_id,
+        formData.phone
+      );
+
+      if (phoneMessage) {
+        toast.error(phoneMessage, { duration: 10000 });
+      } else if (error?.code === '42501' || error?.message?.includes('permission denied')) {
         toast.error("Erro de permissao. Verifique as politicas RLS no Supabase.");
       } else if (error?.code === '23503' || error?.message?.includes('foreign key')) {
         toast.error("Erro: organizacao nao encontrada. Execute o script SQL de vinculacao.");
