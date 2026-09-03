@@ -41,7 +41,7 @@ vi.mock("../../supabase/functions/_shared/copilot/cancellation.ts", () => ({
   logCopilotCancellation: vi.fn(),
 }));
 
-import { checkDocumentAlreadySent, executeSendDocument, resolveDocumentIdByName } from "../../supabase/functions/_shared/actions/send-document.ts";
+import { checkDocumentAlreadySent, executeSendDocument, resolveDocumentIdByName, resolveDocumentIdByNearMiss } from "../../supabase/functions/_shared/actions/send-document.ts";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -430,5 +430,43 @@ describe("executeSendDocument — resolução do document_id", () => {
     expect(result.success).toBe(false);
     expect(result.error).not.toContain("invalid");
     expect(result.error).toContain("not found");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* UUID quase-certo — o modelo trocou um dígito                        */
+/* ------------------------------------------------------------------ */
+
+describe("resolveDocumentIdByNearMiss", () => {
+  // Caso real, Forever Bella 02/09/2026: o modelo pediu `…-3e3a-…` duas vezes;
+  // o arquivo é `…-3f3a-…`. Duas ações morreram em dead_letter depois de 3
+  // retries — retry nunca conserta um dígito errado.
+  const REAL = "c3213b6b-3f3a-4629-83d4-f4fdb68eb0be";
+  const TYPO = "c3213b6b-3e3a-4629-83d4-f4fdb68eb0be";
+
+  const withDocs = (ids: string[]) =>
+    buildSupabaseMockMultiTable({
+      copilot_agent_documents: { data: ids.map((id) => ({ id })), error: null },
+    });
+
+  it("resgata o documento quando exatamente UM está a um caractere de distância", async () => {
+    const supabase = withDocs([REAL, "0afa30d8-9e9a-4981-95d8-eda2bc9208ba"]);
+    expect(await resolveDocumentIdByNearMiss(supabase as any, "org-111", TYPO)).toBe(REAL);
+  });
+
+  it("devolve null com DOIS candidatos a um caractere — mandar o arquivo errado é pior", async () => {
+    const ambiguous = "c3213b6b-3a3a-4629-83d4-f4fdb68eb0be";
+    const supabase = withDocs([REAL, ambiguous]);
+    expect(await resolveDocumentIdByNearMiss(supabase as any, "org-111", TYPO)).toBeNull();
+  });
+
+  it("não resgata quando a distância é maior que um caractere", async () => {
+    const supabase = withDocs(["c3213b6b-3f3a-4629-83d4-f4fdb68eb0ff"]);
+    expect(await resolveDocumentIdByNearMiss(supabase as any, "org-111", TYPO)).toBeNull();
+  });
+
+  it("devolve null quando a org não tem documento nenhum", async () => {
+    const supabase = withDocs([]);
+    expect(await resolveDocumentIdByNearMiss(supabase as any, "org-111", TYPO)).toBeNull();
   });
 });
