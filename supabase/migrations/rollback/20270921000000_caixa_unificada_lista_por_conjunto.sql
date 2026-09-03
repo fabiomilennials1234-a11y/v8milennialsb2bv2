@@ -1,4 +1,4 @@
--- ROLLBACK pareado da 20270920000000 (SCRUM-649).
+-- ROLLBACK pareado da 20270921000000 (SCRUM-649).
 --
 -- Duas metades, e a segunda é a que importa:
 --

@@ -467,7 +467,7 @@
 #      `authenticated` manteve EXECUTE após o REPLACE.
 
 #  40. caixa_unificada_lista_por_conjunto_test.sql — a Caixa de Entrada
-#      Unificada (SCRUM-649/SCRUM-657, migration 20270920000000). As duas
+#      Unificada (SCRUM-649/SCRUM-657, migration 20270921000000). As duas
 #      listas de conversa passam a aceitar um CONJUNTO de Instances, e as
 #      funções são IRMÃS: nenhum DROP, nenhum CREATE OR REPLACE nas atuais.
 #      O bloco (R) é quem defende essa decisão — assinatura, sobrecarga única,

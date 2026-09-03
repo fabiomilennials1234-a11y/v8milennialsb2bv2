@@ -11,7 +11,7 @@
 Duas coisas, nesta ordem, e só isso:
 
 1. **Aplicar a migration**
-   `supabase/migrations/20270920000000_caixa_unificada_lista_por_conjunto.sql`
+   `supabase/migrations/20270921000000_caixa_unificada_lista_por_conjunto.sql`
    Cria TRÊS funções novas e não toca em nenhuma existente (`DROP: 0` no arquivo
    inteiro):
    - `public.whatsapp_readable_instance_ids(uuid, uuid[])`
@@ -62,7 +62,7 @@ bash scripts/supabase-branch.sh create w1-caixa-unificada
 #    ⚠️ nunca com o checkout linkado: config.toml aponta para PRODUÇÃO
 psql "$BRANCH_DB_URL" \
   --no-psqlrc --quiet --variable ON_ERROR_STOP=1 \
-  --file supabase/migrations/20270920000000_caixa_unificada_lista_por_conjunto.sql
+  --file supabase/migrations/20270921000000_caixa_unificada_lista_por_conjunto.sql
 
 # 3. rodar a suíte
 DATABASE_URL="$BRANCH_DB_URL" \

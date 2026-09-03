@@ -1,7 +1,7 @@
 -- supabase/tests/caixa_unificada_lista_por_conjunto_test.sql
 --
 -- SCRUM-657 (subtarefa de SCRUM-649 / épico SCRUM-648) — pgTAP das três funções
--- criadas por `20270920000000_caixa_unificada_lista_por_conjunto.sql`:
+-- criadas por `20270921000000_caixa_unificada_lista_por_conjunto.sql`:
 --
 --   public.whatsapp_readable_instance_ids(uuid, uuid[])
 --   public.get_whatsapp_conversation_list_multi(18 args)
