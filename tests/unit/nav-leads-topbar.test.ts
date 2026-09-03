@@ -23,12 +23,22 @@ import {
   SIDEBAR_PRIMARY,
   PITSTOP_GROUPS,
 } from "../../src/modules/platform/lib/navigation-model";
+import { funisDeSistemaNavegaveis } from "../../src/contracts/pipe/nome-do-funil";
 
 const fonteModel = readFileSync(
   resolve(__dirname, "../../src/modules/platform/hooks/useNavigationModel.ts"),
   "utf-8",
 );
 const fonteApp = readFileSync(resolve(__dirname, "../../src/App.tsx"), "utf-8");
+// Os outros dois consumidores da mesma regra de navegação.
+const fonteHub = readFileSync(
+  resolve(__dirname, "../../src/modules/pipelines/pages/FunisHub.tsx"),
+  "utf-8",
+);
+const fonteSeletor = readFileSync(
+  resolve(__dirname, "../../src/modules/pipelines/lib/funnel-nav.ts"),
+  "utf-8",
+);
 
 interface ItemDeMenu {
   label: string;
@@ -95,10 +105,33 @@ describe("Carteira saiu da navegação", () => {
   });
 
   it("o dropdown de Funis também não recebe a Carteira de volta pelo display config", () => {
-    // Os funis da lateral vêm de `usePipelineDisplayConfig`, que ainda entrega
-    // o pipe `upsell`. O filtro é o que impede a porta de reaparecer sozinha
-    // para quem tem a Carteira configurada.
-    expect(fonteModel).toMatch(/\.filter\(\(c\) => c\.pipe_type !== "upsell"\)/);
+    // Os funis da navegação vêm de `usePipelineDisplayConfig`, que ainda
+    // entrega o pipe `upsell`. É esta regra que impede a porta de reaparecer
+    // sozinha para quem tem a Carteira configurada.
+    //
+    // Antes isto era um `toMatch` no filtro escrito à mão dentro de
+    // `useNavigationModel`. Provava a lateral e só ela — e foi exatamente por
+    // isso que o hub `/funis`, que tinha a SUA cópia do filtro sem o `upsell`,
+    // pôde listar um card "Carteira" durante todo esse tempo sem nenhum teste
+    // vermelho. A regra agora tem um dono; a asserção segue o dono.
+    const configs = [
+      { pipe_type: "upsell", display_name: "Carteira", is_visible: true, position: 4 },
+      { pipe_type: "whatsapp", display_name: "Oportunidades", is_visible: true, position: 1 },
+    ];
+    const navegaveis = funisDeSistemaNavegaveis(configs, {
+      mergeDeOportunidadesAtivo: false,
+    });
+    expect(navegaveis.map((c) => c.pipe_type)).toEqual(["whatsapp"]);
+  });
+
+  it("os TRÊS consumidores usam a regra única — ninguém refaz o filtro na mão", () => {
+    // A lateral, o hub `/funis` e o seletor da faixa desenham a mesma lista.
+    // Enquanto cada um carregava a própria cópia do filtro, bastava um esquecer
+    // o `upsell` para a Carteira voltar só naquela tela.
+    for (const fonte of [fonteModel, fonteHub, fonteSeletor]) {
+      expect(fonte).toMatch(/funisDeSistemaNavegaveis\(/);
+      expect(fonte).not.toMatch(/\.filter\(\(c\) => c\.pipe_type !== "upsell"\)/);
+    }
   });
 });
 

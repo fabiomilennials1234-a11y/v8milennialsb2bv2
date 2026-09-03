@@ -26,7 +26,10 @@ export function useUpsellCampanhas() {
       if (!organizationId) return [];
       const { data, error } = await supabase
         .from("upsell_campanhas")
-        .select("*, client:upsell_clients(id, name, company, potencial, is_active), closer:team_members(id, name)")
+        // `external_id` = código do cliente no ERP, exibido como prefixo do nome
+        // no card (`erpCode`). Projeção explícita: sem ele o card da campanha
+        // seria o único da Carteira sem o código.
+        .select("*, client:upsell_clients(id, name, company, potencial, is_active, external_id), closer:team_members(id, name)")
         .eq("organization_id", organizationId)
         .order("created_at", { ascending: false });
 

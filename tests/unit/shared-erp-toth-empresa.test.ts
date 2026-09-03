@@ -182,10 +182,12 @@ describe("colunas de escrita", () => {
       phone: null,
     };
     expect(clientEnrichmentColumns(omie)).toEqual({});
-    expect(leadEnrichmentColumns(omie, "omie")).toEqual({});
+    // O código do ERP é a exceção: todo adapter produz `externalId`, e é ele que
+    // faz a tela do lead mostrar "1 - X" sem join com `upsell_clients`.
+    expect(leadEnrichmentColumns(omie, "omie")).toEqual({ erp_code: "1" });
   });
 
-  it("lead recebe só segmento e UF, com a procedência carimbada", () => {
+  it("lead recebe segmento, UF e código do ERP, com a procedência carimbada", () => {
     const c = mapTothClienteToCanonical(cliente(), { empresa: "CAFE JURERE" });
     expect(leadEnrichmentColumns(c, "toth")).toEqual({
       segment: "TELEVENDAS-VAREJO",
@@ -193,7 +195,15 @@ describe("colunas de escrita", () => {
       // 🔴 `erp`, não `erp_toth`: `leads.uf_source` tem CHECK com vocabulário
       // fechado, e o valor composto derrubou 4 criações de cliente em produção.
       uf_source: "erp",
+      // Identidade, não nome: `leads.name` continua "…" limpo, senão `{{nome}}`
+      // do disparo passaria a dizer "Olá 4242 - Fulano".
+      erp_code: "4242",
     });
+  });
+
+  it("código do ERP não entra em `leads.name`", () => {
+    const c = mapTothClienteToCanonical(cliente(), { empresa: "CAFE JURERE" });
+    expect(c.name).not.toContain(c.externalId);
   });
 
   it("sem UF, não carimba procedência de UF", () => {

@@ -6,8 +6,12 @@
  *
  * This hook owns ONLY the business logic:
  *   - Patch messages cache (INSERT/UPDATE/DELETE)
- *   - Patch contacts sidebar (last_message, timestamp, unread)
+ *   - Patch contacts sidebar (last_message, timestamp, unread) + REORDENAR
  *   - Dedup by message_id
+ *
+ * A reordenação não é detalhe: o patch da sidebar grava o `last_message_time`
+ * novo no mesmo índice, e sem `sortContactsByRecency` a conversa que acabou de
+ * receber mensagem não sobe — o "chat não atualiza" que o cliente relata.
  */
 import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +22,7 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
 import { chatQueryKeys } from "./shared/queryKeys";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
+import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
 
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
 
@@ -98,7 +103,7 @@ export function useWhatsAppMessagesRealtime(
               return prev;
             }
 
-            return prev.map((contact, idx) => {
+            const patched = prev.map((contact, idx) => {
               if (idx !== existingIdx) return contact;
 
               const msgTime = new Date(message.timestamp).getTime();
@@ -125,6 +130,14 @@ export function useWhatsAppMessagesRealtime(
                     : contact.unread_count,
               };
             });
+
+            // O patch acima grava o `last_message_time` novo NO MESMO ÍNDICE.
+            // Sem reordenar, a conversa que acabou de receber mensagem fica
+            // onde estava — e com a lista virtualizada (>50 conversas), fora da
+            // janela visível, não muda um pixel. É o "chat não atualiza" do
+            // cliente. A ordem tem que ser a mesma que a RPC devolve:
+            // `ORDER BY p.last_message_time DESC`.
+            return sortContactsByRecency(patched);
           });
         }
       }

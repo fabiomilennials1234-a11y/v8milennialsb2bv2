@@ -5,6 +5,7 @@ import {
   NOME_DE_FABRICA,
   PIPE_TYPE_PARA_DESTINO,
   destinosDeSistema,
+  funisDeSistemaNavegaveis,
   nomeDoFunil,
 } from "@/contracts/pipe";
 import { SYSTEM_PIPE_CATALOG } from "../hooks/config/usePipelineDisplayConfig";
@@ -105,6 +106,55 @@ describe("destinosDeSistema", () => {
   it("org sem funil de sistema devolve lista vazia, e isso é uma resposta", () => {
     expect(destinosDeSistema([])).toEqual([]);
     expect(destinosDeSistema(undefined)).toEqual([]);
+  });
+});
+
+describe("funisDeSistemaNavegaveis", () => {
+  const semMerge = { mergeDeOportunidadesAtivo: false };
+
+  it("nunca lista a Carteira — ela tem porta própria e não tem funil por trás", () => {
+    // A regressão real: o hub `/funis` era o único dos três consumidores que
+    // não filtrava `upsell`, e desenhava um card "Carteira" apontando para
+    // `/funil/upsell` — rota sem linha em `pipelines` para resolver.
+    const configs = [cfg("upsell", "Carteira"), cfg("whatsapp", "Oportunidades")];
+    expect(funisDeSistemaNavegaveis(configs, semMerge).map((c) => c.pipe_type)).toEqual([
+      "whatsapp",
+    ]);
+  });
+
+  it("omite funil oculto e respeita a ordem que a org deu", () => {
+    const configs = [
+      cfg("propostas", "Orçamentos", { position: 3 }),
+      cfg("confirmacao", "Agendamentos", { position: 2, is_visible: false }),
+      cfg("whatsapp", "Oportunidades", { position: 1 }),
+    ];
+    expect(funisDeSistemaNavegaveis(configs, semMerge).map((c) => c.pipe_type)).toEqual([
+      "whatsapp",
+      "propostas",
+    ]);
+  });
+
+  it("some com Agendamentos quando o merge de oportunidades está ligado (ADR-0004)", () => {
+    const configs = [cfg("whatsapp", "Oportunidades"), cfg("confirmacao", "Agendamentos")];
+    expect(
+      funisDeSistemaNavegaveis(configs, { mergeDeOportunidadesAtivo: true }).map(
+        (c) => c.pipe_type,
+      ),
+    ).toEqual(["whatsapp"]);
+  });
+
+  it("não reordena o array de entrada — ele é o cache do react-query", () => {
+    const configs = [
+      cfg("propostas", "Orçamentos", { position: 3 }),
+      cfg("whatsapp", "Oportunidades", { position: 1 }),
+    ];
+    funisDeSistemaNavegaveis(configs, semMerge);
+    expect(configs.map((c) => c.pipe_type)).toEqual(["propostas", "whatsapp"]);
+  });
+
+  it("org sem funil de sistema devolve lista vazia", () => {
+    expect(funisDeSistemaNavegaveis([], semMerge)).toEqual([]);
+    expect(funisDeSistemaNavegaveis(undefined, semMerge)).toEqual([]);
   });
 });
 

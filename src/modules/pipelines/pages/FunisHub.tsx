@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { CreateFunilOuCampanhaModal } from "@/modules/pipelines/components/funis/CreateFunilOuCampanhaModal";
 import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
+import { funisDeSistemaNavegaveis } from "@/contracts/pipe/nome-do-funil";
 import { funilIcon } from "../lib/funil-icons";
 // Mesmo path map compat do seletor da faixa (morre no flip do redirect).
 import { FUNNEL_FALLBACK_COLOR } from "../lib/funnel-nav";
@@ -62,10 +63,12 @@ export default function FunisHub() {
 
   const isLoading = configLoading || permanentLoading || temporaryLoading;
 
-  // Structural funnels — only visible ones; Agendamentos some quando o merge está ON (ADR-0004)
-  const visibleStructural = displayConfigs.filter(
-    (c) => c.is_visible && !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")),
-  );
+  // Funis de sistema navegáveis — regra ÚNICA em contracts. O hub era o único
+  // dos três consumidores que não filtrava a Carteira, e por isso listava um
+  // card "Carteira" apontando para `/funil/upsell`, rota sem funil por trás.
+  const visibleStructural = funisDeSistemaNavegaveis(displayConfigs, {
+    mergeDeOportunidadesAtivo: hasFeature("merged_opportunity_funnel"),
+  });
 
   // Encerrado não é categoria, é ESTADO — por isso segue recolhido no fim.
   const activeTemporary = temporaryFunnels.filter((f) => f.status !== "ended");
