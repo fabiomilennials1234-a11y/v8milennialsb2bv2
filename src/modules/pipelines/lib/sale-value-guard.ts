@@ -59,10 +59,22 @@ export function hasUsableSaleValue(value: unknown): boolean {
  * Resolve whether `stageKey` lands in a `won`-role stage.
  *
  * Priority:
- *  1. Governed role `stage_role === 'won'` (canonical, mirrors the DB capture).
- *  2. Pre-governance bridge: an ungoverned stage (role still the default
- *     `open`) flagged `is_final_positive` — the legacy "success" signal.
- *  3. Last resort (no stage config loaded): the legacy key `vendido`.
+ * APENAS o papel governado `stage_role === 'won'`.
+ *
+ * ── Os dois atalhos legados foram removidos no B2d ─────────────────────────
+ * Eram: (2) etapa não-governada com `is_final_positive`, e (3) a chave
+ * `vendido` quando a configuração ainda não tinha carregado.
+ *
+ * Os dois existiam como ponte enquanto a governança por `stage_role` não
+ * cobria todo mundo. Depois do B2d eles deixam de ser ponte e passam a
+ * MENTIR: as 375 etapas de desfecho perdem o papel mas continuam com
+ * `is_final_positive` (126 delas) e continuam se chamando `vendido`. Com os
+ * atalhos de pé, a tela pediria o valor da venda numa coluna que o banco não
+ * registra mais como venda — pedir informação para jogar fora.
+ *
+ * `is_final_positive`/`is_final_negative` permanecem na tabela: são lidos em
+ * 14 arquivos de front e 6 funções SQL para coisas que não têm a ver com
+ * dinheiro. O que muda é que esta regra parou de consultá-los.
  */
 export function isWonStageKey(
   stageKey: string,
@@ -73,16 +85,9 @@ export function isWonStageKey(
     // Config is loaded: trust it. A key absent from the loaded board is not a
     // won stage (and isn't a real move target) — do NOT legacy-fallback here.
     if (!stage) return false;
-    if (stage.stage_role === "won") return true;
-    const ungoverned: StageRole | null | undefined = stage.stage_role;
-    if ((ungoverned == null || ungoverned === "open") && stage.is_final_positive) {
-      return true;
-    }
-    return false;
+    return stage.stage_role === "won";
   }
-  // No stage config loaded → last-resort legacy key so the guard still fires
-  // on the default board before stages hydrate.
-  return stageKey === "vendido";
+  return false;
 }
 
 /**
