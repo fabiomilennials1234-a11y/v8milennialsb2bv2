@@ -1115,8 +1115,19 @@ COMMENT ON FUNCTION public.get_official_whatsapp_conversation_list_multi(
 -- mudança: grant sem escape faz a primeira edge function depurar permissão, que
 -- está certa, em vez do gate, que é a causa.
 
+-- ⚠️ `REVOKE ... FROM PUBLIC` NÃO basta para tirar `service_role`.
+--    Medido na branch de preview em 2026-09-03: sem o REVOKE nominal abaixo, as
+--    três funções nascem com `service_role=X/postgres` no `proacl` — grant
+--    EXPLÍCITO, que o Supabase concede por ALTER DEFAULT PRIVILEGES no schema
+--    `public`. Revogar de PUBLIC não alcança grant nominal, e a suíte pgTAP
+--    reprovou exatamente aqui (asserções S7, S14 e S22), o que é a suíte
+--    fazendo o trabalho dela. Mesma família do incidente da tabela de backup
+--    que nasceu legível por `anon`: o default privilege é a fonte, não o GRANT
+--    de schema.
+
 REVOKE ALL     ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) FROM service_role;
 GRANT  EXECUTE ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.get_whatsapp_conversation_list_multi(
@@ -1125,12 +1136,16 @@ REVOKE ALL ON FUNCTION public.get_whatsapp_conversation_list_multi(
 REVOKE EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(
   uuid, uuid[], integer, timestamptz, uuid[], text[], uuid[], text[], uuid,
   boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(
+  uuid, uuid[], integer, timestamptz, uuid[], text[], uuid[], text[], uuid,
+  boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) FROM service_role;
 GRANT EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(
   uuid, uuid[], integer, timestamptz, uuid[], text[], uuid[], text[], uuid,
   boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) TO authenticated;
 
 REVOKE ALL     ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text) FROM service_role;
 GRANT  EXECUTE ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text) TO authenticated;
 
 -- ── Conferência pós-apply ───────────────────────────────────────────────────
