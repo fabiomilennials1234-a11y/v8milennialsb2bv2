@@ -502,6 +502,35 @@ Deno.serve(
       );
     }
 
+    /**
+     * Recalcula a cadência de compra dos clientes.
+     *
+     * **Org inteira, e de propósito.** Dá para argumentar que só os clientes
+     * tocados nesta volta mudaram — mas a janela RELÊ o passado: um pedido
+     * `NORMAL` vira `FATURADO` dias depois, e só então entra na conta. O
+     * conjunto que "mudou" não é o conjunto que apareceu nas páginas de hoje.
+     * Errar isso deixaria a média velha em quem acabou de faturar, e média
+     * velha é pior que média ausente — ela parece atualizada.
+     *
+     * Custo: uma sentença SQL sobre ~12 mil linhas agregando `upsell_orders`.
+     * Nada trafega para o isolate, que é justamente onde a memória acabou uma
+     * vez nesta integração.
+     */
+    let cadenciaRecalculada = 0;
+    if (stats.created + stats.updated > 0) {
+      const { data: recalc, error: recalcErr } = await admin.rpc(
+        "recompute_erp_order_cadence",
+        { p_organization_id: organizationId, p_client_ids: null },
+      );
+      if (recalcErr) {
+        // Não derruba a execução: os pedidos já estão gravados e a cadência é
+        // derivada — a próxima volta recalcula. Falha aqui não pode perder pedido.
+        if (errors.length < 3) errors.push(`recompute_erp_order_cadence: ${recalcErr.message}`);
+      } else {
+        cadenciaRecalculada = typeof recalc === "number" ? recalc : 0;
+      }
+    }
+
     await admin
       .from("toth_connections")
       .update({
@@ -521,7 +550,13 @@ Deno.serve(
       module: "general",
       action: "toth_sync_pedidos",
       status: "success",
-      payloadSnapshot: { ...stats, stop_reason: stopReason, has_next: hasNext, janela: window },
+      payloadSnapshot: {
+        ...stats,
+        stop_reason: stopReason,
+        has_next: hasNext,
+        janela: window,
+        cadencia_recalculada: cadenciaRecalculada,
+      },
     });
 
     return json(
@@ -535,6 +570,7 @@ Deno.serve(
         incompleto: stopReason === "max_pages" && hasNext !== false,
         has_next: hasNext,
         stats,
+        cadencia_recalculada: cadenciaRecalculada,
         // Pedido de cliente que não está na carteira é o sintoma de rodar fora de
         // ordem: clientes primeiro, pedidos depois.
         ...(documentosTruncados

@@ -175,3 +175,38 @@ describe("AdicionarProdutoDialog — ordem de pintura", () => {
     expect(painel.className).toContain("z-[70]");
   });
 });
+
+describe("AdicionarProdutoDialog — enquadramento", () => {
+  /**
+   * jsdom não calcula layout, então este teste NÃO mede largura — ele guarda a
+   * CLASSE, que é o que segura a largura. O vazamento em si foi medido em
+   * navegador (Vite + Playwright, 1440×900): sem `grid-cols-1` a track do grid
+   * persegue a min-content do nome do produto e passa dos 1000px dentro de um
+   * painel de 460px, jogando campos, total e rodapé para fora da borda.
+   *
+   * A guarda existe porque a regressão é SILENCIOSA: quem apagar o token numa
+   * refatoração passa por lint, typecheck, build e por todos os outros testes
+   * daqui, e o diálogo volta a vazar sem ninguém notar.
+   */
+  it("trava a coluna do grid, senão o nome longo estica o diálogo inteiro", () => {
+    abrir();
+
+    // `grid-cols-1` = `repeat(1, minmax(0,1fr))`: troca o mínimo da track de
+    // `auto` para `0` e desliga o automatic minimum size dos filhos. Sem ele a
+    // coluna implícita é `auto`, e `max-w-[460px]` segura só a caixa do painel.
+    expect(screen.getByRole("dialog").className).toContain("grid-cols-1");
+  });
+
+  it("o nome do produto trunca, e o inteiro continua alcançável no title", async () => {
+    abrir();
+
+    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(await screen.findByText("Progressiva 1L"));
+
+    const nome = await screen.findByTitle("Progressiva 1L");
+    // `truncate` é o que corta; o `title` é a contrapartida — sem ele o resto
+    // do nome não fica em lugar nenhum da tela.
+    expect(nome.className).toContain("truncate");
+    expect(nome.textContent).toBe("Progressiva 1L");
+  });
+});

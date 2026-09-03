@@ -198757,116 +198757,6 @@
       },
       {
         "type": "cycle",
-        "from": "src/modules/pipelines/hooks/model/useFunilFilters.ts",
-        "to": "src/modules/pipelines/components/kanban/KanbanFilterPanel.tsx",
-        "unresolvedTo": "@/modules/pipelines/components/kanban/KanbanFilterPanel",
-        "dependencyTypes": [
-          "aliased",
-          "aliased-tsconfig",
-          "aliased-tsconfig-paths",
-          "local",
-          "type-only",
-          "import"
-        ],
-        "rule": {
-          "severity": "warn",
-          "name": "no-circular-dynamic"
-        },
-        "cycle": [
-          {
-            "name": "src/modules/pipelines/components/kanban/KanbanFilterPanel.tsx",
-            "dependencyTypes": [
-              "aliased",
-              "aliased-tsconfig",
-              "aliased-tsconfig-paths",
-              "local",
-              "type-only",
-              "import"
-            ]
-          },
-          {
-            "name": "src/modules/leads/index.ts",
-            "dependencyTypes": [
-              "aliased",
-              "aliased-tsconfig",
-              "aliased-tsconfig-paths",
-              "local",
-              "import"
-            ]
-          },
-          {
-            "name": "src/modules/leads/components/deal-card/DealCardPanel.tsx",
-            "dependencyTypes": [
-              "local",
-              "export"
-            ]
-          },
-          {
-            "name": "src/modules/leads/components/deal-card/DealCardChecklists.tsx",
-            "dependencyTypes": [
-              "local",
-              "import"
-            ]
-          },
-          {
-            "name": "src/modules/engagement/index.ts",
-            "dependencyTypes": [
-              "aliased",
-              "aliased-tsconfig",
-              "aliased-tsconfig-paths",
-              "local",
-              "import"
-            ]
-          },
-          {
-            "name": "src/modules/engagement/components/agenda/CreateMeetingDialogLazy.tsx",
-            "dependencyTypes": [
-              "local",
-              "export"
-            ]
-          },
-          {
-            "name": "src/modules/engagement/components/agenda/CreateMeetingDialog.tsx",
-            "dependencyTypes": [
-              "local",
-              "dynamic-import"
-            ]
-          },
-          {
-            "name": "src/modules/engagement/components/agenda/LeadPorFunilPicker.tsx",
-            "dependencyTypes": [
-              "local",
-              "import"
-            ]
-          },
-          {
-            "name": "src/modules/pipelines/index.ts",
-            "dependencyTypes": [
-              "aliased",
-              "aliased-tsconfig",
-              "aliased-tsconfig-paths",
-              "local",
-              "import"
-            ]
-          },
-          {
-            "name": "src/modules/pipelines/hooks/model/index.ts",
-            "dependencyTypes": [
-              "local",
-              "export"
-            ]
-          },
-          {
-            "name": "src/modules/pipelines/hooks/model/useFunilFilters.ts",
-            "dependencyTypes": [
-              "local",
-              "export"
-            ]
-          }
-        ]
-      },
-      {
-        "type": "cycle",
         "from": "src/modules/engagement/components/followups/ScheduleFollowUpButton.tsx",
         "to": "src/modules/engagement/components/followups/ScheduleFollowUpModal.tsx",
         "unresolvedTo": "./ScheduleFollowUpModal",
@@ -199052,7 +198942,7 @@
         ]
       }
     ],
-    "error": 2,
+    "error": 4,
     "warn": 106,
     "info": 0,
     "ignore": 0,
@@ -199114,7 +199004,7 @@
         {
           "name": "no-circular",
           "severity": "error",
-          "comment": "Ciclos entre módulos / arquivos quebram tree-shaking e tornam refactor frágil. Resolver via extração de tipo compartilhado ou inversão de dependência. Só conta ciclo 100% estático: `viaOnly` exige que NENHUMA aresta do ciclo seja `import()` dinâmico (esses caem em `no-circular-dynamic`).",
+          "comment": "Ciclos entre m\u00f3dulos / arquivos quebram tree-shaking e tornam refactor fr\u00e1gil. Resolver via extra\u00e7\u00e3o de tipo compartilhado ou invers\u00e3o de depend\u00eancia. S\u00f3 conta ciclo 100% est\u00e1tico: `viaOnly` exige que NENHUMA aresta do ciclo seja `import()` din\u00e2mico (esses caem em `no-circular-dynamic`).",
           "from": {},
           "to": {
             "circular": true,
@@ -199129,7 +199019,7 @@
         {
           "name": "no-circular-dynamic",
           "severity": "warn",
-          "comment": "Ciclo que só se fecha por `import()` dinâmico — tipicamente prefetch de rota ou `React.lazy`. NÃO é ciclo em tempo de carga: o módulo dinâmico só é avaliado quando a Promise resolve, então não há inicialização circular nem quebra de tree-shaking (o bundler já separa em chunk). Fica em `warn` de propósito: sinaliza acoplamento entre módulos sem reprovar o padrão de code-splitting que o projeto usa por decisão de arquitetura. Se um destes aparecer sem envolver rota/lazy, trate como acoplamento de verdade.",
+          "comment": "Ciclo que s\u00f3 se fecha por `import()` din\u00e2mico \u2014 tipicamente prefetch de rota ou `React.lazy`. N\u00c3O \u00e9 ciclo em tempo de carga: o m\u00f3dulo din\u00e2mico s\u00f3 \u00e9 avaliado quando a Promise resolve, ent\u00e3o n\u00e3o h\u00e1 inicializa\u00e7\u00e3o circular nem quebra de tree-shaking (o bundler j\u00e1 separa em chunk). Fica em `warn` de prop\u00f3sito: sinaliza acoplamento entre m\u00f3dulos sem reprovar o padr\u00e3o de code-splitting que o projeto usa por decis\u00e3o de arquitetura. Se um destes aparecer sem envolver rota/lazy, trate como acoplamento de verdade.",
           "from": {},
           "to": {
             "circular": true,
@@ -199144,7 +199034,7 @@
         {
           "name": "module-internals-private",
           "severity": "error",
-          "comment": "Imports entre módulos devem passar pela API pública (`src/modules/<bc>/index.ts`). Importar internals (subpastas) cria acoplamento que o monolito modular existe pra evitar.",
+          "comment": "Imports entre m\u00f3dulos devem passar pela API p\u00fablica (`src/modules/<bc>/index.ts`). Importar internals (subpastas) cria acoplamento que o monolito modular existe pra evitar.",
           "from": {
             "path": "^src/modules/([^/]+)/"
           },
@@ -199156,7 +199046,7 @@
         {
           "name": "no-orphans",
           "severity": "warn",
-          "comment": "Arquivos órfãos (sem importadores) acumulam débito e mascaram código morto. Validar caso a caso — pode ser entry point legítimo, mock, ou candidato a deletar.",
+          "comment": "Arquivos \u00f3rf\u00e3os (sem importadores) acumulam d\u00e9bito e mascaram c\u00f3digo morto. Validar caso a caso \u2014 pode ser entry point leg\u00edtimo, mock, ou candidato a deletar.",
           "from": {
             "orphan": true,
             "pathNot": "(^|/)\\.[^/]+\\.(js|cjs|mjs|ts|json)$|\\.d\\.ts$|(^|/)tsconfig\\.json$|(^|/)package\\.json$|\\.config\\.(js|cjs|mjs|ts)$|^src/main\\.tsx$|^src/vite-env\\.d\\.ts$"

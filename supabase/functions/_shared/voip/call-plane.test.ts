@@ -446,7 +446,10 @@ Deno.test("lead invisível sob a RLS do chamador → lead_not_visible, mesmo exi
   assert(!res.ok);
   assertEquals(res.code, "lead_not_visible");
   // Negou ANTES da reserva: cota não é consumida por lead que não se vê.
-  assertEquals(db.__calls.rpc.filter((c: Record<string, unknown>) => c.name === "fn_voip_call_reserve").length, 0);
+  assertEquals(
+    db.__calls.rpc.filter((c: Record<string, unknown>) => c.name === "fn_voip_call_reserve").length,
+    0,
+  );
 });
 
 Deno.test("membro que NÃO é dono do lead, mas o enxerga, é autorizado", async () => {
