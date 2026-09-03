@@ -17,7 +17,7 @@
  * de render do Dashboard (white-screen daquela org). Caímos no corte UTC de
  * `utc-day.ts` (comportamento pré-fix) — degradação silenciosa, nunca hardcode.
  */
-import { startOfUTCDay, endOfUTCDay } from "@/modules/analytics/lib/utc-day";
+import { startOfUTCDay, endOfUTCDay } from "@/shared/time/utc-day";
 
 interface WallClockParts {
   year: number;
