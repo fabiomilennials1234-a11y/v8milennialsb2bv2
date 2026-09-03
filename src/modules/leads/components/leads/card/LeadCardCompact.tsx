@@ -74,7 +74,6 @@ interface LeadCardCompactProps {
     company?: string | null;
     phone?: string | null;
     email?: string | null;
-    rating?: number;
     tags?: Tag[] | null;
     value?: number | null;
     faturamento?: string | number | null;
@@ -471,11 +470,6 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             <Badge style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}40` }}>
               {origin.label}
             </Badge>
-
-            {/* O calor sem a pílula de 1 a 10: só o corte que muda a ação. */}
-            {lead.rating != null && lead.rating >= 8 && (
-              <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-500">Alto potencial</Badge>
-            )}
 
             {urgency && <Badge className={urgency.className}>{urgency.label}</Badge>}
 

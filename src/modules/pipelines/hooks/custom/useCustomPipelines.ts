@@ -262,7 +262,7 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
         .select(`
           *,
           lead:leads(
-            id, name, company, phone, email, rating, origin, urgency, faturamento, notes,
+            id, name, company, phone, email, origin, urgency, faturamento, notes,
             avatar_url, pre_qualification_tier, qualification_tier,
             responsible:team_members!leads_responsible_id_fkey(id, name, avatar_url),
             sdr:team_members!leads_sdr_id_fkey(id, name, avatar_url),

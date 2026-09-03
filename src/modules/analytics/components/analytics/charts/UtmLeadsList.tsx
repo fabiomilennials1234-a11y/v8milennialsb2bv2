@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Star, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { AnalyticsEmptyState } from "../AnalyticsEmptyState";
 import { AT } from "../analytics-tokens";
 import type { UtmLeadRow } from "@/modules/analytics/hooks/useAnalyticsUtms";
@@ -46,7 +46,6 @@ export function UtmLeadsList({ leads, onOpenLead }: Props) {
                 <th className="text-left font-medium text-muted-foreground py-2 px-2">Entrada</th>
                 <th className="text-left font-medium text-muted-foreground py-2 px-2">Status</th>
                 <th className="text-left font-medium text-muted-foreground py-2 px-2">Responsável</th>
-                <th className="text-center font-medium text-muted-foreground py-2 px-2">Rating</th>
               </tr>
             </thead>
             <tbody>
@@ -75,20 +74,6 @@ export function UtmLeadsList({ leads, onOpenLead }: Props) {
                     </span>
                   </td>
                   <td className="py-2 px-2 text-muted-foreground">{lead.responsible}</td>
-                  <td className="py-2 px-2">
-                    <div className="flex items-center justify-center gap-0.5">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star
-                          key={i}
-                          className={`h-3 w-3 ${
-                            i < lead.rating
-                              ? "fill-yellow-400 text-yellow-400"
-                              : "text-muted-foreground/30"
-                          }`}
-                        />
-                      ))}
-                    </div>
-                  </td>
                 </tr>
               ))}
             </tbody>

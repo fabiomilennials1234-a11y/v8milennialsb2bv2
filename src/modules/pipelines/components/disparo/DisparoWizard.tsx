@@ -58,7 +58,7 @@ import {
 /**
  * The funnel board's live filter, narrowed to the dimensions the "Filtro ativo"
  * audience source can honor — exactly the ones the board resolves SERVER-SIDE
- * (search, responsible, tags). The page-only filters (origin, calor, range, …)
+ * (search, responsible, tags). The page-only filters (origin, range, …)
  * are deliberately absent: they never reach the full result set, so the wizard
  * cannot replay them. Threaded from `PipeWhatsapp` so the wizard count matches
  * the board after the same filter.
@@ -1175,7 +1175,7 @@ function EmptyAudienceHint({
 /**
  * "Filtro ativo" config — a calm helper that states exactly which board filters
  * this source honors (search, responsible, tags — the only ones resolved
- * server-side), with the active ones surfaced as chips. Origin/calor/range are
+ * server-side), with the active ones surfaced as chips. Origin/range are
  * page-only and silently dropped, so we say so plainly: the operator is never
  * surprised that a chip they set on the board isn't applied here.
  */
@@ -1188,7 +1188,7 @@ function FiltroSourcePanel({ active, chips }: { active: boolean; chips: string[]
           <p className="text-[12px] leading-snug text-muted-foreground">
             Honra <span className="text-foreground">busca</span>,{" "}
             <span className="text-foreground">responsável</span> e{" "}
-            <span className="text-foreground">tags</span> do funil. Origem, calor e período ficam só
+            <span className="text-foreground">tags</span> do funil. Origem e período ficam só
             no quadro — não entram aqui.
           </p>
           {active && chips.length > 0 && (

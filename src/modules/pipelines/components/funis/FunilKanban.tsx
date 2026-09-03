@@ -7,7 +7,6 @@ import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/M
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import type { StageData } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { useCanDo } from "@/modules/identity";
-import { useUpdateLead } from "@/modules/leads";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
@@ -33,7 +32,6 @@ export interface FunilEntry {
     company: string | null;
     phone: string | null;
     email: string | null;
-    rating: number | null;
     origin?: string | null;
     urgency?: string | null;
     faturamento?: string | null;
@@ -130,7 +128,6 @@ export function FunilKanban({
   onDeleteAllLeads,
   renderStageBadge,
 }: FunilKanbanProps) {
-  const updateLead = useUpdateLead();
   const createAcaoDoDia = useCreateAcaoDoDia();
   const { allowed: canMovePipe } = useCanDo("move_pipe_record");
   // Workflows pendurados no funil: para custom o trigger_config guarda o
@@ -175,7 +172,6 @@ export function FunilKanban({
       company: lead?.company || null,
       phone: lead?.phone || null,
       email: lead?.email || null,
-      rating: lead?.rating || 0,
       origin: lead?.origin ?? undefined,
       urgency: lead?.urgency || null,
       faturamento: lead?.faturamento ?? null,
@@ -301,9 +297,6 @@ export function FunilKanban({
               if (entry) onClickEntry?.(entry);
             }}
             onRemove={onRemoveEntry ? () => onRemoveEntry(card.id) : undefined}
-            onCalorChange={(calor) => {
-              if (card.leadId) updateLead.mutate({ id: card.leadId, rating: calor });
-            }}
             onQuickAction={(title) => {
               createAcaoDoDia.mutate({ title, lead_id: card.leadId || undefined });
             }}

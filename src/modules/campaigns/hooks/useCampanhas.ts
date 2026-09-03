@@ -192,7 +192,6 @@ export interface CampanhaLead {
     email: string | null;
     faturamento: string | null;
     segment: string | null;
-    rating: number | null;
     origin: string;
     notes: string | null;
     responsible_id: string | null;
@@ -439,7 +438,7 @@ export function useCampanhaLeads(campanhaId: string | undefined) {
         .select(`
           *,
           lead:leads(
-            id, name, company, phone, email, faturamento, segment, rating, origin, notes, responsible_id, closer_id,
+            id, name, company, phone, email, faturamento, segment, origin, notes, responsible_id, closer_id,
             responsible:team_members!leads_responsible_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))
@@ -793,7 +792,7 @@ export function useUpdateCampanhaLead() {
         .select(`
           *,
           lead:leads(
-            id, name, company, phone, email, faturamento, segment, rating, origin, notes, responsible_id, closer_id,
+            id, name, company, phone, email, faturamento, segment, origin, notes, responsible_id, closer_id,
             responsible:team_members!leads_responsible_id_fkey(id, name),
             closer:team_members!leads_closer_id_fkey(id, name),
             lead_tags(tag:tags(id, name, color))

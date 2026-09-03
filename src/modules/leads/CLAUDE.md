@@ -7,7 +7,7 @@
 
 ## Escopo
 
-Lead = pessoa/empresa no sistema. Campos: nome, empresa, telefone, email, origem, rating(1-5 manual), qualification_score(0-100 auto), tags, responsáveis (SDR/Closer/Responsible).
+Lead = pessoa/empresa no sistema. Campos: nome, empresa, telefone, email, origem, qualification_score(0-100 auto), qualification_tier/pre_qualification_tier, tags, responsáveis (SDR/Closer/Responsible). `leads.rating` continua na tabela e na API pública, mas SAIU da interface em 2026-09-03 (o "calor").
 
 Inclui:
 - CRUD de lead

@@ -349,7 +349,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     icon: "Database",
     defaultInstruction: "Sempre que o lead mencionar informacoes relevantes (empresa, cargo, segmento, numero de funcionarios, orcamento, ferramenta atual, etc.), preencha o campo correspondente imediatamente. Extraia dados naturalmente da conversa — nao pergunte 'posso salvar isso?'. Se nao existir campo dedicado para a informacao, registre em notas.",
     parameters: [
-      { key: "standardFields", label: "Campos padrao a preencher", type: "text", placeholder: "Ex: empresa, segmento, urgencia, faturamento, rating" },
+      { key: "standardFields", label: "Campos padrao a preencher", type: "text", placeholder: "Ex: empresa, segmento, urgencia, faturamento" },
       { key: "customFields", label: "Campos custom a preencher", type: "text", placeholder: "Ex: Orcamento, Ferramenta Atual, Qtd Funcionarios" },
     ],
   },

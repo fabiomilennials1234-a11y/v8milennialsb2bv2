@@ -44,7 +44,7 @@ src/modules/carteira/
 ├── components/
 │   ├── client/         # ex-src/components/carteira/ (25 files — CarteiraClient*, ClienteX*, OrderApprovalCard, NewOrderModal, HealthSparkline, RevenueChart, AnalyticsKPICards, ...)
 │   ├── upsell/         # ex-src/components/upsell/ (13 files — UpsellBaseKanban, UpsellGestaoKanban, ClientDetailModal, CreateCampanhaModal, ImportUpsellClientsContent, ...)
-│   ├── proposal/       # ex-src/components/proposals/ (11 files — TinyErpConfirmOrderDialog, TinyErpOrderStatus, CalorSlider, ProductCombobox, ...)
+│   ├── proposal/       # ex-src/components/proposals/ (11 files — TinyErpConfirmOrderDialog, TinyErpOrderStatus, ProductCombobox, ...)
 │   ├── deal/           # ex-src/components/deals/ (5 files — CreateDealDialog, DealDetailDrawer, DealItemsTable, DealKanbanCard, DealKPICards)
 │   └── product/        # ex-src/components/products/ (4 files — CreateProductModal, EditProductModal, ProductImportModal, ProductMaterialsSection)
 ├── hooks/              # 24 hooks (ver lista abaixo)

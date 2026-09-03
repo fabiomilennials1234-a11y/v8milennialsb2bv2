@@ -22,7 +22,7 @@ export const MAX_STAGES = 40;
  * filter surface added so the column-count badge and the paginated cards stay
  * consistent (the count used to ignore client-only filters → e.g. Perdido kept
  * showing 21 after filtering origin=site to 10). Each board maps its own UI
- * (origin single/multi, priority/calor bands, time buckets, period, overdue)
+ * (origin single/multi, time buckets, period, overdue)
  * into these generic params; the RPCs (get_pipeline_page /
  * get_pipeline_stage_counts) apply them as plain SQL predicates. A null/empty
  * value means "filter disabled".
@@ -33,12 +33,6 @@ export interface PaginatedFilters {
   tagIds?: string[];
   /** leads.origin ∈ origins (empty/undefined = no filter) */
   origins?: string[];
-  /** COALESCE(leads.rating, 0) bounds — priority bands map here */
-  ratingMin?: number | null;
-  ratingMax?: number | null;
-  /** COALESCE(metadata.calor, 5) bounds — calor bands map here */
-  calorMin?: number | null;
-  calorMax?: number | null;
   /** leads.urgency = urgency */
   urgency?: string | null;
   /** metadata.product_type = productType */
@@ -139,10 +133,6 @@ export function sharedRpcFilterParams(
       filters.responsibleId === "all" ? null : filters.responsibleId || null,
     p_tag_ids: nonEmpty(filters.tagIds),
     p_origins: nonEmpty(filters.origins),
-    p_rating_min: orNull(filters.ratingMin),
-    p_rating_max: orNull(filters.ratingMax),
-    p_calor_min: orNull(filters.calorMin),
-    p_calor_max: orNull(filters.calorMax),
     p_urgency: filters.urgency && filters.urgency !== "all" ? filters.urgency : null,
     p_product_type:
       filters.productType && filters.productType !== "all" ? filters.productType : null,
@@ -264,10 +254,6 @@ export function usePaginatedPipeline(
       filters.responsibleId,
       filters.tagIds,
       filters.origins,
-      filters.ratingMin,
-      filters.ratingMax,
-      filters.calorMin,
-      filters.calorMax,
       filters.urgency,
       filters.productType,
       filters.meetingAfter,
@@ -287,7 +273,7 @@ export function usePaginatedPipeline(
   );
 
   // Stable cache key for the whole filter set (drives refetch of counts + pages
-  // whenever ANY dimension changes — origin, calor band, time bucket, etc.).
+  // whenever ANY dimension changes — origin, time bucket, etc.).
   const filtersKey = useMemo(() => JSON.stringify(sharedParams), [sharedParams]);
 
   const countsQuery = useQuery({

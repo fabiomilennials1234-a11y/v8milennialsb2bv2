@@ -82,7 +82,6 @@ export function useLeadCreateHandler({ pushName, onSuccess }: UseLeadCreateHandl
         company: payload.company || null,
         email: payload.email || null,
         notes: payload.notes || null,
-        rating: payload.rating || null,
       });
     }
 

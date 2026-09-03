@@ -22,8 +22,6 @@ export type FilterSectionConfig =
   | { type: "origin-multi"; value: string[]; onChange: (v: string[]) => void }
   | { type: "tags"; value: string[]; onChange: (v: string[]) => void; tags: { id: string; name: string; color: string | null }[] }
   | { type: "product-type"; value: string; onChange: (v: string) => void }
-  | { type: "calor"; value: string; onChange: (v: string) => void }
-  | { type: "priority"; value: string; onChange: (v: string) => void }
   | { type: "urgency"; value: string; onChange: (v: string) => void }
   | { type: "status-multi"; value: string[]; onChange: (v: string[]) => void; options: { id: string; title: string; color: string }[] }
   | { type: "qualification-tier"; value: string[]; onChange: (v: string[]) => void }
@@ -59,8 +57,6 @@ export function countActiveFilters(sections: FilterSectionConfig[]): number {
       case "responsible":
       case "origin-single":
       case "product-type":
-      case "calor":
-      case "priority":
       case "urgency":
         if (section.value !== "all") count++;
         break;

@@ -3,8 +3,6 @@ import {
   Filter,
   User,
   Tag,
-  Flame,
-  Star,
   Clock,
   Package,
   Globe,
@@ -202,28 +200,6 @@ export function getFilterChips(sections: FilterSectionConfig[]): FilterChipData[
           chips.push({
             id: "product-type",
             label: `Tipo: ${typeLabel}`,
-            onRemove: () => section.onChange("all"),
-          });
-        }
-        break;
-      }
-      case "calor": {
-        if (section.value !== "all") {
-          const calorLabel = section.value === "hot" ? "Quente" : section.value === "warm" ? "Morno" : "Frio";
-          chips.push({
-            id: "calor",
-            label: `Calor: ${calorLabel}`,
-            onRemove: () => section.onChange("all"),
-          });
-        }
-        break;
-      }
-      case "priority": {
-        if (section.value !== "all") {
-          const prioLabel = section.value === "high" ? "Alta" : section.value === "medium" ? "Média" : "Baixa";
-          chips.push({
-            id: "priority",
-            label: `Prioridade: ${prioLabel}`,
             onRemove: () => section.onChange("all"),
           });
         }
@@ -553,70 +529,6 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
               <SelectItem value="all">Todos os tipos</SelectItem>
               <SelectItem value="mrr">Recorrência</SelectItem>
               <SelectItem value="projeto">Projeto</SelectItem>
-            </SelectContent>
-          </Select>
-        </FilterSectionWrapper>
-      );
-
-    case "calor":
-      return (
-        <FilterSectionWrapper icon={Flame} label="Calor">
-          <Select value={section.value} onValueChange={section.onChange}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent className="z-[60]">
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="hot">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-3 h-3 text-destructive" />
-                  Quente (7-10)
-                </div>
-              </SelectItem>
-              <SelectItem value="warm">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-3 h-3 text-chart-5" />
-                  Morno (4-6)
-                </div>
-              </SelectItem>
-              <SelectItem value="cold">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-3 h-3 text-muted-foreground" />
-                  Frio (0-3)
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </FilterSectionWrapper>
-      );
-
-    case "priority":
-      return (
-        <FilterSectionWrapper icon={Star} label="Prioridade">
-          <Select value={section.value} onValueChange={section.onChange}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todas" />
-            </SelectTrigger>
-            <SelectContent className="z-[60]">
-              <SelectItem value="all">Todas as prioridades</SelectItem>
-              <SelectItem value="high">
-                <div className="flex items-center gap-2">
-                  <span className="text-chart-5">★★★</span>
-                  Alta (8-10)
-                </div>
-              </SelectItem>
-              <SelectItem value="medium">
-                <div className="flex items-center gap-2">
-                  <span className="text-chart-5">★★</span>
-                  Média (5-7)
-                </div>
-              </SelectItem>
-              <SelectItem value="low">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">★</span>
-                  Baixa (0-4)
-                </div>
-              </SelectItem>
             </SelectContent>
           </Select>
         </FilterSectionWrapper>

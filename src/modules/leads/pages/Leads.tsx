@@ -58,7 +58,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "../hooks/useLeads";
-import { LeadMobileCard, StarRating, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
+import { LeadMobileCard, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
 import { LeadMobileSortBar } from "../components/leads/LeadMobileSortBar";
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
@@ -123,7 +123,6 @@ interface LeadFormData {
   email: string;
   phone: string;
   origin: string;
-  rating: number;
   segment: string;
   faturamento: string;
   urgency: string;
@@ -140,7 +139,6 @@ const initialFormData: LeadFormData = {
   email: "",
   phone: "",
   origin: "outro",
-  rating: 5,
   segment: "",
   faturamento: "",
   urgency: "",
@@ -158,7 +156,6 @@ const initialFormData: LeadFormData = {
 type LeadsFilterState = {
   searchQuery: string;
   filterOrigin: string;
-  filterRating: string;
   filterQualification: string;
   /** Dono da conta: id de `team_member`, `"all"` ou `"none"` (sem dono). */
   filterResponsible: string;
@@ -167,7 +164,6 @@ type LeadsFilterState = {
 const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   searchQuery: "",
   filterOrigin: "all",
-  filterRating: "all",
   filterQualification: "all",
   filterResponsible: "all",
 };
@@ -207,7 +203,7 @@ function LeadsInner() {
     DEFAULT_LEADS_FILTERS
   );
 
-  const { searchQuery, filterOrigin, filterRating } = filterState;
+  const { searchQuery, filterOrigin } = filterState;
   const filterQualification = filterState.filterQualification ?? "all";
   // Visão salva gravada antes deste filtro existir não traz a chave — o `??`
   // é o que impede o Select de virar não-controlado no meio do uso.
@@ -219,10 +215,6 @@ function LeadsInner() {
   );
   const setFilterOrigin = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, filterOrigin: v })),
-    [setFilterState]
-  );
-  const setFilterRating = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, filterRating: v })),
     [setFilterState]
   );
   const setFilterQualification = useCallback(
@@ -310,9 +302,9 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
+  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -426,7 +418,7 @@ function LeadsInner() {
   // página 5 da nova, e ficar nela devolve um pedaço arbitrário da lista.
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterRating, filterQualification, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
+  }, [searchQuery, filterOrigin, filterQualification, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
@@ -441,13 +433,12 @@ function LeadsInner() {
    * org, que é o que o resto do produto usa.
    */
   const { data: orgStats } = useLeadsStats({
-    searchQuery, filterOrigin, filterRating, filterQualification, filterResponsible,
+    searchQuery, filterOrigin, filterQualification, filterResponsible,
     filterUf: ufFilter, createdFrom, createdTo,
   });
 
   const stats = useMemo(() => ({
     total: totalLeads ?? leads.length,
-    highRating: orgStats?.highRating ?? 0,
     thisMonth: orgStats?.thisMonth ?? 0,
     withSDR: orgStats?.withOwner ?? 0,
   }), [totalLeads, leads.length, orgStats]);
@@ -461,7 +452,6 @@ function LeadsInner() {
         email: lead.email || "",
         phone: lead.phone || "",
         origin: lead.origin || "outro",
-        rating: lead.rating || 5,
         segment: lead.segment || "",
         faturamento: lead.faturamento,
         urgency: lead.urgency || "",
@@ -602,7 +592,7 @@ function LeadsInner() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -610,15 +600,6 @@ function LeadsInner() {
         >
           <p className="stat-card-label">Total de Leads</p>
           <p className="text-xl font-bold">{stats.total}</p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="stat-card"
-        >
-          <p className="stat-card-label">Alta Qualidade (7+)</p>
-          <p className="text-xl font-bold text-chart-5">{stats.highRating}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -660,17 +641,6 @@ function LeadsInner() {
             {Object.entries(originLabels).map(([key, label]) => (
               <SelectItem key={key} value={key}>{label}</SelectItem>
             ))}
-          </SelectContent>
-        </Select>
-        <Select value={filterRating} onValueChange={setFilterRating}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Rating" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos Ratings</SelectItem>
-            <SelectItem value="high">Alta (7-10)</SelectItem>
-            <SelectItem value="medium">Média (4-6)</SelectItem>
-            <SelectItem value="low">Baixa (0-3)</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filterQualification} onValueChange={setFilterQualification}>
@@ -913,7 +883,7 @@ function LeadsInner() {
       <ExportLeadsModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        listFilters={{ searchQuery, filterOrigin, filterRating, filterQualification, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
+        listFilters={{ searchQuery, filterOrigin, filterQualification, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
       />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>
@@ -977,32 +947,21 @@ function LeadsInner() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="origin">Origem</Label>
-                <Select
-                  value={formData.origin}
-                  onValueChange={(v) => setFormData({ ...formData, origin: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(originLabels).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Rating (0-10)</Label>
-                <div className="py-2">
-                  <StarRating
-                    rating={formData.rating}
-                    onRate={(r) => setFormData({ ...formData, rating: r })}
-                  />
-                </div>
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="origin">Origem</Label>
+              <Select
+                value={formData.origin}
+                onValueChange={(v) => setFormData({ ...formData, origin: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(originLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* FUNIL — only visible when creating a new lead */}

@@ -34,7 +34,6 @@ export const EXPORT_LEAD_HEADERS = [
   "Segmento",
   "Urgência",
   "Notas",
-  "Prioridade do lead",
   "Público de origem",
   "utm_campaign",
   "utm_source",
@@ -66,7 +65,7 @@ export interface ExportStageFilter {
   stageId: string;
 }
 
-/** Filtros ativos da lista de leads (busca, origem, rating, qualificação, UF).
+/** Filtros ativos da lista de leads (busca, origem, qualificação, UF).
  * Mesma semântica de `applyLeadListFilters` — reaproveita a fonte única. */
 export type ExportListFilters = LeadListFilterValues;
 
@@ -79,7 +78,7 @@ export interface ExportLeadsOptions {
   /** Título legível da etapa — usado apenas para compor o nome do arquivo. */
   stageTitle?: string;
   /** Filtros ativos da lista — aplicados à exportação para espelhar o que o
-   * usuário vê na tela (busca, origem, rating, qualificação, UF). */
+   * usuário vê na tela (busca, origem, qualificação, UF). */
   listFilters?: ExportListFilters;
   /**
    * Restringe a exportação a um conjunto EXPLÍCITO de leads — a seleção
@@ -103,15 +102,6 @@ function slugify(value: string): string {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "")
     .slice(0, 60) || "etapa";
-}
-
-function ratingToLabel(rating: number | null | undefined): string {
-  if (rating == null) return "";
-  if (rating >= 9) return "Máxima";
-  if (rating >= 7) return "Alta";
-  if (rating >= 4) return "Média";
-  if (rating >= 1) return "Baixa";
-  return "";
 }
 
 function fmtDate(v: string | null | undefined): string {
@@ -221,7 +211,7 @@ export function useExportLeads(): UseExportLeadsResult {
       let leadsQuery = supabase
         .from("leads")
         .select(
-          "id, name, company, email, phone, faturamento, segment, urgency, notes, rating, origin, responsible_id, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
+          "id, name, company, email, phone, faturamento, segment, urgency, notes, origin, responsible_id, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
         )
         .eq("organization_id", organizationId);
 
@@ -229,7 +219,7 @@ export function useExportLeads(): UseExportLeadsResult {
         leadsQuery = leadsQuery.in("id", stageLeadIds);
       }
 
-      // Espelha os filtros ativos da lista (busca, origem, rating, qualificação,
+      // Espelha os filtros ativos da lista (busca, origem, qualificação,
       // UF) — mesma semântica da tela via helper compartilhado.
       if (options.listFilters) {
         leadsQuery = applyLeadListFilters(leadsQuery, options.listFilters);
@@ -290,7 +280,6 @@ export function useExportLeads(): UseExportLeadsResult {
           Segmento: (lead.segment as string) ?? "",
           Urgência: (lead.urgency as string) ?? "",
           Notas: (lead.notes as string) ?? "",
-          "Prioridade do lead": ratingToLabel(lead.rating as number),
           "Público de origem": (lead.origin as string) ?? "",
           utm_campaign: (lead.utm_campaign as string) ?? "",
           utm_source: (lead.utm_source as string) ?? "",

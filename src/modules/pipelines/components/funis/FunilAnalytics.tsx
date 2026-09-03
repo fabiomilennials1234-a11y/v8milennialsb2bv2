@@ -14,7 +14,7 @@
  *
  * Dados que só existem para os 3 slugs (saúde de coorte, no-show, MRR/projeto,
  * drilldown de venda) aparecem QUANDO disponíveis e são omitidos nos demais —
- * documentado no relatório da fatia. As agregações client-side (calor, vendas
+ * documentado no relatório da fatia. As agregações client-side (vendas
  * recentes, produtos) leem os itens CARREGADOS — mesmo recorte que as páginas
  * velhas paginadas liam.
  */
@@ -33,7 +33,6 @@ import {
   AnalyticsPanel,
   AnalyticsStatCard,
   ContinuousFunnel,
-  CalorBars,
   MemberLeaderboard,
 } from "@/modules/pipelines/components/shared/analytics-ui";
 import { PipeWhatsappAnalytics } from "@/modules/pipelines/components/shared/PipeWhatsappAnalytics";
@@ -314,18 +313,6 @@ function PropostasBlock({
     });
   }, [allItems, stages]);
 
-  const calorData = useMemo(() => {
-    const activeProposals = allItems.filter((item) => openKeys.has(item.status));
-    const grouped: { [key: number]: { calor: number; value: number; count: number } } = {};
-    activeProposals.forEach((item) => {
-      const calor = item.calor ?? 5;
-      if (!grouped[calor]) grouped[calor] = { calor, value: 0, count: 0 };
-      grouped[calor].value += Number(item.sale_value) || 0;
-      grouped[calor].count += 1;
-    });
-    return Object.values(grouped);
-  }, [allItems, openKeys]);
-
   const productData = useMemo(() => {
     const productMap = new Map<string, {
       productId: string;
@@ -456,14 +443,6 @@ function PropostasBlock({
                   tone: wonKeys.has(stage.id) ? ("success" as const) : undefined,
                 }))}
               />
-            </AnalyticsPanel>
-
-            <AnalyticsPanel
-              title="Propostas por Calor"
-              subtitle="Valor em aberto por temperatura"
-              dot="destructive"
-            >
-              <CalorBars data={calorData} />
             </AnalyticsPanel>
 
             <AnalyticsPanel

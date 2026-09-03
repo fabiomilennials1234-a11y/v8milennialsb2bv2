@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
 import {
-  Star,
   Building2,
   Calendar,
   User,
@@ -47,7 +46,6 @@ interface ConfirmacaoCardProps {
     phone?: string;
     meetingDate?: string;
     meetingDateTime?: Date;
-    rating: number;
     origin: string;
     responsible?: string;
     tags: { name: string; color: string }[];
@@ -336,19 +334,6 @@ export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, on
               leadName={card.name}
             />
           )}
-          <div className="flex items-center gap-0.5">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={cn(
-                  "w-3 h-3",
-                  i < card.rating
-                    ? "text-primary fill-primary"
-                    : "text-muted-foreground/30"
-                )}
-              />
-            ))}
-          </div>
           {onDelete && card.confirmacaoId && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>

@@ -59,7 +59,6 @@ interface FormData {
   email: string;
   phone: string;
   origin: string;
-  rating: number;
   segment: string;
   faturamento: string;
   uf: string;
@@ -183,7 +182,6 @@ export function LeadModal({
     email: lead?.email || "",
     phone: lead?.phone || "",
     origin: lead?.origin || "outro",
-    rating: lead?.rating || 5,
     segment: lead?.segment || "",
     faturamento: lead?.faturamento || "",
     uf: lead?.uf || "",
@@ -442,8 +440,7 @@ export function LeadModal({
         email: lead?.email || "",
         phone: lead?.phone || "",
         origin: lead?.origin || "outro",
-        rating: lead?.rating || 5,
-        segment: lead?.segment || "",
+            segment: lead?.segment || "",
         faturamento: lead?.faturamento || "",
         uf: lead?.uf || "",
         urgency: lead?.urgency || "",
