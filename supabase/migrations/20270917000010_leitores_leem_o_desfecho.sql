@@ -694,8 +694,12 @@ BEGIN
      AND EXISTS (SELECT 1 FROM public.pipelines p
                   WHERE p.organization_id = tm.organization_id AND p.slug = 'propostas')
    LIMIT 1;
+  -- Banco vazio não tem o que exercitar. Ver a nota em 20270916000020: pular
+  -- por falta de fixture é diferente de aprovar uma sonda que foi barrada.
   IF v_org IS NULL THEN
-    RAISE EXCEPTION 'sem org com membro ativo, funil propostas e negocio fechado para exercitar as guardas';
+    RAISE NOTICE 'sem org com membro, funil propostas e negocio fechado — smoke pulado (banco novo?)';
+    PERFORM set_config('request.jwt.claims', NULL, true);
+    RETURN;
   END IF;
 
   PERFORM set_config('request.jwt.claims',

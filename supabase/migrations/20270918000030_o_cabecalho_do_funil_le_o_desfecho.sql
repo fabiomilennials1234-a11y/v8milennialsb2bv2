@@ -430,8 +430,12 @@ BEGIN
      AND EXISTS (SELECT 1 FROM public.deals d
                   WHERE d.organization_id = tm.organization_id AND d.outcome IN ('won','lost'))
    LIMIT 1;
+  -- Banco vazio não tem o que exercitar. Ver a nota em 20270916000020.
+  -- As verificações ESTRUTURAIS acima (system_stage_role, seed, leitores) já
+  -- rodaram e valem em qualquer banco — só a sonda com dado real é pulada.
   IF v_org IS NULL THEN
-    RAISE EXCEPTION 'sem org com membro ativo, funil e negocio fechado para exercitar as guardas';
+    RAISE NOTICE 'sem org com membro, funil e negocio fechado — smoke pulado (banco novo?)';
+    RETURN;
   END IF;
   SELECT p.id INTO v_pipe FROM public.pipelines p
    WHERE p.organization_id = v_org AND p.is_active LIMIT 1;

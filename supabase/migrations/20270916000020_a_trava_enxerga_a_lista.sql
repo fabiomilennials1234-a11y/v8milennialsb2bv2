@@ -166,8 +166,19 @@ BEGIN
    WHERE tm.user_id IS NOT NULL AND tm.is_active
      AND EXISTS (SELECT 1 FROM public.leads l WHERE l.organization_id = tm.organization_id)
    LIMIT 1;
+  -- ⚠️ Banco VAZIO não é guarda barrada.
+  --
+  -- Esta sonda precisa de uma org real, com membro ativo e na lista de
+  -- poupadas. Em produção isso existe; num banco recém-criado (`db reset`, CI,
+  -- ambiente novo) não existe nada, e abortar ali travaria toda criação de
+  -- ambiente por uma verificação que não tinha o que verificar.
+  --
+  -- A distinção que importa: "não há fixture" é motivo para PULAR; "há fixture
+  -- e a sonda não conseguiu rodar" é motivo para FALHAR — é o caso do
+  -- ROW_COUNT lá embaixo.
   IF v_org IS NULL THEN
-    RAISE EXCEPTION 'sem org poupada com usuario ativo para exercitar a guarda';
+    RAISE NOTICE 'sem org poupada com usuario ativo — sonda de RLS pulada (banco novo?)';
+    RETURN;
   END IF;
 
   SELECT l.id INTO v_lead FROM public.leads l WHERE l.organization_id = v_org LIMIT 1;
