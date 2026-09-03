@@ -38,7 +38,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 
-import { PIPE_TYPES } from "@/types/copilot";
+import { usePipeTypeOptions } from "../../hooks/usePipeTypeOptions";
 import { useAllPipelineStageOptions, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
 
 import {
@@ -128,9 +128,10 @@ function CustomPipeStagesSection({
 
 function useAllStagesFlat() {
   const { stagesByPipe } = useAllPipelineStageOptions();
+  const pipeTypeOptions = usePipeTypeOptions();
   const flat: { pipe: string; stage: string; label: string; pipeLabel: string }[] = [];
 
-  for (const pipeType of PIPE_TYPES) {
+  for (const pipeType of pipeTypeOptions) {
     const stages = stagesByPipe[pipeType.value] || [];
     for (const s of stages) {
       flat.push({
@@ -150,6 +151,7 @@ function useAllStagesFlat() {
 export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const { stagesByPipe } = useAllPipelineStageOptions();
+  const pipeTypeOptions = usePipeTypeOptions();
   const { data: customPipelines = [] } = useCustomPipelines();
   const allStages = useAllStagesFlat();
 
@@ -285,7 +287,7 @@ export function PlaygroundFunis({ state, onChange }: PlaygroundFunisProps) {
           <CardTitle className="text-sm">Funis</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-4 space-y-2">
-          {PIPE_TYPES.map((pipe) => {
+          {pipeTypeOptions.map((pipe) => {
             const isActive = state.activePipes.includes(pipe.value);
             const isExpanded = expanded[pipe.value] ?? false;
             const pipeStages = state.activeStages[pipe.value] || [];

@@ -313,12 +313,10 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
         key: "pipe",
         label: "Pipe",
         type: "select",
-        options: [
-          { value: "whatsapp", label: "Pipe WhatsApp" },
-          { value: "confirmacao", label: "Pipe Confirmação" },
-          { value: "propostas", label: "Pipe Propostas" },
-          { value: "campanha", label: "Campanhas" },
-        ],
+        // SCRUM-641: sem catálogo de labels aqui — o PlaygroundTools resolve
+        // as opções do param "pipe" com os funis REAIS da org
+        // (usePipeTypeOptions), com o nome que ela usa.
+        options: [],
       },
       { key: "stages", label: "Etapas disponiveis", type: "text", placeholder: "Ex: novo, abordado, respondeu" },
     ],

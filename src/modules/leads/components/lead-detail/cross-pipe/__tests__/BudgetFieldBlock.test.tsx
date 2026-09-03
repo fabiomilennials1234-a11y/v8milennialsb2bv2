@@ -79,6 +79,15 @@ vi.mock("@/modules/carteira/hooks/useProducts", () => ({
 // Pós-inversão F7: hooks de pipeline (proposta + items + lossReasons) vêm do
 // PipeOpsPort (context), não mais por import direto de @/modules/pipelines.
 const pipeOpsPort = {
+  // SCRUM-641: o CTA é batizado pelo nome que a ORG usa (useSystemPipes).
+  useSystemPipes: () =>
+    ({
+      data: [
+        { pipe_type: "propostas", display_name: "Orçamentos", is_visible: true, position: 3 },
+      ],
+      isLoading: false,
+      isPending: false,
+    }) as never,
   useCreatePipeProposta: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
   useUpdatePipeProposta: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
   usePipePropostaItems: () => ({ data: [], isLoading: false }) as never,
@@ -138,7 +147,7 @@ describe("BudgetFieldBlock", () => {
       );
       expect(screen.getByText(/sem proposta/i)).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /adicionar à propostas/i }),
+        screen.getByRole("button", { name: /adicionar a orçamentos/i }),
       ).toBeInTheDocument();
     });
   });

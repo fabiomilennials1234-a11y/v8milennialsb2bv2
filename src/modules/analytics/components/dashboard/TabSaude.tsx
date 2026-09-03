@@ -44,7 +44,7 @@ const MATRIX_TOOLTIPS: Record<string, string> = {
   Reunião: "Desses leads, quantos tiveram reunião marcada.",
   Compareceram: "Desses leads, quantos tiveram reunião realizada.",
   Compraram:
-    "Desses leads, quantos chegaram à etapa de venda em Orçamentos. O crédito é de quem fez a pré-venda — mesmo que outro vendedor tenha fechado. Negócio ainda aberto em Orçamentos não conta.",
+    "Desses leads, quantos chegaram à etapa de venda no funil de fechamento. O crédito é de quem fez a pré-venda — mesmo que outro vendedor tenha fechado. Negócio ainda aberto não conta.",
 };
 
 interface TransitionRow {
@@ -231,7 +231,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                 <div className="mt-5 border-t border-border pt-4">
                   <div className="flex items-baseline justify-between">
                     <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-muted-foreground">
-                      <HelpTip text="Médias calculadas só sobre os leads do período que viraram venda. A venda vale a primeira chegada à etapa de venda em Orçamentos; a reunião, a primeira reunião realizada.">
+                      <HelpTip text="Médias calculadas só sobre os leads do período que viraram venda. A venda vale a primeira chegada à etapa de venda no funil de fechamento; a reunião, a primeira reunião realizada.">
                         Tempo até a venda
                       </HelpTip>
                     </span>
@@ -281,7 +281,7 @@ function TabSaudeBase({ range }: { range: PeriodRange }) {
                     <span className="text-[11.5px] leading-snug text-muted-foreground">
                       <b className="font-semibold text-foreground">Ciclo médio de venda</b>
                       <br />
-                      da entrada do lead até fechar em Orçamentos
+                      da entrada do lead até fechar a venda
                     </span>
                   </div>
                 </div>

@@ -45,7 +45,9 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { ChannelBadge } from "@/modules/communication/components/chat/ChannelBadge";
-import { useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
+import { useCustomPipelines, useCustomPipelineStages, usePipelineDisplayConfig } from "@/modules/pipelines";
+import { destinosDeSistema } from "@/contracts/pipe";
+import { isStandardDestination } from "@/lib/lead/lead-destinations";
 import { useCurrentTeamMember } from "@/modules/identity";
 import type { LeadDestination } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import type { CreateLeadFromSocialInput } from "@/modules/communication/hooks/chat/useSocialLeadLink";
@@ -78,6 +80,11 @@ export function SocialCreateLeadDialog({
 
   const { data: teamMember } = useCurrentTeamMember();
   const { data: customPipelines = [] } = useCustomPipelines();
+  // Funis de sistema REAIS da org, com o nome que ELA usa (SCRUM-641) — o trio
+  // cravado oferecia funil que a org podia nem ter, com nome de seed que
+  // nenhuma navegação mostra.
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const destinosSistema = destinosDeSistema(displayConfigs);
   const { data: customStages = [] } = useCustomPipelineStages(
     destination === "custom" ? customPipelineId || undefined : undefined,
   );
@@ -99,6 +106,18 @@ export function SocialCreateLeadDialog({
   useEffect(() => {
     setCustomStageId("");
   }, [customPipelineId]);
+
+  // Mesma correção do LeadCreateForm (#1848): o chute "qualificacao" só é
+  // verdadeiro em org que TEM esse funil. Sem isto, org sem ele abriria o
+  // Select vazio, sem erro.
+  useEffect(() => {
+    if (!displayConfigs) return;
+    if (!isStandardDestination(destination)) return;
+    if (destinosSistema.some((d) => d.destination === destination)) return;
+    setDestination((destinosSistema[0]?.destination ?? "none") as LeadDestination);
+    // destinosSistema é derivado de displayConfigs; a dependência real é a query.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayConfigs, destination]);
 
   const canSubmit = useMemo(() => {
     if (isSubmitting) return false;
@@ -212,11 +231,15 @@ export function SocialCreateLeadDialog({
               </SelectTrigger>
               <SelectContent>
                 {/* Sem rótulo de espécie: funil é funil. */}
-                <SelectGroup>
-                  <SelectItem value="qualificacao">Qualificação</SelectItem>
-                  <SelectItem value="confirmacao">Confirmação</SelectItem>
-                  <SelectItem value="propostas">Propostas</SelectItem>
-                </SelectGroup>
+                {destinosSistema.length > 0 && (
+                  <SelectGroup>
+                    {destinosSistema.map((d) => (
+                      <SelectItem key={d.destination} value={d.destination}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                )}
                 {customPipelines.length > 0 && (
                   <SelectGroup>
                     {customPipelines.map((pipe) => (

@@ -26,6 +26,8 @@ const row = (over: Partial<StageRoleSuggestionRow>): StageRoleSuggestionRow => (
   stage_role_suggested_at: "2026-07-07T12:00:00Z",
   stage_role_suggestion_source: "deterministic",
   organization: { name: "Org A" },
+  pipeline: null,
+  funil_label: null,
   ...over,
 });
 

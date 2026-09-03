@@ -4,6 +4,8 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { usePipelineDisplayConfig } from "@/modules/pipelines";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import {
   useFunnelHealthStageLeads,
   type FunnelHealthRange,
@@ -42,8 +44,15 @@ function humanizeStageKey(key: string) {
   return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
-/** "Onde está agora" — precedência: vendido > Orçamentos > compareceu > reunião > funil. */
-function leadWhereabouts(l: FunnelStageLead): { label: string; cls: string } {
+/**
+ * "Onde está agora" — precedência: vendido > funil de fechamento > compareceu >
+ * reunião > funil. `nomePropostas` é o nome que a ORG dá ao funil de
+ * fechamento (SCRUM-641) — nada de "Orçamentos" cravado.
+ */
+function leadWhereabouts(
+  l: FunnelStageLead,
+  nomePropostas: string,
+): { label: string; cls: string } {
   if (l.proposta_stage === "vendido") {
     return {
       label: l.sale_value ? `Vendido · ${BRL.format(l.sale_value)}` : "Vendido",
@@ -51,7 +60,7 @@ function leadWhereabouts(l: FunnelStageLead): { label: string; cls: string } {
     };
   }
   if (l.proposta_stage) {
-    return { label: `Em Orçamentos · ${humanizeStageKey(l.proposta_stage)}`, cls: "text-primary" };
+    return { label: `Em ${nomePropostas} · ${humanizeStageKey(l.proposta_stage)}`, cls: "text-primary" };
   }
   if (l.held_at) {
     return { label: `Compareceu · ${format(new Date(l.held_at), "dd/MM")}`, cls: "text-emerald-500" };
@@ -80,6 +89,12 @@ export function FunnelStageLeadsSheet({
   onOpenLead,
 }: FunnelStageLeadsSheetProps) {
   const { data: leads, isLoading } = useFunnelHealthStageLeads(range, stage, origins);
+  // Nome do funil de fechamento como a ORG o vê (SCRUM-641).
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const nomePropostas = (() => {
+    const c = displayConfigs?.find((x) => x.pipe_type === "propostas");
+    return c ? c.display_name || NOME_DE_FABRICA.propostas : "Funil removido";
+  })();
   const [query, setQuery] = useState("");
   const [tierFilter, setTierFilter] = useState<string | null>(null);
 
@@ -165,7 +180,7 @@ export function FunnelStageLeadsSheet({
             </div>
           ) : (
             filtered.map((l) => {
-              const where = leadWhereabouts(l);
+              const where = leadWhereabouts(l, nomePropostas);
               const initials = (l.name ?? "?")
                 .split(/\s+/)
                 .map((p) => p[0])

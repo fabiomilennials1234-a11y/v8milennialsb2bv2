@@ -66,7 +66,8 @@ export const SOURCE_LABELS: Record<string, string> = {
   meeting: "Reunião",
   follow_up: "Follow-up",
   scheduled_message: "Mensagem Agendada",
-  pipe_confirmacao: "Confirmação",
+  // SCRUM-641: sem nome de funil cravado — o rótulo diz o QUE o evento é.
+  pipe_confirmacao: "Reunião do funil",
   meeting_event: "Reunião do funil",
   google: "Google Calendar",
 };
