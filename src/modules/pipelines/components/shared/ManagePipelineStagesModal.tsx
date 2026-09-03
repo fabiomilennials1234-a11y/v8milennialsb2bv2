@@ -40,7 +40,10 @@ import {
   type TransitionTarget,
 } from "@/modules/pipelines/components/shared/TransitionSelector";
 import { classifyStageRole } from "@/modules/pipelines/lib/stage-role-classifier";
-import { STAGE_ROLES, STAGE_ROLE_META } from "@/modules/pipelines/lib/stage-role";
+import {
+  STAGE_ROLES_ATRIBUIVEIS,
+  STAGE_ROLE_META,
+} from "@/modules/pipelines/lib/stage-role";
 import type { StageRole } from "@/contracts/pipe";
 import {
   Plus,
@@ -136,9 +139,16 @@ const STAGE_COLORS = [
 /**
  * Dropdown do papel semântico da etapa (stage_role, ADR-0017 §1).
  *
- * won/lost selecionáveis manualmente — escolha explícita do admin conta como
- * confirmação humana. A sugestão do classifier (#991) só PRÉ-PREENCHE; quem
- * decide é sempre quem salva.
+ * ── won/lost NÃO aparecem mais aqui (B2d) ────────────────────────────────
+ * A etapa deixou de decidir ganho e perda; quem decide é o desfecho do
+ * negócio. Marcar uma etapa como venda ganha não fazia mais nada de útil e
+ * fazia uma coisa ruim — reativava o registro de venda por arrastar naquela
+ * etapa, contra o modelo que o resto do sistema segue.
+ *
+ * Se a etapa AINDA carrega um papel de dinheiro (linha antiga, ou reposta por
+ * fora), ele é mostrado como opção desabilitada em vez de sumir: um Select com
+ * `value` fora da lista renderiza vazio, e salvar reescreveria em silêncio o
+ * papel para outro. Ver o item extra abaixo.
  */
 function StageRoleSelect({
   value,
@@ -169,7 +179,26 @@ function StageRoleSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {STAGE_ROLES.map((role) => (
+          {/* Papel legado que não é mais atribuível: visível e travado, para o
+              Select não renderizar vazio nem reescrever o valor ao salvar. */}
+          {!STAGE_ROLES_ATRIBUIVEIS.includes(value) && (
+            <SelectItem key={value} value={value} disabled>
+              <div className="flex items-center gap-2.5 py-0.5">
+                <span
+                  className={cn("w-2 h-2 rounded-full shrink-0", STAGE_ROLE_META[value].dotClassName)}
+                />
+                <div className="min-w-0 text-left">
+                  <div className="text-sm font-medium leading-tight">
+                    {STAGE_ROLE_META[value].label}
+                  </div>
+                  <div className="text-xs text-muted-foreground leading-tight">
+                    Papel antigo — o desfecho do negócio decide isso agora
+                  </div>
+                </div>
+              </div>
+            </SelectItem>
+          )}
+          {STAGE_ROLES_ATRIBUIVEIS.map((role) => (
             <SelectItem key={role} value={role}>
               <div className="flex items-center gap-2.5 py-0.5">
                 <span

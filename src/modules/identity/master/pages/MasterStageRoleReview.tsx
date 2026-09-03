@@ -30,7 +30,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
-  STAGE_ROLES,
+  STAGE_ROLES_ATRIBUIVEIS,
   STAGE_ROLE_META,
   STAGE_ROLE_SOURCE_LABEL,
   type StageRole,
@@ -129,7 +129,13 @@ function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {
             <SelectValue placeholder="Corrigir para…" />
           </SelectTrigger>
           <SelectContent>
-            {STAGE_ROLES.filter((r) => r !== row.suggested_stage_role).map((role) => (
+            {/* B2d: won/lost saíram das opções. Aprovar um deles reativaria o
+                registro de venda por arrastar naquela etapa, contra o modelo
+                em que o desfecho do NEGÓCIO decide. A fila herdada de 163
+                sugestões de dinheiro foi encerrada pela migration
+                `a_fila_de_won_lost_se_aposenta`; o que sobrar aqui só pode ser
+                corrigido para um papel que ainda existe. */}
+            {STAGE_ROLES_ATRIBUIVEIS.filter((r) => r !== row.suggested_stage_role).map((role) => (
               <SelectItem key={role} value={role}>
                 <div className="flex items-center gap-2">
                   <span className={cn("w-1.5 h-1.5 rounded-full", STAGE_ROLE_META[role].dotClassName)} />
