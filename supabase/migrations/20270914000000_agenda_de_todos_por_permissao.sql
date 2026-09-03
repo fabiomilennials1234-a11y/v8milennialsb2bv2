@@ -40,7 +40,7 @@
 --   | meeting           | meetings.created_by                | auth.users.id    |
 --   | follow_up         | follow_ups.assigned_to             | team_members.id  |
 --   | scheduled_message | scheduled_user_messages.created_by | team_members.id  |
---   | pipe_confirmacao  | COALESCE(closer_id, sdr_id)        | team_members.id  |
+--   | pipe_confirmacao  | COALESCE(closer_id, sdr_id)        | team_members.id  |  -- metric-lint-allow: linha de DOCUMENTAÇÃO, não SQL — descreve a coluna de origem da Source 4; o SQL real já tem o allow em 20270831000020:234
 --   | meeting_event     | meeting_events.pre_sale_resp._id   | team_members.id  |
 --
 -- Comparar a coluna crua contra um id só devolve resultado SILENCIOSAMENTE
