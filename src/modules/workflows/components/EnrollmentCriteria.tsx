@@ -1,4 +1,6 @@
 import { Plus, Trash2, Filter } from "lucide-react";
+import { usePipelineDisplayConfig } from "@/modules/pipelines";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,20 +27,36 @@ interface EnrollmentCriteriaProps {
   onChange: (value: EnrollmentCriteriaData) => void;
 }
 
-const LEAD_FIELDS = [
+// SCRUM-641: os três campos de etapa são batizados pelo nome que a ORG dá ao
+// funil (display_config) — ver `useLeadFields` abaixo. `null` marca onde o
+// nome dinâmico entra.
+const LEAD_FIELDS: { value: string; label: string | null; pipeType?: string }[] = [
   { value: "origin", label: "Origem" },
   { value: "rating", label: "Rating (1-5)" },
   { value: "qualification_score", label: "Score qualificacao" },
   { value: "company_name", label: "Empresa" },
   { value: "tags", label: "Tags (contem)" },
   { value: "responsible_id", label: "Responsavel" },
-  { value: "pipe_whatsapp_stage", label: "Etapa WhatsApp" },
-  { value: "pipe_confirmacao_stage", label: "Etapa Confirmacao" },
-  { value: "pipe_propostas_stage", label: "Etapa Propostas" },
+  { value: "pipe_whatsapp_stage", label: null, pipeType: "whatsapp" },
+  { value: "pipe_confirmacao_stage", label: null, pipeType: "confirmacao" },
+  { value: "pipe_propostas_stage", label: null, pipeType: "propostas" },
   { value: "created_days_ago", label: "Criado ha (dias)" },
   { value: "last_message_days", label: "Ultima msg ha (dias)" },
   { value: "custom_field", label: "Campo personalizado" },
 ];
+
+/** LEAD_FIELDS com os nomes de funil resolvidos pela org. */
+function useLeadFields(): { value: string; label: string }[] {
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  return LEAD_FIELDS.map((f) => {
+    if (!f.pipeType) return { value: f.value, label: f.label ?? f.value };
+    const c = displayConfigs?.find((x) => x.pipe_type === f.pipeType);
+    const nome = c
+      ? c.display_name || NOME_DE_FABRICA[f.pipeType] || f.pipeType
+      : "Funil removido";
+    return { value: f.value, label: `Etapa (${nome})` };
+  });
+}
 
 const OPERATORS = [
   { value: "equals", label: "Igual a" },
@@ -58,6 +76,7 @@ export const EMPTY_ENROLLMENT: EnrollmentCriteriaData = {
 };
 
 export function EnrollmentCriteria({ value, onChange }: EnrollmentCriteriaProps) {
+  const leadFields = useLeadFields();
   function addCondition() {
     onChange({
       ...value,
@@ -133,7 +152,7 @@ export function EnrollmentCriteria({ value, onChange }: EnrollmentCriteriaProps)
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {LEAD_FIELDS.map((f) => (
+                    {leadFields.map((f) => (
                       <SelectItem key={f.value} value={f.value}>{f.label}</SelectItem>
                     ))}
                   </SelectContent>

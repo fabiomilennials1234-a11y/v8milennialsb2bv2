@@ -34,6 +34,7 @@ import {
   useBulkAssign,
   useBulkTag,
   useBulkDelete,
+  useBulkRemoverNegocios,
 } from "@/modules/leads/hooks/useBulkActions";
 import { useExportLeads } from "@/modules/leads/hooks/useExportLeads";
 import { QuickBlastDialog } from "./QuickBlastDialog";
@@ -51,9 +52,32 @@ interface BulkActionBarProps {
    * bar keeps its standalone QuickBlastDialog (back-compat for other mounts).
    */
   onDisparar?: (leadIds: string[]) => void;
+  /**
+   * Presente = a barra está DENTRO de um funil, e o que está marcado são
+   * NEGÓCIOS, não pessoas (SCRUM-611).
+   *
+   * Muda o botão destrutivo por completo: em vez de mandar a pessoa para a
+   * lixeira — sumindo da lista de Leads, dos outros funis, da carteira e do
+   * chat — ele apaga as entries daqueles leads NESTE funil, que é exatamente o
+   * que o `⋯ > Excluir negócio` de um card só já fazia.
+   *
+   * Ausente = lista de Leads. Ali o marcado É a pessoa, e excluir lead é o
+   * comportamento certo.
+   *
+   * Não existe opção de excluir a PESSOA de dentro do funil, e isso é
+   * deliberado: dentro de um funil você está olhando negócios, e a barra fala a
+   * língua da tela. Quem quer excluir a pessoa vai à lista de Leads.
+   */
+  escopoFunil?: {
+    pipelineId: string;
+    /** Nome do funil como a org o chama — entra no texto de confirmação. */
+    nomeDoFunil?: string;
+    /** Portão de exclusão da página. `false` esconde o botão destrutivo. */
+    podeExcluir?: boolean;
+  };
 }
 
-export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar }: BulkActionBarProps) {
+export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar, escopoFunil }: BulkActionBarProps) {
   const count = selectedIds.size;
   const [moveOpen, setMoveOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -103,15 +127,22 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar }: Bul
             <FileDown className="mr-1.5 h-3.5 w-3.5" />
             Exportar
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-destructive hover:text-destructive"
-            onClick={() => setDeleteOpen(true)}
-          >
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-            Excluir
-          </Button>
+          {/* O rótulo diz em QUE o clique mexe. "Excluir", sozinho, era o
+              defeito: dentro do funil a pessoa marcava um card de negócio e o
+              botão apagava a PESSOA (SCRUM-611). */}
+          {(!escopoFunil || escopoFunil.podeExcluir !== false) && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive hover:text-destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+              {escopoFunil
+                ? count === 1 ? "Excluir negócio" : "Excluir negócios"
+                : "Excluir"}
+            </Button>
+          )}
 
           <Button size="icon" variant="ghost" className="h-7 w-7 ml-1" onClick={onClear}>
             <X className="h-3.5 w-3.5" />
@@ -122,7 +153,19 @@ export function BulkActionBar({ selectedIds, onClear, leadIds, onDisparar }: Bul
       <BulkMoveDialog open={moveOpen} onOpenChange={setMoveOpen} leadIds={ids} onSuccess={onClear} />
       <BulkAssignDialog open={assignOpen} onOpenChange={setAssignOpen} leadIds={ids} onSuccess={onClear} />
       <BulkTagDialog open={tagOpen} onOpenChange={setTagOpen} leadIds={ids} onSuccess={onClear} />
-      <BulkDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} leadIds={ids} count={count} onSuccess={onClear} />
+      {escopoFunil ? (
+        <BulkExcluirNegociosDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          leadIds={ids}
+          count={count}
+          pipelineId={escopoFunil.pipelineId}
+          nomeDoFunil={escopoFunil.nomeDoFunil}
+          onSuccess={onClear}
+        />
+      ) : (
+        <BulkDeleteDialog open={deleteOpen} onOpenChange={setDeleteOpen} leadIds={ids} count={count} onSuccess={onClear} />
+      )}
       <BulkExportDialog open={exportOpen} onOpenChange={setExportOpen} leadIds={ids} />
       {/* In-bar QuickBlast only when the host did NOT take over "Disparar". */}
       {!onDisparar && (
@@ -491,5 +534,91 @@ function BulkExportDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Confirmação de exclusão de NEGÓCIOS dentro de um funil (SCRUM-611).
+ *
+ * Irmã do `BulkDeleteDialog`, e deliberadamente separada dele: o texto é a
+ * metade do conserto. O diálogo antigo dizia "Excluir N leads" e "serão movidos
+ * para a lixeira" — verdade, mas lida por quem tinha marcado um card de
+ * NEGÓCIO. Aqui a primeira linha diz o que sai, e a segunda diz, em negrito, o
+ * que FICA.
+ */
+function BulkExcluirNegociosDialog({
+  open,
+  onOpenChange,
+  leadIds,
+  count,
+  pipelineId,
+  nomeDoFunil,
+  onSuccess,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  leadIds: string[];
+  count: number;
+  pipelineId: string;
+  nomeDoFunil?: string;
+  onSuccess: () => void;
+}) {
+  const mutation = useBulkRemoverNegocios();
+  const plural = count === 1 ? "negócio" : "negócios";
+
+  const handleDelete = async () => {
+    try {
+      const apagados = await mutation.mutateAsync({ lead_ids: leadIds, pipeline_id: pipelineId });
+      // Zero linhas com sucesso = RLS recusou em silêncio, ou outra aba já
+      // apagou. Dizer "excluído" ali seria mentir para quem continua vendo os
+      // cards na tela.
+      if (apagados === 0) {
+        toast.error("Nada foi excluído — sem permissão, ou os cards já não estavam mais aqui.");
+      } else {
+        toast.success(`${apagados} ${apagados === 1 ? "negócio excluído" : "negócios excluídos"}`);
+      }
+      onOpenChange(false);
+      onSuccess();
+    } catch {
+      toast.error(`Erro ao excluir ${plural}`);
+    }
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>
+            Excluir {count} {plural}
+            {nomeDoFunil ? ` de "${nomeDoFunil}"` : ""}?
+          </AlertDialogTitle>
+          <AlertDialogDescription>
+            {count === 1 ? "O card sai" : "Os cards saem"} deste funil.{" "}
+            <strong>
+              {count === 1 ? "A pessoa continua" : "As pessoas continuam"} na base
+            </strong>
+            , com a ficha, a conversa e os negócios dos outros funis.{" "}
+            <strong>Não há como desfazer</strong> — negócio não vai para a lixeira.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={mutation.isPending}>Cancelar</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={(e) => {
+              // `preventDefault` porque o AlertDialogAction fecha no clique:
+              // sem isto, uma recusa da RLS apagaria a mensagem junto com a
+              // tela. Quem fecha é o handler.
+              e.preventDefault();
+              void handleDelete();
+            }}
+            disabled={mutation.isPending}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
+            {mutation.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+            Excluir {count} {plural}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 }

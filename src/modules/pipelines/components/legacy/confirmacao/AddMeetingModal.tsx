@@ -237,7 +237,7 @@ export function AddMeetingModal({
          * passa a existir), que ATUALIZA o evento em vez de criar outro.
          */
         if (!confirmacaoPipelineId) {
-          throw new Error("Funil de Confirmação não encontrado nesta organização");
+          throw new Error("Funil de destino não encontrado nesta organização");
         }
 
         await moverNegocio({

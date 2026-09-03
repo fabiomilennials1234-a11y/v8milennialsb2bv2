@@ -28,13 +28,14 @@ import { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 import { PipeDistributionSection } from "./PipeDistributionSection";
 import { FunnelIdentitySection } from "./FunnelIdentitySection";
 import type { ReactNode } from "react";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 
 // StageFamily, não PipelineType: este diálogo também veste a Carteira (via
 // slots) — as famílias upsell_* são resíduo D9, não funil (SCRUM-618).
-const PIPE_LABELS: Record<StageFamily, string> = {
-  whatsapp: "Qualificação",
-  confirmacao: "Confirmação",
-  propostas: "Propostas",
+// SCRUM-641: só a Carteira tem rótulo cravado aqui; funil de sistema é
+// batizado pelo display_config (com NOME_DE_FABRICA de reserva), nunca pelo
+// seed "Qualificação"/"Confirmação"/"Propostas".
+const CARTEIRA_LABELS: Partial<Record<StageFamily, string>> = {
   upsell_base: "Carteira Base",
   upsell_gestao: "Carteira Gestão",
 };
@@ -99,7 +100,9 @@ export function PipeSettingsDialog({
   const displayName = isSystemPipe
     ? displayConfigs.find((c) => c.pipe_type === pipeType)?.display_name
     : undefined;
-  const titulo = displayName ?? PIPE_LABELS[pipeType];
+  const titulo = isSystemPipe
+    ? displayName || NOME_DE_FABRICA[pipeType] || pipeType
+    : CARTEIRA_LABELS[pipeType] ?? pipeType;
 
   // upsell_base: Etapas + Regras + Importar (3 tabs). upsell_gestao: Etapas +
   // Importar (2 tabs). Sistema: 7 tabs (Geral entrou na SCRUM-636 — identidade

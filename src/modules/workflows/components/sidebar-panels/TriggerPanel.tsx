@@ -17,7 +17,8 @@ import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
-import { usePipelines, useEtapasDoFunil, useCustomPipelines } from "@/modules/pipelines";
+import { usePipelines, useEtapasDoFunil, useCustomPipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
+import { destinosDeSistema } from "@/contracts/pipe";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { useLeadOrigins } from "@/modules/leads";
 import { CampaignSelectorField } from "./CampaignSelectorField";
@@ -30,6 +31,11 @@ interface TriggerPanelProps {
 export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
   const cfg = (data.config || {}) as Record<string, unknown>;
   const { hasFeature } = useOrgFeatures();
+  // Nome do funil de reuniões como a ORG o vê (SCRUM-641).
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const nomeConfirmacao =
+    destinosDeSistema(displayConfigs).find((d) => d.pipeType === "confirmacao")?.label ??
+    "Funil removido";
   // Categoria Negócios só aparece para org com o módulo ligado (feature `deals`).
   const triggerCategories = TRIGGER_CATEGORIES.filter(
     (c) => c.label !== "Negócios" || hasFeature("deals"),
@@ -212,7 +218,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             <SelectTrigger><SelectValue placeholder="Qualquer pipe" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="__any__">Qualquer</SelectItem>
-              <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
+              <SelectItem value="pipe_confirmacao">{nomeConfirmacao}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -282,7 +288,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="any">Qualquer</SelectItem>
-              <SelectItem value="sdr">Responsável (Qualificação)</SelectItem>
+              <SelectItem value="sdr">Pré-venda (SDR)</SelectItem>
               <SelectItem value="sale">Vendedor</SelectItem>
             </SelectContent>
           </Select>
@@ -597,6 +603,13 @@ function LeadCreatedConfig({
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
   const { data: customPipelines } = useCustomPipelines();
+  // Funis de sistema REAIS da org com o nome que ELA usa (SCRUM-641);
+  // value segue o sentinel legado `pipe_<type>` (contrato do executor).
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const opcoesDePipe = destinosDeSistema(displayConfigs).map((d) => ({
+    value: `pipe_${d.pipeType}`,
+    label: d.label,
+  }));
   const { origins: leadOrigins } = useLeadOrigins();
 
   // Catálogo dinâmico de origens (built-ins globais + custom da org, via lead_origins).
@@ -653,9 +666,9 @@ function LeadCreatedConfig({
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
                 Pipes Padrão
               </SelectLabel>
-              <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-              <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-              <SelectItem value="pipe_propostas">Propostas</SelectItem>
+              {opcoesDePipe.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
             </SelectGroup>
             {customPipelines && customPipelines.length > 0 && (
               <SelectGroup>

@@ -36,7 +36,7 @@ import {
 import { useLeadHistory } from "../../hooks/useLeadTimeline";
 import { ScheduleFollowUpButton } from "@/modules/engagement/components/followups/ScheduleFollowUpButton";
 import { usePipeOps } from "../../pipe-ops";
-import { getPipelineTypeName } from "@/contracts/pipe";
+import { destinosDeSistema } from "@/contracts/pipe";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -219,8 +219,10 @@ export function LeadModal({
     useCreatePipeConfirmacao,
     useCreatePipeProposta,
     useAddLeadToCustomPipe,
+    useSystemPipes,
   } = usePipeOps();
   const { data: customPipelines = [] } = useCustomPipelines();
+  const { data: systemPipes } = useSystemPipes();
   const customPipelineId = selectedPipe.startsWith("custom:") ? selectedPipe.slice(7) : undefined;
   const { data: customStages = [] } = useCustomPipelineStages(customPipelineId);
   const { stagesByPipe } = useAllPipelineStageOptions();
@@ -231,15 +233,17 @@ export function LeadModal({
 
   const showPipeSelector = !isEditing && !skipPipeSelector;
 
+  // Funis de sistema REAIS da org, com o nome que ELA usa (SCRUM-608/641):
+  // org sem o funil (linha de display ausente) ou com ele oculto não recebe a
+  // opção — oferecer criaria negócio num funil que ela não tem, sem erro.
   const pipeOptions = useMemo(() => {
-    const standard = [
-      { value: "std:whatsapp", label: getPipelineTypeName("whatsapp") },
-      { value: "std:confirmacao", label: getPipelineTypeName("confirmacao") },
-      { value: "std:propostas", label: getPipelineTypeName("propostas") },
-    ];
+    const standard = destinosDeSistema(systemPipes).map(d => ({
+      value: `std:${d.pipeType}`,
+      label: d.label,
+    }));
     const custom = customPipelines.map(p => ({ value: `custom:${p.id}`, label: p.name }));
     return [...standard, ...custom];
-  }, [customPipelines]);
+  }, [systemPipes, customPipelines]);
 
   const stageOptions = useMemo(() => {
     if (selectedPipe.startsWith("std:")) {

@@ -146,7 +146,7 @@ function RankingPodiumBase({ range, teamSalesTotal }: RankingPodiumProps) {
       {unassignedSales > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-[10px] border border-[hsl(36_80%_45%/.4)] bg-[hsl(36_80%_50%/.08)] px-3 py-2 text-[11.5px] text-muted-foreground">
           <b className="font-extrabold text-[hsl(36_85%_60%)]">{formatK(unassignedSales)} em vendas sem vendedor atribuído</b>
-          <span>— atribua o vendedor nos cards de Orçamentos pra contar no ranking.</span>
+          <span>— atribua o vendedor nos cards do funil de fechamento pra contar no ranking.</span>
         </div>
       )}
       {ranked.length === 0 ? (

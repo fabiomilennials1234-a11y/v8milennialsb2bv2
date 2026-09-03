@@ -8,6 +8,8 @@ import {
   type ReactNode,
 } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { usePipelineDisplayConfig } from "@/modules/pipelines";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
@@ -347,6 +349,12 @@ function TagsSettings() {
 
 function ConfirmacaoOverdueSettings() {
   const { settings, isAdmin, updateSettings, isUpdating } = useOrganizationSettings();
+  // Nome do funil de reuniões como a ORG o vê (SCRUM-641).
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const nomeConfirmacao = (() => {
+    const c = displayConfigs?.find((x) => x.pipe_type === "confirmacao");
+    return c ? c.display_name || NOME_DE_FABRICA.confirmacao : "Funil removido";
+  })();
   const [localDays, setLocalDays] = useState(settings.confirmacao_overdue_days);
   const [saved, setSaved] = useState(false);
 
@@ -370,7 +378,7 @@ function ConfirmacaoOverdueSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">Pipe de Confirmação</h3>
+        <h3 className="text-lg font-medium">Funil {nomeConfirmacao}</h3>
         <p className="text-sm text-muted-foreground">
           Quando um lead deve aparecer como &quot;Atrasada&quot; (dias sem interação)
         </p>

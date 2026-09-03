@@ -85,6 +85,8 @@ import { SetMeetingDateModal } from "@/modules/pipelines/components/kanban/SetMe
 import { RescheduleModal } from "@/modules/pipelines/components/legacy/confirmacao/RescheduleModal";
 import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
 import { DX_TARGET_KEYS } from "@/modules/pipelines/lib/meeting-dx";
+import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
+import { nomeDoFunil } from "@/contracts/pipe";
 
 /** Fallback quando a org não cadastrou motivos (mesma lista do PipePropostas). */
 const LOSS_REASONS_FALLBACK: MotivoDePerda[] = [
@@ -154,6 +156,9 @@ export function useFunilMoveFlow({
   const updateEntryConfirmacao = useUpdatePipeConfirmacao();
   const logAction = useLogLeadAction();
   const { data: tinyStatus } = useTinyErpStatus();
+  // Nome dos funis como a ORG os vê (SCRUM-641) — copy de toast/history não
+  // pode cravar "Propostas"/"Orçamentos".
+  const { data: displayConfigs } = usePipelineDisplayConfig();
   const cadastroExternoEnabled = useCadastroExternoEnabled();
 
   const ehSystem = pipeline?.type === "system";
@@ -422,8 +427,9 @@ export function useFunilMoveFlow({
       setProcessingCompareceu(true);
       try {
         if (!propostasPipeline) {
-          throw new Error("Funil de Orçamentos não encontrado nesta organização");
+          throw new Error("Funil de destino não encontrado nesta organização");
         }
+        const nomeDoAlvo = nomeDoFunil(displayConfigs, propostasPipeline);
         const targetStageKey = stage.target_stage_key || "marcar_compromisso";
 
         // Passo 1 — responsável + etapa de sucesso (produz `meeting_held`).
@@ -450,7 +456,7 @@ export function useFunilMoveFlow({
           logAction({
             leadId: entry.lead_id,
             action: "meeting_attended",
-            description: "Lead compareceu à reunião e movido para Gestão de Propostas",
+            description: `Lead compareceu à reunião e movido para ${nomeDoAlvo}`,
           });
         }
         if (organizationId) {
@@ -462,7 +468,7 @@ export function useFunilMoveFlow({
             metadata: { from_stage: stage.stage_key, to_stage: targetStageKey, moved_to_pipe: "propostas" },
           });
         }
-        toast.success("Negócio movido para Gestão de Propostas!");
+        toast.success(`Negócio movido para ${nomeDoAlvo}!`);
         setPendingCompareceu(null);
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Erro ao processar comparecimento";
@@ -471,7 +477,7 @@ export function useFunilMoveFlow({
         setProcessingCompareceu(false);
       }
     },
-    [pendingCompareceu, pipeline, pipelines, updateEntryConfirmacao, queryClient, logAction, organizationId],
+    [pendingCompareceu, pipeline, pipelines, displayConfigs, updateEntryConfirmacao, queryClient, logAction, organizationId],
   );
 
   // ── O interceptador ──────────────────────────────────────────────────────
@@ -749,7 +755,16 @@ export function useFunilMoveFlow({
               // beforeSubmit e o move no modal (ADR-0023 d4).
               posMoveSistema(pending.entry, pending.stage, { moved_to_pipe: "confirmacao" });
               invalidateAfterMove(queryClient, pending.entry.lead_id ?? undefined);
-              toast.success("Reunião agendada e negócio movido para Confirmação!");
+              toast.success(
+                `Reunião agendada e negócio movido para ${
+                  nomeDoFunil(
+                    displayConfigs,
+                    pipelines.find((p) => p.type === "system" && p.slug === "confirmacao") ?? {
+                      name: "o funil de destino",
+                    },
+                  )
+                }!`,
+              );
             }
           }}
         />

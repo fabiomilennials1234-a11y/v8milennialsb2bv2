@@ -33,8 +33,6 @@ import {
   STAGE_ROLES,
   STAGE_ROLE_META,
   STAGE_ROLE_SOURCE_LABEL,
-  getPipelineTypeName,
-  type PipelineType,
   type StageRole,
 } from "@/modules/pipelines";
 import {
@@ -47,13 +45,9 @@ import {
 } from "../lib/stage-role-review";
 
 function pipeLabel(row: StageRoleSuggestionRow): string {
-  // Etapa custom (pós-SCRUM-616): pipeline_type é NULL — o rótulo é o funil.
-  if (!row.pipeline_type) return row.pipeline?.name ?? "Funil custom";
-  try {
-    return getPipelineTypeName(row.pipeline_type as PipelineType);
-  } catch {
-    return row.pipeline_type;
-  }
+  // O funil como a ORG o vê (resolvido no hook via nomeDoFunil) — nunca o
+  // catálogo. Etapa órfã (pipeline_id nulo) ganha o fallback honesto.
+  return row.funil_label ?? "Funil removido";
 }
 
 function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {

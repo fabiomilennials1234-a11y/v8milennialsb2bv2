@@ -503,19 +503,9 @@ export const AVAILABLE_SKILLS = [
   "Manter relacionamento",
 ] as const;
 
-/**
- * Pipelines disponíveis no sistema
- */
-// SCRUM-618 (D9/ADR-0034): as entradas upsell_base/upsell_gestao saíram —
-// Carteira não é funil. Medido em prod (2026-09-01): 1 agente tinha as duas em
-// active_pipes; o chip degrada para o slug cru (`.find(...)?.label || pipe`) e
-// o backend já era no-op para elas (etapas aposentadas/inativas).
-export const PIPE_TYPES = [
-  { value: "confirmacao", label: "Pipe Confirmação" },
-  { value: "propostas", label: "Pipe Propostas" },
-  { value: "whatsapp", label: "Pipe WhatsApp" },
-  { value: "campanha", label: "Campanhas" },
-] as const;
+// SCRUM-641: PIPE_TYPES (catálogo cravado "Pipe Confirmação"/"Pipe Propostas"/
+// "Pipe WhatsApp") morreu — as telas resolvem as opções com os funis REAIS da
+// org via `usePipeTypeOptions` (@/modules/copilot/hooks).
 
 /**
  * @deprecated Use useAllPipelineStageOptions() ou usePipelineStageOptions(type) do hook usePipelineStages.

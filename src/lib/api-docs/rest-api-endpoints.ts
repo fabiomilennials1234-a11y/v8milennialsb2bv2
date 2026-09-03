@@ -251,7 +251,7 @@ const endpoints: ApiEndpoint[] = [
   {
     id: "api-move-stage",
     name: "Mover etapa",
-    description: "Move o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, auto-Orçamentos ao compareceu). Escopo: lead:write.",
+    description: "Move o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, transição automática ao funil de destino no compareceu). Escopo: lead:write.",
     category: "rest-api",
     version: "v1",
     method: "POST",

@@ -15,7 +15,7 @@ const PREVIEW_EXAMPLES: Record<string, string> = {
   "{{origem}}":             "Site",
   "{{urgencia}}":           "Alta",
   "{{observacoes}}":        "Interessado no plano premium",
-  "{{estagio}}":            "Qualificação",
+  "{{estagio}}":            "Novo lead",
   "{{data_reuniao}}":       "15/03/2026",
   "{{valor_proposta}}":     "R$ 2.500",
   "{{responsavel}}":        "Maria Santos",

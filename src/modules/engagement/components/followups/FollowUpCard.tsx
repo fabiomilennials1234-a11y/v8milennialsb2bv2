@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { useNomeDoPipe } from "../../hooks/useNomeDoPipe";
 import { format, formatDistanceToNow, isPast, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -53,11 +54,6 @@ const pipeIcons = {
   propostas: Kanban,
 };
 
-const pipeLabels: Record<string, string> = {
-  whatsapp: "WhatsApp",
-  confirmacao: "Confirmação",
-  propostas: "Propostas",
-};
 
 export const FollowUpCard = memo(function FollowUpCard({
   followUp,
@@ -70,6 +66,8 @@ export const FollowUpCard = memo(function FollowUpCard({
   isExpanded = false,
   onToggleExpand,
 }: FollowUpCardProps) {
+  // Nome do funil como a ORG o vê (SCRUM-641).
+  const nomeDoPipe = useNomeDoPipe();
   const [completionNotes, setCompletionNotes] = useState("");
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
 
@@ -164,7 +162,7 @@ export const FollowUpCard = memo(function FollowUpCard({
               {followUp.source_pipe && PipeIcon && (
                 <Badge variant="secondary" className="text-[10px] gap-0.5 px-1.5 py-0 hidden sm:flex">
                   <PipeIcon className="w-3 h-3" />
-                  {pipeLabels[followUp.source_pipe]}
+                  {nomeDoPipe(followUp.source_pipe)}
                 </Badge>
               )}
 
@@ -360,7 +358,7 @@ export const FollowUpCard = memo(function FollowUpCard({
                 {followUp.source_pipe && (
                   <>
                     <span className="text-border">•</span>
-                    <span>Pipe: {pipeLabels[followUp.source_pipe] || followUp.source_pipe}</span>
+                    <span>Funil: {nomeDoPipe(followUp.source_pipe)}</span>
                   </>
                 )}
                 {followUp.is_automated && (

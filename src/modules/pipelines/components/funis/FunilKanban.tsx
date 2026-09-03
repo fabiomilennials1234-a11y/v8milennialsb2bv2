@@ -322,10 +322,15 @@ export function FunilKanban({
         pipelineId={pipelineId}
         leadCount={stageToExport?.count ?? 0}
       />
+      {/* SCRUM-611 — o que está marcado aqui são NEGÓCIOS, não pessoas.
+          Sem `escopoFunil`, o botão vermelho desta barra mandava a PESSOA para
+          a lixeira: ela sumia da lista de Leads, dos outros funis, da carteira
+          e do chat — a partir de um clique dado sobre um card de negócio. */}
       <BulkActionBar
         selectedIds={bulk.selectedIds}
         onClear={bulk.clearSelection}
         leadIds={allLeadIds}
+        escopoFunil={{ pipelineId }}
         onDisparar={
           onDisparar
             ? (leadIds) => {

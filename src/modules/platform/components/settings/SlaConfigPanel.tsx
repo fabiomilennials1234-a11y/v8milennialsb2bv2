@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { useSlaConfigs, useCreateSlaConfig, useUpdateSlaConfig, useDeleteSlaConfig, SlaConfig } from "@/modules/platform/hooks/useSlaConfigs";
 import { useAllPipelineStages, usePipelineDisplayConfig } from "@/modules/pipelines";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 
 const ESCALATION_ACTIONS = [
   { value: "notify", label: "Notificar responsavel" },
@@ -29,24 +30,21 @@ const ESCALATION_ACTIONS = [
  * config real da org (rename prevalece) em vez do nome hardcoded.
  */
 const PIPELINE_TYPES = ["whatsapp", "confirmacao", "propostas"] as const;
-const FALLBACK_TYPE_NAME: Record<string, string> = {
-  whatsapp: "Qualificação",
-  confirmacao: "Confirmação",
-  propostas: "Propostas",
-};
 
 export function SlaConfigPanel() {
   const { data: configs = [], isLoading } = useSlaConfigs();
   const { data: allStages = [] } = useAllPipelineStages();
   const { data: displayConfig = [] } = usePipelineDisplayConfig();
 
+  // SCRUM-641: sem catálogo de fallback. Linha de display ausente = a org não
+  // tem o funil — SLA existente ganha rótulo honesto e o funil some do "Novo".
   function pipeName(type: string): string {
-    return (
-      displayConfig.find((c) => c.pipe_type === type)?.display_name ??
-      FALLBACK_TYPE_NAME[type] ??
-      type
-    );
+    const c = displayConfig.find((x) => x.pipe_type === type);
+    return c ? c.display_name || NOME_DE_FABRICA[type] || type : "Funil removido";
   }
+  const tiposDaOrg = PIPELINE_TYPES.filter((t) =>
+    displayConfig.some((c) => c.pipe_type === t),
+  );
   const createSla = useCreateSlaConfig();
   const updateSla = useUpdateSlaConfig();
   const deleteSla = useDeleteSlaConfig();
@@ -106,7 +104,19 @@ export function SlaConfigPanel() {
             Defina prazos maximos por etapa do pipeline e acoes em caso de atraso
           </p>
         </div>
-        <Button size="sm" onClick={() => setDialogOpen(true)}>
+        <Button
+          size="sm"
+          onClick={() => {
+            // Abre já apontando para um funil que a org TEM — o default
+            // estático "whatsapp" pode não existir nela (SCRUM-641).
+            setForm((f) =>
+              tiposDaOrg.includes(f.pipeline_type as (typeof PIPELINE_TYPES)[number])
+                ? f
+                : { ...f, pipeline_type: tiposDaOrg[0] ?? f.pipeline_type, stage_id: "" },
+            );
+            setDialogOpen(true);
+          }}
+        >
           <Plus className="mr-1 h-4 w-4" /> Novo SLA
         </Button>
       </div>
@@ -174,7 +184,7 @@ export function SlaConfigPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PIPELINE_TYPES.map((p) => (
+                  {tiposDaOrg.map((p) => (
                     <SelectItem key={p} value={p}>{pipeName(p)}</SelectItem>
                   ))}
                 </SelectContent>

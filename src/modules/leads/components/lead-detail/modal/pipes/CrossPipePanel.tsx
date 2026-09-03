@@ -18,7 +18,6 @@ import { ActionPill, type ActionPillType } from "./ActionPill";
 import { ActionPanel } from "./ActionPanel";
 import { NewDealDialog } from "./NewDealDialog";
 import {
-  SYSTEM_PIPE_SHORT_LABEL,
   isCustomPipe,
   isSystemPipe,
 } from "./newDealOptions";
@@ -187,7 +186,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
       kind: "system" as const,
       recordId: p.pipeId!,
       pipeRef: p.pipeType,
-      shortLabel: SYSTEM_PIPE_SHORT_LABEL[p.pipeType] ?? p.label,
+      shortLabel: p.label,
       color: p.color,
       stages: p.stages.map((s) => ({ key: s.id, label: s.label })),
       currentKey: p.currentStage,

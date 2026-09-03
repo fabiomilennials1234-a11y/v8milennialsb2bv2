@@ -141,6 +141,9 @@ function instancia(over: Partial<Row> & { id: string; instance_name: string }): 
     status: "connected",
     provider: "uazapi",
     voice_calls_enabled: true,
+    // Vai para o menu de escolha do número (2026-09-03). `null` é o caso de
+    // instância que o provider ainda não devolveu o telefone.
+    phone_number: null,
     ...over,
   };
 }
@@ -172,7 +175,7 @@ function umNumeroPronto() {
 }
 
 /** Só a consulta que monta a lista de instâncias permitidas. */
-const CONSULTA_DA_REGRA = "whatsapp_instances:id,instance_name,status,provider";
+const CONSULTA_DA_REGRA = "whatsapp_instances:id,instance_name,status,provider,phone_number";
 
 describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma nova", () => {
   it("sem nenhum número com voz ao alcance, a lista é vazia (o botão some)", async () => {
@@ -186,8 +189,22 @@ describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma 
     tables.voip_sessions = [sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" })];
     const result = await listar();
     expect(result.current.numbers).toEqual([
-      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial" },
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: null },
     ]);
+  });
+
+  // O telefone da instância é o que o cliente vê tocar; o menu de escolha do
+  // número mostra-o ao lado do nome. Vem da mesma leitura, sem consulta a mais.
+  it("o telefone da instância chega como phoneNumber, sem consulta a mais", async () => {
+    tables.whatsapp_instances = [
+      instancia({ id: "i-1", instance_name: "Comercial", phone_number: "5548991199347" }),
+    ];
+    tables.voip_sessions = [sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" })];
+    const result = await listar();
+    expect(result.current.numbers).toEqual([
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: "5548991199347" },
+    ]);
+    expect(consultas.filter((c) => c.startsWith("whatsapp_instances:"))).toHaveLength(2);
   });
 
   it("instância COM lista não aparece para quem está fora dela", async () => {
@@ -231,7 +248,7 @@ describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma 
     ];
     const result = await listar();
     expect(result.current.numbers).toEqual([
-      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial" },
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: null },
     ]);
   });
 
@@ -395,7 +412,7 @@ describe("useAnswerableVoiceNumbers — quem DEVE ser chamado", () => {
     umNumeroPronto();
     const result = await listarParaReceber();
     expect(result.current.numbers).toEqual([
-      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial" },
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: null },
     ]);
   });
 
