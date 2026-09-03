@@ -436,8 +436,17 @@ describe("sendToNumber action handler", () => {
       const r0 = rows[0] as Record<string, unknown>;
       expect(r0.direction).toBe("outgoing");
       expect(r0.message_type).toBe("conversation");
-      // Load-bearing: this is what makes fn_human_pause_on_manual_send early-return.
-      expect(r0.sent_source).toBe("workflow-send-to-number");
+      // Load-bearing DUAS vezes, e é fácil quebrar uma consertando a outra:
+      //  1. `whatsapp_messages_sent_source_check` só aceita manual|copilot|workflow.
+      //     Antes daqui saía "workflow-send-to-number": violava a CHECK, o upsert
+      //     devolvia 23514, o catch best-effort engolia e a notificação sumia do
+      //     chat. Medido no PROD: 0 linhas com esse valor em 2,3M mensagens.
+      //  2. fn_human_pause_on_manual_send faz early-return em
+      //     `COALESCE(sent_source,'manual') != 'manual'` — ou seja, QUALQUER valor
+      //     não-`manual` serve. "workflow" preserva isso; só nunca use "manual".
+      expect(r0.sent_source).toBe("workflow");
+      expect(["manual", "copilot", "workflow"]).toContain(r0.sent_source);
+      expect(r0.sent_source).not.toBe("manual");
       // Keyed to the RECIPIENT's number, NOT the lead — lead_id stays null.
       expect(r0.lead_id).toBeNull();
       expect(r0.phone_number).toBe("5511988887777");
