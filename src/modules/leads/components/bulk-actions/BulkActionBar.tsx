@@ -26,7 +26,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useTeamMembers } from "@/modules/identity";
+import { useTeamMembers, useOrganizationSettings } from "@/modules/identity";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { usePipeOps } from "../../pipe-ops";
 import {
@@ -158,10 +158,15 @@ function BulkMoveDialog({
   const systemFunnels = activeFunnels.filter((f) => f.type === "system");
   const customFunnels = activeFunnels.filter((f) => f.type === "custom");
 
-  // Default: primeiro funil de sistema (paridade com o antigo "whatsapp"),
-  // senão o primeiro ativo — sem estado até a lista carregar.
+  // SCRUM-641 (D4): default = o funil PADRÃO da org (default_pipeline_id),
+  // que é o mesmo fallback de toda porta de entrada. Depois: primeiro funil de
+  // sistema (paridade legada das orgs antigas), senão o primeiro ativo.
+  const { settings } = useOrganizationSettings();
+  const defaultFunnelId = settings?.default_pipeline_id ?? null;
   const effectivePipelineId =
-    pipelineId || systemFunnels[0]?.id || activeFunnels[0]?.id || "";
+    pipelineId ||
+    (defaultFunnelId && activeFunnels.some((f) => f.id === defaultFunnelId) ? defaultFunnelId : "") ||
+    systemFunnels[0]?.id || activeFunnels[0]?.id || "";
 
   const { data: stages = [] } = useFunnelStages(effectivePipelineId || undefined);
 

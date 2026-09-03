@@ -128,6 +128,35 @@ Deno.test("alias NÃO sombreia funil real: org com funil slug=qualificacao resol
   assertEquals(await resolvePipelineId(supa, ORG, "qualificacao"), "44444444-4444-4444-8444-444444444444");
 });
 
+Deno.test("SCRUM-641: alias legado em org SEM o funil do trio → pipeline_not_found tipado (alias resolve SÓ onde o funil existe)", async () => {
+  __clearPipelineResolutionCache();
+  // Org nova pós-funil-único: só o funil semeado 'vendas' — nenhum slug do trio.
+  const rows: PipelineRow[] = [
+    { id: "55555555-5555-4555-8555-555555555555", organization_id: "org-nova", slug: "vendas", name: "Funil de Vendas", type: "custom", is_active: true },
+  ];
+  const { supa } = fakePipelines(rows);
+  for (const alias of ["qualificacao", "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas"]) {
+    __clearPipelineResolutionCache();
+    const err = await assertRejects(
+      () => resolvePipelineId(supa, "org-nova", alias),
+      PipelineResolutionError,
+    );
+    assertEquals(err.code, "pipeline_not_found");
+    assertEquals(err.ref, alias);
+  }
+  // Os slugs diretos do trio também erram tipado nessa org.
+  for (const slug of ["whatsapp", "confirmacao", "propostas"]) {
+    __clearPipelineResolutionCache();
+    const err = await assertRejects(
+      () => resolvePipelineId(supa, "org-nova", slug),
+      PipelineResolutionError,
+    );
+    assertEquals(err.code, "pipeline_not_found");
+  }
+  // E o funil que a org TEM segue resolvendo.
+  assertEquals(await resolvePipelineId(supa, "org-nova", "vendas"), "55555555-5555-4555-8555-555555555555");
+});
+
 Deno.test("funil inexistente → PipelineResolutionError(pipeline_not_found), nunca null", async () => {
   __clearPipelineResolutionCache();
   const { supa } = fakePipelines(ROWS);

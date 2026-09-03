@@ -82,14 +82,15 @@ export function useEnabledSystemPipeTypes(): SystemPipeType[] {
 }
 
 /**
- * Funis de sistema que a org PODE ativar — os que ela não tem, mais os que
- * tem porém ocultos.
+ * Funis de sistema que a org pode REATIVAR — só os que ela TEM registrados
+ * porém ocultos (`is_visible = false`).
  *
- * Antes chamava-se `useHiddenDefaultPipes` e devolvia só `is_visible = false`.
- * Com a auto-semeadura morta, "não ter a linha" passou a ser o estado normal
- * de uma org nova (e o estado final de um funil excluído), então a lista
- * precisa somar os dois casos — senão o diálogo "Ativar funil" nasce vazio em
- * toda org nova e o funil excluído fica sem caminho de volta.
+ * SCRUM-641: o trio legado deixou de ser oferecido como MODELO. Org que nunca
+ * teve o registro (org nova pós-funil-único, ou org que excluiu o funil) não
+ * vê mais o trio como opção — o único modelo do produto é o "Funil de Vendas"
+ * (`FUNIL_DE_VENDAS_STAGES` em contracts/pipe), criado pelo caminho comum de
+ * funil. A REATIVAÇÃO de funil oculto de org antiga continua intacta
+ * (`enable_system_pipeline`, registry-gated).
  */
 export function useAvailableSystemPipes() {
   const { data: configs } = usePipelineDisplayConfig();
@@ -97,13 +98,13 @@ export function useAvailableSystemPipes() {
 
   return SYSTEM_PIPE_CATALOG.filter((cat) => {
     const atual = existentes.get(cat.pipe_type);
-    return !atual || !atual.is_visible;
+    return !!atual && !atual.is_visible;
   }).map((cat) => ({
     pipe_type: cat.pipe_type,
-    // Preserva o nome que a org personalizou, quando a linha existe.
+    // Preserva o nome que a org personalizou.
     display_name: existentes.get(cat.pipe_type)?.display_name ?? cat.display_name,
-    /** `false` = a org nunca teve (ou excluiu); `true` = tem, só está oculto. */
-    ja_existe: existentes.has(cat.pipe_type),
+    /** Sempre true desde SCRUM-641 — a lista só contém funil registrado (oculto). */
+    ja_existe: true,
   }));
 }
 

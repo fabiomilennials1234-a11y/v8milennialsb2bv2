@@ -15,6 +15,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { isValidUUID, isValidISODate, validateArraySize, validateReferencedId } from "../_shared/validation.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
 import { upsertPipeEntryDetailed, getPipeEntry, updatePipeEntryById, resolveActiveStageKey, resolvePipeline, isPipelineResolutionError } from "../_shared/pipeline-adapter.ts";
+import { resolveMeetingDestination } from "../_shared/pipeline-destination.ts";
 import type { ResolvedPipeline } from "../_shared/pipeline-adapter.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -413,17 +414,32 @@ serve(withErrorBoundary('lead-webhook', async (req) => {
         );
       }
 
-      if (payload.place_in_pipe && payload.place_in_pipe.pipe !== "confirmacao") {
+      // SCRUM-641: o destino preferido segue 'confirmacao'/'reuniao_marcada'
+      // (org antiga: idêntico). Org sem esse funil → funil PADRÃO ancorado
+      // pela etapa de papel meeting_booked; sem funil padrão → lead sem card.
+      const calDest = await resolveMeetingDestination(supabase, organizationId as string, {
+        ref: "confirmacao",
+        stageKey: "reuniao_marcada",
+      });
+
+      if (payload.place_in_pipe && calDest && payload.place_in_pipe.pipe !== calDest.ref) {
         console.warn(
-          `[lead-webhook] origin=cal override: caller mandou pipe="${payload.place_in_pipe.pipe}" stage="${payload.place_in_pipe.stage}", forçando confirmacao/reuniao_marcada`,
+          `[lead-webhook] origin=cal override: caller mandou pipe="${payload.place_in_pipe.pipe}" stage="${payload.place_in_pipe.stage}", forçando ${calDest.ref}/${calDest.stageKey}`,
         );
       }
 
-      payload.place_in_pipe = {
-        pipe: "confirmacao",
-        stage: "reuniao_marcada",
-        meeting_date: meetingDate,
-      };
+      if (calDest) {
+        payload.place_in_pipe = {
+          pipe: calDest.ref,
+          stage: calDest.stageKey,
+          meeting_date: meetingDate,
+        };
+      } else {
+        console.warn(
+          `[lead-webhook] origin=cal sem destino de reunião na org ${organizationId} (sem funil 'confirmacao' e sem funil padrão) — lead será criado sem card.`,
+        );
+        delete payload.place_in_pipe;
+      }
     }
 
     let result: Awaited<ReturnType<typeof getOrCreateLead>>;

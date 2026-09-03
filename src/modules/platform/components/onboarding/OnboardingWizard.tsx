@@ -4,10 +4,8 @@ import { useAuth } from "@/modules/identity";
 import { useOnboarding, type OnboardingAnswers } from "@/modules/platform/hooks/useOnboarding";
 import { useOrganization } from "@/modules/identity";
 import { generateSuggestions, type SuggestedPipeline, type SuggestedAutomation } from "@/modules/platform/lib/onboarding-suggestions";
-import { generatePipelineDisplayConfig, applyPipelineDisplayConfig } from "@/modules/platform/lib/pipeline-config-from-quiz";
 import { useCreateCustomPipeline } from "@/modules/pipelines";
 import { track } from "@/lib/analytics";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { StepPerfilOperacao } from "./steps/StepPerfilOperacao";
 import { StepEstruturaComercial } from "./steps/StepEstruturaComercial";
@@ -68,7 +66,10 @@ export function OnboardingWizard() {
   const [isApplying, setIsApplying] = useState(false);
 
   const currentStepKey = STEP_KEYS[currentStep];
-  const stepAnswers = (localAnswers as Record<string, Record<string, unknown>>)[currentStepKey] ?? {};
+  const stepAnswers = useMemo(
+    () => (localAnswers as Record<string, Record<string, unknown>>)[currentStepKey] ?? {},
+    [localAnswers, currentStepKey],
+  );
 
   const updateStepAnswer = useCallback((key: string, value: unknown) => {
     setLocalAnswers((prev) => ({
@@ -123,10 +124,11 @@ export function OnboardingWizard() {
           continue;
         }
       }
-      // Funis de sistema: nascem pela RPC canônica (enable_system_pipeline)
-      // dentro de applyPipelineDisplayConfig — registro + pipelines + etapas.
-      const pipelineConfig = generatePipelineDisplayConfig(localAnswers);
-      await applyPipelineDisplayConfig(supabase, organizationId, pipelineConfig);
+      // SCRUM-641: o quiz NÃO semeia mais os funis de sistema legados. A org
+      // já nasce com o "Funil de Vendas" (trigger trg_seed_default_funnel,
+      // 20270918000000) como funil padrão; o que o quiz agrega são os funis
+      // CUSTOM sugeridos acima — criados pelo fluxo normal. O rename do funil
+      // padrão fica ao alcance do usuário como em qualquer funil.
       await markApplied();
       toast.success("Pipelines configurados!");
       setCurrentStep(4); // advance to Equipe

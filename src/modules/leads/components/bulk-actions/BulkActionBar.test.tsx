@@ -15,6 +15,8 @@ vi.mock("@/modules/identity", () => ({
   useTeamMembers: () => ({ data: [] }),
   useOrganization: () => ({ organizationId: "org-1", isReady: true }),
   useCanDo: () => ({ allowed: true, isLoading: false }),
+  // SCRUM-641: o diálogo de mover passa a defaultar pro funil PADRÃO da org.
+  useOrganizationSettings: () => ({ settings: { default_pipeline_id: null } }),
 }));
 vi.mock("@/modules/leads/hooks/useTags", () => ({ useTags: () => ({ data: [] }) }));
 vi.mock("./QuickBlastDialog", () => ({ QuickBlastDialog: () => null }));
