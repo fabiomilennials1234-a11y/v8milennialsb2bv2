@@ -273,7 +273,7 @@
                       "closer_id": null,
                       "sold": false,
                       "sale_value": null,
-                      "rating": 4,
+                      "rating": null,
                       "qualification_score": 80,
                       "created_at": "2026-06-14T14:30:22Z"
                     }
@@ -451,7 +451,7 @@
                   "phone": "+5511…",
                   "origin": "outro",
                   "tier": "ouro",
-                  "rating": 4,
+                  "rating": null,
                   "qualification_score": 80,
                   "responsible_id": "bf98…",
                   "sdr_id": null,
@@ -537,7 +537,7 @@
                   "id": "f21072f1-…",
                   "name": "Acme Renomeado",
                   "tier": "ouro",
-                  "rating": 5
+                  "rating": null
                 }
               }
             }
@@ -563,7 +563,7 @@
               "example": {
                 "name": "Acme Renomeado",
                 "tier": "ouro",
-                "rating": 5
+                "rating": null
               },
               "schema": {
                 "type": "object",
@@ -618,7 +618,9 @@
                   },
                   "rating": {
                     "type": "number",
-                    "description": "Estrelas de 1 a 5."
+                    "deprecated": true,
+                    "nullable": true,
+                    "description": "DEPRECADO. A nota manual do lead foi aposentada (SCRUM-647). O campo continua sendo ACEITO no corpo e passa a ser IGNORADO — nenhum PATCH falha por causa dele. Na leitura, vem sempre null, e a chave sai do payload em 2026-11-03. Para priorizar lead, use qualification_score."
                   },
                   "qualification_score": {
                     "type": "number",

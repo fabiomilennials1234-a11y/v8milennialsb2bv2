@@ -55,7 +55,18 @@ const TEXT_FIELDS = [
   "segment", "faturamento",
   "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
 ];
-const NUM_FIELDS = ["rating", "qualification_score"];
+// `rating` saiu daqui (SCRUM-647, Etapa 2): a coluna `leads.rating` foi
+// aposentada. A chave continua ACEITA no corpo do PATCH e passa a ser
+// ignorada — o laço abaixo só olha os campos desta lista, então uma chave
+// desconhecida já é descartada em silêncio, sem 422.
+//
+// Ignorar em vez de recusar é decisão, não descuido: quem envia `rating` envia
+// junto com `name`, `phone` e o resto. Um 422 reprovaria o PATCH INTEIRO por
+// causa de um campo aposentado, e a integração perderia a atualização toda.
+// O aviso às orgs (.specs/features/funis-unificacao/aviso-remocao-rating.md) é
+// o canal para contar que o campo saiu; a API não é lugar de dar essa notícia
+// derrubando escrita boa.
+const NUM_FIELDS = ["qualification_score"];
 const UUID_FIELDS = [
   "responsible_id", "sdr_id", "closer_id",
   "pre_sale_responsible_id", "sale_responsible_id",
