@@ -56,6 +56,12 @@ export interface CustomPipelineStage {
   is_active: boolean;
   is_final_positive: boolean;
   is_final_negative: boolean;
+  /**
+   * Papel semântico governado (won/lost/meeting_*) — opcional porque nem todo
+   * escritor deste shape o carrega; a query única `useFunilStages` SEMPRE o
+   * seleciona (SCRUM-637: é por ele que comportamento de etapa se decide).
+   */
+  stage_role?: StageRole | null;
   target_pipeline_id: string | null;
   target_stage_id: string | null;
   target_pipe_type: string | null;

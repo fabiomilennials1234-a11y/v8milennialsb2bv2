@@ -13,7 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { useSlaConfigs, useCreateSlaConfig, useUpdateSlaConfig, useDeleteSlaConfig, SlaConfig } from "@/modules/platform/hooks/useSlaConfigs";
-import { useAllPipelineStages, getPipelineTypeName, PipelineType } from "@/modules/pipelines";
+import { useAllPipelineStages, usePipelineDisplayConfig } from "@/modules/pipelines";
 
 const ESCALATION_ACTIONS = [
   { value: "notify", label: "Notificar responsavel" },
@@ -22,11 +22,31 @@ const ESCALATION_ACTIONS = [
   { value: "create_followup", label: "Criar follow-up" },
 ];
 
-const PIPELINE_TYPES: PipelineType[] = ["whatsapp", "confirmacao", "propostas"];
+/**
+ * `sla_configs` é chaveada por `pipeline_type` TEXT (sem `pipeline_id`) e tem
+ * 0 linhas em prod (medido 2026-09-02) — o painel só alcança o trio de fábrica
+ * até a tabela ganhar FK de funil (W6). O rótulo, ao menos, sai do display
+ * config real da org (rename prevalece) em vez do nome hardcoded.
+ */
+const PIPELINE_TYPES = ["whatsapp", "confirmacao", "propostas"] as const;
+const FALLBACK_TYPE_NAME: Record<string, string> = {
+  whatsapp: "Qualificação",
+  confirmacao: "Confirmação",
+  propostas: "Propostas",
+};
 
 export function SlaConfigPanel() {
   const { data: configs = [], isLoading } = useSlaConfigs();
   const { data: allStages = [] } = useAllPipelineStages();
+  const { data: displayConfig = [] } = usePipelineDisplayConfig();
+
+  function pipeName(type: string): string {
+    return (
+      displayConfig.find((c) => c.pipe_type === type)?.display_name ??
+      FALLBACK_TYPE_NAME[type] ??
+      type
+    );
+  }
   const createSla = useCreateSlaConfig();
   const updateSla = useUpdateSlaConfig();
   const deleteSla = useDeleteSlaConfig();
@@ -106,7 +126,7 @@ export function SlaConfigPanel() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-sm">
-                      {getPipelineTypeName(config.pipeline_type as PipelineType)} — {getStageName(config.stage_id)}
+                      {pipeName(config.pipeline_type)} — {getStageName(config.stage_id)}
                     </CardTitle>
                     <Badge variant="outline" className="text-xs tabular-nums">
                       {config.max_hours}h
@@ -155,7 +175,7 @@ export function SlaConfigPanel() {
                 </SelectTrigger>
                 <SelectContent>
                   {PIPELINE_TYPES.map((p) => (
-                    <SelectItem key={p} value={p}>{getPipelineTypeName(p)}</SelectItem>
+                    <SelectItem key={p} value={p}>{pipeName(p)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

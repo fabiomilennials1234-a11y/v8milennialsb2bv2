@@ -90,7 +90,7 @@ beforeEach(() => {
   for (const k of Object.keys(rows)) delete rows[k];
   rows.pipelines = [];
   rows.pipeline_stages = [];
-  rows.custom_pipeline_stages = [];
+  rows.pipeline_stages = [];
   rows.pipeline_entries = [];
   rows.deals = [];
 });
@@ -104,9 +104,9 @@ describe("posição da etapa — o desempate da Situação", () => {
       { id: "pipe-1", slug: "whatsapp", name: "Qualificação", color: "#0f0", type: "system" },
     ];
     rows.pipeline_stages = [
-      { pipeline_type: "whatsapp", stage_key: "novo", name: "Novo", stage_role: null, position: 0 },
-      { pipeline_type: "whatsapp", stage_key: "abordado", name: "Abordado", stage_role: null, position: 1 },
-      { pipeline_type: "whatsapp", stage_key: "respondeu", name: "Respondeu", stage_role: null, position: 2 },
+      { id: "pipe-1-novo", pipeline_id: "pipe-1", stage_key: "novo", name: "Novo", stage_role: null, position: 0 },
+      { id: "pipe-1-abordado", pipeline_id: "pipe-1", stage_key: "abordado", name: "Abordado", stage_role: null, position: 1 },
+      { id: "pipe-1-respondeu", pipeline_id: "pipe-1", stage_key: "respondeu", name: "Respondeu", stage_role: null, position: 2 },
     ];
     rows.pipeline_entries = [entry({ stage_key: "respondeu" })];
 
@@ -125,8 +125,8 @@ describe("posição da etapa — o desempate da Situação", () => {
       { id: "pipe-2", slug: "propostas", name: "Orçamentos", color: "#00f", type: "system" },
     ];
     rows.pipeline_stages = [
-      { pipeline_type: "whatsapp", stage_key: "novo", name: "Novo lead", stage_role: null, position: 0 },
-      { pipeline_type: "propostas", stage_key: "novo", name: "Nova proposta", stage_role: null, position: 3 },
+      { id: "pipe-1-novo", pipeline_id: "pipe-1", stage_key: "novo", name: "Novo lead", stage_role: null, position: 0 },
+      { id: "pipe-2-novo", pipeline_id: "pipe-2", stage_key: "novo", name: "Nova proposta", stage_role: null, position: 3 },
     ];
     rows.pipeline_entries = [
       entry({ id: "e-whats", pipeline_id: "pipe-1", stage_key: "novo" }),
@@ -147,7 +147,7 @@ describe("posição da etapa — o desempate da Situação", () => {
       { id: "pipe-1", slug: "whatsapp", name: "Qualificação", color: "#0f0", type: "system" },
     ];
     rows.pipeline_stages = [
-      { pipeline_type: "whatsapp", stage_key: "novo", name: "Novo", stage_role: null, position: 0 },
+      { id: "pipe-1-novo", pipeline_id: "pipe-1", stage_key: "novo", name: "Novo", stage_role: null, position: 0 },
     ];
     rows.pipeline_entries = [entry({ stage_key: "etapa_que_sumiu" })];
 
@@ -165,8 +165,8 @@ describe("posição da etapa — o desempate da Situação", () => {
       { id: "pipe-1", slug: "whatsapp", name: "Qualificação", color: "#0f0", type: "system" },
     ];
     rows.pipeline_stages = [
-      { pipeline_type: "whatsapp", stage_key: "novo", name: "Novo", stage_role: null, position: 0 },
-      { pipeline_type: "whatsapp", stage_key: "agendado", name: "Agendado", stage_role: null, position: 4 },
+      { id: "pipe-1-novo", pipeline_id: "pipe-1", stage_key: "novo", name: "Novo", stage_role: null, position: 0 },
+      { id: "pipe-1-agendado", pipeline_id: "pipe-1", stage_key: "agendado", name: "Agendado", stage_role: null, position: 4 },
     ];
     rows.pipeline_entries = [
       entry({ id: "atras", stage_key: "novo" }),
@@ -189,10 +189,10 @@ describe("índice e total da etapa — o denominador da barra de progresso", () 
       { id: "pipe-1", slug: "whatsapp", name: "Qualificação", color: "#0f0", type: "system" },
     ];
     rows.pipeline_stages = [
-      { pipeline_type: "whatsapp", stage_key: "a", name: "A", stage_role: null, position: 0 },
-      { pipeline_type: "whatsapp", stage_key: "b", name: "B", stage_role: null, position: 10 },
-      { pipeline_type: "whatsapp", stage_key: "c", name: "C", stage_role: null, position: 20 },
-      { pipeline_type: "whatsapp", stage_key: "d", name: "D", stage_role: null, position: 30 },
+      { id: "pipe-1-a", pipeline_id: "pipe-1", stage_key: "a", name: "A", stage_role: null, position: 0 },
+      { id: "pipe-1-b", pipeline_id: "pipe-1", stage_key: "b", name: "B", stage_role: null, position: 10 },
+      { id: "pipe-1-c", pipeline_id: "pipe-1", stage_key: "c", name: "C", stage_role: null, position: 20 },
+      { id: "pipe-1-d", pipeline_id: "pipe-1", stage_key: "d", name: "D", stage_role: null, position: 30 },
     ];
   }
 
@@ -223,10 +223,10 @@ describe("índice e total da etapa — o denominador da barra de progresso", () 
       { id: "pipe-1", slug: "whatsapp", name: "Qualificação", color: "#0f0", type: "system" },
     ];
     rows.pipeline_stages = [
-      { pipeline_type: "whatsapp", stage_key: "c", name: "C", stage_role: null, position: 2 },
-      { pipeline_type: "whatsapp", stage_key: "a", name: "A", stage_role: null, position: 0 },
-      { pipeline_type: "whatsapp", stage_key: "d", name: "D", stage_role: null, position: 3 },
-      { pipeline_type: "whatsapp", stage_key: "b", name: "B", stage_role: null, position: 1 },
+      { id: "pipe-1-c", pipeline_id: "pipe-1", stage_key: "c", name: "C", stage_role: null, position: 2 },
+      { id: "pipe-1-a", pipeline_id: "pipe-1", stage_key: "a", name: "A", stage_role: null, position: 0 },
+      { id: "pipe-1-d", pipeline_id: "pipe-1", stage_key: "d", name: "D", stage_role: null, position: 3 },
+      { id: "pipe-1-b", pipeline_id: "pipe-1", stage_key: "b", name: "B", stage_role: null, position: 1 },
     ];
     rows.pipeline_entries = [entry({ stage_key: "c" })];
 
@@ -244,11 +244,11 @@ describe("índice e total da etapa — o denominador da barra de progresso", () 
       { id: "pipe-1", slug: "whatsapp", name: "Qualificação", color: "#0f0", type: "system" },
     ];
     rows.pipeline_stages = [
-      { pipeline_type: "whatsapp", stage_key: "a", name: "A", stage_role: null, position: 0 },
-      { pipeline_type: "whatsapp", stage_key: "b", name: "B", stage_role: null, position: 1 },
+      { id: "pipe-1-a", pipeline_id: "pipe-1", stage_key: "a", name: "A", stage_role: null, position: 0 },
+      { id: "pipe-1-b", pipeline_id: "pipe-1", stage_key: "b", name: "B", stage_role: null, position: 1 },
       // position 2 desativada — não vem na consulta
-      { pipeline_type: "whatsapp", stage_key: "d", name: "D", stage_role: null, position: 3 },
-      { pipeline_type: "whatsapp", stage_key: "e", name: "E", stage_role: null, position: 4 },
+      { id: "pipe-1-d", pipeline_id: "pipe-1", stage_key: "d", name: "D", stage_role: null, position: 3 },
+      { id: "pipe-1-e", pipeline_id: "pipe-1", stage_key: "e", name: "E", stage_role: null, position: 4 },
     ];
     rows.pipeline_entries = [entry({ stage_key: "e" })];
 
@@ -266,11 +266,11 @@ describe("índice e total da etapa — o denominador da barra de progresso", () 
       { id: "pipe-2", slug: "propostas", name: "Orçamentos", color: "#00f", type: "system" },
     ];
     rows.pipeline_stages = [
-      { pipeline_type: "whatsapp", stage_key: "w1", name: "W1", stage_role: null, position: 0 },
-      { pipeline_type: "whatsapp", stage_key: "w2", name: "W2", stage_role: null, position: 1 },
-      { pipeline_type: "whatsapp", stage_key: "w3", name: "W3", stage_role: null, position: 2 },
-      { pipeline_type: "propostas", stage_key: "p1", name: "P1", stage_role: null, position: 0 },
-      { pipeline_type: "propostas", stage_key: "p2", name: "P2", stage_role: null, position: 1 },
+      { id: "pipe-1-w1", pipeline_id: "pipe-1", stage_key: "w1", name: "W1", stage_role: null, position: 0 },
+      { id: "pipe-1-w2", pipeline_id: "pipe-1", stage_key: "w2", name: "W2", stage_role: null, position: 1 },
+      { id: "pipe-1-w3", pipeline_id: "pipe-1", stage_key: "w3", name: "W3", stage_role: null, position: 2 },
+      { id: "pipe-2-p1", pipeline_id: "pipe-2", stage_key: "p1", name: "P1", stage_role: null, position: 0 },
+      { id: "pipe-2-p2", pipeline_id: "pipe-2", stage_key: "p2", name: "P2", stage_role: null, position: 1 },
     ];
     rows.pipeline_entries = [
       entry({ id: "e-whats", pipeline_id: "pipe-1", stage_key: "w3" }),
@@ -325,7 +325,7 @@ describe("funil custom — a entry guarda ora o uuid da etapa, ora o `stage_key`
     rows.pipelines = [
       { id: "pipe-x", slug: "reativacao", name: "Reativação", color: "#f0f", type: "custom" },
     ];
-    rows.custom_pipeline_stages = [
+    rows.pipeline_stages = [
       { id: "uuid-1", pipeline_id: "pipe-x", stage_key: "contato", name: "Contato", stage_role: null, position: 0 },
       { id: "uuid-2", pipeline_id: "pipe-x", stage_key: "proposta", name: "Proposta", stage_role: null, position: 1 },
       { id: "uuid-3", pipeline_id: "pipe-x", stage_key: "fechado", name: "Fechado", stage_role: "won", position: 2 },
@@ -365,8 +365,8 @@ describe("funil custom — a entry guarda ora o uuid da etapa, ora o `stage_key`
       ...(rows.pipelines as unknown[]),
       { id: "pipe-y", slug: "pos-venda", name: "Pós-venda", color: "#ff0", type: "custom" },
     ];
-    rows.custom_pipeline_stages = [
-      ...(rows.custom_pipeline_stages as unknown[]),
+    rows.pipeline_stages = [
+      ...(rows.pipeline_stages as unknown[]),
       { id: "uuid-9", pipeline_id: "pipe-y", stage_key: "ativo", name: "Ativo", stage_role: null, position: 0 },
       { id: "uuid-10", pipeline_id: "pipe-y", stage_key: "churn", name: "Churn", stage_role: null, position: 1 },
     ];

@@ -26,21 +26,13 @@ import {
   Kanban,
   LayoutGrid,
   List,
-  Target,
-  Users,
-  ShoppingBag,
-  Heart,
-  Briefcase,
-  Star,
-  Zap,
-  Gift,
   Send,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
 import { resolveFunil } from "@/modules/pipelines/lib/resolve-funil";
+import { funilIcon } from "@/modules/pipelines/lib/funil-icons";
 import {
   useFunilStages,
   usePaginatedFunil,
@@ -50,8 +42,6 @@ import type { PaginatedFilters } from "@/modules/pipelines/hooks/model/usePagina
 import {
   useCustomPipeline,
   useRemoveLeadFromCustomPipe,
-  useDeleteCustomPipeline,
-  useCustomPipelineDeleteImpact,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { FunilKanban, type FunilEntry } from "@/modules/pipelines/components/funis/FunilKanban";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
@@ -78,18 +68,6 @@ import {
 } from "@/lib/metrics-period";
 import { getStalledBucket, STALLED_ALL } from "@/modules/pipelines/lib/stalled-buckets";
 import { useFeaturePermission, useResponsibleMembers } from "@/modules/identity";
-
-const ICON_MAP: Record<string, LucideIcon> = {
-  kanban: Kanban,
-  target: Target,
-  users: Users,
-  "shopping-bag": ShoppingBag,
-  heart: Heart,
-  briefcase: Briefcase,
-  star: Star,
-  zap: Zap,
-  gift: Gift,
-};
 
 /**
  * Estado serializável do board — o objeto INTEIRO é o payload da saved view
@@ -172,7 +150,6 @@ function FunilPageInner() {
   const [showAddLead, setShowAddLead] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
-  const [showDeletePipeline, setShowDeletePipeline] = useState(false);
   const [isDisparoOpen, setIsDisparoOpen] = useState(false);
 
   const { data: pipelines = [], isLoading: loadingPipelines } = usePipelines();
@@ -208,14 +185,7 @@ function FunilPageInner() {
 
   const mover = useMoverCardNoFunil(pipeline ? { id: pipeline.id, type: pipeline.type } : null);
   const removeLead = useRemoveLeadFromCustomPipe();
-  const deletePipeline = useDeleteCustomPipeline();
-  const { data: impacto } = useCustomPipelineDeleteImpact(
-    ehCustom ? pipeline?.id : undefined,
-    showDeletePipeline,
-  );
-  const bloqueado = (impacto?.cards_invasores ?? 0) > 0;
 
-  const { allowed: canDeletePipeline } = useFeaturePermission("pipeline.custom_delete");
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
   const responsibleMembers = useResponsibleMembers();
 
@@ -307,26 +277,6 @@ function FunilPageInner() {
     }
   };
 
-  const handleDeletePipeline = async () => {
-    if (!pipeline) return;
-    try {
-      const r = await deletePipeline.mutateAsync(pipeline.id);
-      const detalhe = [
-        r?.cards ? `${r.cards} card(s)` : null,
-        r?.automacoes_desativadas ? `${r.automacoes_desativadas} automação(ões) desativada(s)` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      toast.success(`Funil "${pipeline.name}" excluído${detalhe ? ` — ${detalhe}` : ""}`);
-      navigate("/");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "";
-      if (msg.includes("card de outro funil")) toast.error(msg, { duration: 10_000 });
-      else if (msg.includes("permissão")) toast.error("Você não tem permissão para excluir este funil");
-      else toast.error("Erro ao excluir funil");
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
@@ -347,7 +297,7 @@ function FunilPageInner() {
     );
   }
 
-  const PipeIcon = ICON_MAP[pipeline.icon] || Kanban;
+  const PipeIcon = funilIcon(pipeline.icon);
 
   return (
     <div className="space-y-4">
@@ -496,14 +446,6 @@ function FunilPageInner() {
           onOpenChange={setShowSettings}
           pipeline={customRow}
           stages={stages}
-          onRequestDelete={
-            canDeletePipeline
-              ? () => {
-                  setShowSettings(false);
-                  setShowDeletePipeline(true);
-                }
-              : undefined
-          }
         />
       )}
 
@@ -522,78 +464,6 @@ function FunilPageInner() {
           }
         />
       )}
-
-      {/* Confirmar exclusão do funil (custom) */}
-      <AlertDialog open={showDeletePipeline} onOpenChange={setShowDeletePipeline}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" />
-              Excluir Funil "{pipeline?.name}"?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {bloqueado ? (
-                <>
-                  <strong>Não dá para excluir agora.</strong> {impacto?.cards_invasores} card(s)
-                  de <strong>outro funil</strong> estão parados numa etapa deste. Mova-os
-                  para o funil de origem primeiro.
-                  <br />
-                  <br />
-                  O sistema não faz isso sozinho de propósito: mover o card dispararia
-                  as automações da etapa de destino — e mandaria mensagem para um lead
-                  que não tem nada a ver com este funil.
-                </>
-              ) : (
-                <>
-                  Esta ação <strong>não pode ser desfeita</strong>. O funil, suas{" "}
-                  {impacto ? `${impacto.etapas} etapa(s)` : "etapas"} e{" "}
-                  {impacto ? `${impacto.cards} card(s)` : "todos os cards"}
-                  {impacto && impacto.leads > 0 ? ` de ${impacto.leads} lead(s)` : ""}{" "}
-                  serão apagados em definitivo.
-                  {!!impacto?.eventos_etapa && (
-                    <>
-                      {" "}
-                      Junto vai o histórico de etapas deste funil ({impacto.eventos_etapa}{" "}
-                      evento(s)) — as métricas de conversão e de tempo por etapa dele zeram.
-                    </>
-                  )}
-                  <br />
-                  <br />
-                  <strong>Os leads continuam no sistema</strong> — o que some é a posição
-                  deles neste funil.
-                  {!!impacto?.automacoes && (
-                    <>
-                      <br />
-                      <br />
-                      ⚠️ {impacto.automacoes} automação(ões) que usam este funil{" "}
-                      <strong>serão desativadas</strong>.
-                    </>
-                  )}
-                  {!!impacto?.disparos_em_voo && (
-                    <>
-                      <br />
-                      ⚠️ {impacto.disparos_em_voo} disparo(s) em andamento perdem o destino
-                      e passam a deixar o lead onde está.
-                    </>
-                  )}
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>{bloqueado ? "Entendi" : "Cancelar"}</AlertDialogCancel>
-            {!bloqueado && (
-              <AlertDialogAction
-                onClick={handleDeletePipeline}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {deletePipeline.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Excluir Funil
-              </AlertDialogAction>
-            )}
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Confirmar remoção de lead */}
       <AlertDialog open={!!removeEntryId} onOpenChange={() => setRemoveEntryId(null)}>

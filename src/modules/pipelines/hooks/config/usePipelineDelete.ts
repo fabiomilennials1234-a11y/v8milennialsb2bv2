@@ -105,7 +105,6 @@ export function useDeletePipelineById() {
         "leads-deals",
         "blast_plans",
         "funil-stages",
-        "stages_do_funil",
         "organization-settings",
       ]) {
         queryClient.invalidateQueries({ queryKey: [key] });

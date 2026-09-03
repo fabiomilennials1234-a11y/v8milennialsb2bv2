@@ -25,20 +25,20 @@ import type { NewDealOption } from "./NewDealDialog";
  */
 
 export const SYSTEM_PIPE_SHORT_LABEL: Record<string, string> = {
-  qualificacao: "Qualificação",
+  whatsapp: "Qualificação",
   confirmacao: "Confirmação",
   propostas: "Propostas",
   upsell: "Carteira",
 };
 
 const SYSTEM_PIPE_TYPES = new Set<StandardPipelineStatus["pipeType"]>([
-  "qualificacao",
+  "whatsapp",
   "confirmacao",
   "propostas",
 ]);
 
 export function isSystemPipe(p: PipelineStatus): p is StandardPipelineStatus & {
-  pipeType: "qualificacao" | "confirmacao" | "propostas";
+  pipeType: "whatsapp" | "confirmacao" | "propostas";
 } {
   return p.type === "standard" && SYSTEM_PIPE_TYPES.has(p.pipeType);
 }

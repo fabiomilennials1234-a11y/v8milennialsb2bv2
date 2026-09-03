@@ -3,6 +3,7 @@ import {
   usePermanentCustomFunnels,
   useTemporaryFunnels,
 } from "../hooks/custom/useCustomPipelines";
+import { usePipelines } from "../hooks/model/usePipelines";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 
 /**
@@ -13,6 +14,11 @@ import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
  * mapas garantiria divergência na primeira vez que alguém renomeasse um funil.
  */
 
+/**
+ * COMPAT (expand-contract): rotas antigas dos funis de sistema, vivas até o
+ * redirect `/pipe-*` → `/funil/:slug` flipar (paridade da página unificada).
+ * Morre junto com `PIPE_PATH_MAP` do navigation-model na demolição (W6).
+ */
 export const FUNNEL_PATH_MAP: Record<string, string> = {
   whatsapp: "/pipe-whatsapp",
   confirmacao: "/pipe-confirmacao",
@@ -20,12 +26,13 @@ export const FUNNEL_PATH_MAP: Record<string, string> = {
   upsell: "/upsell",
 };
 
-export const FUNNEL_COLOR_MAP: Record<string, string> = {
-  whatsapp: "#3b82f6",
-  confirmacao: "#8b5cf6",
-  propostas: "#f97316",
-  upsell: "#ec4899",
-};
+/**
+ * Cor de fallback quando a linha de `pipelines` ainda não chegou (ou o funil
+ * não tem cor gravada). As cores REAIS vêm de `pipelines.color` — funil de
+ * sistema persiste cor/ícone como qualquer outro (SCRUM-637; morreu o
+ * `FUNNEL_COLOR_MAP` hardcoded que ignorava a personalização).
+ */
+export const FUNNEL_FALLBACK_COLOR = "#64748b";
 
 export type FunnelGroup = "estrutural" | "custom" | "prazo";
 
@@ -68,6 +75,12 @@ export function useFunnelOptions(): { options: FunnelOption[]; isLoading: boolea
   const { data: displayConfigs = [], isLoading: configLoading } = usePipelineDisplayConfig();
   const { data: permanent = [], isLoading: permanentLoading } = usePermanentCustomFunnels();
   const { data: temporary = [], isLoading: temporaryLoading } = useTemporaryFunnels();
+  // Registro único: é daqui que saem cor (e ícone) REAIS de qualquer funil —
+  // funil de sistema personalizado deixa de aparecer com a cor de fábrica.
+  const { data: pipelines = [] } = usePipelines();
+
+  const corPorSlug = new Map(pipelines.map((p) => [p.slug, p.color] as const));
+  const corPorId = new Map(pipelines.map((p) => [p.id, p.color] as const));
 
   const options: FunnelOption[] = [];
 
@@ -80,7 +93,7 @@ export function useFunnelOptions(): { options: FunnelOption[]; isLoading: boolea
     options.push({
       key: `sys:${config.pipe_type}`,
       label: config.display_name,
-      color: FUNNEL_COLOR_MAP[config.pipe_type] ?? "#64748b",
+      color: corPorSlug.get(config.pipe_type) ?? FUNNEL_FALLBACK_COLOR,
       path,
       group: "estrutural",
     });
@@ -92,7 +105,7 @@ export function useFunnelOptions(): { options: FunnelOption[]; isLoading: boolea
       options.push({
         key: `custom:${row.id}`,
         label: row.name,
-        color: row.color ?? "#64748b",
+        color: corPorId.get(row.id) ?? row.color ?? FUNNEL_FALLBACK_COLOR,
         path: `/funil/${row.slug}`,
         group,
         ended: row.status === "ended",

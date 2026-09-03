@@ -60,7 +60,6 @@ function negocio(over: Partial<DealCardData> = {}): DealCardData {
     },
     funil: "Orçamentos",
     funilCor: "#a855f7",
-    pipeTable: "pipe_propostas",
     etapas: ETAPAS,
     etapaAtual: "orcamento",
     dono: null,

@@ -142,10 +142,9 @@ beforeEach(() => {
 });
 
 describe("O painel roteia por FAMÍLIA, não pelo nome da view", () => {
-  it("funil de sistema SEM view de compat (pipeTable null) vai para pipeline_entries", async () => {
+  it("funil de sistema fora do trio de slugs vai para pipeline_entries", async () => {
     negocioRef.value = {
       ...NEGOCIO_ESTAGNADO,
-      pipeTable: null, // upsell/carteira e os funis de sistema novos
       funilEhSystem: true,
       funil: "Carteira",
     };
@@ -160,7 +159,6 @@ describe("O painel roteia por FAMÍLIA, não pelo nome da view", () => {
   it("funil custom vai para custom_pipe_entries", async () => {
     negocioRef.value = {
       ...NEGOCIO_ESTAGNADO,
-      pipeTable: null,
       funilEhSystem: false,
       funil: "Reativação",
     };
@@ -175,7 +173,6 @@ describe("O painel roteia por FAMÍLIA, não pelo nome da view", () => {
   it("funil de sistema COM view de compat continua em pipeline_entries", async () => {
     negocioRef.value = {
       ...NEGOCIO_ESTAGNADO,
-      pipeTable: "pipe_propostas",
       funilEhSystem: true,
     };
     montar();
@@ -189,7 +186,7 @@ describe("O painel roteia por FAMÍLIA, não pelo nome da view", () => {
 
 describe("A caixa de confirmação não fecha em cima de uma recusa", () => {
   it("DELETE recusado (0 linhas, linha ainda lá) mantém a confirmação na tela", async () => {
-    negocioRef.value = { ...NEGOCIO_ESTAGNADO, pipeTable: null, funilEhSystem: false };
+    negocioRef.value = { ...NEGOCIO_ESTAGNADO, funilEhSystem: false };
     linhasApagadas = []; // a RLS recusou, sem erro
     linhaAindaLa = { id: "e1" }; // e a linha continua no banco
     montar();
@@ -203,7 +200,7 @@ describe("A caixa de confirmação não fecha em cima de uma recusa", () => {
   });
 
   it("card que já não existe fecha tudo em vez de prender o usuário", async () => {
-    negocioRef.value = { ...NEGOCIO_ESTAGNADO, pipeTable: null, funilEhSystem: false };
+    negocioRef.value = { ...NEGOCIO_ESTAGNADO, funilEhSystem: false };
     linhasApagadas = []; // 0 linhas...
     linhaAindaLa = null; // ...porque alguém já apagou noutra aba
     montar();

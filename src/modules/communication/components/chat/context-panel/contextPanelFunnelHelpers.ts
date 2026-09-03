@@ -24,14 +24,6 @@ export interface FunnelCardRow {
   stages: FunnelStageView[];
 }
 
-/** pipeType do useLeadAllPipelines → pipe_type do pipeline_display_config. */
-const PIPE_TYPE_TO_DISPLAY: Record<string, string> = {
-  qualificacao: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-  upsell: "upsell",
-};
-
 /** Etapa terminal = registra/estorna receita (ADR-0017). Exige confirmação. */
 export function isTerminalRole(role: string | null | undefined): boolean {
   return role === "won" || role === "lost";
@@ -78,8 +70,8 @@ export function availableFunnelsToAdd(
     if (p.type === "standard") {
       if (p.pipeId) continue; // lead já está
       if (!p.pipelineDbId) continue; // upsell legacy — não adicionável
-      const displayType = PIPE_TYPE_TO_DISPLAY[p.pipeType] ?? p.pipeType;
-      const cfg = cfgByType.get(displayType);
+      // SCRUM-637: `pipeType` já é o pipe_type do display config (slug real).
+      const cfg = cfgByType.get(p.pipeType);
       if (cfg && cfg.is_visible === false) continue; // funil escondido pela org
       out.push({
         pipelineId: p.pipelineDbId,
@@ -118,11 +110,10 @@ export function toFunnelRows(
       // pipeline_entries.id) — mover via useMovePipelineEntry escreveria no id
       // errado. pipelineDbId null marca esses; fora do card.
       if (!p.pipelineDbId) continue;
-      const displayType = PIPE_TYPE_TO_DISPLAY[p.pipeType] ?? p.pipeType;
       rows.push({
         key: p.pipeType,
         entryId: p.pipeId,
-        label: labelByType.get(displayType) ?? p.label,
+        label: labelByType.get(p.pipeType) ?? p.label,
         color: p.color,
         currentStageKey: p.currentStage,
         stages: p.stages.map((s) => ({ key: s.id, label: s.label, role: s.role ?? null })),
