@@ -1,7 +1,7 @@
 ---
 type: feature
 domain: vendas
-status: shipped
+status: superseded
 created: 2026-05-22
 updated: 2026-05-22
 owner: backend
@@ -11,6 +11,14 @@ tags: [pipelines, leads, db-trigger]
 ---
 
 # Pipelines — Auto-assign default (whatsapp/novo)
+
+> [!warning] SUPERADO (SCRUM-641, 2026-09-03)
+> O trigger descrito aqui **não existe em prod** (medido: nenhum trigger de
+> `leads` insere em `pipeline_entries`). O fallback vigente é outro: porta de
+> entrada sem destino declarado semeia no **funil padrão da org**
+> (`organizations.default_pipeline_id`, SCRUM-624/D4), e org nova nasce com o
+> "Funil de Vendas" como padrão (`trg_seed_default_funnel`, 20270918000000).
+> Os slugs `whatsapp`/`novo` abaixo são história, não referência.
 
 ## O que é
 

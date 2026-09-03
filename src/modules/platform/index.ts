@@ -67,7 +67,6 @@ export * from "./lib/logger";
 export * from "./lib/optimistic-lock";
 export * from "./lib/rate-limit";
 export * from "./lib/onboarding-suggestions";
-export * from "./lib/pipeline-config-from-quiz";
 export * from "./lib/tv-config-from-quiz";
 
 // ────────────────────────────────────────────────────────────────────────

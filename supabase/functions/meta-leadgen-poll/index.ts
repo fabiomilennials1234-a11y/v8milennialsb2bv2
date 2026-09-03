@@ -22,7 +22,8 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { createMetaGraphClient } from "../_shared/meta/graph-client.ts";
 import { planLeadgenImport } from "../_shared/meta/leadgen-import.ts";
-import { upsertPipeEntry, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
+import { upsertPipeEntry } from "../_shared/pipeline-adapter.ts";
+import { resolveLeadDestination } from "../_shared/pipeline-destination.ts";
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
@@ -101,10 +102,13 @@ Deno.serve(withErrorBoundary("meta-leadgen-poll", async (req) => {
         continue;
       }
 
-      const firstStage = await resolveFirstWhatsappStage(supabase, orgId);
+      const dest = await resolveMetaLeadDestination(supabase, orgId);
+      if (!dest) {
+        console.warn(`[meta-leadgen-poll] org ${orgId} sem funil de destino (nem 'whatsapp', nem funil padrão) — leads serão criados SEM card.`);
+      }
       let created = 0;
       for (const p of plan.toImport) {
-        const inserted = await createLead(supabase, orgId, firstStage, p);
+        const inserted = await createLead(supabase, orgId, dest, p);
         if (inserted) created++;
       }
       entry.created = created;
@@ -133,23 +137,24 @@ async function getPageToken(systemToken: string, pageId: string): Promise<string
 }
 
 /**
- * First (lowest-position) active stage of the Org's WhatsApp funnel; falls
- * back to 'novo'.
+ * Destino do lead desta porta.
  *
- * SCRUM-624: a consulta inline por `pipeline_type = 'whatsapp'` morreu — a
- * resolução vai pelo adapter (`resolveActiveStageKey`), que lê as etapas por
- * `pipeline_id` (FK real, W1) a partir do slug do funil semeado. Esta porta
- * não tem configuração de destino própria (o binding Meta→org não declara
- * funil), então o destino segue o default histórico 'whatsapp' — destino
- * configurável por binding fica registrado como incremento.
+ * SCRUM-641: o preferido segue o default histórico 'whatsapp' (org antiga:
+ * idêntico). Org SEM esse funil (org nova pós-funil-único) cai no funil
+ * PADRÃO da org + 1ª etapa ativa. Sem funil padrão → null: lead criado SEM
+ * card, com log — mesmo contrato do lead-webhook. Destino configurável por
+ * binding Meta→org segue registrado como incremento.
  */
-async function resolveFirstWhatsappStage(supabase: any, orgId: string): Promise<string> {
-  return (await resolveActiveStageKey(supabase, orgId, "whatsapp")) ?? "novo";
+async function resolveMetaLeadDestination(
+  supabase: any,
+  orgId: string,
+): Promise<{ ref: string; stageKey: string } | null> {
+  return await resolveLeadDestination(supabase, orgId, { ref: "whatsapp" });
 }
 
-/** Creates the Lead (deduped by meta_lead_id / phone / email) in the first WhatsApp stage. */
+/** Creates the Lead (deduped by meta_lead_id / phone / email) no destino resolvido (null = sem card). */
 async function createLead(
-  supabase: any, orgId: string, stageKey: string,
+  supabase: any, orgId: string, dest: { ref: string; stageKey: string } | null,
   p: { leadgenId: string; fields: Record<string, string | null> },
 ): Promise<boolean> {
   const phone = p.fields.phone ?? null;
@@ -188,10 +193,12 @@ async function createLead(
   }).select("id").single();
   if (error) { console.error("[meta-leadgen-poll] insert lead failed:", error.message); return false; }
 
-  try {
-    await upsertPipeEntry(supabase, { leadId: lead.id, orgId, slug: "whatsapp", stageKey, metadata: {}, assignedTo: null });
-  } catch (e) {
-    console.warn("[meta-leadgen-poll] pipe entry failed:", (e as Error).message);
+  if (dest) {
+    try {
+      await upsertPipeEntry(supabase, { leadId: lead.id, orgId, slug: dest.ref, stageKey: dest.stageKey, metadata: {}, assignedTo: null });
+    } catch (e) {
+      console.warn("[meta-leadgen-poll] pipe entry failed:", (e as Error).message);
+    }
   }
   return true;
 }

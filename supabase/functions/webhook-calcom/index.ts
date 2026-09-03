@@ -12,6 +12,7 @@ import {
 import { logRuntime } from "../_shared/logger.ts";
 import { isFeatureFlagEnabled } from "../_shared/feature-flags.ts";
 import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import { resolveMeetingDestination } from "../_shared/pipeline-destination.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -243,14 +244,21 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
     // Merge Agendamentos→Oportunidades (ADR-0004): org com flag ON recebe a reunião
     // no funil whatsapp em `agendado`; o funil de Oportunidades NÃO é mais removido.
     //
-    // SCRUM-624: o destino desta porta é decidido pela flag acima — a única
-    // "config da porta" que existe hoje. Os dois valores são SLUGS DE FUNIL
-    // SEMEADO resolvidos pelo adapter (qualquer funil por id/slug, sem filtro
-    // de type) — a união de 3 literais morreu com o PipeSlug (ADR-0034 D1).
-    // Destino livre por org (qualquer funil) fica registrado como incremento.
+    // SCRUM-641: o destino PREFERIDO segue decidido pela flag (org antiga com o
+    // trio se comporta byte a byte como antes). Onde o funil preferido NÃO
+    // existe (org nova pós-funil-único), o fallback é o funil PADRÃO da org
+    // ancorado pela etapa de papel `meeting_booked` — nunca por slug. Sem funil
+    // padrão → lead sem card + log (contrato do lead-webhook desde SCRUM-624).
     const useMergedFunnel = await isFeatureFlagEnabled(supabase, targetOrganizationId, "merged_opportunity_funnel");
-    const mSlug: string = useMergedFunnel ? "whatsapp" : "confirmacao";
-    const mStage = useMergedFunnel ? "agendado" : "reuniao_marcada";
+    const meetingDest = await resolveMeetingDestination(supabase, targetOrganizationId, {
+      ref: useMergedFunnel ? "whatsapp" : "confirmacao",
+      stageKey: useMergedFunnel ? "agendado" : "reuniao_marcada",
+    });
+    const mSlug: string | null = meetingDest?.ref ?? null;
+    const mStage: string | null = meetingDest?.stageKey ?? null;
+    if (!meetingDest) {
+      console.warn(`[Webhook Cal.com] org ${targetOrganizationId} sem destino de reunião (nem funil preferido, nem funil padrão) — lead segue sem card.`);
+    }
 
     // 1. First, try to find by email (case-insensitive)
     // SECURITY: Filter by organization_id
@@ -361,10 +369,14 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
       // Use effective date - existing or new
       const effectiveMeetingDate = existingCompromissoDate || startTime;
 
-      // Create or update the meeting entry (whatsapp:agendado quando merge ON, senão confirmacao)
-      const existingConfirmacao = await getPipeEntry(supabase, existingLead.id, targetOrganizationId, mSlug);
+      // Create or update the meeting entry (destino resolvido acima; null = sem card)
+      const existingConfirmacao = mSlug
+        ? await getPipeEntry(supabase, existingLead.id, targetOrganizationId, mSlug)
+        : null;
 
-      if (existingConfirmacao) {
+      if (!mSlug || !mStage) {
+        // Sem destino: reunião registrada no lead (compromisso_date/notes), sem card.
+      } else if (existingConfirmacao) {
         const confirmacaoUpdates: { stageKey?: string; metadata?: Record<string, unknown>; assignedTo?: string | null } = {};
         const metaUpdates: Record<string, unknown> = {};
 
@@ -404,10 +416,13 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
       }
 
       // Com o merge OFF: o lead sai da qualificação (whatsapp) ao agendar. Com merge
-      // ON, whatsapp É o destino — não remove.
+      // ON, whatsapp É o destino — não remove. SCRUM-641: quando a reunião caiu
+      // no FALLBACK (funil padrão), também não remove — o funil padrão pode SER
+      // o whatsapp da org, e o delete apagaria o card recém-criado.
       const existingProposta = await getPipeEntry(supabase, existingLead.id, targetOrganizationId, "propostas");
 
-      if (!useMergedFunnel && (!existingProposta || existingProposta.stage_key !== "compromisso_marcado")) {
+      if (!useMergedFunnel && !meetingDest?.usedDefaultPipeline
+          && (!existingProposta || existingProposta.stage_key !== "compromisso_marcado")) {
         // Only remove from pipeline_entries(whatsapp) if NOT in compromisso_marcado
         const deleted = await deletePipeEntry(supabase, existingLead.id, targetOrganizationId, "whatsapp");
 
@@ -489,22 +504,24 @@ Deno.serve(withErrorBoundary('webhook-calcom', async (req) => {
       // Add "Cal" tag to new lead
       await addTagToLead(newLead.id, calTagId);
 
-      // Create meeting entry (whatsapp:agendado quando merge ON, senão confirmacao)
-      const confirmacaoMeta: Record<string, unknown> = { meeting_date: startTime };
-      if (useMergedFunnel) { confirmacaoMeta.confirmation_status = "pendente"; confirmacaoMeta.is_confirmed = false; }
-      if (closerId) {
-        confirmacaoMeta.closer_id = closerId;
-        console.log("Creating meeting entry for new lead with closer:", closerId);
-      }
+      // Create meeting entry (destino resolvido no topo; null = lead sem card)
+      if (mSlug && mStage) {
+        const confirmacaoMeta: Record<string, unknown> = { meeting_date: startTime };
+        if (useMergedFunnel) { confirmacaoMeta.confirmation_status = "pendente"; confirmacaoMeta.is_confirmed = false; }
+        if (closerId) {
+          confirmacaoMeta.closer_id = closerId;
+          console.log("Creating meeting entry for new lead with closer:", closerId);
+        }
 
-      await upsertPipeEntry(supabase, {
-        leadId: newLead.id,
-        orgId: targetOrganizationId,
-        slug: mSlug,
-        stageKey: mStage,
-        metadata: confirmacaoMeta,
-        assignedTo: closerId,
-      });
+        await upsertPipeEntry(supabase, {
+          leadId: newLead.id,
+          orgId: targetOrganizationId,
+          slug: mSlug,
+          stageKey: mStage,
+          metadata: confirmacaoMeta,
+          assignedTo: closerId,
+        });
+      }
 
       // Create history entry with closer info
       await supabase.from("lead_history").insert({

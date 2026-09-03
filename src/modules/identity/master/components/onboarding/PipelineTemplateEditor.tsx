@@ -11,7 +11,6 @@ import {
   useUpdatePipelineTemplate,
 } from "@/modules/platform/hooks/useOnboardingTemplates";
 import { MatchCriteriaBuilder } from "./MatchCriteriaBuilder";
-import { SYSTEM_PIPE_CATALOG } from "@/modules/pipelines";
 import { toast } from "sonner";
 
 const COLORS = ["#7dc4e4", "#a6d189", "#ca9ee6", "#f6c177", "#e78284", "#8caaee"];
@@ -42,18 +41,12 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
   const [priority, setPriority] = useState(0);
   const [isActive, setIsActive] = useState(true);
   const [matchCriteria, setMatchCriteria] = useState<Record<string, string[]>>({});
-  // SCRUM-635: os funis de sistema vêm do CATÁLOGO (SYSTEM_PIPE_CATALOG), não
-  // de 3 chaves literais. O formato persistido segue `pipe_<slug>` — é o que
-  // `applyPipelineTemplates` (onboarding-engine) consome via
-  // `enable_system_pipeline`.
-  const [defaultConfig, setDefaultConfig] = useState<Record<string, any>>(() =>
-    Object.fromEntries(
-      SYSTEM_PIPE_CATALOG.map((cat) => [
-        `pipe_${cat.pipe_type}`,
-        { visible: cat.pipe_type === "whatsapp" || cat.pipe_type === "propostas" },
-      ]),
-    ),
-  );
+  // SCRUM-641: os toggles fixos do trio legado MORRERAM — template é lista
+  // livre de funis custom, e a org nova já nasce com o "Funil de Vendas"
+  // semeado como padrão (trigger trg_seed_default_funnel). `defaultConfig`
+  // sobrevive só como passagem: preserva a chave de template ANTIGO no save
+  // (o onboarding-engine a ignora), sem oferecê-la na tela.
+  const [defaultConfig, setDefaultConfig] = useState<Record<string, any>>({});
   const [customPipelines, setCustomPipelines] = useState<CustomPipeline[]>([]);
 
   useEffect(() => {
@@ -166,39 +159,11 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
           </div>
         </div>
 
-        <div>
-          <Label className="mb-2 block">Funis de sistema do template</Label>
-          <p className="text-xs text-muted-foreground mb-2">
-            Funis ativados na org nova via <code>enable_system_pipeline</code> — já nascem com etapas semeadas.
+        <div className="p-3 rounded-lg border border-border/40 bg-muted/30">
+          <p className="text-xs text-muted-foreground">
+            Toda org nova já nasce com o <strong>Funil de Vendas</strong> como funil padrão.
+            O template soma a ele os funis da lista abaixo.
           </p>
-          {SYSTEM_PIPE_CATALOG.map((cat) => {
-            const key = `pipe_${cat.pipe_type}`;
-            return (
-              <div key={key} className="flex items-center gap-3 mb-2">
-                <Switch
-                  checked={defaultConfig[key]?.visible ?? false}
-                  onCheckedChange={(v) =>
-                    setDefaultConfig((prev) => ({ ...prev, [key]: { ...prev[key], visible: v } }))
-                  }
-                />
-                <span className="text-sm w-36">
-                  {cat.display_name}
-                  <span className="block text-[10px] text-muted-foreground">{cat.pipe_type}</span>
-                </span>
-                <Input
-                  placeholder="Nome na org nova (opcional)"
-                  value={defaultConfig[key]?.label ?? ""}
-                  onChange={(e) =>
-                    setDefaultConfig((prev) => ({
-                      ...prev,
-                      [key]: { ...prev[key], label: e.target.value || undefined },
-                    }))
-                  }
-                  className="flex-1"
-                />
-              </div>
-            );
-          })}
         </div>
 
         <div>
