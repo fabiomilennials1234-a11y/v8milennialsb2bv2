@@ -410,7 +410,7 @@ migration, logo de branch do Supabase para o pgTAP.
 
 Suíte de `_shared/oraculo/`: **32 de 32 verdes**. `deno check` OK nas quatro.
 
-**Migration** `20270906000000_oraculo_catalogo_estrutural.sql` — quatro RPCs, todas
+**Migration** `20270921000030_oraculo_catalogo_estrutural.sql` — quatro RPCs, todas
 `SECURITY INVOKER`, com `REVOKE ALL ... FROM PUBLIC, anon, authenticated` e `GRANT EXECUTE` só para
 `service_role`.
 
