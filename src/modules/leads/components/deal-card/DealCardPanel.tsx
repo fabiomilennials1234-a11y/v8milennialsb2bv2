@@ -17,6 +17,7 @@ import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { useFeaturePermission } from "@/modules/identity";
+import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
@@ -61,6 +62,7 @@ import type { DealCardComentario, ItemEditado } from "./types";
  */
 export const DealCardPanel = memo(function DealCardPanel() {
   const { isOpen, entryId, leadId, aba, close, openDeal } = useDealSheet();
+  const renderLigar = useLeadCallAction();
   const { openLead } = useLeadSheet();
   const { isMobile } = useViewport();
   const queryClient = useQueryClient();
@@ -451,6 +453,11 @@ export const DealCardPanel = memo(function DealCardPanel() {
           !comLead && leadId ? (
             <LeadCardEtiquetas leadId={leadId} podeCriar={!!souAdmin} />
           ) : undefined
+        }
+        /* Vê o negócio → vê o lead → pode ligar. Quem desenha o botão é a
+           raiz (App.tsx), via LeadCallActionSlot. */
+        acaoLigar={
+          leadId && renderLigar ? renderLigar({ id: leadId, nome: data.lead.nome }) : undefined
         }
         onSaveNote={salvarNota}
         onMoverEtapa={moverEtapa}

@@ -26,10 +26,6 @@ let numbers: CallableVoiceNumber[] = [];
 /** Cada `tcSessionId` que o `useVoiceCall` recebeu, na ordem dos renders. */
 let sessoesRecebidas: Array<string | null> = [];
 let fase: VoiceCallState["phase"] = "idle";
-/** Se o vendedor alcança o lead (SDR/closer/responsável, ou bypass). */
-let leadEhDele = true;
-/** Cada `leadId` que o `useCanCallLead` recebeu — `null` = "não perguntei". */
-let leadsPerguntados: Array<string | null | undefined> = [];
 const start = vi.fn();
 
 vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
@@ -38,11 +34,21 @@ vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
   // entra no dublê porque o `VoiceCallProvider`, que estes testes montam de
   // verdade, a consome desde a fatia do toque de entrada.
   useAnswerableVoiceNumbers: () => ({ numbers, isLoading: false }),
-  // A regra real vive em `useVoipSession.test.ts`, contra o banco dublê. Aqui o
-  // que está em julgamento é o BOTÃO: se ele pergunta, e se obedece a resposta.
-  useCanCallLead: (leadId: string | null | undefined) => {
-    leadsPerguntados.push(leadId);
-    return !!leadId && leadEhDele;
+}));
+
+/**
+ * Toda consulta que alguém tentar fazer ao banco a partir do botão. Desde
+ * 2026-09-02 a resposta certa é NENHUMA: "vê o lead → pode ligar", e quem
+ * decide se o lead está na tela é a RLS. Se este dublê registrar uma leitura
+ * de `leads`, alguém reintroduziu a pergunta de dono que sumia o botão do SDR.
+ */
+const tabelasConsultadas: string[] = [];
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    from: (table: string) => {
+      tabelasConsultadas.push(table);
+      throw new Error(`o botão de ligar consultou "${table}" — ele não deveria consultar nada`);
+    },
   },
 }));
 
@@ -133,11 +139,11 @@ function comQueryClient(ui: React.ReactElement) {
   return <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>;
 }
 
-function montar() {
+function montar(props: Partial<React.ComponentProps<typeof VoiceCallButton>> = {}) {
   return render(
     comQueryClient(
       <VoiceCallProvider>
-        <VoiceCallButton leadId="lead-1" leadName="Fábrica Silva" />
+        <VoiceCallButton leadId="lead-1" leadName="Fábrica Silva" {...props} />
       </VoiceCallProvider>,
     ),
   );
@@ -154,8 +160,7 @@ beforeEach(() => {
   numbers = [];
   sessoesRecebidas = [];
   fase = "idle";
-  leadEhDele = true;
-  leadsPerguntados = [];
+  tabelasConsultadas.length = 0;
   start.mockClear();
 });
 
@@ -199,46 +204,116 @@ describe("VoiceCallButton — quantos números o vendedor tem", () => {
   });
 });
 
-describe("VoiceCallButton — o lead precisa ser dele", () => {
-  // O defeito: `leads.view_all` nasce `true`, o vendedor enxerga todo lead da
-  // organização, e em todos eles o botão aparecia — para tomar `not_lead_owner`
-  // (403) sem uma linha de explicação.
-  it("lead que não é dele: o botão some, mesmo com número ao alcance", () => {
+describe("VoiceCallButton — vê o lead → pode ligar", () => {
+  // Até 2026-09-02 o botão perguntava "este lead é dele?" — lendo colunas
+  // legadas de responsável, nem sequer as canônicas `pre_sale_responsible_id`/
+  // `sale_responsible_id` — e sumia quando não era. Como só ~8% dos leads com conversa
+  // têm dono, sumia justamente para o SDR que estava no chat — na Milennials,
+  // 3 conversas abertas, 3 leads de outros donos, botão nenhum. A condição
+  // agora é a mesma da tela: se o lead está aqui, a RLS de `leads` já disse
+  // que ele pode ser visto, e ver é poder ligar. O servidor confere a mesma
+  // RLS (`lead_not_visible`).
+  it("lead que NÃO é dele: o botão aparece, e sem perguntar nada ao banco", () => {
     numbers = [COMERCIAL];
-    leadEhDele = false;
-    montar();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
-  });
-
-  it("lead dele: o botão aparece normalmente", () => {
-    numbers = [COMERCIAL];
-    leadEhDele = true;
-    montar();
+    montar({ leadId: "lead-de-um-colega" });
     expect(botaoLigar()).toBeInTheDocument();
+    expect(tabelasConsultadas).toEqual([]);
   });
 
-  // Com dois números o botão é um grupo de duas metades. Nenhuma das duas pode
-  // sobreviver a um lead alheio.
-  it("lead que não é dele: some também o seletor de número", () => {
+  it("com dois números, as duas metades aparecem em lead que não é dele", () => {
     numbers = [COMERCIAL, SUPORTE];
-    leadEhDele = false;
-    montar();
+    montar({ leadId: "lead-de-um-colega" });
+    expect(botaoLigar()).toBeInTheDocument();
+    expect(seletor()).toBeInTheDocument();
+  });
+
+  // Sem lead não há destino: o servidor deriva o número do lead, e é essa
+  // derivação que sustenta consentimento, fronteira e teto por número.
+  it("sem lead não há botão, mesmo com número ao alcance", () => {
+    numbers = [COMERCIAL];
+    montar({ leadId: null });
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  // O provider vive fora das rotas e o PR anterior derrubou o custo dele para
-  // 0-1 requisição. Perguntar "de quem é este lead" em organização sem voz
-  // devolveria o custo, e para esconder um botão que já estava escondido.
-  it("sem número ao alcance, nem chega a perguntar de quem é o lead", () => {
+  it("disca pelo lead da tela, seja ele de quem for", async () => {
+    numbers = [COMERCIAL];
+    const user = userEvent.setup();
+    montar({ leadId: "lead-de-um-colega", leadName: "Colega Ltda" });
+    await user.click(botaoLigar());
+    expect(start).toHaveBeenCalledWith("lead-de-um-colega");
+  });
+});
+
+describe("VoiceCallButton — a variante ícone, para os cards e o celular", () => {
+  // O mesmo botão, sem rótulo, em 32px. Mesma regra: sem número ao alcance
+  // ou sem lead, some. O nome acessível continua "Ligar" — leitor de tela e
+  // teste não precisam saber de qual variante se trata.
+  it("nenhum número ao alcance: some inteiro", () => {
     numbers = [];
-    montar();
-    expect(leadsPerguntados.every((id) => id === null)).toBe(true);
+    montar({ variant: "icon" });
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("com número ao alcance, a pergunta é feita pelo lead da tela", () => {
+  it("um número: um botão só, com o ícone e sem seletor, que disca em um clique", async () => {
     numbers = [COMERCIAL];
-    montar();
-    expect(leadsPerguntados).toContain("lead-1");
+    const user = userEvent.setup();
+    montar({ variant: "icon" });
+
+    expect(seletor()).not.toBeInTheDocument();
+    expect(screen.queryByText("Comercial")).not.toBeInTheDocument();
+    await user.click(botaoLigar());
+    expect(start).toHaveBeenCalledWith("lead-1");
+    expect(sessaoAtual()).toBe("tc-1");
+  });
+
+  it("dois números: ligar continua a um clique e a seta abre a escolha", async () => {
+    numbers = [COMERCIAL, SUPORTE];
+    const user = userEvent.setup();
+    montar({ variant: "icon" });
+
+    await user.click(botaoLigar());
+    expect(start).toHaveBeenCalledWith("lead-1");
+    expect(sessaoAtual()).toBe("tc-1");
+
+    await user.click(seletor()!);
+    await user.click(await screen.findByRole("menuitemradio", { name: "Suporte" }));
+    expect(sessaoAtual()).toBe("tc-2");
+  });
+
+  // O card do lead e o cabeçalho do celular são clicáveis por baixo: abrem a
+  // ficha ou a conversa. Ligar não pode abrir nada além da chamada.
+  it("o clique não vaza para o container", async () => {
+    numbers = [COMERCIAL];
+    const porBaixo = vi.fn();
+    const user = userEvent.setup();
+    render(
+      comQueryClient(
+        <VoiceCallProvider>
+          <div onClick={porBaixo} onPointerDown={porBaixo}>
+            <VoiceCallButton variant="icon" leadId="lead-1" />
+          </div>
+        </VoiceCallProvider>,
+      ),
+    );
+    await user.click(botaoLigar());
+    expect(start).toHaveBeenCalledWith("lead-1");
+    expect(porBaixo).not.toHaveBeenCalled();
+  });
+
+  it("o grupo de duas metades não recorta o anel de foco e é da família rounded-lg", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    montar({ variant: "icon" });
+    const grupo = botaoLigar().parentElement!;
+    expect(grupo.className).not.toMatch(/overflow-hidden/);
+    expect(grupo.className).toMatch(/\brounded-lg\b/);
+  });
+
+  it("em chamada, as duas metades ficam travadas", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    fase = "active";
+    montar({ variant: "icon" });
+    expect(botaoLigar()).toBeDisabled();
+    expect(seletor()).toBeDisabled();
   });
 });
 
