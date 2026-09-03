@@ -14,6 +14,7 @@ import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { funisDeSistemaNavegaveis } from "@/contracts/pipe/nome-do-funil";
 import { useFeaturePermissions, useIdentity, useOrganization, useUserRole } from "@/modules/identity";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
 import { useMetricsStudioEnabled } from "@/modules/analytics";
@@ -134,13 +135,13 @@ export function useNavigationModel(): NavigationModel {
     const rowBySlug = new Map(pipelineRows.map((p) => [p.slug, p] as const));
     const rowById = new Map(pipelineRows.map((p) => [p.id, p] as const));
 
-    const pipes: NavNode[] = (displayConfig ?? [])
-      .filter((c) => c.is_visible)
-      // Carteira é porta própria na lateral — não se repete dentro de Funis.
-      .filter((c) => c.pipe_type !== "upsell")
-      // Agendamentos some quando o merge de oportunidades está ligado (ADR-0004).
-      .filter((c) => !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")))
-      .sort((a, b) => a.position - b.position)
+    // Visibilidade + Carteira fora + merge de oportunidades: regra ÚNICA em
+    // contracts (`funisDeSistemaNavegaveis`), compartilhada com o hub `/funis`
+    // e o seletor da faixa. Ela também ordena — e sobre CÓPIA: o `.sort()` que
+    // vivia aqui reordenava o próprio array do cache do react-query.
+    const pipes: NavNode[] = funisDeSistemaNavegaveis(displayConfig, {
+      mergeDeOportunidadesAtivo: hasFeature("merged_opportunity_funnel"),
+    })
       .map((c) => {
         const row = rowBySlug.get(c.pipe_type);
         return {

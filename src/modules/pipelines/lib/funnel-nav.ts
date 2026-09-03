@@ -5,6 +5,7 @@ import {
 } from "../hooks/custom/useCustomPipelines";
 import { usePipelines } from "../hooks/model/usePipelines";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { funisDeSistemaNavegaveis } from "@/contracts/pipe/nome-do-funil";
 
 /**
  * Fonte única de navegação entre funis.
@@ -76,13 +77,15 @@ export function useFunnelOptions(): { options: FunnelOption[]; isLoading: boolea
 
   const options: FunnelOption[] = [];
 
-  for (const config of displayConfigs) {
-    if (!config.is_visible) continue;
-    if (config.pipe_type === "upsell") continue;
-    if (config.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")) continue;
+  const sistemaNavegavel = funisDeSistemaNavegaveis(displayConfigs, {
+    mergeDeOportunidadesAtivo: hasFeature("merged_opportunity_funnel"),
+  });
+
+  for (const config of sistemaNavegavel) {
     // SCRUM-637 (flip): todo funil navega pela rota única. Carteira já foi
-    // filtrada acima; pipe_type fora do trio de sistema não tem funil por
-    // trás — link morto não entra (mesma guarda do mapa antigo).
+    // filtrada por `funisDeSistemaNavegaveis`; pipe_type fora do trio de
+    // sistema não tem funil por trás — link morto não entra (mesma guarda do
+    // mapa antigo).
     if (!SYSTEM_FUNNEL_SLUGS.has(config.pipe_type)) continue;
     const path = `/funil/${config.pipe_type}`;
     options.push({
