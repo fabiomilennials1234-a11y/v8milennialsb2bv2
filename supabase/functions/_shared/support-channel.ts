@@ -28,6 +28,8 @@
  * secret, isso aparece, em vez de a regressão passar por sucesso.
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+
 /** Só o que a escolha precisa ver. Espelha colunas de `whatsapp_instances`. */
 export interface SenderCandidate {
   id: string;
@@ -88,9 +90,15 @@ export function pickSenderInstance(candidates: SenderCandidate[]): SenderCandida
 
 type EnvReader = (key: string) => string | undefined;
 
-/** Cliente Supabase com service role. Tipado frouxo para não arrastar o SDK aqui. */
-// deno-lint-ignore no-explicit-any
-type AdminClient = any;
+/**
+ * Cliente Supabase com service role.
+ *
+ * Importado pelo especificador BARE do `deno.json`, não pela URL do esm.sh: é
+ * `import type`, então o bundler apaga a linha antes de virar JS, e o Vitest —
+ * que roda `pickSenderInstance` e `senderTrace` sem Deno por perto — nunca tenta
+ * resolvê-lo.
+ */
+type AdminClient = SupabaseClient;
 
 async function readConfig(supabaseAdmin: AdminClient, key: string): Promise<string | null> {
   const { data } = await supabaseAdmin
