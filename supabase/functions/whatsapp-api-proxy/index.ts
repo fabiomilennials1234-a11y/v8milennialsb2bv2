@@ -61,16 +61,27 @@ const RATE_LIMIT_MAX = 60;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const rateLimitState = new Map<string, { count: number; resetAt: number }>();
 
-function checkRateLimit(orgId: string): boolean {
+/**
+ * Devolve `count` e `resetAt` junto do veredito porque um 429 sozinho não diz
+ * NADA sobre o que fazer: o balde é por org e por isolate, então o mesmo clique
+ * passa ou apanha conforme quem atendeu. Saber quanto do minuto ainda falta é a
+ * diferença entre "o inbox desta org satura o teto" e "o teto está baixo".
+ */
+function checkRateLimit(
+  orgId: string
+): { allowed: boolean; count: number; resetAt: number } {
   const now = Date.now();
   const rl = rateLimitState.get(orgId);
   if (rl && rl.resetAt > now) {
-    if (rl.count >= RATE_LIMIT_MAX) return false;
+    if (rl.count >= RATE_LIMIT_MAX) {
+      return { allowed: false, count: rl.count, resetAt: rl.resetAt };
+    }
     rl.count += 1;
-    return true;
+    return { allowed: true, count: rl.count, resetAt: rl.resetAt };
   }
-  rateLimitState.set(orgId, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
-  return true;
+  const fresh = { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS };
+  rateLimitState.set(orgId, fresh);
+  return { allowed: true, count: fresh.count, resetAt: fresh.resetAt };
 }
 
 // ---------------------------------------------------------------------------
@@ -218,6 +229,89 @@ function jsonResponse(
 }
 
 // ---------------------------------------------------------------------------
+// Porta fechada — 4xx que o roteamento nunca chega a ver
+// ---------------------------------------------------------------------------
+
+type DenyContext = {
+  /** Ação pedida, quando o corpo já foi lido. */
+  action?: string;
+  organizationId?: string;
+  /** `auth.users.id` de quem pediu — quem apanhou da porta. */
+  userId?: string;
+  instanceId?: string;
+  /** Contexto do motivo. NUNCA dado de lead: isto vai para `runtime_logs`. */
+  detail?: string;
+};
+
+/**
+ * Devolve um 4xx de porta E registra a recusa em `runtime_logs`.
+ *
+ * O `catch` no fim do handler já registra tudo que ESTOURA dentro do
+ * roteamento. O que não deixava rastro era o oposto: a requisição barrada
+ * ANTES dele — plano, assinatura, tenant, rate limit —, que volta por `return`
+ * e some.
+ *
+ * Isso não é hipótese. Investigando "o cliente não consegue criar instância"
+ * (Mapila Alimentos, 2026-08-31), `runtime_logs` tinha ZERO linhas de
+ * `createInstance` com `status='error'` em 14 dias, em 107 orgs. A leitura
+ * ingênua desse zero — "então não falhou" — é a leitura errada, e ela custou o
+ * diagnóstico inteiro: a falha só podia estar nas portas, e as portas eram
+ * mudas. Um zero só é evidência quando o caminho que produziria a linha existe.
+ *
+ * Convenção do nome: `<action>:denied`, para que filtrar por ação continue
+ * achando o fluxo (`action LIKE 'createInstance%'`) e o motivo estável more em
+ * `payload_snapshot.reason` — agrupável, ao contrário de texto livre.
+ *
+ * Custo assumido: uma escrita por requisição recusada, no caminho quente da
+ * recusa. Sob rajada de 429 isso multiplica INSERTs — e é aceito de propósito,
+ * porque uma rajada de recusa é precisamente o evento que ninguém consegue ver
+ * hoje. Se virar volume, a saída é amostrar aqui, não voltar ao silêncio.
+ *
+ * ⚠️ Requisição NÃO autenticada (401) fica de fora por decisão: escrita
+ * disparável por quem não provou identidade é amplificação controlada pelo
+ * atacante. Da resolução de org em diante, todo `return` de porta passa aqui.
+ */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function denied(
+  httpStatus: number,
+  reason: string,
+  body: Record<string, unknown>,
+  headers: Record<string, string>,
+  ctx: DenyContext = {}
+): Promise<Response> {
+  // `entity_id` é uuid na tabela e o valor vem do CORPO da requisição — em
+  // "instancia_inexistente", que é justamente quando ele costuma vir torto, um
+  // id malformado faria o INSERT estourar 22P02. `logRuntime` engole a falha
+  // por design, então o efeito seria perder a linha exatamente no caso que ela
+  // existe para registrar. Fora do formato, o id vai como texto no `detail`.
+  const entityId =
+    ctx.instanceId && UUID_RE.test(ctx.instanceId) ? ctx.instanceId : undefined;
+  const detail =
+    ctx.instanceId && !entityId
+      ? [ctx.detail, `instance_id malformado: ${ctx.instanceId.slice(0, 64)}`]
+          .filter(Boolean)
+          .join(" — ")
+      : ctx.detail;
+
+  await logRuntime({
+    organizationId: ctx.organizationId,
+    module: "whatsapp",
+    action: `${ctx.action ?? "unknown"}:denied`,
+    status: "error",
+    errorMessage: detail
+      ? `${httpStatus} ${reason} — ${detail}`
+      : `${httpStatus} ${reason}`,
+    entityType: entityId ? "whatsapp_instances" : undefined,
+    entityId,
+    triggeredBy: ctx.userId,
+    payloadSnapshot: { http_status: httpStatus, reason },
+  });
+  return jsonResponse(httpStatus, body, headers);
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -270,12 +364,16 @@ Deno.serve(
     try {
       body = await req.json();
     } catch {
-      return jsonResponse(400, { error: "Invalid JSON body" }, corsHeaders);
+      return await denied(400, "invalid_json", { error: "Invalid JSON body" }, corsHeaders, {
+        userId: user.id,
+      });
     }
 
     const action = body?.action;
     if (!action || typeof action !== "string") {
-      return jsonResponse(400, { error: "Missing action" }, corsHeaders);
+      return await denied(400, "missing_action", { error: "Missing action" }, corsHeaders, {
+        userId: user.id,
+      });
     }
 
     const instanceId = body?.instance_id as string | undefined;
@@ -303,10 +401,12 @@ Deno.serve(
     if (isMaster) {
       // Master can act on any org. Require explicit target so we never assume.
       if (!targetOrgId) {
-        return jsonResponse(
+        return await denied(
           400,
+          "master_sem_org_alvo",
           { error: "Master must provide organization_id" },
-          corsHeaders
+          corsHeaders,
+          { action, userId: user.id, instanceId }
         );
       }
       const { data: orgRow } = await supabaseAdmin
@@ -315,7 +415,13 @@ Deno.serve(
         .eq("id", targetOrgId)
         .maybeSingle();
       if (!orgRow) {
-        return jsonResponse(404, { error: "Organization not found" }, corsHeaders);
+        return await denied(
+          404,
+          "org_inexistente",
+          { error: "Organization not found" },
+          corsHeaders,
+          { action, organizationId: targetOrgId, userId: user.id, instanceId }
+        );
       }
       callerOrgId = targetOrgId;
     } else if (
@@ -336,7 +442,23 @@ Deno.serve(
         .maybeSingle();
 
       if (orgErr || !userOrg?.organization_id) {
-        return jsonResponse(403, { error: "No organization" }, corsHeaders);
+        // `orgErr` e "sem linha" chegam aqui pela MESMA porta e não são a mesma
+        // coisa: `maybeSingle()` devolve erro (PGRST116) quando o usuário tem
+        // MAIS DE UMA linha ativa em `team_members` — o proxy inteiro morre para
+        // ele, e o 403 diz "No organization", que é o oposto do problema. O
+        // código do PostgREST separa os dois casos sem mudar o contrato.
+        return await denied(
+          403,
+          orgErr ? "team_member_ambiguo" : "sem_team_member_ativo",
+          { error: "No organization" },
+          corsHeaders,
+          {
+            action,
+            userId: user.id,
+            instanceId,
+            detail: orgErr ? `postgrest ${orgErr.code ?? "sem code"}` : undefined,
+          }
+        );
       }
       callerOrgId = userOrg.organization_id;
       // Autoria da mensagem enviada (SCRUM-593, ADR-0033 §4). Viaja com o
@@ -347,10 +469,12 @@ Deno.serve(
       // If a target org was supplied, it must match the user's own org —
       // prevents a regular user from acting on another tenant via the param.
       if (targetOrgId && targetOrgId !== callerOrgId) {
-        return jsonResponse(
+        return await denied(
           403,
+          "cross_tenant",
           { error: "Cannot target a different organization" },
-          corsHeaders
+          corsHeaders,
+          { action, organizationId: callerOrgId, userId: user.id, instanceId }
         );
       }
     }
@@ -364,21 +488,38 @@ Deno.serve(
     // endpoint é alcançável com o token que a pessoa já tem.
     // Master passa por fora, como no plan gate logo abaixo.
     if (!isMaster && (await isOrgBlocked(supabaseAdmin, callerOrgId))) {
-      return jsonResponse(
+      return await denied(
         402,
+        "subscription_blocked",
         {
           error: "subscription_blocked",
           message: "Assinatura da organização suspensa.",
         },
-        corsHeaders
+        corsHeaders,
+        { action, organizationId: callerOrgId, userId: user.id, instanceId }
       );
     }
 
     // -------------------------------------------------------------------------
     // 4. Rate limit (per org)
     // -------------------------------------------------------------------------
-    if (!checkRateLimit(callerOrgId)) {
-      return jsonResponse(429, { error: "Rate limit exceeded" }, corsHeaders);
+    const rate = checkRateLimit(callerOrgId);
+    if (!rate.allowed) {
+      return await denied(
+        429,
+        "rate_limit",
+        { error: "Rate limit exceeded" },
+        corsHeaders,
+        {
+          action,
+          organizationId: callerOrgId,
+          userId: user.id,
+          instanceId,
+          detail:
+            `${rate.count}/${RATE_LIMIT_MAX} por min neste isolate, ` +
+            `janela reabre em ${Math.max(0, rate.resetAt - Date.now())}ms`,
+        }
+      );
     }
 
     // -------------------------------------------------------------------------
@@ -388,7 +529,33 @@ Deno.serve(
       try {
         await assertPlanFeature(supabaseAdmin, callerOrgId, "chat");
       } catch (e) {
-        if (e instanceof PlanFeatureDeniedError) return planDeniedResponse(e, corsHeaders);
+        if (e instanceof PlanFeatureDeniedError) {
+          // A resposta continua sendo a do plan-gate (contrato do corpo: error +
+          // feature + plan). Só o registro é nosso.
+          await logRuntime({
+            organizationId: callerOrgId,
+            module: "whatsapp",
+            action: `${action}:denied`,
+            status: "error",
+            errorMessage: `403 plan_feature — ${e.featureKey} fora do plano '${e.planName ?? "desconhecido"}'`,
+            triggeredBy: user.id,
+            payloadSnapshot: { http_status: 403, reason: "plan_feature", feature: e.featureKey },
+          });
+          return planDeniedResponse(e, corsHeaders);
+        }
+        // Não é recusa de plano: é o gate que não conseguiu decidir (RPC fora).
+        // Sobe para o error boundary como antes — mas deixa a linha, porque este
+        // ramo derruba TODA ação do proxy e é o mais fácil de confundir com
+        // "o WhatsApp caiu".
+        await logRuntime({
+          organizationId: callerOrgId,
+          module: "whatsapp",
+          action: `${action}:denied`,
+          status: "error",
+          errorMessage: `500 plan_gate_indisponivel — ${(e as Error).message}`,
+          triggeredBy: user.id,
+          payloadSnapshot: { http_status: 500, reason: "plan_gate_indisponivel" },
+        });
         throw e;
       }
     }
@@ -403,10 +570,12 @@ Deno.serve(
       if (action === "createInstance") {
         const instanceName = payload.instance_name as string | undefined;
         if (!instanceName) {
-          return jsonResponse(
+          return await denied(
             400,
+            "sem_instance_name",
             { error: "Missing payload.instance_name" },
-            corsHeaders
+            corsHeaders,
+            { action, organizationId: callerOrgId, userId: user.id }
           );
         }
 
@@ -508,7 +677,13 @@ Deno.serve(
       // All other actions require instance_id + tenant check
       // -----------------------------------------------------------------------
       if (!instanceId) {
-        return jsonResponse(400, { error: "Missing instance_id" }, corsHeaders);
+        return await denied(
+          400,
+          "sem_instance_id",
+          { error: "Missing instance_id" },
+          corsHeaders,
+          { action, organizationId: callerOrgId, userId: user.id }
+        );
       }
 
       const { data: instance, error: instErr } = await supabaseAdmin
@@ -518,7 +693,22 @@ Deno.serve(
         .maybeSingle();
 
       if (instErr || !instance) {
-        return jsonResponse(404, { error: "Instance not found" }, corsHeaders);
+        // A fronteira de tenant (logo abaixo) e a de existência devolvem coisas
+        // diferentes e falham por motivos diferentes; `instErr` separa "a linha
+        // não existe" de "a leitura quebrou".
+        return await denied(
+          404,
+          instErr ? "leitura_da_instancia_falhou" : "instancia_inexistente",
+          { error: "Instance not found" },
+          corsHeaders,
+          {
+            action,
+            organizationId: callerOrgId,
+            userId: user.id,
+            instanceId,
+            detail: instErr ? `postgrest ${instErr.code ?? "sem code"}` : undefined,
+          }
+        );
       }
 
       // CRITICAL: tenant boundary check
