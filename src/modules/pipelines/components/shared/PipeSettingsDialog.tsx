@@ -58,6 +58,10 @@ interface PipeSettingsDialogProps {
   onOpenChange: (open: boolean) => void;
   pipeType: StageFamily;
   stages: PipelineStage[];
+  /**
+   * Aba inicial. Sem valor, abre na PRIMEIRA aba do diálogo — "Geral"
+   * (identidade) no funil de sistema, "Etapas" na Carteira, que não tem Geral.
+   */
   defaultTab?: string;
   /**
    * Slots de upsell (carteira) — injetados pelos call sites de carteira.
@@ -74,7 +78,7 @@ export function PipeSettingsDialog({
   onOpenChange,
   pipeType,
   stages,
-  defaultTab = "etapas",
+  defaultTab,
   upsellRulesSlot,
   upsellImportSlot,
 }: PipeSettingsDialogProps) {
@@ -110,6 +114,13 @@ export function PipeSettingsDialog({
   // discordarem sobre onde se renomeia ou se exclui um funil).
   const tabCount = isUpsellGestao ? 2 : isUpsellBase ? 3 : 7;
 
+  // "Geral" é a PRIMEIRA aba e a aba inicial: identidade antes de mecânica.
+  // Ela era a SÉTIMA de sete — quem quisesse renomear ou excluir o funil tinha
+  // de atravessar Etapas, Campos, Distribuição, Importar, Exportar e Disparos
+  // para chegar. A Carteira não tem "geral" (sem linha canônica em
+  // `pipelines`), então lá o início continua sendo "etapas".
+  const abaInicial = defaultTab ?? (isUpsell ? "etapas" : "geral");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[900px]" style={{ maxHeight: '85vh', overflow: 'hidden' }}>
@@ -120,8 +131,14 @@ export function PipeSettingsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue={defaultTab}>
+        <Tabs defaultValue={abaInicial}>
           <TabsList className={`grid w-full ${TAB_GRID[tabCount]}`}>
+            {!isUpsell && (
+              <TabsTrigger value="geral" className="gap-1.5 text-xs">
+                <Palette className="w-3.5 h-3.5" />
+                Geral
+              </TabsTrigger>
+            )}
             <TabsTrigger value="etapas" className="gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5" />
               Etapas
@@ -160,15 +177,44 @@ export function PipeSettingsDialog({
                   <Send className="w-3.5 h-3.5" />
                   Disparos
                 </TabsTrigger>
-                <TabsTrigger value="geral" className="gap-1.5 text-xs">
-                  <Palette className="w-3.5 h-3.5" />
-                  Geral
-                </TabsTrigger>
               </>
             )}
           </TabsList>
 
           <div className="overflow-y-auto mt-4 pr-1" style={{ maxHeight: 'calc(85vh - 10rem)' }}>
+            {/* Identidade (nome/ícone/cor — D4) + Zona de Perigo (exclusão via
+                DeletePipelineDialog — D3). MESMO lugar, mesma copy e mesmo
+                portão de permissão do funil customizado: as duas espécies
+                deixaram de existir, então as duas telas não podem discordar
+                sobre onde se renomeia ou se exclui um funil.
+
+                Só os três tipos com linha em `pipelines`. upsell_* fica de
+                fora: resíduo D9, sem linha canônica e sem cards próprios. */}
+            {!isUpsell && (
+              <TabsContent value="geral" className="mt-0">
+                {pipelineRow ? (
+                  <FunnelIdentitySection
+                    pipeline={{
+                      id: pipelineRow.id,
+                      slug: pipelineRow.slug,
+                      type: "system",
+                      name: pipelineRow.name,
+                      icon: pipelineRow.icon,
+                      color: pipelineRow.color,
+                    }}
+                    displayName={displayName}
+                    onDeleted={() => onOpenChange(false)}
+                  />
+                ) : (
+                  /* Agora que "Geral" abre primeiro, a ausência da linha
+                     canônica não pode virar aba em branco no primeiro paint. */
+                  <p className="text-sm text-muted-foreground">
+                    Carregando os dados do funil…
+                  </p>
+                )}
+              </TabsContent>
+            )}
+
             <TabsContent value="etapas" className="mt-0">
               <ManagePipelineStagesContent
                 pipelineType={pipeType}
@@ -216,30 +262,6 @@ export function PipeSettingsDialog({
                   />
                 </TabsContent>
 
-                {/* Identidade (nome/ícone/cor — D4) + Zona de Perigo (exclusão
-                    via DeletePipelineDialog — D3). MESMO lugar, mesma copy e
-                    mesmo portão de permissão do funil customizado: as duas
-                    espécies deixaram de existir, então as duas telas não podem
-                    discordar sobre onde se renomeia ou se exclui um funil.
-
-                    Só os três tipos com linha em `pipelines`. upsell_* fica de
-                    fora: resíduo D9, sem linha canônica e sem cards próprios. */}
-                <TabsContent value="geral" className="mt-0">
-                  {pipelineRow && (
-                    <FunnelIdentitySection
-                      pipeline={{
-                        id: pipelineRow.id,
-                        slug: pipelineRow.slug,
-                        type: "system",
-                        name: pipelineRow.name,
-                        icon: pipelineRow.icon,
-                        color: pipelineRow.color,
-                      }}
-                      displayName={displayName}
-                      onDeleted={() => onOpenChange(false)}
-                    />
-                  )}
-                </TabsContent>
               </>
             )}
           </div>

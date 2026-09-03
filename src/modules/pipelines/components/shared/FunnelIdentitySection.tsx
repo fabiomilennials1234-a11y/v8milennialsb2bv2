@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,15 @@ export interface FunnelIdentitySectionProps {
   displayName?: string;
   /** Fecha o diálogo hospedeiro após a exclusão do funil. */
   onDeleted?: () => void;
+  /** Chamado após um salvamento bem-sucedido (fechar o diálogo hospedeiro). */
+  onSaved?: () => void;
+  /**
+   * Zona de Perigo embutida. Default `true` — as duas abas "Geral" seguem
+   * exatamente como estavam. Hospedeiro que JÁ oferece "Excluir" como ação
+   * própria (o menu do cartão no hub) passa `false`: a mesma superfície não
+   * pode oferecer o delete duas vezes.
+   */
+  mostrarZonaDePerigo?: boolean;
 }
 
 /**
@@ -46,6 +55,8 @@ export function FunnelIdentitySection({
   pipeline,
   displayName,
   onDeleted,
+  onSaved,
+  mostrarZonaDePerigo = true,
 }: FunnelIdentitySectionProps) {
   const nomeAtual = displayName ?? pipeline.name;
   const [name, setName] = useState(nomeAtual);
@@ -53,6 +64,7 @@ export function FunnelIdentitySection({
   const [color, setColor] = useState(pipeline.color);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
 
+  const nomeId = useId();
   const updateIdentity = useUpdatePipelineIdentity();
   const { allowed: podeExcluir } = useFeaturePermission("pipeline.custom_delete");
 
@@ -70,6 +82,7 @@ export function FunnelIdentitySection({
         color,
       });
       toast.success("Funil atualizado");
+      onSaved?.();
     } catch (error: any) {
       toast.error(error.message || "Erro ao atualizar");
     }
@@ -78,8 +91,8 @@ export function FunnelIdentitySection({
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>Nome do Funil</Label>
-        <Input value={name} onChange={(e) => setName(e.target.value)} />
+        <Label htmlFor={nomeId}>Nome do Funil</Label>
+        <Input id={nomeId} value={name} onChange={(e) => setName(e.target.value)} />
       </div>
 
       <div className="space-y-2">
@@ -132,7 +145,7 @@ export function FunnelIdentitySection({
         </Button>
       )}
 
-      {podeExcluir && (
+      {mostrarZonaDePerigo && podeExcluir && (
         <div className="pt-6 mt-2 border-t border-destructive/20 space-y-2">
           <p className="text-sm font-semibold text-destructive">Zona de Perigo</p>
           <p className="text-xs text-muted-foreground">
@@ -151,12 +164,14 @@ export function FunnelIdentitySection({
         </div>
       )}
 
-      <DeletePipelineDialog
-        open={confirmandoExclusao}
-        onOpenChange={setConfirmandoExclusao}
-        pipeline={{ id: pipeline.id, name: nomeAtual, type: pipeline.type }}
-        onDeleted={onDeleted}
-      />
+      {mostrarZonaDePerigo && (
+        <DeletePipelineDialog
+          open={confirmandoExclusao}
+          onOpenChange={setConfirmandoExclusao}
+          pipeline={{ id: pipeline.id, name: nomeAtual, type: pipeline.type }}
+          onDeleted={onDeleted}
+        />
+      )}
     </div>
   );
 }

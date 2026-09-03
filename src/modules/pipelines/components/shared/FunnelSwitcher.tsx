@@ -1,9 +1,10 @@
 import { memo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, Check } from "lucide-react";
+import { ChevronDown, Check, Pencil } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useFunnelOptions, type FunnelOption } from "../../lib/funnel-nav";
+import { FunnelIdentityDialog } from "./FunnelIdentityDialog";
 
 /**
  * Seletor de funil — o nome do funil vira a porta para os outros.
@@ -32,6 +33,7 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
   fallbackColor = "#64748b",
 }: FunnelSwitcherProps) {
   const [open, setOpen] = useState(false);
+  const [renomeando, setRenomeando] = useState(false);
   const navigate = useNavigate();
   const { options, isLoading } = useFunnelOptions();
 
@@ -121,7 +123,44 @@ export const FunnelSwitcher = memo(function FunnelSwitcher({
             </button>
           );
         })}
+
+        {/* Renomear o funil ABERTO, a partir do próprio nome dele.
+            O clique no nome continua abrindo a lista — a decisão do protótipo
+            (escolher é que troca) fica de pé, e o título não vira campo
+            editável. O que muda é que a identidade deixou de morar só na
+            sétima aba de Configurações. */}
+        {current?.pipeline && (
+          <>
+            <div className="my-1 h-px bg-border" aria-hidden />
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setRenomeando(true);
+              }}
+              data-testid="funnel-switcher-rename"
+              className={cn(
+                "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px]",
+                "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
+                "transition-colors duration-150",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              )}
+            >
+              <Pencil className="size-3.5 shrink-0" aria-hidden />
+              <span className="truncate">Renomear "{label}"</span>
+            </button>
+          </>
+        )}
       </PopoverContent>
+
+      {current?.pipeline && (
+        <FunnelIdentityDialog
+          open={renomeando}
+          onOpenChange={setRenomeando}
+          pipeline={current.pipeline}
+          displayName={label}
+        />
+      )}
     </Popover>
   );
 });

@@ -115,7 +115,9 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Components — shared (configuração + dispatch)
 - `PipeSettingsDialog`, `ManagePipelineStagesContent`, `ManagePipelineStagesModal`
-- `FunnelIdentitySection` — identidade do funil (nome/ícone/cor, escreve em `pipelines` e sincroniza `display_name` do registro no sistema) + Zona de Perigo, na aba "Geral" dos DOIS diálogos de configurações (sistema e custom) desde SCRUM-636. Portão de exclusão: `pipeline.custom_delete`. A confirmação é o `DeletePipelineDialog` único (substituiu `DangerZoneSystemPipe`, demolido).
+- `FunnelIdentitySection` — identidade do funil (nome/ícone/cor, escreve em `pipelines` e sincroniza `display_name` do registro no sistema) + Zona de Perigo, na aba "Geral" dos DOIS diálogos de configurações (sistema e custom) desde SCRUM-636. Portão de exclusão: `pipeline.custom_delete`. A confirmação é o `DeletePipelineDialog` único (substituiu `DangerZoneSystemPipe`, demolido). Props `onSaved` e `mostrarZonaDePerigo` servem a hospedeiro fora da aba.
+- `FunnelIdentityDialog` — a MESMA seção num diálogo, sem Zona de Perigo. É por onde renomear/repintar chega fora de Configurações (menu do cartão no hub, rodapé do seletor de funil).
+- **"Geral" é a PRIMEIRA aba e a aba inicial** dos dois diálogos (identidade antes de mecânica; era a última em ambos). `defaultTab` explícito continua vencendo — a Carteira abre em "Importar". `upsell_*` não tem "Geral" (sem linha canônica em `pipelines`) e segue começando em "Etapas".
 - `PipeDispatchRulesSection`, `PipeDistributionSection`
 
 ### Components — custom pipelines
@@ -123,8 +125,9 @@ Ver `./index.ts` para a superfície completa. Estável.
 - `CreatePipelineModal`, `AddLeadToPipeModal`, `ImportCustomPipelineContent`
 - Constantes: `PIPELINE_COLORS`, `PIPELINE_ICONS`
 
-### Components — funis (creators)
+### Components — funis (creators + ações)
 - `CreateFunilOuCampanhaModal`, `CreateTemporaryFunnelModal`
+- `FunnelActionsMenu` — kebab do cartão de funil: **Renomear** (abre `FunnelIdentityDialog`) e **Excluir** (abre `DeletePipelineDialog`). "Excluir" some sem `pipeline.custom_delete`. Usado em todo cartão do hub `/funis`, encerrados inclusive. Nenhuma lógica própria: só a porta.
 
 ### Components — legacy (confirmação standalone)
 - Cards/stats: `ConfirmacaoCard`, `ConfirmacaoStats`, `ConfirmacaoDetailModal`

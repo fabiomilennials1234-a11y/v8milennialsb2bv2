@@ -131,8 +131,15 @@ export function CustomPipeSettingsDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs defaultValue="etapas">
+        {/* "Geral" primeiro — e é onde o diálogo abre. Identidade antes de
+            mecânica: era a última das quatro, e renomear ou excluir o funil
+            exigia atravessar Etapas, Disparos e Importar. */}
+        <Tabs defaultValue="geral">
           <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="geral" className="gap-1.5 text-xs">
+              <Palette className="w-3.5 h-3.5" />
+              Geral
+            </TabsTrigger>
             <TabsTrigger value="etapas" className="gap-1.5 text-xs">
               <Layers className="w-3.5 h-3.5" />
               Etapas
@@ -145,13 +152,22 @@ export function CustomPipeSettingsDialog({
               <FileSpreadsheet className="w-3.5 h-3.5" />
               Importar
             </TabsTrigger>
-            <TabsTrigger value="geral" className="gap-1.5 text-xs">
-              <Palette className="w-3.5 h-3.5" />
-              Geral
-            </TabsTrigger>
           </TabsList>
 
           <div className="overflow-y-auto max-h-[calc(85vh-12rem)] mt-4 pr-1">
+            <TabsContent value="geral" className="mt-0">
+              <FunnelIdentitySection
+                pipeline={{
+                  id: pipeline.id,
+                  slug: pipeline.slug,
+                  type: "custom",
+                  name: pipeline.name,
+                  icon: pipeline.icon,
+                  color: pipeline.color,
+                }}
+                onDeleted={() => onOpenChange(false)}
+              />
+            </TabsContent>
             <TabsContent value="etapas" className="mt-0">
               <ManagePipelineStagesContent
                 pipelineId={pipeline.id}
@@ -167,19 +183,6 @@ export function CustomPipeSettingsDialog({
                 pipelineId={pipeline.id}
                 pipelineName={pipeline.name}
                 stages={stages}
-              />
-            </TabsContent>
-            <TabsContent value="geral" className="mt-0">
-              <FunnelIdentitySection
-                pipeline={{
-                  id: pipeline.id,
-                  slug: pipeline.slug,
-                  type: "custom",
-                  name: pipeline.name,
-                  icon: pipeline.icon,
-                  color: pipeline.color,
-                }}
-                onDeleted={() => onOpenChange(false)}
               />
             </TabsContent>
           </div>
