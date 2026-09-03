@@ -25,6 +25,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { isCopilotCanceled } from "../_shared/copilot/cancellation.ts";
+import { montarPayloadDoAgente } from "../_shared/copilot-batch-payload.ts";
 import {
   checkBatchMaturity,
   type BatchInfo,
@@ -130,12 +131,22 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
     }
   };
 
+  /** Instance da mensagem mais recente do batch; `null` se nenhuma trouxer. */
+  const instanciaDoBatch = (linhas: unknown): string | null => {
+    const arr = (linhas ?? []) as { instance_id?: string | null }[];
+    for (let i = arr.length - 1; i >= 0; i--) {
+      const id = arr[i]?.instance_id;
+      if (typeof id === "string" && id) return id;
+    }
+    return null;
+  };
+
   try {
     // --- Resolve conteúdo entrante (whatsapp_messages, modelo atual) ---
     const messageIds = (claimedRows as { message_id: string }[]).map((r) => r.message_id);
     const { data: msgs } = await supabase
       .from("whatsapp_messages")
-      .select("content, timestamp")
+      .select("content, timestamp, instance_id")
       .in("id", messageIds)
       .order("timestamp", { ascending: true });
 
@@ -163,13 +174,16 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
       const resp = await fetch(agentMessageUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-        body: JSON.stringify({
-          from: phone,
-          message: combinedContent,
-          channel: "whatsapp",
-          organization_id: orgId,
-          incoming_message_type: "text",
-        }),
+        body: JSON.stringify(montarPayloadDoAgente({
+          phone,
+          orgId,
+          content: combinedContent,
+          // A Instance da mensagem MAIS RECENTE do batch. O batch é agrupado
+          // por telefone+org, então em tese pode misturar Instances; a última
+          // é a que o lead acabou de usar, que é a resposta certa para
+          // "de qual número ele respondeu".
+          instanceId: instanciaDoBatch(msgs),
+        })),
       });
       if (!resp.ok) {
         await applyOutcome({ kind: "transient_error", error: `agent_message_${resp.status}` });
