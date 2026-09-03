@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
-import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
+import { useLeadCallAction } from "@/shared/components/lead-call-action-context";
 
 import { LeadCard } from "./LeadCard";
 import { LeadCardAside } from "./LeadCardAside";

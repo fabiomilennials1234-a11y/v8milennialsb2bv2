@@ -17,7 +17,7 @@ import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { useFeaturePermission } from "@/modules/identity";
-import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
+import { useLeadCallAction } from "@/shared/components/lead-call-action-context";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
