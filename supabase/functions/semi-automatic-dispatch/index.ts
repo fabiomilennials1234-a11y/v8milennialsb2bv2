@@ -18,6 +18,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
+import { persistOutboundMessage } from "../_shared/action-handlers/whatsapp-helpers.ts";
 import { getTimeBasedVariables } from '../_shared/time-variables.ts';
 import { personalizationFirstName } from "../_shared/lead-name.ts";
 
@@ -357,6 +358,23 @@ async function processBatch(
           message_content: messageContent,
           message_id: sendResult.messageId,
           sent_at: new Date().toISOString(),
+        });
+
+        // `outbound_dispatch_log` acima é registro da CAMPANHA; o chat lê
+        // `whatsapp_messages`. Sem esta linha o disparo some da conversa do lead
+        // e o eco `fromMe` volta rotulado `manual`, fazendo o
+        // `trg_human_pause_on_manual_send` pausar o Copilot de cada lead do lote
+        // — logo depois de a campanha ter falado com ele.
+        await persistOutboundMessage(supabase, {
+          organizationId,
+          instanceId: whatsappInstance.id,
+          providerMessageId: sendResult.messageId,
+          phone: lead.phone,
+          messageType: isAudioTemplate ? "audio" : "conversation",
+          content: messageContent,
+          leadId: lead.id,
+          sentSource: "workflow",
+          fallbackIdPrefix: "semiauto",
         });
 
         // increment_whatsapp_rate_limit removido: RPC ausente em prod, só

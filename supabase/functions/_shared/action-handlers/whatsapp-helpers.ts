@@ -306,6 +306,17 @@ export type OutboundMessage = {
   leadId?: string | null;
   /** Prefixo do id sintético de último recurso. Default `wf`. */
   fallbackIdPrefix?: string;
+  /**
+   * Rótulo de origem da linha. Default `workflow` — o valor de quem chamava isto
+   * antes de existir o parâmetro, então omitir preserva o comportamento.
+   *
+   * O universo é fechado pelo CHECK do banco: `manual | copilot | workflow`.
+   * `manual` está deliberadamente FORA do tipo. Gravar `manual` aqui seria pedir
+   * ao gatilho que pausasse o Copilot — o oposto do que esta função existe para
+   * fazer —, e nenhum chamador desta função é humano: todos são automação que
+   * acabou de entregar uma mensagem.
+   */
+  sentSource?: "workflow" | "copilot";
 };
 
 /**
@@ -315,10 +326,11 @@ export type OutboundMessage = {
  * detalhe de higiene: quando o eco `fromMe` volta pelo webhook, ele entra com
  * `onConflict: "message_id,instance_id"` e `ignoreDuplicates: true`. Com o id
  * real, o eco colide com esta linha, vira DO NOTHING, e o que escrevemos aqui
- * sobrevive inteiro — inclusive `sent_source: "workflow"`, que é o que impede o
- * `trg_human_pause_on_manual_send` de pausar o Copilot do lead a cada mídia
- * disparada por automação. Com um id sintético não há colisão: o eco insere uma
- * SEGUNDA linha, com `sent_source` no default `manual`, e o gatilho dispara.
+ * sobrevive inteiro — inclusive o `sent_source` (`workflow` ou `copilot`, nunca
+ * `manual`), que é o que impede o `trg_human_pause_on_manual_send` de pausar o
+ * Copilot do lead a cada mensagem disparada por automação. Com um id sintético
+ * não há colisão: o eco insere uma SEGUNDA linha, com `sent_source` no default
+ * `manual`, e o gatilho dispara.
  *
  * `ignoreDuplicates: false` (merge), e não `true`: o eco pode chegar ANTES do
  * retorno do `/send`. Se este upsert virasse no-op nesse caso, a linha ficaria
@@ -392,7 +404,7 @@ export async function persistOutboundMessage(
     timestamp: new Date().toISOString(),
     status: "sent",
     sent_by_ai: true,
-    sent_source: "workflow",
+    sent_source: msg.sentSource ?? "workflow",
   };
   // Coluna ausente do payload fica de fora do UPDATE do upsert. Omitir preserva
   // o que o eco já tiver gravado ali, em vez de sobrescrever com null.
