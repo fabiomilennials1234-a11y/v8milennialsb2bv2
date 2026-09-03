@@ -376,7 +376,15 @@ Deno.serve(
           module: "job_monitor",
           action: "watchdog_alert",
           status: "success",
-          payloadSnapshot: { alert: alert.key, ...(alert.logPayload ?? {}) },
+          // `self_blind` vai no caminho de SUCESSO também, e não só no de erro:
+          // sem ele, um aviso entregue não diz por qual canal saiu, e o dia em
+          // que as secrets próprias forem provisionadas fica indistinguível do
+          // dia em que alguém as apagar sem querer.
+          payloadSnapshot: {
+            alert: alert.key,
+            self_blind: channel.ok ? channel.selfBlind : null,
+            ...(alert.logPayload ?? {}),
+          },
         });
       } else {
         failed.push(alert.key);
