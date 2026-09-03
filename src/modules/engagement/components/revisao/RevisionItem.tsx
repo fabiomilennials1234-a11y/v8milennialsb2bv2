@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNomeDoPipe } from "../../hooks/useNomeDoPipe";
 import { motion, AnimatePresence } from "framer-motion";
 import { format, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -118,6 +119,8 @@ export function RevisionItem({
   canDelete,
   timezone,
 }: RevisionItemProps) {
+  // Nome do funil como a ORG o vê (SCRUM-641).
+  const nomeDoPipe = useNomeDoPipe();
   const [expanded, setExpanded] = useState(false);
   const [showCompletionBanner, setShowCompletionBanner] = useState(false);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -310,7 +313,7 @@ export function RevisionItem({
                 {task.sourcePipe && (
                   <span className="flex items-center gap-1">
                     {(() => { const Icon = PIPE_ICONS[task.sourcePipe] || MessageSquare; return <Icon className="w-3 h-3" />; })()}
-                    {task.sourcePipe === "whatsapp" ? "WhatsApp" : task.sourcePipe === "confirmacao" ? "Confirmação" : "Propostas"}
+                    {nomeDoPipe(task.sourcePipe)}
                   </span>
                 )}
                 {task.isAutomated && (

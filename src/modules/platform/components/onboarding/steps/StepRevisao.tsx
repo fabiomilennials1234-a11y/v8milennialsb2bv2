@@ -10,7 +10,7 @@ const LAUNCH_ITEMS = [
   {
     icon: GitBranch,
     label: "Pipeline configurado",
-    description: "Funil de qualificação pronto para receber leads",
+    description: "Funil de vendas pronto para receber leads",
   },
   {
     icon: Users,

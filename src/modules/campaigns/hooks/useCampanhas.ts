@@ -34,10 +34,12 @@ export const OBJECTIVE_LABELS: Record<CampaignObjective, string> = {
   livre: 'Livre',
 };
 
+// SCRUM-641: as descrições não citam mais nome de funil — a org chama os
+// funis do jeito dela (o destino real vem de OBJECTIVE_TARGET_MAP/target_pipeline_id).
 export const OBJECTIVE_DESCRIPTIONS: Record<CampaignObjective, string> = {
-  qualificacao: 'Qualificar leads → Pipe WhatsApp',
-  agendamentos: 'Agendar reuniões → Pipe Confirmação',
-  propostas: 'Enviar propostas → Pipe Propostas',
+  qualificacao: 'Qualificar leads novos',
+  agendamentos: 'Agendar reuniões com os leads',
+  propostas: 'Enviar propostas e fechar',
   livre: 'Objetivo customizado → Você configura',
 };
 

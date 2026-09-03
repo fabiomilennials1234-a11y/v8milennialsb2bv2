@@ -27,9 +27,8 @@ const groups: ShortcutGroup[] = [
     items: [
       { keys: ["G", "D"], label: "Dashboard" },
       { keys: ["G", "L"], label: "Leads" },
-      { keys: ["G", "W"], label: "Funil WhatsApp" },
-      { keys: ["G", "C"], label: "Confirmacao" },
-      { keys: ["G", "P"], label: "Propostas" },
+      { keys: ["G", "W"], label: "Funil padrão" },
+      { keys: ["G", "F"], label: "Funis" },
       { keys: ["G", "M"], label: "Chat" },
     ],
   },

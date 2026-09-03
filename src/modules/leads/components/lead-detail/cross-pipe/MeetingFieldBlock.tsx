@@ -16,6 +16,7 @@ import {
 } from "@/contracts/pipe";
 import type { Tables } from "@/integrations/supabase/types";
 import { usePipeOps } from "../../../pipe-ops";
+import { useNomeDoPipeDeSistema } from "../../../hooks/useNomeDoPipeDeSistema";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { CompareceuModal } from "../../leads/funnel-contexts/modals/CompareceuModal";
@@ -59,6 +60,10 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
   // O funil de destino do "compareceu". A transição virou MOVE (ADR-0023 §4), e
   // mover exige o id do funil — antes só o hook de criação o conhecia.
   const { data: propostasPipelineId } = usePipelineId("propostas");
+  // Nomes como a ORG os vê (SCRUM-641) — nada de "Confirmação"/"Propostas" cravados.
+  const nomeDoPipe = useNomeDoPipeDeSistema();
+  const nomeConfirmacao = nomeDoPipe("confirmacao");
+  const nomePropostas = nomeDoPipe("propostas");
   const logAction = useLogLeadAction();
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [compareceuOpen, setCompareceuOpen] = useState(false);
@@ -92,12 +97,12 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
         logAction({
           leadId,
           action: "pipe_added",
-          description: 'Lead adicionado ao pipe "Confirmação"',
+          description: `Lead adicionado ao funil "${nomeConfirmacao}"`,
         });
-        toast.success("Lead adicionado à Confirmação");
+        toast.success(`Lead adicionado a ${nomeConfirmacao}`);
         onSuccess?.();
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Erro ao adicionar à Confirmação";
+        const msg = err instanceof Error ? err.message : `Erro ao adicionar a ${nomeConfirmacao}`;
         toast.error(msg);
       }
     };
@@ -118,7 +123,7 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
           ) : (
             <Plus className="w-3.5 h-3.5" />
           )}
-          Adicionar à Confirmação
+          Adicionar a {nomeConfirmacao}
         </Button>
       </div>
     );
@@ -314,14 +319,14 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
             // TypeScript reabrir o tipo do valor vindo do hook.
             const targetPipelineId = propostasPipelineId;
             if (!targetPipelineId) {
-              throw new Error("Funil de Orçamentos não encontrado nesta organização");
+              throw new Error("Funil de destino não encontrado nesta organização");
             }
             // `pipeData.id` é `string | null` no tipo da view. Card sem id não é
             // posição que se possa mover — falhar aqui é melhor que mandar null
             // para o banco e receber "negócio não encontrado".
             const entryId = pipeData.id;
             if (!entryId) {
-              throw new Error("Card de Confirmação sem identificador — recarregue a página");
+              throw new Error("Card sem identificador — recarregue a página");
             }
 
             await updatePipe.mutateAsync({
@@ -343,9 +348,9 @@ export const MeetingFieldBlock = memo(function MeetingFieldBlock({
             logAction({
               leadId,
               action: "meeting_attended",
-              description: "Lead compareceu — promovido para Gestão de Propostas",
+              description: `Lead compareceu — promovido para ${nomePropostas}`,
             });
-            toast.success("Lead movido para Gestão de Propostas");
+            toast.success(`Lead movido para ${nomePropostas}`);
             setCompareceuOpen(false);
             onSuccess?.();
           } catch (err: unknown) {

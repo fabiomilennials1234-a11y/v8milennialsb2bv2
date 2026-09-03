@@ -115,7 +115,7 @@ export function ExportLeadsContent({ onDone, listFilters }: ExportLeadsContentPr
       )}
       <p className="text-xs text-muted-foreground">
         O arquivo inclui todos os dados: lead (nome, empresa, contato, prioridade, origem, UTMs, datas),
-        etapa e datas de cada pipe (WhatsApp, Confirmação, Propostas), valores, responsáveis e notas.
+        etapa e datas de cada funil da organização, valores, responsáveis e notas.
       </p>
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="outline" onClick={() => onDone?.()} disabled={isExporting}>

@@ -13,6 +13,8 @@ import {
   useCustomPipelineStages as useCustomPipeStagesQuery,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { usePipelineStages, type PipelineType } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
+import { destinosDeSistema } from "@/contracts/pipe";
 
 /** Pares de destino mutuamente exclusivos (custom XOR standard). */
 export interface TransitionTarget {
@@ -27,11 +29,11 @@ export interface TransitionTarget {
 // funil. Medido em prod (2026-09-01): 1 etapa custom ainda aponta
 // target_pipe_type='upsell_base'; a EXECUÇÃO dessa transição segue intacta
 // (useCustomPipelines), só não dá mais para criar/editar apontando pra lá.
-const STANDARD_PIPES: { value: string; label: string }[] = [
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "propostas", label: "Propostas" },
-];
+//
+// SCRUM-641: o catálogo fixo ("Qualificação"/"Confirmação"/"Propostas") saiu
+// também — as opções padrão agora vêm de `pipeline_display_config`, com o
+// NOME que a org usa, e só para os funis que ela TEM e não escondeu. Apontar
+// transição para funil que a org excluiu criaria movimento para lugar nenhum.
 
 /**
  * Seletor de transição automática ao atingir etapa de sucesso. Lista unificada:
@@ -57,6 +59,7 @@ export function TransitionSelector({
   onChangeTarget: (updates: TransitionTarget) => void;
 }) {
   const { data: customPipelines } = useCustomPipelines();
+  const { data: displayConfigs } = usePipelineDisplayConfig();
   const isCustomTarget = !!targetPipelineId;
   const isStandardTarget = !!targetPipeType;
   const selectedPipeValue = isCustomTarget ? targetPipelineId : isStandardTarget ? targetPipeType : "__none__";
@@ -97,7 +100,9 @@ export function TransitionSelector({
   };
 
   // Exclude the origin funnel from destination options.
-  const standardOptions = STANDARD_PIPES.filter((p) => p.value !== currentPipeType);
+  const standardOptions = destinosDeSistema(displayConfigs)
+    .map((d) => ({ value: d.pipeType, label: d.label }))
+    .filter((p) => p.value !== currentPipeType);
   const otherCustomPipelines = (customPipelines || []).filter((p) => p.id !== currentPipelineId);
 
   return (
@@ -111,14 +116,24 @@ export function TransitionSelector({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="__none__">Nenhum (ficar neste funil)</SelectItem>
-          <SelectGroup>
-            <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-              Pipes Padrão
-            </SelectLabel>
-            {standardOptions.map((p) => (
-              <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
-            ))}
-          </SelectGroup>
+          {standardOptions.length > 0 && (
+            <SelectGroup>
+              <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
+                Funis do sistema
+              </SelectLabel>
+              {standardOptions.map((p) => (
+                <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+              ))}
+            </SelectGroup>
+          )}
+          {/* Alvo gravado num funil que a org não tem mais: manter o item
+              visível (fallback honesto) em vez de deixar o Radix cair no
+              placeholder e a tela negar um vínculo que está no banco. */}
+          {isStandardTarget &&
+            targetPipeType &&
+            !standardOptions.some((p) => p.value === targetPipeType) && (
+              <SelectItem value={targetPipeType}>Funil removido</SelectItem>
+            )}
           {otherCustomPipelines.length > 0 && (
             <SelectGroup>
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">

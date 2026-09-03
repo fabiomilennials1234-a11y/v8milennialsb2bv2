@@ -44,7 +44,8 @@ import {
   type TemplateTextareaHandle,
 } from "@/modules/workflows/components/TemplateTextarea";
 import type { CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
-import { usePipelines, useEtapasDoFunil } from "@/modules/pipelines";
+import { usePipelines, useEtapasDoFunil, usePipelineDisplayConfig } from "@/modules/pipelines";
+import { destinosDeSistema } from "@/contracts/pipe";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
@@ -554,6 +555,16 @@ interface ActionPanelProps {
 
 export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   const at = data.actionType;
+  // Funis de sistema REAIS da org, com o nome que ELA usa (SCRUM-641). O value
+  // continua o sentinel legado `pipe_<type>` — é o contrato do executor.
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const funisDeSistema = destinosDeSistema(displayConfigs);
+  const opcoesDePipe = funisDeSistema.map((d) => ({
+    value: `pipe_${d.pipeType}`,
+    label: d.label,
+  }));
+  const nomeConfirmacao =
+    funisDeSistema.find((d) => d.pipeType === "confirmacao")?.label ?? "Funil removido";
   // Node unificado gateado por org (ADR-0012). Fail-closed: enquanto carrega ou
   // se a org não tem a flag, o picker mostra os envios legados, como antes.
   const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
@@ -863,9 +874,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-                <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-                <SelectItem value="pipe_propostas">Propostas</SelectItem>
+                {opcoesDePipe.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -892,9 +903,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
               <SelectValue placeholder="Selecione" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-              <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-              <SelectItem value="pipe_propostas">Propostas</SelectItem>
+              {opcoesDePipe.map((o) => (
+                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -913,9 +924,9 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
                 <SelectValue placeholder="Selecione" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-                <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-                <SelectItem value="pipe_propostas">Propostas</SelectItem>
+                {opcoesDePipe.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1054,8 +1065,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {at === "schedule_meeting" && (
         <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-          Cria uma entrada no Pipe Confirmação com status "reunião marcada" para
-          o lead.
+          Cria uma entrada no funil {nomeConfirmacao} com status "reunião
+          marcada" para o lead.
         </div>
       )}
 

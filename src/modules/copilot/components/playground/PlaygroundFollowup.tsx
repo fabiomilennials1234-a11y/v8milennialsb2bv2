@@ -57,7 +57,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FollowupRule, FollowupTriggerType, FollowupStyle, SequenceStep } from "@/types/copilot";
-import { PIPE_TYPES } from "@/types/copilot";
+import { usePipeTypeOptions } from "../../hooks/usePipeTypeOptions";
 import { useAllPipelineStageOptions } from "@/modules/pipelines";
 import {
   useAgentFollowupRules,
@@ -253,6 +253,7 @@ function FollowupRuleCard({
   const [tagInput, setTagInput] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
   const { stagesByPipe } = useAllPipelineStageOptions();
+  const pipeTypeOptions = usePipeTypeOptions();
 
   const isCadenceMode = !!(localRule.sequenceSteps && localRule.sequenceSteps.length > 0);
 
@@ -632,7 +633,7 @@ function FollowupRuleCard({
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
-                        {PIPE_TYPES.map((pipe) => (
+                        {pipeTypeOptions.map((pipe) => (
                           <SelectItem key={pipe.value} value={pipe.value}>
                             {pipe.label}
                           </SelectItem>
@@ -647,7 +648,7 @@ function FollowupRuleCard({
                           className="cursor-pointer"
                           onClick={() => updateLocalRule("filterPipes", (localRule.filterPipes || []).filter((p) => p !== pipe))}
                         >
-                          {PIPE_TYPES.find((p) => p.value === pipe)?.label || pipe} x
+                          {pipeTypeOptions.find((p) => p.value === pipe)?.label || pipe} x
                         </Badge>
                       ))}
                     </div>

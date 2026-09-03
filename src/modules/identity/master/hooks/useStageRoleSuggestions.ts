@@ -17,7 +17,8 @@ import {
   type ReviewAction,
   type StageRoleSuggestionRow,
 } from "../lib/stage-role-review";
-import type { StageRole } from "@/contracts/pipe";
+import { nomeDoFunil } from "@/contracts/pipe";
+import type { StageRole, SystemPipeDisplay } from "@/contracts/pipe";
 
 const QUERY_KEY = ["master-stage-role-suggestions"] as const;
 
@@ -26,18 +27,45 @@ export function useStageRoleSuggestions() {
   return useQuery({
     queryKey: QUERY_KEY,
     queryFn: async (): Promise<StageRoleSuggestionRow[]> => {
-      const { data, error } = await supabase
-        .from("pipeline_stages")
-        .select(
-          "id, organization_id, pipeline_type, stage_key, name, color, stage_role, suggested_stage_role, stage_role_suggested_at, stage_role_suggestion_source, organization:organizations(name), pipeline:pipelines(name)",
-        )
-        .in("suggested_stage_role", ["won", "lost"])
-        .eq("is_active", true)
-        .order("organization_id")
-        .returns<StageRoleSuggestionRow[]>();
+      // Duas leituras em paralelo: a fila + o display config de TODAS as
+      // orgs (policy master_ghost_select_pipeline_display_config). O rótulo
+      // do funil precisa ser o nome que a ORG usa — nunca o catálogo
+      // ("Qualificação"/"Confirmação"/"Propostas" são o seed congelado que
+      // nenhuma navegação mostra). Mesma regra de nome do resto do app:
+      // `nomeDoFunil` (@/contracts/pipe).
+      type RawRow = Omit<StageRoleSuggestionRow, "funil_label">;
+      const [fila, configs] = await Promise.all([
+        supabase
+          .from("pipeline_stages")
+          .select(
+            "id, organization_id, pipeline_type, stage_key, name, color, stage_role, suggested_stage_role, stage_role_suggested_at, stage_role_suggestion_source, organization:organizations(name), pipeline:pipelines(name, slug, type)",
+          )
+          .in("suggested_stage_role", ["won", "lost"])
+          .eq("is_active", true)
+          .order("organization_id")
+          .returns<RawRow[]>(),
+        supabase
+          .from("pipeline_display_config")
+          .select("organization_id, pipe_type, display_name, is_visible, position")
+          .returns<(SystemPipeDisplay & { organization_id: string })[]>(),
+      ]);
 
-      if (error) throw error;
-      return data ?? [];
+      if (fila.error) throw fila.error;
+      if (configs.error) throw configs.error;
+
+      const configsPorOrg = new Map<string, SystemPipeDisplay[]>();
+      for (const c of configs.data ?? []) {
+        const lista = configsPorOrg.get(c.organization_id) ?? [];
+        lista.push(c);
+        configsPorOrg.set(c.organization_id, lista);
+      }
+
+      return (fila.data ?? []).map((row): StageRoleSuggestionRow => ({
+        ...row,
+        funil_label: row.pipeline
+          ? nomeDoFunil(configsPorOrg.get(row.organization_id), row.pipeline)
+          : null,
+      }));
     },
     staleTime: 30 * 1000,
   });
