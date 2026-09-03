@@ -64,12 +64,19 @@ describe("isWonStageKey", () => {
     // The literal 'vendido' is NOT won on a board that renamed it.
     expect(isWonStageKey("vendido", renamedWon)).toBe(false);
   });
-  it("bridges ungoverned final-positive stages", () => {
-    expect(isWonStageKey("vendido", ungoverned)).toBe(true);
+  // ── B2d: os dois atalhos legados morreram, e é isto que se afirma agora ──
+  //
+  // Eram pontes enquanto a governança por `stage_role` não cobria todo mundo.
+  // Depois do B2d elas MENTEM: as 375 etapas de desfecho perdem o papel mas
+  // seguem com `is_final_positive` (126 delas) e seguem se chamando `vendido`.
+  // Com as pontes de pé, a tela pediria o valor da venda numa coluna que o
+  // banco não registra mais como venda.
+  it("etapa não-governada com is_final_positive NÃO é mais etapa de ganho", () => {
+    expect(isWonStageKey("vendido", ungoverned)).toBe(false);
   });
-  it("falls back to the legacy key when stages are unavailable", () => {
-    expect(isWonStageKey("vendido", [])).toBe(true);
-    expect(isWonStageKey("vendido", undefined)).toBe(true);
+  it("sem configuração carregada, NÃO adivinha pela chave legada", () => {
+    expect(isWonStageKey("vendido", [])).toBe(false);
+    expect(isWonStageKey("vendido", undefined)).toBe(false);
     expect(isWonStageKey("proposta_enviada", [])).toBe(false);
   });
 });
@@ -144,8 +151,10 @@ describe("stageRequiresSaleValue — a flag manda, a ausência dela não", () =>
     expect(shouldPromptForSaleValue("novo", null, exigeSemSerGanho)).toBe(false);
   });
 
-  it("sem board carregado, o fallback legado continua valendo", () => {
-    expect(stageRequiresSaleValue("vendido", null)).toBe(true);
+  // B2d: sem board carregado não há o que exigir. Antes daqui, `vendido`
+  // devolvia true por adivinhação de nome — ver isWonStageKey acima.
+  it("sem board carregado, nada é exigido por adivinhação de nome", () => {
+    expect(stageRequiresSaleValue("vendido", null)).toBe(false);
     expect(stageRequiresSaleValue("qualquer_outra", null)).toBe(false);
   });
 });
