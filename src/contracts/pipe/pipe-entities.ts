@@ -62,6 +62,12 @@ export interface CustomPipelineStage {
    * seleciona (SCRUM-637: é por ele que comportamento de etapa se decide).
    */
   stage_role?: StageRole | null;
+  /**
+   * Opt-in da guarda de valor por etapa (SCRUM-545 f3, 20270903000020).
+   * Opcional: escritores antigos não o carregam — a guarda cai no fallback por
+   * won-resolution, nunca em `false` (ver `lib/sale-value-guard`).
+   */
+  requires_sale_value?: boolean | null;
   target_pipeline_id: string | null;
   target_stage_id: string | null;
   target_pipe_type: string | null;

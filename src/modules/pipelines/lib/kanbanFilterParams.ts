@@ -53,13 +53,6 @@ export function calorBandToBounds(band: string): CalorBounds {
 }
 
 /**
- * Propostas: closed stages whose period reference date is metrics_period_at
- * (fallback updated_at) instead of created_at. Mirrors
- * CLOSED_STATUSES_PROPOSTAS / isPropostaInPeriod in PipePropostas.
- */
-export const PROPOSTAS_CLOSED_STATUS_KEYS = ["vendido", "perdido"] as const;
-
-/**
  * Confirmação: stages excluded from the "overdue" bucket. Mirrors
  * isConfirmacaoOverdue (compareceu / perdido are never overdue).
  */

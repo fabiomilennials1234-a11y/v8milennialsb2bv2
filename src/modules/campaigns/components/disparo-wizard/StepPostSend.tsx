@@ -7,6 +7,10 @@
  * all at once. The destination is validated fail-closed by blast-plan-create;
  * here we only capture funnel + stage and the human label shown downstream
  * (Review / Monitor).
+ *
+ * Fatia B (Funil é Funil): o seletor lista os funis REAIS da org — sistema e
+ * custom juntos, num Select só, por `pipelines.id`. Etapa por
+ * `pipeline_stages.id` (uuid canônico de qualquer funil).
  */
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AlertTriangle, MapPin, MoveRight } from "lucide-react";
@@ -19,9 +23,7 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import type { SystemPipelineType } from "@/modules/pipelines";
-import { SYSTEM_FUNNELS } from "./audience-resolve";
-import { useFunnelStageOptions, funnelSelectValue } from "./use-funnel-stage-options";
+import { useFunnelStageOptions } from "./use-funnel-stage-options";
 import { StepHeader } from "./StepHeader";
 import type { DisparoDraft } from "./wizard-machine";
 import { kickerDoPasso } from "./wizard-machine";
@@ -85,14 +87,13 @@ export function StepPostSend({ draft, patch }: StepPostSendProps) {
   const reduced = useReducedMotion();
   const isMove = draft.postSendMode === "move";
 
-  const { customPipelines, stages, stagesLoading, funnelLabel, hasFunnel } =
+  const { funnels, stages, stagesLoading, funnelLabel, hasFunnel } =
     useFunnelStageOptions({
-      funnelKind: draft.postSendFunnelKind,
-      pipelineType: draft.postSendPipelineType,
+      funnelScope: "one",
       pipelineId: draft.postSendPipelineId,
     });
 
-  const hasDestination = isMove && hasFunnel && draft.postSendStageKey !== "";
+  const hasDestination = isMove && hasFunnel && draft.postSendStageId !== "";
 
   // Craft: warn (without blocking) when the destination equals the audience's
   // own source funnel+stage — the contacts would not actually change stage.
@@ -100,47 +101,30 @@ export function StepPostSend({ draft, patch }: StepPostSendProps) {
   const sameAsOrigin =
     hasDestination &&
     draft.audienceSourceType === "estagio" &&
-    audience.funnelKind === draft.postSendFunnelKind &&
-    (draft.postSendFunnelKind === "system"
-      ? audience.pipelineType === draft.postSendPipelineType
-      : audience.pipelineId === draft.postSendPipelineId) &&
-    audience.stageKey === draft.postSendStageKey;
+    audience.funnelScope === "one" &&
+    audience.pipelineId === draft.postSendPipelineId &&
+    audience.stageId === draft.postSendStageId;
 
   const keepHere = () =>
     patch({
       postSendMode: "none",
-      postSendFunnelKind: "system",
-      postSendPipelineType: null,
       postSendPipelineId: null,
-      postSendStageKey: "",
+      postSendStageId: "",
       postSendLabel: "",
     });
 
-  const onFunnelChange = (value: string) => {
-    const [kind, id] = value.split(":");
-    if (kind === "system") {
-      patch({
-        postSendFunnelKind: "system",
-        postSendPipelineType: id as SystemPipelineType,
-        postSendPipelineId: null,
-        postSendStageKey: "",
-        postSendLabel: "",
-      });
-    } else {
-      patch({
-        postSendFunnelKind: "custom",
-        postSendPipelineId: id,
-        postSendPipelineType: null,
-        postSendStageKey: "",
-        postSendLabel: "",
-      });
-    }
+  const onFunnelChange = (pipelineId: string) => {
+    patch({
+      postSendPipelineId: pipelineId,
+      postSendStageId: "",
+      postSendLabel: "",
+    });
   };
 
-  const onStageChange = (key: string) => {
-    const stageName = stages.find((s) => s.key === key)?.name ?? "";
+  const onStageChange = (stageId: string) => {
+    const stageName = stages.find((s) => s.key === stageId)?.name ?? "";
     patch({
-      postSendStageKey: key,
+      postSendStageId: stageId,
       postSendLabel: stageName ? `${funnelLabel} · ${stageName}` : funnelLabel,
     });
   };
@@ -186,24 +170,15 @@ export function StepPostSend({ draft, patch }: StepPostSendProps) {
                 <div className="space-y-1.5">
                   <Label className="text-sm">Funil de destino</Label>
                   <Select
-                    value={funnelSelectValue({
-                      funnelKind: draft.postSendFunnelKind,
-                      pipelineType: draft.postSendPipelineType,
-                      pipelineId: draft.postSendPipelineId,
-                    })}
+                    value={draft.postSendPipelineId ?? ""}
                     onValueChange={onFunnelChange}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Escolha um funil" />
                     </SelectTrigger>
                     <SelectContent>
-                      {SYSTEM_FUNNELS.map((f) => (
-                        <SelectItem key={f.value} value={`system:${f.value}`}>
-                          {f.label}
-                        </SelectItem>
-                      ))}
-                      {customPipelines.map((p) => (
-                        <SelectItem key={p.id} value={`custom:${p.id}`}>
+                      {funnels.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
                           {p.name}
                         </SelectItem>
                       ))}
@@ -214,7 +189,7 @@ export function StepPostSend({ draft, patch }: StepPostSendProps) {
                 <div className="space-y-1.5">
                   <Label className="text-sm">Etapa de destino</Label>
                   <Select
-                    value={draft.postSendStageKey}
+                    value={draft.postSendStageId}
                     onValueChange={onStageChange}
                     disabled={stagesLoading || stages.length === 0}
                   >

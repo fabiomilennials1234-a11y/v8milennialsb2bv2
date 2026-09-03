@@ -64,10 +64,10 @@ for (const f of FEATURES) {
   }
 }
 
-// Sub-paths dos funis também são controlados pela feature "funnels"
-SIDEBAR_FEATURE_MAP["/pipe-whatsapp"] = "funnels";
-SIDEBAR_FEATURE_MAP["/pipe-confirmacao"] = "funnels";
-SIDEBAR_FEATURE_MAP["/pipe-propostas"] = "funnels";
+// Sub-paths dos funis também são controlados pela feature "funnels".
+// SCRUM-637: os pipes de sistema vivem em /funil/:slug — itens da sidebar
+// resolvem a chave pelo prefixo (ver featureKeyFor em useNavigationModel).
+SIDEBAR_FEATURE_MAP["/funil"] = "funnels";
 SIDEBAR_FEATURE_MAP["/upsell"] = "carteira";
 SIDEBAR_FEATURE_MAP["/templates"] = "message_templates";
 // Rota legada do chat — mesma feature key da rota atual
@@ -95,11 +95,8 @@ export const ROUTE_FEATURE_MAP: Record<string, FeatureKey> = {
   "/atendimento/meta": "chat",
   // funis (CRM core — true nos 3 planos; guard fecha a porta pra plano futuro)
   "/funis": "funnels",
-  // Rota única SCRUM-632; /pipe-* seguem até a demolição (SCRUM-637)
+  // Rota única (SCRUM-632; flip na 637 — /pipe-* viraram redirects sem elemento)
   "/funil/:slug": "funnels",
-  "/pipe-whatsapp": "funnels",
-  "/pipe-confirmacao": "funnels",
-  "/pipe-propostas": "funnels",
   // leads
   "/leads": "leads",
   "/lixeira": "leads",

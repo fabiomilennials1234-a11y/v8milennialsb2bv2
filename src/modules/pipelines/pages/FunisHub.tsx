@@ -19,7 +19,7 @@ import { CreateFunilOuCampanhaModal } from "@/modules/pipelines/components/funis
 import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
 import { funilIcon } from "../lib/funil-icons";
 // Mesmo path map compat do seletor da faixa (morre no flip do redirect).
-import { FUNNEL_PATH_MAP, FUNNEL_FALLBACK_COLOR } from "../lib/funnel-nav";
+import { FUNNEL_FALLBACK_COLOR } from "../lib/funnel-nav";
 import type { LucideIcon } from "lucide-react";
 
 /**
@@ -77,7 +77,7 @@ export default function FunisHub() {
       return {
         key: `sys:${c.pipe_type}`,
         name: c.display_name,
-        path: FUNNEL_PATH_MAP[c.pipe_type] ?? "/funis",
+        path: `/funil/${c.pipe_type}`,
         color: row?.color ?? FUNNEL_FALLBACK_COLOR,
         icon: funilIcon(row?.icon),
       };

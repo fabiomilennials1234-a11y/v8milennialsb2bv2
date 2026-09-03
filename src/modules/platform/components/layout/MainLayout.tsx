@@ -53,9 +53,8 @@ const CHAT_PATTERNS = [
 
 // Rotas wide: kanbans ocupam largura quase total (sem max-w-[1600px])
 const WIDE_LAYOUT_PATTERNS = [
-  /^\/pipe-whatsapp/,
-  /^\/pipe-confirmacao/,
-  /^\/pipe-propostas/,
+  // SCRUM-637 (flip): kanbans vivem na rota única `/funil/:slug`.
+  /^\/funil(\/|$)/,
   /^\/leads(\/|$)/,
   /^\/custom-pipeline/,
   /^\/campanhas/,

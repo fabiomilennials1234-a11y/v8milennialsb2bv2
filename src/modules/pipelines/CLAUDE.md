@@ -108,7 +108,7 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Components — kanban
 - `KanbanBoard`, `KanbanCard`, `KanbanFilterPanel`, `DraggableKanbanBoard`
-- `PipelineListView`, `PipeTableView`
+- `PipelineListView` (`PipeTableView` morreu no flip da 637 — sem consumidor)
 - `CreateOpportunityModal`, `ExportStageDialog`
 - `StageWorkflowsBadge`, `StageWorkflowsBadgeWrapper`
 - Helpers do filtro: `originLabels`, `ALL_ORIGIN_OPTIONS`, `countActiveFilters`
@@ -117,10 +117,9 @@ Ver `./index.ts` para a superfície completa. Estável.
 - `PipeSettingsDialog`, `ManagePipelineStagesContent`, `ManagePipelineStagesModal`
 - `FunnelIdentitySection` — identidade do funil (nome/ícone/cor, escreve em `pipelines` e sincroniza `display_name` do registro no sistema) + Zona de Perigo, na aba "Geral" dos DOIS diálogos de configurações (sistema e custom) desde SCRUM-636. Portão de exclusão: `pipeline.custom_delete`. A confirmação é o `DeletePipelineDialog` único (substituiu `DangerZoneSystemPipe`, demolido).
 - `PipeDispatchRulesSection`, `PipeDistributionSection`
-- `GhostLeadsBanner`
 
 ### Components — custom pipelines
-- `CustomPipelineKanban`, `CustomPipeLeadCard`, `CustomPipeSettingsDialog`
+- `CustomPipeSettingsDialog` (`CustomPipelineKanban` + `CustomPipeLeadCard` morreram na 637 — o board único é `FunilKanban` + `LeadCard`)
 - `CreatePipelineModal`, `AddLeadToPipeModal`, `ImportCustomPipelineContent`
 - Constantes: `PIPELINE_COLORS`, `PIPELINE_ICONS`
 

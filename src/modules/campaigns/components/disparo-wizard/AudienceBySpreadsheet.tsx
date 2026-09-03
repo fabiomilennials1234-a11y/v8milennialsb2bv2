@@ -10,7 +10,7 @@
  * `disparo-planilha-create`. Preview counts come from its `dry_run` — the front
  * never reimports the Deno partition.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   Upload,
@@ -33,18 +33,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import {
-  useCustomPipelines,
-  useCustomPipelineStages,
-  usePipelineStages,
-  type SystemPipelineType,
-} from "@/modules/pipelines";
 import { useTags } from "@/modules/leads";
 import {
   useDisparoPlanilhaCreate,
   type PlanilhaReport,
 } from "@/modules/campaigns/hooks/useDisparoPlanilhaCreate";
-import { SYSTEM_FUNNELS } from "./audience-resolve";
+import { useFunnelStageOptions } from "./use-funnel-stage-options";
 import {
   parseSpreadsheetFile,
   mapGridToRows,
@@ -68,18 +62,15 @@ const FIELD_LABELS: { field: ColumnField; label: string; required?: boolean }[] 
   { field: "email", label: "E-mail" },
 ];
 
+/** Destino dos contatos novos — UM funil qualquer da org (Fatia B). */
 interface DestinationState {
-  funnelKind: "system" | "custom";
-  pipelineType: SystemPipelineType;
   pipelineId: string | null;
-  stageKey: string;
+  stageId: string;
 }
 
 const DEFAULT_DESTINATION: DestinationState = {
-  funnelKind: "system",
-  pipelineType: "whatsapp",
   pipelineId: null,
-  stageKey: "",
+  stageId: "",
 };
 
 export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetProps) {
@@ -91,21 +82,18 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
   const [tagIds, setTagIds] = useState<string[]>([]);
   const [preview, setPreview] = useState<{ report: PlanilhaReport; recipients: number } | null>(null);
 
-  const isSystem = dest.funnelKind === "system";
-  const { data: customPipelines = [] } = useCustomPipelines();
-  const { data: systemStages = [], isLoading: systemStagesLoading } = usePipelineStages(
-    isSystem ? dest.pipelineType : ("whatsapp" as SystemPipelineType),
-  );
-  const { data: customStages = [], isLoading: customStagesLoading } = useCustomPipelineStages(
-    !isSystem ? (dest.pipelineId ?? undefined) : undefined,
-  );
+  const { funnels, stages, stagesLoading } = useFunnelStageOptions({
+    funnelScope: "one",
+    pipelineId: dest.pipelineId,
+  });
   const { data: tags = [] } = useTags();
 
-  const stages = useMemo<{ key: string; name: string }[]>(() => {
-    if (isSystem) return systemStages.map((s) => ({ key: s.stage_key, name: s.name }));
-    return customStages.map((s) => ({ key: s.id, name: s.name }));
-  }, [isSystem, systemStages, customStages]);
-  const stagesLoading = isSystem ? systemStagesLoading : customStagesLoading;
+  // Semeia o primeiro funil real da org quando nada foi escolhido ainda.
+  useEffect(() => {
+    if (!dest.pipelineId && funnels.length > 0) {
+      setDest((d) => (d.pipelineId ? d : { ...d, pipelineId: funnels[0].id }));
+    }
+  }, [dest.pipelineId, funnels]);
 
   const rows = useMemo(
     () => (parsed ? mapGridToRows(parsed.dataRows, map) : []),
@@ -152,18 +140,13 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
     invalidate();
   };
 
-  const onFunnelChange = (value: string) => {
-    const [kind, id] = value.split(":");
-    setDest(
-      kind === "system"
-        ? { funnelKind: "system", pipelineType: id as SystemPipelineType, pipelineId: null, stageKey: "" }
-        : { funnelKind: "custom", pipelineType: "whatsapp", pipelineId: id, stageKey: "" },
-    );
+  const onFunnelChange = (pipelineId: string) => {
+    setDest({ pipelineId, stageId: "" });
     invalidate();
   };
 
-  const destReady = isSystem ? !!dest.stageKey : !!(dest.pipelineId && dest.stageKey);
-  const funnelArg = isSystem ? dest.pipelineType : (dest.pipelineId ?? "");
+  const destReady = !!(dest.pipelineId && dest.stageId);
+  const funnelArg = dest.pipelineId ?? "";
 
   const runPreview = async () => {
     if (map.phone < 0) {
@@ -173,9 +156,8 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
     try {
       const res = await dryRun.mutateAsync({
         rows,
-        funnelKind: dest.funnelKind,
         funnel: funnelArg,
-        stage: dest.stageKey,
+        stage: dest.stageId,
         tags: tagIds,
         dryRun: true,
       });
@@ -189,9 +171,8 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
     try {
       const res = await confirmRun.mutateAsync({
         rows,
-        funnelKind: dest.funnelKind,
         funnel: funnelArg,
-        stage: dest.stageKey,
+        stage: dest.stageId,
         tags: tagIds,
       });
       const ids = res.lead_ids ?? [];
@@ -204,9 +185,8 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
           context: "disparo",
           type: "planilha",
           fileName,
-          funnelKind: dest.funnelKind,
-          funnel: funnelArg,
-          stage: dest.stageKey,
+          pipelineId: funnelArg,
+          stageId: dest.stageId,
           report: res.report,
         },
       });
@@ -343,20 +323,15 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
               <div className="space-y-1.5">
                 <Label className="text-xs">Funil</Label>
                 <Select
-                  value={isSystem ? `system:${dest.pipelineType}` : `custom:${dest.pipelineId ?? ""}`}
+                  value={dest.pipelineId ?? ""}
                   onValueChange={onFunnelChange}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Escolha um funil" />
                   </SelectTrigger>
                   <SelectContent>
-                    {SYSTEM_FUNNELS.map((f) => (
-                      <SelectItem key={f.value} value={`system:${f.value}`}>
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                    {customPipelines.map((p) => (
-                      <SelectItem key={p.id} value={`custom:${p.id}`}>
+                    {funnels.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
                         {p.name}
                       </SelectItem>
                     ))}
@@ -366,9 +341,9 @@ export function AudienceBySpreadsheet({ draft, patch }: AudienceBySpreadsheetPro
               <div className="space-y-1.5">
                 <Label className="text-xs">Etapa</Label>
                 <Select
-                  value={dest.stageKey}
+                  value={dest.stageId}
                   onValueChange={(v) => {
-                    setDest((d) => ({ ...d, stageKey: v }));
+                    setDest((d) => ({ ...d, stageId: v }));
                     invalidate();
                   }}
                   disabled={stagesLoading || stages.length === 0}

@@ -101,14 +101,14 @@ function DisparoWizardInner({ numbers, onClose, onFinish }: DisparoWizardInnerPr
 
     // Post-send destination: each lead is moved when ITS message is sent (per
     // lot, over the plan's days). Validated fail-closed by blast-plan-create.
+    // Shape canônico da Fatia B: {pipelineId, stageId, label} — o servidor
+    // valida fail-closed e persiste id-first; os shapes legados seguem aceitos
+    // na leitura pelos planos antigos.
     const postSendTarget =
-      draft.postSendMode === "move" && draft.postSendStageKey
+      draft.postSendMode === "move" && draft.postSendStageId && draft.postSendPipelineId
         ? {
-            funnelKind: draft.postSendFunnelKind,
-            ...(draft.postSendFunnelKind === "system"
-              ? { pipelineType: draft.postSendPipelineType ?? undefined }
-              : { pipelineId: draft.postSendPipelineId ?? undefined }),
-            stageKey: draft.postSendStageKey,
+            pipelineId: draft.postSendPipelineId,
+            stageId: draft.postSendStageId,
             label: draft.postSendLabel,
           }
         : undefined;

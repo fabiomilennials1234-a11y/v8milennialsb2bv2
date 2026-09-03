@@ -9,6 +9,8 @@
 
 > **UI legada do Kanban de campanhas retirada.** As páginas `Campanhas`/`CampanhaDetail` e o cluster de 17 componentes (`CampanhaCard`, `CampanhaKanban`, `CampanhaAnalytics`, `CampanhaViewersSection`, `CampanhaDisparosTab`, `CampanhaAutomaticaPanel`, `CampanhaSemiAutomaticaPanel`, `CampanhaDispatchRulesSection`, `CampanhaPipeAutomationsSection`, `CreateCampanhaModal`, `EditCampanhaModal`, `AddLeadToCampanhaModal`, `CampaignEndModal`, `CampaignTemplateSelector`, `ExtractToPipeModal`, `ImportLeadsModal`, `ManageStagesModal`) foram **deletados**. Campanhas agora são modeladas como **funis com prazo** (funis temporários) em `pipelines/FunisHub`, e o envio em massa vive em `/disparos` (`DisparosPanel`/`NovoDisparo` + Wizard Linear #904). A **entidade** Campaign + seus hooks permanecem vivos (consumidos por `workflows` + `leads` + disparos) — só a superfície de UI Kanban saiu.
 
+> **Fatia B (Funil é Funil, D1/D4):** campanha e disparo apontam pra QUALQUER funil por `pipeline_id` + `stage_id` — o trio de sistema deixou de ser especial. `campanhas.target_pipeline_id`/`target_stage_id` (migration 20270917000000) são o destino canônico; `objective`/`free_target_pipe` viram formato LEGADO aceito na leitura pra sempre (`resolveExtractionTarget` lê id-first). O wizard de Disparos lista os funis reais da org (`usePipelines`) e resolve público via `get_pipeline_lead_ids` (motor único). `blast_plans.pipeline_id` registra o funil de origem do público; `post_send_target` persiste `{pipelineId, stageId, label}` (shapes legados aceitos na leitura).
+
 A entidade Campaign (paralela aos pipes) ainda modela:
 - Objetivo (`qualificacao`, `agendamentos`, `propostas`, `livre`) + deadline
 - Agente IA (opcional — pra conversar com lead)

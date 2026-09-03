@@ -38,11 +38,11 @@ describe("filterByOutbound", () => {
   });
 
   it("mantém o pai quando só os filhos estão liberados", () => {
-    const funis = node("/funis", { children: [node("/pipe-whatsapp")] });
+    const funis = node("/funis", { children: [node("/funil/whatsapp")] });
     // /funis está no recorte, mas o que importa aqui é o pai sobreviver
     // mesmo quando a própria rota não estivesse — por isso o pai de teste
     // usa uma rota fora da lista.
-    const grupo = node("/inexistente", { children: [node("/pipe-propostas")] });
+    const grupo = node("/inexistente", { children: [node("/funil/propostas")] });
     expect(filterByOutbound([funis, grupo], true).map((i) => i.path)).toEqual([
       "/funis",
       "/inexistente",
@@ -172,18 +172,31 @@ describe("makeCanViewRoute", () => {
     const can = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: undefined });
     expect(can("/leads")).toBe(true);
   });
+
+  it("/funil/<slug> herda a permissão do prefixo /funil (flip da 637)", () => {
+    const can = makeCanViewRoute({
+      isMaster: false,
+      isAdmin: false,
+      featurePerms: { "pipeline.view": false },
+    });
+    expect(can("/funil/whatsapp")).toBe(false);
+    expect(can("/funil/pos-venda")).toBe(false);
+    // negação some → liberado (chave ausente é liberada)
+    const canSem = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: {} });
+    expect(canSem("/funil/whatsapp")).toBe(true);
+  });
 });
 
 describe("filterByPermission", () => {
   const negaFunis = (path: string) => path !== "/funis";
 
   it("mantém o pai negado quando ao menos um filho é visível", () => {
-    const funis = node("/funis", { children: [node("/pipe-whatsapp")] });
+    const funis = node("/funis", { children: [node("/funil/whatsapp")] });
     expect(filterByPermission([funis], negaFunis).map((i) => i.path)).toEqual(["/funis"]);
   });
 
   it("corta o pai quando ele e todos os filhos estão negados", () => {
-    const funis = node("/funis", { children: [node("/pipe-whatsapp")] });
+    const funis = node("/funis", { children: [node("/funil/whatsapp")] });
     expect(filterByPermission([funis], () => false)).toEqual([]);
   });
 
@@ -194,9 +207,9 @@ describe("filterByPermission", () => {
 
 describe("pruneChildren", () => {
   it("remove os filhos negados sem derrubar o pai", () => {
-    const funis = node("/funis", { children: [node("/pipe-whatsapp"), node("/pipe-propostas")] });
-    const [result] = pruneChildren([funis], (path) => path !== "/pipe-propostas");
-    expect(result.children?.map((c) => c.path)).toEqual(["/pipe-whatsapp"]);
+    const funis = node("/funis", { children: [node("/funil/whatsapp"), node("/funil/propostas")] });
+    const [result] = pruneChildren([funis], (path) => path !== "/funil/propostas");
+    expect(result.children?.map((c) => c.path)).toEqual(["/funil/whatsapp"]);
   });
 });
 
@@ -209,11 +222,6 @@ describe("isRouteActive", () => {
 
   it("casa por prefixo", () => {
     expect(isRouteActive("/leads/123", "/leads")).toBe(true);
-  });
-
-  it("ativa Funis a partir das rotas de pipe", () => {
-    expect(isRouteActive("/pipe-whatsapp", "/funis", FUNIS_PATHS)).toBe(true);
-    expect(isRouteActive("/pipe-propostas/abc", "/funis", FUNIS_PATHS)).toBe(true);
   });
 
   it("ativa Funis a partir da rota única /funil/:slug (SCRUM-632)", () => {

@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import {
   priorityBandToRating,
   calorBandToBounds,
-  PROPOSTAS_CLOSED_STATUS_KEYS,
   CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS,
 } from "@/modules/pipelines/lib/kanbanFilterParams";
 
@@ -65,9 +64,6 @@ describe("calorBandToBounds — parity with legacy client predicate", () => {
 });
 
 describe("status-key constants", () => {
-  it("propostas closed statuses", () => {
-    expect([...PROPOSTAS_CLOSED_STATUS_KEYS]).toEqual(["vendido", "perdido"]);
-  });
   it("confirmação overdue exclusions", () => {
     expect([...CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS]).toEqual(["compareceu", "perdido"]);
   });

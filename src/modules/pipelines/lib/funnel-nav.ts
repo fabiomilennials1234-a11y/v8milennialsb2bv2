@@ -14,17 +14,6 @@ import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
  * mapas garantiria divergência na primeira vez que alguém renomeasse um funil.
  */
 
-/**
- * COMPAT (expand-contract): rotas antigas dos funis de sistema, vivas até o
- * redirect `/pipe-*` → `/funil/:slug` flipar (paridade da página unificada).
- * Morre junto com `PIPE_PATH_MAP` do navigation-model na demolição (W6).
- */
-export const FUNNEL_PATH_MAP: Record<string, string> = {
-  whatsapp: "/pipe-whatsapp",
-  confirmacao: "/pipe-confirmacao",
-  propostas: "/pipe-propostas",
-  upsell: "/upsell",
-};
 
 /**
  * Cor de fallback quando a linha de `pipelines` ainda não chegou (ou o funil
@@ -33,6 +22,9 @@ export const FUNNEL_PATH_MAP: Record<string, string> = {
  * `FUNNEL_COLOR_MAP` hardcoded que ignorava a personalização).
  */
 export const FUNNEL_FALLBACK_COLOR = "#64748b";
+
+/** Os funis de sistema navegáveis (Carteira fica fora — D6). */
+const SYSTEM_FUNNEL_SLUGS = new Set(["whatsapp", "confirmacao", "propostas"]);
 
 export type FunnelGroup = "estrutural" | "custom" | "prazo";
 
@@ -88,8 +80,11 @@ export function useFunnelOptions(): { options: FunnelOption[]; isLoading: boolea
     if (!config.is_visible) continue;
     if (config.pipe_type === "upsell") continue;
     if (config.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")) continue;
-    const path = FUNNEL_PATH_MAP[config.pipe_type];
-    if (!path) continue;
+    // SCRUM-637 (flip): todo funil navega pela rota única. Carteira já foi
+    // filtrada acima; pipe_type fora do trio de sistema não tem funil por
+    // trás — link morto não entra (mesma guarda do mapa antigo).
+    if (!SYSTEM_FUNNEL_SLUGS.has(config.pipe_type)) continue;
+    const path = `/funil/${config.pipe_type}`;
     options.push({
       key: `sys:${config.pipe_type}`,
       label: config.display_name,

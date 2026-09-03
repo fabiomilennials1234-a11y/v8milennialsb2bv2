@@ -100,7 +100,7 @@ describe("useFunnelOptions — o que entra na navegação", () => {
       "sys:confirmacao",
       "sys:propostas",
     ]);
-    expect(result.current.options[0].path).toBe("/pipe-whatsapp");
+    expect(result.current.options[0].path).toBe("/funil/whatsapp");
     expect(result.current.options[0].group).toBe("estrutural");
   });
 
@@ -205,7 +205,7 @@ describe("FunnelSwitcher — escolher troca, abrir não", () => {
     abrir();
     fireEvent.click(screen.getByTestId("funnel-switcher-option-sys:propostas"));
 
-    expect(navigate).toHaveBeenCalledWith("/pipe-propostas");
+    expect(navigate).toHaveBeenCalledWith("/funil/propostas");
   });
 
   it("escolher o funil já aberto não navega", () => {
