@@ -113,6 +113,12 @@ describe("applyLeadListFilters — demais filtros (guardas de regressão)", () =
     expect(rec.ors[0]).toContain("phone.ilike.%acme%");
   });
 
+  it("busca casa o código do ERP — a lista mostra \"1234 - João\" e digitar 1234 tem que achar", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { searchQuery: "1234" });
+    expect(rec.ors[0]).toContain("erp_code.ilike.%1234%");
+  });
+
   it("busca por telefone com máscara casa a coluna normalizada só com os dígitos", () => {
     const { builder, rec } = makeBuilder();
     applyLeadListFilters(builder, { searchQuery: "(21) 99999-8888" });

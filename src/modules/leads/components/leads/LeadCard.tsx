@@ -117,6 +117,16 @@ const VARIANT_CONFIG: Record<LeadCardVariant, {
 export interface LeadCardData extends DraggableItem {
   id: string;
   name: string;
+  /**
+   * Código do cliente no ERP, exibido como prefixo do nome: "1234 - João".
+   *
+   * 🔴 Campo PRÓPRIO em vez de nome já composto, por dois motivos: o `name` é
+   * editável por duplo clique e salva o que estiver nele (com o código junto,
+   * o vendedor gravaria "1234 - João" em `leads.name` e isso vazaria em
+   * `{{nome}}` de disparo), e a inicial do avatar sai do nome — prefixado, todo
+   * cliente do ERP viraria um avatar "1".
+   */
+  erpCode?: string | null;
   company?: string | null;
   email?: string | null;
   phone?: string | null;
@@ -696,7 +706,11 @@ export const LeadCard = memo(function LeadCard({
                     onInlineEdit && "cursor-text",
                   )}
                   onDoubleClick={(e) => startEdit("name", lead.name, e)}
+                  title={lead.erpCode ? `${lead.erpCode} - ${lead.name}` : lead.name}
                 >
+                  {lead.erpCode && (
+                    <span className="font-normal text-muted-foreground">{lead.erpCode} - </span>
+                  )}
                   {lead.name}
                 </h4>
               )}

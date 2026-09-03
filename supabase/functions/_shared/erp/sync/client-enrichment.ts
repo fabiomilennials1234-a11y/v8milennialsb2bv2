@@ -90,7 +90,13 @@ export function seedLastOrderAt(
  * Bem menos que no cliente da carteira, e de propósito: o lead é a entidade
  * comercial e a maioria dos seus campos é curada por gente. Só entram os que o
  * ERP conhece melhor que o CRM — segmento e UF, que alimentam filtro de funil e
- * territorialização.
+ * territorialização, mais o código do cliente no ERP.
+ *
+ * 🔴 `erp_code` é IDENTIDADE, não nome. Ele existe para que as telas de lead
+ * mostrem "1234 - João da Silva" sem join com `upsell_clients`, e é lido só pela
+ * camada de exibição (`src/shared/format/erp-code.ts`). Compor o código dentro
+ * de `leads.name` faria `{{nome}}` do disparo e a saudação do Copilot dizerem
+ * "Olá 1234 - João da Silva" para o cliente.
  *
  * `uf_source` carimba a procedência para que um dado do ERP não seja confundido
  * com UF inferida de DDD — o trigger `set_uf_from_ddd` só sobrescreve UF nula
@@ -115,5 +121,6 @@ export function leadEnrichmentColumns(
     cols.uf = client.uf;
     cols.uf_source = "erp";
   }
+  if (client.externalId) cols.erp_code = client.externalId;
   return cols;
 }

@@ -36,6 +36,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { useBulkSelection } from "@/shared/hooks/useBulkSelection";
+import { erpLabel } from "@/shared/format/erp-code";
 
 export type { PortfolioClientRow };
 
@@ -445,8 +446,11 @@ export function CarteiraClientTable({
                   )}
                   <TableCell className={cn("py-3", bulk ? "" : "pl-4")}>
                     <div className="flex flex-col gap-px min-w-0">
-                      <span className="text-sm font-semibold text-foreground truncate max-w-[220px]">
-                        {client.name}
+                      <span
+                        className="text-sm font-semibold text-foreground truncate max-w-[220px]"
+                        title={erpLabel(client)}
+                      >
+                        {erpLabel(client)}
                       </span>
                       <span className="text-xs text-muted-foreground truncate max-w-[220px]">
                         {[

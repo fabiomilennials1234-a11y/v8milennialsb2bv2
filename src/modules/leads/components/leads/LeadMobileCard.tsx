@@ -3,6 +3,7 @@ import { Building, Mail, Phone, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { LeadStanding } from "../../lib/lead-relacao-situacao";
+import { erpLabel } from "@/shared/format/erp-code";
 
 /**
  * O cartão de lead do celular — a lista abaixo de 768px.
@@ -32,6 +33,8 @@ import type { LeadStanding } from "../../lib/lead-relacao-situacao";
 export interface LeadMobileCardLead {
   id: string;
   name: string;
+  /** Código do cliente no ERP — prefixa o nome na exibição. */
+  erp_code?: string | null;
   company?: string | null;
   phone?: string | null;
   email?: string | null;
@@ -99,7 +102,7 @@ export function LeadMobileCard({
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{lead.name}</p>
+          <p className="truncate font-semibold">{erpLabel(lead)}</p>
           {lead.company && (
             <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
               <Building className="h-3 w-3 shrink-0" />

@@ -71,6 +71,12 @@ interface LeadCardCompactProps {
     /** Id do LEAD (o `id` acima é o da ENTRADA no funil). O chat precisa deste. */
     leadId?: string | null;
     name: string;
+    /**
+     * Código do cliente no ERP, exibido como prefixo ("1234 - João"). Campo
+     * próprio, não nome composto: a inicial do avatar sai do `name`, e
+     * prefixado todo cliente do ERP viraria um avatar "1".
+     */
+    erpCode?: string | null;
     company?: string | null;
     phone?: string | null;
     email?: string | null;
@@ -294,7 +300,13 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             </div>
 
             <div className="min-w-0 flex-1">
-              <h4 className="truncate text-[12.5px] font-semibold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary">
+              <h4
+                className="truncate text-[12.5px] font-semibold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary"
+                title={lead.erpCode ? `${lead.erpCode} - ${lead.name}` : lead.name}
+              >
+                {lead.erpCode && (
+                  <span className="font-normal text-muted-foreground">{lead.erpCode} - </span>
+                )}
                 {lead.name}
               </h4>
               {lead.company && (
