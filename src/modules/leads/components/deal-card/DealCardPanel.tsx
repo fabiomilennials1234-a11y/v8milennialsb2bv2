@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -38,6 +38,7 @@ import { useDealCardData } from "./useDealCardData";
 import { useExcluirNegocio } from "./useExcluirNegocio";
 import {
   useAtualizarItemDoNegocio,
+  useGarantirNegocioDaEntrada,
   useRemoverItemDoNegocio,
 } from "./useItensDoNegocio";
 import type { DealCardComentario, ItemEditado } from "./types";
@@ -76,18 +77,57 @@ export const DealCardPanel = memo(function DealCardPanel() {
   /**
    * Lançar produto exige a linha em `deals` — `deal_items.deal_id` é NOT NULL.
    *
-   * Quando ela não existe, o callback NÃO desce: o `DealCardMoney` só desenha o
-   * "+ Adicionar produto" quando recebe a prop, e um botão que abriria um
-   * diálogo cujo INSERT falharia é pior que botão nenhum. O bloco explica a
-   * ausência em vez de escondê-la (ver `motivoSemProduto` abaixo).
+   * 🚨 **Antes, quando ela não existia, o botão simplesmente não descia** e o
+   * bloco imprimia *"Este card ainda não tem um negócio aberto"*. Medido em
+   * prod: **9.258 de 48.138 entradas (19,2%)** — o cliente abria o card e não
+   * tinha como lançar produto nenhum.
    *
-   * Criar o negócio aqui não é opção de bastidor: ADR-0023 decisão 3 diz que
-   * "um Negócio nasce só por clique humano", e a única porta é a RPC
-   * `abrir_negocio`, que cria card NOVO em vez de pendurar negócio numa entrada
-   * existente. Ligar entrada antiga a negócio novo é trabalho de RPC própria,
-   * não de um efeito colateral do botão de produto.
+   * Agora o botão desce SEMPRE, e o negócio é materializado no clique, por
+   * `garantir_negocio_da_entrada` (idempotente). Ver `useGarantirNegocioDaEntrada`
+   * para por que isso NÃO viola a decisão 3 da ADR-0023 — o clique é humano; o
+   * que ela proíbe é ingest, integração e automação.
+   *
+   * ⚠️ O comentário que estava aqui dizia que a única porta era `abrir_negocio`
+   * (que cria card NOVO) e que pendurar negócio numa entrada existente seria
+   * "trabalho de RPC própria". **Caducou**: essa RPC passou a existir na
+   * `20270904000000`, e o backfill da `20270908005010` já a usa.
    */
   const dealId = data?.dealId ?? null;
+  const garantirNegocio = useGarantirNegocioDaEntrada(entryId);
+
+  /**
+   * O `deal_id` que a RPC acabou de criar.
+   *
+   * Serve para não esperar o refetch do painel: `invalidateQueries` volta com o
+   * `dealId` novo, mas só depois da ida ao servidor, e o diálogo precisa do id
+   * no mesmo gesto. Guardar o retorno abre o diálogo na hora; quando o refetch
+   * chega, `data.dealId` passa a ser a mesma coisa e este estado deixa de
+   * importar. Zerado ao trocar de card, senão o card seguinte herdaria o
+   * negócio do anterior.
+   */
+  const [dealIdMaterializado, setDealIdMaterializado] = useState<string | null>(null);
+  useEffect(() => setDealIdMaterializado(null), [entryId]);
+
+  const dealIdParaProduto = dealId ?? dealIdMaterializado;
+
+  /**
+   * Abrir o "Adicionar produto" a partir de QUALQUER card.
+   *
+   * Com negócio, é o que sempre foi: abre o diálogo. Sem negócio, materializa
+   * primeiro e só então abre — se a RPC falhar, o diálogo não abre e o toast do
+   * hook explica, que é melhor que abrir um diálogo cujo INSERT vai falhar.
+   */
+  const adicionarProduto = useCallback(async () => {
+    if (!dealIdParaProduto) {
+      if (!entryId || garantirNegocio.isPending) return;
+      try {
+        setDealIdMaterializado(await garantirNegocio.mutateAsync(entryId));
+      } catch {
+        return; // o toast é do `onError` do hook
+      }
+    }
+    setAdicionandoProduto(true);
+  }, [dealIdParaProduto, entryId, garantirNegocio]);
 
   /**
    * Editar e remover item.
@@ -485,9 +525,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
         decidindo={decidindo}
         onOpenDeal={trocarNegocio}
         onNewDeal={abrirFicha}
-        onAdicionarProduto={dealId ? () => setAdicionandoProduto(true) : undefined}
-        onEditarItem={dealId ? editarItem : undefined}
-        onRemoverItem={dealId ? removerItemDoNegocio : undefined}
+        /* Sempre — inclusive no card sem negócio, que é materializado no
+           clique. Era esta linha que sumia o botão em 19,2% dos cards. */
+        onAdicionarProduto={adicionarProduto}
+        /* Estes dois seguem presos ao negócio, e isso NÃO esconde nada: o lápis
+           e a lixeira são de item já lançado, e não há item sem negócio. */
+        onEditarItem={dealIdParaProduto ? editarItem : undefined}
+        onRemoverItem={dealIdParaProduto ? removerItemDoNegocio : undefined}
         movendo={pendingStageKey}
         comentarios={comentarios}
         onComentar={podeComentar ? comentar : undefined}
@@ -548,11 +592,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * por uma tela que ninguém pediu ainda. Mesma regra do painel logo acima
    * (`if (!isOpen) return null`).
    */
-  const dialogoProduto = dealId && adicionandoProduto ? (
+  const dialogoProduto = dealIdParaProduto && adicionandoProduto ? (
     <AdicionarProdutoDialog
       aberto={adicionandoProduto}
       aoFechar={() => setAdicionandoProduto(false)}
-      dealId={dealId}
+      /* Pode ser o negócio que já existia OU o que a RPC acabou de criar — o
+         `adicionarProduto` só liga `adicionandoProduto` depois de ter um id. */
+      dealId={dealIdParaProduto}
       entryId={entryId}
       itensAtuais={data?.itens ?? []}
     />

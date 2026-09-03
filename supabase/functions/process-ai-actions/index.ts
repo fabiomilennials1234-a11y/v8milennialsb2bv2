@@ -18,6 +18,7 @@ import { executeAiAction, type ActionRecord } from "../_shared/ai-action-executo
 import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { logToolCall } from "../_shared/copilot/tool-call-logger.ts";
+import { needsConcurrencyGuard } from "../_shared/copilot/concurrency-guard.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -97,8 +98,9 @@ async function processAction(
   let jobId: string | null = null;
 
   try {
-    // 3. Controle de concorrência: se já existe processing para mesmo lead+action_type, reagendar
-    if (lead_id) {
+    // 3. Controle de concorrência: se já existe processing para mesmo lead+action_type, reagendar.
+    //    `send_document` é isento — ver `_shared/copilot/concurrency-guard.ts`.
+    if (lead_id && needsConcurrencyGuard(action_type)) {
       const { data: hasConcurrent } = await supabase.rpc("has_concurrent_ai_action", {
         p_lead_id: lead_id,
         p_action_type: action_type,
