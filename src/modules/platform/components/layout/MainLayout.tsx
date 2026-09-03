@@ -16,7 +16,6 @@ import { MobileChatProvider, useMobileChatContext } from "@/contexts/MobileChatC
 import { ChatBubble } from "@/modules/communication/components/chat/bubble";
 import { FloatingDock } from "@/modules/platform/components/dock/FloatingDock";
 import { SupportFab } from "@/modules/platform/components/support/SupportFab";
-import { SupportRealtimeAnnouncement } from "@/modules/platform/components/support/announcement/SupportRealtimeAnnouncement";
 import { SessionDeadBanner } from "@/modules/communication/components/whatsapp/SessionDeadBanner";
 import { QuickBlastProgressPanel } from "@/modules/leads/components/bulk-actions/QuickBlastProgressPanel";
 
@@ -164,7 +163,6 @@ function MainLayoutInner({ children }: MainLayoutProps) {
           módulos disputavam `fixed bottom-6 right-6` — ver FloatingDock.tsx. */}
       <FloatingDock />
       <SupportFab />
-      <SupportRealtimeAnnouncement />
       {featureFlags.chatBubble && <ChatBubble />}
 
       <QuickBlastProgressPanel />
