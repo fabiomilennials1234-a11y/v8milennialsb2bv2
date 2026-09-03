@@ -198754,9 +198754,195 @@
             ]
           }
         ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/engagement/components/followups/ScheduleFollowUpButton.tsx",
+        "to": "src/modules/engagement/components/followups/ScheduleFollowUpModal.tsx",
+        "unresolvedTo": "./ScheduleFollowUpModal",
+        "dependencyTypes": [
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "error",
+          "name": "no-circular"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/engagement/components/followups/ScheduleFollowUpModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/hooks/useNomeDoPipe.ts",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/custom/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadDetailDialogV2.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/lead-detail/modal/LeadModalToolbar.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/followups/ScheduleFollowUpButton.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          }
+        ]
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/leads/components/leads/LeadModal.tsx",
+        "to": "src/modules/engagement/components/followups/ScheduleFollowUpButton.tsx",
+        "unresolvedTo": "@/modules/engagement/components/followups/ScheduleFollowUpButton",
+        "dependencyTypes": [
+          "aliased",
+          "aliased-tsconfig",
+          "aliased-tsconfig-paths",
+          "local",
+          "import"
+        ],
+        "rule": {
+          "severity": "error",
+          "name": "no-circular"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/engagement/components/followups/ScheduleFollowUpButton.tsx",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/followups/ScheduleFollowUpModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/hooks/useNomeDoPipe.ts",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/custom/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/components/custom/AddLeadToPipeModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/leads/LeadModal.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          }
+        ]
       }
     ],
-    "error": 2,
+    "error": 4,
     "warn": 106,
     "info": 0,
     "ignore": 0,
