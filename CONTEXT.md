@@ -203,7 +203,19 @@ Canonical terms used across the system. No implementation details here — this 
 
 ## Billing
 
+Este é o dinheiro que a **Organização deve ao Torque** — direção oposta à de `Order`, `Cotação` e `Título`, que descrevem o dinheiro que o cliente final deve à Organização. Quando houver risco de leitura dupla, qualificar ("cobrança no Asaas").
+
 - **Subscription Plan**: A pricing tier for an Organization. Managed via Asaas payment gateway. Controls feature access via quotas and feature flags.
+
+- **Contratação**: Um pacote de venda do Torque congelado e precificado, esperando pagamento. Carrega plano de partida, features, limites, número de assentos, ciclo, meio de pagamento e preço. Nasce de duas origens — montada por um Master (venda assistida, entregue como link com token) ou escolhida pelo próprio cliente no site (self-serve, resolvida por sessão) — e as duas viram a mesma coisa. _Avoid_: **Pedido** e **Cotação**, que no glossário descrevem a venda da Organização para o cliente final dela, não a venda do Torque para a Organização.
+
+- **Comprador (Buyer)**: A pessoa jurídica ou física que paga uma Contratação — razão social, documento fiscal (CPF ou CNPJ) e e-mail fiscal. Distinto do **usuário** que se cadastrou e da **Organização** que será provisionada: quem opera o produto e quem paga a conta não são necessariamente a mesma entidade. Trocar o documento fiscal cria um cliente novo no gateway, e o meio de pagamento salvo não atravessa.
+
+- **Snapshot da Assinatura**: A cópia congelada da Contratação gravada no instante do pagamento, e a camada BASE de onde o produto lê features e limites. É o contrato: mudança posterior no catálogo não alcança quem já comprou — é daqui que sai o grandfathering. Append-only. Distinto do **Subscription Plan** (o catálogo, mutável) e de uma concessão temporária de feature (que tem validade).
+
+- **Provisionamento**: O trabalho de transformar "pagou" em "tem acesso" — criar ou atualizar a Organização, criar o admin, gravar plano e validade, ligar o Snapshot. Roda **fora** do webhook do gateway, em fila própria, porque falhar dentro do webhook deixaria a Organização paga e inacessível em silêncio.
+
+- **Cota (Quota)**: O teto de um recurso para uma Organização (assentos, instâncias de WhatsApp, agentes de Copilot). É **soma**, não disputa: base do plano + o que foi comprado a mais + ajuste manual do Master. O valor efetivo é derivado e não aceita escrita direta. Distinto de **feature**, que é sobrescrita — a última camada a falar vence.
 
 ## Marketing
 
