@@ -72,8 +72,7 @@ export function orderPipelinesForExport(pipelines: ExportPipeline[]): ExportPipe
  * blocos fixos antigos tinham, com a origem em `pipeline_entries`:
  *   · scheduled_date (Qualificação) e meeting_date (Confirmação) colapsam em
  *     "Data reunião" (meeting_date vence quando ambos existem);
- *   · calor não sai mais por funil — é espelho de `leads.rating`, já exportado
- *     como "Prioridade do lead";
+ *   · calor não sai mais por funil (nem por lead — saiu da planilha);
  *   · commitment_date por funil colapsou em "Data compromisso (lead)".
  */
 export function funnelColumnHeaders(funnelName: string): string[] {

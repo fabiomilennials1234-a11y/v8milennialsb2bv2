@@ -423,15 +423,6 @@ describe("full import pipeline simulation (single-parse)", () => {
     expect(rows[0].m.phone).toBeUndefined();
   });
 
-  it("rating string parsed to number correctly", () => {
-    const values = ["5", "abc", "", undefined, "0", "10"];
-    const parsed = values.map((v) => {
-      const n = v ? parseInt(v, 10) : 0;
-      return isNaN(n) ? 0 : n;
-    });
-    expect(parsed).toEqual([5, 0, 0, 0, 0, 10]);
-  });
-
   it("empty phones array guard prevents .in() crash", () => {
     const phones: string[] = [];
     const query = phones.length > 0 ? phones : ["__none__"];

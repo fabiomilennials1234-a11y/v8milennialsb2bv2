@@ -12,7 +12,6 @@ export interface LeadContactFormData {
   name: string;
   company: string;
   email: string;
-  rating: number;
   notes: string;
 }
 

@@ -86,7 +86,7 @@ import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "../c
 import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
 import { FunnelViewsMenu } from "@/modules/pipelines/components/shared/FunnelViewsMenu";
 import { revivePeriodState, createInitialPeriodState, type MetricsPeriodState } from "@/lib/metrics-period";
-import { priorityBandToRating, calorBandToBounds, CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS } from "@/modules/pipelines/lib/kanbanFilterParams";
+import { CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS } from "@/modules/pipelines/lib/kanbanFilterParams";
 import { calcularEtapaPorDataDaReuniao, podeAplicarDx } from "@/modules/pipelines/lib/meeting-dx";
 import {
   useFeaturePermission,
@@ -133,8 +133,8 @@ const TIME_OPTIONS: { value: TimeFilter; label: string }[] = [
 /**
  * Dimensões que NÃO são universais (SCRUM-633) — portadas das páginas velhas
  * e ligadas por CAPACIDADE do funil, não por slug: faixas de reunião aparecem
- * quando o funil tem etapas de reunião; calor/prioridade/tipo de produto
- * quando o funil tem etapa `won` (é onde valor faz sentido); status-multi
+ * quando o funil tem etapas de reunião; tipo de produto quando o funil tem
+ * etapa `won` (é onde valor faz sentido); status-multi
  * sempre (qualquer board multi-coluna filtra por etapa).
  */
 type ExtraFilterState = {
@@ -142,8 +142,6 @@ type ExtraFilterState = {
   urgencyFilter: string;
   selectedStatuses: string[];
   productType: string;
-  calor: string;
-  priority: string;
 };
 
 const DEFAULT_EXTRA_FILTERS: ExtraFilterState = {
@@ -151,8 +149,6 @@ const DEFAULT_EXTRA_FILTERS: ExtraFilterState = {
   urgencyFilter: "all",
   selectedStatuses: [],
   productType: "all",
-  calor: "all",
-  priority: "all",
 };
 
 /**
@@ -283,8 +279,6 @@ function FunilPageInner() {
       urgency: extra.urgencyFilter !== "all" ? extra.urgencyFilter : undefined,
       statusKeys: extra.selectedStatuses.length ? extra.selectedStatuses : undefined,
       productType: extra.productType !== "all" ? extra.productType : undefined,
-      ...priorityBandToRating(extra.priority),
-      ...calorBandToBounds(extra.calor),
       // Âncora de período dos FECHADOS por stage_role (metrics_period_at →
       // fallback updated_at) — a mesma âncora canônica do motor de métricas.
       closedStatusKeys:
@@ -389,13 +383,20 @@ function FunilPageInner() {
   );
   const applyBoardState = useCallback(
     (f: FunilBoardState) => {
-      const { searchQuery, viewMode: vm, timeFilter, urgencyFilter, selectedStatuses, productType, calor, priority, ...universal } = f;
+      const { searchQuery, viewMode: vm, timeFilter, urgencyFilter, selectedStatuses, productType, ...rest } = f;
+      // Visões salvas antes de 2026-09-03 ainda trazem `calor`/`priority` — as
+      // duas dimensões saíram com o calor da interface. Descarte-as aqui, senão
+      // elas vazariam para o estado universal do controller.
+      const { calor: _calor, priority: _priority, ...universal } = rest as typeof rest & {
+        calor?: string;
+        priority?: string;
+      };
       controller.setState({
         ...universal,
         // Datas de range custom voltam do JSON como string — revive.
         period: revivePeriodState(universal.period as MetricsPeriodState),
       });
-      setExtra({ timeFilter, urgencyFilter, selectedStatuses, productType, calor, priority });
+      setExtra({ timeFilter, urgencyFilter, selectedStatuses, productType });
       controller.setSearch(searchQuery ?? "");
       setViewMode(vm ?? "kanban");
     },
@@ -419,8 +420,6 @@ function FunilPageInner() {
     }
     if (temEtapaWon) {
       extras.push({ type: "product-type", value: extra.productType, onChange: (v: string) => patchExtra({ productType: v }) });
-      extras.push({ type: "calor", value: extra.calor, onChange: (v: string) => patchExtra({ calor: v }) });
-      extras.push({ type: "priority", value: extra.priority, onChange: (v: string) => patchExtra({ priority: v }) });
     }
     if (stages.length > 1) {
       extras.push({
@@ -515,7 +514,6 @@ function FunilPageInner() {
           name: e.lead?.name || "Sem nome",
           company: e.lead?.company || undefined,
           phone: e.lead?.phone || undefined,
-          rating: e.lead?.rating || 0,
           stage_key: e.stage_key,
           created_at: e.created_at,
         })),

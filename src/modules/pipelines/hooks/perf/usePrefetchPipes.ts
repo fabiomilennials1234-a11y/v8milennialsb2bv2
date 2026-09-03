@@ -5,7 +5,7 @@ import { useOrganization } from "@/modules/identity";
 import { usePipelineId, type PipelineType } from "../model/usePipelineEntries";
 
 const LEAD_SELECT = `
-  id, name, company, email, phone, rating, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled,
+  id, name, company, email, phone, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled,
   sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id,
   responsible:team_members!leads_responsible_id_fkey(id, name),
   sdr:team_members!leads_sdr_id_fkey(id, name),

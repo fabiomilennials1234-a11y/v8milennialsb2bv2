@@ -36,7 +36,6 @@ export interface CreateLeadPayload {
   name: string;
   company: string;
   email: string;
-  rating: number;
   notes: string;
   origin: string;
   sdrId?: string;
@@ -66,7 +65,6 @@ export function LeadCreateForm({
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
-  const [rating, setRating] = useState(0);
   const [origin, setOrigin] = useState("whatsapp");
   const [sdrId, setSdrId] = useState("");
   const [destination, setDestination] = useState<LeadDestination>("qualificacao");
@@ -167,7 +165,6 @@ export function LeadCreateForm({
       name,
       company,
       email,
-      rating,
       notes,
       origin,
       sdrId: sdrId || undefined,

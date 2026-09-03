@@ -16,7 +16,6 @@ interface Lead {
   name?: string | null;
   company?: string | null;
   email?: string | null;
-  rating?: number | null;
   notes?: string | null;
 }
 
@@ -36,7 +35,6 @@ export function useLeadForm(
     name: "",
     company: "",
     email: "",
-    rating: 0,
     notes: "",
   });
 
@@ -50,11 +48,10 @@ export function useLeadForm(
         name: lead.name || "",
         company: lead.company || "",
         email: lead.email || "",
-        rating: lead.rating || 0,
         notes: lead.notes || "",
       });
     } else {
-      setFormData({ name: pushName || "", company: "", email: "", rating: 0, notes: "" });
+      setFormData({ name: pushName || "", company: "", email: "", notes: "" });
     }
   }, [lead, pushName]);
 
@@ -65,7 +62,6 @@ export function useLeadForm(
       name: formData.name,
       company: formData.company || null,
       email: formData.email || null,
-      rating: formData.rating || null,
       notes: formData.notes || null,
     });
     logAction({ leadId: lead.id, action: "field_updated", description: "Dados do lead atualizados via chat" });

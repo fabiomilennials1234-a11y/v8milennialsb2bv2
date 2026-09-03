@@ -5,7 +5,7 @@
  * 6 ciclos: chips render, chip filter, card content, card click, mover action, empty state.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
 
 const mockStages = [
@@ -20,7 +20,6 @@ const mockLeads = [
     name: "Joao Silva",
     company: "Empresa XYZ",
     phone: "+5511999999999",
-    rating: 3,
     stage_key: "novo",
     created_at: "2026-05-10T00:00:00Z",
   },
@@ -29,7 +28,6 @@ const mockLeads = [
     name: "Maria Santos",
     company: "ABC Dist",
     phone: "+5515888888888",
-    rating: 5,
     stage_key: "abordado",
     created_at: "2026-05-12T00:00:00Z",
   },
@@ -38,7 +36,6 @@ const mockLeads = [
     name: "Carlos Souza",
     company: "Tech Corp",
     phone: "+5511777777777",
-    rating: 1,
     stage_key: "novo",
     created_at: "2026-05-14T00:00:00Z",
   },
@@ -140,22 +137,6 @@ describe("PipelineListView — card content", () => {
     expect(screen.getByText("+5511777777777")).toBeInTheDocument();
   });
 
-  it("renders rating stars for each lead", () => {
-    render(
-      <PipelineListView
-        stages={mockStages}
-        leads={mockLeads}
-        onLeadClick={vi.fn()}
-        onMoveLeadToStage={vi.fn()}
-      />
-    );
-
-    // Joao has rating 3 — should have 3 filled stars
-    const cards = screen.getAllByTestId("lead-card");
-    const firstCard = cards[0];
-    const filledStars = within(firstCard).getAllByTestId("star-filled");
-    expect(filledStars.length).toBe(3);
-  });
 });
 
 // ---------------------------------------------------------------------------

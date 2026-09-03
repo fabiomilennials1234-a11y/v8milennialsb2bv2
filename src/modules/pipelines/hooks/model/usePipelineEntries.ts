@@ -5,7 +5,7 @@ import { useOrganization } from "@/modules/identity";
 export type PipelineType = "whatsapp" | "confirmacao" | "propostas";
 
 export const LEAD_SELECT = `
-  id, name, company, email, phone, rating, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled,
+  id, name, company, email, phone, origin, segment, faturamento, urgency, notes, compromisso_date, ai_disabled,
   avatar_url, pre_qualification_tier, qualification_tier,
   sdr_id, closer_id, responsible_id, pre_sale_responsible_id, sale_responsible_id,
   responsible:team_members!leads_responsible_id_fkey(id, name, avatar_url),
@@ -210,6 +210,10 @@ export function flattenMetadata(entry: any) {
     sale_value: meta.sale_value ?? null,
     product_id: meta.product_id ?? null,
     product_type: meta.product_type ?? null,
+    // `calor` saiu da INTERFACE em 2026-09-03 (card, chip e CalorBars). O dado
+    // segue em `metadata` e continua mapeado aqui porque o único leitor restante
+    // é o payload do Coach IA da TV (`useTVDashboardData.propostasQuentes` →
+    // edge fn `oraculo-comercial`), que não é superfície visível.
     calor: meta.calor ?? null,
     loss_reason_id: meta.loss_reason_id ?? null,
     commitment_date: meta.commitment_date ?? null,

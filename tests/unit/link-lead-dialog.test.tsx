@@ -10,7 +10,7 @@ vi.mock("@/modules/communication/hooks/chat-meta/useMetaLinkLead", () => ({
 }));
 
 // useLeads(params) returns a react-query result; data is the leads array.
-// Real signature: useLeads({ page?, searchQuery?, filterOrigin?, filterRating? }).
+// Real signature: useLeads({ page?, searchQuery?, filterOrigin? }).
 vi.mock("@/modules/leads/hooks/useLeads", () => ({
   useLeads: () => ({
     data: [{ id: "l1", name: "Alice", phone: "11999" }],

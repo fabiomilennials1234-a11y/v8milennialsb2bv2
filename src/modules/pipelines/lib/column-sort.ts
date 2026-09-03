@@ -7,19 +7,9 @@
  * "Última movimentação" (ordenar uma etapa em A–Z não responde pergunta que o
  * operador faça diante do board) e "Calor" foi embora sem substituta.
  *
- * ## 🚨 "Calor" não ordenava por calor — o rótulo mentia
- *
- * Ela lia `rating`, que é `leads.rating`. O `calor` de verdade é outra coluna,
- * `pipe_propostas.calor`, e vive só no funil de Propostas. Prova no vizinho:
- * `lib/kanbanFilterParams` mapeia a faixa **"Prioridade"** para `rating` (alta
- * `>=8`) e a faixa **"Calor"** para `calor` (quente `>=7`) — campos distintos,
- * defaults distintos (`rating||0` contra `calor??5`). Ou seja, esta opção
- * ordenava por *prioridade* sob o nome de *calor*, nos quatro boards, inclusive
- * nos três que não têm `calor` nenhum.
- *
- * **Ao reintroduzir ordenação por qualquer uma das duas, escolha o campo antes
- * do rótulo** — e note que `calor` só existiria em Propostas, o que a tornaria
- * uma opção que precisa ser escondida nos demais, como já acontece com o filtro.
+ * Em 2026-09-03 o calor saiu da interface inteira — o `rating` do lead (que era
+ * o que aquela opção realmente lia, sob rótulo errado) e o `calor` da entrada de
+ * funil. Não há o que reintroduzir aqui.
  *
  * ## "Parado há" e "Última movimentação" são a MESMA leitura, invertida
  *
@@ -56,9 +46,8 @@ export const COLUMN_SORT_OPTIONS: { key: ColumnSortKey; label: string }[] = [
 export const DEFAULT_COLUMN_SORT: ColumnSortKey = "manual";
 
 /**
- * `rating` saiu junto com a opção "Calor" — era seu único leitor aqui. O campo
- * continua existindo no card e no filtro "Prioridade"; o que deixou de existir é
- * a ordenação por ele.
+ * `rating` saiu junto com a opção "Calor" — era seu único leitor aqui. Desde
+ * 2026-09-03 ele também não existe mais no card nem em filtro nenhum.
  */
 interface SortableCardShape {
   value?: number | null;

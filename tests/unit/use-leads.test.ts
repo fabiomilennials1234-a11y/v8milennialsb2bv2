@@ -26,7 +26,6 @@ describe("useLeads types and constants", () => {
       page: 0,
       searchQuery: "test",
       filterOrigin: "meta_ads",
-      filterRating: "high",
     };
     expect(params.page).toBe(0);
     expect(params.searchQuery).toBe("test");
@@ -35,10 +34,5 @@ describe("useLeads types and constants", () => {
   it("filter params are optional", () => {
     const params: LeadsFilterParams = {};
     expect(params.page).toBeUndefined();
-  });
-
-  it("filterRating accepts valid values", () => {
-    const params: LeadsFilterParams = { filterRating: "high" };
-    expect(["high", "medium", "low", "all"]).toContain(params.filterRating);
   });
 });

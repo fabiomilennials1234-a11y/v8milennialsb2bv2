@@ -21,7 +21,6 @@ export interface LeadsFilterParams {
   page?: number;
   searchQuery?: string;
   filterOrigin?: string;
-  filterRating?: string;
   filterQualification?: string;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
@@ -71,7 +70,7 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
+  const { page = 0, searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
@@ -81,7 +80,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
     // o cache devolve a pagina da ordem antiga; sem filterAssignment, mistura
     // "todos" com "sem responsavel". Espalhados (e nao como objeto) para a
     // chave continuar legivel no devtools.
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort.key, sort.direction],
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort.key, sort.direction],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -105,7 +104,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
       // paginação por OFFSET repete linha entre páginas dentro de um empate,
@@ -124,11 +123,11 @@ export function useLeads(params: LeadsFilterParams = {}) {
  * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
+  const { searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible],
+    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible],
     queryFn: async () => {
       if (!organizationId) return 0;
 
@@ -136,7 +135,7 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
         .from("leads")
         .select("*", { count: "exact", head: true });
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
 
       const { count, error } = await query;
       if (error) throw error;
@@ -347,8 +346,8 @@ export function useUpdateLead() {
        *   gravação falhou.
        * - `["pipeline-page"]` é a RPC `get_pipeline_page` de que os boards
        *   vivem (`usePaginatedPipeline`). Sem ela o card atrás do painel fica
-       *   com o valor velho até um F5 — e o mesmo vale para a edição inline e
-       *   o "calor" nos três boards, que chamam este hook direto.
+       *   com o valor velho até um F5 — e o mesmo vale para a edição inline
+       *   nos três boards, que chama este hook direto.
        *
        * Strings literais de propósito: importar as chaves de `modules/pipelines`
        * reabriria o ciclo leads↔pipelines que o dependency-cruiser barra.

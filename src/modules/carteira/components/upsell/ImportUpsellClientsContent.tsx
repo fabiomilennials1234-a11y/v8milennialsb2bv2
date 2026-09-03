@@ -107,7 +107,6 @@ const UPSELL_SYSTEM_FIELDS: { key: string; label: string; required?: boolean }[]
   { key: "segment", label: "Segmento" },
   { key: "notes", label: "Notas / Observações" },
   { key: "origin", label: "Origem" },
-  { key: "rating", label: "Prioridade" },
 ];
 
 /** Campos adicionais disponíveis quando a flag customer_portfolio está ativa */
@@ -514,7 +513,6 @@ export function ImportUpsellClientsContent({
                 continue;
               }
             } else {
-              const ratingNum = lead.rating ? parseInt(lead.rating, 10) : 0;
               const { data: newLead, error: leadError } = await supabase
                 .from("leads")
                 .insert({
@@ -527,7 +525,6 @@ export function ImportUpsellClientsContent({
                   segment: lead.segment || null,
                   notes: lead.notes || null,
                   origin: "outro" as const,
-                  rating: isNaN(ratingNum) ? 0 : ratingNum,
                 })
                 .select("id")
                 .single();

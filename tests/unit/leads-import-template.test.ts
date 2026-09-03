@@ -30,7 +30,6 @@ describe("LEADS_TEMPLATE_HEADERS", () => {
     const headers = [...LEADS_TEMPLATE_HEADERS];
     expect(headers).toContain("Etapa");
     expect(headers).toContain("Vendedor");
-    expect(headers).toContain("Temperatura");
     expect(headers).toContain("Valor");
     expect(headers).toContain("Produto");
   });

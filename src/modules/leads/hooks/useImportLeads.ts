@@ -12,7 +12,6 @@ export const KNOWN_LEAD_FIELDS = [
   "faturamento",
   "segment",
   "notes",
-  "rating",
   "origin",
   "utm_campaign",
   "utm_source",
@@ -21,7 +20,6 @@ export const KNOWN_LEAD_FIELDS = [
   "utm_term",
   "urgency",
   "compromisso_date",
-  "temperatura",
   "valor",
   "produto",
   "data_compromisso",
@@ -55,8 +53,6 @@ const HEADER_TO_FIELD: Record<string, string> = {
   segmento: "segment",
   setor: "segment",
   "segmento de atuação": "segment",
-  prioridade: "rating",
-  "prioridade do lead": "rating",
   origem: "origin",
   "público de origem": "origin",
   notas: "notes",
@@ -75,9 +71,6 @@ const HEADER_TO_FIELD: Record<string, string> = {
   urgência: "urgency",
   "data compromisso": "compromisso_date",
   "compromisso": "compromisso_date",
-  temperatura: "temperatura",
-  "temperatura lead": "temperatura",
-  calor: "temperatura",
   valor: "valor",
   "valor da proposta": "valor",
   "valor proposta": "valor",
@@ -311,14 +304,11 @@ interface ParsedLead {
   utm_medium?: string;
   utm_content?: string;
   utm_term?: string;
-  rating?: number; // From "Prioridade do lead"
   origin?: string; // From "Público de origem"
   /** Nome da etapa na planilha (ex: "Novo", "Abordado"). Será mapeado para stage_key na importação. */
   stage?: string;
   /** Nome do vendedor/responsável na planilha. Será mapeado ao vendedor com nome mais parecido no sistema. */
   seller_name?: string;
-  /** Temperatura/calor do lead (1-10). Usado no funil de propostas. */
-  calor?: number;
   /** Valor da proposta em número. Usado no funil de propostas. */
   valor_proposta?: number;
   /** Nome do produto na planilha. Será mapeado ao produto com nome mais parecido no sistema. */
@@ -770,7 +760,7 @@ export function useImportLeads() {
                   // Toda coluna mapeada explicitamente para um campo do sistema é consumida:
                   // seu valor vai para a coluna dedicada (ou metadata de etapa), nunca para
                   // "Outros campos" da observação. Sem isso, campos cujo nome não casa o
-                  // próprio coletor (segment/rating/origin/...) vazavam para o notes.
+                  // próprio coletor (segment/origin/...) vazavam para o notes.
                   // Exceção: "notes" é capturado depois via noteColumns (lê pela chave),
                   // então consumi-lo aqui esvaziaria a observação legítima.
                   if (field !== "notes") {
@@ -957,22 +947,15 @@ export function useImportLeads() {
             segmentField.matchedKeys.forEach(k => usedKeys.add(k));
             const segment = chooseBestValue("segment", segmentField.values);
 
-            // PRIORIDADE → RATING (Máxima=10, Alta=8, Média=5, Baixa=2)
-            const prioridadeField = collectFieldValues(
+            // PRIORIDADE — o campo saiu da interface (calor/rating, 2026-09-03).
+            // A coluna continua sendo CONSUMIDA de propósito: sem marcar as
+            // chaves em `usedKeys`, "Prioridade do lead" voltaria a vazar para
+            // "Outros campos" da observação.
+            collectFieldValues(
               rowForParse,
               ["Prioridade do lead", "Prioridade"],
               [/prioridade/]
-            );
-            prioridadeField.matchedKeys.forEach(k => usedKeys.add(k));
-            const prioridadeValue = chooseBestValue("name", prioridadeField.values);
-            let rating: number | undefined;
-            if (prioridadeValue) {
-              const pLower = prioridadeValue.toLowerCase();
-              if (pLower.includes("máxima") || pLower.includes("maxima")) rating = 10;
-              else if (pLower.includes("alta")) rating = 8;
-              else if (pLower.includes("média") || pLower.includes("media")) rating = 5;
-              else if (pLower.includes("baixa")) rating = 2;
-            }
+            ).matchedKeys.forEach(k => usedKeys.add(k));
 
             // ORIGEM (Público de origem)
             const origemField = collectFieldValues(
@@ -1001,19 +984,14 @@ export function useImportLeads() {
             vendedorField.matchedKeys.forEach(k => usedKeys.add(k));
             const sellerNameValue = chooseBestValue("name", vendedorField.values);
 
-            // TEMPERATURA / CALOR (1-10), VALOR, PRODUTO, DATA COMPROMISSO, TEMPO CONTRATO, OBSERVAÇÕES ETAPA
-            const temperaturaField = collectFieldValues(
+            // TEMPERATURA / CALOR saiu da interface (2026-09-03) — só consumimos
+            // as chaves para que não vazem para a observação. VALOR, PRODUTO,
+            // DATA COMPROMISSO, TEMPO CONTRATO e OBSERVAÇÕES ETAPA seguem.
+            collectFieldValues(
               rowForParse,
               ["Temperatura", "Calor", "temperatura", "Temperatura (Propostas)"],
               [/temperatura/, /calor/]
-            );
-            temperaturaField.matchedKeys.forEach(k => usedKeys.add(k));
-            const temperaturaStr = chooseBestValue("name", temperaturaField.values);
-            let calor: number | undefined;
-            if (temperaturaStr) {
-              const n = parseInt(temperaturaStr.replace(/\D/g, ""), 10);
-              if (!isNaN(n)) calor = Math.min(10, Math.max(1, n));
-            }
+            ).matchedKeys.forEach(k => usedKeys.add(k));
 
             const valorField = collectFieldValues(
               rowForParse,
@@ -1152,11 +1130,9 @@ export function useImportLeads() {
               utm_medium: utm_medium || undefined,
               utm_content: utm_content || undefined,
               utm_term: utm_term || undefined,
-              rating,
               origin: origemValue,
               stage: stageValue,
               seller_name: sellerNameValue,
-              calor,
               valor_proposta,
               product_name: product_name || undefined,
               commitment_date,

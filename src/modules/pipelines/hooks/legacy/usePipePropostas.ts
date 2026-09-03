@@ -47,7 +47,6 @@ export function useCreatePipeProposta() {
       if (item.sale_value !== undefined) metadata.sale_value = item.sale_value;
       if (item.product_type !== undefined) metadata.product_type = item.product_type;
       if (item.product_id !== undefined) metadata.product_id = item.product_id;
-      if (item.calor !== undefined) metadata.calor = item.calor;
       if (item.loss_reason_id !== undefined) metadata.loss_reason_id = item.loss_reason_id;
       if (item.commitment_date !== undefined) metadata.commitment_date = item.commitment_date;
       if (item.contract_duration !== undefined) metadata.contract_duration = item.contract_duration;
@@ -133,7 +132,6 @@ export function useUpdatePipeProposta() {
       if (updates.sale_value !== undefined) mergedMeta.sale_value = updates.sale_value;
       if (updates.product_type !== undefined) mergedMeta.product_type = updates.product_type;
       if (updates.product_id !== undefined) mergedMeta.product_id = updates.product_id;
-      if (updates.calor !== undefined) mergedMeta.calor = updates.calor;
       if (updates.loss_reason_id !== undefined) mergedMeta.loss_reason_id = updates.loss_reason_id;
       // 🔴 `loss_reason` FALTAVA nesta lista, e a ausência era invisível
       // (SCRUM-369). A tela de Propostas escrevia `updates.loss_reason` desde

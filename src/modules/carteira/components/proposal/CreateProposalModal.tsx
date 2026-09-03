@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, User, Building2, Star, DollarSign, Clock, Calendar, Package, Plus, Trash2 } from "lucide-react";
+import { Search, User, Building2, DollarSign, Clock, Calendar, Package, Plus, Trash2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
@@ -300,19 +300,6 @@ export function CreateProposalModal({
                                 </Badge>
                               )}
                             </div>
-                          </div>
-                          <div className="flex items-center gap-0.5">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={cn(
-                                  "w-3 h-3",
-                                  i < Math.ceil((lead.rating || 0) / 2)
-                                    ? "text-chart-5 fill-chart-5"
-                                    : "text-muted-foreground/30"
-                                )}
-                              />
-                            ))}
                           </div>
                         </div>
                       </motion.button>

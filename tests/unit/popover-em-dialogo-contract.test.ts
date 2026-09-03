@@ -119,7 +119,9 @@ const CALENDARIOS_DEFERIDOS: ReadonlyArray<string> = [
  */
 // SCRUM-637 (flip): as 3 páginas /pipe-* morreram levando 5 popovers de
 // board (54 → 49) — nenhum popover novo entrou sem classificação.
-const TOTAL_DE_POPOVERS = 49;
+// 2026-09-03 (calor fora da interface): `LeadCardCalor` e `CalorSlider` foram
+// apagados, levando os 2 popovers de arrastar/ajustar o calor (49 → 47).
+const TOTAL_DE_POPOVERS = 47;
 
 function arquivosTsx(dir: string, acc: string[] = []): string[] {
   for (const nome of readdirSync(dir)) {
