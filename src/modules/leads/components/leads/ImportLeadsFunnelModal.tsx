@@ -16,6 +16,7 @@ import {
 import { useLeadCustomFields } from "../../hooks/useLeadCustomFields";
 import { useCanDo } from "@/modules/identity";
 import { usePipeOps } from "../../pipe-ops";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import { useTeamMembers } from "@/modules/identity";
 import { useProducts } from "@/modules/carteira/hooks/useProducts";
 import { downloadLeadsImportTemplate } from "@/lib/leadsImportTemplate";
@@ -45,11 +46,17 @@ const PIPELINE_TYPE: Record<FunnelDestination, "whatsapp" | "propostas" | "confi
   confirmacao: "confirmacao",
 };
 
-const DESTINATION_LABELS: Record<FunnelDestination, string> = {
-  qualificacao: "Qualificação",
-  propostas: "Propostas",
-  confirmacao: "Confirmação",
-};
+/**
+ * O nome que a ORG usa para o funil de destino (SCRUM-641) — antes era um
+ * mapa fixo com os nomes do seed, que a navegação nunca mostra. Linha de
+ * display ausente = a org não tem mais o funil → fallback honesto.
+ */
+function useNomeDoDestino(destination: FunnelDestination): string {
+  const { data: systemPipes } = usePipeOps().useSystemPipes();
+  const pipeType = PIPELINE_TYPE[destination];
+  const c = systemPipes?.find((x) => x.pipe_type === pipeType);
+  return c ? c.display_name || NOME_DE_FABRICA[pipeType] || pipeType : "Funil removido";
+}
 
 const MONTH_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
@@ -88,6 +95,7 @@ export function ImportLeadsFunnelContent({
   destination,
   onDone,
 }: ImportLeadsFunnelContentProps) {
+  const nomeDoDestino = useNomeDoDestino(destination);
   const [step, setStep] = useState<Step>("upload");
   const [file, setFile] = useState<File | null>(null);
   const [previewLeads, setPreviewLeads] = useState<PreviewLead[]>([]);
@@ -578,7 +586,7 @@ export function ImportLeadsFunnelContent({
               )}
 
               <p className="text-sm text-center text-muted-foreground">
-                Os leads já estão em {DESTINATION_LABELS[destination]}.
+                Os leads já estão em {nomeDoDestino}.
               </p>
               <Button className="w-full" onClick={handleClose}>
                 Fechar
@@ -600,13 +608,14 @@ export function ImportLeadsFunnelModal({
   onOpenChange,
   destination,
 }: ImportLeadsFunnelModalProps) {
+  const nomeDoDestino = useNomeDoDestino(destination);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-primary" />
-            Importar Leads — {DESTINATION_LABELS[destination]}
+            Importar Leads — {nomeDoDestino}
           </DialogTitle>
         </DialogHeader>
         <ImportLeadsFunnelContent destination={destination} onDone={() => onOpenChange(false)} />

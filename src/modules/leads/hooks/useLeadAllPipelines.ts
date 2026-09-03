@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
+import { nomeDoFunil, type SystemPipeDisplay } from "@/contracts/pipe";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -64,6 +65,7 @@ export function useLeadAllPipelines(leadId: string | null) {
         { data: allPipelines },
         { data: customStagesAll },
         { data: pipeUpsell },
+        { data: displayConfigs },
       ] = await Promise.all([
         // Ordem idêntica à de `readActivePipelineEntry`
         // (`pipelines/hooks/model/usePipelineEntries.ts`) e à de `readPipeEntries`
@@ -101,6 +103,12 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("lead_id", leadId)
           .eq("organization_id", orgId)
           .maybeSingle(),
+        // O nome que a ORG usa (SCRUM-641): pipelines.name de funil de sistema
+        // é o seed congelado; a canônica é pipeline_display_config.
+        supabase
+          .from("pipeline_display_config")
+          .select("pipe_type, display_name, is_visible, position")
+          .eq("organization_id", orgId),
       ]);
 
       const entries = allEntries ?? [];
@@ -164,25 +172,32 @@ export function useLeadAllPipelines(leadId: string | null) {
       // (é ela que os consumidores leem como "dá pra abrir negócio aqui").
       for (const slug of SYSTEM_SLUGS) {
         const pipeline = pipelineBySlug.get(slug);
+        // Sem linha em `pipelines`, a org NÃO tem o funil — nenhuma rail.
+        // Antes o slug entrava com rótulo de catálogo e virava uma oferta de
+        // funil inexistente; negócio antigo de funil arquivado já era
+        // invisível aqui (dealsOf é chaveado por pipeline.id) — nada some a
+        // mais com o `continue` (SCRUM-641).
+        if (!pipeline) continue;
         const stages = getStages(slug);
-        // Nome/cor REAIS do registro `pipelines` (funil renomeável/colorível);
-        // fallback pros rótulos históricos enquanto a linha não chegou.
-        const label =
-          pipeline?.name ??
-          (slug === "whatsapp" ? "Qualificação" : slug === "confirmacao" ? "Confirmação" : "Propostas");
+        // Nome como a ORG o vê: display_config manda; `pipelines.name` só é
+        // rótulo final para funil custom (nomeDoFunil, @/contracts/pipe).
+        const label = nomeDoFunil(
+          (displayConfigs ?? []) as SystemPipeDisplay[],
+          pipeline,
+        );
         const color =
-          pipeline?.color ??
+          pipeline.color ??
           (slug === "whatsapp" ? "#6366f1" : slug === "confirmacao" ? "#22c55e" : "#f59e0b");
         const base = {
           type: "standard" as const,
           pipeType: slug,
           label,
           color,
-          pipelineDbId: pipeline?.id ?? null,
+          pipelineDbId: pipeline.id,
           stages,
         };
 
-        const deals = dealsOf(pipeline?.id);
+        const deals = dealsOf(pipeline.id);
         if (deals.length === 0) {
           results.push({ ...base, pipeId: null, currentStage: null, currentStageLabel: null });
           continue;

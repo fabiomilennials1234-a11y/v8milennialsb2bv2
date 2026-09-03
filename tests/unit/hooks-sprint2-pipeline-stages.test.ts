@@ -68,7 +68,7 @@ import {
   getPipelineTypeName,
   getStageFamilyName,
   getSuccessStageTransition,
-  DEFAULT_STAGES,
+  FALLBACK_STAGES,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
 
 // ---- Pure function tests ----
@@ -147,21 +147,12 @@ describe("getSuccessStageTransition", () => {
   });
 });
 
-describe("DEFAULT_STAGES", () => {
-  it("has all pipeline types (e nada de Carteira — SCRUM-618)", () => {
-    expect(DEFAULT_STAGES).toHaveProperty("whatsapp");
-    expect(DEFAULT_STAGES).toHaveProperty("confirmacao");
-    expect(DEFAULT_STAGES).toHaveProperty("propostas");
-    expect(DEFAULT_STAGES).not.toHaveProperty("upsell_base");
-    expect(DEFAULT_STAGES).not.toHaveProperty("upsell_gestao");
-  });
-
-  it("whatsapp has correct stages", () => {
-    const stages = DEFAULT_STAGES.whatsapp;
-    expect(stages.length).toBeGreaterThan(0);
-    expect(stages[0].id).toBe("novo");
-    const agendado = stages.find(s => s.id === "agendado");
-    expect(agendado?.is_final_positive).toBe(true);
+describe("FALLBACK_STAGES (SCRUM-641)", () => {
+  it("é a trilha única do Funil de Vendas — o Record por trio morreu", () => {
+    expect(Array.isArray(FALLBACK_STAGES)).toBe(true);
+    expect(FALLBACK_STAGES[0].id).toBe("novo");
+    expect(FALLBACK_STAGES.find((s) => s.id === "ganhou")?.is_final_positive).toBe(true);
+    expect(FALLBACK_STAGES.find((s) => s.id === "perdeu")?.is_final_negative).toBe(true);
   });
 });
 
@@ -228,7 +219,7 @@ describe("usePipelineStages", () => {
    * Se alguém reintroduzir o fallback neste ramo, este teste cai.
    */
   it("org SEM o funil no registro: devolve [] e nem consulta pipeline_stages", async () => {
-    mockPorTabela([{ pipe_type: "propostas" }], DEFAULT_STAGES.whatsapp);
+    mockPorTabela([{ pipe_type: "propostas" }], FALLBACK_STAGES);
 
     const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
@@ -245,7 +236,7 @@ describe("usePipelineStages", () => {
    */
   it("erro ao ler o registro NÃO ressuscita o funil", async () => {
     mockFrom.mockImplementation((tabela: string) => {
-      if (tabela !== "pipeline_display_config") return createChainMock(DEFAULT_STAGES.whatsapp);
+      if (tabela !== "pipeline_display_config") return createChainMock(FALLBACK_STAGES);
       const chain = createChainMock([]);
       chain.then = (resolve: (v: unknown) => unknown) =>
         Promise.resolve({ data: null, error: { message: "network" } }).then(resolve);

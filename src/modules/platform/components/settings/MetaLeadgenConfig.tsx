@@ -15,6 +15,8 @@ import { useOrganization } from "@/modules/identity";
 import { useMetaConnectionStatus, MetaPage } from "@/modules/communication/hooks/useMetaConnection";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { usePipelineDisplayConfig } from "@/modules/pipelines";
+import { destinosDeSistema } from "@/contracts/pipe";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,11 +94,6 @@ const LEAD_FIELD_OPTIONS = [
   { value: "utm_term", label: "UTM Term" },
 ];
 
-const PIPE_OPTIONS = [
-  { value: "whatsapp", label: "Pipe de Qualificação" },
-  { value: "confirmacao", label: "Pipe Confirmação" },
-  { value: "propostas", label: "Pipe de Propostas" },
-];
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -427,6 +424,14 @@ function PageLeadgenCard({
     ? pipeStages[config.assign_to_pipe] || []
     : [];
 
+  // Funis de sistema REAIS da org, com o nome que ELA usa (SCRUM-641) — o trio
+  // cravado oferecia funil que a org podia nem ter, com nome de catálogo.
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const pipeOptions = destinosDeSistema(displayConfigs).map((d) => ({
+    value: d.pipeType,
+    label: d.label,
+  }));
+
   return (
     <div className="border rounded-lg p-4 space-y-4">
       {/* Header */}
@@ -613,7 +618,7 @@ function PageLeadgenCard({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhum</SelectItem>
-                  {PIPE_OPTIONS.map((p) => (
+                  {pipeOptions.map((p) => (
                     <SelectItem key={p.value} value={p.value}>
                       {p.label}
                     </SelectItem>

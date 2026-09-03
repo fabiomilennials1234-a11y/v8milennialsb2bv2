@@ -21,6 +21,7 @@ import { startJob, finishJob, failJob } from "../_shared/job-tracker.ts";
 import { executeWorkflow } from "../_shared/workflow-executor.ts";
 import { fireTrigger, processCronTriggers, processScheduledDateTriggers, matchesTriggerConfig } from "../_shared/workflow-trigger.ts";
 import { tryResolvePipelineId } from "../_shared/pipeline-adapter.ts";
+import { getOrgDefaultPipelineRef } from "../_shared/pipeline-destination.ts";
 import { requireCronAuth } from "../_shared/auth.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
 import {
@@ -544,8 +545,18 @@ async function processPeriodicTriggers(
         const windowStart = new Date().toISOString();
         const windowEnd = new Date(Date.now() + hoursBefore * 3_600_000).toISOString();
 
-        // Resolve confirmacao pipeline id for this org
-        const confirmacaoPipelineId = await tryResolvePipelineId(supabase, wf.organization_id, "confirmacao");
+        // SCRUM-641: destino preferido segue 'confirmacao' (org antiga:
+        // idêntico); org sem esse funil ancora a reunião no funil PADRÃO —
+        // é lá que as portas (calcom/new-lead/lead-webhook) gravam
+        // metadata.meeting_date pós-funil-único. Sem os dois → pula.
+        const wfOrgId = (wf as { organization_id: string }).organization_id;
+        let confirmacaoPipelineId = await tryResolvePipelineId(supabase, wfOrgId, "confirmacao");
+        if (!confirmacaoPipelineId) {
+          const defaultRef = await getOrgDefaultPipelineRef(supabase, wfOrgId);
+          if (defaultRef) {
+            confirmacaoPipelineId = await tryResolvePipelineId(supabase, wfOrgId, defaultRef);
+          }
+        }
         if (!confirmacaoPipelineId) continue;
 
         // Query pipeline_entries for unconfirmed meetings

@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import type { PlaygroundToolDef, PlaygroundToolState } from "./types";
 import { PLAYGROUND_TOOLS, isMoverCardAutoEnabled } from "./types";
+import { usePipeTypeOptions } from "../../hooks/usePipeTypeOptions";
 
 const ICON_MAP: Record<string, any> = {
   UserCheck,
@@ -56,6 +57,7 @@ interface PlaygroundToolsProps {
 }
 
 export function PlaygroundTools({ tools, onChange, activePipes }: PlaygroundToolsProps) {
+  const pipeTypeOptions = usePipeTypeOptions();
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
 
   const activeCount = Object.values(tools).filter((t) => t.enabled).length;
@@ -206,7 +208,10 @@ export function PlaygroundTools({ tools, onChange, activePipes }: PlaygroundTool
                                 <SelectValue placeholder="Selecione..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {param.options?.map((opt) => (
+                                {(param.key === "pipe"
+                                  ? pipeTypeOptions
+                                  : param.options ?? []
+                                ).map((opt) => (
                                   <SelectItem key={opt.value} value={opt.value}>
                                     {opt.label}
                                   </SelectItem>

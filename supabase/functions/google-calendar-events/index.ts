@@ -27,6 +27,7 @@ import {
 import { logRuntime } from "../_shared/logger.ts";
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import { resolveMeetingDestination } from "../_shared/pipeline-destination.ts";
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -407,17 +408,33 @@ Deno.serve(withErrorBoundary('google-calendar-events', async (req) => {
           .eq("id", createdEvent.id);
       }
 
-      // Salva meet_link no pipeline_entries (confirmacao)
+      // Salva meet_link no pipeline_entries.
+      // SCRUM-641: `pipe_slug` explícito no payload é a config da porta e vale
+      // como veio. SEM config, o preferido segue 'confirmacao'/'reuniao_marcada'
+      // (org antiga: idêntico); org sem esse funil → funil PADRÃO ancorado pela
+      // etapa de papel meeting_booked; sem funil padrão → sem card (log no helper).
       if (meetLink && (payload.pipe_confirmacao_id || payload.lead_id)) {
-        await saveMeetLinkToPipe(
-          supabase,
-          payload.pipe_confirmacao_id ?? "",
-          meetLink,
-          payload.lead_id,
-          orgId,
-          payload.pipe_slug ?? "confirmacao",
-          payload.pipe_stage_key ?? "reuniao_marcada",
-        );
+        let destRef = payload.pipe_slug ?? null;
+        let destStage = payload.pipe_stage_key ?? "reuniao_marcada";
+        if (!destRef && orgId) {
+          const dest = await resolveMeetingDestination(supabase, orgId, {
+            ref: "confirmacao",
+            stageKey: payload.pipe_stage_key ?? "reuniao_marcada",
+          });
+          destRef = dest?.ref ?? null;
+          destStage = dest?.stageKey ?? destStage;
+        }
+        if (destRef || payload.pipe_confirmacao_id) {
+          await saveMeetLinkToPipe(
+            supabase,
+            payload.pipe_confirmacao_id ?? "",
+            meetLink,
+            destRef ? payload.lead_id : undefined,
+            orgId,
+            destRef ?? "confirmacao",
+            destStage,
+          );
+        }
       }
 
       await logCalendarOp(supabase, {

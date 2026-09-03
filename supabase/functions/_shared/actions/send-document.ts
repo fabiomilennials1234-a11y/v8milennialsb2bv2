@@ -100,6 +100,50 @@ export async function resolveDocumentIdByName(
 }
 
 /**
+ * Resgata um UUID **bem formado mas inexistente** — o modelo trocou um dígito.
+ *
+ * `resolveDocumentIdByName` acima só entra quando o campo NÃO parece um UUID.
+ * Quando o modelo copia o id da descrição da tool e erra um caractere, o valor
+ * passa no `UUID_RE`, o `.eq("id", …)` não casa nada e a ação morre em
+ * "Document not found" — depois de 3 retries, porque o erro é determinístico e
+ * nenhum retry vai consertar um dígito. Medido na Forever Bella em 02/09: o
+ * modelo pediu `c3213b6b-3e3a-…` duas vezes; o arquivo real é `c3213b6b-3f3a-…`
+ * (`Banho de Verniz - PRODUTO 1.png`). Duas ações mortas, duas fotos que o lead
+ * pediu e nunca viu.
+ *
+ * Critério deliberadamente estreito: **um único** documento da org a exatamente
+ * **um** caractere de distância. Com dois candidatos a distância 1 não há como
+ * saber qual o modelo quis, e mandar o arquivo errado para o cliente é pior que
+ * não mandar — nesse caso devolve null e o erro segue.
+ */
+export async function resolveDocumentIdByNearMiss(
+  supabase: SupabaseClient,
+  organizationId: string,
+  raw: string,
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("copilot_agent_documents")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("status", "ready");
+  if (!data?.length) return null;
+
+  const target = raw.toLowerCase();
+  const near = data
+    .map((row) => String(row.id))
+    .filter((id) => {
+      if (id.length !== target.length) return false;
+      let diff = 0;
+      for (let i = 0; i < id.length; i++) {
+        if (id[i] !== target[i] && ++diff > 1) return false;
+      }
+      return diff === 1;
+    });
+
+  return near.length === 1 ? near[0] : null;
+}
+
+/**
  * Checks if a document was already sent in a conversation.
  * Used as hard dedup gate before dispatching the actual send.
  *
@@ -216,18 +260,32 @@ export async function checkDocumentAlreadySent(
 // N entregas idênticas (incidente 2026-06-02, vídeo 3×).
 //
 // Este lock atômico (INSERT ON CONFLICT DO NOTHING via RPC) garante AT-MOST-ONCE
-// por (conversa, documento): a 1ª tentativa reserva e envia; retries/órfãos
-// colidem no lock e viram no-op. Liberado apenas em falha REAL de envio, para
-// não travar um retry legítimo.
-const SEND_DOCUMENT_LOCK_TTL_SECONDS = 24 * 60 * 60; // 24h
+// por AÇÃO: a 1ª tentativa reserva e envia; retries/órfãos DA MESMA AÇÃO colidem
+// no lock e viram no-op. Liberado apenas em falha REAL de envio, para não travar
+// um retry legítimo.
+//
+// 🚨 2026-09-03: o escopo passou de (conversa, documento) para (conversa,
+// documento, AÇÃO). O que o incidente de 2026-06-02 exige é que a MESMA linha
+// re-clamada pelo cron não entregue duas vezes — e o re-claim reusa o mesmo
+// `actionId`, então a proteção fica intacta. Ancorar em (conversa, documento)
+// fazia o lock valer por 24h para QUALQUER pedido futuro: o lead pedia a foto de
+// novo, o modelo chamava a tool de novo, nascia uma ação NOVA — e ela morria
+// contra o lock de uma entrega de horas antes. Pedido novo do lead = ação nova =
+// lock novo. Duplicata dentro do MESMO turno não chega aqui: `buildIdempotencyKey`
+// já a barra no enfileiramento, com o `document_id` na chave.
+const SEND_DOCUMENT_LOCK_TTL_SECONDS = 24 * 60 * 60; // 24h — cobre o ciclo de retry inteiro da ação
 
 function buildSendDocumentLockKey(
   conversationId: string | null,
   leadId: string,
   documentId: string,
+  actionId: string | null,
 ): string {
   const scope = conversationId ? `conv:${conversationId}` : `lead:${leadId}`;
-  return `send_document:${scope}:${documentId}`;
+  // Sem actionId (chamada fora do worker) o lock recai no escopo antigo — é o
+  // caminho sem re-claim, então não há retry automático de que se defender.
+  const attempt = actionId ? `:action:${actionId}` : "";
+  return `send_document:${scope}:${documentId}${attempt}`;
 }
 
 async function acquireSendDocumentLock(
@@ -242,7 +300,7 @@ async function acquireSendDocumentLock(
   });
   if (error) {
     // Fail-open: erro transitório no lock não pode bloquear envio legítimo.
-    // checkDocumentAlreadySent (lifetime) segue como rede secundária.
+    // O custo de uma mídia repetida é menor que o de uma mídia que nunca chega.
     console.warn("[executeSendDocument] dedup lock acquire failed:", error.message);
     return true;
   }
@@ -308,40 +366,67 @@ export async function executeSendDocument(
     documentId = resolvedId;
   }
 
-  const { data: doc, error: docError } = await supabase
-    .from("copilot_agent_documents")
-    .select("id, file_name, file_path, mime_type, organization_id, file_type")
-    .eq("id", documentId)
-    .eq("organization_id", organizationId)
-    .single();
+  const fetchDoc = (id: string) =>
+    supabase
+      .from("copilot_agent_documents")
+      .select("id, file_name, file_path, mime_type, organization_id, file_type")
+      .eq("id", id)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+
+  let { data: doc, error: docError } = await fetchDoc(documentId);
+
+  // UUID bem formado que não existe: o modelo errou um dígito ao copiar o id.
+  // Retry não conserta — ou resgatamos aqui, ou a foto pedida nunca sai.
+  if (!doc && UUID_RE.test(documentId)) {
+    const rescuedId = await resolveDocumentIdByNearMiss(supabase, organizationId, documentId);
+    if (rescuedId) {
+      logEvent("copilot_document_id_rescued_near_miss", {
+        tags: {
+          "copilot.document_raw": documentId,
+          "copilot.document_id": rescuedId,
+          "copilot.organization_id": organizationId,
+        },
+      }).catch(() => {});
+      documentId = rescuedId;
+      ({ data: doc, error: docError } = await fetchDoc(rescuedId));
+    }
+  }
 
   if (docError || !doc) {
     return { success: false, error: `Document not found: ${docError?.message || "not found"}` };
   }
 
-  // 2. Dedup gate — block duplicate document sends per conversation lifetime.
+  // 2. Reenvio pedido pelo lead SEMPRE vale — o gate vitalício virou TELEMETRIA.
+  //
+  // 🚨 2026-09-03, decisão do produto: "se o cliente pediu a imagem, manda a
+  // imagem". O gate abaixo bloqueava por (conversa, documento) SEM recorte de
+  // tempo: uma vez entregue, aquele arquivo nunca mais saía naquela conversa,
+  // nem quando o lead pedia de novo horas depois. Medido na Forever Bella em
+  // 02/09: as 3 fotos foram entregues às 17:27–17:29 e, na segunda rodada às
+  // 19:29–19:36, as 9 novas tentativas dos MESMOS arquivos foram suprimidas —
+  // o lead pediu 4 vezes, o Jefferson anunciou 4 vezes e nada saiu.
+  //
+  // O que continua protegendo contra entrega dupla é o lock atômico logo antes
+  // do despacho (SEND_DOCUMENT_LOCK_WINDOW_SECONDS), que é race-free e cobre a
+  // janela real do incidente de 2026-06-02 (worker mata aos 30s sem abortar o
+  // `sendMedia` em voo → cron re-claim reenvia). O gate vitalício NUNCA foi essa
+  // proteção: é read-then-act, e portanto nunca foi race-free.
+  //
+  // Mantido como observação para não perder o sinal de laço do modelo.
   if (conversationId) {
-    const alreadySent = await checkDocumentAlreadySent(
-      supabase,
-      conversationId,
-      documentId,
-      leadId,
-      doc.file_path,
-      actionId,
-    );
-    if (alreadySent) {
-      console.debug("[executeSendDocument] Duplicate document skipped:", { conversationId, documentId });
-      await stampActionOutcome(supabase, actionId, payload, {
-        document_id: documentId,
-        [SUPPRESSED_AT_KEY]: new Date().toISOString(),
-        [SUPPRESSED_REASON_KEY]: "duplicate_document",
-      });
-      return {
-        success: true,
-        message: "Document already sent in this conversation — skipped",
-        data: { skipped: true, reason: "duplicate_document" },
-      };
-    }
+    checkDocumentAlreadySent(supabase, conversationId, documentId, leadId, doc.file_path, actionId)
+      .then((repeat) => {
+        if (!repeat) return;
+        logEvent("copilot_document_resent_on_request", {
+          tags: {
+            "copilot.document_id": documentId,
+            "copilot.conversation_id": conversationId,
+            "copilot.organization_id": organizationId,
+          },
+        }).catch(() => {});
+      })
+      .catch(() => {});
   }
 
   // 3. Gerar URL assinada (valida por 1 hora)
@@ -431,7 +516,7 @@ export async function executeSendDocument(
 
   // Idempotência atômica: reserva o envio (conversa, documento) ANTES de
   // despachar. Retry após timeout / órfão de envio colide aqui e vira no-op.
-  const lockKey = buildSendDocumentLockKey(conversationId, leadId, documentId);
+  const lockKey = buildSendDocumentLockKey(conversationId, leadId, documentId, actionId);
   const lockAcquired = await acquireSendDocumentLock(supabase, organizationId, lockKey);
   if (!lockAcquired) {
     console.debug("[executeSendDocument] Send already in-flight/done (lock held), skipping:", {

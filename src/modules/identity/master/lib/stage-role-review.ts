@@ -25,7 +25,14 @@ export interface StageRoleSuggestionRow {
   stage_role_suggestion_source: StageRoleSuggestionSource | null;
   organization: { name: string } | null;
   /** Funil dono da etapa — é o rótulo quando pipeline_type é NULL (custom). */
-  pipeline: { name: string } | null;
+  pipeline: { name: string; slug: string | null; type: string | null } | null;
+  /**
+   * O nome do funil como a ORG o vê (display_config → nome de fábrica →
+   * pipelines.name), resolvido no hook. NULL quando a etapa está órfã
+   * (pipeline_id nulo — funil excluído/legacy): a tela mostra o fallback
+   * honesto em vez de inventar um nome de catálogo (SCRUM-641).
+   */
+  funil_label: string | null;
 }
 
 export interface OrgSuggestionGroup {

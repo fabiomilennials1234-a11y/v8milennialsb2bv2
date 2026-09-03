@@ -352,16 +352,6 @@ export function DealCardMoney({
   /** Idem para a lixeira de cada linha. */
   onRemoverItem?: (itemId: string) => Promise<void>;
 }) {
-  /**
-   * A ausência do botão é DITA, não escondida.
-   *
-   * `deal_items.deal_id` é NOT NULL e `pipeline_entries.deal_id` é nulo em
-   * muitas entradas antigas — então, nesses casos, não há onde lançar item e o
-   * botão não desce. Sem esta frase o bloco fica idêntico ao que era antes (uma
-   * lista sem saída), e quem abrir vai concluir de novo que a tela simplesmente
-   * não deixa cadastrar produto.
-   */
-  const semNegocio = !onAdicionarProduto;
   const { temItens, desconto, total } = contaDoNegocio(itens, valorDoNegocio, valorDoFunil);
   const bruto = itens.reduce((s, i) => s + i.precoUnitario * i.quantidade, 0);
   const totalDosProdutos = itens.reduce((s, i) => s + i.total, 0);
@@ -420,15 +410,17 @@ export function DealCardMoney({
           </div>
         ) : (
           <div className="flex flex-col gap-1 py-4">
+            {/*
+              Só a frase do vazio. A que vinha abaixo dela — *"Este card ainda
+              não tem um negócio aberto — abra um em Novo negócio"* — saiu
+              porque deixou de ser verdade: o "+ Adicionar produto" agora desce
+              em todo card, e o negócio é materializado no clique. Mandar a
+              pessoa a outra tela com o botão ali do lado seria pior que não
+              dizer nada.
+            */}
             <p className="text-[12.5px] text-muted-foreground/70">
               Nenhum produto lançado neste negócio.
             </p>
-            {semNegocio && (
-              <p className="text-[11.5px] text-muted-foreground/55">
-                Este card ainda não tem um negócio aberto — é nele que os produtos
-                ficam. Abra um em "Novo negócio" para poder lançá-los.
-              </p>
-            )}
           </div>
         )}
 

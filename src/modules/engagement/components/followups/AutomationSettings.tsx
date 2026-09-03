@@ -37,6 +37,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { usePipelineDisplayConfig } from "@/modules/pipelines";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import {
   useFollowUpAutomations,
   useCreateFollowUpAutomation,
@@ -46,9 +48,12 @@ import {
   type TriggerType,
 } from "@/modules/engagement/hooks/useFollowUps";
 
+// SCRUM-641: o NOME do funil saiu daqui — vinha do seed congelado
+// ("Qualificação"/"Confirmacao"/"Propostas") e aparecia independente do que a
+// org chama seus funis. O rótulo agora vem de `useNomeDoPipe` (display_config).
+// Ícone/cor/etapas seguem cravados (dívida conhecida: etapas legacy).
 const pipeConfig = {
   whatsapp: {
-    label: "Qualificação",
     icon: MessageSquare,
     color: "text-success",
     stages: [
@@ -59,7 +64,6 @@ const pipeConfig = {
     ],
   },
   confirmacao: {
-    label: "Confirmacao",
     icon: Calendar,
     color: "text-chart-4",
     stages: [
@@ -73,7 +77,6 @@ const pipeConfig = {
     ],
   },
   propostas: {
-    label: "Propostas",
     icon: Kanban,
     color: "text-primary",
     stages: [
@@ -87,6 +90,18 @@ const pipeConfig = {
     ],
   },
 };
+
+/**
+ * O nome que a ORG usa para cada funil de sistema (SCRUM-641).
+ * Linha de display ausente = a org não tem (mais) o funil → fallback honesto.
+ */
+function useNomeDoPipe() {
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  return (pipeType: string): string => {
+    const c = displayConfigs?.find((x) => x.pipe_type === pipeType);
+    return c ? c.display_name || NOME_DE_FABRICA[pipeType] || pipeType : "Funil removido";
+  };
+}
 
 const priorityLabels: Record<string, string> = {
   low: "Baixa",
@@ -144,6 +159,7 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
     setIsEditing(false);
   };
 
+  const nomeDoPipe = useNomeDoPipe();
   const pipeTypeConfig = pipeConfig[automation.pipe_type];
   const stageLabel = pipeTypeConfig?.stages.find(
     (s) => s.value === automation.stage
@@ -155,7 +171,7 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
         <div className="flex-1">
           <div className="flex items-center gap-2 mb-2 flex-wrap">
             <Badge variant="outline" className={`text-xs ${pipeTypeConfig?.color}`}>
-              {pipeTypeConfig?.label}
+              {nomeDoPipe(automation.pipe_type)}
             </Badge>
             <Badge variant="secondary" className="text-xs">
               {stageLabel}
@@ -194,9 +210,9 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {Object.entries(pipeConfig).map(([key, config]) => (
+                      {Object.keys(pipeConfig).map((key) => (
                         <SelectItem key={key} value={key}>
-                          {config.label}
+                          {nomeDoPipe(key)}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -350,6 +366,7 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
 // ============================================
 
 function CreateAutomationForm({ onClose }: { onClose: () => void }) {
+  const nomeDoPipe = useNomeDoPipe();
   const createAutomation = useCreateFollowUpAutomation();
   const [newAutomation, setNewAutomation] = useState({
     pipe_type: "whatsapp" as FollowUpAutomation["pipe_type"],
@@ -405,7 +422,7 @@ function CreateAutomationForm({ onClose }: { onClose: () => void }) {
                   <SelectItem key={key} value={key}>
                     <span className="flex items-center gap-2">
                       <Icon className={`w-4 h-4 ${config.color}`} />
-                      {config.label}
+                      {nomeDoPipe(key)}
                     </span>
                   </SelectItem>
                 );
@@ -517,6 +534,7 @@ function CreateAutomationForm({ onClose }: { onClose: () => void }) {
 
 function TimeBasedAutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps) {
   const TriggerIcon = triggerTypeIcons[automation.trigger_type] || Clock;
+  const nomeDoPipe = useNomeDoPipe();
   const pipeTypeConfig = pipeConfig[automation.pipe_type];
 
   const delayLabel = automation.trigger_type === "not_confirmed"
@@ -533,7 +551,7 @@ function TimeBasedAutomationItem({ automation, onUpdate, onDelete }: AutomationI
               {triggerTypeLabels[automation.trigger_type]}
             </Badge>
             <Badge variant="outline" className={`text-xs ${pipeTypeConfig?.color}`}>
-              {pipeTypeConfig?.label}
+              {nomeDoPipe(automation.pipe_type)}
             </Badge>
             <Badge variant="secondary" className="text-xs">
               {delayLabel}
@@ -609,6 +627,7 @@ function TimeBasedAutomationItem({ automation, onUpdate, onDelete }: AutomationI
 // ============================================
 
 function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
+  const nomeDoPipe = useNomeDoPipe();
   const createAutomation = useCreateFollowUpAutomation();
   const [form, setForm] = useState({
     trigger_type: "no_response_from_team" as TriggerType,
@@ -716,7 +735,7 @@ function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
                 <SelectItem key={key} value={key}>
                   <span className="flex items-center gap-2">
                     <Icon className={`w-4 h-4 ${config.color}`} />
-                    {config.label}
+                    {nomeDoPipe(key)}
                   </span>
                 </SelectItem>
               );
@@ -873,6 +892,7 @@ function CreateTimeBasedForm({ onClose }: { onClose: () => void }) {
 // ============================================
 
 function StageBasedTab() {
+  const nomeDoPipe = useNomeDoPipe();
   const { data: automations, isLoading } = useFollowUpAutomations("stage_change");
   const updateAutomation = useUpdateFollowUpAutomation();
   const deleteAutomation = useDeleteFollowUpAutomation();
@@ -936,7 +956,7 @@ function StageBasedTab() {
                 <AccordionTrigger className="hover:no-underline">
                   <div className="flex items-center gap-2">
                     <PipeIcon className={`w-4 h-4 ${config.color}`} />
-                    <span className="font-medium">{config.label}</span>
+                    <span className="font-medium">{nomeDoPipe(pipeType)}</span>
                     <Badge variant="secondary" className="text-xs">
                       {pipeAutomations.filter((a) => a.is_active).length} ativas
                     </Badge>

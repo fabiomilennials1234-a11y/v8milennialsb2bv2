@@ -3,7 +3,7 @@
   "info": {
     "title": "Torque CRM — Public REST API",
     "version": "1.0.0",
-    "description": "API REST pública do Torque CRM. Auth via API Key escopada (tq_live_*).\n\n## Negócio, na interface, é `deal` na API\n\nA interface diz **Negócio**. O contrato diz `deal`. É a mesma coisa.\n\n⚠️ **Se você está vindo do Kommo, atenção ao vocabulário.** Lá, \"lead\" É o negócio — o card que anda no funil. Aqui não: seguimos o modelo do Pipedrive.\n\n- **Lead** = a pessoa ou empresa. Identidade durável. **Nunca ocupa uma etapa.**\n- **Negócio** (`deal`) = uma tentativa de venda para aquele Lead. É o que ocupa etapa e anda pelo funil.\n\nUm Lead pode ter vários Negócios ao longo dos anos, **inclusive dois abertos ao mesmo tempo no mesmo funil** — é assim que recompra se representa.\n\nModelar por analogia com o Kommo leva a errar tudo.\n\n## Criar uma venda: três chamadas\n\nA criação é estrita, no estilo Pipedrive — `POST /deals` exige um Lead que já existe.\n\n```\n1) GET  /api/v1/leads/search?phone=11999990000\n   → 200 { data: [] }                       a pessoa não existe\n\n2) POST /api/v1/leads\n   { \"name\": \"João\", \"phone\": \"11999990000\" }\n   → 201 { \"id\": \"...\" }                    criada\n   → 409 lead_already_exists                JÁ EXISTIA — e o corpo traz\n                                            details.lead_id, use esse\n\n3) POST /api/v1/deals\n   { \"lead_id\": \"...\", \"pipeline\": \"whatsapp\", \"stage\": \"novo\" }\n   → 201 { \"id\": \"...\", \"source\": \"api\" }\n```\n\nO passo 2 **nunca cria uma segunda pessoa** com o mesmo telefone. Se já existe, recusa e devolve quem está lá — siga para o passo 3 com aquele `lead_id`.\n\nEnvie `Idempotency-Key` nas criações: a mesma chave devolve o mesmo recurso em vez de criar outro, o que torna retentativa segura.\n\n## Convenções\n\nListas: `{ data, next_cursor, has_more }` — pagine devolvendo `next_cursor` em `?cursor=`.\nErros: `{ error: { code, message, details? } }`.\nLimite estourado: 429 com `Retry-After`."
+    "description": "API REST pública do Torque CRM. Auth via API Key escopada (tq_live_*).\n\n## Negócio, na interface, é `deal` na API\n\nA interface diz **Negócio**. O contrato diz `deal`. É a mesma coisa.\n\n⚠️ **Se você está vindo do Kommo, atenção ao vocabulário.** Lá, \"lead\" É o negócio — o card que anda no funil. Aqui não: seguimos o modelo do Pipedrive.\n\n- **Lead** = a pessoa ou empresa. Identidade durável. **Nunca ocupa uma etapa.**\n- **Negócio** (`deal`) = uma tentativa de venda para aquele Lead. É o que ocupa etapa e anda pelo funil.\n\nUm Lead pode ter vários Negócios ao longo dos anos, **inclusive dois abertos ao mesmo tempo no mesmo funil** — é assim que recompra se representa.\n\nModelar por analogia com o Kommo leva a errar tudo.\n\n## Criar uma venda: três chamadas\n\nA criação é estrita, no estilo Pipedrive — `POST /deals` exige um Lead que já existe.\n\n```\n1) GET  /api/v1/leads/search?phone=11999990000\n   → 200 { data: [] }                       a pessoa não existe\n\n2) POST /api/v1/leads\n   { \"name\": \"João\", \"phone\": \"11999990000\" }\n   → 201 { \"id\": \"...\" }                    criada\n   → 409 lead_already_exists                JÁ EXISTIA — e o corpo traz\n                                            details.lead_id, use esse\n\n3) POST /api/v1/deals\n   { \"lead_id\": \"...\", \"pipeline\": \"vendas\", \"stage\": \"novo\" }\n   → 201 { \"id\": \"...\", \"source\": \"api\" }\n```\n\nO passo 2 **nunca cria uma segunda pessoa** com o mesmo telefone. Se já existe, recusa e devolve quem está lá — siga para o passo 3 com aquele `lead_id`.\n\nEnvie `Idempotency-Key` nas criações: a mesma chave devolve o mesmo recurso em vez de criar outro, o que torna retentativa segura.\n\n## Convenções\n\nListas: `{ data, next_cursor, has_more }` — pagine devolvendo `next_cursor` em `?cursor=`.\nErros: `{ error: { code, message, details? } }`.\nLimite estourado: 429 com `Retry-After`."
   },
   "servers": [
     {
@@ -474,9 +474,9 @@
                   ],
                   "pipes": [
                     {
-                      "pipeline": "whatsapp",
-                      "pipeline_name": "WhatsApp",
-                      "type": "system",
+                      "pipeline": "vendas",
+                      "pipeline_name": "Funil de Vendas",
+                      "type": "custom",
                       "stage_key": "novo",
                       "sold": false,
                       "sale_value": null,
@@ -771,12 +771,12 @@
                   "data": [
                     {
                       "id": "p1",
-                      "name": "WhatsApp",
-                      "slug": "whatsapp",
-                      "type": "system",
-                      "color": "#25D366",
-                      "icon": "message-circle",
-                      "display_order": 1,
+                      "name": "Funil de Vendas",
+                      "slug": "vendas",
+                      "type": "custom",
+                      "color": "#f59e0b",
+                      "icon": "trending-up",
+                      "display_order": 3,
                       "is_active": true,
                       "stages": [
                         {
@@ -1103,8 +1103,8 @@
               "application/json": {
                 "example": {
                   "moved": true,
-                  "target_stage": "compareceu",
-                  "target_pipe": "confirmacao"
+                  "target_stage": "proposta_enviada",
+                  "target_pipe": "vendas"
                 }
               }
             }
@@ -1128,8 +1128,8 @@
           "content": {
             "application/json": {
               "example": {
-                "pipe": "confirmacao",
-                "stage": "compareceu"
+                "pipe": "vendas",
+                "stage": "proposta_enviada"
               }
             }
           }

@@ -395,7 +395,7 @@ export function CreateOpportunityModal({
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
                     O lead entrará na etapa "Novo" e poderá ser movido através do funil.
-                    Quando chegar em "Agendado", será automaticamente criado no Pipe de Confirmação.
+                    Etapas de sucesso com transição configurada movem o negócio ao funil de destino automaticamente.
                   </p>
                 </motion.div>
               </div>

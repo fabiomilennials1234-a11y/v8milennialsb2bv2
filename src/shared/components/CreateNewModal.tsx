@@ -4,8 +4,9 @@ import { GitBranch, Target, Plus, ArrowLeft } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { CreatePipelineModal, useAvailableSystemPipes, useEnableSystemPipe } from "@/modules/pipelines";
+import { CreatePipelineModal, useAvailableSystemPipes, useCreateCustomPipeline, useEnableSystemPipe } from "@/modules/pipelines";
 import type { SystemPipeType } from "@/modules/pipelines";
+import { FUNIL_DE_VENDAS_NOME, FUNIL_DE_VENDAS_STAGES } from "@/contracts/pipe";
 import { toast } from "sonner";
 
 interface CreateNewModalProps {
@@ -21,6 +22,26 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
   const navigate = useNavigate();
   const hiddenPipes = useAvailableSystemPipes();
   const enablePipe = useEnableSystemPipe();
+  const createPipeline = useCreateCustomPipeline();
+
+  // SCRUM-641: o ÚNICO modelo do produto. Mesma trilha que a org nova ganha
+  // de fábrica no servidor — aqui como template de criação manual, pelo
+  // caminho comum de funil (papéis chegam pela fila classify-stage-roles).
+  const handleCreateSalesFunnel = async () => {
+    try {
+      const pipeline = await createPipeline.mutateAsync({
+        name: FUNIL_DE_VENDAS_NOME,
+        icon: "trending-up",
+        color: "#f59e0b",
+        custom_stages: [...FUNIL_DE_VENDAS_STAGES],
+      });
+      toast.success("Funil criado com sucesso!");
+      if (pipeline?.slug) navigate(`/funil/${pipeline.slug}`);
+      handleClose();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao criar funil");
+    }
+  };
 
   const handleClose = () => {
     onOpenChange(false);
@@ -116,6 +137,20 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
                     <p className="text-xs text-muted-foreground mt-1">Etapas personalizadas</p>
                   </button>
 
+                  {/* SCRUM-641: o único modelo do produto — mesma trilha do funil de fábrica. */}
+                  <button
+                    onClick={handleCreateSalesFunnel}
+                    disabled={createPipeline.isPending}
+                    className="bg-muted/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors disabled:opacity-50"
+                  >
+                    <p className="font-semibold text-sm">{FUNIL_DE_VENDAS_NOME}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Novo → Em conversa → Reunião → Proposta → Ganhou/Perdeu
+                    </p>
+                    <p className="text-xs text-primary mt-1">Criar com etapas prontas</p>
+                  </button>
+
+                  {/* Reativação de funil legado OCULTO (org antiga com registro). */}
                   {hiddenPipes.map((pipe) => (
                     <button
                       key={pipe.pipe_type}
@@ -124,12 +159,8 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
                       className="bg-muted/30 border border-border rounded-lg p-4 text-left hover:border-primary/30 transition-colors disabled:opacity-50"
                     >
                       <p className="font-semibold text-sm">{pipe.display_name}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {pipe.ja_existe ? "Você já teve este funil — está oculto" : "Modelo do sistema"}
-                      </p>
-                      <p className="text-xs text-primary mt-1">
-                        {pipe.ja_existe ? "Clique para reativar" : "Criar com etapas prontas"}
-                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">Você já teve este funil — está oculto</p>
+                      <p className="text-xs text-primary mt-1">Clique para reativar</p>
                     </button>
                   ))}
                 </div>

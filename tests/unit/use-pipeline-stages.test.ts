@@ -11,65 +11,56 @@ vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({
   useRealtimeSubscription: vi.fn(),
 }));
 
-import { DEFAULT_STAGES, type PipelineType } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { FALLBACK_STAGES } from "@/modules/pipelines/hooks/model/usePipelineStages";
+import { FUNIL_DE_VENDAS_STAGES } from "@/contracts/pipe";
 
-describe("DEFAULT_STAGES", () => {
-  it("has stages for the 3 pipeline types (funis)", () => {
-    const types: PipelineType[] = ["whatsapp", "confirmacao", "propostas"];
-    types.forEach((type) => {
-      expect(DEFAULT_STAGES[type], `Missing stages for ${type}`).toBeDefined();
-      expect(DEFAULT_STAGES[type].length).toBeGreaterThan(0);
+/**
+ * SCRUM-641: o antigo `DEFAULT_STAGES` (Record com o trio
+ * whatsapp/confirmacao/propostas) morreu — funil é funil (ADR-0034 D1), e o
+ * fallback de exibição é UMA trilha, espelho do funil de fábrica.
+ */
+describe("FALLBACK_STAGES (trilha única, SCRUM-641)", () => {
+  it("é a trilha do Funil de Vendas: novo → em_conversa → reuniao_marcada → proposta_enviada → ganhou → perdeu", () => {
+    expect(FALLBACK_STAGES.map((s) => s.id)).toEqual([
+      "novo",
+      "em_conversa",
+      "reuniao_marcada",
+      "proposta_enviada",
+      "ganhou",
+      "perdeu",
+    ]);
+  });
+
+  it("espelha FUNIL_DE_VENDAS_STAGES (nomes, cores e flags finais)", () => {
+    expect(FALLBACK_STAGES.map((s) => ({
+      name: s.title,
+      color: s.color,
+      is_final_positive: s.is_final_positive ?? false,
+      is_final_negative: s.is_final_negative ?? false,
+    }))).toEqual([...FUNIL_DE_VENDAS_STAGES]);
+  });
+
+  it("tem exatamente um final positivo (ganhou) e um final negativo (perdeu)", () => {
+    expect(FALLBACK_STAGES.filter((s) => s.is_final_positive).map((s) => s.id)).toEqual(["ganhou"]);
+    expect(FALLBACK_STAGES.filter((s) => s.is_final_negative).map((s) => s.id)).toEqual(["perdeu"]);
+  });
+
+  it("toda etapa tem id, title e color; ids únicos; sem alvo de transição entre funis", () => {
+    const ids = FALLBACK_STAGES.map((s) => s.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    FALLBACK_STAGES.forEach((stage) => {
+      expect(stage.id).toBeTruthy();
+      expect(stage.title).toBeTruthy();
+      expect(stage.color).toBeTruthy();
+      // O trio tinha target_pipe_type (agendado → confirmacao etc.). A trilha
+      // única não aponta para funil nenhum — reintroduzir slug aqui é regressão.
+      expect(stage.target_pipe_type).toBeUndefined();
+      expect(stage.target_stage_key).toBeUndefined();
     });
   });
 
-  /**
-   * SCRUM-618 (D9/ADR-0034): Carteira não é funil. As famílias upsell_* saíram
-   * do vocabulário — o fallback delas mora no módulo carteira
-   * (CARTEIRA_DEFAULT_STAGES em useCarteiraStages). Se alguém as reintroduzir
-   * aqui, este teste cai.
-   */
-  it("não contém as famílias aposentadas da Carteira", () => {
-    expect(DEFAULT_STAGES).not.toHaveProperty("upsell_base");
-    expect(DEFAULT_STAGES).not.toHaveProperty("upsell_gestao");
-  });
-
-  it("whatsapp pipeline has standard stages", () => {
-    const stages = DEFAULT_STAGES.whatsapp;
-    const ids = stages.map((s) => s.id);
-    expect(ids).toContain("novo");
-    expect(ids).toContain("abordado");
-    expect(ids).toContain("respondeu");
-    expect(ids).toContain("agendado");
-  });
-
-  it("every pipeline has at least one final_positive stage", () => {
-    const types: PipelineType[] = ["whatsapp", "confirmacao", "propostas"];
-    types.forEach((type) => {
-      const positives = DEFAULT_STAGES[type].filter((s) => s.is_final_positive);
-      expect(positives.length, `${type} has no positive final stage`).toBeGreaterThanOrEqual(1);
-    });
-  });
-
-  it("every stage has id, title, and color", () => {
-    Object.entries(DEFAULT_STAGES).forEach(([type, stages]) => {
-      stages.forEach((stage) => {
-        expect(stage.id, `${type} stage missing id`).toBeTruthy();
-        expect(stage.title, `${type}.${stage.id} missing title`).toBeTruthy();
-        expect(stage.color, `${type}.${stage.id} missing color`).toBeTruthy();
-      });
-    });
-  });
-
-  it("agendado stage targets confirmacao pipeline", () => {
-    const agendado = DEFAULT_STAGES.whatsapp.find((s) => s.id === "agendado");
-    expect(agendado?.target_pipe_type).toBe("confirmacao");
-    expect(agendado?.target_stage_key).toBe("reuniao_marcada");
-  });
-
-  it("no duplicate stage IDs within a pipeline", () => {
-    Object.entries(DEFAULT_STAGES).forEach(([type, stages]) => {
-      const ids = stages.map((s) => s.id);
-      expect(new Set(ids).size, `Duplicate IDs in ${type}`).toBe(ids.length);
-    });
+  it("não menciona os slugs do trio legado em lugar nenhum", () => {
+    const dump = JSON.stringify(FALLBACK_STAGES);
+    expect(dump).not.toMatch(/whatsapp|confirmacao|propostas|upsell/);
   });
 });

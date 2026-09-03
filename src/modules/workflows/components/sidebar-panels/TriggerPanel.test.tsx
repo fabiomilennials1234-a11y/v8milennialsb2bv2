@@ -19,6 +19,8 @@ vi.mock("@/modules/pipelines", () => ({
   useCustomPipelines: () => ({ data: [] }),
   useCustomPipelineStages: () => ({ data: [] }),
   usePipelineStages: () => ({ data: [] }),
+  usePipelineDisplayConfig: () => ({ data: [] }),
+  useEtapasDoFunil: () => ({ data: [] }),
   getPipelineTypeName: (t: string) => t,
 }));
 

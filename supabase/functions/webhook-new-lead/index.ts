@@ -9,6 +9,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { fireTrigger } from "../_shared/workflow-trigger.ts";
 import { successResponse, errorResponse } from "../_shared/response.ts";
 import { upsertPipeEntry, getPipeEntry, deletePipeEntry, updatePipeEntryById, resolveActiveStageKey } from "../_shared/pipeline-adapter.ts";
+import { resolveLeadDestination, resolveMeetingDestination } from "../_shared/pipeline-destination.ts";
 
 // Helper function to normalize email (lowercase, trim)
 function normalizeEmail(email: string | null | undefined): string | null {
@@ -291,33 +292,45 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
       if (effectiveCompromissoDate) {
         const orgId = existingLead.organization_id || organization_id;
 
-        // Check if already in pipeline_entries(confirmacao)
-        const existingConfirmacao = await getPipeEntry(supabase, existingLead.id, orgId, "confirmacao");
+        // SCRUM-641: destino preferido segue confirmacao/reuniao_marcada (org
+        // antiga: idêntico); org sem esse funil → funil padrão ancorado pelo
+        // papel meeting_booked; sem padrão → sem card (log no helper).
+        const meetDest = await resolveMeetingDestination(supabase, orgId, {
+          ref: "confirmacao",
+          stageKey: "reuniao_marcada",
+        });
 
-        if (existingConfirmacao) {
-          await updatePipeEntryById(supabase, existingConfirmacao.id, {
-            stageKey: "reuniao_marcada",
-            metadata: { meeting_date: newCompromissoDate },
-          });
-        } else {
-          await upsertPipeEntry(supabase, {
-            leadId: existingLead.id,
-            orgId,
-            slug: "confirmacao",
-            stageKey: "reuniao_marcada",
-            metadata: {
-              sdr_id: sdr_id || existingLead.sdr_id || null,
-              meeting_date: newCompromissoDate,
-            },
-            assignedTo: sdr_id || existingLead.sdr_id || null,
-          });
+        if (meetDest) {
+          const existingConfirmacao = await getPipeEntry(supabase, existingLead.id, orgId, meetDest.ref);
+
+          if (existingConfirmacao) {
+            await updatePipeEntryById(supabase, existingConfirmacao.id, {
+              stageKey: meetDest.stageKey,
+              metadata: { meeting_date: newCompromissoDate },
+            });
+          } else {
+            await upsertPipeEntry(supabase, {
+              leadId: existingLead.id,
+              orgId,
+              slug: meetDest.ref,
+              stageKey: meetDest.stageKey,
+              metadata: {
+                sdr_id: sdr_id || existingLead.sdr_id || null,
+                meeting_date: newCompromissoDate,
+              },
+              assignedTo: sdr_id || existingLead.sdr_id || null,
+            });
+          }
         }
 
         // Check if lead is in pipeline_entries(propostas) with stage "compromisso_marcado"
         // If so, keep in pipeline_entries(whatsapp) (exception rule)
+        // SCRUM-641: só remove quando a reunião NÃO caiu no fallback — o funil
+        // padrão pode ser o próprio whatsapp da org.
         const existingProposta = await getPipeEntry(supabase, existingLead.id, orgId, "propostas");
 
-        if (!existingProposta || existingProposta.stage_key !== "compromisso_marcado") {
+        if (!meetDest?.usedDefaultPipeline
+            && (!existingProposta || existingProposta.stage_key !== "compromisso_marcado")) {
           // Only remove from pipeline_entries(whatsapp) if NOT in compromisso_marcado
           await deletePipeEntry(supabase, existingLead.id, orgId, "whatsapp");
         }
@@ -357,18 +370,22 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
     // CREATE NEW LEAD (NO DUPLICATE FOUND)
     // Atomic lead + pipe creation via RPC (single transaction)
     //
-    // SCRUM-624: esta porta não tem config de destino própria — mantém os
-    // destinos históricos (funis SEMEADOS 'whatsapp'/'confirmacao', resolvidos
-    // por slug via adapter nos caminhos de unificação acima; destino
-    // configurável fica registrado como incremento). O que muda: a etapa de
-    // entrada do ramo whatsapp deixa de ser o literal 'novo' e passa a ser a
-    // 1ª etapa ATIVA do funil (ghost-stage guard via adapter) — paridade com
-    // lead-webhook/lead-service/webhook-orchestrator, que já faziam isso.
-    // 'reuniao_marcada' do ramo confirmacao é semântico (reunião) e fica.
-    const pipeType = compromisso_date ? 'confirmacao' : 'whatsapp';
-    const whatsappEntryStage = pipeType === 'whatsapp'
-      ? ((await resolveActiveStageKey(supabase, organization_id, 'whatsapp')) ?? 'novo')
-      : null;
+    // SCRUM-641: destinos preferidos seguem os históricos ('whatsapp' para
+    // lead comum, 'confirmacao' para reunião) — org antiga com o trio se
+    // comporta byte a byte como antes, inclusive a atomicidade do RPC. Org
+    // SEM o funil preferido (org nova pós-funil-único) cai no funil PADRÃO:
+    // reunião ancora na etapa de papel meeting_booked; lead comum na 1ª etapa
+    // ativa. Nesse fallback o RPC cria só o lead (p_pipe_type null — o IF do
+    // RPC só conhece o trio) e o card nasce via adapter logo depois — mesmo
+    // playbook do lead-webhook (lead primeiro, card depois).
+    const dest = compromisso_date
+      ? await resolveMeetingDestination(supabase, organization_id, { ref: 'confirmacao', stageKey: 'reuniao_marcada' })
+      : await resolveLeadDestination(supabase, organization_id, { ref: 'whatsapp' });
+
+    // Caminho histórico (trio existe): o RPC posiciona atomicamente.
+    const rpcPipeType = dest && !dest.usedDefaultPipeline ? (compromisso_date ? 'confirmacao' : 'whatsapp') : null;
+    const rpcPipeStatus = rpcPipeType ? dest!.stageKey : null;
+    const pipeLabel = dest?.ref ?? null;
 
     const { data: result, error: rpcError } = await supabase.rpc('create_lead_with_pipe', {
       p_name: name,
@@ -391,8 +408,8 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
       p_utm_campaign: utm_campaign || null,
       p_utm_term: utm_term || null,
       p_utm_content: utm_content || null,
-      p_pipe_type: pipeType,
-      p_pipe_status: pipeType === 'confirmacao' ? 'reuniao_marcada' : whatsappEntryStage,
+      p_pipe_type: rpcPipeType,
+      p_pipe_status: rpcPipeStatus,
       p_pipe_meeting_date: compromisso_date || null,
     });
 
@@ -402,12 +419,29 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
 
     const leadId = result.lead_id;
 
-    if (pipeType === 'confirmacao') {
-      // Create history entry for confirmacao
+    // Fallback SCRUM-641: destino fora do trio (funil padrão) — o card nasce
+    // aqui, via adapter. dest null = org sem funil padrão: lead SEM card, log.
+    if (dest && dest.usedDefaultPipeline) {
+      await upsertPipeEntry(supabase, {
+        leadId,
+        orgId: organization_id,
+        slug: dest.ref,
+        stageKey: dest.stageKey,
+        metadata: compromisso_date
+          ? { sdr_id: sdr_id || null, meeting_date: compromisso_date }
+          : { sdr_id: sdr_id || null },
+        assignedTo: sdr_id || null,
+      });
+    } else if (!dest) {
+      console.warn(`[webhook-new-lead] lead ${leadId} criado SEM card: org ${organization_id} sem funil de destino (nem trio, nem funil padrão).`);
+    }
+
+    if (compromisso_date) {
+      // Create history entry for reunião
       await supabase.from("lead_history").insert({
         lead_id: leadId,
         action: "lead_created",
-        description: `Sistema: Lead ${name} adicionado automaticamente no pipe de confirmação com reunião marcada para ${compromisso_date}`,
+        description: `Sistema: Lead ${name} adicionado automaticamente com reunião marcada para ${compromisso_date}`,
         created_by: null,
       });
 
@@ -417,13 +451,13 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
         status: "success",
         entityType: "lead",
         entityId: leadId,
-        payloadSnapshot: { pipe: "confirmacao" },
+        payloadSnapshot: { pipe: pipeLabel },
       });
 
       return successResponse({
-        message: "Lead criado com sucesso no pipe de confirmação",
+        message: "Lead criado com sucesso com reunião marcada",
         lead_id: leadId,
-        pipe: "confirmacao",
+        pipe: pipeLabel,
       }, corsHeaders, { req });
     }
 
@@ -442,7 +476,7 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
       status: "success",
       entityType: "lead",
       entityId: leadId,
-      payloadSnapshot: { pipe: "whatsapp" },
+      payloadSnapshot: { pipe: pipeLabel },
     });
 
     // Fire webhook_received workflow trigger (fire-and-forget)
@@ -457,7 +491,7 @@ Deno.serve(withErrorBoundary('webhook-new-lead', async (req) => {
     return successResponse({
       message: "Lead criado com sucesso",
       lead_id: leadId,
-      pipe: "whatsapp",
+      pipe: pipeLabel,
     }, corsHeaders, { req });
 
   } catch (error) {

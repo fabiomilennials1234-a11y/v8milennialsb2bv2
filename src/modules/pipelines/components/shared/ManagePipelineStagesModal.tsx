@@ -18,14 +18,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  PipelineType,
   StageFamily,
   useCreatePipelineStage,
   useUpdatePipelineStage,
   useDeletePipelineStage,
   useReorderPipelineStages,
   usePipelineStageLeadCounts,
-  getPipelineTypeName,
   getStageFamilyName,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import {
@@ -35,6 +33,8 @@ import {
   useReorderCustomPipelineStages,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import { usePipeDispatchRules } from "@/modules/pipelines/hooks/config/usePipeDispatchRules";
+import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import {
   TransitionSelector,
   type TransitionTarget,
@@ -268,6 +268,13 @@ function SortableStageItem({
   } = useSortable({ id: stage.id });
 
   const { data: customPipelines } = useCustomPipelines();
+  // Nome do funil de sistema alvo como a ORG o vê (SCRUM-641): display_config
+  // manda; linha ausente = a org não tem mais o funil → fallback honesto.
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const nomeDoPipeAlvo = (pipeType: string): string => {
+    const c = displayConfigs?.find((x) => x.pipe_type === pipeType);
+    return c ? c.display_name || NOME_DE_FABRICA[pipeType] || pipeType : "Funil removido";
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -422,7 +429,7 @@ function SortableStageItem({
               )}
               {stage.is_final_positive && stage.target_pipe_type && (
                 <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                  → {getPipelineTypeName(stage.target_pipe_type as PipelineType)}
+                  → {nomeDoPipeAlvo(stage.target_pipe_type)}
                 </span>
               )}
               {stage.is_final_positive && stage.target_pipeline_id && (
@@ -1094,11 +1101,20 @@ export function ManagePipelineStagesModal({
   pipelineId,
   stages,
 }: ManagePipelineStagesModalProps) {
+  // SCRUM-641: família de sistema é batizada pelo display_config da org;
+  // `getStageFamilyName` fica só para o resíduo Carteira (upsell_*).
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const configDaFamilia = displayConfigs?.find((c) => c.pipe_type === pipelineType);
+  const nomeDaFamilia = configDaFamilia
+    ? configDaFamilia.display_name || NOME_DE_FABRICA[pipelineType] || pipelineType
+    : pipelineType === "upsell_base" || pipelineType === "upsell_gestao"
+      ? getStageFamilyName(pipelineType)
+      : "Funil removido";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Gerenciar Etapas - {getStageFamilyName(pipelineType)}</DialogTitle>
+          <DialogTitle>Gerenciar Etapas - {nomeDaFamilia}</DialogTitle>
           <DialogDescription>
             Crie, edite, reordene ou remova etapas do funil. Arraste para reordenar.
           </DialogDescription>

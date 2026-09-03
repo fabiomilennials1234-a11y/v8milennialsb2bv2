@@ -45,10 +45,12 @@ import { useLeadsDeals } from "../../hooks/useLeadsDeals";
  * Tirar isso do funil custaria ao vendedor a tela onde ele trabalha o dia todo.
  */
 
+/**
+ * SCRUM-641: o trio saiu — `pipe.label` já chega resolvido pelo
+ * `useLeadAllPipelines` com o nome que a ORG usa. Só a Carteira (não-funil,
+ * D9/ADR-0034) mantém rótulo próprio.
+ */
 const SYSTEM_SHORT_LABEL: Record<string, string> = {
-  whatsapp: "Qualificação",
-  confirmacao: "Confirmação",
-  propostas: "Propostas",
   upsell: "Carteira",
 };
 

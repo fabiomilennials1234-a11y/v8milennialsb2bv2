@@ -37,8 +37,10 @@ export function useGlobalShortcuts({ onShowHelp }: { onShowHelp: () => void }) {
     { key: "g d", label: "Dashboard", group: "Navegacao", action: () => navigate("/"), seq: true },
     { key: "g l", label: "Leads", group: "Navegacao", action: () => navigate("/leads"), seq: true },
     { key: "g w", label: "Funil padrão", group: "Navegacao", action: () => navigate(defaultFunnelPath), seq: true },
-    { key: "g c", label: "Confirmacao", group: "Navegacao", action: () => navigate("/funil/confirmacao"), seq: true },
-    { key: "g p", label: "Propostas", group: "Navegacao", action: () => navigate("/funil/propostas"), seq: true },
+    // SCRUM-641: `g c`/`g p` (rotas fixas /funil/confirmacao|propostas do trio
+    // legado) morreram — funil é funil, nenhum atalho aponta slug fixo. O hub
+    // /funis lista os funis reais da org.
+    { key: "g f", label: "Funis", group: "Navegacao", action: () => navigate("/funis"), seq: true },
     { key: "g m", label: "Chat", group: "Navegacao", action: () => navigate("/chat-whatsapp"), seq: true },
     { key: "?", label: "Atalhos", group: "Geral", action: onShowHelp },
   ];

@@ -33,7 +33,7 @@ export function useWhatsAppInstancesForUser(options?: { enabled?: boolean }) {
 
       const { data: instances, error: instError } = await supabase
         .from("whatsapp_instances")
-        .select("id, instance_name, status, provider")
+        .select("id, instance_name, status, provider, phone_number")
         .eq("organization_id", organizationId)
         .neq("status", "error")
         .order("instance_name");

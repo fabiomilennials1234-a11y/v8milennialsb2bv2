@@ -105,7 +105,7 @@ export {
   useCreatePipelineStage,
   useUpdatePipelineStage,
   useDeletePipelineStage,
-  DEFAULT_STAGES,
+  FALLBACK_STAGES,
   useAllPipelineStageOptions,
   usePipelineStageOptions,
   getPipelineTypeName,

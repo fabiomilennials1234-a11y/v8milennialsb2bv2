@@ -17,6 +17,7 @@
 
 import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { CanonicalClient } from "../types.ts";
+import { type OwnerMap } from "./owner-map.ts";
 import {
   clientEnrichmentColumns,
   erpDateToTimestamp,
@@ -66,6 +67,8 @@ export function buildClientRows(
    * órfãs daquele número, em vez de todos disputarem as mesmas mensagens.
    */
   phoneAvailable = true,
+  /** De-para de representante. Ausente = nasce sem dono, como antes. */
+  ownerMap?: OwnerMap,
 ): { lead: Record<string, unknown>; carteira: Record<string, unknown> } {
   return {
     lead: {
@@ -90,7 +93,7 @@ export function buildClientRows(
       external_source: source,
       external_id: client.externalId,
       external_ref: client.externalRef,
-      ...clientEnrichmentColumns(client),
+      ...clientEnrichmentColumns(client, ownerMap),
       // Recência já na criação: sem isto o cliente entraria na carteira sem
       // "dias sem pedido", e a saúde só existiria depois que houvesse pedido
       // registrado no CRM — que para a Café Jurerê ainda não acontece.
@@ -121,6 +124,13 @@ export async function bulkCreateClients(
     usedPhones?: Set<string>;
     /** Normalizador — espelho de `normalize_brazilian_phone`. */
     normalizePhone?: (phone: string | null) => string | null;
+    /**
+     * De-para de representante do ERP → team member.
+     *
+     * Ausente (o padrão) mantém o comportamento antigo: o cliente nasce sem
+     * dono. Só código explicitamente mapeado ganha `responsible_id`.
+     */
+    ownerMap?: OwnerMap;
   },
 ): Promise<BulkCreateResult> {
   const { organizationId, source, clients } = params;
@@ -134,7 +144,7 @@ export async function bulkCreateClients(
       const norm = c.phone ? normalize(c.phone) : null;
       const available = !norm || !usedPhones.has(norm);
       if (norm && available) usedPhones.add(norm);
-      return buildClientRows(organizationId, source, c, newId(), available);
+      return buildClientRows(organizationId, source, c, newId(), available, params.ownerMap);
     });
     const leadIds = rows.map((r) => r.lead.id as string);
 

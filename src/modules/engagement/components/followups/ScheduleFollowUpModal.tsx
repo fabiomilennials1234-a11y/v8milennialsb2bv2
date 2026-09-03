@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNomeDoPipe } from "../../hooks/useNomeDoPipe";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Calendar as CalendarIcon, Clock } from "lucide-react";
@@ -49,6 +50,8 @@ export function ScheduleFollowUpModal({
   sourcePipeId,
   defaultAssignedTo,
 }: ScheduleFollowUpModalProps) {
+  // Nome do funil como a ORG o vê (SCRUM-641).
+  const nomeDoPipe = useNomeDoPipe();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState<Date>();
@@ -107,7 +110,7 @@ export function ScheduleFollowUpModal({
             <p className="text-sm font-medium">{leadName}</p>
             {sourcePipe && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Via: {sourcePipe === "whatsapp" ? "WhatsApp" : sourcePipe === "confirmacao" ? "Confirmação" : "Propostas"}
+                Via: {nomeDoPipe(sourcePipe)}
               </p>
             )}
           </div>
