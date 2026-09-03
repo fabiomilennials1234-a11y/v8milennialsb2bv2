@@ -153,6 +153,13 @@ function usesLeadPositionFilter(triggerConfig: Record<string, unknown> | null | 
   );
 }
 
+/**
+ * Cooldown padrão do `lead_replied`, em minutos. Existe porque o modo padrão
+ * (`any`) reage a QUALQUER mensagem: sem freio, a rajada normal do WhatsApp
+ * ("oi" + "tudo bem?" + "?") dispararia a automação três vezes em 40 segundos.
+ */
+const COOLDOWN_PADRAO_MINUTOS = 60;
+
 /** Modos que exigem evidência de tempo; `any` não paga query nenhuma. */
 function usesReplyModeEvidence(triggerConfig: Record<string, unknown> | null | undefined): boolean {
   const modo = (triggerConfig || {}).reply_mode;
@@ -497,10 +504,24 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     // stage_changed uses a 300s window (re-dispatching the same lead within 5min is
     // never intended); other triggers use 60s. leadId-less triggers get a null key
     // (never deduped) — distinct NULLs, so they always insert.
-    const dedupWindowSeconds = triggerType === "stage_changed" ? 300 : 60;
+    // `lead_replied` tem janela POR WORKFLOW: é o cooldown que o usuário
+    // configura na tela ("não repetir por N minutos"). Os outros gatilhos
+    // seguem com a janela fixa de sempre.
+    //
+    // Efeito de borda assumido e documentado na spec: balde é fatia de tempo,
+    // não janela deslizante — 10h59 e 11h01 caem em baldes diferentes e as duas
+    // passam. Teto de uma execução extra, só na virada. Cooldown exato exigiria
+    // uma consulta à última execução a cada mensagem recebida.
+    const janelaDoWorkflow = (config: Record<string, unknown> | null | undefined): number => {
+      if (triggerType === "stage_changed") return 300;
+      if (triggerType !== "lead_replied") return 60;
+      const minutos = Number((config || {}).cooldown_minutes);
+      if (!Number.isFinite(minutos) || minutos <= 0) return COOLDOWN_PADRAO_MINUTOS * 60;
+      return Math.round(minutos * 60);
+    };
     const now = new Date();
     const executions = await Promise.all(
-      deduped.map(async (w: { id: string }) => ({
+      deduped.map(async (w: TriggerWorkflowRow) => ({
         workflow_id: w.id,
         organization_id: organizationId,
         lead_id: leadId,
@@ -528,7 +549,7 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
               triggerType,
               payload: entryId ? { ...ctxObj, pipeline_entry_id: entryId } : ctxObj,
               now,
-              windowSeconds: dedupWindowSeconds,
+              windowSeconds: janelaDoWorkflow(w.trigger_config),
             })
           : null,
       })),

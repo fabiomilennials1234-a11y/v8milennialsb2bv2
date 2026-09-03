@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   matchesTriggerConfig,
   fireTrigger,
@@ -1325,6 +1325,113 @@ describe("fireTrigger", () => {
       expect((em1.context as Record<string, unknown>).lead_stage_ids).toEqual([ETAPA_1]);
       expect((em2.context as Record<string, unknown>).lead_stage_ids).toEqual([ETAPA_2]);
       expect(hashOf(em1.trigger_dedup_key)).toBe(hashOf(em2.trigger_dedup_key));
+    });
+
+    // ── cooldown ──
+    // Não há mecanismo novo: a chave de dedup já é `${trigger}:${hash}:${balde}`
+    // e o índice único parcial (workflow_id, lead_id, trigger_dedup_key) já
+    // garante que só o primeiro insert do balde vence. Cooldown é esse balde
+    // com outro tamanho.
+    describe("cooldown", () => {
+      afterEach(() => vi.useRealTimers());
+
+      const baldeDe = (key: unknown) => String(key).split(":")[2];
+
+      async function dispararEmDoisMomentos(config: Record<string, unknown>, minutosEntre: number) {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-09-03T12:00:00.000Z"));
+
+        const primeiro = createMockSupabase();
+        seedWorkflow(primeiro.mockTable, config);
+        await fireTrigger({
+          supabase: primeiro.sb,
+          organizationId: "org-1",
+          triggerType: "lead_replied",
+          leadId: "lead-1",
+          context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+        });
+
+        vi.advanceTimersByTime(minutosEntre * 60 * 1000);
+
+        const segundo = createMockSupabase();
+        seedWorkflow(segundo.mockTable, config);
+        await fireTrigger({
+          supabase: segundo.sb,
+          organizationId: "org-1",
+          triggerType: "lead_replied",
+          leadId: "lead-1",
+          context: { trigger: "lead_replied", channel: "whatsapp", message: "e aí?" },
+        });
+
+        return [
+          primeiro.getInserted("workflow_executions")[0].trigger_dedup_key,
+          segundo.getInserted("workflow_executions")[0].trigger_dedup_key,
+        ];
+      }
+
+      it("duas respostas dentro do cooldown caem no mesmo balde", async () => {
+        const [a, b] = await dispararEmDoisMomentos({ cooldown_minutes: 60 }, 10);
+        expect(baldeDe(a)).toBe(baldeDe(b));
+      });
+
+      it("passado o cooldown, o balde muda e a automação pode rodar de novo", async () => {
+        const [a, b] = await dispararEmDoisMomentos({ cooldown_minutes: 60 }, 90);
+        expect(baldeDe(a)).not.toBe(baldeDe(b));
+      });
+
+      it("cooldown curto deixa passar o que o longo segurava", async () => {
+        const [a, b] = await dispararEmDoisMomentos({ cooldown_minutes: 1 }, 10);
+        expect(baldeDe(a)).not.toBe(baldeDe(b));
+      });
+
+      it("sem cooldown configurado, o padrão de 60min vale", async () => {
+        const [a, b] = await dispararEmDoisMomentos({}, 10);
+        expect(baldeDe(a)).toBe(baldeDe(b));
+      });
+
+      it("valor inválido cai no padrão, não em janela zero", async () => {
+        const [a, b] = await dispararEmDoisMomentos({ cooldown_minutes: 0 }, 10);
+        expect(baldeDe(a)).toBe(baldeDe(b));
+
+        const [c, d] = await dispararEmDoisMomentos({ cooldown_minutes: "abacaxi" }, 10);
+        expect(baldeDe(c)).toBe(baldeDe(d));
+      });
+
+      // O cooldown é do `lead_replied`. Mexer nele não pode alterar a janela
+      // dos outros gatilhos — `stage_changed` tem 300s por causa do incidente
+      // de re-disparo (Motor 100, 2026-07-03).
+      it("não altera a janela dos outros gatilhos", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-09-03T12:00:00.000Z"));
+
+        const dispararStageChanged = async () => {
+          const { sb, mockTable, getInserted } = createMockSupabase();
+          mockTable("workflows", [
+            {
+              id: "wf-stage",
+              trigger_config: { cooldown_minutes: 60 },
+              organization_id: "org-1",
+              trigger_type: "stage_changed",
+              is_active: true,
+            },
+          ]);
+          await fireTrigger({
+            supabase: sb,
+            organizationId: "org-1",
+            triggerType: "stage_changed",
+            leadId: "lead-1",
+            context: { trigger: "stage_changed" },
+          });
+          return getInserted("workflow_executions")[0].trigger_dedup_key;
+        };
+
+        const a = await dispararStageChanged();
+        vi.advanceTimersByTime(10 * 60 * 1000);
+        const b = await dispararStageChanged();
+
+        // 10 min > janela de 300s: baldes diferentes, o cooldown foi ignorado.
+        expect(baldeDe(a)).not.toBe(baldeDe(b));
+      });
     });
 
     it("fail-closed de ponta a ponta quando a leitura dos funis falha", async () => {
