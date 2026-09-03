@@ -27,9 +27,20 @@ const identity = {
   isReady: true,
 };
 
+/**
+ * `agenda.view_all` nasce LIGADA no catálogo: a agenda é da operação, e ver só
+ * o que é seu é a exceção que um admin escolhe. O default daqui espelha o do
+ * banco de propósito — se um dia divergirem, é este teste que grita.
+ */
+const permissao = { podeVerTodos: true, carregando: false };
+
 vi.mock("@/modules/identity", () => ({
   useAuth: () => ({ session: { user: { id: USER_ID }, access_token: "t" } }),
   useIdentity: () => identity,
+  useCanDo: (chave: string) =>
+    chave === "agenda.view_all"
+      ? { allowed: permissao.podeVerTodos, reason: "", isLoading: permissao.carregando }
+      : { allowed: true, reason: "", isLoading: false },
   useTeamMembers: () => ({
     data: [
       { id: TEAM_MEMBER_ID, user_id: USER_ID, name: "Eu Mesmo", is_active: true },
@@ -125,6 +136,8 @@ beforeEach(() => {
   updateMeeting.mockClear();
   identity.isAdmin = false;
   identity.isReady = true;
+  permissao.podeVerTodos = true;
+  permissao.carregando = false;
   vi.setSystemTime(new Date(2026, 7, 24, 9, 0));
 });
 
@@ -159,7 +172,26 @@ describe("Agenda — moldura da tela", () => {
 });
 
 describe("Agenda — quem vê o quê", () => {
-  it("usuário comum vê o seu e NÃO vê o do colega", () => {
+  it("por padrão a agenda é da OPERAÇÃO: usuário comum vê o do colega também", () => {
+    agendaEvents.push(
+      rpcEvent({ id: "meu", title: "Reunião minha", created_by: USER_ID }),
+      rpcEvent({
+        id: "dela",
+        title: "Reunião da Ana",
+        created_by: OUTRO_MEMBER_ID,
+        creator_name: "Ana Souza",
+      }),
+    );
+
+    render(<Agenda />);
+
+    expect(screen.getByText(/Reunião minha/)).toBeInTheDocument();
+    expect(screen.getByText(/Reunião da Ana/)).toBeInTheDocument();
+    expect(screen.getByText("2 atividades")).toBeInTheDocument();
+  });
+
+  it("sem a permissão `agenda.view_all`, vê o seu e NÃO vê o do colega", () => {
+    permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({ id: "meu", title: "Reunião minha", created_by: USER_ID }),
       rpcEvent({
@@ -177,7 +209,8 @@ describe("Agenda — quem vê o quê", () => {
     expect(screen.getByText("1 atividade")).toBeInTheDocument();
   });
 
-  it("usuário comum enxerga o próprio follow-up, que vem com id de TEAM_MEMBER", () => {
+  it("recortado, enxerga o próprio follow-up, que vem com id de TEAM_MEMBER", () => {
+    permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({
         id: "fu",
@@ -192,7 +225,8 @@ describe("Agenda — quem vê o quê", () => {
     expect(screen.getByText(/Ligar amanhã/)).toBeInTheDocument();
   });
 
-  it("follow-up SEM responsável não some — é o que a pessoa acabou de criar", () => {
+  it("recortado, follow-up SEM responsável não some — é o que a pessoa acabou de criar", () => {
+    permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({
         id: "fu-sem-dono",
@@ -208,7 +242,8 @@ describe("Agenda — quem vê o quê", () => {
     expect(screen.getByText(/Retornar ligação/)).toBeInTheDocument();
   });
 
-  it("reunião marcada POR um colega COM o usuário aparece na agenda dele", () => {
+  it("recortado, reunião marcada POR um colega COM o usuário aparece na agenda dele", () => {
+    permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({
         id: "conv-1",
@@ -228,15 +263,27 @@ describe("Agenda — quem vê o quê", () => {
     expect(screen.getByText(/Reunião com a Ana/)).toBeInTheDocument();
   });
 
-  it("usuário comum não recebe o filtro de atendente", () => {
+  it("quem vê a operação inteira recebe o filtro de atendente", () => {
+    render(<Agenda />);
+    expect(screen.getByLabelText("Filtrar por atendente")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filtrar por tipo")).toBeInTheDocument();
+  });
+
+  it("quem está recortado NÃO recebe o filtro de atendente", () => {
+    permissao.podeVerTodos = false;
     render(<Agenda />);
     expect(screen.queryByLabelText("Filtrar por atendente")).toBeNull();
     // O filtro de tipo continua para todos.
     expect(screen.getByLabelText("Filtrar por tipo")).toBeInTheDocument();
   });
 
-  it("admin vê os dois e consegue identificar o responsável", () => {
+  it("admin atravessa mesmo com a permissão desligada — o cargo não perde a operação", () => {
+    // `get-member-permissions` ainda não lê `organization_feature_defaults`:
+    // um default de org desligado chegaria aqui como `false` para o admin
+    // também. O banco dá `true` para admin antes de qualquer camada; a tela
+    // precisa concordar.
     identity.isAdmin = true;
+    permissao.podeVerTodos = false;
     agendaEvents.push(
       rpcEvent({ id: "meu", title: "Reunião minha", created_by: USER_ID }),
       rpcEvent({
@@ -255,15 +302,23 @@ describe("Agenda — quem vê o quê", () => {
     expect(screen.getByText("2 atividades")).toBeInTheDocument();
   });
 
-  it("admin recebe o filtro de atendente", () => {
-    identity.isAdmin = true;
-    render(<Agenda />);
-    expect(screen.getByLabelText("Filtrar por atendente")).toBeInTheDocument();
-  });
-
   it("enquanto a identidade não resolve, vale a regra restrita", () => {
     identity.isAdmin = true;
     identity.isReady = false; // ainda carregando
+    agendaEvents.push(
+      rpcEvent({
+        id: "dela",
+        title: "Reunião da Ana",
+        created_by: OUTRO_MEMBER_ID,
+      }),
+    );
+
+    render(<Agenda />);
+    expect(screen.queryByText(/Reunião da Ana/)).not.toBeInTheDocument();
+  });
+
+  it("enquanto a PERMISSÃO não resolve, vale a regra restrita", () => {
+    permissao.carregando = true;
     agendaEvents.push(
       rpcEvent({
         id: "dela",

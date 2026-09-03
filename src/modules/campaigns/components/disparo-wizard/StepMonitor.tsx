@@ -204,7 +204,7 @@ export function StepMonitor({ draft, planId }: StepMonitorProps) {
       )}
 
       {/* Post-send destination note — only when the plan moves leads on send */}
-      {!terminal && draft.postSendMode === "move" && draft.postSendStageKey && (
+      {!terminal && draft.postSendMode === "move" && draft.postSendStageId && (
         <p className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/70">
           <MoveRight className="h-3.5 w-3.5" />
           Contatos enviados vão pra {draft.postSendLabel}.

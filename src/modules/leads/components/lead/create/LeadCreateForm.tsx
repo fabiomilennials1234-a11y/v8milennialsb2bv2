@@ -26,6 +26,7 @@ import {
   isStandardDestination,
   DEST_TO_PIPE_TYPE,
 } from "@/lib/lead/lead-destinations";
+import { destinosDeSistema } from "@/contracts/pipe";
 import type { LeadDestination } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { usePipeOps } from "../../../pipe-ops";
 import { useCampanhas } from "@/modules/campaigns/hooks/useCampanhas";
@@ -80,6 +81,22 @@ export function LeadCreateForm({
   const { data: campanhas = [] } = useCampanhas();
   const pipeOps = usePipeOps();
   const { data: customPipelines = [] } = pipeOps.useCustomPipelines();
+  /**
+   * Os funis de sistema COM O NOME DA ORG.
+   *
+   * Até aqui esta lista era três `<SelectItem>` com "Qualificação",
+   * "Confirmação" e "Propostas" escritos à mão — nomes que vêm do seed de
+   * `create_default_pipelines()` e que a navegação NUNCA mostra (ela usa
+   * `pipeline_display_config.display_name`, cujos padrões são "Oportunidades",
+   * "Agendamentos" e "Orçamentos"). A pessoa escolhia um funil pelo nome errado
+   * e o encontrava com outro. É o SCRUM-608.
+   *
+   * O segundo defeito era mais caro: os três eram FIXOS. Org que excluiu um
+   * funil de sistema continuava recebendo a opção, e o lead ia parar num funil
+   * que ela não tem — sem erro, porque o INSERT em si funciona.
+   */
+  const { data: systemPipes } = pipeOps.useSystemPipes();
+  const destinosSistema = destinosDeSistema(systemPipes);
   const { data: customPipeStages = [] } = pipeOps.useCustomPipelineStages(
     destination === "custom" ? customPipelineId : undefined
   );
@@ -98,6 +115,28 @@ export function LeadCreateForm({
     setCustomStageId("");
     setCustomPipelineId("");
   }, [destination]);
+
+  /**
+   * O destino inicial só pode ser decidido DEPOIS que se sabe quais funis a org
+   * tem. `useState("qualificacao")` é um chute que era sempre verdadeiro quando
+   * os três funis eram fixos e passou a ser falso quando funil de sistema virou
+   * opt-in (#1848): numa org sem Oportunidades, o campo abriria mostrando um
+   * destino que a própria lista não oferece — e o `<Select>` do Radix renderiza
+   * isso como campo VAZIO, sem erro nenhum.
+   *
+   * Corrige uma vez, no primeiro render em que a lista chega, e só quando o
+   * destino atual não está entre os oferecidos. Não sequestra escolha do
+   * usuário: "campanha", "custom" e "none" não passam por aqui.
+   */
+  useEffect(() => {
+    if (!systemPipes) return;
+    if (!isStandardDestination(destination)) return;
+    if (destinosSistema.some((d) => d.destination === destination)) return;
+    setDestination((destinosSistema[0]?.destination ?? "none") as LeadDestination);
+    // `destinosSistema` é derivado de `systemPipes` a cada render; depender dele
+    // reexecutaria o efeito à toa. A dependência real é a query.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemPipes, destination]);
 
   useEffect(() => {
     setCustomStageId("");
@@ -259,11 +298,15 @@ export function LeadCreateForm({
             </SelectTrigger>
             <SelectContent>
               {/* Sem rótulo de espécie: funil é funil. */}
-              <SelectGroup>
-                <SelectItem value="qualificacao">Qualificação</SelectItem>
-                <SelectItem value="confirmacao">Confirmação</SelectItem>
-                <SelectItem value="propostas">Propostas</SelectItem>
-              </SelectGroup>
+              {destinosSistema.length > 0 && (
+                <SelectGroup>
+                  {destinosSistema.map((d) => (
+                    <SelectItem key={d.destination} value={d.destination}>
+                      {d.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              )}
               {customPipelines.length > 0 && (
                 <SelectGroup>
                   {customPipelines.map((pipe) => (

@@ -55,10 +55,8 @@ describe("SIDEBAR_FEATURE_MAP", () => {
     expect(SIDEBAR_FEATURE_MAP["/funis"]).toBe("funnels");
   });
 
-  it("maps pipe sub-paths to funnels", () => {
-    expect(SIDEBAR_FEATURE_MAP["/pipe-whatsapp"]).toBe("funnels");
-    expect(SIDEBAR_FEATURE_MAP["/pipe-confirmacao"]).toBe("funnels");
-    expect(SIDEBAR_FEATURE_MAP["/pipe-propostas"]).toBe("funnels");
+  it("maps o prefixo /funil (rota única pós-637) to funnels", () => {
+    expect(SIDEBAR_FEATURE_MAP["/funil"]).toBe("funnels");
   });
 
   it("maps /upsell to carteira", () => {

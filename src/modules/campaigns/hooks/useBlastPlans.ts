@@ -46,13 +46,10 @@ export interface BlastPlanLotBreakdown {
  * blast-plan-create against the caller's org.
  */
 export interface BlastPostSendTarget {
-  funnelKind: "system" | "custom";
-  /** System pipe when funnelKind === "system". */
-  pipelineType?: "whatsapp" | "confirmacao" | "propostas";
-  /** Custom pipeline id when funnelKind === "custom". */
-  pipelineId?: string;
-  /** system: stage_key slug; custom: custom_pipeline_stages.id uuid. */
-  stageKey: string;
+  /** Funil de destino — `pipelines.id` (QUALQUER funil da org, Fatia B). */
+  pipelineId: string;
+  /** Etapa de destino — `pipeline_stages.id` (uuid canônico). */
+  stageId: string;
   /** Human label, e.g. "Oportunidades · Em negociação" (panel display). */
   label: string;
 }

@@ -2,7 +2,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useOrganization } from "@/modules/identity";
-import type { ProductVariant, ProductVariantInsert, ProductVariantUpdate } from "./useProducts";
+import {
+  invalidateProductQueries,
+  type ProductVariant,
+  type ProductVariantInsert,
+  type ProductVariantUpdate,
+} from "./useProducts";
 
 export function useProductVariants(productId: string | undefined) {
   return useQuery({
@@ -39,7 +44,7 @@ export function useCreateProductVariant() {
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["product-variants", variables.product_id] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      invalidateProductQueries(queryClient);
       toast.success("Variação criada com sucesso!");
     },
     onError: (error) => {
@@ -65,7 +70,7 @@ export function useUpdateProductVariant() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["product-variants", data.product_id] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      invalidateProductQueries(queryClient);
       toast.success("Variação atualizada com sucesso!");
     },
     onError: (error) => {
@@ -89,7 +94,7 @@ export function useDeleteProductVariant() {
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["product-variants", variables.productId] });
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      invalidateProductQueries(queryClient);
       toast.success("Variação excluída com sucesso!");
     },
     onError: (error) => {
@@ -116,7 +121,7 @@ export function useBulkCreateProductVariants() {
       if (productId) {
         queryClient.invalidateQueries({ queryKey: ["product-variants", productId] });
       }
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      invalidateProductQueries(queryClient);
       toast.success(`${variables.length} variações criadas com sucesso!`);
     },
     onError: (error) => {

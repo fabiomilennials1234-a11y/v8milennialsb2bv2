@@ -20,7 +20,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { ArrowRight, FileSpreadsheet, RefreshCw } from "lucide-react";
-import type { ProductType } from "@/modules/carteira/hooks/useProducts";
+import { invalidateProductQueries, type ProductType } from "@/modules/carteira/hooks/useProducts";
 
 // -- System fields that the user can map spreadsheet columns to --
 const SYSTEM_FIELDS = [
@@ -420,8 +420,7 @@ export function ProductImportModal({ open, onOpenChange }: ProductImportModalPro
         }
       }
 
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      queryClient.invalidateQueries({ queryKey: ["products-with-variants"] });
+      invalidateProductQueries(queryClient);
 
       const parts: string[] = [];
       if (productsImported > 0) parts.push(`${productsImported} produto(s) criado(s)`);

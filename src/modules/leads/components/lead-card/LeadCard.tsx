@@ -105,6 +105,7 @@ export function LeadCard({
   onApagarComentario,
   comentando,
   editorDeEtiquetas,
+  acaoLigar,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -139,6 +140,19 @@ export function LeadCard({
    * ausência dele.
    */
   editorDeEtiquetas?: React.ReactNode;
+  /**
+   * O botão de LIGAR, montado pronto por quem tem o banco (`VoiceCallButton`,
+   * variante ícone) — mesmo escape de `editorDeEtiquetas`: este arquivo é
+   * alcançável a partir de `src/preview/main.tsx` e não pode importar o
+   * provider de voz, que lê react-query e Supabase.
+   *
+   * Aqui havia um `AcaoRapida` "Ligar" sem `onClick` — botão morto desde o
+   * primeiro commit do card, desabilitado por `!lead.telefone` e nada mais.
+   * Sem a prop não fica nada no lugar: botão que não faz nada é pior que a
+   * ausência dele, e o `VoiceCallButton` já some sozinho quando não há número
+   * de voz ao alcance — a mesma regra do chat.
+   */
+  acaoLigar?: React.ReactNode;
 }) {
   const [aba, setAba] = useState<Aba>("historico");
   const [nota, setNota] = useState(lead.nota);
@@ -265,7 +279,7 @@ export function LeadCard({
 
           <div className="flex shrink-0 items-center gap-1.5">
             <AcaoRapida icone={MessageCircle} rotulo="Abrir conversa" />
-            <AcaoRapida icone={Phone} rotulo="Ligar" desabilitado={!lead.telefone} />
+            {acaoLigar}
             <AcaoRapida icone={Mail} rotulo="Enviar e-mail" desabilitado={!lead.email} />
             <AcaoRapida icone={CalendarPlus} rotulo="Agendar mensagem" />
             <AcaoRapida

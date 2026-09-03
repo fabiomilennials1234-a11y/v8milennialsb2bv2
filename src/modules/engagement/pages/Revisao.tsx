@@ -20,7 +20,7 @@ import { ScheduleFollowUpModal } from "@/modules/engagement/components/followups
 import { useFollowUps, useCompleteFollowUp, useUpdateFollowUp, useArchiveFollowUp, useDeleteFollowUp } from "@/modules/engagement/hooks/useFollowUps";
 import { useMyScheduledMessages, useCancelScheduledMessage } from "@/modules/communication/hooks/useScheduledMessages";
 import { useDailyPriorities } from "@/modules/engagement/hooks/useDailyPriorities";
-import { useTeamMembers, useCurrentTeamMember } from "@/modules/identity";
+import { useTeamMembers, useCurrentTeamMember, useOrganization } from "@/modules/identity";
 import { useUserRole, useFeaturePermission } from "@/modules/identity";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -33,6 +33,7 @@ function RevisaoInner() {
   const [suggestionsOpen, setSuggestionsOpen] = useState(true);
   const [automationSettingsOpen, setAutomationSettingsOpen] = useState(false);
 
+  const { timezone } = useOrganization();
   const { data: userRole } = useUserRole();
   const isAdmin = userRole?.role === "admin";
   const { data: currentMember } = useCurrentTeamMember();
@@ -172,6 +173,7 @@ function RevisaoInner() {
           <RevisionItem
             key={`${task.type}-${task.id}`}
             task={task}
+            timezone={timezone}
             onComplete={(id, notes) => handleComplete(id, task.type, notes)}
             onCancel={task.type === "scheduled-message" ? (id) => cancelMessage.mutate(id) : undefined}
             onArchive={task.type === "follow-up" ? (id) => archiveFollowUp.mutate(id) : undefined}
@@ -196,6 +198,7 @@ function RevisaoInner() {
               <RevisionItem
                 key={`${task.type}-${task.id}`}
                 task={task}
+                timezone={timezone}
                 onComplete={() => {}}
                 canDelete={canDelete}
               />

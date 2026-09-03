@@ -56,6 +56,18 @@ export interface CustomPipelineStage {
   is_active: boolean;
   is_final_positive: boolean;
   is_final_negative: boolean;
+  /**
+   * Papel semântico governado (won/lost/meeting_*) — opcional porque nem todo
+   * escritor deste shape o carrega; a query única `useFunilStages` SEMPRE o
+   * seleciona (SCRUM-637: é por ele que comportamento de etapa se decide).
+   */
+  stage_role?: StageRole | null;
+  /**
+   * Opt-in da guarda de valor por etapa (SCRUM-545 f3, 20270903000020).
+   * Opcional: escritores antigos não o carregam — a guarda cai no fallback por
+   * won-resolution, nunca em `false` (ver `lib/sale-value-guard`).
+   */
+  requires_sale_value?: boolean | null;
   target_pipeline_id: string | null;
   target_stage_id: string | null;
   target_pipe_type: string | null;
@@ -223,3 +235,26 @@ export interface PipelineStageInsert {
 
 /** Modo de agendamento usado pelo RescheduleModal (slot do PipeOpsPort). */
 export type ReschedulingMode = "schedule" | "reschedule";
+
+/**
+ * O funil de sistema COMO A ORGANIZAÇÃO O CHAMA — a linha de
+ * `pipeline_display_config`.
+ *
+ * Vive em `contracts` porque `leads` precisa dela para montar o cadastro e não
+ * pode importar `@/modules/pipelines` (o barrel arrasta o PipeOpsProvider). É
+ * um subconjunto estrutural de `PipelineDisplayConfig`: só o que atravessa a
+ * fronteira, sem `id` nem `organization_id`.
+ *
+ * 🚨 Este é o nome CANÔNICO. `pipelines.name` NÃO é: para funil de sistema ele
+ * fica congelado no seed de `create_default_pipelines()` ("Qualificação",
+ * "Confirmação", "Propostas") enquanto a navegação, o hub de funis e o que a
+ * org renomeou vivem aqui. Rotular por `pipelines.name` — ou pior, por string
+ * cravada no JSX — é como o cadastro de lead passou a oferecer "Qualificação"
+ * para uma org cujo funil se chama "Oportunidades" (SCRUM-608).
+ */
+export interface SystemPipeDisplay {
+  pipe_type: string;
+  display_name: string;
+  is_visible: boolean;
+  position: number;
+}

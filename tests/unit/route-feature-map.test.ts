@@ -29,6 +29,12 @@ const appSource = readFileSync(resolve(__dirname, "../../src/App.tsx"), "utf-8")
 // quando o grupo aparece com cadeado — não há URL a contornar.
 const REDIRECT_ONLY_PATHS = new Set(["/marketing", "/analytics", "/chat", "/turbo"]);
 
+/**
+ * "/funil" é PREFIXO de navegação (SCRUM-637): os itens da sidebar vivem em
+ * /funil/<slug> e o guard de rota correspondente é o da rota única.
+ */
+const PREFIX_ALIAS: Record<string, string> = { "/funil": "/funil/:slug" };
+
 /** Divide o JSX de rotas em chunks: cada chunk começa em `<Route` e vai até o próximo. */
 function routeChunks(): Map<string, string> {
   const chunks = new Map<string, string>();
@@ -66,7 +72,7 @@ describe("SIDEBAR_FEATURE_MAP ↔ ROUTE_FEATURE_MAP", () => {
   it("todo path com cadeado na nav tem guard de rota (ou é redirect conhecido)", () => {
     const gaps = Object.entries(SIDEBAR_FEATURE_MAP)
       .filter(([path]) => !REDIRECT_ONLY_PATHS.has(path))
-      .filter(([path, key]) => ROUTE_FEATURE_MAP[path] !== key)
+      .filter(([path, key]) => ROUTE_FEATURE_MAP[PREFIX_ALIAS[path] ?? path] !== key)
       .map(([path, key]) => `${path} → ${key}`);
     expect(gaps).toEqual([]);
   });

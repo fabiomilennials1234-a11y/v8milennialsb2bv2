@@ -198659,6 +198659,101 @@
           "severity": "warn",
           "name": "no-orphans"
         }
+      },
+      {
+        "type": "cycle",
+        "from": "src/modules/pipelines/hooks/model/index.ts",
+        "to": "src/modules/pipelines/hooks/model/useFunilFilters.ts",
+        "unresolvedTo": "./useFunilFilters",
+        "dependencyTypes": [
+          "local",
+          "export"
+        ],
+        "rule": {
+          "severity": "warn",
+          "name": "no-circular-dynamic"
+        },
+        "cycle": [
+          {
+            "name": "src/modules/pipelines/hooks/model/useFunilFilters.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/DealCardPanel.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/leads/components/deal-card/DealCardChecklists.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/CreateMeetingDialogLazy.tsx",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/CreateMeetingDialog.tsx",
+            "dependencyTypes": [
+              "local",
+              "dynamic-import"
+            ]
+          },
+          {
+            "name": "src/modules/engagement/components/agenda/LeadPorFunilPicker.tsx",
+            "dependencyTypes": [
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/index.ts",
+            "dependencyTypes": [
+              "aliased",
+              "aliased-tsconfig",
+              "aliased-tsconfig-paths",
+              "local",
+              "import"
+            ]
+          },
+          {
+            "name": "src/modules/pipelines/hooks/model/index.ts",
+            "dependencyTypes": [
+              "local",
+              "export"
+            ]
+          }
+        ]
       }
     ],
     "error": 2,

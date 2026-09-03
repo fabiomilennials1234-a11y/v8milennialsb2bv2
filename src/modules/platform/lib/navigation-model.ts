@@ -20,7 +20,6 @@ import {
   Fuel,
   Gauge,
   GitBranch,
-  Kanban,
   ListChecks,
   MoreHorizontal,
   Package,
@@ -67,29 +66,16 @@ export interface NavNode {
   children?: NavNode[];
 }
 
-/**
- * Ícone de funil na lateral — um só, para todos.
- *
- * Havia dois mapas aqui: um por `pipe_type` (WhatsApp/Agendamentos/Propostas
- * ganhavam ícones fixos) e outro com os ícones que um funil customizado pode
- * escolher. Juntos, faziam os funis da org parecerem de outra espécie que os
- * criados pelo usuário. Não são: são todos funis.
- */
-export const FUNIL_ICON: React.ElementType = Kanban;
+// `FUNIL_ICON` (ícone fixo para todo funil) morreu na SCRUM-637: a lateral
+// resolve por `funilIcon(pipelines.icon)` — a identidade que o USUÁRIO deu ao
+// funil, igual para os de fábrica e os criados por ele.
 
 /**
- * COMPAT (SCRUM-632, expand-contract): mapeia os funis de SISTEMA para as
- * rotas antigas, que seguem vivas até a paridade da página unificada fechar
- * (633/634). Na SCRUM-637 os itens de sistema passam a apontar `/funil/:slug`
- * e este mapa morre. NÃO adicione entradas — funil novo é custom e navega por
- * `/funil/:slug` direto.
+ * SCRUM-637 (flip): o `PIPE_PATH_MAP` morreu — TODO funil navega pela rota
+ * única `/funil/:slug`. Só a Carteira mantém rota própria (não é funil de
+ * negócio — D6/ADR-0034).
  */
-export const PIPE_PATH_MAP: Record<string, string> = {
-  whatsapp: "/pipe-whatsapp",
-  confirmacao: "/pipe-confirmacao",
-  propostas: "/pipe-propostas",
-  upsell: "/upsell",
-};
+export const CARTEIRA_PATH = "/upsell";
 
 /** Filhos de Turbo. Os de Funis são dinâmicos (vêm de `usePipelineDisplayConfig`). */
 export const TURBO_CHILDREN: NavNode[] = [
@@ -236,11 +222,7 @@ export function buildSettingsGroup(visibility: SettingsTabVisibility): PitstopGr
  */
 export const FUNIS_PATHS = [
   "/funil",
-  "/pipe-whatsapp",
-  "/pipe-confirmacao",
-  "/pipe-propostas",
   "/funis",
-  "/pipe/custom",
 ] as const;
 
 export const TURBO_PATHS = ["/copilot", "/automacoes"] as const;
@@ -253,9 +235,9 @@ export const OUTBOUND_MEMBER_ALLOWED_PATHS = [
   "/dashboard",
   "/chat",
   "/chat-whatsapp",
-  "/pipe-whatsapp",
-  "/pipe-confirmacao",
-  "/pipe-propostas",
+  // SCRUM-637: os pipes de sistema vivem em `/funil/:slug` — entrada por
+  // PREFIXO (ver `isOutboundAllowed`), cobrindo qualquer funil visível.
+  "/funil",
   "/funis",
   "/follow-ups",
 ] as const;
@@ -269,9 +251,9 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/marketing": "marketing.view",
   "/chat": "whatsapp.view",
   "/chat-whatsapp": "whatsapp.view",
-  "/pipe-whatsapp": "pipeline.view",
-  "/pipe-confirmacao": "pipeline.view",
-  "/pipe-propostas": "pipeline.view",
+  // SCRUM-637: `/funil` cobre `/funil/:slug` por prefixo (ver makeCanViewRoute)
+  // — mesma permissão que os /pipe-* levavam, agora pra QUALQUER funil.
+  "/funil": "pipeline.view",
   "/upsell": "upsell.view",
   "/agenda": "agenda.view",
   "/follow-ups": "followups.view",

@@ -16,32 +16,25 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { CreateFunilOuCampanhaModal } from "@/modules/pipelines/components/funis/CreateFunilOuCampanhaModal";
-// Mesma tabela de cor que o seletor da faixa usa — as duas telas não podem
-// discordar sobre a cor de um funil.
-import { FUNNEL_COLOR_MAP } from "../lib/funnel-nav";
-
-const PIPE_PATH_MAP: Record<string, string> = {
-  whatsapp: "/pipe-whatsapp",
-  confirmacao: "/pipe-confirmacao",
-  propostas: "/pipe-propostas",
-  upsell: "/upsell",
-};
-
-const FALLBACK_COLOR = "#64748b";
+import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
+import { funilIcon } from "../lib/funil-icons";
+// Mesmo path map compat do seletor da faixa (morre no flip do redirect).
+import { FUNNEL_FALLBACK_COLOR } from "../lib/funnel-nav";
+import type { LucideIcon } from "lucide-react";
 
 /**
- * Um funil na lista. Sem espécie e sem ícone próprio — mas COM cor.
+ * Um funil na lista — com a cor e o ícone QUE O USUÁRIO ESCOLHEU.
  *
- * Cor não separa: separa quando só um lado tem. Todo funil aqui tem a sua (a
- * do `pipe_type` para os da org, a escolhida pelo usuário para os criados por
- * ele), então ela identifica o funil sem sugerir que existem duas classes. É a
- * mesma regra que o `FunnelSwitcher` já seguia.
+ * Cor/ícone vêm de `pipelines` (registro único, SCRUM-637): funil de sistema
+ * persiste personalização como qualquer outro, e o hub reflete. Nome de
+ * sistema continua vindo do display_config (rename legado prevalece).
  */
 interface FunilCard {
   key: string;
   name: string;
   path: string;
   color: string;
+  icon: LucideIcon;
   /** Linha de apoio: prazo, meta, estado. Vazia quando não há o que dizer. */
   meta?: string;
 }
@@ -55,6 +48,11 @@ export default function FunisHub() {
   const { data: displayConfigs = [], isLoading: configLoading } = usePipelineDisplayConfig();
   const { data: permanentFunnels = [], isLoading: permanentLoading } = usePermanentCustomFunnels();
   const { data: temporaryFunnels = [], isLoading: temporaryLoading } = useTemporaryFunnels();
+  const { data: pipelines = [] } = usePipelines();
+
+  // Registro único → cor/ícone reais de qualquer funil.
+  const pipeBySlug = new Map(pipelines.map((p) => [p.slug, p] as const));
+  const pipeById = new Map(pipelines.map((p) => [p.id, p] as const));
   const [createOpen, setCreateOpen] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
 
@@ -74,17 +72,22 @@ export default function FunisHub() {
   const endedTemporary = temporaryFunnels.filter((f) => f.status === "ended");
 
   const allFunnels: FunilCard[] = [
-    ...visibleStructural.map((c) => ({
-      key: `sys:${c.pipe_type}`,
-      name: c.display_name,
-      path: PIPE_PATH_MAP[c.pipe_type] ?? "/funis",
-      color: FUNNEL_COLOR_MAP[c.pipe_type] ?? FALLBACK_COLOR,
-    })),
+    ...visibleStructural.map((c) => {
+      const row = pipeBySlug.get(c.pipe_type);
+      return {
+        key: `sys:${c.pipe_type}`,
+        name: c.display_name,
+        path: `/funil/${c.pipe_type}`,
+        color: row?.color ?? FUNNEL_FALLBACK_COLOR,
+        icon: funilIcon(row?.icon),
+      };
+    }),
     ...permanentFunnels.map((pipe) => ({
       key: pipe.id,
       name: pipe.name,
       path: `/funil/${pipe.slug}`,
-      color: pipe.color ?? FALLBACK_COLOR,
+      color: pipeById.get(pipe.id)?.color ?? pipe.color ?? FUNNEL_FALLBACK_COLOR,
+      icon: funilIcon(pipeById.get(pipe.id)?.icon),
     })),
     ...activeTemporary.map((pipe) => {
       const daysLeft = pipe.ends_at
@@ -105,7 +108,8 @@ export default function FunisHub() {
         key: pipe.id,
         name: pipe.name,
         path: `/funil/${pipe.slug}`,
-        color: pipe.color ?? FALLBACK_COLOR,
+        color: pipeById.get(pipe.id)?.color ?? pipe.color ?? FUNNEL_FALLBACK_COLOR,
+        icon: funilIcon(pipeById.get(pipe.id)?.icon),
         meta: partes.length > 0 ? partes.join(" · ") : undefined,
       };
     }),
@@ -153,7 +157,7 @@ export default function FunisHub() {
                 className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
                 style={{ background: funil.color + "15" }}
               >
-                <Kanban className="w-5 h-5" style={{ color: funil.color }} />
+                <funil.icon className="w-5 h-5" style={{ color: funil.color }} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">{funil.name}</p>

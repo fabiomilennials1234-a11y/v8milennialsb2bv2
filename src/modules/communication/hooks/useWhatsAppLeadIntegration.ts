@@ -2,13 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { responsavelParaGravar } from "@/modules/communication/lib/lead-responsible";
-import { DEFAULT_STAGES } from "@/contracts/pipe";
+import { FALLBACK_STAGES } from "@/contracts/pipe";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 
 /**
  * Fetches the first active stage_key for a pipeline type from pipeline_stages.
- * Falls back to DEFAULT_STAGES if no dynamic stage exists.
+ * Falls back to FALLBACK_STAGES (trilha única, SCRUM-641) if no dynamic stage exists.
  */
 async function getFirstStageKey(orgId: string, pipelineType: string): Promise<string> {
   const { data } = await supabase
@@ -21,8 +21,7 @@ async function getFirstStageKey(orgId: string, pipelineType: string): Promise<st
     .limit(1)
     .maybeSingle();
   if (data?.stage_key) return data.stage_key;
-  const fallback = DEFAULT_STAGES[pipelineType as keyof typeof DEFAULT_STAGES];
-  return fallback?.[0]?.id || "novo";
+  return FALLBACK_STAGES[0]?.id || "novo";
 }
 
 /**

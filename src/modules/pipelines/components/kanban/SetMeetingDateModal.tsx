@@ -34,6 +34,13 @@ export interface SetMeetingDateModalProps {
   leadPhone?: string | null;
   /** "reschedule" volta o card pra `agendado` e reseta a confirmação. */
   variant?: "set" | "reschedule";
+  /**
+   * Chamado APÓS a data ser gravada com sucesso (antes do modal fechar).
+   * A página unificada usa isto pra completar o move interceptado por
+   * `stage_role = meeting_booked` — a data entra no metadata primeiro, o card
+   * só transiciona depois (SCRUM-637).
+   */
+  onSaved?: () => void;
 }
 
 /** Combina o dia escolhido + "HH:mm" num instante (hora local do navegador). */
@@ -45,7 +52,7 @@ function combine(day: Date, time: string): Date {
 }
 
 export function SetMeetingDateModal({
-  open, onOpenChange, entryId, leadId, leadName, leadCompany, leadPhone, variant = "set",
+  open, onOpenChange, entryId, leadId, leadName, leadCompany, leadPhone, variant = "set", onSaved,
 }: SetMeetingDateModalProps) {
   const [day, setDay] = useState<Date | undefined>();
   const [time, setTime] = useState("10:00");
@@ -89,12 +96,12 @@ export function SetMeetingDateModal({
     if (variant === "reschedule") {
       reschedule.mutate(
         { entryId, meetingDate },
-        { onSuccess: () => { fireCalendar(meetingDate); onOpenChange(false); }, onError: onSaveError },
+        { onSuccess: () => { fireCalendar(meetingDate); onSaved?.(); onOpenChange(false); }, onError: onSaveError },
       );
     } else {
       setMeetingDate.mutate(
         { entryId, meetingDate, meetLink: link.trim() || null },
-        { onSuccess: () => { fireCalendar(meetingDate); onOpenChange(false); }, onError: onSaveError },
+        { onSuccess: () => { fireCalendar(meetingDate); onSaved?.(); onOpenChange(false); }, onError: onSaveError },
       );
     }
   };

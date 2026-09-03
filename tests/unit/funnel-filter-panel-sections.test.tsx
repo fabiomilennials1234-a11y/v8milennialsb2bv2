@@ -394,28 +394,35 @@ describe("os dois filtros convivem no mesmo painel", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Resíduo do cabeçalho antigo em Confirmação
 // ─────────────────────────────────────────────────────────────────────────────
-describe("PipeConfirmacao não guarda a fileira de botões antiga", () => {
+describe("a página unificada não guarda a fileira de botões antiga (SCRUM-637)", () => {
   // Resolve a partir da raiz do projeto (cwd do Vitest) — `import.meta.url`
-  // não é um file:// depois da transformação do Vite.
+  // não é um file:// depois da transformação do Vite. A página velha de
+  // Confirmação morreu no flip; a obrigação passou pra página unificada
+  // (seções extras) + `useFunilFilters` (seções universais, SCRUM-633).
   const source = readFileSync(
-    resolve(process.cwd(), "src/modules/pipelines/pages/PipeConfirmacao.tsx"),
+    resolve(process.cwd(), "src/modules/pipelines/pages/Funil.tsx"),
+    "utf8",
+  );
+  const controllerSource = readFileSync(
+    resolve(process.cwd(), "src/modules/pipelines/hooks/model/useFunilFilters.ts"),
     "utf8",
   );
 
   it("entrega as faixas de reunião ao painel de Filtros", () => {
     expect(source).toMatch(/type:\s*["']single-choice["']/);
     expect(source).toMatch(/label:\s*["']Reunião["']/);
-    expect(source).toMatch(/timeOptions\.filter\(/);
+    expect(source).toMatch(/TIME_OPTIONS/);
   });
 
   it("não renderiza mais os botões de faixa soltos no cabeçalho", () => {
     // Era `timeOptions.map(...)` numa fileira acima do board. Se voltar, o
     // operador passa a ter dois lugares para o mesmo filtro — e eles divergem.
-    expect(source).not.toMatch(/timeOptions\.map\(/);
+    expect(source).not.toMatch(/TIME_OPTIONS\.map\(/);
   });
 
   it("guarda 'Criados no período' como seção, não como seletor próprio", () => {
-    expect(source).toMatch(/type:\s*["']created-period["']/);
+    expect(controllerSource).toMatch(/type:\s*["']created-period["']/);
     expect(source).not.toMatch(/<MetricsPeriodSelector/);
+    expect(controllerSource).not.toMatch(/<MetricsPeriodSelector/);
   });
 });

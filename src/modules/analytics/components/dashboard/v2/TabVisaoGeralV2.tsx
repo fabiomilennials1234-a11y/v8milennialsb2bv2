@@ -215,7 +215,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           label="Propostas" value={m?.propostasEnviadas ?? 0} format="int"
           delta={m && p ? deltaBadge(m.propostasEnviadas, p.propostasEnviadas) : undefined}
           caption={`${p?.propostasEnviadas ?? 0} ${range.prevLabel}`}
-          quickActionLabel="Ver propostas →" quickActionTo="/pipe-propostas" delay={0.22}
+          quickActionLabel="Ver propostas →" quickActionTo="/funis" delay={0.22}
         />
       </div>
       <div className="col-span-1 md:col-span-2">
@@ -223,7 +223,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           label="Vendas" value={m?.novosClientes ?? 0} format="int"
           delta={m && p ? deltaBadge(m.novosClientes, p.novosClientes) : undefined}
           caption={`${p?.novosClientes ?? 0} ${range.prevLabel}`}
-          quickActionLabel="Ver fechamentos →" quickActionTo="/pipe-propostas" delay={0.26}
+          quickActionLabel="Ver fechamentos →" quickActionTo="/funis" delay={0.26}
         />
       </div>
       <div className="col-span-1 md:col-span-2">

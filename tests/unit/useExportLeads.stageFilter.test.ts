@@ -146,8 +146,8 @@ function findQueriesFor(table: string) {
   return queries.filter((q) => q.table === table);
 }
 
-describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-635)", () => {
-  it("pipe=whatsapp (slug legado): resolve pipeline_id em `pipelines` e filtra pipeline_entries por stage_key", async () => {
+describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-635/637)", () => {
+  it("stage_key (formato legado de etapa): filtra pipeline_entries por stage_key", async () => {
     seedFunnels();
     setTableData("pipeline_entries", [{ lead_id: "L1" }, { lead_id: "L2" }, { lead_id: "L1" }]);
     setTableData("leads", [{ id: "L1", name: "Foo" }, { id: "L2", name: "Bar" }]);
@@ -158,7 +158,7 @@ describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-63
     await act(async () => {
       const r = await result.current.exportLeads({
         format: "csv",
-        stageFilter: { pipe: "whatsapp", stageId: "novo" },
+        stageFilter: { pipelineId: "pl-w", stageId: "novo" },
         stageTitle: "Novo",
       });
       count = r.count;
@@ -185,25 +185,7 @@ describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-63
     expect(count).toBe(2);
   });
 
-  it("pipe=confirmacao sem o funil na org: devolve {count:0} sem consultar leads (semântica da view vazia)", async () => {
-    seedFunnels(); // org só tem whatsapp + custom
-    setTableData("pipeline_entries", [{ lead_id: "L9" }]);
-    setTableData("leads", [{ id: "L9", name: "Baz" }]);
-
-    const { result } = renderHook(() => useExportLeads());
-    let res = { count: -1 };
-    await act(async () => {
-      res = await result.current.exportLeads({
-        format: "csv",
-        stageFilter: { pipe: "confirmacao", stageId: "reuniao_marcada" },
-      });
-    });
-
-    expect(res.count).toBe(0);
-    expect(findQueriesFor("leads").length).toBe(0);
-  });
-
-  it("pipe=custom: customPipelineId vira pipeline_id e etapa uuid filtra por stage_id", async () => {
+  it("etapa uuid: filtra por stage_id — serve funil custom igual (pl-c)", async () => {
     seedFunnels();
     setTableData("pipeline_entries", [{ lead_id: "C1" }]);
     setTableData("leads", [{ id: "C1", name: "Ix" }]);
@@ -212,11 +194,7 @@ describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-63
     await act(async () => {
       await result.current.exportLeads({
         format: "csv",
-        stageFilter: {
-          pipe: "custom",
-          stageId: STAGE_UUID,
-          customPipelineId: "pl-c",
-        },
+        stageFilter: { pipelineId: "pl-c", stageId: STAGE_UUID },
       });
     });
 
@@ -231,7 +209,7 @@ describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-63
     );
   });
 
-  it("pipe=pipeline (canônico, SCRUM-633): pipelineId endereça qualquer funil", async () => {
+  it("pipelineId endereça qualquer funil (canônico, SCRUM-633)", async () => {
     seedFunnels();
     setTableData("pipeline_entries", [{ lead_id: "P1" }]);
     setTableData("leads", [{ id: "P1", name: "Uni" }]);
@@ -240,7 +218,7 @@ describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-63
     await act(async () => {
       await result.current.exportLeads({
         format: "csv",
-        stageFilter: { pipe: "pipeline", stageId: STAGE_UUID, pipelineId: "pl-w" },
+        stageFilter: { pipelineId: "pl-w", stageId: STAGE_UUID },
       });
     });
 
@@ -253,24 +231,13 @@ describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-63
     );
   });
 
-  it("pipe=custom: throws when customPipelineId is missing", async () => {
+  it("pipelineId ausente (chamador js sem tipo): lança em runtime", async () => {
     seedFunnels();
     const { result } = renderHook(() => useExportLeads());
     await expect(
       result.current.exportLeads({
         format: "csv",
-        stageFilter: { pipe: "custom", stageId: "stage-x" },
-      }),
-    ).rejects.toThrow(/customPipelineId/);
-  });
-
-  it("pipe=pipeline: throws when pipelineId is missing", async () => {
-    seedFunnels();
-    const { result } = renderHook(() => useExportLeads());
-    await expect(
-      result.current.exportLeads({
-        format: "csv",
-        stageFilter: { pipe: "pipeline", stageId: STAGE_UUID },
+        stageFilter: { stageId: STAGE_UUID } as never,
       }),
     ).rejects.toThrow(/pipelineId/);
   });
@@ -285,7 +252,7 @@ describe("useExportLeads — stageFilter (motor único por pipeline_id, SCRUM-63
     await act(async () => {
       res = await result.current.exportLeads({
         format: "csv",
-        stageFilter: { pipe: "whatsapp", stageId: "esfriou" },
+        stageFilter: { pipelineId: "pl-w", stageId: "esfriou" },
       });
     });
     expect(res.count).toBe(0);

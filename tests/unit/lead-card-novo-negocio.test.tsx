@@ -43,7 +43,7 @@ import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
 
 const QUALIFICACAO_COM_NEGOCIO: PipelineStatus = {
   type: "standard",
-  pipeType: "qualificacao",
+  pipeType: "whatsapp",
   label: "Qualificação",
   color: "#6366f1",
   pipelineDbId: "pl-q",
@@ -155,7 +155,7 @@ describe("buildNewDealOptions — funil com negócio não é opção de negócio
     const opcoes = buildNewDealOptions(semNegocio, { canAdd: PODE, vendaFechada: false });
 
     expect(opcoes.map((o) => o.key)).toEqual([
-      "sys:qualificacao",
+      "sys:whatsapp",
       "sys:confirmacao",
       "sys:propostas",
     ]);
@@ -457,7 +457,7 @@ describe("Card do Lead — o botão 'Criar negócio' abre a porta única", { tim
     expect(screen.getByTestId("new-deal-option-sys:propostas")).toBeInTheDocument();
     expect(screen.getByTestId("new-deal-option-custom:cp-1")).toBeInTheDocument();
     // Qualificação já tem negócio; Carteira está travada e vira chip, não opção.
-    expect(screen.queryByTestId("new-deal-option-sys:qualificacao")).toBeNull();
+    expect(screen.queryByTestId("new-deal-option-sys:whatsapp")).toBeNull();
     expect(screen.queryByTestId("new-deal-option-sys:upsell")).toBeNull();
   });
 

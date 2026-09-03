@@ -7,7 +7,7 @@ import { usePipeOps } from "../pipe-ops";
 
 export interface StandardPipelineStatus {
   type: "standard";
-  pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+  pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
   label: string;
   color: string;
   /** id do pipeline (tabela pipelines) — alvo do add. Null p/ upsell (legacy). */
@@ -32,18 +32,18 @@ export interface CustomPipelineStatus {
 
 export type PipelineStatus = StandardPipelineStatus | CustomPipelineStatus;
 
+/**
+ * SCRUM-637: `pipeType` de funil de sistema É o slug (`pipelines.slug`) — o
+ * sentinel legado "qualificacao" morreu junto com os mapas de tradução
+ * (SYSTEM_SLUG_TO_PIPE / SYSTEM_RAIL_REF / PIPE_TYPE_TO_DISPLAY, todos viraram
+ * identidade). Resta só o resíduo Carteira (D9): as etapas dela vivem em
+ * `pipeline_stages.pipeline_type = 'upsell_base'`, sem FK de funil.
+ */
 const PIPE_TYPE_MAP: Record<string, string> = {
-  qualificacao: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
   upsell: "upsell_base",
 };
 
-const SYSTEM_SLUG_TO_PIPE: Record<string, "qualificacao" | "confirmacao" | "propostas"> = {
-  whatsapp: "qualificacao",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-};
+const SYSTEM_SLUGS = ["whatsapp", "confirmacao", "propostas"] as const;
 
 // ─── Main hook: unified pipeline_entries query ────────
 
@@ -162,14 +162,20 @@ export function useLeadAllPipelines(leadId: string | null) {
 
       // System pipelines — uma linha POR NEGÓCIO; sem negócio, uma linha vazia
       // (é ela que os consumidores leem como "dá pra abrir negócio aqui").
-      for (const [slug, pipeType] of Object.entries(SYSTEM_SLUG_TO_PIPE)) {
+      for (const slug of SYSTEM_SLUGS) {
         const pipeline = pipelineBySlug.get(slug);
-        const stages = getStages(pipeType);
-        const label = slug === "whatsapp" ? "Qualificação" : slug === "confirmacao" ? "Confirmação" : "Propostas";
-        const color = slug === "whatsapp" ? "#6366f1" : slug === "confirmacao" ? "#22c55e" : "#f59e0b";
+        const stages = getStages(slug);
+        // Nome/cor REAIS do registro `pipelines` (funil renomeável/colorível);
+        // fallback pros rótulos históricos enquanto a linha não chegou.
+        const label =
+          pipeline?.name ??
+          (slug === "whatsapp" ? "Qualificação" : slug === "confirmacao" ? "Confirmação" : "Propostas");
+        const color =
+          pipeline?.color ??
+          (slug === "whatsapp" ? "#6366f1" : slug === "confirmacao" ? "#22c55e" : "#f59e0b");
         const base = {
           type: "standard" as const,
-          pipeType,
+          pipeType: slug,
           label,
           color,
           pipelineDbId: pipeline?.id ?? null,
@@ -276,7 +282,7 @@ export async function assertMemberInOrg(
 
 export interface AddLeadToStandardPipeVars {
   leadId: string;
-  pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+  pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
   stageId: string;
   /**
    * Dono do negócio (`team_members.id`). Ausente = quem está criando, que era
@@ -358,16 +364,12 @@ export function useAddLeadToStandardPipe() {
        * do apply em prod (regenerar a partir de branch efêmera corrompe o
        * arquivo — ver CLAUDE.md).
        */
-      const RPC_PIPE: Record<string, string> = {
-        qualificacao: "whatsapp",
-        confirmacao: "confirmacao",
-        propostas: "propostas",
-      };
-
-      if (RPC_PIPE[pipeType]) {
+      if (pipeType !== "upsell") {
         const { error } = await supabase.rpc("abrir_negocio" as never, {
           p_lead_id: leadId,
-          p_pipe: RPC_PIPE[pipeType],
+          // SCRUM-637: `pipeType` já É o slug que a RPC entende — o mapa
+          // RPC_PIPE virou identidade e morreu.
+          p_pipe: pipeType,
           p_stage: stageId,
           p_owner_id: memberId,
           p_value: pipeType === "propostas" ? saleValue ?? null : null,
@@ -419,11 +421,11 @@ export function useMoveLeadInStandardPipe() {
       newStageId,
     }: {
       pipeId: string;
-      pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+      pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
       newStageId: string;
     }) => {
       const table =
-        pipeType === "qualificacao" ? "pipe_whatsapp"
+        pipeType === "whatsapp" ? "pipe_whatsapp"
         : pipeType === "confirmacao" ? "pipe_confirmacao"
         : pipeType === "propostas" ? "pipe_propostas"
         : "upsell";
@@ -456,10 +458,10 @@ export function useRemoveLeadFromStandardPipe() {
       pipeType,
     }: {
       pipeId: string;
-      pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+      pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
     }) => {
       const table =
-        pipeType === "qualificacao" ? "pipe_whatsapp"
+        pipeType === "whatsapp" ? "pipe_whatsapp"
         : pipeType === "confirmacao" ? "pipe_confirmacao"
         : pipeType === "propostas" ? "pipe_propostas"
         : "upsell";

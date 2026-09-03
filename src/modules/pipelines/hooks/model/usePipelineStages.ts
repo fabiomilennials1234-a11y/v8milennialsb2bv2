@@ -3,16 +3,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { PipelineType, StageFamily, PipelineStage, PipelineStageInsert, DefaultStage } from "@/contracts/pipe";
-import { DEFAULT_STAGES } from "@/contracts/pipe";
+import { FALLBACK_STAGES } from "@/contracts/pipe";
 
 // `PipelineType` + `PipelineStage(Insert)` + `getPipelineTypeName` +
 // `stagesToColumns` têm definição canônica em contracts (puros, sem
 // side-effect) — quebra import direto leads→pipelines. Re-exportados aqui
 // mantendo a API pública inalterada.
 export type { PipelineType, StageFamily, PipelineStage, PipelineStageInsert, DefaultStage };
-// DEFAULT_STAGES: constante PURA movida para `@/contracts/pipe` (quebra ciclo
+// FALLBACK_STAGES: constante PURA em `@/contracts/pipe` (quebra ciclo
 // communication/leads -> pipelines via barrel). Re-exportada aqui p/ API estável.
-export { DEFAULT_STAGES };
+// SCRUM-641: o antigo `DEFAULT_STAGES` (Record por trio) morreu — funil é
+// funil, e o fallback de exibição é uma trilha só.
+export { FALLBACK_STAGES };
 
 /**
  * Os tipos de funil de sistema que a org tem, lidos do registro.
@@ -59,7 +61,7 @@ function buildFallbackStages(
   // contexto para dentro do literal — sem isso `stage_role: "open"` alarga para
   // `string` e não satisfaz o enum `StageRole`.
   const syntheticTimestamp = new Date(0).toISOString();
-  return DEFAULT_STAGES[pipelineType].map((stage, index): PipelineStage => ({
+  return FALLBACK_STAGES.map((stage, index): PipelineStage => ({
     id: stage.id,
     // Etapa sintética, nunca persistida: sem org dona, e timestamp de epoch
     // sinaliza "não veio do banco" sem fingir uma data plausível.
@@ -484,7 +486,6 @@ export function useDeletePipelineStage() {
       if (variables.pipelineId) {
         queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipelineId] });
         queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipelineId] });
-        queryClient.invalidateQueries({ queryKey: ["stages_do_funil", variables.pipelineId] });
         queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipelineId] });
         queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipelineId] });
         queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", variables.pipelineId] });

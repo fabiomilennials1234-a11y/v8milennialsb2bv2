@@ -48,7 +48,7 @@ export function useFunilStages(pipelineId: string | undefined) {
       const { data, error } = await supabase
         .from("pipeline_stages")
         .select(
-          "id, organization_id, pipeline_id, stage_key, name, color, position, is_active, is_final_positive, is_final_negative, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key, checklist_template_id, created_at, updated_at",
+          "id, organization_id, pipeline_id, stage_key, name, color, position, is_active, is_final_positive, is_final_negative, stage_role, requires_sale_value, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key, checklist_template_id, created_at, updated_at",
         )
         .eq("pipeline_id", pipelineId)
         .eq("is_active", true)

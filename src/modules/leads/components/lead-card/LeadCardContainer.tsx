@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
 
 import { LeadCard } from "./LeadCard";
 import { LeadCardAside } from "./LeadCardAside";
@@ -72,6 +73,7 @@ export function LeadCardContainer({
   onAbrirFicha?: () => void;
 }) {
   const { data, isLoading, visibility, organizacaoId } = useLeadCardData(leadId, isOpen);
+  const renderLigar = useLeadCallAction();
   const updateLead = useUpdateLead();
   const saveCustomField = useSaveCustomFieldValue();
   const toggleAI = useToggleLeadAI();
@@ -276,6 +278,9 @@ export function LeadCardContainer({
           <LeadCardEtiquetas leadId={leadId} podeCriar={podeCriarEtiqueta} />
         ) : undefined
       }
+      // Vê o lead → pode ligar. Quem desenha o botão é a raiz (App.tsx), via
+      // LeadCallActionSlot; ele some sozinho sem número de voz ao alcance.
+      acaoLigar={leadId && renderLigar ? renderLigar({ id: leadId, nome: data.nome }) : undefined}
       onToggleCopilot={(ativo) =>
         leadId && toggleAI.mutate({ leadId, disabled: !ativo })
       }

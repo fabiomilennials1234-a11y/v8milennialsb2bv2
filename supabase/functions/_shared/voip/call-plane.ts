@@ -49,7 +49,12 @@ export type DenyCode =
   | "lead_not_found"
   | "lead_org_mismatch"
   | "lead_without_phone"
-  | "not_lead_owner"
+  /**
+   * O chamador não ENXERGA o lead sob a RLS de `leads`. Substituiu
+   * `not_lead_owner` em 2026-09-02: a condição para ligar deixou de ser "é
+   * dono do lead" e passou a ser "vê o lead" — a mesma fronteira da tela.
+   */
+  | "lead_not_visible"
   /**
    * O operador não opera por ESTA instância. Terceiro caso, distinto dos dois
    * vizinhos: `voice_calls_disabled` é a instância sem voz, `permission_denied`
@@ -251,7 +256,7 @@ export async function authorizeCallAndMint(
 
     const { data: lead } = await supabaseAdmin
       .from("leads")
-      .select("id, organization_id, normalized_phone, phone_digits, phone, sdr_id, closer_id, responsible_id")
+      .select("id, organization_id, normalized_phone, phone_digits, phone")
       .eq("id", leadId)
       .maybeSingle();
 
@@ -271,15 +276,42 @@ export async function authorizeCallAndMint(
     );
     if (peer.length < 8 || peer.length > 15) return deny("lead_without_phone");
 
-    // Admin operacional alcança qualquer lead da org; membro só os seus. É a
-    // mesma fronteira que a RLS de voip_calls aplica na leitura — se a escrita
-    // fosse mais larga, o operador ligaria para um lead que depois não conseguiria ver.
-    if (!isOrgAdmin(caller)) {
-      const owns = caller.teamMemberId !== null &&
-        (lead.sdr_id === caller.teamMemberId ||
-          lead.closer_id === caller.teamMemberId ||
-          lead.responsible_id === caller.teamMemberId);
-      if (!owns) return deny("not_lead_owner");
+    // 2b. Vê o lead → pode ligar. A fronteira é a RLS de `leads`
+    //     (`leads_select_by_responsibility_and_permissions`): a MESMA policy
+    //     que decide se o lead aparece na tela, e a mesma que
+    //     `voip_calls_select_org` já usava na leitura via
+    //     `can_see_lead_by_permissions`. Escrita e leitura coincidem de verdade.
+    //
+    //     Até 2026-09-02 aqui havia um gate de DONO que se dizia "a mesma
+    //     fronteira da leitura" — não era: a leitura era por visibilidade e a
+    //     escrita ficou mais estreita. Pior: ele lia colunas LEGADAS de
+    //     responsável, espelhadas por trigger e marcadas para drop (#755),
+    //     enquanto o produto atribui dono por `pre_sale_responsible_id` /
+    //     `sale_responsible_id` — 26 leads tinham dono canônico barrado pelo
+    //     gate. E como só ~8% dos leads com conversa têm dono, o botão sumia
+    //     justamente para o SDR no chat (medido na Milennials em 2026-09-02).
+    //
+    //     A regra NÃO é reescrita em TypeScript: quem responde é o banco, com
+    //     o JWT do chamador — e a policy já cobre as canônicas
+    //     (`is_user_responsible(pre_sale_responsible_id, sale_responsible_id)`)
+    //     e as demais portas (admin, `leads.view_all`, funil, gestor). Nenhuma
+    //     cópia à mão acompanharia isso. Fail-closed — erro de consulta nega.
+    const { data: visible, error: visibleErr } = await caller.asUser
+      .from("leads")
+      .select("id")
+      .eq("id", leadId)
+      .maybeSingle();
+
+    if (visibleErr || !visible) {
+      await logRuntime({
+        organizationId: caller.orgId,
+        module: "voip",
+        action: "lead_not_visible",
+        status: "error",
+        errorMessage: visibleErr?.message,
+        payloadSnapshot: { user_id: caller.userId, lead_id: leadId, tc_session_id: tcSessionId },
+      });
+      return deny("lead_not_visible");
     }
   } else {
     if (!args.existingCallId) return deny("call_not_answerable");

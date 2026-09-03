@@ -4,14 +4,14 @@ import { useIdentity } from "@/modules/identity";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
-import { startOfUTCDay, endOfUTCDay } from "@/modules/analytics/lib/utc-day";
+import { startOfUTCDay, endOfUTCDay } from "@/shared/time/utc-day";
 import {
   zonedDayStart,
   zonedDayEnd,
   zonedDateParts,
   zonedDayStartOfYMD,
   zonedDayEndOfYMD,
-} from "@/modules/analytics/lib/zoned-day";
+} from "@/shared/time/zoned-day";
 
 export type CommandPeriod = "today" | "week" | "month" | "quarter" | "custom";
 

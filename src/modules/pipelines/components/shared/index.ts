@@ -5,7 +5,6 @@
  * Reexportado pela API pública (`../../index.ts`) com os mesmos nomes.
  */
 export { AutoCreateLeadToggle } from "./AutoCreateLeadToggle";
-export { GhostLeadsBanner } from "./GhostLeadsBanner";
 export {
   ManagePipelineStagesContent,
   ManagePipelineStagesModal,

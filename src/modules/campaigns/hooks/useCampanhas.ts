@@ -10,12 +10,21 @@ import { useCanDo } from "@/modules/identity";
 // Tipos para os objetivos de campanha
 export type CampaignObjective = 'qualificacao' | 'agendamentos' | 'propostas' | 'livre';
 
+/** @deprecated Formato LEGADO persistido em `campanhas.free_target_pipe` —
+ *  aceito na leitura pra sempre (o resolvedor de funil entende o alias
+ *  `pipe_*`). Código novo usa `target_pipeline_id`/`target_stage_id`. */
 export type TargetPipe = 'pipe_whatsapp' | 'pipe_confirmacao' | 'pipe_propostas';
 
-export const OBJECTIVE_TARGET_MAP: Record<Exclude<CampaignObjective, 'livre'>, { pipe: TargetPipe; stage: string }> = {
-  qualificacao: { pipe: 'pipe_whatsapp', stage: 'novo' },
-  agendamentos: { pipe: 'pipe_confirmacao', stage: 'reuniao_marcada' },
-  propostas:    { pipe: 'pipe_propostas', stage: 'marcar_compromisso' },
+/**
+ * Mapa LEGADO objetivo→destino (Fatia B): só serve de fallback de leitura para
+ * campanha antiga sem `target_pipeline_id` (a migration 20270917000000
+ * backfillou as resolvíveis). `pipeline` é slug (o resolvedor aceita
+ * id/slug/alias); `stage` é stage_key.
+ */
+export const OBJECTIVE_TARGET_MAP: Record<Exclude<CampaignObjective, 'livre'>, { pipeline: string; stage: string }> = {
+  qualificacao: { pipeline: 'whatsapp', stage: 'novo' },
+  agendamentos: { pipeline: 'confirmacao', stage: 'reuniao_marcada' },
+  propostas:    { pipeline: 'propostas', stage: 'marcar_compromisso' },
 };
 
 export const OBJECTIVE_LABELS: Record<CampaignObjective, string> = {
@@ -100,6 +109,10 @@ export interface Campanha {
   objective: CampaignObjective;
   free_target_pipe: TargetPipe | null;
   free_target_stage: string | null;
+  // Destino canônico da extração (Fatia B): QUALQUER funil da org por
+  // (pipeline_id, stage_id). NULL = resolver pelo formato legado acima.
+  target_pipeline_id: string | null;
+  target_stage_id: string | null;
   // Campos dos modos de campanha
   campaign_type: CampaignType;
   agent_id: string | null;
@@ -224,6 +237,9 @@ export interface CampanhaInsert {
   objective?: CampaignObjective;
   free_target_pipe?: TargetPipe | null;
   free_target_stage?: string | null;
+  // Destino canônico (Fatia B) — qualquer funil por (pipeline_id, stage_id)
+  target_pipeline_id?: string | null;
+  target_stage_id?: string | null;
   // Campos dos modos de campanha
   campaign_type?: CampaignType;
   agent_id?: string | null;
@@ -249,8 +265,11 @@ export interface CampanhaStageInsert {
   is_reuniao_marcada?: boolean;
 }
 
-/** Regra: quando lead chega nesta etapa da campanha, enviar para o pipe na etapa indicada e remover da campanha */
-export type CampanhaPipeAutomationTarget = "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas";
+/** Regra: quando lead chega nesta etapa da campanha, enviar para o funil na
+ *  etapa indicada e remover da campanha. Fatia B: aceita QUALQUER funil —
+ *  `pipelines.id` (canônico) ou slug/alias legado (`pipe_*`, valor histórico
+ *  persistido — 1 linha em prod, lida pra sempre). */
+export type CampanhaPipeAutomationTarget = string;
 
 export interface CampanhaPipeAutomation {
   id: string;
@@ -314,7 +333,9 @@ export function useCampanhas() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as Campanha[];
+      // Ponte até o regen de types.ts: as colunas target_* (20270917000000)
+      // são mais novas que o Row gerado — o cast desce por unknown.
+      return (data ?? []) as unknown as Campanha[];
     },
     enabled: isReady && !!organizationId,
   });
@@ -476,6 +497,12 @@ export function useCreateCampanha() {
           objective: campanha.objective || 'livre',
           free_target_pipe: campanha.objective === 'livre' ? (campanha.free_target_pipe ?? null) : null,
           free_target_stage: campanha.objective === 'livre' ? (campanha.free_target_stage ?? null) : null,
+          // Destino canônico (Fatia B). Cast: colunas de 20270917000000, mais
+          // novas que o último types.ts gerado (regen na janela do deploy).
+          ...({
+            target_pipeline_id: campanha.target_pipeline_id ?? null,
+            target_stage_id: campanha.target_stage_id ?? null,
+          } as Record<string, unknown>),
           // Campos dos modos de campanha
           campaign_type: campanha.campaign_type || 'manual',
           agent_id: campanha.agent_id || null,
@@ -591,7 +618,8 @@ export function useUpdateCampanha() {
 
       const { data, error } = await supabase
         .from("campanhas")
-        .update(updates)
+        // Ponte até o regen de types.ts (colunas target_* de 20270917000000).
+        .update(updates as never)
         .eq("id", id)
         .select()
         .single();
@@ -1326,20 +1354,67 @@ export function useDeleteCampanhaDispatchRuleStep() {
 
 // --- Resolver destino de extração a partir do objetivo da campanha ---
 
-export function resolveExtractionTarget(campanha: Pick<Campanha, 'objective' | 'free_target_pipe' | 'free_target_stage'>): { pipe: TargetPipe; stage: string } | null {
+/**
+ * Destino da extração, id-first (Fatia B):
+ *   1. `target_pipeline_id`/`target_stage_id` — o par canônico (qualquer funil);
+ *   2. objetivo fixo legado → OBJECTIVE_TARGET_MAP (slug + stage_key);
+ *   3. 'livre' legado → free_target_pipe/free_target_stage (alias `pipe_*`,
+ *      que o resolvedor de funil entende) — aceito na leitura pra sempre;
+ *   4. nada resolve → null (campanha livre sem destino, comportamento de sempre).
+ *
+ * `pipeline` é referência (uuid, slug ou alias) e `stage` é referência
+ * (`pipeline_stages.id` uuid ou stage_key) — exatamente o que
+ * `useExtractLeadToPipe` resolve contra o modelo canônico.
+ */
+export function resolveExtractionTarget(
+  campanha: Pick<
+    Campanha,
+    'objective' | 'free_target_pipe' | 'free_target_stage' | 'target_pipeline_id' | 'target_stage_id'
+  >,
+): { pipeline: string; stage: string } | null {
+  if (campanha.target_pipeline_id && campanha.target_stage_id) {
+    return { pipeline: campanha.target_pipeline_id, stage: campanha.target_stage_id };
+  }
   if (campanha.objective !== 'livre') {
     return OBJECTIVE_TARGET_MAP[campanha.objective];
   }
   if (campanha.free_target_pipe && campanha.free_target_stage) {
-    return { pipe: campanha.free_target_pipe, stage: campanha.free_target_stage };
+    return { pipeline: campanha.free_target_pipe, stage: campanha.free_target_stage };
   }
   return null; // Campanha livre sem destino configurado
 }
 
-// --- Extrair lead da campanha e enviar para um pipe (sai da campanha, entra no pipe) ---
+// --- Extrair lead da campanha e enviar para um funil (sai da campanha, entra no funil) ---
 
-export type ExtractLeadToPipeTarget = "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas";
+/** @deprecated Fatia B: o alvo virou referência livre de funil (uuid/slug/alias).
+ *  Mantido só pela API pública do módulo até a F6 demolir o vocabulário. */
+export type ExtractLeadToPipeTarget = string;
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Aliases legados persistidos (free_target_pipe / automações antigas). */
+const LEGACY_PIPE_ALIASES: Record<string, string> = {
+  pipe_whatsapp: "whatsapp",
+  pipe_confirmacao: "confirmacao",
+  pipe_propostas: "propostas",
+  qualificacao: "whatsapp",
+};
+
+/**
+ * Extrai o lead da campanha para (funil, etapa) — QUALQUER funil da org, por
+ * referência (Fatia B). Escrita canônica em `pipeline_entries` (a mesma tabela
+ * que os INSTEAD OF das views legadas alimentavam — sem passar pelas views,
+ * que têm data pra morrer na F6). Comportamento preservado do fluxo legado:
+ *   · lead já no funil → só muda de etapa (update);
+ *   · lead fora → entra na etapa (insert), com responsável efetivo
+ *     `responsible_id ?? sdr_id ?? closer_id` e metadata espelhando o que as
+ *     views gravavam (responsible_id/sdr_id/closer_id);
+ *   · follow-up automation: `follow_up_automations` ainda é indexada por
+ *     `pipe_type` do trio — dispara só quando o destino é um funil de slug
+ *     whatsapp/confirmacao/propostas (ponte legada; funil custom nunca teve
+ *     automação dessas, então nada muda pra ele);
+ *   · por fim remove o lead da campanha (campanha_leads).
+ */
 export function useExtractLeadToPipe() {
   const queryClient = useQueryClient();
 
@@ -1348,7 +1423,7 @@ export function useExtractLeadToPipe() {
       campanha_lead_id,
       campanha_id,
       lead_id,
-      target_pipe,
+      pipeline,
       stage,
       organization_id,
       responsible_id,
@@ -1359,8 +1434,9 @@ export function useExtractLeadToPipe() {
       campanha_lead_id: string;
       campanha_id: string;
       lead_id: string;
-      target_pipe: ExtractLeadToPipeTarget;
-      /** Etapa (status) do pipe para onde o lead deve ir. Ex: "novo", "reuniao_marcada", "marcar_compromisso" */
+      /** Funil de destino: `pipelines.id` (canônico) ou slug/alias legado. */
+      pipeline: string;
+      /** Etapa de destino: `pipeline_stages.id` (canônico) ou stage_key legada. */
       stage: string;
       organization_id: string;
       responsible_id?: string | null;
@@ -1369,119 +1445,87 @@ export function useExtractLeadToPipe() {
       campaign_name?: string;
     }) => {
       const notes = campaign_name ? `Campanha: ${campaign_name}` : undefined;
-      const stageVal = stage as "novo" | "abordado" | "respondeu" | "esfriou" | "agendado" |
-        "reuniao_marcada" | "confirmar_d5" | "confirmar_d3" | "confirmar_d2" | "confirmar_d1" |
-        "pre_confirmada" | "confirmacao_no_dia" | "confirmada_no_dia" | "remarcar" | "compareceu" | "perdido" |
-        "marcar_compromisso" | "reativar" | "compromisso_marcado" | "proposta_enviada" | "futuro" | "vendido";
 
-      if (target_pipe === "pipe_whatsapp") {
-        const { data: existing } = await supabase
-          .from("pipe_whatsapp")
-          .select("id")
-          .eq("lead_id", lead_id)
-          .maybeSingle();
-        if (!existing) {
-          const effectiveResponsible = responsible_id ?? sdr_id ?? null;
-          const { data: row, error } = await supabase
-            .from("pipe_whatsapp")
-            .insert({
-              lead_id,
-              status: stageVal,
-              responsible_id: effectiveResponsible,
-              sdr_id: sdr_id ?? null,
-              organization_id,
-              notes: notes ?? null,
-            })
-            .select()
-            .single();
-          if (error) throw error;
+      // 1. Resolve o funil na org (id-first; slug/alias legado pra sempre).
+      const ref = pipeline.trim();
+      const slugRef = LEGACY_PIPE_ALIASES[ref.toLowerCase()] ?? ref;
+      let pipeQuery = supabase
+        .from("pipelines")
+        .select("id, slug")
+        .eq("organization_id", organization_id);
+      pipeQuery = UUID_RE.test(ref) ? pipeQuery.eq("id", ref) : pipeQuery.eq("slug", slugRef);
+      const { data: pipelineRow, error: pipeErr } = await pipeQuery.maybeSingle();
+      if (pipeErr) throw pipeErr;
+      if (!pipelineRow) throw new Error(`Funil "${pipeline}" não encontrado nesta organização.`);
+
+      // 2. Resolve a etapa DENTRO do funil (uuid casa qualquer linha; key só
+      //    etapa ativa — mesma semântica do motor moveStage do servidor).
+      let stageQuery = supabase
+        .from("pipeline_stages")
+        .select("id, stage_key")
+        .eq("organization_id", organization_id)
+        .eq("pipeline_id", pipelineRow.id);
+      stageQuery = UUID_RE.test(stage.trim())
+        ? stageQuery.eq("id", stage.trim())
+        : stageQuery.eq("stage_key", stage.trim()).eq("is_active", true);
+      const { data: stageRow, error: stageErr } = await stageQuery.maybeSingle();
+      if (stageErr) throw stageErr;
+      if (!stageRow) throw new Error(`Etapa "${stage}" não existe neste funil.`);
+
+      // 3. Entry corrente do par (funil, lead): primeira ABERTA; senão a mais
+      //    recente (mesma regra do pickActiveEntry do servidor).
+      const { data: entries, error: readErr } = await supabase
+        .from("pipeline_entries")
+        .select("id, closed_at, entered_at")
+        .eq("organization_id", organization_id)
+        .eq("pipeline_id", pipelineRow.id)
+        .eq("lead_id", lead_id)
+        .order("entered_at", { ascending: false })
+        .limit(50);
+      if (readErr) throw readErr;
+      const existing =
+        (entries ?? []).find((e) => !e.closed_at) ?? (entries ?? [])[0] ?? null;
+
+      const effectiveResponsible = responsible_id ?? sdr_id ?? closer_id ?? null;
+
+      if (!existing) {
+        const { error: insErr } = await supabase.from("pipeline_entries").insert({
+          lead_id,
+          organization_id,
+          pipeline_id: pipelineRow.id,
+          // stage_id é o canônico; o trigger espelho preenche a stage_key.
+          stage_id: stageRow.id,
+          stage_key: stageRow.stage_key,
+          assigned_to: effectiveResponsible,
+          notes: notes ?? null,
+          metadata: {
+            responsible_id: responsible_id ?? null,
+            sdr_id: sdr_id ?? null,
+            closer_id: closer_id ?? null,
+          },
+        });
+        if (insErr) throw insErr;
+
+        // Ponte legada: follow_up_automations ainda é por pipe_type do trio.
+        const trioSlug = ["whatsapp", "confirmacao", "propostas"].includes(pipelineRow.slug)
+          ? (pipelineRow.slug as "whatsapp" | "confirmacao" | "propostas")
+          : null;
+        if (trioSlug) {
           await triggerFollowUpAutomation({
             leadId: lead_id,
             assignedTo: effectiveResponsible,
-            pipeType: "whatsapp",
-            stage: stageVal,
-            sourcePipeId: row.id,
+            pipeType: trioSlug,
+            stage: stageRow.stage_key,
+            sourcePipeId: pipelineRow.id,
             organizationId: organization_id,
           });
-        } else {
-          const { error: updateErr } = await supabase
-            .from("pipe_whatsapp")
-            .update({ status: stageVal, ...(notes && { notes }) })
-            .eq("id", existing.id);
-          if (updateErr) throw updateErr;
-        }
-      } else if (target_pipe === "pipe_confirmacao") {
-        const { data: existing } = await supabase
-          .from("pipe_confirmacao")
-          .select("id")
-          .eq("lead_id", lead_id)
-          .maybeSingle();
-        if (!existing) {
-          const effectiveResponsible = responsible_id ?? sdr_id ?? closer_id ?? null;
-          const { data: row, error } = await supabase
-            .from("pipe_confirmacao")
-            .insert({
-              lead_id,
-              status: stageVal,
-              responsible_id: effectiveResponsible,
-              sdr_id: sdr_id ?? null,
-              organization_id,
-              notes: notes ?? null,
-            })
-            .select()
-            .single();
-          if (error) throw error;
-          await triggerFollowUpAutomation({
-            leadId: lead_id,
-            assignedTo: effectiveResponsible,
-            pipeType: "confirmacao",
-            stage: stageVal,
-            sourcePipeId: row.id,
-            organizationId: organization_id,
-          });
-        } else {
-          const { error: updateErr } = await supabase
-            .from("pipe_confirmacao")
-            .update({ status: stageVal, ...(notes && { notes }) })
-            .eq("id", existing.id);
-          if (updateErr) throw updateErr;
         }
       } else {
-        const { data: existing } = await supabase
-          .from("pipe_propostas")
-          .select("id")
-          .eq("lead_id", lead_id)
-          .maybeSingle();
-        if (!existing) {
-          const effectiveResponsible = responsible_id ?? closer_id ?? null;
-          const { data: row, error } = await supabase
-            .from("pipe_propostas")
-            .insert({
-              lead_id,
-              status: stageVal,
-              responsible_id: effectiveResponsible,
-              closer_id: closer_id ?? null,
-              organization_id,
-              notes: notes ?? null,
-            })
-            .select()
-            .single();
-          if (error) throw error;
-          await triggerFollowUpAutomation({
-            leadId: lead_id,
-            assignedTo: effectiveResponsible,
-            pipeType: "propostas",
-            stage: stageVal,
-            sourcePipeId: row.id,
-            organizationId: organization_id,
-          });
-        } else {
-          const { error: updateErr } = await supabase
-            .from("pipe_propostas")
-            .update({ status: stageVal, ...(notes && { notes }) })
-            .eq("id", existing.id);
-          if (updateErr) throw updateErr;
-        }
+        const { error: updateErr } = await supabase
+          .from("pipeline_entries")
+          .update({ stage_id: stageRow.id, stage_key: stageRow.stage_key, ...(notes && { notes }) })
+          .eq("id", existing.id);
+        if (updateErr) throw updateErr;
       }
 
       const { error: delError } = await supabase
@@ -1490,7 +1534,7 @@ export function useExtractLeadToPipe() {
         .eq("id", campanha_lead_id);
       if (delError) throw delError;
 
-      return { target_pipe };
+      return { pipeline_id: pipelineRow.id };
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["campanha_leads", variables.campanha_id] });

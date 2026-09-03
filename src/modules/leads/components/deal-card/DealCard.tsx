@@ -207,6 +207,7 @@ export function DealCard({
   onExcluir,
   excluindo,
   etiquetas,
+  acaoLigar,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
@@ -298,6 +299,14 @@ export function DealCard({
    * que é quem sabe se a coluna existe; aqui só se escolhe onde pendurar.
    */
   etiquetas?: ReactNode;
+  /**
+   * O botão de LIGAR para a pessoa do negócio, montado pronto pelo painel
+   * (`VoiceCallButton`, variante ícone). Slot, e não import, pela mesma razão
+   * de `painelChecklists`: este arquivo é alcançável a partir de
+   * `src/preview/main.tsx`, e o provider de voz lê react-query e Supabase.
+   * Não reestampa a pessoa — é um ato sobre ela, não uma identidade.
+   */
+  acaoLigar?: ReactNode;
 }) {
   const abaPedida: Aba =
     abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
@@ -392,8 +401,11 @@ export function DealCard({
             top-4`), e ele abriga também o `⋯`. O cluster não depende do estado
             do negócio: excluir um negócio JÁ ganho ou perdido é o caso mais
             comum de faxina de funil. */}
-        {(aberto || onExcluir) && (
+        {(aberto || onExcluir || acaoLigar) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pr-8">
+            {/* Ligar vem antes do desfecho: é o ato mais frequente sobre um
+                negócio aberto, e o único que não o encerra. */}
+            {acaoLigar}
             {aberto && (
               <AcaoPrimaria
                 icone={Check}

@@ -164,7 +164,7 @@ supabase/
 
 **Permissões (3 camadas)**: Master → Org Admin → Feature Permissions → Role Matrix. Hooks: `useUserRole()`, `useCanPerformAction(action)`, `useMasterAuth()`. Server-side enforcement map: `docs/PERMISSION-ENFORCEMENT.md`.
 
-**Pipelines**: `pipe_whatsapp` (qualificação), `pipe_confirmacao` (reunião), `pipe_propostas` (fechamento), `custom_pipelines`. Stages dinâmicas em `pipeline_stages`. Lead pode estar em múltiplos pipes.
+**Pipelines**: funil é funil (ADR-0034) — registro único em `pipelines`, etapas em `pipeline_stages` (FK `pipeline_id`, comportamento por `stage_role`: meeting_booked/meeting_held/won/lost), cards em `pipeline_entries`. Org nova nasce com UM funil de fábrica ("Funil de Vendas", slug `vendas`) já como `organizations.default_pipeline_id` (trigger `trg_seed_default_funnel`). Orgs antigas mantêm os funis semeados legados; `pipe_whatsapp/confirmacao/propostas` e `custom_*` são views de compat em demolição (F6). Lead pode estar em múltiplos funis.
 
 **Edge Function pattern**: `Deno.serve(withErrorBoundary('nome', handler))` + `withSecurityHeaders(getCorsHeaders(req))` + OPTIONS early return. O boundary devolve 500 **com CORS** — nunca remova o wrapper.
 
@@ -214,15 +214,15 @@ Provider-agnostic via adapter. Migração Evolution→Uazapi completa.
 ## Webhook lead-webhook
 
 ```json
-{"source":"meta_ads","organization_id":"uuid","fields":{"name":"...","phone":"...","email":"...","company":"..."},"tags":["Ouro"],"place_in_pipe":{"pipe":"whatsapp","stage":"novo_lead"},"assigned_user_id":"uuid","update_existing_if_match":true}
+{"source":"meta_ads","organization_id":"uuid","fields":{"name":"...","phone":"...","email":"...","company":"..."},"tags":["Ouro"],"place_in_pipe":{"pipe":"vendas","stage":"novo"},"assigned_user_id":"uuid","update_existing_if_match":true}
 ```
-Tags: array, JSON string `'["Ouro"]'`, ou string simples. Case-insensitive.
+Tags: array, JSON string `'["Ouro"]'`, ou string simples. Case-insensitive. `place_in_pipe.pipe` aceita id (uuid) ou slug de qualquer funil da org; funil inexistente → 4xx (D6). Sem `place_in_pipe`, o lead entra no funil padrão da org (`default_pipeline_id`).
 
 ## Domínio
 
 **Lead**: pessoa/empresa no sistema. Campos: nome, empresa, telefone, email, origem, rating(1-5 manual), qualification_score(0-100 auto), tags, responsáveis(SDR/Closer/Responsible).
 
-**Lifecycle**: Entrada → pipe_whatsapp(novo→abordado→respondeu→agendado) → pipe_confirmacao(marcada→d5→d3→d1→compareceu) → pipe_propostas(enviada→vendido/perdido) → upsell. Lead em múltiplos pipes simultâneo.
+**Lifecycle**: Entrada (porta declara o destino; fallback = funil padrão da org) → progressão pelas etapas do funil, ancorada em `stage_role` (reunião = meeting_booked/meeting_held; desfecho = won/lost em qualquer funil). Trilha de fábrica da org nova: Novo → Em conversa → Reunião marcada → Proposta enviada → Ganhou/Perdeu. Orgs antigas seguem com as trilhas legadas delas. Lead em múltiplos funis simultâneo.
 
 **Roles código**: `team_members.role` é o enum `app_role` = `admin | sdr | closer | agency | bdr | cliente | member`. Em uso hoje (prod): `admin` e `member`. **É `member`, nunca `membro`** — escrever `'membro'` estoura `22P02` no INSERT. **`master` NÃO é role**: é camada à parte (`is_master_user()`, `useMasterAuth()`), fora do enum. SDR/Closer existem no enum mas o produto os trata como rótulo de UI. Guarda mecânica: `tests/unit/role-vocabulary.test.ts`.
 
@@ -234,7 +234,7 @@ Tags: array, JSON string `'["Ouro"]'`, ou string simples. Case-insensitive.
 
 ## Data model
 
-`leads` (central) | `organizations` (tenant) | `team_members` (vendas+comissões) | `pipe_whatsapp/confirmacao/propostas` | `custom_pipelines`+`custom_pipe_entries` | `pipeline_stages` | `tags`+`lead_tags` | `campanhas`+`campanha_stages` | `workflows`+`workflow_executions` | `copilot_agents` | `conversations`+`conversation_messages` | `channel_messages` | `products` | `lead_history` | `follow_ups` | `webhook_deliveries` | `subscription_plans`
+`leads` (central) | `organizations` (tenant) | `team_members` (vendas+comissões) | `pipelines`+`pipeline_stages`+`pipeline_entries` (funis; views de compat `pipe_*`/`custom_*` em demolição) | `tags`+`lead_tags` | `campanhas`+`campanha_stages` | `workflows`+`workflow_executions` | `copilot_agents` | `conversations`+`conversation_messages` | `channel_messages` | `products` | `lead_history` | `follow_ups` | `webhook_deliveries` | `subscription_plans`
 
 Relações: Lead→pipes(1:N), Lead→tags(N:N via lead_tags), Lead→responsible/sdr/closer(FKs team_members), Org→tudo(scoped), Workflow→executions→steps, Agent→conversations→messages.
 

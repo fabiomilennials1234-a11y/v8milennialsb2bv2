@@ -59,7 +59,6 @@ vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
     numbers: [SO_PARA_RECEBER, SO_PARA_RECEBER_2],
     isLoading: false,
   }),
-  useCanCallLead: () => true,
 }));
 
 // ─── a fronteira de rede ─────────────────────────────────────────────────────

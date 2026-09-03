@@ -46,6 +46,7 @@ import {
   useDeletePipePropostaItem,
 } from "./hooks/legacy/usePipePropostaItems";
 import { useLossReasons } from "./hooks/config/useLossReasons";
+import { usePipelineDisplayConfig } from "./hooks/config/usePipelineDisplayConfig";
 import { RescheduleModal } from "./components/legacy/confirmacao/RescheduleModal";
 import { MergedMeetingEditor } from "./components/kanban/MergedMeetingEditor";
 import { usePipelineId } from "./hooks/model/usePipelineEntries";
@@ -69,6 +70,10 @@ const port: PipeOpsPort = {
   // SCRUM-633 — modelo unificado por pipeline_id (bulk sem sentinela custom:)
   useFunnels: usePipelines,
   useFunnelStages: useStagesDoFunil,
+  // SCRUM-608 — "quais funis de sistema a org TEM, e como ela os chama".
+  // `PipelineDisplayConfig` é superset estrutural de `SystemPipeDisplay` (traz
+  // `id`/`organization_id` a mais), então o hook satisfaz a porta sem adaptador.
+  useSystemPipes: usePipelineDisplayConfig,
   useCustomPipelines,
   useCustomPipelineStages,
   useAddLeadToCustomPipe,

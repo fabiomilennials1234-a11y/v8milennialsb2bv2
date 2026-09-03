@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useExportLeads, type ExportStageFilter } from "@/modules/leads";
+import { useExportLeads } from "@/modules/leads";
 import { useCanDo } from "@/modules/identity";
 import { toast } from "sonner";
 import { FileDown, Loader2, FileSpreadsheet, FileText } from "lucide-react";
@@ -15,16 +15,13 @@ interface ExportStageDialogProps {
   onOpenChange: (open: boolean) => void;
   stageId: string;
   stageTitle: string;
-  pipe: ExportStageFilter["pipe"];
-  /** Obrigatório quando pipe === "custom". */
-  customPipelineId?: string;
   /**
-   * SCRUM-633 — modo unificado: com `pipelineId` presente E `pipe="pipeline"`,
-   * a etapa é endereçada por (pipelines.id, pipeline_stages.id) e o resolve
-   * acontece direto em `pipeline_entries`, servindo QUALQUER funil. É o modo
-   * da página unificada `/funil/:slug`; os modos por slug seguem até a W6.
+   * SCRUM-633/637 — modo único: a etapa é endereçada por
+   * (pipelines.id, pipeline_stages.id) e o resolve acontece direto em
+   * `pipeline_entries`, servindo QUALQUER funil. Os modos por slug morreram
+   * no flip junto com as páginas que os usavam.
    */
-  pipelineId?: string;
+  pipelineId: string;
   /** Quantidade de leads visíveis no Kanban para exibir no diálogo. */
   leadCount: number;
 }
@@ -33,16 +30,13 @@ interface ExportStageDialogProps {
  * Diálogo para exportar leads de uma única etapa do Kanban.
  * Reusa `useExportLeads` com `stageFilter` para garantir o mesmo schema do
  * arquivo da exportação global (SCRUM-635: bloco do lead + um bloco por funil
- * REAL da org — não mais os 3 pipes fixos). Todo modo de `pipe` colapsa em
- * `pipeline_id` dentro do motor; os valores legados seguem aceitos até a W6.
+ * REAL da org — não mais os 3 pipes fixos).
  */
 export function ExportStageDialog({
   open,
   onOpenChange,
   stageId,
   stageTitle,
-  pipe,
-  customPipelineId,
   pipelineId,
   leadCount,
 }: ExportStageDialogProps) {
@@ -67,12 +61,7 @@ export function ExportStageDialog({
     try {
       const { count } = await exportLeads({
         format,
-        stageFilter: {
-          pipe,
-          stageId,
-          ...(pipe === "custom" && customPipelineId ? { customPipelineId } : {}),
-          ...(pipe === "pipeline" && pipelineId ? { pipelineId } : {}),
-        },
+        stageFilter: { pipelineId, stageId },
         stageTitle,
       });
       if (count === 0) {

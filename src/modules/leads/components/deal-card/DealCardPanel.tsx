@@ -17,6 +17,7 @@ import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
 import { isMissingSchemaError } from "@/lib/rpc-errors";
 import { useFeaturePermission } from "@/modules/identity";
+import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
@@ -61,6 +62,7 @@ import type { DealCardComentario, ItemEditado } from "./types";
  */
 export const DealCardPanel = memo(function DealCardPanel() {
   const { isOpen, entryId, leadId, aba, close, openDeal } = useDealSheet();
+  const renderLigar = useLeadCallAction();
   const { openLead } = useLeadSheet();
   const { isMobile } = useViewport();
   const queryClient = useQueryClient();
@@ -135,14 +137,10 @@ export const DealCardPanel = memo(function DealCardPanel() {
       const etapa = data.etapas.find((e) => e.chave === chave);
       if (!etapa) return;
 
-      if (data.pipeTable) {
-        await move({
-          kind: "system",
-          pipeTable: data.pipeTable,
-          pipeId: entryId,
-          stageKey: chave,
-          stageLabel: etapa.nome,
-        });
+      // SCRUM-637: discriminação por FAMÍLIA (`funilEhSystem`), não mais pelo
+      // nome da view — funil de sistema com slug fora do trio agora move.
+      if (data.funilEhSystem) {
+        await move({ kind: "system", pipeId: entryId, stageKey: chave, stageLabel: etapa.nome });
       } else {
         await move({ kind: "custom", entryId, stageId: chave, stageLabel: etapa.nome });
       }
@@ -230,12 +228,9 @@ export const DealCardPanel = memo(function DealCardPanel() {
    * isso com todas as letras. "Excluir" num painel que mostra a pessoa na
    * coluna da esquerda é ambíguo o bastante para merecer a frase inteira.
    *
-   * ⚠️ O discriminador é `funilEhSystem`, **não** `pipeTable`. `pipeTable` é
-   * nome de VIEW e nasce `null` em funil de sistema fora dos três slugs
-   * conhecidos (`upsell`, e os funis de sistema novos) — rotear por ele
-   * mandaria a exclusão desses para `custom_pipe_entries`, onde o id não
-   * existe. `moverEtapa` acima continua com `pipeTable` de propósito: lá o
-   * destino da escrita É a view. Ver `useExcluirNegocio` para o resto.
+   * ⚠️ O discriminador é `funilEhSystem` (`pipelines.type`) — desde a
+   * SCRUM-637 é o MESMO critério do `moverEtapa` acima: nenhuma decisão sai
+   * mais do nome da view. Ver `useExcluirNegocio` para o resto.
    */
   const { allowed: podeExcluirCard } = useFeaturePermission("pipeline.delete_cards");
   const { excluir, excluindo } = useExcluirNegocio();
@@ -451,6 +446,11 @@ export const DealCardPanel = memo(function DealCardPanel() {
           !comLead && leadId ? (
             <LeadCardEtiquetas leadId={leadId} podeCriar={!!souAdmin} />
           ) : undefined
+        }
+        /* Vê o negócio → vê o lead → pode ligar. Quem desenha o botão é a
+           raiz (App.tsx), via LeadCallActionSlot. */
+        acaoLigar={
+          leadId && renderLigar ? renderLigar({ id: leadId, nome: data.lead.nome }) : undefined
         }
         onSaveNote={salvarNota}
         onMoverEtapa={moverEtapa}

@@ -24,9 +24,14 @@
  * o servidor vai recusar com `not_instance_member` (HTTP 403).
  *
  * ─── As quatro condições, e de onde cada uma vem ────────────────────────────
- * (Existe uma QUINTA, que não é sobre número e sim sobre lead — a dona do lead,
- * em `useCanCallLead`, no fim deste arquivo. Todas as cinco traduzem o mesmo
- * gate do servidor, e ficam juntas pelo mesmo motivo.)
+ * (Sobre o LEAD não há condição no front desde 2026-09-02: a regra é "vê o
+ * lead → pode ligar", e quem decide se o lead está na tela é a RLS de `leads`.
+ * O servidor confere a mesma RLS com o JWT do chamador — `call-plane.ts`,
+ * bloco 2b, `lead_not_visible`. Antes existia aqui um `useCanCallLead` que
+ * exigia ser dono do lead — e lendo colunas legadas de responsável, não as
+ * canônicas `pre_sale_responsible_id`/`sale_responsible_id`. Como só ~8% dos
+ * leads com conversa têm dono, o botão sumia justamente para o SDR no chat.
+ * Medido na Milennials em 2026-09-02.)
  *
  * Um número só serve para ligar quando as quatro valem ao mesmo tempo:
  *   · o vendedor tem a permissão de ligar     → `useCanDo("voip.call.start")`
@@ -51,7 +56,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { isVirtualTeamMember, useCanDo, useOrganization } from "@/modules/identity";
+import { useCanDo, useOrganization } from "@/modules/identity";
 import { useWhatsAppInstancesForUser } from "@/modules/communication/hooks/chat/useWhatsAppInstances";
 
 export interface CallableVoiceNumber {
@@ -232,88 +237,4 @@ export function useCallableVoiceNumbers() {
  */
 export function useAnswerableVoiceNumbers() {
   return useVoiceNumbersFor("voip.call.answer");
-}
-
-/**
- * Este vendedor alcança ESTE lead?
- *
- * A quinta condição, e a única que depende do lead — por isso ela não cabe em
- * `useCallableVoiceNumbers`, que responde "por quais números" e vive no provider
- * da raiz, onde lead nenhum existe. Mora aqui, ao lado das outras, porque as
- * cinco são a mesma tradução do mesmo gate: `_shared/voip/call-plane.ts`.
- *
- * A regra é a do servidor, à letra (`call-plane.ts`, bloco 2): SDR, closer ou
- * responsável do lead — as três colunas, e só elas. `pre_sale_responsible_id` e
- * `sale_responsible_id` existem na tabela e descrevem outra divisão de trabalho;
- * o servidor não as lê, então lê-las aqui ofereceria o botão para quem tomaria
- * `not_lead_owner` (HTTP 403) — o defeito que este hook existe para fechar.
- *
- * ─── Por que isto importa mais do que parece ────────────────────────────────
- * `leads.view_all` nasce `true` e a policy `leads_select_by_responsibility_and_permissions`
- * libera todo lead da organização. Por PADRÃO o vendedor enxerga leads alheios —
- * e ver nunca foi poder ligar. Sem esta pergunta o botão aparecia em todos eles
- * e falhava em silêncio, que é o modo mais caro de errar: ensina o vendedor a
- * desconfiar da tela inteira.
- *
- * ─── Quem bypassa ──────────────────────────────────────────────────────────
- * `isOrgAdmin` (`_shared/voip/caller.ts`) é `isMaster || isGestor || role ===
- * "admin"` — NÃO é só admin. No front os dois shadow users chegam como
- * team_member VIRTUAL (`master-virtual-*`, `gestor-virtual-*`) com `role`
- * `admin`, e `isVirtualTeamMember` é como o resto do produto já os reconhece
- * (`useWhatsAppInstancesForUser` faz o mesmo bypass, com o mesmo par). Reusar o
- * par é o que impede uma terceira definição de "admin operacional" nascer aqui.
- *
- * O id virtual não bate com coluna nenhuma de lead: sem o bypass, master e
- * gestor perderiam o botão em TODO lead.
- *
- * Sobra UM canto onde o front fica mais RESTRITO que o servidor, declarado e
- * aceito: o master que também é `team_member` real e não-admin da organização
- * chega aqui como membro comum (o virtual só é cunhado quando não há linha
- * real), e perde o botão em lead alheio que o servidor aceitaria. Errar para o
- * lado restrito esconde um botão que funcionaria; errar para o outro é
- * exatamente o defeito que esta função fecha.
- *
- * ─── O custo ───────────────────────────────────────────────────────────────
- * `leadId` nulo é como o chamador diz "ainda não vale perguntar" — o botão passa
- * nulo enquanto não houver número ao alcance, e assim as ~29 organizações sem
- * voz seguem pagando ZERO por esta condição. Admin/master/gestor também não
- * pagam: a resposta deles não depende da linha do lead. Sobra uma consulta por
- * lead, só para membro comum, só no chat, com cache por `queryKey`.
- *
- * Responde `false` até saber. É a direção segura: botão que aparece tarde custa
- * um instante; botão que aparece e falha custa a confiança na tela.
- */
-export function useCanCallLead(leadId: string | null | undefined): boolean {
-  const { organizationId, teamMemberId, role } = useOrganization();
-  const admOperacional = isVirtualTeamMember(teamMemberId) || role === "admin";
-
-  const { data: ehDele } = useQuery<boolean>({
-    queryKey: ["voip_lead_owner", organizationId, leadId, teamMemberId],
-    enabled: !!leadId && !!organizationId && !!teamMemberId && !admOperacional,
-    // Muda quando alguém reatribui o lead, não por interação da tela.
-    staleTime: 60_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("leads")
-        .select("sdr_id, closer_id, responsible_id")
-        .eq("id", leadId!)
-        // Em produção quem barra outra organização é a RLS de `leads`. O filtro
-        // explícito é o mesmo `lead_org_mismatch` que o servidor cobra, e não
-        // depende da RLS estar escrita como se espera.
-        .eq("organization_id", organizationId!)
-        .maybeSingle();
-
-      // Lead ausente é `lead_not_found` no servidor; erro aqui é infraestrutura.
-      // Os dois negam: um gate que abre quando o banco tosse não é gate.
-      if (error || !data) return false;
-
-      return data.sdr_id === teamMemberId ||
-        data.closer_id === teamMemberId ||
-        data.responsible_id === teamMemberId;
-    },
-  });
-
-  if (!leadId) return false;
-  if (admOperacional) return true;
-  return ehDele === true;
 }

@@ -138,7 +138,7 @@ describe("CrossPipePanel — rails", () => {
       data: [
         {
           type: "standard",
-          pipeType: "qualificacao",
+          pipeType: "whatsapp",
           label: "Qualificação",
           color: "#6366f1",
           pipeId: "entry-q",
@@ -284,7 +284,7 @@ describe("CrossPipePanel — collapsible rails", () => {
   const threeActivePipes = [
     {
       type: "standard",
-      pipeType: "qualificacao",
+      pipeType: "whatsapp",
       label: "Qualificação",
       color: "#6366f1",
       pipeId: "entry-q",

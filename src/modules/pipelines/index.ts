@@ -105,7 +105,7 @@ export {
   useCreatePipelineStage,
   useUpdatePipelineStage,
   useDeletePipelineStage,
-  DEFAULT_STAGES,
+  FALLBACK_STAGES,
   useAllPipelineStageOptions,
   usePipelineStageOptions,
   getPipelineTypeName,
@@ -225,7 +225,6 @@ export {
   ALL_ORIGIN_OPTIONS,
   countActiveFilters,
   PipelineListView,
-  PipeTableView,
   StageWorkflowsBadge,
   StageWorkflowsBadgeWrapper,
 } from "./components/kanban";
@@ -241,7 +240,6 @@ export type {
 
 // ── Components: shared (Ghost, MetricsPeriod, Manage/Dispatch/Distribution/Settings)
 export {
-  GhostLeadsBanner,
   ManagePipelineStagesContent,
   ManagePipelineStagesModal,
   PipeDispatchRulesSection,
@@ -257,8 +255,6 @@ export {
   CreatePipelineModal,
   PIPELINE_COLORS,
   PIPELINE_ICONS,
-  CustomPipeLeadCard,
-  CustomPipelineKanban,
   CustomPipeSettingsDialog,
   ImportCustomPipelineContent,
 } from "./components/custom";
@@ -295,7 +291,6 @@ export type { AudienceConditions } from "./components/disparo";
 export {
   AddMeetingModal,
   ConfirmacaoCard,
-  ConfirmacaoDetailModal,
   ConfirmacaoStats,
   MeetingCountdown,
   MeetingTimeline,
@@ -331,3 +326,8 @@ export type {
 // a transição compareceu → Orçamentos, e cross-module só entra pelo barrel.
 export { moverNegocio, invalidateAfterMove } from "./lib/moverNegocio";
 export type { MoverNegocioParams } from "./lib/moverNegocio";
+
+// ── Identidade visual do funil (SCRUM-637) ────────────────────────────────
+// Cor/ícone de QUALQUER funil vêm de `pipelines`; a lateral (platform) resolve
+// o ícone por aqui — mapa canônico único, sem cópias por tela.
+export { FUNIL_ICON_MAP, funilIcon } from "./lib/funil-icons";

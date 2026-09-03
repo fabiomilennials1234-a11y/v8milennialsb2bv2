@@ -191,6 +191,15 @@
 #      lead. `has_function_privilege` nome por nome — nem anon, nem
 #      authenticated, nem service_role executam a função nova.
 #
+#  25b. voip_can_see_call_dono_canonico_test.sql — a fronteira do lead na leitura
+#      de voip_calls olha o dono CANÔNICO (20270915000000). O caso que manda:
+#      membro é `sale_responsible_id` e `closer_id` é NULO (26 leads assim em
+#      produção em 2026-09-02) — com a função antiga, lendo as legadas
+#      sdr_id/closer_id, o dono de verdade não lia a própria ligação. Semeia a
+#      divergência com as triggers OFF, restringe leads.view_* nos dois membros
+#      para que só a responsabilidade decida, e afirma os grants depois do
+#      OR REPLACE (DROP+CREATE devolveria EXECUTE a anon).
+#
 #  26. metric_negocio_semantica_test.sql — LEAD ≠ NEGÓCIO (SCRUM-311 fatia 9,
 #      20270813100000, ADR-0023 `negocio-is-the-funnel-unit`). A asserção que o
 #      arquivo existe para fazer: um lead com DOIS negócios abertos devolve
@@ -540,6 +549,7 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/voip_recording_playback_test.sql" \
     "$SCRIPT_DIR/voip_recording_retention_test.sql" \
     "$SCRIPT_DIR/voip_incoming_creates_call_test.sql" \
+    "$SCRIPT_DIR/voip_can_see_call_dono_canonico_test.sql" \
     "$SCRIPT_DIR/whatsapp_instance_reap_queue_test.sql" \
     "$SCRIPT_DIR/subscription_snapshot_base_layer_test.sql" \
     "$SCRIPT_DIR/organizations_plan_fk_test.sql" \
@@ -563,12 +573,14 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/avisos_varreduras_test.sql" \
     "$SCRIPT_DIR/avisos_preferencias_test.sql" \
     "$SCRIPT_DIR/avisos_push_test.sql" \
-    "$SCRIPT_DIR/avisos_limpeza_test.sql"
+    "$SCRIPT_DIR/avisos_limpeza_test.sql" \
+    "$SCRIPT_DIR/lead_custom_fields_org_em_uso_test.sql" \
+    "$SCRIPT_DIR/org_plural_em_todas_as_policies_test.sql"
 }
 
 run_with_psql() {
   local f
-  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql password_reset_grants_test.sql assert_org_access_test.sql export_lead_data_authz_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql metric_leads_sem_responsavel_test.sql metric_qualidade_lead_test.sql metric_negocios_perdidos_test.sql metric_tempo_resposta_test.sql metric_taxa_qualidade_test.sql metric_reunioes_no_show_test.sql metric_negocio_semantica_test.sql metric_custom_tree_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql rls_inv6_definer_sem_gate_test.sql billing_cycle_semiannual_test.sql payment_links_package_test.sql payment_history_receipt_period_method_test.sql payment_webhook_ledger_test.sql provision_existing_org_test.sql payment_link_buyers_test.sql provision_new_org_test.sql payment_link_paid_at_test.sql metric_conversao_etapas_test.sql metric_coorte_canonica_test.sql metric_ganho_perda_test.sql metric_taxa_pre_venda_test.sql metric_ltv_test.sql metric_clientes_sem_resposta_test.sql metric_taxa_resposta_automacao_test.sql metric_clientes_sem_atuacao_test.sql metric_curva_abc_test.sql disparo_resolvers_org_scope_test.sql deal_procedencia_test.sql auto_seed_card_morto_test.sql deal_last_activity_test.sql api_lead_create_search_test.sql api_create_deal_test.sql api_read_deal_test.sql api_update_deal_test.sql api_move_deal_test.sql avisos_coalescing_red_fixture.sql avisos_coalescing_test.sql avisos_produtores_test.sql avisos_automacao_test.sql avisos_varreduras_test.sql avisos_preferencias_test.sql avisos_push_test.sql avisos_limpeza_test.sql; do
+  for f in rls_invariants_red_fixture.sql rls_invariants.sql metric_period_bounds_test.sql stage_role_test.sql stage_role_money_guard_test.sql pipeline_stage_events_test.sql sale_events_test.sql sale_events_state_backfill_test.sql commission_projection_test.sql get_sales_metrics_test.sql get_funnel_flow_test.sql get_ranking_test.sql get_commission_ledger_test.sql productivity_canonical_test.sql custom_pipeline_stages_stage_role_test.sql duplicate_leads_rpcs_test.sql password_reset_grants_test.sql assert_org_access_test.sql export_lead_data_authz_test.sql metric_revenue_stream_test.sql sale_events_producer_identity_test.sql carteira_emits_sale_events_test.sql funnel_stream_by_customer_moment_test.sql reetiqueta_funnel_streams_test.sql composable_metrics_engine_test.sql metric_leads_sem_responsavel_test.sql metric_qualidade_lead_test.sql metric_negocios_perdidos_test.sql metric_tempo_resposta_test.sql metric_taxa_qualidade_test.sql metric_reunioes_no_show_test.sql metric_negocio_semantica_test.sql metric_custom_tree_test.sql tv_shell_legacy_cells_and_seed_test.sql tv_reseed_s1_test.sql tv_s2_stage_label_scope_test.sql parity_p1_measures_test.sql send_dedup_log_test.sql voip_foundation_test.sql voip_gate_test.sql voip_call_id_provenance_test.sql voip_sweep_stuck_calls_test.sql voip_reserve_inbound_requires_tc_call_id_test.sql voip_webhook_ingest_test.sql voip_reserve_instance_access_test.sql voip_call_log_projection_test.sql voip_recording_ingest_test.sql voip_recording_playback_test.sql voip_recording_retention_test.sql voip_incoming_creates_call_test.sql whatsapp_instance_reap_queue_test.sql subscription_snapshot_base_layer_test.sql organizations_plan_fk_test.sql organizations_plan_quota_sync_test.sql inv5_public_tables_readable_by_anon_test.sql payment_links_test.sql rls_inv6_definer_sem_gate_test.sql billing_cycle_semiannual_test.sql payment_links_package_test.sql payment_history_receipt_period_method_test.sql payment_webhook_ledger_test.sql provision_existing_org_test.sql payment_link_buyers_test.sql provision_new_org_test.sql payment_link_paid_at_test.sql metric_conversao_etapas_test.sql metric_coorte_canonica_test.sql metric_ganho_perda_test.sql metric_taxa_pre_venda_test.sql metric_ltv_test.sql metric_clientes_sem_resposta_test.sql metric_taxa_resposta_automacao_test.sql metric_clientes_sem_atuacao_test.sql metric_curva_abc_test.sql disparo_resolvers_org_scope_test.sql deal_procedencia_test.sql auto_seed_card_morto_test.sql deal_last_activity_test.sql api_lead_create_search_test.sql api_create_deal_test.sql api_read_deal_test.sql api_update_deal_test.sql api_move_deal_test.sql avisos_coalescing_red_fixture.sql avisos_coalescing_test.sql avisos_produtores_test.sql avisos_automacao_test.sql avisos_varreduras_test.sql avisos_preferencias_test.sql avisos_push_test.sql avisos_limpeza_test.sql lead_custom_fields_org_em_uso_test.sql org_plural_em_todas_as_policies_test.sql; do
     echo "----- running $f via psql -----"
     # --variable ON_ERROR_STOP=1 turns any pgTAP failure (which RAISEs) into a
     # non-zero exit. We also grep for a TAP "not ok" line as a belt-and-braces

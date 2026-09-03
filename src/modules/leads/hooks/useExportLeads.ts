@@ -54,22 +54,16 @@ type ExportFormat = "csv" | "xlsx";
  * Filtro por etapa do Kanban: limita a exportação aos leads que estejam na
  * etapa indicada do funil especificado.
  *
- * SCRUM-635: o MOTOR é único — todo modo colapsa em `pipeline_id` e resolve
- * direto em `pipeline_entries` (fonte única pós-W3). Os valores legados de
- * `pipe` seguem aceitos como FORMATO DE ENTRADA até a W6:
- *   · "whatsapp" | "confirmacao" | "propostas": `stageId` é o stage_key; o
- *     funil é resolvido por (org, slug, type='system') em `pipelines`;
- *   · "custom": `stageId` é o uuid da etapa e `customPipelineId` (que É o
- *     `pipelines.id` pós-inversão do silo) é obrigatório;
- *   · "pipeline" (SCRUM-633, canônico): `pipelineId` endereça QUALQUER funil
- *     e `stageId` é o uuid de `pipeline_stages` (stage_key também é aceito).
+ * SCRUM-635/637: o MOTOR é único — (pipeline_id, etapa) resolve direto em
+ * `pipeline_entries` (fonte única pós-W3). Os braços legados por slug
+ * ("whatsapp"/"confirmacao"/"propostas") e "custom" morreram no flip da 637
+ * junto com as páginas que os alimentavam — este é o único formato.
  */
 export interface ExportStageFilter {
-  pipe: "whatsapp" | "confirmacao" | "propostas" | "custom" | "pipeline";
+  /** `pipelines.id` — endereça QUALQUER funil (sistema ou custom). */
+  pipelineId: string;
+  /** uuid de `pipeline_stages` (canônico) ou stage_key. */
   stageId: string;
-  customPipelineId?: string;
-  /** Obrigatório quando pipe === "pipeline". */
-  pipelineId?: string;
 }
 
 /** Filtros ativos da lista de leads (busca, origem, rating, qualificação, UF).
@@ -184,28 +178,10 @@ export function useExportLeads(): UseExportLeadsResult {
       let stageLeadIds: string[] | null = null;
       if (options.stageFilter) {
         const sf = options.stageFilter;
-        let targetPipelineId: string | null = null;
-        if (sf.pipe === "pipeline") {
-          if (!sf.pipelineId) {
-            throw new Error("pipelineId é obrigatório quando pipe='pipeline'");
-          }
-          targetPipelineId = sf.pipelineId;
-        } else if (sf.pipe === "custom") {
-          if (!sf.customPipelineId) {
-            throw new Error("customPipelineId é obrigatório quando pipe='custom'");
-          }
-          // Pós-inversão do silo (20270908001000) o id do funil custom É o
-          // `pipelines.id` — nenhuma tradução necessária.
-          targetPipelineId = sf.customPipelineId;
-        } else {
-          // Slug legado dos pipes de sistema → linha de `pipelines` da org.
-          // type='system' desambigua funil custom homônimo (mesma regra da
-          // view de compat que este caminho substitui).
-          targetPipelineId =
-            pipelines.find((p) => p.slug === sf.pipe && p.type === "system")?.id ?? null;
-          // Org sem o funil: a view de compat devolvia vazio — preserva.
-          if (!targetPipelineId) return { count: 0 };
+        if (!sf.pipelineId) {
+          throw new Error("pipelineId é obrigatório no stageFilter");
         }
+        const targetPipelineId = sf.pipelineId;
 
         // `as any` no from: pipeline_entries.stage_id (20270906002000) ainda
         // não está no types.ts gerado — mesmo padrão de usePipelines.
@@ -336,7 +312,7 @@ export function useExportLeads(): UseExportLeadsResult {
 
       const dateStamp = new Date().toISOString().slice(0, 10);
       const filename = options.stageFilter
-        ? `leads_${options.stageFilter.pipe}_${slugify(options.stageTitle ?? options.stageFilter.stageId)}_${dateStamp}`
+        ? `leads_funil_${slugify(options.stageTitle ?? options.stageFilter.stageId)}_${dateStamp}`
         : `leads_export_${dateStamp}`;
       const headers = buildExportHeaders(EXPORT_LEAD_HEADERS, pipelines);
 

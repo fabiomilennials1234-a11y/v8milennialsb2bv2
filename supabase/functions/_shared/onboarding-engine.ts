@@ -54,13 +54,6 @@ export async function verifyWhatsAppConnected(supabase: SupabaseClient, orgId: s
   return !!data;
 }
 
-const SYSTEM_PIPE_SLUGS = ["whatsapp", "confirmacao", "propostas", "upsell"] as const;
-
-function slugFromConfigKey(key: string): string | null {
-  const slug = key.startsWith("pipe_") ? key.slice(5) : key;
-  return (SYSTEM_PIPE_SLUGS as readonly string[]).includes(slug) ? slug : null;
-}
-
 function slugify(name: string, sep: string): string {
   return name
     .toLowerCase()
@@ -71,23 +64,19 @@ function slugify(name: string, sep: string): string {
 }
 
 /**
- * Aplica os templates de funil na org — CAMINHO CANÔNICO (SCRUM-635, W4).
+ * Aplica os templates de funil na org — lista LIVRE (SCRUM-641).
  *
- * `default_pipelines_config` (chaves `pipe_whatsapp`/`pipe_confirmacao`/
- * `pipe_propostas`/… com `{visible, label}`): cada funil visível nasce pela
- * RPC `enable_system_pipeline` — registro em `pipeline_display_config` +
- * espelho em `pipelines` + etapas semeadas server-side (SCRUM-618). O `label`
- * entra por UPDATE depois (a RPC preserva nome personalizado).
+ * O template só carrega `custom_pipelines`: cada um vira funil comum nas
+ * tabelas-base `pipelines` + `pipeline_stages` (modelo único pós-W3),
+ * espelhando o fluxo de criação do front (`useCreateCustomPipeline`):
+ * slug/stage_key canônicos, org nas etapas, rollback do funil se as etapas
+ * falharem.
  *
- * ⚠️ A versão anterior upsertava `pipeline_display_config` com uma coluna
- * `config` QUE NÃO EXISTE (onConflict "organization_id", que também não é
- * chave) e engolia o erro — o bloco default nunca aplicou nada em produção.
- *
- * `custom_pipelines` do template: escreve nas tabelas-base `pipelines` +
- * `pipeline_stages` (modelo único pós-W3) espelhando o fluxo de criação do
- * front (`useCreateCustomPipeline`): slug/stage_key canônicos, org nas
- * etapas, rollback do funil se as etapas falharem. A versão anterior inseria
- * `custom_pipeline_stages` SEM organization_id/stage_key.
+ * `default_pipelines_config` (os 3 toggles fixos do trio legado) é IGNORADO
+ * desde o SCRUM-641 — org nova já nasce com o "Funil de Vendas" semeado como
+ * funil padrão pelo trigger `trg_seed_default_funnel` (20270918000000), e o
+ * trio deixou de ser oferecível. O log abaixo denuncia template antigo que
+ * ainda carregue a chave.
  */
 export async function applyPipelineTemplates(
   supabase: SupabaseClient,
@@ -97,36 +86,18 @@ export async function applyPipelineTemplates(
   const created: any[] = [];
 
   for (const tpl of templates) {
-    const defaultConfig = (tpl.default_pipelines_config ?? {}) as Record<
-      string,
-      { visible?: boolean; label?: string }
-    >;
-    const applied: { slug: string; label?: string }[] = [];
-    for (const [key, cfg] of Object.entries(defaultConfig)) {
-      const slug = slugFromConfigKey(key);
-      if (!slug || !cfg?.visible) continue;
-      const { error } = await supabase.rpc("enable_system_pipeline", {
-        p_org_id: orgId,
-        p_pipe_type: slug,
-      });
-      if (error) {
-        console.error("[onboarding-engine] enable_system_pipeline falhou:", slug, error.message);
-        continue;
-      }
-      if (cfg.label) {
-        const { error: renameError } = await supabase
-          .from("pipeline_display_config")
-          .update({ display_name: cfg.label, updated_at: new Date().toISOString() })
-          .eq("organization_id", orgId)
-          .eq("pipe_type", slug);
-        if (renameError) {
-          console.error("[onboarding-engine] rename do funil falhou:", slug, renameError.message);
-        }
-      }
-      applied.push({ slug, label: cfg.label });
-    }
-    if (applied.length > 0) {
-      created.push({ type: "default_config", name: tpl.name, enabled: applied });
+    // SCRUM-641: o bloco `default_pipelines_config` → `enable_system_pipeline`
+    // MORREU. Org nova já nasce com o "Funil de Vendas" semeado como padrão
+    // (trigger trg_seed_default_funnel, 20270918000000); template master não
+    // oferece mais o trio legado como toggle fixo — o que o template carrega
+    // é a lista LIVRE de `custom_pipelines` abaixo. As chaves
+    // `default_pipelines_config` dos 3 templates de prod (medido 2026-09-03)
+    // ficam inertes de propósito.
+    if (tpl.default_pipelines_config && Object.keys(tpl.default_pipelines_config).length > 0) {
+      console.log(
+        "[onboarding-engine] default_pipelines_config ignorado (SCRUM-641, funil único de fábrica):",
+        tpl.name,
+      );
     }
 
     const customs = tpl.custom_pipelines ?? [];

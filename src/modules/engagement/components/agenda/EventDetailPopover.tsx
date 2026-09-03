@@ -392,7 +392,7 @@ export function EventDetailPopover({
 
         {event.source === "pipe_confirmacao" && (
           <a
-            href="/pipe-confirmacao"
+            href="/funil/confirmacao"
             className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <GitBranch className="w-3.5 h-3.5 shrink-0" />

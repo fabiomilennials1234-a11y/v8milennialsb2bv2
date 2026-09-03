@@ -18,15 +18,15 @@ import { useFeaturePermissions, useIdentity, useOrganization, useUserRole } from
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
 import { useMetricsStudioEnabled } from "@/modules/analytics";
 import {
+  funilIcon,
   useActiveTemporaryFunnels,
   usePermanentCustomFunnels,
   usePipelineDisplayConfig,
+  usePipelines,
 } from "@/modules/pipelines";
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
 import {
-  FUNIL_ICON,
   FUNIS_PATHS,
-  PIPE_PATH_MAP,
   PITSTOP_GROUPS,
   buildSettingsGroup,
   SIDEBAR_AGENDA,
@@ -76,6 +76,9 @@ export function useNavigationModel(): NavigationModel {
   const { data: displayConfig } = usePipelineDisplayConfig();
   const { data: permanentPipelines = [] } = usePermanentCustomFunnels();
   const { data: temporaryFunnels = [] } = useActiveTemporaryFunnels();
+  // Registro único dos funis — a lateral reflete cor/ícone que o usuário
+  // escolheu (SCRUM-637), em vez do ícone fixo pra todo mundo.
+  const { data: pipelineRows = [] } = usePipelines();
   const { data: metaPages } = useMetaPages();
   const metricsStudio = useMetricsStudioEnabled();
 
@@ -100,29 +103,37 @@ export function useNavigationModel(): NavigationModel {
             return key ? !hasFeature(key) : false;
           });
         }
-        const key = SIDEBAR_FEATURE_MAP[path];
+        const key =
+          SIDEBAR_FEATURE_MAP[path] ??
+          (path.startsWith("/funil/") ? SIDEBAR_FEATURE_MAP["/funil"] : undefined);
         if (!key) return false;
         return !hasFeature(key);
       },
     [isMaster, hasFeature],
   );
 
-  const featureKeyFor = (path: string) => SIDEBAR_FEATURE_MAP[path];
+  // Rota única de funil (SCRUM-637): itens /funil/<slug> herdam a chave do
+  // prefixo — o mapa não enumera slugs.
+  const featureKeyFor = (path: string) =>
+    SIDEBAR_FEATURE_MAP[path] ??
+    (path.startsWith("/funil/") ? SIDEBAR_FEATURE_MAP["/funil"] : undefined);
 
   /**
    * Filhos de Funis — uma lista só.
    *
-   * Não há mais classe de funil na lateral: mesmo ícone, sem cor própria, sem
-   * linha separando bloco de bloco. O que existia — pipes da org primeiro,
-   * depois customizados permanentes, depois os com prazo, cada bloco abrindo
-   * com um `startsGroup` — desenhava três categorias que o produto não tem
-   * mais. A gaveta do celular (`SidebarMobileDrawer`) já ignorava o
-   * `startsGroup` e sempre mostrou a lista lisa; agora o desktop concorda.
+   * Não há classe de funil na lateral — mas há IDENTIDADE: cada funil aparece
+   * com a cor e o ícone que o usuário escolheu (`pipelines.icon/color`,
+   * SCRUM-637). O que morreu foi o ícone fixo por espécie; o que fica é o
+   * mesmo tratamento pra todo funil, de fábrica ou criado pelo usuário. Nome
+   * de funil de sistema continua vindo do display_config (rename prevalece).
    *
    * A ORDEM de concatenação fica: é a que o usuário já conhece (os da org por
    * `position`, depois os criados por ele). Ordem não é rótulo de categoria.
    */
   const funisChildren = useMemo<NavNode[]>(() => {
+    const rowBySlug = new Map(pipelineRows.map((p) => [p.slug, p] as const));
+    const rowById = new Map(pipelineRows.map((p) => [p.id, p] as const));
+
     const pipes: NavNode[] = (displayConfig ?? [])
       .filter((c) => c.is_visible)
       // Carteira é porta própria na lateral — não se repete dentro de Funis.
@@ -130,34 +141,38 @@ export function useNavigationModel(): NavigationModel {
       // Agendamentos some quando o merge de oportunidades está ligado (ADR-0004).
       .filter((c) => !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")))
       .sort((a, b) => a.position - b.position)
-      .map((c) => ({
-        label: c.display_name,
-        icon: FUNIL_ICON,
-        path: PIPE_PATH_MAP[c.pipe_type] ?? "/funis",
-      }));
+      .map((c) => {
+        const row = rowBySlug.get(c.pipe_type);
+        return {
+          label: c.display_name,
+          icon: funilIcon(row?.icon),
+          color: row?.color,
+          // SCRUM-637 (flip): funil de sistema navega pela rota única, igual
+          // aos custom — o PIPE_PATH_MAP morreu junto com as páginas /pipe-*.
+          path: `/funil/${c.pipe_type}`,
+        };
+      });
 
     // Membro de org outbound continua vendo só os pipes: este `return` é o
     // único ponto onde a distinção carrega semântica de ACESSO, não de estilo.
     if (isOutboundMember) return pipes;
 
-    // SCRUM-632: custom navega pela rota única `/funil/:slug` (a página
-    // unificada já é upgrade de paridade pra ele — paginação real). Os itens
-    // de SISTEMA acima continuam nas rotas antigas via PIPE_PATH_MAP até a
-    // paridade fechar; viram `/funil/` na SCRUM-637.
     const permanentes: NavNode[] = permanentPipelines.map((pipe) => ({
       label: pipe.name,
-      icon: FUNIL_ICON,
+      icon: funilIcon(rowById.get(pipe.id)?.icon),
+      color: rowById.get(pipe.id)?.color ?? undefined,
       path: `/funil/${pipe.slug}`,
     }));
 
     const temporarios: NavNode[] = temporaryFunnels.map((pipe) => ({
       label: pipe.name,
-      icon: FUNIL_ICON,
+      icon: funilIcon(rowById.get(pipe.id)?.icon),
+      color: rowById.get(pipe.id)?.color ?? undefined,
       path: `/funil/${pipe.slug}`,
     }));
 
     return [...pipes, ...permanentes, ...temporarios];
-  }, [displayConfig, hasFeature, isOutboundMember, permanentPipelines, temporaryFunnels]);
+  }, [displayConfig, hasFeature, isOutboundMember, permanentPipelines, temporaryFunnels, pipelineRows]);
 
   const primary = useMemo(() => {
     // Cópia: a constante do módulo nunca é escrita.

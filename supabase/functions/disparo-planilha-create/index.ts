@@ -35,17 +35,17 @@ import {
 } from "../_shared/quick-blast/spreadsheet-upsert.ts";
 import { normalizeCanonicalPhone } from "../_shared/copilot-v2/phone-normalizer.ts";
 import {
-  resolveActiveStageKey,
+  isPipelineResolutionError,
+  resolvePipeline,
   upsertPipeEntry,
-  type PipeSlug,
 } from "../_shared/pipeline-adapter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-const SYSTEM_SLUGS = new Set<string>(["whatsapp", "confirmacao", "propostas"]);
 const PHONE_CHUNK = 200;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function jsonResponse(status: number, body: unknown, headers: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -134,8 +134,9 @@ Deno.serve(
     }
 
     const rows = rawRows.map(toMappedRow);
-    const funnelKind: "system" | "custom" =
-      funnel_kind ?? (SYSTEM_SLUGS.has(funnel) ? "system" : "custom");
+    // `funnel_kind` legado é aceito e IGNORADO (Fatia B): o destino resolve por
+    // (org, id-ou-slug) em `pipelines` — funil é funil, sem família.
+    void funnel_kind;
 
     try {
       // --- Load existing Leads for the uploaded phones only (bounded by file size). ---
@@ -186,35 +187,33 @@ Deno.serve(
       }
 
       // --- Resolve + validate the destination funnel/stage (org-scoped). ---
-      let systemStageKey = "";
-      if (funnelKind === "system") {
-        if (!SYSTEM_SLUGS.has(funnel)) {
-          return jsonResponse(400, { error: "Invalid system funnel" }, corsHeaders);
+      // Fatia B: UM caminho para qualquer funil — `funnel` é pipelines.id
+      // (canônico) ou slug/alias legado; `stage` é pipeline_stages.id
+      // (canônico) ou stage_key legada. Fail-closed: destino que não resolve
+      // na org do chamador é 400 antes de qualquer escrita.
+      let destPipelineId: string;
+      try {
+        destPipelineId = (await resolvePipeline(supabaseAdmin, orgId, funnel)).id;
+      } catch (e) {
+        if (isPipelineResolutionError(e)) {
+          return jsonResponse(400, { error: "Funnel not found in your organization" }, corsHeaders);
         }
-        systemStageKey =
-          (await resolveActiveStageKey(supabaseAdmin, orgId, funnel as PipeSlug, stage)) ?? stage;
-      } else {
-        const { data: pipelineRow } = await supabaseAdmin
-          .from("custom_pipelines")
-          .select("id")
-          .eq("id", funnel)
-          .eq("organization_id", orgId)
-          .eq("is_active", true)
-          .maybeSingle();
-        if (!pipelineRow) {
-          return jsonResponse(400, { error: "Custom funnel not found in your organization" }, corsHeaders);
-        }
-        const { data: stageRow } = await supabaseAdmin
-          .from("custom_pipeline_stages")
-          .select("id")
-          .eq("id", stage)
-          .eq("pipeline_id", funnel)
-          .eq("is_active", true)
-          .maybeSingle();
-        if (!stageRow) {
-          return jsonResponse(400, { error: "Stage not found in this funnel" }, corsHeaders);
-        }
+        throw e;
       }
+      let stageQuery = supabaseAdmin
+        .from("pipeline_stages")
+        .select("id, stage_key")
+        .eq("organization_id", orgId)
+        .eq("pipeline_id", destPipelineId)
+        .eq("is_active", true);
+      stageQuery = UUID_RE.test(stage)
+        ? stageQuery.eq("id", stage)
+        : stageQuery.eq("stage_key", stage);
+      const { data: stageRow } = await stageQuery.maybeSingle();
+      if (!stageRow) {
+        return jsonResponse(400, { error: "Stage not found in this funnel" }, corsHeaders);
+      }
+      const destStageKey = stageRow.stage_key as string;
 
       // --- Validate the chosen tags belong to the org (drop anything cross-tenant). ---
       let validTagIds: string[] = [];
@@ -257,30 +256,15 @@ Deno.serve(
           if (!leadId) continue;
           createdLeadIds.push(leadId);
 
-          // Seed into the chosen funnel/stage.
-          if (funnelKind === "system") {
-            await upsertPipeEntry(supabaseAdmin, {
-              leadId,
-              orgId,
-              slug: funnel as PipeSlug,
-              stageKey: systemStageKey,
-            });
-          } else {
-            const now = new Date().toISOString();
-            const { error: entryErr } = await supabaseAdmin
-              .from("custom_pipe_entries")
-              .insert({
-                lead_id: leadId,
-                organization_id: orgId,
-                pipeline_id: funnel,
-                stage_id: stage,
-                entered_at: now,
-                stage_changed_at: now,
-              });
-            if (entryErr) {
-              console.warn("[disparo-planilha-create] custom_pipe_entries insert failed:", entryErr.message);
-            }
-          }
+          // Seed into the chosen funnel/stage — motor único (o adapter aceita
+          // uuid além de slug; lead recém-criado nunca tem entry, então o
+          // upsert é o INSERT do fluxo legado nos dois mundos).
+          await upsertPipeEntry(supabaseAdmin, {
+            leadId,
+            orgId,
+            slug: destPipelineId,
+            stageKey: destStageKey,
+          });
         }
 
         // Tag the new leads (never the matched ones — ADR-0014: match = no overwrite).
@@ -318,7 +302,7 @@ Deno.serve(
         module: "disparo-planilha-create",
         action: "created",
         status: "success",
-        payloadSnapshot: { ...report, recipients: leadIds.length, funnelKind },
+        payloadSnapshot: { ...report, recipients: leadIds.length, pipeline_id: destPipelineId },
       });
 
       return jsonResponse(200, { ok: true, lead_ids: leadIds, recipient_count: leadIds.length, report }, corsHeaders);

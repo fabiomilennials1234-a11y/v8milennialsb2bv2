@@ -59,7 +59,6 @@ function negocio(over: Partial<DealCardData> = {}): DealCardData {
     },
     funil: "Orçamentos",
     funilCor: "#a855f7",
-    pipeTable: "pipe_propostas",
     etapas: ETAPAS_COM_DESFECHO,
     etapaAtual: "proposta_enviada",
     dono: "Luiza Andrade",

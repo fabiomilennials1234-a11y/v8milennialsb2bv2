@@ -16,11 +16,10 @@ import type { MappedRow } from "../components/disparo-wizard/spreadsheet-parse";
 
 export interface PlanilhaCreateInput {
   rows: MappedRow[];
-  /** "system" → funnel is a pipe slug + stage is a stage_key; "custom" → ids. */
-  funnelKind: "system" | "custom";
-  /** System pipe slug (whatsapp|confirmacao|propostas) OR custom pipeline uuid. */
+  /** Funil de destino — `pipelines.id` (canônico, Fatia B). O servidor também
+   *  aceita slug/alias legado, lendo o formato antigo pra sempre. */
   funnel: string;
-  /** System stage_key OR custom stage_id (uuid). */
+  /** Etapa de destino — `pipeline_stages.id` (canônico) ou stage_key legada. */
   stage: string;
   /** Tag ids applied to NEWLY created leads only (matched leads untouched). */
   tags?: string[];
@@ -50,7 +49,6 @@ export function useDisparoPlanilhaCreate() {
       const { data, error } = await supabase.functions.invoke("disparo-planilha-create", {
         body: {
           rows: input.rows,
-          funnel_kind: input.funnelKind,
           funnel: input.funnel,
           stage: input.stage,
           tags: input.tags ?? [],

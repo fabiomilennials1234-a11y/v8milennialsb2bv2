@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
+import { limitesDoDia } from "@/shared/time/dia-da-org";
 export interface FollowUp {
   id: string;
   lead_id: string;
@@ -76,11 +77,15 @@ export function useFollowUps(filters?: {
   showArchived?: boolean;
   dateFilter?: "today" | "overdue" | "upcoming" | "all";
 }) {
-  const { organizationId, isReady } = useOrganization();
+  const { organizationId, isReady, timezone } = useOrganization();
   useRealtimeSubscription("follow_ups", ["follow_ups"]);
 
   return useQuery({
-    queryKey: ["follow_ups", filters, organizationId],
+    // `timezone` entra na chave: a fronteira do dia abaixo depende dele, e ele
+    // chega null nos primeiros renders. Sem isto, o resultado calculado com o
+    // fallback UTC ficaria cacheado e a lista não se corrigiria quando a org
+    // resolvesse.
+    queryKey: ["follow_ups", filters, organizationId, timezone],
     queryFn: async () => {
       if (!organizationId) return [];
       let query = supabase
@@ -105,19 +110,20 @@ export function useFollowUps(filters?: {
         query = query.is("completed_at", null);
       }
 
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      // O corte é o da ORG, não o do browser. `new Date(y, m, d)` — que estava
+      // aqui — usa o fuso da máquina de quem abriu a tela: dois vendedores da
+      // mesma organização, em fusos diferentes, viam listas de "atrasados"
+      // diferentes. Mesma regra que a aba Comando já aplicava às tarefas do dia.
+      const { inicioDeHoje, inicioDeAmanha } = limitesDoDia(timezone);
 
       if (filters?.dateFilter === "today") {
         query = query
-          .gte("due_date", today.toISOString())
-          .lt("due_date", tomorrow.toISOString());
+          .gte("due_date", inicioDeHoje)
+          .lt("due_date", inicioDeAmanha);
       } else if (filters?.dateFilter === "overdue") {
-        query = query.lt("due_date", today.toISOString());
+        query = query.lt("due_date", inicioDeHoje);
       } else if (filters?.dateFilter === "upcoming") {
-        query = query.gte("due_date", tomorrow.toISOString());
+        query = query.gte("due_date", inicioDeAmanha);
       }
 
       const { data, error } = await query;

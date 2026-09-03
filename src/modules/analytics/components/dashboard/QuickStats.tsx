@@ -14,15 +14,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { startOfDay, endOfDay, isToday, isBefore } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
+import { limitesDoDia } from "@/shared/time/dia-da-org";
 interface QuickStatsProps {
   className?: string;
 }
 
 function QuickStatsBase({ className }: QuickStatsProps) {
-  const { organizationId, isReady } = useOrganization();
+  const { organizationId, isReady, timezone } = useOrganization();
 
   const { data: stats } = useQuery({
-    queryKey: ["quick-stats", organizationId],
+    // `timezone` na chave: as fronteiras de dia abaixo dependem dele e ele
+    // chega null nos primeiros renders.
+    queryKey: ["quick-stats", organizationId, timezone],
     queryFn: async () => {
       if (!organizationId) {
         return {
@@ -36,6 +39,10 @@ function QuickStatsBase({ className }: QuickStatsProps) {
       const now = new Date();
       const todayStart = startOfDay(now).toISOString();
       const todayEnd = endOfDay(now).toISOString();
+      // Reunião e lead novo seguem no corte do browser (fora do escopo da
+      // SCRUM-607); só os dois contadores de follow-up passam para o fuso da
+      // org, que é onde a divergência com a lista aparecia.
+      const { inicioDeHoje, inicioDeAmanha } = limitesDoDia(timezone, now);
 
       const { count: meetingsToday } = await supabase
         .from("pipe_confirmacao")
@@ -52,19 +59,40 @@ function QuickStatsBase({ className }: QuickStatsProps) {
         .lte("meeting_date", todayEnd)
         .eq("is_confirmed", true);
 
+      /**
+       * Os dois contadores de follow-up, agora DISJUNTOS e no fuso da org.
+       *
+       * Três defeitos moravam nestas duas consultas (SCRUM-607):
+       *
+       *  1. "Pendentes" era `due_date <= fim de hoje`, o que INCLUÍA os
+       *     atrasados. Somar os dois cartões contava a mesma linha duas vezes;
+       *  2. "Atrasados" cortava por INSTANTE (`due_date < agora`), enquanto a
+       *     lista da Revisão cortava por DIA. Um follow-up que vence hoje às
+       *     09:00, visto às 15:00, era "Atrasado" no cartão e "de hoje" na
+       *     lista — mesma linha, dois veredictos;
+       *  3. nenhuma das duas filtrava `archived_at`, e a lista filtra. Era o
+       *     "número que não bate com a tela": follow-up arquivado contava aqui
+       *     e não existia lá.
+       *
+       * Agora: atrasado = venceu num dia anterior; pendente = vence HOJE. Um
+       * follow-up cai em exatamente um dos dois.
+       */
       const { count: pendingFollowUps } = await supabase
         .from("follow_ups")
         .select("*", { count: "exact", head: true })
         .eq("organization_id", organizationId)
         .is("completed_at", null)
-        .lte("due_date", todayEnd);
+        .is("archived_at", null)
+        .gte("due_date", inicioDeHoje)
+        .lt("due_date", inicioDeAmanha);
 
       const { count: overdueFollowUps } = await supabase
         .from("follow_ups")
         .select("*", { count: "exact", head: true })
         .eq("organization_id", organizationId)
         .is("completed_at", null)
-        .lt("due_date", now.toISOString());
+        .is("archived_at", null)
+        .lt("due_date", inicioDeHoje);
 
       const { count: newLeadsToday } = await supabase
         .from("leads")
@@ -103,7 +131,10 @@ function QuickStatsBase({ className }: QuickStatsProps) {
       bg: "bg-success/10",
     },
     {
-      label: "Follow-ups pendentes",
+      // "hoje", não "pendentes": o cartão deixou de somar os atrasados, e
+      // manter o rótulo antigo sobre um número que mudou de significado é como
+      // a divergência começa de novo.
+      label: "Follow-ups hoje",
       value: stats.pendingFollowUps,
       icon: Clock,
       color: "text-warning",

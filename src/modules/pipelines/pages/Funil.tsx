@@ -1,10 +1,11 @@
-import { useState, useMemo, useCallback } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { useParams, useNavigate, useSearchParams, Navigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -26,36 +27,47 @@ import {
   Kanban,
   LayoutGrid,
   List,
-  Target,
-  Users,
-  ShoppingBag,
-  Heart,
-  Briefcase,
-  Star,
-  Zap,
-  Gift,
+  BarChart3,
   Send,
+  Calendar as CalendarIcon,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 
 import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
 import { resolveFunil } from "@/modules/pipelines/lib/resolve-funil";
+import { funilIcon } from "@/modules/pipelines/lib/funil-icons";
 import {
   useFunilStages,
   usePaginatedFunil,
-  useMoverCardNoFunil,
 } from "@/modules/pipelines/hooks/model/usePaginatedFunil";
 import type { PaginatedFilters } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import {
+  useFunilFilters,
+  createInitialFunilFilterState,
+  type FunilFilterState,
+} from "@/modules/pipelines/hooks/model/useFunilFilters";
+import { useFunilMetrics } from "@/modules/pipelines/hooks/config/useFunilMetrics";
+import {
   useCustomPipeline,
   useRemoveLeadFromCustomPipe,
-  useDeleteCustomPipeline,
-  useCustomPipelineDeleteImpact,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
+// Delete GENÉRICO de entry (o corpo apaga `pipeline_entries` por id, com
+// checagem de RLS via .select) — o nome é herança da página de Propostas.
+import { useDeletePipeProposta as useDeleteEntry } from "@/modules/pipelines/hooks/legacy/usePipePropostas";
+import { usePipelineStages } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { FunilKanban, type FunilEntry } from "@/modules/pipelines/components/funis/FunilKanban";
+import { useFunilMoveFlow, type FunilFlowEntry } from "@/modules/pipelines/components/funis/useFunilMoveFlow";
+import { FunilAnalytics } from "@/modules/pipelines/components/funis/FunilAnalytics";
 import { KanbanFilterPanel, FilterChips, type FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
 import { PipelineListView } from "@/modules/pipelines/components/kanban/PipelineListView";
+import { CreateOpportunityModal } from "@/modules/pipelines/components/kanban/CreateOpportunityModal";
+import { MeetingTimeline } from "@/modules/pipelines/components/legacy/confirmacao/MeetingTimeline";
+import { AddMeetingModal } from "@/modules/pipelines/components/legacy/confirmacao/AddMeetingModal";
+import { PipeSettingsDialog } from "@/modules/pipelines/components/shared/PipeSettingsDialog";
+import { StageWorkflowsBadgeWrapper } from "@/modules/pipelines/components/kanban/StageWorkflowsBadgeWrapper";
+import { useStageWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
+import { AutoCreateLeadToggle } from "@/modules/pipelines/components/shared/AutoCreateLeadToggle";
+import { CreateProposalModal } from "@/modules/carteira/components/proposal/CreateProposalModal";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import {
   DealPanelProvider,
@@ -63,104 +75,291 @@ import {
   LeadPanelProvider,
   DealCardPanel,
   LeadCardPanel,
+  LeadModal,
+  useBatchedLeadMetrics,
+  useDeleteAllLeadsInPipe,
 } from "@/modules/leads";
 import { LeadPanelLayout } from "@/modules/platform/components/layout/LeadPanelLayout";
 import { AddLeadToPipeModal } from "@/modules/pipelines/components/custom/AddLeadToPipeModal";
 import { CustomPipeSettingsDialog } from "@/modules/pipelines/components/custom/CustomPipeSettingsDialog";
-import { DisparoWizard } from "../components/disparo";
+import { DisparoWizard, type DisparoBoardFilter, type DisparoSource } from "../components/disparo";
 import { FunnelControlBar } from "@/modules/pipelines/components/shared/FunnelControlBar";
 import { FunnelViewsMenu } from "@/modules/pipelines/components/shared/FunnelViewsMenu";
+import { revivePeriodState, createInitialPeriodState, type MetricsPeriodState } from "@/lib/metrics-period";
+import { priorityBandToRating, calorBandToBounds, CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS } from "@/modules/pipelines/lib/kanbanFilterParams";
+import { calcularEtapaPorDataDaReuniao, podeAplicarDx } from "@/modules/pipelines/lib/meeting-dx";
 import {
-  type MetricsPeriodState,
-  getDateRange,
-  createInitialPeriodState,
-  revivePeriodState,
-} from "@/lib/metrics-period";
-import { getStalledBucket, STALLED_ALL } from "@/modules/pipelines/lib/stalled-buckets";
-import { useFeaturePermission, useResponsibleMembers } from "@/modules/identity";
+  useFeaturePermission,
+  useConfirmacaoOverdueDays,
+  useOrganization,
+  useResponsibleMembers,
+} from "@/modules/identity";
+import { useTags } from "@/modules/leads/hooks/useTags";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import { trackModuleVisit } from "@/lib/analytics";
+import {
+  startOfDay,
+  endOfDay,
+  addDays,
+  startOfWeek,
+  endOfWeek,
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
 
-const ICON_MAP: Record<string, LucideIcon> = {
-  kanban: Kanban,
-  target: Target,
-  users: Users,
-  "shopping-bag": ShoppingBag,
-  heart: Heart,
-  briefcase: Briefcase,
-  star: Star,
-  zap: Zap,
-  gift: Gift,
-};
+const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+function formatPeriodLabel(range: { startStr: string; endStr: string }): string {
+  const [sy, sm, sd] = range.startStr.slice(0, 10).split("-").map(Number);
+  const [ey, em, ed] = range.endStr.slice(0, 10).split("-").map(Number);
+  if (sy === ey && sm === em) return `${sd}–${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+  if (sy === ey) return `${sd} ${MONTHS_PT[sm - 1]} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+  return `${sd} ${MONTHS_PT[sm - 1]} ${sy} – ${ed} ${MONTHS_PT[em - 1]} ${ey}`;
+}
+
+type FunilViewMode = "kanban" | "list" | "timeline" | "analytics";
+
+/** Papel efetivo da etapa — `open` quando a governança ainda não a marcou. */
+const roleDe = (s: { stage_role?: import("@/contracts/pipe").StageRole | null }) =>
+  s.stage_role ?? "open";
+
+/** Faixas de reunião (porte do quick-filter da Confirmação). */
+type TimeFilter = "all" | "today" | "tomorrow" | "week" | "overdue";
+const TIME_OPTIONS: { value: TimeFilter; label: string }[] = [
+  { value: "today", label: "Hoje" },
+  { value: "tomorrow", label: "Amanhã" },
+  { value: "week", label: "Semana" },
+  { value: "overdue", label: "Atrasadas" },
+];
 
 /**
- * Estado serializável do board — o objeto INTEIRO é o payload da saved view
- * (SCRUM-634: `FunnelViewsMenu` com `pipelineId` grava em `pipeline:{uuid}`).
- * Type alias (não interface) de propósito: satisfaz `Record<string, unknown>`
- * do menu sem index signature manual. `periodState` carrega `Date` em range
- * custom — ao aplicar uma view salva, passa por `revivePeriodState`.
+ * Dimensões que NÃO são universais (SCRUM-633) — portadas das páginas velhas
+ * e ligadas por CAPACIDADE do funil, não por slug: faixas de reunião aparecem
+ * quando o funil tem etapas de reunião; calor/prioridade/tipo de produto
+ * quando o funil tem etapa `won` (é onde valor faz sentido); status-multi
+ * sempre (qualquer board multi-coluna filtra por etapa).
  */
-type FunilFilterState = {
-  searchQuery: string;
-  filterResponsible: string;
-  qualificationTier: string[];
-  preQualificationTier: string[];
-  periodState: MetricsPeriodState;
-  filterStalled: string;
-  viewMode: "kanban" | "list";
+type ExtraFilterState = {
+  timeFilter: TimeFilter;
+  urgencyFilter: string;
+  selectedStatuses: string[];
+  productType: string;
+  calor: string;
+  priority: string;
 };
 
-const DEFAULT_FUNIL_FILTERS: FunilFilterState = {
-  searchQuery: "",
-  filterResponsible: "all",
-  qualificationTier: [],
-  preQualificationTier: [],
-  periodState: createInitialPeriodState(),
-  filterStalled: STALLED_ALL,
-  viewMode: "kanban",
+const DEFAULT_EXTRA_FILTERS: ExtraFilterState = {
+  timeFilter: "all",
+  urgencyFilter: "all",
+  selectedStatuses: [],
+  productType: "all",
+  calor: "all",
+  priority: "all",
 };
 
 /**
- * `/funil/:slug` — a página ÚNICA de funil (SCRUM-632, F4 · expand-contract).
+ * Payload da saved view (SCRUM-634): o estado universal do controller + as
+ * dimensões extras + busca + visão, num objeto serializável só. Range custom
+ * de período carrega `Date` — revive na aplicação.
+ */
+type FunilBoardState = { [K in keyof FunilFilterState]: FunilFilterState[K] } &
+  ExtraFilterState & {
+    searchQuery: string;
+    viewMode: FunilViewMode;
+  };
+
+/**
+ * `/funil/:slug` — a página ÚNICA de funil (SCRUM-632 → fechada na SCRUM-637).
  *
- * Unificação ESTRUTURAL, não redesign: mesma identidade visual do kanban atual
- * (FunnelControlBar + DraggableKanbanBoard + LeadCard, dark-first, tokens
- * existentes). O que muda é a espinha de dados: qualquer funil — de sistema ou
- * custom — resolve por `pipelines` e renderiza pela via canônica da SCRUM-626
- * (`get_pipeline_page` + `get_pipeline_stage_counts_by_id`, por pipeline_id),
- * com paginação real por coluna (fim do truncamento de 1.000 do board custom).
- *
- * Paridade DESTA fatia = o que a página custom tem hoje: board dnd, settings
- * do funil, adicionar lead, export por etapa, disparo, lista mobile — MAIS
- * filtros server-side (responsável/tier/período/parado-há, que no board custom
- * eram client-side e agora casam com o badge por construção).
- *
- * Slots para 633/634 (paridade dos funis de sistema — NÃO implementados aqui):
- *   · filtros ricos por família (origem/calor/status/vencidos) → entram como
- *     novas `FilterSectionConfig` mapeadas em `PaginatedFilters` (o hook já
- *     aceita a superfície completa);
- *   · saved views / bulk avançado / métricas de funil → penduram na
- *     FunnelControlBar e no FunilKanban sem tocar na composição das colunas;
- *   · fluxos de move de sistema (LossReasonDialog, modais de reunião, guarda
- *     de valor) → interceptam em `handleMove` antes de `useMoverCardNoFunil`.
- *
- * Até lá, as rotas `/pipe-*` seguem nas páginas antigas (expand); `/funil/whatsapp`
- * funciona para teste A/B manual. As 4 páginas velhas morrem na SCRUM-637.
+ * Paridade rica com as 3 páginas de sistema, generalizada por `stage_role`:
+ * fluxos de move com desfecho (`useFunilMoveFlow`), painel completo de filtros
+ * (`useFunilFilters` + seções extras por capacidade), analytics por funil
+ * (`FunilAnalytics` + `useFunilMetrics`), timeline de reuniões e recálculo D-x
+ * quando o funil tem o trilho. As rotas `/pipe-*` viraram redirects pra cá.
  */
 function FunilPageInner() {
   const { slug: param } = useParams<{ slug: string }>();
   const navigate = useNavigate();
 
   const { openDeal } = useDealSheet();
+  const { organizationId } = useOrganization();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Estado único e serializável — é ele que a saved view grava/aplica.
-  const [filterState, setFilterState] = useState<FunilFilterState>(DEFAULT_FUNIL_FILTERS);
-  const { searchQuery, filterResponsible, qualificationTier, preQualificationTier, periodState, filterStalled, viewMode } = filterState;
-  const patchFilters = useCallback(
-    (patch: Partial<FunilFilterState>) => setFilterState((s) => ({ ...s, ...patch })),
+  const { data: pipelines = [], isLoading: loadingPipelines } = usePipelines();
+  const pipeline = resolveFunil(pipelines, param);
+  const ehCustom = pipeline?.type === "custom";
+  const ehSystem = pipeline?.type === "system";
+  /** Slug de sistema do trio legado — liga os portes específicos de família. */
+  const trioSlug =
+    ehSystem &&
+    (pipeline?.slug === "whatsapp" || pipeline?.slug === "confirmacao" || pipeline?.slug === "propostas")
+      ? pipeline.slug
+      : null;
+
+  useEffect(() => {
+    // Mantém a série histórica dos 3 slugs (`pipe_*`); funil novo entra como `funil_*`.
+    if (pipeline?.slug) {
+      trackModuleVisit(trioSlug ? `pipe_${trioSlug}` : `funil_${pipeline.slug}`, organizationId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipeline?.slug]);
+
+  // Linha RICA do funil custom (lifecycle, metas, config) — os diálogos
+  // reaproveitados (settings/delete/import) falam este shape.
+  const { data: customRow } = useCustomPipeline(ehCustom ? pipeline?.slug : undefined);
+
+  const { data: stages = [], isLoading: loadingStages } = useFunilStages(pipeline?.id);
+  // Editor de etapas dos funis de sistema (PipeSettingsDialog fala o shape da
+  // família por pipe_type — mesmo diálogo das páginas velhas). Hook incondicional
+  // (regra de hooks); o resultado só é usado quando `trioSlug` existe.
+  const { data: familyStages = [] } = usePipelineStages(trioSlug ?? "whatsapp");
+  const responsibleMembers = useResponsibleMembers();
+  // Workflows de funil de sistema seguem configurados por pipe_type — o badge
+  // por slug entra como override no board (custom usa o badge por pipeline_id).
+  const { data: systemWorkflowCounts = {} } = useStageWorkflowCounts(trioSlug ?? undefined);
+
+  // ── Filtros: bloco universal (SCRUM-633) + dimensões extras por capacidade ─
+  const controller = useFunilFilters(pipeline?.id);
+  const [viewMode, setViewMode] = useState<FunilViewMode>("kanban");
+  const [extra, setExtra] = useState<ExtraFilterState>(DEFAULT_EXTRA_FILTERS);
+  const patchExtra = useCallback(
+    (patch: Partial<ExtraFilterState>) => setExtra((s) => ({ ...s, ...patch })),
     [],
   );
 
-  // Deep-link de view salva (?view=...) — mesmo contrato das páginas de sistema.
+  const overdueDays = useConfirmacaoOverdueDays();
+  const { data: orgTags = [] } = useTags();
+
+  const temEtapaMeeting = useMemo(
+    () => stages.some((s) => roleDe(s) === "meeting_booked" || roleDe(s) === "meeting_held"),
+    [stages],
+  );
+  const temEtapaWon = useMemo(
+    () => stages.some((s) => roleDe(s) === "won" || (roleDe(s) === "open" && s.is_final_positive)),
+    [stages],
+  );
+  /** Chaves de desfecho por PAPEL — âncora de período dos fechados (motor 633). */
+  const closedStatusKeys = useMemo(
+    () =>
+      stages
+        .filter(
+          (s) =>
+            roleDe(s) === "won" ||
+            roleDe(s) === "lost" ||
+            (roleDe(s) === "open" && (s.is_final_positive || s.is_final_negative)),
+        )
+        .map((s) => s.stage_key),
+    [stages],
+  );
+
+  // Faixas de reunião → params server-side (mesma matemática da página velha).
+  const timeParams = useMemo(() => {
+    const now = new Date();
+    if (extra.timeFilter === "today") {
+      return { meetingAfter: startOfDay(now).toISOString(), meetingBefore: endOfDay(now).toISOString() };
+    }
+    if (extra.timeFilter === "tomorrow") {
+      const t = addDays(now, 1);
+      return { meetingAfter: startOfDay(t).toISOString(), meetingBefore: endOfDay(t).toISOString() };
+    }
+    if (extra.timeFilter === "week") {
+      return {
+        meetingAfter: startOfWeek(now, { locale: ptBR }).toISOString(),
+        meetingBefore: endOfWeek(now, { locale: ptBR }).toISOString(),
+      };
+    }
+    if (extra.timeFilter === "overdue") {
+      const limit = new Date();
+      limit.setDate(limit.getDate() - overdueDays);
+      return {
+        updatedBefore: limit.toISOString(),
+        overdueExcludeStatusKeys: [...CONFIRMACAO_OVERDUE_EXCLUDE_STATUS_KEYS],
+      };
+    }
+    return {};
+  }, [extra.timeFilter, overdueDays]);
+
+  const filters = useMemo<PaginatedFilters>(
+    () => ({
+      ...controller.paginatedFilters,
+      urgency: extra.urgencyFilter !== "all" ? extra.urgencyFilter : undefined,
+      statusKeys: extra.selectedStatuses.length ? extra.selectedStatuses : undefined,
+      productType: extra.productType !== "all" ? extra.productType : undefined,
+      ...priorityBandToRating(extra.priority),
+      ...calorBandToBounds(extra.calor),
+      // Âncora de período dos FECHADOS por stage_role (metrics_period_at →
+      // fallback updated_at) — a mesma âncora canônica do motor de métricas.
+      closedStatusKeys:
+        controller.metricsRange && closedStatusKeys.length ? closedStatusKeys : undefined,
+      ...timeParams,
+    }),
+    [controller.paginatedFilters, controller.metricsRange, extra, closedStatusKeys, timeParams],
+  );
+
+  const { stageData, isLoading: loadingBoard } = usePaginatedFunil(pipeline?.id, stages, filters);
+
+  const allItems = useMemo(
+    () => stages.flatMap((s) => stageData[s.stage_key]?.items ?? []),
+    [stages, stageData],
+  );
+
+  // ── Métricas de funil (SCRUM-633) — alimentam o viewMode Analytics ────────
+  const metrics = useFunilMetrics(pipeline?.id, controller.metricsRange);
+
+  // ── Contadores por lead nos cards (comentários/checklists, 2 queries) ─────
+  const loadedLeadIds = useMemo(
+    () => [...new Set(allItems.filter((it: any) => it.lead_id).map((it: any) => it.lead_id as string))],
+    [allItems],
+  );
+  const { data: metricsMap = {} } = useBatchedLeadMetrics(loadedLeadIds);
+
+  // ── Fluxos ricos de move (por stage_role — SCRUM-637) ─────────────────────
+  const findEntry = useCallback(
+    (entryId: string): FunilFlowEntry | undefined =>
+      allItems.find((e: any) => e.id === entryId) as FunilFlowEntry | undefined,
+    [allItems],
+  );
+  const flow = useFunilMoveFlow({ pipeline, pipelines, stages, findEntry });
+
+  const handleMove = useCallback(
+    (entryId: string, stage: (typeof stages)[number]) => {
+      flow.requestMove(entryId, stage);
+    },
+    [flow],
+  );
+
+  // ── Recálculo D-x: etapa segue a data da reunião (porte da Confirmação) ───
+  const stageKeySet = useMemo(() => new Set(stages.map((s) => s.stage_key)), [stages]);
+  const dxRunning = useRef(false);
+  useEffect(() => {
+    if (!flow.temTrilhoDx || allItems.length === 0 || dxRunning.current) return;
+    dxRunning.current = true;
+    (async () => {
+      try {
+        for (const item of allItems as any[]) {
+          const meetingDate = item.meeting_date ? new Date(item.meeting_date) : null;
+          const alvo = calcularEtapaPorDataDaReuniao(meetingDate, item.status);
+          if (podeAplicarDx(stageKeySet, alvo) && alvo !== item.status) {
+            try {
+              await flow.updateEntryConfirmacao.mutateAsync({
+                id: item.id,
+                status: alvo as never,
+                leadId: item.lead_id,
+                assignedTo: item.sdr_id || item.closer_id,
+              });
+            } catch (error) {
+              console.error("[Funil] Erro no recálculo D-x:", error);
+            }
+          }
+        }
+      } finally {
+        dxRunning.current = false;
+      }
+    })();
+    // Roda quando o volume carregado muda — mesmo guarda da página velha
+    // contra loop infinito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow.temTrilhoDx, allItems.length]);
+
+  // ── Saved views (SCRUM-634): payload único e serializável ─────────────────
   const [activeViewId, setActiveViewId] = useState<string | null>(searchParams.get("view"));
   const handleActiveViewChange = useCallback(
     (viewId: string | null) => {
@@ -169,93 +368,140 @@ function FunilPageInner() {
     },
     [setSearchParams],
   );
+
+  const currentBoardState = useMemo<FunilBoardState>(
+    () => ({
+      ...controller.state,
+      ...extra,
+      searchQuery: controller.search,
+      viewMode,
+    }),
+    [controller.state, controller.search, extra, viewMode],
+  );
+  const defaultBoardState = useMemo<FunilBoardState>(
+    () => ({
+      ...createInitialFunilFilterState(),
+      ...DEFAULT_EXTRA_FILTERS,
+      searchQuery: "",
+      viewMode: "kanban",
+    }),
+    [],
+  );
+  const applyBoardState = useCallback(
+    (f: FunilBoardState) => {
+      const { searchQuery, viewMode: vm, timeFilter, urgencyFilter, selectedStatuses, productType, calor, priority, ...universal } = f;
+      controller.setState({
+        ...universal,
+        // Datas de range custom voltam do JSON como string — revive.
+        period: revivePeriodState(universal.period as MetricsPeriodState),
+      });
+      setExtra({ timeFilter, urgencyFilter, selectedStatuses, productType, calor, priority });
+      controller.setSearch(searchQuery ?? "");
+      setViewMode(vm ?? "kanban");
+    },
+    [controller],
+  );
+
+  // ── Seções do painel: universais + extras por capacidade ──────────────────
+  const filterSections: FilterSectionConfig[] = useMemo(() => {
+    const extras: FilterSectionConfig[] = [];
+    if (temEtapaMeeting) {
+      extras.push({
+        type: "single-choice",
+        id: "time-bucket",
+        label: "Reunião",
+        value: extra.timeFilter,
+        onChange: (v: string) => patchExtra({ timeFilter: v as TimeFilter }),
+        options: TIME_OPTIONS,
+        allValue: "all",
+      });
+      extras.push({ type: "urgency", value: extra.urgencyFilter, onChange: (v: string) => patchExtra({ urgencyFilter: v }) });
+    }
+    if (temEtapaWon) {
+      extras.push({ type: "product-type", value: extra.productType, onChange: (v: string) => patchExtra({ productType: v }) });
+      extras.push({ type: "calor", value: extra.calor, onChange: (v: string) => patchExtra({ calor: v }) });
+      extras.push({ type: "priority", value: extra.priority, onChange: (v: string) => patchExtra({ priority: v }) });
+    }
+    if (stages.length > 1) {
+      extras.push({
+        type: "status-multi",
+        value: extra.selectedStatuses,
+        onChange: (v: string[]) => patchExtra({ selectedStatuses: v }),
+        options: stages.map((s) => ({ id: s.stage_key, title: s.name, color: s.color || "#64748b" })),
+      });
+    }
+    return [...controller.sections, ...extras];
+  }, [controller.sections, extra, temEtapaMeeting, temEtapaWon, stages, patchExtra]);
+
+  const handleClearFilters = useCallback(() => {
+    // Busca e visão sobrevivem ao "limpar filtros" — mesmo recorte de sempre.
+    controller.clearAll();
+    setExtra(DEFAULT_EXTRA_FILTERS);
+  }, [controller]);
+
+  // ── Disparo: fonte "Filtro ativo" + seed manual do bulk (porte) ───────────
+  const [isDisparoOpen, setIsDisparoOpen] = useState(false);
+  const [disparoSource, setDisparoSource] = useState<DisparoSource>("estagio");
+  const [disparoManualIds, setDisparoManualIds] = useState<string[]>([]);
+
+  const disparoBoardFilter: DisparoBoardFilter = useMemo(() => {
+    const chips: string[] = [];
+    const term = controller.search.trim();
+    if (term) chips.push(`Busca: "${term}"`);
+    if (controller.state.responsibleId !== "all") {
+      const member = controller.sections.find((s) => s.type === "responsible");
+      const name =
+        member && "members" in member
+          ? member.members.find((m) => m.id === controller.state.responsibleId)?.name
+          : undefined;
+      chips.push(`Responsável: ${name ?? "selecionado"}`);
+    }
+    if (controller.state.tagIds.length > 0) {
+      const names = controller.state.tagIds
+        .map((id) => orgTags.find((t: any) => t.id === id)?.name)
+        .filter(Boolean) as string[];
+      if (names.length > 0) chips.push(`Tags: ${names.join(", ")}`);
+    }
+    return {
+      search: controller.search,
+      responsibleId: controller.state.responsibleId,
+      tagIds: controller.state.tagIds,
+      chips,
+    };
+  }, [controller.search, controller.state.responsibleId, controller.state.tagIds, controller.sections, orgTags]);
+
+  const handleOpenDisparoStage = useCallback(() => {
+    setDisparoManualIds([]);
+    setDisparoSource("estagio");
+    setIsDisparoOpen(true);
+  }, []);
+  const handleDispararManual = useCallback((leadIds: string[]) => {
+    setDisparoManualIds(leadIds);
+    setDisparoSource("manual");
+    setIsDisparoOpen(true);
+  }, []);
+
+  // ── Criação por família (porte dos primaryActions das páginas velhas) ─────
   const [showAddLead, setShowAddLead] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSystemSettings, setShowSystemSettings] = useState(false);
   const [removeEntryId, setRemoveEntryId] = useState<string | null>(null);
-  const [showDeletePipeline, setShowDeletePipeline] = useState(false);
-  const [isDisparoOpen, setIsDisparoOpen] = useState(false);
+  const [showCreateOpportunity, setShowCreateOpportunity] = useState(false);
+  const [showCreateLead, setShowCreateLead] = useState(false);
+  const [showCreateMeeting, setShowCreateMeeting] = useState(false);
+  const [showCreateProposal, setShowCreateProposal] = useState(false);
 
-  const { data: pipelines = [], isLoading: loadingPipelines } = usePipelines();
-  const pipeline = resolveFunil(pipelines, param);
-  const ehCustom = pipeline?.type === "custom";
-
-  // Linha RICA do funil custom (lifecycle, metas, config) — os diálogos
-  // reaproveitados (settings/delete/import) falam este shape. Funil de sistema
-  // não tem essa linha; os diálogos ficam fora do render nesse caso.
-  const { data: customRow } = useCustomPipeline(ehCustom ? pipeline?.slug : undefined);
-
-  const { data: stages = [], isLoading: loadingStages } = useFunilStages(pipeline?.id);
-
-  // ── Filtros server-side (626): badge e cards saem do MESMO recorte ───────
-  const periodRange = useMemo(() => getDateRange(periodState), [periodState]);
-  const stalledBucket = useMemo(() => getStalledBucket(filterStalled), [filterStalled]);
-
-  const filters = useMemo<PaginatedFilters>(
-    () => ({
-      search: searchQuery,
-      responsibleId: filterResponsible,
-      qualificationTier,
-      preQualificationTier,
-      periodAfter: periodRange?.startStr ?? null,
-      periodBefore: periodRange?.endStr ?? null,
-      stalledMinDays: stalledBucket?.minDays ?? null,
-      stalledMaxDays: stalledBucket?.maxDays ?? null,
-    }),
-    [searchQuery, filterResponsible, qualificationTier, preQualificationTier, periodRange, stalledBucket],
-  );
-
-  const { stageData, isLoading: loadingBoard } = usePaginatedFunil(pipeline?.id, stages, filters);
-
-  const mover = useMoverCardNoFunil(pipeline ? { id: pipeline.id, type: pipeline.type } : null);
   const removeLead = useRemoveLeadFromCustomPipe();
-  const deletePipeline = useDeleteCustomPipeline();
-  const { data: impacto } = useCustomPipelineDeleteImpact(
-    ehCustom ? pipeline?.id : undefined,
-    showDeletePipeline,
-  );
-  const bloqueado = (impacto?.cards_invasores ?? 0) > 0;
-
-  const { allowed: canDeletePipeline } = useFeaturePermission("pipeline.custom_delete");
+  const deleteEntry = useDeleteEntry();
+  // "Mover etapa pra lixeira" — o motor de delete em massa é chaveado pelas
+  // views do trio; hook incondicional (regra de hooks), oferecido só no trio.
+  const deleteAllLeadsInPipe = useDeleteAllLeadsInPipe(trioSlug ?? "whatsapp");
+  const [stageToDelete, setStageToDelete] = useState<{ id: string; title: string } | null>(null);
   const { allowed: canDeleteCards } = useFeaturePermission("pipeline.delete_cards");
-  const responsibleMembers = useResponsibleMembers();
 
   const isLoading = loadingPipelines || loadingStages;
 
-  const filterSections: FilterSectionConfig[] = useMemo(
-    () => [
-      { type: "created-period", value: periodState, onChange: (v: MetricsPeriodState) => patchFilters({ periodState: v }) },
-      { type: "stalled-days", value: filterStalled, onChange: (v: string) => patchFilters({ filterStalled: v }) },
-      { type: "responsible", value: filterResponsible, onChange: (v: string) => patchFilters({ filterResponsible: v }), members: responsibleMembers },
-      { type: "qualification-tier", value: qualificationTier, onChange: (v: string[]) => patchFilters({ qualificationTier: v }) },
-      { type: "pre-qualification-tier", value: preQualificationTier, onChange: (v: string[]) => patchFilters({ preQualificationTier: v }) },
-    ],
-    [periodState, filterStalled, filterResponsible, responsibleMembers, qualificationTier, preQualificationTier, patchFilters],
-  );
-
-  const handleClearFilters = useCallback(() => {
-    // Busca e visão sobrevivem ao "limpar filtros" — mesmo recorte do board custom.
-    patchFilters({
-      filterResponsible: "all",
-      qualificationTier: [],
-      preQualificationTier: [],
-      periodState: createInitialPeriodState(),
-      filterStalled: STALLED_ALL,
-    });
-  }, [patchFilters]);
-
-  const handleMove = useCallback(
-    (entryId: string, stage: { id: string; stage_key: string }) => {
-      mover
-        .mutateAsync({ entryId, stageId: stage.id, stageKey: stage.stage_key })
-        .catch((e) => {
-          const msg = e instanceof Error ? e.message : "";
-          toast.error(msg.includes("permissão") || msg.includes("Permissões") ? msg : "Erro ao mover lead");
-        });
-    },
-    [mover],
-  );
-
-  // ── Mobile: lista por stage (mesmo componente do board custom) ───────────
+  // ── Mobile: lista por stage ───────────────────────────────────────────────
   const { isMobile } = useViewport();
   const mobileStages = useMemo(
     () => stages.map((s) => ({ id: s.id, name: s.name, stage_key: s.stage_key, color: s.color ?? undefined })),
@@ -278,15 +524,10 @@ function FunilPageInner() {
   );
   const handleMobileLeadClick = useCallback(
     (entryId: string) => {
-      for (const s of stages) {
-        const entry = ((stageData[s.stage_key]?.items ?? []) as FunilEntry[]).find((e) => e.id === entryId);
-        if (entry) {
-          openDeal(entry.id, entry.lead_id);
-          return;
-        }
-      }
+      const entry = findEntry(entryId);
+      if (entry?.lead_id) openDeal(entry.id, entry.lead_id);
     },
-    [stages, stageData, openDeal],
+    [findEntry, openDeal],
   );
   const handleMobileMove = useCallback(
     (entryId: string, stageKey: string) => {
@@ -299,33 +540,23 @@ function FunilPageInner() {
   const handleRemoveEntry = async () => {
     if (!removeEntryId || !pipeline) return;
     try {
-      await removeLead.mutateAsync({ entry_id: removeEntryId, pipeline_id: pipeline.id });
+      if (ehCustom) {
+        await removeLead.mutateAsync({ entry_id: removeEntryId, pipeline_id: pipeline.id });
+      } else {
+        await deleteEntry.mutateAsync(removeEntryId);
+      }
       toast.success("Lead removido do funil");
       setRemoveEntryId(null);
-    } catch {
-      toast.error("Erro ao remover lead");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao remover lead");
     }
   };
 
-  const handleDeletePipeline = async () => {
-    if (!pipeline) return;
-    try {
-      const r = await deletePipeline.mutateAsync(pipeline.id);
-      const detalhe = [
-        r?.cards ? `${r.cards} card(s)` : null,
-        r?.automacoes_desativadas ? `${r.automacoes_desativadas} automação(ões) desativada(s)` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ");
-      toast.success(`Funil "${pipeline.name}" excluído${detalhe ? ` — ${detalhe}` : ""}`);
-      navigate("/");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "";
-      if (msg.includes("card de outro funil")) toast.error(msg, { duration: 10_000 });
-      else if (msg.includes("permissão")) toast.error("Você não tem permissão para excluir este funil");
-      else toast.error("Erro ao excluir funil");
-    }
-  };
+  // Timeline: entradas com reunião, fora das etapas de desfecho (por PAPEL).
+  const timelineItems = useMemo(() => {
+    const closed = new Set(closedStatusKeys);
+    return (allItems as any[]).filter((it) => it.meeting_date && !closed.has(it.status));
+  }, [allItems, closedStatusKeys]);
 
   if (isLoading) {
     return (
@@ -347,7 +578,37 @@ function FunilPageInner() {
     );
   }
 
-  const PipeIcon = ICON_MAP[pipeline.icon] || Kanban;
+  const PipeIcon = funilIcon(pipeline.icon);
+  const periodRange = controller.metricsRange;
+
+  const viewOptions: { value: FunilViewMode; icon: typeof LayoutGrid; label: string }[] = [
+    { value: "kanban", icon: LayoutGrid, label: "Kanban" },
+    { value: "list", icon: List, label: "Lista" },
+    ...(temEtapaMeeting ? [{ value: "timeline" as const, icon: CalendarIcon, label: "Timeline" }] : []),
+    { value: "analytics", icon: BarChart3, label: "Analytics" },
+  ];
+
+  const primaryAction = ehCustom ? (
+    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowAddLead(true)}>
+      <Plus className="w-4 h-4 mr-2" />
+      Adicionar Lead
+    </Button>
+  ) : trioSlug === "whatsapp" ? (
+    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateOpportunity(true)}>
+      <Plus className="w-4 h-4 mr-2" />
+      Novo negócio
+    </Button>
+  ) : trioSlug === "confirmacao" ? (
+    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateMeeting(true)}>
+      <Plus className="w-4 h-4 mr-2" />
+      Nova Reunião
+    </Button>
+  ) : trioSlug === "propostas" ? (
+    <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowCreateProposal(true)}>
+      <Plus className="w-4 h-4 mr-2" />
+      Nova Proposta
+    </Button>
+  ) : undefined;
 
   return (
     <div className="space-y-4">
@@ -355,26 +616,17 @@ function FunilPageInner() {
         funnelKey={ehCustom ? `custom:${pipeline.id}` : `sys:${pipeline.slug}`}
         funnelLabel={pipeline.name}
         funnelColor={pipeline.color}
-        search={searchQuery}
-        onSearchChange={(v) => patchFilters({ searchQuery: v })}
+        search={controller.search}
+        onSearchChange={controller.setSearch}
         views={
-          /* Alternador de visão + views salvas num gatilho só (SCRUM-634):
-             `pipelineId` faz o menu gravar em `pipeline:{uuid}` — o MESMO
-             contrato pra qualquer funil, sistema ou custom. */
           <FunnelViewsMenu
             viewMode={viewMode}
-            onViewModeChange={(v) => patchFilters({ viewMode: v })}
-            viewOptions={[
-              { value: "kanban", icon: LayoutGrid, label: "Kanban" },
-              { value: "list", icon: List, label: "Lista" },
-            ]}
+            onViewModeChange={setViewMode}
+            viewOptions={viewOptions}
             pipelineId={pipeline.id}
-            currentFilters={filterState}
-            defaultFilters={DEFAULT_FUNIL_FILTERS}
-            onApplyFilters={(f) =>
-              // Datas de range custom voltam do JSON como string — revive.
-              setFilterState({ ...f, periodState: revivePeriodState(f.periodState) })
-            }
+            currentFilters={currentBoardState}
+            defaultFilters={defaultBoardState}
+            onApplyFilters={applyBoardState}
             activeViewId={activeViewId}
             onActiveViewChange={handleActiveViewChange}
           />
@@ -386,7 +638,7 @@ function FunilPageInner() {
               style={{ color: pipeline.color }}
               aria-hidden
             />
-            {stages.length > 0 && (
+            {stages.length > 0 && viewMode !== "analytics" && (
               <KanbanFilterPanel sections={filterSections} onClearAll={handleClearFilters} />
             )}
           </>
@@ -395,6 +647,12 @@ function FunilPageInner() {
           <>
             {ehCustom && customRow && (
               <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSettings(true)}>
+                <Settings2 className="w-4 h-4 mr-2" />
+                Configurações
+              </Button>
+            )}
+            {trioSlug && (
+              <Button size="sm" variant="ghost" className="h-9" onClick={() => setShowSystemSettings(true)}>
                 <Settings2 className="w-4 h-4 mr-2" />
                 Configurações
               </Button>
@@ -414,24 +672,35 @@ function FunilPageInner() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-60">
-                  <DropdownMenuItem onClick={() => setIsDisparoOpen(true)}>
+                  <DropdownMenuItem onClick={handleOpenDisparoStage}>
                     <Send className="w-4 h-4 mr-2 text-primary" />
                     Disparo
                   </DropdownMenuItem>
+                  {trioSlug === "whatsapp" && (
+                    <DropdownMenuItem onClick={() => setShowCreateLead(true)}>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Novo lead
+                    </DropdownMenuItem>
+                  )}
+                  {trioSlug && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <div className="px-2 py-1.5">
+                        <AutoCreateLeadToggle />
+                      </div>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
           </>
         }
-        primaryAction={
-          ehCustom ? (
-            <Button size="sm" className="h-9 gradient-gold" onClick={() => setShowAddLead(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Adicionar Lead
-            </Button>
-          ) : undefined
+        primaryAction={primaryAction}
+        chips={
+          viewMode !== "analytics" ? (
+            <FilterChips sections={filterSections} onClearAll={handleClearFilters} />
+          ) : null
         }
-        chips={<FilterChips sections={filterSections} onClearAll={handleClearFilters} />}
       />
 
       {pipeline.description && (
@@ -442,8 +711,46 @@ function FunilPageInner() {
           com `leads` sob RLS — entry cujo lead o usuário não enxerga nem chega
           na tela, e a contagem da coluna sai do MESMO recorte. */}
 
+      {/* Indicador de período ativo (porte das páginas velhas) */}
+      {viewMode !== "analytics" && periodRange && (
+        <div className="flex items-center gap-3 px-4 py-2.5 rounded-lg bg-card border border-border text-sm text-muted-foreground">
+          <CalendarIcon className="w-4 h-4 shrink-0" />
+          <span className="flex-1">
+            Exibindo cards criados em{" "}
+            <span className="text-foreground font-medium">{formatPeriodLabel(periodRange)}</span>
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() =>
+              controller.setState((s) => ({ ...s, period: createInitialPeriodState() }))
+            }
+          >
+            Ver todos
+          </Button>
+        </div>
+      )}
+
       {stages.length > 0 ? (
-        isMobile || viewMode === "list" ? (
+        viewMode === "analytics" ? (
+          <FunilAnalytics
+            pipeline={pipeline}
+            stages={stages}
+            stageData={stageData}
+            allItems={allItems}
+            metrics={metrics}
+            periodRange={periodRange}
+            responsibleMembers={responsibleMembers}
+          />
+        ) : viewMode === "timeline" ? (
+          <MeetingTimeline
+            meetings={timelineItems}
+            onMeetingClick={(meeting) => {
+              if (meeting.lead_id) openDeal(meeting.id, meeting.lead_id);
+            }}
+          />
+        ) : isMobile || viewMode === "list" ? (
           <PipelineListView
             stages={mobileStages}
             leads={mobileLeads}
@@ -457,8 +764,34 @@ function FunilPageInner() {
             stages={stages}
             stageData={stageData}
             onMove={handleMove}
-            onRemoveEntry={ehCustom && canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
+            onRemoveEntry={canDeleteCards ? (id) => setRemoveEntryId(id) : undefined}
             onClickEntry={(entry) => openDeal(entry.id, entry.lead_id)}
+            metricsMap={metricsMap}
+            onDisparar={handleDispararManual}
+            onDeleteAllLeads={
+              trioSlug
+                ? (stageKey, stageTitle) => setStageToDelete({ id: stageKey, title: stageTitle })
+                : undefined
+            }
+            renderStageBadge={
+              trioSlug
+                ? (col) => {
+                    const allCounts = systemWorkflowCounts["__all__"] || { total: 0, active: 0 };
+                    const stageCounts = systemWorkflowCounts[col.id] || { total: 0, active: 0 };
+                    return (
+                      <StageWorkflowsBadgeWrapper
+                        pipeType={trioSlug}
+                        stageKey={col.id}
+                        stageName={col.title}
+                        counts={{
+                          total: stageCounts.total + allCounts.total,
+                          active: stageCounts.active + allCounts.active,
+                        }}
+                      />
+                    );
+                  }
+                : undefined
+            }
           />
         )
       ) : (
@@ -479,7 +812,10 @@ function FunilPageInner() {
         </div>
       )}
 
-      {/* Modals — reaproveitados do board custom, gated por família até a 637 */}
+      {/* Diálogos dos fluxos ricos de move (won/lost/reunião/destinos) */}
+      {flow.dialogs}
+
+      {/* Modals de criação/gestão por família */}
       {ehCustom && pipeline && stages.length > 0 && (
         <AddLeadToPipeModal
           open={showAddLead}
@@ -496,14 +832,47 @@ function FunilPageInner() {
           onOpenChange={setShowSettings}
           pipeline={customRow}
           stages={stages}
-          onRequestDelete={
-            canDeletePipeline
-              ? () => {
-                  setShowSettings(false);
-                  setShowDeletePipeline(true);
-                }
-              : undefined
-          }
+        />
+      )}
+
+      {trioSlug && (
+        <PipeSettingsDialog
+          open={showSystemSettings}
+          onOpenChange={setShowSystemSettings}
+          pipeType={trioSlug}
+          stages={familyStages}
+        />
+      )}
+
+      {trioSlug === "whatsapp" && (
+        <>
+          <CreateOpportunityModal
+            open={showCreateOpportunity}
+            onOpenChange={setShowCreateOpportunity}
+            onSuccess={() => {}}
+          />
+          <LeadModal
+            open={showCreateLead}
+            onOpenChange={setShowCreateLead}
+            lead={null}
+            onSuccess={() => {}}
+          />
+        </>
+      )}
+
+      {trioSlug === "confirmacao" && (
+        <AddMeetingModal
+          open={showCreateMeeting}
+          onOpenChange={setShowCreateMeeting}
+          onSuccess={() => {}}
+        />
+      )}
+
+      {trioSlug === "propostas" && (
+        <CreateProposalModal
+          open={showCreateProposal}
+          onOpenChange={setShowCreateProposal}
+          onSuccess={() => {}}
         />
       )}
 
@@ -512,85 +881,47 @@ function FunilPageInner() {
           open={isDisparoOpen}
           onOpenChange={setIsDisparoOpen}
           context={
-            ehCustom
-              ? {
-                  kind: "custom",
-                  pipelineId: pipeline.id,
-                  stages: stages.map((s) => ({ id: s.id, name: s.name, color: s.color })),
-                }
-              : { kind: "system", pipelineType: pipeline.slug as "whatsapp" | "confirmacao" | "propostas" }
+            /* Kind canônico da fatia B: UM pipelineId serve qualquer funil —
+               os shapes legados (system/custom) seguem aceitos na leitura. */
+            { kind: "pipeline", pipelineId: pipeline.id }
           }
+          boardFilter={disparoBoardFilter}
+          initialSource={disparoSource}
+          initialManualLeadIds={disparoManualIds}
         />
       )}
 
-      {/* Confirmar exclusão do funil (custom) */}
-      <AlertDialog open={showDeletePipeline} onOpenChange={setShowDeletePipeline}>
+      {/* Mover leads de uma etapa pra lixeira (trio de sistema) */}
+      <AlertDialog open={!!stageToDelete} onOpenChange={(open) => { if (!open) setStageToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-destructive" />
-              Excluir Funil "{pipeline?.name}"?
-            </AlertDialogTitle>
+            <AlertDialogTitle>Mover leads da etapa "{stageToDelete?.title}" para lixeira</AlertDialogTitle>
             <AlertDialogDescription>
-              {bloqueado ? (
-                <>
-                  <strong>Não dá para excluir agora.</strong> {impacto?.cards_invasores} card(s)
-                  de <strong>outro funil</strong> estão parados numa etapa deste. Mova-os
-                  para o funil de origem primeiro.
-                  <br />
-                  <br />
-                  O sistema não faz isso sozinho de propósito: mover o card dispararia
-                  as automações da etapa de destino — e mandaria mensagem para um lead
-                  que não tem nada a ver com este funil.
-                </>
-              ) : (
-                <>
-                  Esta ação <strong>não pode ser desfeita</strong>. O funil, suas{" "}
-                  {impacto ? `${impacto.etapas} etapa(s)` : "etapas"} e{" "}
-                  {impacto ? `${impacto.cards} card(s)` : "todos os cards"}
-                  {impacto && impacto.leads > 0 ? ` de ${impacto.leads} lead(s)` : ""}{" "}
-                  serão apagados em definitivo.
-                  {!!impacto?.eventos_etapa && (
-                    <>
-                      {" "}
-                      Junto vai o histórico de etapas deste funil ({impacto.eventos_etapa}{" "}
-                      evento(s)) — as métricas de conversão e de tempo por etapa dele zeram.
-                    </>
-                  )}
-                  <br />
-                  <br />
-                  <strong>Os leads continuam no sistema</strong> — o que some é a posição
-                  deles neste funil.
-                  {!!impacto?.automacoes && (
-                    <>
-                      <br />
-                      <br />
-                      ⚠️ {impacto.automacoes} automação(ões) que usam este funil{" "}
-                      <strong>serão desativadas</strong>.
-                    </>
-                  )}
-                  {!!impacto?.disparos_em_voo && (
-                    <>
-                      <br />
-                      ⚠️ {impacto.disparos_em_voo} disparo(s) em andamento perdem o destino
-                      e passam a deixar o lead onde está.
-                    </>
-                  )}
-                </>
-              )}
+              Todos os leads da etapa "{stageToDelete?.title}" serão movidos para a lixeira. Leads em
+              outras etapas não serão afetados. Você pode restaurá-los pela página de lixeira.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{bloqueado ? "Entendi" : "Cancelar"}</AlertDialogCancel>
-            {!bloqueado && (
-              <AlertDialogAction
-                onClick={handleDeletePipeline}
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              >
-                {deletePipeline.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Excluir Funil
-              </AlertDialogAction>
-            )}
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!stageToDelete) return;
+                try {
+                  const result = await deleteAllLeadsInPipe.mutateAsync({ stageId: stageToDelete.id });
+                  setStageToDelete(null);
+                  toast.success(
+                    result?.deleted
+                      ? `${result.deleted} leads movidos para lixeira.`
+                      : "Leads movidos para lixeira.",
+                  );
+                } catch {
+                  toast.error("Erro ao mover leads para lixeira.");
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleteAllLeadsInPipe.isPending ? "Movendo para lixeira..." : "Mover para lixeira"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -610,7 +941,9 @@ function FunilPageInner() {
               onClick={handleRemoveEntry}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {removeLead.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {(removeLead.isPending || deleteEntry.isPending) && (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              )}
               Remover
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -621,6 +954,15 @@ function FunilPageInner() {
 }
 
 export default function FunilPage() {
+  const { slug: param } = useParams<{ slug: string }>();
+  const { hasFeature } = useOrgFeatures();
+
+  // Agendamentos foi mergeado em Oportunidades — board standalone aposentado
+  // (ADR-0004). Mesma guarda que a página velha de Confirmação carregava.
+  if (param === "confirmacao" && hasFeature("merged_opportunity_funnel")) {
+    return <Navigate to="/funis" replace />;
+  }
+
   return (
     <LeadPanelProvider>
       <DealPanelProvider>

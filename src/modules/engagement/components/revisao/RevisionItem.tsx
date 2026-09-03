@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { format, isPast, isToday } from "date-fns";
+import { format, isToday } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   MessageSquare,
@@ -24,6 +24,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
 import { ScheduleFollowUpModal } from "@/modules/engagement/components/followups/ScheduleFollowUpModal";
+import { estaAtrasado } from "@/modules/engagement/lib/follow-up-atraso";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { cn } from "@/lib/utils";
@@ -91,6 +92,18 @@ interface RevisionItemProps {
     assignedTo?: string,
   ) => void;
   canDelete?: boolean;
+  /**
+   * Fuso da organização, para decidir o que é "atrasado".
+   *
+   * Entra por PROP e não por `useOrganization()` aqui dentro: este componente é
+   * de apresentação — recebe `task` e devolve cliques — e plugar um hook de
+   * dados nele exigiria `AuthProvider` em toda montagem, inclusive nos testes
+   * (que quebraram 11 de uma vez quando tentei). Quem tem o contexto é a página.
+   *
+   * Ausente → a regra cai em UTC, que no Brasil erra para o lado seguro: o
+   * corte é mais cedo, então nunca acusa como atrasado algo de hoje.
+   */
+  timezone?: string | null;
 }
 
 export function RevisionItem({
@@ -103,6 +116,7 @@ export function RevisionItem({
   onOpenLead,
   onScheduleNew,
   canDelete,
+  timezone,
 }: RevisionItemProps) {
   const [expanded, setExpanded] = useState(false);
   const [showCompletionBanner, setShowCompletionBanner] = useState(false);
@@ -111,7 +125,16 @@ export function RevisionItem({
   const [completionNotes, setCompletionNotes] = useState("");
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
 
-  const isOverdue = !task.isCompleted && isPast(task.scheduledAt);
+  /**
+   * O selo vermelho da lista — a QUINTA definição de "atrasado" que existia no
+   * produto, e a única que o usuário enxerga.
+   *
+   * Era `isPast(scheduledAt)`: corte por INSTANTE, no fuso do browser. Uma
+   * tarefa marcada para hoje às 09:00 ficava vermelha às 09:01, ao lado de um
+   * cartão do dashboard que a contava como "de hoje". Agora as duas leem a
+   * mesma regra, e ela corta por DIA no fuso da organização (SCRUM-607).
+   */
+  const isOverdue = !task.isCompleted && estaAtrasado(task.scheduledAt, timezone);
   const hasPhone = !!formatPhoneForWhatsApp(task.leadPhone ?? undefined);
   const isFollowUp = task.type === "follow-up";
 

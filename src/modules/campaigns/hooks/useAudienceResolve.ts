@@ -1,37 +1,27 @@
 /**
  * useAudienceResolve — live audience resolution for the Disparos wizard (#902).
  *
- * Thin React shell over the pure `audience-resolve` core. Composes the existing
- * pipelines RPC hooks (`useStageLeadIds` / `useFilteredLeadIds` /
- * `useCustomFilteredLeadIds` / `useAllFunnelsLeadIds`, all org-scoped
- * server-side — the front never sends org_id as authority) and returns the
- * single active candidate set for the chosen source.
+ * Thin React shell over the pure `audience-resolve` core. Fatia B (Funil é
+ * Funil): a família de resolvers por tipo de funil morreu — UM funil resolve
+ * por `usePipelineLeadIds` (motor único `get_pipeline_lead_ids`, migration
+ * 20270908003000) e "Todos os funis" por `useAllFunnelsLeadIds`. Ambos
+ * org-scoped server-side — the front never sends org_id as authority.
  *
  * ONE query resolves the audience — never a client-side fan-out across funnels.
  * The frozen `leadIds` handed to the blast is exactly what the live counter
  * showed, with no intermediate partial state.
  *
  * Hooks run unconditionally (Rules of Hooks); inactive resolvers are gated to a
- * cheap empty result — stage via an empty stageKey (the hook's own `enabled`),
- * custom via a null pipelineId, all-funnels via a real `enabled` flag, and the
- * filtered RPC via a sentinel stage that matches no rows. The sentinel exists
- * only because the inherited hooks expose no `enabled`; new code uses the flag.
- * The pure `resolverFor` decides which one is authoritative.
+ * cheap empty result — the pipeline resolver via a null pipelineId (the hook's
+ * own `enabled`), all-funnels via a real `enabled` flag. The pure `resolverFor`
+ * decides which one is authoritative.
  */
 import { useMemo } from "react";
-import {
-  useStageLeadIds,
-  useFilteredLeadIds,
-  useCustomFilteredLeadIds,
-  useAllFunnelsLeadIds,
-} from "@/modules/pipelines";
+import { useAllFunnelsLeadIds, usePipelineLeadIds } from "@/modules/pipelines";
 import {
   resolverFor,
   type AudienceSelection,
 } from "../components/disparo-wizard/audience-resolve";
-
-/** A stage_key that matches no lead — gates the filtered RPC to an empty result. */
-const INACTIVE_STAGE = "__disparo_inactive__";
 
 export interface ResolvedAudience {
   leadIds: string[];
@@ -50,45 +40,22 @@ export function useAudienceResolve(sel: AudienceSelection): ResolvedAudience {
     origin: sel.conditions.origin,
   };
 
-  // Whole-funnel scope sends a NULL stage to the RPCs, which read it as "every
-  // stage". Only get_filtered_lead_ids / get_custom_filtered_lead_ids accept it.
-  const wholeFunnel = sel.stageScope === "all";
-
-  // system, ONE plain stage (no conditions) — gated by the hook's own
-  // `enabled:!!stageKey`. Never reached with a whole-funnel scope (resolverFor
-  // routes that to "filtered": get_stage_lead_ids has no NULL-stage escape).
-  const stage = useStageLeadIds(sel.pipelineType, kind === "stage" ? sel.stageKey : "");
-
-  // system, narrowed and/or whole-funnel — sentinel stage keeps the query empty
-  // when inactive; null stage means "every stage of this pipe".
-  const filtered = useFilteredLeadIds(sel.pipelineType, {
-    stageKey: kind === "filtered" ? (wholeFunnel ? null : sel.stageKey) : INACTIVE_STAGE,
+  // ONE funnel (any type), one stage or whole. A null stageId means "every
+  // stage of this funnel" (the RPC's p_stage_id NULL escape); a null pipelineId
+  // disables the query via the hook's own `enabled`.
+  const pipeline = usePipelineLeadIds(kind === "pipeline" ? sel.pipelineId : null, {
+    stageId: kind === "pipeline" && sel.stageScope === "one" ? sel.stageId || null : null,
     ...conditionFields,
   });
 
-  // custom pipeline, one stage or whole — gated by the hook's own
-  // `enabled:!!pipelineId`.
-  const custom = useCustomFilteredLeadIds(kind === "custom" ? sel.pipelineId : null, {
-    stageId: kind === "custom" && !wholeFunnel ? sel.stageKey : null,
-    ...conditionFields,
-  });
-
-  // every funnel at once, deduplicated server-side — gated by a real `enabled`.
+  // Every funnel at once, deduplicated server-side — gated by a real `enabled`.
   const allFunnels = useAllFunnelsLeadIds(conditionFields, {
     enabled: kind === "all-funnels",
   });
 
   return useMemo<ResolvedAudience>(() => {
     const active =
-      kind === "stage"
-        ? stage
-        : kind === "filtered"
-          ? filtered
-          : kind === "custom"
-            ? custom
-            : kind === "all-funnels"
-              ? allFunnels
-              : null;
+      kind === "pipeline" ? pipeline : kind === "all-funnels" ? allFunnels : null;
     if (!active) return { leadIds: [], count: 0, isLoading: false, isError: false };
     const leadIds = active.data ?? [];
     return {
@@ -97,5 +64,5 @@ export function useAudienceResolve(sel: AudienceSelection): ResolvedAudience {
       isLoading: active.isLoading,
       isError: active.isError,
     };
-  }, [kind, stage, filtered, custom, allFunnels]);
+  }, [kind, pipeline, allFunnels]);
 }

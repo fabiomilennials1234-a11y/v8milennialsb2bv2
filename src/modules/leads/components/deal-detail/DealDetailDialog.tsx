@@ -45,14 +45,8 @@ import { useLeadsDeals } from "../../hooks/useLeadsDeals";
  * Tirar isso do funil custaria ao vendedor a tela onde ele trabalha o dia todo.
  */
 
-const SYSTEM_RAIL_REF: Record<string, "whatsapp" | "confirmacao" | "propostas"> = {
-  qualificacao: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-};
-
 const SYSTEM_SHORT_LABEL: Record<string, string> = {
-  qualificacao: "Qualificação",
+  whatsapp: "Qualificação",
   confirmacao: "Confirmação",
   propostas: "Propostas",
   upsell: "Carteira",
@@ -73,7 +67,7 @@ const MERGED_MEETING_STAGES = ["agendado", "remarcar", "compareceu", "nao_compar
  * oferecer:
  * - `confirmacao` → reunião (`pipe_confirmacao.meeting_date`)
  * - `propostas` → orçamento (`pipe_propostas.sale_value` + itens)
- * - `qualificacao` com funil mergeado (ADR-0004) → reunião mora na entry whatsapp
+ * - `whatsapp` com funil mergeado (ADR-0004) → reunião mora na entry whatsapp
  * - **custom → nada.** `custom_pipe_entries` não tem `metadata jsonb`, e
  *   `pipe_proposta_items.pipe_proposta_id` referencia `pipeline_entries(id)` —
  *   outro espaço de ids. Não é escolha de design, é trava de schema; ligar pill
@@ -83,7 +77,7 @@ function dealPills(pipe: PipelineStatus, mergedMeeting: boolean): ActionPillType
   if (!isStandard(pipe)) return [];
   if (pipe.pipeType === "confirmacao") return ["meeting"];
   if (pipe.pipeType === "propostas") return ["budget"];
-  if (pipe.pipeType === "qualificacao" && mergedMeeting) return ["meeting"];
+  if (pipe.pipeType === "whatsapp" && mergedMeeting) return ["meeting"];
   return [];
 }
 
@@ -138,7 +132,7 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
       return {
         kind: "system",
         recordId: entryId,
-        pipeRef: SYSTEM_RAIL_REF[pipe.pipeType] ?? pipe.pipeType,
+        pipeRef: pipe.pipeType,
         shortLabel: SYSTEM_SHORT_LABEL[pipe.pipeType] ?? pipe.label,
         color: pipe.color,
         stages: pipe.stages.map((s) => ({ key: s.id, label: s.label })),
@@ -188,7 +182,7 @@ function DealContent({ onClose, isMobile }: { onClose: () => void; isMobile: boo
   const organizationId = lead.organization_id ?? "";
   const mergedMeeting =
     isStandard(pipe) &&
-    pipe.pipeType === "qualificacao" &&
+    pipe.pipeType === "whatsapp" &&
     hasFeature("merged_opportunity_funnel") &&
     MERGED_MEETING_STAGES.includes(pipe.currentStage ?? "");
 

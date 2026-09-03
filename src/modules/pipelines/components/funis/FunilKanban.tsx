@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { DraggableKanbanBoard, type KanbanColumn } from "@/modules/pipelines/components/kanban/DraggableKanbanBoard";
 import { ExportStageDialog } from "@/modules/pipelines/components/kanban/ExportStageDialog";
-import { LeadCard, type LeadCardData } from "@/modules/leads";
+import { LeadCard, type LeadCardData, type LeadMetrics } from "@/modules/leads";
 import { StageWorkflowsBadge } from "@/modules/pipelines/components/kanban/StageWorkflowsBadge";
+import { MergedFunnelCardActions } from "@/modules/pipelines/components/kanban/MergedFunnelCardActions";
 import { useCustomPipeStageWorkflows, useCustomPipeWorkflowCounts } from "@/modules/workflows/hooks/useStageWorkflows";
 import type { StageData } from "@/modules/pipelines/hooks/model/usePaginatedPipeline";
 import { useCanDo } from "@/modules/identity";
@@ -22,6 +23,10 @@ export interface FunilEntry {
   stage_key: string;
   notes: string | null;
   created_at: string;
+  /** Funil mergeado (ADR-0004): dados de reunião achatados do metadata. */
+  meeting_date?: string | null;
+  is_confirmed?: boolean;
+  metadata?: Record<string, unknown> | null;
   lead?: {
     id: string;
     name: string | null;
@@ -50,6 +55,29 @@ interface FunilKanbanProps {
   onMove: (entryId: string, stage: CustomPipelineStage) => void;
   onRemoveEntry?: (entryId: string) => void;
   onClickEntry?: (entry: FunilEntry) => void;
+  /**
+   * Contadores por lead (comentários/checklists) — 2 queries batched sobre os
+   * ids CARREGADOS (`useBatchedLeadMetrics`), mesmo custo que o board legado de
+   * Qualificação pagava. Opcional: sem o mapa o card só omite os badges.
+   */
+  metricsMap?: Record<string, LeadMetrics>;
+  /**
+   * "Disparar" da barra de bulk abre o wizard de Disparo pré-semeado com a
+   * seleção (fonte Manual) — porte das páginas de sistema. Sem o handler a
+   * barra cai no QuickBlast interno (comportamento antigo do board custom).
+   */
+  onDisparar?: (leadIds: string[]) => void;
+  /**
+   * "Mover leads da etapa pra lixeira" (menu da coluna) — porte das páginas de
+   * sistema; a página só o oferece onde o delete em massa existe (trio).
+   */
+  onDeleteAllLeads?: (stageKey: string, stageTitle: string) => void;
+  /**
+   * Badge de workflows da coluna. Workflows de funil de SISTEMA ainda são
+   * configurados por pipe_type (slug) — a página injeta o badge legado aqui;
+   * sem override, o badge por pipeline_id (funil custom) é usado.
+   */
+  renderStageBadge?: (col: { id: string; title: string }) => ReactNode;
 }
 
 function FunilStageBadge({
@@ -97,6 +125,10 @@ export function FunilKanban({
   onMove,
   onRemoveEntry,
   onClickEntry,
+  metricsMap,
+  onDisparar,
+  onDeleteAllLeads,
+  renderStageBadge,
 }: FunilKanbanProps) {
   const updateLead = useUpdateLead();
   const createAcaoDoDia = useCreateAcaoDoDia();
@@ -107,6 +139,21 @@ export function FunilKanban({
   const { data: workflowCounts = {} } = useCustomPipeWorkflowCounts(pipelineId);
   const [stageToExport, setStageToExport] = useState<{ id: string; title: string; count: number } | null>(null);
   const bulk = useBulkSelection();
+
+  // Destino do "Marcar perdido": papel PRIMEIRO, flag depois — em duas
+  // passadas. Um `find` único com OR escolhe por acidente de posição: etapa de
+  // falta marcada final_negative que vem antes ganharia da etapa `lost` real,
+  // e o botão moveria o card pra onde ele já está (fix portado da main,
+  // 46f27b2f — "falta a reunião deixa de contar como perda"). `stage_role` é o
+  // mesmo critério que a métrica usa pra contar perda. Stages já chegam só
+  // ativas (usePaginatedFunil filtra is_active).
+  const lostStageKey = useMemo(
+    () =>
+      (stages.find((s) => s.stage_role === "lost") ??
+        stages.find((s) => (s.stage_role ?? "open") === "open" && s.is_final_negative))
+        ?.stage_key ?? null,
+    [stages],
+  );
 
   // Ordered lead ids (shift-select em range) — só o que está CARREGADO.
   const allLeadIds = useMemo(
@@ -147,6 +194,15 @@ export function FunilKanban({
       createdAt: entry.created_at,
       notes: entry.notes,
       leadId: entry.lead_id ?? undefined,
+      metrics: entry.lead_id ? metricsMap?.[entry.lead_id] : undefined,
+      // ── Confirmação de reunião (funil mergeado — ADR-0004, porte do board
+      // de Qualificação): o componente de ações auto-gateia na flag da org e
+      // nas stage keys do merge, então montar amplo é seguro.
+      stageKey: entry.stage_key ?? null,
+      meetingDate: entry.meeting_date ?? (entry.metadata?.meeting_date as string | undefined) ?? null,
+      confirmationStatus:
+        (entry.metadata?.confirmation_status as LeadCardData["confirmationStatus"]) ??
+        (entry.is_confirmed ? "confirmado" : "pendente"),
     };
   };
 
@@ -168,7 +224,8 @@ export function FunilKanban({
           onLoadMore: slot?.fetchMore,
         };
       }),
-    [stages, stageData],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stages, stageData, metricsMap],
   );
 
   const findEntry = (entryId: string): FunilEntry | undefined => {
@@ -188,11 +245,13 @@ export function FunilKanban({
           if (stage) onMove(itemId, stage);
         }}
         disabled={!canMovePipe}
+        onDeleteAllLeads={onDeleteAllLeads}
         onExportStage={(stageKey, stageTitle) => {
           const col = columns.find((c) => c.id === stageKey);
           setStageToExport({ id: stageKey, title: stageTitle, count: col?.items.length ?? 0 });
         }}
         renderColumnExtra={(col) => {
+          if (renderStageBadge) return renderStageBadge({ id: col.id, title: col.title });
           const allCounts = workflowCounts["__all__"] || { total: 0, active: 0 };
           const stageCounts = workflowCounts[col.id] || { total: 0, active: 0 };
           const merged = {
@@ -214,6 +273,23 @@ export function FunilKanban({
             variant="custom"
             density="compact"
             showValue
+            extraActions={
+              <MergedFunnelCardActions
+                entryId={card.id}
+                stageKey={card.stageKey}
+                meetingDate={card.meetingDate}
+                confirmationStatus={card.confirmationStatus}
+                lostStageKey={lostStageKey}
+                onMoveStage={(toStage) => {
+                  const st = stages.find((s) => s.stage_key === toStage);
+                  if (st) onMove(card.id, st);
+                }}
+                leadId={card.leadId}
+                leadName={card.name}
+                leadCompany={card.company}
+                leadPhone={card.phone}
+              />
+            }
             selected={bulk.isSelected(card.leadId || "")}
             onSelect={(e) => {
               const lid = card.leadId || "";
@@ -243,11 +319,22 @@ export function FunilKanban({
         // (pipelines.id, pipeline_stages.id) — serve qualquer família.
         stageId={stages.find((s) => s.stage_key === stageToExport?.id)?.id ?? ""}
         stageTitle={stageToExport?.title ?? ""}
-        pipe="pipeline"
         pipelineId={pipelineId}
         leadCount={stageToExport?.count ?? 0}
       />
-      <BulkActionBar selectedIds={bulk.selectedIds} onClear={bulk.clearSelection} leadIds={allLeadIds} />
+      <BulkActionBar
+        selectedIds={bulk.selectedIds}
+        onClear={bulk.clearSelection}
+        leadIds={allLeadIds}
+        onDisparar={
+          onDisparar
+            ? (leadIds) => {
+                onDisparar(leadIds);
+                bulk.clearSelection();
+              }
+            : undefined
+        }
+      />
     </>
   );
 }

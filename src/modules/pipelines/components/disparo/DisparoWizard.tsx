@@ -36,11 +36,9 @@ import {
 } from "@/modules/campaigns";
 import { useCarteiraLeadIds } from "@/modules/carteira";
 
-import { usePipelineStages } from "../../hooks/model/usePipelineStages";
-import { useStageLeadIds } from "../../hooks/model/useStageLeadIds";
-import { useFilteredLeadIds } from "../../hooks/model/useFilteredLeadIds";
-import { useCustomFilteredLeadIds } from "../../hooks/model/useCustomFilteredLeadIds";
-import type { PipelineType } from "../../hooks/model/usePipelineEntries";
+import { usePipelines } from "../../hooks/model/usePipelines";
+import { usePipelineLeadIds } from "../../hooks/model/usePipelineLeadIds";
+import { useStagesDoFunil } from "../../hooks/model/useStagesDoFunil";
 
 import { BlastBreakdown } from "./BlastBreakdown";
 import { BlastRefinementsControls } from "./BlastRefinementsControls";
@@ -87,26 +85,31 @@ export interface DisparoBoardFilter {
  */
 export type DisparoSource = "estagio" | "filtro" | "manual";
 
-/** System (canonical) funnels the stage/filtro resolvers understand. */
+/**
+ * @deprecated Fatia B (Funil é Funil): só sobrevive no contrato LEGADO do
+ * contexto `{kind:"system"}` — aceito na leitura pra sempre; código novo monta
+ * `{kind:"pipeline", pipelineId}`. Morre na F6 junto com o contexto legado.
+ */
 export type SystemPipelineType = "whatsapp" | "confirmacao" | "propostas";
 
 /**
  * Where the wizard is mounted — discriminates how the audience resolves. All
- * three kinds funnel into the SAME refinements + dry-run preview + fire +
- * "agendar lotes" downstream (those take lead_ids and never branch on context):
+ * kinds funnel into the SAME refinements + dry-run preview + fire + "agendar
+ * lotes" downstream (those take lead_ids and never branch on context):
  *
- *   - system  : a canonical pipe (`pipe_whatsapp/confirmacao/propostas`). Stage
- *               source via `useStageLeadIds` (every lead in the stage, no
- *               responsible scope); audience conditions route the stage through
- *               `useFilteredLeadIds` with the stageKey.
- *   - custom  : a user-defined pipeline (`pipeline_entries`, stage_id uuid).
- *               Resolves via `useCustomFilteredLeadIds`. Stage picker reads the
- *               passed `stages` (uuid ids). (Phase 2b mount.)
+ *   - pipeline: CANÔNICO (Fatia B) — um funil qualquer da org por
+ *               `pipelines.id`. Etapas via `useStagesDoFunil` (uuid), público
+ *               via `usePipelineLeadIds` (motor único `get_pipeline_lead_ids`).
+ *   - system  : LEGADO, aceito pra sempre — slug do trio; normaliza pra
+ *               `pipeline` resolvendo o id em `usePipelines` por (org, slug).
+ *   - custom  : LEGADO, aceito pra sempre — já carrega o `pipelineId`;
+ *               normaliza direto (a lista `stages` passada é ignorada: a fonte
+ *               única de etapas é `useStagesDoFunil`).
  *   - carteira: the post-sale portfolio. Source picker becomes "Segmento";
  *               resolves via `useCarteiraLeadIds`. No responsible filter.
- *               (Phase 2b mount.)
  */
 export type DisparoContext =
+  | { kind: "pipeline"; pipelineId: string }
   | { kind: "system"; pipelineType: SystemPipelineType }
   | { kind: "custom"; pipelineId: string; stages: { id: string; name: string; color?: string | null }[] }
   | { kind: "carteira" };
@@ -191,14 +194,15 @@ function DisparoWizardInner({
   const reduceMotion = useReducedMotion();
 
   const isCarteira = context.kind === "carteira";
-  const isCustom = context.kind === "custom";
-  const isSystem = context.kind === "system";
-  // The system funnel feeding the stage/filtro resolvers. Custom/carteira don't
-  // use it (they have their own resolvers) — default to whatsapp to satisfy the
-  // type when the hooks are called with `enabled:false` inputs.
-  const systemPipelineType: SystemPipelineType = isSystem
-    ? (context as { pipelineType: SystemPipelineType }).pipelineType
-    : "whatsapp";
+  // Fatia B: o kind system/custom colapsou — todo contexto de funil normaliza
+  // pra UM `pipelineId`. O contrato legado `{kind:"system", pipelineType}` é
+  // aceito pra sempre: o slug resolve pro funil real da org via `usePipelines`.
+  const { data: orgPipelines = [] } = usePipelines();
+  const funnelId: string | null = isCarteira
+    ? null
+    : context.kind === "system"
+      ? orgPipelines.find((p) => p.slug === context.pipelineType)?.id ?? null
+      : context.pipelineId;
   // The primary source label flips for carteira (a Segment set, not a Stage).
   const primarySourceLabel = isCarteira ? "Segmento" : "Estágio";
 
@@ -207,7 +211,8 @@ function DisparoWizardInner({
 
   // Step 1 — Público
   const [source, setSource] = useState<DisparoSource>(initialSource);
-  // Funnel stage selection. system: stage_key slug; custom: stage_id uuid.
+  // Funnel stage selection — `pipeline_stages.id` (uuid, canônico de qualquer
+  // funil). O nome `stageKey` fica pelo prop público do PublicoStep.
   const [stageKey, setStageKey] = useState<string>("");
   // Carteira segment multi-select (only used when context.kind === "carteira").
   const [segments, setSegments] = useState<string[]>([]);
@@ -248,43 +253,20 @@ function DisparoWizardInner({
   const [result, setResult] = useState<QuickBlastResult | null>(null);
   const [planResult, setPlanResult] = useState<CreateBlastPlanResult | null>(null);
 
-  // System-funnel stages (slug-keyed). Only fetched for the system context;
-  // custom/carteira don't read it. The hook is cheap + cached, gated on enabled.
-  const { data: systemStages = [], isLoading: systemStagesLoading } = usePipelineStages(
-    isSystem ? systemPipelineType : ("whatsapp" as PipelineType),
+  // Unified stage list for the picker — `pipeline_stages` por pipeline_id,
+  // chave = stage id (uuid), pra QUALQUER funil. Carteira has no stage picker.
+  const stagesQuery = useStagesDoFunil(funnelId);
+  const stages = useMemo<{ key: string; name: string; color?: string | null }[]>(
+    () => (stagesQuery.data ?? []).map((s) => ({ key: s.id, name: s.name, color: s.color })),
+    [stagesQuery.data],
   );
-  // Unified stage list for the picker, keyed by `key` (slug for system,
-  // stage_id uuid for custom). Carteira has no stage picker.
-  const stages = useMemo<{ key: string; name: string; color?: string | null }[]>(() => {
-    if (isCustom) {
-      return (context as { stages: { id: string; name: string; color?: string | null }[] }).stages.map(
-        (s) => ({ key: s.id, name: s.name, color: s.color }),
-      );
-    }
-    if (isSystem) return systemStages.map((s) => ({ key: s.stage_key, name: s.name, color: s.color }));
-    return [];
-  }, [isCustom, isSystem, context, systemStages]);
-  const stagesLoading = isSystem ? systemStagesLoading : false;
+  const stagesLoading = !!funnelId && stagesQuery.isLoading;
 
   const { data: orgTags = [] } = useTags();
   const { data: templates = [] } = useCampaignTemplates();
   const { data: instances = [] } = useWhatsAppInstances();
   const blast = useQuickBlast();
   const createPlan = useCreateBlastPlan();
-
-  // Any audience condition active? These narrow EVERY source except Manual, and
-  // route the Estágio source through the filtered RPC (which honors them).
-  const conditionsActive =
-    conditions.tagIds.length > 0 ||
-    conditions.qualificationTier.length > 0 ||
-    conditions.preQualificationTier.length > 0 ||
-    conditions.origin.length > 0;
-  // The Estágio source needs the FILTERED resolver only when an audience
-  // condition narrows it; otherwise the plain stage resolver suffices. Audience
-  // is no longer scoped by responsible — every lead in the stage (with or
-  // without a responsible) is included; the sending instance is chosen in the
-  // Mensagem step and is who sends, for everyone.
-  const stageNeedsFilter = conditionsActive;
 
   // Does the board carry an active server-side filter at all? Without one the
   // "Filtro ativo" source has nothing to honor and is empty/disabled. Carteira
@@ -307,19 +289,17 @@ function DisparoWizardInner({
     origin: conditions.origin,
   };
 
-  // ── SYSTEM resolvers ──────────────────────────────────────────────────────
-  // Plain stage source — every lead in a stage, no narrowing. Only when no
-  // audience condition forces the filtered path.
-  const { data: sysStageLeadIds, isLoading: sysStageLoading } = useStageLeadIds(
-    systemPipelineType,
-    isSystem && source === "estagio" && !stageNeedsFilter ? stageKey : "",
-  );
-  // Filtered source — board's "filtro" replay, OR the narrowed Estágio (stageKey
-  // + conditions + responsible). Conditions ALWAYS apply; the board's filter
-  // adds its own search/responsible/tags on top for the "filtro" source.
-  const { data: sysFilteredLeadIds, isLoading: sysFilteredLoading } = useFilteredLeadIds(
-    systemPipelineType,
-    isSystem && source === "filtro" && boardFilterActive
+  // ── FUNNEL resolver (motor único — Fatia B) ───────────────────────────────
+  // `get_pipeline_lead_ids` cobre estágio, funil inteiro, condições e o replay
+  // do filtro do board para QUALQUER funil, por pipeline_id. O hook desliga
+  // sozinho com pipelineId null (carteira/manual-only).
+  const funnelResolverActive =
+    !isCarteira &&
+    !!funnelId &&
+    ((source === "estagio" && !!stageKey) || (source === "filtro" && boardFilterActive));
+  const { data: funnelLeadIds, isLoading: funnelLeadsLoading } = usePipelineLeadIds(
+    funnelResolverActive ? funnelId : null,
+    source === "filtro"
       ? {
           search: boardFilter?.search,
           responsibleId: boardFilter?.responsibleId,
@@ -330,26 +310,10 @@ function DisparoWizardInner({
           preQualificationTier: conditions.preQualificationTier,
           origin: conditions.origin,
         }
-      : isSystem && source === "estagio" && !!stageKey && stageNeedsFilter
-        ? {
-            stageKey,
-            ...conditionFields,
-          }
-        : {},
-  );
-
-  // ── CUSTOM resolver ───────────────────────────────────────────────────────
-  // Single resolver covers stage + conditions + responsible for custom funnels.
-  // Fetched when on a stage/filtro source with a target chosen.
-  const customPipelineId = isCustom
-    ? (context as { pipelineId: string }).pipelineId
-    : null;
-  const { data: customLeadIds, isLoading: customLoading } = useCustomFilteredLeadIds(
-    isCustom && (source === "estagio" || source === "filtro") ? customPipelineId : null,
-    {
-      stageId: source === "estagio" ? stageKey || null : null,
-      ...conditionFields,
-    },
+      : {
+          stageId: stageKey || null,
+          ...conditionFields,
+        },
   );
 
   // ── CARTEIRA resolver ─────────────────────────────────────────────────────
@@ -368,10 +332,7 @@ function DisparoWizardInner({
   const audienceLeadIds = (() => {
     if (source === "manual") return manualLeadIds;
     if (isCarteira) return carteiraLeadIds;
-    if (isCustom) return customLeadIds;
-    // system
-    if (source === "filtro") return boardFilterActive ? sysFilteredLeadIds : [];
-    return stageNeedsFilter ? sysFilteredLeadIds : sysStageLeadIds;
+    return funnelResolverActive ? funnelLeadIds : [];
   })();
 
   const audienceLoading = (() => {
@@ -381,12 +342,7 @@ function DisparoWizardInner({
       const ready = source === "filtro" || segments.length > 0;
       return carteiraLoading && ready;
     }
-    if (isCustom) {
-      const ready = source === "filtro" || !!stageKey;
-      return customLoading && ready;
-    }
-    if (source === "filtro") return boardFilterActive && sysFilteredLoading;
-    return (stageNeedsFilter ? sysFilteredLoading : sysStageLoading) && !!stageKey;
+    return funnelResolverActive && funnelLeadsLoading;
   })();
 
   const audienceSize = audienceLeadIds?.length ?? 0;
@@ -459,18 +415,21 @@ function DisparoWizardInner({
         : `${manualLeadIds.length} selecionados`;
 
   // Audience provenance descriptor — best-effort, recorded on the plan for its
-  // panel label. Mirrors the same fields the fire path already resolves.
+  // panel label e pra coluna canônica `blast_plans.pipeline_id` (Fatia B). O
+  // `stageId` é uuid de `pipeline_stages`; a chave legada `stageKey` de planos
+  // antigos continua aceita na leitura.
   const audienceSourceDescriptor = useMemo<Record<string, unknown>>(
     () => ({
       context: context.kind,
       source,
+      ...(funnelId ? { pipelineId: funnelId } : {}),
       ...(source === "estagio"
         ? isCarteira
           ? { segments }
-          : { stageKey }
+          : { stageId: stageKey }
         : {}),
     }),
-    [context.kind, source, isCarteira, segments, stageKey],
+    [context.kind, source, isCarteira, segments, stageKey, funnelId],
   );
 
   // Over-budget decision (#707). The dry-run preview reports `remaining` —

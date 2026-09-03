@@ -455,7 +455,7 @@ from runtime_logs where module = 'voip' order by created_at desc limit 20;
 | `session_not_open` | passo 7 — o pareamento não completou |
 | `consent_missing` | passo 8 |
 | `not_instance_member` | o operador não tem acesso àquela instância; ver seção 8d |
-| `not_lead_owner` | o lead não é do operador; use um lead dele ou entre como admin |
+| `lead_not_visible` | o operador não enxerga o lead sob a RLS de `leads` (mesma regra da tela); desde 2026-09-02 não existe mais gate de dono — ver ADR-0024 Emenda 1 |
 | `lead_without_phone` | o lead não tem telefone utilizável |
 | `daily_cap_reached` | `daily_call_cap` na instância |
 | `operator_busy` | há chamada viva do mesmo operador; encerre antes |

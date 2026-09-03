@@ -36,6 +36,7 @@ import type {
   PipePropostaItemInsert,
   LossReason,
   ReschedulingMode,
+  SystemPipeDisplay,
 } from "@/contracts/pipe";
 
 type PipeWhatsappRow = Tables<"pipe_whatsapp">;
@@ -167,10 +168,29 @@ export interface PipeOpsPort {
   // Um funil, um id: os diálogos de bulk listam TODOS os funis da org e as
   // etapas do escolhido sem saber a família — mata o sentinela `custom:<id>`
   // e o hack `(isCustom ? "whatsapp" : pipe)` do BulkMoveDialog.
+  //
+  // 🚨 `FunnelOption.name` é `pipelines.name` — para funil de SISTEMA esse é o
+  // nome CONGELADO do seed ("Qualificação"/"Confirmação"/"Propostas"), que a
+  // navegação nunca mostra. Ao exibir um `FunnelOption` de sistema, passe por
+  // `nomeDoFunil` (`@/contracts/pipe`) com o display config da org — senão o
+  // defeito da SCRUM-608 reaparece nas telas novas.
   useFunnels: () => UseQueryResult<FunnelOption[]>;
   useFunnelStages: (
     pipelineId: string | undefined,
   ) => UseQueryResult<FunnelStageOption[]>;
+
+  /**
+   * Os funis de SISTEMA que esta organização tem, com o nome que ela usa.
+   *
+   * Existe porque `leads` monta o cadastro e precisa rotular funil pelo
+   * `display_name` da org — não pelo `pipelines.name` do seed, e muito menos
+   * por string cravada (SCRUM-608). Lista vazia é resposta legítima: a org
+   * pode ter excluído todos os funis de sistema.
+   *
+   * Não se sobrepõe a `useFunnels`: aquele responde "quais funis existem, por
+   * id"; este responde "quais funis de sistema a org TEM e como ela os chama".
+   */
+  useSystemPipes: () => UseQueryResult<SystemPipeDisplay[]>;
 
   // ── Custom pipelines ──────────────────────────────────────────────────────
   useCustomPipelines: () => UseQueryResult<CustomPipeline[]>;

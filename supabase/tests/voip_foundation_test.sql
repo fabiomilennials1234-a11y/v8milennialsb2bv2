@@ -182,8 +182,12 @@ VALUES ('b1111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaa
        ('b3333333-3333-3333-3333-333333333333', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         '33333333-3333-3333-3333-333333333333', 'Inativo', 'inativo@voip.test', 'member', false);
 
--- Lead do "Dono".
-INSERT INTO public.leads (id, organization_id, name, phone, sdr_id, closer_id)
+-- Lead do "Dono" — pelas colunas CANÔNICAS de responsável. `sdr_id`/`closer_id`
+-- são legadas (espelho por trigger, drop no #755) e `voip_can_see_call` deixou
+-- de lê-las na 20270915000000; com as triggers desligadas, semeá-las aqui não
+-- preencheria as canônicas e o "Dono" deixaria de ser dono para a fronteira.
+INSERT INTO public.leads
+  (id, organization_id, name, phone, pre_sale_responsible_id, sale_responsible_id)
 VALUES ('c1111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
         'Lead Alvo', '5548991005289',
         'b1111111-1111-1111-1111-111111111111', 'b1111111-1111-1111-1111-111111111111');

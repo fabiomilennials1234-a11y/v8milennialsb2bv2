@@ -8,7 +8,7 @@ import {
   type MetricsPeriodState,
 } from "@/lib/metrics-period";
 import { getStalledBucket, STALLED_ALL } from "@/modules/pipelines/lib/stalled-buckets";
-import type { FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
+import type { FilterSectionConfig } from "@/modules/pipelines/lib/kanban-filter-config";
 import type { PaginatedFilters } from "./usePaginatedPipeline";
 import type { PipelineLeadIdsParams } from "./usePipelineLeadIds";
 
@@ -91,11 +91,10 @@ export interface FunilFiltersController {
  * concatenar seções extras no array antes de renderizar o painel e mapear os
  * params extras por cima de `paginatedFilters` (ambos são valores simples).
  *
- * "Parado há" entra SEM o gate `STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES`: os
+ * "Parado há" entra sem gate (o interruptor legado morreu com as páginas): os
  * params `p_stalled_*` existem na assinatura de prod pós-W3 (20270908003000
  * recriou `get_pipeline_page` já com eles; sonda PostgREST de 2026-09-02
- * resolveu a chamada com os params — sem PGRST202). O flag legado protege só
- * os boards antigos que ainda chamam por slug num deploy defasado.
+ * resolveu a chamada com os params — sem PGRST202).
  */
 export function useFunilFilters(
   pipelineId: string | null | undefined,

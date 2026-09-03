@@ -35,8 +35,8 @@ function navPaths(file: string): string[] {
 }
 
 const NAV_SOURCES = [
+  // TopNavigation.tsx morreu na SCRUM-637 (zero imports desde a lateral nova).
   "src/modules/platform/lib/navigation-model.ts",
-  "src/modules/platform/components/layout/TopNavigation.tsx",
 ];
 
 describe("navegação → rotas", () => {

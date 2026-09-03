@@ -55,12 +55,6 @@ interface StageRailProps {
   onExpand?: () => void;
 }
 
-const PIPE_TABLE: Record<string, "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas"> = {
-  whatsapp: "pipe_whatsapp",
-  confirmacao: "pipe_confirmacao",
-  propostas: "pipe_propostas",
-};
-
 /**
  * Collapsed chip variant — compact one-line representation of a rail when
  * another rail is the user's focus. Same visual DNA as the expanded rail
@@ -212,11 +206,11 @@ const StageRailExpanded = memo(function StageRailExpanded({
     if (stage.key === pipe.currentKey) return;
     if (pendingStageKey !== null) return;
     if (pipe.kind === "system") {
-      const table = PIPE_TABLE[pipe.pipeRef];
-      if (!table) return;
+      // SCRUM-637: o move escreve direto em `pipeline_entries` — qualquer
+      // funil de sistema move, independente do slug (morreu o PIPE_TABLE que
+      // silenciava slugs fora do trio).
       onMove({
         kind: "system",
-        pipeTable: table,
         pipeId: pipe.recordId,
         stageKey: stage.key,
         stageLabel: stage.label,

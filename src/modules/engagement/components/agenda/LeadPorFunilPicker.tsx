@@ -43,6 +43,7 @@ import {
 } from "@/components/ui/select";
 import { useDebounce } from "@/shared/hooks/useDebounce";
 import { usePipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
+import { nomeDoFunil } from "@/contracts/pipe";
 import { useLeadsPorFunil, useLeadById } from "@/modules/leads";
 
 /**
@@ -87,29 +88,19 @@ export function LeadPorFunilPicker({
   /**
    * O NOME que a organização usa, que não é `pipelines.name`.
    *
-   * Para funil de SISTEMA, `pipelines.name` é fixo no seed de
-   * `create_default_pipelines()`: "Qualificação" / "Confirmação" / "Propostas".
-   * O resto do produto — navegação, hub de funis — rotula por
-   * `pipeline_display_config.display_name`, cujos padrões já são OUTROS
-   * ("Oportunidades" / "Agendamentos" / "Orçamentos") e que cada org renomeia.
+   * A regra saiu daqui para `@/contracts/pipe` (`nomeDoFunil`) quando o
+   * cadastro de lead precisou dela e não podia importar `pipelines` —
+   * SCRUM-608. Era o único lugar do sistema que fazia o cruzamento certo, e
+   * copiar seria garantir divergência na primeira correção.
    *
-   * Sem este cruzamento o seletor da Agenda seria o único lugar do sistema a
-   * chamar os funis por nomes que a pessoa nunca viu — ela procuraria
-   * "Agendamentos" e acharia "Confirmação". O cruzamento é por
-   * `pipelines.slug` ↔ `pipeline_display_config.pipe_type`.
-   *
-   * Funil CUSTOM não entra nessa tabela: ali `pipelines.name` já é o nome que
-   * o usuário deu, e é o que as outras telas mostram.
+   * O que continua sendo desta tela: só a ligação com a query.
    */
-  const nomeDoFunil = useMemo(() => {
-    const porTipo = new Map(
-      (displayConfig ?? []).map((c) => [c.pipe_type as string, c.display_name]),
-    );
-    return (funil: { name: string; slug?: string; type?: string }) =>
-      funil.type === "system" && funil.slug && porTipo.get(funil.slug)
-        ? (porTipo.get(funil.slug) as string)
-        : funil.name;
-  }, [displayConfig]);
+  const nomearFunil = useMemo(
+    () =>
+      (funil: { name: string; slug?: string; type?: string }) =>
+        nomeDoFunil(displayConfig, funil),
+    [displayConfig],
+  );
 
   /**
    * `usePipelines` NÃO filtra `is_active` — funil arquivado continua vindo. E
@@ -208,12 +199,12 @@ export function LeadPorFunilPicker({
               <SelectItem value={SEM_FUNIL}>Nenhum funil</SelectItem>
               {funilArquivado && (
                 <SelectItem value={funilArquivado.id}>
-                  {nomeDoFunil(funilArquivado)} (arquivado)
+                  {nomearFunil(funilArquivado)} (arquivado)
                 </SelectItem>
               )}
               {funis.map((funil) => (
                 <SelectItem key={funil.id} value={funil.id}>
-                  {nomeDoFunil(funil)}
+                  {nomearFunil(funil)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -276,7 +267,7 @@ export function LeadPorFunilPicker({
               <Input
                 className="pl-8"
                 placeholder={`Buscar lead em ${
-                  funilSelecionado ? nomeDoFunil(funilSelecionado) : "este funil"
+                  funilSelecionado ? nomearFunil(funilSelecionado) : "este funil"
                 }...`}
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}

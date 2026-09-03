@@ -217,24 +217,13 @@ export interface DealCardData {
   funil: string;
   funilCor: string;
   /**
-   * Tabela do funil system (`pipe_whatsapp` | `pipe_confirmacao` |
-   * `pipe_propostas`), ou `null` em funil custom. É o que `useCrossPipeMove`
-   * precisa para saber onde escrever — as duas famílias guardam a posição em
-   * lugares diferentes.
-   */
-  pipeTable: "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas" | null;
-  /**
    * `pipelines.type === "system"` — a FAMÍLIA do funil.
    *
-   * ⚠️ Não é `pipeTable != null`, e a diferença tem consequência. `pipeTable`
-   * sai de um switch de SLUG que só conhece `whatsapp`/`confirmacao`/
-   * `propostas`; funil de SISTEMA com qualquer outro slug (`upsell`, e os
-   * funis de sistema novos) tem `pipeTable: null` e `funilEhSystem: true`.
-   *
-   * Quem escreve por FAMÍLIA — a exclusão, que precisa escolher entre
-   * `pipeline_entries` e `custom_pipe_entries` — tem de ler este campo. Quem
-   * escreve por TABELA de compat (`useCrossPipeMove`) continua lendo
-   * `pipeTable`, que é literalmente o nome da view.
+   * Único discriminador de escrita desde a SCRUM-637: mover escreve em
+   * `pipeline_entries` (system) ou via `custom_pipe_entries` (custom, INSTEAD
+   * OF com a lógica viva), e a exclusão idem. O campo `pipeTable` (nome de
+   * view por switch de slug) morreu — silenciava funil de sistema com slug
+   * fora do trio.
    */
   funilEhSystem: boolean;
   /** Trilha completa do funil, para a barra mostrar onde ele está e o que falta. */
