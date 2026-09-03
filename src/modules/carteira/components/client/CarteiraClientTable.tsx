@@ -216,7 +216,11 @@ export function CarteiraClientTable({
     pageSize: PAGE_SIZE,
   });
 
-  const rows = data?.rows ?? [];
+  // Memoizado porque a identidade importa duas vezes logo abaixo: `rowIds` é um
+  // useMemo com `[rows]` na dependência, e o efeito que chama `onRowsChange`
+  // também. Com `data?.rows ?? []` cru, o `[]` do ramo vazio nasce novo a cada
+  // render e os dois disparam sem que nada tenha mudado.
+  const rows = useMemo(() => data?.rows ?? [], [data]);
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
   const rowIds = useMemo(() => rows.map((r) => r.id), [rows]);
