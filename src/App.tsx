@@ -49,9 +49,6 @@ function lazyRetry<T extends { default: any }>(
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
 const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
-const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
-const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
-const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
 const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pages/Equipe")));
@@ -396,30 +393,8 @@ function AppRoutes() {
       />
       <Route path="/marketing" element={<Navigate to="/dashboard" replace />} />
       <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />
-      <Route
-        path="/pipe-confirmacao"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <FeatureRoute feature="funnels"><PipeConfirmacao /></FeatureRoute>
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/pipe-propostas"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <FeatureRoute feature="funnels"><PipePropostas /></FeatureRoute>
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/pipe-confirmacao" element={<RedirectPipeParaFunil slug="confirmacao" />} />
+      <Route path="/pipe-propostas" element={<RedirectPipeParaFunil slug="propostas" />} />
       <Route
         path="/performance"
         element={
@@ -448,18 +423,7 @@ function AppRoutes() {
         path="/gestao-metas"
         element={<Navigate to="/performance" replace />}
       />
-      <Route
-        path="/pipe-whatsapp"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <FeatureRoute feature="funnels"><PipeWhatsapp /></FeatureRoute>
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/pipe-whatsapp" element={<RedirectPipeParaFunil slug="whatsapp" />} />
       <Route
         path="/faq"
         element={
@@ -890,6 +854,16 @@ function NavigateComQuery({ to }: { to: string }) {
  * motivo de `NavigateComQuery`. A navegação interna já aponta direto para
  * `/funil/…`; este redirect segura bookmark e link antigo.
  */
+/**
+ * SCRUM-637 — flip das rotas de sistema: /pipe-* viraram redirects pra rota
+ * única `/funil/:slug`, preservando query (?view=...) e hash. As 3 páginas
+ * velhas morreram no mesmo diff; bookmark e link antigo caem aqui.
+ */
+function RedirectPipeParaFunil({ slug }: { slug: string }) {
+  const { search, hash } = useLocation();
+  return <Navigate to={`/funil/${slug}${search}${hash}`} replace />;
+}
+
 function RedirectPipeCustomParaFunil() {
   const { slug } = useParams<{ slug: string }>();
   const { search, hash } = useLocation();

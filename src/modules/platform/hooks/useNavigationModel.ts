@@ -27,7 +27,6 @@ import {
 import { SIDEBAR_FEATURE_MAP, type FeatureKey } from "@/modules/platform/lib/feature-registry";
 import {
   FUNIS_PATHS,
-  PIPE_PATH_MAP,
   PITSTOP_GROUPS,
   buildSettingsGroup,
   SIDEBAR_AGENDA,
@@ -104,14 +103,20 @@ export function useNavigationModel(): NavigationModel {
             return key ? !hasFeature(key) : false;
           });
         }
-        const key = SIDEBAR_FEATURE_MAP[path];
+        const key =
+          SIDEBAR_FEATURE_MAP[path] ??
+          (path.startsWith("/funil/") ? SIDEBAR_FEATURE_MAP["/funil"] : undefined);
         if (!key) return false;
         return !hasFeature(key);
       },
     [isMaster, hasFeature],
   );
 
-  const featureKeyFor = (path: string) => SIDEBAR_FEATURE_MAP[path];
+  // Rota única de funil (SCRUM-637): itens /funil/<slug> herdam a chave do
+  // prefixo — o mapa não enumera slugs.
+  const featureKeyFor = (path: string) =>
+    SIDEBAR_FEATURE_MAP[path] ??
+    (path.startsWith("/funil/") ? SIDEBAR_FEATURE_MAP["/funil"] : undefined);
 
   /**
    * Filhos de Funis — uma lista só.
@@ -142,7 +147,9 @@ export function useNavigationModel(): NavigationModel {
           label: c.display_name,
           icon: funilIcon(row?.icon),
           color: row?.color,
-          path: PIPE_PATH_MAP[c.pipe_type] ?? "/funis",
+          // SCRUM-637 (flip): funil de sistema navega pela rota única, igual
+          // aos custom — o PIPE_PATH_MAP morreu junto com as páginas /pipe-*.
+          path: `/funil/${c.pipe_type}`,
         };
       });
 
@@ -150,10 +157,6 @@ export function useNavigationModel(): NavigationModel {
     // único ponto onde a distinção carrega semântica de ACESSO, não de estilo.
     if (isOutboundMember) return pipes;
 
-    // SCRUM-632: custom navega pela rota única `/funil/:slug` (a página
-    // unificada já é upgrade de paridade pra ele — paginação real). Os itens
-    // de SISTEMA acima continuam nas rotas antigas via PIPE_PATH_MAP até a
-    // paridade fechar (gap documentado na 637); aí viram `/funil/`.
     const permanentes: NavNode[] = permanentPipelines.map((pipe) => ({
       label: pipe.name,
       icon: funilIcon(rowById.get(pipe.id)?.icon),

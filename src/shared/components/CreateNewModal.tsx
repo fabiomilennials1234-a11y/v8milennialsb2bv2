@@ -13,11 +13,8 @@ interface CreateNewModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-const PIPE_ROUTES: Record<string, string> = {
-  whatsapp: "/pipe-whatsapp",
-  confirmacao: "/pipe-confirmacao",
-  propostas: "/pipe-propostas",
-};
+// SCRUM-637 (flip): funil de sistema também navega pela rota única.
+const pipeRoute = (pipeType: string) => `/funil/${pipeType}`;
 
 export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
   const [step, setStep] = useState<"choice" | "funnel-templates" | "create-pipeline">("choice");
@@ -39,7 +36,7 @@ export function CreateNewModal({ open, onOpenChange }: CreateNewModalProps) {
       // ausente "ativava" sem criar nada.)
       await enablePipe.mutateAsync(pipeType as SystemPipeType);
       toast.success("Funil criado com sucesso!");
-      const route = PIPE_ROUTES[pipeType];
+      const route = pipeRoute(pipeType);
       if (route) navigate(route);
       handleClose();
     } catch {

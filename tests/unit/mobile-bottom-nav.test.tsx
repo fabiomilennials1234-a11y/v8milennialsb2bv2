@@ -63,8 +63,8 @@ describe("MobileBottomNav", () => {
     expect(screen.getByTestId("tab-chat")).toHaveAttribute("data-active", "true");
   });
 
-  it("highlights Funis tab when on /pipe-whatsapp", () => {
-    renderNav("/pipe-whatsapp");
+  it("highlights Funis tab when on /funil/whatsapp (rota única pós-637)", () => {
+    renderNav("/funil/whatsapp");
     expect(screen.getByTestId("tab-funis")).toHaveAttribute("data-active", "true");
   });
 

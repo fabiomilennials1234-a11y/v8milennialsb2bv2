@@ -21,7 +21,9 @@ const TABS: Tab[] = [
     label: "Funis",
     icon: GitBranch,
     path: "/funis",
-    match: ["/pipe-", "/custom-pipeline", "/upsell"],
+    // SCRUM-637 (flip): todo funil vive em /funil/:slug; /pipe-* são só
+    // redirects e /custom-pipeline segue por bookmark antigo.
+    match: ["/funil", "/pipe-", "/custom-pipeline", "/upsell"],
   },
   { id: "leads", label: "Leads", icon: Users, path: "/leads" },
   { id: "agenda", label: "Agenda", icon: CalendarDays, path: "/agenda" },

@@ -69,6 +69,8 @@ export interface PlanRow {
   created_by?: string;
   status: string;
   source?: Record<string, unknown> | null;
+  /** Funil de origem do público (coluna canônica da Fatia B); NULL = sem funil único. */
+  pipeline_id?: string | null;
   message: string;
   refinements: Record<string, unknown> | null;
   image_url: string | null;
@@ -242,6 +244,9 @@ export interface CreateBlastPlanParams {
   releaseTime?: string;
   /** Descriptor of how the audience was resolved (for the record only). */
   source?: Record<string, unknown> | null;
+  /** Funil de origem do público (Fatia B — canônico, uuid JÁ validado na org
+   *  pelo edge fn). NULL = público sem funil único (planilha, todos os funis). */
+  pipelineId?: string | null;
   /** Post-send destination (already validated fail-closed by the edge fn).
    *  Persisted on the plan so the releaser can rebuild the move hook. */
   postSendTarget?: Record<string, unknown> | null;
@@ -322,6 +327,7 @@ export async function createBlastPlan(
     created_by: params.userId,
     status: "active",
     source: params.source ?? null,
+    pipeline_id: params.pipelineId ?? null,
     message: params.message,
     template: params.template ?? null,
     refinements: (params.refinements as Record<string, unknown>) ?? null,
@@ -479,6 +485,7 @@ async function createMultiNumberBlastPlan(
     created_by: params.userId,
     status: "active",
     source: params.source ?? null,
+    pipeline_id: params.pipelineId ?? null,
     message: params.message,
     template: params.template ?? null,
     refinements: (params.refinements as Record<string, unknown>) ?? null,

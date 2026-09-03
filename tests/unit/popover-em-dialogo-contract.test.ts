@@ -117,7 +117,9 @@ const CALENDARIOS_DEFERIDOS: ReadonlyArray<string> = [
  * 14 estão na lista acima. Os outros 40 são de página/kanban/tabela solta, ou
  * têm conteúdo que cabe inteiro — nos dois casos não há o que rolar.
  */
-const TOTAL_DE_POPOVERS = 54;
+// SCRUM-637 (flip): as 3 páginas /pipe-* morreram levando 5 popovers de
+// board (54 → 49) — nenhum popover novo entrou sem classificação.
+const TOTAL_DE_POPOVERS = 49;
 
 function arquivosTsx(dir: string, acc: string[] = []): string[] {
   for (const nome of readdirSync(dir)) {

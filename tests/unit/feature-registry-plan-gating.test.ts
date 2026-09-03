@@ -41,9 +41,8 @@ describe("SIDEBAR_FEATURE_MAP — rotas de feature paga", () => {
     "/disparos": "whatsapp_bulk",
     "/upsell": "carteira",
     "/templates": "message_templates",
-    "/pipe-whatsapp": "funnels",
-    "/pipe-confirmacao": "funnels",
-    "/pipe-propostas": "funnels",
+    // SCRUM-637 (flip): os pipes vivem na rota única — a chave é o prefixo.
+    "/funil": "funnels",
   };
 
   for (const [path, key] of Object.entries(expected)) {

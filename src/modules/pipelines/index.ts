@@ -225,7 +225,6 @@ export {
   ALL_ORIGIN_OPTIONS,
   countActiveFilters,
   PipelineListView,
-  PipeTableView,
   StageWorkflowsBadge,
   StageWorkflowsBadgeWrapper,
 } from "./components/kanban";
@@ -241,7 +240,6 @@ export type {
 
 // ── Components: shared (Ghost, MetricsPeriod, Manage/Dispatch/Distribution/Settings)
 export {
-  GhostLeadsBanner,
   ManagePipelineStagesContent,
   ManagePipelineStagesModal,
   PipeDispatchRulesSection,
@@ -257,8 +255,6 @@ export {
   CreatePipelineModal,
   PIPELINE_COLORS,
   PIPELINE_ICONS,
-  CustomPipeLeadCard,
-  CustomPipelineKanban,
   CustomPipeSettingsDialog,
   ImportCustomPipelineContent,
 } from "./components/custom";
