@@ -66,8 +66,14 @@ export function buildSentDocumentsSection(
   // prod 2026-09-01: de 20 leads que disseram "não chegou", em 12 o agente nem
   // tentou de novo. A lista agora só traz o que foi de fato entregue, e a
   // instrução deixa de forçar a insistência.
+  // 🚨 2026-09-03: "pedido do lead" é motivo suficiente, e precisa estar dito
+  // sem rodeio. A redação anterior abria com a proibição ("não mande de novo") e
+  // só depois liberava — o modelo parava na primeira metade e respondia com
+  // texto. O runtime não trava mais reenvio (o gate vitalício de
+  // `send-document.ts` virou telemetria), então a única coisa entre o pedido do
+  // lead e o arquivo é esta instrução.
   lines.push(
-    "Os arquivos abaixo já chegaram ao lead nesta conversa — não os mande de novo sem motivo. Se o lead disser que não recebeu, ou pedir de novo, reenvie na hora: não afirme que já mandou nem peça para ele procurar no histórico.",
+    "Os arquivos abaixo já chegaram ao lead nesta conversa. **Se ele pedir qualquer um de novo, ou disser que não recebeu, CHAME `send_document` na hora** — pedir de novo já é motivo suficiente, e reenviar nunca é erro. Nunca responda com texto no lugar do arquivo, nunca afirme que já mandou e nunca peça para ele procurar no histórico. Fora isso, não repita arquivo que ninguém pediu.",
   );
   lines.push("");
   for (const doc of sentDocuments) {
