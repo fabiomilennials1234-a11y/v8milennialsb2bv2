@@ -68,6 +68,11 @@ export interface CallableVoiceNumber {
    * Nunca o `tc_session_id`, que não significa nada para ele.
    */
   instanceName: string;
+  /**
+   * O telefone da instância, quando o banco sabe. Vai para o menu de escolha,
+   * em mono: é o número que o cliente vê tocar no celular dele.
+   */
+  phoneNumber?: string | null;
 }
 
 /** Instância → sessão aberta, já filtrado por `voice_calls_enabled`. */
@@ -186,7 +191,12 @@ function useVoiceNumbersFor(featureKey: string): {
     for (const inst of allowedInstances) {
       const tcSessionId = reach[inst.id];
       if (!tcSessionId) continue;
-      out.push({ tcSessionId, instanceId: inst.id, instanceName: inst.instance_name });
+      out.push({
+        tcSessionId,
+        instanceId: inst.id,
+        instanceName: inst.instance_name,
+        phoneNumber: inst.phone_number ?? null,
+      });
     }
     return out;
   }, [allowedInstances, reach, podeLigar]);

@@ -4,9 +4,20 @@
  * Extraído de WhatsAppChat.tsx ChatWindow header (C6).
  * C11: adiciona DensityToggle (3 botões ghost: compact/comfortable/spacious).
  * Props: callbacks puros — sem hooks de mutation aqui, recebe handlers do pai.
+ *
+ * ─── Quem cede espaço, e em que ordem (2026-09-03) ──────────────────────────
+ * O cabeçalho é uma linha só: sete controles `shrink-0` e um bloco que encolhe,
+ * o contato. Com dois números de voz o botão de ligar chegou a 200 px e o
+ * contato colapsou até sobrar o avatar (medido na Milennials). A regra agora:
+ * o contato tem piso (`min-w-[11rem]`) e trunca em vez de quebrar linha; as
+ * ações moram num grupo `shrink-0` de largura previsível; abaixo de `lg` os
+ * rótulos "Ligar" e "Ver lead" viram ícone com tooltip e a densidade entra num
+ * menu "⋯". O nome do contato é o último a perder espaço. Sem `overflow-hidden`
+ * na raiz — ele escondia o problema em vez de resolver, e recortava o anel de
+ * foco.
  */
 import React from "react";
-import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, LayoutList, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Phone, UserCircle, Plus, Bot, UserPlus, ArrowRightLeft, Loader2, AlignJustify, List, LayoutList, AlertTriangle, MoreHorizontal } from "lucide-react";
 import { TakeoverControls } from "@/modules/communication/components/chat/takeover/TakeoverControls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +32,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -92,7 +106,7 @@ function DensityToggle({
   onDensityChange: (d: DensityMode) => void;
 }) {
   return (
-    <div className="flex items-center gap-0.5 shrink-0" role="group" aria-label="Modo de densidade das mensagens">
+    <div className="hidden lg:flex items-center gap-0.5 shrink-0" role="group" aria-label="Modo de densidade das mensagens">
       {DENSITY_OPTIONS.map(({ mode, icon: Icon, label }) => (
         <Tooltip key={mode}>
           <TooltipTrigger asChild>
@@ -118,6 +132,47 @@ function DensityToggle({
         </Tooltip>
       ))}
     </div>
+  );
+}
+
+/**
+ * A densidade abaixo de `lg`: os três ícones cedem lugar a um "⋯" com as mesmas
+ * três opções — mesmo handler, e o item marcado diz qual está ativa. Segue
+ * só do `md` para cima, como os três ícones sempre foram: no celular o
+ * cabeçalho é outro (`MobileChatThreadHeader`).
+ */
+function DensityOverflowMenu({
+  density = "comfortable",
+  onDensityChange,
+}: {
+  density: DensityMode;
+  onDensityChange: (d: DensityMode) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="hidden md:inline-flex lg:hidden h-7 w-7 p-0 shrink-0 text-muted-foreground"
+          aria-label="Mais opções"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>Densidade das mensagens</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={density} onValueChange={(v) => onDensityChange(v as DensityMode)}>
+          {DENSITY_OPTIONS.map(({ mode, icon: Icon, label }) => (
+            <DropdownMenuRadioItem key={mode} value={mode}>
+              <Icon className="mr-2 w-3.5 h-3.5 text-muted-foreground" aria-hidden />
+              {label}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -151,7 +206,7 @@ export function ChatHeader({
   const chatJid = phoneNumber ? `${phoneNumber.replace(/\D/g, "")}@s.whatsapp.net` : null;
   const avatarGradient = getAvatarGradient(phoneNumber || contactName);
   return (
-    <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0 min-w-0 overflow-hidden">
+    <div className="flex items-center gap-3 p-3 border-b border-border/60 bg-background shrink-0 min-w-0">
       <Button variant="ghost" size="icon" onClick={onBack} className="md:hidden shrink-0">
         <ArrowLeft className="w-5 h-5" />
       </Button>
@@ -160,7 +215,7 @@ export function ChatHeader({
       <div
         role="button"
         tabIndex={0}
-        className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer hover:bg-muted/50 -m-2 p-2 rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex items-center gap-3 flex-1 min-w-[11rem] cursor-pointer hover:bg-muted/50 -m-2 p-2 rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
         onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLeadModal(); }}
         onPointerDown={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenLeadModal(); } }}
@@ -179,9 +234,12 @@ export function ChatHeader({
           <ChannelBadge channel="whatsapp" size={16} overlay />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-display font-semibold truncate text-foreground">{contactName}</h3>
-            <RealtimeStatusBadge organizationId={organizationId} />
+          {/* Nada quebra linha aqui: o nome trunca e os badges ficam presos à
+              direita dele. Com `flex-wrap`, o "Ao vivo" caía para baixo do
+              avatar, por trás do botão de ligar. */}
+          <div className="flex items-center gap-2 flex-nowrap min-w-0">
+            <h3 className="font-display font-semibold truncate min-w-0 text-foreground">{contactName}</h3>
+            <RealtimeStatusBadge organizationId={organizationId} className="shrink-0" />
             {!hasLead && (
               <Badge
                 variant="secondary"
@@ -198,37 +256,45 @@ export function ChatHeader({
         </div>
       </div>
 
-      {/* Ligar por WhatsApp (TorqueCalls). Some sozinho quando a org não tem
-          número de voz conectado. */}
-      <VoiceCallButton leadId={leadId} leadName={contactName} />
+      {/* Grupo de ações: largura previsível, nunca encolhe. Ligar ▾ · Ver lead ·
+          histórico. Abaixo de `lg` os rótulos viram ícone com tooltip. */}
+      <div className="flex items-center gap-1.5 shrink-0">
+        {/* Ligar por WhatsApp (TorqueCalls). Some sozinho quando a org não tem
+            número de voz conectado. */}
+        <VoiceCallButton leadId={leadId} leadName={contactName} />
 
-      {/* Botão ver / criar lead */}
-      <Button
-        type="button"
-        variant={hasLead ? "ghost" : "outline"}
-        size="sm"
-        className={cn("shrink-0", !hasLead && "border-primary text-primary hover:bg-primary/10")}
-        onClick={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
-        onPointerDown={(e) => e.stopPropagation()}
-        title={hasLead ? "Ver dados do lead e pipeline" : "Criar lead para este contato"}
-      >
-        {hasLead ? (
-          <>
-            <UserCircle className="w-4 h-4 mr-1.5" />
-            Ver lead
-          </>
-        ) : (
-          <>
-            <Plus className="w-4 h-4 mr-1.5" />
-            Criar Lead
-          </>
+        {/* Botão ver / criar lead */}
+        <Button
+          type="button"
+          variant={hasLead ? "ghost" : "outline"}
+          size="sm"
+          className={cn("shrink-0 gap-0", !hasLead && "border-primary text-primary hover:bg-primary/10")}
+          onClick={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          title={hasLead ? "Ver dados do lead e pipeline" : "Criar lead para este contato"}
+          aria-label={hasLead ? "Ver lead" : "Criar lead"}
+        >
+          {hasLead ? (
+            <>
+              <UserCircle className="w-4 h-4 lg:mr-1.5" />
+              <span className="hidden lg:inline">Ver lead</span>
+            </>
+          ) : (
+            <>
+              <Plus className="w-4 h-4 lg:mr-1.5" />
+              <span className="hidden lg:inline">Criar Lead</span>
+            </>
+          )}
+        </Button>
+
+        {/* Sync history per-chat */}
+        {instanceId && chatJid && (
+          <SyncChatButton instanceId={instanceId} chatJid={chatJid} />
         )}
-      </Button>
+      </div>
 
-      {/* Sync history per-chat */}
-      {instanceId && chatJid && (
-        <SyncChatButton instanceId={instanceId} chatJid={chatJid} />
-      )}
+      {/* Separa as ações do contato do bloco de estado da conversa (IA, densidade). */}
+      <div className="hidden md:block h-5 w-px bg-border/60 shrink-0" aria-hidden />
 
       {/* Message limits warning */}
       {limitsWarning && (
@@ -296,11 +362,12 @@ export function ChatHeader({
         </Badge>
       )}
 
-      {/* Density toggle — desktop only */}
+      {/* Density: três ícones do `lg` para cima; "⋯" entre `md` e `lg`. */}
       {onDensityChange && (
-        <div className="hidden md:block">
+        <>
           <DensityToggle density={density ?? "comfortable"} onDensityChange={onDensityChange} />
-        </div>
+          <DensityOverflowMenu density={density ?? "comfortable"} onDensityChange={onDensityChange} />
+        </>
       )}
 
       {/* SZ.chat transfer dropdown */}
