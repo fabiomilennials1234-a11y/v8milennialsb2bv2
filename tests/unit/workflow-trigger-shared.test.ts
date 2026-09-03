@@ -999,6 +999,121 @@ describe("fireTrigger", () => {
       expect(ctx).not.toHaveProperty("lead_pipeline_ids");
     });
 
+    it("grava lead_stage_ids no context quando o filtro é por etapa", async () => {
+      const ETAPA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { stage_ids: [ETAPA] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: ETAPA },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(1);
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx.lead_stage_ids).toEqual([ETAPA]);
+    });
+
+    it("o context com etapa passa na revalidação do executor", async () => {
+      const ETAPA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const config = { pipeline_ids: [FUNIL_A], stage_ids: [ETAPA] };
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, config);
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: ETAPA },
+      ]);
+
+      await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      const persisted = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(matchesTriggerConfig("lead_replied", config, persisted)).toBe(true);
+    });
+
+    it("card sem stage_id chega ao matcher como nulo, não some da lista", async () => {
+      const ETAPA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      // Filtro por funil (para a query acontecer), card sem etapa.
+      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: null },
+      ]);
+
+      await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      // Nulo preservado — é o que distingue "card sem etapa" de "leitura falhou".
+      expect(ctx.lead_stage_ids).toEqual([null]);
+      expect(matchesTriggerConfig("lead_replied", { stage_ids: [ETAPA] }, ctx)).toBe(false);
+    });
+
+    it("fail-closed de ponta a ponta quando o filtro é por etapa e a leitura falha", async () => {
+      const ETAPA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const { sb, mockTable, mockSelectError, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { stage_ids: [ETAPA] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: ETAPA },
+      ]);
+      mockSelectError("pipeline_entries", { code: "57014", message: "statement timeout" });
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(0);
+      expect(getInserted("workflow_executions")).toHaveLength(0);
+    });
+
+    it("persistir as etapas NÃO contamina a chave de dedup", async () => {
+      const ETAPA_1 = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const ETAPA_2 = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+      const hashOf = (key: unknown) => String(key).split(":")[1];
+
+      const dispararNaEtapa = async (etapaDoLead: string) => {
+        const { sb, mockTable, getInserted } = createMockSupabase();
+        seedWorkflow(mockTable, { stage_ids: [ETAPA_1, ETAPA_2] });
+        mockTable("pipeline_entries", [
+          { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: etapaDoLead },
+        ]);
+        await fireTrigger({
+          supabase: sb,
+          organizationId: "org-1",
+          triggerType: "lead_replied",
+          leadId: "lead-1",
+          context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+        });
+        return getInserted("workflow_executions")[0];
+      };
+
+      const em1 = await dispararNaEtapa(ETAPA_1);
+      const em2 = await dispararNaEtapa(ETAPA_2);
+
+      expect((em1.context as Record<string, unknown>).lead_stage_ids).toEqual([ETAPA_1]);
+      expect((em2.context as Record<string, unknown>).lead_stage_ids).toEqual([ETAPA_2]);
+      expect(hashOf(em1.trigger_dedup_key)).toBe(hashOf(em2.trigger_dedup_key));
+    });
+
     it("fail-closed de ponta a ponta quando a leitura dos funis falha", async () => {
       const { sb, mockTable, mockSelectError, getInserted } = createMockSupabase();
       seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });

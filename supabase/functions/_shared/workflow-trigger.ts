@@ -140,9 +140,17 @@ export function normalizePipelineIds(value: unknown): string[] {
   return [...seen];
 }
 
-/** Um workflow de `lead_replied` só precisa do lookup de funis se filtrar por eles. */
-function usesPipelineFilter(triggerConfig: Record<string, unknown> | null | undefined): boolean {
-  return normalizePipelineIds((triggerConfig || {}).pipeline_ids).length > 0;
+/**
+ * Um workflow de `lead_replied` só precisa do lookup de posição se filtrar por
+ * funil OU por etapa. As duas listas vêm da MESMA leitura de
+ * `pipeline_entries`, então uma guarda só decide se a query acontece.
+ */
+function usesLeadPositionFilter(triggerConfig: Record<string, unknown> | null | undefined): boolean {
+  const cfg = triggerConfig || {};
+  return (
+    normalizePipelineIds(cfg.pipeline_ids).length > 0 ||
+    normalizePipelineIds(cfg.stage_ids).length > 0
+  );
 }
 
 /**
@@ -161,22 +169,29 @@ function usesPipelineFilter(triggerConfig: Record<string, unknown> | null | unde
  * fail-closed. O filtro por `organization_id` é explícito e obrigatório: quem
  * chama é service_role, que BYPASSA a RLS de `pipeline_entries`.
  */
-async function loadLeadPipelineIds(
+async function loadLeadPosition(
   supabase: SupabaseClient,
   organizationId: string,
   leadId: string,
-): Promise<string[] | null> {
+): Promise<{ pipelines: string[]; stages: (string | null)[] } | null> {
   const { data, error } = await supabase
     .from("pipeline_entries")
-    .select("pipeline_id")
+    .select("pipeline_id, stage_id")
     .eq("organization_id", organizationId)
     .eq("lead_id", leadId);
 
   if (error) {
-    console.warn("[workflow-trigger] Falha ao ler funis do lead:", error.message);
+    console.warn("[workflow-trigger] Falha ao ler a posição do lead:", error.message);
     return null;
   }
-  return (data ?? []).map((row: { pipeline_id: string }) => String(row.pipeline_id));
+  const rows = (data ?? []) as { pipeline_id: string; stage_id: string | null }[];
+  return {
+    pipelines: rows.map((row) => String(row.pipeline_id)),
+    // `stage_id` nulo entra na lista como nulo, em vez de ser filtrado: o
+    // matcher precisa distinguir "card sem etapa" (não casa nada) de "leitura
+    // falhou" (fail-closed). Medido em PROD: 41 das 48.171 entradas.
+    stages: rows.map((row) => (row.stage_id == null ? null : String(row.stage_id))),
+  };
 }
 
 /**
@@ -304,10 +319,14 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     // não vem no evento — os outros só leem campos que o próprio evento traz,
     // e para eles a revalidação sempre foi idempotente.
     let matchContext: Record<string, unknown> = context || {};
-    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesPipelineFilter(w.trigger_config))) {
+    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesLeadPositionFilter(w.trigger_config))) {
+      const posicao = await loadLeadPosition(supabase, organizationId, leadId);
       matchContext = {
         ...matchContext,
-        lead_pipeline_ids: await loadLeadPipelineIds(supabase, organizationId, leadId),
+        // `null` (leitura falhou) chega ao matcher como `null` nos dois campos
+        // — é o que dispara o fail-closed dos dois filtros.
+        lead_pipeline_ids: posicao?.pipelines ?? null,
+        lead_stage_ids: posicao?.stages ?? null,
       };
     }
 
