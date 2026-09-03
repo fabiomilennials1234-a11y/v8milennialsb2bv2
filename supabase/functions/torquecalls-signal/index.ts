@@ -488,11 +488,12 @@ function denied(
   result: { ok: false; code: string; retryAfterMs?: number },
   cors: Record<string, string>,
 ): Response {
-  // `not_instance_member` é recusa de AUTORIZAÇÃO — o operador não opera por
-  // aquele número — e sai 403 junto das outras duas. Sem isto caía no 409
-  // genérico, no mesmo balde de `operator_busy`/`rate_limited`, que são
-  // "tente de novo": a interface leria "espere" onde o certo é "não é seu".
-  const status = result.code === "permission_denied" || result.code === "not_lead_owner" ||
+  // `not_instance_member` e `lead_not_visible` são recusas de AUTORIZAÇÃO —
+  // o operador não opera por aquele número, ou não enxerga aquele lead — e
+  // saem 403 junto de `permission_denied`. Sem isto caíam no 409 genérico, no
+  // mesmo balde de `operator_busy`/`rate_limited`, que são "tente de novo": a
+  // interface leria "espere" onde o certo é "não é seu".
+  const status = result.code === "permission_denied" || result.code === "lead_not_visible" ||
       result.code === "not_instance_member"
     ? 403
     : result.code === "consent_missing"

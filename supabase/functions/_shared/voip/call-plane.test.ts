@@ -128,6 +128,29 @@ const LEAD = "c1111111-1111-1111-1111-111111111111";
 const CALL = "d1111111-1111-1111-1111-111111111111";
 const INSTANCE = "e1111111-1111-1111-1111-111111111111";
 
+/**
+ * O cliente com o JWT do chamador, como `resolveCaller` o entrega. É por ele
+ * que o choke pergunta "este usuário ENXERGA este lead?" — em produção quem
+ * responde é a RLS de `leads`; aqui, este stub. Por padrão o lead está visível.
+ */
+const leadVisivel = () =>
+  stubClient({ tables: { leads: (f) => (f.id === LEAD ? { id: LEAD } : null) } });
+const leadInvisivel = () => stubClient({ tables: { leads: () => null } });
+/** A RLS não devolve vazio, devolve ERRO — e o gate tem que negar do mesmo jeito. */
+const leadComErro = () => ({
+  from: () => {
+    const chain: Record<string, unknown> = {};
+    for (const m of ["select", "eq", "maybeSingle"]) {
+      chain[m] = () =>
+        m === "maybeSingle"
+          ? Promise.resolve({ data: null, error: { message: "permission denied" } })
+          : chain;
+    }
+    return chain;
+  },
+  // deno-lint-ignore no-explicit-any
+}) as any;
+
 // O cast é a prova pelo avesso do teste de tipo em types.test.ts: fora de
 // resolveCaller, só se produz um Caller mentindo para o compilador.
 function memberCaller(over: Partial<Caller> = {}): Caller {
@@ -138,6 +161,7 @@ function memberCaller(over: Partial<Caller> = {}): Caller {
     role: "member",
     isMaster: false,
     isGestor: false,
+    asUser: leadVisivel(),
     ...over,
   } as unknown as Caller;
 }
@@ -151,15 +175,19 @@ const openSession = () => ({
   whatsapp_instance_id: INSTANCE,
 });
 
-const ownedLead = () => ({
+/**
+ * Um lead da org, sem dono nenhum. Desde 2026-09-02 o choke não lê coluna de
+ * responsável — nem as canônicas (`pre_sale_responsible_id`,
+ * `sale_responsible_id`) nem as legadas marcadas para drop (#755). Elas ficam
+ * de fora do fixture de propósito: um `select` que voltasse a pedi-las quebra
+ * na projeção do stub.
+ */
+const orgLead = () => ({
   id: LEAD,
   organization_id: ORG,
   normalized_phone: "5548 99100-5289",
   phone_digits: null,
   phone: null,
-  sdr_id: TM,
-  closer_id: null,
-  responsible_id: null,
 });
 
 const grantedConsent = (f: Filters) =>
@@ -207,7 +235,7 @@ Deno.test("autoriza e emite três tokens com atos e validades distintas", async 
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
@@ -252,7 +280,7 @@ Deno.test("o número discado vem do lead, não do chamador — e normalizado", a
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
@@ -295,7 +323,7 @@ Deno.test("o DDI é reposto antes de o número sair para a rede (caso de produç
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: () => ({ ...ownedLead(), normalized_phone: "51985960716" }),
+      leads: () => ({ ...orgLead(), normalized_phone: "51985960716" }),
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
@@ -326,7 +354,7 @@ Deno.test("número que já tem DDI atravessa o choke intocado", async () => {
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: () => ({ ...ownedLead(), normalized_phone: "5551985960716" }),
+      leads: () => ({ ...orgLead(), normalized_phone: "5551985960716" }),
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
@@ -383,19 +411,32 @@ Deno.test("nega sessão de outra organização", async () => {
   assertEquals(res.code, "session_org_mismatch");
 });
 
-Deno.test("nega lead que não é do operador", async () => {
+// ─── Vê o lead → pode ligar (2026-09-02) ─────────────────────────────────────
+//
+// Até aqui havia um gate de DONO: membro só ligava para lead de que fosse
+// responsável — e lendo colunas legadas, não `pre_sale_responsible_id` /
+// `sale_responsible_id`. A leitura (`voip_calls_select_org`) nunca foi assim —
+// era por visibilidade — e o dado de dono é raro (~8% dos leads com conversa).
+// Resultado medido: o botão sumia para o SDR que estava no chat. A condição
+// agora é a RLS de `leads`, consultada com o JWT do chamador — e a policy já
+// olha as canônicas via `is_user_responsible(...)`.
+
+Deno.test("lead invisível sob a RLS do chamador → lead_not_visible, mesmo existindo na org", async () => {
   await setupSigningKey();
+  // O admin ACHA o lead (existe, é da org, tem telefone). O que nega é o
+  // cliente do USUÁRIO devolver vazio — é isto que prova que a pergunta é
+  // feita ao cliente certo, e não ao service_role.
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: () => ({ ...ownedLead(), sdr_id: "outro", closer_id: null, responsible_id: null }),
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
     rpc: okReserve,
   });
 
-  const res = await authorizeCallAndMint(memberCaller(), {
+  const res = await authorizeCallAndMint(memberCaller({ asUser: leadInvisivel() }), {
     supabaseAdmin: db,
     tcSessionId: "tc-sess",
     direction: "outbound",
@@ -403,29 +444,82 @@ Deno.test("nega lead que não é do operador", async () => {
   });
 
   assert(!res.ok);
-  assertEquals(res.code, "not_lead_owner");
+  assertEquals(res.code, "lead_not_visible");
+  // Negou ANTES da reserva: cota não é consumida por lead que não se vê.
+  assertEquals(db.__calls.rpc.filter((c) => c.name === "fn_voip_call_reserve").length, 0);
 });
 
-Deno.test("admin alcança lead de qualquer um da org", async () => {
+Deno.test("membro que NÃO é dono do lead, mas o enxerga, é autorizado", async () => {
   await setupSigningKey();
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: () => ({ ...ownedLead(), sdr_id: "outro", closer_id: null, responsible_id: null }),
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
     rpc: okReserve,
   });
 
-  const res = await authorizeCallAndMint(memberCaller({ role: "admin" }), {
+  // `memberCaller()` é membro comum, `teamMemberId` que não bate com nada, e
+  // `orgLead()` não tem coluna de dono nenhuma.
+  const res = await authorizeCallAndMint(memberCaller(), {
     supabaseAdmin: db,
     tcSessionId: "tc-sess",
     direction: "outbound",
     leadId: LEAD,
   });
 
-  assert(res.ok, `admin deveria passar, veio ${JSON.stringify(res)}`);
+  assert(res.ok, `membro que vê o lead deveria passar, veio ${JSON.stringify(res)}`);
+});
+
+Deno.test("erro na consulta de visibilidade NEGA — fail-closed", async () => {
+  await setupSigningKey();
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: orgLead,
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(memberCaller({ asUser: leadComErro() }), {
+    supabaseAdmin: db,
+    tcSessionId: "tc-sess",
+    direction: "outbound",
+    leadId: LEAD,
+  });
+
+  assert(!res.ok);
+  assertEquals(res.code, "lead_not_visible");
+});
+
+Deno.test("admin também passa pela RLS — não há mais dono a bypassar", async () => {
+  await setupSigningKey();
+  const db = stubClient({
+    tables: {
+      voip_sessions: openSession,
+      leads: orgLead,
+      consent_records: grantedConsent,
+      ...permissiveEngine,
+    },
+    rpc: okReserve,
+  });
+
+  const res = await authorizeCallAndMint(
+    memberCaller({ role: "admin", asUser: leadInvisivel() }),
+    {
+      supabaseAdmin: db,
+      tcSessionId: "tc-sess",
+      direction: "outbound",
+      leadId: LEAD,
+    },
+  );
+
+  assert(!res.ok);
+  assertEquals(res.code, "lead_not_visible");
 });
 
 // Desde 2026-07-31, por decisão do CTO, o padrão é assumir todo lead
@@ -437,7 +531,7 @@ Deno.test("sem a exigência ligada, autoriza mesmo sem consentimento nenhum", as
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       organizations: () => ({ require_voice_consent: false }),
       consent_records: () => null,
       ...permissiveEngine,
@@ -463,7 +557,7 @@ Deno.test("org sem linha legível NÃO vira trava silenciosa", async () => {
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       organizations: () => null,
       consent_records: () => null,
       ...permissiveEngine,
@@ -486,7 +580,7 @@ Deno.test("com a exigência LIGADA, nega sem consentimento de voz", async () => 
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       organizations: () => ({ require_voice_consent: true }),
       consent_records: () => null,
       ...permissiveEngine,
@@ -515,7 +609,7 @@ Deno.test("com a exigência ligada, consentimento com source='manual' não conta
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       organizations: () => ({ require_voice_consent: true }),
       consent_records: (f) =>
         Array.isArray(f.source) && (f.source as string[]).includes("manual")
@@ -542,7 +636,7 @@ Deno.test("nega quando o membro não tem voip.call.start", async () => {
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       consent_records: grantedConsent,
       master_users: () => null,
       team_members: () => ({ id: TM, role: "member" }),
@@ -575,7 +669,7 @@ Deno.test("nega quem não opera pela instância da sessão, sem chegar à reserv
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
@@ -610,7 +704,7 @@ Deno.test("o gate pergunta pelo usuário do Caller e pela instância da SESSÃO"
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
@@ -640,7 +734,7 @@ Deno.test("erro do gate de instância NEGA — fail-closed", async () => {
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
@@ -806,7 +900,7 @@ Deno.test("repassa a negativa do governor sem assinar nada", async () => {
     const db = stubClient({
       tables: {
         voip_sessions: openSession,
-        leads: ownedLead,
+        leads: orgLead,
         consent_records: grantedConsent,
         ...permissiveEngine,
       },
@@ -938,7 +1032,7 @@ Deno.test("o cid assinado é o id de rede, não o uuid da linha", async () => {
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
@@ -977,7 +1071,7 @@ Deno.test("recusa sem assinar quando a reserva não devolve tc_call_id", async (
   const db = stubClient({
     tables: {
       voip_sessions: openSession,
-      leads: ownedLead,
+      leads: orgLead,
       consent_records: grantedConsent,
       ...permissiveEngine,
     },
