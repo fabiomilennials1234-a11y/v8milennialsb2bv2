@@ -404,6 +404,109 @@ describe("matchesTriggerConfig", () => {
       });
     });
 
+    // ── modos de resposta (reply_mode) ──
+    // A evidência chega PRONTA no context (horas decorridas), nunca um
+    // timestamp cru: `matchesTriggerConfig` roda de novo no executor, minutos
+    // depois, e comparar contra "agora" faria a revalidação reprovar o que o
+    // disparo aprovou. Número congelado no disparo revalida igual sempre.
+    describe("modos de resposta", () => {
+      it("modo padrão (ausente) dispara em qualquer mensagem", () => {
+        expect(matchesTriggerConfig("lead_replied", {}, { message: "oi" })).toBe(true);
+      });
+
+      it("after_outbound não dispara quando ninguém falou com o lead antes", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          { hours_since_outbound: null }
+        )).toBe(false);
+      });
+
+      it("after_outbound dispara dentro da janela", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          { hours_since_outbound: 1 }
+        )).toBe(true);
+      });
+
+      it("after_outbound não dispara depois da janela", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          { hours_since_outbound: 72 }
+        )).toBe(false);
+      });
+
+      it("after_outbound aceita a borda exata da janela", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          { hours_since_outbound: 48 }
+        )).toBe(true);
+      });
+
+      it("after_outbound sem janela configurada exige só que tenha havido outbound", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound" },
+          { hours_since_outbound: 1000 }
+        )).toBe(true);
+      });
+
+      // Fail-closed: sem a evidência no context o modo é inavaliável, e
+      // disparar transformaria "só quem respondeu" em "qualquer mensagem".
+      it("after_outbound é fail-closed sem a evidência no context", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          {}
+        )).toBe(false);
+      });
+
+      it("first_of_thread dispara na primeira mensagem que a pessoa manda", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "first_of_thread", new_thread_after_hours: 24 },
+          { hours_since_previous_inbound: null }
+        )).toBe(true);
+      });
+
+      it("first_of_thread cala a rajada dentro da mesma conversa", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "first_of_thread", new_thread_after_hours: 24 },
+          { hours_since_previous_inbound: 0.01 }
+        )).toBe(false);
+      });
+
+      it("first_of_thread volta a disparar depois do silêncio", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "first_of_thread", new_thread_after_hours: 24 },
+          { hours_since_previous_inbound: 168 }
+        )).toBe(true);
+      });
+
+      it("first_of_thread é fail-closed sem a evidência no context", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "first_of_thread", new_thread_after_hours: 24 },
+          {}
+        )).toBe(false);
+      });
+
+      it("modo any ignora a evidência dos outros modos", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "any" },
+          { hours_since_outbound: null, hours_since_previous_inbound: 0.01 }
+        )).toBe(true);
+      });
+
+      it("modo e número se somam (E)", () => {
+        const NUMERO = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48, source_ids: [NUMERO] },
+          { hours_since_outbound: 2, instance_id: NUMERO }
+        )).toBe(true);
+
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48, source_ids: [NUMERO] },
+          { hours_since_outbound: 2, instance_id: "outro" }
+        )).toBe(false);
+      });
+    });
+
     // ── filtro por etapa (stage_ids) ──
     // Sob o ADR-0023 quem ocupa etapa é o Negócio, não o Lead — e um Lead pode
     // ter vários. Escolha registrada na spec: filtro PURO, basta o lead ter
@@ -1062,6 +1165,116 @@ describe("fireTrigger", () => {
       // Nulo preservado — é o que distingue "card sem etapa" de "leitura falhou".
       expect(ctx.lead_stage_ids).toEqual([null]);
       expect(matchesTriggerConfig("lead_replied", { stage_ids: [ETAPA] }, ctx)).toBe(false);
+    });
+
+    it("carrega hours_since_outbound quando o modo é after_outbound", async () => {
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "after_outbound", reply_window_hours: 48 });
+      const duasHorasAtras = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      mockTable("whatsapp_messages", [
+        { organization_id: "org-1", lead_id: "lead-1", direction: "outgoing", timestamp: duasHorasAtras },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(1);
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx.hours_since_outbound).toBeCloseTo(2, 1);
+    });
+
+    // A mensagem que acabou de chegar JÁ está persistida quando o gatilho roda.
+    // Se a evidência olhasse a linha mais recente, `first_of_thread` compararia
+    // a mensagem com ela mesma (0h de silêncio) e nunca disparava.
+    it("first_of_thread ignora a própria mensagem que acabou de chegar", async () => {
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "first_of_thread", new_thread_after_hours: 24 });
+      const agora = new Date().toISOString();
+      const semanaPassada = new Date(Date.now() - 168 * 60 * 60 * 1000).toISOString();
+      mockTable("whatsapp_messages", [
+        { organization_id: "org-1", lead_id: "lead-1", direction: "incoming", timestamp: agora },
+        { organization_id: "org-1", lead_id: "lead-1", direction: "incoming", timestamp: semanaPassada },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "e aí?" },
+      });
+
+      expect(count).toBe(1);
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx.hours_since_previous_inbound).toBeCloseTo(168, 0);
+    });
+
+    it("first_of_thread não dispara na segunda mensagem da mesma rajada", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "first_of_thread", new_thread_after_hours: 24 });
+      const agora = new Date().toISOString();
+      const umMinutoAtras = new Date(Date.now() - 60 * 1000).toISOString();
+      mockTable("whatsapp_messages", [
+        { organization_id: "org-1", lead_id: "lead-1", direction: "incoming", timestamp: agora },
+        { organization_id: "org-1", lead_id: "lead-1", direction: "incoming", timestamp: umMinutoAtras },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "?" },
+      });
+
+      expect(count).toBe(0);
+    });
+
+    it("modo any não paga a query de evidência", async () => {
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "any" });
+
+      await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx).not.toHaveProperty("hours_since_outbound");
+      expect(ctx).not.toHaveProperty("hours_since_previous_inbound");
+    });
+
+    it("fail-closed quando a leitura da evidência falha", async () => {
+      const { sb, mockTable, mockSelectError, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "after_outbound", reply_window_hours: 48 });
+      mockTable("whatsapp_messages", [
+        {
+          organization_id: "org-1",
+          lead_id: "lead-1",
+          direction: "outgoing",
+          timestamp: new Date(Date.now() - 3_600_000).toISOString(),
+        },
+      ]);
+      mockSelectError("whatsapp_messages", { code: "57014", message: "statement timeout" });
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(0);
+      expect(getInserted("workflow_executions")).toHaveLength(0);
     });
 
     it("fail-closed de ponta a ponta quando o filtro é por etapa e a leitura falha", async () => {
