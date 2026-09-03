@@ -48,11 +48,23 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 
+/**
+ * ── won/lost saíram daqui (B2d) ───────────────────────────────────────────
+ * A etapa deixou de decidir ganho e perda: quem decide é o desfecho do
+ * negócio, e é de lá que todas as métricas leem
+ * (migration `a_coluna_deixa_de_decidir`).
+ *
+ * Continuar sugerindo won/lost encheria a fila do master com 163 itens que,
+ * ao serem aprovados, REATIVARIAM o registro de venda por arrastar naquela
+ * etapa — contra o modelo que o resto do sistema segue. Sugestão que só pode
+ * causar dano não é sugestão.
+ *
+ * Os papéis de REUNIÃO ficam e seguem auto-aplicando: `agendado` e
+ * `compareceu` são posição no funil, não dinheiro, e a agenda depende deles.
+ */
 const SUGGESTABLE_ROLES: SuggestableStageRole[] = [
   "meeting_booked",
   "meeting_held",
-  "won",
-  "lost",
 ];
 
 interface StageRow {
@@ -82,11 +94,11 @@ function buildPrompt(stages: StageRow[]): string {
   return [
     "Você classifica etapas de funil de vendas B2B (CRM, pt-BR) em papéis semânticos para métricas.",
     "Para CADA etapa, escolha UM papel pelo NOME:",
-    "- won: venda fechada/ganha (terminal positivo, gera receita)",
-    "- lost: oportunidade perdida/desistiu/sem interesse (terminal negativo)",
     "- meeting_booked: reunião/call/visita marcada ou aguardando confirmação",
     "- meeting_held: reunião/call/visita realizada, lead compareceu",
-    "- open: qualquer outra coisa (etapa intermediária, nutrição, negociação em curso)",
+    "- open: qualquer outra coisa — incluindo etapa de VENDA GANHA ou PERDIDA",
+    "IMPORTANTE: etapa de venda ganha/perdida é `open`. O sistema decide ganho e",
+    "perda pelo desfecho do NEGÓCIO, não pela etapa — a etapa só dá nome à coluna.",
     "As flags [final positivo/negativo] são sinal fraco — o NOME decide. Na dúvida, use open.",
     "",
     "Etapas:",

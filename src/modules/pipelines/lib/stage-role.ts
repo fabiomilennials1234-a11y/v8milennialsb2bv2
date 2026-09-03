@@ -9,12 +9,42 @@
 
 import type { StageRole } from "@/contracts/pipe";
 
+/**
+ * TODOS os papéis do enum. Para RENDERIZAR — badge, legenda, tela de revisão.
+ * Continua com won/lost porque o enum do banco continua com eles.
+ */
 export const STAGE_ROLES: readonly StageRole[] = [
   "open",
   "meeting_booked",
   "meeting_held",
   "won",
   "lost",
+] as const;
+
+/**
+ * Os papéis que o admin pode ATRIBUIR a uma etapa.
+ *
+ * ── Por que won/lost saíram daqui ─────────────────────────────────────────
+ * Desde o B2d (migration `a_coluna_deixa_de_decidir`) a etapa não decide mais
+ * ganho nem perda. Quem decide é o desfecho do negócio, pelo botão ou pela
+ * automação, e é de lá que TODAS as métricas leem.
+ *
+ * Marcar uma etapa como "Venda ganha" deixou de fazer qualquer coisa útil e
+ * passou a fazer uma coisa ruim: reativa `fn_capture_sale_event` naquela
+ * etapa, e o funil volta a registrar venda por arrastar — para uma org só,
+ * em silêncio, contra o modelo que o resto do sistema segue. Foi medido
+ * acontecendo: uma etapa nasceu com papel `lost` horas depois de a fatia
+ * anterior subir, criada pela tela.
+ *
+ * Opção que não faz nada é ruim; opção que faz o errado é pior. Sai da tela.
+ *
+ * Os papéis de REUNIÃO ficam: `agendado` e `compareceu` são posição no funil,
+ * não dinheiro, e a agenda depende deles.
+ */
+export const STAGE_ROLES_ATRIBUIVEIS: readonly StageRole[] = [
+  "open",
+  "meeting_booked",
+  "meeting_held",
 ] as const;
 
 export interface StageRoleMeta {

@@ -313,7 +313,12 @@ export {
   normalizeStageName,
 } from "./lib/stage-role-classifier";
 export type { StageRoleSuggestion, StageRoleAction } from "./lib/stage-role-classifier";
-export { STAGE_ROLES, STAGE_ROLE_META, STAGE_ROLE_SOURCE_LABEL } from "./lib/stage-role";
+export {
+  STAGE_ROLES,
+  STAGE_ROLES_ATRIBUIVEIS,
+  STAGE_ROLE_META,
+  STAGE_ROLE_SOURCE_LABEL,
+} from "./lib/stage-role";
 export type { StageRoleMeta } from "./lib/stage-role";
 export type {
   StageRole,

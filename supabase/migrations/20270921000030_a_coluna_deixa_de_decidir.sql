@@ -2,6 +2,11 @@
 --
 -- ⚠️⚠️ NÃO APLICAR ANTES DO DEPLOY DO FRONT DA PARTE 1 (20270918000030).
 --
+-- Numerada 20270921000030 e não 20270918000040: o ledger de prod andou para
+-- 20270921000020 enquanto o PR desta fatia esperava merge. Versão abaixo do
+-- teto do ledger é o começo do buraco que fez `org_plural_nas_39_tabelas`
+-- passar meses sem rodar — ver o cabeçalho daquele arquivo.
+--
 -- A guarda no fim deste arquivo tenta impedir o erro, mas ela só enxerga o
 -- banco. Se o front antigo ainda estiver no ar, `useFunilMetrics` deriva
 -- ganho/perda das etapas fechadas, `closedKeys` fica vazio, e o cabeçalho de
