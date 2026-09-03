@@ -168,6 +168,58 @@ export function useAtualizarItemDoNegocio(entryId: string | null) {
   });
 }
 
+/**
+ * Materializar o Negócio da entrada — o que destrava lançar produto no card
+ * que ainda não tem um.
+ *
+ * ── POR QUE ISTO EXISTE ───────────────────────────────────────────────────
+ * `deal_items.deal_id` é NOT NULL, então card sem `deals` não tinha onde
+ * pendurar item — e o painel escondia o "+ Adicionar produto" e imprimia
+ * *"Este card ainda não tem um negócio aberto"*. Medido em prod: **9.258 de
+ * 48.138 entradas (19,2%)** estavam nesse estado, concentradas em funil de
+ * SISTEMA (9.084; nos custom eram só 174). Para quem usa, o produto
+ * simplesmente não existia naquele card.
+ *
+ * ── POR QUE NÃO VIOLA A ADR-0023 ──────────────────────────────────────────
+ * A decisão 3 diz que "um Negócio nasce só por clique humano" e proíbe
+ * ingest, integração e automação — **é exatamente o que continua valendo**:
+ * quem cria aqui é a pessoa clicando em "+ Adicionar produto", com intenção
+ * explícita. Nada nasce por chegada de lead, por webhook ou por progresso de
+ * etapa (a criação dirigida por `compareceu` que a ADR rejeita).
+ *
+ * ⚠ O comentário anterior no `DealCardPanel` dizia que ligar entrada antiga a
+ * negócio seria "trabalho de RPC própria" e que a única porta era
+ * `abrir_negocio` — que cria card NOVO. Isso **caducou**: a RPC própria passou
+ * a existir em `20270904000000_desfecho_do_negocio.sql`, e é a mesma porta que
+ * o backfill da `20270908005010` e o desfecho pela UI já usam.
+ *
+ * ── IDEMPOTENTE, E É ISSO QUE A TORNA SEGURA NO CLIQUE ────────────────────
+ * `garantir_negocio_da_entrada` devolve o `deal_id` que já existe quando existe,
+ * e só INSERE quando não há. Dois cliques seguidos, ou duas abas, não criam dois
+ * Negócios. O que ela cria leva `source = 'entrada_materializada'`, o mesmo
+ * rótulo do backfill — então dá para separar depois o que nasceu por aqui.
+ */
+export function useGarantirNegocioDaEntrada(entryId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data, error } = await supabase.rpc("garantir_negocio_da_entrada" as never, {
+        p_entry_id: id,
+      } as never);
+
+      if (error) throw error;
+      return data as unknown as string;
+    },
+    // O painel precisa reler: o card passa a ter negócio, e é dele que saem o
+    // bloco de produtos e o valor.
+    onSuccess: () => invalidarNegocio(queryClient, entryId),
+    onError: (erro: Error) => {
+      toast.error(`Não foi possível abrir o negócio deste card: ${erro.message}`);
+    },
+  });
+}
+
 /** Remover um item do negócio. O valor do negócio se recalcula sozinho. */
 export function useRemoverItemDoNegocio(entryId: string | null) {
   const queryClient = useQueryClient();

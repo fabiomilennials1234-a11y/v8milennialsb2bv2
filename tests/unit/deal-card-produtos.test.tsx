@@ -141,18 +141,26 @@ describe("DealCardMoney — a tabela de produtos", () => {
     expect(screen.getByText("avulso")).toBeTruthy();
   });
 
-  it("sem produto e sem negócio, DIZ o porquê em vez de esconder", () => {
+  it("sem produto, diz que está vazio — e nada além disso", () => {
     render(<DealCardMoney itens={[]} valorDoNegocio={null} />);
     expect(screen.getByText(/Nenhum produto lançado neste negócio/)).toBeTruthy();
-    expect(screen.getByText(/ainda não tem um negócio aberto/)).toBeTruthy();
     // Sem lastro nenhum o total é "—", nunca "R$ 0,00".
     expect(screen.getByText("—")).toBeTruthy();
   });
 
-  it("com negócio aberto e nenhum item, não repete a frase da ausência", () => {
-    render(<DealCardMoney itens={[]} valorDoNegocio={null} onAdicionarProduto={() => {}} />);
-    expect(screen.getByText(/Nenhum produto lançado neste negócio/)).toBeTruthy();
+  /**
+   * A frase *"Este card ainda não tem um negócio aberto — abra um em Novo
+   * negócio"* SAIU, e este teste existe para ela não voltar.
+   *
+   * Ela era honesta enquanto o botão não descia em card sem `deals` — 9.258 de
+   * 48.138 entradas em prod (19,2%). Agora o "+ Adicionar produto" desce em
+   * todo card e o negócio é materializado no clique, então a frase mandaria a
+   * pessoa para outra tela com o botão ali do lado.
+   */
+  it("nunca manda abrir negócio em outra tela — o botão faz isso sozinho", () => {
+    render(<DealCardMoney itens={[]} valorDoNegocio={null} />);
     expect(screen.queryByText(/ainda não tem um negócio aberto/)).toBeNull();
+    expect(screen.queryByText(/Novo negócio/)).toBeNull();
   });
 });
 
