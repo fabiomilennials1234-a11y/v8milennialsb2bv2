@@ -191,6 +191,15 @@
 #      lead. `has_function_privilege` nome por nome — nem anon, nem
 #      authenticated, nem service_role executam a função nova.
 #
+#  25b. voip_can_see_call_dono_canonico_test.sql — a fronteira do lead na leitura
+#      de voip_calls olha o dono CANÔNICO (20270915000000). O caso que manda:
+#      membro é `sale_responsible_id` e `closer_id` é NULO (26 leads assim em
+#      produção em 2026-09-02) — com a função antiga, lendo as legadas
+#      sdr_id/closer_id, o dono de verdade não lia a própria ligação. Semeia a
+#      divergência com as triggers OFF, restringe leads.view_* nos dois membros
+#      para que só a responsabilidade decida, e afirma os grants depois do
+#      OR REPLACE (DROP+CREATE devolveria EXECUTE a anon).
+#
 #  26. metric_negocio_semantica_test.sql — LEAD ≠ NEGÓCIO (SCRUM-311 fatia 9,
 #      20270813100000, ADR-0023 `negocio-is-the-funnel-unit`). A asserção que o
 #      arquivo existe para fazer: um lead com DOIS negócios abertos devolve
@@ -540,6 +549,7 @@ run_with_pg_prove() {
     "$SCRIPT_DIR/voip_recording_playback_test.sql" \
     "$SCRIPT_DIR/voip_recording_retention_test.sql" \
     "$SCRIPT_DIR/voip_incoming_creates_call_test.sql" \
+    "$SCRIPT_DIR/voip_can_see_call_dono_canonico_test.sql" \
     "$SCRIPT_DIR/whatsapp_instance_reap_queue_test.sql" \
     "$SCRIPT_DIR/subscription_snapshot_base_layer_test.sql" \
     "$SCRIPT_DIR/organizations_plan_fk_test.sql" \

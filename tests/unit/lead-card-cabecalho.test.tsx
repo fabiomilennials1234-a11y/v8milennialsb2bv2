@@ -78,6 +78,7 @@ vi.mock("sonner", () => ({
 }));
 
 import { LeadCardContainer } from "@/modules/leads/components/lead-card/LeadCardContainer";
+import { LeadCallActionProvider } from "@/shared/components/LeadCallActionSlot";
 
 function lead(over: Partial<LeadCardData> = {}): LeadCardData {
   return { ...LEAD_EXEMPLO, ...over };
@@ -226,5 +227,34 @@ describe("LeadCardContainer — Excluir pergunta antes", () => {
 
     await waitFor(() => expect(deleteLeadAsync).toHaveBeenCalledWith("l1"));
     expect(deleteLeadAsync).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("LeadCard — o botão de Ligar vem da raiz, pelo slot", () => {
+  // `leads` não importa `communication` (ciclo entre os barrels). O botão real
+  // é injetado por `App.tsx` via `LeadCallActionProvider`; aqui o que se prova
+  // é a costura: o container pede o botão PARA ESTE lead e o pendura no
+  // cabeçalho. Sem provider, nada aparece — e nada de morto fica no lugar.
+  it("com o provider, o botão do lead aberto aparece no cabeçalho", () => {
+    cardDataRef.value = lead({ id: "l1", nome: "Fábrica Silva" });
+    const pedidos: Array<{ id: string; nome: string | null }> = [];
+    const { container } = render(
+      <LeadCallActionProvider
+        value={(alvo) => {
+          pedidos.push(alvo);
+          return <button type="button" aria-label="Ligar" />;
+        }}
+      >
+        <LeadCardContainer leadId="l1" isOpen />
+      </LeadCallActionProvider>,
+    );
+    expect(within(cabecalho(container)).getByRole("button", { name: /^ligar$/i })).toBeInTheDocument();
+    expect(pedidos).toContainEqual({ id: "l1", nome: "Fábrica Silva" });
+  });
+
+  it("sem provider, não há botão Ligar — nem o morto de antes", () => {
+    cardDataRef.value = lead({ id: "l1" });
+    render(<LeadCardContainer leadId="l1" isOpen />);
+    expect(screen.queryByRole("button", { name: /^ligar$/i })).not.toBeInTheDocument();
   });
 });

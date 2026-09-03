@@ -77,7 +77,7 @@ export const CALL_DENY_MESSAGES: Record<string, string> = {
   consent_missing: "Este lead ainda não autorizou receber ligações.",
   lead_required: "Selecione um lead para ligar.",
   lead_without_phone: "Este lead não tem telefone.",
-  not_lead_owner: "Este lead não é seu.",
+  lead_not_visible: "Você não tem acesso a este lead.",
   permission_denied: "Você não tem permissão para ligar.",
   operator_busy: "Você já está em uma chamada.",
   org_concurrency_reached: "Todas as linhas de voz estão ocupadas.",
