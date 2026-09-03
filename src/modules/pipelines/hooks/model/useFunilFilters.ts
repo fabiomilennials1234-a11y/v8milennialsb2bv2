@@ -8,7 +8,7 @@ import {
   type MetricsPeriodState,
 } from "@/lib/metrics-period";
 import { getStalledBucket, STALLED_ALL } from "@/modules/pipelines/lib/stalled-buckets";
-import type { FilterSectionConfig } from "@/modules/pipelines/components/kanban/KanbanFilterPanel";
+import type { FilterSectionConfig } from "@/modules/pipelines/lib/kanban-filter-config";
 import type { PaginatedFilters } from "./usePaginatedPipeline";
 import type { PipelineLeadIdsParams } from "./usePipelineLeadIds";
 
