@@ -202,8 +202,33 @@ export function AdicionarProdutoDialog({
         baixo em `pointer-events: none`, então o toque atravessa a folha e cai
         num diálogo que ninguém está vendo. Medido em 390×844: o diálogo existia
         no DOM, recebia o clique, e a tela mostrava só a folha.
+
+        `grid-cols-1` é o ENQUADRAMENTO. O `DialogContent` é `grid` sem
+        `grid-template-columns`, então a coluna é implícita e `auto` — e o
+        mínimo de uma track `auto` é a maior min-content dos itens, sem teto: o
+        `max-w-[460px]` segura a CAIXA do painel, nunca a track. Com um nome de
+        produto longo o `truncate` do span vira `white-space: nowrap`, cuja
+        min-content é a linha inteira, e a coluna é desenhada nessa largura
+        dentro do painel estreito — campos, total e rodapé saem pela borda e
+        pintam sobre a página, e a descrição do header para de quebrar linha.
+        Medido em 1440×900: track de mais de 1000px num content-box de 410px,
+        com o conteúdo passando ~1000px da borda direita. O valor exato varia
+        com o comprimento do nome — a track ACOMPANHA o texto linearmente.
+
+        `grid-cols-1` é `repeat(1, minmax(0,1fr))`, e o que ele troca é a MIN
+        track sizing function, de `auto` para `0`. Isso desliga o *automatic
+        minimum size* do item (CSS Grid §6.6, que só vale para item cruzando
+        track de mínimo `auto`), então o `min-width:auto` dos filhos vira 0 e a
+        track deixa de perseguir a min-content de quem está dentro.
+        ⚠️ **Não é o `min-w-0` do span que passa a valer** — medido: tirar o
+        `min-w-0` mantendo `grid-cols-1` não muda nada (track segue 410px, nome
+        segue truncando). Aquele `min-w-0` já valia antes; só nunca precisava
+        encolher, porque tinha a track inteira de espaço.
+
+        Com nome curto é no-op, medido número por número: uma track `auto` que
+        já cabe e uma `1fr` dão os mesmos 410px.
       */}
-      <DialogContent className="z-[60] max-w-[460px]" overlayClassName="z-[60]">
+      <DialogContent className="z-[60] max-w-[460px] grid-cols-1" overlayClassName="z-[60]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[15px]">
             <Package className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -219,7 +244,10 @@ export function AdicionarProdutoDialog({
           {escolhido ? (
             <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2">
               <Package className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-[13px]">
+              {/* O `title` é a contrapartida do truncate: agora que o nome
+                  longo é cortado em vez de esticar o diálogo, o resto dele
+                  precisa continuar alcançável em algum lugar. */}
+              <span className="min-w-0 flex-1 truncate text-[13px]" title={escolhido.product_name}>
                 {escolhido.product_name}
               </span>
               {!escolhido.product_id && (
