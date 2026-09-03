@@ -325,3 +325,156 @@ Delta zero em vermelho, +28 em verde — exatamente os 28 casos da fatia (11 + 4
 **Armadilha encontrada no caminho:** a primeira tentativa usou `--reporter=basic`, que não existe
 nesta versão do vitest. O comando saiu com código 0 e log de erro do carregador — **zero testes
 rodaram**. É a quarta roupa do verde por ausência: suíte não-invocada. Só a contagem total distingue.
+
+---
+
+## SCRUM-596 — premissas medidas em produção antes de escrever
+
+O molde é `tools/metricas.ts`: cada ferramenta chama uma RPC, com o Escopo aplicado antes de tocar no
+banco e a organização vinda do Escopo, nunca do modelo. As quatro novas exigem RPC nova, logo
+migration, logo branch do Supabase para o pgTAP.
+
+**Onde a posição no funil realmente mora.** `deals` tem 35.230 linhas e **não tem `pipeline_id` nem
+`stage_id`** — a posição vive em `pipeline_entries` (`pipeline_id`, `stage_key`, `deal_id`,
+`assigned_to`). Quem escrever a ferramenta `funil` contra `deals` não acha etapa nenhuma.
+
+| Ferramenta | Fonte | Dado real em produção | Veredito |
+|---|---|---|---|
+| `funil` | `pipeline_entries` + `pipeline_stages` | 45.553 entradas abertas com `stage_key` | viável |
+| `ranking` | `pipeline_entries.assigned_to` | 15.652 atribuições, **100% válidas** em `team_members`, 91 pessoas distintas | viável |
+| `leads` | `leads` | 57.834 leads; 14.453 com responsável; 29.721 sem toque há mais de 30 dias | viável, com uma ressalva |
+| `perdas` | — | **zero motivos registrados** | **inviável como especificado** |
+
+### A ferramenta `perdas` não tem o que ler
+
+O ticket pede "motivos reais de negócio perdido no período". Em produção existem **1.234 negócios
+perdidos** (`deals.outcome = 'lost'`, contra 304 ganhos e 33.692 abertos — a coluna `outcome` está
+100% preenchida e é confiável). Motivo, porém, não existe em lugar nenhum:
+
+| Onde o motivo poderia estar | Preenchidos |
+|---|---|
+| `deals.loss_reason_id` | 0 |
+| `deals.loss_reason` (texto) | 0 |
+| `pipe_propostas.loss_reason_id` e `.loss_reason` | 0 |
+| `pipeline_entries.metadata → loss_reason_id` | 209 chaves presentes, **todas com valor `null`** |
+
+Cruzando: dos 1.234 perdidos, **27 (2,2%)** têm sequer a chave alcançável — e o join com o catálogo
+devolve vazio, porque o valor gravado é nulo.
+
+**Não é bug de gravação.** O caminho de escrita (`useMergedFunnelActions`) só grava quando há id:
+`...(lossReasonId ? { loss_reason_id: lossReasonId } : {})`. E o catálogo `loss_reasons` tem 756
+linhas que são **seed de sistema** — 108 organizações × 7 motivos, com `is_system = false` em
+**zero** delas. Ninguém customizou e ninguém preencheu. A funcionalidade nasceu semeada e nunca foi
+usada.
+
+Construir `perdas` como está escrito produziria uma ferramenta que sempre responde vazio — e o
+SCRUM-600 nomeia exatamente esse risco: "uma ferramenta devolveu vazio e o modelo preencheu o buraco
+sozinho". Decisão de recorte pendente com o CTO.
+
+### Ressalva da ferramenta `leads`
+
+O recorte "sem próximo passo" seria derivado de `follow_ups` sem conclusão, e existem **574**
+follow-ups abertos para 57.834 leads. O recorte devolveria quase a base inteira, o que não é um
+recorte. Os outros dois — "parados há N dias" e "sem contato" — se sustentam.
+
+### SCRUM-596 — execução: ferramenta `ranking`
+
+`_shared/oraculo/tools/ranking.ts` + `.test.ts` — 3 casos, **3 controles positivos**.
+
+| Ciclo | Caso | Controle positivo |
+|---|---|---|
+| 1 | `member` é recusado ANTES de tocar no banco | mover a recusa para depois da consulta deixa vermelho |
+| 2 | admin consulta, e a organização vem do Escopo, não do modelo | — |
+| 3 | período e limite têm teto; ausente e lixo caem no padrão | tirar cada um dos dois tetos deixa vermelho |
+
+O caso 1 é o que distingue **recusar** de **recusar depois de já ter lido**: o teste assere que
+`calls.length` é zero, e não só o formato da saída. Um filtro aplicado na volta da consulta passaria
+num teste que olhasse apenas o retorno — o dado já teria saído do banco.
+
+Deslize corrigido no caminho: `lerPeriodo` e `lerLimite` foram escritos junto com o ciclo 2, sem
+teste vermelho antes. O ciclo 3 cobriu os dois, e o controle positivo confirma que não é tautológico.
+
+**Ainda não existe** a RPC `oraculo_ranking`. As quatro ferramentas dependem de RPC nova, logo de
+migration, logo de branch do Supabase para o pgTAP.
+
+### SCRUM-596 — as quatro ferramentas e a migration
+
+**Ferramentas** (`_shared/oraculo/tools/`) — 12 casos, todos no molde de `metricas.ts`:
+
+| Ferramenta | Casos | Controle positivo |
+|---|---|---|
+| `ranking` | 3 | recusa movida para depois da consulta deixa vermelho; tirar cada teto deixa vermelho |
+| `perdas` | 3 | escopo do member vazando para organização deixa vermelho |
+| `funil` | 3 | — |
+| `leads` | 3 | recorte livre vindo do modelo deixa vermelho |
+
+Suíte de `_shared/oraculo/`: **32 de 32 verdes**. `deno check` OK nas quatro.
+
+**Migration** `20270921000030_oraculo_catalogo_estrutural.sql` — quatro RPCs, todas
+`SECURITY INVOKER`, com `REVOKE ALL ... FROM PUBLIC, anon, authenticated` e `GRANT EXECUTE` só para
+`service_role`.
+
+#### O achado que teria produzido um funil errado
+
+A etapa vem de **dois catálogos**, e o elo não é o óbvio:
+
+- pipeline custom → `custom_pipeline_stages` por (`pipeline_id`, `stage_key`);
+- pipeline de sistema → `pipeline_stages` por (`organization_id`, `pipeline_type`, `stage_key`),
+  onde **`pipeline_type` casa com `pipelines.slug`**.
+
+Medido em produção: `pipelines.type` vale `'system'`/`'custom'` e **não** casa com
+`pipeline_stages.pipeline_type` (`whatsapp`/`propostas`/`confirmacao`) — o join pelo `type` devolve
+**zero** linhas. Pelo slug, a cobertura das 45.587 entradas abertas vai de **36% para 99,88%**.
+Quem usasse o join óbvio construiria um funil que enxerga um terço da operação sem avisar.
+
+Também confirmado: `pipeline_entries.pipeline_id` casa 100% com `pipelines.id` — e **não** com
+`custom_pipelines`, que cobre só 35%.
+
+#### Decisões registradas no SQL
+
+- `perdas` devolve `motivo_disponivel: false` e uma observação explícita. Ferramenta que responde
+  vazio em silêncio é exatamente onde o modelo preenche o buraco sozinho.
+- `ranking` exclui quem não teve movimento no período: conta de teste apareceria como o pior
+  desempenho da organização todo dia, para sempre.
+- `funil` mostra etapa sem nome de catálogo com a chave crua em vez de omiti-la — 55 das 45.587
+  entradas estão nessa situação, e escondê-las faria a soma não bater com o total.
+- Os tetos de período, dias e limite estão **dentro da função**, não só na ferramenta: quem tiver a
+  credencial de `service_role` fala direto com a RPC.
+
+#### Verificação em branch do Supabase
+
+Branch `vmgkukvyxhlemiyynnbj` criada com `scripts/supabase-branch.sh`, 300 tabelas, 231 migrations.
+**Já derrubada.**
+
+`supabase/tests/oraculo_onda2_catalogo_test.sql` — **24 asserções, 0 falhas**.
+
+A Management API devolve só o resultado da última consulta, então `SELECT * FROM finish()` mostrando
+`1..24` prova que as 24 rodaram, mas **não** que passaram. As saídas foram capturadas numa tabela
+temporária e contadas: `falhas: 0, total: 24`. **Controle positivo executado no harness**: inverter a
+asserção de `authenticated` produz `falhas: 1` com o nome do caso. Sem esse controle, `1..24` seria
+verde por ausência.
+
+### SCRUM-596 — as ferramentas ligadas ao laço
+
+`_shared/oraculo/catalogo.ts` + `.test.ts` — 2 casos.
+
+Os dois lados do catálogo passam a morar no mesmo módulo: o que é anunciado ao modelo
+(`TOOL_SCHEMAS`) e quem executa (`criarFerramentas`). O `oraculo-turno` só importa os dois.
+
+**Por que juntar.** O laço rejeita em silêncio qualquer chamada a ferramenta fora do catálogo de
+executores. Com as listas separadas em dois arquivos, anunciar `funil` ao modelo sem registrar o
+executor faria toda chamada virar `rejectedToolCalls` — o Oráculo responderia sem os números e
+nenhum erro apareceria. O teste de paridade fecha isso; o controle positivo confirma que tirar um
+executor da lista deixa vermelho.
+
+O segundo caso — as cinco ferramentas nominalmente presentes — existe porque o teste de paridade
+sozinho passa com as duas listas vazias.
+
+**Bug de tipo corrigido, que só o `deno check` via.** `ToolDb.rpc` declarava `Promise`, e o `rpc` do
+supabase-js devolve `PostgrestFilterBuilder` — thenable, mas não `Promise`. O cliente real não cabia
+no próprio tipo da ferramenta. Funcionava em runtime porque `await` aceita thenable, e nenhum teste
+pegava. Agora é `PromiseLike`, e `deno check oraculo-turno/index.ts` passa limpo — antes acusava
+1 erro, herdado de `origin/main`.
+
+**Verificação:** `npm run test:edge` com **809 de 809 verdes** (eram 795 na Onda 1: +12 das
+ferramentas, +2 do catálogo). `deno check` em `_shared/` com **0 erros**.
