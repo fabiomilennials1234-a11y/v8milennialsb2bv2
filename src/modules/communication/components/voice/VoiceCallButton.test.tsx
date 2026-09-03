@@ -110,6 +110,7 @@ const SUPORTE: CallableVoiceNumber = {
   tcSessionId: "tc-2",
   instanceId: "i-2",
   instanceName: "Suporte",
+  phoneNumber: "5548991199347",
 };
 
 /** Mesma chave que `usePersistedState` monta: v8:ui:{tela}:{org}:{membro}. */
@@ -185,11 +186,49 @@ describe("VoiceCallButton — quantos números o vendedor tem", () => {
     expect(sessaoAtual()).toBe("tc-1");
   });
 
-  it("dois números: o seletor aparece e diz por qual vai sair a ligação", () => {
+  // Desde 2026-09-03 o nome do número NÃO fica no cabeçalho: com dois números
+  // o botão passava de 200 px e o contato colapsava até sobrar o avatar. O
+  // estado mora no tooltip e no menu — a um gesto, não a zero.
+  it("dois números: a seta aparece e o tooltip diz por qual vai sair a ligação", () => {
     numbers = [COMERCIAL, SUPORTE];
     montar();
     expect(seletor()).toBeInTheDocument();
-    expect(screen.getByText("Comercial")).toBeInTheDocument();
+    expect(botaoLigar()).toHaveAttribute("title", "Ligar por Comercial");
+    expect(screen.queryByText("Comercial")).not.toBeInTheDocument();
+    expect(seletor()).toHaveAccessibleName(/Agora: Comercial\./);
+  });
+
+  it("um número: o tooltip diz por qual número sai, sem seta e sem menu", () => {
+    numbers = [COMERCIAL];
+    montar();
+    expect(botaoLigar()).toHaveAttribute("title", "Ligar por Comercial");
+    expect(seletor()).not.toBeInTheDocument();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  // O botão é UM aos olhos — "Ligar ▾" — mas a seta tem que abrir o menu sem
+  // discar, e o corpo tem que discar sem abrir o menu.
+  it("dois números: a seta abre o menu e NÃO disca", async () => {
+    numbers = [COMERCIAL, SUPORTE];
+    const user = userEvent.setup();
+    montar();
+    await user.click(seletor()!);
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(screen.getByText("Ligar pelo número")).toBeInTheDocument();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  // O nome da instância diz quem atende; o telefone diz o que o cliente vê
+  // tocar. Quando o banco sabe o telefone, o menu mostra os dois.
+  it("o menu lista cada número com nome e, quando existe, o telefone formatado", async () => {
+    numbers = [COMERCIAL, SUPORTE];
+    const user = userEvent.setup();
+    montar();
+    await user.click(seletor()!);
+    const suporte = await screen.findByRole("menuitemradio", { name: /Suporte/ });
+    expect(suporte).toHaveTextContent("+55 (48) 99119-9347");
+    expect(screen.getByRole("menuitemradio", { name: "Comercial" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitemradio", { name: "Comercial" })).toHaveAttribute("aria-checked", "true");
   });
 
   // O gesto de sempre — um clique, e disca — não pode ganhar um passo só
@@ -220,7 +259,7 @@ describe("VoiceCallButton — vê o lead → pode ligar", () => {
     expect(tabelasConsultadas).toEqual([]);
   });
 
-  it("com dois números, as duas metades aparecem em lead que não é dele", () => {
+  it("com dois números, o botão e a seta aparecem em lead que não é dele", () => {
     numbers = [COMERCIAL, SUPORTE];
     montar({ leadId: "lead-de-um-colega" });
     expect(botaoLigar()).toBeInTheDocument();
@@ -276,7 +315,7 @@ describe("VoiceCallButton — a variante ícone, para os cards e o celular", () 
     expect(sessaoAtual()).toBe("tc-1");
 
     await user.click(seletor()!);
-    await user.click(await screen.findByRole("menuitemradio", { name: "Suporte" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /^Suporte/ }));
     expect(sessaoAtual()).toBe("tc-2");
   });
 
@@ -329,6 +368,19 @@ describe("VoiceCallButton — o acabamento do grupo", () => {
     const grupo = botaoLigar().parentElement!;
     expect(grupo.className).not.toMatch(/overflow-hidden/);
     expect(grupo.className).toMatch(/\brounded-lg\b/);
+    expect(botaoLigar().className).toMatch(/focus-visible:z-10/);
+    expect(seletor()!.className).toMatch(/focus-visible:z-10/);
+  });
+
+  // O cabeçalho do chat tem sete controles fixos e um só que encolhe — o
+  // contato. O rótulo é o que cede abaixo de `lg`; o ícone e o tooltip ficam.
+  it("o rótulo 'Ligar' cede abaixo de lg; o botão em si nunca encolhe", () => {
+    numbers = [COMERCIAL, SUPORTE];
+    montar();
+    const rotulo = screen.getByText("Ligar");
+    expect(rotulo.className).toMatch(/\bhidden\b/);
+    expect(rotulo.className).toMatch(/lg:inline/);
+    expect(botaoLigar().parentElement!.className).toMatch(/shrink-0/);
   });
 });
 
@@ -340,7 +392,7 @@ describe("VoiceCallButton — a escolha do número chega até a chamada", () => 
     expect(sessaoAtual()).toBe("tc-1");
 
     await user.click(seletor()!);
-    await user.click(await screen.findByRole("menuitemradio", { name: "Suporte" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: /^Suporte/ }));
 
     expect(sessaoAtual()).toBe("tc-2");
     await user.click(botaoLigar());
@@ -353,7 +405,7 @@ describe("VoiceCallButton — a escolha do número chega até a chamada", () => 
     lembrar("tc-2");
     montar();
     expect(sessaoAtual()).toBe("tc-2");
-    expect(screen.getByText("Suporte")).toBeInTheDocument();
+    expect(botaoLigar()).toHaveAttribute("title", "Ligar por Suporte");
   });
 
   // O número saiu do alcance dele. Um alerta sobre isso não o ajuda a ligar.
@@ -362,7 +414,7 @@ describe("VoiceCallButton — a escolha do número chega até a chamada", () => 
     lembrar("tc-que-sumiu");
     montar();
     expect(sessaoAtual()).toBe("tc-1");
-    expect(screen.getByText("Comercial")).toBeInTheDocument();
+    expect(botaoLigar()).toHaveAttribute("title", "Ligar por Comercial");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 

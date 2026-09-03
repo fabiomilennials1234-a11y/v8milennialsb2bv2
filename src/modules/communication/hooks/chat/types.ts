@@ -104,6 +104,8 @@ export interface WhatsAppInstanceForUser {
   status: string;
   /** Provider — drives capability gating (Uazapi/Evolution/Meta Cloud). Rule 13. */
   provider?: string;
+  /** Telefone da instância — opcional porque dublês e leituras antigas não o trazem. */
+  phone_number?: string | null;
 }
 
 // ─── Canais sociais (Instagram via NotificaMe) ───────────────────────────────
