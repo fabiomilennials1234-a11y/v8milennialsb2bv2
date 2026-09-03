@@ -91,13 +91,23 @@ Motivo de não alterar as existentes: a de WhatsApp tem 16 parâmetros e já sof
 
 Hoje `p_limit` recorta por Instance. Se o modo unificado pedir N caixas com limite por caixa e ordenar no cliente, a paginação mente: conversas reais somem da lista sem sinal.
 
-A função nova ordena por recência **sobre o conjunto** e aplica o limite depois. A paginação por cursor de tempo (`p_before`) continua sendo o mecanismo.
+A função nova ordena por recência **sobre o conjunto** e aplica o limite depois. A paginação continua por cursor, mas o cursor passa a ser **composto**: `(last_message_time, instance_id, normalized_phone)`, com ordenação total nas mesmas três colunas.
+
+Um cursor de coluna única não serve aqui, e isso foi medido em produção (2026-09-03, Alamaster): 9.389 de 9.390 conversas não-grupo têm `last_message_time` de segundo inteiro, porque o fornecedor manda unix em segundos. Dentro de uma caixa, o empate raramente encosta na borda da página; sobre o conjunto das 57, encosta o tempo todo. Simulando a rolagem inteira de 50 em 50 com `p_before` estrito: no conjunto, 22 conversas somem de todas as páginas; na mesma simulação sobre uma caixa só (1.700 conversas), zero. É a unificação que liga o defeito — hoje nenhum call-site manda `p_before`.
+
+Chamador que mandar só `p_before` repete o empate na página seguinte em vez de perdê-lo. Duplicar é visível e recuperável; sumir não é nenhum dos dois.
 
 ### D4 — A interseção de acesso é feita no servidor
 
 O conjunto de Instances que o cliente pede é cruzado, dentro da função, com as Instances que aquele usuário pode ler: a lista de membros permitidos por Instance, com a regra vigente de que Instance sem lista é aberta à Organization inteira, e o bypass de admin e master.
 
 O cliente nunca é a autoridade sobre o conjunto. Sem isso, a multi-seleção seria a porta lateral do recorte por Instance que a Alamaster e a Café Jurerê usam.
+
+**A escrita da allowlist fecha junto, na mesma migration.** Medido em produção: `whatsapp_instance_allowed_members` era gravável pelo próprio membro que ela exclui — as policies de INSERT/UPDATE/DELETE pediam só ser team_member da org da Instance mais `can_manage_whatsapp_instances()`, que cai em `whatsapp.manage_instances` (`is_admin_only = false`, `default_value = true`, zero defaults de org desligando). Um `POST` me punha na lista da caixa proibida; um `DELETE` esvaziava a lista e fazia a caixa cair no ramo "sem lista = aberta à org inteira". As três policies passam a exigir `is_org_admin` da org da Instance.
+
+Isso é novo, não um furo antigo: nenhuma das funções de lista vivas consulta a allowlist — hoje ela é recorte de front, e qualquer membro já lê qualquer caixa da própria org passando o uuid na RPC antiga. Esta fatia é a primeira vez que a allowlist decide acesso no servidor, e por isso a escrita tinha que fechar no mesmo commit. Efeito de tela: o botão "Vendedores" em Configurações → WhatsApp passa a exigir admin.
+
+Fora do escopo, reportado: as policies de escrita de `whatsapp_instances` têm a mesma forma e a mesma fraqueza — membro comum apaga a Instance da org.
 
 O recorte por responsável do Lead (`can_see_chat_scope`, política `chat_restrict_to_owner`) continua sendo aplicado **por conversa**, como as funções atuais já fazem.
 

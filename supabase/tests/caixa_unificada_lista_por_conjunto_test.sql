@@ -4,8 +4,13 @@
 -- criadas por `20270920000000_caixa_unificada_lista_por_conjunto.sql`:
 --
 --   public.whatsapp_readable_instance_ids(uuid, uuid[])
---   public.get_whatsapp_conversation_list_multi(16 args)
---   public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz)
+--   public.get_whatsapp_conversation_list_multi(18 args)
+--   public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer,
+--                                                        timestamptz, uuid, text)
+--
+-- e as três policies de ESCRITA de `whatsapp_instance_allowed_members`, que a
+-- mesma migration fecha para admin da org — sem isso a interseção de acesso é
+-- auto-serviço: o membro se põe na lista da caixa proibida com um POST.
 --
 -- Spec: `.specs/features/2026-09-03-caixa-de-entrada-unificada.md`
 --
@@ -34,6 +39,11 @@
 --               uma caixa não zera o contador da outra
 --       W26–W27 `chat_restrict_to_owner`: CONTROLE POSITIVO DOS DOIS LADOS
 --       W28     organization alheia continua sendo 42501
+--       W29–W31 PAGINAÇÃO com EMPATE de last_message_time: o cursor composto
+--               não perde conversa na borda da página, e o cursor parcial
+--               REPETE em vez de perder
+--   (P) as policies de escrita da allowlist exigem admin da org — a tabela que
+--       o gate consulta não pode ser gravável por quem o gate exclui
 --   (O) a lista do Canal Oficial, mesmas fronteiras
 --   (R) RETROCOMPATIBILIDADE: as funções ANTIGAS respondem exatamente como
 --       antes — mesma assinatura, uma só sobrecarga, mesmos grants, mesmas
@@ -54,7 +64,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(70);
+SELECT plan(81);
 
 -- ===========================================================================
 -- Fixture
@@ -276,8 +286,9 @@ SELECT is(
 SELECT ok(
   (SELECT p.prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'whatsapp_readable_instance_ids'),
-  '(S) é SECURITY DEFINER — whatsapp_instance_allowed_members tem RLS, e sem DEFINER '
-  'ela leria ZERO linhas, concluiria "nenhuma caixa tem lista" e LIBERARIA TODAS');
+  '(S) é SECURITY DEFINER — a guarda tem que responder o mesmo para todo chamador, '
+  'e continuar respondendo a verdade no dia em que a policy de SELECT da allowlist '
+  'for endurecida: ali "não li lista nenhuma" vira "não existe lista", que LIBERA');
 
 SELECT ok(
   (SELECT p.proconfig::text LIKE '%search_path=public%'
@@ -305,13 +316,28 @@ SELECT ok(
     WHERE n.nspname = 'public' AND p.proname = 'whatsapp_readable_instance_ids'),
   '(S) PUBLIC não tem EXECUTE em whatsapp_readable_instance_ids');
 
+-- `service_role` FICA DE FORA das três, e é decisão, não esquecimento: o gate
+-- de org recusa esse papel antes de qualquer leitura. MEDIDO em produção com
+-- `SET ROLE service_role` e claims nulas — o contexto de uma edge function:
+-- `get_my_organization_ids()` devolve 0 linhas e `is_master_user()` devolve
+-- false, então o gate levanta 42501. Grant sem escape faria a primeira edge
+-- function depurar permissão, que está certa, em vez do gate, que é a causa.
+-- (`whatsapp_chip_instance_ids` tem o escape; estas, de propósito, não.)
+SELECT ok(
+  NOT has_function_privilege('service_role',
+    'public.whatsapp_readable_instance_ids(uuid, uuid[])', 'EXECUTE'),
+  '(S) service_role NÃO executa whatsapp_readable_instance_ids — o gate o recusaria '
+  'com 42501 de qualquer forma, e grant decorativo é pista falsa');
+
 -- --- get_whatsapp_conversation_list_multi ----------------------------------
 SELECT is(
   (SELECT oidvectortypes(p.proargtypes)
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'get_whatsapp_conversation_list_multi'),
-  'uuid, uuid[], integer, timestamp with time zone, uuid[], text[], uuid[], text[], uuid, boolean, text, boolean, boolean, boolean, text, boolean',
-  '(S) get_whatsapp_conversation_list_multi tem os 16 argumentos, com p_instances uuid[] no lugar de p_instance uuid');
+  'uuid, uuid[], integer, timestamp with time zone, uuid[], text[], uuid[], text[], uuid, boolean, text, boolean, boolean, boolean, text, boolean, uuid, text',
+  '(S) get_whatsapp_conversation_list_multi tem os 18 argumentos: os 16 da irmã, com '
+  'p_instances uuid[] no lugar de p_instance uuid, MAIS p_before_box e p_before_phone — '
+  'o cursor composto sem o qual a paginação sobre o conjunto perde conversa em empate');
 
 SELECT ok(
   (SELECT p.prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -327,13 +353,13 @@ SELECT ok(
 
 SELECT ok(
   has_function_privilege('authenticated',
-    'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamptz,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean)',
+    'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamptz,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)',
     'EXECUTE'),
   '(S) authenticated executa get_whatsapp_conversation_list_multi');
 
 SELECT ok(
   NOT has_function_privilege('anon',
-    'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamptz,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean)',
+    'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamptz,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)',
     'EXECUTE'),
   '(S) anon NÃO executa get_whatsapp_conversation_list_multi');
 
@@ -346,6 +372,12 @@ SELECT ok(
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'get_whatsapp_conversation_list_multi'),
   '(S) PUBLIC não tem EXECUTE em get_whatsapp_conversation_list_multi');
+
+SELECT ok(
+  NOT has_function_privilege('service_role',
+    'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamptz,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)',
+    'EXECUTE'),
+  '(S) service_role NÃO executa get_whatsapp_conversation_list_multi');
 
 -- A coluna que a fatia inteira existe para entregar. Sem ela a lista mistura
 -- caixas e a linha não diz por qual número responder.
@@ -365,8 +397,9 @@ SELECT is(
   (SELECT oidvectortypes(p.proargtypes)
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'get_official_whatsapp_conversation_list_multi'),
-  'uuid, uuid[], integer, timestamp with time zone',
-  '(S) get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz) existe');
+  'uuid, uuid[], integer, timestamp with time zone, uuid, text',
+  '(S) get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, '
+  'uuid, text) existe — os dois últimos são o cursor composto');
 
 SELECT ok(
   (SELECT p.prosecdef FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -381,12 +414,12 @@ SELECT ok(
 
 SELECT ok(
   has_function_privilege('authenticated',
-    'public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz)', 'EXECUTE'),
+    'public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text)', 'EXECUTE'),
   '(S) authenticated executa get_official_whatsapp_conversation_list_multi');
 
 SELECT ok(
   NOT has_function_privilege('anon',
-    'public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz)', 'EXECUTE'),
+    'public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text)', 'EXECUTE'),
   '(S) anon NÃO executa get_official_whatsapp_conversation_list_multi');
 
 -- PUBLIC é o grantee 0 em aclexplode. `proacl IS NOT NULL` vai junto de
@@ -398,6 +431,12 @@ SELECT ok(
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'get_official_whatsapp_conversation_list_multi'),
   '(S) PUBLIC não tem EXECUTE em get_official_whatsapp_conversation_list_multi');
+
+SELECT ok(
+  NOT has_function_privilege('service_role',
+    'public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text)',
+    'EXECUTE'),
+  '(S) service_role NÃO executa get_official_whatsapp_conversation_list_multi');
 
 SELECT is(
   (SELECT (array_agg(a.nm ORDER BY a.ord))[1]
@@ -875,6 +914,239 @@ SELECT ok(
   NOT has_function_privilege('anon',
     'public.get_official_whatsapp_conversation_list(uuid, uuid, integer, timestamptz)', 'EXECUTE'),
   '(R11) os grants da antiga do Canal Oficial seguem fechados para anon');
+
+
+-- ===========================================================================
+-- (W29–W31) PAGINAÇÃO COM EMPATE — o defeito que a unificação LIGA
+--
+-- MEDIDO EM PRODUÇÃO EM 2026-09-03, Alamaster: 9.389 de 9.390 conversas
+-- não-grupo têm `last_message_time` de SEGUNDO INTEIRO (o fornecedor manda unix
+-- em segundos), sobre 8.779 instantes distintos. Simulando a rolagem inteira,
+-- 50 em 50, com cursor de UMA coluna e `<` estrito:
+--   • CONJUNTO das 57 caixas: 188 páginas, 9.368 de 9.390 — 22 conversas somem
+--     PARA SEMPRE, em nenhuma página;
+--   • UMA caixa (49437977-…, 1.700 conversas): 34 páginas, 1.700 de 1.700.
+-- É a união que cria o defeito, e é esta fatia que liga o mecanismo — nenhum
+-- call-site do front manda `p_before` hoje.
+--
+-- A geometria abaixo é a menor que reproduz isso: TRÊS conversas, sendo a 2ª e
+-- a 3ª EMPATADAS em `last_message_time` e em CAIXAS DIFERENTES, com limite 2 —
+-- a borda da página cai DENTRO do empate, que é exatamente o caso em que o
+-- cursor de uma coluna só apaga a irmã.
+--
+-- ⚠️ Este bloco entra DEPOIS de (R) de propósito: ele acrescenta conversas, e
+--    todos os asserts de contagem acima seriam invalidados se viesse antes.
+-- ===========================================================================
+SET LOCAL role postgres;
+
+-- `now()` é fixo dentro da transação, então os dois `- interval '1 minute'`
+-- produzem o MESMO instante — o empate é montado, não sorteado.
+INSERT INTO whatsapp_messages
+  (organization_id, instance_id, message_id, remote_jid, phone_number,
+   direction, content, "timestamp")
+VALUES
+  ('64900000-aaaa-0000-0000-000000000649', '64900000-1111-0000-0000-000000000649',
+   'unif-pag-topo', '5511988888888@s.whatsapp.net', '5511988888888',
+   'incoming', 'a mais recente de todas', now() - interval '30 seconds'),
+  ('64900000-aaaa-0000-0000-000000000649', '64900000-1111-0000-0000-000000000649',
+   'unif-pag-empate-a1', '5511966666666@s.whatsapp.net', '5511966666666',
+   'incoming', 'empatada, caixa A1', now() - interval '1 minute'),
+  ('64900000-aaaa-0000-0000-000000000649', '64900000-2222-0000-0000-000000000649',
+   'unif-pag-empate-a2', '5511977777777@s.whatsapp.net', '5511977777777',
+   'incoming', 'empatada, caixa A2', now() - interval '1 minute');
+
+INSERT INTO channel_messages (organization_id, channel, instance_id, external_id,
+                              contact_external_id, sender_name, direction,
+                              content, "timestamp")
+VALUES
+  ('64900000-aaaa-0000-0000-000000000649', 'whatsapp', '64900000-1111-0000-0000-000000000649',
+   'unif-ch-pag-topo', '5511988888888', 'Topo', 'incoming',
+   'oficial mais recente', now() - interval '30 seconds'),
+  ('64900000-aaaa-0000-0000-000000000649', 'whatsapp', '64900000-1111-0000-0000-000000000649',
+   'unif-ch-pag-a1', '5511966666666', 'Empate A1', 'incoming',
+   'oficial empatado A1', now() - interval '1 minute'),
+  ('64900000-aaaa-0000-0000-000000000649', 'whatsapp', '64900000-2222-0000-0000-000000000649',
+   'unif-ch-pag-a2', '5511977777777', 'Empate A2', 'incoming',
+   'oficial empatado A2', now() - interval '1 minute');
+
+SET LOCAL role authenticated;
+SELECT set_config('request.jwt.claims',
+  '{"sub":"64900000-0001-0000-0000-000000000649","role":"authenticated"}', true);
+
+-- CONTROLE POSITIVO do bloco inteiro: sem paginação as duas empatadas EXISTEM e
+-- são visíveis. Sem este assert, os dois seguintes passariam com a lista vazia.
+SELECT is(
+  (SELECT count(*) FROM public.get_whatsapp_conversation_list_multi(
+     p_org => '64900000-aaaa-0000-0000-000000000649',
+     p_instances => ARRAY['64900000-1111-0000-0000-000000000649', '64900000-2222-0000-0000-000000000649']::uuid[],
+     p_limit => 10)
+    WHERE normalized_phone IN (public.normalize_brazilian_phone('5511966666666'),
+                               public.normalize_brazilian_phone('5511977777777'))),
+  2::bigint,
+  '(W29) CONTROLE POSITIVO: as DUAS conversas empatadas aparecem numa página só, '
+  'em caixas diferentes — o empate está montado e é visível');
+
+-- O assert que pega o defeito. Página 1 com limite 2 pega a mais recente e UMA
+-- das empatadas; o cursor sai da ÚLTIMA linha entregue, como o front faria.
+-- Com cursor de uma coluna e `<` estrito, a irmã do empate não entra em página
+-- NENHUMA: a soma das duas páginas traria 1 das 2. Com cursor composto, 2.
+SELECT is(
+  (WITH p1 AS (
+     SELECT m.instance_id, m.normalized_phone, m.last_message_time
+       FROM public.get_whatsapp_conversation_list_multi(
+              p_org => '64900000-aaaa-0000-0000-000000000649',
+              p_instances => ARRAY['64900000-1111-0000-0000-000000000649', '64900000-2222-0000-0000-000000000649']::uuid[],
+              p_limit => 2) m
+   ),
+   cur AS (
+     SELECT p1.last_message_time AS t, p1.instance_id AS b, p1.normalized_phone AS np
+       FROM p1
+      ORDER BY p1.last_message_time, p1.instance_id, p1.normalized_phone
+      LIMIT 1
+   ),
+   p2 AS (
+     SELECT m.instance_id, m.normalized_phone
+       FROM cur
+       CROSS JOIN LATERAL public.get_whatsapp_conversation_list_multi(
+              p_org => '64900000-aaaa-0000-0000-000000000649',
+              p_instances => ARRAY['64900000-1111-0000-0000-000000000649', '64900000-2222-0000-0000-000000000649']::uuid[],
+              p_limit => 2,
+              p_before => cur.t,
+              p_before_box => cur.b,
+              p_before_phone => cur.np) m
+   )
+   SELECT count(*)
+     FROM (SELECT instance_id, normalized_phone FROM p1
+           UNION ALL
+           SELECT instance_id, normalized_phone FROM p2) u
+    WHERE u.normalized_phone IN (public.normalize_brazilian_phone('5511966666666'),
+                                 public.normalize_brazilian_phone('5511977777777'))),
+  2::bigint,
+  '(W30) rolar a lista misturada de 2 em 2 com o cursor COMPOSTO entrega as DUAS '
+  'empatadas — uma em cada página. Com cursor de uma coluna só, a segunda some '
+  'de todas as páginas, que é a mentira que a decisão D3 existe para impedir');
+
+-- Contrato antigo: quem mandar só `p_before` não perde nada — REPETE o empate.
+-- Repetir é visível e recuperável; sumir não é nenhum dos dois.
+SELECT is(
+  (SELECT count(*) FROM public.get_whatsapp_conversation_list_multi(
+     p_org => '64900000-aaaa-0000-0000-000000000649',
+     p_instances => ARRAY['64900000-1111-0000-0000-000000000649', '64900000-2222-0000-0000-000000000649']::uuid[],
+     p_limit => 10,
+     p_before => (SELECT m.last_message_time
+                    FROM public.get_whatsapp_conversation_list_multi(
+                           p_org => '64900000-aaaa-0000-0000-000000000649',
+                           p_instances => ARRAY['64900000-1111-0000-0000-000000000649']::uuid[],
+                           p_limit => 10) m
+                   WHERE m.normalized_phone = public.normalize_brazilian_phone('5511966666666')))
+    WHERE normalized_phone IN (public.normalize_brazilian_phone('5511966666666'),
+                               public.normalize_brazilian_phone('5511977777777'))),
+  2::bigint,
+  '(W31) cursor PARCIAL (só p_before, o contrato antigo) devolve o empate INTEIRO '
+  'de novo em vez de perdê-lo — a degradação escolhida é duplicar, nunca sumir');
+
+-- --- O12–O13: a mesma paginação no Canal Oficial ---------------------------
+SELECT is(
+  (SELECT count(*) FROM public.get_official_whatsapp_conversation_list_multi(
+     p_org => '64900000-aaaa-0000-0000-000000000649',
+     p_instances => ARRAY['64900000-1111-0000-0000-000000000649', '64900000-2222-0000-0000-000000000649']::uuid[],
+     p_limit => 10)
+    WHERE contact_external_id IN ('5511966666666', '5511977777777')),
+  2::bigint,
+  '(O12) CONTROLE POSITIVO: as duas threads empatadas do Canal Oficial existem');
+
+SELECT is(
+  (WITH p1 AS (
+     SELECT m.instance_id, m.contact_external_id, m.last_message_time
+       FROM public.get_official_whatsapp_conversation_list_multi(
+              p_org => '64900000-aaaa-0000-0000-000000000649',
+              p_instances => ARRAY['64900000-1111-0000-0000-000000000649', '64900000-2222-0000-0000-000000000649']::uuid[],
+              p_limit => 2) m
+   ),
+   cur AS (
+     SELECT p1.last_message_time AS t, p1.instance_id AS i, p1.contact_external_id AS c
+       FROM p1
+      ORDER BY p1.last_message_time, p1.instance_id, p1.contact_external_id
+      LIMIT 1
+   ),
+   p2 AS (
+     SELECT m.instance_id, m.contact_external_id
+       FROM cur
+       CROSS JOIN LATERAL public.get_official_whatsapp_conversation_list_multi(
+              p_org => '64900000-aaaa-0000-0000-000000000649',
+              p_instances => ARRAY['64900000-1111-0000-0000-000000000649', '64900000-2222-0000-0000-000000000649']::uuid[],
+              p_limit => 2,
+              p_before => cur.t,
+              p_before_instance => cur.i,
+              p_before_contact => cur.c) m
+   )
+   SELECT count(*)
+     FROM (SELECT instance_id, contact_external_id FROM p1
+           UNION ALL
+           SELECT instance_id, contact_external_id FROM p2) u
+    WHERE u.contact_external_id IN ('5511966666666', '5511977777777')),
+  2::bigint,
+  '(O13) …e o cursor composto do Canal Oficial também entrega as duas — '
+  'este lado é inerte hoje (1 Instance, 22 contatos), e é por isso que nasce fechado');
+
+
+-- ===========================================================================
+-- (P) A ALLOWLIST É GATE, ENTÃO A ESCRITA DELA NÃO PODE SER AUTO-SERVIÇO
+--
+-- MEDIDO EM PRODUÇÃO: `whatsapp.manage_instances` está `is_admin_only = false,
+-- default_value = true` no catálogo, com ZERO linhas em
+-- `organization_feature_defaults`, então `can_manage_whatsapp_instances()`
+-- devolvia true para TODO membro ativo — e as três policies de escrita desta
+-- tabela pediam só isso mais "ser team_member da org da Instance". Com
+-- `authenticated` tendo INSERT/UPDATE/DELETE na tabela, a interseção D4 era
+-- auto-serviço: um POST me põe na lista da caixa proibida, e um DELETE esvazia
+-- a lista e faz a caixa cair no ramo "sem lista = aberta à org inteira".
+--
+-- Estes asserts são sobre a TABELA, não sobre a função — é lá que o gate mora.
+-- ===========================================================================
+-- `errcode` tipado e `errmsg` NULO de propósito: o texto da recusa de RLS é do
+-- Postgres, não nosso, e casá-lo à letra amarraria a suíte à versão do servidor.
+-- O que importa é o CÓDIGO — 42501, a recusa.
+SELECT throws_ok(
+  $$ INSERT INTO whatsapp_instance_allowed_members (whatsapp_instance_id, team_member_id)
+     VALUES ('64900000-3333-0000-0000-000000000649', '64900000-a001-0000-0000-000000000649') $$,
+  '42501'::char(5), NULL::text,
+  '(P1) membro comum NÃO se põe na lista de uma caixa proibida — a escrita da '
+  'allowlist exige admin da org, senão o gate de acesso é auto-serviço');
+
+-- DELETE barrado por RLS não levanta erro: some do recorte e afeta ZERO linhas.
+-- Por isso este assert conta linhas em vez de esperar exceção.
+--
+-- ⚠️ O `WITH` fica no TOPO do statement, e não dentro de um subselect do `is()`:
+--    CTE que modifica dado só é aceita no nível de cima
+--    ("WITH clause containing a data-modifying statement must be at the top
+--    level"). `count(*)` sobre conjunto vazio ainda devolve uma linha com 0.
+WITH d AS (
+  DELETE FROM whatsapp_instance_allowed_members
+   WHERE whatsapp_instance_id = '64900000-3333-0000-0000-000000000649'
+   RETURNING 1
+)
+SELECT is(
+  count(*),
+  0::bigint,
+  '(P2) …e NÃO esvazia a lista da caixa proibida, que era o outro caminho: lista '
+  'vazia significa "aberta à org inteira"')
+FROM d;
+
+SELECT set_config('request.jwt.claims',
+  '{"sub":"64900000-0003-0000-0000-000000000649","role":"authenticated"}', true);
+
+WITH d AS (
+  DELETE FROM whatsapp_instance_allowed_members
+   WHERE whatsapp_instance_id = '64900000-3333-0000-0000-000000000649'
+   RETURNING 1
+)
+SELECT is(
+  count(*),
+  1::bigint,
+  '(P3) CONTROLE POSITIVO: o ADMIN da org apaga a MESMA linha. O W19 e o P2 acima '
+  'provam que o gate é sobre QUEM escreve, não sobre uma linha que não existia')
+FROM d;
 
 RESET ROLE;
 

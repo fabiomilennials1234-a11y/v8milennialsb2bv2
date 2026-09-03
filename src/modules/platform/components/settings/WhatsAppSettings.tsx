@@ -55,7 +55,7 @@ import {
   NotificameTemplatesCard,
 } from "@/modules/communication";
 import { useFeatureFlag } from "../../hooks/useFeatureFlag";
-import { useCanManageWhatsApp } from "@/modules/identity";
+import { useCanManageWhatsApp, useIdentity } from "@/modules/identity";
 import { useTeamMembers } from "@/modules/identity";
 import {
   useAllowedMembersForInstance,
@@ -460,6 +460,17 @@ export function WhatsAppSettings() {
   // Mesma permissão que libera "Nova Instância". Declarada AQUI, antes do
   // NotificaMe, porque é ela que decide se a sonda dele chega a rodar.
   const { canManage } = useCanManageWhatsApp();
+  // Quem responde em qual número deixou de ser preferência de tela e virou GATE
+  // de acesso no servidor: `whatsapp_readable_instance_ids` (SCRUM-649) lê
+  // `whatsapp_instance_allowed_members` para decidir quais caixas a pessoa
+  // enxerga na Caixa de Entrada Unificada. A escrita dessa tabela passou a
+  // exigir admin da org na mesma migration — senão o membro se põe na lista da
+  // caixa proibida com um POST e o gate vira auto-serviço. `canManage` sozinho
+  // NÃO basta aqui: ele cai em `whatsapp.manage_instances`, que o catálogo vivo
+  // entrega a todo membro ativo (`is_admin_only = false, default_value = true`).
+  // Sem este `isAdmin`, o botão continuaria aparecendo e o "Salvar" levaria
+  // erro de RLS.
+  const { isAdmin } = useIdentity();
   // NotificaMe Seamless.
   //
   // A sonda de mount é LEITURA PURA (`mode:"status"` na edge function). Isto é
@@ -893,7 +904,7 @@ export function WhatsAppSettings() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {canManage && (
+                  {canManage && isAdmin && (
                     <Button
                       variant="outline"
                       size="sm"

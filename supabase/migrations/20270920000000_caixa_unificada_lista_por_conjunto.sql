@@ -35,12 +35,108 @@
 
 
 -- ============================================================================
+-- 0. A allowlist vira GATE, então a escrita dela passa a exigir admin da org
+-- ============================================================================
+--
+-- MEDIDO EM PRODUÇÃO EM 2026-09-03, e é o achado que obrigou este bloco:
+-- `whatsapp_instance_allowed_members` é escrita pelo próprio usuário que ela
+-- exclui. As três policies de escrita exigiam só (a) a Instance ser de uma org
+-- onde eu sou team_member e (b) `can_manage_whatsapp_instances()` — que cai em
+-- `has_feature_permission('whatsapp.manage_instances')`, e o catálogo vivo diz
+-- `is_admin_only = false, default_value = true`, com ZERO linhas em
+-- `organization_feature_defaults` desligando e só 3 overrides individuais (os
+-- três desabilitando). Ou seja: todo membro ativo passava. E `authenticated`
+-- tem INSERT/UPDATE/DELETE na tabela.
+--
+-- O ataque era uma requisição PostgREST:
+--   POST   /rest/v1/whatsapp_instance_allowed_members
+--          {whatsapp_instance_id: <caixa proibida>, team_member_id: <meu id>}
+--   ou     DELETE ...?whatsapp_instance_id=eq.<caixa proibida>
+-- A primeira me põe na lista; a segunda esvazia a lista e faz a caixa cair no
+-- ramo "sem lista = aberta à org inteira". Nos dois casos a interseção da
+-- função abaixo devolveria a caixa proibida, e a lista entregaria as conversas.
+--
+-- ⚠️ POR QUE ISSO É NOVO, e não um furo que já estava aberto: medido, NENHUMA
+--    das duas funções de lista vivas consulta `allowed_members` — nem
+--    `get_whatsapp_conversation_list`, nem
+--    `get_official_whatsapp_conversation_list`, nem `can_see_chat_scope`
+--    (`pg_get_functiondef(...) LIKE '%allowed_members%'` é false nas três).
+--    Hoje a allowlist é recorte de FRONT: qualquer membro já lê qualquer caixa
+--    da própria org passando o uuid na RPC antiga. Esta migration é a PRIMEIRA
+--    vez que a allowlist decide acesso no servidor — e é por isso que a escrita
+--    dela tem que fechar JUNTO. Fechar depois seria carimbar uma garantia que
+--    um `POST` desfaz.
+--
+-- A escolha é a mais estreita que fecha: só as policies de escrita DESTA
+-- tabela, exigindo `is_org_admin(<org da Instance>)`. NÃO se mexe no catálogo
+-- `feature_permissions` — virar `whatsapp.manage_instances` em `is_admin_only`
+-- também tiraria de todo não-admin o direito de criar, renomear e apagar
+-- Instance, que é decisão de produto e não cabe nesta fatia.
+--
+-- `is_org_admin` já embute o master e já exige `is_active` — que é, de quebra,
+-- o `tm.is_active` que faltava nos quals antigos de UPDATE e DELETE: membro
+-- DESATIVADO da org escrevia a allowlist. E ela é SECURITY DEFINER, exigência
+-- de qualquer guarda que leia tabela com RLS: não-DEFINER leria vazio e o vazio
+-- pareceria resposta.
+--
+-- ⚠️ EFEITO VISÍVEL NA TELA: o botão "Vendedores" de
+--    `WhatsAppSettings.tsx` é gated por `useCanManageWhatsApp()`, a mesma
+--    feature permission. O front desta fatia passa a somar `isAdmin` ali, senão
+--    o não-admin continua vendo o botão e leva erro de RLS no "Salvar".
+--
+-- ⚠️ NÃO se mexe nas policies de `whatsapp_instances` (INSERT/UPDATE/DELETE),
+--    que têm a MESMA forma e a MESMA fraqueza — membro comum apaga a Instance
+--    da org. Está fora do escopo desta fatia, e vai reportado ao CTO.
+
+DROP POLICY IF EXISTS members_can_insert_allowed_members ON public.whatsapp_instance_allowed_members;
+CREATE POLICY members_can_insert_allowed_members
+  ON public.whatsapp_instance_allowed_members
+  FOR INSERT
+  WITH CHECK (EXISTS (
+    SELECT 1
+      FROM public.whatsapp_instances wi
+     WHERE wi.id = whatsapp_instance_allowed_members.whatsapp_instance_id
+       AND public.is_org_admin(wi.organization_id)
+  ));
+
+DROP POLICY IF EXISTS members_can_update_allowed_members ON public.whatsapp_instance_allowed_members;
+CREATE POLICY members_can_update_allowed_members
+  ON public.whatsapp_instance_allowed_members
+  FOR UPDATE
+  USING (EXISTS (
+    SELECT 1
+      FROM public.whatsapp_instances wi
+     WHERE wi.id = whatsapp_instance_allowed_members.whatsapp_instance_id
+       AND public.is_org_admin(wi.organization_id)
+  ));
+
+DROP POLICY IF EXISTS members_can_delete_allowed_members ON public.whatsapp_instance_allowed_members;
+CREATE POLICY members_can_delete_allowed_members
+  ON public.whatsapp_instance_allowed_members
+  FOR DELETE
+  USING (EXISTS (
+    SELECT 1
+      FROM public.whatsapp_instances wi
+     WHERE wi.id = whatsapp_instance_allowed_members.whatsapp_instance_id
+       AND public.is_org_admin(wi.organization_id)
+  ));
+
+-- A policy `master_ghost_all_whatsapp_instance_allowed_members` (FOR ALL,
+-- `is_master_user()`) e a de SELECT `allowed_members_select_own_org` NÃO são
+-- tocadas: ler quem responde em qual número segue sendo de toda a org, e é
+-- disso que o seletor do front vive.
+
+
+-- ============================================================================
 -- 1. whatsapp_readable_instance_ids — a interseção de acesso (decisão D4)
 -- ============================================================================
 --
--- O cliente NUNCA é autoridade sobre o conjunto de caixas. O que ele pede é
+-- O cliente não é autoridade sobre o conjunto de caixas: o que ele pede é
 -- cruzado aqui com o que a pessoa pode ler. Sem isto, a multi-seleção seria a
 -- porta lateral do recorte por Instance que a Alamaster e a Café Jurerê usam.
+-- A afirmação só se sustenta com o bloco 0 acima — enquanto a allowlist fosse
+-- gravável pelo membro que ela exclui, o conjunto era auto-serviço por escrita,
+-- não por argumento.
 --
 -- Semântica, espelhando exatamente `useWhatsAppInstancesForUser` no front:
 --   • master e admin DA ORGANIZATION veem todas as Instances dela;
@@ -52,12 +148,22 @@
 --   • conjunto vazio ou nulo significa "todas as que eu posso ler", não
 --     "nenhuma" — é assim que a tela abre antes de a pessoa marcar nada.
 --
--- ⚠️ PRECISA SER `SECURITY DEFINER`. `whatsapp_instance_allowed_members` tem
---    RLS ligada. Uma guarda não-DEFINER leria ZERO linhas por não conseguir
---    ler, concluiria "nenhuma Instance tem lista" e liberaria TODAS — vazio
---    pareceria resposta. O front tem exatamente esse defeito hoje: os dois
---    `select` de allowed_members descartam o `error`, e erro vira `[]`, que
---    vira "sem restrição". Fail-OPEN. Esta função é fail-closed.
+-- ⚠️ É `SECURITY DEFINER`, e a razão NÃO é "senão leria vazio". Medido: a
+--    policy viva `allowed_members_select_own_org` tem qual
+--    `whatsapp_instance_id IN (SELECT id FROM whatsapp_instances WHERE
+--    organization_id IN (SELECT get_my_organization_ids()))`, e `authenticated`
+--    tem SELECT na tabela — logo qualquer membro ativo da org JÁ lê a allowlist
+--    inteira dela, com ou sem DEFINER. A razão de ser DEFINER é outra, e
+--    tripla: (1) as duas listas que a consomem são elas próprias DEFINER, e uma
+--    guarda que muda de resposta conforme quem executa é guarda que mente;
+--    (2) o dia em que a policy de SELECT for endurecida — e ela devia ser — a
+--    guarda tem que continuar respondendo a verdade em vez de virar fail-OPEN,
+--    porque aqui "não li nenhuma lista" é indistinguível de "não existe lista",
+--    e o segundo LIBERA; (3) é a forma das irmãs (`whatsapp_chip_instance_ids`,
+--    `is_org_admin`, `can_see_chat_scope`), e divergir sem motivo é dívida.
+--    O front, esse sim, é fail-OPEN por outro caminho: os dois `select` de
+--    allowed_members descartam o `error`, e erro vira `[]`, que vira "sem
+--    restrição". Esta função é fail-closed.
 --
 -- ⚠️ O bypass usa `is_org_admin(p_org)`, NÃO `is_user_admin()`.
 --    Medido: `is_user_admin()` é ORG-AGNÓSTICO — devolve true para quem é admin
@@ -169,11 +275,47 @@ COMMENT ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) IS
 --    Isto É o modelo, não efeito colateral: o glossário define Conversa do
 --    Lead como o par (Lead ↔ inbox), e um Lead mantém várias ao mesmo tempo.
 --
--- ⚠️ (B) O limite é GLOBAL sobre o conjunto, aplicado DEPOIS da união.
---    Limite por caixa com ordenação no cliente faz a paginação mentir:
---    conversa real some da lista sem sinal. O cursor `p_before` continua sendo
---    o mecanismo de paginação — e vale notar que ele existe na função atual e
---    NENHUM call-site do front o manda hoje. A irmã nasce com ele exercitado.
+-- ⚠️ (B) O limite é GLOBAL sobre o conjunto, aplicado DEPOIS da união, e o
+--    cursor é COMPOSTO: `(last_message_time, instance_id, normalized_phone)`.
+--    Limite por caixa com ordenação no cliente faz a paginação mentir, mas
+--    cursor de UMA coluna sobre um conjunto faz a MESMA mentira por outro
+--    caminho, e este foi medido.
+--
+--    MEDIDO EM PRODUÇÃO EM 2026-09-03, Alamaster: 9.389 de 9.390 conversas
+--    não-grupo têm `last_message_time` de SEGUNDO INTEIRO — o fornecedor manda
+--    unix em segundos, então empate não é cauda, é regime: 9.390 linhas sobre
+--    8.779 instantes distintos. (9.390 é o recorte das Instances VIVAS da org,
+--    que é o que esta função lê pela CTE `boxes`; as ~10.1 mil citadas no bloco
+--    (A) incluem os uuids históricos de chip, que não são caixa de ninguém.) Dentro de UMA caixa o empate quase não encosta
+--    na borda da página; sobre o CONJUNTO das 57, encosta o tempo todo.
+--    Simulando a rolagem inteira, 50 em 50, com o cursor de uma coluna só e
+--    `<` estrito:
+--      • CONJUNTO das 57 caixas: 188 páginas, 9.368 de 9.390 entregues —
+--        22 conversas somem PARA SEMPRE, sem sinal nenhum;
+--      • UMA caixa (49437977-…, 1.700 conversas): 34 páginas, 1.700 de 1.700,
+--        ZERO perdidas.
+--    Ou seja: é a unificação que liga o defeito. Ele é latente na função atual
+--    (nenhum call-site do front manda `p_before` hoje) e nasceria VIVO aqui,
+--    contra a própria decisão D3, que existe para impedir exatamente isto.
+--
+--    A cura tem duas metades, e uma sem a outra não fecha:
+--      1. ORDEM TOTAL. `ORDER BY last_message_time DESC, box DESC,
+--         normalized_phone DESC` — as três na MESMA direção, senão a comparação
+--         de tupla do cursor não corresponde à ordenação. Sem desempate, QUAL
+--         linha do empate cai na página nem sequer é estável entre dois
+--         refetches da mesma página.
+--      2. CURSOR COMPOSTO. `p_before_box` e `p_before_phone` acompanham
+--         `p_before`, e o predicado compara a TUPLA. `(box, normalized_phone)` é
+--         único dentro da CTE `chip` (é a chave do DISTINCT ON), então a ordem é
+--         total e o cursor aponta para UMA linha, não para um grupo.
+--    Chamador que mandar só `p_before` (o contrato antigo) REPETE o empate na
+--    página seguinte em vez de perdê-lo — degradação escolhida: duplicar é
+--    visível e recuperável, sumir não.
+--
+--    Acrescentar dois argumentos não custa `PGRST203` aqui: as três funções
+--    ainda não existem em prod (conferido em `pg_proc`), então esta migration é
+--    o primeiro `CREATE` delas. Os dois entram no FIM da assinatura, para que
+--    nenhum call-site posicional dos 16 argumentos anteriores mude de posição.
 --
 -- ⚠️ (C) A não-lida NÃO é mais um agregado sobre o conjunto inteiro.
 --    MEDIDO, e é a razão de a função ter esta forma: agregar
@@ -234,7 +376,11 @@ CREATE OR REPLACE FUNCTION public.get_whatsapp_conversation_list_multi(
   p_unread         boolean     DEFAULT NULL::boolean,
   p_waiting        boolean     DEFAULT NULL::boolean,
   p_source         text        DEFAULT NULL::text,
-  p_include_groups boolean     DEFAULT false
+  p_include_groups boolean     DEFAULT false,
+  -- Cursor COMPOSTO — ver bloco (B) do cabeçalho. Os dois no FIM da assinatura
+  -- de propósito: nenhum dos 16 argumentos anteriores muda de posição.
+  p_before_box     uuid        DEFAULT NULL::uuid,
+  p_before_phone   text        DEFAULT NULL::text
 )
 RETURNS TABLE(
   instance_id              uuid,
@@ -260,8 +406,22 @@ DECLARE
   v_limit integer := least(greatest(coalesce(p_limit, 50), 1), 1000);
   -- As caixas que o usuário pode de fato ler, já cruzadas com o pedido.
   v_boxes   uuid[];
+  -- O mapa uuid-do-chip → CAIXA, materializado como DOIS arrays paralelos.
+  -- Existe para que `whatsapp_chip_instance_ids` seja chamada UMA vez por
+  -- requisição, e não duas: antes ela rodava aqui e DE NOVO dentro da CTE
+  -- `boxes` do RETURN QUERY, com os mesmos argumentos e em statements
+  -- separados — sem reuso de plano, portanto trabalho jogado fora.
+  -- MEDIDO com EXPLAIN ANALYZE em prod, como membro ativo da Alamaster:
+  -- expandir as 57 caixas custa 49,1 ms (59,5 ms como master), porque cada
+  -- chamada é uma plpgsql DEFINER que reavalia `get_my_organization_ids()` e
+  -- `is_master_user()` antes de olhar a reap_queue. Duas rodadas eram ~98 ms
+  -- por lista, com ~49 ms de desperdício — a mesma ordem de grandeza da
+  -- consulta de dados inteira (30-112 ms). No caso comum (1 a 2 caixas, 60 das
+  -- 62 orgs) a diferença é ~2 ms e nenhuma das duas formas importa.
+  v_box_of    uuid[];
+  v_member_of uuid[];
   -- Todos os uuids de todos os chips das caixas acima, achatados. Serve só
-  -- para pré-filtrar leitura; o mapeamento uuid → caixa fica na CTE `boxes`.
+  -- para pré-filtrar leitura; o mapeamento uuid → caixa é o par acima.
   v_members uuid[];
   v_keys    text[];
   -- Isolamento por responsável (#1629). Resolvido UMA vez, não por linha.
@@ -303,22 +463,46 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Achatado dos chips. `whatsapp_chip_instance_ids` é o mapa
+  -- Expansão dos chips, UMA vez. `whatsapp_chip_instance_ids` é o mapa
   -- Instance → uuids históricos do MESMO NÚMERO, e degrada em silêncio por
   -- desenho (número desconhecido devolve o singleton) — a tolerância é
   -- mantida aqui de propósito, porque o front sobe antes da migration.
-  SELECT array_agg(DISTINCT mm.member)
-    INTO v_members
-    FROM unnest(v_boxes) AS b(box)
-    CROSS JOIN LATERAL unnest(public.whatsapp_chip_instance_ids(p_org, b.box)) AS mm(member);
-  v_members := COALESCE(v_members, v_boxes);
+  --
+  -- O `DISTINCT ON (member)` garante PARTIÇÃO: cada uuid pertence a exatamente
+  -- uma caixa, então nenhuma conversa é contada duas vezes se dois chips se
+  -- sobrepuserem. Medido: hoje isso não acontece — as 36 linhas de
+  -- `whatsapp_instance_reap_queue` nunca são Instances vivas, e o único par de
+  -- Instances vivas que divide número (Basic4u, "Bruna Basic4u" e "bruna 2",
+  -- 554797890485) tem chips singleton e disjuntos. A guarda é para o dia em
+  -- que isso mudar, e custa uma ordenação sobre no máximo 57 linhas.
+  -- O desempate prefere a caixa que É o próprio uuid, depois a menor.
+  SELECT array_agg(x.box ORDER BY x.member), array_agg(x.member ORDER BY x.member)
+    INTO v_box_of, v_member_of
+    FROM (
+      SELECT DISTINCT ON (mm.member) b.box, mm.member
+        FROM unnest(v_boxes) AS b(box)
+        CROSS JOIN LATERAL unnest(public.whatsapp_chip_instance_ids(p_org, b.box)) AS mm(member)
+       ORDER BY mm.member, (mm.member = b.box) DESC, b.box
+    ) x;
+
+  -- `array_agg` de zero linhas devolve NULL. Aqui isso só aconteceria se a
+  -- função de chip devolvesse vazio para TODAS as caixas — impossível pelo
+  -- corpo dela, que devolve ao menos o singleton, mas NULL viraria mapa vazio e
+  -- lista vazia, e vazio pareceria resposta. A identidade é o fallback correto.
+  IF v_member_of IS NULL THEN
+    v_box_of    := v_boxes;
+    v_member_of := v_boxes;
+  END IF;
+
+  v_members := v_member_of;
   v_keys    := ARRAY(SELECT t.m::text FROM unnest(v_members) AS t(m));
 
   -- ── Isolamento por responsável ─────────────────────────────────────────
-  -- Bloco COPIADO da função viva, com a mesma semântica, de propósito. Esta
-  -- função é SECURITY DEFINER, então o RLS de whatsapp_messages NÃO se aplica
-  -- aqui: sem este bloco a política fica decorativa — a tabela fecha e a
-  -- LISTA, que é o que o usuário vê, continua mostrando tudo.
+  -- Bloco copiado da função viva, com a mesma semântica — com UMA divergência
+  -- deliberada, documentada no lugar dela, algumas linhas abaixo. Esta função é
+  -- SECURITY DEFINER, então o RLS de whatsapp_messages NÃO se aplica aqui: sem
+  -- este bloco a política fica decorativa — a tabela fecha e a LISTA, que é o
+  -- que o usuário vê, continua mostrando tudo.
   --
   -- Nota de cobertura: medido em produção, as DUAS únicas orgs com
   -- `chat_restrict_to_owner = true` (Goletric Perdizes e Goletric Pinheiros)
@@ -336,9 +520,21 @@ BEGIN
       AND tm.is_active = true
     LIMIT 1;
 
+    -- DIVERGÊNCIA DELIBERADA da função viva, e é a única do bloco: ela usa
+    -- `is_user_admin()`, que é ORG-AGNÓSTICA (corpo vivo:
+    -- `EXISTS(user_roles WHERE user_id=auth.uid() AND role='admin')` OR
+    -- `EXISTS(team_members WHERE user_id=auth.uid() AND role='admin' AND
+    -- is_active)` — sem `organization_id` em nenhum dos dois ramos). Com ela,
+    -- quem é admin em QUALQUER org derrubaria o recorte por responsável de uma
+    -- org onde é membro raso. O cabeçalho desta migration argumenta contra isso
+    -- 280 linhas acima, e usá-la aqui deixaria o arquivo incoerente consigo.
+    -- Exposição hoje é ZERO, medida nas duas pontas: das 147 linhas
+    -- `user_roles.role='admin'`, nenhuma é de alguém que seja membro não-admin
+    -- de alguma org; e das 2 orgs com `chat_restrict_to_owner`, nenhuma tem
+    -- whatsapp_instance. É latente, não vivo — e a irmã nasce sem ele.
+    -- `is_org_admin(p_org)` já embute o master e já exige `is_active`.
     v_iso_bypass :=
-      public.is_master_user()
-      OR public.is_user_admin()
+      public.is_org_admin(p_org)
       OR (v_iso_tm IS NOT NULL AND EXISTS (
             SELECT 1 FROM public.member_feature_permissions mfp
             WHERE mfp.team_member_id = v_iso_tm
@@ -360,21 +556,11 @@ BEGIN
   -- dizer por qual número ela vai responder, e um uuid de instância já
   -- excluída não é resposta.
   --
-  -- O `DISTINCT ON (member)` garante PARTIÇÃO: cada uuid pertence a exatamente
-  -- uma caixa, então nenhuma conversa é contada duas vezes se dois chips se
-  -- sobrepuserem. Medido: hoje isso não acontece — as 36 linhas de
-  -- `whatsapp_instance_reap_queue` nunca são Instances vivas, e o único par de
-  -- Instances vivas que divide número (Basic4u, "Bruna Basic4u" e "bruna 2",
-  -- 554797890485) tem chips singleton e disjuntos. A guarda é para o dia em
-  -- que isso mudar, e custa uma ordenação sobre no máximo 57 linhas.
+  -- A partição já foi calculada acima, com UMA passada por
+  -- `whatsapp_chip_instance_ids`. Aqui ela só é desempacotada.
   WITH boxes AS (
-    SELECT DISTINCT ON (x.member) x.box, x.member
-    FROM (
-      SELECT b.box, mm.member
-      FROM unnest(v_boxes) AS b(box)
-      CROSS JOIN LATERAL unnest(public.whatsapp_chip_instance_ids(p_org, b.box)) AS mm(member)
-    ) x
-    ORDER BY x.member, (x.member = x.box) DESC, x.box
+    SELECT u.box, u.member
+    FROM unnest(v_box_of, v_member_of) AS u(box, member)
   ),
   -- Leitura por (caixa, telefone). A chave é `whatsapp:<instance>:<telefone>`
   -- — confirmado em prod: 19.038 linhas nesse namespace, segmento 2 sempre um
@@ -470,7 +656,21 @@ BEGIN
            s.last_message, s.last_message_time, s.last_message_direction,
            s.last_message_sent_source, s.lid, s.grp
     FROM chip s
-    WHERE (p_before IS NULL OR s.last_message_time < p_before)
+      -- CURSOR COMPOSTO — ver bloco (B) do cabeçalho. `<` estrito sobre
+      -- `last_message_time` sozinho apaga conversa real na borda da página
+      -- quando há empate, e sobre o CONJUNTO empate é regime, não cauda:
+      -- medido, 22 conversas somem para sempre na rolagem da Alamaster.
+      -- A tupla é comparada NA MESMA ORDEM e na MESMA DIREÇÃO do ORDER BY.
+      -- Cursor PARCIAL (só `p_before`, o contrato antigo) devolve o empate
+      -- inteiro de novo em vez de perdê-lo: repetir é visível, sumir não.
+    WHERE (
+        p_before IS NULL
+        OR s.last_message_time < p_before
+        OR (s.last_message_time = p_before
+            AND (p_before_box IS NULL
+                 OR p_before_phone IS NULL
+                 OR (s.box, s.normalized_phone) < (p_before_box, p_before_phone)))
+      )
 
       AND (p_waiting IS NOT TRUE OR s.last_message_direction = 'incoming')
       AND (
@@ -572,7 +772,10 @@ BEGIN
               WHERE c3.box = s.box AND c3.np = s.normalized_phone
                 AND ct.tag_id = ANY(p_tags))
       )
-    ORDER BY s.last_message_time DESC
+    -- ORDEM TOTAL. `(box, normalized_phone)` é a chave do DISTINCT ON de `chip`,
+    -- logo é única, logo esta ordenação não tem empate — e é ela que torna o
+    -- cursor composto acima uma posição, e não um grupo. As três colunas DESC.
+    ORDER BY s.last_message_time DESC, s.box DESC, s.normalized_phone DESC
     LIMIT v_limit
   )
   SELECT p.box, p.phone_number, p.normalized_phone, p.last_push_name, p.last_message,
@@ -600,19 +803,25 @@ BEGIN
       AND m."timestamp" > COALESCE(r.last_read_at, now() - interval '7 days')
   ) u ON true
   WHERE cp.deleted_at IS NULL
-  ORDER BY p.last_message_time DESC;
+  -- Mesma ordem TOTAL do CTE `page`: é desta última linha que o cliente tira o
+  -- cursor da página seguinte, então as duas ordenações têm que coincidir.
+  ORDER BY p.last_message_time DESC, p.box DESC, p.normalized_phone DESC;
 END;
 $function$;
 
 COMMENT ON FUNCTION public.get_whatsapp_conversation_list_multi(
   uuid, uuid[], integer, timestamptz, uuid[], text[], uuid[], text[], uuid,
-  boolean, text, boolean, boolean, boolean, text, boolean) IS
+  boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) IS
   'Caixa de Entrada Unificada, lado Chip (SCRUM-649). Irmã de '
   'get_whatsapp_conversation_list: aceita um CONJUNTO de Instances, devolve a '
   'caixa de origem em cada linha, DISTINCT ON por (chip, telefone) e limite '
   'GLOBAL por recência sobre o conjunto. O conjunto pedido é cruzado com '
   'whatsapp_readable_instance_ids; o recorte por responsável segue por '
-  'conversa. Não substitui a função de uma Instance, que segue intacta.';
+  'conversa. Paginação por cursor COMPOSTO '
+  '(p_before, p_before_box, p_before_phone) sobre ordem total '
+  '(last_message_time, instance_id, normalized_phone) — cursor de uma coluna só '
+  'perde conversa em empate de timestamp, e sobre o conjunto empate é regime. '
+  'Não substitui a função de uma Instance, que segue intacta.';
 
 
 -- ============================================================================
@@ -659,11 +868,21 @@ COMMENT ON FUNCTION public.get_whatsapp_conversation_list_multi(
 --    `channel_messages` é escrita pela Instance viva e o Canal Oficial não tem
 --    histórico de número (a Instance dele tem `phone_number` NULO — medido na
 --    Chique: 1 das 2 Instances sem número, que é justamente a oficial).
+-- ⚠️ O cursor é COMPOSTO aqui pela MESMA razão do lado do Chip — ver bloco (B)
+--    do cabeçalho da função anterior. Hoje este lado é inerte (1 Instance
+--    notificame, 22 contatos: nunca pagina), então o defeito nasceria latente
+--    em vez de vivo. Fica fechado agora porque a forma é a mesma e a onda que
+--    ligar o scroll infinito não vai lembrar de conferir os dois lados.
 CREATE OR REPLACE FUNCTION public.get_official_whatsapp_conversation_list_multi(
   p_org       uuid,
   p_instances uuid[]  DEFAULT NULL::uuid[],
   p_limit     integer DEFAULT 50,
-  p_before    timestamp with time zone DEFAULT NULL::timestamp with time zone
+  p_before    timestamp with time zone DEFAULT NULL::timestamp with time zone,
+  -- Cursor COMPOSTO, no FIM da assinatura: os 4 argumentos anteriores não
+  -- mudam de posição. A chave é (instance_id, contact_external_id), que é a do
+  -- DISTINCT ON de `thread` e portanto única.
+  p_before_instance uuid DEFAULT NULL::uuid,
+  p_before_contact  text DEFAULT NULL::text
 )
 RETURNS TABLE(
   instance_id            uuid,
@@ -802,25 +1021,39 @@ BEGIN
     ) l ON true
    -- p_before é cursor sobre a CONVERSA (a última mensagem dela), aplicado
    -- FORA do DISTINCT ON: dentro, mudaria QUAL mensagem é a última de cada
-   -- thread em vez de paginar. O limite é GLOBAL sobre o conjunto (D3).
-   WHERE (p_before IS NULL OR t.ts < p_before)
+   -- thread em vez de paginar. O limite é GLOBAL sobre o conjunto (D3), e o
+   -- cursor é COMPOSTO: `<` estrito sobre `ts` sozinho perde thread em empate
+   -- de timestamp na borda da página. Cursor parcial repete em vez de perder.
+   WHERE (
+       p_before IS NULL
+       OR t.ts < p_before
+       OR (t.ts = p_before
+           AND (p_before_instance IS NULL
+                OR p_before_contact IS NULL
+                OR (t.inst, t.cid) < (p_before_instance, p_before_contact)))
+     )
      -- Isolamento por responsável (#1629), por CONVERSA. Devolve true de saída
      -- quando a política está desligada, que é o caso de todas as orgs com
      -- canal oficial hoje.
      AND public.can_see_chat_scope(p_org, NULL, public.normalize_brazilian_phone(t.cid))
-   ORDER BY t.ts DESC
+   -- ORDEM TOTAL, mesma ordem e mesma direção da tupla do cursor. É desta
+   -- última linha que o cliente tira o cursor da próxima página.
+   ORDER BY t.ts DESC, t.inst DESC, t.cid DESC
    LIMIT v_limit;
 END;
 $function$;
 
 COMMENT ON FUNCTION public.get_official_whatsapp_conversation_list_multi(
-  uuid, uuid[], integer, timestamptz) IS
+  uuid, uuid[], integer, timestamptz, uuid, text) IS
   'Caixa de Entrada Unificada, lado Canal Oficial (SCRUM-649). Irmã de '
   'get_official_whatsapp_conversation_list: aceita um CONJUNTO de Instances, '
   'devolve a caixa de origem em cada linha, DISTINCT ON por '
   '(instance_id, contact_external_id) e limite GLOBAL por recência. Mantém '
   'can_see_chat_scope por conversa e a comparação de telefone por variantes. '
-  'Não substitui a função de uma Instance, que segue intacta.';
+  'Paginação por cursor COMPOSTO (p_before, p_before_instance, '
+  'p_before_contact) sobre ordem total (timestamp, instance_id, '
+  'contact_external_id). Não substitui a função de uma Instance, que segue '
+  'intacta.';
 
 
 -- ============================================================================
@@ -868,29 +1101,37 @@ COMMENT ON FUNCTION public.get_official_whatsapp_conversation_list_multi(
 -- gratuita: qualquer regressão futura no gate vira exploração sem autenticação.
 -- Mesma lição de `20260727140438_inbox_filter_grants_tighten`.
 --
--- `service_role` entra porque as três irmãs atuais o têm em prod
--- (`get_whatsapp_conversation_list`, `get_official_whatsapp_conversation_list`
--- e `whatsapp_chip_instance_ids` têm todas
--- `{postgres=X, authenticated=X, service_role=X}`), e edge function que
--- precise da lista tem que poder chamá-la sem virar mais uma exceção.
+-- `service_role` NÃO entra, e isto é uma correção deliberada. As três irmãs
+-- atuais o têm em prod, mas dar o grant aqui seria decorativo E enganoso: o
+-- gate de org das três funções novas RECUSA `service_role`. MEDIDO com
+-- `SET ROLE service_role` e `request.jwt.claims` nulo — que é o contexto de uma
+-- edge function: `get_my_organization_ids()` volta vazio e `is_master_user()`
+-- volta false, então as duas pernas do AND são verdadeiras e o gate levanta
+-- `42501 forbidden: org not accessible` antes de qualquer leitura.
+-- `whatsapp_chip_instance_ids` TEM o escape (`COALESCE(auth.role(),'') <>
+-- 'service_role' AND ...`); estas não têm, de propósito — a lista é de chamador
+-- autenticado, que é o que o produto faz hoje. Não há chamador em edge function
+-- nenhuma. O dia em que houver, o escape e o grant entram JUNTOS, na mesma
+-- mudança: grant sem escape faz a primeira edge function depurar permissão, que
+-- está certa, em vez do gate, que é a causa.
 
 REVOKE ALL     ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) FROM anon;
-GRANT  EXECUTE ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) TO authenticated, service_role;
+GRANT  EXECUTE ON FUNCTION public.whatsapp_readable_instance_ids(uuid, uuid[]) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.get_whatsapp_conversation_list_multi(
   uuid, uuid[], integer, timestamptz, uuid[], text[], uuid[], text[], uuid,
-  boolean, text, boolean, boolean, boolean, text, boolean) FROM PUBLIC;
+  boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(
   uuid, uuid[], integer, timestamptz, uuid[], text[], uuid[], text[], uuid,
-  boolean, text, boolean, boolean, boolean, text, boolean) FROM anon;
+  boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) FROM anon;
 GRANT EXECUTE ON FUNCTION public.get_whatsapp_conversation_list_multi(
   uuid, uuid[], integer, timestamptz, uuid[], text[], uuid[], text[], uuid,
-  boolean, text, boolean, boolean, boolean, text, boolean) TO authenticated, service_role;
+  boolean, text, boolean, boolean, boolean, text, boolean, uuid, text) TO authenticated;
 
-REVOKE ALL     ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz) FROM PUBLIC;
-REVOKE EXECUTE ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz) FROM anon;
-GRANT  EXECUTE ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz) TO authenticated, service_role;
+REVOKE ALL     ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text) FROM anon;
+GRANT  EXECUTE ON FUNCTION public.get_official_whatsapp_conversation_list_multi(uuid, uuid[], integer, timestamptz, uuid, text) TO authenticated;
 
 -- ── Conferência pós-apply ───────────────────────────────────────────────────
 -- Rodar à mão. `role_table_grants` mente por omissão; a fonte é `pg_proc.proacl`.
@@ -903,16 +1144,26 @@ GRANT  EXECUTE ON FUNCTION public.get_official_whatsapp_conversation_list_multi(
 --                        'get_official_whatsapp_conversation_list_multi');
 --
 -- GRANTEES ESPERADOS, nas TRÊS, exatamente estes e nenhum a mais:
---   {postgres=X/postgres, authenticated=X/postgres, service_role=X/postgres}
+--   {postgres=X/postgres, authenticated=X/postgres}
 -- Ou seja: PUBLIC sem EXECUTE (nenhuma entrada `=X/postgres` sem grantee à
--- esquerda) e `anon` sem EXECUTE.
+-- esquerda), `anon` sem EXECUTE e `service_role` sem EXECUTE — este último
+-- porque o gate o recusaria de qualquer forma; ver o comentário acima.
 --
 -- Ponto a ponto:
 --   SELECT has_function_privilege('authenticated',
---            'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamptz,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean)',
+--            'public.get_whatsapp_conversation_list_multi(uuid,uuid[],integer,timestamptz,uuid[],text[],uuid[],text[],uuid,boolean,text,boolean,boolean,boolean,text,boolean,uuid,text)',
 --            'EXECUTE');  -- esperado: true
 --   SELECT has_function_privilege('anon', '<mesma assinatura>', 'EXECUTE');
 --                         -- esperado: false
+--
+-- E as policies de escrita da allowlist (bloco 0), que são o que sustenta a
+-- interseção D4:
+--   SELECT polname, pg_get_expr(COALESCE(polqual, polwithcheck), polrelid)
+--     FROM pg_policy
+--    WHERE polrelid = 'public.whatsapp_instance_allowed_members'::regclass
+--      AND polname LIKE 'members_can_%';
+-- Esperado nas três: `is_org_admin(wi.organization_id)`, e NENHUMA menção a
+-- `can_manage_whatsapp_instances()`.
 --
 -- E que as FUNÇÕES ANTIGAS sigam intactas — esta migration não as tocou:
 --   SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
