@@ -74,7 +74,8 @@ const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communicati
 // em que o chunk de ChatWhatsApp começa a ser baixado.
 import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
 import { VoiceCallButton, VoiceCallProvider } from "@/modules/communication";
-import { LeadCallActionProvider, type LeadCallActionRenderer } from "@/shared/components/LeadCallActionSlot";
+import { LeadCallActionProvider } from "@/shared/components/LeadCallActionSlot";
+import type { LeadCallActionRenderer } from "@/shared/components/lead-call-action-context";
 const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
 // CustomPipeline saiu das rotas (redirect → /funil/:slug, SCRUM-632); o
