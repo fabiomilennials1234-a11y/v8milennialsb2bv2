@@ -573,6 +573,25 @@ export function matchesTriggerConfig(
         if (!isInAnyWanted) return false;
       }
 
+      // ── Filtro por etapa ──
+      // Chave é `pipeline_entries.stage_id` (uuid), não `stage_key` (texto com
+      // escopo por funil): o uuid é inequívoco entre funis, e o mesmo apelido
+      // de etapa se repete em funis diferentes. Medido em PROD 2026-09-03:
+      // `stage_id` preenchido em 48.130 das 48.171 entradas — as 41 restantes
+      // não casam filtro nenhum, por fail-closed.
+      //
+      // Filtro PURO (ADR-0023 + spec): basta o lead ter ALGUM card numa das
+      // etapas marcadas. A execução não se amarra ao Negócio que casou, e um
+      // lead com dois cards elegíveis gera UMA execução, não duas.
+      const wantedStages = normalizePipelineIds(config.stage_ids);
+      if (wantedStages.length > 0) {
+        const leadStages = context.lead_stage_ids;
+        // Fail-closed, mesmo motivo do funil: sem saber onde o lead está, o
+        // filtro é inavaliável e disparar levaria a automação a lead de fora.
+        if (!Array.isArray(leadStages)) return false;
+        if (!leadStages.some((id) => wantedStages.includes(String(id)))) return false;
+      }
+
       // ── Filtro por instância de origem ──
       // Existe para o caso de duas Instances falando com o MESMO lead: só a
       // resposta que chega no número escolhido conta. `channel` não resolve —

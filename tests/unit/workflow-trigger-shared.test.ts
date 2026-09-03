@@ -404,6 +404,100 @@ describe("matchesTriggerConfig", () => {
       });
     });
 
+    // ── filtro por etapa (stage_ids) ──
+    // Sob o ADR-0023 quem ocupa etapa é o Negócio, não o Lead — e um Lead pode
+    // ter vários. Escolha registrada na spec: filtro PURO, basta o lead ter
+    // ALGUM card numa das etapas marcadas, e uma execução por resposta.
+    describe("filtro por etapa", () => {
+      const ETAPA_ENVIADA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const ETAPA_NEGOCIACAO = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+
+      it("não dispara quando o lead não está em nenhuma das etapas", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [ETAPA_NEGOCIACAO] }
+        )).toBe(false);
+      });
+
+      it("dispara quando o lead tem card na etapa marcada", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [ETAPA_ENVIADA] }
+        )).toBe(true);
+      });
+
+      it("basta estar em UMA das etapas marcadas (OR)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA, ETAPA_NEGOCIACAO] },
+          { lead_stage_ids: [ETAPA_NEGOCIACAO] }
+        )).toBe(true);
+      });
+
+      // 12% dos leads em PROD têm 2+ cards. Um card elegível basta, e o
+      // resultado é UMA execução — o matcher devolve um booleano, não uma
+      // contagem.
+      it("lead com vários cards casa se um deles estiver na etapa", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [ETAPA_NEGOCIACAO, ETAPA_ENVIADA] }
+        )).toBe(true);
+      });
+
+      it("lista vazia = qualquer etapa (não exige o contexto)", () => {
+        expect(matchesTriggerConfig("lead_replied", { stage_ids: [] }, {})).toBe(true);
+      });
+
+      it("fail-closed quando o contexto não traz as etapas do lead", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          {}
+        )).toBe(false);
+      });
+
+      it("fail-closed quando a leitura das etapas falhou (null)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: null }
+        )).toBe(false);
+      });
+
+      // As 41 entradas de PROD sem `stage_id` chegam como null na lista.
+      it("card sem stage_id não casa filtro nenhum", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [null] }
+        )).toBe(false);
+      });
+
+      it("não dispara quando o lead não tem card algum", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [] }
+        )).toBe(false);
+      });
+
+      it("etapa, funil e número se somam (E)", () => {
+        const FUNIL = "11111111-1111-1111-1111-111111111111";
+        const NUMERO = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        const completo = {
+          pipeline_ids: [FUNIL],
+          stage_ids: [ETAPA_ENVIADA],
+          source_ids: [NUMERO],
+        };
+        expect(matchesTriggerConfig("lead_replied", completo, {
+          lead_pipeline_ids: [FUNIL],
+          lead_stage_ids: [ETAPA_ENVIADA],
+          instance_id: NUMERO,
+        })).toBe(true);
+
+        expect(matchesTriggerConfig("lead_replied", completo, {
+          lead_pipeline_ids: [FUNIL],
+          lead_stage_ids: [ETAPA_NEGOCIACAO],
+          instance_id: NUMERO,
+        })).toBe(false);
+      });
+    });
+
     // ── filtro por instância de origem (source_ids) ──
     // O caso que existe para resolver: a org tem dois números falando com o
     // mesmo lead, e só a resposta que chega NO número escolhido deve contar.
