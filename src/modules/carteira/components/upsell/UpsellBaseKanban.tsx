@@ -214,6 +214,7 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
                       lead={{
                         id: client.id,
                         name: client.name,
+                        erpCode: client.external_id,
                         company: client.company,
                         phone: client.phone,
                         value: vendasPorCliente[client.id] || 0,

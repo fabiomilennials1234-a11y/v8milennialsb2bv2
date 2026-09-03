@@ -30,6 +30,8 @@ export interface FunilEntry {
   lead?: {
     id: string;
     name: string | null;
+    /** Código do cliente no ERP — projetado por `20270921000020`. */
+    erp_code?: string | null;
     company: string | null;
     phone: string | null;
     email: string | null;
@@ -172,6 +174,7 @@ export function FunilKanban({
     return {
       id: entry.id,
       name: lead?.name || "Sem nome",
+      erpCode: lead?.erp_code ?? null,
       company: lead?.company || null,
       phone: lead?.phone || null,
       email: lead?.email || null,

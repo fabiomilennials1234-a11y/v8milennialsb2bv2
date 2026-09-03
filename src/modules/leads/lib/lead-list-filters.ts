@@ -151,6 +151,11 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
       `company.ilike.${pattern}`,
       `email.ilike.${pattern}`,
       `phone.ilike.${pattern}`,
+      // 🔴 EXIGE a migration `20270921000010` APLICADA. A lista mostra o lead
+      // como "1234 - João" e digitar o código tem que achá-lo; mas o PostgREST
+      // devolve 400 para coluna inexistente, e um 400 aqui não degrada — apaga a
+      // busca inteira. Aplicar a migration ANTES de mergear o frontend.
+      `erp_code.ilike.${pattern}`,
     ];
 
     // Telefone é digitado com máscara ("(21) 99999-8888", "21 99999 8888") mas

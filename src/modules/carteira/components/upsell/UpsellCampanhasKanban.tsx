@@ -204,6 +204,7 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
                       lead={{
                         id: campanha.id,
                         name: (campanha.client as any)?.name || "Cliente",
+                        erpCode: (campanha.client as any)?.external_id ?? null,
                         company: (campanha.client as any)?.company,
                         potencial: (campanha.client as any)?.potencial,
                         responsible: (campanha.closer as any)?.name,

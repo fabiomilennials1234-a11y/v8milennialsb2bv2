@@ -10,6 +10,7 @@ import type { LeadStanding } from "../../lib/lead-relacao-situacao";
 import type { Lead } from "../../hooks/useLeads";
 import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import type { LeadDeal } from "../../hooks/useLeadsDeals";
+import { erpLabel } from "@/shared/format/erp-code";
 
 /**
  * Linha da lista de leads — cartão solto, não célula de tabela.
@@ -315,7 +316,7 @@ export function LeadListRow({
         <LeadAvatar name={lead.name} />
         <div className="min-w-0">
           <p className="truncate text-[14.5px] font-semibold tracking-[-0.01em]">
-            {lead.company ? `${lead.name} — ${lead.company}` : lead.name}
+            {lead.company ? `${erpLabel(lead)} — ${lead.company}` : erpLabel(lead)}
           </p>
           <p className="mt-px text-xs text-muted-foreground">
             Ticket médio{" "}
