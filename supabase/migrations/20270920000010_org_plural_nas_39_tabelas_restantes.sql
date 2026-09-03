@@ -1,5 +1,23 @@
 -- A org do usuário vira PLURAL nas 39 tabelas que ainda a resolviam no singular.
 --
+-- ── POR QUE O NÚMERO É 20270920000010 ───────────────────────────────────────
+-- Terceira versão deste arquivo, e as duas anteriores falhariam CALADAS:
+--
+--   20270917000000 — colidia no repo com `campanha_e_disparo_por_pipeline_id`.
+--                    Dois arquivos, mesmo prefixo: `db push` aplica um e pula
+--                    o outro sem erro.
+--   20270917000010 — livre no repo, mas o ledger de PROD já a usa para
+--                    `leitores_leem_o_desfecho` (migration sem arquivo aqui —
+--                    outra frente aplica direto). `db push` veria a versão no
+--                    ledger, consideraria aplicada e PULARIA.
+--   20270920000010 — livre no repo E no ledger. Medido em 2026-09-03: teto do
+--                    ledger `20270919000000`, teto do repo `20270920000000`.
+--
+-- Isto NÃO é detalhe de numeração. Este arquivo tem 88 `CREATE POLICY` sem
+-- `IF NOT EXISTS`: versão já no ledger = 39 tabelas seguem com RLS resolvendo
+-- a org errada, sem UMA linha de erro. O teto do repo não é o teto do slot
+-- livre — conferir o ledger de prod, e conferir de novo no momento do apply.
+--
 -- ── O DEFEITO, GENERALIZADO ─────────────────────────────────────────────────
 -- `get_user_organization_id()` NÃO devolve a org em uso. É:
 --

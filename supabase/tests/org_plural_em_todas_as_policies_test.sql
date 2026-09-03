@@ -1,6 +1,12 @@
 -- supabase/tests/org_plural_em_todas_as_policies_test.sql
 --
--- Guarda de 20270917000000_org_plural_nas_39_tabelas_restantes.sql.
+-- Guarda de 20270920000010_org_plural_nas_39_tabelas_restantes.sql.
+--
+-- O numero ja mudou duas vezes, e o motivo importa. Nasceu em 20270917000000
+-- colidindo com `campanha_e_disparo_por_pipeline_id`; foi para 20270917000010,
+-- que o ledger de PROD ja usava para `leitores_leem_o_desfecho` — ali o
+-- `db push` PULARIA a migration em silencio. Em 20270920000010 esta livre no
+-- repo E no ledger. Ver o cabecalho da propria migration.
 --
 -- (a) INVARIANTE DE SCHEMA — nenhuma policy do schema `public` pode resolver o
 --     tenant por `get_user_organization_id()`, que devolve a org mais ANTIGA do
