@@ -1,4 +1,4 @@
--- 20270919000010_lead_guarda_o_codigo_do_erp.sql
+-- 20270921000010_lead_guarda_o_codigo_do_erp.sql
 --
 -- `leads` passa a guardar o código do cliente no ERP, para que as telas de lead
 -- (lista, kanban do funil, ficha, cabeçalho do chat) mostrem "1234 - João da

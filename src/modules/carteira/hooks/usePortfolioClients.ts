@@ -20,7 +20,7 @@ export interface PortfolioClientRow {
   churn_probability: number | null;
   /**
    * Código do cliente no ERP de origem. Entra na projeção da RPC em
-   * `20270919000000` — o mesmo número que o vendedor digita no Toth. NULL para
+   * `20270921000000` — o mesmo número que o vendedor digita no Toth. NULL para
    * cliente sem ERP; o rótulo (`erpLabel`) degrada para o nome puro.
    */
   external_id: string | null;

@@ -54,7 +54,7 @@ export function withErpCode(
  * As duas grafias existem porque as duas entidades guardam o mesmo dado com
  * nomes diferentes: `upsell_clients.external_id` (identidade externa genérica,
  * anterior a esta feature) e `leads.erp_code` (espelho, criado por
- * `20270919000010`). Ambos são opcionais para que `Tables<"leads">` e
+ * `20270921000010`). Ambos são opcionais para que `Tables<"leads">` e
  * `Tables<"upsell_clients">` sejam aceitos sem cast — inclusive antes de o
  * `types.ts` ser regerado, quando `erp_code` ainda nem existe no tipo.
  */

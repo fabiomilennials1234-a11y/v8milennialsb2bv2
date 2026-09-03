@@ -1,7 +1,7 @@
 -- backfill-lead-erp-code.sql
 --
 -- Preenche `leads.erp_code` a partir de `upsell_clients.external_id` para os
--- leads que já existiam quando a coluna nasceu (migration 20270919000010).
+-- leads que já existiam quando a coluna nasceu (migration 20270921000010).
 --
 -- Passo SEPARADO da migration de propósito: migration é só schema (guarda F4 do
 -- CLAUDE.md), para que um apply com URL errada vire erro de schema recuperável e

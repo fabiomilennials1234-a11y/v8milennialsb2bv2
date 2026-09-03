@@ -30,7 +30,7 @@ export interface FunilEntry {
   lead?: {
     id: string;
     name: string | null;
-    /** Código do cliente no ERP — projetado por `20270919000020`. */
+    /** Código do cliente no ERP — projetado por `20270921000020`. */
     erp_code?: string | null;
     company: string | null;
     phone: string | null;

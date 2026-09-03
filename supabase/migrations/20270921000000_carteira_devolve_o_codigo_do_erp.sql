@@ -1,4 +1,4 @@
--- 20270919000000_carteira_devolve_o_codigo_do_erp.sql
+-- 20270921000000_carteira_devolve_o_codigo_do_erp.sql
 --
 -- A tela da Carteira passa a mostrar "1234 - João da Silva": o código do cliente
 -- no ERP na frente do nome. O código já existia em `upsell_clients.external_id`

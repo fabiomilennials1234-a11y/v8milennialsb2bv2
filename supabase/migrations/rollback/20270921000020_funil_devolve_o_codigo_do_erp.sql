@@ -1,21 +1,13 @@
--- 20270919000020_funil_devolve_o_codigo_do_erp.sql
+-- ROLLBACK de 20270921000020_funil_devolve_o_codigo_do_erp.sql
 --
--- O card do funil passa a mostrar "1234 - João da Silva", como a Carteira.
+-- Volta `get_pipeline_page` ao corpo SEM `erp_code` — o que estava vivo em prod
+-- em 2026-09-03, lido por `pg_get_functiondef`.
 --
--- 🔴 Este corpo é CÓPIA VERBATIM da definição que está em produção (lida com
--- `pg_get_functiondef` em 2026-09-03), com EXATAMENTE duas adições:
---   1. `'erp_code', l.erp_code` no `jsonb_build_object` do lead;
---   2. `OR l.erp_code ILIKE …` no filtro de busca.
--- Nenhum outro predicado, join, ordenação ou comentário mudou — inclusive o
--- `-- metric-lint-allow` da linha de `p_updated_before`, que é o que mantém o
--- lint de métricas (ADR-0017) verde neste arquivo.
+-- ⚠ Reverter deixa o card do funil sem o código do ERP e a busca do funil sem
+-- casar por código. Não mexe em tenancy: os filtros de `organization_id` e
+-- `pipeline_id` são idênticos nas duas versões.
 --
--- (2) existe pela mesma razão da Carteira: ver o código na etiqueta e não achar
--- o cliente ao digitá-lo seria pior que não mostrar. A busca é server-side e
--- paginada por cursor — filtrar no cliente só acharia dentro da página.
---
--- `leads.erp_code` vem de 20270919000010. Lead sem ERP devolve NULL e o card
--- mostra só o nome.
+-- Gerado removendo do arquivo de ida exatamente as duas adições.
 
 CREATE OR REPLACE FUNCTION public.get_pipeline_page(
   p_pipeline_slug text DEFAULT NULL::text,
@@ -74,8 +66,6 @@ BEGIN
       'rating', l.rating, 'origin', l.origin, 'segment', l.segment, 'faturamento', l.faturamento,
       'urgency', l.urgency, 'notes', l.notes, 'compromisso_date', l.compromisso_date,
       'ai_disabled', l.ai_disabled, 'avatar_url', l.avatar_url,
-      -- Código do cliente no ERP — exibição apenas (src/shared/format/erp-code.ts).
-      'erp_code', l.erp_code,
       'pre_qualification_tier', l.pre_qualification_tier, 'qualification_tier', l.qualification_tier,
       'sdr_id', l.sdr_id, 'closer_id', l.closer_id, 'responsible_id', l.responsible_id,
       'pre_sale_responsible_id', l.pre_sale_responsible_id, 'sale_responsible_id', l.sale_responsible_id,
@@ -95,7 +85,7 @@ BEGIN
   LEFT JOIN public.team_members tm_sale ON tm_sale.id = l.sale_responsible_id
   WHERE pe.pipeline_id = v_pipeline_id AND pe.stage_key = p_stage_id AND pe.organization_id = p_org_id
     AND pe.lead_id IS NOT NULL AND (p_cursor IS NULL OR pe.created_at < p_cursor)
-    AND (p_search IS NULL OR p_search = '' OR (l.name ILIKE '%' || p_search || '%' OR l.phone ILIKE '%' || p_search || '%' OR l.company ILIKE '%' || p_search || '%' OR l.erp_code ILIKE '%' || p_search || '%'))
+    AND (p_search IS NULL OR p_search = '' OR (l.name ILIKE '%' || p_search || '%' OR l.phone ILIKE '%' || p_search || '%' OR l.company ILIKE '%' || p_search || '%'))
     AND (p_responsible_id IS NULL OR ((pe.metadata->>'pre_sale_responsible_id')::UUID = p_responsible_id OR (pe.metadata->>'sale_responsible_id')::UUID = p_responsible_id OR l.pre_sale_responsible_id = p_responsible_id OR l.sale_responsible_id = p_responsible_id))
     AND (p_tag_ids IS NULL OR array_length(p_tag_ids, 1) IS NULL OR NOT EXISTS (SELECT unnest(p_tag_ids) EXCEPT SELECT lt2.tag_id FROM public.lead_tags lt2 WHERE lt2.lead_id = l.id))
     AND (p_qualification_tier IS NULL OR array_length(p_qualification_tier, 1) IS NULL OR l.qualification_tier::text = ANY(p_qualification_tier))
