@@ -43,7 +43,7 @@ export interface InboxServerFilterArgs {
    * `true` = a página pode conter grupo (a org tem a aba). `null` = comportamento
    * de sempre, e é o que TODO outro consumidor da RPC continua mandando.
    *
-   * ⚠️ Depende da migration `20270909000000_conversation_list_grupos_por_org`.
+   * ⚠️ Depende da migration `20270916000000_conversation_list_grupos_por_org`.
    * Enquanto ela não estiver em prod, mandar este argumento leva `PGRST202` —
    * `useWhatsAppContacts` tem queda para a chamada sem ele, senão o inbox
    * INTEIRO da org flagada ficaria vazio por causa de uma aba.

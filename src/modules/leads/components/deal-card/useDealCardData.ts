@@ -51,14 +51,6 @@ function papelDaEtapa(role: unknown): DealCardStage["papel"] {
   return role === "won" ? "ganho" : role === "lost" ? "perdido" : "aberto";
 }
 
-/** `pipelines.slug` → `pipeline_stages.pipeline_type` dos funis system. */
-const SLUG_TO_STAGE_TYPE: Record<string, string> = {
-  whatsapp: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-  upsell: "upsell_base",
-};
-
 export function useDealCardData(entryId: string | null, leadId: string | null, isOpen: boolean) {
   const { organizationId, teamMemberId, role } = useOrganization();
   const { lead, isLoading: carregandoLead } = useLeadDetail(leadId, isOpen);
@@ -103,8 +95,6 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     staleTime: 60_000,
     queryFn: async () => {
       const pipelineId = negocioBase!.pipelineId;
-      const isSystem = negocioBase!.isSystem;
-      const stageType = SLUG_TO_STAGE_TYPE[negocioBase!.pipelineSlug] ?? negocioBase!.pipelineSlug;
 
       const [entryRes, etapasRes, movRes, amostraRes, ativRes, tarefasRes] = await Promise.all([
         supabase
@@ -113,22 +103,17 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
           .select("id, notes, assigned_to, metadata, entered_at, deal_id")
           .eq("id", entryId!)
           .maybeSingle(),
-        isSystem
-          ? supabase
-              .from("pipeline_stages")
-              .select("stage_key, name, stage_role, position")
-              .eq("organization_id", organizationId!)
-              .eq("pipeline_type", stageType)
-              .eq("is_active", true)
-              .order("position")
-          : supabase
-              .from("custom_pipeline_stages")
-              // `stage_key` entra para a régua conseguir casar a etapa: é o
-              // slug que o gatilho grava em `pipeline_entries.stage_key`.
-              .select("id, stage_key, name, stage_role, position")
-              .eq("pipeline_id", pipelineId)
-              .eq("is_active", true)
-              .order("position"),
+        // Pós-F1 (20270906001000) TODA etapa vive em `pipeline_stages` com FK
+        // `pipeline_id` — uma query serve as duas famílias. Morreram a
+        // bifurcação por `isSystem` e o mapa slug→pipeline_type (SCRUM-637).
+        supabase
+          .from("pipeline_stages")
+          // `stage_key` entra para a régua conseguir casar a etapa: é o
+          // slug que os gatilhos gravam em `pipeline_entries.stage_key`.
+          .select("id, stage_key, name, stage_role, position")
+          .eq("pipeline_id", pipelineId)
+          .eq("is_active", true)
+          .order("position"),
         supabase
           .from("pipeline_stage_events")
           .select("id, from_stage_key, to_stage_key, occurred_at, actor, source")
@@ -350,15 +335,6 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
       funil: negocioBase.funnelName,
       funilCor: negocioBase.funnelColor,
-      pipeTable: negocioBase.isSystem
-        ? negocioBase.pipelineSlug === "whatsapp"
-          ? "pipe_whatsapp"
-          : negocioBase.pipelineSlug === "confirmacao"
-            ? "pipe_confirmacao"
-            : negocioBase.pipelineSlug === "propostas"
-              ? "pipe_propostas"
-              : null
-        : null,
       funilEhSystem: negocioBase.isSystem,
       etapas,
       etapaAtual: negocioBase.stageKey ?? "",

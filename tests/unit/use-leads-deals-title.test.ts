@@ -38,6 +38,8 @@ vi.mock("@/integrations/supabase/client", () => {
     builder.in = self;
     builder.order = self;
     builder.limit = self;
+    builder.is = self;
+    builder.not = self;
     // O hook faz `await` direto no builder — `then` é o que resolve.
     builder.then = (resolve: (v: unknown) => unknown) =>
       Promise.resolve({ data: rows[table] ?? [], error: null }).then(resolve);
@@ -69,9 +71,9 @@ function seed(opts: { dealId?: string | null; dealTitle?: string }) {
   ];
   rows.pipelines = [{ id: "pipe-1", slug: "whatsapp", name: "Qualificação", color: "#fff", type: "system" }];
   rows.pipeline_stages = [
-    { pipeline_type: "whatsapp", stage_key: "novo", name: "Novo Lead", stage_role: null },
+    { id: "pipe-1-novo", pipeline_id: "pipe-1", stage_key: "novo", name: "Novo Lead", stage_role: null },
   ];
-  rows.custom_pipeline_stages = [];
+  rows.pipeline_stages = [];
   rows.deals = opts.dealId && opts.dealTitle
     ? [{ id: opts.dealId, title: opts.dealTitle }]
     : [];

@@ -295,7 +295,6 @@ export type { AudienceConditions } from "./components/disparo";
 export {
   AddMeetingModal,
   ConfirmacaoCard,
-  ConfirmacaoDetailModal,
   ConfirmacaoStats,
   MeetingCountdown,
   MeetingTimeline,
@@ -331,3 +330,8 @@ export type {
 // a transição compareceu → Orçamentos, e cross-module só entra pelo barrel.
 export { moverNegocio, invalidateAfterMove } from "./lib/moverNegocio";
 export type { MoverNegocioParams } from "./lib/moverNegocio";
+
+// ── Identidade visual do funil (SCRUM-637) ────────────────────────────────
+// Cor/ícone de QUALQUER funil vêm de `pipelines`; a lateral (platform) resolve
+// o ícone por aqui — mapa canônico único, sem cópias por tela.
+export { FUNIL_ICON_MAP, funilIcon } from "./lib/funil-icons";

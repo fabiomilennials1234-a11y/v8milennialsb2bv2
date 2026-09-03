@@ -133,7 +133,7 @@ export function useWhatsAppContacts(
          * QUEDA PARA A ASSINATURA ANTIGA — só para `p_include_groups`.
          *
          * O argumento só existe depois da migration
-         * `20270909000000_conversation_list_grupos_por_org`, e apply em prod é
+         * `20270916000000_conversation_list_grupos_por_org`, e apply em prod é
          * botão do humano. Se o front chegar primeiro, o PostgREST não acha a
          * função (`PGRST202`) e o inbox INTEIRO da org flagada fica vazio — por
          * causa de uma aba. Aqui ele perde a aba e mantém a lista.
@@ -148,7 +148,7 @@ export function useWhatsAppContacts(
         ) {
           console.warn(
             "[inbox] `p_include_groups` não existe nesta base — migration " +
-              "20270909000000 ainda não aplicada. Lista segue sem grupo.",
+              "20270916000000 ainda não aplicada. Lista segue sem grupo.",
           );
           const { p_include_groups: _descartado, ...semGrupos } = baseArgs as Record<string, unknown>;
           ({ data: rows, error: rpcError } = await supabase.rpc(

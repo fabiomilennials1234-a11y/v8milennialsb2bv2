@@ -7,7 +7,6 @@
  */
 export { AddMeetingModal } from "./AddMeetingModal";
 export { ConfirmacaoCard } from "./ConfirmacaoCard";
-export { ConfirmacaoDetailModal } from "./ConfirmacaoDetailModal";
 export { ConfirmacaoStats } from "./ConfirmacaoStats";
 export { MeetingCountdown } from "./MeetingCountdown";
 export { MeetingTimeline } from "./MeetingTimeline";

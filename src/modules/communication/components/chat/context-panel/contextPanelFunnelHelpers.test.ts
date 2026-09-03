@@ -27,7 +27,7 @@ describe("isTerminalRole / terminalKind", () => {
 const standard = (over: Partial<Extract<PipelineStatus, { type: "standard" }>> = {}): PipelineStatus =>
   ({
     type: "standard",
-    pipeType: "qualificacao",
+    pipeType: "whatsapp",
     label: "Qualificação",
     color: "#6366f1",
     pipelineDbId: "pl-opp",
@@ -42,7 +42,7 @@ const standard = (over: Partial<Extract<PipelineStatus, { type: "standard" }>> =
   }) as PipelineStatus;
 
 describe("toFunnelRows", () => {
-  it("mapeia standard e aplica rótulo do display config (qualificacao→whatsapp)", () => {
+  it("mapeia standard e aplica rótulo do display config", () => {
     const rows = toFunnelRows([standard()], [
       { pipe_type: "whatsapp", display_name: "Oportunidades" },
     ]);
