@@ -25,7 +25,18 @@
  *   ("João da Silva", "  ")     -> "João da Silva"      (ERP preenche com espaço)
  *   (null, "1234")              -> "1234"               (nunca " - João")
  *   ("1234 - João", "1234")     -> "1234 - João"        (não duplica o prefixo)
+ *   ("1234-João", "1234")       -> "1234-João"          (idem, separador colado)
  */
+/** Escapa o código para uso em regex — `external_id` é TEXT, não garantidamente numérico. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** O nome já começa com este código seguido de um separador reconhecível? */
+function startsWithCode(name: string, code: string): boolean {
+  return new RegExp(`^${escapeRegExp(code)}\\s*[-–:]\\s*`).test(name);
+}
+
 export function withErpCode(
   name: string | null | undefined,
   code: string | null | undefined,
@@ -38,10 +49,22 @@ export function withErpCode(
   if (!cleanCode) return cleanName;
   if (!cleanName) return cleanCode;
 
-  // Idempotente de propósito: o nome pode já ter chegado prefixado — de um
-  // import de planilha, ou do dia em que alguém decidir compor o código na
-  // origem. Prefixar de novo daria "1234 - 1234 - João da Silva".
-  if (cleanName === cleanCode || cleanName.startsWith(`${cleanCode} - `)) {
+  // Idempotente de propósito: o nome pode já ter chegado prefixado — vendedor
+  // que digitou o código à mão, import de planilha, ou o dia em que alguém
+  // decidir compor o código na origem. Prefixar de novo daria
+  // "1234 - 1234 - João da Silva".
+  //
+  // 🔴 O separador é FROUXO porque a digitação humana é. Medido na Café Jurerê
+  // em 2026-09-03: 25 leads com código digitado no nome, e um deles é
+  // "15014-WANDO REPRESENTANTE" — traço colado, sem espaços. Uma guarda que
+  // exigisse exatamente "15014 - " deixaria passar justamente esse, e o rótulo
+  // viraria "15014 - 15014-WANDO REPRESENTANTE".
+  //
+  // Aceita `-`, `–` (travessão que vem de planilha) e `:`, com espaço em
+  // qualquer lado ou nenhum. Não aceita separador ausente ("1234João") — ali o
+  // número pode ser parte do nome ("1000 EMBALAGENS LTDA" tem 415 irmãos só
+  // nessa base) e prefixar está certo.
+  if (cleanName === cleanCode || startsWithCode(cleanName, cleanCode)) {
     return cleanName;
   }
 

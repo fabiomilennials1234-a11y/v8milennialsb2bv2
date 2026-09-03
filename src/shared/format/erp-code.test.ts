@@ -27,9 +27,31 @@ describe("withErpCode", () => {
     expect(withErpCode("1234", "1234")).toBe("1234");
   });
 
+  it("separador colado também conta — o caso real \"15014-WANDO REPRESENTANTE\"", () => {
+    expect(withErpCode("15014-WANDO REPRESENTANTE", "15014")).toBe("15014-WANDO REPRESENTANTE");
+    expect(withErpCode("1234 -João", "1234")).toBe("1234 -João");
+    expect(withErpCode("1234- João", "1234")).toBe("1234- João");
+  });
+
+  it("travessão de planilha e dois-pontos também contam", () => {
+    expect(withErpCode("1234 – João", "1234")).toBe("1234 – João");
+    expect(withErpCode("1234: João", "1234")).toBe("1234: João");
+  });
+
+  it("número colado no nome NÃO é prefixo — \"1000 EMBALAGENS\" tem 415 irmãos na base", () => {
+    // Sem separador, o número é parte da razão social. Prefixar está certo.
+    expect(withErpCode("1000 EMBALAGENS LTDA", "1000")).toBe("1000 - 1000 EMBALAGENS LTDA");
+  });
+
   it("prefixo parecido não conta como já-prefixado", () => {
     // "12" não prefixa "1234 - ..." — sem o separador, o startsWith casaria.
     expect(withErpCode("1234 - João", "12")).toBe("12 - 1234 - João");
+  });
+
+  it("código com caractere de regex não quebra a guarda", () => {
+    // `external_id` é TEXT: nada garante que seja numérico.
+    expect(withErpCode("A.1 - João", "A.1")).toBe("A.1 - João");
+    expect(withErpCode("AX1 - João", "A.1")).toBe("A.1 - AX1 - João");
   });
 
   it("nada de nada devolve string vazia", () => {
