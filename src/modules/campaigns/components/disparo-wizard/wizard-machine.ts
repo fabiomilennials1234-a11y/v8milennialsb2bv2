@@ -14,11 +14,9 @@
  * #910 — here it just flips `released` and advances to the monitor step).
  */
 import type { BlastMediaType } from "@/modules/communication";
-import type { SystemPipelineType } from "@/modules/pipelines";
 import {
   createDefaultSelection,
   type AudienceSelection,
-  type FunnelKind,
 } from "./audience-resolve";
 import { CAP_RECOMMENDED } from "@/shared/disparo/speed-safety";
 
@@ -118,17 +116,14 @@ export interface DisparoDraft {
   /** Post-send destination: move each lead when ITS message goes out. Default
    *  "none" — the step is optional and passes untouched. */
   postSendMode: "none" | "move";
-  /** Destination funnel kind when moving (mirrors AudienceSelection encoding).
-   *  `Exclude<…, "all">` on purpose: a move destination is always ONE concrete
-   *  funnel. `"all"` is an audience *read* scope ("todos os funis") — never a
-   *  write target, since a lead cannot be moved into "every funnel". */
-  postSendFunnelKind: Exclude<FunnelKind, "all">;
-  /** Destination system pipe when funnelKind === "system"; null = not chosen. */
-  postSendPipelineType: SystemPipelineType | null;
-  /** Destination custom pipeline id when funnelKind === "custom" (else null). */
+  /** Destination funnel (`pipelines.id`, QUALQUER funil da org — Fatia B).
+   *  Sempre UM funil concreto: o escopo "todos os funis" é de LEITURA de
+   *  público, nunca de escrita — um lead não pode ser movido pra "todo funil".
+   *  null = not chosen. */
   postSendPipelineId: string | null;
-  /** system: stage_key slug; custom: stage_id uuid. "" = nothing chosen yet. */
-  postSendStageKey: string;
+  /** Destination stage (`pipeline_stages.id`, uuid canônico de qualquer
+   *  funil). "" = nothing chosen yet. */
+  postSendStageId: string;
   /** Human label, e.g. "Oportunidades · Em negociação" (Review/Monitor copy). */
   postSendLabel: string;
   numbers: DisparoNumber[];
@@ -219,7 +214,7 @@ export function validateStep(
     case "postsend":
       // Optional step: "manter onde estão" always passes; moving requires a
       // chosen destination stage.
-      if (draft.postSendMode === "move" && !draft.postSendStageKey)
+      if (draft.postSendMode === "move" && !draft.postSendStageId)
         return { ok: false, reason: "Escolha a etapa de destino." };
       return { ok: true, reason: null };
     case "speed": {
@@ -269,10 +264,8 @@ export function createInitialState(
       mediaError: null,
       antiBan: true,
       postSendMode: "none",
-      postSendFunnelKind: "system",
-      postSendPipelineType: null,
       postSendPipelineId: null,
-      postSendStageKey: "",
+      postSendStageId: "",
       postSendLabel: "",
       numbers,
       capPerNumber: CAP_RECOMMENDED,

@@ -92,7 +92,7 @@ export function StepReview({ draft }: StepReviewProps) {
         </Row>
 
         <Row icon={MoveRight} label="Depois do envio">
-          {draft.postSendMode === "move" && draft.postSendStageKey ? (
+          {draft.postSendMode === "move" && draft.postSendStageId ? (
             <>
               <span className="font-medium">{draft.postSendLabel}</span>
               <span className="text-muted-foreground"> · movido no envio de cada mensagem</span>

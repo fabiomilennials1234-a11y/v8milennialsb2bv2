@@ -38,10 +38,8 @@ function freshDraft(over: Partial<DisparoDraft> = {}): DisparoDraft {
     mediaError: null,
     antiBan: true,
     postSendMode: "none",
-    postSendFunnelKind: "system",
-    postSendPipelineType: null,
     postSendPipelineId: null,
-    postSendStageKey: "",
+    postSendStageId: "",
     postSendLabel: "",
     numbers: NUMBERS,
     capPerNumber: 80,
@@ -109,8 +107,8 @@ describe("validateStep", () => {
       "postsend",
       freshDraft({
         postSendMode: "move",
-        postSendPipelineType: "propostas",
-        postSendStageKey: "enviada",
+        postSendPipelineId: "0f0e0d0c-0b0a-4a4b-8c8d-9e9f00010203",
+        postSendStageId: "11111111-2222-4333-8444-555566667777",
         postSendLabel: "Orçamentos · Enviada",
       }),
     );
@@ -123,10 +121,8 @@ describe("postsend defaults", () => {
   it("createInitialState starts with no post-send move and no destination", () => {
     const s = createInitialState("2026-06-25", NUMBERS);
     expect(s.draft.postSendMode).toBe("none");
-    expect(s.draft.postSendFunnelKind).toBe("system");
-    expect(s.draft.postSendPipelineType).toBeNull();
     expect(s.draft.postSendPipelineId).toBeNull();
-    expect(s.draft.postSendStageKey).toBe("");
+    expect(s.draft.postSendStageId).toBe("");
     expect(s.draft.postSendLabel).toBe("");
   });
 
@@ -153,7 +149,7 @@ describe("postsend defaults", () => {
     expect(wizardReducer(s, { type: "NEXT" })).toBe(s); // unchanged
     s = wizardReducer(s, {
       type: "PATCH",
-      patch: { postSendStageKey: "novo_lead", postSendLabel: "Oportunidades · Novo lead" },
+      patch: { postSendStageId: "aaaabbbb-cccc-4ddd-8eee-ffff00001111", postSendLabel: "Oportunidades · Novo lead" },
     });
     expect(canAdvance(s)).toBe(true);
   });

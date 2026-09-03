@@ -165,13 +165,13 @@ function createWrapper() {
 // ============================================================
 
 describe("Campaign constants", () => {
-  it("OBJECTIVE_TARGET_MAP has 3 objectives", () => {
+  it("OBJECTIVE_TARGET_MAP has 3 objectives, keyed by canonical funnel refs (Fatia B)", () => {
     expect(Object.keys(OBJECTIVE_TARGET_MAP)).toHaveLength(3);
-    expect(OBJECTIVE_TARGET_MAP.qualificacao.pipe).toBe("pipe_whatsapp");
+    expect(OBJECTIVE_TARGET_MAP.qualificacao.pipeline).toBe("whatsapp");
     expect(OBJECTIVE_TARGET_MAP.qualificacao.stage).toBe("novo");
-    expect(OBJECTIVE_TARGET_MAP.agendamentos.pipe).toBe("pipe_confirmacao");
+    expect(OBJECTIVE_TARGET_MAP.agendamentos.pipeline).toBe("confirmacao");
     expect(OBJECTIVE_TARGET_MAP.agendamentos.stage).toBe("reuniao_marcada");
-    expect(OBJECTIVE_TARGET_MAP.propostas.pipe).toBe("pipe_propostas");
+    expect(OBJECTIVE_TARGET_MAP.propostas.pipeline).toBe("propostas");
     expect(OBJECTIVE_TARGET_MAP.propostas.stage).toBe("marcar_compromisso");
   });
 
@@ -258,45 +258,73 @@ describe("getObjectiveSuccessStageLabel", () => {
 });
 
 describe("resolveExtractionTarget", () => {
-  it("returns map for qualificacao", () => {
+  const noCanon = { target_pipeline_id: null, target_stage_id: null };
+  const P1 = "0f0e0d0c-0b0a-4a4b-8c8d-9e9f00010203";
+  const S1 = "11111111-2222-4333-8444-555566667777";
+
+  it("prefers the canonical pair (target_pipeline_id + target_stage_id) — any funnel", () => {
     expect(
-      resolveExtractionTarget({ objective: "qualificacao", free_target_pipe: null, free_target_stage: null })
-    ).toEqual({ pipe: "pipe_whatsapp", stage: "novo" });
+      resolveExtractionTarget({
+        objective: "qualificacao",
+        free_target_pipe: null,
+        free_target_stage: null,
+        target_pipeline_id: P1,
+        target_stage_id: S1,
+      })
+    ).toEqual({ pipeline: P1, stage: S1 });
   });
 
-  it("returns map for agendamentos", () => {
+  it("falls back to the legacy map for qualificacao", () => {
     expect(
-      resolveExtractionTarget({ objective: "agendamentos", free_target_pipe: null, free_target_stage: null })
-    ).toEqual({ pipe: "pipe_confirmacao", stage: "reuniao_marcada" });
+      resolveExtractionTarget({ objective: "qualificacao", free_target_pipe: null, free_target_stage: null, ...noCanon })
+    ).toEqual({ pipeline: "whatsapp", stage: "novo" });
   });
 
-  it("returns map for propostas", () => {
+  it("falls back to the legacy map for agendamentos", () => {
     expect(
-      resolveExtractionTarget({ objective: "propostas", free_target_pipe: null, free_target_stage: null })
-    ).toEqual({ pipe: "pipe_propostas", stage: "marcar_compromisso" });
+      resolveExtractionTarget({ objective: "agendamentos", free_target_pipe: null, free_target_stage: null, ...noCanon })
+    ).toEqual({ pipeline: "confirmacao", stage: "reuniao_marcada" });
   });
 
-  it("returns custom for livre with config", () => {
+  it("falls back to the legacy map for propostas", () => {
     expect(
-      resolveExtractionTarget({ objective: "livre", free_target_pipe: "pipe_whatsapp", free_target_stage: "novo" })
-    ).toEqual({ pipe: "pipe_whatsapp", stage: "novo" });
+      resolveExtractionTarget({ objective: "propostas", free_target_pipe: null, free_target_stage: null, ...noCanon })
+    ).toEqual({ pipeline: "propostas", stage: "marcar_compromisso" });
+  });
+
+  it("reads the legacy livre config forever — the pipe_* alias travels as-is", () => {
+    expect(
+      resolveExtractionTarget({ objective: "livre", free_target_pipe: "pipe_whatsapp", free_target_stage: "novo", ...noCanon })
+    ).toEqual({ pipeline: "pipe_whatsapp", stage: "novo" });
   });
 
   it("returns null for livre without config", () => {
     expect(
-      resolveExtractionTarget({ objective: "livre", free_target_pipe: null, free_target_stage: null })
+      resolveExtractionTarget({ objective: "livre", free_target_pipe: null, free_target_stage: null, ...noCanon })
     ).toBeNull();
   });
 
   it("returns null for livre with partial config (pipe only)", () => {
     expect(
-      resolveExtractionTarget({ objective: "livre", free_target_pipe: "pipe_whatsapp", free_target_stage: null })
+      resolveExtractionTarget({ objective: "livre", free_target_pipe: "pipe_whatsapp", free_target_stage: null, ...noCanon })
     ).toBeNull();
   });
 
   it("returns null for livre with partial config (stage only)", () => {
     expect(
-      resolveExtractionTarget({ objective: "livre", free_target_pipe: null, free_target_stage: "novo" })
+      resolveExtractionTarget({ objective: "livre", free_target_pipe: null, free_target_stage: "novo", ...noCanon })
+    ).toBeNull();
+  });
+
+  it("ignores a canonical pair missing one half — falls through to the legacy path", () => {
+    expect(
+      resolveExtractionTarget({
+        objective: "livre",
+        free_target_pipe: null,
+        free_target_stage: null,
+        target_pipeline_id: P1,
+        target_stage_id: null,
+      })
     ).toBeNull();
   });
 });
@@ -1429,239 +1457,315 @@ describe("useDeleteCampanhaDispatchRuleStep", () => {
 });
 
 // ============================================================
-// useExtractLeadToPipe (complex mutation with branching logic)
+// useExtractLeadToPipe — motor único por pipeline_entries (Fatia B)
 // ============================================================
+
+const PIPE_UUID = "0f0e0d0c-0b0a-4a4b-8c8d-9e9f00010203";
+const STAGE_UUID = "11111111-2222-4333-8444-555566667777";
+
+/**
+ * Roteia mockFrom por tabela: pipelines/pipeline_stages resolvem o destino,
+ * pipeline_entries devolve as entries existentes (thenable), campanha_leads
+ * grava o delete. Devolve as chains pra asserção fina.
+ */
+function extractionTables(opts?: {
+  pipelineRow?: any;
+  stageRow?: any;
+  entries?: any[];
+}) {
+  const pipelines = createChainMock({
+    maybeSingleData: opts?.pipelineRow ?? { id: PIPE_UUID, slug: "whatsapp" },
+  });
+  if (opts && "pipelineRow" in opts && opts.pipelineRow === null) {
+    pipelines.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+  }
+  const stages = createChainMock({
+    maybeSingleData: opts?.stageRow ?? { id: STAGE_UUID, stage_key: "novo" },
+  });
+  if (opts && "stageRow" in opts && opts.stageRow === null) {
+    stages.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+  }
+  const entries = createChainMock({ thenData: opts?.entries ?? [] });
+  const campanhaLeads = createChainMock();
+  mockFrom.mockImplementation((table: string) => {
+    if (table === "pipelines") return pipelines;
+    if (table === "pipeline_stages") return stages;
+    if (table === "pipeline_entries") return entries;
+    if (table === "campanha_leads") return campanhaLeads;
+    return createChainMock();
+  });
+  return { pipelines, stages, entries, campanhaLeads };
+}
 
 describe("useExtractLeadToPipe", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("extracts to pipe_whatsapp (new entry - no existing)", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
+  it("inserts a pipeline_entries row when the lead is not in the funnel", async () => {
+    const t = extractionTables();
     const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
     await act(async () => {
       await result.current.mutateAsync({
         campanha_lead_id: "cl-1",
         campanha_id: "camp-1",
         lead_id: "lead-1",
-        target_pipe: "pipe_whatsapp",
+        pipeline: PIPE_UUID,
         stage: "novo",
         organization_id: "org-t",
       });
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_whatsapp");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
+    expect(t.entries.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        lead_id: "lead-1",
+        organization_id: "org-t",
+        pipeline_id: PIPE_UUID,
+        stage_id: STAGE_UUID,
+        stage_key: "novo",
+      }),
+    );
     expect(mockFrom).toHaveBeenCalledWith("campanha_leads");
   });
 
-  it("extracts to pipe_whatsapp with sdr_id (uses as responsible)", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
+  it("resolves the legacy pipe_* alias to the funnel slug — read-forever contract", async () => {
+    const t = extractionTables();
     const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
     await act(async () => {
       await result.current.mutateAsync({
         campanha_lead_id: "cl-1",
         campanha_id: "camp-1",
         lead_id: "lead-1",
-        target_pipe: "pipe_whatsapp",
-        stage: "abordado",
+        pipeline: "pipe_whatsapp",
+        stage: "novo",
+        organization_id: "org-t",
+      });
+    });
+    // não é uuid → resolve por slug, com o alias traduzido
+    expect(t.pipelines.eq).toHaveBeenCalledWith("slug", "whatsapp");
+  });
+
+  it("uses sdr_id as effective responsible when responsible_id is absent", async () => {
+    const t = extractionTables();
+    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({
+        campanha_lead_id: "cl-1",
+        campanha_id: "camp-1",
+        lead_id: "lead-1",
+        pipeline: PIPE_UUID,
+        stage: "novo",
         organization_id: "org-t",
         sdr_id: "m1",
       });
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_whatsapp");
+    expect(t.entries.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ assigned_to: "m1" }),
+    );
   });
 
-  it("extracts to pipe_whatsapp with explicit responsible_id", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
+  it("prefers responsible_id over sdr_id and closer_id", async () => {
+    const t = extractionTables();
     const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
     await act(async () => {
       await result.current.mutateAsync({
         campanha_lead_id: "cl-1",
         campanha_id: "camp-1",
         lead_id: "lead-1",
-        target_pipe: "pipe_whatsapp",
+        pipeline: PIPE_UUID,
         stage: "novo",
         organization_id: "org-t",
         responsible_id: "m1",
         sdr_id: "m2",
+        closer_id: "m3",
       });
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_whatsapp");
+    expect(t.entries.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        assigned_to: "m1",
+        metadata: { responsible_id: "m1", sdr_id: "m2", closer_id: "m3" },
+      }),
+    );
   });
 
-  it("updates existing pipe_whatsapp entry", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: { id: "existing-1" }, error: null });
-    mockFrom.mockReturnValue(chain);
+  it("falls back to closer_id when neither responsible nor sdr is given", async () => {
+    const t = extractionTables();
     const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
     await act(async () => {
       await result.current.mutateAsync({
         campanha_lead_id: "cl-1",
         campanha_id: "camp-1",
         lead_id: "lead-1",
-        target_pipe: "pipe_whatsapp",
-        stage: "abordado",
+        pipeline: PIPE_UUID,
+        stage: "novo",
+        organization_id: "org-t",
+        closer_id: "m3",
+      });
+    });
+    expect(t.entries.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ assigned_to: "m3" }),
+    );
+  });
+
+  it("updates the current entry (first OPEN one) instead of inserting", async () => {
+    const t = extractionTables({
+      entries: [
+        { id: "closed-1", closed_at: "2026-01-01", entered_at: "2026-02-01" },
+        { id: "open-1", closed_at: null, entered_at: "2026-01-15" },
+      ],
+    });
+    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({
+        campanha_lead_id: "cl-1",
+        campanha_id: "camp-1",
+        lead_id: "lead-1",
+        pipeline: PIPE_UUID,
+        stage: STAGE_UUID,
         organization_id: "org-t",
         campaign_name: "Test Campaign",
       });
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_whatsapp");
+    expect(t.entries.insert).not.toHaveBeenCalled();
+    expect(t.entries.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stage_id: STAGE_UUID,
+        stage_key: "novo",
+        notes: "Campanha: Test Campaign",
+      }),
+    );
+    expect(t.entries.eq).toHaveBeenCalledWith("id", "open-1");
   });
 
-  it("extracts to pipe_confirmacao (new entry)", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
-    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
-    await act(async () => {
-      await result.current.mutateAsync({
-        campanha_lead_id: "cl-1",
-        campanha_id: "camp-1",
-        lead_id: "lead-1",
-        target_pipe: "pipe_confirmacao",
-        stage: "reuniao_marcada",
-        organization_id: "org-t",
-      });
+  it("falls back to the most recent entry when every entry is closed", async () => {
+    const t = extractionTables({
+      entries: [
+        { id: "recent-closed", closed_at: "2026-03-01", entered_at: "2026-03-01" },
+        { id: "old-closed", closed_at: "2026-01-01", entered_at: "2026-01-01" },
+      ],
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_confirmacao");
-    expect(mockFrom).toHaveBeenCalledWith("campanha_leads");
-  });
-
-  it("extracts to pipe_confirmacao with closer_id as fallback responsible", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
     const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
     await act(async () => {
       await result.current.mutateAsync({
         campanha_lead_id: "cl-1",
         campanha_id: "camp-1",
         lead_id: "lead-1",
-        target_pipe: "pipe_confirmacao",
-        stage: "reuniao_marcada",
-        organization_id: "org-t",
-        closer_id: "m3",
-      });
-    });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_confirmacao");
-  });
-
-  it("updates existing pipe_confirmacao entry", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: { id: "existing-2" }, error: null });
-    mockFrom.mockReturnValue(chain);
-    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
-    await act(async () => {
-      await result.current.mutateAsync({
-        campanha_lead_id: "cl-1",
-        campanha_id: "camp-1",
-        lead_id: "lead-1",
-        target_pipe: "pipe_confirmacao",
-        stage: "confirmar_d5",
-        organization_id: "org-t",
-        campaign_name: "Confirm Campaign",
-      });
-    });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_confirmacao");
-  });
-
-  it("extracts to pipe_propostas (new entry)", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
-    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
-    await act(async () => {
-      await result.current.mutateAsync({
-        campanha_lead_id: "cl-1",
-        campanha_id: "camp-1",
-        lead_id: "lead-1",
-        target_pipe: "pipe_propostas",
-        stage: "marcar_compromisso",
-        organization_id: "org-t",
-      });
-    });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_propostas");
-    expect(mockFrom).toHaveBeenCalledWith("campanha_leads");
-  });
-
-  it("extracts to pipe_propostas with closer_id", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
-    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
-    await act(async () => {
-      await result.current.mutateAsync({
-        campanha_lead_id: "cl-1",
-        campanha_id: "camp-1",
-        lead_id: "lead-1",
-        target_pipe: "pipe_propostas",
-        stage: "proposta_enviada",
-        organization_id: "org-t",
-        closer_id: "m3",
-      });
-    });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_propostas");
-  });
-
-  it("updates existing pipe_propostas entry", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: { id: "existing-3" }, error: null });
-    mockFrom.mockReturnValue(chain);
-    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
-    await act(async () => {
-      await result.current.mutateAsync({
-        campanha_lead_id: "cl-1",
-        campanha_id: "camp-1",
-        lead_id: "lead-1",
-        target_pipe: "pipe_propostas",
-        stage: "vendido",
-        organization_id: "org-t",
-        campaign_name: "Proposal Campaign",
-      });
-    });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_propostas");
-  });
-
-  it("always deletes the campanha_lead after extraction", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
-    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
-    await act(async () => {
-      await result.current.mutateAsync({
-        campanha_lead_id: "cl-1",
-        campanha_id: "camp-1",
-        lead_id: "lead-1",
-        target_pipe: "pipe_whatsapp",
+        pipeline: PIPE_UUID,
         stage: "novo",
         organization_id: "org-t",
       });
     });
-    expect(mockFrom).toHaveBeenCalledWith("campanha_leads");
+    expect(t.entries.update).toHaveBeenCalled();
+    expect(t.entries.eq).toHaveBeenCalledWith("id", "recent-closed");
   });
 
-  it("includes campaign_name as notes when provided", async () => {
-    const chain = createChainMock();
-    chain.maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
-    mockFrom.mockReturnValue(chain);
+  it("triggers the legacy follow-up automation only for the trio slugs", async () => {
+    const { triggerFollowUpAutomation } = await import("@/modules/workflows/hooks/useAutoFollowUp");
+    extractionTables({ pipelineRow: { id: PIPE_UUID, slug: "confirmacao" } });
     const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
     await act(async () => {
       await result.current.mutateAsync({
         campanha_lead_id: "cl-1",
         campanha_id: "camp-1",
         lead_id: "lead-1",
-        target_pipe: "pipe_whatsapp",
+        pipeline: PIPE_UUID,
+        stage: "novo",
+        organization_id: "org-t",
+      });
+    });
+    expect(triggerFollowUpAutomation).toHaveBeenCalledWith(
+      expect.objectContaining({ pipeType: "confirmacao" }),
+    );
+  });
+
+  it("does NOT trigger follow-up automation for a custom funnel (parity: never had it)", async () => {
+    const { triggerFollowUpAutomation } = await import("@/modules/workflows/hooks/useAutoFollowUp");
+    extractionTables({ pipelineRow: { id: PIPE_UUID, slug: "pos-venda" } });
+    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({
+        campanha_lead_id: "cl-1",
+        campanha_id: "camp-1",
+        lead_id: "lead-1",
+        pipeline: PIPE_UUID,
+        stage: "novo",
+        organization_id: "org-t",
+      });
+    });
+    expect(triggerFollowUpAutomation).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the funnel does not resolve in the org — fail-closed, nothing written", async () => {
+    const t = extractionTables({ pipelineRow: null });
+    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
+    await expect(
+      act(async () => {
+        await result.current.mutateAsync({
+          campanha_lead_id: "cl-1",
+          campanha_id: "camp-1",
+          lead_id: "lead-1",
+          pipeline: "funil-que-nao-existe",
+          stage: "novo",
+          organization_id: "org-t",
+        });
+      }),
+    ).rejects.toThrow(/não encontrado/);
+    expect(t.entries.insert).not.toHaveBeenCalled();
+    expect(t.campanhaLeads.delete).not.toHaveBeenCalled();
+  });
+
+  it("rejects when the stage does not belong to the funnel", async () => {
+    const t = extractionTables({ stageRow: null });
+    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
+    await expect(
+      act(async () => {
+        await result.current.mutateAsync({
+          campanha_lead_id: "cl-1",
+          campanha_id: "camp-1",
+          lead_id: "lead-1",
+          pipeline: PIPE_UUID,
+          stage: "etapa-fantasma",
+          organization_id: "org-t",
+        });
+      }),
+    ).rejects.toThrow(/Etapa/);
+    expect(t.entries.insert).not.toHaveBeenCalled();
+  });
+
+  it("always deletes the campanha_lead after extraction", async () => {
+    const t = extractionTables();
+    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({
+        campanha_lead_id: "cl-1",
+        campanha_id: "camp-1",
+        lead_id: "lead-1",
+        pipeline: PIPE_UUID,
+        stage: "novo",
+        organization_id: "org-t",
+      });
+    });
+    expect(t.campanhaLeads.delete).toHaveBeenCalled();
+    expect(t.campanhaLeads.eq).toHaveBeenCalledWith("id", "cl-1");
+  });
+
+  it("includes campaign_name as notes when inserting", async () => {
+    const t = extractionTables();
+    const { result } = renderHook(() => useExtractLeadToPipe(), { wrapper: createWrapper() });
+    await act(async () => {
+      await result.current.mutateAsync({
+        campanha_lead_id: "cl-1",
+        campanha_id: "camp-1",
+        lead_id: "lead-1",
+        pipeline: PIPE_UUID,
         stage: "novo",
         organization_id: "org-t",
         campaign_name: "My Campaign",
       });
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipe_whatsapp");
+    expect(t.entries.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ notes: "Campanha: My Campaign" }),
+    );
   });
 });

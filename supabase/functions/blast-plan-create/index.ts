@@ -25,6 +25,7 @@ import { channelMessagesActivitySource } from "../_shared/quick-blast/refinement
 import { blastPlanStore } from "../_shared/quick-blast/blast-plan-store.ts";
 import { createBlastPlan, type BlastPlanNumber } from "../_shared/quick-blast/blast-plan.ts";
 import { validatePostSendTarget, buildPostSendMover } from "../_shared/quick-blast/post-send-target.ts";
+import { isPipelineResolutionError, resolvePipeline } from "../_shared/pipeline-adapter.ts";
 import { instanceDailyUsageSource, resolveInstanceCap } from "../_shared/quick-blast/instance-budget.ts";
 import { resolveBlastWindow } from "../_shared/quick-blast/blast-plan-distribution.ts";
 import type { BlastLead } from "../_shared/quick-blast/recipients.ts";
@@ -148,7 +149,32 @@ Deno.serve(
       if (!validated.ok) {
         return jsonResponse(400, { error: validated.error }, corsHeaders);
       }
-      postSendTarget = validated.target as unknown as Record<string, unknown>;
+      // Persiste o shape CANÔNICO {pipelineId, stageId, label} (Fatia B) — os
+      // planos legados no banco seguem no shape antigo e o leitor aceita ambos.
+      postSendTarget = validated.persisted as unknown as Record<string, unknown>;
+    }
+
+    // Funil de origem do público (Fatia B): o wizard novo grava `pipelineId`
+    // no descriptor; descriptors legados carregam `pipelineType` (slug) ou
+    // nada. Resolve na ORG DO CHAMADOR (nunca confia no uuid do payload) e
+    // degrada pra NULL quando não resolve — é proveniência, não roteamento.
+    let audiencePipelineId: string | null = null;
+    {
+      const src = (source ?? null) as Record<string, unknown> | null;
+      const ref =
+        typeof src?.pipelineId === "string" && src.pipelineId
+          ? (src.pipelineId as string)
+          : typeof src?.pipelineType === "string" && src.pipelineType
+            ? (src.pipelineType as string)
+            : null;
+      const funnelScope = src?.funnelKind ?? src?.funnelScope;
+      if (ref && funnelScope !== "all") {
+        try {
+          audiencePipelineId = (await resolvePipeline(supabaseAdmin, orgId, ref)).id;
+        } catch (e) {
+          if (!isPipelineResolutionError(e)) throw e;
+        }
+      }
     }
 
     // Frozen refinements (#704) — re-applied at each future lot release. A
@@ -265,6 +291,7 @@ Deno.serve(
           dailyBudget,
           releaseTime: release_time,
           source: source ?? null,
+          pipelineId: audiencePipelineId,
           postSendTarget,
         },
       );
