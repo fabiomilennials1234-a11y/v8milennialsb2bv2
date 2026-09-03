@@ -573,6 +573,25 @@ export function matchesTriggerConfig(
         if (!isInAnyWanted) return false;
       }
 
+      // ── Filtro por instância de origem ──
+      // Existe para o caso de duas Instances falando com o MESMO lead: só a
+      // resposta que chega no número escolhido conta. `channel` não resolve —
+      // ele distingue WhatsApp de Meta, não um número nosso do outro.
+      //
+      // `normalizePipelineIds` é reusada por ser normalização de lista de
+      // strings, não algo específico de funil: mesmo jsonb não-validado, mesmo
+      // descarte de não-string e de vazio.
+      const wantedSources = normalizePipelineIds(config.source_ids);
+      if (wantedSources.length > 0) {
+        // Fail-closed, pelo mesmo motivo do funil: sem saber por onde a
+        // mensagem entrou, o filtro é inavaliável, e disparar transformaria
+        // "só o número do Closer" em "qualquer número" em silêncio. É o que
+        // aconteceria hoje no `notificame-webhook`, que dispara sem contexto.
+        const origem = context.instance_id;
+        if (typeof origem !== "string" || !origem) return false;
+        if (!wantedSources.includes(origem)) return false;
+      }
+
       if (config.contains_text && context.message) {
         return String(context.message).toLowerCase().includes(String(config.contains_text).toLowerCase());
       }

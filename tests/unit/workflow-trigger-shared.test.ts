@@ -403,6 +403,79 @@ describe("matchesTriggerConfig", () => {
         )).toBe(false);
       });
     });
+
+    // ── filtro por instância de origem (source_ids) ──
+    // O caso que existe para resolver: a org tem dois números falando com o
+    // mesmo lead, e só a resposta que chega NO número escolhido deve contar.
+    describe("filtro por instância", () => {
+      const NUMERO_CLOSER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+      const NUMERO_SDR = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+
+      it("não dispara quando a resposta veio de outro número", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_type: "whatsapp_instance", source_ids: [NUMERO_CLOSER] },
+          { instance_id: NUMERO_SDR }
+        )).toBe(false);
+      });
+
+      it("dispara quando a resposta veio do número escolhido", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_type: "whatsapp_instance", source_ids: [NUMERO_CLOSER] },
+          { instance_id: NUMERO_CLOSER }
+        )).toBe(true);
+      });
+
+      it("basta ser UM dos números marcados (OR)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_type: "whatsapp_instance", source_ids: [NUMERO_CLOSER, NUMERO_SDR] },
+          { instance_id: NUMERO_SDR }
+        )).toBe(true);
+      });
+
+      it("lista vazia = qualquer número (não exige o contexto)", () => {
+        expect(matchesTriggerConfig("lead_replied", { source_ids: [] }, {})).toBe(true);
+      });
+
+      // O `notificame-webhook` dispara sem contexto nenhum hoje. Sem esta
+      // guarda, "só o número do Closer" viraria "qualquer número" em silêncio.
+      it("fail-closed quando o evento não diz de onde veio", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: [NUMERO_CLOSER] },
+          {}
+        )).toBe(false);
+      });
+
+      it("fail-closed quando a origem vem vazia", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: [NUMERO_CLOSER] },
+          { instance_id: "" }
+        )).toBe(false);
+      });
+
+      it("ignora entradas inválidas na lista salva (jsonb não é validado)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: ["  ", null, 7, NUMERO_CLOSER] },
+          { instance_id: NUMERO_CLOSER }
+        )).toBe(true);
+      });
+
+      it("lista só com lixo equivale a sem filtro", () => {
+        expect(matchesTriggerConfig("lead_replied", { source_ids: ["", "  "] }, {})).toBe(true);
+      });
+
+      it("número e funil se somam (E, não OU)", () => {
+        const FUNIL = "11111111-1111-1111-1111-111111111111";
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: [NUMERO_CLOSER], pipeline_ids: [FUNIL] },
+          { instance_id: NUMERO_CLOSER, lead_pipeline_ids: [FUNIL] }
+        )).toBe(true);
+
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: [NUMERO_CLOSER], pipeline_ids: [FUNIL] },
+          { instance_id: NUMERO_SDR, lead_pipeline_ids: [FUNIL] }
+        )).toBe(false);
+      });
+    });
   });
 
   // lead_no_reply, meeting_not_confirmed, followup_overdue, cron
