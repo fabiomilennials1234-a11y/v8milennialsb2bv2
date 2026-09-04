@@ -45,6 +45,7 @@ import { MobileChatLayout } from "@/modules/communication/components/chat/layout
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { ConversationList } from "@/modules/communication/components/chat/list/ConversationList";
 import { ChatHeader } from "@/modules/communication/components/chat/view/ChatHeader";
+import { AvisoDaAutomacao } from "@/modules/communication/components/chat/view/AvisoDaAutomacao";
 import { MobileChatThreadHeader } from "@/modules/communication/components/chat/view/MobileChatThreadHeader";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
@@ -67,6 +68,7 @@ import {
   officialWhatsAppSender,
 } from "@/modules/communication/hooks/chat/social-sender";
 import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
+import { regimeDaConversaAberta } from "@/modules/communication/lib/regimeDaConversaAberta";
 import {
   chaveDeConversaOficial,
   contatoDeConversaNova,
@@ -107,6 +109,7 @@ import { usePreferredInstance } from "@/modules/communication/hooks/usePreferred
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { resolveEffectiveLead } from "@/modules/communication/lib/resolveEffectiveLead";
 import {
+  buildWhatsAppConversationKey,
   caixaDaChave,
   contactKey,
   interlocutorDaChave,
@@ -371,6 +374,12 @@ function ChatView({
         />
       )}
 
+      {/* Entre o cabeçalho e a thread, e não dentro do composer: a pessoa
+          precisa saber que a automação fala por outro número ANTES de ler a
+          conversa e decidir responder, não no instante em que já está
+          digitando. Só aparece na divergência. */}
+      <AvisoDaAutomacao telefone={phoneNumber} caixaAberta={instanceId} />
+
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
         {threadState === "loading" ? (
           <div className="flex items-center justify-center h-full">
@@ -589,45 +598,25 @@ export function ChatShellWithContext() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   /**
-   * A caixa da CONVERSA ABERTA — que não é mais a mesma coisa que "a caixa
-   * selecionada". Com duas caixas marcadas, a tela mostra as duas e a thread
-   * pertence à linha em que a pessoa clicou; a chave carrega essa origem, e é
-   * dela que sai tudo que fala com UMA conversa: fetch da thread, read-state,
-   * envio, painel de contexto.
+   * De qual caixa sai a resposta — a decisão D6, num lugar só e testável.
    *
-   * Sem conversa aberta, a caixa de referência é a única marcada — e só quando é
-   * uma só: com várias, "a caixa atual" não existe, e inventar uma faria o
-   * composer nascer apontando para um número arbitrário.
+   * A caixa da CONVERSA ABERTA deixou de ser a mesma coisa que "a caixa
+   * selecionada": a tela mostra várias e a thread pertence à linha em que a
+   * pessoa clicou. Daqui saem os três eixos que o composer, o read-state, o
+   * fetch da thread e o painel de contexto consomem.
    */
-  const selectedBox = useMemo(() => {
-    const daChave = caixaDaChave(selectedKey);
-    const aberta = daChave ? boxes.find((b) => b.id === daChave) : undefined;
-    if (aberta) return aberta;
-    return caixasMarcadas.length === 1 ? caixasMarcadas[0] : null;
-  }, [boxes, caixasMarcadas, selectedKey]);
-
-  /**
-   * A caixa aberta lê `channel_messages`? O discriminador decide pelo PROVIDER, e
-   * não pelo `kind`: o canal oficial é `kind: "whatsapp"` (mora em
-   * `whatsapp_instances`) e mesmo assim recebe em `channel_messages`. Ausência de
-   * provider significa o comportamento antigo — são ~30 orgs com instâncias
-   * gravadas antes da coluna existir.
-   */
-  const isSocialBox = selectedBox ? boxUsesChannelMessages(selectedBox) : false;
-  /** Dentro dessas, qual é a do canal oficial (a que envia por outra rota). */
-  const isOfficialBox = isSocialBox && selectedBox?.kind === "whatsapp";
-
-  /**
-   * Instagram continua abrindo SOZINHO até a W5 — `get_social_conversation_list`
-   * ainda não aplica o recorte por responsável, e duas orgs dependem dele. Nesse
-   * regime a tela inteira segue o caminho de antes; em qualquer outro, a lista
-   * vem do motor unificado.
-   */
-  const modoInstagram = caixasMarcadas.length === 1 && caixasMarcadas[0].kind === "instagram";
-
-  const selectedInstanceId = isSocialBox ? null : (selectedBox?.id ?? null);
-  const selectedChannelId = modoInstagram ? caixasMarcadas[0].id : null;
-  const selectedOfficialInstanceId = isOfficialBox ? (selectedBox?.id ?? null) : null;
+  const {
+    caixa: selectedBox,
+    ehSocial: isSocialBox,
+    ehOficial: isOfficialBox,
+    modoInstagram,
+    instanciaDeChip: selectedInstanceId,
+    canalDeInstagram: selectedChannelId,
+    instanciaOficial: selectedOfficialInstanceId,
+  } = useMemo(
+    () => regimeDaConversaAberta({ chave: selectedKey, caixas: boxes, marcadas: caixasMarcadas }),
+    [selectedKey, boxes, caixasMarcadas],
+  );
 
 
   // `?box=` sozinho: escolhe a caixa e sai da frente. Só aceita id que esteja na
@@ -718,8 +707,14 @@ export function ChatShellWithContext() {
         const chave = chaveDeConversaOficial(escolhida.id, deepLink.phone);
         if (chave) setSelectedKey(chave);
       } else {
+        // A chave carrega a CAIXA desde a caixa unificada. Guardar o telefone
+        // solto aqui — como era até a W2 — deixava a conversa sem caixa: o
+        // parser não acha o interlocutor, o telefone chega `null` no composer e
+        // a thread do lead sem mensagens abre vazia para sempre.
         const normalized = normalizePhone(deepLink.phone);
-        if (normalized) setSelectedKey(normalized);
+        if (normalized) {
+          setSelectedKey(buildWhatsAppConversationKey(escolhida.id, normalized));
+        }
       }
     }
     setDeepLinkProcessed(true);
@@ -1049,10 +1044,13 @@ export function ChatShellWithContext() {
    * a RLS de `conversation_read_state` já autoriza a `authenticated`
    * (`user_id = auth.uid()` + org do usuário), e a chave gravada é EXATAMENTE a
    * que a RPC social lê para calcular `unread_count`. Se as duas divergirem, o
-   * badge nunca zera — foi assim que o unread de WhatsApp quebrou
-   * (`useConversationReadState` grava `whatsapp:unknown:<phone>`, que a RPC de
-   * WhatsApp nunca casa; defeito pré-existente, issue separada, NÃO consertado
-   * aqui porque mexeria no comportamento de ~30 orgs em produção).
+   * badge nunca zera.
+   *
+   * O caminho que gravava `whatsapp:unknown:<phone>` (o antigo
+   * `useConversationReadState`) foi REMOVIDO na W3: ele não tinha consumidor
+   * nenhum e produzia uma chave que a RPC de WhatsApp nunca casa. No modo
+   * unificado sempre há caixa — a da linha aberta —, então não há mais motivo
+   * para existir uma chave sem ela.
    */
   const markSocialConversationRead = useCallback(
     (conversationKey: string, channelId: string, externalUserId: string) => {
