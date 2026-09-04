@@ -1,8 +1,9 @@
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useWhatsAppInstancesForUser } from "@/modules/communication";
 import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
+import { filaComLead } from "@/modules/analytics/lib/comando-proximos-passos";
 import {
   linhaVisivel,
   type ComandoEscopo,
@@ -68,6 +69,21 @@ export interface ConversasAguardandoResult {
   total: number;
   isLoading: boolean;
   isError: boolean;
+  /**
+   * A org não tem NENHUM número de WhatsApp ao alcance deste usuário.
+   *
+   * Sem isto o card concluía "ninguém esperando" a partir de zero query — que é
+   * a frase mais perigosa desta tela, porque afirma que a fila está limpa
+   * quando na verdade nunca foi perguntada.
+   */
+  semChips: boolean;
+  /**
+   * Quantos chips falharam quando pelo menos um respondeu. A lista fica curta,
+   * e sem este número ela ficaria curta EM SILÊNCIO.
+   */
+  chipsComErro: number;
+  /** Força releitura de todos os chips. */
+  refetch: () => void;
   /**
    * `true` quando a RPC nova ainda não está no banco e caímos no predicado
    * antigo do inbox. A lista fica mais CURTA (perde as que a IA respondeu),
@@ -291,10 +307,18 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
   const { data: instancias, isLoading: instLoading } =
     useWhatsAppInstancesForUser();
   const { escopo, isAdmin, meuTeamMemberId, isReady } = useComandoScope();
+  const queryClient = useQueryClient();
 
   const chips = instancias ?? [];
+  const identidadePendente = !organizationId || !isReady;
 
-  return useQueries({
+  // Pede FOLGA à RPC porque o card só mostra conversa com lead cadastrado
+  // (decisão do CTO em 2026-09-04): pedir 10 e descartar as sem lead deixaria a
+  // lista curta por corte, não por falta de fila. O teto evita transformar um
+  // card em varredura.
+  const limiteBusca = Math.min(limite * 3, 60);
+
+  const resultado = useQueries({
     queries: chips.map((chip) => ({
       // `escopo` entra na chave: admin e vendedor não podem compartilhar cache,
       // senão um troca-troca de conta serve a lista errada.
@@ -303,7 +327,7 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
         "conversas-aguardando",
         organizationId,
         chip.id,
-        limite,
+        limiteBusca,
         escopo,
       ],
       queryFn: () =>
@@ -311,7 +335,7 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
           organizationId as string,
           chip.id,
           chip.instance_name,
-          limite,
+          limiteBusca,
           escopo,
           meuTeamMemberId,
         ),
@@ -321,28 +345,47 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
       enabled: !!organizationId && isReady,
       staleTime: 30_000,
     })),
-    combine: (resultados): ConversasAguardandoResult => {
-      const items = resultados
-        .flatMap((r) => r.data?.rows ?? [])
-        .sort(
-          (a, b) =>
-            new Date(b.lastClientMessageAt).getTime() -
-            new Date(a.lastClientMessageAt).getTime(),
-        )
-        .slice(0, limite);
+    combine: (resultados): Omit<ConversasAguardandoResult, "refetch"> => {
+      // Só conversa com LEAD cadastrado (decisão do CTO em 2026-09-04): o card
+      // é uma fila de trabalho sobre gente conhecida. Número solto continua no
+      // /chat — some daqui, não do produto. A regra vive em lib para ser
+      // testada sem React nem banco.
+      const comLead = filaComLead(resultados.flatMap((r) => r.data?.rows ?? []));
 
       return {
-        items,
-        total: resultados.reduce((soma, r) => soma + (r.data?.total ?? 0), 0),
-        // Sem chip nenhum a lista está resolvida e vazia, não carregando.
-        isLoading: instLoading || resultados.some((r) => r.isLoading),
+        items: comLead.slice(0, limite),
+        // O total é o das linhas COM LEAD, e não o `waiting_total` do banco:
+        // aquele conta a fila inteira, e o contador do cabeçalho ficaria maior
+        // que a lista que ele encima.
+        total: comLead.length,
+        // Enquanto a identidade não resolve não há query nenhuma, e em React
+        // Query v5 query desabilitada reporta `isLoading: false` — sem esta
+        // linha o card afirmaria "ninguém esperando" durante o boot.
+        isLoading:
+          instLoading ||
+          identidadePendente ||
+          resultados.some((r) => r.isLoading),
         // Um chip que falha não apaga os outros; só marca erro quando TODOS
         // falharam (ou quando o único que existe falhou).
         isError:
           resultados.length > 0 && resultados.every((r) => r.isError),
         isDegraded: resultados.some((r) => r.data?.degraded === true),
+        semChips: !instLoading && !identidadePendente && chips.length === 0,
+        chipsComErro: resultados.filter((r) => r.isError).length,
         isAdmin,
       };
     },
   });
+
+  return {
+    ...resultado,
+    // `useQueries` não devolve refetch agregado, e sem ele o card mais
+    // importante da tela ficava sem "tentar de novo" — erro virava beco sem
+    // saída. Invalidar por prefixo relê todos os chips de uma vez.
+    refetch: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["comando", "conversas-aguardando"],
+      });
+    },
+  };
 }

@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { format, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarClock, MapPin, Video } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { diasAte } from "@/modules/analytics/lib/comando-proximos-passos";
 import {
   useComandoAgenda,
   type ComandoAgendaEvent,
@@ -10,7 +12,8 @@ import {
 import { ComandoCard } from "./ComandoCard";
 import { DonoDaLinha } from "./DonoDaLinha";
 
-const MOSTRAR = 6;
+/** Os próximos cinco compromissos — pedido do CTO em 2026-09-04. */
+const MOSTRAR = 5;
 /** Janela de "próximas". Curta o bastante para ser fila, longa para não vazar. */
 const DIAS_A_FRENTE = 14;
 
@@ -43,6 +46,7 @@ function rotuloDoDia(inicio: Date): string {
   return format(inicio, "EEE, dd MMM", { locale: ptBR });
 }
 
+
 /**
  * Bloco 2 — o que já está marcado.
  *
@@ -59,14 +63,20 @@ function rotuloDoDia(inicio: Date): string {
 export function CardProximasAgendas() {
   const navigate = useNavigate();
 
-  // A janela é derivada uma vez; recriar `new Date()` a cada render trocaria a
-  // queryKey em todo ciclo e a query nunca sairia de `fetching`.
+  // A janela é derivada uma vez POR DIA. Recriar `new Date()` a cada render
+  // trocaria a queryKey em todo ciclo e a query nunca sairia de `fetching`;
+  // memoizar com `[]`, como estava, congelava a janela no momento em que a aba
+  // foi aberta — quem deixa o Comando aberto durante a virada do dia
+  // continuava lendo "Hoje" sobre ontem, e nem refetch corrigia, porque os ISO
+  // congelados também iam na chave.
+  const diaCorrente = new Date().toDateString();
   const [inicio, fim] = useMemo(() => {
     const agora = new Date();
     const limite = new Date(agora);
     limite.setDate(limite.getDate() + DIAS_A_FRENTE);
     return [agora, limite];
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a data é a dependência real; `diaCorrente` é a forma estável dela
+  }, [diaCorrente]);
 
   const { data, isLoading, isError, isAdmin, refetch } = useComandoAgenda(
     inicio,
@@ -164,6 +174,25 @@ export function CardProximasAgendas() {
                   {e.meet_link && <Video className="h-3 w-3" />}
                   {e.location && <MapPin className="h-3 w-3" />}
                 </span>
+
+                {/* Contagem regressiva à direita: a coluna da esquerda diz QUANDO
+                    é, esta diz QUANTO FALTA. São leituras diferentes — "qui, 11
+                    set" não responde "isso é longe?" sem uma conta de cabeça. */}
+                {(() => {
+                  const { texto, hoje } = diasAte(inicioEvento, inicio);
+                  return (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                        hoje
+                          ? "bg-primary/15 text-primary"
+                          : "bg-muted text-muted-foreground/70",
+                      )}
+                    >
+                      {texto}
+                    </span>
+                  );
+                })()}
               </button>
             </li>
           );
