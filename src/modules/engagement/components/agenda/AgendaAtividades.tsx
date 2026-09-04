@@ -90,6 +90,10 @@ import {
 } from "./EventDetailPopover";
 import { CreateMeetingDialog } from "./CreateMeetingDialog";
 import { EditMeetingDialog } from "./EditMeetingDialog";
+// Cross-module pela API pública: `engagement` já consome `ScheduleMessageModal`
+// de `communication` (ver CLAUDE.md do módulo), e o barrel é o caminho que a
+// regra de boundaries permite.
+import { ScheduleMessageModal } from "@/modules/communication";
 
 // ─── Google Calendar user colors (for shared calendars overlay) ───────────────
 
@@ -129,6 +133,8 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
   const [createInitialStart, setCreateInitialStart] = useState<Date | undefined>();
   /** Id CRU da reunião em edição (sem o prefixo de fonte). `null` = fechado. */
   const [editingMeetingId, setEditingMeetingId] = useState<string | null>(null);
+  /** Mensagem agendada em edição — o evento inteiro. `null` = fechado. */
+  const [editingScheduled, setEditingScheduled] = useState<UnifiedEvent | null>(null);
 
   // ── Filtros da tela ─────────────────────────────────────────────────────────
   const [statusFilter, setStatusFilter] = useState<AgendaStatusFilter>("all");
@@ -477,6 +483,21 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
     setPopover(null);
   }, []);
 
+  /**
+   * Edição de mensagem agendada. Guarda o EVENTO inteiro, não só o id, porque o
+   * formulário precisa do texto e da hora atuais — e a RPC da Agenda já traz os
+   * dois (`description` é o `message_content` cru; `start` é o `scheduled_at`).
+   * Buscar a linha de novo só para reler o que já está em mãos seria um
+   * round-trip a mais para abrir um modal.
+   *
+   * O que a RPC NÃO traz — telefone e chip — o formulário não usa em modo
+   * edição: `phoneNumber`/`instanceId` só alimentam o INSERT.
+   */
+  const handleEditScheduledMessage = useCallback((event: UnifiedEvent) => {
+    setEditingScheduled(event);
+    setPopover(null);
+  }, []);
+
   /** "+N mais" abre o dia inteiro — a lista cronológica que já existe. */
   const handleShowMore = useCallback((day: Date) => {
     setDate(day);
@@ -726,6 +747,7 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
             onSetOutcome={handleSetOutcome}
             onDeleteGoogleEvent={handleDeleteGoogleEvent}
             onEditMeeting={handleEditMeeting}
+            onEditScheduledMessage={handleEditScheduledMessage}
           />
         )}
       </AnimatePresence>
@@ -745,6 +767,26 @@ export function AgendaAtividades({ onClose }: AgendaAtividadesProps) {
           if (!aberto) setEditingMeetingId(null);
         }}
       />
+
+      {/* Editar mensagem agendada — mesmo formulário do chat, em modo edição.
+          Montado por CHAVE (`key`) porque o formulário guarda texto e data em
+          `useState` inicializado pelas props: sem a chave, abrir um segundo
+          agendamento reusaria a instância e mostraria o conteúdo do primeiro. */}
+      {editingScheduled && (
+        <ScheduleMessageModal
+          key={editingScheduled.id}
+          open
+          onOpenChange={(aberto) => {
+            if (!aberto) setEditingScheduled(null);
+          }}
+          leadId={editingScheduled.leadId ?? ""}
+          leadName={editingScheduled.leadName ?? "este contato"}
+          phoneNumber=""
+          editingId={rawEventId(editingScheduled)}
+          editingContent={editingScheduled.description ?? ""}
+          editingScheduledAt={editingScheduled.start}
+        />
+      )}
     </div>
   );
 }

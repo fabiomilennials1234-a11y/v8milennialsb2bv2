@@ -148,27 +148,62 @@ export function useCreateScheduledMessage() {
   });
 }
 
-/** Cancelar mensagem agendada */
+/**
+ * A janela de edição fechou entre abrir o formulário e salvar.
+ *
+ * `scheduled` não é estado estável: o cron roda a cada minuto e a primeira
+ * coisa que faz é virar a linha para `sending` (o compare-and-swap em
+ * `process-scheduled-user-messages`). Quem estava com o modal aberto perde a
+ * corrida — e perder aqui é o certo, porque a mensagem já está saindo.
+ */
+export const AGENDAMENTO_FORA_DE_JANELA =
+  "Este agendamento não está mais editável — ele já saiu, está saindo ou foi cancelado.";
+
+/**
+ * Cancelar mensagem agendada.
+ *
+ * 🚨 O `.eq("status", "scheduled")` é um compare-and-swap, e o PostgREST devolve
+ * SUCESSO quando ele não casa linha nenhuma. Sem `.select()` e sem checar o que
+ * voltou, cancelar uma mensagem que o worker já pegou não fazia nada — e ainda
+ * dizia "Agendamento cancelado". A UI mentia e a mensagem saía assim mesmo. É a
+ * mesma armadilha que o worker documenta no próprio lock (`if (!locked?.length)
+ * continue`).
+ */
 export function useCancelScheduledMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("scheduled_user_messages")
         .update({ status: "cancelled" })
         .eq("id", id)
-        .eq("status", "scheduled");
+        .eq("status", "scheduled")
+        .select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error(AGENDAMENTO_FORA_DE_JANELA);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
+      queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
       toast.success("Agendamento cancelado");
+    },
+    onError: (err: Error) => {
+      // Sem isto a falha era muda: a mutation não tinha `onError`, então a
+      // pessoa via o item continuar na lista sem nenhuma explicação.
+      toast.error(err.message || "Erro ao cancelar agendamento");
+      queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
+      queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
     },
   });
 }
 
-/** Editar mensagem agendada (conteúdo e/ou horário) */
+/**
+ * Editar mensagem agendada (conteúdo e/ou horário).
+ *
+ * Mesma guarda de janela do cancelamento, pelo mesmo motivo: editar a linha que
+ * o worker já travou é um UPDATE que casa zero linha e volta 200.
+ */
 export function useUpdateScheduledMessage() {
   const queryClient = useQueryClient();
 
@@ -182,16 +217,32 @@ export function useUpdateScheduledMessage() {
       if (input.messageContent !== undefined) updates.message_content = input.messageContent;
       if (input.scheduledAt) updates.scheduled_at = input.scheduledAt.toISOString();
 
-      const { error } = await supabase
+      // Nada a gravar: um `.update({})` iria à rede para não mudar coisa
+      // alguma, voltaria zero linha e cairia na guarda abaixo acusando janela
+      // fechada — erro errado para "você não alterou nada".
+      if (Object.keys(updates).length === 0) return;
+
+      const { data, error } = await supabase
         .from("scheduled_user_messages")
         .update(updates)
         .eq("id", input.id)
-        .eq("status", "scheduled");
+        .eq("status", "scheduled")
+        .select("id");
       if (error) throw error;
+      if (!data?.length) throw new Error(AGENDAMENTO_FORA_DE_JANELA);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
+      // A Agenda lê pela RPC `get_agenda_events`, com chave própria: sem esta
+      // linha, editar pela Agenda deixava o card com o texto e o horário
+      // ANTIGOS até o staleTime vencer.
+      queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
       toast.success("Agendamento atualizado");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Erro ao atualizar agendamento");
+      queryClient.invalidateQueries({ queryKey: ["scheduled-messages"] });
+      queryClient.invalidateQueries({ queryKey: ["agenda-events"] });
     },
   });
 }

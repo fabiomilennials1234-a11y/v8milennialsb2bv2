@@ -70,6 +70,15 @@ interface EventDetailPopoverProps {
    * e não têm o que este formulário grava.
    */
   onEditMeeting?: (event: UnifiedEvent) => void;
+  /**
+   * Abre a edição de uma MENSAGEM AGENDADA (o texto e a hora do envio).
+   *
+   * Separado de `onEditMeeting` de propósito: são formulários distintos
+   * gravando em tabelas distintas (`meetings` × `scheduled_user_messages`).
+   * Reusar o mesmo callback obrigaria o consumidor a reabrir um `switch` de
+   * fonte lá dentro — o acoplamento que a prop acima existe para evitar.
+   */
+  onEditScheduledMessage?: (event: UnifiedEvent) => void;
 }
 
 // ─── Source icon helper ───────────────────────────────────────────────────────
@@ -98,6 +107,7 @@ export function EventDetailPopover({
   onDeleteGoogleEvent,
   onSetOutcome,
   onEditMeeting,
+  onEditScheduledMessage,
 }: EventDetailPopoverProps) {
   const { event, x, y } = state;
   const ref = useRef<HTMLDivElement>(null);
@@ -234,6 +244,20 @@ export function EventDetailPopover({
    */
   const podeEditar = event.source === "meeting" && !!onEditMeeting;
 
+  /**
+   * Mensagem agendada se edita por aqui — texto e hora do envio.
+   *
+   * O recorte por `status === "scheduled"` não é decoração: a Agenda também
+   * mostra as linhas em `sending`, e essas o worker já travou. Oferecer o lápis
+   * ali levaria a um UPDATE que casa zero linha — que o PostgREST responde com
+   * 200. A guarda em `useUpdateScheduledMessage` transforma isso em erro
+   * visível; esta aqui evita chegar lá.
+   */
+  const podeEditarAgendamento =
+    event.source === "scheduled_message" &&
+    event.status === "scheduled" &&
+    !!onEditScheduledMessage;
+
   // Delete confirmation label
   const deleteLabel =
     event.source === "google"
@@ -277,6 +301,16 @@ export function EventDetailPopover({
                 className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5"
                 title="Editar evento"
                 aria-label="Editar evento"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {podeEditarAgendamento && (
+              <button
+                onClick={() => onEditScheduledMessage?.(event)}
+                className="text-muted-foreground hover:text-foreground transition-colors rounded p-0.5"
+                title="Editar mensagem agendada"
+                aria-label="Editar mensagem agendada"
               >
                 <Pencil className="w-3.5 h-3.5" />
               </button>
