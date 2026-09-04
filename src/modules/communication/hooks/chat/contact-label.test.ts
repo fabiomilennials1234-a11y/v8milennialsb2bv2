@@ -12,12 +12,10 @@ import { contactLabel, type ChatContact, type SocialContact } from "./types";
 
 const whatsapp = (over: Partial<ChatContact>): ChatContact => ({
   channel: "whatsapp",
-  // A CAIXA virou parte da identidade da conversa em `f309f909` (SCRUM-659) e o
-  // campo passou a ser obrigatório; este fixture ficou para trás e o
-  // `tsc-ratchet` acusava o erro na `main` desde 03/09. `null` é o valor certo
-  // aqui: o rótulo não depende da caixa, e a conversa "sem caixa" é o caso que
-  // o resto do arquivo já exercitava sem dizer.
-  instance_id: null,
+  // Obrigatório desde que a chave da conversa virou `(instance_id,
+  // phone_number)`. Não participa do rótulo, mas o dublê tem de continuar
+  // sendo um contato válido.
+  instance_id: "11111111-1111-1111-1111-111111111111",
   phone_number: "5548999998888",
   push_name: null,
   last_message: null,

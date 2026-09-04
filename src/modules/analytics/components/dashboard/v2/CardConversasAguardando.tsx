@@ -1,4 +1,3 @@
-import { Link } from "react-router-dom";
 import { Bot, MessageSquareDot, Smartphone } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
@@ -28,8 +27,17 @@ const LINHA_CLASSES =
  * uma pergunta por qual falar.
  */
 export function CardConversasAguardando() {
-  const { items, total, isLoading, isError, isDegraded, isAdmin } =
-    useConversasAguardando(MOSTRAR);
+  const {
+    items,
+    total,
+    isLoading,
+    isError,
+    isDegraded,
+    isAdmin,
+    semChips,
+    chipsComErro,
+    refetch,
+  } = useConversasAguardando(MOSTRAR);
 
   const restantes = Math.max(0, total - items.length);
 
@@ -43,22 +51,38 @@ export function CardConversasAguardando() {
       action={{ label: "Abrir chat", to: "/chat-whatsapp" }}
       isLoading={isLoading}
       isError={isError}
+      onRetry={refetch}
       isEmpty={items.length === 0}
-      emptyTitle="Ninguém esperando"
+      /* Sem número conectado a fila não está limpa — ela nunca foi perguntada.
+         Dizer "ninguém esperando" aqui seria afirmar o que não se mediu. */
+      emptyTitle={semChips ? "Nenhum WhatsApp conectado" : "Ninguém esperando"}
       emptyHint={
-        isAdmin
-          ? "Todo cliente que falou já teve resposta de alguém do time. É o estado que você quer ver aqui."
-          : "Todo cliente que falou com você já teve resposta. É o estado que você quer ver aqui."
+        semChips
+          ? "Este card lê as conversas do WhatsApp. Conecte um número em Configurações › WhatsApp para a fila aparecer aqui."
+          : isAdmin
+            ? "Todo cliente com lead cadastrado que falou já teve resposta de alguém do time. É o estado que você quer ver aqui."
+            : "Todo cliente com lead cadastrado que falou com você já teve resposta. É o estado que você quer ver aqui."
       }
       notice={
-        isDegraded ? (
-          <p className="border-b border-border/50 bg-muted/40 px-4 py-2 text-[10px] leading-relaxed text-muted-foreground/80">
-            Lista parcial: mostrando só as conversas sem nenhuma resposta. As que
-            a IA respondeu entram depois que a migration
-            <span className="cmd-mono"> 20270821250000 </span>
-            for aplicada neste banco.
-          </p>
-        ) : null
+        <>
+          {isDegraded ? (
+            <p className="border-b border-border/50 bg-muted/40 px-4 py-2 text-[10px] leading-relaxed text-muted-foreground/80">
+              Lista parcial: mostrando só as conversas sem nenhuma resposta. As
+              que a IA respondeu entram depois que a migration
+              <span className="cmd-mono"> 20270821250000 </span>
+              for aplicada neste banco.
+            </p>
+          ) : null}
+          {/* Falha parcial de chip encurta a lista. Sem esta linha ela encurta
+              calada, e a tela vira "está tudo respondido". */}
+          {chipsComErro > 0 && !isError ? (
+            <p className="border-b border-border/50 bg-muted/40 px-4 py-2 text-[10px] leading-relaxed text-muted-foreground/80">
+              {chipsComErro === 1
+                ? "Um número não respondeu agora — a fila dele está fora desta lista."
+                : `${chipsComErro} números não responderam agora — as filas deles estão fora desta lista.`}
+            </p>
+          ) : null}
+        </>
       }
       footer={
         restantes > 0 ? (
@@ -70,34 +94,24 @@ export function CardConversasAguardando() {
       }
     >
       <ul className="divide-y divide-border/50">
-        {items.map((c) => (
-          <li key={c.key}>
-            {c.leadId ? (
-              <AbrirConversaButton
-                leadId={c.leadId}
-                phone={c.phoneNumber}
-                variant="ghost"
-                className={LINHA_CLASSES}
-                aria-label={`Abrir conversa com ${c.displayName}`}
-              >
-                <LinhaConversa conversa={c} mostrarDono={isAdmin} />
-              </AbrirConversaButton>
-            ) : (
-              /* Sem lead vinculado o caminho sancionado não se aplica — ele
-                 exige `leadId` por contrato. A conversa existe e o vendedor
-                 precisa alcançá-la, então a linha leva ao chat já apontando a
-                 caixa exata; não há "qual caixa?" a perguntar, porque o hook
-                 fez fan-out por instância e cada linha carrega a sua. */
-              <Link
-                to={`/chat-whatsapp?phone=${encodeURIComponent(c.phoneNumber)}&instance=${encodeURIComponent(c.instanceId)}`}
-                className={LINHA_CLASSES}
-                aria-label={`Abrir conversa com ${c.displayName}`}
-              >
-                <LinhaConversa conversa={c} mostrarDono={isAdmin} />
-              </Link>
-            )}
-          </li>
-        ))}
+        {/* `c.leadId &&` não é redundância com o filtro do hook: é o que estreita
+            o tipo para o contrato de `AbrirConversaButton`, que exige `leadId`. */}
+        {items.map(
+          (c) =>
+            c.leadId && (
+              <li key={c.key}>
+                <AbrirConversaButton
+                  leadId={c.leadId}
+                  phone={c.phoneNumber}
+                  variant="ghost"
+                  className={LINHA_CLASSES}
+                  aria-label={`Abrir conversa com ${c.displayName}`}
+                >
+                  <LinhaConversa conversa={c} mostrarDono={isAdmin} />
+                </AbrirConversaButton>
+              </li>
+            ),
+        )}
       </ul>
     </ComandoCard>
   );

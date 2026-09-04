@@ -1,7 +1,15 @@
-import { useMemo } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { Target } from "lucide-react";
-import { useIndividualGoals } from "@/modules/engagement";
+import {
+  useCreateGoal,
+  useIndividualGoals,
+  useTeamGoals,
+} from "@/modules/engagement";
 import { useCurrentTeamMember, useFeaturePermission } from "@/modules/identity";
+import { useDashboardMetrics } from "@/modules/analytics/hooks/useDashboardMetrics";
+import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { formatBRL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ComandoCard } from "./ComandoCard";
@@ -55,6 +63,7 @@ export function CardMetas() {
   const { data, isLoading, isError, refetch } = useIndividualGoals();
   const { data: teamMember } = useCurrentTeamMember();
   const { allowed: podeVerEquipe } = useFeaturePermission("performance.view");
+  const { isAdmin } = useComandoScope();
   const meuId = teamMember?.id ?? null;
 
   const grupos = useMemo(() => {
@@ -95,6 +104,16 @@ export function CardMetas() {
     [grupos],
   );
 
+  // Alguém já tem meta individual de vendas? Muda o que a org pode prometer:
+  // `syncTeamFaturamentoGoal` RECALCULA a meta de faturamento como a soma
+  // dessas, então um valor digitado à mão aqui seria substituído no próximo
+  // salvamento de meta individual. A UI avisa em vez de deixar sumir.
+  const temMetasIndividuaisDeVendas = useMemo(
+    () =>
+      ((data?.salesGoals ?? []) as LinhaMeta[]).some((l) => (l.goal ?? 0) > 0),
+    [data],
+  );
+
   return (
     <ComandoCard
       icon={Target}
@@ -105,7 +124,10 @@ export function CardMetas() {
       isLoading={isLoading}
       isError={isError}
       onRetry={() => void refetch()}
-      isEmpty={grupos.length === 0}
+      /* Quem enxerga a equipe nunca mais cai no estado vazio: a faixa da meta
+         da organização ocupa o lugar dele, e é ela que oferece o campo para
+         definir a meta sem sair da tela. */
+      isEmpty={grupos.length === 0 && !podeVerEquipe}
       emptyTitle={
         podeVerEquipe ? "Nenhuma meta definida" : "Você não tem meta este mês"
       }
@@ -126,6 +148,12 @@ export function CardMetas() {
       }
     >
       <div className="divide-y divide-border/50">
+        {podeVerEquipe && (
+          <MetaDaOrganizacao
+            podeEditar={isAdmin}
+            derivadaDeIndividuais={temMetasIndividuaisDeVendas}
+          />
+        )}
         {grupos.map((g) => (
           <div key={g.metrica} className="px-4 py-3">
             {/* Linha da equipe: é a soma exata do que está logo abaixo. */}
@@ -200,6 +228,143 @@ export function CardMetas() {
         ))}
       </div>
     </ComandoCard>
+  );
+}
+
+/**
+ * A meta de FATURAMENTO da organização no mês — e, quando ela não existe, o
+ * campo para definir ali mesmo.
+ *
+ * É a MESMA linha que o `/performance` chama de "🏢 Meta do Time": tabela
+ * `goals`, `type = 'faturamento'`, `team_member_id = null`. Gravar aqui é
+ * gravar lá — não há segunda entidade, nem cópia.
+ *
+ * ⚠️ ESSE VALOR PODE SER RECALCULADO. `syncTeamFaturamentoGoal` roda a cada
+ * salvamento de meta individual de vendas e sobrescreve o alvo da org com a
+ * SOMA dessas metas. É comportamento do `/performance`, anterior a este campo,
+ * e mantê-lo é o que faz "gravar aqui = gravar lá" ser verdade. O que muda é
+ * que agora a tela DIZ isso, em vez de deixar o número sumir sem explicação.
+ *
+ * 🔒 Só admin/master escreve: a RLS de `goals` exige `is_user_admin()`. Quem
+ * tem `performance.manage_goals` sem ser admin veria o campo e tomaria erro do
+ * banco — por isso o gate aqui é o mesmo do banco, e não a chave de feature.
+ */
+function MetaDaOrganizacao({
+  podeEditar,
+  derivadaDeIndividuais,
+}: {
+  podeEditar: boolean;
+  derivadaDeIndividuais: boolean;
+}) {
+  const agora = new Date();
+  const mes = agora.getMonth() + 1;
+  const ano = agora.getFullYear();
+
+  const { data: metasDaOrg, isLoading } = useTeamGoals(mes, ano);
+  // `null` explícito no filtro de membro: sem ele o hook recorta pelo próprio
+  // usuário quando ele não é admin, e a barra rotulada "organização" mostraria
+  // a receita de uma pessoa só. Quem chega aqui já passou por
+  // `performance.view` — a mesma chave que libera ver a equipe no /performance.
+  const { data: metrics } = useDashboardMetrics(mes, ano, null);
+  const criarMeta = useCreateGoal();
+  const [rascunho, setRascunho] = useState("");
+
+  const meta = (metasDaOrg ?? []).find((g) => g.type === "faturamento");
+  const alvo = Number(meta?.target_value ?? 0);
+  const realizado = metrics?.vendaTotal ?? 0;
+  const percentual = pct(realizado, alvo);
+
+  const valorDigitado = Number(rascunho.replace(/\./g, "").replace(",", "."));
+  const podeSalvar =
+    Number.isFinite(valorDigitado) && valorDigitado > 0 && !criarMeta.isPending;
+
+  async function salvar(evento: FormEvent) {
+    evento.preventDefault();
+    if (!podeSalvar) return;
+    await criarMeta.mutateAsync({
+      name: "Faturamento",
+      type: "faturamento",
+      target_value: valorDigitado,
+      // Coluna depreciada (o progresso é recalculado), mas NOT NULL-ável e
+      // escrita pelo `/performance` do mesmo jeito. Divergir aqui criaria duas
+      // formas de linha para a mesma meta.
+      current_value: 0,
+      month: mes,
+      year: ano,
+      team_member_id: null,
+    });
+    setRascunho("");
+  }
+
+  if (isLoading) return null;
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-baseline gap-2">
+        <span className="cmd-lbl">Faturamento · organização</span>
+        {alvo > 0 && (
+          <>
+            <span className="ml-auto text-[12px] font-semibold tabular-nums">
+              {formatBRL(realizado)}
+              <span className="font-normal text-muted-foreground/60">
+                {" / "}
+                {formatBRL(alvo)}
+              </span>
+            </span>
+            <span
+              className={cn(
+                "w-[38px] shrink-0 text-right text-[12px] font-bold tabular-nums",
+                percentual >= 100 ? "text-primary" : "text-muted-foreground",
+              )}
+            >
+              {percentual}%
+            </span>
+          </>
+        )}
+      </div>
+
+      {alvo > 0 ? (
+        <>
+          <Barra percentual={percentual} destaque />
+          {derivadaDeIndividuais && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground/60">
+              Este alvo é recalculado como a soma das metas individuais de
+              vendas. Editar por Performance › Gestão.
+            </p>
+          )}
+        </>
+      ) : podeEditar ? (
+        <form onSubmit={salvar} className="mt-2 flex items-center gap-2">
+          <div className="relative flex-1">
+            <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-muted-foreground/60">
+              R$
+            </span>
+            <Input
+              value={rascunho}
+              onChange={(e) => setRascunho(e.target.value)}
+              inputMode="decimal"
+              placeholder="0,00"
+              aria-label="Meta de faturamento da organização para este mês"
+              className="h-8 pl-8 text-[12px] tabular-nums"
+            />
+          </div>
+          <Button type="submit" size="sm" className="h-8" disabled={!podeSalvar}>
+            {criarMeta.isPending ? "Salvando…" : "Definir meta"}
+          </Button>
+        </form>
+      ) : (
+        <p className="mt-1 text-[11px] text-muted-foreground/70">
+          A organização ainda não tem meta de faturamento para este mês.
+        </p>
+      )}
+
+      {alvo <= 0 && podeEditar && derivadaDeIndividuais && (
+        <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground/60">
+          Há metas individuais de vendas neste mês: ao salvar a próxima delas, o
+          alvo da organização passa a ser a soma dessas metas.
+        </p>
+      )}
+    </div>
   );
 }
 
