@@ -12,6 +12,10 @@ import { contactLabel, type ChatContact, type SocialContact } from "./types";
 
 const whatsapp = (over: Partial<ChatContact>): ChatContact => ({
   channel: "whatsapp",
+  // Obrigatório em `ChatContact` desde a caixa unificada (`null` = "não sei de
+  // qual caixa", hipótese real). O spread de `Partial` não satisfaz o campo,
+  // então a fábrica precisa dele explícito.
+  instance_id: null,
   phone_number: "5548999998888",
   push_name: null,
   last_message: null,
