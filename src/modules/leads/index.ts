@@ -183,6 +183,15 @@ export type {
   ImportFunnelResult,
 } from "./hooks/useImportLeads";
 
+// ── Recompra: ciclo médio de compra (lista de leads) ───────────────────────
+export { useLeadsReorderCycle, computeReorderCycles } from "./hooks/useLeadsReorderCycle";
+export type { LeadReorderCycleMap } from "./hooks/useLeadsReorderCycle";
+export {
+  calcularCicloDeRecompra,
+  JANELA_DE_RECOMPRA_DIAS,
+} from "./lib/reorder-cycle";
+export type { CicloDeRecompra, EstadoDoCiclo } from "./lib/reorder-cycle";
+
 // ── Hooks: export ──────────────────────────────────────────────────────────
 export { useExportLeads, EXPORT_LEAD_HEADERS } from "./hooks/useExportLeads";
 export type {
