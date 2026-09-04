@@ -17,10 +17,15 @@ import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
-import type { WhatsAppMessage, ChatContact } from "./types";
+import type { WhatsAppMessage } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
 import { chatQueryKeys, MULTI_KEY_PREFIX } from "./shared/queryKeys";
+import {
+  comContatos,
+  contatosDoCache,
+  type CacheDeContatos,
+} from "./shared/cacheDeContatos";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
 import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
 
@@ -135,7 +140,12 @@ export function useWhatsAppMessagesRealtime(
         for (const query of queryClient.getQueryCache().findAll({ queryKey: raiz })) {
           if (!contemACaixa(query.queryKey)) continue;
 
-          const prev = query.state.data as ChatContact[] | undefined;
+          // A raiz guarda DUAS formas — o array da lista de uma caixa e o
+          // envelope `{ contatos, cheia }` da lista por conjunto. Ler o `.data`
+          // como array direto fazia `findIndex` estourar contra a entrada
+          // `multi:` e matar o patch de tempo real no meio (a mensagem parava
+          // de chegar na tela). Ver `shared/cacheDeContatos.ts`.
+          const prev = contatosDoCache(query.state.data);
           if (!prev) continue;
 
           // A linha é `(caixa, telefone)` desde a caixa unificada: casar só pelo
@@ -152,9 +162,10 @@ export function useWhatsAppMessagesRealtime(
             continue;
           }
 
-          queryClient.setQueryData<ChatContact[]>(query.queryKey, (atual) => {
-            if (!atual) return atual;
-            const patched = atual.map((contact, idx) => {
+          queryClient.setQueryData<CacheDeContatos>(query.queryKey, (atual) => {
+            const contatos = contatosDoCache(atual);
+            if (!contatos) return atual;
+            const patched = contatos.map((contact, idx) => {
               if (idx !== existingIdx) return contact;
 
               const msgTime = new Date(message.timestamp).getTime();
@@ -189,7 +200,11 @@ export function useWhatsAppMessagesRealtime(
             // janela visível, não muda um pixel. É o "chat não atualiza" do
             // cliente. A ordem tem que ser a mesma que a RPC devolve:
             // `ORDER BY p.last_message_time DESC`.
-            return sortContactsByRecency(patched);
+            //
+            // De volta na MESMA forma de onde saiu: a lista por conjunto
+            // precisa manter o `cheia` que o motor mediu, senão um patch de
+            // mensagem apagaria o sinal de página truncada.
+            return comContatos(atual, sortContactsByRecency(patched));
           });
         }
       }

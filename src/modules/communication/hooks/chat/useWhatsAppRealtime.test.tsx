@@ -158,6 +158,78 @@ describe("useWhatsAppMessagesRealtime — ordem da lista de conversas", () => {
   });
 });
 
+// ─── A lista por CONJUNTO guarda outra forma ────────────────────────────────
+
+describe("useWhatsAppMessagesRealtime — a entrada `multi:` não é um array", () => {
+  /**
+   * Regressão de 04/09. O patcher mira a RAIZ `whatsapp_contacts` de propósito
+   * — é assim que ele alcança a lista que o `/chat` realmente renderiza. Só que
+   * a raiz guarda DUAS formas, e ele lia `query.state.data` como array: contra
+   * a entrada `multi:` (`{ contatos, cheia }`) o `findIndex` estourava e o
+   * patch morria no meio do laço, com a mensagem nova parando de chegar à tela.
+   *
+   * Sem `contatosDoCache`, o primeiro `it` levanta
+   * `prev.findIndex is not a function`.
+   */
+  const IDS = [INST, "inst-2"];
+
+  function setupMulti(contatos: ReturnType<typeof contato>[], cheia = true) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(chatQueryKeys.contactsMulti(ORG, IDS, ""), {
+      contatos,
+      cheia,
+    });
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    renderHook(() => useWhatsAppMessagesRealtime(null, INST), { wrapper });
+    return queryClient;
+  }
+
+  const listaMulti = (qc: QueryClient) =>
+    qc.getQueryData(chatQueryKeys.contactsMulti(ORG, IDS, "")) as {
+      contatos: ReturnType<typeof contato>[];
+      cheia: boolean;
+    };
+
+  it("o patch atravessa o envelope em vez de estourar", () => {
+    const qc = setupMulti([
+      contato("5548999990001", "2026-09-04T10:00:00Z"),
+      contato("5548999990003", "2026-09-04T08:00:00Z"),
+    ]);
+
+    expect(() =>
+      capturedOnEvent?.(insertDe("5548999990003", "2026-09-04T15:00:00Z", INST)),
+    ).not.toThrow();
+
+    const { contatos } = listaMulti(qc);
+    expect(contatos.map((c) => c.phone_number)).toEqual([
+      "5548999990003",
+      "5548999990001",
+    ]);
+    expect(contatos[0].last_message).toBe("mensagem nova");
+  });
+
+  it("o `cheia` sobrevive ao patch — o corte de página não pode sumir", () => {
+    const qc = setupMulti([contato("5548999990001", "2026-09-04T10:00:00Z")], true);
+
+    capturedOnEvent?.(insertDe("5548999990001", "2026-09-04T15:00:00Z", INST));
+
+    expect(listaMulti(qc).cheia).toBe(true);
+  });
+
+  it("mensagem de caixa FORA do conjunto não toca esta lista", () => {
+    const qc = setupMulti([contato("5548999990001", "2026-09-04T10:00:00Z")]);
+
+    capturedOnEvent?.(insertDe("5548999990001", "2026-09-04T15:00:00Z", "inst-9"));
+
+    expect(listaMulti(qc).contatos[0].last_message_time).toBe("2026-09-04T10:00:00Z");
+  });
+});
+
 // ─── A thread aberta é de UMA caixa ─────────────────────────────────────────
 
 describe("useWhatsAppMessagesRealtime — a thread aberta pertence a uma caixa", () => {

@@ -79,6 +79,7 @@ import { invalidateChipInstanceIds } from "@/modules/communication/lib/chipInsta
 import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
 import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
+import { zerarNaoLidas } from "@/modules/communication/hooks/chat/shared/cacheDeContatos";
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
@@ -994,18 +995,21 @@ export function ChatShellWithContext() {
       // `contactsMulti` (terceiro segmento `multi:<ids>`), e mirar a chave de
       // uma caixa deixava de acertar qualquer coisa — o badge só sumia no
       // refetch seguinte.
-      queryClient.setQueriesData<ChatContact[]>(
-        { queryKey: ["whatsapp_contacts", organizationId] },
-        (old) =>
-          old?.map((c) =>
-            // A CAIXA entra na comparação: zerar só pelo telefone apagaria
-            // também a não-lida da linha do mesmo contato na outra caixa, que é
-            // outra conversa e ninguém leu.
-            c.phone_number === phone &&
-            (c.instance_id == null || c.instance_id === instanceId)
-              ? { ...c, unread_count: 0 }
-              : c,
-          ) ?? old,
+      //
+      // ⚠️ Mirar a raiz traz as DUAS formas que ela guarda: o array da lista de
+      // uma caixa e o envelope `{ contatos, cheia }` da lista por conjunto.
+      // Chamar `.map` direto no que vem daqui foi o que derrubou a tela inteira
+      // em 04/09 (`Te.map is not a function` no ErrorBoundary, ao abrir
+      // qualquer conversa). Quem sabe das duas formas é `zerarNaoLidas`.
+      zerarNaoLidas(
+        queryClient,
+        ["whatsapp_contacts", organizationId],
+        // A CAIXA entra na comparação: zerar só pelo telefone apagaria também a
+        // não-lida da linha do mesmo contato na outra caixa, que é outra
+        // conversa e ninguém leu.
+        (c) =>
+          c.phone_number === phone &&
+          (c.instance_id == null || c.instance_id === instanceId),
       );
       void supabase
         .rpc("mark_conversation_read", {
