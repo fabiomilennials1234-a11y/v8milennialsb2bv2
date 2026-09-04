@@ -11,6 +11,7 @@ import {
   X,
   Edit2,
   FileDown,
+  FileUp,
   History,
   CircleDashed,
 } from "lucide-react";
@@ -61,6 +62,7 @@ import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, L
 import { LeadMobileCard, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
 import { LeadMobileSortBar } from "../components/leads/LeadMobileSortBar";
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
+import { ImportLeadsModal } from "../components/leads/ImportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
 import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
 import { QUALIFICATION_TIERS } from "../components/lead-detail/modal/types";
@@ -234,8 +236,10 @@ function LeadsInner() {
   }, [setSearchParams]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const { allowed: canExport } = useCanDo("export_leads");
+  const { allowed: canImport } = useCanDo("import_leads");
   const { allowed: canCreateLead } = useCanDo("create_lead");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
@@ -581,6 +585,10 @@ function LeadsInner() {
         <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
           <History className="w-4 h-4" />
         </Button>
+        <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport} className="gap-2">
+          <FileUp className="w-4 h-4" />
+          Importar
+        </Button>
         <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
           <FileDown className="w-4 h-4" />
           Exportar
@@ -879,6 +887,8 @@ function LeadsInner() {
           </div>
         )}
       </div>
+
+      <ImportLeadsModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
 
       <ExportLeadsModal
         open={isExportModalOpen}

@@ -358,6 +358,25 @@ export interface ImportLeadsToPipelineOptions {
   metricsPeriodYear?: number;
 }
 
+/**
+ * Importação SEM funil (tela de Leads): cria/atualiza a pessoa e para aí.
+ *
+ * Não há etapa a escolher porque não há funil — é a diferença inteira em
+ * relação a `ImportLeadsToPipelineOptions`. O vendedor continua existindo: a
+ * coluna Vendedor da planilha grava `responsible_id`/`sdr_id` no próprio lead,
+ * que é onde a tela de Leads lê o responsável.
+ */
+export interface ImportLeadsOnlyOptions {
+  /** Vendedores para mapear a coluna Vendedor (nome → id). */
+  members?: { id: string; name: string }[];
+  userColumnMapping?: Record<string, string>;
+  /** Responsável usado quando a coluna Vendedor está vazia ou não casa ninguém. */
+  responsibleId?: string | null;
+  /** Mês (1-12) e ano em que estes leads devem contar nas métricas. */
+  metricsPeriodMonth?: number;
+  metricsPeriodYear?: number;
+}
+
 export interface ImportLeadsToFunnelOptions {
   destination: FunnelDestination;
   /** Etapa padrão quando a linha não tem coluna Etapa ou o valor não corresponde a nenhuma etapa. */
@@ -1439,6 +1458,70 @@ export function useImportLeads() {
     }
   };
 
+  /**
+   * Importa SÓ as pessoas — nenhum negócio é aberto.
+   *
+   * É o caminho da tela de Leads. A planilha é a mesma do funil (o parser, os
+   * apelidos de coluna e o modelo baixável não mudam); o que muda é o destino:
+   * a edge para depois de gravar o lead, sem tocar `pipeline_entries`. Colunas
+   * de funil que venham na planilha (Etapa, Valor, Produto) são simplesmente
+   * ignoradas aqui — não há onde gravá-las sem inventar um negócio.
+   */
+  const importLeadsOnly = async (
+    file: File,
+    options: ImportLeadsOnlyOptions = {},
+  ): Promise<ImportFunnelResult> => {
+    if (!organizationId) {
+      throw new Error("Organização não encontrada");
+    }
+
+    setIsImporting(true);
+    setProgress(0);
+    setResult(null);
+
+    try {
+      const parsedLeads = await parseCSV(file, options.userColumnMapping);
+      if (parsedLeads.length === 0) {
+        throw new Error("Nenhum lead válido encontrado no arquivo");
+      }
+
+      setProgress(20);
+
+      const { report } = await callImportEdgeFunction(parsedLeads, {
+        destination: "leads",
+        members: options.members,
+        responsible_id: options.responsibleId || undefined,
+        sdr_id: options.responsibleId || undefined,
+        metrics_period_month: options.metricsPeriodMonth,
+        metrics_period_year: options.metricsPeriodYear,
+      });
+
+      setLastReport(report);
+
+      const duplicatePattern = /duplicado|ja existe|já existe|sem dados novos/i;
+      const duplicates = report.errors.filter((e) => duplicatePattern.test(e.reason)).length;
+      const invalid = report.rejected - duplicates;
+
+      const importResult: ImportFunnelResult = {
+        total: report.total,
+        imported: report.created,
+        duplicates,
+        updated: report.updated,
+        invalid: invalid < 0 ? report.rejected : invalid,
+        incomplete: report.incomplete ?? 0,
+      };
+
+      setProgress(100);
+      setResult(importResult as ImportResult);
+      return importResult;
+    } catch (error) {
+      console.error("Import leads-only error:", error);
+      throw error;
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
   const resetImport = () => {
     setProgress(0);
     setResult(null);
@@ -1532,6 +1615,7 @@ export function useImportLeads() {
     importLeadsToFunnel,
     importLeadsToCustomPipeline,
     importLeadsToPipeline,
+    importLeadsOnly,
     resetImport,
     fixExistingLeadNames,
     isImporting,
