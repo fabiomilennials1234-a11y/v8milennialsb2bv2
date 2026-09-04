@@ -25,7 +25,7 @@
  *
  * Ele abria sozinho enquanto `get_social_conversation_list` não aplicava o
  * recorte por responsável: juntá-lo ao conjunto teria ampliado a superfície de
- * um furo conhecido. A migration `20270929000000` fechou o furo, e o canal
+ * um furo conhecido. A migration `20270931000000` fechou o furo, e o canal
  * social passou a ser uma caixa como as outras — marca, desmarca e mistura.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";

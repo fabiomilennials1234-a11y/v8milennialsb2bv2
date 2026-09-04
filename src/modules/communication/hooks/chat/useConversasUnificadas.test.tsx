@@ -181,7 +181,7 @@ describe("useConversasUnificadas", () => {
 
   it("canal de Instagram entra na lista, com uma chamada própria por canal", async () => {
     // Ele ficava fora enquanto `get_social_conversation_list` não aplicava o
-    // recorte por responsável. A migration 20270929000000 fechou o furo, e o
+    // recorte por responsável. A migration 20270931000000 fechou o furo, e o
     // canal virou uma fonte como as outras.
     rpcMock.mockImplementation(async (nome: string) => {
       if (nome === "get_social_conversation_list") {

@@ -20,7 +20,7 @@
  * `kind` foi o que deixou mensagem invisível no chat em 18/08.
  *
  * Instagram entrou na W5, quando `get_social_conversation_list` passou a
- * aplicar o recorte por responsável (migration `20270929000000`). Até ali ele
+ * aplicar o recorte por responsável (migration `20270931000000`). Até ali ele
  * ficava fora de propósito: puxá-lo para a lista unificada teria ampliado a
  * superfície de um furo conhecido.
  *

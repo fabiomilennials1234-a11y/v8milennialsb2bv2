@@ -40,6 +40,19 @@
 -- CTEs. A única mudança de lógica é a linha do `WHERE`.
 -- ============================================================================
 
+-- ⚠️ DROP + CREATE, e não CREATE OR REPLACE. Em produção esta função ainda tem
+--    OITO colunas de retorno; o corpo abaixo tem DEZ, e o Postgres recusa a
+--    troca com `42P13 cannot change return type of existing function`. Os
+--    ARGUMENTOS são idênticos nas duas formas, então um DROP resolve as duas.
+--
+-- ⚠️ E DROP RESETA OS GRANTS. Neste repo isso já devolveu `EXECUTE` a `PUBLIC`
+--    em silêncio (ver `20260727140438_inbox_filter_grants_tighten`). Por isso os
+--    grants são reafirmados logo abaixo, explicitamente, na MESMA forma que
+--    produção tem hoje: `authenticated` e `service_role` executam, `anon` não.
+--    Nada de conveniência nova — o conjunto medido antes do apply é o conjunto
+--    depois dele.
+DROP FUNCTION IF EXISTS public.get_social_conversation_list(uuid, uuid, integer, timestamptz);
+
 CREATE OR REPLACE FUNCTION public.get_social_conversation_list(p_org uuid, p_channel uuid, p_limit integer DEFAULT 50, p_before timestamp with time zone DEFAULT NULL::timestamp with time zone)
  RETURNS TABLE(contact_external_id text, sender_name text, sender_profile_pic text, contact_handle text, last_message text, last_message_time timestamp with time zone, last_message_direction text, unread_count integer, lead_id uuid, lead_name text)
  LANGUAGE plpgsql
@@ -204,6 +217,11 @@ $function$;
 
 COMMENT ON FUNCTION public.get_social_conversation_list(uuid, uuid, integer, timestamptz) IS
   'Lista de conversas de um canal social (Instagram). Aplica can_see_chat_scope '
-  'por conversa desde 20270929000000 (SCRUM-653): o lead sai de '
+  'por conversa desde 20270931000000 (SCRUM-653): o lead sai de '
   'lead_social_identities, porque no Instagram não há telefone para casar e '
   'channel_messages.lead_id é cache derivado que nasce nulo.';
+
+REVOKE ALL     ON FUNCTION public.get_social_conversation_list(uuid, uuid, integer, timestamptz) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.get_social_conversation_list(uuid, uuid, integer, timestamptz) FROM anon;
+GRANT  EXECUTE ON FUNCTION public.get_social_conversation_list(uuid, uuid, integer, timestamptz) TO authenticated;
+GRANT  EXECUTE ON FUNCTION public.get_social_conversation_list(uuid, uuid, integer, timestamptz) TO service_role;

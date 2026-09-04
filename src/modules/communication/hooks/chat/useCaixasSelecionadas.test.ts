@@ -178,7 +178,7 @@ describe("useCaixasSelecionadas — a seleção nunca fica vazia", () => {
 describe("useCaixasSelecionadas — o Instagram é uma caixa como as outras (W5)", () => {
   it("Instagram entra no conjunto junto com os números", () => {
     // Ele abria sozinho enquanto a lista social não respeitava o responsável.
-    // A migration 20270929000000 fechou o furo, e a exclusividade saiu.
+    // A migration 20270931000000 fechou o furo, e a exclusividade saiu.
     const { result } = renderHook(() =>
       useCaixasSelecionadas({ caixas: [comercial, tecnica, insta], userId: "u1" }),
     );
