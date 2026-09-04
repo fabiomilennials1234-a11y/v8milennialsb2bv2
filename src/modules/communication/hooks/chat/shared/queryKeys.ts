@@ -113,6 +113,30 @@ export const chatQueryKeys = {
       `multi:${idsOrdenados.join(",")}`,
     ] as const,
 
+  /**
+   * Lista de conversas da BOLHA de chat, por caixa.
+   *
+   * Raiz PRÓPRIA (`bubble_contacts`), e não a de `contacts`. Até a W4 a bolha
+   * gravava na MESMA chave da lista do `/chat` — e com dados de outra origem:
+   * ela filtrava arquivadas fora, contava não-lidas pelo `localStorage` e
+   * deixava as etiquetas vazias. Duas telas escrevendo formatos diferentes na
+   * mesma entrada de cache produz lista misturada, e o sintoma aparece longe da
+   * causa: culpa-se o banco por uma conversa que sumiu no cliente.
+   *
+   * A separação é pré-requisito da troca de motor, não consequência dela — com
+   * as chaves separadas, trocar o motor da bolha deixa de poder quebrar o
+   * `/chat`.
+   */
+  bubbleContacts: (
+    organizationId: string | null | undefined,
+    instanceId: string | null | undefined,
+  ) =>
+    [
+      "bubble_contacts",
+      organizationId ?? null,
+      instanceId ?? null,
+    ] as const,
+
   /** Contagem lightweight de unread para badge global (ChatBubbleContext). */
   unreadBadge: (
     organizationId: string | null | undefined,
@@ -214,6 +238,7 @@ export type ChatQueryKey =
   | ReturnType<typeof chatQueryKeys.messages>
   | ReturnType<typeof chatQueryKeys.contacts>
   | ReturnType<typeof chatQueryKeys.contactsMulti>
+  | ReturnType<typeof chatQueryKeys.bubbleContacts>
   | ReturnType<typeof chatQueryKeys.officialContactsMulti>
   | ReturnType<typeof chatQueryKeys.contactsPrefix>
   | ReturnType<typeof chatQueryKeys.unreadBadge>
@@ -236,6 +261,9 @@ export type ChatQueryKey =
  * unificada?" sem reconstruir a chave — `String(key[2]).startsWith(MULTI_KEY_PREFIX)`.
  */
 export const MULTI_KEY_PREFIX = "multi:" as const;
+
+/** Raiz das chaves da bolha. Separada da lista do `/chat` — ver `bubbleContacts`. */
+export const BUBBLE_CONTACTS_KEY_ROOT = "bubble_contacts" as const;
 
 export const SOCIAL_CONTACTS_KEY_ROOT = "social_contacts" as const;
 export const SOCIAL_MESSAGES_KEY_ROOT = "social_messages" as const;

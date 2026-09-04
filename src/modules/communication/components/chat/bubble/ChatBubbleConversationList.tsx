@@ -1,7 +1,10 @@
 /**
  * Lista de conversas do Bubble — agrega contacts de TODAS instâncias permitidas.
  *
- * Compõe useWhatsAppContacts × N instâncias (cache compartilhado com /chat).
+ * Cache PRÓPRIO (`bubbleContacts`): esta lista tem outra origem de dado — ela
+ * filtra arquivadas fora, conta não-lidas pelo `localStorage` e deixa etiqueta
+ * vazia. Dividir a entrada de cache com o `/chat` fazia dois formatos
+ * disputarem o mesmo espaço.
  * Filtragem local: search debounced sobre nome/phone (case-insensitive).
  * Virtualização: >50 items via @tanstack/react-virtual (mesma estratégia
  * do ConversationList canônico).
@@ -44,9 +47,12 @@ interface ChatBubbleConversationListProps {
 }
 
 /**
- * Replica enxuta de useWhatsAppContacts mas inline aqui pra usar dentro de
- * useQueries (cada instância gera 1 query). Compartilha queryKey com o hook
- * canônico → cache reaproveitado quando o /chat já populou.
+ * Réplica enxuta de useWhatsAppContacts, inline aqui para caber dentro de
+ * `useQueries` (uma query por instância).
+ *
+ * ⚠️ DÍVIDA RECONHECIDA, com data de vencimento: a SCRUM-668 troca isto pela
+ *    função do banco. O que a mantém viva por ora é só a ordem das fatias —
+ *    separar as chaves de cache primeiro torna a troca reversível.
  */
 async function fetchContactsForInstance(
   organizationId: string,
@@ -241,7 +247,7 @@ export function ChatBubbleConversationList({
 
   const queries = useQueries({
     queries: instances.map((inst) => ({
-      queryKey: chatQueryKeys.contacts(organizationId, inst.id),
+      queryKey: chatQueryKeys.bubbleContacts(organizationId, inst.id),
       queryFn: () => fetchContactsForInstance(organizationId!, inst.id),
       enabled: !!organizationId && !!inst.id,
       staleTime: 5 * 60_000,
