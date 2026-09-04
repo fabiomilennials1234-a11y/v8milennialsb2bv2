@@ -85,6 +85,18 @@ export function failureReasonLabel(reason: string | null): string {
   }
 }
 
+/**
+ * O detalhe de um destinatário `unconfirmed`.
+ *
+ * "Não confirmada" sozinha manda o operador adivinhar de quem é o problema. O
+ * texto diz o que de fato aconteceu: a mensagem saiu, o prazo de entrega da Meta
+ * venceu, e ela nunca confirmou — nem entrega, nem recusa. É ausência de
+ * informação, e afirmar qualquer uma das duas seria inventar (ADR-0029, #1721).
+ */
+export function unconfirmedLabel(): string {
+  return "Prazo de entrega vencido sem confirmação do canal";
+}
+
 /** Rótulo da tab Aguardando: "Lote N · previsto DD/MM" (só "Lote N" sem data). */
 export function awaitingLotLabel(input: AwaitingLotInput): string {
   const { lotNumber, expectedDate } = deriveAwaitingLot(input);

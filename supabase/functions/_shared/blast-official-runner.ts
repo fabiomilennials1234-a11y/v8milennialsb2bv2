@@ -74,6 +74,16 @@ export interface ResultadoDoEnvio {
  */
 interface ErroDaConsulta {
   message: string;
+  /**
+   * O SQLSTATE, quando o erro vem do Postgres.
+   *
+   * OPCIONAL de propósito: `PostgrestError` sempre traz `message`, mas `code`
+   * some quando o erro nasce no transporte (rede, timeout do PostgREST) em vez
+   * do banco. Declará-lo obrigatório seria descrever um objeto que nem sempre
+   * chega assim — e a #1724 depende de distinguir 23505 de qualquer outro erro
+   * (`marcar()`), então o campo tem de existir no tipo e poder faltar no valor.
+   */
+  code?: string;
 }
 
 /** O resultado terminal de qualquer consulta deste worker. */
@@ -399,12 +409,61 @@ async function marcar(
     .from("blast_plan_recipients")
     .update(patch)
     .eq("id", id);
-  if (error) {
-    // A mensagem JÁ SAIU. Transformar falha de banco em exceção faria o tique
-    // seguinte reprocessar quem já recebeu — e a duplicata é cobrada. Barulho
-    // no log, e a linha fica reivindicada até o stale de 10 minutos.
+  if (!error) return;
+
+  // ─── A COLISÃO DE `provider_message_id` (23505) ─────────────────────────
+  //
+  // O índice único dessa coluna é GLOBAL: a tabela não tem `organization_id` (o
+  // tenant vem de `plan_id → blast_plans`), então o precedente de
+  // `channel_messages` — chave `(organization_id, provider_message_id)` — não é
+  // copiável aqui. O risco está registrado no #1721 (HANDOFF item B).
+  //
+  // Se o fornecedor repetir um id entre organizações, este UPDATE estoura 23505
+  // com a mensagem JÁ ENVIADA. Sem tratamento, a linha fica `pending` com
+  // `claimed_at`, o stale de 10 minutos a devolve à fila, e ela é REENVIADA:
+  // duplicata cobrada, que é exatamente o que o ADR-0028 §5 manda evitar.
+  //
+  // A saída é largar o id e fechar a linha assim mesmo. Perde-se a correlação do
+  // callback — a linha termina como `unconfirmed` no fim do prazo (#1724) —, e a
+  // troca é claramente favorável: "uma entrega sem confirmação" custa zero;
+  // "uma mensagem paga duas vezes" custa dinheiro e incomoda o cliente.
+  //
+  // Só o 23505. Retentar deadlock ou timeout com o mesmo payload não conserta
+  // nada e esconderia o problema numa segunda linha de log.
+  const ehColisao = error.code === "23505" ||
+    (error.message ?? "").includes("23505");
+
+  if (ehColisao && "provider_message_id" in patch) {
+    const { provider_message_id: colidente, ...semOId } = patch;
+    const segunda = await deps.supabaseAdmin
+      .from("blast_plan_recipients")
+      .update(semOId)
+      .eq("id", id);
+
+    if (!segunda.error) {
+      // UM log, e ele nomeia a saída de emergência: se isto aparecer em
+      // produção, a resposta é acrescentar `organization_id` à tabela e
+      // reescopar o índice — NÃO remover a unicidade, que é o que torna a
+      // idempotência real (HANDOFF-1721, "saída de emergência").
+      console.error(
+        `[blast-official] provider_message_id colidente (23505): linha fechada ` +
+          `como enviada SEM o id — a entrega não terá confirmação. id=${id} ` +
+          `valor=${String(colidente)}`,
+      );
+      return;
+    }
+
     console.error(
-      `[blast-official] envio feito mas linha NÃO marcada: id=${id} err=${error.message}`,
+      `[blast-official] envio feito, colisão 23505 E a segunda tentativa falhou: ` +
+        `id=${id} err=${segunda.error.message}`,
     );
+    return;
   }
+
+  // A mensagem JÁ SAIU. Transformar falha de banco em exceção faria o tique
+  // seguinte reprocessar quem já recebeu — e a duplicata é cobrada. Barulho
+  // no log, e a linha fica reivindicada até o stale de 10 minutos.
+  console.error(
+    `[blast-official] envio feito mas linha NÃO marcada: id=${id} err=${error.message}`,
+  );
 }

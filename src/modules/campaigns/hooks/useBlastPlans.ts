@@ -12,6 +12,11 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  resumirDestinatarios,
+  type LinhaDoResumo,
+  type ResumoDoDisparo,
+} from "@/modules/campaigns/lib/blast-delivery-summary";
 import type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
 import { useCurrentTeamMember } from "@/modules/identity";
 
@@ -29,6 +34,18 @@ export interface BlastPlan {
   lots_released: number;
   release_time: string;
   next_release_date: string | null;
+  /**
+   * O Template congelado da Meta (#1722). NULL ⇒ regime Chip.
+   *
+   * É o discriminador de regime do produto, o mesmo que `claim_blast_recipients`
+   * usa no servidor. A tela precisa dele para saber se este Disparo TEM custo:
+   * só o Canal Oficial é cobrado por mensagem (ADR-0029), e mostrar "custo — / —"
+   * num Disparo por Chip afirmaria que existe uma conta que ninguém vai receber.
+   *
+   * `unknown` e não um tipo estruturado: nenhuma tela lê o conteúdo, só a
+   * presença. Modelá-lo aqui seria inventar uma forma que o servidor já tem.
+   */
+  template: unknown | null;
   created_at: string;
   updated_at: string;
 }
@@ -115,6 +132,10 @@ export function useCreateBlastPlan() {
   });
 }
 
+/** Mesmo tamanho de página do irmão `useBlastPlanRecipients`: o limite do PostgREST. */
+const PROGRESS_PAGE = 1000;
+const PROGRESS_PAGE_CAP = 20; // 20k destinatários — muito acima de qualquer plano real
+
 /** List the org's Blast Plans (RLS-scoped), newest first. */
 export function useBlastPlans() {
   const { data: teamMember } = useCurrentTeamMember();
@@ -138,37 +159,76 @@ export function useBlastPlans() {
   });
 }
 
-export interface BlastPlanProgress {
-  total: number;
-  sent: number;
-  skipped: number;
-  pending: number;
-  /** Reclassificados sent → failed pelo sync do poll (ADR-0016, #948). */
-  failed: number;
-}
+export type BlastPlanProgress = ResumoDoDisparo;
 
-/** Per-plan recipient progress (sent / skipped / pending / failed), for the Disparos panel. */
-export function useBlastPlanProgress(planId: string | null) {
+/**
+ * Progresso por plano — contagem dos SEIS estados e os dois custos (#1724).
+ *
+ * ── MULTI-TENANCY (LEIA antes de mexer) ────────────────────────────────────
+ * Recebe o `BlastPlan` INTEIRO, nunca um `plan_id` solto, e é fail-closed contra
+ * a org corrente — mesmo contrato do irmão `useBlastPlanRecipients`, e pelo mesmo
+ * motivo: `blast_plan_recipients` não tem `organization_id`, e a policy
+ * master-ghost dá SELECT cross-org a usuário master, então "confiar na RLS" não
+ * basta (lição do incidente `useBlastPlans`, changelog 2026-07-02).
+ *
+ * Isto ficou mais sério nesta fatia: a consulta passou a ler DINHEIRO.
+ *
+ * ── PAGINADO, e isso não é zelo ────────────────────────────────────────────
+ * A versão anterior fazia um `select` só, contra o teto de 1000 linhas do
+ * PostgREST. Enquanto contava só pessoas, um total truncado era um número errado;
+ * agora a mesma consulta soma dinheiro, e um total truncado não parece truncado —
+ * parece um valor. Por isso também há `truncado`: se a audiência passar do teto de
+ * páginas, os custos voltam `null` em vez de parciais.
+ *
+ * ⚠️ `.order()` ANTES do `.range()`, e é obrigatório: `range` sem ordem total é
+ * indefinido no Postgres, e a tabela está sendo escrita pelo worker ENQUANTO a
+ * tela lê. Sem ordem, páginas podem repetir ou pular linhas — e o sintoma seria
+ * um total de fatura errado, silenciosamente. `created_at` empata (o criador
+ * insere a audiência em lote), então `id` é o desempate que torna a ordem total.
+ *
+ * A agregação mora em `blast-delivery-summary.ts`, no cliente e não numa RPC: o
+ * frontend deste repo deploya sozinho no merge para a main enquanto a migration é
+ * botão do humano, e entre um e outro uma RPC inexistente faria o painel dizer
+ * "0 enviados" — a mesma mentira que este ticket recusa para o custo.
+ */
+export function useBlastPlanProgress(plan: BlastPlan | null) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const orgId = teamMember?.organization_id;
+  const planBelongsToOrg = !!plan && !!orgId && plan.organization_id === orgId;
+
   return useQuery({
-    queryKey: ["blast_plan_recipients", planId],
+    queryKey: ["blast_plan_recipients", plan?.id, "progress", orgId],
     queryFn: async (): Promise<BlastPlanProgress> => {
-      if (!planId) return { total: 0, sent: 0, skipped: 0, pending: 0, failed: 0 };
-      const { data, error } = await supabase
-        .from("blast_plan_recipients" as any)
-        .select("status")
-        .eq("plan_id", planId);
-      if (error) throw error;
-      const rows = (data ?? []) as unknown as { status: string }[];
-      const p: BlastPlanProgress = { total: rows.length, sent: 0, skipped: 0, pending: 0, failed: 0 };
-      for (const r of rows) {
-        if (r.status === "sent") p.sent += 1;
-        else if (r.status === "skipped") p.skipped += 1;
-        else if (r.status === "failed") p.failed += 1;
-        else p.pending += 1;
+      // Fail-closed: nunca soma recipients de plano fora da org selecionada.
+      if (!plan || !orgId || plan.organization_id !== orgId) {
+        return resumirDestinatarios([]);
       }
-      return p;
+
+      const rows: LinhaDoResumo[] = [];
+      let truncado = false;
+
+      for (let page = 0; page <= PROGRESS_PAGE_CAP; page++) {
+        if (page === PROGRESS_PAGE_CAP) {
+          truncado = true;
+          break;
+        }
+        const from = page * PROGRESS_PAGE;
+        const { data, error } = await supabase
+          .from("blast_plan_recipients" as any)
+          .select("status, estimated_cost, actual_cost")
+          .eq("plan_id", plan.id)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, from + PROGRESS_PAGE - 1);
+        if (error) throw error;
+        const batch = (data ?? []) as unknown as LinhaDoResumo[];
+        rows.push(...batch);
+        if (batch.length < PROGRESS_PAGE) break;
+      }
+
+      return resumirDestinatarios(rows, truncado);
     },
-    enabled: !!planId,
+    enabled: planBelongsToOrg,
   });
 }
 

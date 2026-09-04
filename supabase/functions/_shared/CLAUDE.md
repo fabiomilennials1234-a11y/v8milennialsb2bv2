@@ -14,6 +14,10 @@ fora dos triviais.**
 - `error-boundary.ts` — `withErrorBoundary('nome', handler)` wrapper + `logError` / `logEvent`. É o try/catch de topo: devolve 500 **com CORS** (ADR-0017)
 - `logger.ts` — wrapper estruturado (level/tags)
 
+### Disparo (Canal Oficial)
+- `blast-official-runner.ts` — o laço do worker: reivindica, decide, envia, marca (#1722)
+- `quick-blast/fechar-entrega.ts` — o **ciclo de entrega** (#1724): o callback de status fecha a linha do destinatário e o custo previsto vira realizado. ⚠️ O casamento **não** é pelo id estável do callback: `blast_plan_recipients.provider_message_id` guarda o id da RESPOSTA DO ENVIO, que é o `channel_messages.external_id` — espaços de identificador diferentes, 747/747 medidos em prod com zero coincidências. Quem resolve o callback até a linha de `channel_messages` é o `notificame-webhook` (duas chaves, `external_id` primeiro); de lá este módulo casa. Tenant vai no JOIN, porque a tabela não tem `organization_id` e a UNIQUE é global
+
 ### WhatsApp
 - `whatsapp-client.ts` — adapter provider-agnostic (Uazapi atual)
 - `whatsapp-providers/` — implementations por provider
