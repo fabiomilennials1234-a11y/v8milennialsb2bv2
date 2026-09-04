@@ -13,10 +13,12 @@
  *   node scripts/vault-regen-indexes.mjs                     # default
  *   node scripts/vault-regen-indexes.mjs --check             # exit 1 se mudaria algo (CI)
  *   node scripts/vault-regen-indexes.mjs --path <vault-root>
+ *   node scripts/vault-regen-indexes.mjs --changed-from <git-ref>
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const VAULT_ROOT_DEFAULT = "Obsidian/Segundo Cerebro/Claude Code — Torque CRM";
 
@@ -26,6 +28,14 @@ const vaultRoot =
     ? args[args.indexOf("--path") + 1]
     : VAULT_ROOT_DEFAULT;
 const checkMode = args.includes("--check");
+const changedFrom = args.includes("--changed-from")
+  ? args[args.indexOf("--changed-from") + 1]
+  : null;
+
+if (args.includes("--changed-from") && !changedFrom) {
+  console.error("vault-regen-indexes: --changed-from requires a git ref");
+  process.exit(2);
+}
 
 function parseFrontmatter(content) {
   if (!content.startsWith("---")) return null;
@@ -176,11 +186,34 @@ function preserveManualSections(existing, generated) {
 }
 
 // ===== walk top-level folders =====
-const topDirs = fs
+let topDirs = fs
   .readdirSync(vaultRoot, { withFileTypes: true })
   .filter((d) => d.isDirectory() && /^\d{2}\s/.test(d.name))
   .map((d) => d.name)
   .sort();
+
+if (changedFrom) {
+  let changedPaths;
+  try {
+    changedPaths = execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", "--diff-filter=ACMRD", `${changedFrom}...HEAD`, "--", vaultRoot],
+      { encoding: "utf8" },
+    );
+  } catch (error) {
+    console.error(`vault-regen-indexes: unable to compare against ${changedFrom}`);
+    if (error.stderr) console.error(error.stderr.trim());
+    process.exit(2);
+  }
+
+  const changedTopDirs = new Set(
+    changedPaths
+      .split("\0")
+      .filter(Boolean)
+      .map((file) => path.relative(vaultRoot, file).split(path.sep)[0]),
+  );
+  topDirs = topDirs.filter((folder) => changedTopDirs.has(folder));
+}
 
 let changed = 0;
 let kept = 0;
