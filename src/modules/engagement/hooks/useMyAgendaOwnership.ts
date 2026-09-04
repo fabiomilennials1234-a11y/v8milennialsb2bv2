@@ -38,8 +38,9 @@ export function useMyAgendaOwnership(teamMemberId: string | null) {
           .select("meeting_id")
           .eq("team_member_id", teamMemberId)
           .then((r) => (r.error ? [] : ((r.data ?? []) as unknown as Array<{ meeting_id: string }>))),
-        from("pipe_confirmacao")
+        from("negocio_projetado")
           .select("id")
+          .eq("funil_sistema", "confirmacao")
           .eq("organization_id", organizationId as string)
           .eq("sdr_id", teamMemberId)
           .then((r) => (r.error ? [] : ((r.data ?? []) as unknown as Array<{ id: string }>))),

@@ -28,11 +28,13 @@ export function useCommissions(month?: number, year?: number) {
         .select(`
           *,
           team_member:team_members(id, name, role),
-          pipe_proposta:pipe_propostas(
+          pipe_proposta:negocio_projetado(
             id, sale_value, product_type,
             lead:leads(name, company)
           )
         `)
+        // O espelho já recortava o funil; num embed o recorte é este filtro.
+        .eq("pipe_proposta.funil_sistema", "propostas")
         .eq("organization_id", organizationId)
         .eq("source", "manual")
         .order("created_at", { ascending: false });
@@ -63,11 +65,13 @@ export function useCommissionsByMember(teamMemberId: string, month?: number, yea
         .from("commissions")
         .select(`
           *,
-          pipe_proposta:pipe_propostas(
+          pipe_proposta:negocio_projetado(
             id, sale_value, product_type, closed_at,
             lead:leads(name, company)
           )
         `)
+        // O espelho já recortava o funil; num embed o recorte é este filtro.
+        .eq("pipe_proposta.funil_sistema", "propostas")
         .eq("organization_id", organizationId)
         .eq("team_member_id", teamMemberId)
         // Projeções de sale_events (#994) invisíveis até o SP-3 — ver useCommissions.
@@ -266,20 +270,22 @@ export function useCommissionSummary(teamMemberId: string, month: number, year: 
       // histórico onde dual era nulo.
       const [salesQ1, salesQ2] = await Promise.all([
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("sale_value, product_type")
+          .eq("funil_sistema", "propostas")
           .eq("organization_id", organizationId)
           .eq("sale_responsible_id", teamMemberId)
-          .eq("status", "vendido")
+          .eq("stage_key", "vendido")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
           .lte("metrics_period_at", endStr),
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("sale_value, product_type")
+          .eq("funil_sistema", "propostas")
           .eq("organization_id", organizationId)
           .eq("sale_responsible_id", teamMemberId)
-          .eq("status", "vendido")
+          .eq("stage_key", "vendido")
           .is("metrics_period_at", null)
           .gte("closed_at", startStr)
           .lte("closed_at", endStr),

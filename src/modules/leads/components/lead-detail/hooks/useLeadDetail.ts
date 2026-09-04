@@ -96,18 +96,25 @@ export function useLeadDetail(leadId: string | null, isOpen: boolean) {
     queryKey: ["lead-pipes", leadId],
     queryFn: async () => {
       if (!leadId) return null;
+      // Leituras na projeção canônica `negocio_projetado`, que substitui os
+      // espelhos pipe_whatsapp / pipe_confirmacao / pipe_propostas /
+      // custom_pipe_entries. O que o espelho chamava "status" a projeção chama
+      // "stage_key"; os demais nomes de coluna são idênticos.
       const [whatsapp, confirmacao, propostas, customEntries, followUps] = await Promise.all([
-        supabase.from("pipe_whatsapp").select("*").eq("lead_id", leadId),
-        supabase.from("pipe_confirmacao").select("*").eq("lead_id", leadId),
-        supabase.from("pipe_propostas").select("*").eq("lead_id", leadId),
+        supabase.from("negocio_projetado").select("*").eq("funil_sistema", "whatsapp").eq("lead_id", leadId),
+        supabase.from("negocio_projetado").select("*").eq("funil_sistema", "confirmacao").eq("lead_id", leadId),
+        supabase.from("negocio_projetado").select("*").eq("funil_sistema", "propostas").eq("lead_id", leadId),
         supabase
-          .from("custom_pipe_entries")
+          .from("negocio_projetado")
           // `is_active` entra no embed só para peneirar abaixo. Filtrar pela
           // coluna embutida (`.eq("pipeline.is_active", true)`) exigiria
           // `!inner`, e embed com filtro é justamente onde o PostgREST devolve
           // PGRST201 quando a relação fica ambígua — não vale o risco por uma
           // peneira de 1 linha.
-          .select("*, stage:custom_pipeline_stages(name, color), pipeline:custom_pipelines(name, is_active)")
+          .select("*, stage:pipeline_stages(name, color), pipeline:pipelines(name, is_active)")
+          // O espelho custom_pipe_entries era `pipeline_entries` juntado com
+          // `pipelines` em `type = 'custom'` — na projeção isso é pipeline_type.
+          .eq("pipeline_type", "custom")
           .eq("lead_id", leadId),
         supabase.from("follow_ups").select("*").eq("lead_id", leadId),
       ]);

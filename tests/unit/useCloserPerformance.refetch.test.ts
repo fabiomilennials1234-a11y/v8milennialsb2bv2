@@ -3,13 +3,21 @@ import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
-// Regressão ENG-USAB-2: as perf hooks (pipe_propostas/pipe_confirmacao) não tinham
+// Regressão ENG-USAB-2: as perf hooks (propostas/confirmacao) não tinham
 // realtime nem invalidation; sem refetchInterval o TV dashboard congelava após uma
 // venda. Este teste prova que o polling re-busca na cadência configurada.
 
+// Os dois hooks leem a mesma projeção `negocio_projetado`; o que os distingue é o
+// filtro `funil_sistema`. Contar por nome de tabela deixou de separar um do outro,
+// então o espião registra o funil pedido em cada busca.
+const funilSpy = vi.fn((_funil: string) => {});
+
 const fromSpy = vi.fn((_table: string) => ({
   select: () => ({
-    eq: () => Promise.resolve({ data: [], error: null }),
+    eq: (coluna: string, valor: string) => {
+      if (coluna === "funil_sistema") funilSpy(valor);
+      return { eq: () => Promise.resolve({ data: [], error: null }) };
+    },
   }),
 }));
 
@@ -36,13 +44,14 @@ function createWrapper() {
     React.createElement(QueryClientProvider, { client: qc }, children);
 }
 
-function countFor(table: string) {
-  return fromSpy.mock.calls.filter((c) => c[0] === table).length;
+function countFor(funil: string) {
+  return funilSpy.mock.calls.filter((c) => c[0] === funil).length;
 }
 
 describe("perf hooks — refetchInterval (TV dashboard não congela)", () => {
   beforeEach(() => {
     fromSpy.mockClear();
+    funilSpy.mockClear();
     vi.useFakeTimers();
   });
   afterEach(() => {
@@ -52,20 +61,25 @@ describe("perf hooks — refetchInterval (TV dashboard não congela)", () => {
   it("usePerfPipePropostas re-busca na cadência do polling", async () => {
     renderHook(() => usePerfPipePropostas(), { wrapper: createWrapper() });
     await vi.advanceTimersByTimeAsync(0); // flush fetch inicial
-    const initial = countFor("pipe_propostas");
+    const initial = countFor("propostas");
     expect(initial).toBeGreaterThanOrEqual(1);
+    // A dimensão que o recorte por funil não cobre: o hook tem que sair da
+    // projeção canônica, não de um espelho. Sem isto o dublê aprovaria um
+    // `.from("pipe_propostas").eq("funil_sistema", …)`, que nem existe.
+    expect(fromSpy.mock.calls.every((c) => c[0] === "negocio_projetado")).toBe(true);
 
     await vi.advanceTimersByTimeAsync(REFETCH_INTERVAL);
-    expect(countFor("pipe_propostas")).toBeGreaterThan(initial);
+    expect(countFor("propostas")).toBeGreaterThan(initial);
   });
 
   it("usePerfPipeConfirmacao re-busca na cadência do polling", async () => {
     renderHook(() => usePerfPipeConfirmacao(), { wrapper: createWrapper() });
     await vi.advanceTimersByTimeAsync(0);
-    const initial = countFor("pipe_confirmacao");
+    const initial = countFor("confirmacao");
     expect(initial).toBeGreaterThanOrEqual(1);
+    expect(fromSpy.mock.calls.every((c) => c[0] === "negocio_projetado")).toBe(true);
 
     await vi.advanceTimersByTimeAsync(REFETCH_INTERVAL);
-    expect(countFor("pipe_confirmacao")).toBeGreaterThan(initial);
+    expect(countFor("confirmacao")).toBeGreaterThan(initial);
   });
 });

@@ -402,8 +402,9 @@ export function useConversionRates(month?: number, year?: number) {
 
       // Propostas: TODOS os leads no pipe (sem filtro de período) para taxa de conversão correta
       const { data: propostasData } = await supabase
-        .from("pipe_propostas")
-        .select("sale_responsible_id, responsible_id, closer_id, status")
+        .from("negocio_projetado")
+        .select("sale_responsible_id, responsible_id, closer_id, stage_key")
+        .eq("funil_sistema", "propostas")
         .eq("organization_id", organizationId);
 
       const meetingsRates: ConversionRate[] = computeMeetingRates(
@@ -416,7 +417,7 @@ export function useConversionRates(month?: number, year?: number) {
       const salesRates: ConversionRate[] = salesMembers.map((member) => {
         const total = (propostasData || []).filter((p) => ((p as any).sale_responsible_id || p.responsible_id || p.closer_id) === member.id).length;
         const vendidas = (propostasData || []).filter(
-          (p) => ((p as any).sale_responsible_id || p.responsible_id || p.closer_id) === member.id && p.status === "vendido"
+          (p) => ((p as any).sale_responsible_id || p.responsible_id || p.closer_id) === member.id && p.stage_key === "vendido"
         ).length;
         return {
           id: member.id,

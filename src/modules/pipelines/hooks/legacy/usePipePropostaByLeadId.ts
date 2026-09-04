@@ -8,7 +8,8 @@ export type PipePropostaRow = Tables<"pipe_propostas">;
  * Fetch the lead's most recent pipe_propostas entry (or null when the lead
  * isn't in the Propostas pipe yet).
  *
- * Reads from the compat view over pipeline_entries (migration 20260983).
+ * Lê da projeção canônica `negocio_projetado` (funil_sistema = "propostas"),
+ * que substitui o espelho pipe_propostas.
  */
 export function usePipePropostaByLeadId(leadId: string | null | undefined) {
   return useQuery({
@@ -18,8 +19,10 @@ export function usePipePropostaByLeadId(leadId: string | null | undefined) {
     queryFn: async (): Promise<PipePropostaRow | null> => {
       if (!leadId) return null;
       const { data, error } = await supabase
-        .from("pipe_propostas")
-        .select("*")
+        .from("negocio_projetado")
+        // Alias do PostgREST: o consumidor lê `status`, a projeção chama `stage_key`.
+        .select("*, status:stage_key")
+        .eq("funil_sistema", "propostas")
         .eq("lead_id", leadId)
         .order("created_at", { ascending: false })
         .limit(1)
