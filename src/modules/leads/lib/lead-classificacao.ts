@@ -7,15 +7,21 @@
  * que um dia divirjam — e a divergência aparece como "o filtro não acha o que a
  * lista mostra", que é caro de diagnosticar.
  *
- * ⚠️ ESTE VOCABULÁRIO É SOBRE CADASTRO NO ERP, e não sobre ter comprado. A
- * gaveta `cliente` aqui significa "tem `erp_code` e a situação do parceiro está
- * entre as que a org considera ativas" (migration `20270922000000`). Medido em
- * prod 2026-09-04: dos 5.442 leads da Café Jurerê nessa gaveta, **exatamente 1**
- * tem venda em `sale_events`.
+ * ⚠️ ESTE VOCABULÁRIO É COMPARTILHADO POR DUAS LEIS, e a fonte da verdade
+ * depende da ORGANIZAÇÃO (decisão do CTO em 2026-09-04):
  *
- * Quem responde "comprou?" é `lead-relacao-abas.ts`, ancorado em
- * `leads.primeira_venda_at`. Na tela este controle se chama **"Cadastro no
- * ERP"** justamente para as duas leis não disputarem a palavra "cliente".
+ * - **org COM integração de ERP** — `cliente` significa "tem `erp_code` e a
+ *   situação do parceiro está entre as que a org considera ativas", gravado em
+ *   `leads.classificacao` pela migration `20270922000000`. `indefinido` só
+ *   existe aqui: é o cadastrado cuja situação não está na lista.
+ * - **org SEM integração** — `cliente` significa "comprou": venda líquida no
+ *   funil OU pedido no ERP, a lei que `lead-relacao-situacao.ts` já usa na
+ *   coluna "Relação" e que `primeira_venda_at`/`primeiro_pedido_erp_at`
+ *   materializam para o filtro poder rodar no banco.
+ *
+ * As duas discordam quando ambas existiriam, e está medido: na Café Jurerê,
+ * dos 5.442 leads com `classificacao='cliente'`, **exatamente 1** tem venda.
+ * Por isso não convivem na mesma tela — quem escolhe é `useOrgUsaLeiDoErp`.
  */
 
 export const LEAD_CLASSIFICACOES = ["lead", "cliente", "indefinido"] as const;
