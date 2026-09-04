@@ -30,9 +30,28 @@ export function useLeadClassificacao() {
       leadId: string;
       classificacao: LeadClassificacao;
     }) => {
+      /**
+       * O cast existe porque `types.ts` está ATRASADO em relação a prod — não
+       * porque o campo não exista.
+       *
+       * `types.ts` é gerado do banco, e `classificacao`/`classificacao_manual`
+       * já estão aplicadas em produção (`20270922000000`). Regenerar resolveria
+       * o tipo — e foi tentado —, mas expõe **15 erros** em `useExcluirNegocio`,
+       * `useCrossPipeMove`, `useLeadAllPipelines`, `useCustomPipelines` e
+       * `stageTransition`: código de outras frentes escrito contra o schema
+       * antigo, que só compila porque o `types.ts` commitado também é antigo.
+       *
+       * Arrastar 15 erros alheios para dentro deste PR seria pior que o cast.
+       * Quando alguém regenerar os tipos, isto some sozinho.
+       */
+      const patch: Record<string, unknown> = {
+        classificacao,
+        classificacao_manual: true,
+      };
+
       const { error } = await supabase
         .from("leads")
-        .update({ classificacao, classificacao_manual: true })
+        .update(patch)
         .eq("id", leadId);
 
       if (error) throw error;

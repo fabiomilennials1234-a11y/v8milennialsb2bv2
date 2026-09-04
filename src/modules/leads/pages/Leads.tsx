@@ -884,7 +884,14 @@ function LeadsInner() {
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
                               <DropdownMenuRadioGroup
-                                value={lead.classificacao ?? "lead"}
+                                // Mesma razão do cast em `useLeadClassificacao`:
+                                // a coluna existe em prod, o `types.ts`
+                                // commitado é que está atrasado. Regenerar
+                                // expõe 15 erros de outras frentes.
+                                value={
+                                  (lead as { classificacao?: string })
+                                    .classificacao ?? "lead"
+                                }
                                 onValueChange={(v) =>
                                   mudarClassificacao({
                                     leadId: lead.id,
