@@ -45,6 +45,7 @@ import { MobileChatLayout } from "@/modules/communication/components/chat/layout
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { ConversationList } from "@/modules/communication/components/chat/list/ConversationList";
 import { ChatHeader } from "@/modules/communication/components/chat/view/ChatHeader";
+import { AvisoDaAutomacao } from "@/modules/communication/components/chat/view/AvisoDaAutomacao";
 import { MobileChatThreadHeader } from "@/modules/communication/components/chat/view/MobileChatThreadHeader";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
@@ -372,6 +373,12 @@ function ChatView({
           isReactivating={copilotPause.isReactivating}
         />
       )}
+
+      {/* Entre o cabeçalho e a thread, e não dentro do composer: a pessoa
+          precisa saber que a automação fala por outro número ANTES de ler a
+          conversa e decidir responder, não no instante em que já está
+          digitando. Só aparece na divergência. */}
+      <AvisoDaAutomacao telefone={phoneNumber} caixaAberta={instanceId} />
 
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
         {threadState === "loading" ? (
