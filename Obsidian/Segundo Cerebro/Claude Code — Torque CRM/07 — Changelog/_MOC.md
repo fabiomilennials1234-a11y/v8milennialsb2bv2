@@ -134,4 +134,4 @@ owner: claude-agent
 - [[2026-09-02-campanha-e-disparo-por-pipeline-id|2026-09-02-campanha-e-disparo-por-pipeline-id]]
 - [[2026-09-02-torquecalls-ligar-todo-lead-visivel|TorqueCalls: botão Ligar em todo lead visível (chat, lead, negócio, celular)]]
 - [[2026-09-03-chat-cabecalho-ligar-layout|Chat: cabeçalho — Ligar ▾ sem esmagar o contato]]
-- [[2026-09-04-migration-escritoras-saem-dos-espelhos|SCRUM-674 — RPCs deixam de escrever pelos espelhos]]
+- [[2026-09-04-migration-escritoras-saem-dos-espelhos|SCRUM-674 — escritoras SQL deixam os espelhos]]
