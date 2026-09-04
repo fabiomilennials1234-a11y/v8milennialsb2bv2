@@ -12,8 +12,35 @@ import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const rpcMock = vi.fn();
+
+/**
+ * O dublê LÊ `this`, de propósito.
+ *
+ * O dublê anterior era `{ rpc: (...a) => rpcMock(...a) }` — uma função que não
+ * precisa do receptor. Ele passava verde mesmo quando o código guardava
+ * `supabase.rpc` numa const solta, o que em produção desamarra o método do
+ * PostgrestClient e estoura antes de tocar a rede: o /chat de 04/09 ficou vazio
+ * exatamente assim, sem uma linha nos logs da API.
+ *
+ * Aqui o dublê exige o receptor. Chamar sem ele lança, e o teste fica vermelho
+ * como produção ficaria.
+ */
+const supabaseDublê = {
+  marca: "cliente-real",
+  rpc(this: { marca?: string } | undefined, ...a: unknown[]) {
+    if (this?.marca !== "cliente-real") {
+      throw new TypeError(
+        "supabase.rpc chamado sem receptor — o método foi desamarrado do cliente",
+      );
+    }
+    return rpcMock(...a);
+  },
+};
+
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { rpc: (...a: unknown[]) => rpcMock(...a) },
+  get supabase() {
+    return supabaseDublê;
+  },
 }));
 
 const teamMemberMock = vi.fn();
@@ -244,5 +271,18 @@ describe("useConversasUnificadas", () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+
+  it("a chamada atravessa o CLIENTE, não uma referência solta ao método", () => {
+    // Regressão do /chat vazio em produção (04/09). `supabase.rpc` usa `this`;
+    // guardá-lo numa const desamarra o receptor e a chamada estoura dentro do
+    // `queryFn`, antes de sair requisição nenhuma — a tela mostra "nenhuma
+    // conversa" e o log da API não registra nada, nem erro.
+    const solto = supabaseDublê.rpc;
+
+    expect(() => solto("get_whatsapp_conversation_list_multi", {})).toThrow(
+      /desamarrado/,
+    );
+    expect(() => supabaseDublê.rpc("get_whatsapp_conversation_list_multi", {})).not.toThrow();
   });
 });

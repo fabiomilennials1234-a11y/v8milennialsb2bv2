@@ -87,7 +87,24 @@ type ChamadaDeRpcNova = (
   args: Record<string, unknown>,
 ) => Promise<{ data: unknown; error: { code?: string; message?: string } | null }>;
 
-const chamarRpcNova = supabase.rpc as unknown as ChamadaDeRpcNova;
+/**
+ * ⚠️ A CHAMADA ATRAVESSA O OBJETO, SEMPRE. `supabase.rpc` é um MÉTODO do
+ * PostgrestClient e usa `this` para montar a URL e os headers. Guardá-lo numa
+ * const solta (`const f = supabase.rpc`) desamarra o receptor: a chamada estoura
+ * DENTRO do `queryFn`, antes de tocar a rede — nenhuma requisição sai, nenhum
+ * status aparece no log, e a lista fica vazia como se a org não tivesse
+ * conversa. Foi assim que o /chat de produção ficou vazio em 04/09.
+ *
+ * O dublê dos testes (`{ rpc: (...a) => mock(...a) }`) é um objeto simples e
+ * sobrevive ao desamarre — por isso a suíte passou verde enquanto produção
+ * quebrava. O teste que fecha esse buraco usa um dublê que LÊ `this`.
+ */
+function chamarRpcNova(
+  nome: string,
+  args: Record<string, unknown>,
+): ReturnType<ChamadaDeRpcNova> {
+  return (supabase as unknown as { rpc: ChamadaDeRpcNova }).rpc(nome, args);
+}
 
 /** Teto da lista do canal oficial. O mesmo da caixa isolada — 22 conversas em prod. */
 const LIMITE_OFICIAL = 200;
