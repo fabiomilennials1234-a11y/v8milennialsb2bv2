@@ -30,8 +30,29 @@ import {
   selectInChunks,
   IN_CHUNK_SIZE,
   IN_CHUNK_SIZE_FANOUT,
+  type ChunkedResult,
 } from "@/shared/supabase/selectInChunks";
 import type { ChatContact, ChatContactTag } from "../types";
+
+/**
+ * A linha do join de etiqueta, dos dois lados.
+ *
+ * `tags!inner(...)` devolve o objeto embutido, e não um array, porque o join é
+ * para UM. Tipar aqui é o que permite ler `row.tags.id` sem `any` — e faz uma
+ * coluna renomeada aparecer no compilador em vez de virar `undefined` na
+ * etiqueta em branco.
+ *
+ * ⚠️ O builder do postgrest-js não é atribuível a esta forma sem um passo
+ * explícito: ele tipa o embed como união de objeto e array, porque não sabe que
+ * o join é para UM. O `as unknown as` nas duas chamadas é esse passo, e é mais
+ * estreito que o `any` que estava aqui antes — a forma fica declarada num lugar
+ * só, e coluna renomeada volta a aparecer no compilador.
+ */
+interface LinhaDeEtiqueta {
+  lead_id?: string;
+  conversation_id?: string;
+  tags: ChatContactTag;
+}
 
 export interface OpcoesDeEnriquecimento {
   /**
@@ -83,25 +104,29 @@ export async function enriquecerContatos(
       "leads",
     ),
     softTags(
-      selectInChunks<any>(
+      selectInChunks<LinhaDeEtiqueta>(
         leadIds,
         (chunk) =>
           supabase
             .from("lead_tags")
             .select("lead_id, tags!inner(id, name, color)")
-            .in("lead_id", chunk),
+            .in("lead_id", chunk) as unknown as PromiseLike<
+            ChunkedResult<LinhaDeEtiqueta>
+          >,
         IN_CHUNK_SIZE_FANOUT,
       ),
       "lead_tags",
     ),
     softTags(
-      selectInChunks<any>(
+      selectInChunks<LinhaDeEtiqueta>(
         convIds,
         (chunk) =>
           supabase
             .from("whatsapp_conversation_tags")
             .select("conversation_id, tags!inner(id, name, color)")
-            .in("conversation_id", chunk),
+            .in("conversation_id", chunk) as unknown as PromiseLike<
+            ChunkedResult<LinhaDeEtiqueta>
+          >,
         IN_CHUNK_SIZE_FANOUT,
       ),
       "conversation_tags",
@@ -112,17 +137,17 @@ export async function enriquecerContatos(
   for (const row of leadNameRows) if (row.name) leadNameMap.set(row.id, row.name);
 
   const leadTagsMap = new Map<string, ChatContactTag[]>();
-  for (const row of leadTagRows as any[]) {
-    const tag = (row as { tags: ChatContactTag }).tags;
-    leadTagsMap.set(row.lead_id, [...(leadTagsMap.get(row.lead_id) || []), tag]);
+  for (const row of leadTagRows) {
+    if (!row.lead_id || !row.tags) continue;
+    leadTagsMap.set(row.lead_id, [...(leadTagsMap.get(row.lead_id) || []), row.tags]);
   }
 
   const convTagsMap = new Map<string, ChatContactTag[]>();
-  for (const row of convTagRows as any[]) {
-    const tag = (row as { tags: ChatContactTag }).tags;
+  for (const row of convTagRows) {
+    if (!row.conversation_id || !row.tags) continue;
     convTagsMap.set(row.conversation_id, [
       ...(convTagsMap.get(row.conversation_id) || []),
-      tag,
+      row.tags,
     ]);
   }
 

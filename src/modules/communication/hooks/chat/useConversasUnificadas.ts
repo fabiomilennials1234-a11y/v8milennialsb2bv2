@@ -70,6 +70,25 @@ import { boxUsesChannelMessages } from "./inbox-box-source";
 import { toSocialContact, type SocialConversationRow } from "./social-conversation-row";
 import type { ChatContact, InboxBox } from "./types";
 
+/**
+ * A porta para as RPCs que `types.ts` ainda não conhece.
+ *
+ * `src/integrations/supabase/types.ts` é gerado a partir de prod, e as três
+ * funções desta onda entraram lá depois do arquivo. Até o próximo regen, o
+ * cliente tipado recusa os nomes novos.
+ *
+ * O escape é NOMEADO em vez de `(supabase as any)` espalhado: assim o retorno
+ * continua checado (`data` é `unknown`, e quem consome declara a forma em
+ * `LinhaDeChip`/`LinhaOficial`), e a busca por este tipo mostra exatamente
+ * quantos call-sites esperam o regen.
+ */
+type ChamadaDeRpcNova = (
+  nome: string,
+  args: Record<string, unknown>,
+) => Promise<{ data: unknown; error: { code?: string; message?: string } | null }>;
+
+const chamarRpcNova = supabase.rpc as unknown as ChamadaDeRpcNova;
+
 /** Teto da lista do canal oficial. O mesmo da caixa isolada — 22 conversas em prod. */
 const LIMITE_OFICIAL = 200;
 
@@ -164,7 +183,7 @@ export function useConversasUnificadas(
       // conhece depois do regen contra a base onde a migration entrou. O shape
       // fica declarado em `LinhaDeChip`, para coluna renomeada aparecer como
       // erro de tipo aqui e não como `undefined` na tela.
-      let { data, error } = await (supabase as any).rpc(
+      let { data, error } = await chamarRpcNova(
         "get_whatsapp_conversation_list_multi",
         {
           p_org: organizationId,
@@ -182,7 +201,7 @@ export function useConversasUnificadas(
         );
         const porCaixa = await Promise.all(
           idsChip.map(async (id) => {
-            const r = await (supabase as any).rpc("get_whatsapp_conversation_list", {
+            const r = await chamarRpcNova("get_whatsapp_conversation_list", {
               p_org: organizationId,
               p_instance: id,
               p_limit: limiteChip,
@@ -253,7 +272,7 @@ export function useConversasUnificadas(
         return { contatos: [] as ReturnType<typeof toSocialContact>[], cheia: false };
       }
 
-      let { data, error } = await (supabase as any).rpc(
+      let { data, error } = await chamarRpcNova(
         "get_official_whatsapp_conversation_list_multi",
         {
           p_org: organizationId,
@@ -265,7 +284,7 @@ export function useConversasUnificadas(
       if (ehFuncaoAusente(error)) {
         const porCaixa = await Promise.all(
           idsOficiais.map(async (id) => {
-            const r = await (supabase as any).rpc(
+            const r = await chamarRpcNova(
               "get_official_whatsapp_conversation_list",
               { p_org: organizationId, p_instance: id, p_limit: LIMITE_OFICIAL },
             );
