@@ -13,17 +13,9 @@
  */
 import { useRef, useCallback, useMemo, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { Loader2, Search, MessageSquare, Archive, Settings, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader2, Search, MessageSquare, Archive, Users } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
 import { useViewport } from "@/shared/hooks/use-viewport";
@@ -34,8 +26,10 @@ import {
   type InboxBox,
   type InboxContact,
 } from "@/modules/communication/hooks/chat/types";
-import { ChannelBadge } from "../ChannelBadge";
 import { ConversationListItem, contactDisplayName } from "./ConversationListItem";
+import { SeletorDeCaixas } from "./SeletorDeCaixas";
+import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
+import type { NaoLidasDaCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
 import { MobileConversationRow } from "./MobileConversationRow";
 import { MobileChatListHeader, type MobileChatFilter } from "./MobileChatListHeader";
 import { InboxFilterBar } from "./InboxFilterBar";
@@ -78,8 +72,27 @@ interface ConversationListProps {
    * Antes era `instances` — o seletor deixou de ser "escolha o número".
    */
   boxes?: InboxBox[];
-  selectedBoxId?: string | null;
-  onSelectBox?: (boxId: string) => void;
+  /**
+   * Ids das caixas MARCADAS. Nunca vazio quando há caixa — ver
+   * `useCaixasSelecionadas`. Com um id só o seletor se comporta como o de antes.
+   */
+  marcadas?: string[];
+  onAlternarCaixa?: (boxId: string) => void;
+  onSomenteCaixa?: (boxId: string) => void;
+  onTodasAsCaixas?: () => void;
+  /**
+   * Não lidas por caixa, INCLUSIVE as desmarcadas — é o que faz o seletor
+   * apontar onde está o que a lista não mostra (D8).
+   */
+  naoLidasPorCaixa?: Map<string, NaoLidasDaCaixa>;
+  /**
+   * Caixa de origem e "fio" de cada linha, por `contactKey`.
+   *
+   * Vem pronto do motor (`unificarCaixas`), e não é derivado aqui: a lista
+   * recebe `InboxContact[]` de consumidores diferentes, e só o shell da caixa
+   * unificada sabe quais caixas estão em jogo. Ausente = modo de sempre.
+   */
+  metaPorLinha?: Map<string, { caixa: CaixaDaLinha; tambemEm: CaixaDaLinha[] }>;
   activeTab: InboxTab;
   onTabChange: (tab: InboxTab) => void;
   /**
@@ -89,14 +102,19 @@ interface ConversationListProps {
    * de #1632, intacto para toda org que não pediu a aba.
    */
   abasDeGrupos?: boolean;
-  onArchive: (phone: string) => void;
+  /**
+   * A CAIXA da linha vai junto: `whatsapp_conversations` é por (instância,
+   * telefone), e no modo unificado a linha clicada pode não ser da caixa da
+   * conversa aberta. Opcional para não quebrar quem chama sem ela.
+   */
+  onArchive: (phone: string, instanceId?: string | null) => void;
   onUnarchive: (conversationId: string) => void;
-  onDelete: (phone: string) => void;
+  onDelete: (phone: string, instanceId?: string | null) => void;
   isAdmin: boolean;
   instanceId: string | null;
   organizationId: string | null;
   allTags: { id: string; name: string; color: string }[];
-  onAddTag: (phone: string, tagId: string) => void;
+  onAddTag: (phone: string, tagId: string, instanceId?: string | null) => void;
   onRemoveTag: (conversationId: string, tagId: string) => void;
   onOpenInstances?: () => void;
   /** Modo de densidade para altura estimada dos itens. */
@@ -132,8 +150,12 @@ export function ConversationList({
   onSearchChange,
   isLoading,
   boxes,
-  selectedBoxId,
-  onSelectBox,
+  marcadas,
+  onAlternarCaixa,
+  onSomenteCaixa,
+  onTodasAsCaixas,
+  naoLidasPorCaixa,
+  metaPorLinha,
   activeTab,
   onTabChange,
   abasDeGrupos = false,
@@ -166,7 +188,10 @@ export function ConversationList({
   const { isMobile } = useViewport();
   const [mobileFilter, setMobileFilter] = useState<MobileChatFilter>("all");
 
-  const selectedBox = boxes?.find((b) => b.id === selectedBoxId) ?? null;
+  // A caixa que o header MOBILE nomeia. Com várias marcadas é a primeira da
+  // ordem do seletor: o mobile não tem multi-seleção nesta onda (ele cicla), e
+  // nomear "3 caixas" no lugar do número não ajudaria quem está ciclando.
+  const selectedBox = boxes?.find((b) => marcadas?.includes(b.id)) ?? boxes?.[0] ?? null;
   /**
    * Caixa social muda o REGIME da lista, não só o ícone. Funil, etapa,
    * qualificação, vendedor, etiqueta, arquivadas e "pediu atendente" são todos
@@ -174,7 +199,15 @@ export function ConversationList({
    * aplica nenhum deles. Mostrá-los inertes seria mentir sobre o recorte —
    * o usuário clicaria num chip e a lista não mudaria.
    */
-  const isSocialBox = selectedBox ? boxUsesChannelMessages(selectedBox) : false;
+  /**
+   * Mais de uma caixa marcada. A lista passa a misturar os dois regimes, e é o
+   * ÚNICO ramo novo desta tela — com uma caixa só, tudo abaixo se comporta
+   * exatamente como antes, que é o que 42 das 62 organizações vão ver.
+   */
+  const modoUnificado = (marcadas?.length ?? 0) > 1;
+
+  const isSocialBox =
+    !modoUnificado && selectedBox ? boxUsesChannelMessages(selectedBox) : false;
 
   /**
    * A metade de WhatsApp da lista. O engine de filtro, os contadores e o
@@ -223,11 +256,19 @@ export function ConversationList({
   // Nenhuma das dimensões do filtro tem dado para avaliar aqui, e o `activeTab`
   // não existe (não há arquivamento). Uma lista curta e honesta.
   const socialContacts = useMemo(() => {
-    if (!isSocialBox) return [] as InboxContact[];
+    // No modo unificado as linhas do canal oficial chegam MISTURADAS com as de
+    // Chip; estreitar aqui é o que dá a elas a mesma busca local que teriam na
+    // caixa isolada, sem submetê-las a dimensões que a RPC delas não aplica.
+    const universo = modoUnificado
+      ? contacts.filter((c) => !isWhatsAppContact(c))
+      : isSocialBox
+        ? contacts
+        : ([] as InboxContact[]);
+    if (universo.length === 0) return universo;
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return contacts;
-    return contacts.filter((c) => contactDisplayName(c).toLowerCase().includes(q));
-  }, [isSocialBox, contacts, searchQuery]);
+    if (!q) return universo;
+    return universo.filter((c) => contactDisplayName(c).toLowerCase().includes(q));
+  }, [isSocialBox, modoUnificado, contacts, searchQuery]);
 
   // ── Desktop: engine puro. Mobile: header próprio (all/unread/groups + vendedor).
   const whatsappFiltered = useMemo(() => {
@@ -256,7 +297,22 @@ export function ConversationList({
     });
   }, [isMobile, whatsappContacts, filter, filterCtx, searchQuery, activeTab, mobileFilter, resolveContactVendorId, currentTeamMemberId]);
 
-  const filteredContacts: InboxContact[] = isSocialBox ? socialContacts : whatsappFiltered;
+  /**
+   * A lista final.
+   *
+   * No modo unificado o recorte é feito nas duas metades e depois REAPLICADO
+   * sobre `contacts` — que já chega ordenado pelo motor. Concatenar as metades e
+   * reordenar aqui seria uma segunda implementação da regra de recência, e a
+   * primeira divergência entre as duas apareceria como linha fora de ordem sem
+   * ninguém saber qual das duas está certa.
+   */
+  const filteredContacts: InboxContact[] = useMemo(() => {
+    if (!modoUnificado) return isSocialBox ? socialContacts : whatsappFiltered;
+    const sobreviventes = new Set(
+      [...whatsappFiltered, ...socialContacts].map((c) => contactKey(c)),
+    );
+    return contacts.filter((c) => sobreviventes.has(contactKey(c)));
+  }, [modoUnificado, isSocialBox, socialContacts, whatsappFiltered, contacts]);
 
   // Contagens reagem ao filtro aplicado (menos a própria tab).
   const activeCount = useMemo(
@@ -281,13 +337,17 @@ export function ConversationList({
     if (isMobile) return whatsappContacts.filter((c) => c.is_group && !c.archived_at).length;
     return applyInboxFilters(whatsappContacts, filter, filterCtx, { searchQuery, tab: "grupos" }).length;
   }, [abasDeGrupos, isMobile, whatsappContacts, filter, filterCtx, searchQuery]);
-  const unreadCount = useMemo(
-    () =>
-      isSocialBox
-        ? socialContacts.filter((c) => c.unread_count > 0).length
-        : whatsappContacts.filter((c) => !c.is_group && !c.archived_at && c.unread_count > 0).length,
-    [isSocialBox, socialContacts, whatsappContacts],
-  );
+  const unreadCount = useMemo(() => {
+    const doWhatsApp = whatsappContacts.filter(
+      (c) => !c.is_group && !c.archived_at && c.unread_count > 0,
+    ).length;
+    if (isSocialBox) return socialContacts.filter((c) => c.unread_count > 0).length;
+    // No modo unificado o número soma as duas metades: ele conta o que está NA
+    // LISTA, e a lista agora tem as duas. (O contador que segue o ACESSO, e não
+    // a seleção, é outro — vive no seletor de caixas.)
+    if (!modoUnificado) return doWhatsApp;
+    return doWhatsApp + socialContacts.filter((c) => c.unread_count > 0).length;
+  }, [isSocialBox, modoUnificado, socialContacts, whatsappContacts]);
 
   // Com o gate fechado o recorte não é confiável — número exibido seria invenção.
   const fmtCount = useCallback(
@@ -333,10 +393,15 @@ export function ConversationList({
             // O mobile cicla entre as caixas em vez de abrir um seletor. Com o
             // Instagram na roda, ciclar continua sendo a interação certa: são
             // poucas caixas e o nome no header diz em qual você está.
-            if (boxes && boxes.length > 1 && onSelectBox) {
-              const idx = boxes.findIndex((b) => b.id === selectedBoxId);
+            // No mobile ciclar é a interação, e ciclar significa TROCAR de
+            // caixa — não acrescentar ao conjunto. Um toque que somasse caixas
+            // deixaria o vendedor com uma lista crescente sem nunca ter pedido
+            // a caixa unificada.
+            const trocar = onSomenteCaixa ?? onAlternarCaixa;
+            if (boxes && boxes.length > 1 && trocar) {
+              const idx = boxes.findIndex((b) => b.id === selectedBox?.id);
               const next = boxes[(idx + 1) % boxes.length];
-              onSelectBox(next.id);
+              trocar(next.id);
             }
           }}
           searchQuery={searchQuery}
@@ -354,71 +419,17 @@ export function ConversationList({
         />
       ) : (
       <div className="p-3 border-b bg-background shrink-0">
-        {boxes && boxes.length > 0 && onSelectBox && (
-          <div className="mb-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Caixa de entrada
-              </p>
-              {isAdmin && onOpenInstances && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onOpenInstances}
-                  className="h-6 gap-1 text-xs text-muted-foreground hover:text-foreground px-2"
-                  title="Gerenciar instâncias WhatsApp"
-                >
-                  <Settings className="w-3.5 h-3.5" />
-                  Instâncias
-                </Button>
-              )}
-            </div>
-            <Select value={selectedBoxId || ""} onValueChange={onSelectBox}>
-              <SelectTrigger className="h-9 w-full bg-background">
-                <SelectValue placeholder="Escolha a caixa..." />
-              </SelectTrigger>
-              <SelectContent>
-                {boxes.map((box) => (
-                  <SelectItem key={box.id} value={box.id}>
-                    <span className="flex items-center gap-2">
-                      {/* O selo do canal, e não só a bolinha de status: é ele
-                          que faz a caixa nova ser lida como Instagram em vez de
-                          "mais um número de WhatsApp". */}
-                      <ChannelBadge
-                        channel={
-                          boxUsesChannelMessages(box) && box.kind === "whatsapp"
-                            ? "whatsapp_oficial"
-                            : box.kind
-                        }
-                        size={14}
-                      />
-                      <span
-                        className={cn(
-                          "w-1.5 h-1.5 rounded-full shrink-0",
-                          box.status === "connected"
-                            ? "bg-emerald-500"
-                            : box.status === "connecting"
-                              ? "bg-amber-500"
-                              : "bg-muted-foreground/40",
-                        )}
-                      />
-                      {box.name}
-                      {/* O selo "Oficial" separa o canal da API da Meta do
-                          WhatsApp por QR na MESMA lista. O telefone não serve
-                          para isso: `phone_number` é NULL no canal oficial — o
-                          `/v1/channels` do fornecedor não o devolve — e o campo
-                          apareceria vazio (decisão Q11 do spec). */}
-                      {boxUsesChannelMessages(box) && box.kind === "whatsapp" && (
-                        <span className="ml-1 rounded-sm border border-border/60 px-1 py-px text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                          Oficial
-                        </span>
-                      )}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+        {boxes && boxes.length > 0 && marcadas && onAlternarCaixa && (
+          <SeletorDeCaixas
+            caixas={boxes}
+            marcadas={marcadas}
+            onAlternar={onAlternarCaixa}
+            onSomente={onSomenteCaixa ?? onAlternarCaixa}
+            onTodas={onTodasAsCaixas ?? (() => {})}
+            naoLidas={naoLidasPorCaixa}
+            isAdmin={isAdmin}
+            onOpenInstances={onOpenInstances}
+          />
         )}
 
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
@@ -596,6 +607,8 @@ export function ConversationList({
                     onAddTag={onAddTag}
                     onRemoveTag={onRemoveTag}
                     stageLabel={stageLabelFor(contact)}
+                    caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
+                    tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
                   />
                 </div>
               );
@@ -630,6 +643,8 @@ export function ConversationList({
                   onAddTag={onAddTag}
                   onRemoveTag={onRemoveTag}
                   stageLabel={stageLabelFor(contact)}
+                  caixa={metaPorLinha?.get(contactKey(contact))?.caixa}
+                  tambemEm={metaPorLinha?.get(contactKey(contact))?.tambemEm}
                 />
               ),
             )}

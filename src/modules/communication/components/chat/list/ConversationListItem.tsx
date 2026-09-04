@@ -14,6 +14,7 @@ import {
   Check,
   Bot,
   Zap,
+  Link2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -45,7 +46,9 @@ import {
   type InboxContact,
 } from "@/modules/communication/hooks/chat/types";
 import { ChannelBadge } from "../ChannelBadge";
+import { instanceColor } from "../bubble/utils/instanceColor";
 import { getAvatarGradient } from "./avatarGradient";
+import type { CaixaDaLinha } from "@/modules/communication/lib/caixaUnificada";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -88,10 +91,16 @@ interface ContactContextMenuProps {
   instanceId: string | null;
   organizationId: string | null;
   allTags: { id: string; name: string; color: string }[];
-  onArchive: (phone: string) => void;
+  /**
+   * A CAIXA vai junto: `whatsapp_conversations` é por (instância, telefone), e
+   * no modo unificado a linha clicada pode ser de uma caixa que não é a da
+   * conversa aberta. Sem ela, arquivar a linha da Técnica arquivaria a conversa
+   * homônima do Comercial.
+   */
+  onArchive: (phone: string, instanceId?: string | null) => void;
   onUnarchive: (conversationId: string) => void;
-  onDelete: (phone: string) => void;
-  onAddTag: (phone: string, tagId: string) => void;
+  onDelete: (phone: string, instanceId?: string | null) => void;
+  onAddTag: (phone: string, tagId: string, instanceId?: string | null) => void;
   onRemoveTag: (conversationId: string, tagId: string) => void;
 }
 
@@ -147,7 +156,7 @@ function ContactContextMenu({
                           if (isActive && contact.conversation_id) {
                             onRemoveTag(contact.conversation_id, tag.id);
                           } else {
-                            onAddTag(contact.phone_number, tag.id);
+                            onAddTag(contact.phone_number, tag.id, contact.instance_id);
                           }
                         }}
                       >
@@ -169,7 +178,9 @@ function ContactContextMenu({
           </DropdownMenuSub>
 
           {activeTab === "active" ? (
-            <DropdownMenuItem onClick={() => onArchive(contact.phone_number)}>
+            <DropdownMenuItem
+              onClick={() => onArchive(contact.phone_number, contact.instance_id)}
+            >
               <Archive className="w-4 h-4 mr-2" />
               Arquivar conversa
             </DropdownMenuItem>
@@ -212,7 +223,7 @@ function ContactContextMenu({
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => {
-                onDelete(contact.phone_number);
+                onDelete(contact.phone_number, contact.instance_id);
                 setShowDeleteConfirm(false);
               }}
             >
@@ -238,13 +249,31 @@ export interface ConversationListItemProps {
   instanceId: string | null;
   organizationId: string | null;
   allTags: { id: string; name: string; color: string }[];
-  onArchive: (phone: string) => void;
+  onArchive: (phone: string, instanceId?: string | null) => void;
   onUnarchive: (conversationId: string) => void;
-  onDelete: (phone: string) => void;
-  onAddTag: (phone: string, tagId: string) => void;
+  onDelete: (phone: string, instanceId?: string | null) => void;
+  onAddTag: (phone: string, tagId: string, instanceId?: string | null) => void;
   onRemoveTag: (conversationId: string, tagId: string) => void;
   /** Rótulo da etapa atual do lead (primeiro funil), resolvido pela lista. */
   stageLabel?: string | null;
+  /**
+   * A CAIXA de onde esta conversa veio.
+   *
+   * OPCIONAL, e ausente é o caminho de hoje: com uma caixa marcada, dizer de
+   * qual caixa a linha veio é repetir o que o seletor já diz três centímetros
+   * acima. São 42 das 62 organizações com um número só — elas não podem ganhar
+   * ruído por causa de uma capacidade que não usam.
+   */
+  caixa?: CaixaDaLinha;
+  /**
+   * As OUTRAS caixas em que este mesmo interlocutor tem conversa na tela.
+   *
+   * É o "fio" da decisão 1 do grill: duas linhas do mesmo contato não são
+   * duplicata da tela, são duas Conversas do Lead. Sem essa nota a lista parece
+   * ter repetido a pessoa — e a leitura de "a tela bugou" é pior que a de "ele
+   * fala nos dois números".
+   */
+  tambemEm?: readonly CaixaDaLinha[];
 }
 
 export function ConversationListItem({
@@ -262,6 +291,8 @@ export function ConversationListItem({
   onAddTag,
   onRemoveTag,
   stageLabel,
+  caixa,
+  tambemEm,
 }: ConversationListItemProps) {
   const displayName = contactDisplayName(contact);
   const avatarGradient = getAvatarGradient(contactAvatarSeed(contact));
@@ -385,6 +416,45 @@ export function ConversationListItem({
           </div>
           <div className="flex items-center justify-between gap-2 mt-0.5">
             <p className="text-[12px] text-muted-foreground/60 truncate flex-1 min-w-0 flex items-center gap-1">
+              {/* De qual caixa esta conversa corre. Vive na linha de metadados,
+                  e não ao lado do nome: o nome é o que a pessoa procura ao
+                  varrer a lista, e um selo disputando esse espaço rouba a
+                  varredura. A cor é a MESMA que a bolha de chat dá ao número —
+                  duas derivações dariam duas cores para a mesma caixa. */}
+              {caixa && (
+                <span
+                  className="flex items-center gap-1 shrink-0 max-w-[132px]"
+                  title={`Caixa: ${caixa.nome}`}
+                >
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ backgroundColor: instanceColor(caixa.id) }}
+                    aria-hidden
+                  />
+                  <span className="text-[10px] leading-none truncate text-muted-foreground/90">
+                    {caixa.nome}
+                  </span>
+                </span>
+              )}
+              {/* O FIO. Texto, e não só um ícone: cor e forma sozinhas não dizem
+                  QUAL é a outra caixa, e é justamente isso que decide se a
+                  pessoa responde aqui ou lá. Fica na mesma linha e trunca —
+                  altura de linha variável quebra a lista virtualizada. */}
+              {tambemEm && tambemEm.length > 0 && (
+                <span
+                  className="flex items-center gap-0.5 shrink-0 text-[10px] leading-none text-muted-foreground/70"
+                  title={`O mesmo contato também tem conversa em: ${tambemEm
+                    .map((c) => c.nome)
+                    .join(", ")}`}
+                >
+                  <Link2 className="w-3 h-3 shrink-0" aria-hidden />
+                  <span className="truncate max-w-[112px]">
+                    {tambemEm.length === 1
+                      ? `também em ${tambemEm[0].nome}`
+                      : `também em ${tambemEm.length} caixas`}
+                  </span>
+                </span>
+              )}
               {stageLabel && (
                 <span
                   className="text-[10px] leading-none px-1.5 py-0.5 rounded shrink-0 bg-muted text-muted-foreground/90 whitespace-nowrap"

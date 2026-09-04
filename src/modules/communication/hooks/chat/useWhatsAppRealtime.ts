@@ -16,7 +16,7 @@ import { useRealtimeChannel } from "@/shared/realtime/useRealtimeChannel";
 import type { WhatsAppMessage, ChatContact } from "./types";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
-import { chatQueryKeys } from "./shared/queryKeys";
+import { chatQueryKeys, MULTI_KEY_PREFIX } from "./shared/queryKeys";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
 
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
@@ -77,28 +77,55 @@ export function useWhatsAppMessagesRealtime(
       }
 
       // ── Patch lista de contatos (sidebar) ─────────────────────────────────
-      if (currentInstanceId) {
-        // Prefixo: patcha todas as variantes filtradas da instância (issue #1277).
-        const contactsQueryKey = chatQueryKeys.contactsPrefix(
-          organizationId,
-          currentInstanceId,
-        );
+      //
+      // A lista deixou de ser sempre "a de uma caixa": a caixa unificada guarda
+      // o conjunto marcado em `multi:<ids>` na mesma raiz. Alcançar só a chave
+      // da caixa aberta deixaria a lista real sem patch nenhum — e a tela
+      // congelaria até o próximo refetch, para TODA organização, porque o /chat
+      // usa a chave de conjunto mesmo com uma caixa só.
+      //
+      // Então o alvo é a RAIZ, e cada entrada de cache é avaliada pela caixa da
+      // MENSAGEM: só entra a lista cujo conjunto contém aquela caixa. Sem esse
+      // recorte, uma mensagem de outro número invalidaria listas que não a
+      // mostram — refetch a cada mensagem, em toda org com mais de um número.
+      const caixaDaMensagem = message.instance_id ?? null;
+      if (caixaDaMensagem && (eventType === "INSERT" || eventType === "UPDATE")) {
+        const raiz = ["whatsapp_contacts", organizationId ?? null] as const;
+        const normPhone = normalizePhone(messagePhone);
 
-        if (eventType === "INSERT" || eventType === "UPDATE") {
-          queryClient.setQueriesData<ChatContact[]>({ queryKey: contactsQueryKey }, (prev) => {
-            if (!prev) return prev;
+        const contemACaixa = (key: readonly unknown[]): boolean => {
+          const eixo = key[2];
+          if (typeof eixo !== "string") return false;
+          if (!eixo.startsWith(MULTI_KEY_PREFIX)) return eixo === caixaDaMensagem;
+          return eixo
+            .slice(MULTI_KEY_PREFIX.length)
+            .split(",")
+            .includes(caixaDaMensagem);
+        };
 
-            const normPhone = normalizePhone(messagePhone);
-            const existingIdx = prev.findIndex(
-              (c) => normalizePhone(c.phone_number) === normPhone,
-            );
+        for (const query of queryClient.getQueryCache().findAll({ queryKey: raiz })) {
+          if (!contemACaixa(query.queryKey)) continue;
 
-            if (existingIdx === -1) {
-              queryClient.invalidateQueries({ queryKey: contactsQueryKey });
-              return prev;
-            }
+          const prev = query.state.data as ChatContact[] | undefined;
+          if (!prev) continue;
 
-            return prev.map((contact, idx) => {
+          // A linha é `(caixa, telefone)` desde a caixa unificada: casar só pelo
+          // telefone acertaria a linha da caixa errada quando o mesmo contato
+          // fala pelos dois números — 10 contatos na Chique, 21% na Alamaster.
+          const existingIdx = prev.findIndex(
+            (c) =>
+              normalizePhone(c.phone_number) === normPhone &&
+              (c.instance_id == null || c.instance_id === caixaDaMensagem),
+          );
+
+          if (existingIdx === -1) {
+            queryClient.invalidateQueries({ queryKey: query.queryKey });
+            continue;
+          }
+
+          queryClient.setQueryData<ChatContact[]>(query.queryKey, (atual) => {
+            if (!atual) return atual;
+            return atual.map((contact, idx) => {
               if (idx !== existingIdx) return contact;
 
               const msgTime = new Date(message.timestamp).getTime();
@@ -107,18 +134,19 @@ export function useWhatsAppMessagesRealtime(
               if (msgTime <= existingTime) return contact;
 
               const isIncoming = message.direction === "incoming";
+              // "Está aberta" agora inclui a CAIXA: a mesma conversa aberta na
+              // outra caixa não pode zerar a não-lida desta.
               const isCurrentConversation =
-                phoneNumberRef.current &&
-                normalizePhone(messagePhone) ===
-                  normalizePhone(phoneNumberRef.current);
+                !!phoneNumberRef.current &&
+                normalizePhone(messagePhone) === normalizePhone(phoneNumberRef.current) &&
+                (instanceIdRef.current == null ||
+                  instanceIdRef.current === caixaDaMensagem);
 
               return {
                 ...contact,
                 last_message: message.content ?? contact.last_message,
                 last_message_time: message.timestamp,
-                last_message_direction: message.direction as
-                  | "incoming"
-                  | "outgoing",
+                last_message_direction: message.direction as "incoming" | "outgoing",
                 unread_count:
                   isIncoming && !isCurrentConversation
                     ? contact.unread_count + 1
