@@ -4,6 +4,7 @@ import { MobileConversationRow } from "@/modules/communication/components/chat/l
 import type { ChatContact } from "@/modules/communication/hooks/useWhatsAppChat";
 
 const baseContact: ChatContact = {
+  instance_id: "cx-1",
   phone_number: "5511999999999",
   push_name: "João Silva",
   lead_name: "João Silva",
@@ -93,7 +94,7 @@ describe("MobileConversationRow", () => {
     expect(screen.queryByLabelText("IA ativa")).not.toBeInTheDocument();
   });
 
-  it("fires onPress with phone number", () => {
+  it("entrega a CHAVE da conversa, não o telefone", () => {
     const onPress = vi.fn();
     render(
       <MobileConversationRow
@@ -103,7 +104,10 @@ describe("MobileConversationRow", () => {
       />,
     );
     fireEvent.click(screen.getByRole("button"));
-    expect(onPress).toHaveBeenCalledWith("5511999999999");
+    // A identidade da conversa é `(caixa, telefone)` desde a caixa unificada:
+    // o telefone sozinho colidiria entre duas caixas que falam com o mesmo
+    // número, e a linha de uma abriria a thread da outra.
+    expect(onPress).toHaveBeenCalledWith("whatsapp:cx-1:5511999999999");
   });
 
   it("shows 'Você:' prefix for outgoing manual messages", () => {

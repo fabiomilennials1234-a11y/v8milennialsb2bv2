@@ -6,6 +6,7 @@ import type { ChatContact } from "@/modules/communication/hooks/chat/types";
 function contact(over: Partial<ChatContact> = {}): ChatContact {
   return {
     channel: "whatsapp",
+    instance_id: "inst-1",
     phone_number: "5548999000111",
     push_name: "Maria",
     last_message: "oi",

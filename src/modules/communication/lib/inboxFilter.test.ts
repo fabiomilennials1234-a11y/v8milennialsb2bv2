@@ -16,6 +16,7 @@ function contact(over: Partial<ChatContact> = {}): ChatContact {
   seq += 1;
   return {
     channel: "whatsapp",
+    instance_id: `inst-${seq}`,
     phone_number: `5548999${String(seq).padStart(6, "0")}`,
     push_name: `Contato ${seq}`,
     last_message: "oi",

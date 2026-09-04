@@ -69,6 +69,24 @@ export interface ChatContact {
    * já tinha `ChatContact` continua tendo.
    */
   channel: "whatsapp";
+  /**
+   * A CAIXA de onde esta conversa veio — `whatsapp_instances.id`.
+   *
+   * Existe porque a lista deixou de ser de uma caixa só. Com duas caixas
+   * visíveis ao mesmo tempo, o telefone para de ser identidade: o mesmo número
+   * falando com dois números nossos são duas Conversas do Lead, com históricos
+   * diferentes, e sem este campo as duas linhas colidiriam em `contactKey` —
+   * mesma `key` de React, mesma seleção, e a thread de uma abrindo no lugar da
+   * outra.
+   *
+   * `null` significa "não sei de qual caixa", e não é hipótese: a bolha de chat
+   * agrupa por telefone ATRAVESSANDO caixas (W4 a migra para o motor novo) e o
+   * contador de não-lidas do badge constrói contato sem origem. Quem produz
+   * `null` produz uma linha que a caixa unificada não sabe marcar — e é melhor
+   * que a alternativa, que seria carimbar uma caixa arbitrária e mostrar o selo
+   * errado.
+   */
+  instance_id: string | null;
   phone_number: string;
   push_name: string | null;
   last_message: string | null;
@@ -233,7 +251,65 @@ export function isSocialContact(c: InboxContact): c is SocialContact {
  * `chat-meta` casou thread por `sender_id` e fez toda mensagem de SAÍDA sumir.
  */
 export function contactKey(c: InboxContact): string {
-  return isWhatsAppContact(c) ? c.phone_number : c.conversation_key;
+  return isWhatsAppContact(c)
+    ? buildWhatsAppConversationKey(c.instance_id, c.phone_number)
+    : c.conversation_key;
+}
+
+/**
+ * A chave de conversa de uma caixa de WhatsApp por QR.
+ *
+ * `whatsapp:<instância>:<telefone>` — a MESMA forma de três segmentos das
+ * caixas sociais, agora também aqui. Antes desta onda a chave era o telefone
+ * cru, e ele bastava porque a lista mostrava uma caixa por vez.
+ *
+ * ⚠️ NÃO É A CHAVE DO BANCO, apesar do namespace idêntico.
+ * `conversation_read_state.conversation_key` guarda
+ * `whatsapp:<instância>:<telefone NORMALIZADO>`, montada pela RPC
+ * `mark_conversation_read` a partir de `(p_instance_id, p_normalized_phone)`.
+ * Aqui o terceiro segmento é o telefone COMO A LISTA O RECEBEU, porque é ele
+ * que o composer, o painel de contexto e o fetch da thread consomem — trocar
+ * por normalizado mudaria o número para o qual a mensagem sai. As duas chaves
+ * convivem porque nenhuma das duas atravessa a fronteira da outra: esta nunca
+ * é gravada no banco, e a do banco nunca é comparada com seleção de tela.
+ *
+ * Instância ausente vira `sem-caixa`, e não string vazia: `whatsapp::5511...`
+ * seria uma chave de dois segmentos disfarçada, e o parser devolveria o
+ * interlocutor errado.
+ */
+export function buildWhatsAppConversationKey(
+  instanceId: string | null | undefined,
+  phoneNumber: string,
+): string {
+  return `whatsapp:${instanceId || "sem-caixa"}:${phoneNumber}`;
+}
+
+/**
+ * A caixa de uma chave de conversa — segundo segmento, qualquer que seja o
+ * canal. `null` para uma chave que não tem a forma de três segmentos.
+ */
+export function caixaDaChave(chave: string | null | undefined): string | null {
+  if (!chave) return null;
+  const partes = chave.split(":");
+  if (partes.length < 3) return null;
+  return partes[1] || null;
+}
+
+/**
+ * O interlocutor de uma chave de conversa — TUDO depois do segundo `:`.
+ *
+ * Fatiar por índice, e não `split(':')[2]`: id de rede social é opaco e pode
+ * conter `:` (há teste guardando isso desde a fatia do Instagram). Para uma
+ * caixa de WhatsApp devolve exatamente o telefone que entrou na chave — é o que
+ * o composer e o painel de contexto consomem.
+ */
+export function interlocutorDaChave(chave: string | null | undefined): string | null {
+  if (!chave) return null;
+  const primeiro = chave.indexOf(":");
+  if (primeiro === -1) return null;
+  const segundo = chave.indexOf(":", primeiro + 1);
+  if (segundo === -1) return null;
+  return chave.slice(segundo + 1) || null;
 }
 
 /**

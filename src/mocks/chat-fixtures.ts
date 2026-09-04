@@ -13,6 +13,7 @@ import type { AiTakeoverState } from "@/modules/communication/lib/chat-types";
 
 export const mockContact: ChatContact = {
   channel: "whatsapp",
+  instance_id: "instance-uuid-001",
   phone_number: "+5511999991001",
   push_name: "João Silva",
   lead_name: "João Silva",

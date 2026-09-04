@@ -316,6 +316,9 @@ export function ChatBubbleProvider({ children }: ChatBubbleProviderProps) {
             // ChatContact à mão fora da camada de dados.
             return Object.entries(unreadByPhone).map(([phone, unread]) => ({
               channel: "whatsapp" as const,
+              // Esta query é POR instância (`enabled` amarra `inst.id`): a
+              // origem é conhecida, mesmo o contato sendo sintético.
+              instance_id: inst.id,
               phone_number: phone, push_name: null, last_message: null,
               last_message_time: new Date().toISOString(), last_message_direction: null,
               last_message_sent_source: null,
