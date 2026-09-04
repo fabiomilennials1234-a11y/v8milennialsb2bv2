@@ -15,7 +15,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { usePipelines } from "@/modules/pipelines";
+import { useFunisDaOrg } from "@/modules/pipelines";
 import { usePipelineDisplayConfig } from "@/modules/pipelines";
 import { useOrganization } from "@/modules/identity";
 
@@ -31,7 +31,9 @@ export interface FunnelOption {
 
 export function useInboxFunnelOptions(): FunnelOption[] {
   const { organizationId } = useOrganization();
-  const { data: pipelines = [] } = usePipelines();
+  // `useFunisDaOrg` já resolve o rótulo; o display config segue sendo lido
+  // abaixo para VISIBILIDADE e ORDEM, que são outra decisão.
+  const { data: pipelines = [] } = useFunisDaOrg();
   const { data: displayConfig = [] } = usePipelineDisplayConfig();
 
   // Etapas de QUALQUER funil, pela FK real (fonte única `pipeline_stages`).
@@ -78,7 +80,9 @@ export function useInboxFunnelOptions(): FunnelOption[] {
       if (p.type === "system") {
         const cfg = cfgByType.get(p.slug as (typeof displayConfig)[number]["pipe_type"]);
         if (cfg && cfg.is_visible === false) continue; // escondido pela org
-        const label = cfg?.display_name ?? p.name;
+        // Era `cfg?.display_name ?? p.name` — a regra de `nomeDoFunil`
+        // reescrita à mão aqui. Uma cópia a menos.
+        const label = p.label;
         options.push({
           pipelineId: p.id,
           label,
@@ -88,7 +92,7 @@ export function useInboxFunnelOptions(): FunnelOption[] {
       } else {
         options.push({
           pipelineId: p.id,
-          label: p.name,
+          label: p.label,
           stages: stagesByPipeline.get(p.id) ?? [],
           order: 1000 + p.display_order, // custom sempre depois dos de sistema
         });

@@ -57,7 +57,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/modules/leads/hooks/useTags";
-import { usePipelines } from "@/modules/pipelines";
+import { useFunisDaOrg } from "@/modules/pipelines";
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
@@ -422,7 +422,8 @@ function ConfirmacaoOverdueSettings() {
  */
 function DefaultPipelineSettings() {
   const { settings, isAdmin, updateSettings, isUpdating, isLoading: settingsLoading } = useOrganizationSettings();
-  const { data: pipelines = [], isLoading: pipelinesLoading } = usePipelines();
+  // Nome que a ORG usa — ver `useFunisDaOrg`.
+  const { data: pipelines = [], isLoading: pipelinesLoading } = useFunisDaOrg();
 
   const NONE = "__none__";
   const current = settings.default_pipeline_id ?? NONE;
@@ -461,7 +462,7 @@ function DefaultPipelineSettings() {
             <SelectItem value={NONE}>Sem funil padrão</SelectItem>
             {pipelines.map((p) => (
               <SelectItem key={p.id} value={p.id}>
-                {p.name}
+                {p.label}
                 {p.is_active === false ? " (inativo)" : ""}
               </SelectItem>
             ))}

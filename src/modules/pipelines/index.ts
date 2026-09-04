@@ -87,6 +87,11 @@ export type {
 } from "./hooks/legacy";
 
 // ── Hooks: pipeline modelo novo (pipeline_entries + pipeline_stages) ──────
+// Funis da org COM o nome que ela usa. Prefira este a `usePipelines` em
+// qualquer lugar que desenhe o funil na tela — `pipelines.name` é o seed
+// congelado para funil de sistema (SCRUM-608).
+export { useFunisDaOrg, useFunisAtivosDaOrg } from "./hooks/model/useFunisDaOrg";
+export type { FunilDaOrg } from "./hooks/model/useFunisDaOrg";
 export {
   usePipelines,
   usePipeline,

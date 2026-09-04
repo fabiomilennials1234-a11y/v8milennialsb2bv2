@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { usePipelines } from "@/modules/pipelines";
+import { useFunisDaOrg } from "@/modules/pipelines";
 import { useOrganizationSettings } from "@/modules/identity";
 
 /**
@@ -23,7 +23,8 @@ export interface AnalyticsPipelineOption {
 }
 
 export function useAnalyticsPipelineOptions() {
-  const { data: pipelines, isLoading } = usePipelines();
+  // Nome que a ORG usa — `pipelines.name` é o seed congelado no sistema.
+  const { data: pipelines, isLoading } = useFunisDaOrg();
   const { settings } = useOrganizationSettings();
   const defaultPipelineId = settings.default_pipeline_id;
 
@@ -31,7 +32,7 @@ export function useAnalyticsPipelineOptions() {
     const active = (pipelines ?? []).filter((p) => p.is_active);
     const options: AnalyticsPipelineOption[] = active.map((p) => ({
       id: p.id,
-      name: p.name,
+      name: p.label,
       slug: p.slug,
     }));
     const orgDefault =
