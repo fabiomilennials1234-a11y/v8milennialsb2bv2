@@ -1,5 +1,5 @@
 {
-  "medido_em": "2026-09-04T00:18:47.606Z",
+  "medido_em": "2026-09-04T23:15:47.229Z",
   "linhas": [
     {
       "nome": "bulk_add_to_custom_pipe",
@@ -9,9 +9,9 @@
     },
     {
       "nome": "custom_pipe_entries",
-      "calls": "100070",
-      "stmts": 44,
-      "newest_stats_since": "2026-09-03 16:42:30.429152+00"
+      "calls": "100593",
+      "stmts": 45,
+      "newest_stats_since": "2026-09-04 18:28:09.90137+00"
     },
     {
       "nome": "custom_pipeline_delete_impact",
@@ -21,15 +21,15 @@
     },
     {
       "nome": "custom_pipeline_stages",
-      "calls": "123960",
-      "stmts": 55,
-      "newest_stats_since": "2026-09-03 13:44:28.96909+00"
+      "calls": "124580",
+      "stmts": 56,
+      "newest_stats_since": "2026-09-04 18:43:16.821842+00"
     },
     {
       "nome": "custom_pipelines",
-      "calls": "230387",
-      "stmts": 27,
-      "newest_stats_since": "2026-09-03 11:56:49.909901+00"
+      "calls": "234985",
+      "stmts": 31,
+      "newest_stats_since": "2026-09-04 20:16:12.382646+00"
     },
     {
       "nome": "delete_custom_pipeline",
@@ -57,21 +57,21 @@
     },
     {
       "nome": "pipe_confirmacao",
-      "calls": "606542",
-      "stmts": 166,
+      "calls": "607661",
+      "stmts": 164,
       "newest_stats_since": "2026-09-03 10:33:52.380552+00"
     },
     {
       "nome": "pipe_propostas",
-      "calls": "257348",
-      "stmts": 188,
-      "newest_stats_since": "2026-08-25 15:44:14.461169+00"
+      "calls": "258457",
+      "stmts": 184,
+      "newest_stats_since": "2026-09-04 03:28:53.246051+00"
     },
     {
       "nome": "pipe_whatsapp",
-      "calls": "243439",
+      "calls": "244423",
       "stmts": 78,
-      "newest_stats_since": "2026-08-20 11:51:12.832734+00"
+      "newest_stats_since": "2026-09-04 03:27:47.090498+00"
     },
     {
       "nome": "system_pipeline_delete_impact",
