@@ -91,7 +91,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("organization_id", orgId)
           .eq("is_active", true),
         supabase
-          .from("custom_pipeline_stages")
+          .from("pipeline_stages")
           .select("id, pipeline_id, name, color, position, stage_key, stage_role")
           .eq("organization_id", orgId)
           .eq("is_active", true)
@@ -117,6 +117,10 @@ export function useLeadAllPipelines(leadId: string | null) {
       // Build stage lookup
       const stagesByDbType = new Map<string, { id: string; label: string; color: string; role: string | null }[]>();
       (dynamicStages || []).forEach((s) => {
+        // `pipeline_type` é anulável desde que a etapa ganhou FK ao funil
+        // (SCRUM-616): etapa de funil custom não tem tipo de sistema e é
+        // indexada por `pipeline_id` no mapa de baixo, não aqui.
+        if (!s.pipeline_type) return;
         const arr = stagesByDbType.get(s.pipeline_type) || [];
         arr.push({ id: s.stage_key, label: s.name, color: s.color || "#64748b", role: (s as { stage_role?: string | null }).stage_role ?? null });
         stagesByDbType.set(s.pipeline_type, arr);
@@ -228,6 +232,10 @@ export function useLeadAllPipelines(leadId: string | null) {
       // Custom pipelines
       const stagesByPipeline = new Map<string, typeof customStagesAll>();
       (customStagesAll || []).forEach((s) => {
+        // `pipeline_stages.pipeline_id` é anulável; o espelho `custom_pipeline_stages`
+        // devolvia não-nulo porque nascia de um JOIN. Etapa sem funil não pertence a
+        // funil custom nenhum, então não entra no mapa.
+        if (!s.pipeline_id) return;
         const arr = stagesByPipeline.get(s.pipeline_id) || [];
         arr.push(s);
         stagesByPipeline.set(s.pipeline_id, arr);

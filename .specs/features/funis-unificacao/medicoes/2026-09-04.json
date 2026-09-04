@@ -1,0 +1,89 @@
+{
+  "medido_em": "2026-09-04T00:18:47.606Z",
+  "linhas": [
+    {
+      "nome": "bulk_add_to_custom_pipe",
+      "calls": "154",
+      "stmts": 1,
+      "newest_stats_since": "2026-07-03 18:26:22.977543+00"
+    },
+    {
+      "nome": "custom_pipe_entries",
+      "calls": "100070",
+      "stmts": 44,
+      "newest_stats_since": "2026-09-03 16:42:30.429152+00"
+    },
+    {
+      "nome": "custom_pipeline_delete_impact",
+      "calls": "0",
+      "stmts": 0,
+      "newest_stats_since": ""
+    },
+    {
+      "nome": "custom_pipeline_stages",
+      "calls": "123960",
+      "stmts": 55,
+      "newest_stats_since": "2026-09-03 13:44:28.96909+00"
+    },
+    {
+      "nome": "custom_pipelines",
+      "calls": "230387",
+      "stmts": 27,
+      "newest_stats_since": "2026-09-03 11:56:49.909901+00"
+    },
+    {
+      "nome": "delete_custom_pipeline",
+      "calls": "4",
+      "stmts": 1,
+      "newest_stats_since": "2026-08-25 16:57:48.761725+00"
+    },
+    {
+      "nome": "delete_system_pipeline",
+      "calls": "0",
+      "stmts": 0,
+      "newest_stats_since": ""
+    },
+    {
+      "nome": "get_custom_filtered_lead_ids",
+      "calls": "26",
+      "stmts": 1,
+      "newest_stats_since": "2026-06-26 18:29:56.250954+00"
+    },
+    {
+      "nome": "get_custom_pipeline_stage_counts",
+      "calls": "4635",
+      "stmts": 2,
+      "newest_stats_since": "2026-07-28 17:11:08.194753+00"
+    },
+    {
+      "nome": "pipe_confirmacao",
+      "calls": "606542",
+      "stmts": 166,
+      "newest_stats_since": "2026-09-03 10:33:52.380552+00"
+    },
+    {
+      "nome": "pipe_propostas",
+      "calls": "257348",
+      "stmts": 188,
+      "newest_stats_since": "2026-08-25 15:44:14.461169+00"
+    },
+    {
+      "nome": "pipe_whatsapp",
+      "calls": "243439",
+      "stmts": 78,
+      "newest_stats_since": "2026-08-20 11:51:12.832734+00"
+    },
+    {
+      "nome": "system_pipeline_delete_impact",
+      "calls": "0",
+      "stmts": 0,
+      "newest_stats_since": ""
+    },
+    {
+      "nome": "system_stage_role",
+      "calls": "0",
+      "stmts": 0,
+      "newest_stats_since": ""
+    }
+  ]
+}

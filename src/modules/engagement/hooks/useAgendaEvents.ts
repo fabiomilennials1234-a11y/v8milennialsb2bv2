@@ -208,12 +208,13 @@ async function fetchAgendaFallback(
         .gte("due_date", startIso)
         .lt("due_date", endIso) as never,
     ),
-    // Source 4: pipe_confirmacao (non-null meeting_date in range)
+    // Source 4: funil de confirmação (meeting_date preenchido no intervalo)
     safe<Record<string, unknown>>(
-      from("pipe_confirmacao")
+      from("negocio_projetado")
         .select(
-          "id, notes, meeting_date, status, lead_id, lead:leads(name, company)",
+          "id, notes, meeting_date, stage_key, lead_id, lead:leads(name, company)",
         )
+        .eq("funil_sistema", "confirmacao")
         .eq("organization_id", organizationId)
         .not("meeting_date", "is", null)
         .gte("meeting_date", startIso)
@@ -284,7 +285,7 @@ async function fetchAgendaFallback(
       end_at: addMinutesIso(md, 60),
       all_day: false,
       event_type: "meeting",
-      status: (r.status as string) ?? "scheduled",
+      status: (r.stage_key as string) ?? "scheduled",
       lead_id: (r.lead_id as string) ?? null,
       lead_name: lead?.name ?? null,
       lead_company: lead?.company ?? null,

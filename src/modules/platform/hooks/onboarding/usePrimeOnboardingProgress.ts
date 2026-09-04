@@ -118,10 +118,11 @@ export function usePrimeOnboardingProgress() {
       if (cached && !cached.step_first_sale) {
         checks.push(
           supabase
-            .from("pipe_propostas")
+            .from("negocio_projetado")
             .select("id", { count: "exact", head: true })
+            .eq("funil_sistema", "propostas")
             .eq("organization_id", organizationId!)
-            .eq("status", "vendido")
+            .eq("stage_key", "vendido")
             .then(({ count }) => ({
               step: "step_first_sale" as OnboardingStepKey,
               count: count ?? 0,

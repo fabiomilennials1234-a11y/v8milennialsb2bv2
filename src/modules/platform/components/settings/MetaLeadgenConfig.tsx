@@ -758,6 +758,10 @@ export function MetaLeadgenConfig() {
 
       const grouped: Record<string, Array<{ stage_key: string; name: string }>> = {};
       for (const stage of data || []) {
+        // `pipeline_type` é anulável desde que a etapa ganhou FK ao funil
+        // (SCRUM-616): etapa de funil custom não tem tipo de sistema e não
+        // pertence a nenhum grupo desta tela.
+        if (!stage.pipeline_type) continue;
         if (!grouped[stage.pipeline_type]) grouped[stage.pipeline_type] = [];
         grouped[stage.pipeline_type].push({
           stage_key: stage.stage_key,
