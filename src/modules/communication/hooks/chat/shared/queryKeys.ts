@@ -66,6 +66,53 @@ export const chatQueryKeys = {
       filterKey ?? "",
     ] as const,
 
+  /**
+   * Lista de contatos de um CONJUNTO de caixas (caixa unificada).
+   *
+   * Mesma RAIZ (`whatsapp_contacts`) e mesmo segundo segmento (a org) das listas
+   * de uma caixa só, de propósito: os patches de realtime alcançam o cache por
+   * PREFIXO com `setQueriesData`, e uma lista fora da raiz pararia de receber
+   * patch — a tela congelaria até o próximo refetch, que é o defeito mais caro
+   * que esta tela pode ter.
+   *
+   * O terceiro segmento é `multi:<ids ordenados>` em vez de um uuid. É o que
+   * distingue as duas famílias sem sair da raiz: um patcher que só sabe tratar a
+   * lista de UMA caixa filtra por esse prefixo em vez de escrever formato errado
+   * numa lista que não é dele.
+   *
+   * ⚠️ Os ids entram ORDENADOS. A mesma seleção em ordem diferente é a mesma
+   * pergunta; sem ordenar, marcar A depois B e marcar B depois A abririam duas
+   * entradas de cache com a mesma resposta — e cada patch acertaria só uma.
+   */
+  contactsMulti: (
+    organizationId: string | null | undefined,
+    idsOrdenados: readonly string[],
+    filterKey?: string,
+  ) =>
+    [
+      "whatsapp_contacts",
+      organizationId ?? null,
+      `multi:${idsOrdenados.join(",")}`,
+      filterKey ?? "",
+    ] as const,
+
+  /**
+   * Lista de conversas de um CONJUNTO de caixas do canal OFICIAL.
+   *
+   * Raiz `social_contacts` porque é de lá que ela lê (`channel_messages`), e é
+   * essa raiz que `useSocialRealtime` invalida — o tempo real desta lista vem de
+   * graça, como já vinha para a caixa oficial isolada.
+   */
+  officialContactsMulti: (
+    organizationId: string | null | undefined,
+    idsOrdenados: readonly string[],
+  ) =>
+    [
+      "social_contacts",
+      organizationId ?? null,
+      `multi:${idsOrdenados.join(",")}`,
+    ] as const,
+
   /** Contagem lightweight de unread para badge global (ChatBubbleContext). */
   unreadBadge: (
     organizationId: string | null | undefined,
@@ -166,6 +213,8 @@ export const chatQueryKeys = {
 export type ChatQueryKey =
   | ReturnType<typeof chatQueryKeys.messages>
   | ReturnType<typeof chatQueryKeys.contacts>
+  | ReturnType<typeof chatQueryKeys.contactsMulti>
+  | ReturnType<typeof chatQueryKeys.officialContactsMulti>
   | ReturnType<typeof chatQueryKeys.contactsPrefix>
   | ReturnType<typeof chatQueryKeys.unreadBadge>
   | ReturnType<typeof chatQueryKeys.leadWhatsAppInstance>
@@ -180,5 +229,13 @@ export type ChatQueryKey =
  * recebe (ele invalida por `[chave[0]]`), e é o que garante que a invalidação
  * de um canal social nunca toque o cache de WhatsApp.
  */
+/**
+ * Prefixo do terceiro segmento das chaves por CONJUNTO de caixas.
+ *
+ * Existe para que um patcher possa perguntar "esta entrada de cache é uma lista
+ * unificada?" sem reconstruir a chave — `String(key[2]).startsWith(MULTI_KEY_PREFIX)`.
+ */
+export const MULTI_KEY_PREFIX = "multi:" as const;
+
 export const SOCIAL_CONTACTS_KEY_ROOT = "social_contacts" as const;
 export const SOCIAL_MESSAGES_KEY_ROOT = "social_messages" as const;
