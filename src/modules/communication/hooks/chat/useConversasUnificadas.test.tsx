@@ -278,9 +278,14 @@ describe("useConversasUnificadas", () => {
     // guardá-lo numa const desamarra o receptor e a chamada estoura dentro do
     // `queryFn`, antes de sair requisição nenhuma — a tela mostra "nenhuma
     // conversa" e o log da API não registra nada, nem erro.
-    const solto = supabaseDublê.rpc;
+    // `call(undefined, ...)` é o que acontece quando o método é guardado numa
+    // const e chamado solto: o receptor some.
+    const solto = supabaseDublê.rpc as (
+      this: unknown,
+      ...a: unknown[]
+    ) => unknown;
 
-    expect(() => solto("get_whatsapp_conversation_list_multi", {})).toThrow(
+    expect(() => solto.call(undefined, "get_whatsapp_conversation_list_multi", {})).toThrow(
       /desamarrado/,
     );
     expect(() => supabaseDublê.rpc("get_whatsapp_conversation_list_multi", {})).not.toThrow();

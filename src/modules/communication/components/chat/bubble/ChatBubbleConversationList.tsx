@@ -1,30 +1,51 @@
 /**
- * Lista de conversas do Bubble — agrega contacts de TODAS instâncias permitidas.
+ * Lista de conversas da bolha de chat — todas as caixas de Chip permitidas.
  *
- * Cache PRÓPRIO (`bubbleContacts`): esta lista tem outra origem de dado — ela
- * filtra arquivadas fora, conta não-lidas pelo `localStorage` e deixa etiqueta
- * vazia. Dividir a entrada de cache com o `/chat` fazia dois formatos
- * disputarem o mesmo espaço.
- * Filtragem local: search debounced sobre nome/phone (case-insensitive).
- * Virtualização: >50 items via @tanstack/react-virtual (mesma estratégia
- * do ConversationList canônico).
+ * ─── A RÉPLICA MANUAL MORREU AQUI (D10) ────────────────────────────────────
  *
- * Conversas arquivadas são filtradas (mostra apenas active).
+ * Até a W4 este arquivo tinha uma cópia da consulta de lista escrita à mão:
+ * baixava até 8.000 mensagens POR CAIXA, deduplicava por telefone no
+ * navegador, resolvia nome de lead num segundo `select`, contava não-lidas
+ * varrendo o `localStorage` e ainda lia `whatsapp_conversations` para saber o
+ * que estava arquivado. Cinco idas ao banco por caixa, e um resultado que
+ * divergia da lista do `/chat` sem ninguém saber qual das duas estava certa.
+ *
+ * Agora consome a MESMA função do banco que o `/chat` usa
+ * (`useConversasUnificadas` → `get_whatsapp_conversation_list_multi`): uma
+ * chamada para todas as caixas, lendo a tabela-resumo, com não-lida vinda do
+ * `conversation_read_state` e a caixa de origem em cada linha.
+ *
+ * ⚠️ NÃO É INCIDENTE DE SEGURANÇA, e não foi tratado como um: a leitura direta
+ *    passava por `whatsapp_messages`, cuja RLS já aplica `can_see_chat` —
+ *    conferido ao vivo em produção. O problema era duplicação e divergência.
+ *
+ * ─── O QUE CONTINUA IGUAL, DE PROPÓSITO ────────────────────────────────────
+ *
+ * A bolha mostra só conversa ATIVA (arquivada fica fora), a busca segue local
+ * sobre nome e telefone, o filtro por caixa segue visual, e a virtualização
+ * entra acima de 50 linhas. Ela também NÃO é aposentada: serve para responder
+ * sem sair do funil ou da Carteira.
+ *
+ * ⚠️ SÓ CAIXAS DE CHIP. A thread da bolha lê `whatsapp_messages`
+ *    (`useWhatsAppMessages`), então listar aqui uma conversa do canal oficial
+ *    abriria uma thread vazia — mostrar conversa que não abre é pior que não
+ *    mostrar. O canal oficial na bolha é fatia própria.
  */
-import { useMemo, useRef, useEffect, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
+import { useMemo, useRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Loader2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ChatBubbleConversationItem } from "./ChatBubbleConversationItem";
 import { ChatBubbleEmptyState } from "./ChatBubbleEmptyState";
-import { useCurrentTeamMember } from "@/modules/identity";
-import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
-import { supabase } from "@/integrations/supabase/client";
-import { normalizePhone } from "@/lib/normalizePhone";
-import { resolveChipInstanceIds } from "@/modules/communication/lib/chipInstanceIds";
-import type { ChatContact, ChatContactTag, WhatsAppInstanceForUser } from "@/modules/communication/hooks/chat/types";
+import { useConversasUnificadas } from "@/modules/communication/hooks/chat/useConversasUnificadas";
+import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
+import { isWhatsAppContact } from "@/modules/communication/hooks/chat/types";
+import type {
+  ChatContact,
+  InboxBox,
+  WhatsAppInstanceForUser,
+} from "@/modules/communication/hooks/chat/types";
 
 const VIRTUALIZE_THRESHOLD = 50;
 
@@ -46,192 +67,6 @@ interface ChatBubbleConversationListProps {
   onResetFilter: () => void;
 }
 
-/**
- * Réplica enxuta de useWhatsAppContacts, inline aqui para caber dentro de
- * `useQueries` (uma query por instância).
- *
- * ⚠️ DÍVIDA RECONHECIDA, com data de vencimento: a SCRUM-668 troca isto pela
- *    função do banco. O que a mantém viva por ora é só a ordem das fatias —
- *    separar as chaves de cache primeiro torna a troca reversível.
- */
-async function fetchContactsForInstance(
-  organizationId: string,
-  instanceId: string,
-): Promise<ChatContact[]> {
-  // Chip, não instância: histórico de instância excluída some da bolha pelo
-  // mesmo motivo que sumia do /chat. A varredura por chip depende da migration
-  // (apply MANUAL); antes dela isto degrada pra instância viva, que é o
-  // comportamento de hoje. Ver `chipInstanceIds.ts`.
-  const instanceIds = await resolveChipInstanceIds(organizationId, instanceId);
-
-  const { data, error } = await supabase
-    .from("whatsapp_messages")
-    .select(`
-      phone_number,
-      push_name,
-      content,
-      timestamp,
-      direction,
-      instance_id,
-      lead_id,
-      leads(name)
-    `)
-    .eq("organization_id", organizationId)
-    .in("instance_id", [...instanceIds])
-    .order("timestamp", { ascending: false });
-  if (error) throw error;
-
-  const contactsMap = new Map<string, ChatContact>();
-  for (const msg of data || []) {
-    const key = normalizePhone(msg.phone_number) ?? msg.phone_number;
-    if (!key) continue;
-    const existing = contactsMap.get(key);
-    const leadName = (msg.leads as { name?: string } | null)?.name ?? null;
-
-    if (!existing) {
-      contactsMap.set(key, {
-        // A bolha continua WhatsApp-pura nesta fatia: ela lê `whatsapp_messages`
-        // e nunca `channel_messages`. O discriminador é carimbado porque a
-        // conversa que sai daqui atravessa os mesmos componentes de lista.
-        channel: "whatsapp",
-        // A bolha agrupa por TELEFONE atravessando caixas (W4 a migra para o
-        // motor da caixa unificada). Enquanto isso, a origem carimbada é a da
-        // mensagem mais recente — que é também a caixa que a linha abre.
-        instance_id: msg.instance_id ?? null,
-        phone_number: msg.phone_number,
-        push_name: msg.direction === "incoming" ? msg.push_name : null,
-        last_message: msg.content,
-        last_message_time: msg.timestamp,
-        last_message_direction:
-          msg.direction === "incoming" || msg.direction === "outgoing"
-            ? msg.direction
-            : null,
-        last_message_sent_source: null,
-        unread_count: 0,
-        lead_id: msg.lead_id,
-        lead_name: leadName,
-        conversation_id: null,
-        archived_at: null,
-        tags: [],
-        is_group: false,
-        funnels: [],
-        qualification_tier: null,
-      });
-    } else {
-      if (new Date(msg.timestamp) > new Date(existing.last_message_time)) {
-        existing.last_message = msg.content;
-        existing.last_message_time = msg.timestamp;
-        existing.last_message_direction =
-          msg.direction === "incoming" || msg.direction === "outgoing"
-            ? msg.direction
-            : existing.last_message_direction;
-      }
-      if (msg.lead_id || leadName) {
-        existing.lead_id = existing.lead_id || msg.lead_id;
-        existing.lead_name = existing.lead_name || leadName;
-      }
-      if (msg.direction === "incoming" && msg.push_name) {
-        existing.push_name = existing.push_name || msg.push_name;
-      }
-    }
-  }
-
-  // Resolve lead names by phone for contacts missing lead_name
-  const phonesWithoutName = Array.from(contactsMap.entries())
-    .filter(([, c]) => !c.lead_name && !c.push_name)
-    .map(([, c]) => c.phone_number);
-
-  if (phonesWithoutName.length > 0) {
-    const { data: leads } = await supabase
-      .from("leads")
-      .select("name, phone")
-      .eq("organization_id", organizationId)
-      .in("phone", phonesWithoutName);
-
-    if (leads) {
-      const leadsByPhone = new Map(leads.map((l) => [normalizePhone(l.phone) ?? l.phone, l.name]));
-      for (const contact of contactsMap.values()) {
-        if (contact.lead_name || contact.push_name) continue;
-        const k = normalizePhone(contact.phone_number) ?? contact.phone_number;
-        const name = leadsByPhone.get(k);
-        if (name) contact.lead_name = name;
-      }
-    }
-  }
-
-  // Unread count via localStorage last_seen
-  const LAST_SEEN = "whatsapp_last_seen_";
-  const lastSeen: Record<string, string> = {};
-  if (typeof localStorage !== "undefined") {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (k?.startsWith(LAST_SEEN)) {
-        const p = k.slice(LAST_SEEN.length);
-        lastSeen[p] = localStorage.getItem(k) || "";
-      }
-    }
-  }
-
-  const { data: incoming } = await supabase
-    .from("whatsapp_messages")
-    .select("phone_number, timestamp")
-    .eq("organization_id", organizationId)
-    .in("instance_id", [...instanceIds])
-    .eq("direction", "incoming")
-    .order("timestamp", { ascending: false });
-
-  const unreadByPhone: Record<string, number> = {};
-  for (const m of incoming || []) {
-    const k = normalizePhone(m.phone_number) ?? "";
-    if (!k) continue;
-    const seen = lastSeen[k] ? new Date(lastSeen[k]).getTime() : 0;
-    if (new Date(m.timestamp).getTime() > seen) {
-      unreadByPhone[k] = (unreadByPhone[k] ?? 0) + 1;
-    }
-  }
-  for (const c of contactsMap.values()) {
-    const k = normalizePhone(c.phone_number) ?? "";
-    c.unread_count = unreadByPhone[k] ?? 0;
-  }
-
-  // Conversation metadata pra filtrar arquivadas/deletadas. Segue na instância
-  // viva: a FK de `whatsapp_conversations` é ON DELETE CASCADE, então instância
-  // excluída não deixa linha pra varrer — não há chip a resolver aqui.
-  const { data: convMeta } = await supabase
-    .from("whatsapp_conversations")
-    .select("id, phone_number, archived_at, deleted_at")
-    .eq("organization_id", organizationId)
-    .eq("instance_id", instanceId);
-
-  const metaMap = new Map<
-    string,
-    { id: string; archived_at: string | null; deleted_at: string | null }
-  >();
-  for (const row of convMeta || []) {
-    const k = normalizePhone(row.phone_number) ?? row.phone_number;
-    metaMap.set(k, row);
-  }
-
-  const results: ChatContact[] = [];
-  for (const contact of contactsMap.values()) {
-    const k = normalizePhone(contact.phone_number) ?? contact.phone_number;
-    const meta = metaMap.get(k);
-    if (meta?.deleted_at) continue;
-    if (meta?.archived_at) continue; // Bubble mostra apenas active
-    contact.conversation_id = meta?.id ?? null;
-    contact.archived_at = meta?.archived_at ?? null;
-    // Tags ficam vazias no Bubble (compact); detalhamento fica em /chat.
-    contact.tags = [] as ChatContactTag[];
-    results.push(contact);
-  }
-
-  results.sort(
-    (a, b) =>
-      new Date(b.last_message_time).getTime() - new Date(a.last_message_time).getTime(),
-  );
-  return results;
-}
-
 export function ChatBubbleConversationList({
   instances,
   searchQuery,
@@ -241,37 +76,56 @@ export function ChatBubbleConversationList({
   onSelect,
   onResetFilter,
 }: ChatBubbleConversationListProps) {
-  const { data: teamMember } = useCurrentTeamMember();
-  const organizationId = teamMember?.organization_id ?? null;
   const showInstanceDot = instances.length > 1;
 
-  const queries = useQueries({
-    queries: instances.map((inst) => ({
-      queryKey: chatQueryKeys.bubbleContacts(organizationId, inst.id),
-      queryFn: () => fetchContactsForInstance(organizationId!, inst.id),
-      enabled: !!organizationId && !!inst.id,
-      staleTime: 5 * 60_000,
-    })),
-  });
+  /**
+   * As caixas que esta lista cobre: só CHIP.
+   *
+   * A thread da bolha lê `whatsapp_messages`; incluir o canal oficial faria a
+   * linha aparecer e a conversa abrir vazia. `boxUsesChannelMessages` decide
+   * pelo PROVIDER, que é o discriminador certo — o canal oficial também é
+   * `kind: "whatsapp"`.
+   */
+  const caixas = useMemo<InboxBox[]>(
+    () =>
+      instances
+        .map(
+          (i): InboxBox => ({
+            kind: "whatsapp",
+            id: i.id,
+            name: i.instance_name,
+            status: i.status,
+            provider: i.provider,
+          }),
+        )
+        .filter((box) => !boxUsesChannelMessages(box)),
+    [instances],
+  );
 
-  const isLoading = queries.some((q) => q.isLoading) && !queries.some((q) => q.data);
-  const allEntries: ListEntry[] = useMemo(() => {
-    const out: ListEntry[] = [];
-    queries.forEach((q, idx) => {
-      const inst = instances[idx];
-      if (!inst || !q.data) return;
-      for (const contact of q.data) {
-        out.push({ contact, instanceId: inst.id, instanceName: inst.instance_name });
-      }
-    });
-    out.sort(
-      (a, b) =>
-        new Date(b.contact.last_message_time).getTime() -
-        new Date(a.contact.last_message_time).getTime(),
-    );
-    return out;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queries.map((q) => q.dataUpdatedAt).join("|"), instances]);
+  // A MESMA fonte do /chat: uma chamada para todas as caixas, limite global,
+  // ordenação por recência feita no servidor. Sem `serverFilter` — a bolha não
+  // tem as dimensões do inbox, e o padrão já traz a página completa.
+  const { linhas, isLoading, isFetching } = useConversasUnificadas(caixas);
+
+  const allEntries: ListEntry[] = useMemo(
+    () =>
+      linhas.flatMap((linha) => {
+        const contato = linha.contato;
+        // A bolha é WhatsApp por QR de ponta a ponta; o estreitamento mantém o
+        // resto do arquivo sem um único `as`.
+        if (!isWhatsAppContact(contato)) return [];
+        // Arquivada fica de fora — a bolha mostra só conversa ativa, como antes.
+        if (contato.archived_at) return [];
+        return [
+          {
+            contact: contato,
+            instanceId: linha.caixa.id,
+            instanceName: linha.caixa.nome,
+          },
+        ];
+      }),
+    [linhas],
+  );
 
   // Filtro por instância (visual, client-side). Aplicado ANTES de search/empty
   // pra que o empty state filtered-empty fale do contexto correto.
@@ -406,7 +260,7 @@ export function ChatBubbleConversationList({
           </ul>
         )}
 
-        {queries.some((q) => q.isFetching) && !isLoading && (
+        {isFetching && !isLoading && (
           <div className="absolute top-2 right-2 text-muted-foreground/60">
             <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
           </div>
