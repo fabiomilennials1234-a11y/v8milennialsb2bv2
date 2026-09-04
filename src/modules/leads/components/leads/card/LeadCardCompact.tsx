@@ -103,6 +103,14 @@ interface LeadCardCompactProps {
   config: {
     showContact: boolean; showValue: boolean; showDate: boolean;
     showProducts: boolean; showMeetLink: boolean; showNotes: boolean;
+    /**
+     * Se a linha de data aparece VAZIA (o convite azul "Sem data") quando não
+     * há compromisso. Opcional e default `true` para não mexer em quem já
+     * monta este card sem a chave — o funil custom é quem a manda `false`
+     * (S6): lá a data existe porque a Agenda a espelhou, e funil de assunto
+     * nenhum deve ganhar um convite a marcar reunião.
+     */
+    showDateEmpty?: boolean;
   };
   origin: { bg: string; text: string; label: string };
   urgency: { label: string; className: string } | null;
@@ -395,7 +403,10 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                 </Linha>
               )}
 
-              {config.showDate && (
+              {/* A data é regida pelo DADO: existe compromisso → existe linha.
+                  O convite "Sem data" continua nos funis onde a data é
+                  esperada, e some onde `showDateEmpty` é `false`. */}
+              {config.showDate && (parsedDate || config.showDateEmpty !== false) && (
                 <Linha icone={<CalendarDays className="size-[13px]" />} vazio="Sem data">
                   {parsedDate ? (
                     <>

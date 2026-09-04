@@ -86,6 +86,8 @@ interface FormState {
   event_type: MeetingEventType;
   pipeline_id: string;
   lead_id: string;
+  /** Negócio da reunião. Ver a semeadura abaixo — sem ela o Salvar apaga. */
+  deal_id: string;
   color: string;
   meet_link: string;
 }
@@ -150,6 +152,13 @@ export function EditMeetingDialog({
       event_type: meeting.event_type ?? "meeting",
       pipeline_id: meeting.pipeline_id ?? "",
       lead_id: meeting.lead_id ?? "",
+      // 🚨 SEMEAR `deal_id` é obrigatório, não simetria de estilo.
+      // `useUpdateMeeting` faz `.update(updates)` CRU: `handleSubmit` monta o
+      // payload a partir DESTE formulário, então um campo não semeado vai como
+      // `null` e apaga o vínculo. Sem esta linha, abrir e salvar qualquer uma
+      // das 642 reuniões do backfill do S3 — sem tocar em nada — desligaria a
+      // reunião do negócio, e a data sumiria do card no espelho seguinte.
+      deal_id: meeting.deal_id ?? "",
       color: meeting.color ?? "",
       meet_link: meeting.meet_link ?? "",
     });
@@ -209,6 +218,28 @@ export function EditMeetingDialog({
       lead_id: form.lead_id || null,
       // Espelha a regra da criação: funil só se houver lead.
       pipeline_id: form.lead_id ? form.pipeline_id || null : null,
+      // O negócio depende do LEAD, e deliberadamente NÃO do funil.
+      //
+      // 🚨 Exigir `pipeline_id` aqui anularia a semeadura acima em massa, e em
+      // silêncio: `meetings.pipeline_id` é opcional e mora vazia justamente nas
+      // reuniões que TÊM negócio. Medido em prod (2026-09-03): das 151 que o
+      // backfill da 20270926000000 preenche, 15 ficam com `pipeline_id` NULL
+      // (aquele bloco escreve SÓ `deal_id`), e o `meeting-webhook` — 883 das
+      // 935 reuniões de prod — não escreve `pipeline_id` em linha nenhuma,
+      // embora agora resolva `deal_id`. Nenhum trigger de `public.meetings`
+      // deriva a coluna.
+      // Consequência do gate antigo: abrir uma dessas na Agenda, não tocar em
+      // NADA e clicar Salvar mandava `deal_id: null`; o
+      // `trg_meeting_espelha_no_funil` (que cobre `UPDATE OF deal_id`) via a
+      // troca, chamava `fn_espelho_limpa_projecao` e a data da reunião sumia do
+      // card do Negócio e do card do funil. Apagar vínculo é para quem pediu.
+      //
+      // O lead sozinho basta como guarda porque `LeadPorFunilPicker` zera
+      // `dealId` junto com `leadId` nos TRÊS handlers: trocar de funil, trocar
+      // de lead ou limpar o lead nunca deixa um negócio de outro funil no
+      // formulário. Desvincular o lead continua SOLTANDO o negócio junto — e é
+      // aí, e só aí, que o espelho limpa a projeção da entrada antiga.
+      deal_id: form.lead_id ? form.deal_id || null : null,
       color: form.color || null,
       meet_link: form.meet_link || null,
     };
@@ -376,18 +407,26 @@ export function EditMeetingDialog({
               value={{
                 pipelineId: form.pipeline_id || null,
                 leadId: form.lead_id || null,
+                dealId: form.deal_id || null,
               }}
-              onChange={({ pipelineId, leadId }) =>
+              onChange={({ pipelineId, leadId, dealId }) => {
+                // O picker não passa por `update()`, então precisa marcar sujo
+                // por conta própria — senão o próximo refetch em background
+                // (a Agenda invalida `["meetings"]` por prefixo o tempo todo)
+                // re-semeia o formulário e desfaz a escolha de funil/lead/
+                // negócio que a pessoa acabou de fazer, sem aviso.
+                sujoRef.current = true;
                 setForm((prev) =>
                   prev
                     ? {
                         ...prev,
                         pipeline_id: pipelineId ?? "",
                         lead_id: leadId ?? "",
+                        deal_id: dealId ?? "",
                       }
                     : prev,
-                )
-              }
+                );
+              }}
             />
 
             {/* Cor */}
