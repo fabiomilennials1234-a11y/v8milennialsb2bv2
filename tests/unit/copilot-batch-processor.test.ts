@@ -10,6 +10,7 @@ import {
   BATCH_ABSOLUTE_CAP_MS,
   type BatchInfo,
 } from "../../supabase/functions/_shared/copilot-batch-maturity.ts";
+import { montarPayloadDoAgente } from "../../supabase/functions/_shared/copilot-batch-payload.ts";
 
 describe("checkBatchMaturity", () => {
   const now = new Date("2026-05-18T12:00:00Z");
@@ -122,5 +123,56 @@ describe("checkBatchMaturity", () => {
     const result = checkBatchMaturity(batch, now);
     expect(result.isMature).toBe(true);
     expect(result.reason).toBe("idle_window"); // idle checked first
+  });
+});
+
+// ─── payload entregue ao agent-message ────────────────────────────────────
+// A fila é a SEGUNDA porta de entrada do agent-message (a primeira é o fetch
+// direto do whatsapp-webhook). O gatilho `lead_replied` filtra por número de
+// origem, então as duas portas precisam carregar a Instance — senão o filtro
+// funciona pelo caminho de fallback e falha em silêncio pelo caminho da fila,
+// que é exatamente o que está sendo ligado por org no rollout canário.
+describe("montarPayloadDoAgente", () => {
+  it("carrega a Instance de onde a conversa veio", () => {
+    const payload = montarPayloadDoAgente({
+      phone: "5547999999999",
+      orgId: "org-1",
+      content: "oi",
+      instanceId: "inst-1",
+    });
+
+    expect(payload.instance_id).toBe("inst-1");
+  });
+
+  it("mantém os campos que o agent-message já esperava", () => {
+    const payload = montarPayloadDoAgente({
+      phone: "5547999999999",
+      orgId: "org-1",
+      content: "oi",
+      instanceId: "inst-1",
+    });
+
+    expect(payload).toEqual({
+      from: "5547999999999",
+      message: "oi",
+      channel: "whatsapp",
+      organization_id: "org-1",
+      incoming_message_type: "text",
+      instance_id: "inst-1",
+    });
+  });
+
+  // Batch é agrupado por telefone+org, não por Instance. Se a linha não trouxer
+  // a Instance, mandar `undefined` é melhor que inventar: o matcher reprova por
+  // fail-closed em vez de disparar como se fosse o número certo.
+  it("sem Instance na linha, o campo vai ausente em vez de chutado", () => {
+    const payload = montarPayloadDoAgente({
+      phone: "5547999999999",
+      orgId: "org-1",
+      content: "oi",
+      instanceId: null,
+    });
+
+    expect(payload.instance_id).toBeNull();
   });
 });

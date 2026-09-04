@@ -697,6 +697,11 @@ export async function triggerReactions(
     push_name: persisted.push_name,
     incoming_message_type: persisted.message_type,
     media_url: copilotMediaUrl,
+    // Quem conhece a Instance é este webhook. O gatilho `lead_replied` filtra
+    // por número de origem, mas dispara lá dentro do agent-message — sem este
+    // campo a identidade do número se perde no caminho e o filtro "só o número
+    // do Closer" vira "qualquer número", em silêncio.
+    instance_id: persisted.instance_id,
   };
 
   // A entrega da resposta da IA (fetch agent-message → enviar chunks) roda DEPOIS

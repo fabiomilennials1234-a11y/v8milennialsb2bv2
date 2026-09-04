@@ -17,7 +17,14 @@ import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
-import { useFunisDaOrg, useEtapasDoFunil, useCustomPipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
+import {
+  useFunisDaOrg,
+  useEtapasDoFunil,
+  useCustomPipelines,
+  usePipelineDisplayConfig,
+  useAllPipelineStages,
+} from "@/modules/pipelines";
+import { useWhatsAppInstances } from "@/modules/communication";
 import { destinosDeSistema } from "@/contracts/pipe";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { useLeadOrigins } from "@/modules/leads";
@@ -501,9 +508,16 @@ function LeadRepliedConfig({
   cfg: Record<string, unknown>;
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
+  // `useFunisDaOrg` e não `usePipelines`: o funil aparece com o nome que a ORG
+  // usa, não com o seed do banco (#1992). O resto do painel já faz assim.
   const { data: pipelines } = useFunisDaOrg();
+  const { data: todasAsEtapas } = useAllPipelineStages();
+  const { data: instancias } = useWhatsAppInstances();
 
   const selectedIds = Array.isArray(cfg.pipeline_ids) ? (cfg.pipeline_ids as string[]) : [];
+  const etapasMarcadas = Array.isArray(cfg.stage_ids) ? (cfg.stage_ids as string[]) : [];
+  const origensMarcadas = Array.isArray(cfg.source_ids) ? (cfg.source_ids as string[]) : [];
+  const modo = (cfg.reply_mode as string) || "any";
 
   // Funil desativado some da lista, mas se ele ainda estiver salvo no filtro
   // precisa continuar visível — senão o usuário vê "0 funis" numa automação
@@ -511,11 +525,44 @@ function LeadRepliedConfig({
   const visiblePipelines = (pipelines || []).filter(
     (p) => p.is_active || selectedIds.includes(p.id),
   );
+  // Etapas visíveis são só as dos funis marcados: etapa é um recorte DENTRO do
+  // funil, e mostrar as 4.759 etapas da base inteira não seria uma escolha, era
+  // uma lista telefônica.
+  const etapasDosFunisMarcados = (todasAsEtapas || []).filter(
+    (e) => e.pipeline_id != null && selectedIds.includes(e.pipeline_id),
+  );
+
   const togglePipeline = (pipelineId: string, checked: boolean) => {
     const next = checked
       ? [...selectedIds, pipelineId]
       : selectedIds.filter((id) => id !== pipelineId);
-    updateConfig({ pipeline_ids: next });
+
+    // Desmarcar o funil leva junto as etapas dele. Sem isso o filtro ficaria
+    // restrito a uma etapa que sumiu da tela — invisível e indesmarcável.
+    const etapasQueSobrevivem = etapasMarcadas.filter((etapaId) =>
+      (todasAsEtapas || []).some(
+        (e) => e.id === etapaId && e.pipeline_id != null && next.includes(e.pipeline_id),
+      ),
+    );
+
+    updateConfig({ pipeline_ids: next, stage_ids: etapasQueSobrevivem });
+  };
+
+  const toggleEtapa = (etapaId: string, checked: boolean) => {
+    updateConfig({
+      stage_ids: checked
+        ? [...etapasMarcadas, etapaId]
+        : etapasMarcadas.filter((id) => id !== etapaId),
+    });
+  };
+
+  const toggleOrigem = (instanceId: string, checked: boolean) => {
+    updateConfig({
+      source_type: "whatsapp_instance",
+      source_ids: checked
+        ? [...origensMarcadas, instanceId]
+        : origensMarcadas.filter((id) => id !== instanceId),
+    });
   };
 
   // Lista única: os funis eram separados em "Funis Padrão" e "Funis Custom"
@@ -543,6 +590,89 @@ function LeadRepliedConfig({
 
   return (
     <>
+      <div className="space-y-2">
+        <Label>Quando contar como resposta</Label>
+        <Select value={modo} onValueChange={(v) => updateConfig({ reply_mode: v })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Qualquer mensagem do lead</SelectItem>
+            <SelectItem value="after_outbound">Só se respondeu algo que enviamos</SelectItem>
+            <SelectItem value="first_of_thread">Só a primeira da conversa</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {modo === "after_outbound" && (
+        <div className="space-y-2">
+          <Label htmlFor="reply-window">Dentro de (horas)</Label>
+          <Input
+            id="reply-window"
+            type="number"
+            min={1}
+            value={(cfg.reply_window_hours as number) ?? 48}
+            onChange={(e) => updateConfig({ reply_window_hours: Number(e.target.value) })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Depois desse prazo, a mensagem do lead conta como conversa nova, não
+            como resposta.
+          </p>
+        </div>
+      )}
+
+      {modo === "first_of_thread" && (
+        <div className="space-y-2">
+          <Label htmlFor="new-thread">Conversa nova após (horas de silêncio)</Label>
+          <Input
+            id="new-thread"
+            type="number"
+            min={1}
+            value={(cfg.new_thread_after_hours as number) ?? 24}
+            onChange={(e) => updateConfig({ new_thread_after_hours: Number(e.target.value) })}
+          />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="cooldown">Não repetir por (minutos)</Label>
+        <Input
+          id="cooldown"
+          type="number"
+          min={1}
+          value={(cfg.cooldown_minutes as number) ?? 60}
+          onChange={(e) => updateConfig({ cooldown_minutes: Number(e.target.value) })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Freio contra rajada: três mensagens seguidas do lead não viram três
+          automações.
+        </p>
+      </div>
+
+      {/* A escolha de número só existe para quem TEM escolha: 43 das 62 orgs
+          com chip têm um número só. */}
+      {(instancias || []).length > 1 && (
+        <div className="space-y-2">
+          <Label>De onde</Label>
+          <p className="text-xs text-muted-foreground">
+            Dispara só quando a resposta chegar em um dos números marcados.
+            Nenhum marcado = qualquer número.
+          </p>
+          <div className="space-y-1 max-h-40 overflow-y-auto rounded-md border p-3">
+            {(instancias || []).map((i: { id: string; instance_name?: string | null }) => (
+              <label
+                key={i.id}
+                className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+              >
+                <Checkbox
+                  checked={origensMarcadas.includes(i.id)}
+                  onCheckedChange={(checked) => toggleOrigem(i.id, checked === true)}
+                />
+                {i.instance_name || i.id}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label>Canal</Label>
         <Select
@@ -577,6 +707,32 @@ function LeadRepliedConfig({
           </p>
         )}
       </div>
+
+      {/* Etapa é recorte dentro do funil — sem funil marcado, não há o que
+          recortar, e a lista não aparece. */}
+      {selectedIds.length > 0 && etapasDosFunisMarcados.length > 0 && (
+        <div className="space-y-2">
+          <Label>Etapas (opcional)</Label>
+          <p className="text-xs text-muted-foreground">
+            Dispara só quando o lead tiver card em uma das etapas marcadas.
+            Nenhuma marcada = qualquer etapa do funil.
+          </p>
+          <div className="space-y-1 max-h-48 overflow-y-auto rounded-md border p-3">
+            {etapasDosFunisMarcados.map((e: { id: string; name: string }) => (
+              <label
+                key={e.id}
+                className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+              >
+                <Checkbox
+                  checked={etapasMarcadas.includes(e.id)}
+                  onCheckedChange={(checked) => toggleEtapa(e.id, checked === true)}
+                />
+                {e.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Contém texto (opcional)</Label>

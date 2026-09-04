@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   matchesTriggerConfig,
   fireTrigger,
@@ -400,6 +400,276 @@ describe("matchesTriggerConfig", () => {
         expect(matchesTriggerConfig("lead_replied",
           { pipeline_ids: [FUNIL_A], channel: "whatsapp" },
           { lead_pipeline_ids: [FUNIL_A], channel: "meta" }
+        )).toBe(false);
+      });
+    });
+
+    // ── modos de resposta (reply_mode) ──
+    // A evidência chega PRONTA no context (horas decorridas), nunca um
+    // timestamp cru: `matchesTriggerConfig` roda de novo no executor, minutos
+    // depois, e comparar contra "agora" faria a revalidação reprovar o que o
+    // disparo aprovou. Número congelado no disparo revalida igual sempre.
+    describe("modos de resposta", () => {
+      it("modo padrão (ausente) dispara em qualquer mensagem", () => {
+        expect(matchesTriggerConfig("lead_replied", {}, { message: "oi" })).toBe(true);
+      });
+
+      it("after_outbound não dispara quando ninguém falou com o lead antes", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          { hours_since_outbound: null }
+        )).toBe(false);
+      });
+
+      it("after_outbound dispara dentro da janela", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          { hours_since_outbound: 1 }
+        )).toBe(true);
+      });
+
+      it("after_outbound não dispara depois da janela", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          { hours_since_outbound: 72 }
+        )).toBe(false);
+      });
+
+      it("after_outbound aceita a borda exata da janela", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          { hours_since_outbound: 48 }
+        )).toBe(true);
+      });
+
+      it("after_outbound sem janela configurada exige só que tenha havido outbound", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound" },
+          { hours_since_outbound: 1000 }
+        )).toBe(true);
+      });
+
+      // Fail-closed: sem a evidência no context o modo é inavaliável, e
+      // disparar transformaria "só quem respondeu" em "qualquer mensagem".
+      it("after_outbound é fail-closed sem a evidência no context", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48 },
+          {}
+        )).toBe(false);
+      });
+
+      it("first_of_thread dispara na primeira mensagem que a pessoa manda", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "first_of_thread", new_thread_after_hours: 24 },
+          { hours_since_previous_inbound: null }
+        )).toBe(true);
+      });
+
+      it("first_of_thread cala a rajada dentro da mesma conversa", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "first_of_thread", new_thread_after_hours: 24 },
+          { hours_since_previous_inbound: 0.01 }
+        )).toBe(false);
+      });
+
+      it("first_of_thread volta a disparar depois do silêncio", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "first_of_thread", new_thread_after_hours: 24 },
+          { hours_since_previous_inbound: 168 }
+        )).toBe(true);
+      });
+
+      it("first_of_thread é fail-closed sem a evidência no context", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "first_of_thread", new_thread_after_hours: 24 },
+          {}
+        )).toBe(false);
+      });
+
+      it("modo any ignora a evidência dos outros modos", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "any" },
+          { hours_since_outbound: null, hours_since_previous_inbound: 0.01 }
+        )).toBe(true);
+      });
+
+      it("modo e número se somam (E)", () => {
+        const NUMERO = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48, source_ids: [NUMERO] },
+          { hours_since_outbound: 2, instance_id: NUMERO }
+        )).toBe(true);
+
+        expect(matchesTriggerConfig("lead_replied",
+          { reply_mode: "after_outbound", reply_window_hours: 48, source_ids: [NUMERO] },
+          { hours_since_outbound: 2, instance_id: "outro" }
+        )).toBe(false);
+      });
+    });
+
+    // ── filtro por etapa (stage_ids) ──
+    // Sob o ADR-0023 quem ocupa etapa é o Negócio, não o Lead — e um Lead pode
+    // ter vários. Escolha registrada na spec: filtro PURO, basta o lead ter
+    // ALGUM card numa das etapas marcadas, e uma execução por resposta.
+    describe("filtro por etapa", () => {
+      const ETAPA_ENVIADA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const ETAPA_NEGOCIACAO = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+
+      it("não dispara quando o lead não está em nenhuma das etapas", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [ETAPA_NEGOCIACAO] }
+        )).toBe(false);
+      });
+
+      it("dispara quando o lead tem card na etapa marcada", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [ETAPA_ENVIADA] }
+        )).toBe(true);
+      });
+
+      it("basta estar em UMA das etapas marcadas (OR)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA, ETAPA_NEGOCIACAO] },
+          { lead_stage_ids: [ETAPA_NEGOCIACAO] }
+        )).toBe(true);
+      });
+
+      // 12% dos leads em PROD têm 2+ cards. Um card elegível basta, e o
+      // resultado é UMA execução — o matcher devolve um booleano, não uma
+      // contagem.
+      it("lead com vários cards casa se um deles estiver na etapa", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [ETAPA_NEGOCIACAO, ETAPA_ENVIADA] }
+        )).toBe(true);
+      });
+
+      it("lista vazia = qualquer etapa (não exige o contexto)", () => {
+        expect(matchesTriggerConfig("lead_replied", { stage_ids: [] }, {})).toBe(true);
+      });
+
+      it("fail-closed quando o contexto não traz as etapas do lead", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          {}
+        )).toBe(false);
+      });
+
+      it("fail-closed quando a leitura das etapas falhou (null)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: null }
+        )).toBe(false);
+      });
+
+      // As 41 entradas de PROD sem `stage_id` chegam como null na lista.
+      it("card sem stage_id não casa filtro nenhum", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [null] }
+        )).toBe(false);
+      });
+
+      it("não dispara quando o lead não tem card algum", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { stage_ids: [ETAPA_ENVIADA] },
+          { lead_stage_ids: [] }
+        )).toBe(false);
+      });
+
+      it("etapa, funil e número se somam (E)", () => {
+        const FUNIL = "11111111-1111-1111-1111-111111111111";
+        const NUMERO = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+        const completo = {
+          pipeline_ids: [FUNIL],
+          stage_ids: [ETAPA_ENVIADA],
+          source_ids: [NUMERO],
+        };
+        expect(matchesTriggerConfig("lead_replied", completo, {
+          lead_pipeline_ids: [FUNIL],
+          lead_stage_ids: [ETAPA_ENVIADA],
+          instance_id: NUMERO,
+        })).toBe(true);
+
+        expect(matchesTriggerConfig("lead_replied", completo, {
+          lead_pipeline_ids: [FUNIL],
+          lead_stage_ids: [ETAPA_NEGOCIACAO],
+          instance_id: NUMERO,
+        })).toBe(false);
+      });
+    });
+
+    // ── filtro por instância de origem (source_ids) ──
+    // O caso que existe para resolver: a org tem dois números falando com o
+    // mesmo lead, e só a resposta que chega NO número escolhido deve contar.
+    describe("filtro por instância", () => {
+      const NUMERO_CLOSER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+      const NUMERO_SDR = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+
+      it("não dispara quando a resposta veio de outro número", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_type: "whatsapp_instance", source_ids: [NUMERO_CLOSER] },
+          { instance_id: NUMERO_SDR }
+        )).toBe(false);
+      });
+
+      it("dispara quando a resposta veio do número escolhido", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_type: "whatsapp_instance", source_ids: [NUMERO_CLOSER] },
+          { instance_id: NUMERO_CLOSER }
+        )).toBe(true);
+      });
+
+      it("basta ser UM dos números marcados (OR)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_type: "whatsapp_instance", source_ids: [NUMERO_CLOSER, NUMERO_SDR] },
+          { instance_id: NUMERO_SDR }
+        )).toBe(true);
+      });
+
+      it("lista vazia = qualquer número (não exige o contexto)", () => {
+        expect(matchesTriggerConfig("lead_replied", { source_ids: [] }, {})).toBe(true);
+      });
+
+      // O `notificame-webhook` dispara sem contexto nenhum hoje. Sem esta
+      // guarda, "só o número do Closer" viraria "qualquer número" em silêncio.
+      it("fail-closed quando o evento não diz de onde veio", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: [NUMERO_CLOSER] },
+          {}
+        )).toBe(false);
+      });
+
+      it("fail-closed quando a origem vem vazia", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: [NUMERO_CLOSER] },
+          { instance_id: "" }
+        )).toBe(false);
+      });
+
+      it("ignora entradas inválidas na lista salva (jsonb não é validado)", () => {
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: ["  ", null, 7, NUMERO_CLOSER] },
+          { instance_id: NUMERO_CLOSER }
+        )).toBe(true);
+      });
+
+      it("lista só com lixo equivale a sem filtro", () => {
+        expect(matchesTriggerConfig("lead_replied", { source_ids: ["", "  "] }, {})).toBe(true);
+      });
+
+      it("número e funil se somam (E, não OU)", () => {
+        const FUNIL = "11111111-1111-1111-1111-111111111111";
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: [NUMERO_CLOSER], pipeline_ids: [FUNIL] },
+          { instance_id: NUMERO_CLOSER, lead_pipeline_ids: [FUNIL] }
+        )).toBe(true);
+
+        expect(matchesTriggerConfig("lead_replied",
+          { source_ids: [NUMERO_CLOSER], pipeline_ids: [FUNIL] },
+          { instance_id: NUMERO_SDR, lead_pipeline_ids: [FUNIL] }
         )).toBe(false);
       });
     });
@@ -830,6 +1100,338 @@ describe("fireTrigger", () => {
 
       const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
       expect(ctx).not.toHaveProperty("lead_pipeline_ids");
+    });
+
+    it("grava lead_stage_ids no context quando o filtro é por etapa", async () => {
+      const ETAPA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { stage_ids: [ETAPA] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: ETAPA },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(1);
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx.lead_stage_ids).toEqual([ETAPA]);
+    });
+
+    it("o context com etapa passa na revalidação do executor", async () => {
+      const ETAPA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const config = { pipeline_ids: [FUNIL_A], stage_ids: [ETAPA] };
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, config);
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: ETAPA },
+      ]);
+
+      await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      const persisted = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(matchesTriggerConfig("lead_replied", config, persisted)).toBe(true);
+    });
+
+    it("card sem stage_id chega ao matcher como nulo, não some da lista", async () => {
+      const ETAPA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      // Filtro por funil (para a query acontecer), card sem etapa.
+      seedWorkflow(mockTable, { pipeline_ids: [FUNIL_A] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: null },
+      ]);
+
+      await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      // Nulo preservado — é o que distingue "card sem etapa" de "leitura falhou".
+      expect(ctx.lead_stage_ids).toEqual([null]);
+      expect(matchesTriggerConfig("lead_replied", { stage_ids: [ETAPA] }, ctx)).toBe(false);
+    });
+
+    it("carrega hours_since_outbound quando o modo é after_outbound", async () => {
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "after_outbound", reply_window_hours: 48 });
+      const duasHorasAtras = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      mockTable("whatsapp_messages", [
+        { organization_id: "org-1", lead_id: "lead-1", direction: "outgoing", timestamp: duasHorasAtras },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(1);
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx.hours_since_outbound).toBeCloseTo(2, 1);
+    });
+
+    // A mensagem que acabou de chegar JÁ está persistida quando o gatilho roda.
+    // Se a evidência olhasse a linha mais recente, `first_of_thread` compararia
+    // a mensagem com ela mesma (0h de silêncio) e nunca disparava.
+    it("first_of_thread ignora a própria mensagem que acabou de chegar", async () => {
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "first_of_thread", new_thread_after_hours: 24 });
+      const agora = new Date().toISOString();
+      const semanaPassada = new Date(Date.now() - 168 * 60 * 60 * 1000).toISOString();
+      mockTable("whatsapp_messages", [
+        { organization_id: "org-1", lead_id: "lead-1", direction: "incoming", timestamp: agora },
+        { organization_id: "org-1", lead_id: "lead-1", direction: "incoming", timestamp: semanaPassada },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "e aí?" },
+      });
+
+      expect(count).toBe(1);
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx.hours_since_previous_inbound).toBeCloseTo(168, 0);
+    });
+
+    it("first_of_thread não dispara na segunda mensagem da mesma rajada", async () => {
+      const { sb, mockTable } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "first_of_thread", new_thread_after_hours: 24 });
+      const agora = new Date().toISOString();
+      const umMinutoAtras = new Date(Date.now() - 60 * 1000).toISOString();
+      mockTable("whatsapp_messages", [
+        { organization_id: "org-1", lead_id: "lead-1", direction: "incoming", timestamp: agora },
+        { organization_id: "org-1", lead_id: "lead-1", direction: "incoming", timestamp: umMinutoAtras },
+      ]);
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "?" },
+      });
+
+      expect(count).toBe(0);
+    });
+
+    it("modo any não paga a query de evidência", async () => {
+      const { sb, mockTable, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "any" });
+
+      await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      const ctx = getInserted("workflow_executions")[0].context as Record<string, unknown>;
+      expect(ctx).not.toHaveProperty("hours_since_outbound");
+      expect(ctx).not.toHaveProperty("hours_since_previous_inbound");
+    });
+
+    it("fail-closed quando a leitura da evidência falha", async () => {
+      const { sb, mockTable, mockSelectError, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { reply_mode: "after_outbound", reply_window_hours: 48 });
+      mockTable("whatsapp_messages", [
+        {
+          organization_id: "org-1",
+          lead_id: "lead-1",
+          direction: "outgoing",
+          timestamp: new Date(Date.now() - 3_600_000).toISOString(),
+        },
+      ]);
+      mockSelectError("whatsapp_messages", { code: "57014", message: "statement timeout" });
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(0);
+      expect(getInserted("workflow_executions")).toHaveLength(0);
+    });
+
+    it("fail-closed de ponta a ponta quando o filtro é por etapa e a leitura falha", async () => {
+      const ETAPA = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const { sb, mockTable, mockSelectError, getInserted } = createMockSupabase();
+      seedWorkflow(mockTable, { stage_ids: [ETAPA] });
+      mockTable("pipeline_entries", [
+        { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: ETAPA },
+      ]);
+      mockSelectError("pipeline_entries", { code: "57014", message: "statement timeout" });
+
+      const count = await fireTrigger({
+        supabase: sb,
+        organizationId: "org-1",
+        triggerType: "lead_replied",
+        leadId: "lead-1",
+        context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+      });
+
+      expect(count).toBe(0);
+      expect(getInserted("workflow_executions")).toHaveLength(0);
+    });
+
+    it("persistir as etapas NÃO contamina a chave de dedup", async () => {
+      const ETAPA_1 = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+      const ETAPA_2 = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+      const hashOf = (key: unknown) => String(key).split(":")[1];
+
+      const dispararNaEtapa = async (etapaDoLead: string) => {
+        const { sb, mockTable, getInserted } = createMockSupabase();
+        seedWorkflow(mockTable, { stage_ids: [ETAPA_1, ETAPA_2] });
+        mockTable("pipeline_entries", [
+          { organization_id: "org-1", lead_id: "lead-1", pipeline_id: FUNIL_A, stage_id: etapaDoLead },
+        ]);
+        await fireTrigger({
+          supabase: sb,
+          organizationId: "org-1",
+          triggerType: "lead_replied",
+          leadId: "lead-1",
+          context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+        });
+        return getInserted("workflow_executions")[0];
+      };
+
+      const em1 = await dispararNaEtapa(ETAPA_1);
+      const em2 = await dispararNaEtapa(ETAPA_2);
+
+      expect((em1.context as Record<string, unknown>).lead_stage_ids).toEqual([ETAPA_1]);
+      expect((em2.context as Record<string, unknown>).lead_stage_ids).toEqual([ETAPA_2]);
+      expect(hashOf(em1.trigger_dedup_key)).toBe(hashOf(em2.trigger_dedup_key));
+    });
+
+    // ── cooldown ──
+    // Não há mecanismo novo: a chave de dedup já é `${trigger}:${hash}:${balde}`
+    // e o índice único parcial (workflow_id, lead_id, trigger_dedup_key) já
+    // garante que só o primeiro insert do balde vence. Cooldown é esse balde
+    // com outro tamanho.
+    describe("cooldown", () => {
+      afterEach(() => vi.useRealTimers());
+
+      const baldeDe = (key: unknown) => String(key).split(":")[2];
+
+      async function dispararEmDoisMomentos(config: Record<string, unknown>, minutosEntre: number) {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-09-03T12:00:00.000Z"));
+
+        const primeiro = createMockSupabase();
+        seedWorkflow(primeiro.mockTable, config);
+        await fireTrigger({
+          supabase: primeiro.sb,
+          organizationId: "org-1",
+          triggerType: "lead_replied",
+          leadId: "lead-1",
+          context: { trigger: "lead_replied", channel: "whatsapp", message: "oi" },
+        });
+
+        vi.advanceTimersByTime(minutosEntre * 60 * 1000);
+
+        const segundo = createMockSupabase();
+        seedWorkflow(segundo.mockTable, config);
+        await fireTrigger({
+          supabase: segundo.sb,
+          organizationId: "org-1",
+          triggerType: "lead_replied",
+          leadId: "lead-1",
+          context: { trigger: "lead_replied", channel: "whatsapp", message: "e aí?" },
+        });
+
+        return [
+          primeiro.getInserted("workflow_executions")[0].trigger_dedup_key,
+          segundo.getInserted("workflow_executions")[0].trigger_dedup_key,
+        ];
+      }
+
+      it("duas respostas dentro do cooldown caem no mesmo balde", async () => {
+        const [a, b] = await dispararEmDoisMomentos({ cooldown_minutes: 60 }, 10);
+        expect(baldeDe(a)).toBe(baldeDe(b));
+      });
+
+      it("passado o cooldown, o balde muda e a automação pode rodar de novo", async () => {
+        const [a, b] = await dispararEmDoisMomentos({ cooldown_minutes: 60 }, 90);
+        expect(baldeDe(a)).not.toBe(baldeDe(b));
+      });
+
+      it("cooldown curto deixa passar o que o longo segurava", async () => {
+        const [a, b] = await dispararEmDoisMomentos({ cooldown_minutes: 1 }, 10);
+        expect(baldeDe(a)).not.toBe(baldeDe(b));
+      });
+
+      it("sem cooldown configurado, o padrão de 60min vale", async () => {
+        const [a, b] = await dispararEmDoisMomentos({}, 10);
+        expect(baldeDe(a)).toBe(baldeDe(b));
+      });
+
+      it("valor inválido cai no padrão, não em janela zero", async () => {
+        const [a, b] = await dispararEmDoisMomentos({ cooldown_minutes: 0 }, 10);
+        expect(baldeDe(a)).toBe(baldeDe(b));
+
+        const [c, d] = await dispararEmDoisMomentos({ cooldown_minutes: "abacaxi" }, 10);
+        expect(baldeDe(c)).toBe(baldeDe(d));
+      });
+
+      // O cooldown é do `lead_replied`. Mexer nele não pode alterar a janela
+      // dos outros gatilhos — `stage_changed` tem 300s por causa do incidente
+      // de re-disparo (Motor 100, 2026-07-03).
+      it("não altera a janela dos outros gatilhos", async () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date("2026-09-03T12:00:00.000Z"));
+
+        const dispararStageChanged = async () => {
+          const { sb, mockTable, getInserted } = createMockSupabase();
+          mockTable("workflows", [
+            {
+              id: "wf-stage",
+              trigger_config: { cooldown_minutes: 60 },
+              organization_id: "org-1",
+              trigger_type: "stage_changed",
+              is_active: true,
+            },
+          ]);
+          await fireTrigger({
+            supabase: sb,
+            organizationId: "org-1",
+            triggerType: "stage_changed",
+            leadId: "lead-1",
+            context: { trigger: "stage_changed" },
+          });
+          return getInserted("workflow_executions")[0].trigger_dedup_key;
+        };
+
+        const a = await dispararStageChanged();
+        vi.advanceTimersByTime(10 * 60 * 1000);
+        const b = await dispararStageChanged();
+
+        // 10 min > janela de 300s: baldes diferentes, o cooldown foi ignorado.
+        expect(baldeDe(a)).not.toBe(baldeDe(b));
+      });
     });
 
     it("fail-closed de ponta a ponta quando a leitura dos funis falha", async () => {

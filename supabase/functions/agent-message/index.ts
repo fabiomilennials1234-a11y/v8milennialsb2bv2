@@ -58,7 +58,7 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
   try {
     // Parse webhook de Twilio ou formato genérico
     const body = await req.json();
-    const { from, channel, organization_id, push_name, incoming_message_type } = body; // from = phone number ou user_id
+    const { from, channel, organization_id, push_name, incoming_message_type, instance_id } = body; // from = phone number ou user_id
 
     // A. Batch mode: message_ids array → load + concat from channel_messages
     const isBatchMode = body.batch_mode === true && Array.isArray(body.message_ids) && body.message_ids.length > 0;
@@ -291,7 +291,11 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
           organizationId: organization_id,
           triggerType: "lead_replied",
           leadId: repliedLead.id,
-          context: { trigger: "lead_replied", channel, message },
+          // `instance_id` é o insumo do filtro por número de origem. Chega do
+          // whatsapp-webhook (e do copilot-batch-processor); quando ausente, o
+          // matcher reprova por fail-closed qualquer workflow que filtre por
+          // número — nunca dispara achando que é "qualquer número".
+          context: { trigger: "lead_replied", channel, message, instance_id },
           source: "copilot",
         }).catch((err) => {
           console.warn('[agent-message] fireTrigger lead_replied falhou:', err?.message ?? err);

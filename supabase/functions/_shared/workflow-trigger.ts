@@ -140,9 +140,96 @@ export function normalizePipelineIds(value: unknown): string[] {
   return [...seen];
 }
 
-/** Um workflow de `lead_replied` só precisa do lookup de funis se filtrar por eles. */
-function usesPipelineFilter(triggerConfig: Record<string, unknown> | null | undefined): boolean {
-  return normalizePipelineIds((triggerConfig || {}).pipeline_ids).length > 0;
+/**
+ * Um workflow de `lead_replied` só precisa do lookup de posição se filtrar por
+ * funil OU por etapa. As duas listas vêm da MESMA leitura de
+ * `pipeline_entries`, então uma guarda só decide se a query acontece.
+ */
+function usesLeadPositionFilter(triggerConfig: Record<string, unknown> | null | undefined): boolean {
+  const cfg = triggerConfig || {};
+  return (
+    normalizePipelineIds(cfg.pipeline_ids).length > 0 ||
+    normalizePipelineIds(cfg.stage_ids).length > 0
+  );
+}
+
+/**
+ * Cooldown padrão do `lead_replied`, em minutos. Existe porque o modo padrão
+ * (`any`) reage a QUALQUER mensagem: sem freio, a rajada normal do WhatsApp
+ * ("oi" + "tudo bem?" + "?") dispararia a automação três vezes em 40 segundos.
+ */
+const COOLDOWN_PADRAO_MINUTOS = 60;
+
+/** Modos que exigem evidência de tempo; `any` não paga query nenhuma. */
+function usesReplyModeEvidence(triggerConfig: Record<string, unknown> | null | undefined): boolean {
+  const modo = (triggerConfig || {}).reply_mode;
+  return modo === "after_outbound" || modo === "first_of_thread";
+}
+
+/**
+ * Horas decorridas desde a última mensagem NOSSA para o lead, e desde a
+ * mensagem ANTERIOR dele.
+ *
+ * Devolve horas, não timestamps, de propósito: `matchesTriggerConfig` roda de
+ * novo no executor, e comparar contra "agora" faria a revalidação reprovar o
+ * que o disparo aprovou.
+ *
+ * `null` em qualquer campo significa "não houve" — nunca "falhou". Falha de
+ * leitura devolve `null` no objeto inteiro, que o matcher trata como
+ * fail-closed.
+ *
+ * A leitura do inbound pega DUAS linhas e usa a segunda: a mensagem que
+ * acabou de chegar já está persistida quando o gatilho roda, então a primeira
+ * linha é ela mesma. Sem isso, `first_of_thread` compararia a mensagem com ela
+ * própria e nunca disparava.
+ *
+ * Índice que cobre as duas consultas (verificado em PROD com EXPLAIN):
+ * `idx_whatsapp_msgs_org_lead (organization_id, lead_id, timestamp DESC)`.
+ */
+async function loadReplyEvidence(
+  supabase: SupabaseClient,
+  organizationId: string,
+  leadId: string,
+): Promise<{ hoursSinceOutbound: number | null; hoursSincePreviousInbound: number | null } | null> {
+  const horasDesde = (iso: unknown): number | null => {
+    if (typeof iso !== "string") return null;
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) return null;
+    return (Date.now() - t) / 3_600_000;
+  };
+
+  const [saida, entrada] = await Promise.all([
+    supabase
+      .from("whatsapp_messages")
+      .select("timestamp")
+      .eq("organization_id", organizationId)
+      .eq("lead_id", leadId)
+      .eq("direction", "outgoing")
+      .order("timestamp", { ascending: false })
+      .limit(1),
+    supabase
+      .from("whatsapp_messages")
+      .select("timestamp")
+      .eq("organization_id", organizationId)
+      .eq("lead_id", leadId)
+      .eq("direction", "incoming")
+      .order("timestamp", { ascending: false })
+      .limit(2),
+  ]);
+
+  if (saida.error || entrada.error) {
+    console.warn(
+      "[workflow-trigger] Falha ao ler a evidência do modo de resposta:",
+      saida.error?.message ?? entrada.error?.message,
+    );
+    return null;
+  }
+
+  const linhasEntrada = (entrada.data ?? []) as { timestamp: string }[];
+  return {
+    hoursSinceOutbound: horasDesde(((saida.data ?? []) as { timestamp: string }[])[0]?.timestamp),
+    hoursSincePreviousInbound: horasDesde(linhasEntrada[1]?.timestamp),
+  };
 }
 
 /**
@@ -161,22 +248,29 @@ function usesPipelineFilter(triggerConfig: Record<string, unknown> | null | unde
  * fail-closed. O filtro por `organization_id` é explícito e obrigatório: quem
  * chama é service_role, que BYPASSA a RLS de `pipeline_entries`.
  */
-async function loadLeadPipelineIds(
+async function loadLeadPosition(
   supabase: SupabaseClient,
   organizationId: string,
   leadId: string,
-): Promise<string[] | null> {
+): Promise<{ pipelines: string[]; stages: (string | null)[] } | null> {
   const { data, error } = await supabase
     .from("pipeline_entries")
-    .select("pipeline_id")
+    .select("pipeline_id, stage_id")
     .eq("organization_id", organizationId)
     .eq("lead_id", leadId);
 
   if (error) {
-    console.warn("[workflow-trigger] Falha ao ler funis do lead:", error.message);
+    console.warn("[workflow-trigger] Falha ao ler a posição do lead:", error.message);
     return null;
   }
-  return (data ?? []).map((row: { pipeline_id: string }) => String(row.pipeline_id));
+  const rows = (data ?? []) as { pipeline_id: string; stage_id: string | null }[];
+  return {
+    pipelines: rows.map((row) => String(row.pipeline_id)),
+    // `stage_id` nulo entra na lista como nulo, em vez de ser filtrado: o
+    // matcher precisa distinguir "card sem etapa" (não casa nada) de "leitura
+    // falhou" (fail-closed). Medido em PROD: 41 das 48.171 entradas.
+    stages: rows.map((row) => (row.stage_id == null ? null : String(row.stage_id))),
+  };
 }
 
 /**
@@ -304,10 +398,33 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     // não vem no evento — os outros só leem campos que o próprio evento traz,
     // e para eles a revalidação sempre foi idempotente.
     let matchContext: Record<string, unknown> = context || {};
-    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesPipelineFilter(w.trigger_config))) {
+    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesLeadPositionFilter(w.trigger_config))) {
+      const posicao = await loadLeadPosition(supabase, organizationId, leadId);
       matchContext = {
         ...matchContext,
-        lead_pipeline_ids: await loadLeadPipelineIds(supabase, organizationId, leadId),
+        // `null` (leitura falhou) chega ao matcher como `null` nos dois campos
+        // — é o que dispara o fail-closed dos dois filtros.
+        lead_pipeline_ids: posicao?.pipelines ?? null,
+        lead_stage_ids: posicao?.stages ?? null,
+      };
+    }
+
+    // Evidência dos modos `after_outbound` / `first_of_thread`. Query separada
+    // da posição porque a maioria dos workflows usa o modo `any` e não deve
+    // pagar por ela.
+    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesReplyModeEvidence(w.trigger_config))) {
+      const evidencia = await loadReplyEvidence(supabase, organizationId, leadId);
+      matchContext = {
+        ...matchContext,
+        // Leitura falhou → campos AUSENTES, e o matcher reprova por não achar
+        // número. Gravar `null` diria "não houve mensagem anterior", que é
+        // afirmação diferente e destravaria `first_of_thread` por engano.
+        ...(evidencia
+          ? {
+              hours_since_outbound: evidencia.hoursSinceOutbound,
+              hours_since_previous_inbound: evidencia.hoursSincePreviousInbound,
+            }
+          : {}),
       };
     }
 
@@ -387,10 +504,24 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     // stage_changed uses a 300s window (re-dispatching the same lead within 5min is
     // never intended); other triggers use 60s. leadId-less triggers get a null key
     // (never deduped) — distinct NULLs, so they always insert.
-    const dedupWindowSeconds = triggerType === "stage_changed" ? 300 : 60;
+    // `lead_replied` tem janela POR WORKFLOW: é o cooldown que o usuário
+    // configura na tela ("não repetir por N minutos"). Os outros gatilhos
+    // seguem com a janela fixa de sempre.
+    //
+    // Efeito de borda assumido e documentado na spec: balde é fatia de tempo,
+    // não janela deslizante — 10h59 e 11h01 caem em baldes diferentes e as duas
+    // passam. Teto de uma execução extra, só na virada. Cooldown exato exigiria
+    // uma consulta à última execução a cada mensagem recebida.
+    const janelaDoWorkflow = (config: Record<string, unknown> | null | undefined): number => {
+      if (triggerType === "stage_changed") return 300;
+      if (triggerType !== "lead_replied") return 60;
+      const minutos = Number((config || {}).cooldown_minutes);
+      if (!Number.isFinite(minutos) || minutos <= 0) return COOLDOWN_PADRAO_MINUTOS * 60;
+      return Math.round(minutos * 60);
+    };
     const now = new Date();
     const executions = await Promise.all(
-      deduped.map(async (w: { id: string }) => ({
+      deduped.map(async (w: TriggerWorkflowRow) => ({
         workflow_id: w.id,
         organization_id: organizationId,
         lead_id: leadId,
@@ -418,7 +549,7 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
               triggerType,
               payload: entryId ? { ...ctxObj, pipeline_entry_id: entryId } : ctxObj,
               now,
-              windowSeconds: dedupWindowSeconds,
+              windowSeconds: janelaDoWorkflow(w.trigger_config),
             })
           : null,
       })),
@@ -487,6 +618,37 @@ export function matchesTriggerConfig(
       }
 
       if (config.campanha_id && context.campanha_id && config.campanha_id !== context.campanha_id) return false;
+
+      // ── Modo de resposta ──
+      // O que conta como "responder". Padrão `any`: qualquer inbound do lead.
+      //
+      // A evidência chega PRONTA no context, em horas decorridas, e nunca como
+      // timestamp cru. Motivo: `matchesTriggerConfig` roda de novo no
+      // `process-workflow-executions`, minutos ou horas depois. Comparar
+      // "agora" contra um timestamp faria a revalidação reprovar exatamente o
+      // que o disparo aprovou — a automação nasceria e morreria sozinha.
+      // Número congelado no disparo revalida igual para sempre.
+      const replyMode = typeof config.reply_mode === "string" ? config.reply_mode : "any";
+
+      if (replyMode === "after_outbound") {
+        const desde = context.hours_since_outbound;
+        // `null` = nunca enviamos nada para este lead (ou não neste número).
+        // Isso não é resposta, é o lead iniciando conversa.
+        if (typeof desde !== "number") return false;
+        const janela = Number(config.reply_window_hours);
+        if (Number.isFinite(janela) && janela > 0 && desde > janela) return false;
+      }
+
+      if (replyMode === "first_of_thread") {
+        const desde = context.hours_since_previous_inbound;
+        // `null` = primeira mensagem que esta pessoa manda. É, por definição, a
+        // primeira da conversa.
+        if (desde !== null) {
+          if (typeof desde !== "number") return false;
+          const silencio = Number(config.new_thread_after_hours);
+          if (Number.isFinite(silencio) && silencio > 0 && desde < silencio) return false;
+        }
+      }
 
       // ── Filtro por etapa ──
       // Configs vivas guardam stage_key em `stages`/`from_stage`/`to_stage`;
@@ -571,6 +733,75 @@ export function matchesTriggerConfig(
         if (!Array.isArray(leadPipelines)) return false;
         const isInAnyWanted = leadPipelines.some((id) => wantedPipelines.includes(String(id)));
         if (!isInAnyWanted) return false;
+      }
+
+      // ── Modo de resposta ──
+      // O que conta como "responder". Padrão `any`: qualquer inbound do lead.
+      //
+      // A evidência chega PRONTA no context, em horas decorridas, e nunca como
+      // timestamp cru. Motivo: `matchesTriggerConfig` roda de novo no
+      // `process-workflow-executions`, minutos ou horas depois. Comparar
+      // "agora" contra um timestamp faria a revalidação reprovar exatamente o
+      // que o disparo aprovou — a automação nasceria e morreria sozinha.
+      // Número congelado no disparo revalida igual para sempre.
+      const replyMode = typeof config.reply_mode === "string" ? config.reply_mode : "any";
+
+      if (replyMode === "after_outbound") {
+        const desde = context.hours_since_outbound;
+        // `null` = nunca enviamos nada para este lead (ou não neste número).
+        // Isso não é resposta, é o lead iniciando conversa.
+        if (typeof desde !== "number") return false;
+        const janela = Number(config.reply_window_hours);
+        if (Number.isFinite(janela) && janela > 0 && desde > janela) return false;
+      }
+
+      if (replyMode === "first_of_thread") {
+        const desde = context.hours_since_previous_inbound;
+        // `null` = primeira mensagem que esta pessoa manda. É, por definição, a
+        // primeira da conversa.
+        if (desde !== null) {
+          if (typeof desde !== "number") return false;
+          const silencio = Number(config.new_thread_after_hours);
+          if (Number.isFinite(silencio) && silencio > 0 && desde < silencio) return false;
+        }
+      }
+
+      // ── Filtro por etapa ──
+      // Chave é `pipeline_entries.stage_id` (uuid), não `stage_key` (texto com
+      // escopo por funil): o uuid é inequívoco entre funis, e o mesmo apelido
+      // de etapa se repete em funis diferentes. Medido em PROD 2026-09-03:
+      // `stage_id` preenchido em 48.130 das 48.171 entradas — as 41 restantes
+      // não casam filtro nenhum, por fail-closed.
+      //
+      // Filtro PURO (ADR-0023 + spec): basta o lead ter ALGUM card numa das
+      // etapas marcadas. A execução não se amarra ao Negócio que casou, e um
+      // lead com dois cards elegíveis gera UMA execução, não duas.
+      const wantedStages = normalizePipelineIds(config.stage_ids);
+      if (wantedStages.length > 0) {
+        const leadStages = context.lead_stage_ids;
+        // Fail-closed, mesmo motivo do funil: sem saber onde o lead está, o
+        // filtro é inavaliável e disparar levaria a automação a lead de fora.
+        if (!Array.isArray(leadStages)) return false;
+        if (!leadStages.some((id) => wantedStages.includes(String(id)))) return false;
+      }
+
+      // ── Filtro por instância de origem ──
+      // Existe para o caso de duas Instances falando com o MESMO lead: só a
+      // resposta que chega no número escolhido conta. `channel` não resolve —
+      // ele distingue WhatsApp de Meta, não um número nosso do outro.
+      //
+      // `normalizePipelineIds` é reusada por ser normalização de lista de
+      // strings, não algo específico de funil: mesmo jsonb não-validado, mesmo
+      // descarte de não-string e de vazio.
+      const wantedSources = normalizePipelineIds(config.source_ids);
+      if (wantedSources.length > 0) {
+        // Fail-closed, pelo mesmo motivo do funil: sem saber por onde a
+        // mensagem entrou, o filtro é inavaliável, e disparar transformaria
+        // "só o número do Closer" em "qualquer número" em silêncio. É o que
+        // aconteceria hoje no `notificame-webhook`, que dispara sem contexto.
+        const origem = context.instance_id;
+        if (typeof origem !== "string" || !origem) return false;
+        if (!wantedSources.includes(origem)) return false;
       }
 
       if (config.contains_text && context.message) {

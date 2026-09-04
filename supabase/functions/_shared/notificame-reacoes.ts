@@ -29,18 +29,39 @@ export interface EventoParaReagir {
   leadId: string | null;
 }
 
+/**
+ * Contexto que acompanha o disparo do `lead_replied`.
+ *
+ * ⚠️ O disparo saía SEM contexto nenhum. Como `matchesTriggerConfig` só compara
+ * quando o contexto traz o campo, um workflow restrito a "canal WhatsApp"
+ * disparava também com resposta de Instagram: filtro que passa sempre é filtro
+ * que não existe. O filtro por número de origem cairia no mesmo buraco.
+ *
+ * Não há `instance_id` aqui, e é de propósito: o canal oficial não tem Instance
+ * de WhatsApp. A ausência faz o matcher reprovar por fail-closed os workflows
+ * que filtram por número — que é a resposta certa, e não uma lacuna.
+ */
+export interface ContextoDoGatilho {
+  trigger: "lead_replied";
+  /** `meta` é como o seletor da tela chama Instagram e Facebook. */
+  channel: "whatsapp" | "meta";
+}
+
 export interface ReacoesDoEvento {
   /** Telefone a passar para a RPC que recorta leads por número. */
   resolverEsperaPorTelefone: string | null;
   /** Lead a passar para a variante da RPC que recebe o lead direto. */
   resolverEsperaPorLead: string | null;
   dispararLeadRespondeu: boolean;
+  /** `null` quando o evento não dispara nada. */
+  contextoDoGatilho: ContextoDoGatilho | null;
 }
 
 const NADA: ReacoesDoEvento = {
   resolverEsperaPorTelefone: null,
   resolverEsperaPorLead: null,
   dispararLeadRespondeu: false,
+  contextoDoGatilho: null,
 };
 
 function textoDe(valor: string | null | undefined): string | null {
@@ -71,5 +92,9 @@ export function reacoesDoEvento(evento: EventoParaReagir): ReacoesDoEvento {
     resolverEsperaPorTelefone: telefone,
     resolverEsperaPorLead: telefone ? null : leadId,
     dispararLeadRespondeu: true,
+    contextoDoGatilho: {
+      trigger: "lead_replied",
+      channel: evento.canal === "whatsapp" ? "whatsapp" : "meta",
+    },
   };
 }

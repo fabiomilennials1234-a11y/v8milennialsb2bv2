@@ -14200,6 +14200,7 @@ export type Database = {
           max_days_in_stage: number | null
           name: string
           organization_id: string | null
+          pipeline_id: string | null
           pipeline_type: string
           position: number
           requires_sale_value: boolean
@@ -14233,6 +14234,7 @@ export type Database = {
           max_days_in_stage?: number | null
           name: string
           organization_id?: string | null
+          pipeline_id?: string | null
           pipeline_type: string
           position?: number
           requires_sale_value?: boolean
@@ -14268,6 +14270,7 @@ export type Database = {
           max_days_in_stage?: number | null
           name?: string
           organization_id?: string | null
+          pipeline_id?: string | null
           pipeline_type?: string
           position?: number
           requires_sale_value?: boolean
