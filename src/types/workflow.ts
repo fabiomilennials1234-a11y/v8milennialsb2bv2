@@ -277,6 +277,12 @@ export interface TriggerConfigCron {
   description?: string;
 }
 
+/** O que conta como "responder". Ver `_shared/workflow-trigger.ts`. */
+export type ReplyMode = "any" | "after_outbound" | "first_of_thread";
+
+/** Origem da resposta. Hoje só Instance de WhatsApp; o contrato já cabe o resto. */
+export type ReplySourceType = "whatsapp_instance";
+
 export interface TriggerConfigLeadReplied {
   channel?: "whatsapp" | "meta" | "any";
   contains_text?: string;
@@ -286,6 +292,38 @@ export interface TriggerConfigLeadReplied {
    * Semântica OR; vazio/ausente = qualquer funil.
    */
   pipeline_ids?: string[];
+  /**
+   * Etapas em que o lead precisa ter card (`pipeline_stages.id`). Semântica OR;
+   * vazio/ausente = qualquer etapa. Chave é o uuid e não o `stage_key`: o
+   * apelido de etapa se repete entre funis, o uuid não.
+   *
+   * Filtro PURO: basta o lead ter ALGUM card numa das etapas. A execução não se
+   * amarra ao Negócio que casou, e um lead com dois cards elegíveis gera UMA
+   * execução (ADR-0023 + spec do gatilho).
+   */
+  stage_ids?: string[];
+  /**
+   * De qual das NOSSAS caixas a resposta precisa ter vindo. Existe para a org
+   * com dois números falando com o mesmo lead: só o número escolhido conta.
+   *
+   * `source_type` já nasce como discriminador para o dia em que Instagram e
+   * WhatsApp oficial entrarem — hoje só o ramo `whatsapp_instance` é avaliado.
+   * Semântica OR; vazio/ausente = qualquer origem.
+   */
+  source_type?: ReplySourceType;
+  source_ids?: string[];
+  /** Padrão `any`. */
+  reply_mode?: ReplyMode;
+  /** Só em `after_outbound`: quanto tempo depois do nosso envio ainda conta. */
+  reply_window_hours?: number;
+  /** Só em `first_of_thread`: silêncio que faz a próxima mensagem virar conversa nova. */
+  new_thread_after_hours?: number;
+  /**
+   * Freio. Mesmo workflow não roda duas vezes para o mesmo lead dentro da
+   * janela. Padrão 60 — sem ele, a rajada normal do WhatsApp ("oi" + "tudo
+   * bem?" + "?") dispara a automação três vezes em 40 segundos.
+   */
+  cooldown_minutes?: number;
 }
 
 export interface TriggerConfigLeadNoReply {
