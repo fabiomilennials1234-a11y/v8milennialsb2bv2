@@ -68,7 +68,7 @@ function lista(qc: QueryClient, filterKey?: string) {
     []) as ReturnType<typeof contato>[];
 }
 
-function insertDe(phone: string, timestamp: string) {
+function insertDe(phone: string, timestamp: string, instanceId?: string) {
   return {
     eventType: "INSERT",
     new: {
@@ -77,6 +77,7 @@ function insertDe(phone: string, timestamp: string) {
       timestamp,
       content: "mensagem nova",
       direction: "incoming",
+      ...(instanceId === undefined ? {} : { instance_id: instanceId }),
     },
     old: null,
   };
@@ -154,5 +155,62 @@ describe("useWhatsAppMessagesRealtime — ordem da lista de conversas", () => {
       "5548999990003",
       "5548999990001",
     ]);
+  });
+});
+
+// ─── A thread aberta é de UMA caixa ─────────────────────────────────────────
+
+describe("useWhatsAppMessagesRealtime — a thread aberta pertence a uma caixa", () => {
+  const OUTRA = "inst-2";
+  const TELEFONE = "5548999990001";
+
+  /** Monta o cache da THREAD (não o da lista) com a conversa aberta em `INST`. */
+  function setupThread() {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(chatQueryKeys.messages(ORG, TELEFONE, INST), []);
+    queryClient.setQueryData(chatQueryKeys.messages(ORG, TELEFONE, OUTRA), []);
+
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+    renderHook(() => useWhatsAppMessagesRealtime(TELEFONE, INST), { wrapper });
+    return queryClient;
+  }
+
+  const thread = (qc: QueryClient, inst: string) =>
+    (qc.getQueryData(chatQueryKeys.messages(ORG, TELEFONE, inst)) ?? []) as unknown[];
+
+  it("mensagem da MESMA caixa entra na thread aberta", () => {
+    const qc = setupThread();
+
+    capturedOnEvent?.(insertDe(TELEFONE, "2026-08-06T15:00:00Z", INST));
+
+    expect(thread(qc, INST)).toHaveLength(1);
+  });
+
+  it("mensagem do MESMO telefone em OUTRA caixa NÃO entra na thread aberta", () => {
+    // É o defeito que a caixa unificada cria: o mesmo número fala com dois
+    // números nossos. Sem o recorte por caixa, o vendedor leria na thread do
+    // Comercial uma mensagem que o cliente mandou para a Técnica.
+    const qc = setupThread();
+
+    capturedOnEvent?.(insertDe(TELEFONE, "2026-08-06T15:00:00Z", OUTRA));
+
+    expect(thread(qc, INST)).toHaveLength(0);
+    // E não vaza para o cache da outra caixa por acidente: quem escreve lá é a
+    // thread daquela caixa quando ELA estiver aberta.
+    expect(thread(qc, OUTRA)).toHaveLength(0);
+  });
+
+  it("mensagem SEM caixa continua entrando — parar de receber é pior que receber", () => {
+    // `whatsapp_messages.instance_id` é nulável. Recusar a mensagem faria a
+    // tela congelar, que é o chamado "o chat não atualiza" por outra porta.
+    const qc = setupThread();
+
+    capturedOnEvent?.(insertDe(TELEFONE, "2026-08-06T15:00:00Z"));
+
+    expect(thread(qc, INST)).toHaveLength(1);
   });
 });

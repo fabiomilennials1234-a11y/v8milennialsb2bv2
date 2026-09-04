@@ -1049,10 +1049,13 @@ export function ChatShellWithContext() {
    * a RLS de `conversation_read_state` já autoriza a `authenticated`
    * (`user_id = auth.uid()` + org do usuário), e a chave gravada é EXATAMENTE a
    * que a RPC social lê para calcular `unread_count`. Se as duas divergirem, o
-   * badge nunca zera — foi assim que o unread de WhatsApp quebrou
-   * (`useConversationReadState` grava `whatsapp:unknown:<phone>`, que a RPC de
-   * WhatsApp nunca casa; defeito pré-existente, issue separada, NÃO consertado
-   * aqui porque mexeria no comportamento de ~30 orgs em produção).
+   * badge nunca zera.
+   *
+   * O caminho que gravava `whatsapp:unknown:<phone>` (o antigo
+   * `useConversationReadState`) foi REMOVIDO na W3: ele não tinha consumidor
+   * nenhum e produzia uma chave que a RPC de WhatsApp nunca casa. No modo
+   * unificado sempre há caixa — a da linha aberta —, então não há mais motivo
+   * para existir uma chave sem ela.
    */
   const markSocialConversationRead = useCallback(
     (conversationKey: string, channelId: string, externalUserId: string) => {
