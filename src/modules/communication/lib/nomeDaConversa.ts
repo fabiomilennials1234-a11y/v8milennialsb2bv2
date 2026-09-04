@@ -25,6 +25,8 @@
  * vencendo — trocar por `||` mudaria a tela de quem não pediu mudança.
  */
 
+import { rotuloDeIdentificadorOculto } from "./identificadorOculto";
+
 export interface FontesDoNomeDaConversa {
   /** `whatsapp_conversation_summary.last_push_name` — o perfil do interlocutor. */
   pushName: string | null;
@@ -42,7 +44,13 @@ export function nomeDaConversa(
   fontes: FontesDoNomeDaConversa,
   opcoes: OpcoesDoNomeDaConversa = {},
 ): string {
-  const { pushName, nomeDoLead, telefone } = fontes;
+  const { pushName, nomeDoLead } = fontes;
+  // A ÚLTIMA queda deixa de ser o identificador cru: quando ele é um LID ou um
+  // canal, o cabeçalho passava a se chamar `210028246085780`. Só a queda muda —
+  // com nome de lead ou push_name, a ordem e o resultado são os de sempre.
+  // Ver `lib/identificadorOculto.ts`.
+  const telefone =
+    rotuloDeIdentificadorOculto(fontes.telefone) ?? fontes.telefone;
 
   if (opcoes.nomeDoWhatsappPrimeiro) {
     return pushName ?? nomeDoLead ?? telefone ?? "";
