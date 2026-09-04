@@ -6,6 +6,7 @@ import { Send, Image as ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMetaSend } from "@/modules/communication/hooks/chat-meta/useMetaSend";
 import { isWithin24hWindow } from "@/modules/communication/hooks/chat-meta/types";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
@@ -21,6 +22,8 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
   const [text, setText] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const { mutateAsync, isPending } = useMetaSend();
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id ?? null;
   const canSend = isWithin24hWindow(lastInboundAt);
 
   async function handleSend() {
@@ -35,13 +38,20 @@ export function MetaComposer({ conversationId, lastInboundAt }: Props) {
 
   async function handleImage(file: File) {
     if (!canSend) return;
+    if (!organizationId) {
+      toast.error("Sem organização ativa para publicar o arquivo");
+      return;
+    }
     // Segmento aleatório: bucket público (provider busca a URL); path não-enumerável.
-    const path = `meta/${conversationId}/${crypto.randomUUID()}-${file.name}`;
+    // A org ocupa o segmento 2 porque é ali que `media_insert_org_scoped` procura —
+    // com a conversa nesse lugar o uuid casava a regex mas nunca pertencia a
+    // `get_my_organization_ids()`, e o upload voltava como violação de RLS.
+    const path = `meta/${organizationId}/${conversationId}/${crypto.randomUUID()}-${file.name}`;
     const { data, error } = await supabase.storage
       .from(CHAT_MEDIA_BUCKET)
       .upload(path, file, { contentType: file.type, upsert: false });
     if (error || !data) {
-      toast.error("Falha no upload");
+      toast.error(`Falha no upload${error ? `: ${error.message}` : ""}`);
       return;
     }
     const { data: pub } = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(data.path);
