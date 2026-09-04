@@ -35,6 +35,19 @@
  * lista de uma caixa usa — inclusive a regra de que a falha SOBE quando o filtro
  * recorta por etiqueta. Funil e qualificação continuam sendo enriquecidos pelo
  * shell (`useLeadInboxMeta`), fora daqui.
+ *
+ * ─── QUEDA PARA AS RPCs DE UMA CAIXA (ordem de deploy) ──────────────────────
+ *
+ * As funções `_multi` chegam pela migration `20270921000000`, e apply em prod é
+ * botão do humano. Se o front subir primeiro, o PostgREST não acha a função
+ * (`PGRST202`) e o `/chat` INTEIRO fica vazio — para todas as organizações, por
+ * causa de uma capacidade que a maioria delas nem usa.
+ *
+ * Então, e SÓ nesse código, a queda é para as funções de uma caixa, uma chamada
+ * por caixa marcada. Isso perde a garantia do limite global (D3): com duas
+ * caixas movimentadas, a paginação volta a poder esconder conversa. É pior que o
+ * desenho e MUITO melhor que a tela vazia — e no caso comum, uma caixa marcada,
+ * a queda é byte a byte o comportamento de hoje. Qualquer outro erro sobe.
  */
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -59,6 +72,16 @@ import type { ChatContact, InboxBox } from "./types";
 
 /** Teto da lista do canal oficial. O mesmo da caixa isolada — 22 conversas em prod. */
 const LIMITE_OFICIAL = 200;
+
+/**
+ * O PostgREST não achou a função. É o código que a ordem de deploy produz —
+ * front novo contra base sem a migration —, e o ÚNICO que autoriza a queda.
+ * Estreito de propósito: qualquer outro erro (permissão, argumento, timeout)
+ * precisa subir, senão a queda vira um jeito de esconder defeito.
+ */
+function ehFuncaoAusente(error: unknown): boolean {
+  return (error as { code?: string } | null)?.code === "PGRST202";
+}
 
 /** Linha crua de `get_whatsapp_conversation_list_multi`. */
 interface LinhaDeChip {
@@ -141,7 +164,7 @@ export function useConversasUnificadas(
       // conhece depois do regen contra a base onde a migration entrou. O shape
       // fica declarado em `LinhaDeChip`, para coluna renomeada aparecer como
       // erro de tipo aqui e não como `undefined` na tela.
-      const { data, error } = await (supabase as any).rpc(
+      let { data, error } = await (supabase as any).rpc(
         "get_whatsapp_conversation_list_multi",
         {
           p_org: organizationId,
@@ -150,6 +173,36 @@ export function useConversasUnificadas(
           ...(filterArgs ?? {}),
         },
       );
+
+      if (ehFuncaoAusente(error)) {
+        console.warn(
+          "[inbox] `get_whatsapp_conversation_list_multi` não existe nesta base — " +
+            "migration 20270921000000 ainda não aplicada. A lista cai para uma " +
+            "chamada por caixa, e o limite deixa de ser global.",
+        );
+        const porCaixa = await Promise.all(
+          idsChip.map(async (id) => {
+            const r = await (supabase as any).rpc("get_whatsapp_conversation_list", {
+              p_org: organizationId,
+              p_instance: id,
+              p_limit: limiteChip,
+              ...(filterArgs ?? {}),
+            });
+            if (r.error) throw r.error;
+            // A função antiga NÃO devolve `instance_id`: a caixa é o argumento
+            // que mandamos, e aqui isso é verdade porque a chamada é uma por
+            // caixa. É o único ponto do arquivo onde derivar do argumento é
+            // legítimo.
+            return ((r.data ?? []) as LinhaDeChip[]).map((linha) => ({
+              ...linha,
+              instance_id: id,
+            }));
+          }),
+        );
+        data = porCaixa.flat();
+        error = null;
+      }
+
       if (error) throw error;
 
       const linhas = (data ?? []) as LinhaDeChip[];
@@ -200,7 +253,7 @@ export function useConversasUnificadas(
         return { contatos: [] as ReturnType<typeof toSocialContact>[], cheia: false };
       }
 
-      const { data, error } = await (supabase as any).rpc(
+      let { data, error } = await (supabase as any).rpc(
         "get_official_whatsapp_conversation_list_multi",
         {
           p_org: organizationId,
@@ -208,6 +261,25 @@ export function useConversasUnificadas(
           p_limit: LIMITE_OFICIAL,
         },
       );
+
+      if (ehFuncaoAusente(error)) {
+        const porCaixa = await Promise.all(
+          idsOficiais.map(async (id) => {
+            const r = await (supabase as any).rpc(
+              "get_official_whatsapp_conversation_list",
+              { p_org: organizationId, p_instance: id, p_limit: LIMITE_OFICIAL },
+            );
+            if (r.error) throw r.error;
+            return ((r.data ?? []) as SocialConversationRow[]).map((linha) => ({
+              ...linha,
+              instance_id: id,
+            }));
+          }),
+        );
+        data = porCaixa.flat();
+        error = null;
+      }
+
       if (error) throw error;
 
       const linhas = (data ?? []) as LinhaOficial[];

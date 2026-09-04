@@ -194,4 +194,55 @@ describe("useConversasUnificadas", () => {
     // resposta — e cada patch de tempo real acertaria só uma delas.
     expect(rpcMock.mock.calls.length).toBe(antes);
   });
+
+  it("base sem a migration: cai para a RPC de UMA caixa, uma por caixa", async () => {
+    // Ordem de deploy — front novo, migration `20270921000000` ainda não
+    // aplicada. Sem a queda, o /chat inteiro fica vazio para todas as orgs.
+    rpcMock.mockImplementation(async (nome: string, args: Record<string, unknown>) => {
+      if (nome.endsWith("_multi")) {
+        return { data: null, error: { code: "PGRST202", message: "not found" } };
+      }
+      if (nome === "get_whatsapp_conversation_list") {
+        return {
+          data: [
+            linhaDeChip(
+              String(args.p_instance),
+              `5548911110000`,
+              args.p_instance === "cx-a" ? "2026-09-03T12:00:00Z" : "2026-09-03T11:00:00Z",
+            ),
+          ],
+          error: null,
+        };
+      }
+      return { data: [], error: null };
+    });
+
+    const { result } = renderHook(() => useConversasUnificadas([CHIP_A, CHIP_B]), {
+      wrapper: wrap(newQc()),
+    });
+    await waitFor(() => expect(result.current.linhas).toHaveLength(2));
+
+    const antigas = rpcMock.mock.calls.filter(
+      ([nome]) => nome === "get_whatsapp_conversation_list",
+    );
+    expect(antigas.map(([, args]) => args.p_instance)).toEqual(["cx-a", "cx-b"]);
+    // A caixa da linha vem do argumento SÓ neste caminho, porque ali a chamada é
+    // uma por caixa — e é o que mantém as chaves distintas.
+    expect(result.current.linhas.map((l) => l.chave)).toEqual([
+      "whatsapp:cx-a:5548911110000",
+      "whatsapp:cx-b:5548911110000",
+    ]);
+  });
+
+  it("erro que NÃO é função ausente continua subindo", async () => {
+    // A queda é estreita de propósito: permissão, argumento e timeout precisam
+    // chegar à tela, senão ela vira um jeito de esconder defeito.
+    rpcMock.mockResolvedValue({ data: null, error: { code: "42501", message: "denied" } });
+
+    const { result } = renderHook(() => useConversasUnificadas([CHIP_A]), {
+      wrapper: wrap(newQc()),
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
 });
