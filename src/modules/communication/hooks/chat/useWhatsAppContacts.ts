@@ -172,6 +172,10 @@ export function useWhatsAppContacts(
                 : 0);
           return {
             channel: "whatsapp",
+            // A caixa de origem. No caminho de UMA caixa é o argumento que a
+            // query recebeu; a lista multi-caixa (W2) troca isto pela coluna
+            // `instance_id` que a RPC `_multi` devolve por linha.
+            instance_id: instanceId,
             phone_number: r.phone_number,
             unread_count: unread,
             push_name: r.push_name,
@@ -327,6 +331,7 @@ export function useWhatsAppContacts(
         if (!existing) {
           contactsMap.set(key, {
             channel: "whatsapp",
+            instance_id: instanceId,
             phone_number: msg.phone_number,
             push_name: msg.direction === "incoming" ? msg.push_name : null,
             last_message: msg.content,

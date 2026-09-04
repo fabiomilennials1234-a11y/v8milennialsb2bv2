@@ -66,6 +66,7 @@ async function fetchContactsForInstance(
       content,
       timestamp,
       direction,
+      instance_id,
       lead_id,
       leads(name)
     `)
@@ -87,6 +88,10 @@ async function fetchContactsForInstance(
         // e nunca `channel_messages`. O discriminador é carimbado porque a
         // conversa que sai daqui atravessa os mesmos componentes de lista.
         channel: "whatsapp",
+        // A bolha agrupa por TELEFONE atravessando caixas (W4 a migra para o
+        // motor da caixa unificada). Enquanto isso, a origem carimbada é a da
+        // mensagem mais recente — que é também a caixa que a linha abre.
+        instance_id: msg.instance_id ?? null,
         phone_number: msg.phone_number,
         push_name: msg.direction === "incoming" ? msg.push_name : null,
         last_message: msg.content,
