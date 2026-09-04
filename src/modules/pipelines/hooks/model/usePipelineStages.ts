@@ -71,6 +71,8 @@ function buildFallbackStages(
     // sinaliza "não veio do banco" sem fingir uma data plausível.
     organization_id: organizationId ?? "",
     pipeline_type: pipelineType,
+    // Etapa sintética: não pertence a nenhum funil persistido.
+    pipeline_id: null,
     stage_key: stage.id,
     name: stage.title,
     color: stage.color,

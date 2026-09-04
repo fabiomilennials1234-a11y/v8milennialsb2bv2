@@ -529,8 +529,7 @@ function LeadRepliedConfig({
   // funil, e mostrar as 4.759 etapas da base inteira não seria uma escolha, era
   // uma lista telefônica.
   const etapasDosFunisMarcados = (todasAsEtapas || []).filter(
-    (e: { pipeline_id?: string | null }) =>
-      e.pipeline_id != null && selectedIds.includes(String(e.pipeline_id)),
+    (e) => e.pipeline_id != null && selectedIds.includes(e.pipeline_id),
   );
 
   const togglePipeline = (pipelineId: string, checked: boolean) => {
@@ -542,8 +541,7 @@ function LeadRepliedConfig({
     // restrito a uma etapa que sumiu da tela — invisível e indesmarcável.
     const etapasQueSobrevivem = etapasMarcadas.filter((etapaId) =>
       (todasAsEtapas || []).some(
-        (e: { id: string; pipeline_id?: string | null }) =>
-          e.id === etapaId && e.pipeline_id != null && next.includes(String(e.pipeline_id)),
+        (e) => e.id === etapaId && e.pipeline_id != null && next.includes(e.pipeline_id),
       ),
     );
 

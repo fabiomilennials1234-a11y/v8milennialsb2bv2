@@ -186,6 +186,10 @@ export interface PipelineStage {
   id: string;
   organization_id: string;
   pipeline_type: StageFamily;
+  // Funil dono da etapa (`pipelines.id`). Medido em prod: 3.578 das 4.759
+  // etapas têm; os NULL são as famílias `upsell_*`, que não têm linha em
+  // `pipelines` e por isso nunca aparecem como funil na interface.
+  pipeline_id: string | null;
   stage_key: string;
   name: string;
   color: string | null;

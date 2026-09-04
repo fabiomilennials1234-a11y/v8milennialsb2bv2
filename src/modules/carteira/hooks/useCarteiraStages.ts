@@ -69,6 +69,8 @@ function buildFallbackCarteiraStages(
     id: stage.id,
     organization_id: organizationId ?? "",
     pipeline_type: family,
+    // Etapa sintética: não pertence a nenhum funil persistido.
+    pipeline_id: null,
     stage_key: stage.id,
     name: stage.title,
     color: stage.color,
