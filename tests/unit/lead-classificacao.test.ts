@@ -53,10 +53,26 @@ describe("vocabulário da classificação", () => {
 });
 
 describe("applyLeadListFilters — recorte por gaveta", () => {
-  it("gaveta escolhida vira eq no banco", () => {
+  /**
+   * ⚠️ `usaLeiDoErp` é obrigatório para a gaveta virar `eq("classificacao")`.
+   *
+   * Desde 2026-09-04 a mesma escolha do seletor tem DUAS fontes possíveis
+   * (decisão do CTO): a gaveta do ERP, para org com a integração feita, e a lei
+   * da RELAÇÃO — venda no funil OU pedido no ERP — para todo o resto. Sem a
+   * flag, o filtro cai na Relação, que é a queda segura: numa org sem
+   * integração, `classificacao` é 'lead' em 100% das linhas.
+   */
+  it("gaveta escolhida vira eq no banco — em org COM integração de ERP", () => {
     const { q, calls } = queryEspia();
-    applyLeadListFilters(q, { filterClassificacao: "cliente" });
+    applyLeadListFilters(q, { filterClassificacao: "cliente", usaLeiDoErp: true });
     expect(calls).toContainEqual({ fn: "eq", args: ["classificacao", "cliente"] });
+  });
+
+  it("sem integração, a MESMA gaveta recorta pela relação, não pelo ERP", () => {
+    const { q, calls } = queryEspia();
+    applyLeadListFilters(q, { filterClassificacao: "cliente", usaLeiDoErp: false });
+    expect(calls.some((c) => c.args[0] === "classificacao")).toBe(false);
+    expect(calls.some((c) => String(c.args[0]).includes("primeira_venda_at"))).toBe(true);
   });
 
   /**
@@ -75,10 +91,10 @@ describe("applyLeadListFilters — recorte por gaveta", () => {
     expect(calls.some((c) => c.args[0] === "classificacao")).toBe(false);
   });
 
-  it("as três gavetas passam pelo filtro", () => {
+  it("as três gavetas passam pelo filtro — no mundo do ERP", () => {
     for (const c of LEAD_CLASSIFICACOES) {
       const { q, calls } = queryEspia();
-      applyLeadListFilters(q, { filterClassificacao: c });
+      applyLeadListFilters(q, { filterClassificacao: c, usaLeiDoErp: true });
       expect(calls).toContainEqual({ fn: "eq", args: ["classificacao", c] });
     }
   });

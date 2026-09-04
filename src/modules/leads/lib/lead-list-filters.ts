@@ -26,24 +26,16 @@ export interface LeadListFilterValues {
    */
   filterClassificacao?: string;
   /**
-   * A LEI DA DIVISÃO: qual aba está aberta.
+   * De onde vem a verdade sobre "é cliente?" para ESTA organização.
    *
-   * `"leads"` = ainda não comprou (`primeira_venda_at IS NULL`).
-   * `"clientes"` = comprou (`IS NOT NULL`).
-   * `"todos"` (ou ausente) = sem recorte — é o que as visões salvas antigas
-   * pedem, e o que a exportação usa quando ninguém escolheu.
+   * `true` — a org tem integração de ERP, e a gaveta é `leads.classificacao`.
+   * `false` (padrão) — a org não tem, e vale a lei da RELAÇÃO: venda no funil
+   * OU pedido no ERP, exatamente como a coluna "Relação" da lista.
    *
-   * A âncora é `sale_events`, o caderno canônico (ADR-0017), materializado em
-   * `leads.primeira_venda_at` pela migration 20270932000000. Medido na Chiquê
-   * em 2026-09-04: essa definição contém as outras duas em uso no produto
-   * (`deals.outcome='won'` e pedido no ERP) e ainda pega 22 leads que venderam
-   * sem o negócio ter sido marcado como ganho.
-   *
-   * ⚠️ NÃO é `filterClassificacao`. Aquele recorta por CADASTRO NO ERP e
-   * discorda deste abertamente: na Café Jurerê, dos 5.442 com
-   * `classificacao='cliente'`, exatamente 1 tem venda.
+   * Vem de `useOrgUsaLeiDoErp`. Ausente = `false`, que é a queda segura: a lei
+   * da Relação deriva de dado que toda org tem.
    */
-  filterRelacao?: "todos" | "leads" | "clientes";
+  usaLeiDoErp?: boolean;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -215,16 +207,35 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
     q = q.lte("created_at", filters.createdTo);
   }
 
+  // ── A DIVISÃO LEAD × CLIENTE — uma decisão, duas fontes ───────────────────
+  //
+  // O MESMO seletor da tela governa nos dois casos; o que muda é de onde vem a
+  // verdade, e isso é por organização (decisão do CTO em 2026-09-04):
+  //
+  //   • org COM integração de ERP → `leads.classificacao` (a lei do ERP,
+  //     migration 20270922000000). Aceita as quatro gavetas, inclusive
+  //     `indefinido`, que só existe nesse mundo.
+  //   • org SEM integração → a lei da RELAÇÃO, que é a mesma que a coluna
+  //     "Relação" da lista já imprime: venda no funil OU pedido no ERP.
+  //
+  // As duas colunas são materializadas justamente porque a lista é paginada no
+  // servidor: `deriveLeadStandings` só enxerga os 50 leads da página, e
+  // recortar ali mostraria "3 de 12.686" em vez dos 3 de verdade.
   if (filters.filterClassificacao && filters.filterClassificacao !== "all") {
-    q = q.eq("classificacao", filters.filterClassificacao);
-  }
-
-  // A lei da divisão. `"todos"` e ausente NÃO filtram — é o que mantém a visão
-  // salva antiga e a exportação sem recorte exibindo exatamente o que exibiam.
-  if (filters.filterRelacao === "leads") {
-    q = q.is("primeira_venda_at", null);
-  } else if (filters.filterRelacao === "clientes") {
-    q = q.not("primeira_venda_at", "is", null);
+    if (filters.usaLeiDoErp) {
+      q = q.eq("classificacao", filters.filterClassificacao);
+    } else if (filters.filterClassificacao === "cliente") {
+      // Cliente = QUALQUER uma das duas provas. O `or` do PostgREST é o que
+      // mantém a lei inteira: cobrir só a venda deixaria de fora 178 leads que
+      // a coluna "Relação" da mesma linha chama de Cliente (medido em prod).
+      q = q.or("primeira_venda_at.not.is.null,primeiro_pedido_erp_at.not.is.null");
+    } else if (filters.filterClassificacao === "lead") {
+      // Lead = NENHUMA das duas provas.
+      q = q.is("primeira_venda_at", null).is("primeiro_pedido_erp_at", null);
+    }
+    // `indefinido` numa org sem ERP não recorta nada: a gaveta não existe
+    // nesse mundo, e devolver lista vazia seria afirmar que não há ninguém.
+    // A tela nem oferece a opção — isto aqui é a rede embaixo dela.
   }
 
   if (filters.filterQualification && filters.filterQualification !== "all") {

@@ -24,8 +24,8 @@ export interface LeadsFilterParams {
   filterQualification?: string;
   /** Gaveta: lead | cliente | indefinido, ou "all". Recorta no BANCO. */
   filterClassificacao?: string;
-  /** Aba aberta: "leads" (nao comprou) | "clientes" (comprou) | "todos". */
-  filterRelacao?: "todos" | "leads" | "clientes";
+  /** A org classifica por ERP? Decide a FONTE do recorte Lead x Cliente. */
+  usaLeiDoErp?: boolean;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -74,7 +74,7 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
+  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
@@ -84,7 +84,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
     // o cache devolve a pagina da ordem antiga; sem filterAssignment, mistura
     // "todos" com "sem responsavel". Espalhados (e nao como objeto) para a
     // chave continuar legivel no devtools.
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort.key, sort.direction],
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort.key, sort.direction],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -108,7 +108,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
       // paginação por OFFSET repete linha entre páginas dentro de um empate,
@@ -127,11 +127,11 @@ export function useLeads(params: LeadsFilterParams = {}) {
  * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
+  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible],
+    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible],
     queryFn: async () => {
       if (!organizationId) return 0;
 
@@ -139,7 +139,7 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
         .from("leads")
         .select("*", { count: "exact", head: true });
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
 
       const { count, error } = await query;
       if (error) throw error;
