@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { CalendarCheck, Check, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
+import { CalendarCheck, CalendarDays, Check, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,7 @@ import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
 import { DealCardMoney } from "./DealCardMoney";
 import { contaDoNegocio } from "./conta-do-negocio";
+import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
 import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
 
 /**
@@ -181,6 +182,85 @@ function AcaoPrimaria({
       <Icone className="size-3.5" />
       {rotulo}
     </button>
+  );
+}
+
+/** Como cada situação da reunião pinta a linha. Chaves de `situacaoDaReuniao`. */
+const TOM_DA_REUNIAO: Record<SituacaoDaReuniao["tom"], { selo: string; texto: string }> = {
+  ok: { selo: "border-success/30 bg-success/10 text-success", texto: "text-success" },
+  ruim: {
+    selo: "border-destructive/35 bg-destructive/[0.08] text-destructive",
+    texto: "text-destructive",
+  },
+  alerta: {
+    selo: "border-warning/40 bg-warning/[0.10] text-warning-strong",
+    texto: "text-warning-strong",
+  },
+  neutro: { selo: "border-border bg-muted text-muted-foreground", texto: "text-muted-foreground" },
+};
+
+/**
+ * A linha da reunião.
+ *
+ * ── O QUE ELA PASSOU A DIZER, E POR QUÊ ───────────────────────────────────
+ * Ela mostrava data e "confirmada / sem confirmação", e mais nada. Faltavam as
+ * duas informações que decidem o que fazer com a reunião:
+ *
+ *   1. **já aconteceu?** Reunião passada sem desfecho é a pendência mais cara
+ *      do funil — é dela que sai o no-show que ninguém registrou. Ela é a única
+ *      situação que ACENDE aqui, porque é a única que pede ação;
+ *   2. **quem sabe dela é a Agenda?** Uma data digitada no card do funil e uma
+ *      reunião com linha em `meetings` se pareciam byte a byte, e só a segunda
+ *      tem botão de compareceu / não compareceu do outro lado. O selo "Agenda"
+ *      é o que diz onde ir mexer.
+ *
+ * O selo NÃO é link. A rota `/agenda` hoje não lê parâmetro de reunião
+ * (verificado): mandar para lá sem foco seria prometer um destino que a outra
+ * tela não cumpre. `reuniao.meetingId` já viaja até aqui para o dia em que ela
+ * ler.
+ */
+function LinhaDaReuniao({ reuniao }: { reuniao: NonNullable<DealCardData["reuniao"]> }) {
+  const situacao = situacaoDaReuniao(reuniao);
+  const tom = TOM_DA_REUNIAO[situacao.tom];
+  const quando = new Date(reuniao.data);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-border bg-card px-3 py-2.5">
+      <span
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center rounded-md border",
+          tom.selo,
+        )}
+        aria-hidden="true"
+      >
+        <CalendarCheck className="size-3.5" />
+      </span>
+      <span
+        className={cn(
+          "text-[13px] font-medium tabular-nums",
+          // Reunião que já passou não some nem apaga — ela recua, para a
+          // próxima linha do card não competir com um compromisso vencido.
+          situacao.passou && "text-muted-foreground",
+        )}
+      >
+        {Number.isNaN(quando.getTime())
+          ? "—"
+          : quando.toLocaleString("pt-BR", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+      </span>
+      <span className={cn("text-[12px]", tom.texto)}>{situacao.rotulo}</span>
+      {situacao.daAgenda && (
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/60 px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">
+          <CalendarDays className="size-3" aria-hidden="true" />
+          Agenda
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -604,33 +684,7 @@ export function DealCard({
 
             {/* Reunião — fora das abas porque é a única coisa aqui com HORA
                 marcada; enterrar num painel é como se perde reunião. */}
-            {negocio.reuniao && (
-              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5">
-                <span
-                  className={cn(
-                    "flex size-7 shrink-0 items-center justify-center rounded-md border",
-                    negocio.reuniao.confirmada
-                      ? "border-success/30 bg-success/10 text-success"
-                      : "border-border bg-muted text-muted-foreground",
-                  )}
-                  aria-hidden="true"
-                >
-                  <CalendarCheck className="size-3.5" />
-                </span>
-                <span className="text-[13px] font-medium tabular-nums">
-                  {new Date(negocio.reuniao.data).toLocaleString("pt-BR", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-                <span className="text-[12px] text-muted-foreground">
-                  {negocio.reuniao.confirmada ? "confirmada" : "sem confirmação"}
-                </span>
-              </div>
-            )}
+            {negocio.reuniao && <LinhaDaReuniao reuniao={negocio.reuniao} />}
 
             {/* Desfecho — só quando o negócio já morreu. */}
             {!aberto && negocio.desfecho && (

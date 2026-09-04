@@ -46,6 +46,9 @@ export {
 } from "./hooks/useLeadsPorFunil";
 export type {
   LeadDoFunil,
+  // S6: a entrada no funil é o NEGÓCIO (1:1 por `uq_pipeline_entries_deal_id`).
+  // O seletor da Agenda precisa do tipo para desempatar o caso ambíguo.
+  EntradaDoFunil,
   LeadsPorFunilResult,
   UseLeadsPorFunilParams,
 } from "./hooks/useLeadsPorFunil";

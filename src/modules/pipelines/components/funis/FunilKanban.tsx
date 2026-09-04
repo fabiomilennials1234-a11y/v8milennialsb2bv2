@@ -165,9 +165,21 @@ export function FunilKanban({
     [stages, stageData],
   );
 
+  // Papel semântico por `stage_key`, resolvido no CLIENTE a partir das etapas
+  // que o board já carregou. É o que aposenta a lista de slugs chumbados do
+  // card de reunião: `reuniao_marcada` numa org e `agendado` noutra são a
+  // mesma coisa para o produto, e só `stage_role` sabe disso. Resolver aqui
+  // mantém `get_pipeline_page` com a MESMA assinatura (S6).
+  const stageRoleByKey = useMemo(
+    () => new Map(stages.map((s) => [s.stage_key, s.stage_role ?? null])),
+    [stages],
+  );
+
   const transformToCard = (entry: FunilEntry): LeadCardData => {
     const lead = entry.lead;
     const responsibleName = lead?.responsible?.name || lead?.closer?.name || lead?.sdr?.name || null;
+    const meetingDate =
+      entry.meeting_date ?? (entry.metadata?.meeting_date as string | undefined) ?? null;
     return {
       id: entry.id,
       name: lead?.name || "Sem nome",
@@ -194,11 +206,21 @@ export function FunilKanban({
       notes: entry.notes,
       leadId: entry.lead_id ?? undefined,
       metrics: entry.lead_id ? metricsMap?.[entry.lead_id] : undefined,
-      // ── Confirmação de reunião (funil mergeado — ADR-0004, porte do board
-      // de Qualificação): o componente de ações auto-gateia na flag da org e
-      // nas stage keys do merge, então montar amplo é seguro.
+      // ── Reunião no card: os BOTÕES de confirmação continuam gateados pela
+      // flag `merged_opportunity_funnel` dentro do próprio componente de
+      // ações (ADR-0004); a DATA não. Montar amplo é seguro.
       stageKey: entry.stage_key ?? null,
-      meetingDate: entry.meeting_date ?? (entry.metadata?.meeting_date as string | undefined) ?? null,
+      stageRole: stageRoleByKey.get(entry.stage_key) ?? null,
+      pipelineId,
+      meetingDate,
+      // ── A reunião no card (S6) ──
+      // `date` é a linha de compromisso do card e NENHUM board do repo a
+      // preenchia — `parsedDate` era sempre nulo em todo funil. Ela passa a
+      // sair da MESMA projeção que o funil mergeado já lia
+      // (`metadata.meeting_date`), que é onde o espelho da Agenda grava a
+      // reunião marcada. Sem flag de org e sem lista de etapa: a data aparece
+      // porque ela existe.
+      date: meetingDate,
       confirmationStatus:
         (entry.metadata?.confirmation_status as LeadCardData["confirmationStatus"]) ??
         (entry.is_confirmed ? "confirmado" : "pendente"),
@@ -276,6 +298,7 @@ export function FunilKanban({
               <MergedFunnelCardActions
                 entryId={card.id}
                 stageKey={card.stageKey}
+                stageRole={card.stageRole}
                 meetingDate={card.meetingDate}
                 confirmationStatus={card.confirmationStatus}
                 lostStageKey={lostStageKey}

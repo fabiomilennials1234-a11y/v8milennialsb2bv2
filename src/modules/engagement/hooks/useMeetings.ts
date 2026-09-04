@@ -35,6 +35,20 @@ export interface Meeting {
    * histórico em silêncio.
    */
   pipeline_id: string | null;
+  /**
+   * O NEGÓCIO da reunião. FK -> `deals(id)`, `ON DELETE SET NULL`.
+   *
+   * A coluna existe desde `20270907000010` e nasceu MORTA: só o backfill do S3
+   * a preencheu (642 linhas no mesmo instante) e nada no app a escrevia. O S6 a
+   * liga, porque é ela que o espelho `meetings → pipeline_entries.metadata`
+   * usa para achar a entrada de destino — `uq_pipeline_entries_deal_id` torna
+   * negócio ↔ entrada 1:1.
+   *
+   * 🚨 Precisa estar NESTE tipo, e não só no banco: `select("*")` já traz a
+   * coluna em runtime, e o tipo escondê-la é o que faria o diálogo de edição
+   * "esquecer" de semeá-la e apagar o vínculo no primeiro Salvar.
+   */
+  deal_id: string | null;
   created_by: string;
   google_event_id: string | null;
   meet_link: string | null;
@@ -86,6 +100,12 @@ export interface CreateMeetingInput {
   lead_id?: string | null;
   /** Funil de onde o lead veio. Ver o campo homônimo em `Meeting`. */
   pipeline_id?: string | null;
+  /**
+   * Negócio da reunião — ver o campo homônimo em `Meeting`. Só é gravado
+   * quando há lead E funil: o negócio é a ENTRADA do lead naquele funil, então
+   * sem os dois ele não tem do que ser derivado nem o que significar.
+   */
+  deal_id?: string | null;
   google_event_id?: string | null;
   meet_link?: string | null;
   color?: string | null;
@@ -108,6 +128,12 @@ export interface UpdateMeetingInput {
   lead_id?: string | null;
   /** Funil de onde o lead veio. Ver o campo homônimo em `Meeting`. */
   pipeline_id?: string | null;
+  /**
+   * 🚨 `useUpdateMeeting` faz `.update(updates)` CRU, sem merge. Mandar este
+   * campo `undefined` preserva o vínculo; mandar `null` o APAGA. Quem edita
+   * precisa SEMEAR o valor atual antes de salvar — ver `EditMeetingDialog`.
+   */
+  deal_id?: string | null;
   google_event_id?: string | null;
   meet_link?: string | null;
   color?: string | null;
@@ -238,6 +264,36 @@ export function useMeetingParticipants(meetingId: string | null) {
 
 // ─── Mutations ───────────────────────────────────────────────────────────────
 
+/**
+ * As telas do FUNIL que a reunião passa a mexer sem tocar nelas — S6.
+ *
+ * A partir do espelho `trg_meeting_espelha_no_funil`, gravar uma reunião com
+ * `deal_id` reescreve `pipeline_entries.metadata.meeting_date` da entrada
+ * daquele negócio. Ou seja: um INSERT em `meetings` muda o card do Kanban e o
+ * card do Negócio, que leem a projeção — e nenhum deles é notificado.
+ *
+ * `pipeline_entries` tem realtime, mas o debounce é de 2s e a Agenda pode estar
+ * numa aba onde o board nem está montado; quando a pessoa volta, o dado velho
+ * ainda está no cache. Invalidando aqui a mudança chega junto com o toast, que
+ * é quando a pessoa está olhando.
+ *
+ * As chaves são as MESMAS que `useSetMeetingDate` (o escritor do lado funil) já
+ * invalida, mais as duas do card do Negócio — o espelho e ele escrevem o mesmo
+ * campo, então divergir aqui faria a data aparecer numa tela e não na outra.
+ */
+const CHAVES_DO_FUNIL = [
+  ["pipeline-page"],
+  ["pipeline-stage-counts"],
+  ["deal-card-extras"],
+  ["leads-deals"],
+] as const;
+
+function invalidarFunil(queryClient: ReturnType<typeof useQueryClient>) {
+  for (const queryKey of CHAVES_DO_FUNIL) {
+    queryClient.invalidateQueries({ queryKey: [...queryKey] });
+  }
+}
+
 /** Create a meeting with optional participant IDs */
 export function useCreateMeeting() {
   const queryClient = useQueryClient();
@@ -292,6 +348,9 @@ export function useCreateMeeting() {
       // trigger grava o `meeting_booked`. Mesma razão do update acima.
       queryClient.invalidateQueries({ queryKey: ["meeting_events"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      // Com `deal_id`, o espelho já reescreveu a projeção do funil. Ver
+      // `CHAVES_DO_FUNIL`.
+      invalidarFunil(queryClient);
       toast.success("Reunião criada com sucesso");
     },
     onError: (error: Error) => {
@@ -331,6 +390,9 @@ export function useUpdateMeeting() {
       // "compareceu" e veria o painel parado.
       queryClient.invalidateQueries({ queryKey: ["meeting_events"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      // Remarcar, trocar de negócio ou cancelar reescreve (ou limpa) a projeção
+      // do funil pelo espelho. Ver `CHAVES_DO_FUNIL`.
+      invalidarFunil(queryClient);
       toast.success("Reunião atualizada");
     },
     onError: (error: Error) => {
@@ -380,6 +442,9 @@ export function useDeleteMeeting() {
       // (`trg_meeting_delete_cleans_events`), então a métrica muda aqui também.
       queryClient.invalidateQueries({ queryKey: ["meeting_events"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      // Apagar limpa a projeção da entrada carimbada por esta reunião. Ver
+      // `CHAVES_DO_FUNIL`.
+      invalidarFunil(queryClient);
       toast.success("Reunião excluída");
     },
     onError: (error: Error) => {

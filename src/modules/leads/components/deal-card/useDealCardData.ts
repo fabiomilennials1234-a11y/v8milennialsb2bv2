@@ -10,6 +10,7 @@ import { useProdutosPorNegocio } from "../lead-card/useProdutosPorNegocio";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
 import { useLeadsCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
+import { montarReuniaoDoNegocio } from "./reuniao-do-negocio";
 import type { DealCardData, DealCardMove, DealCardStage } from "./types";
 
 /**
@@ -24,7 +25,10 @@ import type { DealCardData, DealCardMove, DealCardStage } from "./types";
  *   2. **a movimentação da entry** — `pipeline_stage_events`, 49.739 linhas em
  *      prod que hoje não aparecem em tela nenhuma;
  *   3. **a mediana de dias parado** da mesma etapa na mesma org, que é o que
- *      transforma "74 dias" em "74 contra 21".
+ *      transforma "74 dias" em "74 contra 21";
+ *   4. **as reuniões da Agenda** (`meetings` por `deal_id`), de onde sai o
+ *      DESFECHO. A DATA continua vindo da projeção do metadata — o porquê está
+ *      inteiro em `reuniao-do-negocio.ts`, junto da função que decide.
  *
  * A mediana é calculada no cliente sobre uma amostra limitada de propósito: um
  * `percentile_disc` server-side exigiria RPC nova — mais uma função
@@ -180,7 +184,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
        * teve um leitor.
        */
       const dealId = typeof entryRes.data?.deal_id === "string" ? entryRes.data.deal_id : null;
-      const [negocioRes, itensRes] = dealId
+      const [negocioRes, itensRes, reunioesRes] = dealId
         ? await Promise.all([
             supabase
               .from("deals")
@@ -201,8 +205,30 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
               .order("sort_order", { ascending: true })
               .order("created_at", { ascending: true })
               .eq("deal_id", dealId),
+            /**
+             * ── AS REUNIÕES DA AGENDA DESTE NEGÓCIO ─────────────────────────
+             * Vem por `deal_id`, que esta rodada já tem em mãos — nenhuma
+             * consulta nova de identidade. Traz o DESFECHO, que a projeção do
+             * metadata não carrega: até aqui o card do Negócio não tinha como
+             * dizer se a reunião aconteceu.
+             *
+             * `event_type = 'meeting'` não é filtro decorativo: em prod há 22
+             * `call`, 7 `follow_up` e 1 `other` em `meetings`, e sem ele um
+             * "Retornar contato" viraria A reunião do negócio no card.
+             */
+            supabase
+              .from("meetings")
+              .select("id, start_at, status, meet_link")
+              .eq("deal_id", dealId)
+              // Org explícita além da RLS — regra do repo, e aqui ela também é
+              // a mesma guarda do espelho: reunião de outra org não projeta
+              // nesta entrada, então também não pode aparecer neste card.
+              .eq("organization_id", organizationId!)
+              .eq("event_type", "meeting")
+              .order("start_at", { ascending: true })
+              .limit(50),
           ])
-        : [{ data: null }, { data: [] }];
+        : [{ data: null }, { data: [] }, { data: [] }];
 
       return {
         entry: (entryRes.data ?? null) as Linha | null,
@@ -213,6 +239,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         tarefas: (tarefasRes.data ?? []) as Linha[],
         negocio: (negocioRes?.data ?? null) as Linha | null,
         itens: (itensRes?.data ?? []) as Linha[],
+        reunioes: (reunioesRes?.data ?? []) as Linha[],
         /**
          * O id da linha em `deals`, que até aqui era calculado e descartado.
          *
@@ -273,7 +300,22 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       .map((a) => diasDesde(typeof a.stage_changed_at === "string" ? a.stage_changed_at : null))
       .filter((d): d is number => d !== null);
 
-    const meetingDate = typeof metadata.meeting_date === "string" ? metadata.meeting_date : null;
+    /**
+     * A reunião do negócio — projeção do metadata + desfecho de `meetings`.
+     *
+     * A montagem é pura e mora em `reuniao-do-negocio.ts`: é ela que decide de
+     * quem é cada campo, e a decisão precisa ser testável sem montar hook,
+     * provedor de auth e client de Supabase.
+     */
+    const reuniao = montarReuniaoDoNegocio(
+      metadata,
+      (extras.data?.reunioes ?? []).map((r) => ({
+        id: String(r.id),
+        start_at: typeof r.start_at === "string" ? r.start_at : "",
+        status: typeof r.status === "string" ? r.status : null,
+        meet_link: typeof r.meet_link === "string" ? r.meet_link : null,
+      })),
+    );
 
     return {
       id: negocioBase.id,
@@ -403,13 +445,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         };
       })(),
 
-      reuniao: meetingDate
-        ? {
-            data: meetingDate,
-            confirmada: metadata.is_confirmed === true,
-            link: typeof metadata.meet_link === "string" ? metadata.meet_link : null,
-          }
-        : null,
+      reuniao,
 
       // O desfecho vem da posição enquanto `deals.closed_at` não existe em
       // prod (0 linhas). Quando o backfill do L3 rodar, a fonte troca sem

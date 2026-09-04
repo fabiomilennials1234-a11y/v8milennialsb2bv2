@@ -54,9 +54,18 @@ describe("chatQueryKeys", () => {
   });
 
   describe("contacts()", () => {
-    it("shape correto", () => {
+    it("shape correto — o recorte do servidor faz parte da identidade", () => {
+      // O quarto segmento entrou com o filtro server-side (#1277): duas listas
+      // com recortes diferentes são consultas diferentes e não podem dividir a
+      // mesma entrada de cache. `""` é a lista sem filtro.
       const key = chatQueryKeys.contacts("org-a", "inst-1");
-      expect(key).toEqual(["whatsapp_contacts", "org-a", "inst-1"]);
+      expect(key).toEqual(["whatsapp_contacts", "org-a", "inst-1", ""]);
+    });
+
+    it("filtro distinto → chave distinta", () => {
+      expect(chatQueryKeys.contacts("a", "b", "unread")).not.toEqual(
+        chatQueryKeys.contacts("a", "b"),
+      );
     });
 
     it("idempotente", () => {
@@ -72,6 +81,7 @@ describe("chatQueryKeys", () => {
         "whatsapp_contacts",
         null,
         null,
+        "",
       ]);
     });
   });
@@ -124,6 +134,44 @@ describe("chatQueryKeys", () => {
       const m = chatQueryKeys.messages("org-a", null, "inst-1");
       const c = chatQueryKeys.contacts("org-a", "inst-1");
       expect(m[0]).not.toEqual(c[0]);
+    });
+  });
+
+  describe("bubbleContacts() — a bolha não divide cache com o /chat", () => {
+    it("tem raiz PRÓPRIA, e não a de contacts", () => {
+      // Antes da W4 as duas telas gravavam na mesma entrada com dados de
+      // origens diferentes: a bolha filtra arquivadas fora, conta não-lidas
+      // pelo localStorage e deixa etiqueta vazia. O sintoma da colisão é lista
+      // misturada, e ele aparece longe da causa.
+      const bolha = chatQueryKeys.bubbleContacts("org-a", "inst-1");
+      const chat = chatQueryKeys.contacts("org-a", "inst-1");
+
+      expect(bolha[0]).toBe("bubble_contacts");
+      expect(chat[0]).toBe("whatsapp_contacts");
+      expect(bolha).not.toEqual(chat);
+    });
+
+    it("a raiz da bolha NÃO é prefixo da lista por conjunto do /chat", () => {
+      // `setQueriesData` casa por prefixo: se as raízes coincidissem, o patcher
+      // de uma tela escreveria na outra.
+      const bolha = chatQueryKeys.bubbleContacts("org-a", "inst-1");
+      const multi = chatQueryKeys.contactsMulti("org-a", ["inst-1"], "");
+
+      expect(bolha[0]).not.toBe(multi[0]);
+    });
+
+    it("instância distinta → chave distinta", () => {
+      expect(chatQueryKeys.bubbleContacts("org-a", "i1")).not.toEqual(
+        chatQueryKeys.bubbleContacts("org-a", "i2"),
+      );
+    });
+
+    it("normaliza null e undefined para null", () => {
+      expect(chatQueryKeys.bubbleContacts(null, undefined)).toEqual([
+        "bubble_contacts",
+        null,
+        null,
+      ]);
     });
   });
 });

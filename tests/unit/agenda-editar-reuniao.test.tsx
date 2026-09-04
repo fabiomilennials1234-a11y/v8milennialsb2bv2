@@ -116,7 +116,12 @@ describe("EditMeetingDialog", () => {
     reuniao.isLoading = false;
     montar();
 
-    expect(valorNoPicker).toEqual({ pipelineId: FUNIL, leadId: LEAD });
+    // S6: o picker recebe também o negócio semeado da reunião.
+    expect(valorNoPicker).toEqual({
+      pipelineId: FUNIL,
+      leadId: LEAD,
+      dealId: null,
+    });
     expect(
       (screen.getByLabelText(/Título/) as HTMLInputElement).value,
     ).toBe("Visita à fábrica");
@@ -193,7 +198,11 @@ describe("EditMeetingDialog", () => {
     reuniao.isLoading = false;
     montar();
 
-    expect(valorNoPicker).toEqual({ pipelineId: null, leadId: null });
+    expect(valorNoPicker).toEqual({
+      pipelineId: null,
+      leadId: null,
+      dealId: null,
+    });
   });
 
   it("fim antes do inicio bloqueia a gravacao", () => {

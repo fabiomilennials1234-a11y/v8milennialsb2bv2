@@ -72,7 +72,12 @@ beforeEach(() => {
 describe("CreateMeetingDialog — funil e lead", () => {
   it("abre sem funil e sem lead — dá para criar reunião sem funil", () => {
     montar();
-    expect(valorNoPicker).toEqual({ pipelineId: null, leadId: null });
+    // S6: o par virou trio — o negócio nasce vazio junto com funil e lead.
+    expect(valorNoPicker).toEqual({
+      pipelineId: null,
+      leadId: null,
+      dealId: null,
+    });
 
     fireEvent.click(screen.getByText("Criar atividade"));
     expect(mutate.mock.calls[0][0]).toMatchObject({

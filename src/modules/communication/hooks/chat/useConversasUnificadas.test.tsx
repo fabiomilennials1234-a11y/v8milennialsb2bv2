@@ -12,8 +12,35 @@ import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const rpcMock = vi.fn();
+
+/**
+ * O dublê LÊ `this`, de propósito.
+ *
+ * O dublê anterior era `{ rpc: (...a) => rpcMock(...a) }` — uma função que não
+ * precisa do receptor. Ele passava verde mesmo quando o código guardava
+ * `supabase.rpc` numa const solta, o que em produção desamarra o método do
+ * PostgrestClient e estoura antes de tocar a rede: o /chat de 04/09 ficou vazio
+ * exatamente assim, sem uma linha nos logs da API.
+ *
+ * Aqui o dublê exige o receptor. Chamar sem ele lança, e o teste fica vermelho
+ * como produção ficaria.
+ */
+const supabaseDublê = {
+  marca: "cliente-real",
+  rpc(this: { marca?: string } | undefined, ...a: unknown[]) {
+    if (this?.marca !== "cliente-real") {
+      throw new TypeError(
+        "supabase.rpc chamado sem receptor — o método foi desamarrado do cliente",
+      );
+    }
+    return rpcMock(...a);
+  },
+};
+
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { rpc: (...a: unknown[]) => rpcMock(...a) },
+  get supabase() {
+    return supabaseDublê;
+  },
 }));
 
 const teamMemberMock = vi.fn();
@@ -152,14 +179,57 @@ describe("useConversasUnificadas", () => {
     expect(result.current.linhas[0].chave).toBe("whatsapp:cx-b:5548911110000");
   });
 
-  it("caixa de Instagram não entra nesta lista — ela abre sozinha até a W5", async () => {
-    rpcMock.mockResolvedValue({ data: [], error: null });
+  it("canal de Instagram entra na lista, com uma chamada própria por canal", async () => {
+    // Ele ficava fora enquanto `get_social_conversation_list` não aplicava o
+    // recorte por responsável. A migration 20270931000000 fechou o furo, e o
+    // canal virou uma fonte como as outras.
+    rpcMock.mockImplementation(async (nome: string) => {
+      if (nome === "get_social_conversation_list") {
+        return {
+          data: [linhaOficial("ignorado", "17841400000000000", "2026-09-03T14:00:00Z")],
+          error: null,
+        };
+      }
+      return { data: [], error: null };
+    });
 
-    renderHook(() => useConversasUnificadas([INSTA]), { wrapper: wrap(newQc()) });
+    const { result } = renderHook(() => useConversasUnificadas([INSTA]), {
+      wrapper: wrap(newQc()),
+    });
+    await waitFor(() => expect(result.current.linhas).toHaveLength(1));
 
-    // Nem rede, nem RPC social: quem cuida do Instagram é o caminho de antes.
-    await new Promise((r) => setTimeout(r, 10));
-    expect(rpcMock).not.toHaveBeenCalled();
+    const sociais = rpcMock.mock.calls.filter(
+      ([nome]) => nome === "get_social_conversation_list",
+    );
+    expect(sociais).toHaveLength(1);
+    expect(sociais[0][1]).toMatchObject({ p_channel: "cx-ig" });
+    expect(result.current.linhas[0].caixa.id).toBe("cx-ig");
+  });
+
+  it("Instagram e WhatsApp na MESMA lista, misturados por recência", async () => {
+    rpcMock.mockImplementation(async (nome: string) => {
+      if (nome === "get_whatsapp_conversation_list_multi") {
+        return {
+          data: [linhaDeChip("cx-a", "5548911110000", "2026-09-03T12:00:00Z")],
+          error: null,
+        };
+      }
+      if (nome === "get_social_conversation_list") {
+        return {
+          data: [linhaOficial("ignorado", "17841400000000000", "2026-09-03T13:00:00Z")],
+          error: null,
+        };
+      }
+      return { data: [], error: null };
+    });
+
+    const { result } = renderHook(() => useConversasUnificadas([CHIP_A, INSTA]), {
+      wrapper: wrap(newQc()),
+    });
+    await waitFor(() => expect(result.current.linhas).toHaveLength(2));
+
+    // A do Instagram é mais recente e vem primeiro.
+    expect(result.current.linhas.map((l) => l.caixa.id)).toEqual(["cx-ig", "cx-a"]);
   });
 
   it("conjunto vazio não chama a rede", async () => {
@@ -244,5 +314,23 @@ describe("useConversasUnificadas", () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+
+  it("a chamada atravessa o CLIENTE, não uma referência solta ao método", () => {
+    // Regressão do /chat vazio em produção (04/09). `supabase.rpc` usa `this`;
+    // guardá-lo numa const desamarra o receptor e a chamada estoura dentro do
+    // `queryFn`, antes de sair requisição nenhuma — a tela mostra "nenhuma
+    // conversa" e o log da API não registra nada, nem erro.
+    // `call(undefined, ...)` é o que acontece quando o método é guardado numa
+    // const e chamado solto: o receptor some.
+    const solto = supabaseDublê.rpc as (
+      this: unknown,
+      ...a: unknown[]
+    ) => unknown;
+
+    expect(() => solto.call(undefined, "get_whatsapp_conversation_list_multi", {})).toThrow(
+      /desamarrado/,
+    );
+    expect(() => supabaseDublê.rpc("get_whatsapp_conversation_list_multi", {})).not.toThrow();
   });
 });

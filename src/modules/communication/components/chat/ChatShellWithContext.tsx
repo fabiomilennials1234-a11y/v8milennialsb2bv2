@@ -45,6 +45,7 @@ import { MobileChatLayout } from "@/modules/communication/components/chat/layout
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { ConversationList } from "@/modules/communication/components/chat/list/ConversationList";
 import { ChatHeader } from "@/modules/communication/components/chat/view/ChatHeader";
+import { AvisoDaAutomacao } from "@/modules/communication/components/chat/view/AvisoDaAutomacao";
 import { MobileChatThreadHeader } from "@/modules/communication/components/chat/view/MobileChatThreadHeader";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
@@ -56,7 +57,6 @@ import { ImagePreviewModal } from "@/modules/communication/components/chat/media
 import { SocialChatView } from "@/modules/communication/components/chat/social/SocialChatView";
 import { SocialContextPanel } from "@/modules/communication/components/chat/social/SocialContextPanel";
 import { useInboxBoxes } from "@/modules/communication/hooks/chat/useInboxBoxes";
-import { useSocialContacts } from "@/modules/communication/hooks/chat/useSocialContacts";
 import { useConversasUnificadas } from "@/modules/communication/hooks/chat/useConversasUnificadas";
 import { useCaixasSelecionadas } from "@/modules/communication/hooks/chat/useCaixasSelecionadas";
 import { useNaoLidasPorCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
@@ -66,7 +66,7 @@ import {
   directSender,
   officialWhatsAppSender,
 } from "@/modules/communication/hooks/chat/social-sender";
-import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
+import { regimeDaConversaAberta } from "@/modules/communication/lib/regimeDaConversaAberta";
 import {
   chaveDeConversaOficial,
   contatoDeConversaNova,
@@ -107,6 +107,7 @@ import { usePreferredInstance } from "@/modules/communication/hooks/usePreferred
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { resolveEffectiveLead } from "@/modules/communication/lib/resolveEffectiveLead";
 import {
+  buildWhatsAppConversationKey,
   caixaDaChave,
   contactKey,
   interlocutorDaChave,
@@ -371,6 +372,12 @@ function ChatView({
         />
       )}
 
+      {/* Entre o cabeçalho e a thread, e não dentro do composer: a pessoa
+          precisa saber que a automação fala por outro número ANTES de ler a
+          conversa e decidir responder, não no instante em que já está
+          digitando. Só aparece na divergência. */}
+      <AvisoDaAutomacao telefone={phoneNumber} caixaAberta={instanceId} />
+
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
         {threadState === "loading" ? (
           <div className="flex items-center justify-center h-full">
@@ -589,45 +596,24 @@ export function ChatShellWithContext() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   /**
-   * A caixa da CONVERSA ABERTA — que não é mais a mesma coisa que "a caixa
-   * selecionada". Com duas caixas marcadas, a tela mostra as duas e a thread
-   * pertence à linha em que a pessoa clicou; a chave carrega essa origem, e é
-   * dela que sai tudo que fala com UMA conversa: fetch da thread, read-state,
-   * envio, painel de contexto.
+   * De qual caixa sai a resposta — a decisão D6, num lugar só e testável.
    *
-   * Sem conversa aberta, a caixa de referência é a única marcada — e só quando é
-   * uma só: com várias, "a caixa atual" não existe, e inventar uma faria o
-   * composer nascer apontando para um número arbitrário.
+   * A caixa da CONVERSA ABERTA deixou de ser a mesma coisa que "a caixa
+   * selecionada": a tela mostra várias e a thread pertence à linha em que a
+   * pessoa clicou. Daqui saem os três eixos que o composer, o read-state, o
+   * fetch da thread e o painel de contexto consomem.
    */
-  const selectedBox = useMemo(() => {
-    const daChave = caixaDaChave(selectedKey);
-    const aberta = daChave ? boxes.find((b) => b.id === daChave) : undefined;
-    if (aberta) return aberta;
-    return caixasMarcadas.length === 1 ? caixasMarcadas[0] : null;
-  }, [boxes, caixasMarcadas, selectedKey]);
-
-  /**
-   * A caixa aberta lê `channel_messages`? O discriminador decide pelo PROVIDER, e
-   * não pelo `kind`: o canal oficial é `kind: "whatsapp"` (mora em
-   * `whatsapp_instances`) e mesmo assim recebe em `channel_messages`. Ausência de
-   * provider significa o comportamento antigo — são ~30 orgs com instâncias
-   * gravadas antes da coluna existir.
-   */
-  const isSocialBox = selectedBox ? boxUsesChannelMessages(selectedBox) : false;
-  /** Dentro dessas, qual é a do canal oficial (a que envia por outra rota). */
-  const isOfficialBox = isSocialBox && selectedBox?.kind === "whatsapp";
-
-  /**
-   * Instagram continua abrindo SOZINHO até a W5 — `get_social_conversation_list`
-   * ainda não aplica o recorte por responsável, e duas orgs dependem dele. Nesse
-   * regime a tela inteira segue o caminho de antes; em qualquer outro, a lista
-   * vem do motor unificado.
-   */
-  const modoInstagram = caixasMarcadas.length === 1 && caixasMarcadas[0].kind === "instagram";
-
-  const selectedInstanceId = isSocialBox ? null : (selectedBox?.id ?? null);
-  const selectedChannelId = modoInstagram ? caixasMarcadas[0].id : null;
-  const selectedOfficialInstanceId = isOfficialBox ? (selectedBox?.id ?? null) : null;
+  const {
+    caixa: selectedBox,
+    ehSocial: isSocialBox,
+    ehOficial: isOfficialBox,
+    instanciaDeChip: selectedInstanceId,
+    canalDeInstagram: selectedChannelId,
+    instanciaOficial: selectedOfficialInstanceId,
+  } = useMemo(
+    () => regimeDaConversaAberta({ chave: selectedKey, caixas: boxes, marcadas: caixasMarcadas }),
+    [selectedKey, boxes, caixasMarcadas],
+  );
 
 
   // `?box=` sozinho: escolhe a caixa e sai da frente. Só aceita id que esteja na
@@ -718,8 +704,14 @@ export function ChatShellWithContext() {
         const chave = chaveDeConversaOficial(escolhida.id, deepLink.phone);
         if (chave) setSelectedKey(chave);
       } else {
+        // A chave carrega a CAIXA desde a caixa unificada. Guardar o telefone
+        // solto aqui — como era até a W2 — deixava a conversa sem caixa: o
+        // parser não acha o interlocutor, o telefone chega `null` no composer e
+        // a thread do lead sem mensagens abre vazia para sempre.
         const normalized = normalizePhone(deepLink.phone);
-        if (normalized) setSelectedKey(normalized);
+        if (normalized) {
+          setSelectedKey(buildWhatsAppConversationKey(escolhida.id, normalized));
+        }
       }
     }
     setDeepLinkProcessed(true);
@@ -801,15 +793,10 @@ export function ChatShellWithContext() {
   // chamado SEMPRE (com `null` quando não é a vez dele): montar só o "da vez"
   // mudaria a quantidade de hooks entre renders — o erro que derrubou a primeira
   // tentativa da fatia da caixa social.
-  const unificada = useConversasUnificadas(
-    modoInstagram ? [] : caixasMarcadas,
-    serverFilter,
-  );
-
-  const {
-    data: directContacts = [],
-    isLoading: directContactsLoading,
-  } = useSocialContacts(selectedChannelId);
+  // TODAS as caixas marcadas, inclusive as de Instagram: desde a W5 a RPC
+  // social aplica o recorte por responsável, e o canal deixou de precisar abrir
+  // sozinho.
+  const unificada = useConversasUnificadas(caixasMarcadas, serverFilter);
 
   /** A lista inteira, na ORDEM do motor. É ela que a tela renderiza. */
   const contatosUnificados = useMemo(
@@ -834,7 +821,9 @@ export function ChatShellWithContext() {
     [contatosUnificados],
   );
 
-  const socialContacts = modoInstagram ? directContacts : officialContacts;
+  // Tudo que lê `channel_messages` — canal oficial e Instagram — vem da mesma
+  // lista unificada. É daqui que sai a conversa aberta de qualquer um dos dois.
+  const socialContacts = officialContacts;
 
   /**
    * Caixa de origem e fio, por chave de conversa. A lista consome por
@@ -869,7 +858,7 @@ export function ChatShellWithContext() {
     [isOfficialBox, officialMutation, directMutation],
   );
 
-  const contactsLoading = modoInstagram ? directContactsLoading : unificada.isLoading;
+  const contactsLoading = unificada.isLoading;
 
   // ── Conversa selecionada ────────────────────────────────────────────────────
   //
@@ -983,20 +972,6 @@ export function ChatShellWithContext() {
     );
   }, [socialContacts, selectedKey, isOfficialBox, selectedOfficialInstanceId, leadDeConversaNova]);
 
-  /**
-   * A lista da caixa social, com a conversa NOVA no topo quando ela existe só na
-   * tela. Sem isto o chat abriria a conversa e a lista lateral não a mostraria —
-   * o vendedor veria o composer aberto e nenhuma linha selecionada, que se lê
-   * como tela quebrada.
-   */
-  const socialContactsComNova = useMemo(() => {
-    if (!selectedSocialContact) return socialContacts;
-    const jaEstaNaLista = socialContacts.some(
-      (c) => c.conversation_key === selectedSocialContact.conversation_key,
-    );
-    return jaEstaNaLista ? socialContacts : [selectedSocialContact, ...socialContacts];
-  }, [socialContacts, selectedSocialContact]);
-
   const handleSelectContact = useCallback((key: string) => {
     setSelectedKey(key);
   }, []);
@@ -1015,12 +990,21 @@ export function ChatShellWithContext() {
     (phone: string, instanceId: string) => {
       const norm = normalizePhone(phone);
       if (!norm) return;
-      // Prefixo: zera o badge em todas as variantes filtradas (issue #1277).
+      // A RAIZ, e não a chave de UMA caixa: desde a W2 a lista do /chat vive em
+      // `contactsMulti` (terceiro segmento `multi:<ids>`), e mirar a chave de
+      // uma caixa deixava de acertar qualquer coisa — o badge só sumia no
+      // refetch seguinte.
       queryClient.setQueriesData<ChatContact[]>(
-        { queryKey: chatQueryKeys.contactsPrefix(organizationId, instanceId) },
+        { queryKey: ["whatsapp_contacts", organizationId] },
         (old) =>
           old?.map((c) =>
-            c.phone_number === phone ? { ...c, unread_count: 0 } : c,
+            // A CAIXA entra na comparação: zerar só pelo telefone apagaria
+            // também a não-lida da linha do mesmo contato na outra caixa, que é
+            // outra conversa e ninguém leu.
+            c.phone_number === phone &&
+            (c.instance_id == null || c.instance_id === instanceId)
+              ? { ...c, unread_count: 0 }
+              : c,
           ) ?? old,
       );
       void supabase
@@ -1049,10 +1033,13 @@ export function ChatShellWithContext() {
    * a RLS de `conversation_read_state` já autoriza a `authenticated`
    * (`user_id = auth.uid()` + org do usuário), e a chave gravada é EXATAMENTE a
    * que a RPC social lê para calcular `unread_count`. Se as duas divergirem, o
-   * badge nunca zera — foi assim que o unread de WhatsApp quebrou
-   * (`useConversationReadState` grava `whatsapp:unknown:<phone>`, que a RPC de
-   * WhatsApp nunca casa; defeito pré-existente, issue separada, NÃO consertado
-   * aqui porque mexeria no comportamento de ~30 orgs em produção).
+   * badge nunca zera.
+   *
+   * O caminho que gravava `whatsapp:unknown:<phone>` (o antigo
+   * `useConversationReadState`) foi REMOVIDO na W3: ele não tinha consumidor
+   * nenhum e produzia uma chave que a RPC de WhatsApp nunca casa. No modo
+   * unificado sempre há caixa — a da linha aberta —, então não há mais motivo
+   * para existir uma chave sem ela.
    */
   const markSocialConversationRead = useCallback(
     (conversationKey: string, channelId: string, externalUserId: string) => {
@@ -1189,13 +1176,12 @@ export function ChatShellWithContext() {
    * composer aberto, nenhuma linha selecionada, que se lê como tela quebrada.
    */
   const contatosParaLista = useMemo(() => {
-    if (modoInstagram) return socialContactsComNova;
     if (!selectedSocialContact) return enrichedContacts;
     const jaEsta = enrichedContacts.some(
       (c) => contactKey(c) === selectedSocialContact.conversation_key,
     );
     return jaEsta ? enrichedContacts : [selectedSocialContact, ...enrichedContacts];
-  }, [modoInstagram, socialContactsComNova, selectedSocialContact, enrichedContacts]);
+  }, [selectedSocialContact, enrichedContacts]);
 
   // O engine do filtro não sabe distinguir "esse lead não está em funil nenhum"
   // de "o enriquecimento não chegou" — nos dois casos `funnels` é []. O gate faz
@@ -1233,10 +1219,11 @@ export function ChatShellWithContext() {
     void queryClient.invalidateQueries({ queryKey: ["lead-inbox-meta"] });
     void queryClient.invalidateQueries({ queryKey: ["lead-responsible-map"] });
     void queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"] });
+    // Raiz: alcança a lista por conjunto (`multi:<ids>`) e as de uma caixa.
     void queryClient.invalidateQueries({
-      queryKey: chatQueryKeys.contactsPrefix(organizationId, selectedInstanceId),
+      queryKey: ["whatsapp_contacts", organizationId],
     });
-  }, [queryClient, organizationId, selectedInstanceId]);
+  }, [queryClient, organizationId]);
 
   // ── Archive / Delete / Tags ─────────────────────────────────────────────────
   const archiveConversation = useArchiveConversation();
