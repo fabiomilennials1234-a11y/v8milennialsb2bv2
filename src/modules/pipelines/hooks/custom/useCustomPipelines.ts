@@ -5,6 +5,10 @@ import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscripti
 import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanDo } from "@/modules/identity";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import {
+  proximaPosicaoDeEtapa,
+  mensagemDeConflitoDeEtapa,
+} from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
 // ────────────────────────────────────────────────────────────
 // Types — definição canônica em contracts (puros, sem React/Supabase).
 // Re-exportados aqui para manter a API pública do módulo inalterada.
@@ -727,7 +731,9 @@ export function useCreateCustomPipelineStage() {
       pipeline_id,
       name,
       color,
-      position,
+      // `position` segue no contrato (os chamadores mandam), mas NÃO é lida: o
+      // número que a tela calcula ignora as etapas excluídas, que continuam
+      // ocupando posição. Quem decide é `proximaPosicaoDeEtapa`, abaixo.
       is_final_positive,
       is_final_negative,
       stage_role,
@@ -750,6 +756,12 @@ export function useCreateCustomPipelineStage() {
         throw new Error("Organização não encontrada");
       }
 
+      // A `position` que o editor manda vale como INTENÇÃO ("no fim da lista"),
+      // não como endereço: ela é contada sobre as etapas VISÍVEIS, e etapa
+      // excluída continua ocupando posição (soft delete). Quem decide o número
+      // é o funil inteiro — ver `proximaPosicaoDeEtapa`.
+      const posicaoLivre = await proximaPosicaoDeEtapa({ pipelineId: pipeline_id });
+
       const { data, error } = await supabase
         .from("custom_pipeline_stages")
         .insert({
@@ -758,7 +770,7 @@ export function useCreateCustomPipelineStage() {
           stage_key: generateStageKey(name),
           name,
           color: color || "#64748b",
-          position,
+          position: posicaoLivre,
           is_final_positive: is_final_positive || false,
           is_final_negative: is_final_negative || false,
           ...(stage_role ? { stage_role } : {}),
@@ -767,9 +779,8 @@ export function useCreateCustomPipelineStage() {
         .single();
 
       if (error) {
-        if (error.message?.includes("duplicate")) {
-          throw new Error("Já existe uma etapa com esse nome neste funil");
-        }
+        const conflito = mensagemDeConflitoDeEtapa(error);
+        if (conflito) throw new Error(conflito);
         throw error;
       }
       return data as CustomPipelineStage;

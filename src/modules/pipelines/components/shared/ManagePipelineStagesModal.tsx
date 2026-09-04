@@ -57,6 +57,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
+import { mensagemDeConflitoDeEtapa } from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
 import { ClipboardList } from "lucide-react";
 import {
   DndContext,
@@ -770,8 +771,21 @@ export function ManagePipelineStagesContent({
       setShowNewStageForm(false);
     } catch (error: any) {
       console.error("Error creating stage:", error);
-      if (error.message?.includes("duplicate") || error.message?.includes("Já existe")) {
-        toast.error("Já existe uma etapa com esse nome");
+      // 🚨 Este ramo traduzia QUALQUER `duplicate key` para "nome duplicado".
+      // Três uniques convivem em `pipeline_stages` e só duas falam de nome; a
+      // terceira é de `position`. Foi assim que uma colisão de posição — etapa
+      // excluída que continua ocupando o número — virou, para quem usa, "o
+      // sistema não deixa repetir nome de etapa entre funis", uma regra que o
+      // banco nunca teve.
+      //
+      // Os hooks agora classificam pelo NOME DA CONSTRAINT
+      // (`mensagemDeConflitoDeEtapa`) e chegam aqui com a frase certa; o
+      // fallback só cobre o erro que não passou por eles.
+      const mensagem = mensagemDeConflitoDeEtapa(error);
+      if (mensagem) {
+        toast.error(mensagem);
+      } else if (typeof error?.message === "string" && error.message.trim()) {
+        toast.error(error.message);
       } else {
         toast.error("Erro ao criar etapa");
       }

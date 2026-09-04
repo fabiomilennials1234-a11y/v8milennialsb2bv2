@@ -4,6 +4,10 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { PipelineType, StageFamily, PipelineStage, PipelineStageInsert, DefaultStage } from "@/contracts/pipe";
 import { FALLBACK_STAGES } from "@/contracts/pipe";
+import {
+  proximaPosicaoDeEtapa,
+  mensagemDeConflitoDeEtapa,
+} from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
 
 // `PipelineType` + `PipelineStage(Insert)` + `getPipelineTypeName` +
 // `stagesToColumns` têm definição canônica em contracts (puros, sem
@@ -208,16 +212,31 @@ export function useCreatePipelineStage() {
       // SCRUM-618: nada de semear defaults antes de criar — o seed é
       // server-side e lista vazia é estado legítimo. A etapa criada é a
       // primeira coluna real do board se o funil estava vazio.
+      // A `position` que o editor manda é contada sobre as etapas VISÍVEIS, e
+      // etapa excluída segue ocupando posição (soft delete `is_active=false`).
+      // Quem decide o número é o funil inteiro — ver `proximaPosicaoDeEtapa`.
+      // Sem isto o INSERT bate em `pipeline_stages_pipeline_id_position_key` e
+      // o usuário lê "Já existe uma etapa com esse nome".
+      const posicaoLivre = await proximaPosicaoDeEtapa({
+        organizationId: teamMember.organization_id,
+        pipelineType: stage.pipeline_type,
+      });
+
       const { data, error } = await supabase
         .from("pipeline_stages")
         .insert({
           ...stage,
+          position: posicaoLivre,
           organization_id: teamMember.organization_id,
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        const conflito = mensagemDeConflitoDeEtapa(error);
+        if (conflito) throw new Error(conflito);
+        throw error;
+      }
       return data as PipelineStage;
     },
     onSuccess: (_, variables) => {
