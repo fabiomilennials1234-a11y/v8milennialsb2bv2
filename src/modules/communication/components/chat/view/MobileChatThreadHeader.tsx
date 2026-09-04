@@ -2,6 +2,10 @@ import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { VoiceCallButton } from "@/modules/communication/components/voice/VoiceCallButton";
+import {
+  legendaDoTelefone,
+  telefoneParaExibicao,
+} from "@/modules/communication/lib/identificadorOculto";
 
 export interface MobileChatThreadHeaderProps {
   contactName: string;
@@ -20,7 +24,10 @@ export function MobileChatThreadHeader({
   onBack,
   onTapContact,
 }: MobileChatThreadHeaderProps) {
-  const displayName = contactName || phoneNumber;
+  // `contactName` já vem tratado (`nomeDaConversa`); a queda para o telefone é
+  // que precisava do mesmo cuidado — sem ela, o cabeçalho mobile se chamava
+  // `210028246085780`. Ver `lib/identificadorOculto.ts`.
+  const displayName = contactName || telefoneParaExibicao(phoneNumber) || "";
   const initial = (displayName.charAt(0) || "?").toUpperCase();
 
   return (
@@ -53,7 +60,7 @@ export function MobileChatThreadHeader({
           <p className="text-sm font-semibold truncate">{displayName}</p>
           {!hasLead && (
             <p className="text-[11px] text-muted-foreground truncate">
-              {phoneNumber}
+              {legendaDoTelefone(phoneNumber)}
             </p>
           )}
         </div>

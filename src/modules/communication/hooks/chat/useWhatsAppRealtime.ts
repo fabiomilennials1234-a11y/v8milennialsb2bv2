@@ -6,8 +6,12 @@
  *
  * This hook owns ONLY the business logic:
  *   - Patch messages cache (INSERT/UPDATE/DELETE)
- *   - Patch contacts sidebar (last_message, timestamp, unread)
+ *   - Patch contacts sidebar (last_message, timestamp, unread) + REORDENAR
  *   - Dedup by message_id
+ *
+ * A reordenação não é detalhe: o patch da sidebar grava o `last_message_time`
+ * novo no mesmo índice, e sem `sortContactsByRecency` a conversa que acabou de
+ * receber mensagem não sobe — o "chat não atualiza" que o cliente relata.
  */
 import { useRef, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +22,7 @@ import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { normalizePhone as canonicalNormalizePhone } from "@/lib/normalizePhone";
 import { chatQueryKeys, MULTI_KEY_PREFIX } from "./shared/queryKeys";
 import { upsertRealtimeMessage } from "./shared/optimistic-messages";
+import { sortContactsByRecency } from "@/modules/communication/lib/sortContactsByRecency";
 
 const normalizePhone = (p: string): string => canonicalNormalizePhone(p) ?? "";
 
@@ -88,7 +93,15 @@ export function useWhatsAppMessagesRealtime(
       // MENSAGEM: só entra a lista cujo conjunto contém aquela caixa. Sem esse
       // recorte, uma mensagem de outro número invalidaria listas que não a
       // mostram — refetch a cada mensagem, em toda org com mais de um número.
-      const caixaDaMensagem = message.instance_id ?? null;
+      // A caixa da mensagem, com queda para a caixa ABERTA.
+      //
+      // `whatsapp_messages.instance_id` é nulável, e um payload sem ela deixaria
+      // a lista inteira sem patch — a conversa não subiria e a tela pareceria
+      // congelada, que é exatamente o chamado "o chat não atualiza". Quando o
+      // payload não diz de qual caixa veio, a caixa aberta é a única resposta
+      // disponível, e é a mesma suposição que o patch fazia antes da caixa
+      // unificada.
+      const caixaDaMensagem = message.instance_id ?? instanceIdRef.current ?? null;
       if (caixaDaMensagem && (eventType === "INSERT" || eventType === "UPDATE")) {
         const raiz = ["whatsapp_contacts", organizationId ?? null] as const;
         const normPhone = normalizePhone(messagePhone);
@@ -125,7 +138,7 @@ export function useWhatsAppMessagesRealtime(
 
           queryClient.setQueryData<ChatContact[]>(query.queryKey, (atual) => {
             if (!atual) return atual;
-            return atual.map((contact, idx) => {
+            const patched = atual.map((contact, idx) => {
               if (idx !== existingIdx) return contact;
 
               const msgTime = new Date(message.timestamp).getTime();
@@ -153,6 +166,14 @@ export function useWhatsAppMessagesRealtime(
                     : contact.unread_count,
               };
             });
+
+            // O patch acima grava o `last_message_time` novo NO MESMO ÍNDICE.
+            // Sem reordenar, a conversa que acabou de receber mensagem fica
+            // onde estava — e com a lista virtualizada (>50 conversas), fora da
+            // janela visível, não muda um pixel. É o "chat não atualiza" do
+            // cliente. A ordem tem que ser a mesma que a RPC devolve:
+            // `ORDER BY p.last_message_time DESC`.
+            return sortContactsByRecency(patched);
           });
         }
       }

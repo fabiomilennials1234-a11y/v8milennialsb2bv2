@@ -69,11 +69,20 @@ export function useUpdatePipelineIdentity() {
       return { id, name: trimmed, icon, color };
     },
     onSuccess: () => {
+      // Todo cache que carrega o NOME de um funil. `custom_pipelines` é view
+      // sobre `pipelines` (D5), então o rename de um funil custom chega nela
+      // sozinho — o que falta é mandar refazer a leitura.
+      //   · `pipelines` .............. registro único (hub, lateral, quadro)
+      //   · `pipeline-display-config`  nome do funil de sistema (vence)
+      //   · `custom_pipelines` ....... prefixo: cobre permanent/temporary/active
+      //   · `custom_pipeline` ........ funil aberto, por slug
+      //   · `lead_all_pipelines` ..... os funis do lead, no painel dele
       for (const key of [
         "pipelines",
         "pipeline-display-config",
         "custom_pipelines",
         "custom_pipeline",
+        "lead_all_pipelines",
       ]) {
         queryClient.invalidateQueries({ queryKey: [key] });
       }

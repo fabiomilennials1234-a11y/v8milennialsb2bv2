@@ -20,6 +20,7 @@ import { useLeadById } from "@/modules/leads";
 import { ContextPanelTabInfo } from "./ContextPanelTabInfo";
 import { ContextPanelTabHistory } from "./ContextPanelTabHistory";
 import { ContextPanelTabAI } from "./ContextPanelTabAI";
+import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
 
 export interface ContextPanelProps {
   leadId?: string;
@@ -119,7 +120,10 @@ export function ContextPanel({
 
   // `phoneNumber` deixou de ser o último recurso garantido — uma conversa de
   // Instagram não tem nenhum. "Contato" é o fim da fila.
-  const displayName = lead?.name || pushName || phoneNumber || "Contato";
+  // A queda para `phoneNumber` passa pelo mesmo filtro do resto do chat: LID e
+  // canal viram rótulo, telefone segue igual. Ver `lib/identificadorOculto.ts`.
+  const displayName =
+    lead?.name || pushName || telefoneParaExibicao(phoneNumber) || "Contato";
   const initials = displayName.slice(0, 2).toUpperCase();
   const score =
     typeof lead?.qualification_score === "number" ? lead.qualification_score : 0;

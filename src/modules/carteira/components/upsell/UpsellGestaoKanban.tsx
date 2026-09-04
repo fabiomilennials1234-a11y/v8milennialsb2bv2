@@ -13,7 +13,6 @@ import { PipeSettingsDialog } from "@/modules/pipelines";
 import { ImportUpsellClientsContent } from "./ImportUpsellClientsContent";
 import { useIdentity } from "@/modules/identity";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
-import { useUpdateLead } from "@/modules/leads";
 import { toast } from "sonner";
 
 interface UpsellGestaoKanbanProps {
@@ -36,7 +35,6 @@ function UpsellGestaoKanbanInner({ searchQuery, filterPotencial }: UpsellGestaoK
   const { data: orders = [] } = useUpsellOrders();
   const updateClient = useUpdateUpsellClient();
   const createAcaoDoDia = useCreateAcaoDoDia();
-  const updateLead = useUpdateLead();
   const { isAdmin } = useIdentity();
   const navigate = useNavigate();
 
@@ -210,6 +208,7 @@ function UpsellGestaoKanbanInner({ searchQuery, filterPotencial }: UpsellGestaoK
                       lead={{
                         id: client.id,
                         name: client.name,
+                        erpCode: client.external_id,
                         company: client.company,
                         phone: client.phone,
                         value: vendasPorCliente[client.id] || 0,
@@ -224,9 +223,6 @@ function UpsellGestaoKanbanInner({ searchQuery, filterPotencial }: UpsellGestaoK
                       onClick={() => openDetail(client)}
                       onQuickAction={(title) => {
                         createAcaoDoDia.mutate({ title, lead_id: (client as any).lead_id || undefined });
-                      }}
-                      onCalorChange={(calor) => {
-                        if ((client as any).lead_id || client.leadId) updateLead.mutate({ id: (client as any).lead_id || client.leadId!, rating: calor });
                       }}
                     />
                   </motion.div>

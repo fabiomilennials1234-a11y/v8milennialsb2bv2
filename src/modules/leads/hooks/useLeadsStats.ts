@@ -27,14 +27,13 @@ import { applyLeadListFilters } from "../lib/lead-list-filters";
  * fronteira que já apareceu no card do Comando.
  *
  * ── POR QUE TRÊS QUERIES E NÃO UMA ────────────────────────────────────────
- * São três `head: true` com `count: exact`: o Postgres devolve só o número, sem
- * linha. Uma RPC agregando os três seria uma ida ao banco em vez de três, mas
+ * São dois `head: true` com `count: exact`: o Postgres devolve só o número, sem
+ * linha. Uma RPC agregando os dois seria uma ida ao banco em vez de duas, mas
  * exigiria migration e mais uma função `SECURITY DEFINER` com a superfície de
- * ACL que este projeto já erra com frequência. Três contagens paralelas em
+ * ACL que este projeto já erra com frequência. Duas contagens paralelas em
  * `staleTime` de um minuto custam menos do que essa dívida.
  */
 export interface LeadsStats {
-  highRating: number;
   thisMonth: number;
   withOwner: number;
 }
@@ -66,15 +65,15 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
   const { organizationId, isReady, timezone } = useOrganization();
   const timeZone = timezone || "America/Sao_Paulo";
 
-  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterResponsible } = filters;
+  const { searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterResponsible } = filters;
 
   return useQuery<LeadsStats>({
     queryKey: [
       "leads-stats", organizationId, timeZone,
-      searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterResponsible,
+      searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterResponsible,
     ],
     queryFn: async () => {
-      if (!organizationId) return { highRating: 0, thisMonth: 0, withOwner: 0 };
+      if (!organizationId) return { thisMonth: 0, withOwner: 0 };
 
       const base = () => {
         const q = supabase
@@ -88,32 +87,29 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
 
         // A semântica dos filtros vem de `applyLeadListFilters` — a MESMA função
         // que a lista e a exportação usam. Antes daqui este hook reimplementava
-        // os filtros inline, e a cópia divergiu em três pontos: `filterRating` e
-        // `filterQualification` eram desestruturados, entravam na queryKey e
-        // NUNCA eram aplicados (filtrar por rating mudava a lista e não mudava o
-        // card, com refetch a cada clique para devolver o mesmo número), e a
-        // busca não casava `normalized_phone`, então procurar por telefone dava
-        // contagem diferente do que estava na tela.
+        // os filtros inline, e a cópia divergiu: `filterQualification` era
+        // desestruturado, entrava na queryKey e NUNCA era aplicado (filtrar
+        // mudava a lista e não mudava o card, com refetch a cada clique para
+        // devolver o mesmo número), e a busca não casava `normalized_phone`,
+        // então procurar por telefone dava contagem diferente do que estava na
+        // tela.
         return applyLeadListFilters(q, {
-          searchQuery, filterOrigin, filterRating, filterQualification,
+          searchQuery, filterOrigin, filterQualification,
           filterUf, createdFrom, createdTo, filterResponsible,
         });
       };
 
       const inicioDoMes = monthStartInTz(timeZone).toISOString();
 
-      const [alto, mes, comDono] = await Promise.all([
-        base().gte("rating", 7),
+      const [mes, comDono] = await Promise.all([
         base().gte("created_at", inicioDoMes),
         base().not("responsible_id", "is", null),
       ]);
 
-      if (alto.error) throw alto.error;
       if (mes.error) throw mes.error;
       if (comDono.error) throw comDono.error;
 
       return {
-        highRating: alto.count ?? 0,
         thisMonth: mes.count ?? 0,
         withOwner: comDono.count ?? 0,
       };

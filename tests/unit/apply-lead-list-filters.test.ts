@@ -88,21 +88,6 @@ describe("applyLeadListFilters — demais filtros (guardas de regressão)", () =
     expect(rec.eqs).toContainEqual(["uf", "SP"]);
   });
 
-  it("rating high/medium/low mapeiam para gte/lt corretos", () => {
-    const high = makeBuilder();
-    applyLeadListFilters(high.builder, { filterRating: "high" });
-    expect(high.rec.gtes).toContainEqual(["rating", 7]);
-
-    const medium = makeBuilder();
-    applyLeadListFilters(medium.builder, { filterRating: "medium" });
-    expect(medium.rec.gtes).toContainEqual(["rating", 4]);
-    expect(medium.rec.lts).toContainEqual(["rating", 7]);
-
-    const low = makeBuilder();
-    applyLeadListFilters(low.builder, { filterRating: "low" });
-    expect(low.rec.lts).toContainEqual(["rating", 4]);
-  });
-
   it("busca: adiciona .or() com ilike em name/company/email/phone", () => {
     const { builder, rec } = makeBuilder();
     applyLeadListFilters(builder, { searchQuery: "  acme  " });
@@ -111,6 +96,12 @@ describe("applyLeadListFilters — demais filtros (guardas de regressão)", () =
     expect(rec.ors[0]).toContain("company.ilike.%acme%");
     expect(rec.ors[0]).toContain("email.ilike.%acme%");
     expect(rec.ors[0]).toContain("phone.ilike.%acme%");
+  });
+
+  it("busca casa o código do ERP — a lista mostra \"1234 - João\" e digitar 1234 tem que achar", () => {
+    const { builder, rec } = makeBuilder();
+    applyLeadListFilters(builder, { searchQuery: "1234" });
+    expect(rec.ors[0]).toContain("erp_code.ilike.%1234%");
   });
 
   it("busca por telefone com máscara casa a coluna normalizada só com os dígitos", () => {
@@ -150,16 +141,14 @@ describe("applyLeadListFilters — demais filtros (guardas de regressão)", () =
     expect(rec.ors).toHaveLength(0);
   });
 
-  it("combina múltiplos filtros (origem + qualificação + rating)", () => {
+  it("combina múltiplos filtros (origem + qualificação)", () => {
     const { builder, rec } = makeBuilder();
     applyLeadListFilters(builder, {
       filterOrigin: "meta_ads",
       filterQualification: "diamante",
-      filterRating: "high",
     });
     expect(rec.eqs).toContainEqual(["origin", "meta_ads"]);
     expect(rec.eqs).toContainEqual(["qualification_tier", "diamante"]);
-    expect(rec.gtes).toContainEqual(["rating", 7]);
   });
 });
 
@@ -198,15 +187,6 @@ describe("applyLeadListFilters — janela de criação (created_at)", () => {
     applyLeadListFilters(builder, { filterOrigin: "meta_ads" });
     expect(rec.gtes.find(([c]) => c === "created_at")).toBeUndefined();
     expect(rec.ltes.find(([c]) => c === "created_at")).toBeUndefined();
-  });
-
-  it("não colide com o rating (que também usa gte/lt em outra coluna)", () => {
-    const { builder, rec } = makeBuilder();
-    applyLeadListFilters(builder, { createdFrom: FROM, createdTo: TO, filterRating: "medium" });
-    expect(rec.gtes).toContainEqual(["created_at", FROM]);
-    expect(rec.gtes).toContainEqual(["rating", 4]);
-    expect(rec.lts).toContainEqual(["rating", 7]);
-    expect(rec.ltes).toContainEqual(["created_at", TO]);
   });
 
   it("combina com os demais filtros da lista sem se anular", () => {

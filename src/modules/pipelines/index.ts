@@ -247,6 +247,7 @@ export {
   PipeSettingsDialog,
   DeletePipelineDialog,
   FunnelIdentitySection,
+  FunnelIdentityDialog,
 } from "./components/shared";
 
 // ── Components: custom pipelines ──────────────────────────────────────────
@@ -263,6 +264,7 @@ export {
 export {
   CreateFunilOuCampanhaModal,
   CreateTemporaryFunnelModal,
+  FunnelActionsMenu,
 } from "./components/funis";
 
 // ── Components: disparo (Quick Blast wizard — mass send) ──────────────────

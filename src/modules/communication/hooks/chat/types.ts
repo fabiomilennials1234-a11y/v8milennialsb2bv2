@@ -5,6 +5,8 @@
  * Barrel useWhatsAppChat.ts re-exporta todos estes tipos para backwards-compat.
  */
 
+import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
+
 export interface WhatsAppMessage {
   id: string;
   organization_id: string;
@@ -320,7 +322,14 @@ export function interlocutorDaChave(chave: string | null | undefined): string | 
  */
 export function contactLabel(c: InboxContact): string {
   if (c.channel === "whatsapp") {
-    return (c.push_name || c.lead_name || c.phone_number || "").trim() || "Contato";
+    const nome = (c.push_name || c.lead_name || "").trim();
+    if (nome) return nome;
+    // Sem nome, o que sobra é o identificador — e quando ele é um LID ou um
+    // canal, exibi-lo cru põe `210028246085780` no lugar do contato. Ver
+    // `lib/identificadorOculto.ts`.
+    const rotulo = rotuloDeIdentificadorOculto(c.phone_number);
+    if (rotulo) return rotulo;
+    return (c.phone_number || "").trim() || "Contato";
   }
   // O NOME primeiro, e o @ como queda.
   //

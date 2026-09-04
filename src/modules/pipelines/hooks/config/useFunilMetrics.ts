@@ -83,15 +83,6 @@ export function useFunilMetrics(
       ? (funil.slug as FunilMetricsKind)
       : "generic";
 
-  const roleByKey = useMemo(() => {
-    const map: Record<string, "won" | "lost" | "other"> = {};
-    for (const s of stages) {
-      map[s.stage_key] =
-        s.stage_role === "won" ? "won" : s.stage_role === "lost" ? "lost" : "other";
-    }
-    return map;
-  }, [stages]);
-
   const closedKeys = useMemo(
     () => stages.filter((s) => s.stage_role === "won" || s.stage_role === "lost").map((s) => s.stage_key),
     [stages],
@@ -133,27 +124,75 @@ export function useFunilMetrics(
     staleTime: 60_000,
   });
 
+  /**
+   * ── Ganho e perda vêm do NEGÓCIO, não da etapa (B2d) ──────────────────────
+   *
+   * A versão anterior somava as contagens das etapas cujo `stage_role` era
+   * won/lost. Isso deixou de funcionar por dois motivos, e o segundo é fatal:
+   *
+   * 1. O papel da etapa é inferido do nome e erra — 76 etapas que parecem
+   *    perda estão com papel diferente de `lost`, contra 249 corretas.
+   * 2. A parte 2 do B2d tira o papel de todas as 375 etapas de desfecho. No
+   *    instante em que isso acontece, `closedKeys` fica VAZIO e este bloco
+   *    passaria a somar zero — o cabeçalho de todo funil diria "0 vendidos".
+   *
+   * `get_funil_desfecho_counts` (migration 20270918000030) responde a mesma
+   * pergunta ao negócio, e responde certo antes e depois da parte 2. É por
+   * isso que ela sobe primeiro.
+   */
+  const desfechoQuery = useQuery({
+    queryKey: [
+      "funil-desfecho-counts",
+      pipelineId,
+      range?.startStr ?? "all",
+      range?.endStr ?? "all",
+      organizationId,
+    ],
+    queryFn: async (): Promise<Record<string, number>> => {
+      // Ponte de tipo até o regen: a RPC é mais nova que o types.ts gerado.
+      const { data, error } = await supabase.rpc(
+        "get_funil_desfecho_counts" as unknown as never,
+        {
+          p_pipeline_id: pipelineId,
+          p_org_id: organizationId,
+          p_period_after: range?.startStr ?? null,
+          p_period_before: range?.endStr ?? null,
+        } as unknown as never,
+      );
+      if (error) throw error;
+      const porDesfecho: Record<string, number> = {};
+      for (const row of (data ?? []) as Array<{ outcome: string; cnt: number | string }>) {
+        porDesfecho[row.outcome] = (porDesfecho[row.outcome] ?? 0) + Number(row.cnt);
+      }
+      return porDesfecho;
+    },
+    enabled: isReady && !!organizationId && !!pipelineId,
+    staleTime: 60_000,
+  });
+
   const generic = useMemo<FunilGenericMetrics | null>(() => {
     const byStageKey = genericQuery.data;
     if (!byStageKey) return null;
     let total = 0;
-    let wonCount = 0;
-    let lostCount = 0;
-    for (const [key, cnt] of Object.entries(byStageKey)) {
-      total += cnt;
-      const role = roleByKey[key] ?? "other";
-      if (role === "won") wonCount += cnt;
-      else if (role === "lost") lostCount += cnt;
-    }
+    for (const cnt of Object.values(byStageKey)) total += cnt;
+
+    // `total` continua vindo do motor de etapas: ele é o denominador da
+    // conversão e carrega os 25 filtros do quadro. O desfecho só decide o
+    // NUMERADOR. Misturar as duas fontes num total só faria a conta divergir
+    // sempre que um filtro estivesse ativo.
+    const porDesfecho = desfechoQuery.data;
+    const wonCount = porDesfecho?.won ?? 0;
+    const lostCount = porDesfecho?.lost ?? 0;
+
     return {
       total,
       byStageKey,
       wonCount,
       lostCount,
-      openCount: total - wonCount - lostCount,
+      openCount: Math.max(0, total - wonCount - lostCount),
       conversionRate: total > 0 ? (wonCount / total) * 100 : 0,
     };
-  }, [genericQuery.data, roleByKey]);
+  }, [genericQuery.data, desfechoQuery.data]);
 
   // Blocos legados: chamados incondicionalmente (regra de hooks), ligados só
   // quando o funil resolvido é o slug de sistema correspondente.

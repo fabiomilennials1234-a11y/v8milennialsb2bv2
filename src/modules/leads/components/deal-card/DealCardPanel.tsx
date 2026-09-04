@@ -15,9 +15,10 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { supabase } from "@/integrations/supabase/client";
-import { isMissingSchemaError } from "@/lib/rpc-errors";
+import { isMissingSchemaError, isSaleValueRequiredError } from "@/lib/rpc-errors";
 import { useFeaturePermission } from "@/modules/identity";
 import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
+import { SaleValueRequiredModal } from "@/shared/components/SaleValueRequiredModal";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDealSheet } from "../deal-detail/deal-sheet-context";
 import { useLeadSheet } from "../lead-detail/hooks/useLeadSheet";
@@ -206,8 +207,23 @@ export const DealCardPanel = memo(function DealCardPanel() {
    */
   const [decidindo, setDecidindo] = useState(false);
 
+  /**
+   * ── O valor que o banco exige e a tela precisa deixar digitar ─────────────
+   *
+   * `fn_exige_valor_no_negocio` (20270916000010) recusa fechar como ganho sem
+   * valor nas orgs do rollout. Sem este estado, a recusa virava
+   * `throw new Error(error.message)` — a mensagem do Postgres num toast, e o
+   * usuário preso: a tela pedindo um valor que a tela não deixava informar.
+   *
+   * Quem decide se a org exige é o BANCO, e não dá para o front adivinhar: a
+   * lista `rollout_exige_valor_venda` só é legível por master. Por isso a
+   * ordem é tentar → ser recusado → pedir o valor. Ninguém que não esteja
+   * bloqueado vê modal nenhum.
+   */
+  const [pedindoValor, setPedindoValor] = useState(false);
+
   const definirDesfecho = useCallback(
-    async (desfecho: "won" | "lost") => {
+    async (desfecho: "won" | "lost", valor?: number) => {
       if (!entryId || decidindo) return;
       setDecidindo(true);
       try {
@@ -215,7 +231,11 @@ export const DealCardPanel = memo(function DealCardPanel() {
           p_entry_id: entryId,
           p_outcome: desfecho,
           p_loss_reason: undefined,
-        });
+          // O valor vai na MESMA chamada do desfecho, nunca antes: a trava é
+          // BEFORE UPDATE OF outcome, e escrever em dois passos abriria a
+          // janela em que o preço está salvo e o fechamento falhou.
+          ...(valor !== undefined ? { p_valor: valor } : {}),
+        } as never);
 
         if (error) {
           // ── A migration ainda não rodou ────────────────────────────────────
@@ -237,6 +257,13 @@ export const DealCardPanel = memo(function DealCardPanel() {
             // Os 283 funis (71%) sem etapa terminal nunca tiveram este botão.
             // Dizer o que falta é melhor que um erro de banco cru.
             toast.error("Disponível assim que a atualização do funil for aplicada.");
+            return;
+          }
+          // ── A trava de valor ────────────────────────────────────────────
+          // Não é erro do usuário nem falha: é a única informação que falta.
+          // Abre o campo em vez de despejar a mensagem do banco num toast.
+          if (isSaleValueRequiredError(error)) {
+            setPedindoValor(true);
             return;
           }
           throw new Error(error.message);
@@ -652,6 +679,31 @@ export const DealCardPanel = memo(function DealCardPanel() {
     </AlertDialog>
   ) : null;
 
+  /**
+   * Só montado quando a trava recusou — mesma regra do dialogo de produto logo
+   * acima: nada de rodar formulário e resolver por uma tela que ninguém pediu.
+   *
+   * `defaultValue` vem da soma dos itens quando ela existe: se a pessoa já
+   * cadastrou os produtos, o valor da venda quase sempre É essa soma, e
+   * redigitar é atrito puro. Ela ainda confirma.
+   */
+  const dialogoValor = pedindoValor ? (
+    <SaleValueRequiredModal
+      open
+      leadName={data?.lead?.nome ?? undefined}
+      defaultValue={
+        data?.itens?.length
+          ? data.itens.reduce((soma, i) => soma + Number(i.total ?? 0), 0)
+          : null
+      }
+      onConfirm={(valor) => {
+        setPedindoValor(false);
+        void definirDesfecho("won", valor);
+      }}
+      onCancel={() => setPedindoValor(false)}
+    />
+  ) : null;
+
   if (isMobile) {
     return (
       <>
@@ -662,6 +714,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
         </Sheet>
         {dialogoProduto}
         {dialogoExclusao}
+        {dialogoValor}
       </>
     );
   }
@@ -685,6 +738,7 @@ export const DealCardPanel = memo(function DealCardPanel() {
     </Dialog>
     {dialogoProduto}
     {dialogoExclusao}
+    {dialogoValor}
     </>
   );
 });

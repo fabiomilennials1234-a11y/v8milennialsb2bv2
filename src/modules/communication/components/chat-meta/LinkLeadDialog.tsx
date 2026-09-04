@@ -20,7 +20,7 @@ interface Props {
 
 export function LinkLeadDialog({ conversationId, open, onOpenChange }: Props) {
   const [search, setSearch] = useState("");
-  // Real useLeads signature: { page?, searchQuery?, filterOrigin?, filterRating? }
+  // Real useLeads signature: { page?, searchQuery?, filterOrigin? }
   const { data: leads, isLoading } = useLeads({ searchQuery: search });
   const linkLead = useMetaLinkLead();
 

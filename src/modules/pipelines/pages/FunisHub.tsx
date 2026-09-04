@@ -16,7 +16,9 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { CreateFunilOuCampanhaModal } from "@/modules/pipelines/components/funis/CreateFunilOuCampanhaModal";
-import { usePipelines } from "@/modules/pipelines/hooks/model/usePipelines";
+import { FunnelActionsMenu } from "@/modules/pipelines/components/funis/FunnelActionsMenu";
+import { usePipelines, type Pipeline } from "@/modules/pipelines/hooks/model/usePipelines";
+import { funisDeSistemaNavegaveis } from "@/contracts/pipe/nome-do-funil";
 import { funilIcon } from "../lib/funil-icons";
 // Mesmo path map compat do seletor da faixa (morre no flip do redirect).
 import { FUNNEL_FALLBACK_COLOR } from "../lib/funnel-nav";
@@ -37,6 +39,12 @@ interface FunilCard {
   icon: LucideIcon;
   /** Linha de apoio: prazo, meta, estado. Vazia quando não há o que dizer. */
   meta?: string;
+  /**
+   * Linha canônica em `pipelines` — o que o menu de ações precisa para
+   * renomear/excluir. Ausente só enquanto o registro não chegou: sem ela o
+   * cartão continua listando e navegando, apenas sem menu.
+   */
+  pipeline?: Pipeline;
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -62,10 +70,12 @@ export default function FunisHub() {
 
   const isLoading = configLoading || permanentLoading || temporaryLoading;
 
-  // Structural funnels — only visible ones; Agendamentos some quando o merge está ON (ADR-0004)
-  const visibleStructural = displayConfigs.filter(
-    (c) => c.is_visible && !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")),
-  );
+  // Funis de sistema navegáveis — regra ÚNICA em contracts. O hub era o único
+  // dos três consumidores que não filtrava a Carteira, e por isso listava um
+  // card "Carteira" apontando para `/funil/upsell`, rota sem funil por trás.
+  const visibleStructural = funisDeSistemaNavegaveis(displayConfigs, {
+    mergeDeOportunidadesAtivo: hasFeature("merged_opportunity_funnel"),
+  });
 
   // Encerrado não é categoria, é ESTADO — por isso segue recolhido no fim.
   const activeTemporary = temporaryFunnels.filter((f) => f.status !== "ended");
@@ -80,6 +90,7 @@ export default function FunisHub() {
         path: `/funil/${c.pipe_type}`,
         color: row?.color ?? FUNNEL_FALLBACK_COLOR,
         icon: funilIcon(row?.icon),
+        pipeline: row,
       };
     }),
     ...permanentFunnels.map((pipe) => ({
@@ -88,6 +99,7 @@ export default function FunisHub() {
       path: `/funil/${pipe.slug}`,
       color: pipeById.get(pipe.id)?.color ?? pipe.color ?? FUNNEL_FALLBACK_COLOR,
       icon: funilIcon(pipeById.get(pipe.id)?.icon),
+      pipeline: pipeById.get(pipe.id),
     })),
     ...activeTemporary.map((pipe) => {
       const daysLeft = pipe.ends_at
@@ -111,6 +123,7 @@ export default function FunisHub() {
         color: pipeById.get(pipe.id)?.color ?? pipe.color ?? FUNNEL_FALLBACK_COLOR,
         icon: funilIcon(pipeById.get(pipe.id)?.icon),
         meta: partes.length > 0 ? partes.join(" · ") : undefined,
+        pipeline: pipeById.get(pipe.id),
       };
     }),
   ];
@@ -148,25 +161,38 @@ export default function FunisHub() {
       {allFunnels.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {allFunnels.map((funil) => (
-            <button
+            /* O cartão deixou de ser um <button> só: agora ele hospeda o menu
+               de ações, e botão dentro de botão é HTML inválido (o menu nem
+               abriria). A área de navegação continua sendo um botão — só que
+               agora ela é o miolo do cartão, e o menu é irmão dela. */
+            <div
               key={funil.key}
-              onClick={() => navigate(funil.path)}
-              className="group flex items-center gap-3 p-4 rounded-xl border border-border/50 hover:border-border bg-card hover:bg-muted/30 transition-all text-left"
+              className="group flex items-center rounded-xl border border-border/50 hover:border-border bg-card hover:bg-muted/30 transition-all"
             >
-              <div
-                className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: funil.color + "15" }}
+              <button
+                onClick={() => navigate(funil.path)}
+                className="flex flex-1 min-w-0 items-center gap-3 p-4 text-left"
               >
-                <funil.icon className="w-5 h-5" style={{ color: funil.color }} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate">{funil.name}</p>
-                {funil.meta && (
-                  <p className="text-xs text-muted-foreground truncate">{funil.meta}</p>
-                )}
-              </div>
-              <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-            </button>
+                <div
+                  className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: funil.color + "15" }}
+                >
+                  <funil.icon className="w-5 h-5" style={{ color: funil.color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate">{funil.name}</p>
+                  {funil.meta && (
+                    <p className="text-xs text-muted-foreground truncate">{funil.meta}</p>
+                  )}
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+              {funil.pipeline && (
+                <div className="pr-3 pl-1">
+                  <FunnelActionsMenu pipeline={funil.pipeline} displayName={funil.name} />
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}
@@ -190,17 +216,32 @@ export default function FunisHub() {
           {showEnded && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 opacity-60">
               {endedTemporary.map((pipe) => (
-                <button
+                /* Encerrado é estado, não espécie: o funil segue sendo funil e
+                   ganha o mesmo menu — é justamente aqui que "excluir" costuma
+                   ser o que a pessoa quer. */
+                <div
                   key={pipe.id}
-                  onClick={() => navigate(`/funil/${pipe.slug}`)}
-                  className="p-4 rounded-xl border border-border/50 bg-card text-left"
+                  className="group flex items-start rounded-xl border border-border/50 bg-card"
                 >
-                  <div className="flex items-center gap-2">
-                    <Kanban className="w-4 h-4 text-muted-foreground" />
-                    <p className="text-sm font-medium truncate">{pipe.name}</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">Encerrado</p>
-                </button>
+                  <button
+                    onClick={() => navigate(`/funil/${pipe.slug}`)}
+                    className="flex-1 min-w-0 p-4 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Kanban className="w-4 h-4 text-muted-foreground" />
+                      <p className="text-sm font-medium truncate">{pipe.name}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Encerrado</p>
+                  </button>
+                  {pipeById.get(pipe.id) && (
+                    <div className="pr-3 pt-4 pl-1">
+                      <FunnelActionsMenu
+                        pipeline={pipeById.get(pipe.id)!}
+                        displayName={pipe.name}
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}

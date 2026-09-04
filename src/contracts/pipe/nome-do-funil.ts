@@ -67,6 +67,39 @@ export const PIPE_TYPE_PARA_DESTINO: Readonly<Record<string, string>> = {
   propostas: "propostas",
 };
 
+/**
+ * Os funis de sistema que a org mostra na NAVEGAÇÃO, na ordem dela.
+ *
+ * As exclusões são regra de produto, não estética:
+ *
+ *   - **linha ausente = a org não tem o funil** (migration 20270902000000);
+ *   - **`is_visible = false`** — escondido é escondido;
+ *   - **Carteira (`upsell`) NUNCA entra.** Pelo D6/ADR-0034 ela é faceta do
+ *     lead, não funil de negócio: tem porta própria (`/upsell`) e não tem linha
+ *     em `pipelines`, então qualquer card apontaria para `/funil/upsell` — rota
+ *     sem funil por trás;
+ *   - **`confirmacao` some com o merge de oportunidades ligado** (ADR-0004).
+ *
+ * Existe porque a regra estava COPIADA em três telas (hub, lateral, seletor da
+ * faixa) e a cópia divergiu: o hub `/funis` era o único que não filtrava
+ * `upsell`, e listava um card "Carteira" com link morto. Uma cópia a menos é
+ * uma divergência a menos.
+ */
+export function funisDeSistemaNavegaveis<T extends SystemPipeDisplay>(
+  configs: readonly T[] | undefined,
+  opts: { mergeDeOportunidadesAtivo: boolean },
+): T[] {
+  return (configs ?? [])
+    .filter(
+      (c) =>
+        c.is_visible &&
+        c.pipe_type !== "upsell" &&
+        !(c.pipe_type === "confirmacao" && opts.mergeDeOportunidadesAtivo),
+    )
+    .slice()
+    .sort((a, b) => a.position - b.position);
+}
+
 /** Um funil de sistema oferecível como destino de lead novo. */
 export interface DestinoDeSistema {
   /** Valor do `<SelectItem>` e do payload — "qualificacao" | "confirmacao" | "propostas". */

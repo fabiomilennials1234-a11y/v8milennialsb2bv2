@@ -3,7 +3,7 @@
  *
  * Módulo PURO — sem dependência de React/Supabase-client. Recebe um query
  * builder do Supabase (postgrest) já escopado por tenant e aplica os filtros
- * visíveis ao usuário (busca, origem, UF, rating, qualificação). Reutilizado por:
+ * visíveis ao usuário (busca, origem, UF, qualificação). Reutilizado por:
  *   - `useLeads` / `useLeadsCount` (lista + contagem, via `applyLeadsFilters`)
  *   - `useExportLeads` (exportação espelha o que está na tela)
  *
@@ -16,7 +16,6 @@ export interface LeadListFilterValues {
   /** Busca livre — casa contra nome, empresa, e-mail e telefone. */
   searchQuery?: string;
   filterOrigin?: string;
-  filterRating?: string;
   /** Tier de qualificação, ou os sentinels `"all"` (sem filtro) e `"none"`
    * (leads sem tier — `qualification_tier IS NULL`, ≠ do tier "desqualificado"). */
   filterQualification?: string;
@@ -151,6 +150,11 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
       `company.ilike.${pattern}`,
       `email.ilike.${pattern}`,
       `phone.ilike.${pattern}`,
+      // 🔴 EXIGE a migration `20270921000010` APLICADA. A lista mostra o lead
+      // como "1234 - João" e digitar o código tem que achá-lo; mas o PostgREST
+      // devolve 400 para coluna inexistente, e um 400 aqui não degrada — apaga a
+      // busca inteira. Aplicar a migration ANTES de mergear o frontend.
+      `erp_code.ilike.${pattern}`,
     ];
 
     // Telefone é digitado com máscara ("(21) 99999-8888", "21 99999 8888") mas
@@ -172,12 +176,6 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
 
   if (filters.filterUf) {
     q = q.eq("uf", filters.filterUf);
-  }
-
-  if (filters.filterRating && filters.filterRating !== "all") {
-    if (filters.filterRating === "high") q = q.gte("rating", 7);
-    else if (filters.filterRating === "medium") q = q.gte("rating", 4).lt("rating", 7);
-    else if (filters.filterRating === "low") q = q.lt("rating", 4);
   }
 
   // Janela de criação (deep-link do card "Leads" do Comando). Os limites chegam

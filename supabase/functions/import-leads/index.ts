@@ -83,7 +83,12 @@ interface ParsedLead {
 interface ImportPayload {
   leads: ParsedLead[];
   organization_id: string;
-  destination: "campaign" | "funnel" | "custom_pipeline" | "pipeline";
+  /**
+   * "leads" = importar SEM funil: cria/atualiza a pessoa e para aí, sem
+   * `pipeline_entries`. É o destino da tela de Leads, onde o cadastro é o fim
+   * em si — o negócio nasce depois, quando alguém decidir abrir um.
+   */
+  destination: "campaign" | "funnel" | "custom_pipeline" | "pipeline" | "leads";
 
   // Campaign-specific
   campanha_id?: string;
@@ -797,12 +802,23 @@ async function importToPipeline(
     metrics_period_year,
   } = payload;
 
+  // SEM FUNIL: o destino "leads" para no cadastro da pessoa. Não resolve
+  // pipeline, não escolhe etapa, não escreve `pipeline_entries` — tudo o que
+  // vem antes e depois (dedup por telefone/e-mail, campos personalizados,
+  // vendedor da coluna, período de métricas, histórico) é idêntico, e é por
+  // isso que ele mora aqui em vez de num motor paralelo que envelheceria à
+  // parte.
+  const semFunil = payload.destination === "leads";
+
   // ── 1. Colapsa o destino em (pipelineRef, etapa padrão) ────────────────────
   let pipelineRef: string | null = null;
   let defaultStageRaw: string | null = null;
   let legacyFunnelLabel: string | null = null;
 
-  if (payload.destination === "funnel") {
+  if (semFunil) {
+    pipelineRef = null;
+    defaultStageRaw = null;
+  } else if (payload.destination === "funnel") {
     const dest = payload.funnel_destination;
     if (!dest) throw new Error("funnel_destination é obrigatório para importação em funil");
     if (!payload.stage_key) throw new Error("stage_key é obrigatório para importação em funil");
@@ -822,69 +838,75 @@ async function importToPipeline(
   }
 
   // ── 2. Resolve o funil (id ou slug, qualquer funil ativo da org) ───────────
-  let pipeline: ResolvedPipeline;
-  try {
-    pipeline = await resolvePipeline(supabase, organizationId, pipelineRef);
-  } catch (err) {
-    if (isPipelineResolutionError(err) && legacyFunnelLabel) {
-      // Contrato legado do destino "funnel": org sem o funil de sistema não é
-      // erro HTTP — cada linha sai rejeitada com a explicação de como ativar.
-      for (let i = 0; i < leads.length; i++) {
-        report.rejected++;
-        report.errors.push({ row: i + 1, reason: motivoFalhaDeFunil("no_pipeline", legacyFunnelLabel) });
+  let pipeline: ResolvedPipeline | null = null;
+  if (!semFunil) {
+    try {
+      pipeline = await resolvePipeline(supabase, organizationId, pipelineRef!);
+    } catch (err) {
+      if (isPipelineResolutionError(err) && legacyFunnelLabel) {
+        // Contrato legado do destino "funnel": org sem o funil de sistema não é
+        // erro HTTP — cada linha sai rejeitada com a explicação de como ativar.
+        for (let i = 0; i < leads.length; i++) {
+          report.rejected++;
+          report.errors.push({ row: i + 1, reason: motivoFalhaDeFunil("no_pipeline", legacyFunnelLabel) });
+        }
+        return;
       }
-      return;
+      if (isPipelineResolutionError(err)) {
+        // Contrato legado do destino custom (e o canônico segue igual).
+        throw new Error("Pipeline não encontrado ou não pertence a esta organização");
+      }
+      throw err;
     }
-    if (isPipelineResolutionError(err)) {
-      // Contrato legado do destino custom (e o canônico segue igual).
-      throw new Error("Pipeline não encontrado ou não pertence a esta organização");
-    }
-    throw err;
   }
-  const funnelLabel = pipeline.name || legacyFunnelLabel || pipeline.slug;
+  const funnelLabel = pipeline ? (pipeline.name || legacyFunnelLabel || pipeline.slug) : "";
   // Família de metadata por SLUG (ADR-0034: `type` nunca decide comportamento;
   // slug é único por org, medido 2026-09-02). Os 3 slugs históricos carregam a
-  // semântica legada de vendedor/metadata; qualquer outro funil é genérico.
+  // semântica legada de vendedor/metadata; qualquer outro funil é genérico —
+  // e sem funil também, para que a coluna Vendedor continue gravando
+  // responsible_id/sdr_id no lead.
   const family: "whatsapp" | "confirmacao" | "propostas" | "generic" =
-    pipeline.slug === "whatsapp" || pipeline.slug === "confirmacao" || pipeline.slug === "propostas"
+    pipeline && (pipeline.slug === "whatsapp" || pipeline.slug === "confirmacao" || pipeline.slug === "propostas")
       ? (pipeline.slug as "whatsapp" | "confirmacao" | "propostas")
       : "generic";
 
   // ── 3. Etapas reais do funil + etapa padrão ────────────────────────────────
-  const { data: stageRows } = await supabase
-    .from("pipeline_stages")
-    .select("id, stage_key, name")
-    .eq("organization_id", organizationId)
-    .eq("pipeline_id", pipeline.id)
-    .eq("is_active", true)
-    .order("position");
-  const dbStages = (stageRows ?? []) as PipelineStageRow[];
-  const stageById = new Map(dbStages.map((st) => [st.id, st]));
-  const stageByKey = new Map(dbStages.map((st) => [st.stage_key, st]));
-
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  let defaultStageKey: string;
-  if (UUID_RE.test(defaultStageRaw)) {
-    const st = stageById.get(defaultStageRaw);
-    if (!st) throw new Error("Etapa padrão não encontrada ou não pertence a este pipeline");
-    defaultStageKey = st.stage_key;
-  } else {
-    // stage_key legado passa direto (contrato do destino "funnel": nunca
-    // validou a key — o adapter grava o que veio).
-    defaultStageKey = defaultStageRaw;
-  }
-
-  // Aliases nome→stage_key para a coluna Etapa da planilha: lista do cliente
-  // (formatos legados) tem precedência; sem ela, as etapas reais do funil.
+  let defaultStageKey = "";
   let stageAliases: { stage_key: string; name: string }[] = [];
-  if (payload.stages?.length) {
-    stageAliases = payload.stages;
-  } else if (payload.custom_stages?.length) {
-    stageAliases = payload.custom_stages
-      .map((cs) => ({ stage_key: stageById.get(cs.id)?.stage_key ?? "", name: cs.name }))
-      .filter((a) => a.stage_key);
-  } else {
-    stageAliases = dbStages.map((st) => ({ stage_key: st.stage_key, name: st.name }));
+
+  if (pipeline) {
+    const { data: stageRows } = await supabase
+      .from("pipeline_stages")
+      .select("id, stage_key, name")
+      .eq("organization_id", organizationId)
+      .eq("pipeline_id", pipeline.id)
+      .eq("is_active", true)
+      .order("position");
+    const dbStages = (stageRows ?? []) as PipelineStageRow[];
+    const stageById = new Map(dbStages.map((st) => [st.id, st]));
+
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (UUID_RE.test(defaultStageRaw!)) {
+      const st = stageById.get(defaultStageRaw!);
+      if (!st) throw new Error("Etapa padrão não encontrada ou não pertence a este pipeline");
+      defaultStageKey = st.stage_key;
+    } else {
+      // stage_key legado passa direto (contrato do destino "funnel": nunca
+      // validou a key — o adapter grava o que veio).
+      defaultStageKey = defaultStageRaw!;
+    }
+
+    // Aliases nome→stage_key para a coluna Etapa da planilha: lista do cliente
+    // (formatos legados) tem precedência; sem ela, as etapas reais do funil.
+    if (payload.stages?.length) {
+      stageAliases = payload.stages;
+    } else if (payload.custom_stages?.length) {
+      stageAliases = payload.custom_stages
+        .map((cs) => ({ stage_key: stageById.get(cs.id)?.stage_key ?? "", name: cs.name }))
+        .filter((a) => a.stage_key);
+    } else {
+      stageAliases = dbStages.map((st) => ({ stage_key: st.stage_key, name: st.name }));
+    }
   }
 
   const customFieldMap = await loadCustomFieldMap(supabase, organizationId);
@@ -1086,11 +1108,18 @@ async function importToPipeline(
           entryAssignedTo = sdrIdForLead;
         }
 
+        // SEM FUNIL: acabou aqui. A pessoa está cadastrada, com vendedor e
+        // campos personalizados; nenhum negócio foi aberto em nome dela.
+        if (semFunil) {
+          if (formattedPhone) processedPhones.add(formattedPhone);
+          continue;
+        }
+
         // Escrita da entry — choke único (adapter, por pipeline_id).
         const entryResult = await upsertPipeEntryDetailed(supabase, {
           leadId,
           orgId: organizationId,
-          slug: pipeline.id,
+          slug: pipeline!.id,
           stageKey: stageKeyForLead,
           metadata: entryMetadata,
           assignedTo: entryAssignedTo,
@@ -1134,9 +1163,11 @@ async function importToPipeline(
     const historyRows = createdLeadIds.map((id) => ({
       lead_id: id,
       action: "lead_created",
-      description: payload.destination === "custom_pipeline"
-        ? "Sistema: Lead importado via pipeline custom"
-        : "Sistema: Lead importado via funil",
+      description: semFunil
+        ? "Sistema: Lead importado por planilha (sem funil)"
+        : payload.destination === "custom_pipeline"
+          ? "Sistema: Lead importado via pipeline custom"
+          : "Sistema: Lead importado via funil",
       created_by: null,
     }));
     await supabase.from("lead_history").insert(historyRows);
@@ -1238,9 +1269,9 @@ Deno.serve(
       );
     }
 
-    if (!body.destination || !["campaign", "funnel", "custom_pipeline", "pipeline"].includes(body.destination)) {
+    if (!body.destination || !["campaign", "funnel", "custom_pipeline", "pipeline", "leads"].includes(body.destination)) {
       return new Response(
-        JSON.stringify({ success: false, error: "destination deve ser 'campaign', 'funnel', 'custom_pipeline' ou 'pipeline'" }),
+        JSON.stringify({ success: false, error: "destination deve ser 'campaign', 'funnel', 'custom_pipeline', 'pipeline' ou 'leads'" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
@@ -1268,7 +1299,8 @@ Deno.serve(
         await importToCampaign(supabase, validLeads, { ...body, organization_id: organizationId }, report);
       } else {
         // funnel | custom_pipeline | pipeline — os três colapsam no motor
-        // único por pipeline_id (SCRUM-635).
+        // único por pipeline_id (SCRUM-635). "leads" entra no mesmo motor e
+        // sai antes da escrita da entry.
         await importToPipeline(supabase, validLeads, { ...body, organization_id: organizationId }, report);
       }
     } catch (err) {

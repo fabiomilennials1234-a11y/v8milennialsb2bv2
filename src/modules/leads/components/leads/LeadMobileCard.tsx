@@ -1,8 +1,9 @@
-import { Building, Mail, Phone, Star } from "lucide-react";
+import { Building, Mail, Phone } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { LeadStanding } from "../../lib/lead-relacao-situacao";
+import { erpLabel } from "@/shared/format/erp-code";
 
 /**
  * O cartão de lead do celular — a lista abaixo de 768px.
@@ -32,44 +33,14 @@ import type { LeadStanding } from "../../lib/lead-relacao-situacao";
 export interface LeadMobileCardLead {
   id: string;
   name: string;
+  /** Código do cliente no ERP — prefixa o nome na exibição. */
+  erp_code?: string | null;
   company?: string | null;
   phone?: string | null;
   email?: string | null;
-  rating?: number | null;
   origin: string;
   pre_sale_responsible?: { name?: string | null } | null;
   sale_responsible?: { name?: string | null } | null;
-}
-
-/** Nota de 1 a 10 em estrelas. Vive aqui porque o card do celular é o uso mais quente. */
-export function StarRating({
-  rating,
-  onRate,
-  readonly = false,
-}: {
-  rating: number;
-  onRate?: (r: number) => void;
-  readonly?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((star) => (
-        <button
-          key={star}
-          type="button"
-          disabled={readonly}
-          onClick={() => onRate?.(star)}
-          className={`${readonly ? "cursor-default" : "cursor-pointer hover:scale-110"} transition-transform`}
-        >
-          <Star
-            className={`w-3.5 h-3.5 ${
-              star <= rating ? "fill-chart-5 text-chart-5" : "text-muted-foreground/30"
-            }`}
-          />
-        </button>
-      ))}
-    </div>
-  );
 }
 
 export function LeadMobileCard({
@@ -97,17 +68,14 @@ export function LeadMobileCard({
         selecionado && "border-primary/40 bg-primary/5",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-semibold">{lead.name}</p>
-          {lead.company && (
-            <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
-              <Building className="h-3 w-3 shrink-0" />
-              {lead.company}
-            </p>
-          )}
-        </div>
-        <StarRating rating={lead.rating || 0} readonly />
+      <div className="min-w-0">
+        <p className="truncate font-semibold">{erpLabel(lead)}</p>
+        {lead.company && (
+          <p className="mt-0.5 flex items-center gap-1 truncate text-xs text-muted-foreground">
+            <Building className="h-3 w-3 shrink-0" />
+            {lead.company}
+          </p>
+        )}
       </div>
 
       {/* Relação + Situação — a §6 vale para a página, e o card do celular é a

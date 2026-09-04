@@ -21,7 +21,6 @@ import {
   Phone,
   Plus,
   Sparkles,
-  Star,
   Tag as TagIcon,
   User,
   X,
@@ -60,6 +59,7 @@ import {
 } from "@/modules/leads";
 import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
 import { ContextPanelFunnels } from "./ContextPanelFunnels";
+import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "whatsapp", label: "WhatsApp", dot: "hsl(142 71% 45%)" },
@@ -96,7 +96,6 @@ type LeadShape = Partial<
     | "email"
     | "phone"
     | "origin"
-    | "rating"
     | "responsible_id"
     | "organization_id"
     | "updated_at"
@@ -139,7 +138,9 @@ export function ContextPanelTabInfo({
     return (
       <div className="px-4 py-6 text-center">
         <p className="text-xs text-muted-foreground mb-1">Nenhum lead vinculado a</p>
-        <p className="text-sm font-medium tabular-nums">{phoneNumber}</p>
+        <p className="text-sm font-medium tabular-nums">
+          {telefoneParaExibicao(phoneNumber)}
+        </p>
 
         {/*
           A AÇÃO, e não só o diagnóstico.
@@ -346,15 +347,6 @@ function StandardFields({ lead }: { lead: LeadShape }) {
         </>
       )}
 
-      {/* Rating (5 estrelas) */}
-      <FieldRow label="Rating">
-        <RatingStars
-          value={lead.rating ?? 0}
-          onChange={(v) => save({ rating: v })}
-          disabled={saving}
-        />
-      </FieldRow>
-
       {/* Qualificação + Pré-qualificação (reusa QualificationSlot) */}
       {leadId && (
         <>
@@ -505,53 +497,6 @@ function InlineEditText({
         </button>
       )}
     </FieldRow>
-  );
-}
-
-/* ─── Rating stars ───────────────────────────────────────────────────────── */
-
-function RatingStars({
-  value,
-  onChange,
-  disabled,
-}: {
-  value: number;
-  onChange: (v: number) => void;
-  disabled?: boolean;
-}) {
-  const [hover, setHover] = useState<number | null>(null);
-  return (
-    <div
-      className="flex items-center gap-0.5"
-      onMouseLeave={() => setHover(null)}
-    >
-      {[1, 2, 3, 4, 5].map((n) => {
-        const active = (hover ?? value) >= n;
-        return (
-          <button
-            key={n}
-            type="button"
-            disabled={disabled}
-            onMouseEnter={() => setHover(n)}
-            onClick={() => onChange(n === value ? 0 : n)}
-            aria-label={`${n} estrela${n > 1 ? "s" : ""}`}
-            className={cn(
-              "p-0.5 rounded transition-colors",
-              "hover:bg-muted/30 disabled:cursor-not-allowed disabled:opacity-60",
-            )}
-          >
-            <Star
-              className={cn(
-                "w-3.5 h-3.5 transition-colors",
-                active
-                  ? "fill-[hsl(47_100%_50%)] text-[hsl(47_100%_50%)]"
-                  : "text-muted-foreground/40",
-              )}
-            />
-          </button>
-        );
-      })}
-    </div>
   );
 }
 

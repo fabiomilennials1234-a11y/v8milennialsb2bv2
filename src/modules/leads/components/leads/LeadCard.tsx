@@ -25,7 +25,6 @@ import type { QualificationTier } from "../lead-detail/modal/types";
 import { LeadCardAvatar } from "./card/LeadCardAvatar";
 import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
-import { LeadCardCalor } from "./card/LeadCardCalor";
 import { LeadCardCompact } from "./card/LeadCardCompact";
 import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { formatFaturamento } from "@/lib/format/faturamento";
@@ -117,10 +116,19 @@ const VARIANT_CONFIG: Record<LeadCardVariant, {
 export interface LeadCardData extends DraggableItem {
   id: string;
   name: string;
+  /**
+   * Código do cliente no ERP, exibido como prefixo do nome: "1234 - João".
+   *
+   * 🔴 Campo PRÓPRIO em vez de nome já composto, por dois motivos: o `name` é
+   * editável por duplo clique e salva o que estiver nele (com o código junto,
+   * o vendedor gravaria "1234 - João" em `leads.name` e isso vazaria em
+   * `{{nome}}` de disparo), e a inicial do avatar sai do nome — prefixado, todo
+   * cliente do ERP viraria um avatar "1".
+   */
+  erpCode?: string | null;
   company?: string | null;
   email?: string | null;
   phone?: string | null;
-  rating?: number;
   origin?: string;
   urgency?: string | null;
   tags?: Array<{ name: string; color: string }>;
@@ -136,7 +144,6 @@ export interface LeadCardData extends DraggableItem {
   dateLabel?: string | null;
   meetLink?: string | null;
   // Propostas-specific
-  calor?: number;
   products?: Array<{ name: string; type?: string; value: number }>;
   contractDuration?: number;
   // Notes
@@ -187,7 +194,6 @@ export interface LeadCardProps {
   onSelect?: (e: React.MouseEvent) => void;
   onClick?: () => void;
   onRemove?: () => void;
-  onCalorChange?: (calor: number) => void;
   onQuickAction?: (title: string) => void;
   onInlineEdit?: (field: string, value: string) => void;
   /**
@@ -308,7 +314,7 @@ function formatCurrency(value: number): string {
 
 export const LeadCard = memo(function LeadCard({
   lead, variant, selected, onSelect, onClick, onRemove,
-  onCalorChange, onQuickAction, onInlineEdit, extraActions,
+  onQuickAction, onInlineEdit, extraActions,
   density = "comfortable", ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
@@ -626,15 +632,6 @@ export const LeadCard = memo(function LeadCard({
           !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "confirmado" && "ring-1 ring-green-500/50",
           !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "pre_confirmado" && "ring-1 ring-amber-500/50",
         )}
-        style={{
-          '--card-accent': lead.calor != null && lead.calor >= 8
-            ? 'hsl(0 80% 55%)'
-            : lead.calor != null && lead.calor >= 4
-            ? 'hsl(38 92% 50%)'
-            : lead.calor != null && lead.calor > 0
-            ? 'hsl(210 80% 55%)'
-            : undefined,
-        } as React.CSSProperties}
         onClick={onClick}
       >
         {/* ── Color stripes (Trello-style) ── */}
@@ -654,7 +651,7 @@ export const LeadCard = memo(function LeadCard({
             </button>
           )}
 
-          {/* ── Header: Avatar + Name + Calor + Kebab ──
+          {/* ── Header: Avatar + Name + Kebab ──
                Anatomia do DataCrazy: à esquerda o "símbolo do cara" (a
                inicial, 32px); a QUALIFICAÇÃO sai daqui e vai para o canto
                superior direito, menor (22px) — é o lugar onde o concorrente
@@ -696,7 +693,11 @@ export const LeadCard = memo(function LeadCard({
                     onInlineEdit && "cursor-text",
                   )}
                   onDoubleClick={(e) => startEdit("name", lead.name, e)}
+                  title={lead.erpCode ? `${lead.erpCode} - ${lead.name}` : lead.name}
                 >
+                  {lead.erpCode && (
+                    <span className="font-normal text-muted-foreground">{lead.erpCode} - </span>
+                  )}
                   {lead.name}
                 </h4>
               )}
@@ -736,9 +737,6 @@ export const LeadCard = memo(function LeadCard({
                 name={lead.name}
                 size={22}
               />
-              {lead.rating != null && lead.rating > 0 && (
-                <LeadCardCalor calor={lead.rating} onChange={onCalorChange} />
-              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                   <button className="p-0.5 rounded hover:bg-muted text-muted-foreground">

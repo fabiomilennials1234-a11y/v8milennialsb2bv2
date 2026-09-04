@@ -45,6 +45,7 @@ import { useMessageLimits } from "@/modules/communication/hooks/useMessageLimits
 import { HumanPauseBadge } from "../HumanPauseBadge";
 import { getAvatarGradient } from "@/modules/communication/components/chat/list/avatarGradient";
 import { VoiceCallButton } from "@/modules/communication/components/voice/VoiceCallButton";
+import { legendaDoTelefone } from "@/modules/communication/lib/identificadorOculto";
 
 export interface SzChatSession {
   sz_chat_session_id: string;
@@ -251,7 +252,7 @@ export function ChatHeader({
           </div>
           <p className="text-sm text-muted-foreground flex items-center gap-1 truncate">
             <Phone className="w-3 h-3 shrink-0" />
-            {phoneNumber}
+            {legendaDoTelefone(phoneNumber)}
           </p>
         </div>
       </div>

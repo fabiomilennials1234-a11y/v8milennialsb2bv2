@@ -48,6 +48,7 @@ import { ChatHeader } from "@/modules/communication/components/chat/view/ChatHea
 import { MobileChatThreadHeader } from "@/modules/communication/components/chat/view/MobileChatThreadHeader";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
+import { ScheduledMessagesBanner } from "@/modules/communication/components/chat/ScheduledMessagesBanner";
 import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
 import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
@@ -409,6 +410,22 @@ function ChatView({
           />
         )}
       </div>
+
+      {/* O que já está agendado para ESTA conversa, logo acima de onde se
+          escreve. Sem isto, a mensagem agendada só existia na Agenda e no card
+          do lead: quem abria a conversa não tinha como saber que havia um envio
+          a caminho, e mandava a mesma coisa de novo na mão.
+
+          Depende de lead: a fila é indexada por `lead_id`, então conversa de
+          número sem lead vinculado não tem o que listar. */}
+      {effectiveLeadId && (
+        <ScheduledMessagesBanner
+          leadId={effectiveLeadId}
+          leadName={contactName}
+          phoneNumber={phoneNumber ?? ""}
+          instanceId={instanceId ?? undefined}
+        />
+      )}
 
       {isMobile ? (
         <MobileComposerContextual

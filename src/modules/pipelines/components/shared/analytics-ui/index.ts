@@ -6,4 +6,3 @@ export { ContinuousFunnel, type ContinuousFunnelStage } from "./ContinuousFunnel
 export { ConversionHealth, type ConversionHealthItem } from "./ConversionHealth";
 export { OriginDonut, type OriginSlice } from "./OriginDonut";
 export { MemberLeaderboard, type LeaderboardRow } from "./MemberLeaderboard";
-export { CalorBars, type CalorBarDatum } from "./CalorBars";

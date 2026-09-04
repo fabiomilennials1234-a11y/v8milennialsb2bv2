@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { ChatContact } from "@/modules/communication/hooks/chat/types";
 import { instanceColor } from "./utils/instanceColor";
+import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
 
 interface ChatBubbleConversationItemProps {
   contact: ChatContact;
@@ -60,7 +61,11 @@ function ChatBubbleConversationItemBase({
   isSelected,
   onSelect,
 }: ChatBubbleConversationItemProps) {
-  const displayName = contact.lead_name || contact.push_name || contact.phone_number || "Contato";
+  const displayName =
+    contact.lead_name ||
+    contact.push_name ||
+    telefoneParaExibicao(contact.phone_number) ||
+    "Contato";
   const preview = contact.last_message ?? "";
   const time = formatRelativeTime(contact.last_message_time);
   const unread = contact.unread_count ?? 0;

@@ -25,6 +25,26 @@ interface LeadRow {
   [key: string]: unknown;
 }
 
+/**
+ * `rating` está DEPRECADO e sai do payload em 2026-11-03 (SCRUM-647, Etapa 2).
+ *
+ * Até lá a chave continua no JSON, sempre `null`. Não é meio-termo por
+ * indecisão — é a única transição que não mente e não quebra:
+ *
+ *   * `null` JÁ É um valor legal desta chave hoje: 208 leads em 18 orgs têm
+ *     `rating IS NULL` em produção. Todo consumidor correto já trata esse caso.
+ *     Passar a devolver `null` para todos não introduz um estado novo, só
+ *     generaliza um que a API sempre emitiu.
+ *   * SUMIR com a chave, esse sim, é o estado novo: quebra validador de schema
+ *     estrito e cliente gerado a partir da `openapi.json` — que é exatamente o
+ *     público que respeita o contrato. Punir quem integrou direito é o pior
+ *     resultado possível de uma remoção.
+ *
+ * Ao fim da janela: apagar esta linha e a entrada correspondente na
+ * `public/api/openapi.json`. Nada mais depende dela.
+ */
+const RATING_DEPRECADO = null;
+
 /** Public list-item shape — explicit allowlist (no internal columns). */
 export function serializeLeadRow(row: LeadRow): Record<string, unknown> {
   return {
@@ -34,7 +54,7 @@ export function serializeLeadRow(row: LeadRow): Record<string, unknown> {
     email: row.email ?? null,
     phone: row.phone ?? null,
     origin: row.origin ?? null,
-    rating: row.rating ?? null,
+    rating: RATING_DEPRECADO,
     qualification_score: row.qualification_score ?? null,
     tier: row.tier_efetivo ?? null,
     tags: row.tags ?? [],

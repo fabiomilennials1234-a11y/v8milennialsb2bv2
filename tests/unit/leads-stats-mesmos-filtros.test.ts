@@ -9,13 +9,12 @@
  * ── O QUE ESTAVA ERRADO, MEDIDO NO CÓDIGO ─────────────────────────────────
  * `useLeadsStats` reimplementava os filtros inline em vez de usar
  * `applyLeadListFilters`, que é a fonte única compartilhada por `useLeads`,
- * `useLeadsCount` e `useExportLeads`. A cópia divergiu em três pontos:
+ * `useLeadsCount` e `useExportLeads`. A cópia divergiu em dois pontos:
  *
- *   1. `filterRating` era desestruturado, entrava na queryKey e **nunca era
- *      aplicado**. Filtrar por rating trocava a chave do cache — ou seja,
- *      refetch a cada clique — para devolver exatamente o mesmo número;
- *   2. `filterQualification`, idem;
- *   3. a busca não casava `normalized_phone`, então procurar por telefone
+ *   1. `filterQualification` era desestruturado, entrava na queryKey e **nunca
+ *      era aplicado**. Filtrar trocava a chave do cache — ou seja, refetch a
+ *      cada clique — para devolver exatamente o mesmo número;
+ *   2. a busca não casava `normalized_phone`, então procurar por telefone
  *      contava um conjunto e listava outro. Telefone é digitado com máscara e
  *      gravado cru: é justamente a busca em que o usuário mais confia.
  *
@@ -86,24 +85,6 @@ beforeEach(() => {
 });
 
 describe("useLeadsStats — o card conta o que a lista mostra", () => {
-  it("aplica o filtro de RATING, que antes era ignorado", async () => {
-    const { result } = montar({ filterRating: "high" });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    // "high" é `rating >= 7` na fonte única. As três contagens usam o mesmo
-    // recorte, então o filtro aparece uma vez por query.
-    const gte = feitas("gte");
-    expect(gte.filter((c) => c.startsWith('"rating",7')).length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("faixa média de rating vira intervalo, não só piso", async () => {
-    const { result } = montar({ filterRating: "medium" });
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-    expect(feitas("gte").some((c) => c.startsWith('"rating",4'))).toBe(true);
-    expect(feitas("lt").some((c) => c.startsWith('"rating",7'))).toBe(true);
-  });
-
   it("aplica o filtro de QUALIFICAÇÃO, que antes era ignorado", async () => {
     const { result } = montar({ filterQualification: "ouro" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -126,7 +107,7 @@ describe("useLeadsStats — o card conta o que a lista mostra", () => {
     // `or()` é chamado duas vezes por query: o guard de lead sombra e a busca.
     // Interessa a cláusula de busca — daí `some`, não `every`.
     const busca = feitas("or").filter((c) => c.includes("name.ilike"));
-    expect(busca.length).toBeGreaterThanOrEqual(3);
+    expect(busca.length).toBeGreaterThanOrEqual(2);
     expect(busca.every((c) => c.includes("normalized_phone.ilike"))).toBe(true);
     expect(busca.every((c) => c.includes("999998888"))).toBe(true);
   });
@@ -152,9 +133,8 @@ describe("useLeadsStats — o card conta o que a lista mostra", () => {
     expect(feitas("eq").some((c) => c.includes('"origin"'))).toBe(false);
     expect(feitas("eq").some((c) => c.includes("qualification_tier"))).toBe(false);
     expect(feitas("or").some((c) => c.includes("name.ilike"))).toBe(false);
-    // `rating` NÃO entra aqui: o card "alto" é `gte("rating", 7)` por definição,
-    // e não por filtro do usuário. Só uma chamada — a do próprio card.
-    expect(feitas("gte").filter((c) => c.includes("rating")).length).toBe(1);
+    // `rating` saiu da interface em 2026-09-03 — não entra em recorte nenhum.
+    expect(feitas("gte").filter((c) => c.includes("rating")).length).toBe(0);
   });
 
   it('origem "all" é ausência de filtro, não um valor', async () => {
@@ -168,15 +148,15 @@ describe("useLeadsStats — o card conta o que a lista mostra", () => {
     const { result } = montar({});
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(feitas("eq").filter((c) => c.startsWith('"organization_id","org-1"')).length).toBeGreaterThanOrEqual(3);
-    expect(feitas("is").filter((c) => c.startsWith('"deleted_at",null')).length).toBeGreaterThanOrEqual(3);
+    expect(feitas("eq").filter((c) => c.startsWith('"organization_id","org-1"')).length).toBeGreaterThanOrEqual(2);
+    expect(feitas("is").filter((c) => c.startsWith('"deleted_at",null')).length).toBeGreaterThanOrEqual(2);
   });
 
-  it("a janela de criação continua valendo para os três números", async () => {
+  it("a janela de criação continua valendo para os dois números", async () => {
     const { result } = montar({ createdFrom: "2026-08-01T03:00:00.000Z", createdTo: "2026-08-31T02:59:59.999Z" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(feitas("gte").filter((c) => c.startsWith('"created_at","2026-08-01')).length).toBeGreaterThanOrEqual(3);
-    expect(feitas("lte").filter((c) => c.startsWith('"created_at","2026-08-31')).length).toBeGreaterThanOrEqual(3);
+    expect(feitas("gte").filter((c) => c.startsWith('"created_at","2026-08-01')).length).toBeGreaterThanOrEqual(2);
+    expect(feitas("lte").filter((c) => c.startsWith('"created_at","2026-08-31')).length).toBeGreaterThanOrEqual(2);
   });
 });

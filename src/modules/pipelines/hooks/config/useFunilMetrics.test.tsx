@@ -5,6 +5,28 @@ import { useFunilMetrics } from "./useFunilMetrics";
 
 // ── Mocks ──────────────────────────────────────────────────────────────────
 const rpc = vi.fn();
+
+/**
+ * Dublê que despacha POR NOME de RPC.
+ *
+ * A versão anterior era um `mockResolvedValue` único: qualquer chamada
+ * recebia o shape de `get_pipeline_stage_counts_by_id`. Funcionava enquanto
+ * o hook chamava uma RPC só. Com a segunda (`get_funil_desfecho_counts`, do
+ * B2d) ela passou a devolver linhas de ETAPA para quem esperava linhas de
+ * DESFECHO — sem `outcome`, o hook lia zero, e o teste acusava um defeito que
+ * não existia no código.
+ *
+ * Despachar por nome também deixa o teste falhar de verdade quando o hook
+ * chama uma RPC que ninguém dublou, em vez de receber dados de outra.
+ */
+function dublarRpc(porNome: Record<string, unknown[]>) {
+  rpc.mockImplementation((nome: string) => {
+    if (!(nome in porNome)) {
+      return Promise.resolve({ data: null, error: { message: `RPC sem dublê: ${nome}` } });
+    }
+    return Promise.resolve({ data: porNome[nome], error: null });
+  });
+}
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { rpc: (...a: unknown[]) => rpc(...a) },
 }));
@@ -70,16 +92,23 @@ beforeEach(() => {
 });
 
 describe("useFunilMetrics — métricas por pipeline_id (SCRUM-633)", () => {
-  it("funil CUSTOM: bloco generic via get_pipeline_stage_counts_by_id + won/lost por stage_role", async () => {
-    rpc.mockResolvedValue({
-      data: [
+  it("funil CUSTOM: bloco generic via get_pipeline_stage_counts_by_id + won/lost pelo DESFECHO do negócio (B2d)", async () => {
+    dublarRpc({
+      get_pipeline_stage_counts_by_id: [
         { stage_id: "s1", stage_key: "novo", cnt: 7 },
         // Linha fantasma (stage_id NULL) da MESMA key: reagrega por key.
         { stage_id: null, stage_key: "novo", cnt: 1 },
         { stage_id: "s2", stage_key: "ganhou", cnt: 2 },
         { stage_id: "s3", stage_key: "perdeu", cnt: 2 },
       ],
-      error: null,
+      // B2d: ganho e perda vêm do NEGÓCIO. Repare que os números batem com as
+      // etapas `ganhou`/`perdeu` acima só por coincidência de cenário — o hook
+      // não olha mais para elas.
+      get_funil_desfecho_counts: [
+        { outcome: "open", cnt: 8 },
+        { outcome: "won", cnt: 2 },
+        { outcome: "lost", cnt: 2 },
+      ],
     });
 
     const { result } = renderHook(() => useFunilMetrics("pipe-custom", null), { wrapper });
@@ -92,6 +121,13 @@ describe("useFunilMetrics — métricas por pipeline_id (SCRUM-633)", () => {
       p_period_before: null,
       // Âncora de período dos fechados: derivada do stage_role das etapas.
       p_closed_status_keys: ["ganhou", "perdeu"],
+    });
+    // E a companheira do B2d, que responde ganho/perda pelo negócio.
+    expect(rpc).toHaveBeenCalledWith("get_funil_desfecho_counts", {
+      p_pipeline_id: "pipe-custom",
+      p_org_id: "org-1",
+      p_period_after: null,
+      p_period_before: null,
     });
 
     expect(result.current.kind).toBe("generic");
@@ -111,9 +147,9 @@ describe("useFunilMetrics — métricas por pipeline_id (SCRUM-633)", () => {
   });
 
   it("funil de SISTEMA (propostas): liga SÓ o wrapper legado do slug + generic junto", async () => {
-    rpc.mockResolvedValue({
-      data: [{ stage_id: "s5", stage_key: "vendido", cnt: 3 }],
-      error: null,
+    dublarRpc({
+      get_pipeline_stage_counts_by_id: [{ stage_id: "s5", stage_key: "vendido", cnt: 3 }],
+      get_funil_desfecho_counts: [{ outcome: "won", cnt: 3 }],
     });
     const range = { startStr: "2026-08-01", endStr: "2026-08-31" } as never;
 

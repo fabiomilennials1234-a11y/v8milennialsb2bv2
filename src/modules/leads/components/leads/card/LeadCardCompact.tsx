@@ -71,10 +71,15 @@ interface LeadCardCompactProps {
     /** Id do LEAD (o `id` acima é o da ENTRADA no funil). O chat precisa deste. */
     leadId?: string | null;
     name: string;
+    /**
+     * Código do cliente no ERP, exibido como prefixo ("1234 - João"). Campo
+     * próprio, não nome composto: a inicial do avatar sai do `name`, e
+     * prefixado todo cliente do ERP viraria um avatar "1".
+     */
+    erpCode?: string | null;
     company?: string | null;
     phone?: string | null;
     email?: string | null;
-    rating?: number;
     tags?: Tag[] | null;
     value?: number | null;
     faturamento?: string | number | null;
@@ -294,7 +299,13 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             </div>
 
             <div className="min-w-0 flex-1">
-              <h4 className="truncate text-[12.5px] font-semibold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary">
+              <h4
+                className="truncate text-[12.5px] font-semibold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary"
+                title={lead.erpCode ? `${lead.erpCode} - ${lead.name}` : lead.name}
+              >
+                {lead.erpCode && (
+                  <span className="font-normal text-muted-foreground">{lead.erpCode} - </span>
+                )}
                 {lead.name}
               </h4>
               {lead.company && (
@@ -471,11 +482,6 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             <Badge style={{ backgroundColor: origin.bg, color: origin.text, borderColor: `${origin.text}40` }}>
               {origin.label}
             </Badge>
-
-            {/* O calor sem a pílula de 1 a 10: só o corte que muda a ação. */}
-            {lead.rating != null && lead.rating >= 8 && (
-              <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-500">Alto potencial</Badge>
-            )}
 
             {urgency && <Badge className={urgency.className}>{urgency.label}</Badge>}
 

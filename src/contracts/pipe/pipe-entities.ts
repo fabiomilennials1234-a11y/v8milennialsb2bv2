@@ -103,7 +103,6 @@ export interface CustomPipeEntry {
     // Campos que `useCustomPipeEntries` já seleciona e que o card do kanban lê.
     // Estavam ausentes daqui e o consumo se virava com `as any` — declarados
     // porque o filtro "Responsável" precisa navegar este mesmo objeto tipado.
-    rating?: number | null;
     origin?: string | null;
     urgency?: string | null;
     faturamento?: string | null;

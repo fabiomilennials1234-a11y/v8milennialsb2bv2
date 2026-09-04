@@ -86,7 +86,7 @@ export interface FunilFiltersController {
  * Superfície: as dimensões UNIVERSAIS de qualquer funil (valem sobre
  * `pipeline_entries` + `leads`, sem depender da família): período de criação,
  * parado-há, responsável, origem (multi), tags, tier IA/venda, agendados.
- * Dimensões específicas de um funil (calor/urgency/product-type/status-multi/
+ * Dimensões específicas de um funil (urgency/product-type/status-multi/
  * meeting buckets dos 3 pipes de sistema) NÃO entram aqui — o host pode
  * concatenar seções extras no array antes de renderizar o painel e mapear os
  * params extras por cima de `paginatedFilters` (ambos são valores simples).

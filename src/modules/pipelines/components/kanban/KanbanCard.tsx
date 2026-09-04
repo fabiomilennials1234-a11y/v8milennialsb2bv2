@@ -23,7 +23,6 @@ export interface Lead {
   email?: string;
   phone?: string;
   meetingDate?: string;
-  rating: number;
   origin: string;
   sdr?: string;
   sdrId?: string;
