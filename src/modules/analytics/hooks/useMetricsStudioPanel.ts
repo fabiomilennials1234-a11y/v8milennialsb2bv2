@@ -55,7 +55,14 @@ export interface PanelPersistence {
   isSaving: boolean;
 }
 
-export function useMetricsStudioPanel(): PanelPersistence {
+/**
+ * 🔴 `panelId` é obrigatório desde que o painel deixou de ser um por org
+ * (migration `20271001000000`). Sem ele, a leitura usaria `maybeSingle()` numa
+ * tabela que agora aceita várias linhas por org — e `maybeSingle()` ESTOURA com
+ * mais de uma. Não é preferência de API: é o que impede a tela de quebrar assim
+ * que existir a segunda aba.
+ */
+export function useMetricsStudioPanel(panelId: string | null): PanelPersistence {
   const { organizationId, teamMemberId, isReady } = useOrganization();
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
@@ -72,7 +79,7 @@ export function useMetricsStudioPanel(): PanelPersistence {
   const editorId = isVirtualTeamMember(teamMemberId) ? null : (teamMemberId ?? null);
 
   const query = useQuery({
-    queryKey: ["metrics-studio-panel", organizationId],
+    queryKey: ["metrics-studio-panel", organizationId, panelId],
     queryFn: async (): Promise<StudioWindow[]> => {
       // As duas PONTES DE COMPATIBILIDADE deste arquivo foram removidas em
       // 2026-08-31, seguindo o runbook que o próprio comentário delas descrevia:
@@ -86,7 +93,7 @@ export function useMetricsStudioPanel(): PanelPersistence {
       const { data, error } = await supabase
         .from("metrics_studio_panels")
         .select("layout")
-        .eq("organization_id", organizationId!)
+        .eq("id", panelId!)
         .maybeSingle();
 
       // Tabela ainda não aplicada em prod → painel vazio, sem erro na tela.
@@ -97,7 +104,7 @@ export function useMetricsStudioPanel(): PanelPersistence {
       const layout = (data as { layout?: unknown } | null)?.layout;
       return Array.isArray(layout) ? (layout as StudioWindow[]) : [];
     },
-    enabled: ativa,
+    enabled: ativa && !!panelId,
     // O painel só muda por ação do próprio usuário nesta aba. Refetch em foco
     // sobrescreveria o que ele acabou de mexer.
     staleTime: Infinity,
@@ -121,6 +128,7 @@ export function useMetricsStudioPanel(): PanelPersistence {
    */
   const pendente = useRef<{
     organizationId: string;
+    panelId: string;
     editorId: string | null;
     layout: StudioWindow[];
   } | null>(null);
@@ -131,12 +139,19 @@ export function useMetricsStudioPanel(): PanelPersistence {
     pendente.current = null;
     timer.current = null;
 
-    const { organizationId: orgAlvo, editorId: editor, layout } = alvo;
+    const { organizationId: orgAlvo, panelId: painelAlvo, editorId: editor, layout } = alvo;
 
     const { error } = await supabase
       .from("metrics_studio_panels")
       .upsert(
         {
+          // 🔴 `id` no corpo E como alvo do conflito. O upsert apontava para
+          // `organization_id`, que dependia do índice
+          // `metrics_studio_panels_org_unico` — derrubado pela migration
+          // `20271001000000` para permitir abas. Sem índice único casando com o
+          // `ON CONFLICT`, o Postgres RECUSA a escrita, e o painel para de
+          // salvar com erro só no console.
+          id: painelAlvo,
           organization_id: orgAlvo,
           team_member_id: editor,
           // `layout` é `Json` na coluna e `StudioWindow[]` aqui. A dupla
@@ -145,7 +160,7 @@ export function useMetricsStudioPanel(): PanelPersistence {
           // É a única forma que o tipo gerado admite — não é frouxidão.
           layout: layout as unknown as Json,
         },
-        { onConflict: "organization_id" },
+        { onConflict: "id" },
       );
 
     setIsSaving(false);
@@ -160,18 +175,18 @@ export function useMetricsStudioPanel(): PanelPersistence {
       console.warn("[metrics-studio] painel não salvo:", error.message);
       return;
     }
-    queryClient.setQueryData(["metrics-studio-panel", orgAlvo], layout);
+    queryClient.setQueryData(["metrics-studio-panel", orgAlvo, painelAlvo], layout);
   }, [queryClient]);
 
   const save = useCallback(
     (windows: StudioWindow[]) => {
-      if (!ativa || !organizationId) return;
-      pendente.current = { organizationId, editorId, layout: windows };
+      if (!ativa || !organizationId || !panelId) return;
+      pendente.current = { organizationId, panelId, editorId, layout: windows };
       setIsSaving(true);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => void gravar(), DEBOUNCE_MS);
     },
-    [ativa, organizationId, editorId, gravar],
+    [ativa, organizationId, panelId, editorId, gravar],
   );
 
   /**

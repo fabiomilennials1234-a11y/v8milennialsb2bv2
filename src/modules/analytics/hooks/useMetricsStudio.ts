@@ -141,11 +141,19 @@ export interface MetricsStudioApi {
  * chegam do banco. Resolver janela por mapa de import deixaria toda janela
  * personalizada órfã depois de recarregar a página.
  */
-export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudioApi {
+export function useMetricsStudio(
+  byId: Map<string, EngineMetric>,
+  /**
+   * Aba ativa. `null` enquanto a lista de abas não resolveu — e aí o hook fica
+   * inerte de propósito: hidratar com `[]` faria o efeito de gravação enxergar
+   * "mudou de conteúdo para vazio" e agendar um `save([])`, apagando a aba.
+   */
+  panelId: string | null,
+): MetricsStudioApi {
   // SCRUM-309: o painel vive no servidor. O estado local é a cópia de
   // trabalho — arrastar produz dezenas de mudanças por segundo e nenhuma delas
   // deve virar requisição.
-  const persistencia = useMetricsStudioPanel();
+  const persistencia = useMetricsStudioPanel(panelId);
   const [state, setState] = useState<StudioState>(EMPTY);
 
   // Guarda a referência do último layout que veio do servidor ou foi mandado

@@ -35,6 +35,12 @@ vi.mock("./useMetricsStudioPanel", () => ({
 import { useMetricsStudio } from "./useMetricsStudio";
 
 /**
+ * Aba ativa fixa. O hook passou a receber o painel (fatia 2 das abas): sem id
+ * ele fica inerte de propósito, e todo teste de estado mediria vazio.
+ */
+const PAINEL_ID = "11111111-1111-1111-1111-111111111111";
+
+/**
  * `moveWindow` — e não `addMetric` — é o gatilho de mudança destes testes.
  * Arrastar é a interação mais barata que produz array novo, e não exige montar
  * uma `EngineMetric` de mentira só para o catálogo resolver.
@@ -59,7 +65,7 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
     painel.organizationId = null;
     painel.layout = [];
 
-    const { result } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO));
+    const { result } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO, PAINEL_ID));
 
     expect(result.current.windows).toEqual([]);
     expect(painel.save).not.toHaveBeenCalled();
@@ -69,7 +75,7 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
     painel.organizationId = "org-A";
     painel.layout = [janela("a-1")];
 
-    const { result } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO));
+    const { result } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO, PAINEL_ID));
 
     // Hidratação NÃO é mudança: chegar do servidor não pode devolver escrita.
     expect(result.current.windows).toHaveLength(1);
@@ -85,7 +91,7 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
     painel.organizationId = "org-A";
     painel.layout = [janela("a-1")];
 
-    const { result, rerender } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO));
+    const { result, rerender } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO, PAINEL_ID));
     expect(result.current.windows).toHaveLength(1);
 
     // A troca: `organizationId` já é o novo, o painel do novo ainda não chegou.
@@ -104,7 +110,7 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
     painel.organizationId = "org-A";
     painel.layout = [janela("a-1")];
 
-    const { result, rerender } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO));
+    const { result, rerender } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO, PAINEL_ID));
 
     painel.organizationId = "org-B";
     painel.layout = null;
@@ -128,7 +134,7 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
   it("voltar para a org anterior reidrata do servidor, não do que sobrou na tela", () => {
     painel.organizationId = "org-A";
     painel.layout = [janela("a-1")];
-    const { result, rerender } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO));
+    const { result, rerender } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO, PAINEL_ID));
 
     painel.organizationId = "org-B";
     painel.layout = [janela("b-1"), janela("b-2")];

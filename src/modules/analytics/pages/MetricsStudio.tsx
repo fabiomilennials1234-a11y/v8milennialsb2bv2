@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -17,6 +17,11 @@ import { MetricsCanvas } from "@/modules/analytics/components/metrics-studio/Met
 import { MetricsStudioSidebar } from "@/modules/analytics/components/metrics-studio/MetricsStudioSidebar";
 import type { MetricCustomDefinition } from "@/modules/analytics/hooks/useMetricCustomDefinitions";
 import { useMetricsStudio } from "@/modules/analytics/hooks/useMetricsStudio";
+import {
+  useMetricsStudioPanels,
+  type StudioPanel,
+} from "@/modules/analytics/hooks/useMetricsStudioPanels";
+import { StudioTabs } from "@/modules/analytics/components/metrics-studio/StudioTabs";
 import { useMetricsStudioEnabled } from "@/modules/analytics/hooks/useMetricsStudioEnabled";
 import { useMetricsStudioReport } from "@/modules/analytics/hooks/useMetricsStudioReport";
 import { useStudioCatalog } from "@/modules/analytics/hooks/useStudioCatalog";
@@ -24,6 +29,16 @@ import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   isoDaData,
   STUDIO_PERIODS,
@@ -53,7 +68,23 @@ export default function MetricsStudio() {
   // compôs (Emenda 1 do ADR-0023). Ele é a fonte de resolução de toda janela —
   // por isso desce para o hook de estado, para o canvas e para o relatório.
   const catalogo = useStudioCatalog();
-  const studio = useMetricsStudio(catalogo.byId);
+  const abas = useMetricsStudioPanels();
+  const [abaAtivaId, setAbaAtivaId] = useState<string | null>(null);
+  const [abaParaRemover, setAbaParaRemover] = useState<StudioPanel | null>(null);
+
+  /**
+   * Qual aba está aberta.
+   *
+   * Cai na primeira quando a atual sumiu — removida por este usuário, ou por um
+   * admin noutra aba do navegador. Sem isto o canvas ficaria preso a um id que
+   * não existe mais, e a tela viraria um painel vazio sem explicação.
+   */
+  const abaAtiva =
+    abas.paineis.find((p) => p.id === abaAtivaId) ?? abas.paineis[0] ?? null;
+
+  const studio = useMetricsStudio(catalogo.byId, abaAtiva?.id ?? null);
+
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [compondo, setCompondo] = useState<{ editando: MetricCustomDefinition | null } | null>(null);
   // SCRUM-308. Nasce em Visualização: o painel é para LER. Antes disso, o
@@ -178,6 +209,31 @@ export default function MetricsStudio() {
   // alguém clicar em "Concluir". Mora aqui, e não junto do `useState`, porque
   // depende de `useCurrentTeamMember`, que é resolvido acima.
   const editando = modo === "editar" && podeEditar;
+
+  /**
+   * Provisiona a primeira aba de quem ainda não tem nenhuma.
+   *
+   * 🔴 Só 14 das 107 orgs têm linha em `metrics_studio_panels`. Antes disso não
+   * era problema: a leitura devolvia `null`, o canvas abria vazio e a PRIMEIRA
+   * gravação criava a linha. Agora o layout é carregado POR ID — org sem aba
+   * ficaria sem nada para selecionar e sem destino para gravar, ou seja, com o
+   * Estúdio inerte.
+   *
+   * Roda só para quem pode editar, porque a RLS de escrita é admin-only:
+   * disparar isto para um membro comum geraria um POST recusado a cada abertura
+   * da página, sem nada aparecer na tela. Membro que chegue antes do primeiro
+   * admin vê o estado vazio, que é honesto.
+   */
+  const provisionando = useRef(false);
+  useEffect(() => {
+    if (abas.isLoading || abas.paineis.length > 0) return;
+    if (!podeEditar || !abas.organizationId) return;
+    if (provisionando.current) return;
+    provisionando.current = true;
+    void abas.criar("Meu painel").finally(() => {
+      provisionando.current = false;
+    });
+  }, [abas, podeEditar]);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -444,6 +500,21 @@ export default function MetricsStudio() {
 
       {/* Painel emoldurado: ocupa toda a altura restante da página, medida em
           runtime. Enquanto a medição não chega, cai num piso razoável. */}
+      {/* Abas — acima da moldura do painel, porque elas trocam o CONTEÚDO da
+          moldura. Dentro dela, pareceriam parte do canvas. */}
+      <StudioTabs
+        paineis={abas.paineis}
+        ativoId={abaAtiva?.id ?? null}
+        editavel={editando}
+        onSelecionar={setAbaAtivaId}
+        onCriar={() => void abas.criar("Nova aba")}
+        onRenomear={(id, nome) => void abas.renomear(id, nome)}
+        onRemover={(id) => {
+          const alvo = abas.paineis.find((p) => p.id === id);
+          if (alvo) setAbaParaRemover(alvo);
+        }}
+      />
+
       <div
         ref={panelRef}
         style={panelHeight ? { height: panelHeight } : undefined}
@@ -520,6 +591,42 @@ export default function MetricsStudio() {
           }}
         />
       )}
+
+      {/* Remover aba apaga o layout dela, e não há desfazer. Confirmação com o
+          NOME no texto: numa barra com várias abas, "tem certeza?" genérico não
+          diz qual vai embora. */}
+      <AlertDialog
+        open={!!abaParaRemover}
+        onOpenChange={(aberto) => !aberto && setAbaParaRemover(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover a aba “{abaParaRemover?.nome}”?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Os cards dessa aba são apagados junto, e não dá para desfazer. As
+              outras abas não mudam.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                const alvo = abaParaRemover;
+                setAbaParaRemover(null);
+                if (!alvo) return;
+                // Sai da aba ANTES de removê-la: deixar o canvas apontando para
+                // um id que vai sumir faria uma gravação pendente escrever numa
+                // linha já apagada.
+                if (abaAtiva?.id === alvo.id) setAbaAtivaId(null);
+                void abas.remover(alvo.id);
+              }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

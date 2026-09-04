@@ -34,6 +34,9 @@ vi.mock("@/modules/identity", () => ({
 
 import { useMetricsStudioPanel } from "./useMetricsStudioPanel";
 
+/** O painel deixou de ser um por org — a persistência agora carrega por id. */
+const PAINEL_ID = "11111111-1111-1111-1111-111111111111";
+
 const janela = { id: "w-1", metricId: "leads_criados", corte: "total", x: 8, y: 8, w: 280, h: 132, chart: "number", z: 1 } as never;
 
 describe("useMetricsStudioPanel — o destino viaja junto com a gravação", () => {
@@ -50,7 +53,7 @@ describe("useMetricsStudioPanel — o destino viaja junto com a gravação", () 
   });
 
   it("🚨 trocar de org NÃO descarrega a gravação pendente antes da hora", async () => {
-    const { result, rerender } = renderHook(() => useMetricsStudioPanel(), { wrapper: createWrapper() });
+    const { result, rerender } = renderHook(() => useMetricsStudioPanel(PAINEL_ID), { wrapper: createWrapper() });
 
     act(() => result.current.save([janela]));
 
@@ -81,7 +84,7 @@ describe("useMetricsStudioPanel — o destino viaja junto com a gravação", () 
 
   it("master vira NULL em team_member_id — o id virtual não é uuid de team_members", async () => {
     contexto.teamMemberId = "master-virtual-abc";
-    const { result } = renderHook(() => useMetricsStudioPanel(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useMetricsStudioPanel(PAINEL_ID), { wrapper: createWrapper() });
 
     act(() => result.current.save([janela]));
     await act(async () => {
@@ -94,7 +97,7 @@ describe("useMetricsStudioPanel — o destino viaja junto com a gravação", () 
   it("sem org resolvida não agenda gravação nenhuma", async () => {
     contexto.organizationId = null;
     contexto.isReady = false;
-    const { result } = renderHook(() => useMetricsStudioPanel(), { wrapper: createWrapper() });
+    const { result } = renderHook(() => useMetricsStudioPanel(PAINEL_ID), { wrapper: createWrapper() });
 
     act(() => result.current.save([janela]));
     await act(async () => {
