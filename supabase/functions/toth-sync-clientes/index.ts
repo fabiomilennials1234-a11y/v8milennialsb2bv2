@@ -682,24 +682,35 @@ Deno.serve(
      * conexão. Duplicar esse gate aqui criaria duas verdades sobre quando a lei
      * vale — e a do TypeScript envelheceria primeiro.
      */
-    let classificacao = { cliente: 0, indefinido: 0, lead: 0 };
-    const { data: classData, error: classErr } = await admin.rpc(
-      "apply_erp_lead_classification",
-      { p_organization_id: organizationId },
-    );
-    if (classErr) {
-      // Não derruba: os clientes já estão gravados e a gaveta é derivada — a
-      // próxima volta reclassifica.
-      if (mappingErrors.length < 3) {
-        mappingErrors.push(`apply_erp_lead_classification: ${classErr.message}`);
+    let classificacao = { cliente: 0, indefinido: 0, lead: 0, restantes: 0, lotes: 0 };
+    // Até 12 lotes de 2.000 = 24 mil leads por execução, folgado para a maior
+    // org conhecida (12.686). O teto existe para que um bug de convergência
+    // vire execução longa, e não laço infinito.
+    for (let i = 0; i < 12; i++) {
+      const { data: classData, error: classErr } = await admin.rpc(
+        "apply_erp_lead_classification",
+        { p_organization_id: organizationId, p_limit: 2000 },
+      );
+      if (classErr) {
+        // Não derruba: os clientes já estão gravados e a gaveta é derivada — a
+        // próxima volta reclassifica de onde parou.
+        if (mappingErrors.length < 3) {
+          mappingErrors.push(`apply_erp_lead_classification: ${classErr.message}`);
+        }
+        break;
       }
-    } else if (Array.isArray(classData) && classData.length > 0) {
-      const linha = classData[0] as Record<string, unknown>;
+      const linha = (Array.isArray(classData) ? classData[0] : null) as
+        | Record<string, unknown>
+        | null;
+      if (!linha) break;
       classificacao = {
-        cliente: Number(linha.virou_cliente ?? 0),
-        indefinido: Number(linha.virou_indefinido ?? 0),
-        lead: Number(linha.virou_lead ?? 0),
+        cliente: classificacao.cliente + Number(linha.virou_cliente ?? 0),
+        indefinido: classificacao.indefinido + Number(linha.virou_indefinido ?? 0),
+        lead: classificacao.lead + Number(linha.virou_lead ?? 0),
+        restantes: Number(linha.restantes ?? 0),
+        lotes: i + 1,
       };
+      if (classificacao.restantes === 0) break;
     }
 
     await admin
