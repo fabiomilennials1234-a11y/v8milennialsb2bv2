@@ -45,6 +45,7 @@ import { useDebounce } from "@/shared/hooks/useDebounce";
 import { usePipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
 import { nomeDoFunil } from "@/contracts/pipe";
 import { useLeadsPorFunil, useLeadById } from "@/modules/leads";
+import type { EntradaDoFunil, LeadDoFunil } from "@/modules/leads";
 
 /**
  * Sentinela do Select. Radix LEVANTA com `value=""` em `SelectItem`, então
@@ -56,9 +57,93 @@ export const SEM_FUNIL = "__sem_funil__";
 /** 300ms — o mesmo dos outros dois campos de busca de lead do app. */
 const DEBOUNCE_MS = 300;
 
+/**
+ * O que conta como "o negócio do lead" na hora de RESOLVER um vínculo sozinho.
+ *
+ * ── POR QUE ISTO EXISTE ────────────────────────────────────────────────────
+ * Antes, a candidata era só `!!e.deal_id`. Com uma candidata única o picker
+ * resolvia sem UI nenhuma e gravava o `deal_id` — inclusive o de uma entrada
+ * já ENCERRADA. Medido em prod 2026-09-04: de 38.811 pares (funil, lead) com
+ * negócio, **2.046** resolviam para uma entrada fechada, e não havia nada na
+ * tela dizendo isso. Reunião marcada hoje ia parar num card que ninguém abre
+ * mais — e escrita de dado é o único defeito desta fatia que o rollback não
+ * desfaz, porque ele não distingue o que uma pessoa vinculou à mão.
+ *
+ * ── A DEFINIÇÃO ESCOLHIDA: `closed_at IS NULL` DA ENTRADA ─────────────────
+ * A fatia tinha TRÊS definições divergentes de "o negócio do lead":
+ *
+ *   • a migration `20270927000000` (backfill de `meetings.deal_id`):
+ *     `pe.closed_at IS NULL`;
+ *   • `supabase/functions/meeting-webhook`: `deals.outcome = 'open'`
+ *     + `deals.deleted_at IS NULL`;
+ *   • este picker: nenhuma.
+ *
+ * Este arquivo passa a usar a PRIMEIRA — `closed_at IS NULL` da entrada — por
+ * três razões, nesta ordem:
+ *
+ *   1. **É a coluna da linha que recebe a escrita.** O que o par (funil, lead)
+ *      resolve é uma ENTRADA, e é na `pipeline_entries.metadata` DELA que o
+ *      trigger `trg_meeting_espelha_no_funil` projeta a reunião. A entrada é o
+ *      card no board; `closed_at` é exatamente "este card saiu do board".
+ *      Perguntar pelo desfecho do negócio é perguntar de outra tabela sobre um
+ *      objeto que não é o que se escreve.
+ *   2. **Empata com o outro resolvedor automático da fatia.** O backfill da
+ *      migration é a única outra escrita que escolhe negócio SEM ninguém na
+ *      frente da tela, e o livro `backup.meetings_deal_id_s6_20270927` (que o
+ *      rollback consome) não sabe distinguir auto de manual. Duas regras
+ *      diferentes para a mesma decisão produziriam linhas que parecem escolha
+ *      humana e não são.
+ *   3. **Custa zero.** `closed_at` já vem no `!inner` de `useLeadsPorFunil`.
+ *      `deals.outcome` exigiria um embed novo em `deals` a cada tecla digitada
+ *      no campo de busca.
+ *
+ * As duas definições discordam em 133 das 38.918 entradas com negócio (88
+ * entradas abertas com negócio fechado, 45 fechadas com negócio aberto), o que
+ * dá 133 pares — 0,34%. Não é indiferente, mas nenhuma das duas é "errada": o
+ * que era errado era haver três.
+ *
+ * ⚠️ CONVERGÊNCIA PENDENTE, FORA DESTA FRENTE: o `meeting-webhook`
+ * (`supabase/functions/meeting-webhook/index.ts`, na resolução do `deal_id`)
+ * ainda pergunta por `deals.outcome`. Trocar por `.is('closed_at', null)` em
+ * `pipeline_entries` alinharia os três caminhos; é mudança de edge function e
+ * não foi feita aqui.
+ *
+ * Entrada SEM negócio continua fora por outro motivo, que não mudou: 19,2% das
+ * entradas de prod têm `deal_id` nulo, e oferecer "escolha uma destas duas,
+ * uma sem negócio" seria pedir uma decisão que não muda nada.
+ *
+ * O que este filtro NÃO faz: mexer num `dealId` que já chegou pelo `value`.
+ * Reunião do backfill (ou do webhook) reaberta para edição preserva o vínculo
+ * que tem, mesmo apontando para entrada fechada — o filtro governa o que se
+ * resolve AGORA, nunca o que alguém já decidiu.
+ *
+ * NÃO é exportada de propósito. Exportar convidaria outro caminho a importá-la
+ * e a divergir na primeira correção — que é exatamente como a fatia acabou com
+ * três definições. Quem precisar da mesma regra em SQL a lê na migration; quem
+ * precisar dela no cliente, aqui.
+ */
+function ehCandidata(entrada: EntradaDoFunil): boolean {
+  return !!entrada.deal_id && entrada.closed_at === null;
+}
+
 export interface LeadPorFunilValue {
   pipelineId: string | null;
   leadId: string | null;
+  /**
+   * O NEGÓCIO da reunião — S6.
+   *
+   * Não é um terceiro campo que a pessoa preenche: sai da ENTRADA que o par
+   * (funil, lead) já resolve, porque `uq_pipeline_entries_deal_id` faz negócio
+   * e entrada serem 1:1. No caso normal sai sozinho ao escolher o lead; nos
+   * poucos pares com mais de uma entrada ABERTA no mesmo funil (11 de 48.021
+   * pares, medido em prod 2026-09-04) aparece o desempate abaixo e a pessoa
+   * escolhe. O que é candidata está em `ehCandidata`, acima — e a resposta
+   * mudou: entrada encerrada deixou de contar.
+   *
+   * Opcional no TIPO porque quem já grava só (funil, lead) — e não conhece
+   * negócio nenhum — continua compilando. O `onChange` SEMPRE emite os três.
+   */
+  dealId?: string | null;
 }
 
 interface LeadPorFunilPickerProps {
@@ -74,9 +159,30 @@ export function LeadPorFunilPicker({
   disabled = false,
 }: LeadPorFunilPickerProps) {
   const { pipelineId, leadId } = value;
+  const dealId = value.dealId ?? null;
 
   const [busca, setBusca] = useState("");
   const buscaDebounced = useDebounce(busca, DEBOUNCE_MS);
+
+  /**
+   * As entradas concorrentes do lead escolhido — só existe no caso ambíguo.
+   *
+   * Mora em estado local, e não no `value`, porque é ANDAIME de escolha: some
+   * quando o lead muda e nunca é gravado. Precisa sobreviver ao clique no lead
+   * porque, escolhido o lead, a lista de onde as entradas vieram desaparece da
+   * tela — sem guardá-las aqui o desempate não teria o que oferecer.
+   *
+   * Carrega o LEAD a que pertence, e não só o array: o mesmo picker é remontado
+   * com outro `leadId` quando o diálogo de edição troca de reunião, e um empate
+   * órfão do lead anterior ofereceria dois negócios de outra pessoa.
+   */
+  const [empate, setEmpate] = useState<{
+    leadId: string;
+    entradas: EntradaDoFunil[];
+  } | null>(null);
+
+  const entradasAmbiguas =
+    empate && empate.leadId === leadId ? empate.entradas : [];
 
   const {
     data: funisRaw,
@@ -154,21 +260,59 @@ export function LeadPorFunilPicker({
    */
   const { data: leadEscolhido, isLoading: carregandoLead } = useLeadById(leadId);
 
+  /**
+   * 🚨 `dealId` morre junto com `leadId` nos TRÊS handlers.
+   *
+   * Um `dealId` sobrevivente de outro funil não deixa rastro na tela — o chip
+   * some, o campo de negócio some, e o id continua no formulário. A reunião
+   * seria gravada no card de um negócio que a pessoa nem estava olhando. É o
+   * mesmo motivo pelo qual trocar o funil já limpava o lead.
+   */
   const trocarFunil = (novo: string) => {
     const id = novo === SEM_FUNIL ? null : novo;
     setBusca("");
+    setEmpate(null);
     // Limpa o lead SEMPRE que o funil muda — inclusive ao limpar o funil.
-    onChange({ pipelineId: id, leadId: null });
+    onChange({ pipelineId: id, leadId: null, dealId: null });
   };
 
-  const escolherLead = (id: string) => {
+  const escolherLead = (lead: LeadDoFunil) => {
     setBusca("");
-    onChange({ pipelineId, leadId: id });
+
+    const candidatas = (lead.entradas ?? []).filter(ehCandidata);
+
+    if (candidatas.length === 1) {
+      setEmpate(null);
+      onChange({ pipelineId, leadId: lead.id, dealId: candidatas[0].deal_id });
+      return;
+    }
+
+    if (candidatas.length > 1) {
+      // Ambíguo: guarda as candidatas e deixa o negócio VAZIO. Pegar a primeira
+      // (ou a mais recente, ou a de maior valor) é exatamente o que põe a
+      // reunião no card errado sem ninguém perceber.
+      setEmpate({ leadId: lead.id, entradas: candidatas });
+      onChange({ pipelineId, leadId: lead.id, dealId: null });
+      return;
+    }
+
+    // Nenhuma candidata — nem entrada sem negócio, nem entrada já encerrada,
+    // servem. Segue SEM negócio, e isso não é falha: a reunião é o fato, o
+    // negócio é o vínculo, e falta de vínculo nunca impede marcar reunião.
+    // Preferir "sem negócio" a "negócio fechado" é a escolha inteira desta
+    // função: um card mudo é recuperável à mão, um card errado ninguém vê.
+    setEmpate(null);
+    onChange({ pipelineId, leadId: lead.id, dealId: null });
+  };
+
+  const escolherEntrada = (entrada: EntradaDoFunil) => {
+    onChange({ pipelineId, leadId, dealId: entrada.deal_id });
   };
 
   const limparLead = () => {
     setBusca("");
-    onChange({ pipelineId, leadId: null });
+    setEmpate(null);
+    onChange({ pipelineId, leadId: null, dealId: null });
   };
 
   return (
@@ -293,6 +437,60 @@ export function LeadPorFunilPicker({
           </div>
         )}
       </div>
+
+      {/* ── Negócio (só no empate) ──────────────────────────────────────────
+          Terceiro seletor. NÃO aparece no caminho normal: lá o negócio saiu da
+          única entrada do lead neste funil e mostrar um campo com uma opção só
+          seria pedir confirmação de algo que não tem alternativa. */}
+      {leadId && entradasAmbiguas.length > 1 && (
+        <div className="space-y-1.5">
+          <Label className="text-xs text-muted-foreground">Negócio</Label>
+          <div className="overflow-hidden rounded-lg border border-amber-500/30">
+            <p className="border-b border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400">
+              {/* "abertos" não é enfeite: a lista já não oferece entrada
+                  encerrada, e dizer só "negócios" faria a pessoa procurar na
+                  lista um negócio fechado que ela sabe que existe. */}
+              Este lead tem {entradasAmbiguas.length} negócios abertos neste
+              funil. Escolha em qual a reunião deve aparecer.
+            </p>
+            {entradasAmbiguas.map((entrada) => {
+              const escolhida = entrada.deal_id === dealId;
+              return (
+                <button
+                  key={entrada.id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => escolherEntrada(entrada)}
+                  className={`flex w-full flex-col items-start gap-0.5 border-b border-border/30 px-3 py-2 text-left transition-colors last:border-b-0 disabled:opacity-50 ${
+                    escolhida ? "bg-primary/10" : "hover:bg-muted/40"
+                  }`}
+                >
+                  <span className="w-full truncate text-xs text-foreground">
+                    {/* `stage_name` vem do embed da própria entrada. Cair no
+                        `stage_key` é degradação, não erro: 41 das 48.174
+                        entradas de prod estão sem `stage_id` (etapa apagada) e
+                        o slug ainda diz mais do que "—". */}
+                    {entrada.stage_name ?? entrada.stage_key ?? "Sem etapa"}
+                  </span>
+                  <span className="w-full truncate text-[11px] text-muted-foreground">
+                    {entrada.entered_at
+                      ? `Entrou em ${new Date(entrada.entered_at).toLocaleDateString("pt-BR")}`
+                      : "Sem data de entrada"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {/* Não bloqueia o salvar: sem negócio a reunião existe do mesmo
+              jeito, só não aparece no card. Bloquear trocaria "reunião sem
+              vínculo" por "reunião nenhuma". */}
+          {!dealId && (
+            <p className="text-[11px] text-muted-foreground">
+              Sem escolher, a reunião é criada sem negócio.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -300,20 +498,19 @@ export function LeadPorFunilPicker({
 // ─── Lista ────────────────────────────────────────────────────────────────
 
 interface ListaDeLeadsProps {
-  leads: Array<{
-    id: string;
-    name: string;
-    company: string | null;
-    phone: string | null;
-    email: string | null;
-  }>;
+  leads: LeadDoFunil[];
   temMais: boolean;
   buscando: boolean;
   erro: boolean;
   mensagemErro?: string;
   temTermo: boolean;
   onTentarDeNovo: () => void;
-  onEscolher: (id: string) => void;
+  /**
+   * Devolve o LEAD inteiro, não o id — S6. As entradas do lead neste funil só
+   * existem nesta linha; devolver o id obrigaria a caçá-las de novo, e no
+   * momento do clique elas já estão em mãos.
+   */
+  onEscolher: (lead: LeadDoFunil) => void;
   disabled: boolean;
 }
 
@@ -389,7 +586,7 @@ function ListaDeLeads({
               key={lead.id}
               type="button"
               disabled={disabled}
-              onClick={() => onEscolher(lead.id)}
+              onClick={() => onEscolher(lead)}
               className="flex w-full flex-col items-start gap-0.5 border-b border-border/30 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-muted/40 disabled:opacity-50"
             >
               <span className="w-full truncate text-xs text-foreground">
