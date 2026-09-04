@@ -1,5 +1,3 @@
-// deno-lint-ignore-file no-explicit-any
-
 /**
  * Classificação de JID do WhatsApp — telefone, grupo ou LID.
  *
@@ -98,7 +96,7 @@ const PHONE_HINT_KEYS = [
   "participant_pn",
 ] as const;
 
-function pickString(msg: Record<string, any>, keys: readonly string[]): string | undefined {
+function pickString(msg: Record<string, unknown>, keys: readonly string[]): string | undefined {
   for (const key of keys) {
     const value = msg[key];
     if (typeof value === "string" && value.trim() !== "") return value.trim();
@@ -106,7 +104,7 @@ function pickString(msg: Record<string, any>, keys: readonly string[]): string |
   return undefined;
 }
 
-function pickPhoneJid(msg: Record<string, any>, keys: readonly string[]): string | undefined {
+function pickPhoneJid(msg: Record<string, unknown>, keys: readonly string[]): string | undefined {
   for (const key of keys) {
     const value = msg[key];
     if (typeof value !== "string") continue;
@@ -123,7 +121,7 @@ function pickPhoneJid(msg: Record<string, any>, keys: readonly string[]): string
  * `jidToPhone`): o defeito em produção é o LID, e alargar o corte aqui
  * arriscaria descartar conversa legítima por um formato que ninguém mediu.
  */
-export function resolveHistoryChatJid(msg: Record<string, any>): JidResolution {
+export function resolveHistoryChatJid(msg: Record<string, unknown>): JidResolution {
   const fromMe = msg.fromMe === true || msg.fromme === true || msg.wa_fromMe === true;
   // Quem está do outro lado: numa mensagem nossa é o destinatário, numa recebida
   // é o remetente. Trocar os dois faria toda conversa enviada apontar para o
