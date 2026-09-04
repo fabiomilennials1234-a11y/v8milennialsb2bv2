@@ -6,6 +6,8 @@ import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metric
 import type { StudioPeriod, StudioRange } from "@/modules/analytics/lib/metrics-studio-period";
 import type { StudioWindow } from "@/modules/analytics/hooks/useMetricsStudio";
 import { MetricWindow } from "./MetricWindow";
+import { FixedWindow } from "./FixedWindow";
+import { isFixedWindow } from "@/modules/analytics/lib/metrics-studio-window";
 
 interface MetricsCanvasProps {
   windows: StudioWindow[];
@@ -15,6 +17,20 @@ interface MetricsCanvasProps {
    * `Map` estático de import.
    */
   byId: Map<string, EngineMetric>;
+  /**
+   * Intervalo CONCRETO do painel, para os cards sob medida.
+   *
+   * As janelas de métrica mandam `period`/`range` crus e deixam o motor cortar
+   * no fuso da org. Os cards sob medida buscam os próprios dados no cliente e
+   * precisam de datas resolvidas — e resolvê-las aqui, na mão, faria a semana
+   * começar no domingo (JS) contra a segunda do motor (`date_trunc('week')`),
+   * e usaria o fuso do browser contra o `organizations.timezone` do servidor.
+   * Dois cards lado a lado mostrariam períodos diferentes, sem erro nenhum.
+   *
+   * Por isso vem PRONTO de cima, do mesmo `computePeriodRange` que o Comando já
+   * usa para alimentar exatamente estes componentes.
+   */
+  intervalo: { start: Date; end: Date };
   period: StudioPeriod;
   range?: StudioRange | null;
   podeVerPorPessoa: boolean;
@@ -42,7 +58,7 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, byId, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, byId, intervalo, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
   ref,
 ) {
   const empty = windows.length === 0;
@@ -101,6 +117,25 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
         // admin, por exemplo) simplesmente não desenha. Não é erro: é uma
         // definição que deixou de existir, e o painel do usuário não some por
         // causa disso.
+        // Card sob medida resolve pelo registry e IGNORA `metricId` — precisa
+        // vir antes da busca no catálogo, que não o encontraria.
+        if (isFixedWindow(win)) {
+          return (
+            <FixedWindow
+              key={win.id}
+              win={win}
+              range={intervalo}
+              editavel={editavel}
+              selected={selectedId === win.id}
+              canvas={size}
+              onSelect={onSelect}
+              onMove={onMove}
+              onResize={onResize}
+              onRemove={onRemove}
+            />
+          );
+        }
+
         const metric = byId.get(win.metricId);
         if (!metric) return null;
         return (

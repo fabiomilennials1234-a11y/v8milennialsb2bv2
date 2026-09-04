@@ -1,4 +1,4 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -29,7 +29,8 @@ import {
   STUDIO_PERIODS,
   type StudioPeriod,
 } from "@/modules/analytics/lib/metrics-studio-period";
-import { useCurrentTeamMember, useFeaturePermission } from "@/modules/identity";
+import { useCurrentTeamMember, useFeaturePermission, useOrganization } from "@/modules/identity";
+import { computePeriodRange } from "@/modules/analytics/hooks/useCommandMetrics";
 
 /**
  * Estúdio de Métricas — `/metricas`.
@@ -70,6 +71,41 @@ export default function MetricsStudio() {
     range?.from && range?.to
       ? { from: isoDaData(range.from), to: isoDaData(range.to) }
       : null;
+  const { timezone } = useOrganization();
+
+  /**
+   * Intervalo CONCRETO, para os cards sob medida.
+   *
+   * Reusa `computePeriodRange` — o mesmo helper que o Comando já usa para
+   * alimentar `RankingPodium`, `ProductChampions` e companhia. Não é
+   * conveniência: escrever a expansão aqui faria a semana começar no domingo
+   * (JS `getDay()`) contra a SEGUNDA do motor (`date_trunc('week')`), e usaria
+   * o fuso do browser contra `organizations.timezone`. Card sob medida e card
+   * de métrica, lado a lado, mediriam períodos diferentes sem levantar erro.
+   *
+   * `StudioPeriod` e `CommandPeriod` são o mesmo conjunto de literais
+   * (`today|week|month|quarter|custom`), então não há tradução no meio — o que
+   * elimina a outra forma de errar isto.
+   *
+   * Mês e ano do "agora" porque o Estúdio não tem seletor de mês como o
+   * Comando: aqui o período é sempre relativo a hoje.
+   */
+  const agora = new Date();
+  const intervalo = useMemo(
+    () =>
+      computePeriodRange(
+        period,
+        agora.getMonth(),
+        agora.getFullYear(),
+        range?.from && range?.to ? { from: range.from, to: range.to } : null,
+        timezone ?? undefined,
+      ),
+    // `agora` fora das dependências de propósito: entra como valor a cada
+    // render e só serve de âncora. Incluí-lo recalcularia o intervalo sem parar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [period, range?.from, range?.to, timezone],
+  );
+
   // `custom` sem as duas pontas NÃO mede o intervalo. Chutar um período
   // mostraria um número plausível de algo que ninguém pediu — o pior erro
   // possível numa tela de métrica.
@@ -442,6 +478,7 @@ export default function MetricsStudio() {
             ref={canvasRef}
             windows={studio.windows}
             byId={catalogo.byId}
+            intervalo={intervalo}
             // Com o intervalo pela metade, o painel segue medindo o último
             // período COMPLETO — o que o usuário via antes de clicar em
             // "Escolher", não um "mês" chutado. O aviso acima diz o que está

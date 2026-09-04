@@ -35,4 +35,28 @@ export interface StudioWindow {
   h: number;
   chart: ChartKind;
   z: number;
+  /**
+   * Card SOB MEDIDA, quando presente — é o discriminante.
+   *
+   * Nem tudo que os painéis mostram cabe no motor de métricas. Funil
+   * trapezoidal, pódio de ranking e jornada do lead são componentes próprios,
+   * com visual e interação que nenhuma combinação de `metricId` + `chart`
+   * reproduz. Sem este campo, trazer os dashboards de Comando para o Estúdio
+   * custaria perder essas telas.
+   *
+   * Quando preenchido, o canvas resolve pelo registry
+   * (`metrics-studio-fixed-cards`) e IGNORA `metricId`, `corte` e `chart` —
+   * eles continuam no tipo só porque tornar o `StudioWindow` uma união
+   * discriminada obrigaria a mexer em todos os consumidores que hoje leem
+   * `win.metricId` direto. O ganho de tipo não pagaria o raio da mudança.
+   *
+   * Card fixo é MOVÍVEL e REMOVÍVEL como qualquer outro — o que ele não é, é
+   * configurável por gráfico ou corte.
+   */
+  fixo?: string;
+}
+
+/** Discriminante do card sob medida. Ver a nota em `StudioWindow.fixo`. */
+export function isFixedWindow(win: StudioWindow): boolean {
+  return typeof win.fixo === "string" && win.fixo.length > 0;
 }
