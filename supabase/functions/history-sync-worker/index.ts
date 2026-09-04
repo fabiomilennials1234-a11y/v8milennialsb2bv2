@@ -20,6 +20,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
+import { isGroupJid, isLidJid, resolveHistoryChatJid } from "../_shared/whatsapp-jid.ts";
 
 import "../_shared/whatsapp-providers/evolution-provider.ts";
 import "../_shared/whatsapp-providers/uazapi-provider.ts";
@@ -212,6 +213,11 @@ async function upsertMessages(
   let fetched = 0;
   let firstError: string | null = null;
   let hitExisting = false;
+  // Descartes contados, não silenciosos: uma conversa que some do backfill tem
+  // de aparecer em algum lugar — senão volta como "sumiu histórico" meses
+  // depois, sem rastro de quem tirou.
+  let skippedLid = 0;
+  let skippedNoJid = 0;
 
   for (const raw of messages) {
     const msg = raw as Record<string, any>;
@@ -230,10 +236,23 @@ async function upsertMessages(
     }
 
     const fromMe = msg.fromMe === true || msg.fromme === true || msg.wa_fromMe === true;
-    const remoteJid = msg.chatid ?? msg.chatId ?? msg.remoteJid ?? msg.from ?? msg.to ?? msg.jid ?? "";
 
-    if (String(remoteJid).endsWith("@g.us")) continue;
-    const phoneNumber = String(remoteJid).split("@")[0] || "unknown";
+    // Grupo fica de fora (como sempre ficou) e LID sem número correspondente é
+    // descartado: gravá-lo cria no inbox um "contato" chamado
+    // `210028246085780`, que não casa com lead nenhum e duplica a conversa que
+    // já existe pelo número real. Ver `_shared/whatsapp-jid.ts`.
+    const resolution = resolveHistoryChatJid(msg);
+    if (resolution.kind === "group") continue;
+    if (resolution.kind === "missing") {
+      skippedNoJid += 1;
+      continue;
+    }
+    if (resolution.kind === "unresolved_lid") {
+      skippedLid += 1;
+      continue;
+    }
+    const remoteJid = resolution.jid;
+    const phoneNumber = remoteJid.split("@")[0] || "unknown";
 
     const { error: upsertErr } = await supabase.from("whatsapp_messages").upsert(
       {
@@ -275,6 +294,22 @@ async function upsertMessages(
     await supabase.from("history_sync_jobs").update({
       error: `upsert: ${firstError} (${fetched}/${messages.length} ok)`,
     }).eq("id", job.id);
+  }
+  if (skippedLid > 0 || skippedNoJid > 0) {
+    await logRuntime({
+      module: "whatsapp",
+      action: "history_sync_skipped_messages",
+      status: "skipped",
+      organizationId: job.organization_id,
+      payloadSnapshot: {
+        job_id: job.id,
+        instance_id: job.instance_id,
+        skipped_unresolved_lid: skippedLid,
+        skipped_without_jid: skippedNoJid,
+        upserted: fetched,
+        batch_size: messages.length,
+      },
+    });
   }
   return { fetched, hitExisting };
 }
@@ -781,6 +816,15 @@ async function processJob(
   const maxDays = (job.scope === "full" || job.scope === "incremental") ? 0 : job.max_days;
 
   // --- scope=chat: single chat, time-budgeted loop ---
+  // Sincronizar uma conversa identificada por LID recriaria exatamente o
+  // contato-código que este worker deixou de gravar. Falha explícita, com o
+  // motivo visível para quem apertou o botão.
+  if (job.scope === "chat" && isLidJid(job.chat_jid)) {
+    const msg = "chat_jid é um LID (@lid), não um telefone — sincronize pela conversa do número";
+    await failJob(supabase, job.id, msg);
+    return { fetched: 0, done: true, error: msg };
+  }
+
   if (job.scope === "chat" && job.chat_jid) {
     return processSingleChat(
       supabase, job, provider, job.chat_jid, job.cursor, maxDays, cfg, pressurePct,
@@ -802,13 +846,34 @@ async function processJob(
       await failJob(supabase, job.id, `listChats: ${(e as Error).message}`);
       return { fetched: 0, done: true, error: "listChats failed" };
     }
-    const jids = chatList
+    const individualJids = chatList
       .map(c => c.id)
-      .filter(id => id && id.includes("@") && !id.endsWith("@g.us"))
+      .filter(id => id && id.includes("@") && !isGroupJid(id));
+    // A Uazapi V2 lista conversas por LID quando o número do outro lado não é
+    // exposto à conta. Puxar o histórico por essa chave grava um contato que é
+    // um código, não um telefone — ver `_shared/whatsapp-jid.ts`.
+    const lidJids = individualJids.filter(isLidJid);
+    const jids = individualJids
+      .filter(id => !isLidJid(id))
       .slice(0, job.max_chats);
+    if (lidJids.length > 0) {
+      await logRuntime({
+        module: "whatsapp",
+        action: "history_sync_skipped_lid_chats",
+        status: "skipped",
+        organizationId: job.organization_id,
+        payloadSnapshot: {
+          job_id: job.id,
+          instance_id: job.instance_id,
+          skipped: lidJids.length,
+          total_chats: chatList.length,
+          sample: lidJids.slice(0, 5),
+        },
+      });
+    }
     if (jids.length === 0) {
       const msg = chatList.length > 0
-        ? `0 valid JIDs from ${chatList.length} chats (no individual @s.whatsapp.net JIDs found)`
+        ? `0 valid JIDs from ${chatList.length} chats (${lidJids.length} @lid, no individual @s.whatsapp.net JIDs found)`
         : "no chats found";
       await failJob(supabase, job.id, msg);
       return { fetched: 0, done: true, error: msg };
