@@ -154,6 +154,13 @@ export interface UseConversasUnificadasResult {
   truncada: boolean;
   isLoading: boolean;
   /**
+   * Alguma das duas fontes está buscando AGORA, inclusive em refetch de fundo.
+   *
+   * Diferente de `isLoading`, que é só a primeira busca: a bolha usa este para
+   * o indicador discreto de "atualizando" sem trocar a lista por esqueleto.
+   */
+  isFetching: boolean;
+  /**
    * Alguma das duas fontes falhou. Segue o mesmo contrato da lista de uma caixa:
    * com filtro de etiqueta ativo, o erro precisa chegar ao gate em vez de virar
    * lista vazia — vazio passa por resposta e não é.
@@ -374,6 +381,7 @@ export function useConversasUnificadas(
     isLoading:
       (idsChip.length > 0 && queryChips.isLoading) ||
       (idsOficiais.length > 0 && queryOficiais.isLoading),
+    isFetching: queryChips.isFetching || queryOficiais.isFetching,
     isError: queryChips.isError || queryOficiais.isError,
   };
 }

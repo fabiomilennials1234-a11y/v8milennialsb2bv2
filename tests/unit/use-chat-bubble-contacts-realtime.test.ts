@@ -5,6 +5,11 @@
  * incremento de unread_count condicional ao activePhone, channel name,
  * cleanup, ignore de DELETE.
  */
+
+// ⚠️ A chave é a da BOLHA (`bubbleContacts`), e não a da lista do `/chat`.
+// Até a W4 as duas telas dividiam a mesma entrada de cache com dados de origens
+// diferentes — a bolha filtra arquivadas fora e contava não-lidas pelo
+// `localStorage`. Este patcher escreve só no cache da bolha.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -184,7 +189,7 @@ describe("useChatBubbleContactsRealtime", () => {
 
   it("INSERT em msg cuja instance_id ∈ instanceIds patcheia queryKey correta", () => {
     const qc = newQc();
-    const queryKey = chatQueryKeys.contacts("org-A", "i1");
+    const queryKey = chatQueryKeys.bubbleContacts("org-A", "i1");
     qc.setQueryData<ChatContact[]>(queryKey, [makeContact("11999")]);
 
     renderHook(() => useChatBubbleContactsRealtime(["i1", "i2"], null), {
@@ -199,8 +204,8 @@ describe("useChatBubbleContactsRealtime", () => {
 
   it("INSERT em msg cuja instance_id ∉ instanceIds é IGNORADO (defesa segurança)", () => {
     const qc = newQc();
-    const allowedKey = chatQueryKeys.contacts("org-A", "i1");
-    const forbiddenKey = chatQueryKeys.contacts("org-A", "FORBIDDEN");
+    const allowedKey = chatQueryKeys.bubbleContacts("org-A", "i1");
+    const forbiddenKey = chatQueryKeys.bubbleContacts("org-A", "FORBIDDEN");
     qc.setQueryData<ChatContact[]>(allowedKey, [makeContact("11999")]);
     qc.setQueryData<ChatContact[]>(forbiddenKey, [makeContact("11999")]);
 
@@ -215,7 +220,7 @@ describe("useChatBubbleContactsRealtime", () => {
 
   it("DELETE é ignorado (out of scope)", () => {
     const qc = newQc();
-    const queryKey = chatQueryKeys.contacts("org-A", "i1");
+    const queryKey = chatQueryKeys.bubbleContacts("org-A", "i1");
     qc.setQueryData<ChatContact[]>(queryKey, [makeContact("11999", 5)]);
 
     renderHook(() => useChatBubbleContactsRealtime(["i1"], null), {
@@ -241,7 +246,7 @@ describe("useChatBubbleContactsRealtime", () => {
 
   it("incoming msg em conv NÃO ativa → unread_count++", () => {
     const qc = newQc();
-    const queryKey = chatQueryKeys.contacts("org-A", "i1");
+    const queryKey = chatQueryKeys.bubbleContacts("org-A", "i1");
     qc.setQueryData<ChatContact[]>(queryKey, [makeContact("11999", 2)]);
 
     renderHook(
@@ -255,7 +260,7 @@ describe("useChatBubbleContactsRealtime", () => {
 
   it("incoming msg em conv ATIVA (= activePhone normalizado) → unread NÃO incrementa", () => {
     const qc = newQc();
-    const queryKey = chatQueryKeys.contacts("org-A", "i1");
+    const queryKey = chatQueryKeys.bubbleContacts("org-A", "i1");
     qc.setQueryData<ChatContact[]>(queryKey, [makeContact("11999999999", 0)]);
 
     renderHook(
@@ -269,7 +274,7 @@ describe("useChatBubbleContactsRealtime", () => {
 
   it("outgoing NÃO incrementa unread mesmo em conv não-ativa", () => {
     const qc = newQc();
-    const queryKey = chatQueryKeys.contacts("org-A", "i1");
+    const queryKey = chatQueryKeys.bubbleContacts("org-A", "i1");
     qc.setQueryData<ChatContact[]>(queryKey, [makeContact("11999", 0)]);
 
     renderHook(() => useChatBubbleContactsRealtime(["i1"], null), {

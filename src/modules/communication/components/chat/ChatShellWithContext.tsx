@@ -67,7 +67,6 @@ import {
   directSender,
   officialWhatsAppSender,
 } from "@/modules/communication/hooks/chat/social-sender";
-import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
 import { regimeDaConversaAberta } from "@/modules/communication/lib/regimeDaConversaAberta";
 import {
   chaveDeConversaOficial,
@@ -1010,12 +1009,21 @@ export function ChatShellWithContext() {
     (phone: string, instanceId: string) => {
       const norm = normalizePhone(phone);
       if (!norm) return;
-      // Prefixo: zera o badge em todas as variantes filtradas (issue #1277).
+      // A RAIZ, e não a chave de UMA caixa: desde a W2 a lista do /chat vive em
+      // `contactsMulti` (terceiro segmento `multi:<ids>`), e mirar a chave de
+      // uma caixa deixava de acertar qualquer coisa — o badge só sumia no
+      // refetch seguinte.
       queryClient.setQueriesData<ChatContact[]>(
-        { queryKey: chatQueryKeys.contactsPrefix(organizationId, instanceId) },
+        { queryKey: ["whatsapp_contacts", organizationId] },
         (old) =>
           old?.map((c) =>
-            c.phone_number === phone ? { ...c, unread_count: 0 } : c,
+            // A CAIXA entra na comparação: zerar só pelo telefone apagaria
+            // também a não-lida da linha do mesmo contato na outra caixa, que é
+            // outra conversa e ninguém leu.
+            c.phone_number === phone &&
+            (c.instance_id == null || c.instance_id === instanceId)
+              ? { ...c, unread_count: 0 }
+              : c,
           ) ?? old,
       );
       void supabase
@@ -1231,10 +1239,11 @@ export function ChatShellWithContext() {
     void queryClient.invalidateQueries({ queryKey: ["lead-inbox-meta"] });
     void queryClient.invalidateQueries({ queryKey: ["lead-responsible-map"] });
     void queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"] });
+    // Raiz: alcança a lista por conjunto (`multi:<ids>`) e as de uma caixa.
     void queryClient.invalidateQueries({
-      queryKey: chatQueryKeys.contactsPrefix(organizationId, selectedInstanceId),
+      queryKey: ["whatsapp_contacts", organizationId],
     });
-  }, [queryClient, organizationId, selectedInstanceId]);
+  }, [queryClient, organizationId]);
 
   // ── Archive / Delete / Tags ─────────────────────────────────────────────────
   const archiveConversation = useArchiveConversation();
