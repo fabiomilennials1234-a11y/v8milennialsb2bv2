@@ -176,6 +176,7 @@ export type {
   ImportLeadsToCustomPipelineOptions,
   ImportLeadsToFunnelOptions,
   ImportLeadsToPipelineOptions,
+  ImportLeadsOnlyOptions,
   ImportFunnelResult,
 } from "./hooks/useImportLeads";
 
@@ -274,6 +275,7 @@ export { TimelineItem } from "./components/leads/TimelineItem";
 export { CustomFieldsManager } from "./components/leads/CustomFieldsManager";
 export { ExportLeadsContent } from "./components/leads/ExportLeadsModal";
 export { ImportLeadsFunnelContent } from "./components/leads/ImportLeadsFunnelModal";
+export { ImportLeadsContent, ImportLeadsModal } from "./components/leads/ImportLeadsModal";
 
 // ── Components: lead form internals usadas cross-module ────────────────────
 export { LeadDetailContent } from "./components/lead/LeadDetailContent";

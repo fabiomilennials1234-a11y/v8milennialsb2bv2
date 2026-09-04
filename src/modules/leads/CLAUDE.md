@@ -52,7 +52,8 @@ Ver `./index.ts` para a superfície completa. Estável.
 - Lead detail modal: `LeadDetailDialog` (+ V1/V2 explícitos), `LeadDetailSheet` (alias), `LeadPanelProvider`, `useLeadSheet`, `LeadDetailMobileTabs`
 - Card/modal/score: `LeadCard`, `LeadModal`, `LeadScoreBadge`, `TimelineItem`
 - Form internals consumidos cross-module: `LeadDetailContent`, `LeadCustomFields`, `AddCustomFieldPopover`, `LeadTabHistory`
-- Modais standalone: `CustomFieldsManager`, `ExportLeadsContent`, `ImportLeadsFunnelContent`
+- Modais standalone: `CustomFieldsManager`, `ExportLeadsContent`, `ImportLeadsFunnelContent`, `ImportLeadsContent`/`ImportLeadsModal`
+  - **Dois importadores, e a diferença é o destino.** `ImportLeadsFunnelContent` põe o lead num funil (pede etapa, escreve `pipeline_entries`); `ImportLeadsModal` — o botão Importar da tela de Leads — cria **só a pessoa**, sem negócio, via `importLeadsOnly` → edge `import-leads` com `destination: "leads"`. Mesmo parser, mesmo modelo de planilha, mesmo mapeamento de coluna. Colunas de funil (Etapa, Valor, Produto) são lidas e ignoradas no caminho sem funil.
 - Bulk (slice 16): `BulkActionBar` (`components/bulk-actions/`)
 
 ### Pages (deep-import only)
@@ -72,7 +73,7 @@ Pages NÃO são exportadas via `index.ts` — `App.tsx` faz deep-import para pre
 - Timeline: `TimelineSource`, `TimelinePeriod`, `TimelineFilters`, `TimelineEvent`, `TimelineMetrics`, `TimelinePage`, `LeadHistory`, `LeadHistoryInsert`, `FieldChange`
 - Métricas: `LeadMetrics`
 - Action log: `LeadActionType`, `LeadActionTier`
-- Import: `FilePreviewResult`, `ColumnMappingOption`, `EdgeFunctionReport`, `FunnelDestination`, `ImportLeadsToCustomPipelineOptions`, `ImportLeadsToFunnelOptions`, `ImportFunnelResult`
+- Import: `FilePreviewResult`, `ColumnMappingOption`, `EdgeFunctionReport`, `FunnelDestination`, `ImportLeadsToCustomPipelineOptions`, `ImportLeadsToFunnelOptions`, `ImportLeadsOnlyOptions`, `ImportFunnelResult`
 - Export: `ExportStageFilter`, `ExportLeadsOptions`, `UseExportLeadsResult`
 - Duplicates/trash/novo: `DuplicateGroup`, `TrashLead`, `NewLeadsBucket`, `NewLeadsSource`, `NewLeadsData`
 - Tags attached: `AttachedLeadTag`
