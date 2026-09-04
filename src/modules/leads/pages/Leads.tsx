@@ -93,6 +93,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   CLASSIFICACAO_TODAS,
   LEAD_CLASSIFICACOES,
@@ -711,22 +712,27 @@ function LeadsInner() {
             ))}
           </SelectContent>
         </Select>
-        {/* Gaveta do lead — empurrada para a borda direita pelo `ml-auto`, que é
-            o que separa "o que recorta a busca" (esquerda) de "em que lista eu
-            estou" (direita). */}
-        <Select value={filterClassificacao} onValueChange={setFilterClassificacao}>
-          <SelectTrigger className="w-[160px] sm:ml-auto">
-            <SelectValue placeholder="Classificação" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={CLASSIFICACAO_TODAS}>Todos</SelectItem>
-            {LEAD_CLASSIFICACOES.map((c) => (
-              <SelectItem key={c} value={c}>
-                {LEAD_CLASSIFICACAO_CONFIG[c].label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Gaveta do lead — segmented, não Select, e empurrada para a borda
+            direita pelo `ml-auto`.
+
+            Segmented porque são três opções fixas e saber QUAIS são as outras
+            faz parte da decisão: um Select esconderia "Indefinido" atrás de um
+            clique, e é justamente a gaveta que o usuário não sabe que existe.
+            O `ml-auto` separa "o que recorta a busca" (esquerda) de "em que
+            lista eu estou" (direita). */}
+        <SegmentedControl
+          label="Classificação do lead"
+          className="sm:ml-auto"
+          value={filterClassificacao}
+          onValueChange={setFilterClassificacao}
+          options={[
+            { value: CLASSIFICACAO_TODAS, label: "Todos" },
+            ...LEAD_CLASSIFICACOES.map((c) => ({
+              value: c,
+              label: LEAD_CLASSIFICACAO_CONFIG[c].label,
+            })),
+          ]}
+        />
         <SavedViewsDropdown
           entityType="leads"
           currentFilters={filterState}
