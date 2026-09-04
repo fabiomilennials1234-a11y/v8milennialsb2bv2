@@ -21,14 +21,12 @@
  * matar. Desmarcar a última é ignorado, e o saneamento (caixa que saiu do
  * conjunto permitido) cai na primeira caixa disponível em vez de esvaziar.
  *
- * ─── INSTAGRAM ABRE SOZINHO (até a W5) ──────────────────────────────────────
+ * ─── O INSTAGRAM ENTROU NO CONJUNTO (W5) ────────────────────────────────────
  *
- * `get_social_conversation_list` ainda não aplica o recorte por responsável, e
- * duas orgs têm `chat_restrict_to_owner` ligado — uma delas com 10.175 mensagens
- * de Instagram em 90 dias. Enquanto o furo não fecha, o canal de Instagram não
- * entra num conjunto: marcá-lo desmarca o resto, e marcar outra caixa o desmarca.
- * `exclusiva` diz à UI que houve essa troca, para ela explicar em vez de a
- * seleção parecer ter sumido sozinha.
+ * Ele abria sozinho enquanto `get_social_conversation_list` não aplicava o
+ * recorte por responsável: juntá-lo ao conjunto teria ampliado a superfície de
+ * um furo conhecido. A migration `20270931000000` fechou o furo, e o canal
+ * social passou a ser uma caixa como as outras — marca, desmarca e mistura.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { InboxBox } from "./types";
@@ -67,10 +65,6 @@ function gravar(userId: string | null | undefined, ids: readonly string[]): void
   }
 }
 
-function ehInstagram(caixa: InboxBox | undefined): boolean {
-  return caixa?.kind === "instagram";
-}
-
 export interface UseCaixasSelecionadasArgs {
   /** As caixas que a pessoa pode ler. Já vem recortada por org e por membro. */
   caixas: readonly InboxBox[];
@@ -94,8 +88,6 @@ export interface UseCaixasSelecionadasResult {
   marcadas: string[];
   /** As caixas marcadas, já resolvidas. */
   caixasMarcadas: InboxBox[];
-  /** `true` quando a seleção é uma caixa de Instagram — que abre sozinha. */
-  exclusiva: boolean;
   alternar: (id: string) => void;
   marcarSomente: (id: string) => void;
   marcarTodas: () => void;
@@ -136,16 +128,7 @@ export function useCaixasSelecionadas({
   const marcadas = useMemo(() => {
     if (caixas.length === 0 || suspenso) return [];
 
-    const sobreviventes = (marcadasCruas ?? []).filter((id) => permitidas.has(id));
-
-    // Instagram é exclusivo: se ele estiver no conjunto junto com outras, quem
-    // fica é o resto — a caixa social é a exceção, e a exceção cede.
-    const semInstagramCombinado =
-      sobreviventes.length > 1
-        ? sobreviventes.filter((id) => !ehInstagram(porId.get(id)))
-        : sobreviventes;
-
-    const efetivas = semInstagramCombinado.length > 0 ? semInstagramCombinado : [];
+    const efetivas = (marcadasCruas ?? []).filter((id) => permitidas.has(id));
     if (efetivas.length > 0) {
       // Ordem da lista de caixas, não a de marcação: o seletor tem uma ordem
       // estável (WhatsApp antes de social) e a lista precisa concordar com ela.
@@ -162,7 +145,7 @@ export function useCaixasSelecionadas({
     const conectada = caixas.find((c) => c.kind === "whatsapp" && c.status === "connected");
     const qualquerNumero = caixas.find((c) => c.kind === "whatsapp");
     return [(conectada ?? qualquerNumero ?? caixas[0]).id];
-  }, [caixas, marcadasCruas, permitidas, porId, caixaPreferida, suspenso]);
+  }, [caixas, marcadasCruas, permitidas, caixaPreferida, suspenso]);
 
   // Persiste o conjunto EFETIVO, não o cru: assim a caixa que a pessoa perdeu o
   // acesso sai da memória de vez, em vez de reaparecer no dia em que alguém a
@@ -176,29 +159,21 @@ export function useCaixasSelecionadas({
     (id: string) => {
       setMarcadasCruas(() => {
         const atual = marcadas;
-        const caixa = porId.get(id);
-
-        // Marcar Instagram esvazia o resto; marcar outra coisa tira o Instagram.
-        if (ehInstagram(caixa)) return [id];
-        const semInstagram = atual.filter((x) => !ehInstagram(porId.get(x)));
-
-        if (semInstagram.includes(id)) {
-          const restante = semInstagram.filter((x) => x !== id);
+        if (atual.includes(id)) {
+          const restante = atual.filter((x) => x !== id);
           // Desmarcar a última é sem-op: ver o cabeçalho.
-          return restante.length > 0 ? restante : semInstagram;
+          return restante.length > 0 ? restante : atual;
         }
-        return [...semInstagram, id];
+        return [...atual, id];
       });
     },
-    [marcadas, porId],
+    [marcadas],
   );
 
   const marcarSomente = useCallback((id: string) => setMarcadasCruas([id]), []);
 
   const marcarTodas = useCallback(() => {
-    // "Todas" não inclui Instagram — ele não pode dividir a lista com ninguém
-    // até a W5. Uma org só de Instagram mantém o que já tinha.
-    const todas = caixas.filter((c) => !ehInstagram(c)).map((c) => c.id);
+    const todas = caixas.map((c) => c.id);
     if (todas.length > 0) setMarcadasCruas(todas);
   }, [caixas]);
 
@@ -210,7 +185,6 @@ export function useCaixasSelecionadas({
   return {
     marcadas,
     caixasMarcadas,
-    exclusiva: caixasMarcadas.length === 1 && ehInstagram(caixasMarcadas[0]),
     alternar,
     marcarSomente,
     marcarTodas,

@@ -127,30 +127,38 @@ describe("regimeDaConversaAberta — sem conversa aberta", () => {
     const r = regimeDaConversaAberta({ chave: null, caixas: [], marcadas: [] });
 
     expect(r.caixa).toBeNull();
-    expect(r.modoInstagram).toBe(false);
+    expect(r.canalDeInstagram).toBeNull();
   });
 });
 
 describe("regimeDaConversaAberta — Instagram", () => {
-  it("Instagram marcado sozinho liga o regime dele", () => {
-    const r = regimeDaConversaAberta({ chave: null, caixas: TODAS, marcadas: [insta] });
+  it("conversa de Instagram ABERTA aponta o canal, mesmo com WhatsApp na lista", () => {
+    // Desde a W5 o Instagram divide a lista com as outras caixas. O canal sai da
+    // conversa aberta, e não de "a única caixa marcada" — a tela pode ter uma
+    // conversa de Instagram aberta ao lado de conversas de WhatsApp.
+    const r = regimeDaConversaAberta({
+      chave: `instagram:${insta.id}:17841400000000000`,
+      caixas: TODAS,
+      marcadas: [chip, oficial, insta],
+    });
 
-    expect(r.modoInstagram).toBe(true);
+    expect(r.caixa?.id).toBe("cx-insta");
+    expect(r.ehSocial).toBe(true);
+    expect(r.ehOficial).toBe(false);
     expect(r.canalDeInstagram).toBe("cx-insta");
+    expect(r.instanciaDeChip).toBeNull();
+    expect(r.instanciaOficial).toBeNull();
   });
 
-  it("Instagram NÃO liga o regime quando não está sozinho", () => {
-    // Não deveria acontecer — o hook de seleção o torna exclusivo —, mas se
-    // acontecer, a lista unificada é o caminho seguro: a RPC social é a que
-    // ainda não aplica o recorte por responsável.
+  it("com o Instagram marcado mas uma conversa de CHIP aberta, o canal fica nulo", () => {
     const r = regimeDaConversaAberta({
-      chave: null,
+      chave: buildWhatsAppConversationKey(chip.id, "5548988334050"),
       caixas: TODAS,
       marcadas: [chip, insta],
     });
 
-    expect(r.modoInstagram).toBe(false);
     expect(r.canalDeInstagram).toBeNull();
+    expect(r.instanciaDeChip).toBe("cx-carol");
   });
 
   it("chave malformada não escolhe caixa nenhuma pela chave", () => {

@@ -13,7 +13,8 @@
  *    lidas segue o ACESSO, não a seleção (D8): desmarcar caixa não pode apagar
  *    do radar a mensagem que chega nela. A caixa DESMARCADA com novidade acende
  *    aqui — é o único lugar da tela onde essa lacuna se resolve.
- * 3. Que o Instagram abre sozinho, e por quê, sem parecer defeito.
+ * 3. O canal social é uma caixa como as outras desde a W5 — ele deixou de abrir
+ *    sozinho quando a lista dele passou a respeitar o responsável.
  *
  * ─── O PONTO COLORIDO É O MESMO DA BOLHA ────────────────────────────────────
  *
@@ -27,7 +28,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -79,7 +79,7 @@ export function SeletorDeCaixas({
 
   const marcadasSet = new Set(marcadas);
   const primeira = caixas.find((c) => marcadasSet.has(c.id)) ?? caixas[0];
-  const podeMarcarTodas = caixas.filter((c) => c.kind !== "instagram").length > 1;
+  const podeMarcarTodas = caixas.length > 1;
 
   /**
    * O rótulo do gatilho. Com uma caixa é o NOME dela, como sempre foi — trocar
@@ -216,10 +216,6 @@ export function SeletorDeCaixas({
                   </span>
                 )}
 
-                {box.kind === "instagram" && (
-                  <span className="text-[10px] text-muted-foreground">abre sozinha</span>
-                )}
-
                 {marcadas.length > 1 && marcada && (
                   <button
                     type="button"
@@ -236,15 +232,6 @@ export function SeletorDeCaixas({
             );
           })}
 
-          {caixas.some((c) => c.kind === "instagram") && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[11px] font-normal leading-snug text-muted-foreground">
-                O Instagram abre sozinho por enquanto — a lista dele ainda não
-                respeita o recorte por responsável.
-              </DropdownMenuLabel>
-            </>
-          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
