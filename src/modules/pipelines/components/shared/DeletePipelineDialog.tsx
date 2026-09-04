@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { mensagemDeFalhaAoExcluir } from "../../lib/mensagem-falha-ao-excluir";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -109,22 +110,7 @@ export function DeletePipelineDialog({
       onDeleted?.();
       if (navigateOnDelete) navigate("/funis");
     } catch (e) {
-      // As RPCs recusam em português e dizem o motivo — não trocar recusa
-      // acionável por "Erro ao excluir" genérico.
-      const msg = e instanceof Error ? e.message : "";
-      if (msg.includes("pipeline_is_org_default")) {
-        toast.error(
-          "Este funil ainda é o padrão da organização. Escolha o substituto e tente de novo.",
-        );
-      } else if (msg.includes("não encontrado") || msg.includes("não tem o funil")) {
-        toast.error("Este funil já não existe nesta organização.");
-      } else if (msg.includes("permissão")) {
-        toast.error("Você não tem permissão para excluir este funil");
-      } else if (msg.includes("invasor")) {
-        toast.error(msg);
-      } else {
-        toast.error("Erro ao excluir funil");
-      }
+      toast.error(mensagemDeFalhaAoExcluir(e));
     }
   };
 
