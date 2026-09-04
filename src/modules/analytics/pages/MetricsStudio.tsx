@@ -46,6 +46,7 @@ import {
 } from "@/modules/analytics/lib/metrics-studio-period";
 import { useCurrentTeamMember, useFeaturePermission, useOrganization } from "@/modules/identity";
 import { computePeriodRange } from "@/modules/analytics/hooks/useCommandMetrics";
+import { mesDeReferencia } from "@/modules/analytics/lib/metrics-studio-mes-referencia";
 
 /**
  * Estúdio de Métricas — `/metricas`.
@@ -120,14 +121,21 @@ export default function MetricsStudio() {
    *
    * Mês e ano do "agora" porque o Estúdio não tem seletor de mês como o
    * Comando: aqui o período é sempre relativo a hoje.
+   *
+   * 🔴 O mês vem de `mesDeReferencia`, não de `getMonth()`. `computePeriodRange`
+   * conta o mês a partir de 1 e esta chamada passava o índice 0-based do
+   * `Date` — o preset "Mês", que é o DEFAULT da tela, media o mês ANTERIOR,
+   * enquanto a janela de métrica ao lado media o corrente. Ver o cabeçalho
+   * daquele arquivo.
    */
   const agora = new Date();
+  const { month: mesRef, year: anoRef } = mesDeReferencia(agora);
   const intervalo = useMemo(
     () =>
       computePeriodRange(
         period,
-        agora.getMonth(),
-        agora.getFullYear(),
+        mesRef,
+        anoRef,
         range?.from && range?.to ? { from: range.from, to: range.to } : null,
         timezone ?? undefined,
       ),
