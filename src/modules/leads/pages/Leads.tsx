@@ -13,6 +13,7 @@ import {
   FileDown,
   History,
   CircleDashed,
+  Tag,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -86,6 +93,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
+import {
+  CLASSIFICACAO_TODAS,
+  LEAD_CLASSIFICACOES,
+  LEAD_CLASSIFICACAO_CONFIG,
+  type LeadClassificacao,
+} from "../lib/lead-classificacao";
+import { useLeadClassificacao } from "../hooks/useLeadClassificacao";
 import { useSearchParams } from "react-router-dom";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
@@ -159,6 +173,8 @@ type LeadsFilterState = {
   filterQualification: string;
   /** Dono da conta: id de `team_member`, `"all"` ou `"none"` (sem dono). */
   filterResponsible: string;
+  /** Gaveta: `"lead" | "cliente" | "indefinido"` ou `"all"`. */
+  filterClassificacao?: string;
 };
 
 const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
@@ -166,6 +182,7 @@ const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   filterOrigin: "all",
   filterQualification: "all",
   filterResponsible: "all",
+  filterClassificacao: CLASSIFICACAO_TODAS,
 };
 
 /**
@@ -208,6 +225,12 @@ function LeadsInner() {
   // Visão salva gravada antes deste filtro existir não traz a chave — o `??`
   // é o que impede o Select de virar não-controlado no meio do uso.
   const filterResponsible = filterState.filterResponsible ?? "all";
+  // Visão salva gravada antes desta gaveta existir não traz a chave — sem o
+  // `??` o Select vira não-controlado no meio do uso.
+  const filterClassificacao = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
+  const setFilterClassificacao = (v: string) =>
+    setFilterState((f) => ({ ...f, filterClassificacao: v }));
+  const { mutate: mudarClassificacao } = useLeadClassificacao();
 
   const setSearchQuery = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchQuery: v })),
@@ -302,9 +325,9 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
+  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -418,7 +441,7 @@ function LeadsInner() {
   // página 5 da nova, e ficar nela devolve um pedaço arbitrário da lista.
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterQualification, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
+  }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
@@ -688,6 +711,22 @@ function LeadsInner() {
             ))}
           </SelectContent>
         </Select>
+        {/* Gaveta do lead — empurrada para a borda direita pelo `ml-auto`, que é
+            o que separa "o que recorta a busca" (esquerda) de "em que lista eu
+            estou" (direita). */}
+        <Select value={filterClassificacao} onValueChange={setFilterClassificacao}>
+          <SelectTrigger className="w-[160px] sm:ml-auto">
+            <SelectValue placeholder="Classificação" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={CLASSIFICACAO_TODAS}>Todos</SelectItem>
+            {LEAD_CLASSIFICACOES.map((c) => (
+              <SelectItem key={c} value={c}>
+                {LEAD_CLASSIFICACAO_CONFIG[c].label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <SavedViewsDropdown
           entityType="leads"
           currentFilters={filterState}
@@ -831,6 +870,37 @@ function LeadsInner() {
                             <Edit2 className="w-4 h-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
+                          {/* Gaveta do lead. Radio e não itens soltos porque as
+                              três são mutuamente exclusivas — o usuário precisa
+                              ver em qual está antes de mover.
+
+                              Mover aqui marca `classificacao_manual`, e a lei do
+                              ERP deixa de tocar neste lead: é o que impede a
+                              escolha de sumir na sincronização das 06:00. */}
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <Tag className="w-4 h-4 mr-2" />
+                              Classificação
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              <DropdownMenuRadioGroup
+                                value={lead.classificacao ?? "lead"}
+                                onValueChange={(v) =>
+                                  mudarClassificacao({
+                                    leadId: lead.id,
+                                    classificacao: v as LeadClassificacao,
+                                  })
+                                }
+                              >
+                                {LEAD_CLASSIFICACOES.map((c) => (
+                                  <DropdownMenuRadioItem key={c} value={c}>
+                                    {LEAD_CLASSIFICACAO_CONFIG[c].label}
+                                  </DropdownMenuRadioItem>
+                                ))}
+                              </DropdownMenuRadioGroup>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => {
                               setLeadToDelete(lead);

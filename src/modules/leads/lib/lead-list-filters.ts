@@ -19,6 +19,12 @@ export interface LeadListFilterValues {
   /** Tier de qualificação, ou os sentinels `"all"` (sem filtro) e `"none"`
    * (leads sem tier — `qualification_tier IS NULL`, ≠ do tier "desqualificado"). */
   filterQualification?: string;
+  /**
+   * Gaveta do lead: `"lead" | "cliente" | "indefinido"`, ou `"all"` (sem
+   * recorte). Filtra no BANCO, não na página carregada — a lista é paginada, e
+   * filtrar no cliente mostraria "3 de 12.686" em vez dos 3 de verdade.
+   */
+  filterClassificacao?: string;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -188,6 +194,10 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   }
   if (filters.createdTo) {
     q = q.lte("created_at", filters.createdTo);
+  }
+
+  if (filters.filterClassificacao && filters.filterClassificacao !== "all") {
+    q = q.eq("classificacao", filters.filterClassificacao);
   }
 
   if (filters.filterQualification && filters.filterQualification !== "all") {

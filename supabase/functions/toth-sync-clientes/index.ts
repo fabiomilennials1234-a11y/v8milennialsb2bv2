@@ -669,6 +669,39 @@ Deno.serve(
       }
     }
 
+    /**
+     * Aplica a lei de classificação Lead · Cliente · Indefinido.
+     *
+     * Roda em TODA sincronização, não uma vez — foi o pedido explícito. A
+     * função é idempotente (só escreve o que difere) e respeita
+     * `classificacao_manual`, então quem foi movido à mão pelos três pontos não
+     * volta atrás na madrugada seguinte.
+     *
+     * Chamada sem condição de nossa parte: quem decide se roda é a própria
+     * função, lendo `classificar_leads_por_situacao` e `clientes_situacoes` da
+     * conexão. Duplicar esse gate aqui criaria duas verdades sobre quando a lei
+     * vale — e a do TypeScript envelheceria primeiro.
+     */
+    let classificacao = { cliente: 0, indefinido: 0, lead: 0 };
+    const { data: classData, error: classErr } = await admin.rpc(
+      "apply_erp_lead_classification",
+      { p_organization_id: organizationId },
+    );
+    if (classErr) {
+      // Não derruba: os clientes já estão gravados e a gaveta é derivada — a
+      // próxima volta reclassifica.
+      if (mappingErrors.length < 3) {
+        mappingErrors.push(`apply_erp_lead_classification: ${classErr.message}`);
+      }
+    } else if (Array.isArray(classData) && classData.length > 0) {
+      const linha = classData[0] as Record<string, unknown>;
+      classificacao = {
+        cliente: Number(linha.virou_cliente ?? 0),
+        indefinido: Number(linha.virou_indefinido ?? 0),
+        lead: Number(linha.virou_lead ?? 0),
+      };
+    }
+
     await admin
       .from("toth_connections")
       .update({
@@ -695,6 +728,7 @@ Deno.serve(
         sem_ultima_compra: semUltimaCompra,
         representantes_mapeados: ownerMap.size,
         leads_com_dono_novo: leadsComDonoNovo,
+        classificacao,
       },
     });
 
@@ -703,6 +737,9 @@ Deno.serve(
         success: true,
         stop_reason: stopReason,
         stats,
+        // Zero nos três com a lei ligada é sinal de que `clientes_situacoes`
+        // ainda está NULL — a lei não roda sem o conjunto confirmado.
+        classificacao,
         // Bateu o teto por execução: falta gente. A próxima execução atravessa
         // de graça o que já está igual e continua daqui. Dizer isso evita ler
         // um número parcial como se fosse o total.
