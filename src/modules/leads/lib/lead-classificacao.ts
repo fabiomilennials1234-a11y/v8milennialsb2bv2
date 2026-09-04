@@ -6,6 +6,16 @@
  * filtro que vai ao banco. Espalhar os rótulos por esses três lugares garante
  * que um dia divirjam — e a divergência aparece como "o filtro não acha o que a
  * lista mostra", que é caro de diagnosticar.
+ *
+ * ⚠️ ESTE VOCABULÁRIO É SOBRE CADASTRO NO ERP, e não sobre ter comprado. A
+ * gaveta `cliente` aqui significa "tem `erp_code` e a situação do parceiro está
+ * entre as que a org considera ativas" (migration `20270922000000`). Medido em
+ * prod 2026-09-04: dos 5.442 leads da Café Jurerê nessa gaveta, **exatamente 1**
+ * tem venda em `sale_events`.
+ *
+ * Quem responde "comprou?" é `lead-relacao-abas.ts`, ancorado em
+ * `leads.primeira_venda_at`. Na tela este controle se chama **"Cadastro no
+ * ERP"** justamente para as duas leis não disputarem a palavra "cliente".
  */
 
 export const LEAD_CLASSIFICACOES = ["lead", "cliente", "indefinido"] as const;

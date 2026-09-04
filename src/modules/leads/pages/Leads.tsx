@@ -104,6 +104,12 @@ import {
   type LeadClassificacao,
 } from "../lib/lead-classificacao";
 import { useLeadClassificacao } from "../hooks/useLeadClassificacao";
+import {
+  abaEfetiva,
+  RELACAO_ABAS,
+  RELACAO_ABA_CONFIG,
+  type RelacaoAba,
+} from "../lib/lead-relacao-abas";
 import { useSearchParams } from "react-router-dom";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
@@ -179,6 +185,11 @@ type LeadsFilterState = {
   filterResponsible: string;
   /** Gaveta: `"lead" | "cliente" | "indefinido"` ou `"all"`. */
   filterClassificacao?: string;
+  /**
+   * A aba aberta — a lei da divisão. Fica no estado PERSISTIDO junto com os
+   * demais filtros porque é isso: um recorte da mesma lista, não uma rota.
+   */
+  filterRelacao?: RelacaoAba;
 };
 
 const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
@@ -187,6 +198,10 @@ const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   filterQualification: "all",
   filterResponsible: "all",
   filterClassificacao: CLASSIFICACAO_TODAS,
+  // A aba Leads é a porta de entrada: quem abre a tela quer trabalhar quem
+  // ainda não comprou. Cliente continua a um clique, e a Carteira segue sendo
+  // a tela de quem já compra.
+  filterRelacao: "leads",
 };
 
 /**
@@ -234,6 +249,13 @@ function LeadsInner() {
   const filterClassificacao = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
   const setFilterClassificacao = (v: string) =>
     setFilterState((f) => ({ ...f, filterClassificacao: v }));
+  // Visão salva anterior à lei da divisão não traz a chave. O padrão aqui é
+  // `"todos"`, e NÃO `"leads"`: quem salvou uma visão antes desta tela existir
+  // salvou uma lista sem recorte, e abrir essa visão com gente escondida seria
+  // mudar o que ela guardou.
+  const filterRelacao: RelacaoAba = abaEfetiva(filterState.filterRelacao);
+  const setFilterRelacao = (v: RelacaoAba) =>
+    setFilterState((f) => ({ ...f, filterRelacao: v }));
   const { mutate: mudarClassificacao } = useLeadClassificacao();
 
   const setSearchQuery = useCallback(
@@ -331,9 +353,9 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
+  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -454,7 +476,7 @@ function LeadsInner() {
   // página 5 da nova, e ficar nela devolve um pedaço arbitrário da lista.
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
+  }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, filterRelacao, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
@@ -661,6 +683,44 @@ function LeadsInner() {
         </motion.div>
       </div>
 
+      {/* A LEI DA DIVISÃO — as abas.
+
+          Acima dos filtros, e não junto deles, porque não é um recorte a mais:
+          é QUAL LISTA está aberta. Os filtros abaixo valem dentro da aba
+          escolhida, e o contador de cada aba reflete a busca corrente — senão o
+          usuário vê "Clientes 36" e abre uma lista de 2.
+
+          Aba, e não um filtro escondido, porque some gente da tela: quem
+          comprou sai de "Leads". "Por que fulano sumiu?" tem de ter resposta
+          visível, e a resposta é a aba do lado. */}
+      <div
+        role="tablist"
+        aria-label="Leads ou clientes"
+        className="flex items-center gap-1 border-b border-border/60"
+      >
+        {RELACAO_ABAS.map((aba) => {
+          const ativa = filterRelacao === aba;
+          return (
+            <button
+              key={aba}
+              type="button"
+              role="tab"
+              aria-selected={ativa}
+              title={RELACAO_ABA_CONFIG[aba].descricao}
+              onClick={() => setFilterRelacao(aba)}
+              className={cn(
+                "relative -mb-px border-b-2 px-3 py-2 text-[13px] font-semibold transition-colors",
+                ativa
+                  ? "border-primary text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {RELACAO_ABA_CONFIG[aba].label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 max-w-sm">
@@ -736,8 +796,14 @@ function LeadsInner() {
             clique, e é justamente a gaveta que o usuário não sabe que existe.
             O `ml-auto` separa "o que recorta a busca" (esquerda) de "em que
             lista eu estou" (direita). */}
+        {/* ⚠️ Este recorte é o CADASTRO NO ERP, e o rótulo diz isso desde
+            2026-09-04. Antes ele se chamava "Classificação do lead" e oferecia
+            "Cliente" — a mesma palavra que as abas acima usam com outro
+            significado, e os dois discordam: na Café Jurerê, dos 5.442 leads
+            com `classificacao='cliente'`, exatamente 1 tem venda. Duas
+            perguntas diferentes na mesma tela precisam de dois nomes. */}
         <SegmentedControl
-          label="Classificação do lead"
+          label="Cadastro no ERP"
           className="sm:ml-auto"
           value={filterClassificacao}
           onValueChange={setFilterClassificacao}

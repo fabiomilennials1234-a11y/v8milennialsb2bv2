@@ -25,6 +25,25 @@ export interface LeadListFilterValues {
    * filtrar no cliente mostraria "3 de 12.686" em vez dos 3 de verdade.
    */
   filterClassificacao?: string;
+  /**
+   * A LEI DA DIVISÃO: qual aba está aberta.
+   *
+   * `"leads"` = ainda não comprou (`primeira_venda_at IS NULL`).
+   * `"clientes"` = comprou (`IS NOT NULL`).
+   * `"todos"` (ou ausente) = sem recorte — é o que as visões salvas antigas
+   * pedem, e o que a exportação usa quando ninguém escolheu.
+   *
+   * A âncora é `sale_events`, o caderno canônico (ADR-0017), materializado em
+   * `leads.primeira_venda_at` pela migration 20270932000000. Medido na Chiquê
+   * em 2026-09-04: essa definição contém as outras duas em uso no produto
+   * (`deals.outcome='won'` e pedido no ERP) e ainda pega 22 leads que venderam
+   * sem o negócio ter sido marcado como ganho.
+   *
+   * ⚠️ NÃO é `filterClassificacao`. Aquele recorta por CADASTRO NO ERP e
+   * discorda deste abertamente: na Café Jurerê, dos 5.442 com
+   * `classificacao='cliente'`, exatamente 1 tem venda.
+   */
+  filterRelacao?: "todos" | "leads" | "clientes";
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -198,6 +217,14 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
 
   if (filters.filterClassificacao && filters.filterClassificacao !== "all") {
     q = q.eq("classificacao", filters.filterClassificacao);
+  }
+
+  // A lei da divisão. `"todos"` e ausente NÃO filtram — é o que mantém a visão
+  // salva antiga e a exportação sem recorte exibindo exatamente o que exibiam.
+  if (filters.filterRelacao === "leads") {
+    q = q.is("primeira_venda_at", null);
+  } else if (filters.filterRelacao === "clientes") {
+    q = q.not("primeira_venda_at", "is", null);
   }
 
   if (filters.filterQualification && filters.filterQualification !== "all") {
