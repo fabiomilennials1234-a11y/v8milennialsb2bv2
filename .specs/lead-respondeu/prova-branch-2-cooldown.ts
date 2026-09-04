@@ -1,7 +1,12 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fireTrigger } from "../../supabase/functions/_shared/workflow-trigger.ts";
 
+// O cliente vem do esm.sh e o tipo que `fireTrigger` declara vem do mesmo
+// pacote por outro caminho — a ponte é um cast estrutural, não `any`.
+type ClienteDoTrigger = Parameters<typeof fireTrigger>[0]["supabase"];
 const sb = createClient(Deno.env.get("BRANCH_URL")!, Deno.env.get("BRANCH_KEY")!, { auth: { persistSession: false } });
+const cliente = sb as unknown as ClienteDoTrigger;
+
 const ORG = "11111111-1111-4111-8111-111111111111";
 const LEAD = "22222222-2222-4222-8222-222222222222";
 const WF = "77777777-7777-4777-8777-777777777777";
@@ -11,8 +16,7 @@ const checar = (n: string, ok: boolean, d = "") => { console.log(`${ok ? "ok  " 
 const limpar = () => sb.from("workflow_executions").delete().eq("organization_id", ORG);
 const config = (c: Record<string, unknown>) => sb.from("workflows").update({ trigger_config: c }).eq("id", WF);
 const fogo = (ctx: Record<string, unknown>) =>
-  // deno-lint-ignore no-explicit-any
-  fireTrigger({ supabase: sb as any, organizationId: ORG, triggerType: "lead_replied", leadId: LEAD, context: ctx });
+  fireTrigger({ supabase: cliente, organizationId: ORG, triggerType: "lead_replied", leadId: LEAD, context: ctx });
 /** Fecha as execuções abertas para tirar do caminho a guarda de "já ativa". */
 const fecharAbertas = () =>
   sb.from("workflow_executions").update({ status: "completed", completed_at: new Date().toISOString() }).eq("organization_id", ORG);

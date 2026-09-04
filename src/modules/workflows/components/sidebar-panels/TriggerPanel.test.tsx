@@ -297,7 +297,10 @@ describe("TriggerPanel — lead_replied — etapa", () => {
       pipeline_ids: [PROPOSTAS],
       stage_ids: [ETAPA_ENVIADA, ETAPA_NEGOCIACAO],
     });
-    fireEvent.click(checkboxFor("Propostas"));
+    // A tela mostra o `label` — o nome que a ORG usa (#1992) —, não o `name`
+    // do seed. Clicar por "Propostas" achava nada desde que o painel passou a
+    // ler `useFunisDaOrg`.
+    fireEvent.click(checkboxFor("Orçamentos"));
     const cfg = lastConfig(onUpdate);
     expect(cfg.pipeline_ids).toEqual([]);
     expect(cfg.stage_ids).toEqual([]);
@@ -308,7 +311,7 @@ describe("TriggerPanel — lead_replied — etapa", () => {
       pipeline_ids: [PROPOSTAS, QUALIFICACAO],
       stage_ids: [ETAPA_ENVIADA, ETAPA_DE_OUTRO_FUNIL],
     });
-    fireEvent.click(checkboxFor("Qualificação"));
+    fireEvent.click(checkboxFor("Oportunidades"));
     const cfg = lastConfig(onUpdate);
     expect(cfg.pipeline_ids).toEqual([PROPOSTAS]);
     expect(cfg.stage_ids).toEqual([ETAPA_ENVIADA]);

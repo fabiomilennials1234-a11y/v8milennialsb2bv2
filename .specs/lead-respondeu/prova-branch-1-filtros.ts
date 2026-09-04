@@ -14,7 +14,12 @@ const URL_ = Deno.env.get("BRANCH_URL")!;
 const KEY = Deno.env.get("BRANCH_KEY")!;
 if (URL_.includes("jsjsmuncfkbsbzqzqhfq")) throw new Error("RECUSADO: produção");
 
+// O cliente vem do esm.sh e o tipo que `fireTrigger` declara vem do mesmo
+// pacote por outro caminho — a ponte é um cast estrutural, não `any`.
+type ClienteDoTrigger = Parameters<typeof fireTrigger>[0]["supabase"];
 const sb = createClient(URL_, KEY, { auth: { persistSession: false } });
+
+const cliente = sb as unknown as ClienteDoTrigger;
 
 const ORG = Deno.env.get("ORG_ID")!;
 const LEAD = Deno.env.get("LEAD_ID")!;
@@ -41,8 +46,7 @@ async function comConfig(config: Record<string, unknown>) {
 async function disparar(context: Record<string, unknown>) {
   await limparExecucoes();
   const n = await fireTrigger({
-    // deno-lint-ignore no-explicit-any
-    supabase: sb as any,
+    supabase: cliente,
     organizationId: ORG,
     triggerType: "lead_replied",
     leadId: LEAD,
