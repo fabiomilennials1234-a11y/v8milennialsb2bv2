@@ -196,7 +196,7 @@ describe("useConversasUnificadas", () => {
   });
 
   it("base sem a migration: cai para a RPC de UMA caixa, uma por caixa", async () => {
-    // Ordem de deploy — front novo, migration `20270921000000` ainda não
+    // Ordem de deploy — front novo, migration `20270926000000` ainda não
     // aplicada. Sem a queda, o /chat inteiro fica vazio para todas as orgs.
     rpcMock.mockImplementation(async (nome: string, args: Record<string, unknown>) => {
       if (nome.endsWith("_multi")) {

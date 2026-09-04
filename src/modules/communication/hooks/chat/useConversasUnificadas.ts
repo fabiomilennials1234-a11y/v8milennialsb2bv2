@@ -38,7 +38,7 @@
  *
  * ─── QUEDA PARA AS RPCs DE UMA CAIXA (ordem de deploy) ──────────────────────
  *
- * As funções `_multi` chegam pela migration `20270921000000`, e apply em prod é
+ * As funções `_multi` chegam pela migration `20270926000000`, e apply em prod é
  * botão do humano. Se o front subir primeiro, o PostgREST não acha a função
  * (`PGRST202`) e o `/chat` INTEIRO fica vazio — para todas as organizações, por
  * causa de uma capacidade que a maioria delas nem usa.
@@ -177,7 +177,7 @@ export function useConversasUnificadas(
       if (ehFuncaoAusente(error)) {
         console.warn(
           "[inbox] `get_whatsapp_conversation_list_multi` não existe nesta base — " +
-            "migration 20270921000000 ainda não aplicada. A lista cai para uma " +
+            "migration 20270926000000 ainda não aplicada. A lista cai para uma " +
             "chamada por caixa, e o limite deixa de ser global.",
         );
         const porCaixa = await Promise.all(
