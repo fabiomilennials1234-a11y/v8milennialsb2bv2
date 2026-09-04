@@ -8,7 +8,25 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { contactLabel, type SocialContact } from "./types";
+import { contactLabel, type ChatContact, type SocialContact } from "./types";
+
+const whatsapp = (over: Partial<ChatContact>): ChatContact => ({
+  channel: "whatsapp",
+  phone_number: "5548999998888",
+  push_name: null,
+  last_message: null,
+  last_message_time: "2026-09-03T14:36:00Z",
+  last_message_direction: null,
+  last_message_sent_source: null,
+  unread_count: 0,
+  lead_id: null,
+  lead_name: null,
+  conversation_id: null,
+  archived_at: null,
+  tags: [],
+  is_group: false,
+  ...over,
+});
 
 const social = (over: Partial<SocialContact>): SocialContact => ({
   channel: "whatsapp_oficial",
@@ -48,6 +66,32 @@ describe("contactLabel — canal oficial", () => {
     expect(
       contactLabel(social({ display_name: "Gabriel", lead_name: "Gabriel Aurelio Gipp" })),
     ).toBe("Gabriel");
+  });
+});
+
+describe("contactLabel — WhatsApp sem número de verdade", () => {
+  // Medido em 03/09 na Café Jurerê: 514 das 988 linhas do inbox eram LID,
+  // exibidas como `210028246085780`.
+  it("LID vira rótulo com discriminador, não código", () => {
+    expect(contactLabel(whatsapp({ phone_number: "210028246085780" })))
+      .toBe("Contato sem número · 085780");
+  });
+
+  it("canal do WhatsApp tem nome próprio", () => {
+    expect(contactLabel(whatsapp({ phone_number: "120363404701403742" })))
+      .toBe("Canal do WhatsApp");
+  });
+
+  it("nome conhecido continua ganhando do identificador", () => {
+    expect(contactLabel(whatsapp({ phone_number: "210028246085780", push_name: "Ana" })))
+      .toBe("Ana");
+    expect(contactLabel(whatsapp({ phone_number: "210028246085780", lead_name: "Ana Lima" })))
+      .toBe("Ana Lima");
+  });
+
+  it("telefone de verdade segue exibido igual", () => {
+    expect(contactLabel(whatsapp({ phone_number: "5548999998888" })))
+      .toBe("5548999998888");
   });
 });
 

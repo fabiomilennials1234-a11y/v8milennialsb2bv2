@@ -82,3 +82,24 @@ describe("nomeDaConversa — string vazia é valor, não ausência", () => {
     expect(nomeDaConversa(fontes({ pushName: "", nomeDoLead: "Fernando" }), COM_FLAG)).toBe("");
   });
 });
+
+describe("nomeDaConversa — sem número de verdade", () => {
+  // A queda para o telefone era crua: o cabeçalho da thread se chamava
+  // `210028246085780`. Ver `identificadorOculto.ts`.
+  it("LID vira rótulo nas duas ordens", () => {
+    const fontes = { pushName: null, nomeDoLead: null, telefone: "210028246085780" };
+    expect(nomeDaConversa(fontes)).toBe("Contato sem número · 085780");
+    expect(nomeDaConversa(fontes, { nomeDoWhatsappPrimeiro: true }))
+      .toBe("Contato sem número · 085780");
+  });
+
+  it("com nome, nada muda", () => {
+    expect(nomeDaConversa({ pushName: "Ana", nomeDoLead: null, telefone: "210028246085780" }))
+      .toBe("Ana");
+  });
+
+  it("telefone de verdade segue intocado", () => {
+    expect(nomeDaConversa({ pushName: null, nomeDoLead: null, telefone: "5548999998888" }))
+      .toBe("5548999998888");
+  });
+});

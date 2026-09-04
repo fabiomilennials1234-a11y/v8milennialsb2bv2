@@ -59,6 +59,7 @@ import {
 } from "@/modules/leads";
 import { memberById, memberName, tierLabel } from "./contextPanelInfoHelpers";
 import { ContextPanelFunnels } from "./ContextPanelFunnels";
+import { telefoneParaExibicao } from "@/modules/communication/lib/identificadorOculto";
 
 const SOURCE_OPTIONS: Array<{ value: string; label: string; dot: string }> = [
   { value: "whatsapp", label: "WhatsApp", dot: "hsl(142 71% 45%)" },
@@ -137,7 +138,9 @@ export function ContextPanelTabInfo({
     return (
       <div className="px-4 py-6 text-center">
         <p className="text-xs text-muted-foreground mb-1">Nenhum lead vinculado a</p>
-        <p className="text-sm font-medium tabular-nums">{phoneNumber}</p>
+        <p className="text-sm font-medium tabular-nums">
+          {telefoneParaExibicao(phoneNumber)}
+        </p>
 
         {/*
           A AÇÃO, e não só o diagnóstico.
