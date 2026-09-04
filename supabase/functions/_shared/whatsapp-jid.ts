@@ -20,6 +20,21 @@
 const LID_SUFFIX = "@lid";
 const GROUP_SUFFIX = "@g.us";
 
+/**
+ * Sufixos de JID que **não** são conversa individual, com o rótulo que vai para
+ * o log. `@newsletter` é canal/Status do WhatsApp e entrou aqui pelo mesmo
+ * caminho do LID: 301 mensagens em 10 dias na Café Jurerê, cada canal virando
+ * um "contato" chamado `120363404701403742`.
+ *
+ * É blocklist, não allowlist, de propósito: sufixo novo do provedor continua
+ * sendo gravado (e visível) em vez de sumir em silêncio.
+ */
+const NON_INDIVIDUAL_SUFFIXES: ReadonlyArray<readonly [string, string]> = [
+  [GROUP_SUFFIX, "group"],
+  ["@newsletter", "newsletter"],
+  ["@broadcast", "broadcast"],
+];
+
 /** É um LinkedID (`@lid`)? Nunca é telefone. */
 export function isLidJid(value: unknown): boolean {
   return typeof value === "string" && value.includes(LID_SUFFIX);
@@ -30,10 +45,22 @@ export function isGroupJid(value: unknown): boolean {
   return typeof value === "string" && value.includes(GROUP_SUFFIX);
 }
 
+/**
+ * Rótulo do motivo, quando o JID não é conversa individual — `undefined` se for
+ * individual (ou LID, que tem tratamento próprio: às vezes dá para resolver).
+ */
+export function nonIndividualKind(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  for (const [suffix, kind] of NON_INDIVIDUAL_SUFFIXES) {
+    if (value.includes(suffix)) return kind;
+  }
+  return undefined;
+}
+
 /** Strip a WhatsApp JID / raw value down to a bare phone-number string. */
 export function jidToPhone(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
-  if (isGroupJid(value) || isLidJid(value)) return undefined;
+  if (isLidJid(value) || nonIndividualKind(value)) return undefined;
   // Drop everything from the first "@" (s.whatsapp.net / c.us) and any
   // ":NN" multi-device suffix that precedes it.
   const local = value.split("@")[0].split(":")[0];
@@ -46,8 +73,8 @@ export function jidToPhone(value: unknown): string | undefined {
 export type JidResolution =
   /** JID utilizável como conversa individual — `jid` é o que deve ser gravado. */
   | { kind: "phone"; jid: string }
-  /** Grupo: fora do escopo do backfill de conversas individuais. */
-  | { kind: "group" }
+  /** Grupo, canal (`@newsletter`) ou lista de transmissão: não é conversa 1:1. */
+  | { kind: "non_individual"; reason: string }
   /** LID sem número correspondente no payload. Não dá para gravar sem mentir. */
   | { kind: "unresolved_lid"; lid: string }
   /** Nenhum identificador de conversa no payload. */
@@ -105,7 +132,8 @@ export function resolveHistoryChatJid(msg: Record<string, any>): JidResolution {
 
   const primary = pickString(msg, [...CHAT_KEYS, counterpartKey]);
   if (!primary) return { kind: "missing" };
-  if (isGroupJid(primary)) return { kind: "group" };
+  const excluded = nonIndividualKind(primary);
+  if (excluded) return { kind: "non_individual", reason: excluded };
   if (!isLidJid(primary)) return { kind: "phone", jid: primary };
 
   const resolved = pickPhoneJid(msg, [...PHONE_HINT_KEYS, counterpartKey]);

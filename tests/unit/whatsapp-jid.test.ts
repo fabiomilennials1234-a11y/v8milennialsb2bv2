@@ -12,6 +12,7 @@ import {
   isGroupJid,
   isLidJid,
   jidToPhone,
+  nonIndividualKind,
   resolveHistoryChatJid,
 } from "../../supabase/functions/_shared/whatsapp-jid.ts";
 
@@ -30,6 +31,26 @@ describe("isLidJid / isGroupJid", () => {
   });
 });
 
+describe("nonIndividualKind", () => {
+  it("rotula grupo, canal e transmissão", () => {
+    expect(nonIndividualKind("120363041234567890@g.us")).toBe("group");
+    expect(nonIndividualKind("120363404701403742@newsletter")).toBe("newsletter");
+    expect(nonIndividualKind("status@broadcast")).toBe("broadcast");
+  });
+
+  it("conversa individual e LID não são rotulados aqui", () => {
+    expect(nonIndividualKind("5548999998888@s.whatsapp.net")).toBeUndefined();
+    // LID tem tratamento próprio: às vezes o telefone está no payload.
+    expect(nonIndividualKind("210028246085780@lid")).toBeUndefined();
+  });
+
+  it("sufixo desconhecido do provedor NÃO é cortado às cegas", () => {
+    // Blocklist, não allowlist: coisa nova continua sendo gravada e visível,
+    // em vez de sumir em silêncio.
+    expect(nonIndividualKind("123456@algo.novo")).toBeUndefined();
+  });
+});
+
 describe("jidToPhone", () => {
   it("aceita telefone com e sem sufixo", () => {
     expect(jidToPhone("5548999998888@s.whatsapp.net")).toBe("5548999998888");
@@ -38,8 +59,9 @@ describe("jidToPhone", () => {
     expect(jidToPhone("554899998888")).toBe("554899998888");
   });
 
-  it("recusa grupo, LID e comprimento implausível", () => {
+  it("recusa grupo, canal, LID e comprimento implausível", () => {
     expect(jidToPhone("120363041234567890@g.us")).toBeUndefined();
+    expect(jidToPhone("120363404701403742@newsletter")).toBeUndefined();
     expect(jidToPhone("210028246085780@lid")).toBeUndefined();
     // Um LID cru, sem sufixo, tem cara de número longo demais para E.164.
     expect(jidToPhone("2100282460857801")).toBeUndefined();
@@ -54,9 +76,15 @@ describe("resolveHistoryChatJid", () => {
       .toEqual({ kind: "phone", jid: "5548999998888@s.whatsapp.net" });
   });
 
-  it("marca grupo como grupo", () => {
+  it("marca grupo, canal e transmissão como não-individuais", () => {
     expect(resolveHistoryChatJid({ chatid: "120363041234567890@g.us" }))
-      .toEqual({ kind: "group" });
+      .toEqual({ kind: "non_individual", reason: "group" });
+    // Canal/Status do WhatsApp: 301 mensagens em 10 dias na Café Jurerê viraram
+    // "contato" chamado 120363404701403742 antes deste corte.
+    expect(resolveHistoryChatJid({ chatid: "120363404701403742@newsletter" }))
+      .toEqual({ kind: "non_individual", reason: "newsletter" });
+    expect(resolveHistoryChatJid({ chatid: "status@broadcast" }))
+      .toEqual({ kind: "non_individual", reason: "broadcast" });
   });
 
   it("marca LID sem telefone no payload como não resolvido", () => {

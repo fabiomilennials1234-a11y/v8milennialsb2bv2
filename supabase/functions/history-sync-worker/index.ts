@@ -20,7 +20,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { getWhatsAppProvider } from "../_shared/whatsapp-client.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
-import { isGroupJid, isLidJid, resolveHistoryChatJid } from "../_shared/whatsapp-jid.ts";
+import { isLidJid, nonIndividualKind, resolveHistoryChatJid } from "../_shared/whatsapp-jid.ts";
 
 import "../_shared/whatsapp-providers/evolution-provider.ts";
 import "../_shared/whatsapp-providers/uazapi-provider.ts";
@@ -218,6 +218,9 @@ async function upsertMessages(
   // depois, sem rastro de quem tirou.
   let skippedLid = 0;
   let skippedNoJid = 0;
+  // Grupo já era descartado antes deste fix, então não entra na conta — o que
+  // se quer medir é o que MUDOU: canal (`@newsletter`) e transmissão.
+  let skippedNonIndividual = 0;
 
   for (const raw of messages) {
     const msg = raw as Record<string, any>;
@@ -237,12 +240,15 @@ async function upsertMessages(
 
     const fromMe = msg.fromMe === true || msg.fromme === true || msg.wa_fromMe === true;
 
-    // Grupo fica de fora (como sempre ficou) e LID sem número correspondente é
-    // descartado: gravá-lo cria no inbox um "contato" chamado
-    // `210028246085780`, que não casa com lead nenhum e duplica a conversa que
-    // já existe pelo número real. Ver `_shared/whatsapp-jid.ts`.
+    // Grupo fica de fora (como sempre ficou), e com ele canal (`@newsletter`) e
+    // transmissão. LID sem número correspondente também sai: gravá-lo cria no
+    // inbox um "contato" chamado `210028246085780`, que não casa com lead
+    // nenhum. Ver `_shared/whatsapp-jid.ts`.
     const resolution = resolveHistoryChatJid(msg);
-    if (resolution.kind === "group") continue;
+    if (resolution.kind === "non_individual") {
+      if (resolution.reason !== "group") skippedNonIndividual += 1;
+      continue;
+    }
     if (resolution.kind === "missing") {
       skippedNoJid += 1;
       continue;
@@ -295,7 +301,7 @@ async function upsertMessages(
       error: `upsert: ${firstError} (${fetched}/${messages.length} ok)`,
     }).eq("id", job.id);
   }
-  if (skippedLid > 0 || skippedNoJid > 0) {
+  if (skippedLid > 0 || skippedNoJid > 0 || skippedNonIndividual > 0) {
     await logRuntime({
       module: "whatsapp",
       action: "history_sync_skipped_messages",
@@ -306,6 +312,7 @@ async function upsertMessages(
         instance_id: job.instance_id,
         skipped_unresolved_lid: skippedLid,
         skipped_without_jid: skippedNoJid,
+        skipped_non_individual: skippedNonIndividual,
         upserted: fetched,
         batch_size: messages.length,
       },
@@ -848,7 +855,7 @@ async function processJob(
     }
     const individualJids = chatList
       .map(c => c.id)
-      .filter(id => id && id.includes("@") && !isGroupJid(id));
+      .filter(id => id && id.includes("@") && !nonIndividualKind(id));
     // A Uazapi V2 lista conversas por LID quando o número do outro lado não é
     // exposto à conta. Puxar o histórico por essa chave grava um contato que é
     // um código, não um telefone — ver `_shared/whatsapp-jid.ts`.

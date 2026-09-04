@@ -36,7 +36,7 @@
 WITH lid AS (
   SELECT DISTINCT organization_id, instance_id, normalized_phone
   FROM public.whatsapp_messages
-  WHERE remote_jid LIKE '%@lid'
+  WHERE (remote_jid LIKE '%@lid' OR remote_jid LIKE '%@newsletter' OR remote_jid LIKE '%@broadcast')
     AND organization_id = '<ORG_ID>'::uuid
 )
 SELECT s.organization_id, count(*) AS linhas_a_remover
@@ -80,7 +80,7 @@ WHERE s.organization_id = '<ORG_ID>'::uuid
      WHERE m.organization_id  = s.organization_id
        AND m.instance_id      = s.instance_id
        AND m.normalized_phone = s.normalized_phone
-       AND m.remote_jid LIKE '%@lid'
+       AND m.(remote_jid LIKE '%@lid' OR remote_jid LIKE '%@newsletter' OR remote_jid LIKE '%@broadcast')
   )
 ON CONFLICT DO NOTHING;
 
@@ -96,7 +96,7 @@ WHERE s.organization_id = '<ORG_ID>'::uuid
      WHERE m.organization_id  = s.organization_id
        AND m.instance_id      = s.instance_id
        AND m.normalized_phone = s.normalized_phone
-       AND m.remote_jid LIKE '%@lid'
+       AND m.(remote_jid LIKE '%@lid' OR remote_jid LIKE '%@newsletter' OR remote_jid LIKE '%@broadcast')
   );
 
 -- ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ SELECT
   (SELECT count(*) FROM public.whatsapp_conversation_summary
     WHERE organization_id = '<ORG_ID>'::uuid)                          AS inbox_agora,
   (SELECT count(*) FROM public.whatsapp_messages
-    WHERE organization_id = '<ORG_ID>'::uuid AND remote_jid LIKE '%@lid') AS mensagens_preservadas;
+    WHERE organization_id = '<ORG_ID>'::uuid AND (remote_jid LIKE '%@lid' OR remote_jid LIKE '%@newsletter' OR remote_jid LIKE '%@broadcast')) AS mensagens_preservadas;
 
 -- ---------------------------------------------------------------------------
 -- 5) DESFAZER (se for preciso): devolve as linhas do backup.
