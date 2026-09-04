@@ -3,6 +3,7 @@ import { Building, Mail, Phone } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { LeadStanding } from "../../lib/lead-relacao-situacao";
+import type { CicloDeRecompra } from "../../lib/reorder-cycle";
 import { erpLabel } from "@/shared/format/erp-code";
 
 /**
@@ -46,6 +47,7 @@ export interface LeadMobileCardLead {
 export function LeadMobileCard({
   lead,
   standing,
+  ciclo,
   selecionado = false,
   onOpen,
   originLabel,
@@ -54,6 +56,14 @@ export function LeadMobileCard({
 }: {
   lead: LeadMobileCardLead;
   standing?: LeadStanding;
+  /**
+   * Ciclo de recompra. O celular NÃO ganha o anel — 52px de gráfico num card de
+   * 3 linhas custa mais do que informa. Ganha o que decide a ação: o cartão
+   * esverdeia na época de recomprar e um chip diz de quanto é o ciclo. Os
+   * estados "Sem compra" e "Sem informações" ficam de fora daqui de propósito:
+   * seriam ruído em quase todo card, e a ficha do lead conta a história inteira.
+   */
+  ciclo?: CicloDeRecompra;
   selecionado?: boolean;
   onOpen: () => void;
   originLabel: string;
@@ -65,6 +75,7 @@ export function LeadMobileCard({
       onClick={onOpen}
       className={cn(
         "rounded-xl border border-border bg-card p-3.5 transition-colors active:bg-muted/50",
+        ciclo?.emEpoca && "border-success/45 bg-success/[0.06]",
         selecionado && "border-primary/40 bg-primary/5",
       )}
     >
@@ -123,6 +134,25 @@ export function LeadMobileCard({
         {lead.sale_responsible?.name && (
           <Badge variant="outline" className="border-emerald-500/30 text-xs text-emerald-400">
             {lead.sale_responsible.name}
+          </Badge>
+        )}
+        {ciclo?.estado === "com-ciclo" && (
+          <Badge
+            variant="outline"
+            className={cn(
+              "gap-1.5 text-xs",
+              ciclo.emEpoca
+                ? "border-success/45 text-success"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            <span
+              className={cn(
+                "size-1.5 shrink-0 rounded-full",
+                ciclo.emEpoca ? "bg-success" : "bg-muted-foreground/50",
+              )}
+            />
+            Recompra {ciclo.rotulo}
           </Badge>
         )}
       </div>

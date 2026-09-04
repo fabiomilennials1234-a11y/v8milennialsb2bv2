@@ -37,6 +37,7 @@ import { deriveLeadStandings } from "../lib/lead-relacao-situacao";
 import { useLeadsStats } from "../hooks/useLeadsStats";
 import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
+import { useLeadsReorderCycle } from "../hooks/useLeadsReorderCycle";
 import {
   Select,
   SelectContent,
@@ -353,6 +354,13 @@ function LeadsInner() {
   const { data: salesMetrics } = useLeadsSalesMetrics(allLeadIds);
   // Coluna "Negócios" — card de funil é o negócio (D1). Ver `useLeadsDeals`.
   const { data: leadDeals } = useLeadsDeals(allLeadIds);
+  /**
+   * Coluna "Recompra" — média de dias entre compras, unindo as DATAS de
+   * `sale_events` e dos pedidos aprovados da carteira. Consulta própria porque
+   * `salesMetrics.cycleDays` e `carteiraMetrics.reorderCycleDays` são médias já
+   * agregadas, cada uma sobre metade do histórico. Ver `useLeadsReorderCycle`.
+   */
+  const { data: reorderCycles } = useLeadsReorderCycle(allLeadIds);
 
   /**
    * Cluster "Dados" — a regra de precedência mora em `lib/data-metrics.ts`.
@@ -825,6 +833,7 @@ function LeadsInner() {
                   key={lead.id}
                   lead={lead as LeadMobileCardLead}
                   standing={standings[lead.id]}
+                  ciclo={reorderCycles?.[lead.id]}
                   selecionado={bulk.isSelected(lead.id)}
                   onOpen={() => openLead(lead.id)}
                   originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "outro"}
@@ -866,6 +875,7 @@ function LeadsInner() {
                     metrics={dataMetrics[lead.id]}
                     deals={leadDeals?.[lead.id]}
                     standing={standings[lead.id]}
+                    ciclo={reorderCycles?.[lead.id]}
                     selected={bulk.isSelected(lead.id)}
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
