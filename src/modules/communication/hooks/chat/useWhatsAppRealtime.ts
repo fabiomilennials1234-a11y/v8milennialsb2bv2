@@ -50,8 +50,24 @@ export function useWhatsAppMessagesRealtime(
       const currentInstanceId = instanceIdRef.current;
 
       // ── Patch messages do chat ativo ───────────────────────────────────────
+      //
+      // A CAIXA entra na condição, e não só o telefone. Com duas caixas
+      // marcadas, o mesmo número pode ter thread aberta numa e receber mensagem
+      // na outra — comparar só o telefone anexaria a mensagem da caixa B na
+      // thread da caixa A, e o vendedor leria como resposta dele algo que o
+      // cliente mandou para outro número nosso.
+      //
+      // Mensagem sem `instance_id` (a coluna é nulável) continua caindo na
+      // thread aberta, que é a suposição de sempre: recusá-la faria a tela parar
+      // de receber mensagem em vez de recebê-la no lugar errado, e parar é pior.
+      const mesmaCaixaDaThread =
+        !message.instance_id ||
+        !currentInstanceId ||
+        message.instance_id === currentInstanceId;
+
       if (
         currentPhone &&
+        mesmaCaixaDaThread &&
         normalizePhone(messagePhone) === normalizePhone(currentPhone)
       ) {
         const msgQueryKey = chatQueryKeys.messages(

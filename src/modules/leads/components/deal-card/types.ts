@@ -19,6 +19,16 @@ import type { LeadCardDeal } from "../lead-card/types";
 
 export type EstadoDoNegocio = "aberto" | "ganho" | "perdido";
 
+/**
+ * `meetings.status` — o desfecho da reunião, como a Agenda o grava.
+ *
+ * Mora aqui, e não importado de `@/modules/engagement`, porque o card do
+ * Negócio é um módulo de `leads`: puxar o tipo do outro bounded context pelo
+ * barril arrastaria a Agenda inteira para o grafo de quem só quer desenhar uma
+ * linha. São quatro strings, e o CHECK que as define está no banco.
+ */
+export type StatusDaReuniao = "scheduled" | "completed" | "no_show" | "cancelled";
+
 export interface DealCardStage {
   /**
    * Chave de ESCRITA — o que `moverEtapa` manda de volta ao banco.
@@ -262,7 +272,45 @@ export interface DealCardData {
   /** `deal_items` — tabela que existe desde a Wave 1 e nenhuma tela lia. */
   itens: DealCardItem[];
 
-  reuniao: { data: string; confirmada: boolean; link: string | null } | null;
+  /**
+   * A reunião deste negócio — DUAS fontes, e cada campo sabe de qual veio.
+   *
+   * `data`, `link` e `confirmada` continuam saindo da PROJEÇÃO
+   * (`pipeline_entries.metadata`), não de `meetings`. Não é preguiça de migrar:
+   * a projeção é o único lugar em que as duas origens de reunião se encontram
+   * — o espelho da Agenda (S6) e os escritores do funil, que continuam vivos —
+   * e ler `meetings` como fonte primária apagaria da tela a reunião de 93
+   * negócios de prod que hoje só existem no metadata. Ler a projeção mantém
+   * esse número em zero, hoje e sempre.
+   *
+   * De `meetings` vem só o que a projeção não sabe carregar: o DESFECHO e a
+   * IDENTIDADE da reunião. Os dois vêm `null` quando não há linha em
+   * `meetings` — reunião legado, ou nascida no funil — e nesse caso o bloco
+   * renderiza exatamente como renderizava antes do S6.
+   */
+  reuniao: {
+    data: string;
+    confirmada: boolean;
+    link: string | null;
+    /**
+     * `meetings.status`. `null` = a reunião não tem linha em `meetings`, ou
+     * seja: ninguém pode ter marcado desfecho nela pela Agenda.
+     *
+     * Responde "aconteceu?", que é pergunta DIFERENTE de `confirmada` ("o lead
+     * confirmou?"). Por isso os dois convivem em vez de um substituir o outro:
+     * `meetings` não tem `is_confirmed` e trocar a fonte do selo mudaria o
+     * significado dele sem ninguém ter decidido isso.
+     */
+    status: StatusDaReuniao | null;
+    /**
+     * `meetings.id` — a identidade da reunião na Agenda. É o que diz ao card
+     * que esta reunião TEM dono na Agenda (e não é só uma data digitada no
+     * funil), e é a chave de um "abrir na Agenda" no dia em que a rota
+     * `/agenda` aceitar um alvo: hoje ela não lê parâmetro nenhum, então o
+     * card não promete um link que a tela do outro lado não cumpriria.
+     */
+    meetingId: string | null;
+  } | null;
 
   /** Preenchido só quando `estado` não é `aberto`. */
   desfecho: {

@@ -100,7 +100,16 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
   valor: 12400,
   moeda: "BRL",
   produto: "Linha Performance 5kg",
-  reuniao: { data: "2026-06-18T14:00:00.000Z", confirmada: true, link: null },
+  // Reunião marcada pela AGENDA (tem `meetingId`) e ainda sem desfecho, já
+  // passada: é o estado que o card precisa saber acender, e é o mais comum na
+  // base — reunião acontece e ninguém volta para marcar o que foi.
+  reuniao: {
+    data: "2026-06-18T14:00:00.000Z",
+    confirmada: true,
+    link: null,
+    status: "scheduled",
+    meetingId: "mt-1",
+  },
   desfecho: null,
   movimentacoes: [
     {
@@ -344,7 +353,14 @@ export const NEGOCIO_GANHO: DealCardData = {
   valor: 19500,
   moeda: "BRL",
   produto: "Linha Performance 5kg",
-  reuniao: { data: "2026-05-06T15:30:00.000Z", confirmada: true, link: null },
+  // O outro extremo: reunião da Agenda com desfecho marcado.
+  reuniao: {
+    data: "2026-05-06T15:30:00.000Z",
+    confirmada: true,
+    link: null,
+    status: "completed",
+    meetingId: "mt-2",
+  },
   desfecho: { quando: "2026-05-19T16:48:00.000Z", valorVenda: 19500, motivo: null },
   movimentacoes: [
     {

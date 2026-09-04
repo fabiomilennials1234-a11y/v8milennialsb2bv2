@@ -303,9 +303,12 @@ describe("LeadPorFunilPicker", () => {
 
     fireEvent.click(screen.getByText("Ana Souza"));
 
+    // S6: o par virou TRIO. Este lead não tem entradas no dublê, então o
+    // negócio sai `null` — e a reunião é criada do mesmo jeito.
     expect(onChange).toHaveBeenCalledWith({
       pipelineId: COMERCIAL.id,
       leadId: "l1",
+      dealId: null,
     });
   });
 
@@ -328,9 +331,12 @@ describe("LeadPorFunilPicker", () => {
       target: { value: REATIVACAO.id },
     });
 
+    // S6: o negócio morre junto com o lead — sobreviver gravaria a reunião no
+    // card de um negócio do funil ANTIGO.
     expect(onChange).toHaveBeenCalledWith({
       pipelineId: REATIVACAO.id,
       leadId: null,
+      dealId: null,
     });
   });
 
@@ -341,7 +347,11 @@ describe("LeadPorFunilPicker", () => {
       target: { value: SEM_FUNIL },
     });
 
-    expect(onChange).toHaveBeenCalledWith({ pipelineId: null, leadId: null });
+    expect(onChange).toHaveBeenCalledWith({
+      pipelineId: null,
+      leadId: null,
+      dealId: null,
+    });
   });
 
   it("limpar o lead mantem o funil", () => {
@@ -353,6 +363,7 @@ describe("LeadPorFunilPicker", () => {
     expect(onChange).toHaveBeenCalledWith({
       pipelineId: COMERCIAL.id,
       leadId: null,
+      dealId: null,
     });
   });
 

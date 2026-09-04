@@ -20,7 +20,7 @@ import { AbrirConversaButton } from "@/modules/communication/components/chat/Abr
 import { AbrirConversaMenuItem } from "@/modules/communication/components/chat/AbrirConversaMenuItem";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { DraggableItem } from "@/contracts/pipe";
+import type { DraggableItem, StageRole } from "@/contracts/pipe";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { LeadCardAvatar } from "./card/LeadCardAvatar";
 import { LeadCardLabels } from "./card/LeadCardLabels";
@@ -96,19 +96,55 @@ export type LeadCardVariant =
 const VARIANT_CONFIG: Record<LeadCardVariant, {
   showContact: boolean; showValue: boolean; showDate: boolean;
   showProducts: boolean; showMeetLink: boolean; showNotes: boolean;
+  /**
+   * A linha de data aparece VAZIA (o convite azul "Sem data") quando não há
+   * compromisso. Separada de `showDate` no S6: o funil custom passou a
+   * DESENHAR a data que existe, mas ele é o único board que serve funil de
+   * qualquer assunto — carimbar "Sem data" em card de funil que nunca terá
+   * reunião pioraria a tela em vez de melhorá-la. Nos funis de sistema o
+   * convite continua sendo o comportamento (é ali que a data é esperada).
+   */
+  showDateEmpty: boolean;
+  /**
+   * Se a data vira também o BADGE de urgência ("Atrasado", "Hoje", "D-2",
+   * "12 dias") na faixa de badges do card.
+   *
+   * Separada de `showDate` no S6, e a separação é o ponto. `dateIndicator`
+   * saía de `config.showDate ? getDateIndicator(parsedDate) : null` — um
+   * ternário só para duas decisões diferentes. Ligar `showDate` na variante
+   * `custom` para que a reunião da Agenda aparecesse no card ligava, DE
+   * CARONA, o badge vermelho "Atrasado" em todo card de todo funil custom de
+   * toda organização — inclusive as que não pediram nada e cuja data no
+   * `metadata` nunca foi um compromisso.
+   *
+   * A regra que fica: a LINHA de data aparece porque EXISTE data; o BADGE é
+   * uma afirmação a mais — "isto está atrasado, corra" — e quem a faz é a
+   * variante, explicitamente. As cinco variantes que já tinham `showDate`
+   * ligada continuam com o badge exatamente como estava; `custom` recebe a
+   * linha sem o badge.
+   */
+  showDateBadge: boolean;
 }> = {
   // `showDate`/`showProducts` ligados em 21/08: a anatomia do DataCrazy dá
   // LINHA PRÓPRIA a produto e data, e com os dois desligados o card do funil
   // principal — que é onde o cliente olha — perdia metade do desenho novo.
   // Campo vazio não some: vira o link azul "Sem produto"/"Sem data", que é o
   // convite a preencher do próprio print.
-  whatsapp:        { showContact: true,  showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false },
-  confirmacao:     { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: true,  showNotes: false },
-  propostas:       { showContact: false, showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false },
-  followup:        { showContact: false, showValue: false, showDate: true,  showProducts: false, showMeetLink: false, showNotes: true  },
-  custom:          { showContact: true,  showValue: false, showDate: false, showProducts: false, showMeetLink: false, showNotes: true  },
-  upsell_client:   { showContact: true,  showValue: true,  showDate: false, showProducts: false, showMeetLink: false, showNotes: false },
-  upsell_campanha: { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: false, showNotes: false },
+  whatsapp:        { showContact: true,  showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false, showDateEmpty: true,  showDateBadge: true  },
+  confirmacao:     { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: true,  showNotes: false, showDateEmpty: true,  showDateBadge: true  },
+  propostas:       { showContact: false, showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false, showDateEmpty: true,  showDateBadge: true  },
+  followup:        { showContact: false, showValue: false, showDate: true,  showProducts: false, showMeetLink: false, showNotes: true,  showDateEmpty: true,  showDateBadge: true  },
+  // `custom` liga `showDate` no S6 (espelho da Agenda): a reunião marcada na
+  // Agenda chega ao card pelo metadata, e a data tem de aparecer porque ELA
+  // EXISTE — não porque a etapa se chama "agendado" nem porque a org tem a
+  // flag do funil mergeado. `showDateEmpty: false` é a metade obrigatória da
+  // troca: sem ela, todo card de todo funil custom ganharia "Sem data".
+  custom:          { showContact: true,  showValue: false, showDate: true,  showProducts: false, showMeetLink: false, showNotes: true,  showDateEmpty: false, showDateBadge: false },
+  // `showDateBadge: false` porque `showDate` já era `false`: a carteira nunca
+  // mostrou data nem badge, e a separação não pode ser desculpa para ligar
+  // nada. Onde a variante não tinha badge, ela continua sem.
+  upsell_client:   { showContact: true,  showValue: true,  showDate: false, showProducts: false, showMeetLink: false, showNotes: false, showDateEmpty: true,  showDateBadge: false },
+  upsell_campanha: { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: false, showNotes: false, showDateEmpty: true,  showDateBadge: true  },
 };
 
 // ─── Types ───────────────────────────────────────────────
@@ -173,6 +209,19 @@ export interface LeadCardData extends DraggableItem {
   saleResponsible?:    { name: string | null; avatar_url?: string | null } | null;
   /** Stage atual da entry (slug). Usado p/ confirmação de reunião no funil mergeado. */
   stageKey?: string | null;
+  /**
+   * Papel semântico da etapa (ADR-0017 §1), resolvido no CLIENTE a partir das
+   * etapas que o board já carrega. É o que substitui a lista de slugs
+   * chumbados: `reuniao_marcada` de uma org e `agendado` de outra são a mesma
+   * coisa para o produto, e só `stage_role` sabe disso.
+   */
+  stageRole?: StageRole | null;
+  /**
+   * Funil a que a entry pertence. Semeia o `CreateMeetingDialog` aberto pelo
+   * card — sem ele o vendedor reescolhe no picker o funil de onde acabou de
+   * sair, e é o par (funil, lead) que resolve o negócio da reunião (S6).
+   */
+  pipelineId?: string | null;
   /** Data da reunião (ISO) — funil mergeado Oportunidades. */
   meetingDate?: string | null;
   /** Status de confirmação da reunião — funil mergeado (ADR-0004). */
@@ -187,6 +236,16 @@ export interface LeadCardProps {
   showContact?: boolean;
   showValue?: boolean;
   showDate?: boolean;
+  /** Override do convite "Sem data" (ver `VARIANT_CONFIG.showDateEmpty`). */
+  showDateEmpty?: boolean;
+  /**
+   * Override do badge de urgência (ver `VARIANT_CONFIG.showDateBadge`).
+   *
+   * Existe pelo mesmo motivo do irmão acima: uma superfície que QUEIRA o
+   * badge num funil custom pede aqui, explicitamente, em vez de a decisão
+   * chegar de carona junto com a linha de data.
+   */
+  showDateBadge?: boolean;
   showProducts?: boolean;
   showMeetLink?: boolean;
   showNotes?: boolean;
@@ -360,7 +419,14 @@ export const LeadCard = memo(function LeadCard({
   const urgency = lead.urgency ? URGENCY_COLORS[lead.urgency] : null;
   const hasPhone = !!formatPhoneForWhatsApp(lead.phone ?? undefined);
   const parsedDate = lead.date ? (lead.date instanceof Date ? lead.date : new Date(lead.date)) : null;
-  const dateIndicator = config.showDate ? getDateIndicator(parsedDate) : null;
+  /**
+   * O badge de urgência. Governado por `showDateBadge`, e NÃO por `showDate`:
+   * são duas afirmações diferentes sobre a mesma data — "existe compromisso"
+   * e "este compromisso está atrasado". Ler as duas do mesmo booleano foi o
+   * que fez a variante `custom`, ao ganhar a linha de data do S6, ganhar
+   * junto um "Atrasado" vermelho em todo card de todo funil custom.
+   */
+  const dateIndicator = config.showDateBadge ? getDateIndicator(parsedDate) : null;
 
   const hasContactData =
     (config.showContact && (lead.phone || lead.email)) ||
@@ -566,6 +632,10 @@ export const LeadCard = memo(function LeadCard({
           onOpenChange={setReuniaoOpen}
           initialLeadId={lead.leadId}
           initialLeadName={lead.name}
+          /* Semeia o funil de ONDE o card está (S6): é o par (funil, lead) que
+             resolve o negócio da reunião, e o vendedor não deve reescolher no
+             picker o funil de que ele acabou de sair. */
+          initialPipelineId={lead.pipelineId ?? null}
         />
       )}
       {pipeOps && addFunilOpen && (
@@ -958,6 +1028,10 @@ export const LeadCard = memo(function LeadCard({
           onOpenChange={setReuniaoOpen}
           initialLeadId={lead.leadId}
           initialLeadName={lead.name}
+          /* Semeia o funil de ONDE o card está (S6): é o par (funil, lead) que
+             resolve o negócio da reunião, e o vendedor não deve reescolher no
+             picker o funil de que ele acabou de sair. */
+          initialPipelineId={lead.pipelineId ?? null}
         />
       )}
 

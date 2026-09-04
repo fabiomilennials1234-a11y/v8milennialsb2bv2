@@ -78,6 +78,19 @@ interface CreateMeetingDialogProps {
    * já teve aqui.
    */
   initialLeadName?: string | null;
+  /**
+   * Funil de onde o diálogo foi aberto — S6.
+   *
+   * Quem abre pelo CARD DO FUNIL já está dentro de um funil; sem receber isso o
+   * picker abriria "Nenhum funil" e o negócio nunca seria resolvido (o negócio
+   * sai da ENTRADA, e a entrada só existe dentro de um funil). Com o par
+   * (funil, lead) semeado, a resolução acontece sem clique nenhum.
+   *
+   * NÃO existe `initialDealId` de propósito: quem resolve o negócio é SEMPRE o
+   * picker, a partir do par. Um só resolvedor no app é o que garante que o caso
+   * ambíguo tenha sempre uma pessoa na frente dele.
+   */
+  initialPipelineId?: string | null;
 }
 
 interface FormState {
@@ -91,6 +104,8 @@ interface FormState {
   /** Funil de onde o lead sai. `""` = nenhum. */
   pipeline_id: string;
   lead_id: string;
+  /** Negócio resolvido pelo picker a partir do par (funil, lead). `""` = nenhum. */
+  deal_id: string;
   color: string;
   meet_link: string;
   participant_ids: string[];
@@ -104,6 +119,7 @@ const FORM_VAZIO: Omit<FormState, "start_at" | "end_at"> = {
   event_type: "meeting",
   pipeline_id: "",
   lead_id: "",
+  deal_id: "",
   color: "",
   meet_link: "",
   participant_ids: [],
@@ -129,6 +145,7 @@ export function CreateMeetingDialog({
   initialStart,
   initialLeadId,
   initialLeadName,
+  initialPipelineId,
 }: CreateMeetingDialogProps) {
   const createMeeting = useCreateMeeting();
   const { data: teamMembers = [] } = useTeamMembers();
@@ -138,6 +155,7 @@ export function CreateMeetingDialog({
   const [form, setForm] = useState<FormState>({
     ...FORM_VAZIO,
     lead_id: initialLeadId ?? "",
+    pipeline_id: initialPipelineId ?? "",
     title: tituloSemeado(initialLeadName),
     start_at: format(defaultStart, "yyyy-MM-dd'T'HH:mm"),
     end_at: format(addHours(defaultStart, 1), "yyyy-MM-dd'T'HH:mm"),
@@ -155,12 +173,13 @@ export function CreateMeetingDialog({
       setForm({
         ...FORM_VAZIO,
         lead_id: initialLeadId ?? "",
+        pipeline_id: initialPipelineId ?? "",
         title: tituloSemeado(initialLeadName),
         start_at: format(start, "yyyy-MM-dd'T'HH:mm"),
         end_at: format(addHours(start, 1), "yyyy-MM-dd'T'HH:mm"),
       });
     }
-  }, [open, initialStart, initialLeadId, initialLeadName]);
+  }, [open, initialStart, initialLeadId, initialLeadName, initialPipelineId]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -206,6 +225,11 @@ export function CreateMeetingDialog({
       // Sem lead não há funil a guardar: gravar o funil sozinho deixaria a
       // reunião afirmando uma origem que não aponta para ninguém.
       pipeline_id: form.lead_id ? form.pipeline_id || null : null,
+      // Mesma regra, um degrau acima: o negócio é a ENTRADA do lead NAQUELE
+      // funil. Sem os dois não há o que ele signifique, e gravá-lo assim mesmo
+      // penduraria a reunião num card que ninguém escolheu.
+      deal_id:
+        form.lead_id && form.pipeline_id ? form.deal_id || null : null,
       color: form.color || null,
       meet_link: form.meet_link || null,
       participant_ids:
@@ -360,12 +384,14 @@ export function CreateMeetingDialog({
             value={{
               pipelineId: form.pipeline_id || null,
               leadId: form.lead_id || null,
+              dealId: form.deal_id || null,
             }}
-            onChange={({ pipelineId, leadId }) =>
+            onChange={({ pipelineId, leadId, dealId }) =>
               setForm((prev) => ({
                 ...prev,
                 pipeline_id: pipelineId ?? "",
                 lead_id: leadId ?? "",
+                deal_id: dealId ?? "",
               }))
             }
           />

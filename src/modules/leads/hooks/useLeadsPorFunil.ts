@@ -55,6 +55,49 @@ import { applyLeadListFilters } from "../lib/lead-list-filters";
  * org por parâmetro — ela vem do contexto de auth.
  */
 
+/**
+ * Uma posição do lead DENTRO do funil consultado.
+ *
+ * S6 — por que o embed deixou de ser só `pipeline_id`: a reunião passa a
+ * gravar `meetings.deal_id`, e `uq_pipeline_entries_deal_id` (UNIQUE parcial
+ * sobre `deal_id`) torna negócio ↔ entrada estritamente 1:1. Ou seja, escolher
+ * o NEGÓCIO é o mesmo que escolher a ENTRADA — e a entrada é exatamente o que o
+ * par (funil, lead) já resolve aqui. Trazer `deal_id` no embed que o `!inner`
+ * já buscava dá o negócio DE GRAÇA: nenhuma query nova, nenhum clique a mais.
+ *
+ * `stage_name`/`stage_key` e `entered_at` só existem para ROTULAR o caso
+ * ambíguo — medido em prod 2026-09-03: 30 pares (funil, lead) de 48.122 têm
+ * mais de uma entrada no mesmo funil. Nesses 30 ninguém pode adivinhar por
+ * conta própria: a pessoa escolhe, e para escolher precisa ver etapa e data.
+ */
+export interface EntradaDoFunil {
+  id: string;
+  /** `null` em 19,2% das entradas de prod — entrada sem negócio é normal. */
+  deal_id: string | null;
+  /**
+   * Quando a entrada saiu do board. `null` = ainda viva.
+   *
+   * Está aqui porque é o que define "o negócio DESTE lead" para quem RESOLVE
+   * um vínculo sozinho — ver `escolherLead` em `LeadPorFunilPicker`. É coluna
+   * da própria entrada, então vem no `!inner` que já era buscado: nenhuma
+   * query nova, nenhum join a mais.
+   *
+   * Medido em prod 2026-09-04: de 38.918 entradas com negócio, 36.871 estão
+   * abertas — 2.047 fechadas que o seletor precisava aprender a ignorar.
+   */
+  closed_at: string | null;
+  /**
+   * Nome que a organização vê. Vem do embed `pipeline_stages(name)` da própria
+   * entrada, e não de uma tabela de etapas resolvida à parte: `stage_key` é
+   * slug (`reuniao_marcada`) e quem renomeou a etapa não reconheceria o que
+   * está escolhendo. `null` quando a etapa foi apagada — 41 das 48.174 entradas
+   * de prod estão sem `stage_id` (2026-09-03).
+   */
+  stage_name: string | null;
+  stage_key: string | null;
+  entered_at: string | null;
+}
+
 /** Linha enxuta — o seletor só precisa identificar a pessoa. */
 export interface LeadDoFunil {
   id: string;
@@ -62,6 +105,12 @@ export interface LeadDoFunil {
   company: string | null;
   phone: string | null;
   email: string | null;
+  /**
+   * As entradas DESTE lead NESTE funil. Vem do mesmo `!inner` já filtrado por
+   * `pipeline_entries.pipeline_id`, então o array nunca traz posição de outro
+   * funil — o filtro no recurso embutido recorta o array, não só as linhas-pai.
+   */
+  entradas: EntradaDoFunil[];
 }
 
 /**
@@ -84,9 +133,18 @@ export interface LeadsPorFunilResult {
   temMais: boolean;
 }
 
-interface LeadRow extends LeadDoFunil {
-  /** Só existe para o `!inner` recortar; não é lido. */
-  pipeline_entries?: unknown;
+/** Como o PostgREST devolve a linha: o embed é um array de entradas. */
+interface LeadRow extends Omit<LeadDoFunil, "entradas"> {
+  pipeline_entries?: Array<{
+    id: string;
+    pipeline_id: string;
+    deal_id: string | null;
+    closed_at: string | null;
+    stage_key: string | null;
+    entered_at: string | null;
+    /** Embed 1:1 por `pipeline_entries_stage_id_fkey`; `null` sem `stage_id`. */
+    pipeline_stages?: { name: string | null } | null;
+  }> | null;
 }
 
 export function useLeadsPorFunil({
@@ -112,7 +170,9 @@ export function useLeadsPorFunil({
       // mesmo tipo de builder, e o parser não precisa recursar.
       const base = supabase
         .from("leads")
-        .select("id, name, company, phone, email, pipeline_entries!inner(pipeline_id)")
+        .select(
+          "id, name, company, phone, email, pipeline_entries!inner(id, pipeline_id, deal_id, closed_at, stage_key, entered_at, pipeline_stages(name))",
+        )
         .eq("organization_id", organizationId)
         .eq("pipeline_entries.pipeline_id", pipelineId)
         .is("deleted_at", null)
@@ -141,6 +201,18 @@ export function useLeadsPorFunil({
           company: l.company,
           phone: l.phone,
           email: l.email,
+          // Mais antiga primeiro: quando a pessoa precisa desempatar, a ordem
+          // de entrada é a única que ela reconhece ("a que abri em julho").
+          entradas: (l.pipeline_entries ?? [])
+            .map((e) => ({
+              id: e.id,
+              deal_id: e.deal_id ?? null,
+              closed_at: e.closed_at ?? null,
+              stage_name: e.pipeline_stages?.name ?? null,
+              stage_key: e.stage_key ?? null,
+              entered_at: e.entered_at ?? null,
+            }))
+            .sort((a, b) => (a.entered_at ?? "").localeCompare(b.entered_at ?? "")),
         })),
         temMais: linhas.length > LEADS_POR_FUNIL_PAGE_SIZE,
       };

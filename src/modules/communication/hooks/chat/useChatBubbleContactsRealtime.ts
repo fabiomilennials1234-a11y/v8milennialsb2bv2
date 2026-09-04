@@ -10,7 +10,7 @@
  *
  * Behavior:
  *   - INSERT/UPDATE whose instance_id is in instanceIds ->
- *     patches chatQueryKeys.contacts(orgId, instance_id):
+ *     patches chatQueryKeys.bubbleContacts(orgId, instance_id):
  *       * Updates last_message + last_message_time + last_message_direction
  *       * Increments unread_count when direction='incoming' and not active conv
  *       * If phone not in cache, invalidates queryKey for refetch
@@ -69,8 +69,12 @@ export function useChatBubbleContactsRealtime(
       const isCurrentConversation =
         !!currentActive && normalizePhone(currentActive) === normPhone;
 
-      // Prefixo: patcha todas as variantes filtradas da instância (issue #1277).
-      const contactsQueryKey = chatQueryKeys.contactsPrefix(organizationId, msgInstanceId);
+      // A chave da BOLHA, que desde a W4 tem raiz própria. Antes ela era a mesma
+      // da lista do `/chat`, e o patcher escrevia nas duas — o que só não
+      // quebrava porque as duas guardavam `ChatContact`. Com origens de dado
+      // diferentes, a colisão vira lista misturada e o sintoma aparece longe da
+      // causa.
+      const contactsQueryKey = chatQueryKeys.bubbleContacts(organizationId, msgInstanceId);
 
       queryClient.setQueriesData<ChatContact[]>({ queryKey: contactsQueryKey }, (prev) => {
         if (!prev) return prev;
