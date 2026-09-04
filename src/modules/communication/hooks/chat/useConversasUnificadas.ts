@@ -19,9 +19,15 @@
  * `whatsapp_instances`) e ainda assim recebe em `channel_messages`. Decidir pelo
  * `kind` foi o que deixou mensagem invisível no chat em 18/08.
  *
- * Instagram fica FORA desta fatia: `get_social_conversation_list` ainda não
- * aplica o recorte por responsável (W5), e puxá-lo para a lista unificada
- * ampliaria a superfície do furo. Canal de Instagram continua abrindo sozinho.
+ * Instagram entrou na W5, quando `get_social_conversation_list` passou a
+ * aplicar o recorte por responsável (migration `20270929000000`). Até ali ele
+ * ficava fora de propósito: puxá-lo para a lista unificada teria ampliado a
+ * superfície de um furo conhecido.
+ *
+ * ⚠️ A RPC social recebe UM canal, não um conjunto — não há `_multi` dela. São
+ *    N chamadas, uma por canal marcado, e isso é barato porque é raro: medido
+ *    em produção, 2 organizations têm Instagram e cada uma tem 1 canal. Se um
+ *    dia alguém abrir dez, o custo aparece aqui antes de aparecer no usuário.
  *
  * ─── A CAIXA DE CADA LINHA VEM DA RESPOSTA ──────────────────────────────────
  *
@@ -50,7 +56,7 @@
  * a queda é byte a byte o comportamento de hoje. Qualquer outro erro sobe.
  */
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import {
@@ -68,7 +74,7 @@ import { chatQueryKeys } from "./shared/queryKeys";
 import { enriquecerContatos } from "./shared/enriquecerContatos";
 import { boxUsesChannelMessages } from "./inbox-box-source";
 import { toSocialContact, type SocialConversationRow } from "./social-conversation-row";
-import type { ChatContact, InboxBox } from "./types";
+import type { ChatContact, InboxBox, SocialContact } from "./types";
 
 /**
  * A porta para as RPCs que `types.ts` ainda não conhece.
@@ -108,6 +114,9 @@ function chamarRpcNova(
 
 /** Teto da lista do canal oficial. O mesmo da caixa isolada — 22 conversas em prod. */
 const LIMITE_OFICIAL = 200;
+
+/** Teto por canal social. O mesmo que `useSocialContacts` usava sozinho. */
+const LIMITE_SOCIAL = 200;
 
 /**
  * O PostgREST não achou a função. É o código que a ordem de deploy produz —
@@ -192,6 +201,11 @@ export function useConversasUnificadas(
       caixas
         .filter((c) => c.kind === "whatsapp" && boxUsesChannelMessages(c))
         .sort((a, b) => a.id.localeCompare(b.id)),
+    [caixas],
+  );
+
+  const canaisSociais = useMemo(
+    () => caixas.filter((c) => c.kind === "instagram").sort((a, b) => a.id.localeCompare(b.id)),
     [caixas],
   );
 
@@ -341,9 +355,49 @@ export function useConversasUnificadas(
     staleTime: 30_000,
   });
 
+  /**
+   * Os canais sociais, um por chamada.
+   *
+   * `useQueries` e não um `useQuery` com laço dentro: assim cada canal tem a
+   * própria entrada de cache, sob a MESMA raiz que `useSocialRealtime` invalida
+   * — o tempo real do Instagram continua vindo de graça, como já vinha quando a
+   * caixa abria sozinha.
+   */
+  const queriesSociais = useQueries({
+    queries: canaisSociais.map((canal) => ({
+      queryKey: chatQueryKeys.socialContacts(organizationId, canal.id),
+      queryFn: async (): Promise<SocialContact[]> => {
+        if (!organizationId) return [];
+        const { data, error } = await chamarRpcNova("get_social_conversation_list", {
+          p_org: organizationId,
+          p_channel: canal.id,
+          p_limit: LIMITE_SOCIAL,
+        });
+        if (error) throw error;
+        return ((data ?? []) as SocialConversationRow[]).map((row) =>
+          toSocialContact(row, "instagram", canal.id),
+        );
+      },
+      enabled: !!organizationId,
+      staleTime: 30_000,
+    })),
+  });
+
+  /**
+   * A assinatura do que as fontes sociais já responderam.
+   *
+   * `queriesSociais` é recriado a cada render, então ele não serve de
+   * dependência; o que muda de verdade é o instante da última resposta de cada
+   * canal. Extraído para variável porque a regra de hooks não consegue conferir
+   * expressão montada dentro do array.
+   */
+  const assinaturaSocial = queriesSociais.map((q) => q.dataUpdatedAt).join("|");
+
   const { linhas, truncada } = useMemo(() => {
     const porId = new Map<string, CaixaDaLinha>();
-    for (const caixa of [...chips, ...oficiais]) porId.set(caixa.id, caixaDaLinha(caixa));
+    for (const caixa of [...chips, ...oficiais, ...canaisSociais]) {
+      porId.set(caixa.id, caixaDaLinha(caixa));
+    }
 
     // Linha de caixa que não está no conjunto pedido é descartada: a RPC recorta
     // por acesso, então isso não deveria acontecer — e se acontecer, a lista
@@ -366,10 +420,26 @@ export function useConversasUnificadas(
         entradas: casar(queryOficiais.data?.contatos ?? []),
         cheia: queryOficiais.data?.cheia ?? false,
       },
+      // Cada canal social é uma FONTE própria: o piso de confiança do motor é
+      // por fonte, e juntá-las numa só faria o corte de um canal cheio esconder
+      // conversa de outro que nem estava perto do limite.
+      ...queriesSociais.map((q) => ({
+        entradas: casar(q.data ?? []),
+        cheia: (q.data?.length ?? 0) >= LIMITE_SOCIAL,
+      })),
     ];
 
     return unificarCaixas(fontes, { limite: limiteChip });
-  }, [chips, oficiais, queryChips.data, queryOficiais.data, limiteChip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    chips,
+    oficiais,
+    canaisSociais,
+    queryChips.data,
+    queryOficiais.data,
+    assinaturaSocial,
+    limiteChip,
+  ]);
 
   return {
     linhas,
@@ -380,8 +450,13 @@ export function useConversasUnificadas(
     // lista em esqueleto eterno.
     isLoading:
       (idsChip.length > 0 && queryChips.isLoading) ||
-      (idsOficiais.length > 0 && queryOficiais.isLoading),
-    isFetching: queryChips.isFetching || queryOficiais.isFetching,
-    isError: queryChips.isError || queryOficiais.isError,
+      (idsOficiais.length > 0 && queryOficiais.isLoading) ||
+      queriesSociais.some((q) => q.isLoading),
+    isFetching:
+      queryChips.isFetching ||
+      queryOficiais.isFetching ||
+      queriesSociais.some((q) => q.isFetching),
+    isError:
+      queryChips.isError || queryOficiais.isError || queriesSociais.some((q) => q.isError),
   };
 }

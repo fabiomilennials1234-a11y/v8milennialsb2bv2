@@ -175,39 +175,38 @@ describe("useCaixasSelecionadas — a seleção nunca fica vazia", () => {
   });
 });
 
-describe("useCaixasSelecionadas — Instagram abre sozinho", () => {
-  it("marcar o Instagram desmarca o resto", () => {
+describe("useCaixasSelecionadas — o Instagram é uma caixa como as outras (W5)", () => {
+  it("Instagram entra no conjunto junto com os números", () => {
+    // Ele abria sozinho enquanto a lista social não respeitava o responsável.
+    // A migration 20270929000000 fechou o furo, e a exclusividade saiu.
     const { result } = renderHook(() =>
       useCaixasSelecionadas({ caixas: [comercial, tecnica, insta], userId: "u1" }),
     );
-    act(() => result.current.alternar("cx-tecnica"));
 
     act(() => result.current.alternar("cx-insta"));
 
-    expect(result.current.marcadas).toEqual(["cx-insta"]);
-    expect(result.current.exclusiva).toBe(true);
+    expect(result.current.marcadas).toEqual(["cx-comercial", "cx-insta"]);
   });
 
-  it("marcar um número com o Instagram aberto desmarca o Instagram", () => {
+  it("marcar um número com o Instagram marcado NÃO desmarca o Instagram", () => {
     const { result } = renderHook(() =>
-      useCaixasSelecionadas({ caixas: [comercial, insta], userId: "u1" }),
+      useCaixasSelecionadas({ caixas: [comercial, tecnica, insta], userId: "u1" }),
     );
     act(() => result.current.alternar("cx-insta"));
 
-    act(() => result.current.alternar("cx-comercial"));
+    act(() => result.current.alternar("cx-tecnica"));
 
-    expect(result.current.marcadas).toEqual(["cx-comercial"]);
-    expect(result.current.exclusiva).toBe(false);
+    expect(result.current.marcadas).toEqual(["cx-comercial", "cx-tecnica", "cx-insta"]);
   });
 
-  it("`marcar todas` não arrasta o Instagram junto", () => {
+  it("`marcar todas` inclui o Instagram", () => {
     const { result } = renderHook(() =>
       useCaixasSelecionadas({ caixas: [comercial, tecnica, insta], userId: "u1" }),
     );
 
     act(() => result.current.marcarTodas());
 
-    expect(result.current.marcadas).toEqual(["cx-comercial", "cx-tecnica"]);
+    expect(result.current.marcadas).toEqual(["cx-comercial", "cx-tecnica", "cx-insta"]);
   });
 });
 

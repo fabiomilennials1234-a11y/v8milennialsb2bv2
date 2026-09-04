@@ -57,7 +57,6 @@ import { ImagePreviewModal } from "@/modules/communication/components/chat/media
 import { SocialChatView } from "@/modules/communication/components/chat/social/SocialChatView";
 import { SocialContextPanel } from "@/modules/communication/components/chat/social/SocialContextPanel";
 import { useInboxBoxes } from "@/modules/communication/hooks/chat/useInboxBoxes";
-import { useSocialContacts } from "@/modules/communication/hooks/chat/useSocialContacts";
 import { useConversasUnificadas } from "@/modules/communication/hooks/chat/useConversasUnificadas";
 import { useCaixasSelecionadas } from "@/modules/communication/hooks/chat/useCaixasSelecionadas";
 import { useNaoLidasPorCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
@@ -608,7 +607,6 @@ export function ChatShellWithContext() {
     caixa: selectedBox,
     ehSocial: isSocialBox,
     ehOficial: isOfficialBox,
-    modoInstagram,
     instanciaDeChip: selectedInstanceId,
     canalDeInstagram: selectedChannelId,
     instanciaOficial: selectedOfficialInstanceId,
@@ -795,15 +793,10 @@ export function ChatShellWithContext() {
   // chamado SEMPRE (com `null` quando não é a vez dele): montar só o "da vez"
   // mudaria a quantidade de hooks entre renders — o erro que derrubou a primeira
   // tentativa da fatia da caixa social.
-  const unificada = useConversasUnificadas(
-    modoInstagram ? [] : caixasMarcadas,
-    serverFilter,
-  );
-
-  const {
-    data: directContacts = [],
-    isLoading: directContactsLoading,
-  } = useSocialContacts(selectedChannelId);
+  // TODAS as caixas marcadas, inclusive as de Instagram: desde a W5 a RPC
+  // social aplica o recorte por responsável, e o canal deixou de precisar abrir
+  // sozinho.
+  const unificada = useConversasUnificadas(caixasMarcadas, serverFilter);
 
   /** A lista inteira, na ORDEM do motor. É ela que a tela renderiza. */
   const contatosUnificados = useMemo(
@@ -828,7 +821,9 @@ export function ChatShellWithContext() {
     [contatosUnificados],
   );
 
-  const socialContacts = modoInstagram ? directContacts : officialContacts;
+  // Tudo que lê `channel_messages` — canal oficial e Instagram — vem da mesma
+  // lista unificada. É daqui que sai a conversa aberta de qualquer um dos dois.
+  const socialContacts = officialContacts;
 
   /**
    * Caixa de origem e fio, por chave de conversa. A lista consome por
@@ -863,7 +858,7 @@ export function ChatShellWithContext() {
     [isOfficialBox, officialMutation, directMutation],
   );
 
-  const contactsLoading = modoInstagram ? directContactsLoading : unificada.isLoading;
+  const contactsLoading = unificada.isLoading;
 
   // ── Conversa selecionada ────────────────────────────────────────────────────
   //
@@ -976,20 +971,6 @@ export function ChatShellWithContext() {
       leadDeConversaNova?.name ?? null,
     );
   }, [socialContacts, selectedKey, isOfficialBox, selectedOfficialInstanceId, leadDeConversaNova]);
-
-  /**
-   * A lista da caixa social, com a conversa NOVA no topo quando ela existe só na
-   * tela. Sem isto o chat abriria a conversa e a lista lateral não a mostraria —
-   * o vendedor veria o composer aberto e nenhuma linha selecionada, que se lê
-   * como tela quebrada.
-   */
-  const socialContactsComNova = useMemo(() => {
-    if (!selectedSocialContact) return socialContacts;
-    const jaEstaNaLista = socialContacts.some(
-      (c) => c.conversation_key === selectedSocialContact.conversation_key,
-    );
-    return jaEstaNaLista ? socialContacts : [selectedSocialContact, ...socialContacts];
-  }, [socialContacts, selectedSocialContact]);
 
   const handleSelectContact = useCallback((key: string) => {
     setSelectedKey(key);
@@ -1195,13 +1176,12 @@ export function ChatShellWithContext() {
    * composer aberto, nenhuma linha selecionada, que se lê como tela quebrada.
    */
   const contatosParaLista = useMemo(() => {
-    if (modoInstagram) return socialContactsComNova;
     if (!selectedSocialContact) return enrichedContacts;
     const jaEsta = enrichedContacts.some(
       (c) => contactKey(c) === selectedSocialContact.conversation_key,
     );
     return jaEsta ? enrichedContacts : [selectedSocialContact, ...enrichedContacts];
-  }, [modoInstagram, socialContactsComNova, selectedSocialContact, enrichedContacts]);
+  }, [selectedSocialContact, enrichedContacts]);
 
   // O engine do filtro não sabe distinguir "esse lead não está em funil nenhum"
   // de "o enriquecimento não chegou" — nos dois casos `funnels` é []. O gate faz

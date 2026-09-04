@@ -46,13 +46,6 @@ export interface RegimeDaConversaAberta {
   instanciaDeChip: string | null;
   canalDeInstagram: string | null;
   instanciaOficial: string | null;
-  /**
-   * A tela inteira está no regime de Instagram (uma caixa social marcada
-   * sozinha). É o único caso em que a lista NÃO vem do motor unificado — a RPC
-   * social ainda não aplica o recorte por responsável, e puxá-la para dentro
-   * ampliaria a superfície do furo até a W5.
-   */
-  modoInstagram: boolean;
 }
 
 export interface ArgsDoRegime {
@@ -80,15 +73,16 @@ export function regimeDaConversaAberta({
 
   const ehSocial = caixa ? boxUsesChannelMessages(caixa) : false;
   const ehOficial = ehSocial && caixa?.kind === "whatsapp";
-  const modoInstagram = marcadas.length === 1 && marcadas[0]?.kind === "instagram";
 
   return {
     caixa: caixa ?? null,
     ehSocial,
     ehOficial,
-    modoInstagram,
     instanciaDeChip: ehSocial ? null : (caixa?.id ?? null),
-    canalDeInstagram: modoInstagram ? marcadas[0].id : null,
+    // Desde a W5 o canal social sai da conversa ABERTA, e não de "a única caixa
+    // marcada": com o Instagram dentro do conjunto, a tela pode ter uma conversa
+    // de Instagram aberta ao lado de conversas de WhatsApp na mesma lista.
+    canalDeInstagram: caixa?.kind === "instagram" ? caixa.id : null,
     instanciaOficial: ehOficial ? (caixa?.id ?? null) : null,
   };
 }
