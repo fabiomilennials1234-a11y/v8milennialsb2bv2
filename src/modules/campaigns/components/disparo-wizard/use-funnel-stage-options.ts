@@ -7,7 +7,7 @@
  * (AudienceByStage, #902) and the post-send destination picker (StepPostSend).
  */
 import { useMemo } from "react";
-import { usePipelines, useStagesDoFunil, type Pipeline } from "@/modules/pipelines";
+import { useFunisDaOrg, useStagesDoFunil, type FunilDaOrg } from "@/modules/pipelines";
 import { ALL_FUNNELS_LABEL, type FunnelScope, type StageScope } from "./audience-resolve";
 
 export interface FunnelStageSelection {
@@ -60,10 +60,11 @@ export function useFunnelStageOptions(sel: FunnelStageSelection) {
   // no stage list to load (a união cross-funil não tem eixo de etapa).
   const hasFunnel = isAll ? true : sel.pipelineId !== null;
 
-  const { data: pipelines = [] } = usePipelines();
+  // Nome que a ORG usa — ver `useFunisDaOrg`.
+  const { data: pipelines = [] } = useFunisDaOrg();
   // A lista do picker: só funis ATIVOS (funil desligado não é destino nem
   // fonte de público novo). `usePipelines` já ordena por display_order.
-  const funnels = useMemo<Pipeline[]>(
+  const funnels = useMemo<FunilDaOrg[]>(
     () => pipelines.filter((p) => p.is_active !== false),
     [pipelines],
   );
@@ -82,7 +83,7 @@ export function useFunnelStageOptions(sel: FunnelStageSelection) {
 
   const funnelLabel = isAll
     ? ALL_FUNNELS_LABEL
-    : funnels.find((p) => p.id === sel.pipelineId)?.name ?? "Funil";
+    : funnels.find((p) => p.id === sel.pipelineId)?.label ?? "Funil";
 
   return { funnels, stages, stagesLoading, funnelLabel, hasFunnel };
 }

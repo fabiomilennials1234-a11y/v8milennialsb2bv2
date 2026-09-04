@@ -44,7 +44,7 @@ import {
   type TemplateTextareaHandle,
 } from "@/modules/workflows/components/TemplateTextarea";
 import type { CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
-import { usePipelines, useEtapasDoFunil, usePipelineDisplayConfig } from "@/modules/pipelines";
+import { useFunisDaOrg, useEtapasDoFunil, usePipelineDisplayConfig } from "@/modules/pipelines";
 import { destinosDeSistema } from "@/contracts/pipe";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
@@ -1303,7 +1303,8 @@ function MoveStageFields({
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
 }) {
-  const { data: pipelines, isLoading: pipelinesLoading } = usePipelines();
+  // `useFunisDaOrg`: o rótulo tem que ser o nome que a org usa, não o seed.
+  const { data: pipelines, isLoading: pipelinesLoading } = useFunisDaOrg();
 
   const legacyRef = (data.pipeType as string) || "";
   const pipelineId =
@@ -1340,7 +1341,7 @@ function MoveStageFields({
               </SelectLabel>
               {funis.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.name}
+                  {p.label}
                 </SelectItem>
               ))}
             </SelectGroup>

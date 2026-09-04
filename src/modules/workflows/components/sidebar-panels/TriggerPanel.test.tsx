@@ -15,6 +15,10 @@ import { render, screen, fireEvent } from "@testing-library/react";
 const mockPipelines = vi.fn();
 
 vi.mock("@/modules/pipelines", () => ({
+  // O painel lê por `useFunisDaOrg`, que devolve o funil com `label` — o nome
+  // que a ORG usa. `usePipelines` fica mockado porque outros módulos
+  // importados no topo ainda o consomem.
+  useFunisDaOrg: () => mockPipelines(),
   usePipelines: () => mockPipelines(),
   useCustomPipelines: () => ({ data: [] }),
   useCustomPipelineStages: () => ({ data: [] }),
@@ -55,11 +59,14 @@ const PROPOSTAS = "22222222-2222-2222-2222-222222222222";
 const BLACK_FRIDAY = "33333333-3333-3333-3333-333333333333";
 const ARQUIVADO = "44444444-4444-4444-4444-444444444444";
 
+// `name` é o SEED congelado de `create_default_pipelines()`; `label` é como a
+// org chama o funil (display_config). São diferentes de propósito nos dois de
+// sistema: é isso que prova que a tela mostra o nome da org, e não o do seed.
 const PIPELINES = [
-  { id: QUALIFICACAO, name: "Qualificação", type: "system", is_active: true },
-  { id: PROPOSTAS, name: "Propostas", type: "system", is_active: true },
-  { id: BLACK_FRIDAY, name: "Black Friday", type: "custom", is_active: true },
-  { id: ARQUIVADO, name: "Funil Antigo", type: "custom", is_active: false },
+  { id: QUALIFICACAO, name: "Qualificação", label: "Oportunidades", type: "system", is_active: true },
+  { id: PROPOSTAS, name: "Propostas", label: "Orçamentos", type: "system", is_active: true },
+  { id: BLACK_FRIDAY, name: "Black Friday", label: "Black Friday", type: "custom", is_active: true },
+  { id: ARQUIVADO, name: "Funil Antigo", label: "Funil Antigo", type: "custom", is_active: false },
 ];
 
 function renderPanel(config: Record<string, unknown> = {}) {
@@ -107,7 +114,9 @@ describe("TriggerPanel — lead_replied", () => {
   it("lista todos os funis juntos, sem separar por espécie", () => {
     renderPanel();
     // Um funil da org e um criado pelo usuário, lado a lado…
-    expect(screen.getByText("Qualificação")).toBeInTheDocument();
+    expect(screen.getByText("Oportunidades")).toBeInTheDocument();
+    // O seed NÃO aparece — era ele que a tela mostrava antes.
+    expect(screen.queryByText("Qualificação")).not.toBeInTheDocument();
     expect(screen.getByText("Black Friday")).toBeInTheDocument();
     // …e nenhum cabeçalho dizendo a qual grupo cada um pertence.
     expect(screen.queryByText("Funis Padrão")).not.toBeInTheDocument();
@@ -122,19 +131,19 @@ describe("TriggerPanel — lead_replied", () => {
 
   it("marcar um segundo funil acumula (semântica OR)", () => {
     const { onUpdate } = renderPanel({ pipeline_ids: [QUALIFICACAO] });
-    fireEvent.click(checkboxFor("Propostas"));
+    fireEvent.click(checkboxFor("Orçamentos"));
     expect(lastConfig(onUpdate).pipeline_ids).toEqual([QUALIFICACAO, PROPOSTAS]);
   });
 
   it("desmarcar remove só aquele funil", () => {
     const { onUpdate } = renderPanel({ pipeline_ids: [QUALIFICACAO, PROPOSTAS] });
-    fireEvent.click(checkboxFor("Qualificação"));
+    fireEvent.click(checkboxFor("Oportunidades"));
     expect(lastConfig(onUpdate).pipeline_ids).toEqual([PROPOSTAS]);
   });
 
   it("preserva os outros campos do config ao mexer nos funis", () => {
     const { onUpdate } = renderPanel({ channel: "whatsapp", contains_text: "sim" });
-    fireEvent.click(checkboxFor("Propostas"));
+    fireEvent.click(checkboxFor("Orçamentos"));
     const cfg = lastConfig(onUpdate);
     expect(cfg.channel).toBe("whatsapp");
     expect(cfg.contains_text).toBe("sim");

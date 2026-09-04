@@ -49,7 +49,7 @@ import {
   exigeEtapas,
   faltamEtapas,
 } from "@/modules/analytics/lib/metricas-com-etapa";
-import { usePipelines, useEtapasDoFunil } from "@/modules/pipelines";
+import { useFunisDaOrg, useEtapasDoFunil } from "@/modules/pipelines";
 
 /**
  * Compositor de métrica personalizada — Emenda 1 do ADR-0023 (SCRUM-316..320).
@@ -507,7 +507,8 @@ interface EscolhaDeEtapasProps {
  * devolveria vazio para sempre — sem erro nenhum para explicar.
  */
 function EscolhaDeEtapas({ node, onChange }: EscolhaDeEtapasProps) {
-  const { data: funis = [] } = usePipelines();
+  // Nome que a ORG usa — ver `useFunisDaOrg`.
+  const { data: funis = [] } = useFunisDaOrg();
   const pipelineId = node.filters?.pipeline_id ?? "";
   const { etapas, isLoading } = useEtapasDoFunil(pipelineId || null);
 
@@ -548,7 +549,7 @@ function EscolhaDeEtapas({ node, onChange }: EscolhaDeEtapasProps) {
               conseguir desmarcá-lo. Aqui não: compor métrica sobre funil
               excluído devolve vazio para sempre, sem erro que explique. */}
           {funis.filter((f) => f.id && f.is_active !== false).map((f) => (
-            <SelectItem key={f.id} value={f.id} className="text-[13px]">{f.name}</SelectItem>
+            <SelectItem key={f.id} value={f.id} className="text-[13px]">{f.label}</SelectItem>
           ))}
         </SelectContent>
       </Select>

@@ -17,7 +17,7 @@ import { TRIGGER_CATEGORIES } from "@/types/workflow";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
-import { usePipelines, useEtapasDoFunil, useCustomPipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
+import { useFunisDaOrg, useEtapasDoFunil, useCustomPipelines, usePipelineDisplayConfig } from "@/modules/pipelines";
 import { destinosDeSistema } from "@/contracts/pipe";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { useLeadOrigins } from "@/modules/leads";
@@ -501,7 +501,7 @@ function LeadRepliedConfig({
   cfg: Record<string, unknown>;
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
-  const { data: pipelines } = usePipelines();
+  const { data: pipelines } = useFunisDaOrg();
 
   const selectedIds = Array.isArray(cfg.pipeline_ids) ? (cfg.pipeline_ids as string[]) : [];
 
@@ -532,7 +532,7 @@ function LeadRepliedConfig({
             checked={selectedIds.includes(p.id)}
             onCheckedChange={(checked) => togglePipeline(p.id, checked === true)}
           />
-          {p.name}
+          {p.label}
           {!p.is_active && (
             <span className="text-xs text-muted-foreground">(desativado)</span>
           )}
@@ -715,7 +715,7 @@ function StageChangedConfig({
   const selectedStages = (cfg.stages as string[]) || [];
   const isCampaign = !!campanhaId;
 
-  const { data: pipelines } = usePipelines();
+  const { data: pipelines } = useFunisDaOrg();
   const { data: campanhas } = useCampanhas();
 
   const legacySlug = (cfg.pipe_type as string) || "";
@@ -776,7 +776,7 @@ function StageChangedConfig({
               </SelectLabel>
               {funis.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.name}
+                  {p.label}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -849,7 +849,7 @@ function ScheduledDateConfig({
   const selectedStages = (cfg.stages as string[]) || [];
   const dispatches = (cfg.dispatches as ScheduledDispatchItem[]) || [];
 
-  const { data: pipelines } = usePipelines();
+  const { data: pipelines } = useFunisDaOrg();
 
   const legacySlug = (cfg.pipe_type as string) || "";
   const pipelineId =
@@ -910,7 +910,7 @@ function ScheduledDateConfig({
               </SelectLabel>
               {funis.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.name}
+                  {p.label}
                 </SelectItem>
               ))}
             </SelectGroup>

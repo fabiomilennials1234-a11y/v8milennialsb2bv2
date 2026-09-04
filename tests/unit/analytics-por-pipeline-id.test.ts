@@ -25,7 +25,10 @@ vi.mock("@/integrations/supabase/client", () => ({
 }));
 
 const mockUsePipelines = vi.fn();
+// O hook lê por `useFunisDaOrg` — os funis da org já com `label`, o nome que
+// ela usa. `usePipelines` segue mockado porque outros imports do barril o usam.
 vi.mock("@/modules/pipelines", () => ({
+  useFunisDaOrg: () => mockUsePipelines(),
   usePipelines: () => mockUsePipelines(),
 }));
 
@@ -53,10 +56,12 @@ import { useAnalyticsPipesFunis } from "@/modules/analytics/hooks/useAnalyticsPi
 import { PipelineSelector } from "@/modules/analytics/components/analytics/charts/PipelineSelector";
 
 const FUNIS = [
-  { id: "id-whats", name: "Qualificação", slug: "whatsapp", is_active: true },
-  { id: "id-prop", name: "Propostas", slug: "propostas", is_active: true },
-  { id: "id-cus", name: "Carteira Sul", slug: "carteira-sul", is_active: true },
-  { id: "id-off", name: "Desativado", slug: "morto", is_active: false },
+  // `name` = seed congelado do banco; `label` = nome que a ORG usa. Diferentes
+  // de propósito nos de sistema: é o que prova que a tela mostra o da org.
+  { id: "id-whats", name: "Qualificação", label: "Oportunidades", slug: "whatsapp", is_active: true },
+  { id: "id-prop", name: "Propostas", label: "Orçamentos", slug: "propostas", is_active: true },
+  { id: "id-cus", name: "Carteira Sul", label: "Carteira Sul", slug: "carteira-sul", is_active: true },
+  { id: "id-off", name: "Desativado", label: "Desativado", slug: "morto", is_active: false },
 ];
 
 beforeEach(() => {
@@ -217,8 +222,14 @@ describe("PipelineSelector", () => {
       React.createElement(Wrapper, null, React.createElement(PipelineSelector, { selected: null, onChange })),
     );
     expect(screen.getByText("Todos")).toBeTruthy();
-    expect(screen.getByText("Qualificação")).toBeTruthy();
-    expect(screen.getByText("Propostas")).toBeTruthy();
+    // O NOME QUE A ORG USA, não o seed do banco: o seletor mostrava
+    // "Qualificação"/"Propostas" (`pipelines.name`, congelado por
+    // `create_default_pipelines()`) para toda org, inclusive as que renomearam.
+    expect(screen.getByText("Oportunidades")).toBeTruthy();
+    expect(screen.getByText("Orçamentos")).toBeTruthy();
+    expect(screen.queryByText("Qualificação")).toBeNull();
+    expect(screen.queryByText("Propostas")).toBeNull();
+    // Funil custom não muda: ali `pipelines.name` já é o nome do usuário.
     expect(screen.getByText("Carteira Sul")).toBeTruthy();
     expect(screen.queryByText("Desativado")).toBeNull();
   });
