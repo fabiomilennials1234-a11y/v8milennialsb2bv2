@@ -3,7 +3,7 @@ type: feature
 title: "Automações — Trigger Negócio Criado + Node Criar Negócio"
 status: active
 created: 2026-08-24
-updated: 2026-08-24
+updated: 2026-09-04
 tags: [workflows, negocios, deals, automacao]
 area: automacao
 related: []
@@ -37,19 +37,48 @@ Handler: `_shared/action-handlers/deal-operations.ts`. Sempre grava `source_lead
 
 Expõe para os nós seguintes: `{{negocio_id}}`, `{{negocio_titulo}}`, `{{negocio_valor}}` (e `deal_id` no contexto).
 
-**Não configura pipeline/stage — as colunas não existem em prod.** Medido em 2026-08-24: `public.deals` em produção não tem `pipeline_id` nem `stage_id`, embora `src/integrations/supabase/types.ts` os declare (drift do types.ts, gerado contra outro projeto). A tela de Negócios lê `deal.stage_id` e por isso empilha tudo em "Sem estágio". Node e trigger seguem o schema real.
+**Não configura pipeline/stage em `deals`.** Posição pertence a
+`pipeline_entries`, nunca à identidade do Negócio. O node cria a identidade; o
+gatilho `deal_created` só nasce quando uma porta liga esse Negócio a uma posição
+canônica completa.
 
 ## Trigger — Negócio Criado (`deal_created`)
 
-PG trigger `trg_workflow_deal_created` (AFTER INSERT em `deals`) → `fire_workflow_trigger`. Migration `20270213000000_workflow_trigger_deal_created.sql`.
+Triggers em `pipeline_entries` emitem o evento na primeira transição para uma
+posição completa: `deal_id`, `pipeline_id` e `stage_id` presentes. Isso cobre
+entrada já completa e vínculo completado por `UPDATE`. Movimento posterior não
+reemite. O trigger legado `AFTER INSERT` em `deals` é removido.
 
-Lead do workflow = `deals.source_lead_id`. Contexto: `deal_id`, `deal_title`, `deal_value`, `owner_id`, `created_by_workflow` + aliases pt-BR.
+Lead do workflow = `deals.source_lead_id`. O snapshot persistido inclui
+`deal_id`, `pipeline_entry_id`, `pipeline_id`, `stage_id`, título, valor,
+responsável, Procedência e execução pai. A posição não é recalculada no worker.
 
 Filtros (`trigger_config`, validados em `matchesTriggerConfig`):
 
 - `require_lead` — **default true, fail-closed**. Negócio sem lead não tem quem receber mensagem/tag/etapa; o downstream inteiro assume lead.
 - `source` — espelha `deals.source`: `any` | `human` | `workflow` | `api` | `import`
 - `min_value`, `filter_owner_id`
+- `pipeline_ids` — vários funis; `OU` dentro da lista
+- `stage_ids` — várias etapas; `OU` dentro da lista
+
+Dimensões preenchidas combinam com `E`. Configuração `{}` aceita qualquer
+nascimento operacional com posição completa. Funis selecionados sem etapas
+aceitam qualquer etapa desses funis. Existindo qualquer `stage_id`, somente as
+etapas listadas casam; etapa sem `pipeline_ids` falha fechada.
+
+O matcher SQL recusa incompatíveis antes do `INSERT workflow_executions`. O
+matcher TypeScript revalida o mesmo snapshot antes do primeiro nó.
+
+Materializações e backfills (`entrada_materializada`, `backfill` e
+`backfill_funil_custom`) não representam nascimento comercial e não emitem o
+evento.
+
+### Exclusão de etapa referenciada
+
+A exclusão consulta `pipeline_stage_delete_impact`, mostra o número de
+automações afetadas e só confirma depois da prévia. `delete_pipeline_stage`
+move os cards, desativa os workflows que citam o UUID e desativa a etapa numa
+única transação. Destino de outra organização ou de outro funil é recusado.
 
 ## Guard de laço
 
@@ -62,7 +91,9 @@ Negócio inserido já com `deleted_at` (import/backfill) não dispara.
 
 ## Onde roda
 
-Como todo action node: só no worker `process-workflow-executions`. O trigger apenas enfileira em `workflow_executions`; os filtros de `trigger_config` são avaliados no worker antes do primeiro node.
+O banco captura o nascimento, filtra em SQL e enfileira em
+`workflow_executions`. `process-workflow-executions` revalida o snapshot e
+executa o DAG. A interface apenas grava IDs canônicos na configuração.
 
 ## Procedência (`deals.source`)
 
@@ -94,9 +125,42 @@ execuções; com workflow ativo → 1 execução e contexto correto; `deleted_at
 quebra. `deals.value` é `numeric`, então `deal_value`/`{{negocio_valor}}` vêm com escala
 (`2500.00`) — comparar como número, nunca como texto.
 
+## Prova em preview — 2026-09-04
+
+Preview efêmera `deal-created-2002`:
+
+- 23/23 asserts pgTAP cobrindo nascimento, snapshot, dedup, filtros, isolamento
+  e exclusão transacional;
+- 189/189 testes direcionados do matcher TypeScript e da interface;
+- smoke remoto: uma posição completa criou uma execução; o worker concluiu com
+  um único passo `trigger` e zero passos de ação externa;
+- workflow do smoke usou funil + etapa específicos; contexto persistiu os quatro
+  IDs do sujeito e da posição;
+- ensaio dos quatro rollbacks, dentro de transação, restaurou o trigger legado
+  em `deals`, removeu os triggers de posição, removeu as RPCs novas e restaurou
+  o matcher anterior;
+- após `ROLLBACK`, o teste de etapa voltou a passar, provando que a preview
+  permaneceu no estado novo;
+- fixture e segredo temporário do smoke foram removidos.
+
+Limitação herdada: replay frio integral da `main` ainda para em migrations
+anteriores desta feature. `20270920000000_demolicao_dos_espelhos.sql` depende de
+funções reparadas depois; `20270925000000_aposenta_calor_e_rating.sql` exige
+backup histórico inexistente em banco vazio. A preview aplicou o baseline até
+`20270922000010` e as quatro migrations desta entrega. O contrato relevante foi
+validado; o replay integral da cadeia continua dívida anterior.
+
 ## Deploy
 
-Migration + redeploy de `process-workflow-executions` (importa `_shared/workflow-*`). Sem o redeploy, execuções `deal_created` entram na fila e o worker antigo não conhece o node `create_deal`.
+Ordem obrigatória:
+
+1. deploy de `process-workflow-executions` com matcher TypeScript novo;
+2. aplicar as quatro migrations `20271006000000`–`20271006000030`;
+3. smoke controlado com workflow só de gatilho;
+4. publicar o frontend.
+
+Frontend antes do backend permitiria salvar filtros que o runtime antigo
+ignoraria. Produção exige autorização explícita e árvore limpa.
 
 ## Relacionado
 
