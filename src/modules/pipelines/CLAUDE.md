@@ -9,7 +9,7 @@
 
 Funis de venda. Dois modelos coexistem:
 
-- **Pipes canônicos (legacy)**: `pipe_whatsapp` (qualificação), `pipe_confirmacao` (reunião), `pipe_propostas` (fechamento). Views sobre `pipeline_entries` (coluna `status` = `stage_key` slug). Hooks namespace `usePipe*`.
+- **Compatibilidade legacy**: `pipe_whatsapp`, `pipe_confirmacao` e `pipe_propostas` são views de leitura em retirada. Escrita frontend nelas é proibida desde SCRUM-673; use as funções compartilhadas de entrada.
 - **Pipelines customizados (modelo novo)**: `pipeline_entries` + `pipeline_stages` (coluna `stage_id` uuid). Hooks namespace `usePipeline*` / `useCustom*`.
 
 Stages dinâmicas em `pipeline_stages`. Lead pode estar em múltiplos pipes simultaneamente (invariante crítico).
@@ -160,7 +160,7 @@ Eventos (post slice 19): `lead.stage_changed`, `pipeline.entry.moved`. Slice 19 
 
 ## Áreas frágeis
 
-- **Dual model**: hooks `usePipe*` operam views legacy `pipe_*` (status=stage_key slug); hooks `usePipeline*` operam `pipeline_entries` (stage_id uuid). **Não unificar** — cleanup futuro fora do escopo slice 5.
+- **Views de compatibilidade**: hooks `usePipe*` ainda podem ler `pipe_*` durante a demolição. Toda escrita passa por `fn_entrada_{sistema,custom}_{criar,atualizar}`; funil/etapa custom passam por `fn_{funil,etapa}_custom_*`. Nunca adicione mutação via view.
 - **Realtime**: subscriptions em `pipeline_entries` via `useRealtimeSubscription`, **nunca** nas views `pipe_*` (regra CLAUDE.md raiz). `usePipelineEntries.ts` + `usePipelines.ts` usam o hook. Não mexer na assinatura sem testar multi-tab.
 - **Status field divergente**: pipe_* views = `status` (slug string). Custom pipes = `stage_id` (uuid). Code paths separados.
 - **Lead em múltiplos pipes simultaneamente** — invariante crítico. `useLeadAllPipelines` (módulo `leads`) consolida via RPC.
@@ -194,7 +194,7 @@ Out-of-scope (movem em outras slices):
 
 ## Dedup pendente (out-of-scope slice 5)
 
-- **Dual model unificação**: hooks `usePipe*` (views) vs `usePipeline*` (entries). Cleanup futuro depois de migrar consumidores 100% para `pipeline_entries`.
+- **Demolição dos espelhos**: migrar leitores `usePipe*` restantes para `pipelines`, `pipeline_stages` e `pipeline_entries`; as escritas já saíram na SCRUM-673.
 - **`statusColumns`** existe em 3 hooks com valores divergentes — manter por compat até refactor.
 
 ## Slice de migração

@@ -1,4 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  createCustomPipelineEntry,
+  updateCustomPipelineEntry,
+} from "@/integrations/supabase/pipeline-entry-rpc";
 
 /**
  * Teto de linhas lidas por `(pipeline_id, lead_id)` — espelha
@@ -65,9 +69,8 @@ async function readActiveCustomPipeEntry(pipelineId: string, leadId: string) {
  * negócio nesse funil, cria. Espelha o branch custom→custom de
  * `useMoveLeadInCustomPipe`.
  *
- * Segurança: `organizationId` vem do contexto de auth do chamador. RLS em
- * `custom_pipe_entries` (organization_id = get_user_organization_id()) é o gate
- * final — insert/update cross-org falha no Postgres.
+ * Segurança: `organizationId` vem do contexto de auth do chamador. As funções
+ * compartilhadas escrevem em `pipeline_entries`; a RLS da base é o gate final.
  */
 export async function upsertLeadIntoCustomPipe(params: {
   leadId: string;
@@ -86,18 +89,18 @@ export async function upsertLeadIntoCustomPipe(params: {
   const existingEntry = await readActiveCustomPipeEntry(targetPipelineId, leadId);
 
   if (existingEntry) {
-    await supabase
-      .from("custom_pipe_entries")
-      .update({ stage_id: targetStageId, stage_changed_at: now })
-      .eq("id", existingEntry.id);
-  } else {
-    await supabase.from("custom_pipe_entries").insert({
-      lead_id: leadId,
-      organization_id: organizationId,
-      pipeline_id: targetPipelineId,
+    await updateCustomPipelineEntry(existingEntry.id, {
       stage_id: targetStageId,
-      entered_at: now,
       stage_changed_at: now,
+    });
+  } else {
+    await createCustomPipelineEntry({
+      leadId,
+      organizationId,
+      pipelineId: targetPipelineId,
+      stageId: targetStageId,
+      enteredAt: now,
+      stageChangedAt: now,
     });
   }
 }

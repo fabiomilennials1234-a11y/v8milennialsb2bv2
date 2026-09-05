@@ -1,5 +1,5 @@
 {
-  "count": 20,
+  "count": 13,
   "note": "Erros novos vs .tsc-baseline.json ainda nao corrigidos. TETO: so encolhe. Nao adicione entrada na mao — corrija o tipo.",
   "errors": [
     "src/modules/communication/components/chat/view/ChatHeader.tsx|TS2345|Argument of type 'string | null' is not assignable to parameter of type 'string | undefined'.",
@@ -9,16 +9,9 @@
     "src/modules/engagement/hooks/useCommissions.ts|TS2322|Type 'string | null' is not assignable to type 'string | undefined'.",
     "src/modules/leads/components/deal-card/useExcluirNegocio.ts|TS2589|Type instantiation is excessively deep and possibly infinite.",
     "src/modules/leads/components/deal-card/useExcluirNegocio.ts|TS2769|No overload matches this call.",
-    "src/modules/leads/components/lead-detail/modal/pipes/useCrossPipeMove.ts|TS2345|Argument of type '{ stage_id: string; stage_changed_at: string; }' is not assignable to parameter of type 'never'.",
     "src/modules/leads/pages/Leads.tsx|TS2538|Type 'null' cannot be used as an index type.",
     "src/modules/pipelines/hooks/custom/useCustomPipelines.ts|TS2322|Type 'string | null' is not assignable to type 'string'.",
-    "src/modules/pipelines/hooks/custom/useCustomPipelines.ts|TS2322|Type 'string' is not assignable to type 'undefined'.",
-    "src/modules/pipelines/hooks/custom/useCustomPipelines.ts|TS2345|Argument of type '{ is_active: boolean; }' is not assignable to parameter of type 'never'.",
-    "src/modules/pipelines/hooks/custom/useCustomPipelines.ts|TS2345|Argument of type '{ name?: string | undefined; color?: string | undefined; position?: number | undefined; is_final_positive?: boolean | undefined; is_final_negative?: boolean | undefined; target_pipeline_id?: string | ... 1 more ... | undefined; ... 4 more ...; stage_role?: StageRole | undefined; }' is not assignable to parameter of type 'never'.",
-    "src/modules/pipelines/hooks/custom/useCustomPipelines.ts|TS2345|Argument of type '{ stage_id: string; stage_changed_at: string; }' is not assignable to parameter of type 'never'.",
     "src/modules/pipelines/lib/stageTransition.ts|TS2345|Argument of type 'string | null' is not assignable to parameter of type 'string'.",
-    "src/modules/pipelines/lib/stageTransition.ts|TS2345|Argument of type '{ stage_id: string; stage_changed_at: string; }' is not assignable to parameter of type 'never'.",
-    "src/modules/pipelines/lib/stageTransition.ts|TS2769|No overload matches this call.",
     "src/modules/platform/hooks/useHelpCenter.ts|TS2345|Argument of type '{ category_id?: string | undefined; organization_id?: string | null | undefined; title?: string | undefined; summary?: string | null | undefined; content?: string | undefined; video_url?: string | ... 1 more ... | undefined; ... 5 more ...; updated_at?: string | undefined; }' is not assignable to parameter of type '{ category_id?: string | undefined; content?: string | undefined; created_at?: string | null | undefined; id?: string | undefined; is_published?: boolean | null | undefined; media?: Json | undefined; ... 6 more ...; video_url?: string | ... 1 more ... | undefined; }'.",
     "src/modules/platform/hooks/useHelpCenter.ts|TS2352|Conversion of type '{ category_id: string; content: string; created_at: string | null; id: string; is_published: boolean | null; media: Json; organization_id: string | null; sort_order: number; summary: string | null; ... 4 more ...; category: { ...; }; }' to type 'HelpArticleWithCategory' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first.",
     "src/modules/platform/hooks/useHelpCenter.ts|TS2352|Conversion of type '{ category_id: string; content: string; created_at: string | null; id: string; is_published: boolean | null; media: Json; organization_id: string | null; sort_order: number; summary: string | null; ... 4 more ...; category: { ...; }; }[]' to type 'HelpArticleWithCategory[]' may be a mistake because neither type sufficiently overlaps with the other. If this was intentional, convert the expression to 'unknown' first."

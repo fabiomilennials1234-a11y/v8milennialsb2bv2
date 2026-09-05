@@ -6,6 +6,18 @@ import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanDo } from "@/modules/identity";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
 import {
+  createCustomPipelineEntry,
+  createSystemPipelineEntry,
+  updateCustomPipelineEntry,
+  updateSystemPipelineEntry,
+} from "@/integrations/supabase/pipeline-entry-rpc";
+import {
+  createCustomPipelineStage,
+  createCustomPipelineWithStages,
+  updateCustomPipelineRecord,
+  updateCustomPipelineStage,
+} from "@/integrations/supabase/custom-pipeline-rpc";
+import {
   proximaPosicaoDeEtapa,
   mensagemDeConflitoDeEtapa,
 } from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
@@ -22,6 +34,7 @@ import type {
   CustomPipelineStage,
   CustomPipeEntry,
 } from "@/contracts/pipe";
+import type { Json } from "@/integrations/supabase/types";
 export type {
   LifecycleType,
   FunnelStatus,
@@ -435,10 +448,13 @@ export function useCreateCustomPipeline() {
       const slug = generateSlug(name);
       const isTemporary = lifecycle_type === "temporary";
 
-      // 1. Criar pipeline
-      const { data: pipeline, error: pipeError } = await supabase
-        .from("custom_pipelines")
-        .insert({
+      const stageDefs = custom_stages
+        || (isTemporary && template_type ? TEMPORARY_FUNNEL_STAGES[template_type] : null)
+        || DEFAULT_CUSTOM_STAGES;
+
+      let pipelineId: string;
+      try {
+        pipelineId = await createCustomPipelineWithStages({
           organization_id: teamMember.organization_id,
           name,
           slug,
@@ -457,42 +473,34 @@ export function useCreateCustomPipeline() {
           objective_pipe_type: objective_pipe_type || null,
           objective_stage_key: objective_stage_key || null,
           template_type: template_type || null,
-          lead_source_config: lead_source_config || null,
-        })
-        .select()
-        .single();
-
-      if (pipeError) {
-        if (pipeError.code === "23505" || pipeError.message?.includes("duplicate")) {
+          lead_source_config: (lead_source_config || null) as Json,
+        }, stageDefs.map((stage, index) => ({
+          organization_id: teamMember.organization_id,
+          stage_key: generateStageKey(stage.name),
+          name: stage.name,
+          color: stage.color,
+          position: index,
+          is_final_positive: stage.is_final_positive,
+          is_final_negative: stage.is_final_negative,
+        })));
+      } catch (error) {
+        if (
+          typeof error === "object"
+          && error !== null
+          && ("code" in error && error.code === "23505"
+            || "message" in error && String(error.message).includes("duplicate"))
+        ) {
           throw new Error("Já existe um funil ativo com esse nome nesta organização");
         }
-        throw pipeError;
+        throw error;
       }
 
-      // 2. Criar etapas — do template ou padrão
-      const stageDefs = custom_stages
-        || (isTemporary && template_type ? TEMPORARY_FUNNEL_STAGES[template_type] : null)
-        || DEFAULT_CUSTOM_STAGES;
-
-      const stageInserts = stageDefs.map((stage, index) => ({
-        organization_id: teamMember.organization_id,
-        pipeline_id: pipeline.id,
-        stage_key: generateStageKey(stage.name),
-        name: stage.name,
-        color: stage.color,
-        position: index,
-        is_final_positive: stage.is_final_positive,
-        is_final_negative: stage.is_final_negative,
-      }));
-
-      const { error: stagesError } = await supabase
-        .from("custom_pipeline_stages")
-        .insert(stageInserts);
-
-      if (stagesError) {
-        await supabase.from("custom_pipelines").delete().eq("id", pipeline.id);
-        throw stagesError;
-      }
+      const { data: pipeline, error: pipeError } = await supabase
+        .from("custom_pipelines")
+        .select("*")
+        .eq("id", pipelineId)
+        .single();
+      if (pipeError) throw pipeError;
 
       return pipeline as CustomPipeline;
     },
@@ -502,25 +510,29 @@ export function useCreateCustomPipeline() {
   });
 }
 
-/** Ativar funil temporário (draft → active) */
+async function readCustomPipelineById(id: string): Promise<CustomPipeline> {
+  const { data, error } = await supabase
+    .from("custom_pipelines")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+  return data as CustomPipeline;
+}
+
+/** Ativar funil temporário (draft → active). */
 export function useActivateTemporaryFunnel() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .update({
-          status: "active",
-          starts_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .eq("lifecycle_type", "temporary")
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as CustomPipeline;
+      await updateCustomPipelineRecord(id, {
+        status: "active",
+        starts_at: new Date().toISOString(),
+        _expected_lifecycle_type: "temporary",
+      });
+      return readCustomPipelineById(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -528,22 +540,17 @@ export function useActivateTemporaryFunnel() {
   });
 }
 
-/** Pausar funil temporário */
+/** Pausar funil temporário. */
 export function usePauseTemporaryFunnel() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .update({ status: "paused" })
-        .eq("id", id)
-        .eq("lifecycle_type", "temporary")
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as CustomPipeline;
+      await updateCustomPipelineRecord(id, {
+        status: "paused",
+        _expected_lifecycle_type: "temporary",
+      });
+      return readCustomPipelineById(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -551,22 +558,17 @@ export function usePauseTemporaryFunnel() {
   });
 }
 
-/** Encerrar funil temporário */
+/** Encerrar funil temporário. */
 export function useEndTemporaryFunnel() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .update({ status: "ended" })
-        .eq("id", id)
-        .eq("lifecycle_type", "temporary")
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as CustomPipeline;
+      await updateCustomPipelineRecord(id, {
+        status: "ended",
+        _expected_lifecycle_type: "temporary",
+      });
+      return readCustomPipelineById(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -574,7 +576,7 @@ export function useEndTemporaryFunnel() {
   });
 }
 
-/** Atualizar funil customizado */
+/** Atualizar funil customizado. */
 export function useUpdateCustomPipeline() {
   const queryClient = useQueryClient();
 
@@ -590,25 +592,11 @@ export function useUpdateCustomPipeline() {
       color?: string;
       position?: number;
     }) => {
-      const updateData: Record<string, unknown> = { ...updates };
-      if (updates.name) {
-        updateData.slug = generateSlug(updates.name);
-      }
-
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .update(updateData)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) {
-        if (error.code === "23505" || error.message?.includes("duplicate")) {
-          throw new Error("Já existe um funil ativo com esse nome nesta organização");
-        }
-        throw error;
-      }
-      return data as CustomPipeline;
+      await updateCustomPipelineRecord(id, {
+        ...updates,
+        slug: updates.name ? generateSlug(updates.name) : undefined,
+      });
+      return readCustomPipelineById(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -762,9 +750,9 @@ export function useCreateCustomPipelineStage() {
       // é o funil inteiro — ver `proximaPosicaoDeEtapa`.
       const posicaoLivre = await proximaPosicaoDeEtapa({ pipelineId: pipeline_id });
 
-      const { data, error } = await supabase
-        .from("custom_pipeline_stages")
-        .insert({
+      let stageId: string;
+      try {
+        stageId = await createCustomPipelineStage({
           organization_id: teamMember.organization_id,
           pipeline_id,
           stage_key: generateStageKey(name),
@@ -773,16 +761,20 @@ export function useCreateCustomPipelineStage() {
           position: posicaoLivre,
           is_final_positive: is_final_positive || false,
           is_final_negative: is_final_negative || false,
-          ...(stage_role ? { stage_role } : {}),
-        })
-        .select()
-        .single();
-
-      if (error) {
+          stage_role,
+        });
+      } catch (error) {
         const conflito = mensagemDeConflitoDeEtapa(error);
         if (conflito) throw new Error(conflito);
         throw error;
       }
+      const { data, error } = await supabase
+        .from("custom_pipeline_stages")
+        .select("*")
+        .eq("id", stageId)
+        .single();
+
+      if (error) throw error;
       return data as CustomPipelineStage;
     },
     onSuccess: (_, variables) => {
@@ -818,11 +810,11 @@ export function useUpdateCustomPipelineStage() {
       /** ADR-0017 §1 — só chega aqui por escolha explícita no editor único. */
       stage_role?: import("@/contracts/pipe").StageRole;
     }) => {
+      await updateCustomPipelineStage(id, updates);
       const { data, error } = await supabase
         .from("custom_pipeline_stages")
-        .update(updates)
+        .select("*")
         .eq("id", id)
-        .select()
         .single();
 
       if (error) throw error;
@@ -836,25 +828,15 @@ export function useUpdateCustomPipelineStage() {
 }
 
 /**
- * Desativar etapa — SUPERADO (SCRUM-636).
- *
- * @deprecated O editor único de etapas usa `useDeletePipelineStage`
- * (`../model/usePipelineStages`) com `pipelineId` explícito, que migra os
- * cards e respeita a guarda de regra de disparo — este aqui desativava a
- * etapa SEM migrar (cards fantasmas). Sem chamador vivo; morre na W6 junto
- * com as views de compat.
+ * Compatibilidade do hook antigo. O editor novo usa `useDeletePipelineStage`,
+ * que migra cards antes; este contrato continua fazendo somente soft delete.
  */
 export function useDeleteCustomPipelineStage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, pipeline_id }: { id: string; pipeline_id: string }) => {
-      const { error } = await supabase
-        .from("custom_pipeline_stages")
-        .update({ is_active: false })
-        .eq("id", id);
-
-      if (error) throw error;
+    mutationFn: async ({ id }: { id: string; pipeline_id: string }) => {
+      await updateCustomPipelineStage(id, { is_active: false });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
@@ -917,25 +899,34 @@ export function useAddLeadToCustomPipe() {
         throw new Error("Organização não encontrada");
       }
 
-      const { data, error } = await supabase
-        .from("custom_pipe_entries")
-        .insert({
-          organization_id: teamMember.organization_id,
-          pipeline_id,
-          lead_id,
-          stage_id,
-          assigned_to: assigned_to || null,
+      let entryId: string;
+      try {
+        entryId = await createCustomPipelineEntry({
+          organizationId: teamMember.organization_id,
+          pipelineId: pipeline_id,
+          leadId: lead_id,
+          stageId: stage_id,
+          assignedTo: assigned_to || null,
           notes: notes || null,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        if (error.message?.includes("duplicate")) {
+        });
+      } catch (error) {
+        if (
+          typeof error === "object"
+          && error !== null
+          && "message" in error
+          && String(error.message).includes("duplicate")
+        ) {
           throw new Error("Este lead já está neste funil");
         }
         throw error;
       }
+      const { data, error } = await supabase
+        .from("pipeline_entries")
+        .select("*")
+        .eq("id", entryId)
+        .single();
+
+      if (error) throw error;
 
       // Fire workflow triggers for lead entering custom pipeline
       if (data) {
@@ -984,8 +975,8 @@ const SYSTEM_PIPE_ENTRY_READ_CAP = 50;
  * Lê `pipeline_entries` em vez das views `pipe_*` porque `pipe_whatsapp` e
  * `pipe_confirmacao` não expõem `closed_at`, e sem ele não dá pra aplicar o
  * mesmo critério que o kanban e o Copilot já usam. O `pipelines!inner`
- * reproduz o JOIN da view; a escrita continua indo pela view, que traduz
- * `status` → `stage_key` no INSTEAD OF.
+ * reproduz o JOIN da view; a escrita chama as funções compartilhadas, que
+ * traduzem o vocabulário da UI para `pipeline_entries`.
  *
  * Corrente = ABERTO primeiro, depois o de movimentação mais recente — mesma
  * regra de `readActivePipelineEntry` (`../model/usePipelineEntries.ts`) e de
@@ -1047,14 +1038,14 @@ export function useMoveLeadInCustomPipe() {
           ? "Permissões ainda carregando — tente novamente"
           : "Sem permissão para mover registros no pipe");
       }
+      await updateCustomPipelineEntry(entry_id, {
+        stage_id,
+        stage_changed_at: new Date().toISOString(),
+      });
       const { data, error } = await supabase
-        .from("custom_pipe_entries")
-        .update({
-          stage_id,
-          stage_changed_at: new Date().toISOString(),
-        })
+        .from("pipeline_entries")
+        .select("*")
         .eq("id", entry_id)
-        .select()
         .single();
 
       if (error) throw error;
@@ -1103,28 +1094,37 @@ export function useMoveLeadInCustomPipe() {
             // de coluna inexistente derrubando a transição inteira.
             const existing = await readCurrentSystemPipeEntry("whatsapp", data.lead_id);
             if (existing) {
-              await supabase.from("pipe_whatsapp").update({ status: targetStageKey }).eq("id", existing.id);
+              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
             } else {
-              await supabase.from("pipe_whatsapp").insert({
-                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              await createSystemPipelineEntry({
+                leadId: data.lead_id,
+                organizationId: data.organization_id,
+                slug: "whatsapp",
+                stageKey: targetStageKey,
               });
             }
           } else if (pipeType === "confirmacao") {
             const existing = await readCurrentSystemPipeEntry("confirmacao", data.lead_id);
             if (existing) {
-              await supabase.from("pipe_confirmacao").update({ status: targetStageKey }).eq("id", existing.id);
+              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
             } else {
-              await supabase.from("pipe_confirmacao").insert({
-                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              await createSystemPipelineEntry({
+                leadId: data.lead_id,
+                organizationId: data.organization_id,
+                slug: "confirmacao",
+                stageKey: targetStageKey,
               });
             }
           } else if (pipeType === "propostas") {
             const existing = await readCurrentSystemPipeEntry("propostas", data.lead_id);
             if (existing) {
-              await supabase.from("pipe_propostas").update({ status: targetStageKey }).eq("id", existing.id);
+              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
             } else {
-              await supabase.from("pipe_propostas").insert({
-                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              await createSystemPipelineEntry({
+                leadId: data.lead_id,
+                organizationId: data.organization_id,
+                slug: "propostas",
+                stageKey: targetStageKey,
               });
             }
           } else if (pipeType === "upsell_base") {
@@ -1159,7 +1159,7 @@ export function useRemoveLeadFromCustomPipe() {
   return useMutation({
     mutationFn: async ({ entry_id, pipeline_id }: { entry_id: string; pipeline_id: string }) => {
       const { error } = await supabase
-        .from("custom_pipe_entries")
+        .from("pipeline_entries")
         .delete()
         .eq("id", entry_id);
 

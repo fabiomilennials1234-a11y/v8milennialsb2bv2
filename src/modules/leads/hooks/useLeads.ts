@@ -266,7 +266,6 @@ export function useUpdateLead() {
       }
 
       // SECURITY: Remove organization_id from updates to prevent tampering
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { organization_id: _, ...safeUpdates } = updates as LeadUpdate & { organization_id?: string };
 
       // Optimistic lock (#307): when caller passes the original
@@ -291,47 +290,9 @@ export function useUpdateLead() {
         throw error;
       }
 
-      // Sync responsible_id to all pipe tables that contain this lead
-      if (safeUpdates.responsible_id !== undefined) {
-        const responsibleUpdate = { responsible_id: safeUpdates.responsible_id || null };
-        await supabase.from("pipe_whatsapp").update(responsibleUpdate).eq("lead_id", id);
-        await supabase.from("pipe_confirmacao").update(responsibleUpdate).eq("lead_id", id);
-        await supabase.from("pipe_propostas").update(responsibleUpdate).eq("lead_id", id);
-      }
-
-      // Sync pre_sale_responsible_id / sale_responsible_id to all pipe tables
-      if (safeUpdates.pre_sale_responsible_id !== undefined || safeUpdates.sale_responsible_id !== undefined) {
-        const pipeUpdate: Record<string, unknown> = {};
-        if (safeUpdates.pre_sale_responsible_id !== undefined) {
-          pipeUpdate.pre_sale_responsible_id = safeUpdates.pre_sale_responsible_id || null;
-        }
-        if (safeUpdates.sale_responsible_id !== undefined) {
-          pipeUpdate.sale_responsible_id = safeUpdates.sale_responsible_id || null;
-        }
-        if (Object.keys(pipeUpdate).length > 0) {
-          await supabase.from("pipe_whatsapp").update(pipeUpdate).eq("lead_id", id);
-          await supabase.from("pipe_confirmacao").update(pipeUpdate).eq("lead_id", id);
-          await supabase.from("pipe_propostas").update(pipeUpdate).eq("lead_id", id);
-        }
-      }
-
-      // Sync compromisso_date → pipe_confirmacao.meeting_date (espelho inverso).
-      // Best-effort: pode não existir entrada em pipe_confirmacao para esse lead — nesse
-      // caso UPDATE afeta 0 linhas sem erro. Nunca usar upsert/insert aqui (Security: D5).
-      // Payload literal — nunca spread; nunca tocar em status neste caminho.
-      if (safeUpdates.compromisso_date !== undefined) {
-        const { error: syncErr } = await supabase
-          .from("pipe_confirmacao")
-          .update({ meeting_date: safeUpdates.compromisso_date })
-          .eq("lead_id", id)
-          .eq("organization_id", organizationId);
-        if (syncErr) {
-          console.warn(
-            "[useUpdateLead] failed to sync compromisso_date → pipe_confirmacao.meeting_date",
-            syncErr,
-          );
-        }
-      }
+      // Responsáveis e compromisso são projetados nas entries por triggers de
+      // `leads`, na mesma transação deste UPDATE. O cliente não faz segunda
+      // escrita: evita sucesso parcial e elimina as views do caminho.
 
       return data;
     },
