@@ -8,6 +8,7 @@ import {
   proximaPosicaoDeEtapa,
   mensagemDeConflitoDeEtapa,
 } from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
+import { rpcNaoTipada } from "@/modules/pipelines/lib/rpc-nao-tipada";
 
 // `PipelineType` + `PipelineStage(Insert)` + `getPipelineTypeName` +
 // `stagesToColumns` têm definição canônica em contracts (puros, sem
@@ -391,8 +392,36 @@ export function usePipelineStageLeadCounts(
  * Soft-delete (is_active=false) preserva histórico. PORÉM, se a etapa ainda tem
  * leads, eles precisam ser migrados para uma etapa ativa ANTES de desativar —
  * caso contrário ficam num stage_key que o Kanban não renderiza (leads
- * "fantasmas"). `migrateToStageKey` é obrigatório quando há leads na etapa.
+ * "fantasmas"). `destinationStageId` é obrigatório quando há cards na etapa.
+ * A RPC valida e aplica todas as mudanças na mesma transação.
  */
+export interface PipelineStageDeleteImpact {
+  stage_id: string;
+  pipeline_id: string;
+  cards: number;
+  automacoes: number;
+  regras_disparo: number;
+}
+
+export interface PipelineStageDeleteResult extends PipelineStageDeleteImpact {
+  cards_migrados: number;
+  automacoes_desativadas: number;
+}
+
+export function usePipelineStageDeleteImpact(stageId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["pipeline-stage-delete-impact", stageId],
+    queryFn: async () => {
+      if (!stageId) return null;
+      return rpcNaoTipada<PipelineStageDeleteImpact>("pipeline_stage_delete_impact", {
+        p_stage_id: stageId,
+      });
+    },
+    enabled: enabled && !!stageId,
+    staleTime: 0,
+  });
+}
+
 export function useDeletePipelineStage() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
@@ -401,8 +430,7 @@ export function useDeletePipelineStage() {
     mutationFn: async ({
       id,
       pipeline_type,
-      stageKey,
-      migrateToStageKey,
+      destinationStageId,
       pipelineId: explicitPipelineId,
     }: {
       id: string;
@@ -412,8 +440,7 @@ export function useDeletePipelineStage() {
        * passa `pipelineId` e omite esta.
        */
       pipeline_type?: StageFamily;
-      stageKey: string;
-      migrateToStageKey?: string;
+      destinationStageId?: string;
       /**
        * SCRUM-636 (D3): id explícito do funil — serve qualquer espécie. Com
        * ele, a migração de cards e a contagem valem também para funil custom
@@ -424,72 +451,16 @@ export function useDeletePipelineStage() {
       const organizationId = teamMember?.organization_id;
       if (!organizationId) throw new Error("Organização não encontrada");
 
-      // Guarda F0 (funis-unificacao §4.4): etapa referenciada por regra de
-      // disparo automático não pode ser removida — o slug/id dela é consumido
-      // a jusante (dispatch de WhatsApp). Bloqueia ANTES de migrar leads. O
-      // editor único (D3/SCRUM-636) mostra o bloqueio na UI antes de chegar
-      // aqui; esta recusa segue como cinto para qualquer outro chamador.
-      const { count: dispatchRuleCount, error: rulesError } = await supabase
-        .from("pipe_dispatch_rules")
-        .select("id", { count: "exact", head: true })
-        .eq("organization_id", organizationId)
-        .eq("pipeline_stage_id", id)
-        .eq("is_active", true);
-
-      if (rulesError) {
-        throw new Error(
-          `Não foi possível verificar regras de disparo desta etapa (${rulesError.message}). Remoção bloqueada por segurança.`,
-        );
-      }
-      if ((dispatchRuleCount ?? 0) > 0) {
-        throw new Error(
-          `Esta etapa é alvo de ${dispatchRuleCount} regra(s) de disparo automático ativa(s). ` +
-            `Desative ou reaponte essas regras nas configurações do funil antes de remover a etapa.`,
-        );
-      }
-
       const systemType = pipeline_type ? asSystemPipelineType(pipeline_type) : null;
       const pipelineId =
         explicitPipelineId ??
         (systemType ? await resolveSystemPipelineId(organizationId, systemType) : null);
+      if (!pipelineId) throw new Error("Funil da etapa não encontrado");
 
-      // Migrar leads que ainda estão nesta etapa antes de desativar.
-      if (pipelineId) {
-        const { count, error: countError } = await supabase
-          .from("pipeline_entries")
-          .select("id", { count: "exact", head: true })
-          .eq("pipeline_id", pipelineId)
-          .eq("stage_key", stageKey);
-
-        if (countError) throw countError;
-
-        if ((count ?? 0) > 0) {
-          if (!migrateToStageKey) {
-            throw new Error(
-              `Esta etapa tem ${count} lead(s). Escolha uma etapa de destino para migrar antes de remover.`,
-            );
-          }
-          if (migrateToStageKey === stageKey) {
-            throw new Error("A etapa de destino deve ser diferente da etapa removida.");
-          }
-
-          const { error: migrateError } = await supabase
-            .from("pipeline_entries")
-            .update({ stage_key: migrateToStageKey, updated_at: new Date().toISOString() })
-            .eq("pipeline_id", pipelineId)
-            .eq("stage_key", stageKey);
-
-          if (migrateError) throw migrateError;
-        }
-      }
-
-      // Ao invés de deletar, desativamos a etapa para preservar dados históricos
-      const { error } = await supabase
-        .from("pipeline_stages")
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq("id", id);
-
-      if (error) throw error;
+      return rpcNaoTipada<PipelineStageDeleteResult>("delete_pipeline_stage", {
+        p_stage_id: id,
+        p_destination_stage_id: destinationStageId ?? null,
+      });
     },
     onSuccess: (_, variables) => {
       // Chaves de SISTEMA (por família) — comportamento histórico.
@@ -498,6 +469,8 @@ export function useDeletePipelineStage() {
         queryClient.invalidateQueries({ queryKey: ["pipeline_entries", variables.pipeline_type] });
       }
       queryClient.invalidateQueries({ queryKey: ["all_pipeline_stages"] });
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-stage-delete-impact"] });
       queryClient.invalidateQueries({
         queryKey: ["pipeline_stage_lead_counts", variables.pipelineId ?? variables.pipeline_type],
       });

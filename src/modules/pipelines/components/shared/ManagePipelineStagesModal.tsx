@@ -22,6 +22,7 @@ import {
   useCreatePipelineStage,
   useUpdatePipelineStage,
   useDeletePipelineStage,
+  usePipelineStageDeleteImpact,
   useReorderPipelineStages,
   usePipelineStageLeadCounts,
   getStageFamilyName,
@@ -58,6 +59,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
 import { mensagemDeConflitoDeEtapa } from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
+import { StageDeleteAutomationImpact } from "./StageDeleteAutomationImpact";
 import { ClipboardList } from "lucide-react";
 import {
   DndContext,
@@ -535,7 +537,7 @@ export function ManagePipelineStagesContent({
   const [newStageRoleManual, setNewStageRoleManual] = useState<StageRole>("open");
   const [showNewStageForm, setShowNewStageForm] = useState(false);
   const [deleteStageId, setDeleteStageId] = useState<string | null>(null);
-  const [migrateToStageKey, setMigrateToStageKey] = useState<string>("");
+  const [migrateToStageId, setMigrateToStageId] = useState<string>("");
   const [localStages, setLocalStages] = useState<EditorStage[]>(stages);
 
   // Trilho SISTEMA (pipeline_stages por família) + trilho CUSTOM (view de
@@ -546,6 +548,14 @@ export function ManagePipelineStagesContent({
   const createCustomStage = useCreateCustomPipelineStage();
   const updateCustomStage = useUpdateCustomPipelineStage();
   const deleteStage = useDeletePipelineStage(); // único: migra cards por pipeline_id (636)
+  const {
+    data: stageDeleteImpact,
+    isLoading: isStageDeleteImpactLoading,
+    isError: isStageDeleteImpactError,
+  } = usePipelineStageDeleteImpact(
+    deleteStageId,
+    !!deleteStageId,
+  );
   const reorderStages = useReorderPipelineStages();
   const reorderCustomStages = useReorderCustomPipelineStages();
   const { data: templates = [] } = useChecklistTemplates();
@@ -572,14 +582,18 @@ export function ManagePipelineStagesContent({
 
   // Etapa marcada para remoção + quantos cards ela ainda tem.
   const stageToDelete = localStages.find((s) => s.id === deleteStageId) ?? null;
-  const leadsInStageToDelete = stageToDelete
-    ? stageLeadCounts[stageToDelete.stage_key] ?? 0
-    : 0;
+  const leadsInStageToDelete = stageDeleteImpact?.cards ?? (
+    stageToDelete ? stageLeadCounts[stageToDelete.stage_key] ?? 0 : 0
+  );
   // Regras de disparo ativas que apontam para a etapa (trigger por movimento).
   const blockingRules = deleteStageId
     ? dispatchRules.filter((r) => r.is_active && r.pipeline_stage_id === deleteStageId)
     : [];
-  const deleteBlocked = blockingRules.length > 0;
+  const blockingRuleCount = Math.max(
+    blockingRules.length,
+    stageDeleteImpact?.regras_disparo ?? 0,
+  );
+  const deleteBlocked = blockingRuleCount > 0;
   // Destinos possíveis: outras etapas (exclui a que está sendo removida).
   const migrationTargets = localStages.filter((s) => s.id !== deleteStageId);
 
@@ -800,26 +814,27 @@ export function ManagePipelineStagesContent({
     if (deleteBlocked) return;
 
     // Etapa com cards exige destino de migração (evita cards fantasmas).
-    if (leadsInStageToDelete > 0 && !migrateToStageKey) {
+    if (leadsInStageToDelete > 0 && !migrateToStageId) {
       toast.error("Escolha uma etapa de destino para os cards antes de remover.");
       return;
     }
 
     try {
-      await deleteStage.mutateAsync({
+      const result = await deleteStage.mutateAsync({
         id: deleteStageId,
         pipeline_type: pipelineType,
         pipelineId: pipelineId ?? undefined,
-        stageKey: stageToDelete.stage_key,
-        migrateToStageKey: leadsInStageToDelete > 0 ? migrateToStageKey : undefined,
+        destinationStageId: leadsInStageToDelete > 0 ? migrateToStageId : undefined,
       });
-      toast.success(
-        leadsInStageToDelete > 0
-          ? `Etapa removida. ${leadsInStageToDelete} card(s) migrado(s).`
-          : "Etapa removida",
-      );
+      const details = [
+        result.cards_migrados > 0 ? `${result.cards_migrados} card(s) migrado(s)` : null,
+        result.automacoes_desativadas > 0
+          ? `${result.automacoes_desativadas} automação(ões) desativada(s)`
+          : null,
+      ].filter(Boolean).join(" · ");
+      toast.success(details ? `Etapa removida. ${details}.` : "Etapa removida");
       setDeleteStageId(null);
-      setMigrateToStageKey("");
+      setMigrateToStageId("");
     } catch (error: any) {
       console.error("Error deleting stage:", error);
       toast.error(error.message || "Erro ao remover etapa");
@@ -1005,7 +1020,7 @@ export function ManagePipelineStagesContent({
         onOpenChange={(open) => {
           if (!open) {
             setDeleteStageId(null);
-            setMigrateToStageKey("");
+            setMigrateToStageId("");
           }
         }}
       >
@@ -1027,11 +1042,11 @@ export function ManagePipelineStagesContent({
                 <Send className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                 <span>
                   <strong>Não dá para remover agora.</strong>{" "}
-                  {blockingRules.length === 1
+                  {blockingRuleCount === 1
                     ? "1 regra de disparo automático ativa aponta"
-                    : `${blockingRules.length} regras de disparo automático ativas apontam`}{" "}
+                    : `${blockingRuleCount} regras de disparo automático ativas apontam`}{" "}
                   para esta etapa — remover a etapa deixaria{" "}
-                  {blockingRules.length === 1 ? "o disparo" : "os disparos"} sem alvo.
+                  {blockingRuleCount === 1 ? "o disparo" : "os disparos"} sem alvo.
                 </span>
               </div>
               <ul className="ml-6 list-disc space-y-1 text-xs text-muted-foreground">
@@ -1063,13 +1078,13 @@ export function ManagePipelineStagesContent({
               <Label className="text-xs text-muted-foreground">
                 Mover os {leadsInStageToDelete} card{leadsInStageToDelete > 1 ? "s" : ""} para:
               </Label>
-              <Select value={migrateToStageKey} onValueChange={setMigrateToStageKey}>
+              <Select value={migrateToStageId} onValueChange={setMigrateToStageId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a etapa de destino" />
                 </SelectTrigger>
                 <SelectContent>
                   {migrationTargets.map((s) => (
-                    <SelectItem key={s.id} value={s.stage_key}>
+                    <SelectItem key={s.id} value={s.id}>
                       {s.name}
                     </SelectItem>
                   ))}
@@ -1078,20 +1093,35 @@ export function ManagePipelineStagesContent({
             </div>
           ) : null}
 
+          {!deleteBlocked && (
+            <StageDeleteAutomationImpact automations={stageDeleteImpact?.automacoes ?? 0} />
+          )}
+
+          {isStageDeleteImpactLoading && (
+            <p className="text-xs text-muted-foreground">Calculando impacto da remoção…</p>
+          )}
+          {isStageDeleteImpactError && (
+            <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Não foi possível calcular o impacto. A remoção foi bloqueada.
+            </p>
+          )}
+
           <AlertDialogFooter>
             <AlertDialogCancel>{deleteBlocked ? "Entendi" : "Cancelar"}</AlertDialogCancel>
             {!deleteBlocked && (
               <AlertDialogAction
                 onClick={(e) => {
                   // Não fechar o dialog quando faltar destino — deixa o usuário escolher.
-                  if (leadsInStageToDelete > 0 && !migrateToStageKey) {
+                  if (leadsInStageToDelete > 0 && !migrateToStageId) {
                     e.preventDefault();
                   }
                   handleDeleteStage();
                 }}
                 disabled={
                   deleteStage.isPending ||
-                  (leadsInStageToDelete > 0 && !migrateToStageKey)
+                  isStageDeleteImpactLoading ||
+                  isStageDeleteImpactError ||
+                  (leadsInStageToDelete > 0 && !migrateToStageId)
                 }
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >

@@ -140,6 +140,30 @@ export function normalizePipelineIds(value: unknown): string[] {
   return [...seen];
 }
 
+type StrictIdFilter = { valid: boolean; ids: string[] };
+
+/**
+ * Filtro novo de posição: ausência/lista vazia desliga o filtro; qualquer forma
+ * presente que não seja uma lista integral de strings não vazias falha fechada.
+ */
+function parseStrictIdFilter(config: Record<string, unknown>, key: string): StrictIdFilter {
+  if (!Object.prototype.hasOwnProperty.call(config, key)) return { valid: true, ids: [] };
+  const raw = config[key];
+  if (!Array.isArray(raw)) return { valid: false, ids: [] };
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const value of raw) {
+    if (typeof value !== "string" || value.trim() === "") return { valid: false, ids: [] };
+    const id = value.trim();
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return { valid: true, ids };
+}
+
 /**
  * Um workflow de `lead_replied` só precisa do lookup de posição se filtrar por
  * funil OU por etapa. As duas listas vêm da MESMA leitura de
@@ -857,6 +881,23 @@ export function matchesTriggerConfig(
 
       const source = (config.source as string) || "any";
       if (source !== "any" && source !== context.deal_source) return false;
+
+      const pipelines = parseStrictIdFilter(config, "pipeline_ids");
+      if (!pipelines.valid) return false;
+      if (pipelines.ids.length > 0) {
+        const pipelineId = asUuidOrNull(context.pipeline_id);
+        if (!pipelineId || !pipelines.ids.includes(pipelineId)) return false;
+      }
+
+      const stages = parseStrictIdFilter(config, "stage_ids");
+      if (!stages.valid) return false;
+      if (stages.ids.length > 0) {
+        // Etapa sem funil selecionado é uma config incoerente: a interface só
+        // oferece etapas dentro dos funis marcados e o matcher falha fechado.
+        if (pipelines.ids.length === 0) return false;
+        const stageId = asUuidOrNull(context.stage_id);
+        if (!stageId || !stages.ids.includes(stageId)) return false;
+      }
 
       if (config.filter_owner_id && config.filter_owner_id !== context.owner_id) return false;
 
