@@ -782,9 +782,12 @@ describe("matchesTriggerConfig", () => {
 
   // deal_created
   describe("deal_created", () => {
+    const FUNIL_A = "11111111-1111-1111-1111-111111111111";
+    const FUNIL_B = "22222222-2222-2222-2222-222222222222";
     const ctx = (over: Record<string, unknown> = {}) => ({
       lead_id: "lead-1",
       deal_id: "deal-1",
+      pipeline_id: FUNIL_A,
       deal_value: 1000,
       owner_id: "tm-1",
       deal_source: "human",
@@ -832,6 +835,33 @@ describe("matchesTriggerConfig", () => {
     it("filters by owner", () => {
       expect(matchesTriggerConfig("deal_created", { filter_owner_id: "tm-1" }, ctx())).toBe(true);
       expect(matchesTriggerConfig("deal_created", { filter_owner_id: "tm-9" }, ctx())).toBe(false);
+    });
+
+    it("combina vários funis com OR", () => {
+      expect(
+        matchesTriggerConfig("deal_created", { pipeline_ids: [FUNIL_A, FUNIL_B] }, ctx()),
+      ).toBe(true);
+      expect(
+        matchesTriggerConfig(
+          "deal_created",
+          { pipeline_ids: [FUNIL_A, FUNIL_B] },
+          ctx({ pipeline_id: "33333333-3333-3333-3333-333333333333" }),
+        ),
+      ).toBe(false);
+    });
+
+    it("lista vazia continua significando qualquer funil", () => {
+      expect(matchesTriggerConfig("deal_created", { pipeline_ids: [] }, ctx())).toBe(true);
+    });
+
+    it("falha fechado sem pipeline_id ou com config malformada", () => {
+      expect(
+        matchesTriggerConfig("deal_created", { pipeline_ids: [FUNIL_A] }, ctx({ pipeline_id: null })),
+      ).toBe(false);
+      expect(matchesTriggerConfig("deal_created", { pipeline_ids: FUNIL_A }, ctx())).toBe(false);
+      expect(
+        matchesTriggerConfig("deal_created", { pipeline_ids: [FUNIL_A, 42] }, ctx()),
+      ).toBe(false);
     });
   });
 
