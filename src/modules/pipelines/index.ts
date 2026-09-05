@@ -109,6 +109,7 @@ export {
   useCreatePipelineStage,
   useUpdatePipelineStage,
   useDeletePipelineStage,
+  usePipelineStageDeleteImpact,
   FALLBACK_STAGES,
   useAllPipelineStageOptions,
   usePipelineStageOptions,
