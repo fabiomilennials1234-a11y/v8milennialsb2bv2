@@ -1,7 +1,7 @@
 # Filtros de funil e etapa no gatilho Negócio Criado
 
-Data: 2026-09-04  
-Status: aprovado no grill com o CTO  
+Data: 2026-09-04
+Status: aprovado no grill com o CTO
 Issue: [#2001](https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/issues/2001)
 
 ## Pedido

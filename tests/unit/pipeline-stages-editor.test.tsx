@@ -17,7 +17,10 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import React from "react";
 
 // ── Trilho de SISTEMA (usePipelineStages) ───────────────────────────────────
-const deleteStageMutate = vi.fn().mockResolvedValue(undefined);
+const deleteStageMutate = vi.fn().mockResolvedValue({
+  cards_migrados: 0,
+  automacoes_desativadas: 0,
+});
 const createSystemMutate = vi.fn().mockResolvedValue({});
 const updateSystemMutate = vi.fn().mockResolvedValue({});
 const reorderSystemMutate = vi.fn().mockResolvedValue(true);
@@ -27,6 +30,7 @@ vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({
   useCreatePipelineStage: () => ({ mutateAsync: createSystemMutate, isPending: false }),
   useUpdatePipelineStage: () => ({ mutateAsync: updateSystemMutate, isPending: false }),
   useDeletePipelineStage: () => ({ mutateAsync: deleteStageMutate, isPending: false }),
+  usePipelineStageDeleteImpact: () => ({ data: null, isLoading: false, isError: false }),
   useReorderPipelineStages: () => ({ mutateAsync: reorderSystemMutate, isPending: false }),
   usePipelineStageLeadCounts: () => ({ data: mockLeadCounts }),
   getPipelineTypeName: (t: string) => t,
@@ -161,7 +165,7 @@ describe("Editor único — remoção de etapa com cards (D3)", () => {
     const selects = screen.getAllByTestId("native-select");
     const migrateSelect = selects[selects.length - 1];
     expect(migrateSelect.innerHTML).not.toContain(">Novo Lead<");
-    fireEvent.change(migrateSelect, { target: { value: "abordado" } });
+    fireEvent.change(migrateSelect, { target: { value: "s2" } });
 
     const acaoDepois = screen.getByText("Mover e remover").closest("button")!;
     expect(acaoDepois).toHaveProperty("disabled", false);
@@ -172,8 +176,7 @@ describe("Editor único — remoção de etapa com cards (D3)", () => {
       id: "s1",
       pipeline_type: "whatsapp",
       pipelineId: "pipe-sys-1",
-      stageKey: "novo",
-      migrateToStageKey: "abordado",
+      destinationStageId: "s2",
     });
   });
 
@@ -188,8 +191,7 @@ describe("Editor único — remoção de etapa com cards (D3)", () => {
     await waitFor(() => expect(deleteStageMutate).toHaveBeenCalledTimes(1));
     expect(deleteStageMutate.mock.calls[0][0]).toMatchObject({
       id: "s2",
-      stageKey: "abordado",
-      migrateToStageKey: undefined,
+      destinationStageId: undefined,
     });
   });
 });
