@@ -12,6 +12,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ponto dela, como no cliente real.
 // ---------------------------------------------------------------------------
 const calls: { table: string; op: string; payload: unknown }[] = [];
+const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
 const eqCalls: [string, unknown][] = [];
 type Row = { id: string; stage: { stage_role: string } | null };
 let existingRows: Row[] = [];
@@ -39,7 +40,16 @@ function makeChain(table: string) {
 }
 
 vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { from: (table: string) => makeChain(table) },
+  supabase: {
+    from: (table: string) => makeChain(table),
+    rpc: async (name: string, args: Record<string, unknown>) => {
+      rpcCalls.push({ name, args });
+      return {
+        data: name === "fn_entrada_custom_criar" ? "entry-created" : null,
+        error: null,
+      };
+    },
+  },
 }));
 
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
@@ -50,6 +60,7 @@ const ganho = (id: string): Row => ({ id, stage: { stage_role: "won" } });
 describe("upsertLeadIntoCustomPipe", () => {
   beforeEach(() => {
     calls.length = 0;
+    rpcCalls.length = 0;
     eqCalls.length = 0;
     existingRows = [];
     readError = null;
@@ -65,16 +76,17 @@ describe("upsertLeadIntoCustomPipe", () => {
       targetStageId: "stage-Y",
     });
 
-    const insert = calls.find((c) => c.op === "insert");
-    expect(insert).toBeTruthy();
-    expect(insert!.table).toBe("custom_pipe_entries");
-    expect(insert!.payload).toMatchObject({
-      lead_id: "lead-1",
-      organization_id: "org-1",
-      pipeline_id: "pipe-X",
-      stage_id: "stage-Y",
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0]).toMatchObject({
+      name: "fn_entrada_custom_criar",
+      args: {
+        p_lead_id: "lead-1",
+        p_organization_id: "org-1",
+        p_pipeline_id: "pipe-X",
+        p_stage_id: "stage-Y",
+      },
     });
-    expect(calls.some((c) => c.op === "update")).toBe(false);
+    expect(calls.some((c) => c.op === "insert" || c.op === "update")).toBe(false);
   });
 
   it("move a entry existente (sem duplicar) quando o lead já está no funil destino", async () => {
@@ -87,11 +99,15 @@ describe("upsertLeadIntoCustomPipe", () => {
       targetStageId: "stage-Z",
     });
 
-    const update = calls.find((c) => c.op === "update");
-    expect(update).toBeTruthy();
-    expect(update!.table).toBe("custom_pipe_entries");
-    expect(update!.payload).toMatchObject({ stage_id: "stage-Z" });
-    expect(calls.some((c) => c.op === "insert")).toBe(false);
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0]).toMatchObject({
+      name: "fn_entrada_custom_atualizar",
+      args: {
+        p_entry_id: "entry-99",
+        p_patch: { stage_id: "stage-Z" },
+      },
+    });
+    expect(calls.some((c) => c.op === "insert" || c.op === "update")).toBe(false);
   });
 
   it("com N entries, move a ABERTA e nunca a ganha — e não insere outra", async () => {
@@ -108,11 +124,12 @@ describe("upsertLeadIntoCustomPipe", () => {
       targetStageId: "stage-Z",
     });
 
-    expect(calls.some((c) => c.op === "insert")).toBe(false);
-    const update = calls.find((c) => c.op === "update");
-    expect(update).toBeTruthy();
-    expect(eqCalls).toContainEqual(["id", "entry-aberta"]);
-    expect(eqCalls).not.toContainEqual(["id", "entry-ganha"]);
+    expect(calls.some((c) => c.op === "insert" || c.op === "update")).toBe(false);
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0]).toMatchObject({
+      name: "fn_entrada_custom_atualizar",
+      args: { p_entry_id: "entry-aberta" },
+    });
   });
 
   it("falha de leitura NÃO vira insert — o erro propaga", async () => {
@@ -132,5 +149,6 @@ describe("upsertLeadIntoCustomPipe", () => {
 
     expect(calls.some((c) => c.op === "insert")).toBe(false);
     expect(calls.some((c) => c.op === "update")).toBe(false);
+    expect(rpcCalls).toHaveLength(0);
   });
 });

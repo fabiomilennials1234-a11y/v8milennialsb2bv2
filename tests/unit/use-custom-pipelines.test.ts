@@ -548,7 +548,10 @@ describe("useDeleteCustomPipelineStage", () => {
     await act(async () => {
       try { await result.current.mutateAsync({ id: "s1", pipeline_id: "p1" }); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipeline_stages");
+    expect(supabase.rpc).toHaveBeenCalledWith("fn_etapa_custom_atualizar", {
+      p_id: "s1",
+      p_patch: { is_active: false },
+    });
   });
 });
 
@@ -599,7 +602,8 @@ describe("useAddLeadToCustomPipe", () => {
         });
       } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipe_entries");
+    expect(supabase.rpc).toHaveBeenCalledWith("fn_entrada_custom_criar", expect.any(Object));
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_entries");
   });
 });
 
@@ -624,7 +628,8 @@ describe("useMoveLeadInCustomPipe", () => {
         });
       } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipe_entries");
+    expect(supabase.rpc).toHaveBeenCalledWith("fn_entrada_custom_atualizar", expect.any(Object));
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_entries");
   });
 });
 
@@ -636,7 +641,7 @@ describe("useRemoveLeadFromCustomPipe", () => {
     await act(async () => {
       try { await result.current.mutateAsync({ entry_id: "e1", pipeline_id: "p1" }); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipe_entries");
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_entries");
   });
 });
 

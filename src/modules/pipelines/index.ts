@@ -22,12 +22,11 @@
  * `funis`, `legacy/confirmacao`). Os paths legados `hooks/useX` permanecem como
  * shims de re-export para não quebrar deep-imports externos.
  *
- * ⚠️ Dual model crítico:
- * - Hooks `usePipe{Whatsapp,Confirmacao,Propostas}*` operam **views legacy** `pipe_*`
- *   (coluna `status` = stage_key slug)
- * - Hooks `usePipeline{s,Entries,Stages}*` operam **modelo novo** `pipeline_entries`
- *   (coluna `stage_id` uuid)
- * - NÃO unificar agora — cleanup futuro (out-of-scope slice 5)
+ * ⚠️ Compatibilidade em demolição:
+ * - Hooks `usePipe{Whatsapp,Confirmacao,Propostas}*` ainda leem views legacy.
+ * - Escrita frontend nas seis views é proibida desde SCRUM-673; as mutações
+ *   passam pelas funções compartilhadas e chegam ao modelo canônico.
+ * - Leitores restantes migram na SCRUM-639 antes do DROP das views.
  *
  * Realtime: subscriptions em `pipeline_entries`, NUNCA em `pipe_*` views.
  */

@@ -5,6 +5,11 @@ import { responsavelParaGravar } from "@/modules/communication/lib/lead-responsi
 import { FALLBACK_STAGES } from "@/contracts/pipe";
 import { normalizePhone } from "@/lib/normalizePhone";
 import type { Tables, TablesInsert } from "@/integrations/supabase/types";
+import {
+  createCustomPipelineEntry,
+  createSystemPipelineEntry,
+  updateSystemPipelineEntry,
+} from "@/integrations/supabase/pipeline-entry-rpc";
 
 /**
  * Fetches the first active stage_key for a pipeline type from pipeline_stages.
@@ -242,12 +247,16 @@ export function useCreateLeadFromWhatsApp() {
 
           if (inConf === false && inProp === false) {
             const firstStage = await getFirstStageKey(teamMember.organization_id, "whatsapp");
-            await supabase.from("pipe_whatsapp").insert({
-              lead_id: existingLead.id,
-              status: firstStage,
-              responsible_id: effectiveSdrIdForShadow,
-              sdr_id: effectiveSdrIdForShadow,
-              organization_id: teamMember.organization_id,
+            await createSystemPipelineEntry({
+              leadId: existingLead.id,
+              slug: "whatsapp",
+              stageKey: firstStage,
+              assignedTo: effectiveSdrIdForShadow,
+              organizationId: teamMember.organization_id,
+              metadata: {
+                responsible_id: effectiveSdrIdForShadow,
+                sdr_id: effectiveSdrIdForShadow,
+              },
             });
           } else if (inConf === null || inProp === null) {
             console.warn(
@@ -256,22 +265,30 @@ export function useCreateLeadFromWhatsApp() {
           }
         } else if (effectiveDestination === "confirmacao") {
           const firstStage = await getFirstStageKey(teamMember.organization_id, "confirmacao");
-          await supabase.from("pipe_confirmacao").insert({
-            lead_id: existingLead.id,
-            status: firstStage,
-            responsible_id: effectiveSdrIdForShadow,
-            sdr_id: effectiveSdrIdForShadow,
-            organization_id: teamMember.organization_id,
+          await createSystemPipelineEntry({
+            leadId: existingLead.id,
+            slug: "confirmacao",
+            stageKey: firstStage,
+            assignedTo: effectiveSdrIdForShadow,
+            organizationId: teamMember.organization_id,
+            metadata: {
+              responsible_id: effectiveSdrIdForShadow,
+              sdr_id: effectiveSdrIdForShadow,
+            },
           });
         } else if (effectiveDestination === "propostas") {
           const firstStage = await getFirstStageKey(teamMember.organization_id, "propostas");
-          await supabase.from("pipe_propostas").insert({
-            lead_id: existingLead.id,
-            status: firstStage,
-            responsible_id: effectiveSdrIdForShadow,
-            closer_id: effectiveSdrIdForShadow,
-            sale_responsible_id: effectiveSdrIdForShadow,
-            organization_id: teamMember.organization_id,
+          await createSystemPipelineEntry({
+            leadId: existingLead.id,
+            slug: "propostas",
+            stageKey: firstStage,
+            assignedTo: effectiveSdrIdForShadow,
+            saleResponsibleId: effectiveSdrIdForShadow,
+            organizationId: teamMember.organization_id,
+            metadata: {
+              responsible_id: effectiveSdrIdForShadow,
+              closer_id: effectiveSdrIdForShadow,
+            },
           });
         } else if (effectiveDestination === "campanha" && campanhaId) {
           const { data: stages } = await supabase
@@ -291,12 +308,12 @@ export function useCreateLeadFromWhatsApp() {
             });
           }
         } else if (effectiveDestination === "custom" && customPipelineId && customStageId) {
-          await supabase.from("custom_pipe_entries").insert({
-            organization_id: teamMember.organization_id,
-            pipeline_id: customPipelineId,
-            lead_id: existingLead.id,
-            stage_id: customStageId,
-            assigned_to: effectiveSdrIdForShadow,
+          await createCustomPipelineEntry({
+            organizationId: teamMember.organization_id,
+            pipelineId: customPipelineId,
+            leadId: existingLead.id,
+            stageId: customStageId,
+            assignedTo: effectiveSdrIdForShadow,
           });
         }
 
@@ -356,14 +373,15 @@ export function useCreateLeadFromWhatsApp() {
 
         if (inConfirmacao === false && inPropostas === false) {
           const firstStage = await getFirstStageKey(teamMember.organization_id, "whatsapp");
-          const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
-            lead_id: newLead.id,
-            status: firstStage,
-            responsible_id: effectiveSdrId,
-            sdr_id: effectiveSdrId,
-            organization_id: teamMember.organization_id,
-          });
-          if (pipeError) {
+          try {
+            await createSystemPipelineEntry({
+              leadId: newLead.id,
+              slug: "whatsapp",
+              stageKey: firstStage,
+              organizationId: teamMember.organization_id,
+              metadata: { responsible_id: effectiveSdrId, sdr_id: effectiveSdrId },
+            });
+          } catch (pipeError) {
             console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline qualificação:", pipeError);
           }
         } else if (inConfirmacao === null || inPropostas === null) {
@@ -375,27 +393,29 @@ export function useCreateLeadFromWhatsApp() {
         }
       } else if (effectiveDestination === "confirmacao") {
         const firstStage = await getFirstStageKey(teamMember.organization_id, "confirmacao");
-        const { error: pipeError } = await supabase.from("pipe_confirmacao").insert({
-          lead_id: newLead.id,
-          status: firstStage,
-          responsible_id: effectiveSdrId,
-          sdr_id: effectiveSdrId,
-          organization_id: teamMember.organization_id,
-        });
-        if (pipeError) {
+        try {
+          await createSystemPipelineEntry({
+            leadId: newLead.id,
+            slug: "confirmacao",
+            stageKey: firstStage,
+            organizationId: teamMember.organization_id,
+            metadata: { responsible_id: effectiveSdrId, sdr_id: effectiveSdrId },
+          });
+        } catch (pipeError) {
           console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline confirmação:", pipeError);
         }
       } else if (effectiveDestination === "propostas") {
         const firstStage = await getFirstStageKey(teamMember.organization_id, "propostas");
-        const { error: pipeError } = await supabase.from("pipe_propostas").insert({
-          lead_id: newLead.id,
-          status: firstStage,
-          responsible_id: effectiveSdrId,
-          closer_id: effectiveSdrId,
-          sale_responsible_id: effectiveSdrId,
-          organization_id: teamMember.organization_id,
-        });
-        if (pipeError) {
+        try {
+          await createSystemPipelineEntry({
+            leadId: newLead.id,
+            slug: "propostas",
+            stageKey: firstStage,
+            saleResponsibleId: effectiveSdrId,
+            organizationId: teamMember.organization_id,
+            metadata: { responsible_id: effectiveSdrId, closer_id: effectiveSdrId },
+          });
+        } catch (pipeError) {
           console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline propostas:", pipeError);
         }
       } else if (effectiveDestination === "campanha" && campanhaId) {
@@ -420,14 +440,15 @@ export function useCreateLeadFromWhatsApp() {
           }
         }
       } else if (effectiveDestination === "custom" && customPipelineId && customStageId) {
-        const { error: customError } = await supabase.from("custom_pipe_entries").insert({
-          organization_id: teamMember.organization_id,
-          pipeline_id: customPipelineId,
-          lead_id: newLead.id,
-          stage_id: customStageId,
-          assigned_to: effectiveSdrId,
-        });
-        if (customError) {
+        try {
+          await createCustomPipelineEntry({
+            organizationId: teamMember.organization_id,
+            pipelineId: customPipelineId,
+            leadId: newLead.id,
+            stageId: customStageId,
+            assignedTo: effectiveSdrId,
+          });
+        } catch (customError) {
           console.error("[WhatsApp Lead] Erro ao adicionar ao funil customizado:", customError);
         }
       }
@@ -509,17 +530,13 @@ export function useLinkLeadToWhatsApp() {
           throw new Error("Usuário não está vinculado a uma organização");
         }
         const firstStage = await getFirstStageKey(teamMember.organization_id, "whatsapp");
-        const { error: pipeError } = await supabase.from("pipe_whatsapp").insert({
-          lead_id: leadId,
-          status: firstStage,
-          responsible_id: teamMember.id,
-          sdr_id: teamMember.id,
-          organization_id: teamMember.organization_id,
+        await createSystemPipelineEntry({
+          leadId,
+          slug: "whatsapp",
+          stageKey: firstStage,
+          organizationId: teamMember.organization_id,
+          metadata: { responsible_id: teamMember.id, sdr_id: teamMember.id },
         });
-        if (pipeError) {
-          console.error("[WhatsApp Lead] Erro ao adicionar ao pipeline:", pipeError);
-          throw new Error(pipeError.message || "Falha ao inserir no pipeline");
-        }
       }
 
       // 3. Vincular lead_id nas mensagens
@@ -564,20 +581,13 @@ export function useUpdateLeadPipelineStatus() {
       status: "novo" | "abordado" | "respondeu" | "esfriou" | "agendado";
       scheduledDate?: string;
     }) => {
-      const updateData: any = { status };
+      const updateData: Record<string, string> = { stage_key: status };
       if (scheduledDate) {
         updateData.scheduled_date = scheduledDate;
       }
 
-      const { data, error } = await supabase
-        .from("pipe_whatsapp")
-        .update(updateData)
-        .eq("id", pipeId)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      await updateSystemPipelineEntry(pipeId, updateData);
+      return { id: pipeId, lead_id: leadId, status, scheduled_date: scheduledDate ?? null };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
