@@ -412,8 +412,27 @@ function DealCreatedConfig({
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
   const { data: members = [] } = useTeamMembers();
+  const { data: pipelines } = useFunisDaOrg();
   const activeMembers = members.filter((m) => m.is_active);
   const requireLead = cfg.require_lead !== false;
+  const pipelineConfigIsValid =
+    !Object.prototype.hasOwnProperty.call(cfg, "pipeline_ids") ||
+    (Array.isArray(cfg.pipeline_ids) &&
+      cfg.pipeline_ids.every((id) => typeof id === "string" && id.trim() !== ""));
+  const selectedPipelineIds = pipelineConfigIsValid && Array.isArray(cfg.pipeline_ids)
+    ? (cfg.pipeline_ids as string[])
+    : [];
+  const visiblePipelines = (pipelines || []).filter(
+    (pipeline) => pipeline.is_active || selectedPipelineIds.includes(pipeline.id),
+  );
+
+  const togglePipeline = (pipelineId: string, checked: boolean) => {
+    updateConfig({
+      pipeline_ids: checked
+        ? [...selectedPipelineIds, pipelineId]
+        : selectedPipelineIds.filter((id) => id !== pipelineId),
+    });
+  };
 
   return (
     <>
@@ -485,8 +504,43 @@ function DealCreatedConfig({
         </Select>
       </div>
 
+      <div className="space-y-2">
+        <Label>Funis de nascimento (opcional)</Label>
+        {!pipelineConfigIsValid && (
+          <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            Configuração de funis inválida. Revise a seleção antes de ativar.
+          </p>
+        )}
+        {visiblePipelines.length > 0 ? (
+          <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-border/60 p-2">
+            {visiblePipelines.map((pipeline) => (
+              <label
+                key={pipeline.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
+              >
+                <Checkbox
+                  checked={selectedPipelineIds.includes(pipeline.id)}
+                  onCheckedChange={(checked) => togglePipeline(pipeline.id, checked === true)}
+                />
+                {pipeline.label}
+                {!pipeline.is_active && (
+                  <span className="text-xs text-muted-foreground">(desativado)</span>
+                )}
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Nenhum funil encontrado.</p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {selectedPipelineIds.length === 0
+            ? "Nenhum funil marcado = qualquer funil"
+            : `${selectedPipelineIds.length} funil(is) selecionado(s)`}
+        </p>
+      </div>
+
       <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-        Dispara quando um negócio é criado — na tela de Negócios ou pelo nó "Criar Negócio".
+        Dispara quando o negócio entra no funil e recebe sua primeira etapa.
         O lead do workflow é o lead vinculado ao negócio.
       </div>
     </>

@@ -399,10 +399,12 @@ export interface TriggerConfigScheduledDate {
 }
 
 /**
- * deal_created — disparado pelo PG trigger `trigger_workflow_deal_created`
- * (AFTER INSERT em `deals`). O lead do workflow é `deals.source_lead_id`.
+ * deal_created — disparado quando a posição canônica do Negócio fica completa.
+ * O lead do workflow é `deals.source_lead_id`.
  */
 export interface TriggerConfigDealCreated {
+  /** Funis de nascimento (`pipelines.id`); vazio/ausente = qualquer funil. */
+  pipeline_ids?: string[];
   /** Só dispara para negócios vinculados a um lead. Default: true (fail-closed —
    *  a maioria dos nós downstream precisa de lead). */
   require_lead?: boolean;
