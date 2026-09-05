@@ -863,6 +863,50 @@ describe("matchesTriggerConfig", () => {
         matchesTriggerConfig("deal_created", { pipeline_ids: [FUNIL_A, 42] }, ctx()),
       ).toBe(false);
     });
+
+    it("combina etapas com OR e funil com E", () => {
+      const ETAPA_A1 = "aaaaaaaa-1111-1111-1111-111111111111";
+      const ETAPA_A2 = "aaaaaaaa-2222-2222-2222-222222222222";
+      expect(
+        matchesTriggerConfig(
+          "deal_created",
+          { pipeline_ids: [FUNIL_A], stage_ids: [ETAPA_A1, ETAPA_A2] },
+          ctx({ stage_id: ETAPA_A2 }),
+        ),
+      ).toBe(true);
+      expect(
+        matchesTriggerConfig(
+          "deal_created",
+          { pipeline_ids: [FUNIL_B], stage_ids: [ETAPA_A1, ETAPA_A2] },
+          ctx({ stage_id: ETAPA_A2 }),
+        ),
+      ).toBe(false);
+    });
+
+    it("sem etapas aceita qualquer etapa dos funis escolhidos", () => {
+      expect(
+        matchesTriggerConfig("deal_created", { pipeline_ids: [FUNIL_A], stage_ids: [] }, ctx()),
+      ).toBe(true);
+    });
+
+    it("etapa configurada exige contexto e funil válidos", () => {
+      const ETAPA_A = "aaaaaaaa-1111-1111-1111-111111111111";
+      expect(
+        matchesTriggerConfig(
+          "deal_created",
+          { pipeline_ids: [FUNIL_A], stage_ids: [ETAPA_A] },
+          ctx({ stage_id: null }),
+        ),
+      ).toBe(false);
+      expect(matchesTriggerConfig("deal_created", { stage_ids: [ETAPA_A] }, ctx({ stage_id: ETAPA_A }))).toBe(false);
+      expect(
+        matchesTriggerConfig(
+          "deal_created",
+          { pipeline_ids: [FUNIL_A], stage_ids: ETAPA_A },
+          ctx({ stage_id: ETAPA_A }),
+        ),
+      ).toBe(false);
+    });
   });
 
   // unknown trigger type

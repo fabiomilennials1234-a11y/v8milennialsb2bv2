@@ -413,6 +413,7 @@ function DealCreatedConfig({
 }) {
   const { data: members = [] } = useTeamMembers();
   const { data: pipelines } = useFunisDaOrg();
+  const { data: allStages } = useAllPipelineStages();
   const activeMembers = members.filter((m) => m.is_active);
   const requireLead = cfg.require_lead !== false;
   const pipelineConfigIsValid =
@@ -422,15 +423,37 @@ function DealCreatedConfig({
   const selectedPipelineIds = pipelineConfigIsValid && Array.isArray(cfg.pipeline_ids)
     ? (cfg.pipeline_ids as string[])
     : [];
+  const stageConfigIsValid =
+    !Object.prototype.hasOwnProperty.call(cfg, "stage_ids") ||
+    (Array.isArray(cfg.stage_ids) &&
+      cfg.stage_ids.every((id) => typeof id === "string" && id.trim() !== ""));
+  const selectedStageIds = stageConfigIsValid && Array.isArray(cfg.stage_ids)
+    ? (cfg.stage_ids as string[])
+    : [];
   const visiblePipelines = (pipelines || []).filter(
     (pipeline) => pipeline.is_active || selectedPipelineIds.includes(pipeline.id),
   );
 
   const togglePipeline = (pipelineId: string, checked: boolean) => {
+    const nextPipelineIds = checked
+      ? [...selectedPipelineIds, pipelineId]
+      : selectedPipelineIds.filter((id) => id !== pipelineId);
+    const nextStageIds = selectedStageIds.filter((stageId) =>
+      (allStages || []).some(
+        (stage) => stage.id === stageId && stage.pipeline_id != null && nextPipelineIds.includes(stage.pipeline_id),
+      ),
+    );
     updateConfig({
-      pipeline_ids: checked
-        ? [...selectedPipelineIds, pipelineId]
-        : selectedPipelineIds.filter((id) => id !== pipelineId),
+      pipeline_ids: nextPipelineIds,
+      stage_ids: nextStageIds,
+    });
+  };
+
+  const toggleStage = (stageId: string, checked: boolean) => {
+    updateConfig({
+      stage_ids: checked
+        ? [...selectedStageIds, stageId]
+        : selectedStageIds.filter((id) => id !== stageId),
     });
   };
 
@@ -532,12 +555,64 @@ function DealCreatedConfig({
         ) : (
           <p className="text-xs text-muted-foreground">Nenhum funil encontrado.</p>
         )}
-        <p className="text-xs text-muted-foreground">
-          {selectedPipelineIds.length === 0
-            ? "Nenhum funil marcado = qualquer funil"
-            : `${selectedPipelineIds.length} funil(is) selecionado(s)`}
-        </p>
+        {selectedPipelineIds.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Nenhum funil marcado = qualquer funil
+          </p>
+        )}
       </div>
+
+      {selectedPipelineIds.length > 0 && (
+        <div className="space-y-2">
+          <Label>Etapas de nascimento (opcional)</Label>
+          {!stageConfigIsValid && (
+            <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Configuração de etapas inválida. Revise a seleção antes de ativar.
+            </p>
+          )}
+          <div className="max-h-60 space-y-3 overflow-y-auto rounded-md border border-border/60 p-2">
+            {visiblePipelines
+              .filter((pipeline) => selectedPipelineIds.includes(pipeline.id))
+              .map((pipeline) => {
+                const stages = (allStages || []).filter(
+                  (stage) =>
+                    stage.pipeline_id === pipeline.id &&
+                    (stage.is_active || selectedStageIds.includes(stage.id)),
+                );
+                return (
+                  <div key={pipeline.id} className="space-y-1">
+                    <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Etapas em {pipeline.label}
+                    </p>
+                    {stages.length > 0 ? stages.map((stage) => (
+                      <label
+                        key={stage.id}
+                        className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
+                      >
+                        <Checkbox
+                          checked={selectedStageIds.includes(stage.id)}
+                          onCheckedChange={(checked) => toggleStage(stage.id, checked === true)}
+                        />
+                        {stage.name}
+                        {!stage.is_active && (
+                          <span className="text-xs text-muted-foreground">(desativada)</span>
+                        )}
+                      </label>
+                    )) : (
+                      <p className="px-1 text-xs text-muted-foreground">Nenhuma etapa ativa.</p>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {selectedPipelineIds.length} {selectedPipelineIds.length === 1 ? "funil" : "funis"} ·{" "}
+            {selectedStageIds.length === 0
+              ? "qualquer etapa"
+              : `${selectedStageIds.length} ${selectedStageIds.length === 1 ? "etapa específica" : "etapas específicas"}`}
+          </p>
+        </div>
+      )}
 
       <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
         Dispara quando o negócio entra no funil e recebe sua primeira etapa.
