@@ -405,6 +405,8 @@ export interface TriggerConfigScheduledDate {
 export interface TriggerConfigDealCreated {
   /** Funis de nascimento (`pipelines.id`); vazio/ausente = qualquer funil. */
   pipeline_ids?: string[];
+  /** Etapas de nascimento (`pipeline_stages.id`); vazio = qualquer etapa dos funis. */
+  stage_ids?: string[];
   /** Só dispara para negócios vinculados a um lead. Default: true (fail-closed —
    *  a maioria dos nós downstream precisa de lead). */
   require_lead?: boolean;

@@ -889,6 +889,16 @@ export function matchesTriggerConfig(
         if (!pipelineId || !pipelines.ids.includes(pipelineId)) return false;
       }
 
+      const stages = parseStrictIdFilter(config, "stage_ids");
+      if (!stages.valid) return false;
+      if (stages.ids.length > 0) {
+        // Etapa sem funil selecionado é uma config incoerente: a interface só
+        // oferece etapas dentro dos funis marcados e o matcher falha fechado.
+        if (pipelines.ids.length === 0) return false;
+        const stageId = asUuidOrNull(context.stage_id);
+        if (!stageId || !stages.ids.includes(stageId)) return false;
+      }
+
       if (config.filter_owner_id && config.filter_owner_id !== context.owner_id) return false;
 
       if (config.min_value != null) {

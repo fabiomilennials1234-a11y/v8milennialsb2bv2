@@ -286,6 +286,44 @@ describe("TriggerPanel — deal_created — funis de nascimento", () => {
     fireEvent.click(checkboxFor("Funil Antigo"));
     expect(lastConfig(onUpdate).pipeline_ids).toEqual([]);
   });
+
+  it("só mostra etapas depois de selecionar funil e agrupa pelo nome exibido", () => {
+    const first = renderDealCreatedPanel();
+    expect(screen.queryByText("Etapas de nascimento (opcional)")).not.toBeInTheDocument();
+    first.onUpdate.mockClear();
+
+    renderDealCreatedPanel({ pipeline_ids: [PROPOSTAS] });
+    expect(screen.getByText("Etapas de nascimento (opcional)")).toBeInTheDocument();
+    expect(screen.getByText("Etapas em Orçamentos")).toBeInTheDocument();
+    expect(screen.getByText("Proposta Enviada")).toBeInTheDocument();
+    expect(screen.queryByText("Sondagem")).not.toBeInTheDocument();
+  });
+
+  it("grava várias etapas e resume filtro específico", () => {
+    const { onUpdate } = renderDealCreatedPanel({
+      pipeline_ids: [PROPOSTAS, QUALIFICACAO],
+      stage_ids: [ETAPA_ENVIADA],
+    });
+    fireEvent.click(checkboxFor("Sondagem"));
+    expect(lastConfig(onUpdate).stage_ids).toEqual([ETAPA_ENVIADA, ETAPA_DE_OUTRO_FUNIL]);
+    expect(screen.getByText("2 funis · 1 etapa específica")).toBeInTheDocument();
+  });
+
+  it("sem etapas resume qualquer etapa dos funis selecionados", () => {
+    renderDealCreatedPanel({ pipeline_ids: [PROPOSTAS, QUALIFICACAO] });
+    expect(screen.getByText("2 funis · qualquer etapa")).toBeInTheDocument();
+  });
+
+  it("desmarcar funil remove só as etapas dele", () => {
+    const { onUpdate } = renderDealCreatedPanel({
+      pipeline_ids: [PROPOSTAS, QUALIFICACAO],
+      stage_ids: [ETAPA_ENVIADA, ETAPA_DE_OUTRO_FUNIL],
+    });
+    fireEvent.click(checkboxFor("Oportunidades"));
+    const config = lastConfig(onUpdate);
+    expect(config.pipeline_ids).toEqual([PROPOSTAS]);
+    expect(config.stage_ids).toEqual([ETAPA_ENVIADA]);
+  });
 });
 
 // ── Etapa, número de origem, modo e freio (2026-09-03) ───
