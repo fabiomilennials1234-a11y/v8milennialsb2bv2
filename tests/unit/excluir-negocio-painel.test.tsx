@@ -1,16 +1,9 @@
 /**
- * O painel escolhe a tabela certa — e não fecha em cima de uma recusa.
+ * O painel apaga pela fonte canônica — e não fecha em cima de uma recusa.
  *
- * `excluir-negocio.test.tsx` prova o MOTOR: dado `ehSystem`, qual tabela. Este
- * arquivo prova o ELO ANTERIOR, que é onde o defeito estava e onde nenhum
- * teste chegava: quem calcula `ehSystem` a partir do negócio na tela.
- *
- * A primeira versão do diff roteava por `data.pipeTable`, que é NOME DE VIEW e
- * sai de um switch de slug com três casos. Funil de SISTEMA com qualquer outro
- * slug — `upsell`, e os funis de sistema novos — tem `pipeTable: null`, era
- * lido como custom, e o DELETE ia para `custom_pipe_entries` com um id que não
- * existe lá: zero linhas, card intacto na tela, e um aviso de permissão que é
- * mentira. O teste do motor não pegava isso porque já recebia a família pronta.
+ * `excluir-negocio.test.tsx` prova o hook isolado. Este arquivo prova o elo com
+ * o painel real: cards de sistema e custom entregam o mesmo `entryId`, e ambos
+ * precisam ser removidos de `pipeline_entries`, a fonte única.
  */
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -69,6 +62,9 @@ vi.mock("@/integrations/supabase/client", () => {
 vi.mock("@/modules/identity/permissions/hooks/useUserRole", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+}));
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
+  useOrganization: () => ({ organizationId: "org-1" }),
 }));
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => vi.fn(),
@@ -141,7 +137,7 @@ beforeEach(() => {
   negocioRef.value = null;
 });
 
-describe("O painel roteia por FAMÍLIA, não pelo nome da view", () => {
+describe("O painel apaga qualquer funil pela fonte canônica", () => {
   it("funil de sistema fora do trio de slugs vai para pipeline_entries", async () => {
     negocioRef.value = {
       ...NEGOCIO_ESTAGNADO,
@@ -156,7 +152,7 @@ describe("O painel roteia por FAMÍLIA, não pelo nome da view", () => {
     expect(apagou()[0].tabela).toBe("pipeline_entries");
   });
 
-  it("funil custom vai para custom_pipe_entries", async () => {
+  it("funil custom também vai para pipeline_entries", async () => {
     negocioRef.value = {
       ...NEGOCIO_ESTAGNADO,
       funilEhSystem: false,
@@ -167,7 +163,7 @@ describe("O painel roteia por FAMÍLIA, não pelo nome da view", () => {
     await abrirEConfirmarExclusao();
 
     await waitFor(() => expect(apagou()).toHaveLength(1));
-    expect(apagou()[0].tabela).toBe("custom_pipe_entries");
+    expect(apagou()[0].tabela).toBe("pipeline_entries");
   });
 
   it("funil de sistema COM view de compat continua em pipeline_entries", async () => {

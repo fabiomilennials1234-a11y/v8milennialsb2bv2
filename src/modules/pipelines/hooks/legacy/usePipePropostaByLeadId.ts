@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import type { ProjectedPropostaPipe } from "@/integrations/supabase/projected-pipe-types";
 
 export type PipePropostaRow = ProjectedPropostaPipe;
@@ -13,8 +13,7 @@ export type PipePropostaRow = ProjectedPropostaPipe;
  * que substitui o espelho pipe_propostas.
  */
 export function usePipePropostaByLeadId(leadId: string | null | undefined) {
-  const { data: teamMember } = useCurrentTeamMember();
-  const organizationId = teamMember?.organization_id;
+  const { organizationId } = useOrganization();
 
   return useQuery({
     queryKey: ["pipe_propostas_by_lead", leadId, organizationId],

@@ -82,7 +82,7 @@ vi.mock("@/shared/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => registrou,
 }));
 vi.mock("@/modules/identity", () => ({
-  useCurrentTeamMember: () => ({ data: { organization_id: "org-t" } }),
+  useOrganization: () => ({ organizationId: "org-t" }),
 }));
 
 import { useExcluirNegocio } from "@/modules/leads/components/deal-card/useExcluirNegocio";

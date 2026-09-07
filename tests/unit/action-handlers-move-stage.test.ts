@@ -131,8 +131,8 @@ describe("moveStage — shared action handler", () => {
     expect(result.data?.target_pipe).toBe("campanha");
   });
 
-  it("moves lead in custom pipeline — validates stage and upserts custom_pipe_entries", async () => {
-    const { sb, mockTable, getInserted } = createMockSupabase();
+  it("moves lead in custom pipeline — validates stage and calls canonical create RPC", async () => {
+    const { sb, mockTable, mockRpc, getRpcCalls } = createMockSupabase();
     const customPipeId = "custom-pipe-uuid";
     const stageId = "custom-stage-uuid";
     // SCRUM-627: o funil resolve pelo adapter (`pipelines`) e a etapa pela
@@ -144,6 +144,7 @@ describe("moveStage — shared action handler", () => {
       target_pipe_type: null, target_stage_key: null,
     }]);
     mockTable("custom_pipe_entries", []);
+    mockRpc("fn_entrada_custom_criar", { id: "entry-created" });
 
     const result = await moveStage({
       supabase: sb,
@@ -155,13 +156,19 @@ describe("moveStage — shared action handler", () => {
 
     expect(result.success).toBe(true);
     expect(result.data?.target_pipe).toBe(customPipeId);
-    const inserted = getInserted("custom_pipe_entries");
-    expect(inserted.length).toBe(1);
-    expect(inserted[0]).toMatchObject({ lead_id: "lead-1", pipeline_id: customPipeId, stage_id: stageId });
+    expect(getRpcCalls()).toContainEqual({
+      name: "fn_entrada_custom_criar",
+      params: expect.objectContaining({
+        p_lead_id: "lead-1",
+        p_organization_id: "org-1",
+        p_pipeline_id: customPipeId,
+        p_stage_id: stageId,
+      }),
+    });
   });
 
   it("custom pipeline auto-transition — on is_final_positive, creates entry in target pipeline", async () => {
-    const { sb, mockTable, getInserted } = createMockSupabase();
+    const { sb, mockTable, mockRpc, getRpcCalls } = createMockSupabase();
     const sourcePipeId = "source-pipe";
     const targetPipeId = "target-pipe";
     const sourceStageId = "source-stage-final";
@@ -174,6 +181,7 @@ describe("moveStage — shared action handler", () => {
       target_pipe_type: null, target_stage_key: null,
     }]);
     mockTable("custom_pipe_entries", []);
+    mockRpc("fn_entrada_custom_criar", { id: "entry-created" });
 
     const result = await moveStage({
       supabase: sb,
@@ -184,10 +192,12 @@ describe("moveStage — shared action handler", () => {
     });
 
     expect(result.success).toBe(true);
-    const entries = getInserted("custom_pipe_entries");
-    // Should have 2 entries: source pipeline + auto-transition to target pipeline
-    expect(entries.length).toBe(2);
-    expect(entries[1]).toMatchObject({ pipeline_id: targetPipeId, stage_id: targetStageId });
+    const creates = getRpcCalls().filter((call) => call.name === "fn_entrada_custom_criar");
+    expect(creates).toHaveLength(2);
+    expect(creates[1].params).toEqual(expect.objectContaining({
+      p_pipeline_id: targetPipeId,
+      p_stage_id: targetStageId,
+    }));
   });
 
   it("rejects invalid stage for standard pipe", async () => {
@@ -245,7 +255,7 @@ describe("moveStage — shared action handler", () => {
   });
 
   it("SCRUM-627: funil custom aceita a etapa por STAGE_KEY além do uuid", async () => {
-    const { sb, mockTable, getInserted } = createMockSupabase();
+    const { sb, mockTable, mockRpc, getRpcCalls } = createMockSupabase();
     mockTable("pipelines", [{ id: "pipe-orc", organization_id: "org-1", slug: "orcamentos", type: "custom", is_active: true }]);
     mockTable("pipeline_stages", [{
       id: "st-triagem-id", stage_key: "triagem", pipeline_id: "pipe-orc", organization_id: "org-1", is_active: true,
@@ -253,6 +263,7 @@ describe("moveStage — shared action handler", () => {
       target_pipe_type: null, target_stage_key: null,
     }]);
     mockTable("custom_pipe_entries", []);
+    mockRpc("fn_entrada_custom_criar", { id: "entry-created" });
 
     const result = await moveStage({
       supabase: sb,
@@ -263,9 +274,13 @@ describe("moveStage — shared action handler", () => {
     });
 
     expect(result.success).toBe(true);
-    const inserted = getInserted("custom_pipe_entries");
-    expect(inserted.length).toBe(1);
-    expect(inserted[0]).toMatchObject({ pipeline_id: "pipe-orc", stage_id: "st-triagem-id" });
+    expect(getRpcCalls()).toContainEqual({
+      name: "fn_entrada_custom_criar",
+      params: expect.objectContaining({
+        p_pipeline_id: "pipe-orc",
+        p_stage_id: "st-triagem-id",
+      }),
+    });
   });
 });
 
@@ -388,6 +403,13 @@ function createCustomPipeDb(opts: {
         ...st,
       }));
 
+    const projectedEntries = (): Record<string, unknown>[] =>
+      entries.map((entry) => ({
+        ...entry,
+        pipeline_type: "custom",
+        stage_role: roleOf(entry.stage_id)?.stage_role ?? "open",
+      }));
+
     const source = (): Record<string, unknown>[] =>
       table === "custom_pipeline_stages"
         ? (stages as unknown as Record<string, unknown>[])
@@ -395,8 +417,8 @@ function createCustomPipeDb(opts: {
           ? unifiedStageRows()
         : table === "pipelines"
           ? pipelineRows()
-        : table === "custom_pipe_entries"
-          ? (entries as unknown as Record<string, unknown>[])
+        : table === "negocio_projetado"
+          ? projectedEntries()
           : table === "organizations"
             ? [{ id: "__any__", feature_flags: opts.featureFlags ?? {} }]
             : [];
@@ -417,7 +439,7 @@ function createCustomPipeDb(opts: {
           descNullsLast(a.created_at, b.created_at) ||
           descNullsLast(a.id, b.id),
       );
-      return rows.map((r) => ({ id: r.id, stage: roleOf(r.stage_id) }));
+      return rows.map((r) => ({ id: r.id, stage_role: roleOf(r.stage_id)?.stage_role ?? "open" }));
     };
 
     const run = () => {
@@ -435,7 +457,7 @@ function createCustomPipeDb(opts: {
         }
         return { data: null, error: null };
       }
-      if (table === "custom_pipe_entries") {
+      if (table === "negocio_projetado") {
         if (opts.entriesReadError) return { data: null, error: opts.entriesReadError };
         return { data: readEntries(), error: null };
       }
@@ -470,7 +492,34 @@ function createCustomPipeDb(opts: {
     return chain;
   }
 
-  return { sb: { from } as never, entries, inserted, updated };
+  async function rpc(name: string, params: Record<string, unknown>) {
+    if (name === "fn_entrada_custom_criar") {
+      const row: FakeEntry = {
+        id: `gen-${++seq}`,
+        lead_id: params.p_lead_id as string,
+        organization_id: params.p_organization_id as string,
+        pipeline_id: params.p_pipeline_id as string,
+        stage_id: params.p_stage_id as string,
+        entered_at: params.p_entered_at as string,
+        stage_changed_at: params.p_stage_changed_at as string,
+        created_at: params.p_entered_at as string,
+      };
+      entries.push(row);
+      inserted.push(row);
+      return { data: row, error: null };
+    }
+    if (name === "fn_entrada_custom_atualizar") {
+      const entry = entries.find((row) => row.id === params.p_entry_id);
+      if (!entry) return { data: null, error: { message: "entry not found" } };
+      const payload = params.p_patch as Record<string, unknown>;
+      Object.assign(entry, payload);
+      updated.push({ id: entry.id, payload: { ...payload } });
+      return { data: entry, error: null };
+    }
+    return { data: null, error: { message: `RPC not mocked: ${name}` } };
+  }
+
+  return { sb: { from, rpc } as never, entries, inserted, updated };
 }
 
 const ORG = "org-h4-08";

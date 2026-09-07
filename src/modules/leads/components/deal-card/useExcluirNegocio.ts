@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
-import { useCurrentTeamMember } from "@/modules/identity";
+import { useOrganization } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 
 /**
@@ -120,7 +120,7 @@ function invalidar(qc: ReturnType<typeof useQueryClient>, leadId: string): void 
 export function useExcluirNegocio(): UseExcluirNegocioResult {
   const qc = useQueryClient();
   const registrar = useLogLeadAction();
-  const { data: teamMember } = useCurrentTeamMember();
+  const { organizationId } = useOrganization();
   const [excluindo, setExcluindo] = useState(false);
 
   const excluir = useCallback(
@@ -129,14 +129,14 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
 
       setExcluindo(true);
       try {
-        if (!teamMember?.organization_id) {
+        if (!organizationId) {
           throw new Error("Organização ativa não encontrada");
         }
         const { data: apagadas, error } = await supabase
           .from("pipeline_entries")
           .delete()
           .eq("id", entryId)
-          .eq("organization_id", teamMember.organization_id)
+          .eq("organization_id", organizationId)
           .select("id");
 
         if (error) throw error;
@@ -146,7 +146,7 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
             .from("pipeline_entries")
             .select("id")
             .eq("id", entryId)
-            .eq("organization_id", teamMember.organization_id)
+            .eq("organization_id", organizationId)
             .maybeSingle();
 
           if (!aindaLa) {
@@ -197,7 +197,7 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
         setExcluindo(false);
       }
     },
-    [qc, registrar, teamMember?.organization_id],
+    [organizationId, qc, registrar],
   );
 
   return { excluindo, excluir };

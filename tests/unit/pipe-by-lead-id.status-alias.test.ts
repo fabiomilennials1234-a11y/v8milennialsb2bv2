@@ -55,6 +55,9 @@ const LINHA = {
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: () => projecao(LINHA) },
 }));
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
+  useOrganization: () => ({ organizationId: "org-1" }),
+}));
 
 import { usePipeConfirmacaoByLeadId } from "@/modules/pipelines/hooks/legacy/usePipeConfirmacaoByLeadId";
 import { usePipePropostaByLeadId } from "@/modules/pipelines/hooks/legacy/usePipePropostaByLeadId";
