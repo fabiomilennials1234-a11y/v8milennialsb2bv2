@@ -314,9 +314,9 @@ async function processExecution(
       return;
     }
 
-    // Validate trigger_config conditions (origin, pipe, stage, etc.)
-    // The PG fire_workflow_trigger() creates executions for ALL active workflows
-    // of a trigger type without filtering — this is the gate that enforces conditions.
+    // Revalida trigger_config contra o snapshot persistido antes do primeiro nó.
+    // O matcher SQL já evita criar execuções incompatíveis; este segundo portão
+    // impede que contexto/config alterados entre emissão e claim ampliem o escopo.
     if (workflow.trigger_type && workflow.trigger_config && !currentNodeId) {
       const triggerConfig = workflow.trigger_config as Record<string, unknown>;
       if (!matchesTriggerConfig(workflow.trigger_type, triggerConfig, context)) {

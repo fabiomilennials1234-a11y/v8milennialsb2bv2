@@ -310,14 +310,17 @@ describe("useDeletePipelineStage", () => {
     mockFrom.mockReturnValue(createChainMock());
   });
 
-  it("soft deletes a stage", async () => {
+  it("delegates stage deletion to the transactional RPC", async () => {
     const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
     await act(async () => {
       try {
         await result.current.mutateAsync({ id: "ps-1", pipeline_type: "whatsapp" });
       } catch {}
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
+    expect(supabase.rpc).toHaveBeenCalledWith("delete_pipeline_stage", {
+      p_stage_id: "ps-1",
+      p_destination_stage_id: null,
+    });
   });
 });
 

@@ -36,6 +36,11 @@ vi.mock("@/modules/communication", () => ({
   useWhatsAppInstances: () => mockInstances(),
 }));
 
+vi.mock("@/modules/identity", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/identity")>()),
+  useTeamMembers: () => ({ data: [] }),
+}));
+
 vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({
   useCampanhas: () => ({ data: [] }),
   useCampanhaStages: () => ({ data: [] }),
@@ -92,17 +97,24 @@ const DOIS_NUMEROS = [
   { id: "inst-sdr", instance_name: "Suporte" },
 ];
 
-function renderPanel(config: Record<string, unknown> = {}) {
+function renderPanel(
+  config: Record<string, unknown> = {},
+  triggerType: TriggerNodeData["triggerType"] = "lead_replied",
+) {
   const onUpdate = vi.fn();
   const data = {
     type: "trigger",
-    triggerType: "lead_replied",
+    triggerType,
     label: "Trigger",
     config,
   } as unknown as TriggerNodeData;
 
   render(<TriggerPanel data={data} onUpdate={onUpdate} />);
   return { onUpdate };
+}
+
+function renderDealCreatedPanel(config: Record<string, unknown> = {}) {
+  return renderPanel(config, "deal_created");
 }
 
 /** O config resultante da última chamada de onUpdate. */
@@ -243,6 +255,74 @@ describe("TriggerPanel — lead_replied", () => {
     renderPanel();
     openTriggerTypeSelect();
     expect(screen.queryByText("Negócios")).not.toBeInTheDocument();
+  });
+});
+
+describe("TriggerPanel — deal_created — funis de nascimento", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+  });
+
+  it("config vazia comunica qualquer funil", () => {
+    renderDealCreatedPanel();
+    expect(screen.getByText("Funis de nascimento (opcional)")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum funil marcado = qualquer funil")).toBeInTheDocument();
+  });
+
+  it("grava vários funis com OR", () => {
+    const { onUpdate } = renderDealCreatedPanel({ pipeline_ids: [QUALIFICACAO] });
+    fireEvent.click(checkboxFor("Orçamentos"));
+    expect(lastConfig(onUpdate).pipeline_ids).toEqual([QUALIFICACAO, PROPOSTAS]);
+  });
+
+  it("mantém funil inativo salvo visível e removível", () => {
+    const { onUpdate } = renderDealCreatedPanel({ pipeline_ids: [ARQUIVADO] });
+    expect(screen.getByText("Funil Antigo")).toBeInTheDocument();
+    expect(screen.getByText("(desativado)")).toBeInTheDocument();
+    fireEvent.click(checkboxFor("Funil Antigo"));
+    expect(lastConfig(onUpdate).pipeline_ids).toEqual([]);
+  });
+
+  it("só mostra etapas depois de selecionar funil e agrupa pelo nome exibido", () => {
+    const first = renderDealCreatedPanel();
+    expect(screen.queryByText("Etapas de nascimento (opcional)")).not.toBeInTheDocument();
+    first.onUpdate.mockClear();
+
+    renderDealCreatedPanel({ pipeline_ids: [PROPOSTAS] });
+    expect(screen.getByText("Etapas de nascimento (opcional)")).toBeInTheDocument();
+    expect(screen.getByText("Etapas em Orçamentos")).toBeInTheDocument();
+    expect(screen.getByText("Proposta Enviada")).toBeInTheDocument();
+    expect(screen.queryByText("Sondagem")).not.toBeInTheDocument();
+  });
+
+  it("grava várias etapas e resume filtro específico", () => {
+    const { onUpdate } = renderDealCreatedPanel({
+      pipeline_ids: [PROPOSTAS, QUALIFICACAO],
+      stage_ids: [ETAPA_ENVIADA],
+    });
+    fireEvent.click(checkboxFor("Sondagem"));
+    expect(lastConfig(onUpdate).stage_ids).toEqual([ETAPA_ENVIADA, ETAPA_DE_OUTRO_FUNIL]);
+    expect(screen.getByText("2 funis · 1 etapa específica")).toBeInTheDocument();
+  });
+
+  it("sem etapas resume qualquer etapa dos funis selecionados", () => {
+    renderDealCreatedPanel({ pipeline_ids: [PROPOSTAS, QUALIFICACAO] });
+    expect(screen.getByText("2 funis · qualquer etapa")).toBeInTheDocument();
+  });
+
+  it("desmarcar funil remove só as etapas dele", () => {
+    const { onUpdate } = renderDealCreatedPanel({
+      pipeline_ids: [PROPOSTAS, QUALIFICACAO],
+      stage_ids: [ETAPA_ENVIADA, ETAPA_DE_OUTRO_FUNIL],
+    });
+    fireEvent.click(checkboxFor("Oportunidades"));
+    const config = lastConfig(onUpdate);
+    expect(config.pipeline_ids).toEqual([PROPOSTAS]);
+    expect(config.stage_ids).toEqual([ETAPA_ENVIADA]);
   });
 });
 
