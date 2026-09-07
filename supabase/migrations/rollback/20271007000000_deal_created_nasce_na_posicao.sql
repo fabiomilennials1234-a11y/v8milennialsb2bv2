@@ -1,4 +1,4 @@
--- Rollback de 20271006000000_deal_created_nasce_na_posicao.sql
+-- Rollback de 20271007000000_deal_created_nasce_na_posicao.sql
 
 DROP TRIGGER IF EXISTS trg_workflow_deal_created_position_insert
   ON public.pipeline_entries;

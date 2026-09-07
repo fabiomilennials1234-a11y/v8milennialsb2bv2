@@ -1,4 +1,5 @@
--- Rollback de 20271006000010_deal_created_filtra_funis.sql
+-- Rollback de 20271007000020_deal_created_filtra_etapas.sql
+-- Restaura o matcher com filtro de funil entregue no passo anterior.
 
 CREATE OR REPLACE FUNCTION public.matches_workflow_trigger_config(
   p_trigger_type text,
@@ -83,8 +84,68 @@ BEGIN
     THEN RETURN FALSE; END IF;
     RETURN TRUE;
 
+  WHEN 'deal_created' THEN
+    IF p_config ? 'require_lead'
+       AND jsonb_typeof(p_config->'require_lead') != 'boolean'
+    THEN RETURN FALSE; END IF;
+
+    IF COALESCE((p_config->>'require_lead')::boolean, TRUE)
+       AND COALESCE(p_context->>'lead_id', '') = ''
+    THEN RETURN FALSE; END IF;
+
+    IF p_config ? 'source' AND jsonb_typeof(p_config->'source') != 'string'
+    THEN RETURN FALSE; END IF;
+
+    IF COALESCE(NULLIF(p_config->>'source', ''), 'any') != 'any'
+       AND p_config->>'source' IS DISTINCT FROM p_context->>'deal_source'
+    THEN RETURN FALSE; END IF;
+
+    IF p_config ? 'pipeline_ids' THEN
+      IF jsonb_typeof(p_config->'pipeline_ids') != 'array' THEN
+        RETURN FALSE;
+      END IF;
+
+      IF EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(p_config->'pipeline_ids') AS item(value)
+        WHERE jsonb_typeof(item.value) != 'string'
+           OR btrim(item.value #>> '{}') = ''
+      ) THEN
+        RETURN FALSE;
+      END IF;
+
+      IF jsonb_array_length(p_config->'pipeline_ids') > 0 THEN
+        IF COALESCE(p_context->>'pipeline_id', '') = ''
+           OR NOT (p_config->'pipeline_ids' ? (p_context->>'pipeline_id'))
+        THEN RETURN FALSE; END IF;
+      END IF;
+    END IF;
+
+    IF p_config ? 'filter_owner_id'
+       AND jsonb_typeof(p_config->'filter_owner_id') != 'string'
+    THEN RETURN FALSE; END IF;
+
+    IF COALESCE(p_config->>'filter_owner_id', '') != ''
+       AND p_config->>'filter_owner_id' IS DISTINCT FROM p_context->>'owner_id'
+    THEN RETURN FALSE; END IF;
+
+    BEGIN
+      IF p_config ? 'min_value' AND p_config->>'min_value' IS NOT NULL
+         AND COALESCE((p_context->>'deal_value')::numeric, 0)
+             < (p_config->>'min_value')::numeric
+      THEN RETURN FALSE; END IF;
+    EXCEPTION
+      WHEN invalid_text_representation OR numeric_value_out_of_range THEN
+        RETURN FALSE;
+    END;
+
+    RETURN TRUE;
+
   ELSE
     RETURN TRUE;
   END CASE;
 END;
 $$;
+
+COMMENT ON FUNCTION public.matches_workflow_trigger_config(text, jsonb, jsonb) IS
+  'Filtra gatilhos no banco; deal_created usa posição congelada e falha fechado.';

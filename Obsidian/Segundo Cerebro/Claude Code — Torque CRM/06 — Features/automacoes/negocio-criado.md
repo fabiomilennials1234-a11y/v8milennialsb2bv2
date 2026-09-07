@@ -155,7 +155,7 @@ validado; o replay integral da cadeia continua dívida anterior.
 Ordem obrigatória:
 
 1. deploy de `process-workflow-executions` com matcher TypeScript novo;
-2. aplicar as quatro migrations `20271006000000`–`20271006000030`;
+2. aplicar as quatro migrations `20271007000000`–`20271007000030`;
 3. smoke controlado com workflow só de gatilho;
 4. publicar o frontend.
 
