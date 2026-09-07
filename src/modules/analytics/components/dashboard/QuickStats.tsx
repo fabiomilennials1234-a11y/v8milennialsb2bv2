@@ -45,16 +45,18 @@ function QuickStatsBase({ className }: QuickStatsProps) {
       const { inicioDeHoje, inicioDeAmanha } = limitesDoDia(timezone, now);
 
       const { count: meetingsToday } = await supabase
-        .from("pipe_confirmacao")
+        .from("negocio_projetado")
         .select("*", { count: "exact", head: true })
         .eq("organization_id", organizationId)
+        .eq("funil_sistema", "confirmacao")
         .gte("meeting_date", todayStart)
         .lte("meeting_date", todayEnd);
 
       const { count: confirmedToday } = await supabase
-        .from("pipe_confirmacao")
+        .from("negocio_projetado")
         .select("*", { count: "exact", head: true })
         .eq("organization_id", organizationId)
+        .eq("funil_sistema", "confirmacao")
         .gte("meeting_date", todayStart)
         .lte("meeting_date", todayEnd)
         .eq("is_confirmed", true);

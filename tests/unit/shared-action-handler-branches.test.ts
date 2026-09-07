@@ -104,7 +104,7 @@ const LEAD_FULL = {
 
 describe("resolveVariables — template substitution", () => {
   const setupSupabase = () => {
-    const { sb, mockTable } = createMockSupabase();
+    const { sb, mockTable, mockRpc } = createMockSupabase();
     mockTable("leads", [LEAD_FULL]);
     mockTable("whatsapp_instances", [
       { id: "inst-1", instance_name: "Main", organization_id: "org-1", status: "open", provider: "uazapi" },
@@ -488,7 +488,6 @@ describe("handleMoveStage — all pipe types", () => {
   it("custom pipeline — target stage not found returns error", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("pipeline_stages", []);
-    mockTable("custom_pipe_entries", []);
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",
@@ -505,7 +504,7 @@ describe("handleMoveStage — all pipe types", () => {
   });
 
   it("custom pipeline — inserts new entry on first move", async () => {
-    const { sb, mockTable } = createMockSupabase();
+    const { sb, mockTable, mockRpc } = createMockSupabase();
     // SCRUM-627: a etapa resolve pela tabela unificada `pipeline_stages`.
     mockTable("pipeline_stages", [
       {
@@ -517,7 +516,7 @@ describe("handleMoveStage — all pipe types", () => {
         is_final_positive: false,
       },
     ]);
-    mockTable("custom_pipe_entries", []);
+    mockRpc("fn_entrada_custom_criar", "entry-created");
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",
@@ -533,7 +532,7 @@ describe("handleMoveStage — all pipe types", () => {
   });
 
   it("custom pipeline — is_final_positive triggers auto-transition to standard pipe", async () => {
-    const { sb, mockTable } = createMockSupabase();
+    const { sb, mockTable, mockRpc } = createMockSupabase();
     mockTable("pipeline_stages", [
       {
         id: "stage-target",
@@ -546,9 +545,10 @@ describe("handleMoveStage — all pipe types", () => {
         target_stage_key: "proposta_enviada",
       },
     ]);
-    mockTable("custom_pipe_entries", [
-      { id: "cpe1", lead_id: "lead-1", pipeline_id: "pipe-custom" },
+    mockTable("negocio_projetado", [
+      { id: "cpe1", organization_id: "org-1", lead_id: "lead-1", pipeline_id: "pipe-custom", pipeline_type: "custom", stage_role: "open" },
     ]);
+    mockRpc("fn_entrada_custom_atualizar", null);
     mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
     mockTable("pipeline_entries", []);
     const result = await executeWorkflowAction({
@@ -566,7 +566,7 @@ describe("handleMoveStage — all pipe types", () => {
   });
 
   it("custom pipeline — is_final_positive with target_pipeline_id transitions to another custom pipeline", async () => {
-    const { sb, mockTable } = createMockSupabase();
+    const { sb, mockTable, mockRpc } = createMockSupabase();
     mockTable("pipeline_stages", [
       {
         id: "stage-target",
@@ -579,9 +579,11 @@ describe("handleMoveStage — all pipe types", () => {
         target_stage_id: "stage-B-start",
       },
     ]);
-    mockTable("custom_pipe_entries", [
-      { id: "cpe1", lead_id: "lead-1", pipeline_id: "pipe-A" },
+    mockTable("negocio_projetado", [
+      { id: "cpe1", organization_id: "org-1", lead_id: "lead-1", pipeline_id: "pipe-A", pipeline_type: "custom", stage_role: "open" },
     ]);
+    mockRpc("fn_entrada_custom_atualizar", null);
+    mockRpc("fn_entrada_custom_criar", "entry-created");
     const result = await executeWorkflowAction({
       supabase: sb,
       organizationId: "org-1",

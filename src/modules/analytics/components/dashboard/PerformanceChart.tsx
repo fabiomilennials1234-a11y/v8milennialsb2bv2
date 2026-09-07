@@ -56,19 +56,21 @@ function usePerformanceData(month: number, year: number) {
 
       // Get all meetings compareceu (scoped to organization)
       const { data: meetings } = await supabase
-        .from("pipe_confirmacao")
+        .from("negocio_projetado")
         .select("updated_at")
         .eq("organization_id", organizationId)
-        .eq("status", "compareceu")
+        .eq("funil_sistema", "confirmacao")
+        .eq("stage_key", "compareceu")
         .gte("updated_at", startDate.toISOString())
         .lte("updated_at", endDate.toISOString());
 
       // Get all sales (scoped to organization)
       const { data: sales } = await supabase
-        .from("pipe_propostas")
+        .from("negocio_projetado")
         .select("closed_at, sale_value")
         .eq("organization_id", organizationId)
-        .eq("status", "vendido")
+        .eq("funil_sistema", "propostas")
+        .eq("stage_key", "vendido")
         .gte("closed_at", startDate.toISOString())
         .lte("closed_at", endDate.toISOString());
 

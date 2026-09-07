@@ -6,80 +6,70 @@ Artefatos deste ticket:
 
 | Arquivo | O que é |
 |---|---|
-| `supabase/migrations/20270920000000_demolicao_dos_espelhos.sql` | A demolição. **Escrita, NÃO aplicada.** Três guardas abortam sozinhas se as pré-condições não estiverem satisfeitas. |
-| `supabase/migrations/rollback/20270920000000_demolicao_dos_espelhos.sql` | Rollback pareado. Recria as 6 views, 18 funções de trigger, 18 triggers, 27 grants, 3 comments e os 8 wrappers — a partir dos corpos **exatos de prod capturados em 2026-09-03**. |
+| `supabase/migrations/20271008000000_leitores_saem_dos_espelhos.sql` | Migra os 16 leitores SQL restantes para fontes canônicas. Tem preflight por hash e postflight global. |
+| `supabase/migrations/rollback/20271008000000_leitores_saem_dos_espelhos.sql` | Rollback pareado dos 16 corpos de função capturados de produção. |
+| `supabase/migrations/20271015000000_demolicao_dos_espelhos.sql` | A demolição. **Escrita, NÃO aplicada.** Três guardas abortam sozinhas se as pré-condições não estiverem satisfeitas. |
+| `supabase/migrations/rollback/20271015000000_demolicao_dos_espelhos.sql` | Rollback pareado. Recria as 6 views, 18 funções de trigger, 18 triggers, 27 grants, 3 comments e os 8 wrappers — a partir dos corpos **exatos de prod capturados em 2026-09-03**. |
 | `scripts/medir-leitores-espelhos.mjs` | O instrumento da janela de 7 dias. 1 execução/dia. |
-| `.specs/features/funis-unificacao/medicoes/*.json` | Os snapshots. O de `2026-09-03.json` é o baseline. |
+| `.specs/features/funis-unificacao/medicoes/*.json` | Os snapshots. Os arquivos de 2026-09-03 e 2026-09-04 registram o período anterior ao rollout dos leitores. |
 
 ---
 
-## 0. Estado medido em 2026-09-03 — o DROP **NÃO** está liberado
+## 0. Estado em 2026-09-07
 
-- **32 funções SQL vivas em prod** ainda leem/escrevem pelos 6 espelhos (G1 reprova, testada por ensaio abortável contra prod nesta data).
-- **5 das 6 views receberam leitura do front (`authenticated`) numa janela de 4 minutos** — `pipe_whatsapp`, `pipe_confirmacao`, `pipe_propostas`, `custom_pipelines`, `custom_pipeline_stages`. Só `custom_pipe_entries` ficou em zero nesse recorte, e 4 minutos não são prova de silêncio.
-- **~25 sítios de front vivos** e **4 sítios de edge function vivos** ainda passam pelos espelhos.
-
-A janela de 7 dias **ainda não começou**. Ela começa no primeiro dia em que `medir-leitores-espelhos.mjs` devolver `VEREDITO DO DIA: ZERO`.
-
----
+- SCRUM-673 e SCRUM-674 concluídas em produção: escritores do front e invariantes do banco já usam as portas canônicas.
+- Código de runtime (`src/` + `supabase/functions/`) tem **zero `.from()`** para as seis relações legadas. Gate permanente: `tests/unit/espelhos-sem-leitores.test.ts`.
+- Restavam **16 funções SQL** em produção. A migration `20271008000000_leitores_saem_dos_espelhos.sql` troca todas e tem preflight por MD5, postflight global, transação e rollback exato.
+- Ensaio contra produção em transação com `ROLLBACK`: migration inteira compilou; oito leitores analíticos mantiveram conteúdo idêntico. `get_ranking_data` muda deliberadamente para o ledger `sale_events`; `get_next_best_actions` passa a usar âncoras canônicas.
+- A migration de DROP tinha versão `20270920000000`, anterior a versões já aplicadas, e por isso nunca entrou no ledger remoto. Arquivo ainda não aplicado renomeado para `20271015000000_demolicao_dos_espelhos.sql`.
+- Produção ainda não recebeu a `20271008000000`. A janela de sete dias começa no primeiro snapshot `ZERO` depois desse rollout.
+- SCRUM-638 continua em `Testando`: janela operacional 2026-09-02 → 2026-09-09 e aviso externo do CTO ainda são critérios pendentes.
 
 ## 1. Pré-condições (todas, na ordem)
 
-### 1.1 — Migrar os leitores SQL (32 funções)
+### 1.1 — Migrar os leitores SQL (16 funções restantes)
 
-Ordem sugerida, por risco decrescente de quebrar dinheiro:
+Entregue pela `20271008000000_leitores_saem_dos_espelhos.sql`:
 
-| Grupo | Funções | Caminho canônico |
-|---|---|---|
-| **Métricas de dinheiro** (13) | `get_analytics_{overview,commercial,financial,engagement,pipeline,utm}_metrics`, `get_dashboard_metrics`, `get_ranking_data`, `get_product_ranking`, `get_funnel_health`, `get_next_best_actions`, `get_uf_heatmap`, `get_leads_by_uf`, `get_mkt_origin_metrics` | `pipeline_entries pe JOIN pipelines p ON p.id = pe.pipeline_id` + `pipeline_stages.stage_role` para o papel da etapa. `sale_value` sai de `pe.metadata->>'sale_value'` **ou** do ledger `sale_events` (ADR-0017) — decidir por função, não por atacado. |
-| **Escrita / ciclo de vida** (8) | `abrir_negocio`, `create_lead_with_pipe`, `create_lead_from_social_conversation`, `import_lead_into_custom_pipeline`, `sync_responsible_from_lead_to_pipes`, `bulk_delete_leads`, `purge_lead`, `remove_demo_data` | INSERT/UPDATE/DELETE direto em `pipeline_entries`, resolvendo o funil por `pipelines.slug`/`id` em vez do nome da view. |
-| **Agenda / calendário** (3) | `get_agenda_events`, `get_agenda_events_scoped`, `trigger_google_calendar_sync` | `pe.metadata->>'meeting_date'` sobre `pipeline_entries` do funil `confirmacao`. |
-| **Auxiliares** (8) | `_stage_is_final`, `_stage_key_label`, `metric_stage_role`, `fn_log_pipeline_stage_change_history`, `fn_auto_assign_lead_default_pipe`, `get_all_funnels_lead_ids`, `lead_excluded_from_metrics`, `delete_pipeline` | Todas leem `custom_pipeline_stages` ou `custom_pipe_entries`: trocar por `pipeline_stages` / `pipeline_entries` com `JOIN pipelines`. As três primeiras são as mais baratas (leitura de 1 coluna). |
+- manutenção: `bulk_delete_leads`, `purge_lead`, `remove_demo_data`;
+- adaptadores temporários de INSERT: `custom_pipelines_insert_fn`, `custom_pipeline_stages_insert_fn`;
+- analytics: cinco `get_analytics_*`, `get_leads_by_uf`, `get_mkt_origin_metrics`, `get_uf_heatmap`;
+- decisão/ordenação: `get_next_best_actions`, `get_ranking_data`;
+- calendário: `trigger_google_calendar_sync`.
 
-**Esforço e risco — as métricas de dinheiro são a fatia cara.** As views projetam de `metadata` colunas que o caminho canônico não tem com esse nome: `sale_value`, `sdr_id`, `closer_id`, `responsible_id`, `pre_sale_responsible_id`, `sale_responsible_id`, `is_confirmed`, `metrics_period_at`, `loss_reason_id`, `product_id`, `calor`. Reescrever cada `SELECT sale_value FROM pipe_propostas` como `(pe.metadata->>'sale_value')::numeric` é mecânico; o que **não** é mecânico é que a view faz o cast e o `COALESCE` num lugar só, e 13 funções passam a fazer cada uma o seu. **Não reescrever à mão uma por uma.** A alternativa barata e reversível: uma função `fn_pipe_entry_money(pe)` (ou um CTE padrão) que centralize a projeção, e as 13 funções passam a chamá-la. Risco se feito na marra: divergência silenciosa de número entre dashboards — que é exatamente o defeito-raiz da auditoria de métricas de 2026-07 (ADR-0017). **Não fazer neste ticket.**
+O preflight compara `md5(pg_get_functiondef)` dos 16 corpos capturados de produção. Drift aborta antes de qualquer troca. O postflight varre todas as funções SQL/plpgsql de `public` e exige zero `FROM/JOIN/INSERT/UPDATE/DELETE` pelos seis espelhos. Rollback pareado restaura os corpos exatos capturados antes do apply.
 
-### 1.2 — Migrar os leitores de front (`src/`)
+### 1.2 — Migrar leitores de front (`src/`)
 
-**Vivos, precisam migrar antes do DROP:**
+Concluído na fatia `refactor/639-leitores-saem-dos-espelhos`:
 
-| Arquivo | Views | O que faz |
-|---|---|---|
-| `src/modules/engagement/hooks/useGoals.ts:177-207` | `pipe_propostas`, `pipe_confirmacao` | **Leitor confirmado por medição** (delta > 0 na janela de 4 min). Metas do mês: `sale_value` + trio de atribuição. |
-| `src/modules/engagement/hooks/useCloserPerformance.ts:57,78` | `pipe_propostas`, `pipe_confirmacao` | `usePerfPipePropostas` / `usePerfPipeConfirmacao` — org inteira, `refetchInterval` ligado. Alimenta a TV. |
-| `src/modules/engagement/hooks/useCommissions.ts:269,278` | `pipe_propostas` | Comissão por vendedor. Dinheiro. |
-| `src/modules/pipelines/hooks/custom/useCustomPipelines.ts` (~20 sítios) | as 4 `custom_*` + os 3 `pipe_*` | CRUD inteiro dos funis custom, incluindo `insert`/`update`/`delete` pelas views (passa pelos INSTEAD OF). O maior sítio único. |
-| `src/modules/pipelines/lib/stageTransition.ts:34,90,94` | `custom_pipe_entries` | Move de etapa. |
-| `src/modules/pipelines/hooks/config/usePipeMetrics.ts` (~15 sítios) | `pipe_propostas`, `pipe_confirmacao`, `pipe_whatsapp` | Métricas do board. |
-| `src/modules/leads/components/lead-detail/hooks/useLeadDetail.ts:100-104` | as 3 `pipe_*` + `custom_pipe_entries` | 4 queries paralelas por lead aberto. |
-| `src/modules/leads/hooks/useLeads.ts:294-321` | as 3 `pipe_*` | Propaga responsável para os pipes. **Escrita.** |
-| `src/modules/leads/components/lead-detail/modal/pipes/useCrossPipeMove.ts:73` | `custom_pipe_entries` | Move entre funis. |
-| `src/modules/leads/hooks/useLeadAllPipelines.ts:94` | `custom_pipeline_stages` | |
-| `src/modules/communication/hooks/useWhatsAppLeadIntegration.ts` (~15 sítios) | as 3 `pipe_*` + `custom_pipe_entries` | Cria lead + entry a partir do chat. **Escrita.** |
-| `src/modules/analytics/hooks/useDashboardMetrics.ts:405` | `pipe_propostas` | |
-| `src/modules/analytics/hooks/useOutboundMetrics.ts:78-103` | `pipe_confirmacao`, `pipe_propostas` | 6 `count(head)`. |
-| `src/modules/pipelines/hooks/legacy/usePipe{Proposta,Confirmacao}ByLeadId.ts` | `pipe_propostas`, `pipe_confirmacao` | Ligados no `PipeOpsProvider`. |
-| `src/modules/pipelines/components/legacy/confirmacao/ConfirmacaoCard.tsx:204,220` | `pipe_confirmacao` | |
-| `src/modules/platform/hooks/onboarding/usePrimeOnboardingProgress.ts:121` | `pipe_propostas` | |
+- leituras system passam por `negocio_projetado` com `funil_sistema` e `stage_key`;
+- funis custom leem `pipelines`, `pipeline_stages` e `negocio_projetado`;
+- mutações continuam nas funções canônicas ou em `pipeline_entries` quando DELETE é a operação real;
+- tipos públicos legados são projetados por `src/integrations/supabase/projected-pipe-types.ts` até o DROP;
+- aliases de slug, query keys e campos JSON com nomes históricos não são acesso a relação e permanecem compatíveis.
 
-**Mortos — não bloqueiam, mas devem cair junto para não voltarem por cópia:**
-`src/modules/analytics/components/dashboard/QuickStats.tsx` (0 importadores), `WeeklyChart.tsx` e `PerformanceChart.tsx` (importados só por `TabInteligencia.tsx` / `TabPerformance.tsx`, que são os tabs **v1** e não têm importador nenhum — `pages/Dashboard.tsx` usa os `*V2`).
+Gate AST: `tests/unit/espelhos-sem-leitores.test.ts` resolve literais diretos, condicionais e constantes passadas a `.from()`, bloqueia tabelas dinâmicas `pipe_${…}` e relações legadas embutidas em `.select()`; qualquer uma das seis relações reprova CI.
 
-**Falso positivo, não mexer:** `src/modules/campaigns/hooks/useCampanhas.ts:16,1399-1401` usa `'pipe_whatsapp' | 'pipe_confirmacao' | 'pipe_propostas'` como **chave de alias de slug** (`TargetPipe`), não como tabela. Mesma natureza do `LEGACY_SLUG_ALIASES` de `supabase/functions/_shared/pipeline-adapter.ts`, já registrado como exceção deliberada no gate `tests/unit/pipe-whatsapp-espelho-sem-leitores.test.ts`.
+### 1.3 — Migrar leitores de edge function
 
-**Já morto, conferido:** `SYSTEM_PIPE_TABLE` do tool-executor do copilot-v2 — removido na SCRUM-628; `move_lead_stage` escreve pelo `pipeline-adapter`. `useTVDashboardData.ts` não toca as views diretamente (chega nelas via `useGoals`/`useCloserPerformance`).
+Concluído na mesma fatia:
 
-### 1.3 — Migrar os leitores de edge function
-
-| Arquivo | View | Nota |
-|---|---|---|
-| `supabase/functions/cadastro-externo-push/index.ts:111` | `pipe_propostas` | Resolve a org **a partir da proposta**. Trocar por `pipeline_entries` + `pipelines.slug='propostas'`. |
-| `supabase/functions/_shared/action-handlers/move-stage.ts:95,345,349,368,372` | `custom_pipe_entries` | R+W. Usa embed do PostgREST (`stage:custom_pipeline_stages(stage_role)`) — o embed some junto com a view, não só a tabela. |
-| `supabase/functions/classify-stage-roles/index.ts:196` | `custom_pipeline_stages` | R+W de `stage_role`/`suggested_stage_role` pelo INSTEAD OF. |
-| `supabase/functions/_shared/workflow-trigger.ts:104` | `custom_pipeline_stages` | Lê `stage_role` da etapa de destino. |
+- `cadastro-externo-push`: proposta por `negocio_projetado`;
+- `classify-stage-roles`: leitura e escrita únicas em `pipeline_stages`, com org no write service-role;
+- `_shared/workflow-trigger`: etapa custom por `pipeline_stages`;
+- `_shared/action-handlers/move-stage`: entry custom por projeção e mutação pelas funções canônicas;
+- `pipe-rule-dispatch`: system por `fn_entrada_sistema_atualizar`;
+- `meta-webhook`: destino por `pipeline-adapter`, sem tabela construída por string.
 
 ### 1.4 — Testes
 
-`tests/remote/setup-remote.ts:79-82` e as suítes `tests/integration/{pipe-confirmacao-propostas,pipe-stage-move,bulk-add-to-custom-pipe,lead-import,get-filtered-lead-ids-conditions,rls-responsibility,master-first-class}.test.ts` referenciam as views. Não bloqueiam prod, mas viram vermelho no dia do DROP. Migrar junto com o código que exercitam.
+- TypeScript e build de produção verdes.
+- ESLint sem erros nos arquivos alterados.
+- Testes focados cobrem mapper custom, escolha de entry aberta, action handler, writeback e gate AST.
+- Migration compilada contra produção dentro de transação revertida.
+- Paridade de conteúdo validada para `get_analytics_{commercial,financial,overview,pipeline,utm}_metrics`, `get_mkt_origin_metrics`, `get_uf_heatmap` e `get_leads_by_uf`.
+- `get_ranking_data` usa a reconciliação governada por `scripts/reconcile-ranking-997.sql`; divergências do modelo antigo precisam de finding conhecido.
 
 ### 1.5 — Fusões de hook pendentes
 
@@ -110,19 +100,24 @@ supabase gen types typescript --project-id jsjsmuncfkbsbzqzqhfq > src/integratio
 
 ## 2. Ordem de aplicação
 
-1. `git pull` na `main`. **Conferir o drift do ledger** (medido em 2026-09-03): 7 versões estão em prod e **não** têm arquivo nesta worktree (`20270908000000`, `20270914000010`, `20270914000020`, `20270916000010`, `20270916000020`, `20270917000010`, `20270918000020`) e 2 arquivos não estão no ledger (`20270908010000`, `20270915000010`). Além disso, **`20270917000000` colide**: dois arquivos com o mesmo timestamp (`campanha_e_disparo_por_pipeline_id` e `org_plural_nas_39_tabelas_restantes`), e o ledger tem só uma entrada — o segundo **nunca rodou**. `supabase db push` é inutilizável neste estado; aplicar cirurgicamente, com ledger explícito.
-2. Rodar `node scripts/medir-leitores-espelhos.mjs` e confirmar 7 `ZERO` consecutivos nos JSONs de `medicoes/`.
-3. **Recongelar o baseline** da migration com os `calls` do último snapshot (a G3 compara contra ele; baseline velho torna a guarda um carimbo).
-4. Ensaio abortável contra prod, **sem COMMIT**:
+1. Atualizar `origin/main`, rebasear a branch e resolver qualquer drift antes do merge. A branch desta fatia nasceu diretamente da `main`; nenhuma branch Omie participa.
+2. Aprovar e fundir a fatia dos leitores. Aguardar o frontend da `main` ficar saudável em produção.
+3. Da revisão aprovada, publicar todas as edge functions consumidoras dos módulos compartilhados alterados e aplicar `20271008000000_leitores_saem_dos_espelhos.sql` cirurgicamente. Registrar a versão `20271008000000` em `supabase_migrations.schema_migrations` dentro da mesma transação. **Não usar `supabase db push`**: o ledger remoto tem drift conhecido.
+4. Rodar `node scripts/medir-leitores-espelhos.mjs --baseline` depois que frontend, Edge e SQL estiverem ativos. Esse snapshot inicia a observação; os arquivos de 3 e 4 de setembro não contam.
+5. Rodar `node scripts/medir-leitores-espelhos.mjs` uma vez por dia. Exigir 7 resultados `ZERO` consecutivos, junto com os critérios operacionais da SCRUM-638.
+6. **Recongelar o baseline** da migration de DROP com os `calls` do último snapshot válido (a G3 compara contra ele; baseline velho torna a guarda um carimbo).
+7. Fazer ensaio abortável contra prod, **sem COMMIT**:
    ```bash
    # roda só as guardas — são leitura pura
    node scripts/prod-sql.mjs --file <trecho DO $g1$…$g1$;>
    node scripts/prod-sql.mjs --file <trecho DO $g2$…$g2$;>
    ```
    G1 tem que sair **silenciosa**. Enquanto ela listar função, não há o que discutir.
-5. Aplicar a migration + escrever a linha no `supabase_migrations.schema_migrations` (versão `20270920000000`) na mesma transação.
-6. Regenerar `types.ts`, rodar `npm run typecheck:ratchet` e `npm run lint`.
-7. Redeployar as 4 edge functions do §1.3 **antes** do merge do front — a ordem inversa quebra o WhatsApp inbound.
+8. Aplicar `20271015000000_demolicao_dos_espelhos.sql` + escrever a linha no ledger na mesma transação.
+9. Regenerar `types.ts`, remover casts e tipos de compatibilidade que perderam função e rodar a suíte completa de validação.
+10. Medir paridade custom, anexar evidência à SCRUM-639 e só então fechar SCRUM-638, SCRUM-639 e o épico SCRUM-614.
+
+Drift medido em 2026-09-03: 7 versões estão em prod e não têm arquivo nesta worktree (`20270908000000`, `20270914000010`, `20270914000020`, `20270916000010`, `20270916000020`, `20270917000010`, `20270918000020`); 2 arquivos não estão no ledger (`20270908010000`, `20270915000010`); e `20270917000000` colide entre dois arquivos. Aplicação cirúrgica com ledger explícito é obrigatória até saneamento próprio.
 
 ## 3. Verificação pós-apply
 
@@ -151,8 +146,8 @@ Fumaça de produto, no navegador (o `tsc` verde não prova tela viva — a tela 
 ## 4. Rollback
 
 ```bash
-node scripts/prod-sql.mjs --file supabase/migrations/rollback/20270920000000_demolicao_dos_espelhos.sql
-delete from supabase_migrations.schema_migrations where version = '20270920000000';
+node scripts/prod-sql.mjs --file supabase/migrations/rollback/20271015000000_demolicao_dos_espelhos.sql
+delete from supabase_migrations.schema_migrations where version = '20271015000000';
 ```
 
 O arquivo recria tudo **incluindo os grants** — um `DROP`+`CREATE` de função devolve `EXECUTE` para `PUBLIC`/`anon` se os grants não forem reaplicados, e as 27 linhas de `GRANT` e as `GRANT EXECUTE` dos wrappers estão lá por isso. Depois de rodar, conferir:

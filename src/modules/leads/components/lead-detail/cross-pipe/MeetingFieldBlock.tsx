@@ -14,7 +14,7 @@ import {
   type PipeConfirmacaoStatus,
   confirmacaoStatusColumns as statusColumns,
 } from "@/contracts/pipe";
-import type { Tables } from "@/integrations/supabase/types";
+import type { ProjectedConfirmacaoPipe } from "@/integrations/supabase/projected-pipe-types";
 import { usePipeOps } from "../../../pipe-ops";
 import { useNomeDoPipeDeSistema } from "../../../hooks/useNomeDoPipeDeSistema";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,7 +22,7 @@ import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 import { CompareceuModal } from "../../leads/funnel-contexts/modals/CompareceuModal";
 import { cn } from "@/lib/utils";
 
-type PipeConfirmacao = Tables<"pipe_confirmacao">;
+type PipeConfirmacao = ProjectedConfirmacaoPipe;
 
 /**
  * Cross-pipe field block for "Reunião" (meeting / confirmação pipeline).

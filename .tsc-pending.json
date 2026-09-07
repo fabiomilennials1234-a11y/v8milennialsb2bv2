@@ -1,5 +1,5 @@
 {
-  "count": 13,
+  "count": 11,
   "note": "Erros novos vs .tsc-baseline.json ainda nao corrigidos. TETO: so encolhe. Nao adicione entrada na mao — corrija o tipo.",
   "errors": [
     "src/modules/communication/components/chat/view/ChatHeader.tsx|TS2345|Argument of type 'string | null' is not assignable to parameter of type 'string | undefined'.",
@@ -7,8 +7,6 @@
     "src/modules/copilot/hooks/useAgentFollowupRules.ts|TS2345|Argument of type '(db: FollowupRuleDB) => FollowupRule' is not assignable to parameter of type '(value: { agent_id: string; business_hours_end: string | null; business_hours_start: string | null; context_lookback_days: number | null; created_at: string; description: string | null; ... 21 more ...; use_last_context: boolean | null; }, index: number, array: { ...; }[]) => FollowupRule'.",
     "src/modules/copilot/hooks/useAgentFollowupRules.ts|TS2345|Argument of type '{ agent_id: string; business_hours_end: string | null; business_hours_start: string | null; context_lookback_days: number | null; created_at: string; description: string | null; ... 21 more ...; use_last_context: boolean | null; }' is not assignable to parameter of type 'FollowupRuleDB'.",
     "src/modules/engagement/hooks/useCommissions.ts|TS2322|Type 'string | null' is not assignable to type 'string | undefined'.",
-    "src/modules/leads/components/deal-card/useExcluirNegocio.ts|TS2589|Type instantiation is excessively deep and possibly infinite.",
-    "src/modules/leads/components/deal-card/useExcluirNegocio.ts|TS2769|No overload matches this call.",
     "src/modules/leads/pages/Leads.tsx|TS2538|Type 'null' cannot be used as an index type.",
     "src/modules/pipelines/hooks/custom/useCustomPipelines.ts|TS2322|Type 'string | null' is not assignable to type 'string'.",
     "src/modules/pipelines/lib/stageTransition.ts|TS2345|Argument of type 'string | null' is not assignable to parameter of type 'string'.",

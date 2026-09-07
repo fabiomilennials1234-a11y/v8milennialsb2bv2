@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const calls: { table: string; op: string; payload: unknown }[] = [];
 const rpcCalls: { name: string; args: Record<string, unknown> }[] = [];
 const eqCalls: [string, unknown][] = [];
-type Row = { id: string; stage: { stage_role: string } | null };
+type Row = { id: string; stage_role: string | null };
 let existingRows: Row[] = [];
 let readError: { message: string } | null = null;
 
@@ -54,8 +54,8 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
 
-const aberto = (id: string): Row => ({ id, stage: { stage_role: "open" } });
-const ganho = (id: string): Row => ({ id, stage: { stage_role: "won" } });
+const aberto = (id: string): Row => ({ id, stage_role: "open" });
+const ganho = (id: string): Row => ({ id, stage_role: "won" });
 
 describe("upsertLeadIntoCustomPipe", () => {
   beforeEach(() => {

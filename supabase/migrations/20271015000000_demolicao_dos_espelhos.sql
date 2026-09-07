@@ -1,4 +1,4 @@
--- 20270920000000_demolicao_dos_espelhos.sql
+-- 20271015000000_demolicao_dos_espelhos.sql
 -- SCRUM-639 (W6) — o critério de "entregue" do épico Funil é Funil: espelhos = 0.
 --
 -- ┌───────────────────────────────────────────────────────────────────────────┐
@@ -53,7 +53,7 @@
 --       sozinha não autoriza o DROP; quem autoriza é a janela de 7 dias medida
 --       1×/dia (ver `.specs/features/funis-unificacao/checklist-demolicao.md`).
 --
--- ROLLBACK pareado: `supabase/migrations/rollback/20270920000000_demolicao_dos_espelhos.sql`
+-- ROLLBACK pareado: `supabase/migrations/rollback/20271015000000_demolicao_dos_espelhos.sql`
 -- — recria as 6 views, as 18 funções, os 18 triggers, os grants e os comments
 -- a partir dos corpos EXATOS capturados de prod em 2026-09-03 (viewdef,
 -- functiondef, triggerdef), não de memória nem da migration que os criou.

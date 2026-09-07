@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
+import { useCurrentTeamMember } from "@/modules/identity";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 
 /**
@@ -14,27 +15,8 @@ import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
  * superfície que não seja o board — e o painel é justamente onde a pessoa está
  * quando decide que aquele negócio não existe mais.
  *
- * ── A ARMADILHA DO ESPELHO ────────────────────────────────────────────────
- * `custom_pipe_entries` e `pipeline_entries` compartilham a MESMA primary key:
- * `sync_custom_pipe_to_entries()` espelha uma na outra (16.193 pares em prod,
- * medidos em 2026-07-31). Isso torna a escolha da tabela **assimétrica**, e
- * errar nela produz exatamente o sintoma "excluí e o card continua lá":
- *
- *   - funil CUSTOM → apagar em `custom_pipe_entries`. O gatilho tem ramo
- *     `TG_OP = 'DELETE'` e leva o espelho junto. Apagar direto no espelho
- *     deixaria a linha custom viva, e o kanban custom lê `custom_pipe_entries`
- *     — o card voltaria no próximo refetch. Pior: como não há gatilho reverso
- *     de DELETE, a escrita seguinte na linha custom RESSUSCITA o espelho;
- *   - funil SYSTEM → apagar em `pipeline_entries`, a tabela real por trás das
- *     views `pipe_*`.
- *
- * ⚠️ **O discriminador é `ehSystem` (`pipelines.type`), NUNCA `pipeTable`.**
- * `DealCardData.pipeTable` sai de um switch de SLUG que só conhece
- * `whatsapp`/`confirmacao`/`propostas` e devolve `null` para qualquer outro
- * funil de sistema — `upsell`, e os funis de sistema novos. Rotear por ele
- * mandaria esses DELETEs para `custom_pipe_entries`, onde aquele id não
- * existe: 0 linhas, card intacto, e uma mensagem de permissão que é mentira.
- * Por isso o alvo entra tipado com `ehSystem` e não se deriva nada aqui.
+ * Toda espécie de funil vive em `pipeline_entries`. O id recebido pelo painel
+ * aponta direto para essa fonte única.
  *
  * ── POR QUE `.select()` DEPOIS DO DELETE ──────────────────────────────────
  * Um DELETE que a RLS recusa **não devolve erro** no PostgREST: devolve 0
@@ -57,8 +39,7 @@ import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
  *      nunca existe uma segunda linha ali com o mesmo `deal_id`, e a que havia
  *      acabara de ser apagada. A consulta devolvia `[]` SEMPRE e o DELETE
  *      seguia sempre. A referência que pode sobrar de verdade mora em
- *      `custom_pipe_entries.deal_id`, cujo índice **não** é único — e era
- *      justamente a tabela que a guarda não consultava;
+ *      `pipeline_entries.deal_id`, antes da unificação;
  *   2. **`deals` é soft-delete por decisão do produto.** A tabela tem
  *      `deleted_at`/`deleted_by` e o comentário da policy `deals_delete` diz,
  *      textualmente, que purgar é RPC `SECURITY DEFINER` (como `purge_lead`),
@@ -139,28 +120,33 @@ function invalidar(qc: ReturnType<typeof useQueryClient>, leadId: string): void 
 export function useExcluirNegocio(): UseExcluirNegocioResult {
   const qc = useQueryClient();
   const registrar = useLogLeadAction();
+  const { data: teamMember } = useCurrentTeamMember();
   const [excluindo, setExcluindo] = useState(false);
 
   const excluir = useCallback(
     async (negocio: NegocioAExcluir): Promise<ResultadoExclusao> => {
       const { entryId, leadId, ehSystem } = negocio;
-      const tabela = ehSystem ? "pipeline_entries" : "custom_pipe_entries";
 
       setExcluindo(true);
       try {
+        if (!teamMember?.organization_id) {
+          throw new Error("Organização ativa não encontrada");
+        }
         const { data: apagadas, error } = await supabase
-          .from(tabela)
+          .from("pipeline_entries")
           .delete()
           .eq("id", entryId)
+          .eq("organization_id", teamMember.organization_id)
           .select("id");
 
         if (error) throw error;
 
         if (!apagadas || apagadas.length === 0) {
           const { data: aindaLa } = await supabase
-            .from(tabela)
+            .from("pipeline_entries")
             .select("id")
             .eq("id", entryId)
+            .eq("organization_id", teamMember.organization_id)
             .maybeSingle();
 
           if (!aindaLa) {
@@ -211,7 +197,7 @@ export function useExcluirNegocio(): UseExcluirNegocioResult {
         setExcluindo(false);
       }
     },
-    [qc, registrar],
+    [qc, registrar, teamMember?.organization_id],
   );
 
   return { excluindo, excluir };

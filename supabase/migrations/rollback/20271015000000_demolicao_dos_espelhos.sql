@@ -1,4 +1,4 @@
--- 20270920000000_demolicao_dos_espelhos.sql — ROLLBACK
+-- 20271015000000_demolicao_dos_espelhos.sql — ROLLBACK
 --
 -- Recria os 6 espelhos EXATAMENTE como estavam em PROD em 2026-09-03,
 -- capturados de `pg_get_viewdef` / `pg_get_functiondef` / `pg_get_triggerdef`
