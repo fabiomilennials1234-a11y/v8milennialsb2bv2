@@ -680,35 +680,7 @@ export type Database = {
             foreignKeyName: "acoes_do_dia_confirmacao_id_pipeline_entries_fkey"
             columns: ["confirmacao_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_confirmacao_id_pipeline_entries_fkey"
-            columns: ["confirmacao_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_confirmacao_id_pipeline_entries_fkey"
-            columns: ["confirmacao_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_confirmacao_id_pipeline_entries_fkey"
-            columns: ["confirmacao_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_confirmacao_id_pipeline_entries_fkey"
-            columns: ["confirmacao_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -757,35 +729,7 @@ export type Database = {
             foreignKeyName: "acoes_do_dia_pipeline_entry_id_fkey"
             columns: ["pipeline_entry_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -799,35 +743,7 @@ export type Database = {
             foreignKeyName: "acoes_do_dia_proposta_id_pipeline_entries_fkey"
             columns: ["proposta_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_proposta_id_pipeline_entries_fkey"
-            columns: ["proposta_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_proposta_id_pipeline_entries_fkey"
-            columns: ["proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_proposta_id_pipeline_entries_fkey"
-            columns: ["proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "acoes_do_dia_proposta_id_pipeline_entries_fkey"
-            columns: ["proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -2123,13 +2039,6 @@ export type Database = {
             foreignKeyName: "blast_plans_pipeline_id_fkey"
             columns: ["pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "blast_plans_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
             referencedColumns: ["id"]
           },
@@ -3040,21 +2949,7 @@ export type Database = {
             foreignKeyName: "campanhas_target_pipeline_id_fkey"
             columns: ["target_pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "campanhas_target_pipeline_id_fkey"
-            columns: ["target_pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "campanhas_target_stage_id_fkey"
-            columns: ["target_stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -3351,35 +3246,7 @@ export type Database = {
             foreignKeyName: "checklists_pipeline_entry_id_fkey"
             columns: ["pipeline_entry_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "checklists_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "checklists_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "checklists_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "checklists_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -3694,35 +3561,7 @@ export type Database = {
             foreignKeyName: "commissions_pipeline_entry_id_fkey"
             columns: ["pipe_proposta_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "commissions_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "commissions_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "commissions_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "commissions_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -6517,21 +6356,7 @@ export type Database = {
             foreignKeyName: "custom_pipe_transitions_source_pipeline_id_fkey"
             columns: ["source_pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "custom_pipe_transitions_source_pipeline_id_fkey"
-            columns: ["source_pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "custom_pipe_transitions_source_stage_id_fkey"
-            columns: ["source_stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -6545,21 +6370,7 @@ export type Database = {
             foreignKeyName: "custom_pipe_transitions_target_pipeline_id_fkey"
             columns: ["target_pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "custom_pipe_transitions_target_pipeline_id_fkey"
-            columns: ["target_pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "custom_pipe_transitions_target_stage_id_fkey"
-            columns: ["target_stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -6611,13 +6422,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "custom_pipeline_members_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipelines"
             referencedColumns: ["id"]
           },
           {
@@ -8119,35 +7923,7 @@ export type Database = {
             foreignKeyName: "follow_ups_pipeline_entry_id_fkey"
             columns: ["pipeline_entry_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "follow_ups_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "follow_ups_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "follow_ups_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "follow_ups_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -9119,35 +8895,7 @@ export type Database = {
             foreignKeyName: "lead_comments_pipeline_entry_id_fkey"
             columns: ["pipeline_entry_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lead_comments_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lead_comments_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lead_comments_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "lead_comments_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -10487,13 +10235,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "meetings_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipelines"
             referencedColumns: ["id"]
           },
           {
@@ -12921,13 +12662,6 @@ export type Database = {
             foreignKeyName: "organizations_default_pipeline_id_fkey"
             columns: ["default_pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "organizations_default_pipeline_id_fkey"
-            columns: ["default_pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
             referencedColumns: ["id"]
           },
@@ -13624,13 +13358,6 @@ export type Database = {
             foreignKeyName: "pipe_dispatch_rule_steps_target_stage_id_fkey"
             columns: ["target_stage_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipe_dispatch_rule_steps_target_stage_id_fkey"
-            columns: ["target_stage_id"]
-            isOneToOne: false
             referencedRelation: "pipeline_stages"
             referencedColumns: ["id"]
           },
@@ -13639,13 +13366,6 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "campaign_templates"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipe_dispatch_rule_steps_timeout_target_stage_id_fkey"
-            columns: ["timeout_target_stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -13713,21 +13433,7 @@ export type Database = {
             foreignKeyName: "pipe_dispatch_rules_pipeline_id_fkey"
             columns: ["pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipe_dispatch_rules_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipe_dispatch_rules_pipeline_stage_id_fkey"
-            columns: ["pipeline_stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -13897,35 +13603,7 @@ export type Database = {
             foreignKeyName: "pipe_proposta_items_pipeline_entry_id_fkey"
             columns: ["pipe_proposta_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipe_proposta_items_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipe_proposta_items_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipe_proposta_items_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipe_proposta_items_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -14084,21 +13762,7 @@ export type Database = {
             foreignKeyName: "pipeline_entries_pipeline_id_fkey"
             columns: ["pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_stage_id_fkey"
-            columns: ["stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -14224,13 +13888,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stage_events_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipelines"
             referencedColumns: ["id"]
           },
           {
@@ -14368,13 +14025,6 @@ export type Database = {
             foreignKeyName: "pipeline_stages_pipeline_id_fkey"
             columns: ["pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
             referencedColumns: ["id"]
           },
@@ -14382,21 +14032,7 @@ export type Database = {
             foreignKeyName: "pipeline_stages_target_pipeline_id_fkey"
             columns: ["target_pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_target_pipeline_id_fkey"
-            columns: ["target_pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_target_stage_id_fkey"
-            columns: ["target_stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -15700,13 +15336,6 @@ export type Database = {
             foreignKeyName: "scheduled_pipe_messages_pipeline_id_fkey"
             columns: ["pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "scheduled_pipe_messages_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
             referencedColumns: ["id"]
           },
@@ -15721,13 +15350,6 @@ export type Database = {
             foreignKeyName: "scheduled_pipe_messages_target_stage_id_fkey"
             columns: ["target_stage_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "scheduled_pipe_messages_target_stage_id_fkey"
-            columns: ["target_stage_id"]
-            isOneToOne: false
             referencedRelation: "pipeline_stages"
             referencedColumns: ["id"]
           },
@@ -15736,13 +15358,6 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "campaign_templates"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "scheduled_pipe_messages_timeout_target_stage_id_fkey"
-            columns: ["timeout_target_stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -15972,13 +15587,6 @@ export type Database = {
             columns: ["organization_id"]
             isOneToOne: false
             referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sla_configs_stage_id_fkey"
-            columns: ["stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -16787,35 +16395,7 @@ export type Database = {
             foreignKeyName: "tinyerp_order_mappings_pipeline_entry_id_fkey"
             columns: ["pipe_proposta_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tinyerp_order_mappings_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tinyerp_order_mappings_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tinyerp_order_mappings_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "tinyerp_order_mappings_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -17871,35 +17451,7 @@ export type Database = {
             foreignKeyName: "upsell_orders_pipeline_entry_id_fkey"
             columns: ["pipe_proposta_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "upsell_orders_pipeline_entry_id_fkey"
-            columns: ["pipe_proposta_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -19588,35 +19140,7 @@ export type Database = {
             foreignKeyName: "workflow_executions_pipeline_entry_id_fkey"
             columns: ["pipeline_entry_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipe_entries"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workflow_executions_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
             referencedRelation: "negocio_projetado"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workflow_executions_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_confirmacao"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workflow_executions_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_propostas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workflow_executions_pipeline_entry_id_fkey"
-            columns: ["pipeline_entry_id"]
-            isOneToOne: false
-            referencedRelation: "pipe_whatsapp"
             referencedColumns: ["id"]
           },
           {
@@ -19820,271 +19344,6 @@ export type Database = {
       }
     }
     Views: {
-      custom_pipe_entries: {
-        Row: {
-          assigned_to: string | null
-          created_at: string | null
-          deal_id: string | null
-          entered_at: string | null
-          id: string | null
-          lead_id: string | null
-          notes: string | null
-          organization_id: string | null
-          pipeline_id: string | null
-          pre_sale_responsible_id: string | null
-          sale_responsible_id: string | null
-          stage_changed_at: string | null
-          stage_id: string | null
-          updated_at: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_entries_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "org_visible_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_assigned_to_fkey"
-            columns: ["assigned_to"]
-            isOneToOne: false
-            referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_deal_id_fkey"
-            columns: ["deal_id"]
-            isOneToOne: false
-            referencedRelation: "deals"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads_compat"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_stage_id_fkey"
-            columns: ["stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_stage_id_fkey"
-            columns: ["stage_id"]
-            isOneToOne: false
-            referencedRelation: "pipeline_stages"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      custom_pipeline_stages: {
-        Row: {
-          checklist_template_id: string | null
-          color: string | null
-          created_at: string | null
-          id: string | null
-          is_active: boolean | null
-          is_final_negative: boolean | null
-          is_final_positive: boolean | null
-          name: string | null
-          organization_id: string | null
-          pipeline_id: string | null
-          position: number | null
-          requires_sale_value: boolean | null
-          stage_key: string | null
-          stage_role: Database["public"]["Enums"]["stage_role"] | null
-          stage_role_reviewed_at: string | null
-          stage_role_reviewed_by: string | null
-          stage_role_suggested_at: string | null
-          stage_role_suggestion_source: string | null
-          suggested_stage_role: Database["public"]["Enums"]["stage_role"] | null
-          target_pipe_type: string | null
-          target_pipeline_id: string | null
-          target_stage_id: string | null
-          target_stage_key: string | null
-          updated_at: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_stages_checklist_template_id_fkey"
-            columns: ["checklist_template_id"]
-            isOneToOne: false
-            referencedRelation: "checklists"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_target_pipeline_id_fkey"
-            columns: ["target_pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_target_pipeline_id_fkey"
-            columns: ["target_pipeline_id"]
-            isOneToOne: false
-            referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_target_stage_id_fkey"
-            columns: ["target_stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_stages_target_stage_id_fkey"
-            columns: ["target_stage_id"]
-            isOneToOne: false
-            referencedRelation: "pipeline_stages"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      custom_pipelines: {
-        Row: {
-          bonus_description: string | null
-          bonus_value: number | null
-          color: string | null
-          created_at: string | null
-          created_by: string | null
-          description: string | null
-          ends_at: string | null
-          icon: string | null
-          id: string | null
-          individual_goal: number | null
-          is_active: boolean | null
-          lead_source_config: Json | null
-          lifecycle_type: string | null
-          name: string | null
-          objective_pipe_type: string | null
-          objective_stage_key: string | null
-          organization_id: string | null
-          position: number | null
-          slug: string | null
-          starts_at: string | null
-          status: string | null
-          team_goal: number | null
-          template_type: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          bonus_description?: never
-          bonus_value?: never
-          color?: string | null
-          created_at?: string | null
-          created_by?: string | null
-          description?: string | null
-          ends_at?: never
-          icon?: string | null
-          id?: string | null
-          individual_goal?: never
-          is_active?: boolean | null
-          lead_source_config?: never
-          lifecycle_type?: never
-          name?: string | null
-          objective_pipe_type?: never
-          objective_stage_key?: never
-          organization_id?: string | null
-          position?: never
-          slug?: string | null
-          starts_at?: never
-          status?: never
-          team_goal?: never
-          template_type?: never
-          updated_at?: string | null
-        }
-        Update: {
-          bonus_description?: never
-          bonus_value?: never
-          color?: string | null
-          created_at?: string | null
-          created_by?: string | null
-          description?: string | null
-          ends_at?: never
-          icon?: string | null
-          id?: string | null
-          individual_goal?: never
-          is_active?: boolean | null
-          lead_source_config?: never
-          lifecycle_type?: never
-          name?: string | null
-          objective_pipe_type?: never
-          objective_stage_key?: never
-          organization_id?: string | null
-          position?: never
-          slug?: string | null
-          starts_at?: never
-          status?: never
-          team_goal?: never
-          template_type?: never
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pipelines_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       feature_flags: {
         Row: {
           category: string | null
@@ -20368,21 +19627,7 @@ export type Database = {
             foreignKeyName: "pipeline_entries_pipeline_id_fkey"
             columns: ["pipeline_id"]
             isOneToOne: false
-            referencedRelation: "custom_pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_pipeline_id_fkey"
-            columns: ["pipeline_id"]
-            isOneToOne: false
             referencedRelation: "pipelines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_stage_id_fkey"
-            columns: ["stage_id"]
-            isOneToOne: false
-            referencedRelation: "custom_pipeline_stages"
             referencedColumns: ["id"]
           },
           {
@@ -20469,136 +19714,6 @@ export type Database = {
           usagecount: number | null
         }
         Relationships: []
-      }
-      pipe_confirmacao: {
-        Row: {
-          closer_id: string | null
-          created_at: string | null
-          id: string | null
-          is_confirmed: boolean | null
-          lead_id: string | null
-          meet_link: string | null
-          meeting_date: string | null
-          metrics_period_at: string | null
-          notes: string | null
-          organization_id: string | null
-          pre_sale_responsible_id: string | null
-          responsible_id: string | null
-          sale_responsible_id: string | null
-          sdr_id: string | null
-          status: string | null
-          updated_at: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_entries_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads_compat"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      pipe_propostas: {
-        Row: {
-          calor: number | null
-          closed_at: string | null
-          closer_id: string | null
-          commitment_date: string | null
-          contract_duration: number | null
-          created_at: string | null
-          id: string | null
-          lead_id: string | null
-          loss_reason: string | null
-          loss_reason_id: string | null
-          metrics_period_at: string | null
-          notes: string | null
-          organization_id: string | null
-          pre_sale_responsible_id: string | null
-          product_id: string | null
-          product_type: string | null
-          responsible_id: string | null
-          sale_responsible_id: string | null
-          sale_value: number | null
-          status: string | null
-          updated_at: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_entries_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads_compat"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      pipe_whatsapp: {
-        Row: {
-          created_at: string | null
-          id: string | null
-          lead_id: string | null
-          notes: string | null
-          organization_id: string | null
-          pre_sale_responsible_id: string | null
-          responsible_id: string | null
-          sale_responsible_id: string | null
-          scheduled_date: string | null
-          sdr_id: string | null
-          status: string | null
-          updated_at: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pipeline_entries_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_lead_id_fkey"
-            columns: ["lead_id"]
-            isOneToOne: false
-            referencedRelation: "leads_compat"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pipeline_entries_organization_id_fkey"
-            columns: ["organization_id"]
-            isOneToOne: false
-            referencedRelation: "organizations"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       portfolio_retention_cohorts: {
         Row: {
@@ -21460,14 +20575,6 @@ export type Database = {
         }
         Returns: Json
       }
-      bulk_add_to_custom_pipe: {
-        Args: {
-          p_lead_ids: string[]
-          p_pipeline_id: string
-          p_stage_id: string
-        }
-        Returns: undefined
-      }
       bulk_add_to_pipeline: {
         Args: {
           p_lead_ids: string[]
@@ -21934,9 +21041,9 @@ export type Database = {
         Returns: Json
       }
       create_org_sandbox: { Args: { p_source_org_id: string }; Returns: string }
-      custom_pipeline_delete_impact: {
-        Args: { p_pipeline_id: string }
-        Returns: Json
+      criar_funil_custom_com_etapas: {
+        Args: { p_etapas: Json; p_funil: Json }
+        Returns: string
       }
       custom_pipelines_check_vocab: {
         Args: { p_lifecycle: string; p_status: string; p_template: string }
@@ -21991,10 +21098,9 @@ export type Database = {
         }
         Returns: Json
       }
-      delete_custom_pipeline: { Args: { p_pipeline_id: string }; Returns: Json }
       delete_pipeline: { Args: { p_pipeline_id: string }; Returns: Json }
-      delete_system_pipeline: {
-        Args: { p_org_id: string; p_pipe_type: string }
+      delete_pipeline_stage: {
+        Args: { p_destination_stage_id?: string; p_stage_id: string }
         Returns: Json
       }
       distribute_campaign_round_robin: {
@@ -22189,6 +21295,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      fn_etapa_custom_atualizar: {
+        Args: { p_id: string; p_patch: Json }
+        Returns: undefined
+      }
+      fn_etapa_custom_criar: { Args: { p_input: Json }; Returns: string }
+      fn_funil_custom_atualizar: {
+        Args: { p_id: string; p_patch: Json }
+        Returns: undefined
+      }
+      fn_funil_custom_criar: { Args: { p_input: Json }; Returns: string }
       fn_funnel_flow_step: {
         Args: {
           p_cohort_size: number
@@ -22682,27 +21798,6 @@ export type Database = {
           phone_number: string
           push_name: string
           waiting_total: number
-        }[]
-      }
-      get_custom_filtered_lead_ids: {
-        Args: {
-          p_organization_id?: string
-          p_origin?: string[]
-          p_pipeline_id: string
-          p_pre_qualification_tier?: string[]
-          p_qualification_tier?: string[]
-          p_responsible_id?: string
-          p_search?: string
-          p_stage_id?: string
-          p_tag_ids?: string[]
-        }
-        Returns: string[]
-      }
-      get_custom_pipeline_stage_counts: {
-        Args: { p_org_id: string; p_pipeline_id: string; p_search?: string }
-        Returns: {
-          cnt: number
-          stage_id: string
         }[]
       }
       get_dashboard_metrics: {
@@ -23984,6 +23079,10 @@ export type Database = {
       }
       phone_variants: { Args: { p_phone: string }; Returns: string[] }
       pipeline_delete_impact: { Args: { p_pipeline_id: string }; Returns: Json }
+      pipeline_stage_delete_impact: {
+        Args: { p_stage_id: string }
+        Returns: Json
+      }
       preview_chat_restriction: { Args: { p_org_id: string }; Returns: Json }
       process_overdue_subscriptions: {
         Args: { p_grace_days?: number }
@@ -24163,14 +23262,6 @@ export type Database = {
       sync_org_quotas_from_plan: {
         Args: { p_org_id: string }
         Returns: undefined
-      }
-      system_pipeline_delete_impact: {
-        Args: { p_org_id: string; p_pipe_type: string }
-        Returns: Json
-      }
-      system_stage_role: {
-        Args: { p_pipeline_type: string; p_stage_key: string }
-        Returns: Database["public"]["Enums"]["stage_role"]
       }
       toggle_cron_job: {
         Args: { p_enabled: boolean; p_jobname: string }
