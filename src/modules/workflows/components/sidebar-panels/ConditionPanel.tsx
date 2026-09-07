@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/select";
 import { useResponsibleMembers } from "@/modules/identity";
 import { useLeadOrigins, useLeadCustomFields } from "@/modules/leads";
+import { useAllPipelineStages, useFunisDaOrg } from "@/modules/pipelines";
 import { CONDITION_OPERATOR_LABELS, WEEKDAY_OPTIONS } from "@/types/workflow";
 import type { ConditionNodeData, ConditionOperator, ConditionMode } from "@/types/workflow";
 import { Clock, Filter } from "lucide-react";
@@ -41,7 +42,7 @@ const FIELD_OPTIONS = [
   { value: "urgency", label: "Urgencia" },
   { value: "score", label: "Score" },
   { value: "tag", label: "Tag" },
-  { value: "stage", label: "Estagio" },
+  { value: "stage_id", label: "Etapa atual do negócio" },
   // ── Negócio ── (ADR-0023: lead não tem etapa nem valor; negócio tem)
   { value: "deal_value", label: "Valor do negocio" },
   { value: "has_open_deal", label: "Tem negocio aberto (true/false)" },
@@ -113,6 +114,7 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
   const isResponsibleField = RESPONSIBLE_FIELDS.has(data.field || "");
   const isUtmField = UTM_FIELDS.has(data.field || "");
   const isOriginField = data.field === "origin";
+  const isStageField = data.field === "stage" || data.field === "stage_id";
   const { values: utmValues, isLoading: utmLoading } = useOrgUtmValues(data.field);
 
   // Campo personalizado: `custom` = escolhido no seletor mas ainda sem campo
@@ -154,15 +156,33 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
     originItems.unshift({ value: data.value, label: data.value });
   }
 
+  // Etapa exata, por UUID. O campo legado `stage` guardava stage_key digitada
+  // à mão e não distinguia etapas iguais em dois funis. Definitions antigas
+  // continuam legíveis, mas a próxima escolha migra para `stage_id`.
+  const { data: funnels = [] } = useFunisDaOrg();
+  const { data: pipelineStages = [] } = useAllPipelineStages();
+  const stageItems = pipelineStages
+    .filter((stage) => stage.pipeline_id && (stage.is_active || stage.id === data.value))
+    .map((stage) => ({
+      value: stage.id,
+      label: `${funnels.find((funnel) => funnel.id === stage.pipeline_id)?.label ?? "Funil removido"} · ${stage.name}`,
+    }));
+  const legacyStageValue = data.field === "stage" && data.value
+    ? `__legacy_stage__:${data.value}`
+    : "";
+  const selectedStageValue = legacyStageValue || (data.field === "stage_id" ? data.value : "") || "";
+
   const handleFieldChange = (v: string) => {
     const nowResponsible = RESPONSIBLE_FIELDS.has(v);
     const nowOrigin = v === "origin";
+    const nowStage = v === "stage_id";
     const nowCustom = v === "custom";
     const updates: Partial<ConditionNodeData> = { field: v };
     // Switching responsible <-> non-responsible swaps value semantics (member id vs free text) → clear.
     if (nowResponsible !== isResponsibleField) updates.value = "";
     // Same for origin: free text <-> origin slug are incompatible → clear.
     if (nowOrigin !== isOriginField) updates.value = "";
+    if (nowStage !== isStageField) updates.value = "";
     // Same for custom field: the value domain belongs to the field → clear.
     if (nowCustom !== isCustomField) updates.value = "";
     // Custom fields are always text (`lead_custom_field_values.value` is text) —
@@ -340,7 +360,34 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
           {needsValue && (
             <div className="space-y-2">
               <Label>Valor</Label>
-              {isResponsibleField ? (
+              {isStageField ? (
+                <Select
+                  value={selectedStageValue}
+                  onValueChange={(v) => onUpdate({ field: "stage_id", value: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a etapa exata" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {legacyStageValue && (
+                      <SelectItem value={legacyStageValue} disabled>
+                        Configuração antiga: {data.value}. Selecione a etapa exata.
+                      </SelectItem>
+                    )}
+                    {data.field === "stage_id" && data.value &&
+                      !stageItems.some((stage) => stage.value === data.value) && (
+                        <SelectItem value={data.value} disabled>
+                          Etapa removida ({data.value})
+                        </SelectItem>
+                      )}
+                    {stageItems.map((stage) => (
+                      <SelectItem key={stage.value} value={stage.value}>
+                        {stage.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : isResponsibleField ? (
                 <Select
                   value={data.value || ""}
                   onValueChange={(v) => onUpdate({ value: v })}

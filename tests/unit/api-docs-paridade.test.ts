@@ -65,4 +65,15 @@ describe("documentação da API — as três descrições concordam", () => {
     expect(restApiCategory.description).toMatch(/kommo/i);
     expect(restApiCategory.description).toMatch(/neg[óo]cio/i);
   });
+
+  it("documenta o contrato único de funil sem ressuscitar a restrição custom", () => {
+    const serialized = JSON.stringify(restApiCategory);
+    expect(serialized).not.toContain("custom_pipeline_not_supported");
+    expect(restApiCategory.description).toMatch(/todos os funis seguem o mesmo contrato/i);
+
+    const move = restApiCategory.endpoints.find((e) => e.path === "/api/v1/deals/{id}/move");
+    expect(move?.parameters.find((p) => p.name === "pipeline")?.description).toMatch(
+      /qualquer funil ativo/i,
+    );
+  });
 });

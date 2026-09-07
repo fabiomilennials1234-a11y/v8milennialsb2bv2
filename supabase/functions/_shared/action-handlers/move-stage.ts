@@ -212,11 +212,10 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
     return { success: false, error: "target_stage é obrigatório" };
   }
 
-  // Default legado DELIBERADO: nós salvos antes do editor gravar funil sempre
-  // assumiam Oportunidades — tanto aqui quanto no mapeamento do action-handler.
-  // O editor NOVO (SCRUM-627) grava `pipelineId` sempre; este fallback existe
-  // só para os nós antigos não quebrarem, e morre quando o último for migrado.
-  const targetPipeRef = String((params.target_pipe as string) || "whatsapp");
+  const targetPipeRef = String((params.target_pipe as string) || "").trim();
+  if (!targetPipeRef) {
+    return { success: false, error: "No target funnel configured" };
+  }
   const rawStageRef = String(targetStage).trim();
   const normalizedStage = rawStageRef.toLowerCase();
 

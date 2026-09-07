@@ -19,6 +19,17 @@ import { determineNextState as determineNextStateExternal } from "../../_shared/
 import { getPipeEntry, type PipelineEntry } from "../../_shared/pipeline-adapter.ts";
 import { funnelRefsFromRules } from "../../_shared/copilot/kanban-rules.ts";
 
+const NON_FUNNEL_AXES = new Set(["campanha", "upsell_base", "upsell_gestao"]);
+
+function funnelRefsForAgent(capabilities: any): string[] {
+  const refs = funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules);
+  for (const raw of capabilities?.active_pipes ?? []) {
+    const ref = String(raw ?? "").trim();
+    if (ref && !NON_FUNNEL_AXES.has(ref) && !refs.includes(ref)) refs.push(ref);
+  }
+  return refs;
+}
+
 export interface ProcessLLMResponseResult {
   nextState: string;
   actionToExecute:
@@ -296,7 +307,7 @@ export async function enqueueAutomationActions(
     // SCRUM-628: a automação deixa de assumir o funil WhatsApp — vai junto a
     // ref do funil primário do agente (primeira regra de kanban de eixo-funil).
     // Sem regra configurada, o executor cai no legado "whatsapp".
-    const pipelineRef = funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules)[0] ?? null;
+    const pipelineRef = funnelRefsForAgent(capabilities)[0] ?? null;
 
     console.log("[engine/decide-action] Enqueuing automation action:", automationActionType);
     await enqueueAiAction(supabase, {
@@ -350,8 +361,8 @@ async function loadStagesOfPipeline(
  * Avanço automático de etapa pelo turn do Copilot — em QUALQUER funil (SCRUM-628).
  *
  * O funil deixa de ser o WhatsApp hardcoded: o Sujeito é procurado nos funis
- * que as kanban rules do agente citam (na ordem), com fallback "whatsapp" para
- * agente sem regra — comportamento histórico preservado. A trilha fixa
+ * que as kanban rules e `active_pipes` do agente citam (na ordem), com fallback
+ * "whatsapp" apenas para configuração antiga vazia. A trilha fixa
  * ["novo","abordado","respondeu",...] morreu junto:
  *
  *   - avanço por turn = PRÓXIMA etapa `stage_role='open'` na ordem de position
@@ -387,7 +398,7 @@ export async function enqueuePipelineStageUpdate(
       return;
     }
 
-    const refs = funnelRefsFromRules(capabilities?.copilot_agent_kanban_rules);
+    const refs = funnelRefsForAgent(capabilities);
     if (refs.length === 0) refs.push("whatsapp");
 
     let entry: PipelineEntry | null = null;

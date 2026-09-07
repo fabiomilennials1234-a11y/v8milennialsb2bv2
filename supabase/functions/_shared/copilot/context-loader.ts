@@ -15,7 +15,10 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getPipeEntry, getPipeEntriesByLeads } from "../pipeline-adapter.ts";
+import {
+  getCurrentFunnelEntriesByLeads,
+  getPipeEntriesByLeads,
+} from "../pipeline-adapter.ts";
 
 const SELECT_AGENT = "*, copilot_agent_faqs(*), copilot_agent_kanban_rules(*)";
 
@@ -110,33 +113,23 @@ export async function loadCapabilities(
   // Routing por stage/origin/segment requer leadId
   if (leadId) {
     try {
-      // ADR-0023 §10: o funil WhatsApp entra pelo NEGÓCIO (`pipeline_entries`), igual
-      // confirmação e propostas. `leads.pipe_whatsapp` é espelho legado e não roteia mais.
-      const [leadRes, upsellRes, whatsappRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
+      const [leadRes, upsellRes, funnelEntries, campanhaRes] = await Promise.all([
         supabase.from("leads").select("origin, segment").eq("id", leadId).maybeSingle(),
         supabase.from("upsell_clients").select("tipo_cliente_tempo, gestao_stage").eq("lead_id", leadId).maybeSingle(),
-        getPipeEntry(supabase, leadId, organizationId, "whatsapp"),
-        getPipeEntry(supabase, leadId, organizationId, "confirmacao"),
-        getPipeEntry(supabase, leadId, organizationId, "propostas"),
+        getCurrentFunnelEntriesByLeads(supabase, [leadId], organizationId),
         supabase.from("campanha_leads").select("stage_id, campanha_stages(name)").eq("lead_id", leadId).limit(1).maybeSingle(),
       ]);
 
       const leadRow = leadRes.data as { origin?: string; segment?: string } | null;
       const upsellRow = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string } | null;
-      const whatsappRow = whatsappRes ? { status: whatsappRes.stage_key } : null;
-      const confirmacaoRow = confirmacaoRes ? { status: confirmacaoRes.stage_key } : null;
-      const propostasRow = propostasRes ? { status: propostasRes.stage_key } : null;
       const campanhaRow = campanhaRes.data as { campanha_stages?: { name?: string } } | null;
 
       leadOrigin = leadRow?.origin;
 
-      if (leadRow || upsellRow || whatsappRow || confirmacaoRow || propostasRow || campanhaRow) {
-        const allStages: string[] = [];
-        if (whatsappRow?.status) allStages.push(whatsappRow.status);
+      if (leadRow || upsellRow || funnelEntries.length > 0 || campanhaRow) {
+        const allStages: string[] = funnelEntries.map((entry) => entry.stage_key);
         if (upsellRow?.tipo_cliente_tempo) allStages.push(upsellRow.tipo_cliente_tempo);
         if (upsellRow?.gestao_stage) allStages.push(upsellRow.gestao_stage);
-        if (confirmacaoRow?.status) allStages.push(confirmacaoRow.status);
-        if (propostasRow?.status) allStages.push(propostasRow.status);
         const campanhaStage = campanhaRow?.campanha_stages?.name;
         if (campanhaStage) allStages.push(campanhaStage);
 
@@ -491,7 +484,7 @@ export async function loadLeadData(
 
     const orgId = (lead as Record<string, unknown>).organization_id as string;
 
-    const [customFieldsRes, upsellRes, whatsappEntry, confirmacaoEntry, propostasEntry, campanhaRes] = await Promise.all([
+    const [customFieldsRes, upsellRes, funnelEntries, campanhaRes] = await Promise.all([
       supabase
         .from("lead_custom_field_values")
         .select(`value, field:lead_custom_fields(id, field_name, field_type)`)
@@ -501,9 +494,7 @@ export async function loadLeadData(
         .select("tipo_cliente_tempo, gestao_stage, potencial, is_active")
         .eq("lead_id", leadId)
         .maybeSingle(),
-      getPipeEntry(supabase, leadId, orgId, "whatsapp"),
-      getPipeEntry(supabase, leadId, orgId, "confirmacao"),
-      getPipeEntry(supabase, leadId, orgId, "propostas"),
+      getCurrentFunnelEntriesByLeads(supabase, [leadId], orgId),
       supabase
         .from("campanha_leads")
         .select("stage_id, campanha_id, campanha_stages(name)")
@@ -523,6 +514,9 @@ export async function loadLeadData(
     }
 
     const upsellData = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string; potencial?: string; is_active?: boolean } | null;
+    const whatsappEntry = funnelEntries.find((entry) => entry.pipeline_slug === "whatsapp");
+    const confirmacaoEntry = funnelEntries.find((entry) => entry.pipeline_slug === "confirmacao");
+    const propostasEntry = funnelEntries.find((entry) => entry.pipeline_slug === "propostas");
     const confMeta = (confirmacaoEntry?.metadata ?? {}) as Record<string, unknown>;
     const propMeta = (propostasEntry?.metadata ?? {}) as Record<string, unknown>;
     const campanhaData = campanhaRes.data as { campanha_id?: string; campanha_stages?: { name?: string } } | null;
@@ -547,6 +541,13 @@ export async function loadLeadData(
     return {
       ...(lead as Record<string, unknown>),
       customFields,
+      funnel_positions: funnelEntries.map((entry) => ({
+        pipeline_id: entry.pipeline_id,
+        pipeline_slug: entry.pipeline_slug,
+        pipeline_name: entry.pipeline_name,
+        stage_id: entry.stage_id ?? null,
+        stage_key: entry.stage_key,
+      })),
       upsell_base_stage: upsellData?.tipo_cliente_tempo ?? null,
       upsell_gestao_stage: upsellData?.gestao_stage ?? null,
       upsell_potencial: upsellData?.potencial ?? null,

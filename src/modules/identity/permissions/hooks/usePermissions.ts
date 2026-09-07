@@ -101,7 +101,7 @@ export const PERMISSION_LABELS: Record<PermissionKey, string> = {
   can_delete_leads: "Excluir leads",
   can_create_leads: "Criar leads",
   can_export_leads: "Exportar leads",
-  can_move_pipe_records: "Mover cards no pipe",
+  can_move_pipe_records: "Mover negócios no funil",
   can_manage_campaigns: "Gerenciar campanhas",
 };
 

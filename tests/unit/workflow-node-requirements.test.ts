@@ -98,6 +98,17 @@ describe("detecção de nó incompleto", () => {
     expect(findNodeConfigIssues([no("move_stage")])[0].missing).toBe("etapa de destino");
   });
 
+  it("ações de funil exigem destino explícito e aceitam campos legados", () => {
+    expect(findNodeConfigIssues([no("move_stage", { targetStage: "novo" })]).map((i) => i.missing)).toEqual(["funil de destino"]);
+    expect(findNodeConfigIssues([no("move_stage", { pipeType: "whatsapp", targetStage: "novo" })])).toHaveLength(0);
+
+    expect(findNodeConfigIssues([no("duplicate_to_pipe")]).map((i) => i.missing)).toEqual(["funil de destino", "etapa inicial"]);
+    expect(findNodeConfigIssues([no("duplicate_to_pipe", { targetPipeType: "propostas", targetPipeStage: "enviada" })])).toHaveLength(0);
+
+    expect(findNodeConfigIssues([no("remove_from_pipe")])[0].missing).toBe("funil");
+    expect(findNodeConfigIssues([no("mark_as_lost", { pipelineId: "funil-1" })])).toHaveLength(0);
+  });
+
   it("notify_team_member usa notifyMemberId, não memberId", () => {
     // Controle: a chave errada NÃO satisfaz a regra.
     expect(findNodeConfigIssues([no("notify_team_member", { memberId: "x" })])).toHaveLength(1);
@@ -134,7 +145,7 @@ describe("detecção de nó incompleto", () => {
 
   it("aponta todos os nós ruins, não só o primeiro", () => {
     const r = findNodeConfigIssues([no("add_tag", {}, "a"), no("move_stage", {}, "b")]);
-    expect(r.map((i) => i.nodeId).sort()).toEqual(["a", "b"]);
+    expect(r.map((i) => i.nodeId).sort()).toEqual(["a", "b", "b"]);
   });
 });
 
@@ -147,14 +158,14 @@ describe("etapa que apodreceu", () => {
   });
 
   it("aponta etapa que não existe mais", () => {
-    const r = findStageIssues([moveStage({ targetStage: "nutricao" })], etapas);
+    const r = findStageIssues([moveStage({ targetStage: "nutricao", pipeType: "whatsapp" })], etapas);
     expect(r).toHaveLength(1);
     expect(r[0].missing).toContain("nutricao");
   });
 
   it("etapa válida passa, e a comparação ignora caixa e espaço", () => {
-    expect(findStageIssues([moveStage({ targetStage: "abordado" })], etapas)).toHaveLength(0);
-    expect(findStageIssues([moveStage({ targetStage: "  ABORDADO " })], etapas)).toHaveLength(0);
+    expect(findStageIssues([moveStage({ targetStage: "abordado", pipeType: "whatsapp" })], etapas)).toHaveLength(0);
+    expect(findStageIssues([moveStage({ targetStage: "  ABORDADO ", pipeType: "whatsapp" })], etapas)).toHaveLength(0);
   });
 
   it("funil sem etapas cadastradas não acusa — espelha o executor", () => {
@@ -191,13 +202,13 @@ describe("etapa que apodreceu", () => {
   });
 
   it("campo vazio é da outra regra, não desta", () => {
-    expect(findStageIssues([moveStage({ targetStage: "" })], etapas)).toHaveLength(0);
-    expect(findNodeConfigIssues([moveStage({ targetStage: "" })])).toHaveLength(1);
+    expect(findStageIssues([moveStage({ targetStage: "", pipeType: "whatsapp" })], etapas)).toHaveLength(0);
+    expect(findNodeConfigIssues([moveStage({ targetStage: "", pipeType: "whatsapp" })])).toHaveLength(1);
   });
 
   it("respeita o funil declarado no nó", () => {
     // 'enviada' vale em propostas, não em whatsapp
     expect(findStageIssues([moveStage({ targetStage: "enviada", pipeType: "propostas" })], etapas)).toHaveLength(0);
-    expect(findStageIssues([moveStage({ targetStage: "enviada" })], etapas)).toHaveLength(1);
+    expect(findStageIssues([moveStage({ targetStage: "enviada", pipeType: "whatsapp" })], etapas)).toHaveLength(1);
   });
 });

@@ -36,6 +36,7 @@ function meeting(overrides: Partial<LeadMeeting> = {}): LeadMeeting {
     organization_id: "org-1",
     lead_id: "lead-1",
     pipeline_id: "pipe-1",
+    stage_id: "stage-agendado",
     stage_key: "agendado",
     meeting_date: "2026-07-10T15:00:00Z",
     origin: null,
@@ -143,6 +144,13 @@ describe("planScheduledDateDispatches — audiência", () => {
     const w = wf({ stages: ["agendado"] });
     expect(planScheduledDateDispatches(now, [w], [meeting({ stage_key: "novo" })], [])).toHaveLength(0);
     expect(planScheduledDateDispatches(now, [w], [meeting({ stage_key: "agendado" })], [])).toHaveLength(1);
+  });
+
+  it("aceita UUID de etapa gravado pelo editor novo", () => {
+    const now = new Date("2026-07-03T09:00:00Z");
+    const w = wf({ stages: ["stage-agendado"] });
+    expect(planScheduledDateDispatches(now, [w], [meeting()], [])).toHaveLength(1);
+    expect(planScheduledDateDispatches(now, [w], [meeting({ stage_id: "stage-outra" })], [])).toHaveLength(0);
   });
 
   it("respects optional origin filter", () => {

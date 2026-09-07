@@ -136,7 +136,7 @@ export default function Duplicates() {
             <AlertDialogTitle>Mesclar leads</AlertDialogTitle>
             <AlertDialogDescription>
               O lead <strong>{mergeTarget?.mergeName}</strong> sera mesclado em{" "}
-              <strong>{mergeTarget?.keepName}</strong>. Tags, historico e dados de pipe serao consolidados.
+              <strong>{mergeTarget?.keepName}</strong>. Tags, historico e dados de funil serão consolidados.
               Esta acao nao pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>

@@ -1,9 +1,8 @@
 /**
  * Unified pipeline_entries adapter for edge functions.
  *
- * Replaces direct reads/writes to legacy pipe_whatsapp, pipe_confirmacao,
- * pipe_propostas tables. The reverse sync trigger keeps legacy tables
- * in sync during the migration period.
+ * Replaces direct reads/writes to the removed per-funnel relations. All reads
+ * and writes use `pipelines`, `pipeline_stages` and `pipeline_entries`.
  *
  * SCRUM-623 (ADR-0034 "funil é funil"): o adapter deixou de ser system-only.
  * A resolução aceita **id (uuid) OU slug de qualquer funil ativo da org** —
@@ -193,6 +192,7 @@ export interface PipelineEntry {
   id: string;
   organization_id: string;
   pipeline_id: string;
+  stage_id?: string | null;
   lead_id: string;
   stage_key: string;
   assigned_to: string | null;
@@ -203,6 +203,11 @@ export interface PipelineEntry {
   closed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface CurrentFunnelEntry extends PipelineEntry {
+  pipeline_slug: string;
+  pipeline_name: string;
 }
 
 /**
@@ -492,6 +497,74 @@ export async function getPipeEntriesByLeads(
   }
 
   return picked;
+}
+
+/**
+ * Posição corrente de vários leads em TODOS os funis ativos da organização.
+ * Uma leitura cobre funis semeados e criados pelo usuário; nenhum slug fixo
+ * participa da consulta. Service role exige os dois filtros de tenant abaixo.
+ */
+export async function getCurrentFunnelEntriesByLeads(
+  supabase: SupabaseClient,
+  leadIds: string[],
+  orgId: string,
+): Promise<CurrentFunnelEntry[]> {
+  if (leadIds.length === 0) return [];
+
+  const { data: funnels, error: funnelError } = await supabase
+    .from("pipelines")
+    .select("id, slug, name")
+    .eq("organization_id", orgId)
+    .eq("is_active", true);
+  if (funnelError) {
+    console.warn("[pipeline-adapter] getCurrentFunnelEntriesByLeads funnels error:", funnelError);
+    return [];
+  }
+
+  const funnelById = new Map(
+    ((funnels ?? []) as Array<{ id: string; slug: string; name: string }>).map((funnel) => [
+      funnel.id,
+      funnel,
+    ]),
+  );
+  const funnelIds = [...funnelById.keys()];
+  if (funnelIds.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("pipeline_entries")
+    .select("*")
+    .eq("organization_id", orgId)
+    .in("pipeline_id", funnelIds)
+    .in("lead_id", leadIds)
+    .order("closed_at", { ascending: false, nullsFirst: true })
+    .order("stage_changed_at", { ascending: false })
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+  if (error) {
+    console.warn("[pipeline-adapter] getCurrentFunnelEntriesByLeads entries error:", error);
+    return [];
+  }
+
+  const byLeadAndFunnel = new Map<string, PipelineEntry[]>();
+  for (const row of (data ?? []) as PipelineEntry[]) {
+    const key = `${row.lead_id}:${row.pipeline_id}`;
+    const group = byLeadAndFunnel.get(key);
+    if (group) group.push(row);
+    else byLeadAndFunnel.set(key, [row]);
+  }
+
+  const result: CurrentFunnelEntry[] = [];
+  for (const group of byLeadAndFunnel.values()) {
+    const entry = pickActiveEntry(group);
+    const funnel = entry ? funnelById.get(entry.pipeline_id) : null;
+    if (!entry || !funnel) continue;
+    result.push({
+      ...entry,
+      pipeline_slug: funnel.slug,
+      pipeline_name: funnel.name,
+    });
+  }
+  return result;
 }
 
 /**

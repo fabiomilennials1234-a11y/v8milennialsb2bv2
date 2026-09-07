@@ -84,7 +84,7 @@ const endpoints: ApiEndpoint[] = [
   {
     id: "api-get-lead",
     name: "Lead 360",
-    description: "Retorna um lead completo: tier, tags, custom fields (valores), responsáveis e posições em todos os pipes (com vendido/valor). 404 se não existir na org. Escopo: lead:read.",
+    description: "Retorna um lead completo: tier, tags, campos personalizados, responsáveis e posições em todos os funis (com vendido/valor). 404 se não existir na organização. Escopo: lead:read.",
     category: "rest-api",
     version: "v1",
     method: "GET",
@@ -96,7 +96,7 @@ const endpoints: ApiEndpoint[] = [
     responseFields: [
       { name: "tags", type: "object[]", required: true, description: "{ id, name, color }." },
       { name: "custom_fields", type: "object[]", required: true, description: "{ field_name, field_type, value }." },
-      { name: "pipes", type: "object[]", required: true, description: "Posições em pipes: { pipeline, stage_key, sold, sale_value, … }." },
+      { name: "pipes", type: "object[]", required: true, description: "Posições nos funis. `pipes` é o nome legado deste campo somente de leitura; para novas integrações, use GET /api/v1/leads/{id}/deals." },
     ],
   },
   {
@@ -125,7 +125,7 @@ const endpoints: ApiEndpoint[] = [
   {
     id: "api-list-pipelines",
     name: "Listar funis",
-    description: "Catálogo de funis com etapas, de sistema e personalizados. Escopo: pipeline:read.",
+    description: "Catálogo único de funis da organização com suas etapas. Todos aceitam as mesmas operações, independentemente da origem. Escopo: pipeline:read.",
     category: "rest-api",
     version: "v1",
     method: "GET",
@@ -142,6 +142,7 @@ const endpoints: ApiEndpoint[] = [
     ],
     notes: [
       "Catálogo sem paginação (next_cursor sempre null).",
+      "O campo type informa apenas a origem histórica do funil. Não use system/custom para decidir comportamento: qualquer funil pode ser consultado, receber Negócios e ser destino de movimentação.",
       "Etapa desativada existe no banco e é aceita pela API, mas não aparece no kanban: um Negócio aberto nela fica invisível na tela. Para montar seletor, use only_active_stages=true.",
     ],
   },
@@ -250,8 +251,8 @@ const endpoints: ApiEndpoint[] = [
   },
   {
     id: "api-move-stage",
-    name: "Mover etapa",
-    description: "Move o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, transição automática ao funil de destino no compareceu). Escopo: lead:write.",
+    name: "Mover lead (legado)",
+    description: "Rota legada mantida para integrações existentes. Novas integrações devem mover o Negócio, que é a entidade posicionada no funil. Escopo: lead:write.",
     category: "rest-api",
     version: "v1",
     method: "POST",
@@ -379,7 +380,7 @@ const endpoints: ApiEndpoint[] = [
     path: "/api/v1/deals",
     auth,
     parameters: [
-      { name: "pipeline", type: "string", required: false, description: "Slug do funil. Ex: \"vendas\"." },
+      { name: "pipeline", type: "string", required: false, description: "Slug ou id de qualquer funil da organização. Ex: \"vendas\"." },
       { name: "stage", type: "string", required: false, description: "Etapa." },
       { name: "owner_id", type: "string", required: false, description: "Responsável." },
       { name: "status", type: "string", required: false, description: "open | won | lost | all." },
@@ -405,7 +406,7 @@ const endpoints: ApiEndpoint[] = [
     auth,
     parameters: [
       { name: "lead_id", type: "string", required: true, description: "Lead existente. Crie antes com POST /api/v1/leads." },
-      { name: "pipeline", type: "string", required: true, description: "Slug do funil." },
+      { name: "pipeline", type: "string", required: true, description: "Slug ou id de qualquer funil da organização." },
       { name: "stage", type: "string", required: true, description: "Etapa inicial." },
       { name: "title", type: "string", required: false, description: "Título. Sem ele, vira \"Negócio de <mês>/<ano>\"." },
       { name: "value", type: "number", required: false, description: "Valor." },
@@ -469,15 +470,15 @@ const endpoints: ApiEndpoint[] = [
     path: "/api/v1/deals/{id}/move",
     auth,
     parameters: [
-      { name: "pipeline", type: "string", required: true, description: "Funil de destino." },
-      { name: "stage", type: "string", required: true, description: "Etapa de destino." },
+      { name: "pipeline", type: "string", required: true, description: "Slug ou id do funil de destino. Aceita qualquer funil ativo da organização." },
+      { name: "stage", type: "string", required: true, description: "stage_key da etapa de destino nesse funil." },
       { name: "owner_id", type: "string", required: false, description: "Responsável no destino." },
     ],
     requestExample: { pipeline: "vendas", stage: "proposta_enviada" },
     responseExample: { id: "d1…", pipeline: "vendas", stage: "proposta_enviada" },
     responseFields: [{ name: "pipeline", type: "string", required: true, description: "A posição NOVA." }],
     notes: [
-      "422 custom_pipeline_not_supported para destino em funil customizado: o card mudaria de identidade e perderia o histórico.",
+      "A mesma identidade e o histórico do Negócio são preservados ao mover entre quaisquer funis.",
       "404 também quando o Negócio não tem posição em funil nenhum — não há o que mover.",
     ],
   },
@@ -501,7 +502,7 @@ const endpoints: ApiEndpoint[] = [
 export const restApiCategory: ApiCategory = {
   id: "rest-api",
   name: "REST API v1",
-  description: "API REST pública (/api/v1/*). Lead é a pessoa; Negócio (`deal`) é a venda que anda pelo funil. Se você vem do Kommo: lá \"lead\" é o card do funil — aqui esse papel é do Negócio. Leitura e escrita escopadas por API Key. Base: /functions/v1/api.",
+  description: "API REST pública (/api/v1/*). Lead é a pessoa; Negócio (`deal`) é a venda que anda pelo funil. Se você vem do Kommo: lá \"lead\" é o card do funil — aqui esse papel é do Negócio. Todos os funis seguem o mesmo contrato. Leitura e escrita escopadas por API Key. Base: https://torquecrm.com.br/api/v1.",
   icon: "code",
   endpoints,
 };

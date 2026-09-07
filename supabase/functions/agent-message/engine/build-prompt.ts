@@ -631,19 +631,33 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     if (leadData.urgency) sections.push(`- Urgência: ${leadData.urgency}`);
     if (leadData.rating) sections.push(`- Rating/Score: ${leadData.rating}/10`);
     if (leadData.origin) sections.push(`- Origem: ${leadData.origin}`);
-    if (leadData.whatsapp_status) sections.push(`- Etapa no funil WhatsApp: ${leadData.whatsapp_status}`);
+    const funnelPositions = Array.isArray(leadData.funnel_positions)
+      ? leadData.funnel_positions as Array<{ pipeline_name?: string; pipeline_slug?: string; stage_key?: string }>
+      : [];
+    if (funnelPositions.length > 0) {
+      for (const position of funnelPositions) {
+        if (position.stage_key) {
+          sections.push(`- Etapa no funil ${position.pipeline_name || position.pipeline_slug}: ${position.stage_key}`);
+        }
+      }
+    } else {
+      // Compatibilidade para callers antigos que ainda não enviam funnel_positions.
+      if (leadData.whatsapp_status) sections.push(`- Etapa no funil WhatsApp: ${leadData.whatsapp_status}`);
+      if (leadData.confirmacao_status) sections.push(`- Etapa no funil Confirmação: ${leadData.confirmacao_status}`);
+      if (leadData.propostas_status) sections.push(`- Etapa no funil Propostas: ${leadData.propostas_status}`);
+    }
     if (leadData.confirmacao_status) {
-      let confirmacaoInfo = `- Etapa no funil Confirmação: ${leadData.confirmacao_status}`;
+      let confirmacaoInfo = "- Dados da reunião";
       if (leadData.confirmacao_meeting_date)
         confirmacaoInfo += ` (reunião: ${formatDateTimeInTz(leadData.confirmacao_meeting_date, agentTz)})`;
       if (leadData.confirmacao_is_confirmed) confirmacaoInfo += " [CONFIRMADO]";
-      sections.push(confirmacaoInfo);
+      if (leadData.confirmacao_meeting_date || leadData.confirmacao_is_confirmed) sections.push(confirmacaoInfo);
     }
     if (leadData.propostas_status) {
-      let propostasInfo = `- Etapa no funil Propostas: ${leadData.propostas_status}`;
+      let propostasInfo = "- Dados comerciais";
       if (leadData.propostas_sale_value) propostasInfo += ` (valor: R$${leadData.propostas_sale_value})`;
       if (leadData.propostas_product_type) propostasInfo += ` (produto: ${leadData.propostas_product_type})`;
-      sections.push(propostasInfo);
+      if (leadData.propostas_sale_value || leadData.propostas_product_type) sections.push(propostasInfo);
     }
     if (leadData.upsell_base_stage) sections.push(`- Etapa na Carteira Base: ${leadData.upsell_base_stage}`);
     if (leadData.upsell_gestao_stage) sections.push(`- Etapa na Carteira Gestão: ${leadData.upsell_gestao_stage}`);

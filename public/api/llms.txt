@@ -30,12 +30,12 @@ Nota: Listas retornam { data, next_cursor, has_more }. Pagine passando next_curs
 Nota: Ordenação fixa: created_at desc, id desc.
 
 ## GET /api/v1/leads/{id}
-Retorna um lead completo: tier, tags, custom fields (valores), responsáveis e posições em todos os pipes (com vendido/valor). 404 se não existir na org. Escopo: lead:read.
+Retorna um lead completo: tier, tags, campos personalizados, responsáveis e posições em todos os funis (com vendido/valor). 404 se não existir na organização. Escopo: lead:read.
 
 Parâmetros:
 - `id` (string (uuid), obrigatório): ID do lead (path).
 
-Resposta (exemplo): `{"id":"f21072f1-…","name":"Nairde","company":"Valim","email":null,"phone":"+5511…","origin":"outro","tier":"ouro","rating":4,"qualification_score":80,"responsible_id":"bf98…","sdr_id":null,"closer_id":null,"pre_sale_responsible_id":null,"sale_responsible_id":null,"tags":[{"id":"t1","name":"VIP","color":"#F5C518"}],"custom_fields":[{"field_name":"faturamento","field_type":"text","value":"5M"}],"pipes":[{"pipeline":"whatsapp","pipeline_name":"WhatsApp","type":"system","stage_key":"novo","sold":false,"sale_value":null,"entered_at":"2026-06-14T14:30:22Z","stage_changed_at":"2026-06-14T14:30:22Z"}],"created_at":"2026-06-14T14:30:22Z","updated_at":"2026-06-14T14:30:22Z"}`
+Resposta (exemplo): `{"id":"f21072f1-…","name":"Nairde","company":"Valim","email":null,"phone":"+5511…","origin":"outro","tier":"ouro","rating":4,"qualification_score":80,"responsible_id":"bf98…","sdr_id":null,"closer_id":null,"pre_sale_responsible_id":null,"sale_responsible_id":null,"tags":[{"id":"t1","name":"VIP","color":"#F5C518"}],"custom_fields":[{"field_name":"faturamento","field_type":"text","value":"5M"}],"pipes":[{"pipeline":"vendas","pipeline_name":"Funil de Vendas","type":"custom","stage_key":"novo","sold":false,"sale_value":null,"entered_at":"2026-06-14T14:30:22Z","stage_changed_at":"2026-06-14T14:30:22Z"}],"created_at":"2026-06-14T14:30:22Z","updated_at":"2026-06-14T14:30:22Z"}`
 
 ## GET /api/v1/leads/{id}/timeline
 Histórico do lead (lead_history) com paginação keyset. Escopo: lead:read.
@@ -50,11 +50,35 @@ Resposta (exemplo): `{"data":[{"id":"e1","created_at":"2026-06-14T14:30:22Z","ac
 Nota: Listas retornam { data, next_cursor, has_more }. Pagine passando next_cursor de volta em ?cursor=. Erros: { error: { code, message, details? } }.
 
 ## GET /api/v1/pipelines
-Catálogo de funis com etapas. Funis system trazem etapas; funis custom vêm com stages vazio no v1. Escopo: pipeline:read.
+Catálogo único de funis da organização com suas etapas. Todos aceitam as mesmas operações, independentemente da origem. Escopo: pipeline:read.
 
-Resposta (exemplo): `{"data":[{"id":"p1","name":"WhatsApp","slug":"whatsapp","type":"system","color":"#25D366","icon":"message-circle","display_order":1,"is_active":true,"stages":[{"stage_key":"novo","name":"Novo","color":"#888","position":0,"is_active":true,"is_final_positive":false,"is_final_negative":false}]}],"next_cursor":null,"has_more":false}`
+Parâmetros:
+- `pipeline` (string): Devolve só um funil. Aceita o slug ou o id de qualquer funil da organização. Funil inexistente devolve lista vazia.
+- `only_active_stages` (boolean): Com "true", cada funil traz apenas as etapas ativas — as mesmas que o cliente vê no kanban. Sem o parâmetro, vêm todas, inclusive as desativadas.
+
+Resposta (exemplo): `{"data":[{"id":"p1","name":"Funil de Vendas","slug":"vendas","type":"custom","color":"#f59e0b","icon":"trending-up","display_order":3,"is_active":true,"stages":[{"stage_key":"novo","name":"Novo","color":"#888","position":0,"is_active":true,"is_final_positive":false,"is_final_negative":false}]}],"next_cursor":null,"has_more":false}`
 
 Nota: Catálogo sem paginação (next_cursor sempre null).
+Nota: O campo type informa apenas a origem histórica do funil. Não use system/custom para decidir comportamento: qualquer funil pode ser consultado, receber Negócios e ser destino de movimentação.
+Nota: Etapa desativada existe no banco e é aceita pela API, mas não aparece no kanban: um Negócio aberto nela fica invisível na tela. Para montar seletor, use only_active_stages=true.
+
+## POST /api/v1/custom-fields
+Cadastra um campo personalizado de Lead. Idempotente por nome, ignorando maiúsculas: pedir um campo que já existe devolve o existente com created=false, em vez de criar uma segunda grafia. Escopo: metadata:write.
+
+Resposta (exemplo): `{"id":"cf1","field_name":"faturamento_mensal","field_type":"number","created":true}`
+
+Nota: field_type aceita text, number, date, select e boolean. O tipo select exige field_options com ao menos uma opção.
+Nota: 201 quando cria, 200 quando o campo já existia.
+Nota: Campo personalizado é do Lead. Negócio não tem campos personalizados.
+
+## GET /api/v1/team-members
+Catálogo de membros da organização, para resolver os IDs usados nos campos de responsável (owner_id do Negócio; responsible_id, sale_responsible_id e pre_sale_responsible_id do Lead). Não expõe telefone nem dados de remuneração. Escopo: team:read.
+
+Resposta (exemplo): `{"data":[{"id":"tm1","name":"Maria Souza","email":"maria@empresa.com","job_title":"Closer","role":"member","is_active":true}],"next_cursor":null,"has_more":false}`
+
+Nota: Uma lista só serve pré-venda e vendas: o Torque não marca no membro quem é o quê — isso é decidido por Lead, e a mesma pessoa pode ser pré-venda num e vendas em outro.
+Nota: job_title é texto livre (Closer, SDR, CEO…) e serve como dica na tela, não como filtro.
+Nota: Inclui inativos, com is_active=false: seletor quer os ativos, mas quem sincroniza histórico precisa resolver o nome de quem já saiu.
 
 ## GET /api/v1/tags
 Catálogo de tags da organização. Escopo: metadata:read.
@@ -67,7 +91,7 @@ Catálogo de definições de campos customizados. Escopo: metadata:read.
 Resposta (exemplo): `{"data":[{"id":"cf1","field_name":"faturamento","field_type":"text","field_options":null,"is_required":false,"display_order":0}],"next_cursor":null,"has_more":false}`
 
 ## PATCH /api/v1/leads/{id}
-Atualização parcial de campos permitidos. Campos não-allowlistados são ignorados. Escopo: lead:write.
+Atualiza campos do Lead. Além de nome, empresa, e-mail, telefone e observações, aceita segment, faturamento e os cinco utm_* — que são colunas próprias de leads, não campos personalizados. Escopo: lead:write.
 
 Parâmetros:
 - `id` (string (uuid), obrigatório): ID do lead (path).
@@ -90,14 +114,14 @@ Nota: 422 invalid_tier para tier fora do enum. 422 invalid_responsible se o resp
 Nota: Campos de negócio como segmento/faturamento/urgência são custom fields — use PUT /custom-fields.
 
 ## POST /api/v1/leads/{id}/stage
-Move o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, auto-Orçamentos ao compareceu). Escopo: lead:write.
+Rota legada mantida para integrações existentes. Novas integrações devem mover o Negócio, que é a entidade posicionada no funil. Escopo: lead:write.
 
 Parâmetros:
 - `id` (string (uuid), obrigatório): ID do lead (path).
-- `pipe` (string): Funil: whatsapp, confirmacao, propostas, … Default: whatsapp.
+- `pipe` (string): Slug ou id de qualquer funil da organização. Default: o funil padrão da organização.
 - `stage` (string, obrigatório): stage_key de destino (validado contra as etapas do funil).
 
-Resposta (exemplo): `{"moved":true,"target_stage":"compareceu","target_pipe":"confirmacao"}`
+Resposta (exemplo): `{"moved":true,"target_stage":"proposta_enviada","target_pipe":"vendas"}`
 
 Nota: 400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).
 Nota: meeting_date não é suportado no v1.
@@ -128,8 +152,114 @@ Nota: 404 se o lead não for da org.
 Define valores de campos customizados existentes. Não cria campos novos no v1. Escopo: lead:write.
 
 Parâmetros:
-- `id` (string (uuid), obrigatório): ID do lead (path).
+- `create_missing` (boolean): Com "true", cria como texto o campo que ainda não existe em vez de recusar com 422. Sem o parâmetro, campo desconhecido continua sendo recusado.
 
 Resposta (exemplo): `{"updated":true}`
 
 Nota: 422 unknown_field (com details.unknown_fields) se algum campo não existe na org — nada é gravado. 404 se o lead não for da org.
+
+## POST /api/v1/leads
+Cria um Lead. Telefone repetido NÃO cria uma segunda pessoa: responde 409 com o id de quem já está lá. Escopo: lead:write.
+
+Parâmetros:
+- `name` (string, obrigatório): Nome do lead.
+- `phone` (string): Telefone. É a chave de deduplicação.
+- `email` (string): E-mail.
+- `company` (string): Empresa.
+- `Idempotency-Key` (string): Cabeçalho. Mesma chave devolve o MESMO Lead (200) em vez de criar outro (201).
+
+Resposta (exemplo): `{"id":"9f1c…","name":"João","phone":"11999990000"}`
+
+Nota: 409 lead_already_exists quando o telefone já existe na org — o corpo traz details.lead_id e details.name. Siga para POST /api/v1/deals com aquele lead_id.
+Nota: Retentativa com a mesma Idempotency-Key devolve 200 e o mesmo Lead: nada é criado duas vezes.
+
+## GET /api/v1/leads/search
+Lookup por telefone ou e-mail, para deduplicar antes de criar. Escopo: lead:read.
+
+Parâmetros:
+- `phone` (string): Telefone a procurar.
+- `email` (string): E-mail a procurar (insensível a caixa).
+
+Resposta (exemplo): `{"data":[{"id":"9f1c…","name":"João"}],"next_cursor":null,"has_more":false}`
+
+Nota: 422 missing_search_criteria sem phone nem email — busca sem alvo seria varredura. Para a base inteira use GET /api/v1/leads.
+
+## GET /api/v1/deals
+Lista Negócios com filtros e cursor. Use updated_since para sincronizar só o que mudou. Escopo: deal:read.
+
+Parâmetros:
+- `pipeline` (string): Slug ou id de qualquer funil da organização. Ex: "vendas".
+- `stage` (string): Etapa.
+- `owner_id` (string): Responsável.
+- `status` (string): open | won | lost | all.
+- `updated_since` (string): ISO 8601. Traz o que teve atividade depois — INCLUSIVE quem só mudou de etapa.
+- `cursor` (string): Devolva o next_cursor da página anterior.
+
+Resposta (exemplo): `{"data":[{"id":"d1…","title":"Reposição","pipeline":"vendas","stage":"proposta_enviada","source":"api"}],"next_cursor":null,"has_more":false}`
+
+Nota: 422 invalid_updated_since para data ilegível. Nunca devolve a base inteira nesse caso.
+
+## POST /api/v1/deals
+Abre um Negócio para um Lead que JÁ existe. Escopo: deal:write.
+
+Parâmetros:
+- `lead_id` (string, obrigatório): Lead existente. Crie antes com POST /api/v1/leads.
+- `pipeline` (string, obrigatório): Slug ou id de qualquer funil da organização.
+- `stage` (string, obrigatório): Etapa inicial.
+- `title` (string): Título. Sem ele, vira "Negócio de <mês>/<ano>".
+- `value` (number): Valor.
+- `owner_id` (string): Responsável.
+
+Resposta (exemplo): `{"id":"d1…","source":"api","warning":{"code":"lead_has_open_deal_in_pipeline","open_deal_id":"d0…"}}`
+
+Nota: 422 inline_lead_not_supported se você mandar o Lead embutido: a criação é estrita, crie a pessoa antes.
+Nota: Abrir um segundo Negócio no mesmo funil funciona — é assim que recompra se representa.
+
+## GET /api/v1/deals/{id}
+Devolve o Negócio com a posição atual. Escopo: deal:read.
+
+Parâmetros:
+- `id` (string, obrigatório): Identificador do Negócio (no caminho).
+
+Resposta (exemplo): `{"id":"d1…","pipeline":"vendas","stage":"proposta_enviada","source":"api"}`
+
+Nota: 404 para Negócio de outra organização, igual a inexistente.
+
+## PATCH /api/v1/deals/{id}
+Título, valor, dono e fechamento com motivo. Não move e não reabre. Escopo: deal:write.
+
+Parâmetros:
+- `title` (string): Novo título.
+- `value` (number): Novo valor.
+- `owner_id` (string): Novo responsável.
+- `status` (string): open | won | lost.
+- `loss_reason` (string): Motivo, quando status = lost.
+
+Resposta (exemplo): `{"id":"d1…","won":false,"loss_reason":"Preço"}`
+
+Nota: 422 stage_not_editable se mandar stage ou pipeline: posição tem rota própria.
+Nota: Negócio fechado NÃO reabre — reverter venda é irreversível.
+Nota: Campo omitido mantém o valor atual. Não há como limpar campo por esta rota.
+
+## POST /api/v1/deals/{id}/move
+Move o Negócio de etapa ou de funil. Mover é MOVER: nada fica para trás. Escopo: deal:write.
+
+Parâmetros:
+- `pipeline` (string, obrigatório): Slug ou id do funil de destino. Aceita qualquer funil ativo da organização.
+- `stage` (string, obrigatório): stage_key da etapa de destino nesse funil.
+- `owner_id` (string): Responsável no destino.
+
+Resposta (exemplo): `{"id":"d1…","pipeline":"vendas","stage":"proposta_enviada"}`
+
+Nota: A mesma identidade e o histórico do Negócio são preservados ao mover entre quaisquer funis.
+Nota: 404 também quando o Negócio não tem posição em funil nenhum — não há o que mover.
+
+## GET /api/v1/leads/{id}/deals
+Todos os Negócios daquela pessoa, abertos primeiro. Escopo: deal:read.
+
+Parâmetros:
+- `id` (string (uuid), obrigatório): ID do lead (path).
+
+Resposta (exemplo): `{"data":[{"id":"d1…","pipeline":"vendas","stage":"novo"}],"next_cursor":null,"has_more":false}`
+
+Nota: É por esta lista que a recompra fica legível: o mesmo Lead pode ter dois Negócios abertos no mesmo funil.

@@ -120,7 +120,7 @@ const StageRailCollapsed = memo(function StageRailCollapsed({
           </span>
         ) : (
           <span className="text-[11px] text-muted-foreground/60 italic">
-            sem estágio
+            sem etapa
           </span>
         )}
       </div>

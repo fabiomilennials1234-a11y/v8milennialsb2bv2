@@ -407,7 +407,7 @@ function ConfirmacaoOverdueSettings() {
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Leads que não tiverem nenhuma atualização (status, data, notas) há esse número de dias aparecem como &quot;Atrasadas&quot; no pipe. Itens em Remarcar com atividade recente não entram.
+        Leads que não tiverem nenhuma atualização (status, data, notas) há esse número de dias aparecem como &quot;Atrasadas&quot; no funil. Itens em Remarcar com atividade recente não entram.
       </p>
     </div>
   );

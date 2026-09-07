@@ -57,7 +57,7 @@ interface PlaygroundToolsProps {
 }
 
 export function PlaygroundTools({ tools, onChange, activePipes }: PlaygroundToolsProps) {
-  const pipeTypeOptions = usePipeTypeOptions();
+  const pipeTypeOptions = usePipeTypeOptions({ incluirCampanha: false });
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
 
   const activeCount = Object.values(tools).filter((t) => t.enabled).length;
@@ -126,7 +126,7 @@ export function PlaygroundTools({ tools, onChange, activePipes }: PlaygroundTool
               <div className="flex items-center justify-between px-4 py-2.5">
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   {isAutoEnabled ? (
-                    <div className="flex items-center gap-1" title="Auto-ativado (pipes configurados)">
+                    <div className="flex items-center gap-1" title="Autoativado (funis configurados)">
                       <Lock className="w-3.5 h-3.5 text-primary/60" />
                     </div>
                   ) : (

@@ -12,14 +12,13 @@ import {
 import { upgradeWorkflowNodes } from "@/modules/workflows/lib/upgradeLegacyMessageNode";
 import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/codeNodes";
 import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
-import { CODE_JS_NODE_FLAG, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
+import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
 
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
 import { WorkflowSidebar } from "@/modules/workflows/components/WorkflowSidebar";
 import { WorkflowAnalytics } from "@/modules/workflows/components/WorkflowAnalytics";
-import { EnrollmentCriteria, EMPTY_ENROLLMENT } from "@/modules/workflows/components/EnrollmentCriteria";
 import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/modules/workflows/components/ReenrollmentConfig";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -62,6 +61,15 @@ const DEFAULT_TRIGGER_NODE: WorkflowNode = {
     config: {},
     label: "Trigger",
   } as TriggerNodeData,
+};
+
+// O banco ainda guarda o campo para preservar workflows antigos. A antiga UI
+// de "inscrição automática" só salvava este JSON: nenhum trigger ou executor o
+// avaliava. Manter a promessa na tela fazia o usuário ativar uma regra inerte.
+const EMPTY_ENROLLMENT = {
+  enabled: false,
+  match_all: true,
+  conditions: [] as Array<{ field: string; operator: string; value: string }>,
 };
 
 function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
@@ -190,10 +198,6 @@ export default function AutomacoesEditor() {
   const { enabled: unifiedEnabled, isLoading: unifiedLoading } =
     useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
 
-  // O nó JavaScript ainda não executa (fase 1). Fica fora do menu enquanto a org
-  // não tem a flag, para não prometer na UI o que o runtime não faz.
-  const { enabled: jsNodeEnabled } = useFeatureFlag(CODE_JS_NODE_FLAG);
-
   // In-memory clipboard for copy/paste of node subgraphs (same editor only).
   const clipboardRef = useRef<WorkflowSelection | null>(null);
 
@@ -299,7 +303,7 @@ export default function AutomacoesEditor() {
             config,
             label: preConfiguredTrigger.stage_name
               ? `Quando entra em "${preConfiguredTrigger.stage_name}"`
-              : "Mudança de Estágio",
+              : "Mudança de Etapa",
           } as TriggerNodeData,
         };
         setNodes([triggerNode]);
@@ -611,7 +615,10 @@ export default function AutomacoesEditor() {
         workflowId={id}
         onExport={!isNew && workflow ? () => handleExport(workflow) : undefined}
         onOpenSettings={() => setSettingsOpen(true)}
-        hiddenNodeTypes={jsNodeEnabled ? [] : ["code_javascript"]}
+        // O executor deliberadamente não roda JavaScript sem sandbox. A flag
+        // antiga podia expor um node que sempre era ignorado; oculto até haver
+        // runtime isolado de verdade.
+        hiddenNodeTypes={["code_javascript"]}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -638,26 +645,17 @@ export default function AutomacoesEditor() {
         />
       </div>
 
-      {/* Workflow Settings Sheet — enrollment + reenrollment + analytics */}
+      {/* Workflow Settings Sheet — re-inscrição + analytics */}
       <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
         <SheetContent className="sm:max-w-lg p-0 flex flex-col">
           <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/50">
             <SheetTitle>Configuracoes do workflow</SheetTitle>
           </SheetHeader>
-          <Tabs defaultValue="enrollment" className="flex-1 flex flex-col overflow-hidden">
+          <Tabs defaultValue="reenrollment" className="flex-1 flex flex-col overflow-hidden">
             <TabsList className="mx-6 mt-3 w-auto justify-start bg-muted/50">
-              <TabsTrigger value="enrollment">Inscricao</TabsTrigger>
               <TabsTrigger value="reenrollment">Re-inscricao</TabsTrigger>
               {!isNew && id && <TabsTrigger value="analytics">Analytics</TabsTrigger>}
             </TabsList>
-
-            <TabsContent value="enrollment" className="flex-1 overflow-hidden mt-0">
-              <ScrollArea className="h-full">
-                <div className="px-6 py-4">
-                  <EnrollmentCriteria value={enrollment} onChange={setEnrollment} />
-                </div>
-              </ScrollArea>
-            </TabsContent>
 
             <TabsContent value="reenrollment" className="flex-1 overflow-hidden mt-0">
               <ScrollArea className="h-full">

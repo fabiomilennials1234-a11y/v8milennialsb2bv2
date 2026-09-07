@@ -223,6 +223,22 @@ describe("enqueuePipelineStageUpdate", () => {
     expect(payload.entry_id).toBe("entry-c1");
   });
 
+  it("agente sem regra usa o funil custom configurado em active_pipes", async () => {
+    pipeEntries[CUSTOM_PIPE_ID] = entry(CUSTOM_PIPE_ID, CUSTOM_STAGES[0], "entry-c1");
+
+    await enqueuePipelineStageUpdate(
+      supabaseComEtapas(),
+      ORG,
+      LEAD,
+      1,
+      null,
+      { active_pipes: [CUSTOM_PIPE_ID], copilot_agent_kanban_rules: [] },
+    );
+
+    expect(enqueued).toHaveLength(1);
+    expect((enqueued[0].payload as Record<string, unknown>).target_pipe).toBe(CUSTOM_PIPE_ID);
+  });
+
   it("SCHEDULE_MEETING em funil custom vai para a etapa stage_role=meeting_booked", async () => {
     pipeEntries[CUSTOM_PIPE_ID] = entry(CUSTOM_PIPE_ID, CUSTOM_STAGES[2], "entry-c1");
 

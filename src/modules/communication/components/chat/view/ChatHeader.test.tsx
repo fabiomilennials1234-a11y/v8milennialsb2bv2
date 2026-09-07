@@ -146,7 +146,7 @@ describe("ChatHeader — as ações moram num grupo que não encolhe", () => {
     const rotulo = screen.getByText("Ver lead");
     expect(rotulo.className).toMatch(/\bhidden\b/);
     expect(rotulo.className).toMatch(/lg:inline/);
-    expect(screen.getByRole("button", { name: "Ver lead" })).toHaveAttribute("title", "Ver dados do lead e pipeline");
+    expect(screen.getByRole("button", { name: "Ver lead" })).toHaveAttribute("title", "Ver dados do lead e funis");
   });
 
   it("sem lead, o rótulo 'Criar Lead' segue a mesma regra", () => {

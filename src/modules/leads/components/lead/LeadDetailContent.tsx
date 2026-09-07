@@ -81,7 +81,7 @@ export function LeadDetailContent({
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 overflow-hidden flex flex-col">
           <TabsList className="grid w-full grid-cols-4 mx-6 w-[calc(100%-3rem)]">
             <TabsTrigger value="info">Info</TabsTrigger>
-            <TabsTrigger value="pipeline">Pipeline</TabsTrigger>
+            <TabsTrigger value="pipeline">Funis</TabsTrigger>
             <TabsTrigger value="campanha">Campanhas</TabsTrigger>
             <TabsTrigger value="history">Histórico</TabsTrigger>
           </TabsList>

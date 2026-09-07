@@ -533,7 +533,7 @@ export function useUpdateCopilotAgentPipeline() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["copilot_agents"] });
-      toast.success("Configuração de pipeline atualizada!", {
+      toast.success("Configuração de funis atualizada!", {
         description: "O agente agora atuará nos funis e etapas configurados.",
       });
     },

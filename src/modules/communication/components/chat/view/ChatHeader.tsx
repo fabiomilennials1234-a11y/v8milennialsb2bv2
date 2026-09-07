@@ -272,7 +272,7 @@ export function ChatHeader({
           className={cn("shrink-0 gap-0", !hasLead && "border-primary text-primary hover:bg-primary/10")}
           onClick={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
           onPointerDown={(e) => e.stopPropagation()}
-          title={hasLead ? "Ver dados do lead e pipeline" : "Criar lead para este contato"}
+          title={hasLead ? "Ver dados do lead e funis" : "Criar lead para este contato"}
           aria-label={hasLead ? "Ver lead" : "Criar lead"}
         >
           {hasLead ? (
