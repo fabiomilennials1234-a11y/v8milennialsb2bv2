@@ -43,7 +43,7 @@ const ITEM_MAP: Record<string, RecoverableItem> = {
   "nav-copilot":        { label: "Copilot IA",       Icon: Bot,             type: "navigate", payload: "/copilot" },
   "nav-agenda":         { label: "Agenda",           Icon: CalendarDays,    type: "navigate", payload: "/agenda" },
   "nav-analytics":      { label: "Analytics",        Icon: BarChart3,       type: "navigate", payload: "/analytics" },
-  "nav-funis":          { label: "Funis & Pipes",    Icon: Megaphone,       type: "navigate", payload: "/funis" },
+  "nav-funis":          { label: "Funis",    Icon: Megaphone,       type: "navigate", payload: "/funis" },
   "nav-automacoes":     { label: "Automações",       Icon: Zap,             type: "navigate", payload: "/automacoes" },
   "nav-produtos":       { label: "Produtos",         Icon: ShoppingBag,     type: "navigate", payload: "/produtos" },
   "nav-equipe":         { label: "Equipe",           Icon: Trophy,          type: "navigate", payload: "/equipe" },

@@ -660,7 +660,7 @@ export function DealCard({
                 ativa={subAba}
                 onTrocar={setSubAba}
                 itens={[
-                  { chave: "pipeline" as const, rotulo: "Pipeline Completa" },
+                  { chave: "pipeline" as const, rotulo: "Funil completo" },
                   {
                     chave: "jornada" as const,
                     rotulo: "Jornada do Negócio",

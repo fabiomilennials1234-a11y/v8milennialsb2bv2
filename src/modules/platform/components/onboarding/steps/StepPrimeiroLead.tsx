@@ -43,7 +43,7 @@ export function StepPrimeiroLead({ onNext }: Props) {
         <div>
           <h3 className="text-xl font-bold tracking-tight">Primeiro lead criado!</h3>
           <p className="text-sm text-muted-foreground mt-1">
-            <strong>{name}</strong> está no pipeline de qualificação.
+            <strong>{name}</strong> está no funil de qualificação.
           </p>
         </div>
         <button
@@ -65,7 +65,7 @@ export function StepPrimeiroLead({ onNext }: Props) {
         </div>
         <h3 className="text-lg font-semibold">Adicione o primeiro lead</h3>
         <p className="text-sm text-muted-foreground mt-1">
-          Cadastre um contato real para ver o pipeline funcionando. Use um lead de teste se preferir.
+          Cadastre um contato real para ver o funil funcionando. Use um lead de teste se preferir.
         </p>
       </div>
 

@@ -24,7 +24,7 @@ export function LeadStageHistory({ events, maxEvents = 5 }: LeadStageHistoryProp
     return (
       <div className="text-center py-4">
         <History className="w-6 h-6 text-muted-foreground/30 mx-auto mb-1" />
-        <p className="text-xs text-muted-foreground">Sem histórico de estágios.</p>
+        <p className="text-xs text-muted-foreground">Sem histórico de etapas.</p>
       </div>
     );
   }
@@ -32,7 +32,7 @@ export function LeadStageHistory({ events, maxEvents = 5 }: LeadStageHistoryProp
   return (
     <div className="space-y-0 border rounded-lg overflow-hidden">
       <div className="px-3 py-2 border-b bg-muted/30">
-        <span className="text-xs font-medium text-muted-foreground">Histórico de estágios</span>
+        <span className="text-xs font-medium text-muted-foreground">Histórico de etapas</span>
       </div>
       {stageEvents.map((event, index) => (
         <TimelineItem

@@ -26,7 +26,7 @@ export function OnbStepPipelines() {
       setPipelines(result.pipelines ?? []);
       setApplied(true);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro ao aplicar pipelines");
+      toast.error(err instanceof Error ? err.message : "Erro ao aplicar funis");
     }
   };
 
@@ -35,7 +35,7 @@ export function OnbStepPipelines() {
       <div className="space-y-4 text-center max-w-sm">
         <Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-500" />
         <div>
-          <h3 className="text-lg font-semibold">Configurando pipelines...</h3>
+          <h3 className="text-lg font-semibold">Configurando funis...</h3>
           <p className="text-sm text-muted-foreground mt-1">
             Criando a estrutura ideal para sua operação.
           </p>
@@ -51,9 +51,9 @@ export function OnbStepPipelines() {
           <Workflow className="w-5 h-5 text-amber-500" />
         </div>
         <div>
-          <h3 className="text-lg font-semibold">Pipelines configurados!</h3>
+          <h3 className="text-lg font-semibold">Funis configurados!</h3>
           <p className="text-sm text-muted-foreground">
-            Baseado no seu perfil, criamos esses pipelines:
+            Baseado no seu perfil, criamos estes funis:
           </p>
         </div>
       </div>
@@ -85,7 +85,7 @@ export function OnbStepPipelines() {
         ))}
         {pipelines.length === 0 && (
           <div className="p-4 rounded-xl border border-border/60 bg-muted/20 text-center">
-            <p className="text-sm text-muted-foreground">Pipelines padrão aplicados.</p>
+            <p className="text-sm text-muted-foreground">Funis padrão aplicados.</p>
           </div>
         )}
       </div>

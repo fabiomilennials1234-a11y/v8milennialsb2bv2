@@ -369,7 +369,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como exporto meus leads para uma planilha?",
-        "answer": "Você pode exportar seus leads em CSV. A exportação é feita por etapa do funil, então selecione o estágio desejado antes de exportar. O arquivo abre normalmente no Excel ou no Google Sheets.",
+        "answer": "Você pode exportar seus leads em CSV. A exportação é feita por etapa do funil, então selecione a etapa desejada antes de exportar. O arquivo abre normalmente no Excel ou no Google Sheets.",
         "keywords": [
           "exportar",
           "CSV",

@@ -13,7 +13,7 @@ import type { PendingOrder } from "@/modules/carteira/hooks/useOrderApproval";
 const SOURCE_STYLES: Record<string, { bg: string; text: string; label: string }> = {
   copilot: { bg: "bg-[#2a2a3a]", text: "text-[#8b8bff]", label: "Copilot" },
   manual: { bg: "bg-[#2a2a1a]", text: "text-[#fbbf24]", label: "Manual" },
-  pipe: { bg: "bg-[#1a2a2a]", text: "text-[#2dd4bf]", label: "Pipe" },
+  pipe: { bg: "bg-[#1a2a2a]", text: "text-[#2dd4bf]", label: "Funil" },
   erp: { bg: "bg-[#1a2a3a]", text: "text-[#60a5fa]", label: "ERP" },
   csv_import: { bg: "bg-[#2a2a2a]", text: "text-muted-foreground", label: "CSV" },
 };

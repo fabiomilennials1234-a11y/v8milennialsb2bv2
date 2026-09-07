@@ -195,7 +195,7 @@ function AutomationItem({ automation, onUpdate, onDelete }: AutomationItemProps)
             <div className="space-y-3 mt-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs">Pipe</Label>
+                  <Label className="text-xs">Funil</Label>
                   <Select
                     value={editedAutomation.pipe_type}
                     onValueChange={(v: FollowUpAutomation["pipe_type"]) => {
@@ -401,7 +401,7 @@ function CreateAutomationForm({ onClose }: { onClose: () => void }) {
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label className="text-xs">Pipe de origem *</Label>
+          <Label className="text-xs">Funil de origem *</Label>
           <Select
             value={newAutomation.pipe_type}
             onValueChange={(v: FollowUpAutomation["pipe_type"]) => {
@@ -965,7 +965,7 @@ function StageBasedTab() {
                 <AccordionContent className="pt-2 space-y-3">
                   {pipeAutomations.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      Nenhuma automacao configurada para este pipe
+                      Nenhuma automação configurada para este funil
                     </p>
                   ) : (
                     pipeAutomations.map((automation) => (
