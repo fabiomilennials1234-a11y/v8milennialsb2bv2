@@ -1,20 +1,19 @@
 -- 20271015000000_demolicao_dos_espelhos.sql — ROLLBACK
 --
--- Recria os 6 espelhos EXATAMENTE como estavam em PROD em 2026-09-03,
+-- Recria os 6 espelhos EXATAMENTE como estavam em PROD em 2026-09-07,
 -- capturados de `pg_get_viewdef` / `pg_get_functiondef` / `pg_get_triggerdef`
 -- do projeto jsjsmuncfkbsbzqzqhfq. Não é reconstrução de memória nem cópia da
--- migration que os criou: é o corpo VIVO do dia da captura — que é o que
--- importa, porque o repo já provou estar atrás do prod (7 migrations no ledger
--- sem arquivo nesta worktree).
+-- migration que os criou: é o corpo VIVO depois da 20271008000000 — o que
+-- importa para recuperar o estado imediatamente anterior ao DROP.
 --
 -- Ordem: funções de trigger → views → grants → triggers INSTEAD OF → comments.
 -- (Trigger depende da view E da função; a função não depende da view.)
 --
--- NÃO recria os wrappers de RPC legados nem os grants deles — esses ficam
--- num bloco separado no fim, também capturados de prod.
+-- Wrappers RPC e grants são restaurados no mesmo bloco transacional.
 
 BEGIN;
-
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '120s';
 
 -- ═══ 1. Funções INSTEAD OF ═══════════════════════════════════════════════
 
@@ -156,51 +155,20 @@ CREATE OR REPLACE FUNCTION public.custom_pipeline_stages_insert_fn()
  LANGUAGE plpgsql
  SET search_path TO 'public', 'pg_temp'
 AS $function$
-DECLARE
-  v_pipe public.pipelines%ROWTYPE;
 BEGIN
-  IF NEW.pipeline_id IS NULL THEN
-    RAISE EXCEPTION 'custom_pipeline_stages: pipeline_id é obrigatório';
-  END IF;
-
-  SELECT * INTO v_pipe FROM public.pipelines WHERE id = NEW.pipeline_id;
-  IF v_pipe.id IS NULL THEN
-    RAISE EXCEPTION 'custom_pipeline_stages: funil % não existe em pipelines', NEW.pipeline_id;
-  END IF;
-  IF v_pipe.type <> 'custom' THEN
-    RAISE EXCEPTION 'custom_pipeline_stages: funil % não é custom (type=%)', NEW.pipeline_id, v_pipe.type;
-  END IF;
-
-  NEW.id                  := COALESCE(NEW.id, gen_random_uuid());
-  NEW.organization_id     := COALESCE(NEW.organization_id, v_pipe.organization_id);
-  NEW.color               := COALESCE(NEW.color, '#64748b');
-  NEW.position            := COALESCE(NEW.position, 0);
-  NEW.is_active           := COALESCE(NEW.is_active, true);
-  NEW.is_final_positive   := COALESCE(NEW.is_final_positive, false);
-  NEW.is_final_negative   := COALESCE(NEW.is_final_negative, false);
-  NEW.stage_role          := COALESCE(NEW.stage_role, 'open');
-  NEW.requires_sale_value := COALESCE(NEW.requires_sale_value, false);
-  NEW.created_at          := COALESCE(NEW.created_at, now());
-  NEW.updated_at          := COALESCE(NEW.updated_at, now());  -- metric-lint-allow: default de INSTEAD OF INSERT, não métrica (SCRUM-616)
-
-  INSERT INTO public.pipeline_stages (
-    id, organization_id, pipeline_id, pipeline_type, stage_key, name, color,
-    position, is_active, is_final_positive, is_final_negative,
-    target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key,
-    created_at, updated_at, checklist_template_id,
-    stage_role, suggested_stage_role, stage_role_suggested_at,
-    stage_role_suggestion_source, stage_role_reviewed_at, stage_role_reviewed_by,
-    requires_sale_value
-  ) VALUES (
-    NEW.id, NEW.organization_id, NEW.pipeline_id, NULL, NEW.stage_key, NEW.name,
-    NEW.color, NEW.position, NEW.is_active, NEW.is_final_positive,
-    NEW.is_final_negative, NEW.target_pipeline_id, NEW.target_stage_id,
-    NEW.target_pipe_type, NEW.target_stage_key, NEW.created_at, NEW.updated_at,
-    NEW.checklist_template_id, NEW.stage_role, NEW.suggested_stage_role,
-    NEW.stage_role_suggested_at, NEW.stage_role_suggestion_source,
-    NEW.stage_role_reviewed_at, NEW.stage_role_reviewed_by,
-    NEW.requires_sale_value
-  );
+  NEW.id := public.fn_etapa_custom_criar(to_jsonb(NEW));
+  SELECT
+    ps.id, ps.organization_id, ps.pipeline_id, ps.stage_key, ps.name, ps.color,
+    ps.position, ps.is_active, ps.is_final_positive, ps.is_final_negative,
+    ps.target_pipeline_id, ps.target_stage_id, ps.target_pipe_type,
+    ps.target_stage_key, ps.created_at, ps.updated_at, ps.checklist_template_id,
+    ps.stage_role, ps.suggested_stage_role, ps.stage_role_suggested_at,
+    ps.stage_role_suggestion_source, ps.stage_role_reviewed_at,
+    ps.stage_role_reviewed_by, ps.requires_sale_value
+  INTO NEW
+  FROM public.pipeline_stages ps
+  JOIN public.pipelines p ON p.id = ps.pipeline_id AND p.type = 'custom'
+  WHERE ps.id = NEW.id;
   RETURN NEW;
 END;
 $function$;
@@ -263,31 +231,25 @@ CREATE OR REPLACE FUNCTION public.custom_pipelines_insert_fn()
  SET search_path TO 'public', 'pg_temp'
 AS $function$
 BEGIN
-  NEW.id             := COALESCE(NEW.id, gen_random_uuid());
-  NEW.icon           := COALESCE(NEW.icon, 'kanban');
-  NEW.color          := COALESCE(NEW.color, '#3b82f6');
-  NEW.position       := COALESCE(NEW.position, 0);
-  NEW.is_active      := COALESCE(NEW.is_active, true);
-  NEW.lifecycle_type := COALESCE(NEW.lifecycle_type, 'permanent');
-  NEW.status         := COALESCE(NEW.status, 'active');
-  NEW.created_at     := COALESCE(NEW.created_at, now());
-  NEW.updated_at     := COALESCE(NEW.updated_at, now());  -- metric-lint-allow: default de INSTEAD OF INSERT, não métrica (SCRUM-621)
-
-  PERFORM public.custom_pipelines_check_vocab(NEW.lifecycle_type, NEW.status, NEW.template_type);
-
-  INSERT INTO public.pipelines (
-    id, organization_id, name, slug, type, description, icon, color,
-    display_order, is_active, config, created_by, created_at, updated_at
-  ) VALUES (
-    NEW.id, NEW.organization_id, NEW.name, NEW.slug, 'custom', NEW.description,
-    NEW.icon, NEW.color, NEW.position + 3, NEW.is_active,
-    public.custom_pipelines_extras(
-      NEW.lifecycle_type, NEW.starts_at, NEW.ends_at, NEW.status,
-      NEW.team_goal, NEW.individual_goal, NEW.bonus_value, NEW.bonus_description,
-      NEW.objective_pipe_type, NEW.objective_stage_key, NEW.template_type,
-      NEW.lead_source_config),
-    NEW.created_by, NEW.created_at, NEW.updated_at
-  );
+  NEW.id := public.fn_funil_custom_criar(to_jsonb(NEW));
+  SELECT
+    p.id, p.organization_id, p.name, p.slug, p.description, p.icon, p.color,
+    p.display_order - 3, p.is_active, p.created_by, p.created_at, p.updated_at,
+    COALESCE(p.config->>'lifecycle_type', 'permanent'),
+    (p.config->>'starts_at')::timestamptz,
+    (p.config->>'ends_at')::timestamptz,
+    COALESCE(p.config->>'status', 'active'),
+    (p.config->>'team_goal')::integer,
+    (p.config->>'individual_goal')::integer,
+    (p.config->>'bonus_value')::integer,
+    p.config->>'bonus_description',
+    p.config->>'objective_pipe_type',
+    p.config->>'objective_stage_key',
+    p.config->>'template_type',
+    p.config->'lead_source_config'
+  INTO NEW
+  FROM public.pipelines p
+  WHERE p.id = NEW.id AND p.type = 'custom';
   RETURN NEW;
 END;
 $function$;
@@ -834,14 +796,11 @@ COMMENT ON VIEW public.custom_pipeline_stages IS 'View de compat sobre pipeline_
 COMMENT ON VIEW public.custom_pipelines IS 'View de compat sobre pipelines (type=custom). D5: espelho com data pra morrer — cai na F6 da unificação de funis. Extras vivem em pipelines.config; position = display_order - 3. SCRUM-621.';
 
 
-COMMIT;
 
 -- ═══ 6. Wrappers de RPC legados (corpos exatos de prod, 2026-09-03) ══════
 
 -- Recriados só para desfazer a demolição por inteiro. Se o rollback for
 -- permanente, estes voltam a ser dívida: nenhum tinha chamador medido.
-
-BEGIN;
 
 CREATE OR REPLACE FUNCTION public.bulk_add_to_custom_pipe(p_lead_ids uuid[], p_pipeline_id uuid, p_stage_id uuid)
  RETURNS void
@@ -1176,4 +1135,6 @@ GRANT EXECUTE ON FUNCTION public.system_stage_role(p_pipeline_type text, p_stage
 COMMENT ON FUNCTION public.system_stage_role(p_pipeline_type text, p_stage_key text) IS 'Papel canônico da etapa de sistema. Falta a reunião (nao_compareceu / no_show) é `open` em TODOS os funis: o lead segue vivo e precisa de nova data. Só `perdido` e `vendido` encerram.';
 
 
+
+NOTIFY pgrst, 'reload schema';
 COMMIT;

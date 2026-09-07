@@ -53,3 +53,18 @@ Dois cidadãos onde o mercado tem um. Produção, 2026-09-01:
 ## Efeitos no vault
 
 - [[Glossario]] / `CONTEXT.md`: verbetes **Pipeline** (some "System pipes"; todo funil editável; fábrica = seed; slug = alias), **Stage** (identidade UUID; papel `stage_role`; trilha default é seed), **Negócio** (ocupa etapa em qualquer funil; valor opcional; nasce ao entrar no funil por porta explícita) e **Procedência** (+`webhook`, +`backfill_funil_custom`) atualizados em 2026-09-01.
+
+## Emenda 1 — gate técnico de demolição (2026-09-07)
+
+O CTO autorizou substituir, para o cutover F6, a espera de sete dias por um
+gate técnico reforçado e concluir o épico no mesmo dia. A premissa temporal do
+D5 não era verificável com a precisão exigida: `pg_stat_statements` 1.11 não
+expõe `last_call`, sofre eviction LRU e `track=top` omite statements
+aninhados.
+
+O novo gate exige simultaneamente: zero leitor no grafo de runtime e nas Edge
+Functions; zero função/procedure SQL; zero dependência de view/rule; inspeção
+de todos os workflows n8n ativos; paridade linha a linha dos seis espelhos;
+catálogo pré-DROP exato; rollback integral comparado ao catálogo vivo; CI,
+regeneração de tipos e smoke pós-apply. Evidência:
+`.specs/features/funis-unificacao/revisao-final-2026-09-07.md`.
