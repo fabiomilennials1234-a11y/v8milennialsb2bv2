@@ -249,7 +249,7 @@ async function processPipeQueue(
   const pipelineId = key.pipelineId;
   let pipeType = key.pipeType;
   // true só para funil custom: ações de card vão direto em pipeline_entries.
-  // System mantém o caminho da view pipe_<slug> — comportamento intocado.
+  // Sistema usa a função canônica de atualização.
   let keyIsCustom = false;
 
   // --- Freio 3/3 do D11 (pré-check, camada edge): funil com disparo por etapa
@@ -635,6 +635,7 @@ async function processPipeQueue(
           .from("pipeline_stages")
           .select("id, stage_key, name, pipeline_id")
           .eq("id", targetStageId)
+          .eq("organization_id", orgId)
           .single();
 
         if (!stageData?.stage_key) {
@@ -644,9 +645,8 @@ async function processPipeQueue(
           continue;
         }
 
-        // SCRUM-629: funil CUSTOM move o card na fonte única (pipeline_entries,
-        // stage_id canônico + eco stage_key) — não existe view pipe_<slug> pra
-        // ele. System segue na view, byte-idêntico ao de antes.
+        // Custom grava a fonte única; sistema passa pela porta canônica, que
+        // preserva gatilhos e metadata.
         const rowPipelineId = (row as any).pipeline_id as string | null;
         let stageErr: { message: string } | null = null;
         if (keyIsCustom && rowPipelineId) {
@@ -660,14 +660,14 @@ async function processPipeQueue(
             .from("pipeline_entries")
             .update({ stage_id: stageData.id, stage_key: stageData.stage_key })
             .eq("id", row.pipe_record_id)
+            .eq("organization_id", orgId)
             .eq("pipeline_id", rowPipelineId);
           stageErr = error;
         } else {
-          const pipeTable = `pipe_${pipeType}`;
-          const { error } = await supabase
-            .from(pipeTable)
-            .update({ status: stageData.stage_key })
-            .eq("id", row.pipe_record_id);
+          const { error } = await supabase.rpc("fn_entrada_sistema_atualizar", {
+            p_entry_id: row.pipe_record_id,
+            p_patch: { stage_key: stageData.stage_key },
+          });
           stageErr = error;
         }
 
@@ -711,8 +711,7 @@ async function processPipeQueue(
           continue;
         }
 
-        // SCRUM-629: funil CUSTOM atribui na fonte única
-        // (pipeline_entries.assigned_to); system segue na view pipe_<slug>.
+        // Custom atribui na fonte única; sistema usa a porta canônica.
         const sdrRowPipelineId = (row as any).pipeline_id as string | null;
         let sdrErr: { message: string } | null = null;
         if (keyIsCustom && sdrRowPipelineId) {
@@ -720,14 +719,19 @@ async function processPipeQueue(
             .from("pipeline_entries")
             .update({ assigned_to: sdrId })
             .eq("id", row.pipe_record_id)
+            .eq("organization_id", orgId)
             .eq("pipeline_id", sdrRowPipelineId);
           sdrErr = error;
         } else {
-          const pipeTable = `pipe_${pipeType}`;
-          const { error } = await supabase
-            .from(pipeTable)
-            .update({ sdr_id: sdrId, responsible_id: sdrId, pre_sale_responsible_id: sdrId })
-            .eq("id", row.pipe_record_id);
+          const { error } = await supabase.rpc("fn_entrada_sistema_atualizar", {
+            p_entry_id: row.pipe_record_id,
+            p_patch: {
+              assigned_to: sdrId,
+              sdr_id: sdrId,
+              responsible_id: sdrId,
+              pre_sale_responsible_id: sdrId,
+            },
+          });
           sdrErr = error;
         }
 
@@ -864,22 +868,24 @@ async function processExpiredTimeouts(
           .from("pipeline_stages")
           .select("id, stage_key")
           .eq("id", row.timeout_target_stage_id)
+          .eq("organization_id", orgId)
           .single();
 
         if (stageData?.stage_key) {
-          // SCRUM-629: custom move na fonte única; system segue na view.
+          // Custom move na fonte única; sistema usa a função canônica.
           const timeoutRowPipelineId = (row as any).pipeline_id as string | null;
           if (keyIsCustom && timeoutRowPipelineId) {
             await supabase
               .from("pipeline_entries")
               .update({ stage_id: stageData.id, stage_key: stageData.stage_key })
               .eq("id", row.pipe_record_id)
+              .eq("organization_id", orgId)
               .eq("pipeline_id", timeoutRowPipelineId);
           } else {
-            await supabase
-              .from(`pipe_${pipeType}`)
-              .update({ status: stageData.stage_key })
-              .eq("id", row.pipe_record_id);
+            await supabase.rpc("fn_entrada_sistema_atualizar", {
+              p_entry_id: row.pipe_record_id,
+              p_patch: { stage_key: stageData.stage_key },
+            });
           }
         }
         console.log(`[pipe-rule-dispatch][${pipeType}] Timeout: changed stage for lead ${lead?.name}`);

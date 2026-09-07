@@ -108,20 +108,17 @@ export function usePipeWhatsappByLeadId(leadId: string | null) {
     queryFn: async () => {
       if (!leadId || !organizationId) return null;
 
-      // N negócios por (funil, lead) são legítimos depois do M1. A view
-      // `pipe_whatsapp` NÃO projeta `closed_at` nem `stage_changed_at` (ver
-      // Views.pipe_whatsapp em `@/integrations/supabase/types`), então o passo
-      // "aberto primeiro" de `pickActiveEntry`
-      // (`supabase/functions/_shared/pipeline-adapter.ts`) não é expressável
-      // aqui; sobra o passo seguinte — o negócio mexido por último, com
-      // `updated_at` no lugar de `stage_changed_at`, e `id` fechando a ordem
-      // total para leitor e escritor nunca elegerem cards diferentes.
+      // N negócios por (funil, lead) são legítimos. A projeção canônica expõe
+      // fechamento e mudança de etapa; portanto leitor e escritor elegem o
+      // mesmo card: aberto primeiro, depois o mais recente, com id de desempate.
       const { data, error } = await supabase
-        .from("pipe_whatsapp")
-        .select("*")
+        .from("negocio_projetado")
+        .select("*, status:stage_key")
         .eq("lead_id", leadId)
         .eq("organization_id", organizationId)
-        .order("updated_at", { ascending: false })
+        .eq("funil_sistema", "whatsapp")
+        .order("closed_at", { ascending: true, nullsFirst: true })
+        .order("stage_changed_at", { ascending: false })
         .order("created_at", { ascending: false })
         .order("id", { ascending: false })
         .limit(PIPE_ENTRY_READ_CAP);
@@ -129,14 +126,14 @@ export function usePipeWhatsappByLeadId(leadId: string | null) {
       // O `error.code !== "PGRST116"` que existia aqui engolia exatamente o
       // sinal de N>1 e devolvia `null` = "o lead não está no funil".
       if (error) {
-        console.error("Erro ao buscar pipe_whatsapp:", error);
+        console.error("Erro ao buscar negócio do funil WhatsApp:", error);
         return null;
       }
 
       const rows = data ?? [];
       if (rows.length > 1) {
         console.warn(
-          `[pipe_whatsapp] ${rows.length} negócios para lead=${leadId}; usando o mexido por último.`,
+          `[negocio_projetado/whatsapp] ${rows.length} negócios para lead=${leadId}; usando o aberto mais recente.`,
         );
       }
 
@@ -239,8 +236,8 @@ export function useCreateLeadFromWhatsApp() {
         if (effectiveDestination === "qualificacao") {
           // Não duplicar se já estiver em confirmação ou propostas (ver `pipePresence`)
           const [confRes, propRes] = await Promise.all([
-            supabase.from("pipe_confirmacao").select("id").eq("lead_id", existingLead.id).limit(1),
-            supabase.from("pipe_propostas").select("id").eq("lead_id", existingLead.id).limit(1),
+            supabase.from("negocio_projetado").select("id").eq("organization_id", teamMember.organization_id).eq("lead_id", existingLead.id).eq("funil_sistema", "confirmacao").limit(1),
+            supabase.from("negocio_projetado").select("id").eq("organization_id", teamMember.organization_id).eq("lead_id", existingLead.id).eq("funil_sistema", "propostas").limit(1),
           ]);
           const inConf = pipePresence(confRes);
           const inProp = pipePresence(propRes);
@@ -365,8 +362,8 @@ export function useCreateLeadFromWhatsApp() {
         // Verificar se o lead já está ativo em outro pipe antes de inserir em qualificação
         // (tri-estado — ver `pipePresence`)
         const [confRes, propRes] = await Promise.all([
-          supabase.from("pipe_confirmacao").select("id").eq("lead_id", newLead.id).limit(1),
-          supabase.from("pipe_propostas").select("id").eq("lead_id", newLead.id).limit(1),
+          supabase.from("negocio_projetado").select("id").eq("organization_id", teamMember.organization_id).eq("lead_id", newLead.id).eq("funil_sistema", "confirmacao").limit(1),
+          supabase.from("negocio_projetado").select("id").eq("organization_id", teamMember.organization_id).eq("lead_id", newLead.id).eq("funil_sistema", "propostas").limit(1),
         ]);
         const inConfirmacao = pipePresence(confRes);
         const inPropostas = pipePresence(propRes);
@@ -485,6 +482,7 @@ export function useCreateLeadFromWhatsApp() {
 export function useLinkLeadToWhatsApp() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id ?? null;
 
   return useMutation({
     mutationFn: async ({
@@ -494,6 +492,9 @@ export function useLinkLeadToWhatsApp() {
       leadId: string;
       phone: string;
     }) => {
+      if (!organizationId) {
+        throw new Error("Usuário não está vinculado a uma organização");
+      }
       const normalizedPhone = normalizePhone(phone) || phone.replace(/\D/g, "");
 
       // 1. Atualizar telefone do lead se necessário
@@ -513,9 +514,9 @@ export function useLinkLeadToWhatsApp() {
       // `.maybeSingle()` devolvia "não existe" e cada vínculo empilhava mais um
       // card — 2 → 3 → 4.
       const [whatsappRes, confRes, propRes] = await Promise.all([
-        supabase.from("pipe_whatsapp").select("id").eq("lead_id", leadId).limit(1),
-        supabase.from("pipe_confirmacao").select("id").eq("lead_id", leadId).limit(1),
-        supabase.from("pipe_propostas").select("id").eq("lead_id", leadId).limit(1),
+        supabase.from("negocio_projetado").select("id").eq("organization_id", organizationId).eq("lead_id", leadId).eq("funil_sistema", "whatsapp").limit(1),
+        supabase.from("negocio_projetado").select("id").eq("organization_id", organizationId).eq("lead_id", leadId).eq("funil_sistema", "confirmacao").limit(1),
+        supabase.from("negocio_projetado").select("id").eq("organization_id", organizationId).eq("lead_id", leadId).eq("funil_sistema", "propostas").limit(1),
       ]);
       const existingPipe = pipePresence(whatsappRes);
       const inConfirmacao = pipePresence(confRes);

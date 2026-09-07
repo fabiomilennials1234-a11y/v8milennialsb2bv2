@@ -1,13 +1,9 @@
 /**
  * Stage Role write-back — pure persistence seam (U4, #991, ADR-0017 §1).
  *
- * The classifier edge function (`classify-stage-roles`) governs ungoverned
- * stages across TWO tables — SYSTEM `pipeline_stages` and CUSTOM
- * `custom_pipeline_stages` — and writes each stage's plan back to the SAME
- * table the row came from. U1 (20270302000110) mirrored the suggestion columns
- * (`stage_role`, `suggested_stage_role`, `stage_role_suggested_at`,
- * `stage_role_suggestion_source`) onto `custom_pipeline_stages`, so the payload
- * shape is IDENTICAL for both tables — one builder, two tables (DRY).
+ * The classifier edge function (`classify-stage-roles`) governs system and
+ * custom stages in the single `pipeline_stages` table. The source kind below
+ * exists only to split the operator report.
  *
  * Money invariant (ADR-0017 §1 — won/lost = dinheiro = confirmação humana):
  *   · meeting_booked / meeting_held (auto_apply) → sets `stage_role` directly.
@@ -24,12 +20,12 @@ import type {
   SuggestionSource,
 } from "./stage-role-classifier.ts";
 
-/** The two stage tables whose roles the classifier governs. */
-export type StageSourceTable = "pipeline_stages" | "custom_pipeline_stages";
+/** Logical family in the classifier report. */
+export type StageSourceTable = "system" | "custom";
 
 export const STAGE_SOURCE_TABLES: readonly StageSourceTable[] = [
-  "pipeline_stages",
-  "custom_pipeline_stages",
+  "system",
+  "custom",
 ] as const;
 
 export interface StageRoleUpdate {
@@ -42,8 +38,7 @@ export interface StageRoleUpdate {
 }
 
 /**
- * Builds the column update for a planned suggestion. Table-agnostic: the same
- * payload applies to `pipeline_stages` and `custom_pipeline_stages` (U1 mirror).
+ * Builds the column update for a planned suggestion.
  * won/lost land in `suggested_stage_role` — never in `stage_role`.
  */
 export function buildStageRoleUpdate(

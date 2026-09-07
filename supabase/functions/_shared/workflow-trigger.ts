@@ -76,6 +76,7 @@ async function resolveStageRole(
       .from("pipeline_stages")
       .select("stage_role, organization_id")
       .eq("id", stageId)
+      .eq("organization_id", organizationId)
       .maybeSingle();
     if (data && data.organization_id === organizationId) {
       return (data.stage_role as string) ?? null;
@@ -101,8 +102,9 @@ async function resolveStageRole(
   const pipelineId = typeof ctx.pipeline_id === "string" ? ctx.pipeline_id : null;
   if (pipelineId) {
     const { data } = await supabase
-      .from("custom_pipeline_stages")
+      .from("pipeline_stages")
       .select("stage_role")
+      .eq("organization_id", organizationId)
       .eq("pipeline_id", pipelineId)
       .eq("stage_key", toStage)
       .maybeSingle();

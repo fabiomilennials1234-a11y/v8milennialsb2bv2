@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import { useOrganization } from "@/modules/identity";
+import type { ProjectedConfirmacaoPipe } from "@/integrations/supabase/projected-pipe-types";
 
-export type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
+export type PipeConfirmacaoRow = ProjectedConfirmacaoPipe;
 
 /**
  * Fetch the lead's most recent entrada do funil de Confirmação (or null when the
@@ -18,15 +19,18 @@ export type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
  * card no banco sem o usuário ter tocado no campo.
  */
 export function usePipeConfirmacaoByLeadId(leadId: string | null | undefined) {
+  const { organizationId } = useOrganization();
+
   return useQuery({
-    queryKey: ["pipe_confirmacao_by_lead", leadId],
-    enabled: !!leadId,
+    queryKey: ["pipe_confirmacao_by_lead", leadId, organizationId],
+    enabled: !!leadId && !!organizationId,
     staleTime: 30_000,
     queryFn: async (): Promise<PipeConfirmacaoRow | null> => {
-      if (!leadId) return null;
+      if (!leadId || !organizationId) return null;
       const { data, error } = await supabase
         .from("negocio_projetado")
         .select("*, status:stage_key")
+        .eq("organization_id", organizationId)
         .eq("funil_sistema", "confirmacao")
         .eq("lead_id", leadId)
         .order("created_at", { ascending: false })

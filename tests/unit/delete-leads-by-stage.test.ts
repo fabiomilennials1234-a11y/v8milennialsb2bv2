@@ -109,7 +109,7 @@ describe('useDeleteAllLeadsInPipe — stage filtering', () => {
     await expect(hook.mutateAsync({ stageId: '' })).rejects.toThrow('No stage specified');
   });
 
-  it('calls .eq("status", stageId) when stageId is provided', async () => {
+  it('filters the canonical projection by stage_key when stageId is provided', async () => {
     // Return some lead_ids so we can check the flow
     const leadIds = [{ lead_id: 'lead-1' }, { lead_id: 'lead-2' }];
     createChain(leadIds);
@@ -117,10 +117,10 @@ describe('useDeleteAllLeadsInPipe — stage filtering', () => {
     const hook = useDeleteAllLeadsInPipe('whatsapp');
     await hook.mutateAsync({ stageId: 'novo_lead' });
 
-    // Verify that .eq was called with "status" and the stageId
+    // The canonical projection names the current stage `stage_key`.
     const eqCalls = mockEq.mock.calls;
     const statusFilter = eqCalls.find(
-      ([col, val]: [string, string]) => col === 'status' && val === 'novo_lead'
+      ([col, val]: [string, string]) => col === 'stage_key' && val === 'novo_lead'
     );
     expect(statusFilter).toBeDefined();
   });

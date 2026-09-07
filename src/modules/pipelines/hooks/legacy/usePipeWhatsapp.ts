@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import type { ProjectedWhatsappPipe } from "@/integrations/supabase/projected-pipe-types";
 import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFollowUp";
 
 import { useOrganization } from "@/modules/identity";
@@ -11,7 +11,7 @@ import { optimisticMovePipelineEntry, rollbackPipelineEntryMove, type Optimistic
 // para preservar o module-id que mocks de teste interceptam (slice 7.3-bis).
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "../model/usePipelineEntries";
 
-export type PipeWhatsapp = Tables<"pipe_whatsapp">;
+export type PipeWhatsapp = ProjectedWhatsappPipe;
 export type PipeWhatsappInsert = Partial<PipeWhatsapp> & { lead_id: string };
 export type PipeWhatsappUpdate = Partial<PipeWhatsapp>;
 

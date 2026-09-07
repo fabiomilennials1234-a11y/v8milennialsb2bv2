@@ -386,7 +386,7 @@ const FETCH_PAGE_SIZE = 1000;
 /**
  * Fetch all lead ids for the organization, including:
  * - leads.organization_id = org (base de leads)
- * - lead_id present in pipe_whatsapp / pipe_confirmacao / pipe_propostas for this org (todos que estão no funil/etapa)
+ * - lead_id presente nos três funis de sistema da organização
  * Uses pagination so no row limit (e.g. 30/1000) cuts the list.
  * SECURITY: Only returns ids for the given organization_id.
  */
@@ -394,23 +394,6 @@ async function fetchAllLeadIdsForOrganization(
   organizationId: string
 ): Promise<string[]> {
   const idSet = new Set<string>();
-
-  const fetchPage = async (table: string, orderBy: string, selectCol: string): Promise<void> => {
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from(table)
-        .select(selectCol)
-        .eq("organization_id", organizationId)
-        .order(orderBy, { ascending: true })
-        .range(offset, offset + FETCH_PAGE_SIZE - 1);
-      if (error) throw error;
-      const list = (data ?? []).map((r: Record<string, string>) => r[selectCol]).filter(Boolean);
-      list.forEach((id) => idSet.add(id));
-      if (list.length < FETCH_PAGE_SIZE) break;
-      offset += FETCH_PAGE_SIZE;
-    }
-  };
 
   const fetchLeadsPage = async (): Promise<void> => {
     let offset = 0;
@@ -429,23 +412,32 @@ async function fetchAllLeadIdsForOrganization(
     }
   };
 
-  await Promise.all([
-    fetchLeadsPage(),
-    fetchPage("pipe_whatsapp", "lead_id", "lead_id"),
-    fetchPage("pipe_confirmacao", "lead_id", "lead_id"),
-    fetchPage("pipe_propostas", "lead_id", "lead_id"),
-  ]);
+  const fetchSystemPipelineLeads = async (): Promise<void> => {
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("negocio_projetado")
+        .select("lead_id")
+        .eq("organization_id", organizationId)
+        .in("funil_sistema", ["whatsapp", "confirmacao", "propostas"])
+        .order("lead_id", { ascending: true })
+        .range(offset, offset + FETCH_PAGE_SIZE - 1);
+      if (error) throw error;
+      const list = (data ?? [])
+        .map((row: { lead_id: string | null }) => row.lead_id)
+        .filter((id): id is string => !!id);
+      list.forEach((id) => idSet.add(id));
+      if ((data ?? []).length < FETCH_PAGE_SIZE) break;
+      offset += FETCH_PAGE_SIZE;
+    }
+  };
+
+  await Promise.all([fetchLeadsPage(), fetchSystemPipelineLeads()]);
 
   return Array.from(idSet);
 }
 
-const PIPE_TABLES = {
-  whatsapp: "pipe_whatsapp",
-  propostas: "pipe_propostas",
-  confirmacao: "pipe_confirmacao",
-} as const;
-
-export type PipeTypeForDelete = keyof typeof PIPE_TABLES;
+export type PipeTypeForDelete = "whatsapp" | "propostas" | "confirmacao";
 
 /**
  * Fetch all lead_ids that are in a given pipe for the organization.
@@ -457,16 +449,16 @@ async function fetchAllLeadIdsInPipe(
   pipeType: PipeTypeForDelete,
   stageId?: string
 ): Promise<string[]> {
-  const table = PIPE_TABLES[pipeType];
   const idSet = new Set<string>();
   let offset = 0;
   while (true) {
     let query = supabase
-      .from(table)
+      .from("negocio_projetado")
       .select("lead_id")
-      .eq("organization_id", organizationId);
+      .eq("organization_id", organizationId)
+      .eq("funil_sistema", pipeType);
     if (stageId) {
-      query = query.eq("status", stageId);
+      query = query.eq("stage_key", stageId);
     }
     const { data, error } = await query
       .order("lead_id", { ascending: true })

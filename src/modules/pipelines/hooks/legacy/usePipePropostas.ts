@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import type { ProjectedPropostaPipe } from "@/integrations/supabase/projected-pipe-types";
 import { triggerFollowUpAutomation } from "@/modules/workflows/hooks/useAutoFollowUp";
 
 import { useOrganization } from "@/modules/identity";
@@ -10,7 +10,7 @@ import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platfo
 // para preservar o module-id que mocks de teste interceptam (slice 7.3-bis).
 import { usePipelineEntries, usePipelineId, findOrCreatePipelineEntry } from "../model/usePipelineEntries";
 
-export type PipeProposta = Tables<"pipe_propostas">;
+export type PipeProposta = ProjectedPropostaPipe;
 export type PipePropostaInsert = Partial<PipeProposta> & { lead_id: string };
 export type PipePropostaUpdate = Partial<PipeProposta>;
 
