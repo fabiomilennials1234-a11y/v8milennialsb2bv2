@@ -44,7 +44,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { usePipelines } from "@/modules/pipelines";
+import { useFunisAtivosDaOrg } from "@/modules/pipelines";
 import {
   useAgentKanbanRules,
   useUpsertKanbanRules,
@@ -218,15 +218,10 @@ function StageCollapsible({
 }
 
 export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
-  const { data: pipelines = [], isLoading: loadingPipelines } = usePipelines();
+  const { data: activeFunnels = [], isLoading: loadingPipelines } = useFunisAtivosDaOrg();
   const { byPipelineId, isLoading: loadingStages } = useOrgFunnelStages();
   const { data: rules, isLoading: loadingRules } = useAgentKanbanRules(agentId);
   const upsert = useUpsertKanbanRules(agentId);
-
-  const activeFunnels = useMemo(
-    () => pipelines.filter((p) => p.is_active !== false),
-    [pipelines]
-  );
 
   const [selectedFunnelId, setSelectedFunnelId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, RuleDraft>>({});
@@ -385,7 +380,7 @@ export function AgentKanbanRulesTab({ agentId }: AgentKanbanRulesTabProps) {
                 const count = configuredByFunnel.get(funnel.id) ?? 0;
                 return (
                   <SelectItem key={funnel.id} value={funnel.id}>
-                    {funnel.name}
+                    {funnel.label}
                     {count > 0 ? ` — ${count} regra${count > 1 ? "s" : ""}` : ""}
                   </SelectItem>
                 );

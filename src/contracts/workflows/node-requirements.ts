@@ -59,6 +59,17 @@ const midiaDoTipo = (tipo: string) => (c: NodeConfig) =>
 export const NODE_REQUIREMENTS: Record<string, NodeRequirement[]> = {
   move_stage: [
     { anyOf: ["targetStage"], label: "etapa de destino", executorError: "No target stage configured" },
+    { anyOf: ["pipelineId", "pipeType"], label: "funil de destino", executorError: "No target funnel configured" },
+  ],
+  duplicate_to_pipe: [
+    { anyOf: ["pipelineId", "targetPipeType"], label: "funil de destino", executorError: "No target funnel configured" },
+    { anyOf: ["targetStage", "targetPipeStage"], label: "etapa inicial", executorError: "No target stage configured" },
+  ],
+  remove_from_pipe: [
+    { anyOf: ["pipelineId", "pipeType"], label: "funil", executorError: "No funnel configured" },
+  ],
+  mark_as_lost: [
+    { anyOf: ["pipelineId", "pipeType"], label: "funil", executorError: "No funnel configured" },
   ],
   add_tag: [
     { anyOf: ["tagId", "tagName"], label: "tag", executorError: "No tag configured (provide tagId or tagName)" },
@@ -214,8 +225,8 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * `master_workflow_config_scan`, que chaveia as etapas ativas por TRÊS refs do
  * mesmo funil: `pipelines.slug` (nó legado de sistema), `pipeline_id` (nó
  * novo, qualquer funil) e `pipeline_type` fantasma. O nó é procurado pela
- * própria ref — `pipelineId` novo, `pipeType` legado (slug OU uuid custom), ou
- * o default histórico "whatsapp" dos nós que nunca gravaram funil.
+ * própria ref — `pipelineId` novo ou `pipeType` legado (slug OU uuid custom).
+ * Nó sem funil é inválido e já aparece em `findNodeConfigIssues`.
  *
  * Permissividade em paridade com o executor (`move-stage.ts`):
  *   · ref sem chave no mapa (funil sem etapa cadastrada, upsell_*, campanha,
@@ -239,7 +250,8 @@ export function findStageIssues(
     const normalizado = String(alvo).trim().toLowerCase();
     if (UUID_RE.test(normalizado)) continue; // id de etapa — o executor resolve por id
 
-    const pipe = (config.pipelineId as string) || (config.pipeType as string) || "whatsapp";
+    const pipe = (config.pipelineId as string) || (config.pipeType as string);
+    if (!pipe) continue;
 
     const validas = stageKeysByPipe[pipe] ?? [];
     if (validas.length === 0) continue;

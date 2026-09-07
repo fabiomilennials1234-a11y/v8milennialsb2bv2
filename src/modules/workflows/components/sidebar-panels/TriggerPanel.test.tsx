@@ -15,6 +15,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 const mockPipelines = vi.fn();
 
 const mockStages = vi.fn(() => ({ data: [] as unknown[] }));
+const mockEtapas = vi.fn((_pipelineId?: string) => ({ etapas: [] as unknown[], isLoading: false }));
 const mockInstances = vi.fn(() => ({ data: [] as unknown[] }));
 
 vi.mock("@/modules/pipelines", () => ({
@@ -28,7 +29,7 @@ vi.mock("@/modules/pipelines", () => ({
   useCustomPipelineStages: () => ({ data: [] }),
   usePipelineStages: () => ({ data: [] }),
   usePipelineDisplayConfig: () => ({ data: [] }),
-  useEtapasDoFunil: () => ({ data: [] }),
+  useEtapasDoFunil: (pipelineId?: string) => mockEtapas(pipelineId),
   getPipelineTypeName: (t: string) => t,
 }));
 
@@ -47,7 +48,7 @@ vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({
 }));
 
 vi.mock("@/modules/leads", () => ({
-  useLeadOrigins: () => ({ data: [] }),
+  useLeadOrigins: () => ({ origins: [], labelOf: (v: string) => v, colorOf: () => "#000", isLoading: false }),
 }));
 
 vi.mock("./CampaignSelectorField", () => ({
@@ -76,10 +77,10 @@ const ARQUIVADO = "44444444-4444-4444-4444-444444444444";
 // org chama o funil (display_config). São diferentes de propósito nos dois de
 // sistema: é isso que prova que a tela mostra o nome da org, e não o do seed.
 const PIPELINES = [
-  { id: QUALIFICACAO, name: "Qualificação", label: "Oportunidades", type: "system", is_active: true },
-  { id: PROPOSTAS, name: "Propostas", label: "Orçamentos", type: "system", is_active: true },
-  { id: BLACK_FRIDAY, name: "Black Friday", label: "Black Friday", type: "custom", is_active: true },
-  { id: ARQUIVADO, name: "Funil Antigo", label: "Funil Antigo", type: "custom", is_active: false },
+  { id: QUALIFICACAO, slug: "whatsapp", name: "Qualificação", label: "Oportunidades", type: "system", is_active: true },
+  { id: PROPOSTAS, slug: "propostas", name: "Propostas", label: "Orçamentos", type: "system", is_active: true },
+  { id: BLACK_FRIDAY, slug: "black-friday", name: "Black Friday", label: "Black Friday", type: "custom", is_active: true },
+  { id: ARQUIVADO, slug: "antigo", name: "Funil Antigo", label: "Funil Antigo", type: "custom", is_active: false },
 ];
 
 const ETAPA_ENVIADA = "55555555-5555-5555-5555-555555555555";
@@ -87,10 +88,24 @@ const ETAPA_NEGOCIACAO = "66666666-6666-6666-6666-666666666666";
 const ETAPA_DE_OUTRO_FUNIL = "77777777-7777-7777-7777-777777777777";
 
 const ETAPAS = [
-  { id: ETAPA_ENVIADA, name: "Proposta Enviada", pipeline_id: PROPOSTAS, is_active: true },
-  { id: ETAPA_NEGOCIACAO, name: "Em Negociação", pipeline_id: PROPOSTAS, is_active: true },
-  { id: ETAPA_DE_OUTRO_FUNIL, name: "Sondagem", pipeline_id: QUALIFICACAO, is_active: true },
+  { id: ETAPA_ENVIADA, stage_key: "enviada", name: "Proposta Enviada", pipeline_id: PROPOSTAS, is_active: true },
+  { id: ETAPA_NEGOCIACAO, stage_key: "negociacao", name: "Em Negociação", pipeline_id: PROPOSTAS, is_active: true },
+  { id: ETAPA_DE_OUTRO_FUNIL, stage_key: "sondagem", name: "Sondagem", pipeline_id: QUALIFICACAO, is_active: true },
 ];
+
+function configureEtapas() {
+  mockEtapas.mockImplementation((pipelineId?: string) => ({
+    etapas: ETAPAS
+      .filter((stage) => stage.pipeline_id === pipelineId)
+      .map((stage, position) => ({
+        id: stage.id,
+        stageKey: stage.stage_key,
+        label: stage.name,
+        position,
+      })),
+    isLoading: false,
+  }));
+}
 
 const DOIS_NUMEROS = [
   { id: "inst-closer", instance_name: "Comercial" },
@@ -137,6 +152,7 @@ describe("TriggerPanel — lead_replied", () => {
     vi.clearAllMocks();
     mockPipelines.mockReturnValue({ data: PIPELINES });
     mockStages.mockReturnValue({ data: ETAPAS });
+    configureEtapas();
     mockInstances.mockReturnValue({ data: [] });
     mockHasFeature.mockImplementation((key: string) => key === "deals");
   });
@@ -263,6 +279,7 @@ describe("TriggerPanel — deal_created — funis de nascimento", () => {
     vi.clearAllMocks();
     mockPipelines.mockReturnValue({ data: PIPELINES });
     mockStages.mockReturnValue({ data: ETAPAS });
+    configureEtapas();
     mockInstances.mockReturnValue({ data: [] });
     mockHasFeature.mockImplementation((key: string) => key === "deals");
   });
@@ -338,6 +355,7 @@ describe("TriggerPanel — lead_replied — etapa", () => {
     vi.clearAllMocks();
     mockPipelines.mockReturnValue({ data: PIPELINES });
     mockStages.mockReturnValue({ data: ETAPAS });
+    configureEtapas();
     mockInstances.mockReturnValue({ data: [] });
     mockHasFeature.mockImplementation((key: string) => key === "deals");
   });
@@ -470,5 +488,59 @@ describe("TriggerPanel — lead_replied — modo e freio", () => {
   it("o freio respeita o valor já salvo", () => {
     renderPanel({ cooldown_minutes: 5 });
     expect(screen.getByLabelText(/não repetir por/i)).toHaveValue(5);
+  });
+});
+
+describe("TriggerPanel — referências canônicas de funil", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+    configureEtapas();
+  });
+
+  function openSelect(label: string) {
+    const proto = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+    proto.hasPointerCapture = () => false;
+    proto.setPointerCapture = () => {};
+    proto.releasePointerCapture = () => {};
+    proto.scrollIntoView = () => {};
+    const combobox = screen.getByText(label).parentElement?.querySelector("[role='combobox']");
+    if (!combobox) throw new Error(`Select não encontrado: ${label}`);
+    fireEvent.keyDown(combobox, { key: "Enter" });
+  }
+
+  it("Lead criado lê filtro legado e grava UUID para funil seed ou criado", () => {
+    const legacy = renderPanel({ filter_pipe: "pipe_whatsapp" }, "lead_created");
+    expect(screen.getByText("Oportunidades")).toBeInTheDocument();
+    legacy.onUpdate.mockClear();
+
+    openSelect("Filtrar por funil (opcional)");
+    fireEvent.click(screen.getByText("Black Friday"));
+    expect(lastConfig(legacy.onUpdate)).toMatchObject({
+      filter_pipe: "",
+      filter_pipeline_id: BLACK_FRIDAY,
+    });
+  });
+
+  it("Mudança de etapa grava UUID da etapa e mantém stage_key legado legível", () => {
+    const { onUpdate } = renderPanel(
+      { pipeline_id: PROPOSTAS, stages: ["enviada"] },
+      "stage_changed",
+    );
+    expect(checkboxFor("Proposta Enviada")).toHaveAttribute("data-state", "checked");
+    fireEvent.click(checkboxFor("Em Negociação"));
+    expect(lastConfig(onUpdate).stages).toEqual(["enviada", ETAPA_NEGOCIACAO]);
+  });
+
+  it("Antes de uma data grava UUID da etapa", () => {
+    const { onUpdate } = renderPanel(
+      { pipeline_id: PROPOSTAS, stages: [], dispatches: [] },
+      "scheduled_date",
+    );
+    fireEvent.click(checkboxFor("Proposta Enviada"));
+    expect(lastConfig(onUpdate).stages).toEqual([ETAPA_ENVIADA]);
   });
 });

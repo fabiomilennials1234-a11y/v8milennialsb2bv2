@@ -71,17 +71,15 @@ const getLead360: Handler = async (supabase, ctx) => {
  * antigo por `pipeline_type` era cego para funil custom (coluna NULL pós-W2).
  */
 const listPipelineStages: Handler = async (supabase, ctx, args) => {
-  let pipelineId: string | null = null;
-  if (typeof args.pipe === "string" && args.pipe.trim()) {
-    const pipeline = await resolvePipelineOrThrow(supabase, ctx, "list_pipeline_stages", args.pipe);
-    pipelineId = pipeline.id;
-  }
-  let query = supabase
+  const pipeRef = String(args.pipe ?? "").trim();
+  if (!pipeRef) throw new ToolError("missing_context", "list_pipeline_stages:pipe");
+  const pipeline = await resolvePipelineOrThrow(supabase, ctx, "list_pipeline_stages", pipeRef);
+  const query = supabase
     .from("pipeline_stages")
     .select("stage_key, name, position, stage_role, is_final_positive, is_final_negative")
     .eq("organization_id", ctx.organizationId)
+    .eq("pipeline_id", pipeline.id)
     .eq("is_active", true);
-  if (pipelineId) query = query.eq("pipeline_id", pipelineId);
   const { data, error } = await query.order("position", { ascending: true });
   if (error) throw new Error(`list_pipeline_stages: ${error.message}`);
   return data ?? [];
@@ -147,7 +145,8 @@ const moveLeadStage: Handler = async (supabase, ctx, args) => {
   if (!ctx.leadId) throw new ToolError("missing_context", "move_lead_stage");
   const stageRef = String(args.stage ?? "").trim();
   if (!stageRef) throw new ToolError("missing_context", "move_lead_stage:stage");
-  const pipeRef = String(args.pipe ?? "whatsapp").trim() || "whatsapp";
+  const pipeRef = String(args.pipe ?? "").trim();
+  if (!pipeRef) throw new ToolError("missing_context", "move_lead_stage:pipe");
 
   const pipeline = await resolvePipelineOrThrow(supabase, ctx, "move_lead_stage", pipeRef);
 

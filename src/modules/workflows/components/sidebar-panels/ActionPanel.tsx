@@ -44,8 +44,7 @@ import {
   type TemplateTextareaHandle,
 } from "@/modules/workflows/components/TemplateTextarea";
 import type { CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
-import { useFunisDaOrg, useEtapasDoFunil, usePipelineDisplayConfig } from "@/modules/pipelines";
-import { destinosDeSistema } from "@/contracts/pipe";
+import { useFunisDaOrg, useEtapasDoFunil } from "@/modules/pipelines";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
@@ -553,18 +552,85 @@ interface ActionPanelProps {
   onUpdate: (updates: Partial<ActionNodeData>) => void;
 }
 
+function FunnelLegacyActionFields({
+  data,
+  onUpdate,
+  mode,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+  mode: "duplicate" | "remove" | "lost";
+}) {
+  const { data: pipelines = [], isLoading: pipelinesLoading } = useFunisDaOrg();
+  const legacyRef = mode === "duplicate" ? data.targetPipeType : data.pipeType;
+  const normalizedLegacy = (legacyRef || "").replace(/^pipe_/, "");
+  const pipelineId = data.pipelineId || pipelines.find(
+    (pipeline) => pipeline.id === legacyRef || pipeline.slug === normalizedLegacy,
+  )?.id || "";
+  const visiblePipelines = pipelines.filter(
+    (pipeline) => pipeline.is_active || pipeline.id === pipelineId,
+  );
+  const { etapas, isLoading: stagesLoading } = useEtapasDoFunil(
+    mode === "duplicate" ? pipelineId || null : null,
+  );
+  const legacyStageRef = data.targetStage || data.targetPipeStage || "";
+  const selectedStageId = etapas.find(
+    (stage) => stage.id === legacyStageRef || stage.stageKey === legacyStageRef,
+  )?.id || "";
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Funil</Label>
+        <Select
+          value={pipelineId}
+          onValueChange={(value) => onUpdate({
+            pipelineId: value,
+            pipeType: "",
+            targetPipeType: "",
+            ...(mode === "duplicate" ? { targetStage: "", targetPipeStage: "" } : {}),
+          })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={pipelinesLoading ? "Carregando funis..." : "Selecione o funil"} />
+          </SelectTrigger>
+          <SelectContent>
+            {visiblePipelines.map((pipeline) => (
+              <SelectItem key={pipeline.id} value={pipeline.id}>
+                {pipeline.label}{!pipeline.is_active ? " (desativado)" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {mode === "duplicate" && (
+        <div className="space-y-2">
+          <Label>Etapa inicial</Label>
+          <Select
+            value={selectedStageId}
+            disabled={!pipelineId || stagesLoading}
+            onValueChange={(value) => onUpdate({ targetStage: value, targetPipeStage: "" })}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={stagesLoading ? "Carregando etapas..." : "Selecione a etapa"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {etapas.map((stage) => (
+                <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   const at = data.actionType;
-  // Funis de sistema REAIS da org, com o nome que ELA usa (SCRUM-641). O value
-  // continua o sentinel legado `pipe_<type>` — é o contrato do executor.
-  const { data: displayConfigs } = usePipelineDisplayConfig();
-  const funisDeSistema = destinosDeSistema(displayConfigs);
-  const opcoesDePipe = funisDeSistema.map((d) => ({
-    value: `pipe_${d.pipeType}`,
-    label: d.label,
-  }));
-  const nomeConfirmacao =
-    funisDeSistema.find((d) => d.pipeType === "confirmacao")?.label ?? "Funil removido";
   // Node unificado gateado por org (ADR-0012). Fail-closed: enquanto carrega ou
   // se a org não tem a flag, o picker mostra os envios legados, como antes.
   const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
@@ -863,73 +929,18 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* Duplicate to Pipe */}
       {at === "duplicate_to_pipe" && (
-        <>
-          <div className="space-y-2">
-            <Label>Pipe destino</Label>
-            <Select
-              value={data.targetPipeType || ""}
-              onValueChange={(v) => onUpdate({ targetPipeType: v })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {opcoesDePipe.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Estágio inicial</Label>
-            <Input
-              value={data.targetPipeStage || ""}
-              onChange={(e) => onUpdate({ targetPipeStage: e.target.value })}
-              placeholder="Ex: novo"
-            />
-          </div>
-        </>
+        <FunnelLegacyActionFields data={data} onUpdate={onUpdate} mode="duplicate" />
       )}
 
       {/* Remove from Pipe */}
       {at === "remove_from_pipe" && (
-        <div className="space-y-2">
-          <Label>Pipe</Label>
-          <Select
-            value={data.pipeType || ""}
-            onValueChange={(v) => onUpdate({ pipeType: v })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-            <SelectContent>
-              {opcoesDePipe.map((o) => (
-                <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <FunnelLegacyActionFields data={data} onUpdate={onUpdate} mode="remove" />
       )}
 
       {/* Mark as Lost */}
       {at === "mark_as_lost" && (
         <>
-          <div className="space-y-2">
-            <Label>Pipe</Label>
-            <Select
-              value={data.pipeType || ""}
-              onValueChange={(v) => onUpdate({ pipeType: v })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {opcoesDePipe.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <FunnelLegacyActionFields data={data} onUpdate={onUpdate} mode="lost" />
           <div className="space-y-2">
             <Label>Motivo da perda (opcional)</Label>
             <Input
@@ -1065,8 +1076,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {at === "schedule_meeting" && (
         <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-          Cria uma entrada no funil {nomeConfirmacao} com status "reunião
-          marcada" para o lead.
+          Solicita o agendamento de uma reunião para este lead e mantém o
+          vínculo com o negócio que iniciou a automação.
         </div>
       )}
 
@@ -1307,20 +1318,25 @@ function MoveStageFields({
   const { data: pipelines, isLoading: pipelinesLoading } = useFunisDaOrg();
 
   const legacyRef = (data.pipeType as string) || "";
+  const normalizedLegacyRef = legacyRef.replace(/^pipe_/, "");
   const pipelineId =
     ((data.pipelineId as string) || "") ||
     (legacyRef
-      ? pipelines?.find((p) => p.id === legacyRef || p.slug === legacyRef)?.id ?? ""
+      ? pipelines?.find((p) => p.id === legacyRef || p.slug === normalizedLegacyRef)?.id ?? ""
       : "");
 
   const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
 
   const { etapas, isLoading: stagesLoading } = useEtapasDoFunil(pipelineId || null);
   const activeStages = etapas.map((e) => ({
-    key: e.stageKey,
+    id: e.id,
+    legacyKey: e.stageKey,
     name: e.label,
     color: "#888",
   }));
+  const selectedStageId = activeStages.find(
+    (stage) => stage.id === data.targetStage || stage.legacyKey === data.targetStage,
+  )?.id || "";
 
   const handlePipeChange = (value: string) => {
     onUpdate({ pipelineId: value, pipeType: "", targetStage: "" });
@@ -1349,20 +1365,20 @@ function MoveStageFields({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>Estágio destino</Label>
+        <Label>Etapa de destino</Label>
         {stagesLoading ? (
-          <p className="text-xs text-muted-foreground">Carregando estágios...</p>
+          <p className="text-xs text-muted-foreground">Carregando etapas...</p>
         ) : (
           <Select
-            value={data.targetStage || ""}
+            value={selectedStageId}
             onValueChange={(v) => onUpdate({ targetStage: v })}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Selecione o estágio" />
+              <SelectValue placeholder="Selecione a etapa" />
             </SelectTrigger>
             <SelectContent>
               {activeStages.map((s) => (
-                <SelectItem key={s.key} value={s.key}>
+                <SelectItem key={s.id} value={s.id}>
                   <span className="flex items-center gap-2">
                     <span
                       className="inline-block w-2.5 h-2.5 rounded-full shrink-0"

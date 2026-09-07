@@ -18,6 +18,8 @@ import { useCreateWorkflow } from "@/modules/workflows/hooks/useWorkflows";
 import { FUNIL_A_TEMPLATES, FUNIL_B_TEMPLATES } from "@/contracts/workflows/funnel-templates";
 import { toast } from "sonner";
 import type { WorkflowTemplate } from "@/contracts/workflows/workflow-template";
+import { useAllPipelineStages, useFunisDaOrg } from "@/modules/pipelines";
+import { canonicalizeTemplateFunnelRefs } from "@/modules/workflows/lib/canonicalizeTemplateFunnelRefs";
 
 // Reexportado por compatibilidade: a interface agora é contrato compartilhado
 // (`@/contracts/workflows/workflow-template`), porque o provisionamento de org
@@ -51,7 +53,7 @@ const BUILTIN_TEMPLATES: WorkflowTemplate[] = [
   {
     id: "tpl-welcome",
     name: "Sequencia de boas-vindas",
-    description: "Envia mensagem de boas-vindas quando lead entra no pipe WhatsApp",
+    description: "Envia mensagem de boas-vindas quando o lead é criado",
     category: "engagement",
     tags: ["whatsapp", "boas-vindas"],
     popularity: 100,
@@ -160,6 +162,8 @@ function useWorkflowTemplates() {
 
 export function WorkflowTemplates() {
   const { data: templates = [], isLoading } = useWorkflowTemplates();
+  const { data: pipelines, isLoading: pipelinesLoading } = useFunisDaOrg();
+  const { data: stages = [], isLoading: stagesLoading } = useAllPipelineStages();
   const createWorkflow = useCreateWorkflow();
   const navigate = useNavigate();
 
@@ -184,7 +188,8 @@ export function WorkflowTemplates() {
 
   async function handleUseTemplate(template: WorkflowTemplate) {
     try {
-      const triggerNode = (template.definition as any).nodes?.find(
+      const definition = canonicalizeTemplateFunnelRefs(template.definition, pipelines, stages);
+      const triggerNode = (definition as any).nodes?.find(
         (n: any) => n.type === "trigger",
       );
       const triggerType = triggerNode?.data?.triggerType ?? "lead_created";
@@ -194,7 +199,7 @@ export function WorkflowTemplates() {
         name: `${template.name} (copia)`,
         trigger_type: triggerType,
         trigger_config: triggerConfig,
-        definition: template.definition as any,
+        definition: definition as any,
         is_active: false,
       });
       toast.success("Workflow criado a partir do template");
@@ -358,9 +363,11 @@ export function WorkflowTemplates() {
             </Button>
             <Button
               onClick={() => selected && handleUseTemplate(selected)}
-              disabled={createWorkflow.isPending}
+              disabled={createWorkflow.isPending || pipelinesLoading || stagesLoading}
             >
-              {createWorkflow.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              {(createWorkflow.isPending || pipelinesLoading || stagesLoading) && (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              )}
               Usar template
             </Button>
           </DialogFooter>

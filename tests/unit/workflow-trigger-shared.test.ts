@@ -72,6 +72,13 @@ describe("matchesTriggerConfig", () => {
       )).toBe(false);
     });
 
+    it("falha fechado quando filtros de funil ou etapa não têm contexto", () => {
+      expect(matchesTriggerConfig("stage_changed", { pipeline_id: "pipe-1" }, {})).toBe(false);
+      expect(matchesTriggerConfig("stage_changed", { pipe_type: "whatsapp" }, {})).toBe(false);
+      expect(matchesTriggerConfig("stage_changed", { stages: ["novo"] }, {})).toBe(false);
+      expect(matchesTriggerConfig("stage_changed", { from_stage: "novo" }, {})).toBe(false);
+    });
+
     // ── SCRUM-627: contexto ÚNICO dos gatilhos × formatos de config vivos ──
     // Medido em prod 2026-09-02 (82 stage_changed ativos): 67 com pipe_type
     // slug ("whatsapp"/"propostas"), 15 com pipeline_id uuid, 0 campanha.
@@ -188,6 +195,28 @@ describe("matchesTriggerConfig", () => {
         { filter_pipeline_id: "custom-1" },
         { pipeline_id: "custom-1" }
       )).toBe(true);
+    });
+
+    it("recusa filtro canônico sem pipeline no contexto ou com outro UUID", () => {
+      expect(matchesTriggerConfig("lead_created", { filter_pipeline_id: "custom-1" }, {})).toBe(false);
+      expect(matchesTriggerConfig(
+        "lead_created",
+        { filter_pipeline_id: "custom-1" },
+        { pipeline_id: "custom-2" },
+      )).toBe(false);
+    });
+
+    it("normaliza o prefixo do filtro legado e falha sem contexto", () => {
+      expect(matchesTriggerConfig(
+        "lead_created",
+        { filter_pipe: "pipe_whatsapp" },
+        { pipe_type: "whatsapp" },
+      )).toBe(true);
+      expect(matchesTriggerConfig("lead_created", { filter_pipe: "pipe_whatsapp" }, {})).toBe(false);
+    });
+
+    it("filtro de origem falha fechado quando a origem não veio", () => {
+      expect(matchesTriggerConfig("lead_created", { filter_origin: "meta_ads" }, {})).toBe(false);
     });
   });
 

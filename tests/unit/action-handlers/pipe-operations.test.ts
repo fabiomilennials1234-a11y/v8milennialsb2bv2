@@ -1,228 +1,223 @@
 // @vitest-environment node
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { createMockSupabase } from "../../helpers/supabase-mock";
 import {
   duplicateToPipe,
-  removeFromPipe,
   markAsLost,
+  removeFromPipe,
 } from "../../../supabase/functions/_shared/action-handlers/pipe-operations";
+import { __clearPipelineResolutionCache } from "../../../supabase/functions/_shared/pipeline-adapter";
 import type { ActionInput } from "../../../supabase/functions/_shared/action-handlers/types";
 
-function makeInput(params: Record<string, unknown> = {}, overrides: Record<string, unknown> = {}): ActionInput {
-  const { sb } = createMockSupabase();
+const ORG = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const LEAD = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const FUNNEL = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+const INITIAL_STAGE = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const LOST_STAGE = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+
+function input(
+  supabase: ActionInput["supabase"],
+  params: Record<string, unknown>,
+  leadId: string | null = LEAD,
+): ActionInput {
   return {
-    supabase: sb,
-    organizationId: "org-1",
-    leadId: "lead-1",
+    supabase,
+    organizationId: ORG,
+    leadId,
+    entryId: null,
+    dealId: null,
     conversationId: null,
     params,
-    ...overrides,
   };
 }
 
-// ─── duplicateToPipe ──────────────────────────────────────────────────────
+function seedFunnel(mockTable: ReturnType<typeof createMockSupabase>["mockTable"]) {
+  mockTable("pipelines", [{
+    id: FUNNEL,
+    organization_id: ORG,
+    slug: "black-friday",
+    name: "Black Friday",
+    type: "custom",
+    is_active: true,
+  }]);
+  mockTable("pipeline_stages", [
+    {
+      id: INITIAL_STAGE,
+      organization_id: ORG,
+      pipeline_id: FUNNEL,
+      stage_key: "novo",
+      stage_role: "open",
+      is_final_negative: false,
+      is_active: true,
+      position: 0,
+    },
+    {
+      id: LOST_STAGE,
+      organization_id: ORG,
+      pipeline_id: FUNNEL,
+      stage_key: "sem-interesse",
+      stage_role: "lost",
+      is_final_negative: true,
+      is_active: true,
+      position: 9,
+    },
+  ]);
+}
+
+beforeEach(() => __clearPipelineResolutionCache());
 
 describe("duplicateToPipe", () => {
-  it("returns error when leadId is null", async () => {
-    const result = await duplicateToPipe(makeInput({ targetPipeType: "whatsapp" }, { leadId: null }));
-    expect(result.success).toBe(false);
+  it("recusa lead ausente", async () => {
+    const { sb } = createMockSupabase();
+    expect((await duplicateToPipe(input(sb, { pipelineId: FUNNEL, targetStage: INITIAL_STAGE }, null))).success).toBe(false);
   });
 
-  it("returns error when lead not found", async () => {
-    const { sb, mockTable } = createMockSupabase();
-    mockTable("leads", []);
-    const result = await duplicateToPipe({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-missing",
-      conversationId: null,
-      params: { targetPipeType: "whatsapp", targetPipeStage: "novo" },
-    });
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("not found");
+  it("exige funil e etapa, sem defaults escondidos", async () => {
+    const { sb } = createMockSupabase();
+    expect((await duplicateToPipe(input(sb, {}))).error).toBe("No target funnel configured");
+    expect((await duplicateToPipe(input(sb, { pipelineId: FUNNEL }))).error).toBe("No target stage configured");
   });
 
-  it("upserts pipeline entry for whatsapp pipe + updates leads.pipe_whatsapp", async () => {
+  it("adiciona em funil criado pela org e converte UUID da etapa em stage_key", async () => {
     const { sb, mockTable, getInserted } = createMockSupabase();
-    mockTable("leads", [{ id: "lead-1", name: "Test", organization_id: "org-1" }]);
-    mockTable("pipelines", [{ id: "pipe-wpp", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
+    seedFunnel(mockTable);
+    mockTable("leads", [{ id: LEAD, organization_id: ORG }]);
     mockTable("pipeline_entries", []);
 
-    const result = await duplicateToPipe({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: { targetPipeType: "whatsapp", targetPipeStage: "agendado" },
-    });
+    const result = await duplicateToPipe(input(sb, {
+      pipelineId: FUNNEL,
+      targetStage: INITIAL_STAGE,
+    }));
 
     expect(result.success).toBe(true);
-    expect(result.message).toContain("whatsapp");
-    expect(result.message).toContain("agendado");
+    expect(result.data).toMatchObject({ pipelineId: FUNNEL, targetStage: "novo" });
+    expect(getInserted("pipeline_entries")[0]).toMatchObject({
+      organization_id: ORG,
+      lead_id: LEAD,
+      pipeline_id: FUNNEL,
+      stage_key: "novo",
+    });
   });
 
-  it("upserts pipeline entry for confirmacao pipe (no leads.pipe_whatsapp update)", async () => {
+  it("mantém leitura de slug e stage_key dos nós antigos", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("leads", [{ id: "lead-1", name: "Test", organization_id: "org-1" }]);
-    mockTable("pipelines", [{ id: "pipe-conf", organization_id: "org-1", slug: "confirmacao", type: "system" }]);
+    seedFunnel(mockTable);
+    mockTable("leads", [{ id: LEAD, organization_id: ORG }]);
     mockTable("pipeline_entries", []);
 
-    const result = await duplicateToPipe({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: { targetPipeType: "confirmacao", targetPipeStage: "marcada" },
-    });
-
+    const result = await duplicateToPipe(input(sb, {
+      targetPipeType: "black-friday",
+      targetPipeStage: "novo",
+    }));
     expect(result.success).toBe(true);
-    expect(result.message).toContain("confirmacao");
   });
 
-  it("defaults to whatsapp/novo when params empty", async () => {
+  it("não reporta sucesso para funil inexistente", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("leads", [{ id: "lead-1", name: "Test", organization_id: "org-1" }]);
-    mockTable("pipelines", [{ id: "pipe-wpp", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
-    mockTable("pipeline_entries", []);
+    mockTable("leads", [{ id: LEAD, organization_id: ORG }]);
+    mockTable("pipelines", []);
 
-    const result = await duplicateToPipe({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: {},
-    });
+    const result = await duplicateToPipe(input(sb, {
+      targetPipeType: "nao-existe",
+      targetPipeStage: "novo",
+    }));
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("pipeline_not_found");
+  });
 
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("whatsapp");
+  it("não encontra lead de outra organização", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    seedFunnel(mockTable);
+    mockTable("leads", [{ id: LEAD, organization_id: "outra-org" }]);
+    expect((await duplicateToPipe(input(sb, { pipelineId: FUNNEL, targetStage: INITIAL_STAGE }))).error).toBe("Lead not found");
   });
 });
-
-// ─── removeFromPipe ───────────────────────────────────────────────────────
 
 describe("removeFromPipe", () => {
-  it("returns error when leadId is null", async () => {
-    const result = await removeFromPipe(makeInput({ pipeType: "whatsapp" }, { leadId: null }));
-    expect(result.success).toBe(false);
+  it("exige lead e funil", async () => {
+    const { sb } = createMockSupabase();
+    expect((await removeFromPipe(input(sb, { pipelineId: FUNNEL }, null))).success).toBe(false);
+    expect((await removeFromPipe(input(sb, {}))).error).toBe("No funnel configured");
   });
 
-  it("removes from whatsapp pipe and clears leads.pipe_whatsapp", async () => {
+  it("remove de qualquer funil por UUID", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("pipelines", [{ id: "pipe-wpp", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
-    mockTable("pipeline_entries", [{ id: "entry-1", lead_id: "lead-1", pipeline_id: "pipe-wpp" }]);
+    seedFunnel(mockTable);
+    mockTable("pipeline_entries", [{ id: "entry-1", lead_id: LEAD, pipeline_id: FUNNEL }]);
 
-    const result = await removeFromPipe({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: { pipeType: "whatsapp" },
-    });
-
+    const result = await removeFromPipe(input(sb, { pipelineId: FUNNEL }));
     expect(result.success).toBe(true);
-    expect(result.message).toContain("whatsapp");
+    expect(result.data).toEqual({ pipelineId: FUNNEL });
   });
 
-  it("removes from confirmacao pipe (no leads.pipe_whatsapp clear)", async () => {
+  it("não reporta sucesso para funil inexistente", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("pipelines", [{ id: "pipe-conf", organization_id: "org-1", slug: "confirmacao", type: "system" }]);
-    mockTable("pipeline_entries", [{ id: "entry-1", lead_id: "lead-1", pipeline_id: "pipe-conf" }]);
-
-    const result = await removeFromPipe({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: { pipeType: "confirmacao" },
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("confirmacao");
-  });
-
-  it("defaults to whatsapp when pipeType not provided", async () => {
-    const { sb, mockTable } = createMockSupabase();
-    mockTable("pipelines", [{ id: "pipe-wpp", organization_id: "org-1", slug: "whatsapp", type: "system" }]);
-    mockTable("pipeline_entries", []);
-
-    const result = await removeFromPipe({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: {},
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("whatsapp");
+    mockTable("pipelines", []);
+    expect((await removeFromPipe(input(sb, { pipeType: "sumiu" }))).success).toBe(false);
   });
 });
 
-// ─── markAsLost ───────────────────────────────────────────────────────────
-
 describe("markAsLost", () => {
-  it("returns error when leadId is null", async () => {
-    const result = await markAsLost(makeInput({ pipeType: "propostas" }, { leadId: null }));
-    expect(result.success).toBe(false);
+  it("exige lead e funil", async () => {
+    const { sb } = createMockSupabase();
+    expect((await markAsLost(input(sb, { pipelineId: FUNNEL }, null))).success).toBe(false);
+    expect((await markAsLost(input(sb, {}))).error).toBe("No funnel configured");
   });
 
-  it("marks lead as lost in propostas with loss_reason_id", async () => {
-    const { sb, mockTable } = createMockSupabase();
-    mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
-    mockTable("pipeline_entries", [
-      { id: "entry-1", lead_id: "lead-1", pipeline_id: "pipe-prop", stage_key: "enviada" },
-    ]);
+  it("usa a etapa semântica lost do funil e registra o motivo", async () => {
+    const { sb, mockTable, getInserted, getUpdated } = createMockSupabase();
+    seedFunnel(mockTable);
+    mockTable("pipeline_entries", [{
+      id: "entry-1",
+      organization_id: ORG,
+      lead_id: LEAD,
+      pipeline_id: FUNNEL,
+      stage_key: "novo",
+      metadata: {},
+      closed_at: null,
+      stage_changed_at: "2026-01-01",
+      created_at: "2026-01-01",
+    }]);
 
-    const result = await markAsLost({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: { pipeType: "propostas", lostReason: "preco" },
-    });
+    const result = await markAsLost(input(sb, {
+      pipelineId: FUNNEL,
+      lostReason: "Sem orçamento",
+    }));
 
     expect(result.success).toBe(true);
-    expect(result.message).toContain("propostas");
-  });
-
-  it("logs to lead_history", async () => {
-    const { sb, mockTable, getInserted } = createMockSupabase();
-    mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
-    mockTable("pipeline_entries", [
-      { id: "entry-1", lead_id: "lead-1", pipeline_id: "pipe-prop", stage_key: "enviada" },
-    ]);
-
-    await markAsLost({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: { pipeType: "propostas", lostReason: "preco" },
+    expect(result.data).toMatchObject({ pipelineId: FUNNEL, targetStage: "sem-interesse" });
+    expect(getUpdated("pipeline_entries").at(-1)).toMatchObject({
+      stage_key: "sem-interesse",
+      metadata: { loss_reason: "Sem orçamento", loss_reason_id: "Sem orçamento" },
     });
-
-    const history = getInserted("lead_history");
-    expect(history.length).toBe(1);
-    expect(history[0]).toMatchObject({
-      lead_id: "lead-1",
-      organization_id: "org-1",
+    expect(getInserted("lead_history")[0]).toMatchObject({
+      lead_id: LEAD,
+      organization_id: ORG,
       action: "marked_lost",
+      metadata: { pipelineId: FUNNEL },
     });
   });
 
-  it("defaults to propostas pipe when pipeType not provided", async () => {
+  it("falha quando o funil não possui etapa de perda", async () => {
     const { sb, mockTable } = createMockSupabase();
-    mockTable("pipelines", [{ id: "pipe-prop", organization_id: "org-1", slug: "propostas", type: "system" }]);
+    seedFunnel(mockTable);
+    mockTable("pipeline_stages", [{
+      id: INITIAL_STAGE,
+      organization_id: ORG,
+      pipeline_id: FUNNEL,
+      stage_key: "novo",
+      stage_role: "open",
+      is_final_negative: false,
+      is_active: true,
+      position: 0,
+    }]);
+    expect((await markAsLost(input(sb, { pipelineId: FUNNEL }))).error).toBe("No lost stage configured for funnel");
+  });
+
+  it("falha quando o lead não possui negócio no funil", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    seedFunnel(mockTable);
     mockTable("pipeline_entries", []);
-
-    const result = await markAsLost({
-      supabase: sb,
-      organizationId: "org-1",
-      leadId: "lead-1",
-      conversationId: null,
-      params: {},
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("propostas");
+    expect((await markAsLost(input(sb, { pipelineId: FUNNEL }))).success).toBe(false);
   });
 });

@@ -28,7 +28,7 @@ const ORG_SPECIFIC_ID_FIELDS: Record<string, string> = {
   // então um workflow importado precisa avisar que ele ficou por configurar.
   fallbackInstanceId: "Instância de recuo",
   campaignId: "Campanha",
-  campaignStageId: "Estágio da Campanha",
+  campaignStageId: "Etapa da Campanha",
   campaignTemplateId: "Template da Campanha",
   templateSourceId: "Fonte do Template",
   assigneeId: "Responsável",

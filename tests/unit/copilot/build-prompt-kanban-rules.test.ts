@@ -78,6 +78,24 @@ beforeEach(() => {
 });
 
 describe("buildDynamicPrompt — regras da etapa atual (kanban)", () => {
+  it("mostra no contexto a posição do lead em qualquer funil pelo nome real", async () => {
+    const prompt = await buildDynamicPrompt(baseParams({
+      leadData: {
+        organization_id: "org-1",
+        funnel_positions: [{
+          pipeline_id: CUSTOM_PIPE_ID,
+          pipeline_slug: "vendas-industria",
+          pipeline_name: "Vendas Indústria",
+          stage_id: CUSTOM_STAGE_ID,
+          stage_key: "negociando",
+        }],
+      },
+    }));
+
+    expect(prompt).toContain("- Etapa no funil Vendas Indústria: negociando");
+    expect(prompt).not.toContain("Etapa no funil WhatsApp");
+  });
+
   it("regra em FUNIL CUSTOM (formato novo uuid+uuid) entra no prompt quando a entry está na etapa", async () => {
     pipelines[CUSTOM_PIPE_ID] = {
       id: CUSTOM_PIPE_ID, slug: "pos-venda", name: "Pós-venda", type: "custom", is_active: true,

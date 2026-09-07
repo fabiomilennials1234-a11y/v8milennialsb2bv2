@@ -59,8 +59,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FollowupRule } from "@/types/copilot";
-import { usePipeTypeOptions } from "../hooks/usePipeTypeOptions";
-import { useAllPipelineStageOptions } from "@/modules/pipelines";
+import { useCopilotFunnelOptions } from "../hooks/usePipeTypeOptions";
 import {
   useAgentFollowupRules,
   useCreateFollowupRule,
@@ -138,8 +137,7 @@ function RuleCard({
   const [localRule, setLocalRule] = useState(rule);
   const [tagInput, setTagInput] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
-  const { stagesByPipe } = useAllPipelineStageOptions();
-  const pipeTypeOptions = usePipeTypeOptions();
+  const { options: pipeTypeOptions, stagesByPipe, labelForRef } = useCopilotFunnelOptions();
 
   const updateLocalRule = (field: string, value: any) => {
     setLocalRule((prev) => ({ ...prev, [field]: value }));
@@ -337,7 +335,7 @@ function RuleCard({
               {/* Pipelines */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Pipelines</Label>
+                  <Label>Funis</Label>
                   <Select
                     value=""
                     onValueChange={(value) => {
@@ -368,7 +366,7 @@ function RuleCard({
                           updateLocalRule("filterPipes", (localRule.filterPipes || []).filter((p) => p !== pipe));
                         }}
                       >
-                        {pipeTypeOptions.find(p => p.value === pipe)?.label || pipe} ×
+                        {labelForRef(pipe)} ×
                       </Badge>
                     ))}
                   </div>

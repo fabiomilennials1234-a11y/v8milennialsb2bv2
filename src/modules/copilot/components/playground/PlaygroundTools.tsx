@@ -57,7 +57,7 @@ interface PlaygroundToolsProps {
 }
 
 export function PlaygroundTools({ tools, onChange, activePipes }: PlaygroundToolsProps) {
-  const pipeTypeOptions = usePipeTypeOptions();
+  const pipeTypeOptions = usePipeTypeOptions({ incluirCampanha: false });
   const [expandedTool, setExpandedTool] = useState<string | null>(null);
 
   const activeCount = Object.values(tools).filter((t) => t.enabled).length;

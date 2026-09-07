@@ -1,6 +1,6 @@
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { getTimeBasedVariables as getTimeVars } from '../_shared/time-variables.ts';
-import { getPipeEntriesByLeads } from "../_shared/pipeline-adapter.ts";
+import { getCurrentFunnelEntriesByLeads } from "../_shared/pipeline-adapter.ts";
 /**
  * Worker: Processa regras de follow-up do Copilot
  *
@@ -182,7 +182,7 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
           .in("lead_id", leadIds)
       : Promise.resolve({ data: [] });
 
-    const [{ data: allLeads }, { data: execRows }, waEntries, confEntries, propEntries, { data: stepLogs }] = await Promise.all([
+    const [{ data: allLeads }, { data: execRows }, currentEntries, { data: stepLogs }] = await Promise.all([
       supabase
         .from("leads")
         .select(`
@@ -193,6 +193,8 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
           email,
           origin,
           segment,
+          qualification_score,
+          qualified_at,
           ai_disabled,
           lead_tags(tag:tags(name)),
           upsell_clients(tipo_cliente_tempo, gestao_stage),
@@ -204,25 +206,20 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
         .select("lead_id")
         .eq("rule_id", rule.id)
         .in("lead_id", leadIds),
-      // ADR-0023 §10: o funil WhatsApp entra pelo NEGÓCIO, igual aos outros dois.
-      // `leads.pipe_whatsapp` saiu do SELECT — é espelho legado e não filtra mais.
-      getPipeEntriesByLeads(supabase, leadIds, orgId, "whatsapp"),
-      getPipeEntriesByLeads(supabase, leadIds, orgId, "confirmacao"),
-      getPipeEntriesByLeads(supabase, leadIds, orgId, "propostas"),
+      getCurrentFunnelEntriesByLeads(supabase, leadIds, orgId),
       stepLogPromise,
     ]);
 
-    // Build lookup maps for pipe entries
-    const waByLead = new Map(waEntries.map(e => [e.lead_id, { status: e.stage_key }]));
-    const confByLead = new Map(confEntries.map(e => [e.lead_id, { status: e.stage_key }]));
-    const propByLead = new Map(propEntries.map(e => [e.lead_id, { status: e.stage_key }]));
+    const entriesByLead = new Map<string, typeof currentEntries>();
+    for (const entry of currentEntries) {
+      const group = entriesByLead.get(entry.lead_id);
+      if (group) group.push(entry);
+      else entriesByLead.set(entry.lead_id, [entry]);
+    }
 
-    // Attach pipe data to leads for downstream filter compatibility
     const allLeadsWithPipes = (allLeads || []).map((l: any) => ({
       ...l,
-      pipe_whatsapp_entry: waByLead.get(l.id) ?? null,
-      pipe_confirmacao: confByLead.get(l.id) ? [confByLead.get(l.id)] : [],
-      pipe_propostas: propByLead.get(l.id) ? [propByLead.get(l.id)] : [],
+      current_funnel_entries: entriesByLead.get(l.id) ?? [],
     }));
 
     const leadMap = new Map(allLeadsWithPipes.map((l: any) => [l.id, l]));
@@ -290,17 +287,14 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
         continue;
       }
       if (filterPipes.length > 0) {
-        // Verificar se o lead está em algum dos pipes filtrados (todos os funis)
         const upsellClient = (lead as any).upsell_clients?.[0] || (lead as any).upsell_clients || null;
-        const confirmacao = (lead as any).pipe_confirmacao?.[0] || (lead as any).pipe_confirmacao || null;
-        const propostas = (lead as any).pipe_propostas?.[0] || (lead as any).pipe_propostas || null;
         const campanhaLead = (lead as any).campanha_leads?.[0] || (lead as any).campanha_leads || null;
         const leadPipes: string[] = [];
-        if (lead.pipe_whatsapp_entry?.status) leadPipes.push("whatsapp");
+        for (const entry of (lead.current_funnel_entries || [])) {
+          leadPipes.push(entry.pipeline_id, entry.pipeline_slug);
+        }
         if (upsellClient?.tipo_cliente_tempo) leadPipes.push("upsell_base");
         if (upsellClient?.gestao_stage) leadPipes.push("upsell_gestao");
-        if (confirmacao?.status) leadPipes.push("confirmacao");
-        if (propostas?.status) leadPipes.push("propostas");
         if (campanhaLead) leadPipes.push("campanha");
         const matchesPipe = filterPipes.some((fp: string) => leadPipes.includes(fp));
         if (!matchesPipe) {
@@ -310,15 +304,11 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
       }
       if (filterStages.length > 0) {
         const upsellClient = (lead as any).upsell_clients?.[0] || (lead as any).upsell_clients || null;
-        const confirmacao = (lead as any).pipe_confirmacao?.[0] || (lead as any).pipe_confirmacao || null;
-        const propostas = (lead as any).pipe_propostas?.[0] || (lead as any).pipe_propostas || null;
         const campanhaLead = (lead as any).campanha_leads?.[0] || (lead as any).campanha_leads || null;
         const allStages = [
-          lead.pipe_whatsapp_entry?.status || "",
+          ...(lead.current_funnel_entries || []).map((entry: any) => entry.stage_key),
           upsellClient?.tipo_cliente_tempo || "",
           upsellClient?.gestao_stage || "",
-          confirmacao?.status || "",
-          propostas?.status || "",
           (campanhaLead as any)?.campanha_stages?.name || "",
         ].filter(Boolean);
         if (!filterStages.some((fs: string) => allStages.includes(fs))) {
@@ -329,17 +319,19 @@ Deno.serve(withErrorBoundary('process-copilot-followups', async (req) => {
 
       // ---- Trigger eligibility for non-no_response types ----
       if (triggerType !== "no_response") {
-        const confirmacaoEntry = (lead as any).pipe_confirmacao?.[0] || (lead as any).pipe_confirmacao || null;
-        const propostasEntry = (lead as any).pipe_propostas?.[0] || (lead as any).pipe_propostas || null;
+        const funnelEntries = (lead.current_funnel_entries || []) as Array<any>;
+        const confirmacaoEntry = funnelEntries.find((entry) => entry.pipeline_slug === "confirmacao");
+        const propostasEntry = funnelEntries.find((entry) => entry.pipeline_slug === "propostas");
+        const relevantEntry = triggerType === "after_meeting_scheduled" ? confirmacaoEntry : propostasEntry;
         const triggerLead: TriggerLead = {
           qualification_score: (lead as any).qualification_score,
           qualified_at: (lead as any).qualified_at,
           pipe_stages: {
-            ...(confirmacaoEntry?.status ? { confirmacao: confirmacaoEntry.status } : {}),
-            ...(propostasEntry?.status ? { propostas: propostasEntry.status } : {}),
+            ...(confirmacaoEntry?.stage_key ? { confirmacao: confirmacaoEntry.stage_key } : {}),
+            ...(propostasEntry?.stage_key ? { propostas: propostasEntry.stage_key } : {}),
           },
           last_message_at: c.last_outgoing_at,
-          stage_changed_at: (lead as any).stage_changed_at,
+          stage_changed_at: relevantEntry?.stage_changed_at,
         };
         const triggerCheck = isLeadEligibleForTrigger({
           triggerType,

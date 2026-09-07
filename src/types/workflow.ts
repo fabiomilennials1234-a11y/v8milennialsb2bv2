@@ -240,8 +240,10 @@ export const WEEKDAY_OPTIONS = [
 
 export interface TriggerConfigLeadCreated {
   filter_origin?: string;
+  /** @deprecated Slug legado com/sem prefixo pipe_. */
   filter_pipe?: string;
-  filter_pipeline_id?: string;    // UUID for custom pipelines
+  /** UUID de pipelines para qualquer funil. */
+  filter_pipeline_id?: string;
 }
 
 export interface TriggerConfigStageChanged {
@@ -367,7 +369,7 @@ export interface TriggerConfigFieldChanged {
  * Trigger "Antes de uma data" (scheduled_date).
  *
  * Alvo = data da reunião marcada de cada lead (`pipeline_entries.metadata->>'meeting_date'`),
- * por-lead (não uma data global fixa). Audiência = 1 pipe + etapa(s) + origem opcional.
+ * por-lead (não uma data global fixa). Audiência = 1 funil + etapa(s) + origem opcional.
  * Cada item de `dispatches` dispara uma vez por lead por reunião; remarcar re-arma todos os itens.
  */
 export type ScheduledDispatchUnit = "days" | "hours" | "minutes";
@@ -391,9 +393,10 @@ export type ScheduledDispatchItem = ScheduledDispatchOnBook | ScheduledDispatchB
 export interface TriggerConfigScheduledDate {
   /** O funil (`pipelines.id`) — canônico para qualquer funil (SCRUM-627). */
   pipeline_id?: string;
-  /** @deprecated Legado: slug do pipe de sistema. O editor não grava mais. */
+  /** @deprecated Legado: slug do funil semeado. O editor não grava mais. */
   pipe_type?: string;
-  stages?: string[];        // etapa(s) selecionada(s); vazio = qualquer etapa do pipe
+  /** UUIDs de pipeline_stages; stage_key legado também é aceito. */
+  stages?: string[];
   filter_origin?: string;   // origem opcional
   dispatches: ScheduledDispatchItem[];
 }
@@ -554,8 +557,7 @@ export interface ActionNodeData {
   pipelineId?: string;
   /**
    * @deprecated Legado dos nós salvos: slug de sistema ("whatsapp") OU uuid de
-   * funil custom. O executor ainda aceita (e assume "whatsapp" quando nem isto
-   * existe — default histórico); o editor grava só `pipelineId`.
+   * funil custom. O executor ainda aceita; o editor grava só `pipelineId`.
    */
   pipeType?: string;
   /** Etapa de destino: stage_key (legado) ou `pipeline_stages.id` — os dois valem. */
@@ -571,8 +573,10 @@ export interface ActionNodeData {
   customFieldValue?: string;
   // Update rating
   ratingValue?: number;
-  // Duplicate to pipe
+  // Duplicate to funnel — campos abaixo existem só para leitura de nós antigos.
+  /** @deprecated Use `pipelineId`. */
   targetPipeType?: string;
+  /** @deprecated Use `targetStage`. */
   targetPipeStage?: string;
   // Mark as lost
   lostReason?: string;
@@ -1073,20 +1077,20 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_semi_automatic: "Envio Semi-Automático",
   send_to_number: "Enviar p/ número fixo",
   // Lead Management
-  move_stage: "Mover Estágio",
+  move_stage: "Mover para Etapa",
   add_tag: "Adicionar Tag",
   remove_tag: "Remover Tag",
   update_lead_field: "Atualizar Campo do Lead",
   update_custom_field: "Atualizar Campo Customizado",
   update_rating: "Atualizar Rating",
   calculate_score: "Calcular Lead Score (IA)",
-  duplicate_to_pipe: "Duplicar em Outro Pipe",
-  remove_from_pipe: "Remover do Pipe",
+  duplicate_to_pipe: "Adicionar a Outro Funil",
+  remove_from_pipe: "Remover do Funil",
   mark_as_lost: "Marcar como Perdido",
   // Campanhas
   add_to_campaign: "Adicionar à Campanha",
   remove_from_campaign: "Remover da Campanha",
-  move_campaign_stage: "Mover Estágio na Campanha",
+  move_campaign_stage: "Mover Etapa na Campanha",
   send_campaign_message: "Enviar Mensagem da Campanha",
   pause_campaign_sequence: "Pausar Sequência da Campanha",
   resume_campaign_sequence: "Retomar Sequência da Campanha",
@@ -1120,7 +1124,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
 
 export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   lead_created: "Lead Criado",
-  stage_changed: "Mudança de Estágio",
+  stage_changed: "Mudança de Etapa",
   tag_added: "Tag Adicionada",
   score_reached: "Score Atingido",
   cron: "Agendamento (Cron)",
@@ -1161,8 +1165,8 @@ export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
   is_not_empty: "Não está vazio",
   has_tag: "Tem a tag",
   not_has_tag: "Não tem a tag",
-  in_stage: "Está no estágio",
-  not_in_stage: "Não está no estágio",
+  in_stage: "Está na etapa",
+  not_in_stage: "Não está na etapa",
   starts_with: "Começa com",
   ends_with: "Termina com",
   in_list: "Está na lista",
@@ -1317,10 +1321,10 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { key: "{{origem}}",        label: "Origem do lead",                category: "Lead" },
   { key: "{{urgencia}}",      label: "Urgência",                      category: "Lead" },
   { key: "{{observacoes}}",   label: "Observações",                   category: "Lead" },
-  // Pipeline
-  { key: "{{estagio}}",       label: "Estágio atual no funil",        category: "Pipeline" },
-  { key: "{{data_reuniao}}",  label: "Data da reunião",               category: "Pipeline" },
-  { key: "{{valor_proposta}}",label: "Valor da proposta",             category: "Pipeline" },
+  // Funil
+  { key: "{{estagio}}",       label: "Etapa atual no funil",          category: "Funil" },
+  { key: "{{data_reuniao}}",  label: "Data da reunião",               category: "Funil" },
+  { key: "{{valor_proposta}}",label: "Valor da proposta",             category: "Funil" },
   // Responsável
   { key: "{{responsavel}}",            label: "Nome do responsável",          category: "Responsável" },
   { key: "{{responsavel_telefone}}",   label: "Telefone do responsável",      category: "Responsável" },
@@ -1332,7 +1336,7 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { key: "{{negocio_titulo}}",   label: "Título do negócio",   category: "Negócio" },
   { key: "{{negocio_valor}}",    label: "Valor do negócio",    category: "Negócio" },
   { key: "{{campanha_nome}}",    label: "Nome da campanha",    category: "Campanha" },
-  { key: "{{campanha_estagio}}", label: "Estágio na campanha", category: "Campanha" },
+  { key: "{{campanha_estagio}}", label: "Etapa na campanha", category: "Campanha" },
   // I.A.
   { key: "{{ai_resumo}}",        label: "Resumo da conversa (I.A.)",       category: "I.A." },
   { key: "{{ai_sentimento}}",    label: "Sentimento (positive/neutral/negative)", category: "I.A." },
@@ -1357,7 +1361,7 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
     triggers: ["lead_replied", "lead_no_reply"],
   },
   {
-    label: "Pipeline",
+    label: "Funil",
     // `meeting_confirmed`/`meeting_not_confirmed` SAÍRAM daqui: nunca
     // dispararam (ver a nota na união de tipos) e ofereciam um nó que não faz
     // nada, ao lado de dois que fazem.

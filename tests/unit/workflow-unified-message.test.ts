@@ -32,6 +32,24 @@ vi.mock("../../supabase/functions/_shared/instance-write-guard.ts", () => ({
   StrictWriteResolutionError: class extends Error { errorCode = "test"; },
 }));
 
+// Roteamento é o dono atual da escolha da instância. O mock antigo cobria o
+// guard removido deste caminho e fazia todos os envios falharem antes do
+// dispatcher, embora cada teste tivesse uma instância válida no banco fake.
+vi.mock("../../supabase/functions/_shared/instance-routing.ts", () => ({
+  resolveRoutedInstance: vi.fn().mockResolvedValue({
+    ok: true,
+    instance: {
+      id: "wi-1",
+      organization_id: "org-1",
+      instance_name: "MainInstance",
+      status: "open",
+      is_active: true,
+      provider: "uazapi",
+    },
+  }),
+  isInstanceLive: vi.fn().mockReturnValue(true),
+}));
+
 vi.mock("../../supabase/functions/_shared/whatsapp-client.ts", () => ({
   getWhatsAppProvider: vi.fn().mockResolvedValue({ sendAudio: vi.fn() }),
 }));
