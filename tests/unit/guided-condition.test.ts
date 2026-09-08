@@ -247,3 +247,38 @@ it.each(['utm_campaign', 'utm_source', 'utm_medium', 'utm_content', 'utm_term'])
     version: 1, id: 'campaign', field: `lead.${field}`, operator: 'equals', value: '[verao] b2b.',
   } })).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'campaign', status: 'evaluated', matched: true, actual: '[VERÃO] B2B.' }] });
 });
+
+
+it('compares a selected origin identity using its current code and explains its current name', async () => {
+  const originId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => {
+      const url = String(input);
+      return new Response(JSON.stringify(url.includes('/rpc/test_guided_condition_origins')
+        ? [{ actual_origin: 'referral', origins: [{ id: originId, name: 'Parceiros', slug: 'referral' }] }]
+        : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  expect(await evaluateGuidedCondition(database, {
+    organizationId: 'org-1', leadId: 'lead-1',
+    condition: { version: 1, id: 'origin', field: 'lead.origin', operator: 'equals', originId: originId.toUpperCase() },
+  })).toEqual({ status: 'evaluated', matched: true,
+    rules: [{ id: 'origin', status: 'evaluated', matched: true, actual: 'referral',
+      reference: { id: originId, name: 'Parceiros' } }],
+  });
+});
+
+
+it('denies organizational origin evaluation until its explicit authorized reader exists', async () => {
+  let reads = 0;
+  const database = createClient('https://db.example.test', 'test-service-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => { reads++; return new Response('{}'); } },
+  });
+  expect(await evaluateGuidedCondition(database, {
+    organizationId: 'org-1', leadId: 'lead-1', authorization: { kind: 'organization', workflowId: 'workflow-1' },
+    condition: { version: 1, id: 'origin', field: 'lead.origin', operator: 'is_empty' },
+  })).toEqual({ status: 'error', code: 'access_denied' });
+  expect(reads).toBe(0);
+});

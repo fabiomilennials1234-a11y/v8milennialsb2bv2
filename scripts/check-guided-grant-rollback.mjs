@@ -65,6 +65,9 @@ const campaignRollback = readFileSync(`supabase/migrations/rollback/${campaignMi
 const utmMigration = '20271017000020_guided_utm_authorization.sql';
 const utmForward = readFileSync(`supabase/migrations/${utmMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const utmRollback = readFileSync(`supabase/migrations/rollback/${utmMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const originMigration = '20271017000021_guided_personal_origin_test.sql';
+const originForward = readFileSync(`supabase/migrations/${originMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const originRollback = readFileSync(`supabase/migrations/rollback/${originMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -85,6 +88,12 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${originRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_origins(uuid,uuid,uuid[])') IS NOT NULL THEN
+    RAISE EXCEPTION 'personal origin test still callable after rollback';
+  END IF;
+END $$;
 ${utmRollback}
 ${campaignRollback}
 ${scoreRollback}
@@ -204,6 +213,14 @@ ${activationForward}
 -- Migration 20 restores the complete field contract without narrowing retained grants.
 ${utmForward}
 ${tagForward}
+${originForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_origins(uuid,uuid,uuid[])', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_origins(uuid,uuid,uuid[])', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_origins(uuid,uuid,uuid[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'personal origin test grants invalid';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[])', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[])', 'EXECUTE')

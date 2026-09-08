@@ -7,7 +7,11 @@ export type GuidedScalarRule = {
   field: GuidedTextField;
 } & GuidedTextComparison;
 
-export type GuidedRule = GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedOriginRule = { version: 1; id: string; field: 'lead.origin' } & (
+  { operator: 'equals' | 'not_equals'; originId: string } | { operator: 'is_empty' }
+);
+
+export type GuidedRule = GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -35,6 +39,9 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && rule.children.every(child => valid(child, groupDepth + 1));
     }
     if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
+    if (rule.field === 'lead.origin') return rule.operator === 'is_empty'
+      || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.originId === 'string'
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.originId));
     if (rule.field === 'lead.tags') return (rule.operator === 'has_tag' || rule.operator === 'not_has_tag')
       && typeof rule.tagId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.tagId);
     if (isGuidedNumberField(rule.field)) return rule.operator === 'is_empty'
@@ -69,9 +76,15 @@ export async function evaluateGuidedCondition(
     return { status: 'error' as const, code: 'invalid_configuration' as const };
   }
   const requestedFields = guidedConditionFields(request.condition);
+  // Origin organizational reads remain disabled until their explicit grant and atomic reader exist.
+  if (request.authorization && requestedFields.includes('lead.origin')) {
+    return { status: 'error' as const, code: 'access_denied' as const };
+  }
+  const originIds = new Set<string>();
   const tagIds = new Set<string>();
   function collect(current: GuidedCondition): void {
     if ('children' in current) current.children.forEach(collect);
+    else if (current.field === 'lead.origin' && current.operator !== 'is_empty') originIds.add(current.originId.toLowerCase());
     else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
   }
   collect(request.condition);
@@ -137,6 +150,33 @@ export async function evaluateGuidedCondition(
     }
     if ([...tagIds].some(id => !tags.has(id))) return { status: 'error' as const, code: 'reference_unavailable' as const };
   }
+  type OriginValue = { id: string; name: string; slug: string };
+  const origins = new Map<string, OriginValue>();
+  let actualOrigin: string | null = null;
+  if (requestedFields.includes('lead.origin')) {
+    const response = await caller.rpc('test_guided_condition_origins', {
+      p_organization_id: request.organizationId, p_lead_id: request.leadId, p_origin_ids: [...originIds],
+    });
+    if (response.error) {
+      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
+        : response.error.code === 'PT404' ? 'context_unavailable' as const
+        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
+        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+      return { status: 'error' as const, code };
+    }
+    const rows = response.data;
+    if (!Array.isArray(rows) || rows.length !== 1 || !rows[0]
+      || (rows[0].actual_origin !== null && typeof rows[0].actual_origin !== 'string')
+      || !Array.isArray(rows[0].origins)) return { status: 'error' as const, code: 'source_unavailable' as const };
+    actualOrigin = rows[0].actual_origin;
+    for (const origin of rows[0].origins) {
+      if (!origin || typeof origin.id !== 'string' || typeof origin.name !== 'string' || typeof origin.slug !== 'string') {
+        return { status: 'error' as const, code: 'source_unavailable' as const };
+      }
+      origins.set(origin.id.toLowerCase(), origin);
+    }
+    if ([...originIds].some(id => !origins.has(id))) return { status: 'error' as const, code: 'reference_unavailable' as const };
+  }
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   const record = (request.authorization && (usesFieldReader || usesTagReader)
     ? (data as unknown as { field_values: Record<string, unknown> }).field_values : data) as Record<string, unknown>;
@@ -170,6 +210,16 @@ export async function evaluateGuidedCondition(
         decided = condition.match === 'all' ? !matched : matched;
       }
       return group.matched;
+    }
+    if (condition.field === 'lead.origin') {
+      const empty = actualOrigin === null || actualOrigin === '';
+      const origin = condition.operator === 'is_empty' ? undefined : origins.get(condition.originId.toLowerCase())!;
+      // Slugs encode catalogue identity: unlike display text, their case is significant.
+      const matched = condition.operator === 'is_empty' ? empty
+        : !empty && (condition.operator === 'equals' ? actualOrigin === origin!.slug : actualOrigin !== origin!.slug);
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual: actualOrigin,
+        ...(origin ? { reference: { id: origin.id, name: origin.name } } : {}) });
+      return matched;
     }
     if (condition.field === 'lead.tags') {
       const tag = tags.get(condition.tagId.toLowerCase())!;

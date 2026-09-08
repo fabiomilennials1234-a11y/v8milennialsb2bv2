@@ -413,3 +413,15 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 
 - Final full browser: 60 passed. Final real integration: 38 passed, including each UTM field's personal evaluation, exact caller-RLS suggestion projection, foreign-organization exclusion, explicit grant/publication/pinned execution and revocation. All handles terminal. No ticket certified.
 - Next origin investigation corrected an obsolete assumption in earlier hook documentation: the live preview and baseline lead_origins have UUID id, non-null organization_id, name, slug and is_active. The archived registry migration describes global rows, but the current schema does not permit them. Current origin work must resolve organization-specific UUID references and actual slug semantics; do not expose hardcoded fallback choices as verified live references.
+
+
+## 2026-09-08 — personal origin identity and evaluation
+
+- Revalidated the previous pending process: its handle was missing and no integration/apply process remained live. Live database confirms migration 21 registered and effective EXECUTE restricted to authenticated. Focused real RPC test passed. No reapplication of an uncertain migration was attempted.
+- Public evaluator red→green adds origin equals/not_equals/is_empty with UUID configuration. Values compare the selected catalogue entry's current slug exactly; display-name normalization must not merge distinct codes. Current name is returned as reference explanation. All requested identities are resolved before group short-circuit; null/empty does not satisfy not_equals.
+- Real RPC and HTTP integration covers rename, inactive catalogue entry, same-name replacement after deletion, foreign lead/reference denial, exact-code comparison, negative comparison with absence and unavailable reference in a dispensable group branch. Old preview HTTP returned 422; deployed personal endpoint only, then focused integration passed. Organizational origin reads are explicitly denied before any database access until the explicit grant/atomic reader path is implemented.
+- Added an optional test-name pattern to the preview runner, preserving its fixed test file and target safeguards. This speeds focused red→green checks without substituting them for full regression.
+- Twenty-two-migration reverse rollback/superset recovery passed. Deno evaluator check and focused ESLint/diff passed. Evaluator, HTTP boundary, executor and publication unit suites: 84 passed across their runs. Full real integration and typecheck ratchet pending. Origin UI, automatic authorization/publication and the remainder of ticket 06 remain required; no ticket certified, no worker/production deployment, no final HITL yet.
+
+
+- Final full real integration: 39 passed. Typecheck ratchet: zero introduced errors (805 baseline + 11 inherited tolerated; 481 current). All validation handles terminal. Personal endpoint deployed only on preview. Next path is the origin catalogue selector plus summary/result metadata, followed by explicit organizational scope/atomic reader/publication; these remain implementation work, not release-ready capability. All 21 tickets remain open.

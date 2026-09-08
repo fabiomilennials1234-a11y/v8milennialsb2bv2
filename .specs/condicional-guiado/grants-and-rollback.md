@@ -131,3 +131,10 @@ Rollback restores migration 18's functions while retaining wider storage CHECK a
 Applied/registered atomically on preview only. Source, Medium, Content and Term each have their own explicit grant, exact scalar projection and publication support. Existing campaign/name/tag/score approvals are not broadened. Effective privileges verified on the live database: readers/finalizer service-only; grant writer authenticated-only with unchanged business administration checks.
 
 Rollback restores migration 19 functions while keeping the wider CHECK, approval history, immutable versions and execution pins. Stop guided admission before rollback; the newly unsupported fields fail closed. Twenty-one-file reverse rollback/recovery passed with eleven-field synthetic history preserved. Full recovery now runs 00..11, 20 (supersedes 12/13/15/16/17/18/19), then 14. Do not replay narrower CHECK definitions over retained history. Fresh installation remains numerical. No production changes.
+
+
+### Personal origin migration 20271017000021
+
+Applied and registered on preview only. The authenticated-only SECURITY INVOKER RPC reads the current lead origin code and all requested organization-specific origin UUIDs within one STABLE statement snapshot under caller RLS. Inactive catalogue entries remain valid historical references; deleted entries are unavailable even if a new entry reuses the name and slug. Empty origin is returned explicitly. Effective EXECUTE verified live: authenticated true, anon/service_role false.
+
+Rollback drops only the personal RPC; no catalogue, lead, grant or version data is deleted. The personal test then fails closed with a source error. Twenty-two-file reverse rollback/reapply rehearsal passed, preserving eleven-field approval/version/pin fixtures and restoring authenticated-only execution. Full recovery is 00..11, 20, 14, 21; fresh installation remains numerical. Origin organizational grant/read/publication support is still pending and explicitly denied by the evaluator before any database read. No production changes.

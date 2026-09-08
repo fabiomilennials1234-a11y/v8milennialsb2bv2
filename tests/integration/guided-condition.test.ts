@@ -914,6 +914,62 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('resolves origin identity and current lead code together under caller RLS', async () => {
+    const originId = crypto.randomUUID(), foreignId = crypto.randomUUID(), replacementId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    try {
+      expect((await service.from('lead_origins').insert([
+        { id: originId, organization_id: orgA, name: 'Indicação comercial', slug: 'guided_referral' },
+        { id: foreignId, organization_id: orgB, name: 'Indicação comercial', slug: 'guided_referral' },
+      ])).error).toBeNull();
+      expect((await service.from('leads').update({ origin: 'guided_referral' }).eq('id', leadA)).error).toBeNull();
+      const args = { p_organization_id: orgA, p_lead_id: leadA, p_origin_ids: [originId] };
+      const read = await caller.rpc('test_guided_condition_origins', args);
+      expect(read.error).toBeNull();
+      expect(read.data).toEqual([{ actual_origin: 'guided_referral', origins: [{ id: originId, name: 'Indicação comercial', slug: 'guided_referral' }] }]);
+      expect((await caller.rpc('test_guided_condition_origins', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
+      expect((await caller.rpc('test_guided_condition_origins', { ...args, p_origin_ids: [foreignId] })).error?.code).toBe('PT422');
+      expect((await service.rpc('test_guided_condition_origins', args)).error?.code).toBe('42501');
+      expect((await service.from('lead_origins').update({ name: 'Parceiros', is_active: false }).eq('id', originId)).error).toBeNull();
+      expect((await caller.rpc('test_guided_condition_origins', args)).data).toEqual([{ actual_origin: 'guided_referral', origins: [{ id: originId, name: 'Parceiros', slug: 'guided_referral' }] }]);
+      const condition = { version: 1, id: 'origin', field: 'lead.origin', operator: 'equals', originId: originId.toUpperCase() };
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: 'evaluated', matched: true,
+        rules: [{ id: 'origin', status: 'evaluated', matched: true, actual: 'guided_referral', reference: { id: originId, name: 'Parceiros' } }],
+      });
+      const request = { organizationId: orgA, leadId: leadA, condition };
+      expect(await evaluateGuidedCondition(caller, { ...request, leadId: leadB })).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { ...condition, originId: foreignId } })).toEqual({ status: 'error', code: 'reference_unavailable' });
+      // Different catalogue codes remain different even when display-text normalization would merge them.
+      expect((await service.from('leads').update({ origin: 'GUIDED_REFERRAL' }).eq('id', leadA)).error).toBeNull();
+      expect(await evaluateGuidedCondition(caller, request)).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { ...condition, operator: 'not_equals' } })).toMatchObject({ status: 'evaluated', matched: true });
+      expect((await service.from('lead_origins').delete().eq('id', originId)).error).toBeNull();
+      expect((await service.from('lead_origins').insert({ id: replacementId, organization_id: orgA, name: 'Parceiros', slug: 'guided_referral' })).error).toBeNull();
+      expect((await caller.rpc('test_guided_condition_origins', args)).error?.code).toBe('PT422');
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: {
+        version: 1, id: 'group', kind: 'group', match: 'any', children: [
+          { version: 1, id: 'name', field: 'lead.name', operator: 'equals', value: 'José' }, condition,
+        ],
+      } })).toEqual({ status: 'error', code: 'reference_unavailable' });
+      expect((await service.from('leads').update({ origin: null }).eq('id', leadA)).error).toBeNull();
+      expect((await caller.rpc('test_guided_condition_origins', { ...args, p_origin_ids: [] })).data).toEqual([{ actual_origin: null, origins: [] }]);
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { ...condition, operator: 'not_equals', originId: replacementId } })).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { version: 1, id: 'empty', field: 'lead.origin', operator: 'is_empty' } })).toEqual({
+        status: 'evaluated', matched: true, rules: [{ id: 'empty', status: 'evaluated', matched: true, actual: null }],
+      });
+    } finally {
+      await service.from('leads').update({ origin: null }).eq('id', leadA).throwOnError();
+      await service.from('lead_origins').delete().in('id', [originId, foreignId, replacementId]).throwOnError();
+    }
+  }, 60000);
+
   it('validates all tag identities before deciding membership through caller RLS', async () => {
     const assigned = crypto.randomUUID();
     const unassigned = crypto.randomUUID();

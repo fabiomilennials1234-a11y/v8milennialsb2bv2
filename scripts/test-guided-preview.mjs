@@ -1,6 +1,6 @@
 /** Run the real condition integration seam on an explicitly verified preview.
  * Credentials stay in memory and are passed only to the test child process.
- * Usage: node scripts/test-guided-preview.mjs <preview-ref>
+ * Usage: node scripts/test-guided-preview.mjs <preview-ref> [test-name-pattern]
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 
@@ -25,5 +25,5 @@ for (const key of ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_K
   if (!values[key]) throw new Error(`Preview did not return ${key}`);
   env[key] = values[key];
 }
-const result = spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 'tests/integration/guided-condition.test.ts'], { env, stdio: 'inherit' });
+const result = spawnSync(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', 'tests/integration/guided-condition.test.ts', ...(process.argv[3] ? ['-t', process.argv[3]] : [])], { env, stdio: 'inherit' });
 process.exitCode = result.status ?? 1;
