@@ -175,3 +175,32 @@ preservam semântica anterior. Edição não renomeia nem cria tags.
 
 Publicação desta correção requer frontend + `process-workflow-executions`
 (helper compartilhado `workflow-condition-evaluator.ts`). Sem migration.
+
+### Controles guiados do nó Condição — 2026-09-08
+
+Operadores e tipo de valor são definidos em `lib/condition-field-controls.ts`.
+
+| Campo | Controle |
+| --- | --- |
+| Nome, empresa, email, telefone | Texto com operadores textuais; placeholders específicos |
+| Origem | Catálogo de origens por slug |
+| UTMs | Combobox com valores observados; permite texto novo |
+| Segmento, urgência, faturamento | Combobox com valores de leads visíveis da org; não inventa enum/faixas |
+| Tag | Catálogo de tags; associação exata |
+| Etapa | Dropdown com funil + etapa, salvo por UUID |
+| Responsáveis | Catálogo de membros; seleção indisponível preservada e sinalizada |
+| Avaliação | Dropdown de 1 a 5 estrelas |
+| Pontuação, valor do negócio, dias na etapa | Input numérico com unidade/limites pertinentes |
+| Tem negócio aberto | Sim/Não; operadores booleanos não pedem valor |
+| Campo personalizado | Nome cadastrado; valor respeita text/number/date/select/boolean e field_options |
+| Horário | Dias selecionáveis por teclado, horários nativos e fuso |
+
+Última mensagem, quantidade de mensagens e dias sem contato não são resolvidos
+pelo avaliador atual nem colunas de `leads`. Não são oferecidos a novas regras;
+configurações legadas ficam visíveis com aviso, sem alteração automática.
+
+Operadores incompatíveis salvos ficam identificados como antigos. Trocas de domínio
+limpam valor e ajustam operador incompatível; papéis de responsável e UTMs preservam
+valores compartilhados. Data oferece igualdade/vazio: o executor legado não implementa
+comparação cronológica. Sugestões de campos livres leem amostra limitada a 1000 leads
+sob RLS + filtro de org e nunca são tratadas como catálogo exaustivo.
