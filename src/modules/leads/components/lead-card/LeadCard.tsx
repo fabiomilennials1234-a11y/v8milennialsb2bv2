@@ -210,7 +210,7 @@ export function LeadCard({
                   Cliente
                 </span>
               ) : (
-                <span className="shrink-0 text-[13px] text-muted-foreground">Lead</span>
+                <span className="shrink-0 text-[13px] text-muted-foreground">{lead.relacao === "perdido" ? "Perdido" : "Lead"}</span>
               )}
 
               <span className="h-3 w-px shrink-0 bg-border" aria-hidden="true" />

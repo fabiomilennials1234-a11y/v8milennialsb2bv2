@@ -78,7 +78,7 @@ export interface DealCardLeadRef {
   empresa: string | null;
   telefone: string | null;
   /** `Cliente` quando a pessoa já comprou alguma vez — ADR-0023 §6/§7. */
-  relacao: "lead" | "cliente";
+  relacao: "lead" | "cliente" | "perdido";
 
   /**
    * ── O bloco do lead DENTRO do negócio ──────────────────────────────────

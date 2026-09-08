@@ -211,7 +211,7 @@ export function LeadListHeader({ selectAll, sort, onSortChange }: LeadListHeader
  */
 function RelacaoCell({ standing }: { standing?: LeadStanding }) {
   if (standing?.relacao !== "cliente") {
-    return <span className="text-[13px] text-muted-foreground">Lead</span>;
+    return <span className="text-[13px] text-muted-foreground">{standing?.relacao === "perdido" ? "Perdido" : "Lead"}</span>;
   }
 
   return (
