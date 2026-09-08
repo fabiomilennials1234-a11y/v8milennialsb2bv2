@@ -90,7 +90,7 @@ INSERT INTO public.leads
    NULL, false, NULL)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.custom_pipe_entries
+INSERT INTO public.pipeline_entries
   (id, organization_id, pipeline_id, lead_id, stage_id, entered_at) VALUES
   ('3680c17e-0000-4000-8000-0000000000c5', '36800000-0000-4000-8000-00000000000c',
    '36809191-0000-4000-8000-00000000000c', '3680ead1-0000-4000-8000-0000000000c5',

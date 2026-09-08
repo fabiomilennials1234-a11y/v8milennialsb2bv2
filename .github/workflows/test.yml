@@ -201,7 +201,9 @@ jobs:
       - name: Run RLS invariant suite (red fixture + clean gate)
         run: bash supabase/tests/run.sh
         env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          # Isolated CI only. Initial superuser is needed by tests that switch
+          # SESSION AUTHORIZATION to model PostgREST (not merely SET ROLE).
+          DATABASE_URL: postgresql://supabase_admin:postgres@127.0.0.1:54322/postgres
 
   e2e-tests:
     name: E2E Tests

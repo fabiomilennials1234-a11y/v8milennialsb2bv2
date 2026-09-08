@@ -86,10 +86,8 @@ SELECT is_empty(
      WHERE lead_id = 'deadbeef-1775-4000-8000-00000000c003' $$,
   '(COMPORTAMENTO) Lead inserido não gerou linha em pipeline_entries');
 
-SELECT is_empty(
-  $$ SELECT id FROM public.custom_pipe_entries
-     WHERE lead_id = 'deadbeef-1775-4000-8000-00000000c003' $$,
-  '(COMPORTAMENTO) nem em custom_pipe_entries');
+SELECT ok(to_regclass('public.custom_pipe_entries') IS NULL,
+  '(COMPORTAMENTO) o espelho custom removido não foi recriado');
 
 -- Sem card, sem Negócio — e o Lead continua na base, que é o ponto do ADR-0030.
 SELECT is_empty(
