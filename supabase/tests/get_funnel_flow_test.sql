@@ -161,6 +161,12 @@ VALUES
   ('99699699-aaaa-0000-0000-000000000996','99699699-aaaa-3333-00c1-000000000996','99699699-aaaa-4444-0002-000000000996', 'c_novo',  'c_prog', '2027-07-06 10:00-03','backfill'),
   ('99699699-aaaa-0000-0000-000000000996','99699699-aaaa-3333-00c2-000000000996','99699699-aaaa-4444-0002-000000000996', NULL,      'c_novo', '2027-07-05 11:00-03','backfill');
 
+-- Replica fixtures bypass the canonical pipeline FK assignment trigger.
+UPDATE public.pipeline_stages
+SET pipeline_id = '99699699-aaaa-4444-0001-000000000996'
+WHERE organization_id = '99699699-aaaa-0000-0000-000000000996'
+  AND pipeline_type = 'propostas';
+
 SET LOCAL session_replication_role = origin;
 
 -- Contexto de BACKEND a partir daqui (SCRUM-361).

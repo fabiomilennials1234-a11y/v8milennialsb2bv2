@@ -61,7 +61,7 @@ ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.pipeline_stages (organization_id, pipeline_type, stage_key, name, position, is_active)
 VALUES ('deadbeef-1775-4000-8000-00000000c001', 'whatsapp', 'novo', 'Novo Lead', 1, true)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (pipeline_id, stage_key) DO NOTHING;
 
 -- Prova que a fixture é o cenário certo, e não um cenário vazio que passaria
 -- por acidente.

@@ -28,7 +28,7 @@ INSERT INTO public.pipeline_stages (organization_id, pipeline_type, stage_key, n
 VALUES
   ('e2a52000-0000-4000-8000-000000000001', 'whatsapp', 'novo',       'Novo Lead',  0, (SELECT (enum_range(NULL::public.stage_role))[1])),
   ('e2a52000-0000-4000-8000-000000000001', 'whatsapp', 'compareceu', 'Compareceu', 1, (SELECT (enum_range(NULL::public.stage_role))[1]))
-ON CONFLICT DO NOTHING;
+ON CONFLICT (pipeline_id, stage_key) DO NOTHING;
 
 -- Pipeline CUSTOM (type='custom'): entries em pipeline_entries, stages em
 -- custom_pipeline_stages por pipeline_id (pipelines.id==custom_pipelines.id).
@@ -36,9 +36,9 @@ ON CONFLICT DO NOTHING;
 INSERT INTO public.pipelines (id, organization_id, name, slug, type)
 VALUES ('e2a52000-0000-4000-8000-0000000000c1', 'e2a52000-0000-4000-8000-000000000001', 'Meu Funil', 'meu-funil', 'custom')
 ON CONFLICT (id) DO NOTHING;
-INSERT INTO public.custom_pipeline_stages (organization_id, pipeline_id, stage_key, name, stage_role)
-VALUES ('e2a52000-0000-4000-8000-000000000001', 'e2a52000-0000-4000-8000-0000000000c1', 'proposta_x', 'Proposta Enviada', (SELECT (enum_range(NULL::public.stage_role))[1]))
-ON CONFLICT DO NOTHING;
+INSERT INTO public.pipeline_stages (organization_id, pipeline_id, stage_key, name, position, stage_role)
+VALUES ('e2a52000-0000-4000-8000-000000000001', 'e2a52000-0000-4000-8000-0000000000c1', 'proposta_x', 'Proposta Enviada', 0, (SELECT (enum_range(NULL::public.stage_role))[1]))
+ON CONFLICT (pipeline_id, stage_key) DO NOTHING;
 
 -- Entries abertas: 2 em 'novo' (sistema), 1 em 'compareceu' (sistema), 1 custom.
 INSERT INTO public.pipeline_entries (organization_id, pipeline_id, stage_key, closed_at)
@@ -47,6 +47,14 @@ VALUES
   ('e2a52000-0000-4000-8000-000000000001', 'e2a52000-0000-4000-8000-0000000000a1', 'novo',       NULL),
   ('e2a52000-0000-4000-8000-000000000001', 'e2a52000-0000-4000-8000-0000000000a1', 'compareceu', NULL),
   ('e2a52000-0000-4000-8000-000000000001', 'e2a52000-0000-4000-8000-0000000000c1', 'proposta_x', NULL);
+
+UPDATE public.pipeline_stages SET pipeline_id = 'e2a52000-0000-4000-8000-0000000000a1'
+WHERE organization_id = 'e2a52000-0000-4000-8000-000000000001' AND pipeline_type = 'whatsapp';
+UPDATE public.pipeline_entries e SET stage_id = s.id
+FROM public.pipeline_stages s
+WHERE e.organization_id = 'e2a52000-0000-4000-8000-000000000001'
+  AND s.organization_id = e.organization_id AND s.pipeline_id = e.pipeline_id
+  AND s.stage_key = e.stage_key;
 
 SET LOCAL session_replication_role = DEFAULT;
 SET LOCAL role postgres;

@@ -72,7 +72,7 @@ INSERT INTO public.pipelines (id, organization_id, name, slug, type) VALUES
   ('12031203-9111-0000-0000-000000001203', '12031203-aaaa-0000-0000-000000001203', 'Pipe 1203', 'pipe-1203', 'custom')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.custom_pipeline_stages (id, organization_id, pipeline_id, stage_key, name, position, stage_role) VALUES
+INSERT INTO public.pipeline_stages (id, organization_id, pipeline_id, stage_key, name, position, stage_role) VALUES
   ('12031203-9222-0000-0000-000000001203', '12031203-aaaa-0000-0000-000000001203', '12031203-9111-0000-0000-000000001203', 'ganho', 'Ganho', 1, 'won')
 ON CONFLICT (id) DO NOTHING;
 

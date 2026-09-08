@@ -49,7 +49,7 @@ INSERT INTO public.pipelines (id, organization_id, name, slug, type, is_active) 
    'Prospecção D', 'prospeccao-d', 'custom', true)
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.custom_pipeline_stages
+INSERT INTO public.pipeline_stages
   (id, organization_id, pipeline_id, stage_key, name, position, is_active, stage_role) VALUES
   ('36805747-0000-4000-8000-00000000000c', '36800000-0000-4000-8000-00000000000c',
    '36809191-0000-4000-8000-00000000000c', 'prospect', 'Prospect', 1, true, 'open'),

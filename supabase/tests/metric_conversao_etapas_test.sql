@@ -84,7 +84,7 @@ ON CONFLICT (id) DO NOTHING;
 -- ⚠ `stage_role` é NOT NULL com default 'open'. O comentário de
 -- `metric_stage_role` fala em "NULL = nenhum governa", mas esse NULL vem de a
 -- LINHA não existir, não da coluna. Passar NULL aqui estoura 23502.
-INSERT INTO public.custom_pipeline_stages
+INSERT INTO public.pipeline_stages
   (id, organization_id, pipeline_id, stage_key, name, position, is_active, stage_role) VALUES
   ('31605747-0000-4000-8000-000000000001', '31600000-0000-4000-8000-00000000000a',
    '31609191-0000-4000-8000-00000000000a', 'proposta', 'Proposta', 1, true, 'open'),
