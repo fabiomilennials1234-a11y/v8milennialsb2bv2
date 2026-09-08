@@ -62,3 +62,18 @@ de que explicam todos os relatos de produção.
 Nenhuma nova branch Supabase foi criada. A branch de outra tarefa,
 `codex-condicional-20260907`, continua vinculada ao PR aberto #2038 e não foi
 excluída sem comprovação de desuso.
+
+## Continuação autorizada pelo CTO
+
+- A proposta de rating foi movida integralmente (rename 100%) para
+  `supabase/proposals/`, com plano de retomada documentado. Isto reconcilia
+  o bootstrap com a ausência comprovada desse apply em produção; não simula
+  sua aplicação no ledger nem muda os leitores já aplicados. O ensaio antigo
+  aponta para o novo local e continua pendente de revalidação.
+- Mock de `recriar-etapa-excluida` atualizado para a RPC efetivamente usada,
+  mantendo estado e verificação de unicidade. Os 14 testes passaram.
+- Nova rodada local: 287 testes aprovados em 31 arquivos, incluindo analytics,
+  etapas e proteção do limite entre propostas e migrations.
+- Rollback DDL de templates agora preserva TODAS as abas, inclusive templates
+  intocados; ensaio executável de rollback/reapply adicionado ao CI.
+- CI e rollout ainda aguardam validação; esta seção não libera o merge.

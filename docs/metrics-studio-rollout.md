@@ -2,9 +2,10 @@
 
 Estado em 2026-09-08: preparado para revisão, **não executado em produção**.
 PR de trabalho: #2040. Produção exige autorização explícita do CTO na sessão,
-review e CI verde. O erro histórico do bootstrap de CI em
-`20270925000000_aposenta_calor_e_rating.sql` segue um bloqueio separado;
-nunca corrigir editando uma migration já aplicada.
+review e CI verde. A proposta não aplicada de aposentadoria de rating foi
+preservada em `supabase/proposals/`, fora da cadeia automática; ver README
+nesse diretório e a revisão de 2026-09-08. Nenhuma migration aplicada foi
+alterada para contornar o preflight.
 
 ## Contrato de preservação
 
@@ -32,7 +33,9 @@ nunca corrigir editando uma migration já aplicada.
    anterior; registrar recibo, horário e responsável. Mantém configurações de
    clientes no domínio de backup do banco, sem exportar dados para um laptop.
    Ensaiar antes com `.specs/project/studio-preview-restore-proof.sql` e fixtures
-   sintéticas. Retenção: não remover os snapshots antes de aprovação do CTO.
+   sintéticas, além do rollback/reapply DDL em
+   `.specs/project/studio-preview-ddl-rollback-proof.sql`.
+   Retenção: não remover os snapshots antes de aprovação do CTO.
 4. Ensaiar schema + seed + frontend com organizações sintéticas: painel autoral
    preenchido, vazio, nomes repetidos, múltiplas abas e métricas personalizadas.
    Verificar RLS admin positivo, member negativo e isolamento entre duas orgs.
@@ -60,7 +63,9 @@ nunca corrigir editando uma migration já aplicada.
    antigos ausentes e zero linhas antigas diferentes; somente novos templates.
    Se o seed já concluiu, NÃO repetir para "corrigir" abas ausentes: uma aba pode
    ter sido excluída intencionalmente depois do rollout.
-5. Publicar o frontend revisado. Validar primeiro com CTO na org canário:
+5. Mergear o PR revisado e aguardar Build Image. O workflow atual só publica
+   a imagem no GHCR; não faz deploy automático. Publicar explicitamente no
+   EasyPanel e conferir a versão servida. Validar primeiro com CTO na org canário:
    painel legado, templates, criar/editar/recarregar e excluir apenas aba de QA.
    Não testar destrutivamente no painel de um cliente.
 6. Monitorar erros de leitura/gravação e relatos nas primeiras 24h. A versão nova
@@ -73,8 +78,8 @@ nunca corrigir editando uma migration já aplicada.
   ou que ignora falhas de persistência.
 - Reverter frontend somente para versão compatível com múltiplas abas; manter
   os dados. Não derrubar a tabela nem restaurar o dump inteiro sobre produção.
-- O rollback SQL de templates deve ser revisado contra o estado atual. Mesmo
-  templates sem alteração podem estar em uso: não removê-los automaticamente.
+- O rollback SQL pareado retira apenas trigger/funções de semeadura; preserva
+  todas as abas. Mesmo templates sem alteração podem estar em uso.
 - Recuperação de layout é por ID + organização, comparando estado atual com
   snapshot e confirmando com o CTO. Restaurar só os IDs afetados para não apagar
   edições válidas posteriores ao backup. Preservar cópia do estado pré-reparo.

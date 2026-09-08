@@ -193,6 +193,7 @@ jobs:
             scripts/seed-metrics-studio-templates.sql \
             scripts/seed-metrics-studio-templates.sql \
             .specs/project/studio-preview-restore-proof.sql \
+            .specs/project/studio-preview-ddl-rollback-proof.sql \
             .specs/project/studio-preview-assertions.sql; do
             psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 54322 -U postgres -d postgres -f "$fixture"
           done

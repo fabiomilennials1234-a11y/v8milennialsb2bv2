@@ -342,13 +342,23 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- ────────────────────────────────────────────────────────────
--- 9. pipe_whatsapp entries
+-- 9. Entradas canônicas (a view pipe_whatsapp foi demolida)
 -- ────────────────────────────────────────────────────────────
-INSERT INTO pipe_whatsapp (lead_id, organization_id, status, created_at)
-VALUES
-  ('00000000-0000-0000-0000-000000001001', '00000000-0000-0000-0000-000000000001', 'novo', now()),
-  ('00000000-0000-0000-0000-000000002001', '00000000-0000-0000-0000-000000000002', 'novo', now())
+INSERT INTO pipeline_stages (organization_id, pipeline_id, name, stage_key, position, stage_role)
+SELECT p.organization_id, p.id, 'Novo', 'novo', 0, 'open'
+FROM pipelines p
+WHERE p.organization_id IN ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002')
+  AND p.slug = 'whatsapp'
 ON CONFLICT DO NOTHING;
+
+SELECT public.fn_entrada_sistema_criar(
+  p_organization_id => fixture.org_id, p_slug => 'whatsapp',
+  p_lead_id => fixture.lead_id, p_stage_key => 'novo', p_id => fixture.id)
+FROM (VALUES
+  ('00000000-0000-0000-0000-000000003001'::uuid, '00000000-0000-0000-0000-000000001001'::uuid, '00000000-0000-0000-0000-000000000001'::uuid),
+  ('00000000-0000-0000-0000-000000003002'::uuid, '00000000-0000-0000-0000-000000002001'::uuid, '00000000-0000-0000-0000-000000000002'::uuid)
+) AS fixture(id, lead_id, org_id)
+WHERE NOT EXISTS (SELECT 1 FROM pipeline_entries pe WHERE pe.id = fixture.id);
 
 -- ────────────────────────────────────────────────────────────
 -- 10. Tags
@@ -396,6 +406,12 @@ VALUES
   ('00000000-0000-0000-0000-000000009002', 'Lead Com Um Negocio', 'Acme Um',
    '00000000-0000-0000-0000-000000000001', now(), now())
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO pipeline_stages (organization_id, pipeline_id, name, stage_key, position, stage_role)
+VALUES
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000009e1', 'Novo', 'novo', 0, 'open'),
+  ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000009e1', 'Proposta', 'proposta', 1, 'open')
+ON CONFLICT DO NOTHING;
 
 INSERT INTO pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key, entered_at)
 VALUES
