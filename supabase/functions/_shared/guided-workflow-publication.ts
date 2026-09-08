@@ -104,7 +104,16 @@ export async function handleGuidedWorkflowPublication(req: Request): Promise<Res
     });
     if (publication.error) {
       const code = publication.error.code;
-      if (code === 'PT422') return reply({ status: 'error', code: 'reference_unavailable' }, 422);
+      if (code === 'PT422') {
+        let details: unknown;
+        try { details = JSON.parse(publication.error.details ?? ''); } catch { /* Older finalizers omit locations. */ }
+        const affected = new Set(record(details) && Array.isArray(details.nodeIds)
+          ? details.nodeIds.filter((id: unknown): id is string => typeof id === 'string') : []);
+        const issues = definition.nodes.filter(node => node.type === 'condition' && affected.has(node.id))
+          .map(node => ({ nodeId: node.id, code: 'reference_unavailable',
+            message: 'Uma referência foi removida ou não está acessível. Revise as escolhas desta condição.' }));
+        return reply({ status: 'error', code: 'reference_unavailable', ...(issues.length ? { issues } : {}) }, 422);
+      }
       return reply({ status: 'error', code: code === 'PT409' ? 'draft_revision_conflict'
         : code === '42501' ? 'access_denied' : 'source_unavailable' }, code === 'PT409' ? 409 : code === '42501' ? 403 : 503);
     }

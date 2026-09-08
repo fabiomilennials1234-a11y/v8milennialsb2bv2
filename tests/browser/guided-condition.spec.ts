@@ -455,6 +455,25 @@ test('publicação recusada explica erro no node e preserva edição', async ({ 
   await expect(page.getByRole('button', { name: 'Publicar', exact: true })).toBeEnabled();
 });
 
+for (const located of [false, true]) {
+  test(`publicação com referência indisponível preserva rascunho e orienta revisão (localizada=${located})`, async ({ page }) => {
+    const message = located
+      ? 'Uma referência foi removida ou não está acessível. Revise as escolhas desta condição.'
+      : 'Uma referência foi removida ou não está acessível. Revise as escolhas da condição.';
+    await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } }));
+    await page.route('**/functions/v1/publish-guided-workflow', route => route.fulfill({ status: 422, json: {
+      status: 'error', code: 'reference_unavailable',
+      ...(located ? { issues: [{ nodeId: 'condition-1', code: 'reference_unavailable', message }] } : {}),
+    } }));
+    await openGuidedEditor(page, 'Mariana');
+    await page.getByRole('button', { name: 'Publicar', exact: true }).click();
+    await expect(page.getByRole('alert').filter({ hasText: message })).toBeVisible();
+    if (located) await page.getByRole('button', { name: message, exact: true }).click();
+    else await page.getByText('Nome informado', { exact: true }).click();
+    await expect(page.getByLabel('Valor da comparação')).toHaveValue('Mariana');
+  });
+}
+
 test('conflito ao salvar impede publicação sem perder edição local', async ({ page }) => {
   const publications: string[] = [];
   page.on('request', request => {

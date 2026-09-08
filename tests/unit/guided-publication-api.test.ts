@@ -266,13 +266,20 @@ it.each([
   expect(attemptedPublication).toBe(false);
 });
 
-it('reports a removed publication reference as configuration feedback rather than an outage', async () => {
+it.each([
+  { label: 'no details', details: null, expectedIssues: [] },
+  { label: 'known condition only', details: '{"nodeIds":["c","outside","c"],"message":"do not forward"}', expectedIssues: [
+    { nodeId: 'c', code: 'reference_unavailable', message: 'Uma referência foi removida ou não está acessível. Revise as escolhas desta condição.' },
+  ] },
+  { label: 'invalid identities', details: '{"nodeIds":[null,42,"t"]}', expectedIssues: [] },
+  { label: 'invalid JSON', details: 'invalid-json', expectedIssues: [] },
+])('reports a removed publication reference with safe locations: $label', async ({ details, expectedIssues }) => {
   const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
   vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
   vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
     if (path === '/rest/v1/rpc/finalize_guided_workflow_publication') {
-      return new Response(JSON.stringify({ code: 'PT422', message: 'reference_unavailable' }), {
+      return new Response(JSON.stringify({ code: 'PT422', message: 'reference_unavailable', details }), {
         status: 422, headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -298,5 +305,5 @@ it('reports a removed publication reference as configuration feedback rather tha
     body: JSON.stringify({ organizationId: 'org-1', workflowId: 'workflow-1', expectedRevision: 3 }),
   }));
   expect(response.status).toBe(422);
-  expect(await response.json()).toEqual({ status: 'error', code: 'reference_unavailable' });
+  expect(await response.json()).toEqual({ status: 'error', code: 'reference_unavailable', ...(expectedIssues.length ? { issues: expectedIssues } : {}) });
 });

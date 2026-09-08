@@ -107,3 +107,9 @@ Rollback restores the previous scalar grant writer and drops the new data reader
 Applied/registered only on preview. The service-only finalizer checks every tag reference under catalogue SHARE locks and current workflow grant before inserting/selecting a version. References must belong to the same organization; matching names do not substitute IDs. Effective EXECUTE verified: anon/authenticated false, service true.
 
 Rollback restores the prior scalar-only publication function without changing stored versions/selection or grants. Stop guided admission before rollback; preserved tag versions do not authorize unrestricted reads. Current full recovery sequence: 00..11, 15 (superset of 12/13), 14 (personal tag RPC), then 16. Fresh installation remains in normal numeric order. New rehearsal reverses 16 first, then 15..00 and restores the complete sequence while preserving synthetic five-field grants, versions and execution pins.
+
+### Reference location migration 20271017000017
+
+Applied/registered on preview only. The finalizer's existing reference validation now retains owning workflow node IDs and reports only invalid nodes in PT422 JSON details. This is diagnostic metadata from the editable persisted definition; no tag data or foreign identity is exposed. Effective grants unchanged and verified: anon/authenticated false, service true.
+
+Rollback restores migration 16's validating finalizer without location details, retaining all versions, grants and execution pins. Recovery appends 17 after the existing 00..11 → 15 → 14 → 16 superset sequence; fresh installation remains numerical. Eighteen-file reverse rollback/recovery rehearsal passed. Deployment may safely encounter the older finalizer: API/editor retain an explicit reference error when details are absent.

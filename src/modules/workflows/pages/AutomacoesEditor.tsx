@@ -653,6 +653,7 @@ function AutomacoesEditorContent() {
       if (error instanceof GuidedPublicationError) {
         const messages: Record<string, string> = {
           access_denied: 'Acesso negado. Verifique sua permissão e a autorização de dados da automação.',
+          reference_unavailable: 'Uma referência foi removida ou não está acessível. Revise as escolhas da condição.',
           draft_revision_conflict: 'Outra pessoa alterou o rascunho. Compare a versão atual antes de publicar.',
         };
         setPublicationIssues(error.issues.length ? error.issues : [{ code: error.code,

@@ -825,14 +825,24 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       };
       const publication = await publishHttp(2);
       expect(publication).toMatchObject({ status: 200, body: { status: 'published', version_id: expect.any(String), version_number: 2 } });
-      const invalidDefinition = definitionFor({ version: 1, id: 'all-references', kind: 'group', match: 'any', children: [
+      const invalidBase = definitionFor({ version: 1, id: 'all-references', kind: 'group', match: 'any', children: [
         request.condition, { version: 1, id: 'foreign', field: 'lead.tags', operator: 'not_has_tag', tagId: foreignTag },
       ] });
+      const invalidDefinition = { ...invalidBase,
+        nodes: [...invalidBase.nodes, { id: 'valid', type: 'condition', data: { guidedCondition: request.condition } }],
+        edges: [...invalidBase.edges.map(edge => edge.source === 't' ? { ...edge, target: 'valid' } : edge),
+          { id: 'valid-yes', source: 'valid', target: 'c', sourceHandle: 'yes' },
+          { id: 'valid-no', source: 'valid', target: 'no', sourceHandle: 'no' }],
+      };
       expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 2,
         p_definition: invalidDefinition, p_settings: settings })).error).toBeNull();
-      expect((await service.rpc('finalize_guided_workflow_publication', { ...publishArgs,
-        p_expected_revision: 3, p_definition: invalidDefinition })).error?.code).toBe('PT422');
-      expect(await publishHttp(3)).toEqual({ status: 422, body: { status: 'error', code: 'reference_unavailable' } });
+      const rejected = await service.rpc('finalize_guided_workflow_publication', { ...publishArgs,
+        p_expected_revision: 3, p_definition: invalidDefinition });
+      expect(rejected.error?.code).toBe('PT422');
+      expect(JSON.parse(rejected.error?.details || '{}')).toEqual({ nodeIds: ['c'] });
+      expect(await publishHttp(3)).toEqual({ status: 422, body: { status: 'error', code: 'reference_unavailable', issues: [
+        { nodeId: 'c', code: 'reference_unavailable', message: 'Uma referência foi removida ou não está acessível. Revise as escolhas desta condição.' },
+      ] } });
       const selected = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
       expect(selected.error).toBeNull();
       expect(selected.data?.version_id).toBe(publication.body.version_id);
