@@ -684,6 +684,26 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect(await evaluate(leadB)).toEqual({ status: 422, body: { status: 'error', code: 'context_unavailable' } });
   }, 60000);
 
+  it('tests numeric zero and missing score through personal HTTP permissions', async () => {
+    const evaluate = async (leadId: string, operator: string, value?: number) => {
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId, condition: {
+          version: 1, id: 'score', field: 'lead.qualification_score', operator, ...(value === undefined ? {} : { value }),
+        } }),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    expect((await service.from('leads').update({ qualification_score: 0 }).eq('id', leadA)).error).toBeNull();
+    expect(await evaluate(leadA, 'equals', 0)).toMatchObject({ status: 200, body: {
+      status: 'evaluated', matched: true, rules: [{ id: 'score', actual: 0, matched: true }],
+    } });
+    expect(await evaluate(leadA, 'is_empty')).toMatchObject({ status: 200, body: { matched: false } });
+    expect((await service.from('leads').update({ qualification_score: null }).eq('id', leadA)).error).toBeNull();
+    expect(await evaluate(leadA, 'is_empty')).toMatchObject({ status: 200, body: { matched: true } });
+    expect(await evaluate(leadB, 'equals', 0)).toEqual({ status: 422, body: { status: 'error', code: 'context_unavailable' } });
+  }, 60000);
+
   it.each([
     { field: 'lead.company', value: 'AURORA', actual: 'Fábrica Aurora' },
     { field: 'lead.email', value: '@aurora.example', actual: 'comercial@aurora.example' },
@@ -701,6 +721,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
   }, 60000);
 
   it.each([
+    { field: 'lead.qualification_score', column: 'qualification_score', actual: 0, comparison: 0, fragment: 0 },
     { field: 'lead.company', column: 'company', actual: 'Fábrica Aurora', comparison: 'FABRICA AURORA', fragment: 'AURORA' },
     { field: 'lead.email', column: 'email', actual: 'comercial@aurora.example', comparison: 'COMERCIAL@AURORA.EXAMPLE', fragment: '@aurora.example' },
     { field: 'lead.phone', column: 'phone', actual: '5511999990000', comparison: '5511999990000', fragment: '5511' },
@@ -713,6 +734,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: { name: 'Company grant' },
     })).error).toBeNull();
     expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0 })).error).toBeNull();
+    if (field === 'lead.qualification_score') expect((await service.from('leads').update({ qualification_score: 0 }).eq('id', leadA)).error).toBeNull();
     const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA, p_fields: [field] };
     expect((await service.rpc('read_guided_condition_lead_fields', args)).error?.code).toBe('42501');
     expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [field], p_expected_revision: 1 })).error).toBeNull();
@@ -727,7 +749,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     });
     const definition = { nodes: [
       { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
-      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field, operator: 'contains', value: fragment } } },
+      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field, operator: typeof fragment === 'number' ? 'equals' : 'contains', value: fragment } } },
       { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
     ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
     expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1,

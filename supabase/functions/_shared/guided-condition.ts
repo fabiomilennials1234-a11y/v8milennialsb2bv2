@@ -1,4 +1,4 @@
-import { GUIDED_TEXT_FIELDS, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
+import { GUIDED_SCALAR_FIELDS, isGuidedScalarField, isGuidedNumberField, isGuidedNumberOperator, type GuidedNumberField, type GuidedNumberComparison, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export type GuidedScalarRule = {
@@ -7,7 +7,7 @@ export type GuidedScalarRule = {
   field: GuidedTextField;
 } & GuidedTextComparison;
 
-export type GuidedRule = GuidedScalarRule | {
+export type GuidedRule = GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -37,6 +37,8 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
     if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
     if (rule.field === 'lead.tags') return (rule.operator === 'has_tag' || rule.operator === 'not_has_tag')
       && typeof rule.tagId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.tagId);
+    if (isGuidedNumberField(rule.field)) return rule.operator === 'is_empty'
+      || (isGuidedNumberOperator(rule.operator) && typeof rule.value === 'number' && Number.isFinite(rule.value));
     return isGuidedTextField(rule.field) && (rule.operator === 'is_empty'
       || (isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
   }
@@ -73,7 +75,7 @@ export async function evaluateGuidedCondition(
     else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
   }
   collect(request.condition);
-  const fields = requestedFields.filter(isGuidedTextField);
+  const fields = requestedFields.filter(isGuidedScalarField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
   const usesTagReader = Boolean(request.authorization && tagIds.size);
   const { data, error, status } = request.authorization?.kind === 'organization'
@@ -90,7 +92,7 @@ export async function evaluateGuidedCondition(
       p_organization_id: request.organizationId, p_lead_id: request.leadId,
     }).returns<Array<{ id: string; organization_id: string; name: string | null }>>().maybeSingle()
     : await caller.from('leads')
-      .select(['id', 'organization_id', ...fields.map(field => GUIDED_TEXT_FIELDS[field].column)].join(', '))
+      .select(['id', 'organization_id', ...fields.map(field => GUIDED_SCALAR_FIELDS[field].column)].join(', '))
       .eq('organization_id', request.organizationId)
       .eq('id', request.leadId)
       .is('deleted_at', null)
@@ -138,9 +140,13 @@ export async function evaluateGuidedCondition(
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   const record = (request.authorization && (usesFieldReader || usesTagReader)
     ? (data as unknown as { field_values: Record<string, unknown> }).field_values : data) as Record<string, unknown>;
-  if (!record || fields.some(field => !Object.prototype.hasOwnProperty.call(record, GUIDED_TEXT_FIELDS[field].column))) {
+  if (!record || fields.some(field => !Object.prototype.hasOwnProperty.call(record, GUIDED_SCALAR_FIELDS[field].column))) {
     return { status: 'error' as const, code: 'source_unavailable' as const };
   }
+  if (fields.filter(isGuidedNumberField).some(field => {
+    const value = record[GUIDED_SCALAR_FIELDS[field].column];
+    return value !== null && (typeof value !== 'number' || !Number.isFinite(value));
+  })) return { status: 'error' as const, code: 'source_unavailable' as const };
   type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string } }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
@@ -172,11 +178,19 @@ export async function evaluateGuidedCondition(
         reference: { id: tag.tag_id, name: tag.tag_name } });
       return matched;
     }
-    const actual = record[GUIDED_TEXT_FIELDS[condition.field].column];
+    const actual = record[GUIDED_SCALAR_FIELDS[condition.field].column];
     const empty = actual == null || actual === '';
     let matched = false;
     if (condition.operator === 'is_empty') matched = empty;
-    else if (!empty && typeof actual === 'string') {
+    else if (condition.field === 'lead.qualification_score') {
+      if (!empty && typeof actual === 'number') {
+        switch (condition.operator) {
+          case 'equals': matched = actual === condition.value; break;
+          case 'not_equals': matched = actual !== condition.value; break;
+          case 'greater_than': matched = actual > condition.value; break;
+        }
+      }
+    } else if (!empty && typeof actual === 'string') {
       const text = normalize(actual);
       const comparison = normalize(condition.value);
       switch (condition.operator) {

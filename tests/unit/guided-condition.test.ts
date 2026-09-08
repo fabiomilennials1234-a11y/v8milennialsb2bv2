@@ -195,3 +195,35 @@ it('compares email and phone as separate text fields without rewriting their sto
     { id: 'phone', status: 'evaluated', matched: true, actual: '5511999990000' },
   ] });
 });
+
+it.each([
+  { score: 0, operator: 'equals', value: 0, matched: true },
+  { score: 0, operator: 'is_empty', matched: false },
+  { score: null, operator: 'is_empty', matched: true },
+  { score: null, operator: 'not_equals', value: 0, matched: false },
+  { score: 80, operator: 'greater_than', value: 70, matched: true },
+])('compares qualification score without treating zero as absence: $operator / $score', async ({ score, operator, value, matched }) => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', qualification_score: score }), {
+      headers: { 'Content-Type': 'application/json' },
+    }) },
+  });
+  expect(await evaluateGuidedCondition(database, {
+    organizationId: 'org-1', leadId: 'lead-1', condition: {
+      version: 1, id: 'score', field: 'lead.qualification_score', operator, ...(operator === 'is_empty' ? {} : { value }),
+    },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'score', status: 'evaluated', matched, actual: score }] });
+});
+
+it.each(['', '0', false, 'not-a-score'])('rejects invalid numeric source %j instead of concluding No or empty', async score => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', qualification_score: score }), {
+      headers: { 'Content-Type': 'application/json' },
+    }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+    version: 1, id: 'score', field: 'lead.qualification_score', operator: 'is_empty',
+  } })).toEqual({ status: 'error', code: 'source_unavailable' });
+});

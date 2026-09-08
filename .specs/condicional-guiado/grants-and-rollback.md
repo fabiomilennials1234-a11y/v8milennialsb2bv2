@@ -113,3 +113,9 @@ Rollback restores the prior scalar-only publication function without changing st
 Applied/registered on preview only. The finalizer's existing reference validation now retains owning workflow node IDs and reports only invalid nodes in PT422 JSON details. This is diagnostic metadata from the editable persisted definition; no tag data or foreign identity is exposed. Effective grants unchanged and verified: anon/authenticated false, service true.
 
 Rollback restores migration 16's validating finalizer without location details, retaining all versions, grants and execution pins. Recovery appends 17 after the existing 00..11 → 15 → 14 → 16 superset sequence; fresh installation remains numerical. Eighteen-file reverse rollback/recovery rehearsal passed. Deployment may safely encounter the older finalizer: API/editor retain an explicit reference error when details are absent.
+
+### Numeric qualification score migration 20271017000018
+
+Applied/registered on preview only. Adds explicit lead.qualification_score to the grant writer, scalar and mixed-tag readers, and publication finalizer. Numeric projection preserves zero/null and returns only requested fields. Existing grant rows are not broadened. Effective EXECUTE verified live for all four functions: readers/finalizer service-only; grant writer authenticated-only with business administration checks unchanged.
+
+Rollback restores the exact previous writer/readers/finalizer while preserving wider storage CHECK, approval history, immutable versions and execution pins. Stop guided admission before rollback; numeric evaluation then fails closed. Nineteen-file reverse rollback/recovery rehearsal passed with synthetic six-field history. Full recovery now runs 00..11, 18 (supersedes 12/13/15/16/17), then 14 (personal tag RPC). Do not reapply earlier narrow constraints over retained score/tag approvals. Fresh installation remains numeric order. No production deployment.

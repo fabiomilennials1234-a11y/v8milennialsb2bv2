@@ -1,4 +1,4 @@
-import { GUIDED_TEXT_FIELDS, type GuidedTextField } from '@/contracts/workflows/guided-fields';
+import { GUIDED_SCALAR_FIELDS } from '@/contracts/workflows/guided-fields';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -11,7 +11,7 @@ interface WorkflowDataGrant { fields: string[]; revision: number }
 const database: SupabaseClient = supabase;
 
 export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, canManage, requiredFields = ['lead.name'] }: {
-  actorId: string; workflowId: string; organizationId: string; canManage: boolean; requiredFields?: Array<GuidedTextField | 'lead.tags'>;
+  actorId: string; workflowId: string; organizationId: string; canManage: boolean; requiredFields?: Array<keyof typeof GUIDED_SCALAR_FIELDS | 'lead.tags'>;
 }) {
   const client = useQueryClient();
   const [pending, setPending] = useState(false);
@@ -28,7 +28,7 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
     },
   });
   const authorized = requiredFields.length > 0 && requiredFields.every(field => grant.data?.fields.includes(field));
-  const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : GUIDED_TEXT_FIELDS[field].label).join(' e ');
+  const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : GUIDED_SCALAR_FIELDS[field].label).join(' e ');
   const authorizeLabel = requiredFields.length === 1 && requiredFields[0] === 'lead.name' ? 'Autorizar acesso ao nome dos leads'
     : requiredFields.length === 1 && requiredFields[0] === 'lead.company' ? 'Autorizar acesso à empresa dos leads' : 'Autorizar acesso aos campos selecionados';
   async function update() {
@@ -37,7 +37,7 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
     try {
       const response = await database.rpc('set_workflow_data_grant', {
         p_workflow_id: workflowId, p_fields: authorized
-          ? (grant.data?.fields ?? []).filter(field => !requiredFields.includes(field as GuidedTextField))
+          ? (grant.data?.fields ?? []).filter(field => !requiredFields.includes(field as keyof typeof GUIDED_SCALAR_FIELDS))
           : [...new Set([...(grant.data?.fields ?? []), ...requiredFields])],
         p_expected_revision: grant.data?.revision ?? 0,
       });

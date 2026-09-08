@@ -884,3 +884,29 @@ for (const [field, label, value] of [['lead.email', 'Email', 'comercial@aurora.e
     expect(submitted).toMatchObject({ field, operator: 'equals', value });
   });
 }
+
+test('configura pontuação numérica sem confundir zero com comparação incompleta', async ({ page }) => {
+  await openGuidedEditor(page, 'JOSE');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.qualification_score', operator: 'equals', value: 0 });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 0 }] } });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.qualification_score');
+  const value = page.getByLabel('Valor da comparação');
+  await expect(value).toHaveAttribute('type', 'number');
+  await expect(value).toHaveValue('');
+  await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toBeVisible();
+  await expect(page.getByLabel('Comparação', { exact: true }).getByRole('option', { name: 'contém', exact: true })).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
+  await value.fill('0');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Pontuação de qualificação é igual a 0');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('status')).toContainText('Pontuação de qualificação do lead: 0');
+  await value.fill('');
+  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(value).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeEnabled();
+});

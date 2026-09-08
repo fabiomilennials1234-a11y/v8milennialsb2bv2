@@ -1,4 +1,4 @@
-import type { GuidedTextField, GuidedTextComparison } from '@/contracts/workflows/guided-fields';
+import type { GuidedTextField, GuidedTextComparison, GuidedNumberField, GuidedNumberOperator } from '@/contracts/workflows/guided-fields';
 import type { Node, Edge } from "@xyflow/react";
 
 /**
@@ -653,7 +653,9 @@ export type GuidedTagRuleDraft = {
   /** Display hint only. The evaluator always resolves the current name by ID. */
   tagLabel?: string;
 };
-export type GuidedRuleDraft = GuidedScalarRuleDraft | GuidedTagRuleDraft;
+export type GuidedNumberRuleDraft = { version: 1; id: string; field: GuidedNumberField }
+  & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' });
+export type GuidedRuleDraft = GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];
