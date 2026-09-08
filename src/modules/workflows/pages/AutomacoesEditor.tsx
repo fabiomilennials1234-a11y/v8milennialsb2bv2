@@ -259,7 +259,7 @@ export default function AutomacoesEditor() {
     // Aguarda a flag resolver antes de inicializar, para não migrar nós com o
     // valor fail-closed (false) e depois "pular" para o convertido.
     if (workflow && !initialized && !unifiedLoading && guidedDraft.isSuccess) {
-      setName(workflow.name);
+      setName(guidedDraft.data?.settings?.name ?? workflow.name);
       setIsActive(workflow.is_active);
       const definition = guidedDraft.data?.definition ?? workflow.definition;
       setDraftRevision(guidedDraft.data?.revision ?? 0);
@@ -281,7 +281,7 @@ export default function AutomacoesEditor() {
         nodeIdCounter = maxId + 1;
       }
       // Load enrollment/reenrollment from DB columns
-      const wf = workflow as any;
+      const wf = { ...workflow, ...guidedDraft.data?.settings } as any;
       if (wf.enrollment_criteria && typeof wf.enrollment_criteria === "object") {
         setEnrollment({
           enabled: wf.enrollment_criteria.enabled ?? false,
@@ -548,7 +548,7 @@ export default function AutomacoesEditor() {
       }),
     );
 
-    if (isActive && issues.length > 0) {
+    if (isActive && issues.length > 0 && !(isGuidedDraft && workflow?.is_active)) {
       const nomes = [...new Set(issues.map((i) => i.nodeLabel))].slice(0, 3).join(", ");
       toast.error(
         issues.length === 1
@@ -578,7 +578,7 @@ export default function AutomacoesEditor() {
     try {
       if (isNew) {
         if (nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'))) {
-          const created = await guidedDraft.create.mutateAsync({ id: newGuidedId, name, definition });
+          const created = await guidedDraft.create.mutateAsync({ id: newGuidedId, settings: { name, ...extraFields }, definition });
           setDraftRevision(created.revision);
           toast.success("Rascunho criado. Publique quando estiver pronto.");
           navigate(`/automacoes/${created.workflow_id}`, { replace: true });
@@ -596,7 +596,7 @@ export default function AutomacoesEditor() {
         navigate(`/automacoes/${result.id}`, { replace: true });
       } else {
         if (guidedDraft.data || nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'))) {
-          const saved = await guidedDraft.save.mutateAsync({ definition, revision: draftRevision });
+          const saved = await guidedDraft.save.mutateAsync({ definition, revision: draftRevision, settings: { name, ...extraFields } });
           setDraftRevision(saved.revision);
           toast.success("Rascunho salvo. A versão publicada permanece igual.");
           return;
@@ -617,7 +617,7 @@ export default function AutomacoesEditor() {
         ? "Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar."
         : err.message || "Erro ao salvar workflow");
     }
-  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId]);
+  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null

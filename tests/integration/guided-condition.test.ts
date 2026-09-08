@@ -197,6 +197,79 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect(absent.data).toEqual([]);
   }, 60000);
 
+  it('creates initial draft settings atomically with its rules', async () => {
+    const workflowId = crypto.randomUUID();
+    const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-initial-settings-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const settings = { name: 'Initial settings', re_enrollment_enabled: true, re_enrollment_cooldown_days: 9 };
+    const created = await administrator.rpc('create_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: settings,
+    });
+    expect(created.error).toBeNull();
+    expect(created.data).toEqual({ workflow_id: workflowId, revision: 1 });
+    const draft = await administrator.from('workflow_guided_drafts').select('definition, settings, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(draft.error).toBeNull();
+    expect(draft.data).toEqual({ definition: { nodes: [], edges: [] }, settings, revision: 1 });
+    const live = await administrator.from('workflows').select('is_active, re_enrollment_enabled')
+      .eq('organization_id', orgA).eq('id', workflowId).single();
+    expect(live.data).toEqual({ is_active: false, re_enrollment_enabled: false });
+  }, 60000);
+
+  it('saves draft settings and rules under one revision without changing live enrollment or name', async () => {
+    const workflowId = crypto.randomUUID();
+    const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-settings-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const definition = { nodes: [], edges: [] };
+    const created = await administrator.rpc('create_guided_workflow_draft', {
+      p_workflow_id: workflowId, p_organization_id: orgA, p_name: 'Live name', p_definition: definition,
+    });
+    expect(created.error).toBeNull();
+    const settings = { name: 'Draft name', enrollment_criteria: { enabled: true, match_all: false, conditions: [] },
+      re_enrollment_enabled: true, re_enrollment_cooldown_days: 7, re_enrollment_max_times: 4 };
+    const saved = await administrator.rpc('save_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_definition: definition, p_expected_revision: 1, p_settings: settings,
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.data).toEqual({ workflow_id: workflowId, revision: 2 });
+    const draft = await administrator.from('workflow_guided_drafts').select('definition, settings, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(draft.error).toBeNull();
+    expect(draft.data).toEqual({ definition, settings, revision: 2 });
+    const live = await administrator.from('workflows').select('name, re_enrollment_enabled, re_enrollment_cooldown_days')
+      .eq('organization_id', orgA).eq('id', workflowId).single();
+    expect(live.data).toEqual({ name: 'Live name', re_enrollment_enabled: false, re_enrollment_cooldown_days: 30 });
+    const stale = await administrator.rpc('save_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_definition: {}, p_expected_revision: 1, p_settings: { name: 'Stale overwrite' },
+    });
+    expect(stale.error?.code).toBe('PT409');
+    const unchanged = await administrator.from('workflow_guided_drafts').select('definition, settings, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(unchanged.data).toEqual({ definition, settings, revision: 2 });
+    const invalid = await administrator.rpc('save_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_definition: {}, p_expected_revision: 2, p_settings: [],
+    });
+    expect(invalid.error?.code).toBe('22023');
+    const foreignId = crypto.randomUUID();
+    const foreignCreation = await administrator.rpc('create_guided_workflow_draft_with_settings', {
+      p_workflow_id: foreignId, p_organization_id: orgB, p_definition: {}, p_settings: { name: 'Unauthorized settings' },
+    });
+    expect(foreignCreation.error?.code).toBe('42501');
+    const fixture = await service.from('workflows').insert({ id: foreignId, organization_id: orgB, name: 'Protected settings', trigger_type: 'manual' });
+    if (fixture.error) throw fixture.error;
+    const foreignSave = await administrator.rpc('save_guided_workflow_draft_with_settings', {
+      p_workflow_id: foreignId, p_definition: {}, p_expected_revision: 0, p_settings: { name: 'Unauthorized update' },
+    });
+    expect(foreignSave.error?.code).toBe('42501');
+    const preserved = await administrator.from('workflow_guided_drafts').select('definition, settings, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(preserved.data).toEqual({ definition, settings, revision: 2 });
+  }, 60000);
+
   it('saves an incomplete guided draft without rewriting the existing workflow definition', async () => {
     const workflowId = crypto.randomUUID();
     const existingDefinition = { nodes: [{ id: 'trigger-1', type: 'trigger', data: { triggerType: 'lead_created' } }], edges: [] };
@@ -398,6 +471,14 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
         p_workflow_id: workflowId, p_definition: { nodes: [], edges: [] }, p_expected_revision: 1,
       });
       expect(deniedDraft.error?.code).toBe('42501');
+      const deniedSettings = await caller.rpc('save_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_definition: {}, p_expected_revision: 1, p_settings: { name: 'Member write' },
+      });
+      expect(deniedSettings.error?.code).toBe('42501');
+      const deniedCreation = await caller.rpc('create_guided_workflow_draft_with_settings', {
+        p_workflow_id: crypto.randomUUID(), p_organization_id: orgA, p_definition: {}, p_settings: { name: 'Member creation' },
+      });
+      expect(deniedCreation.error?.code).toBe('42501');
       const hiddenDraft = await caller.from('workflow_guided_drafts').select('definition')
         .eq('organization_id', orgA).eq('workflow_id', workflowId);
       expect(hiddenDraft.error).toBeNull();

@@ -19,9 +19,9 @@ test('troca de usuário remove seleção e resultado pessoal da conta anterior',
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
 });
 
-async function openGuidedEditor(page: Page, draftValue?: string, isNew = false, omitDraftTrigger = false) {
+async function openGuidedEditor(page: Page, draftValue?: string, isNew = false, omitDraftTrigger = false, draftSettings?: Record<string, unknown>, liveActive = false) {
   await page.route('**/rest/v1/workflow_guided_drafts?*', route => route.fulfill({ json: draftValue === undefined ? null : {
-    revision: 3, definition: { nodes: [
+    revision: 3, settings: draftSettings, definition: { nodes: [
       ...(!omitDraftTrigger ? [{ id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } }] : []),
       { id: 'condition-1', type: 'condition', position: { x: 400, y: 220 }, data: { type: 'condition', label: 'Nome informado',
         guidedCondition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: draftValue } } },
@@ -41,7 +41,7 @@ async function openGuidedEditor(page: Page, draftValue?: string, isNew = false, 
   await page.route('**/rest/v1/team_members?*', route => route.fulfill({ json: { id: 'member-1', user_id: 'user-1', organization_id: 'org-1', role: 'admin', is_active: true } }));
   await page.route('**/rest/v1/organizations?*', route => route.fulfill({ json: { id: 'org-1', org_type: 'crm', timezone: 'America/Sao_Paulo', feature_flags: {} } }));
   await page.route('**/rest/v1/workflows?*', route => route.fulfill({ json: {
-    id: 'workflow-1', name: 'Qualificar lead', is_active: false,
+    id: 'workflow-1', name: 'Qualificar lead', is_active: liveActive,
     definition: { nodes: [
       { id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } },
       { id: 'condition-1', type: 'condition', position: { x: 400, y: 220 }, data: {
@@ -64,7 +64,7 @@ test('nova automação guiada cria rascunho separado sem enviar definição ao c
   page.on('request', request => {
     if (request.method() === 'POST' && request.url().includes('/rest/v1/workflows')) directWrites.push(request.url());
   });
-  await page.route('**/rest/v1/rpc/create_guided_workflow_draft', route => {
+  await page.route('**/rest/v1/rpc/create_guided_workflow_draft_with_settings', route => {
     created = route.request().postDataJSON();
     return route.fulfill({ json: { workflow_id: created!.p_workflow_id, revision: 1 } });
   });
@@ -73,7 +73,7 @@ test('nova automação guiada cria rascunho separado sem enviar definição ao c
   await page.getByRole('menuitem', { name: 'Condição', exact: true }).click();
   await page.getByRole('button', { name: 'Criar', exact: true }).click();
   await expect(page.getByText('Rascunho criado. Publique quando estiver pronto.')).toBeVisible();
-  expect(created).toMatchObject({ p_organization_id: 'org-1', p_name: 'Novo Workflow',
+  expect(created).toMatchObject({ p_organization_id: 'org-1', p_settings: { name: 'Novo Workflow', re_enrollment_enabled: false },
     p_workflow_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
     p_definition: { nodes: expect.arrayContaining([expect.objectContaining({ type: 'condition' })]) } });
   expect(directWrites).toEqual([]);
@@ -91,7 +91,7 @@ test('salva comparação incompleta em rascunho sem escrever na definição em e
   page.on('request', request => {
     if (request.method() !== 'GET' && request.url().includes('/rest/v1/workflows')) writes.push(request.method());
   });
-  await page.route('**/rest/v1/rpc/save_guided_workflow_draft', route => {
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
     saved = route.request().postDataJSON();
     return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
   });
@@ -106,9 +106,26 @@ test('salva comparação incompleta em rascunho sem escrever na definição em e
   expect(writes).toEqual([]);
 });
 
+test('editor carrega nome e reinscrição do rascunho e salva junto das regras', async ({ page }) => {
+  let saved: Record<string, unknown> | undefined;
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
+    saved = route.request().postDataJSON();
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
+  });
+  await openGuidedEditor(page, 'Mariana', false, false, { name: 'Nome no rascunho',
+    enrollment_criteria: { enabled: false, match_all: true, conditions: [] },
+    re_enrollment_enabled: true, re_enrollment_cooldown_days: 7, re_enrollment_max_times: 4 });
+  await expect(page.getByPlaceholder('Nome do workflow')).toHaveValue('Nome no rascunho');
+  await page.getByPlaceholder('Nome do workflow').fill('Nome revisado');
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect(page.getByText('Rascunho salvo. A versão publicada permanece igual.')).toBeVisible();
+  expect(saved).toMatchObject({ p_expected_revision: 3, p_settings: { name: 'Nome revisado',
+    re_enrollment_enabled: true, re_enrollment_cooldown_days: 7, re_enrollment_max_times: 4 } });
+});
+
 test('rascunho guiado pode ser salvo durante reconstrução do gatilho', async ({ page }) => {
   let saved: { p_definition: { nodes: Array<{ type: string }> } } | undefined;
-  await page.route('**/rest/v1/rpc/save_guided_workflow_draft', route => {
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
     saved = route.request().postDataJSON();
     return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
   });
@@ -119,9 +136,29 @@ test('rascunho guiado pode ser salvo durante reconstrução do gatilho', async (
   expect(saved?.p_definition.nodes.map(node => node.type)).toEqual(['condition']);
 });
 
+test('rascunho incompleto pode mudar enquanto versão publicada continua ativa', async ({ page }) => {
+  const liveWrites: string[] = [];
+  let saves = 0;
+  page.on('request', request => {
+    if (request.method() === 'PATCH' && request.url().includes('/rest/v1/workflows')) liveWrites.push(request.url());
+  });
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
+    saves++;
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
+  });
+  await openGuidedEditor(page, 'Mariana', false, false, undefined, true);
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Valor da comparação').fill('');
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect(page.getByText('Rascunho salvo. A versão publicada permanece igual.')).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Ativo' })).toBeChecked();
+  expect(saves).toBe(1);
+  expect(liveWrites).toEqual([]);
+});
+
 test('conflito de rascunho preserva edição local e não tenta sobrescrever revisão alheia', async ({ page }) => {
   const revisions: number[] = [];
-  await page.route('**/rest/v1/rpc/save_guided_workflow_draft', route => {
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
     revisions.push(route.request().postDataJSON().p_expected_revision);
     return route.fulfill({ status: 409, json: { code: 'PT409', message: 'draft_revision_conflict' } });
   });
