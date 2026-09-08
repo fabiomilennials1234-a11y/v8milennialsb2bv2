@@ -141,6 +141,13 @@ INSERT INTO public.pipeline_stage_events
   ('31600e40-0000-4000-8000-0000000000b2', '31600000-0000-4000-8000-00000000000b', '3160ead1-0000-4000-8000-0000000000b1', '31609191-0000-4000-8000-00000000000b', '3160e177-0000-4000-8000-0000000000b1', 'proposta', 'vendido',  '2027-08-20T12:00:00Z', 'trigger')
 ON CONFLICT (id) DO NOTHING;
 
+-- The maturation reader uses deals.outcome, not terminal-looking stage names.
+INSERT INTO public.deals (id, organization_id, source_lead_id, title, source, outcome)
+VALUES ('3160dea1-0000-4000-8000-000000000003', '31600000-0000-4000-8000-00000000000a',
+        '3160ead1-0000-4000-8000-000000000003', 'E3 perdido', 'api', 'lost');
+UPDATE public.pipeline_entries SET deal_id = '3160dea1-0000-4000-8000-000000000003'
+WHERE id = '3160e177-0000-4000-8000-000000000003';
+
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   '{"sub":"3160115e-0000-4000-8000-00000000000a","role":"authenticated"}', true);

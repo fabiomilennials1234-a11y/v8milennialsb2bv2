@@ -74,11 +74,10 @@ SELECT is(public._stage_key_label('e2a52000-0000-4000-8000-000000000001', 'e2a52
 -- ===========================================================================
 SELECT is(
   (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') ->> 'value'),
-  '4', '(DEGRADA) etapa sem escopo → value = total (4: 3 sistema + 1 custom), não série');
+  NULL::text, '(MULTI) etapa sem escopo retorna série; não degrada para total');
 SELECT ok(
-  (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') -> 'series') IS NULL
-  OR (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') ->> 'series') IS NULL,
-  '(DEGRADA) etapa sem escopo NÃO devolve série (zero rótulo cru na parede)');
+  jsonb_array_length(public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') -> 'series') = 3,
+  '(MULTI) três baldes distintos por funil e etapa, sem somar funis diferentes');
 
 -- ===========================================================================
 -- (RÓTULO) etapa COM pipeline → série com NOME HUMANO, nunca stage-key cru
@@ -111,10 +110,10 @@ SELECT ok(
 -- SINAL de degradação (#1254 volta 2): quem degrada CONTA que degradou.
 SELECT is(
   (public._metric_leaf_stage_snapshot('e2a52000-0000-4000-8000-000000000001', 'etapa', '{}'::jsonb, 'negocio') ->> 'effective_recorte'),
-  'total', '(SINAL) leaf sinaliza effective_recorte=total ao degradar');
+  NULL::text, '(SINAL) não há sinal de degradação: a série por etapa existe');
 SELECT is(
   (public._metric_leaf('e2a52000-0000-4000-8000-000000000001', 'leads_na_etapa', 'etapa', 'month', NULL, NULL, NULL, '{}'::jsonb) ->> 'recorte'),
-  'total', '(SINAL) _metric_leaf devolve recorte=total no degrade → front dropa "por Etapa" e vira número');
+  'etapa', '(SINAL) _metric_leaf preserva recorte por etapa mesmo sem funil escolhido');
 SELECT is(
   (public._metric_leaf('e2a52000-0000-4000-8000-000000000001', 'leads_na_etapa', 'etapa', 'month', NULL, NULL, NULL,
      '{"pipeline_id":"e2a52000-0000-4000-8000-0000000000a1"}'::jsonb) ->> 'recorte'),

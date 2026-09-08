@@ -263,7 +263,7 @@ SELECT is(
          '{"kind":"leaf","id":"negocios_na_etapa"}'::jsonb, 'etapa',
          NULL, NULL, NULL, NULL,
          '{"pipeline_id":"39139191-0000-4000-8000-00000000000a"}'::jsonb) -> 'series') s
-    WHERE s->>'key' = 'novo'),
+    WHERE s->>'key' = '39139191-0000-4000-8000-00000000000a:novo'),
   2::numeric,
   'SE1: por etapa, "novo" tem 2 NEGÓCIOS (um de cada lead)');
 
@@ -274,7 +274,7 @@ SELECT is(
          '{"kind":"leaf","id":"negocios_na_etapa"}'::jsonb, 'etapa',
          NULL, NULL, NULL, NULL,
          '{"pipeline_id":"39139191-0000-4000-8000-00000000000a"}'::jsonb) -> 'series') s
-    WHERE s->>'key' = 'proposta'),
+    WHERE s->>'key' = '39139191-0000-4000-8000-00000000000a:proposta'),
   1::numeric,
   'SE2: por etapa, "proposta" tem 1 negócio aberto — o fechado saiu');
 

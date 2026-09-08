@@ -162,6 +162,21 @@ VALUES
   ('99699699-aaaa-0000-0000-000000000996','99699699-aaaa-3333-00c2-000000000996','99699699-aaaa-4444-0002-000000000996', NULL,      'c_novo', '2027-07-05 11:00-03','backfill');
 
 -- Replica fixtures bypass the canonical pipeline FK assignment trigger.
+-- Financial outcomes now belong to deals, independently of the stage name.
+-- Keep these cards in open: won/lost must still be counted by the reader.
+INSERT INTO public.deals (id, organization_id, source_lead_id, title, source, outcome)
+SELECT l.id, l.organization_id, l.id, l.name, 'api', d.outcome
+FROM public.leads l
+JOIN (VALUES
+  ('99699699-aaaa-3333-0001-000000000996'::uuid, 'won'),
+  ('99699699-aaaa-3333-0002-000000000996'::uuid, 'won'),
+  ('99699699-aaaa-3333-0006-000000000996'::uuid, 'lost')
+) d(lead_id, outcome) ON d.lead_id = l.id;
+INSERT INTO public.pipeline_entries (organization_id, pipeline_id, lead_id, deal_id, stage_key)
+SELECT organization_id, '99699699-aaaa-4444-0001-000000000996', source_lead_id, id, 's_open'
+FROM public.deals
+WHERE organization_id = '99699699-aaaa-0000-0000-000000000996';
+
 UPDATE public.pipeline_stages
 SET pipeline_id = '99699699-aaaa-4444-0001-000000000996'
 WHERE organization_id = '99699699-aaaa-0000-0000-000000000996'
