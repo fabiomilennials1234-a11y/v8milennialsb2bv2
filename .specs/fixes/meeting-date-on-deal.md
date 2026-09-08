@@ -41,4 +41,4 @@ Rollback function bodies were captured from production. Data rollback restores
 only rows whose metadata still exactly matches this recovery's output. Later
 changes are preserved. The rollback currently requires the recovery backup table.
 
-Validation: PostgreSQL assertions passed on preview mkpjjtwjyvgabavnxqgp. Migration, recovery and rollback also executed against its public schema inside a rolled-back transaction. No preview changes persisted. Production application and UI smoke remain pending.
+Validation: PostgreSQL assertions passed on preview mkpjjtwjyvgabavnxqgp. Migration, recovery and rollback also executed against its public schema inside a rolled-back transaction. No preview changes persisted. Production applied with CTO authorization on 2026-09-08 at approximately 14:23 UTC. Ledger version 20271017000000 matches the file. Recovery restored 7 dates in 3 organizations; all 7 metadata values match the backup projection. Internal EXECUTE grants are denied to anon/authenticated. Production UI smoke has not been performed.
