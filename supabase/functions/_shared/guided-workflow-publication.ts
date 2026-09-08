@@ -3,7 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { AuthError, requireAuth } from './user-auth.ts';
 import { getCorsHeaders } from './cors.ts';
 import { withSecurityHeaders } from './security-headers.ts';
-import { isGuidedCondition } from './guided-condition.ts';
+import { isGuidedCondition, guidedConditionFields, type GuidedCondition } from './guided-condition.ts';
 import { NODE_TYPE_SET, TRIGGER_TYPE_SET, ACTION_TYPE_SET } from './workflow-schema/enums.ts';
 import { validateWorkflow } from './workflow-schema/validator.ts';
 import type { WorkflowDefinition } from './workflow-schema/definition.ts';
@@ -93,7 +93,7 @@ export async function handleGuidedWorkflowPublication(req: Request): Promise<Res
     if (issues.length) return reply({ status: 'error', code: 'invalid_configuration', issues }, 422);
     const definition = draft.data.definition as WorkflowDefinition;
     const requiredFields = [...new Set(definition.nodes.filter(node => node.type === 'condition')
-      .map(node => (node.data.guidedCondition as { field: string }).field))];
+      .flatMap(node => guidedConditionFields(node.data.guidedCondition as GuidedCondition)))];
     const service = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
       auth: { persistSession: false, autoRefreshToken: false },
     });

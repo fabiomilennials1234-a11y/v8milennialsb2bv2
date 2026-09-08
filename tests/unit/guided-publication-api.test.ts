@@ -3,12 +3,17 @@ import { handleGuidedWorkflowPublication } from '../../supabase/functions/_share
 
 afterEach(() => vi.unstubAllGlobals());
 
-it.each(['end', 'configured_audio', 'fixed_delay', 'random_delay'])('publishes only the persisted revision through the service-only finalizer: %s', async (successPath) => {
+it.each(['end', 'configured_audio', 'fixed_delay', 'random_delay', 'grouped'])('publishes only the persisted revision through the service-only finalizer: %s', async (successPath) => {
   const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
   vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
   const definition = { nodes: [
     { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
-    { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
+    { id: 'c', type: 'condition', data: { guidedCondition: successPath === 'grouped'
+      ? { version: 1, id: 'group', kind: 'group', match: 'any', children: [
+        { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' },
+        { version: 1, id: 'empty', field: 'lead.name', operator: 'is_empty' },
+      ] }
+      : { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
     { id: 'y', type: successPath === 'configured_audio' ? 'action' : successPath.endsWith('_delay') ? 'delay' : 'end',
       data: successPath === 'configured_audio' ? { actionType: 'send_whatsapp_audio', audioUrl: 'https://media.example.test/audio.ogg' }
         : successPath === 'fixed_delay' ? { amount: 2, unit: 'hours' }

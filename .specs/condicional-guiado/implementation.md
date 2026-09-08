@@ -238,3 +238,12 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Browser TDD reproduced missing lookup recovery UI. Added persistent publication-read error and explicit refetch button. Recovery restores activation availability without replacing unsaved condition edits.
 - All 28 browser cases passed. Focused lint passed with existing any warnings; diff check passed. No database changes, worker deployment or additional typecheck baseline changes. All process sessions terminal.
 - Outstanding certification and later-ticket scope unchanged. Next substantial product slice is grouped All/Any rules (ticket 05), while producer/runtime end-to-end validation for 03/04 remains open. No ticket certified and no final HITL yet.
+
+## 2026-09-08 — grouped evaluation and first editor path
+
+- Ticket 05 in progress. Public evaluator accepts All/Any trees, validates the whole shape with unique rule/group IDs and at most three group levels, and derives deduplicated publication fields from leaves. Short-circuited leaves/groups explicitly report not_evaluated. Existing single-leaf response remains compatible.
+- First browser slice now creates two rules, selects Qualquer, sends the full tree and displays skipped rules. Depth test reproduced creation of a fourth group; editor now disables nested conversion at depth three while retaining new sibling rules and focus on the added value.
+- Additional public-service red reproduced a leaf carrying children being interpreted as a group after validation. Validator now rejects leaf/group discriminator ambiguity before a personal data read; green verifies invalid_configuration and zero transport reads.
+- Verification: 30 browser cases passed (external transport substituted), 37 evaluator/publication/executor unit cases passed, Deno checks for evaluator/publication passed, focused ESLint zero errors (one Fast Refresh mixed-export warning in the builder), diff check passed. No migration or deployment in this checkpoint. Frontend typecheck ratchet still being observed separately.
+- Remaining ticket 05: duplication/removal/collapse, hierarchical results and canvas summary, panel sizing, keyboard journey, real grouped HTTP/publication/execution proof. This checkpoint does not certify ticket 05 or any of the 21 tickets. All original scope, rollback requirements and final HITL gate retained.
+- Typecheck ratchet finished: zero introduced errors; 805 baseline plus 11 inherited tolerated, 481 current occurrences. All associated process handles terminal.

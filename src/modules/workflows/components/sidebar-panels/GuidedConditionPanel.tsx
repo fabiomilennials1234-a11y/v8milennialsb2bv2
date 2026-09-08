@@ -1,3 +1,4 @@
+import { GuidedConditionBuilder, isIncompleteGuidedDraft } from './GuidedConditionBuilder';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FunctionsHttpError } from '@supabase/supabase-js';
@@ -18,11 +19,11 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
   const [leadId, setLeadId] = useState('');
   const [search, setSearch] = useState('');
   const searchTerm = useDebounce(search.trim(), 250);
-  const [result, setResult] = useState<{ fingerprint: string; matched: boolean; actual: string | null } | null>(null);
+  const [result, setResult] = useState<{ fingerprint: string; matched: boolean; actual: string | null; rules: Array<{ id: string; status?: string; matched?: boolean }> } | null>(null);
   const fingerprint = JSON.stringify({ actorId, organizationId, leadId, condition });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const missingValue = condition.operator === 'equals' && condition.value.length === 0;
+  const missingValue = isIncompleteGuidedDraft(condition);
   const leads = useQuery({
     queryKey: ['guided-condition-leads', actorId, organizationId, searchTerm],
     enabled: Boolean(actorId && organizationId),
@@ -50,7 +51,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
           ? 'Você não tem acesso aos dados necessários para este teste.'
           : 'Não foi possível avaliar esta condição. Verifique seu acesso e tente novamente.');
       } else {
-        setResult({ fingerprint, matched: data.matched, actual: data.rules[0].actual });
+        setResult({ fingerprint, matched: data.matched, actual: data.rules[0]?.actual, rules: data.rules });
       }
     } catch {
       setError('Teste indisponível. Tente novamente.');
@@ -62,17 +63,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
   return <div className="space-y-6">
     <div className="space-y-1"><h3 className="text-lg font-semibold tracking-tight">Quando esta condição for atendida</h3>
       <p className="text-sm text-muted-foreground">Escolha uma informação e defina a comparação.</p></div>
-    <div className="space-y-2"><Label htmlFor="guided-field">Informação</Label>
-      <select id="guided-field" className={selectClass} value="lead.name" disabled><option value="lead.name">Lead · Nome</option></select></div>
-    <div className="space-y-2"><Label htmlFor="guided-operator">Comparação</Label>
-      <select id="guided-operator" className={selectClass} value={condition.operator} onChange={event => {
-        const base = { version: condition.version, id: condition.id, field: condition.field };
-        onChange(event.target.value === 'is_empty' ? { ...base, operator: 'is_empty' } : { ...base, operator: 'equals', value: '' });
-      }}><option value="equals">é igual a</option><option value="is_empty">está vazio</option></select></div>
-    {condition.operator === 'equals' && <div className="space-y-2"><Label htmlFor="guided-value">Valor da comparação</Label>
-      <Input id="guided-value" value={condition.value} aria-invalid={missingValue} aria-describedby={missingValue ? 'guided-value-error' : undefined} onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: José" />
-      {missingValue && <p id="guided-value-error" className="text-xs text-destructive">Informe um valor ou escolha “está vazio”.</p>}
-      <p className="text-xs text-muted-foreground">Maiúsculas e acentos não alteram a comparação.</p></div>}
+    <GuidedConditionBuilder condition={condition} onChange={onChange} />
     <section className="space-y-3 rounded-xl border border-border bg-muted/20 p-4" aria-label="Teste da condição">
       <div><h4 className="font-medium">Confira com um lead</h4><p className="text-xs text-muted-foreground">Consulta dados atuais, sem executar ações.</p></div>
       <Label htmlFor="guided-search-lead">Buscar lead</Label>
@@ -86,7 +77,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
       {leads.isSuccess && leads.data.length === 0 && <p className="text-sm text-muted-foreground">Nenhum lead encontrado. Tente outro nome.</p>}
       <Button type="button" disabled={!leadId || pending || missingValue} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong><p>Nome do lead: {result.actual ?? 'Vazio'}</p></div>}
+      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{'children' in condition ? <ul>{result.rules.map((rule, index) => <li key={rule.id}>Condição {index + 1}: {rule.status === 'not_evaluated' ? 'Não avaliada' : rule.matched ? 'Sim' : 'Não'}</li>)}</ul> : <p>Nome do lead: {result.actual ?? 'Vazio'}</p>}</div>}
     </section>
   </div>;
 }

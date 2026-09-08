@@ -80,3 +80,64 @@ describe('guided condition — public evaluation', () => {
     });
   });
 });
+
+it('evaluates mixed All/Any groups and marks dispensable rules as not evaluated', async () => {
+  const result = await evaluateGuidedCondition(databaseLead('José'), {
+    organizationId: 'org-1', leadId: 'lead-1', condition: {
+      version: 1, id: 'root', kind: 'group', match: 'all', children: [
+        { version: 1, id: 'names', kind: 'group', match: 'any', children: [
+          { version: 1, id: 'jose', field: 'lead.name', operator: 'equals', value: 'JOSE' },
+          { version: 1, id: 'maria', field: 'lead.name', operator: 'equals', value: 'Maria' },
+        ] },
+        { version: 1, id: 'empty', field: 'lead.name', operator: 'is_empty' },
+      ],
+    },
+  });
+  expect(result).toEqual({ status: 'evaluated', matched: false,
+    rules: [{ id: 'jose', status: 'evaluated', matched: true, actual: 'José' },
+      { id: 'maria', status: 'not_evaluated' }, { id: 'empty', status: 'evaluated', matched: false, actual: 'José' }],
+    groups: [{ id: 'root', status: 'evaluated', matched: false }, { id: 'names', status: 'evaluated', matched: true }],
+  });
+});
+
+it('validates an invalid rule in a dispensable branch before reading lead data', async () => {
+  let reads = 0;
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async () => {
+      reads++;
+      return new Response(JSON.stringify({ id: 'lead-1', name: 'José' }), { headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+    version: 1, kind: 'group', id: 'root', match: 'any', children: [
+      { version: 1, id: 'yes', field: 'lead.name', operator: 'equals', value: 'José' },
+      { version: 1, id: 'invalid', field: 'lead.password', operator: 'equals', value: 'secret' },
+    ],
+  } })).toEqual({ status: 'error', code: 'invalid_configuration' });
+  expect(reads).toBe(0);
+});
+
+it.each([3, 4])('limits nested groups including the root: %s levels', async (levels) => {
+  let condition: unknown = { version: 1, id: 'rule', field: 'lead.name', operator: 'equals', value: 'José' };
+  for (let level = levels; level >= 1; level--) {
+    condition = { version: 1, id: `group-${level}`, kind: 'group', match: 'all', children: [condition] };
+  }
+  const result = await evaluateGuidedCondition(databaseLead('José'), { organizationId: 'org-1', leadId: 'lead-1', condition });
+  expect(result).toMatchObject(levels === 3 ? { status: 'evaluated', matched: true } : { status: 'error', code: 'invalid_configuration' });
+});
+
+it('rejects a leaf carrying group children before reading personal data', async () => {
+  let reads = 0;
+  const caller = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => {
+      reads++;
+      return new Response(JSON.stringify({ id: 'lead-1', name: 'José' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  expect(await evaluateGuidedCondition(caller, {
+    organizationId: 'org-1', leadId: 'lead-1',
+    condition: { version: 1, id: 'ambiguous', field: 'lead.name', operator: 'equals', value: 'José', children: [] },
+  })).toEqual({ status: 'error', code: 'invalid_configuration' });
+  expect(reads).toBe(0);
+});

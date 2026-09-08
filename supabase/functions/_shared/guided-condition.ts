@@ -1,6 +1,6 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-export type GuidedCondition = {
+export type GuidedRule = {
   version: 1;
   id: string;
   field: 'lead.name';
@@ -13,12 +13,31 @@ export interface GuidedConditionRequest {
   authorization?: { kind: 'organization'; workflowId: string };
 }
 
+export type GuidedCondition = GuidedRule | {
+  version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedCondition[];
+};
+
 export function isGuidedCondition(value: unknown): value is GuidedCondition {
-  if (!value || typeof value !== 'object') return false;
-  const rule = value as Record<string, unknown>;
-  return rule.version === 1 && typeof rule.id === 'string' && rule.id.length > 0
-    && rule.field === 'lead.name'
-    && (rule.operator === 'is_empty' || (rule.operator === 'equals' && typeof rule.value === 'string' && rule.value.length > 0));
+  const ids = new Set<string>();
+  function valid(value: unknown, groupDepth: number): boolean {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+    const rule = value as Record<string, unknown>;
+    if (rule.version !== 1 || typeof rule.id !== 'string' || !rule.id || ids.has(rule.id)) return false;
+    ids.add(rule.id);
+    if (rule.kind === 'group') {
+      return groupDepth < 3 && (rule.match === 'all' || rule.match === 'any')
+        && Array.isArray(rule.children) && rule.children.length > 0
+        && rule.children.every(child => valid(child, groupDepth + 1));
+    }
+    if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
+    return rule.field === 'lead.name' && (rule.operator === 'is_empty'
+      || (rule.operator === 'equals' && typeof rule.value === 'string' && rule.value.length > 0));
+  }
+  return valid(value, 0);
+}
+
+export function guidedConditionFields(condition: GuidedCondition): string[] {
+  return 'children' in condition ? [...new Set(condition.children.flatMap(guidedConditionFields))] : [condition.field];
 }
 
 /** Evaluate with a caller-scoped client. Never pass a service-role client for
@@ -65,11 +84,35 @@ export async function evaluateGuidedCondition(
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   const empty = data.name == null || data.name === '';
-  const matched = request.condition.operator === 'is_empty'
-    ? empty
-    : !empty && typeof data.name === 'string' && normalize(data.name) === normalize(request.condition.value);
-  return {
-    status: 'evaluated' as const, matched,
-    rules: [{ id: request.condition.id, status: 'evaluated' as const, matched, actual: data.name }],
-  };
+  type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown }
+    | { id: string; status: 'not_evaluated' };
+  type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
+  const rules: RuleResult[] = [];
+  const groups: GroupResult[] = [];
+  function skip(condition: GuidedCondition): void {
+    if ('children' in condition) {
+      groups.push({ id: condition.id, status: 'not_evaluated' });
+      condition.children.forEach(skip);
+    } else rules.push({ id: condition.id, status: 'not_evaluated' });
+  }
+  function evaluate(condition: GuidedCondition): boolean {
+    if ('children' in condition) {
+      const group: Extract<GroupResult, { status: 'evaluated' }> = { id: condition.id, status: 'evaluated', matched: condition.match === 'all' };
+      groups.push(group);
+      let decided = false;
+      for (const child of condition.children) {
+        if (decided) { skip(child); continue; }
+        const matched = evaluate(child);
+        group.matched = matched;
+        decided = condition.match === 'all' ? !matched : matched;
+      }
+      return group.matched;
+    }
+    const matched = condition.operator === 'is_empty' ? empty
+      : !empty && typeof data!.name === 'string' && normalize(data!.name) === normalize(condition.value);
+    rules.push({ id: condition.id, status: 'evaluated', matched, actual: data!.name });
+    return matched;
+  }
+  const matched = evaluate(request.condition);
+  return { status: 'evaluated' as const, matched, rules, ...(groups.length ? { groups } : {}) };
 }

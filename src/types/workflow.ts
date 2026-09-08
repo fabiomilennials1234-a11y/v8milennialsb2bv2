@@ -641,11 +641,15 @@ export interface ActionNodeData {
 }
 
 /** Draft for the guided contract; server validates before evaluation. */
-export type GuidedConditionDraft = {
+export type GuidedRuleDraft = {
   version: 1;
   id: string;
   field: 'lead.name';
 } & ({ operator: 'equals'; value: string } | { operator: 'is_empty' });
+
+export type GuidedConditionDraft = GuidedRuleDraft | {
+  version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];
+};
 
 export interface ConditionNodeData {
   type: "condition";

@@ -459,3 +459,41 @@ test('permite recarregar publicação após falha sem perder rascunho', async ({
   await expect(page.getByText('Não foi possível consultar a versão publicada.')).toHaveCount(0);
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('Ana');
 });
+
+test('combina duas regras com Qualquer e testa árvore completa', async ({ page }) => {
+  let submitted: unknown;
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    submitted = route.request().postDataJSON().condition;
+    const children = route.request().postDataJSON().condition.children;
+    return route.fulfill({ json: { status: 'evaluated', matched: true,
+      rules: [{ id: children[0].id, status: 'evaluated', matched: true, actual: 'José' }, { id: children[1].id, status: 'not_evaluated' }],
+      groups: [{ id: route.request().postDataJSON().condition.id, status: 'evaluated', matched: true }],
+    } });
+  });
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('José');
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).click({ timeout: 5000 });
+  await page.getByLabel('Combinação').selectOption('any');
+  await page.getByLabel('Valor da comparação').nth(1).fill('Maria');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('status')).toContainText('Não avaliada');
+  expect(submitted).toMatchObject({ kind: 'group', match: 'any', children: [
+    { field: 'lead.name', operator: 'equals', value: 'José' }, { field: 'lead.name', operator: 'equals', value: 'Maria' },
+  ] });
+});
+
+test('limita grupos a três níveis sem impedir novas regras no terceiro', async ({ page }) => {
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).first().click();
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).first().click();
+  await expect(page.getByRole('group', { name: 'Grupo de condições', exact: true })).toHaveCount(3);
+  await expect(page.getByRole('button', { name: 'Adicionar condição', exact: true }).first()).toBeDisabled({ timeout: 3000 });
+  const deepest = page.getByRole('group', { name: 'Grupo de condições', exact: true }).last();
+  await deepest.getByRole('button', { name: 'Adicionar condição', exact: true }).last().click();
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(5);
+  await expect(page.getByLabel('Valor da comparação').nth(2)).toBeFocused();
+  await expect(page.getByRole('group', { name: 'Grupo de condições', exact: true })).toHaveCount(3);
+});
