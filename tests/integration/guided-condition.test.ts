@@ -227,6 +227,62 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect(forged.error?.code).toBe('42501');
   }, 60000);
 
+  it('allows full master administration but denies outbound-only and inactive master privileges', async () => {
+    const workflowId = crypto.randomUUID();
+    const password = `${crypto.randomUUID()}!Aa1`;
+    const email = `guided-master-${crypto.randomUUID()}@example.test`;
+    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+    if (created.error) throw created.error;
+    try {
+      const workflow = await service.from('workflows').insert({ id: workflowId, organization_id: orgB,
+        name: 'Master administration', trigger_type: 'manual' });
+      if (workflow.error) throw workflow.error;
+      const master = await service.from('master_users').insert({ user_id: created.data.user.id,
+        is_active: true, permissions: { all: true } });
+      if (master.error) throw master.error;
+      const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-master-${workflowId}` },
+      });
+      const signedIn = await caller.auth.signInWithPassword({ email, password });
+      if (signedIn.error) throw signedIn.error;
+      const approved = await caller.rpc('set_workflow_data_grant', {
+        p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0,
+      });
+      expect(approved.error).toBeNull();
+      const saved = await caller.rpc('save_guided_workflow_draft', {
+        p_workflow_id: workflowId, p_definition: { nodes: [], edges: [] }, p_expected_revision: 0,
+      });
+      expect(saved.error).toBeNull();
+      for (const table of ['workflow_data_grants', 'workflow_guided_drafts']) {
+        const readable = await caller.from(table).select('revision').eq('workflow_id', workflowId).single();
+        expect(readable.error).toBeNull();
+        expect(readable.data).toEqual({ revision: 1 });
+      }
+      for (const state of [
+        { is_active: true, permissions: { outbound_only: true } },
+        { is_active: true, permissions: { all: 'true' } },
+        { is_active: false, permissions: { all: true } },
+      ]) {
+        const changed = await service.from('master_users').update(state).eq('user_id', created.data.user.id);
+        if (changed.error) throw changed.error;
+        expect((await caller.rpc('set_workflow_data_grant', {
+          p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1,
+        })).error?.code).toBe('42501');
+        expect((await caller.rpc('save_guided_workflow_draft', {
+          p_workflow_id: workflowId, p_definition: {}, p_expected_revision: 1,
+        })).error?.code).toBe('42501');
+        for (const table of ['workflow_data_grants', 'workflow_guided_drafts']) {
+          const hidden = await caller.from(table).select('revision').eq('workflow_id', workflowId);
+          expect(hidden.error).toBeNull();
+          expect(hidden.data).toEqual([]);
+        }
+      }
+    } finally {
+      await service.from('master_users').delete().eq('user_id', created.data.user.id).throwOnError();
+      await service.auth.admin.deleteUser(created.data.user.id);
+    }
+  }, 60000);
+
   it('evaluates an accessible lead but cannot infer another organization through manipulated IDs', async () => {
     const evaluate = async (organizationId: string, leadId: string) => {
       const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {

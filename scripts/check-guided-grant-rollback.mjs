@@ -21,6 +21,9 @@ const readerRollback = readFileSync(`supabase/migrations/rollback/${readerMigrat
 const draftMigration = '20271017000003_guided_workflow_drafts.sql';
 const draftForward = readFileSync(`supabase/migrations/${draftMigration}`, 'utf8');
 const draftRollback = readFileSync(`supabase/migrations/rollback/${draftMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const masterMigration = '20271017000004_guided_workflow_master_authorization.sql';
+const masterForward = readFileSync(`supabase/migrations/${masterMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const masterRollback = readFileSync(`supabase/migrations/rollback/${masterMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -33,12 +36,14 @@ INSERT INTO public.workflow_data_grants(workflow_id, organization_id, fields, re
   SELECT workflow_id, org_id, ARRAY['lead.name'], 7 FROM guided_rollback_fixture;
 INSERT INTO public.workflow_guided_drafts(workflow_id, organization_id, definition, revision)
   SELECT workflow_id, org_id, '{"nodes":[],"edges":[]}'::jsonb, 11 FROM guided_rollback_fixture;
+${masterRollback}
 ${draftRollback}
 ${readerRollback}
 ${conflictRollback}
 ${rollback}
 DO $$ BEGIN
   IF to_regprocedure('public.set_workflow_data_grant(uuid,text[],integer)') IS NOT NULL
+    OR to_regprocedure('public.can_administer_guided_workflow(uuid)') IS NOT NULL
     OR to_regprocedure('public.read_guided_condition_lead(uuid,uuid,uuid)') IS NOT NULL
     OR to_regprocedure('public.save_guided_workflow_draft(uuid,jsonb,integer)') IS NOT NULL
     OR has_table_privilege('authenticated', 'public.workflow_guided_drafts', 'SELECT')
@@ -60,7 +65,13 @@ ${forward}
 ${conflictForward}
 ${readerForward}
 ${draftForward}
+${masterForward}
 DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.can_administer_guided_workflow(uuid)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.can_administer_guided_workflow(uuid)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.can_administer_guided_workflow(uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'reapply did not restore master helper privileges';
+  END IF;
   IF NOT has_function_privilege('authenticated', 'public.set_workflow_data_grant(uuid,text[],integer)', 'EXECUTE')
     OR has_function_privilege('anon', 'public.set_workflow_data_grant(uuid,text[],integer)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.set_workflow_data_grant(uuid,text[],integer)', 'EXECUTE') THEN
