@@ -282,6 +282,7 @@ vi.mock("@/modules/leads/components/deal-detail/deal-sheet-context", () => ({
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 vi.mock("@/modules/identity", () => ({
+  useIdentity: () => ({ userId: "user-1" }),
   useResponsibleMembers: () => [{ id: "tm-1", name: "Ana" }],
   useCurrentTeamMember: () => ({ data: { id: "tm-1", organization_id: "org-1" } }),
   isVirtualTeamMember: (id: string) => String(id).startsWith("master-virtual-"),
@@ -618,5 +619,31 @@ describe("Card do Lead — o que o diálogo recusa", { timeout: TIMEOUT_RENDER_M
     clicarCriarNegocio();
 
     expect(screen.getByTestId("new-deal-option-sys:upsell")).toBeInTheDocument();
+  });
+});
+
+const registrarVendas = vi.fn().mockResolvedValue(["sale-1"]);
+vi.mock("@/modules/leads/hooks/useRegisterHistoricalSales", () => ({
+  useRegisterHistoricalSales: () => ({ mutateAsync: registrarVendas, isPending: false }),
+}));
+
+describe("Registrar venda pelo Card do Lead", { timeout: TIMEOUT_RENDER_MS }, () => {
+  it("abre pelo card sem negócios e só grava a lista ao salvar", async () => {
+    montarCard();
+    fireEvent.click(screen.getByRole("button", { name: /negócios/i }));
+    expect(screen.getByRole("button", { name: /criar negócio/i })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar Venda" }));
+    fireEvent.change(screen.getByLabelText("Valor (R$)"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("Data da venda"), { target: { value: "2025-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Próxima venda" }));
+    await waitFor(() => expect(screen.getAllByLabelText("Valor (R$)")).toHaveLength(2));
+    expect(registrarVendas).not.toHaveBeenCalled();
+    fireEvent.change(screen.getAllByLabelText("Valor (R$)")[1], { target: { value: "200" } });
+    fireEvent.change(screen.getAllByLabelText("Data da venda")[1], { target: { value: "2025-02-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar vendas" }));
+    await waitFor(() => expect(registrarVendas).toHaveBeenCalledWith({
+      requestId: expect.any(String), sales: [{ value: 100, date: "2025-01-01" }, { value: 200, date: "2025-02-01" }],
+    }));
+    await waitFor(() => expect(screen.queryByText("Registrar vendas")).not.toBeInTheDocument());
   });
 });

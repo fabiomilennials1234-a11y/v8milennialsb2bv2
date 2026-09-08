@@ -97,6 +97,7 @@ export function LeadCard({
   onSaveNote,
   onOpenDeal,
   onNewDeal,
+  registrarVenda,
   onSaveField,
   onToggleCopilot,
   onDelete,
@@ -113,6 +114,7 @@ export function LeadCard({
   /** Recebe o `pipeline_entries.id` — abre o card do Negócio. */
   onOpenDeal?: (entryId: string) => void;
   onNewDeal?: () => void;
+  registrarVenda?: React.ReactNode;
   /** Persiste um campo do bloco Dados. Sem ela o bloco fica só de leitura. */
   onSaveField?: (chave: string, valor: string) => Promise<void>;
   onToggleCopilot?: (ativo: boolean) => void;
@@ -393,6 +395,7 @@ export function LeadCard({
             {aba === "negocios" && (
               <LeadCardDeals
                 negocios={lead.negocios}
+                registrarVenda={registrarVenda}
                 onOpenDeal={(id) => onOpenDeal?.(id)}
                 onNewDeal={() => onNewDeal?.()}
               />

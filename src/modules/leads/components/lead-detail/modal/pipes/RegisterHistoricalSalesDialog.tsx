@@ -76,7 +76,7 @@ export function RegisterHistoricalSalesDialog({ leadId, disabled }: { leadId: st
     <DialogTrigger asChild><Button type="button" variant="outline" size="sm" disabled={disabled}>
       <Receipt />Registrar Venda
     </Button></DialogTrigger>
-    <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-xl">
+    <DialogContent overlayClassName="z-[60]" className="z-[60] max-h-[85dvh] overflow-y-auto sm:max-w-xl">
       <DialogHeader>
         <DialogTitle>Registrar vendas</DialogTitle>
         <DialogDescription>Informe o valor e a data de cada compra anterior. Ao salvar, as vendas serão registradas como negócios ganhos e usadas no cálculo de recompra.</DialogDescription>

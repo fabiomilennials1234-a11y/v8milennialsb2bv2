@@ -48,3 +48,7 @@ validação atômica, acesso entre organizações, grants e bloqueio de edição
 Os testes React cobrem montagem da lista, cancelamento, confirmação e recuperação.
 
 Aplicar a migration antes de publicar o frontend. Não existe backfill automático.
+
+## Acesso pelo Card do Lead
+
+O Card do Lead atual também oferece Registrar Venda na aba Negócios, ao lado de Criar negócio. O container injeta o formulário compartilhado como ação do card; o card visual continua sem dependência de identidade ou banco. O teste de lead-card-novo-negocio monta o painel completo e percorre aba, botão, lista e gravação. O diálogo usa overlay e conteúdo acima da folha móvel.
