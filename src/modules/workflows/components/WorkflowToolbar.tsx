@@ -42,6 +42,7 @@ interface WorkflowToolbarProps {
   onNameChange: (name: string) => void;
   isActive: boolean;
   onToggleActive: () => void;
+  isToggleDisabled?: boolean;
   onSave: () => void;
   isSaving: boolean;
   onPublish?: () => void;
@@ -115,6 +116,7 @@ export function WorkflowToolbar({
   onNameChange,
   isActive,
   onToggleActive,
+  isToggleDisabled = false,
   onSave,
   isSaving,
   onPublish,
@@ -229,6 +231,7 @@ export function WorkflowToolbar({
           </Label>
           <Switch
             id="workflow-active"
+            disabled={isToggleDisabled}
             checked={isActive}
             onCheckedChange={onToggleActive}
           />

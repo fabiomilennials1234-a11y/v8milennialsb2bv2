@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { WorkflowDefinition } from '@/types/workflow';
@@ -21,6 +21,8 @@ interface GuidedWorkflowDraft { definition: WorkflowDefinition; revision: number
 const database: SupabaseClient = supabase;
 
 export function useGuidedWorkflowDraft(actorId?: string, organizationId?: string | null, workflowId?: string) {
+  const queryClient = useQueryClient();
+  const publicationKey = ['guided-workflow-publication', actorId, organizationId, workflowId];
   const query = useQuery({
     queryKey: ['guided-workflow-draft', actorId, organizationId, workflowId],
     enabled: Boolean(actorId && organizationId && workflowId),
@@ -31,6 +33,27 @@ export function useGuidedWorkflowDraft(actorId?: string, organizationId?: string
         .abortSignal(signal).returns<GuidedWorkflowDraft[]>().maybeSingle();
       if (response.error) throw response.error;
       return response.data;
+    },
+  });
+  const publication = useQuery({
+    queryKey: publicationKey,
+    enabled: Boolean(query.data && actorId && organizationId && workflowId),
+    refetchOnMount: 'always',
+    queryFn: async ({ signal }) => {
+      const response = await database.from('workflow_guided_publications').select('version_id')
+        .eq('workflow_id', workflowId!).eq('organization_id', organizationId!).abortSignal(signal)
+        .returns<Array<{ version_id: string }>>().maybeSingle();
+      if (response.error) throw response.error;
+      return response.data;
+    },
+  });
+  const setActive = useMutation({
+    mutationFn: async (active: boolean) => {
+      const response = await database.rpc('set_guided_workflow_active', {
+        p_workflow_id: workflowId, p_active: active, p_expected_version_id: publication.data?.version_id ?? null,
+      });
+      if (response.error) throw response.error;
+      return response.data as { is_active: boolean };
     },
   });
   const save = useMutation({
@@ -67,8 +90,9 @@ export function useGuidedWorkflowDraft(actorId?: string, organizationId?: string
         throw new GuidedPublicationError(typeof body?.code === 'string' ? body.code : 'source_unavailable', issues);
       }
       if (response.data?.status !== 'published') throw new Error('Não foi possível publicar.');
+      queryClient.setQueryData(publicationKey, { version_id: response.data.version_id });
       return response.data as { version_id: string; version_number: number };
     },
   });
-  return { ...query, save, create, publish };
+  return { ...query, save, create, publish, publication, setActive };
 }

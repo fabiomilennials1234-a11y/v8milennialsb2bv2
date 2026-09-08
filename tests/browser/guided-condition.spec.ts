@@ -19,7 +19,8 @@ test('troca de usuário remove seleção e resultado pessoal da conta anterior',
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
 });
 
-async function openGuidedEditor(page: Page, draftValue?: string, isNew = false, omitDraftTrigger = false, draftSettings?: Record<string, unknown>, liveActive = false) {
+async function openGuidedEditor(page: Page, draftValue?: string, isNew = false, omitDraftTrigger = false, draftSettings?: Record<string, unknown>, liveActive = false, publishedVersion?: string) {
+  await page.route('**/rest/v1/workflow_guided_publications?*', route => route.fulfill({ json: publishedVersion ? { version_id: publishedVersion } : null }));
   await page.route('**/rest/v1/workflow_guided_drafts?*', route => route.fulfill({ json: draftValue === undefined ? null : {
     revision: 3, settings: draftSettings, definition: { nodes: [
       ...(!omitDraftTrigger ? [{ id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } }] : []),
@@ -415,4 +416,16 @@ test('conflito ao salvar impede publicação sem perder edição local', async (
   await expect(page.getByText('Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar.')).toBeVisible();
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('Ana');
   expect(publications).toEqual([]);
+});
+
+test('ativa versão publicada pela API autorizada sem salvar rascunho', async ({ page }) => {
+  let activation: unknown;
+  await page.route('**/rest/v1/rpc/set_guided_workflow_active', route => {
+    activation = route.request().postDataJSON();
+    return route.fulfill({ json: { workflow_id: 'workflow-1', version_id: 'version-2', is_active: true } });
+  });
+  await openGuidedEditor(page, 'Mariana', false, false, undefined, false, 'version-2');
+  await page.getByRole('switch').click();
+  await expect.poll(() => activation, { timeout: 5000 }).toEqual({ p_workflow_id: 'workflow-1', p_active: true, p_expected_version_id: 'version-2' });
+  await expect(page.getByText('Automação ativada.')).toBeVisible();
 });

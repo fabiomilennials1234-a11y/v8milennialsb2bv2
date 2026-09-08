@@ -42,6 +42,9 @@ const pinRollback = readFileSync(`supabase/migrations/rollback/${pinMigration}`,
 const discoveryMigration = '20271017000010_guided_publication_discovery.sql';
 const discoveryForward = readFileSync(`supabase/migrations/${discoveryMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const discoveryRollback = readFileSync(`supabase/migrations/rollback/${discoveryMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const activationMigration = '20271017000011_guided_activation.sql';
+const activationForward = readFileSync(`supabase/migrations/${activationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const activationRollback = readFileSync(`supabase/migrations/rollback/${activationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -62,6 +65,7 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${activationRollback}
 ${discoveryRollback}
 ${pinRollback}
 ${publicationRollback}
@@ -74,7 +78,8 @@ ${readerRollback}
 ${conflictRollback}
 ${rollback}
 DO $$ BEGIN
-  IF to_regprocedure('public.sync_guided_publication_discovery()') IS NOT NULL
+  IF to_regprocedure('public.set_guided_workflow_active(uuid,boolean,uuid)') IS NOT NULL
+    OR to_regprocedure('public.sync_guided_publication_discovery()') IS NOT NULL
     OR to_regprocedure('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])') IS NOT NULL
     OR has_table_privilege('authenticated', 'public.workflow_guided_versions', 'SELECT')
     OR has_table_privilege('service_role', 'public.workflow_guided_versions', 'SELECT')
@@ -125,6 +130,18 @@ DO $$ BEGIN
     WHERE w.name = 'Preserved publication' AND w.trigger_type = 'lead_created' AND w.trigger_config = '{}'::jsonb) THEN
     RAISE EXCEPTION 'published discovery metadata lost';
   END IF;
+  IF has_function_privilege('anon', 'public.guard_guided_workflow_activation()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.guard_guided_workflow_activation()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.guard_guided_workflow_activation()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'activation guard callable directly';
+  END IF;
+END $$;
+DO $$ DECLARE denied boolean := false; BEGIN
+  BEGIN
+    UPDATE public.workflows SET is_active = true WHERE id = (SELECT workflow_id FROM guided_rollback_fixture);
+  EXCEPTION WHEN insufficient_privilege THEN denied := true;
+  END;
+  IF NOT denied THEN RAISE EXCEPTION 'rollback allowed guided activation'; END IF;
 END $$;
 ${forward}
 ${conflictForward}
@@ -137,7 +154,13 @@ ${initialSettingsForward}
 ${publicationForward}
 ${pinForward}
 ${discoveryForward}
+${activationForward}
 DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.set_guided_workflow_active(uuid,boolean,uuid)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.set_guided_workflow_active(uuid,boolean,uuid)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.set_guided_workflow_active(uuid,boolean,uuid)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'activation privileges incorrect';
+  END IF;
   IF has_function_privilege('anon', 'public.sync_guided_publication_discovery()', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.sync_guided_publication_discovery()', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.sync_guided_publication_discovery()', 'EXECUTE') THEN
@@ -220,6 +243,11 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.workflows w JOIN guided_rollback_fixture f ON f.workflow_id = w.id
     WHERE w.name = 'Preserved publication' AND w.trigger_type = 'lead_created' AND w.trigger_config = '{}'::jsonb) THEN
     RAISE EXCEPTION 'published discovery metadata lost';
+  END IF;
+  IF has_function_privilege('anon', 'public.guard_guided_workflow_activation()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.guard_guided_workflow_activation()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.guard_guided_workflow_activation()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'activation guard callable directly';
   END IF;
 END $$;
 ROLLBACK;

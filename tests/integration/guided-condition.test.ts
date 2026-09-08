@@ -91,6 +91,8 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: { name: 'HTTP publication' },
     });
     expect(created.error).toBeNull();
+    expect((await caller.rpc('set_guided_workflow_active', { p_workflow_id: workflowId, p_active: true, p_expected_version_id: crypto.randomUUID() })).error?.code).toBe('42501');
+    expect((await caller.from('workflows').update({ is_active: true }).eq('id', workflowId)).error?.code).toBe('42501');
     const approved = await caller.rpc('set_workflow_data_grant', {
       p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0,
     });
@@ -112,6 +114,12 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const discoverable = await caller.from('workflows').select('name, trigger_type, trigger_config, is_active').eq('id', workflowId).eq('organization_id', orgA).single();
     expect(discoverable.error).toBeNull();
     expect(discoverable.data).toEqual({ name: 'HTTP publication', trigger_type: 'lead_created', trigger_config: {}, is_active: false });
+    const activated = await caller.rpc('set_guided_workflow_active', { p_workflow_id: workflowId, p_active: true, p_expected_version_id: publication.version_id });
+    expect(activated.error).toBeNull();
+    expect(activated.data).toMatchObject({ is_active: true, version_id: publication.version_id });
+    const staleActivation = await caller.rpc('set_guided_workflow_active', { p_workflow_id: workflowId, p_active: true, p_expected_version_id: crypto.randomUUID() });
+    expect(staleActivation.error?.code).toBe('PT409');
+    expect((await caller.rpc('set_guided_workflow_active', { p_workflow_id: workflowId, p_active: false, p_expected_version_id: null })).error).toBeNull();
     const invalidDefinition = { ...definition, nodes: definition.nodes.map(node => node.id === 'y'
       ? { ...node, type: 'unknown_action' } : node) };
     const saved = await caller.rpc('save_guided_workflow_draft_with_settings', {
@@ -148,6 +156,10 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const afterAudio = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
     expect(afterAudio.error).toBeNull();
     expect(afterAudio.data?.version_id).toBe(publication.version_id);
+    expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1 })).error).toBeNull();
+    expect((await caller.rpc('set_guided_workflow_active', { p_workflow_id: workflowId, p_active: true, p_expected_version_id: publication.version_id })).error?.code).toBe('42501');
+    const bypass = await caller.from('workflows').update({ is_active: true }).eq('id', workflowId);
+    expect(bypass.error?.code).toBe('42501');
   }, 60000);
 
   it.each([false, true])('resumes old rules without repeating actions and respects revocation during the wait: %s', async (revokeGrant) => {

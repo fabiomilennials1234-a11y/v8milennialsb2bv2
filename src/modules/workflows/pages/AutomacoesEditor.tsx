@@ -628,6 +628,20 @@ function AutomacoesEditorContent() {
     }
   }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
 
+  const handleToggleActive = useCallback(async () => {
+    if (!isNew && guidedDraft.data && guidedDraft.publication.data) {
+      try {
+        const result = await guidedDraft.setActive.mutateAsync(!isActive);
+        setIsActive(result.is_active);
+        toast.success(result.is_active ? 'Automação ativada.' : 'Automação desativada.');
+      } catch {
+        toast.error('Não foi possível alterar a ativação. Verifique a versão publicada e a autorização de dados.');
+      }
+      return;
+    }
+    setIsActive(!isActive);
+  }, [isNew, guidedDraft.data, guidedDraft.publication.data, guidedDraft.setActive, isActive]);
+
   const handlePublish = useCallback(async () => {
     setPublicationIssues([]);
     const revision = await handleSave();
@@ -683,7 +697,8 @@ function AutomacoesEditorContent() {
         name={name}
         onNameChange={setName}
         isActive={isActive}
-        onToggleActive={() => setIsActive(!isActive)}
+        onToggleActive={handleToggleActive}
+        isToggleDisabled={Boolean(guidedDraft.data) && (guidedDraft.publication.isPending || guidedDraft.publication.isError || guidedDraft.setActive.isPending)}
         onSave={handleSave}
         isSaving={isSaving}
         onPublish={!isNew && guidedDraft.data ? handlePublish : undefined}

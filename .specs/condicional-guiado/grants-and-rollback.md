@@ -71,3 +71,9 @@ Rollback preserves pins/FK and UPDATE guard, disables automatic INSERT capture. 
 Preview applied/registered. AFTER INSERT/UPDATE of selected version synchronizes published name and trigger type/config to the existing workflow discovery surface. Same transaction as version selection; no activation, legacy-definition overwrite or data backfill. Trigger function direct EXECUTE denied to PUBLIC/anon/authenticated/service_role, search_path fixed.
 
 Rollback removes only sync trigger/function and keeps last published metadata, version history and pins. Stop guided admission first. Reverse order 10..00; ascending reapply. Eleven-file transactional rehearsal verifies retained discovery metadata, versions, pins, drafts, grants and restored restricted privileges. Full producer discovery and activation remain unfinished.
+
+### Activation migration 20271017000011
+
+Preview applied/registered. Authenticated-only set_guided_workflow_active derives org, checks current admin and selected version under lock. Trigger-only guard_guided_workflow_activation checks current publication and grant on is_active writes, including direct API mutation. Guard direct EXECUTE denied to all application roles; activation RPC denied to anon/service/PUBLIC and granted authenticated. Functions pin search_path.
+
+Rollback keeps state/history and replaces guard with unconditional rejection of guided activation; deactivation stays possible. Drops activation RPC. Stop admission before rollback; do not clear pins or pretend old definitions can be reconstructed. Twelve-file rehearsal proved rollback denies activation and reapply restores privileges without losing synthetic data.
