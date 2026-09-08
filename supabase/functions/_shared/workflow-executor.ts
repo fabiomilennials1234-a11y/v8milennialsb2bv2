@@ -9,6 +9,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { evaluateGuidedCondition, isGuidedCondition } from './guided-condition.ts';
 import { evaluateCondition, getLeadTags } from "./workflow-condition-evaluator.ts";
 import { executeWorkflowAction, resolveVariables, type ActionResult } from "./workflow-action-handler.ts";
 import {
@@ -87,6 +88,8 @@ interface ExecuteWorkflowParams {
    */
   entryId?: string | null;
   dealId?: string | null;
+  /** Immutable pin supplied by the claimed execution row. Verified before reading rules. */
+  guidedVersionId?: string | null;
   definition: WorkflowDefinition;
   loopLimit: number;
   context: Record<string, unknown>;
@@ -158,10 +161,28 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
     leadId,
     entryId = null,
     dealId = null,
-    definition,
-    loopLimit,
+    definition: currentDefinition,
+    loopLimit: currentLoopLimit,
     context,
   } = params;
+
+  let definition = currentDefinition;
+  let loopLimit = currentLoopLimit;
+  if (params.guidedVersionId) {
+    const execution = await supabase.from('workflow_executions').select('guided_version_id')
+      .eq('id', executionId).eq('workflow_id', workflowId).eq('organization_id', organizationId).maybeSingle();
+    if (execution.error || execution.data?.guided_version_id !== params.guidedVersionId) {
+      return { success: false, status: 'failed', error: 'execution_version_unavailable', stepsExecuted: 0 };
+    }
+    const version = await supabase.from('workflow_guided_versions').select('definition, settings')
+      .eq('id', params.guidedVersionId).eq('workflow_id', workflowId).eq('organization_id', organizationId).maybeSingle();
+    if (version.error || !version.data || !Array.isArray(version.data.definition?.nodes) || !Array.isArray(version.data.definition?.edges)) {
+      await updateExecution(supabase, executionId, 'failed', params.currentNodeId ?? null, params.loopCounters ?? {}, 'execution_version_unavailable');
+      return { success: false, status: 'failed', error: 'execution_version_unavailable', stepsExecuted: 0 };
+    }
+    definition = version.data.definition as WorkflowDefinition;
+    loopLimit = typeof version.data.settings?.loop_limit === 'number' ? version.data.settings.loop_limit : 100;
+  }
 
   // Guided drafts cannot run through the legacy evaluator. The published,
   // organization-authorized runtime must resolve them before graph traversal.
@@ -169,9 +190,21 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
   // when an unpublished guided condition appears later in the graph.
   const guidedDraft = definition.nodes.find(node =>
     node.type === "condition" && Object.prototype.hasOwnProperty.call(node.data, "guidedCondition"));
-  if (guidedDraft) {
+  if (guidedDraft && !params.guidedVersionId) {
     await updateExecution(supabase, executionId, "failed", guidedDraft.id, params.loopCounters ?? {}, "guided_publication_required");
     return { success: false, status: "failed", error: "guided_publication_required", stepsExecuted: 0 };
+  }
+
+  if (params.guidedVersionId) {
+    for (const node of definition.nodes.filter(candidate => candidate.type === 'condition')) {
+      const outputs = definition.edges.filter(edge => edge.source === node.id);
+      if (!isGuidedCondition(node.data.guidedCondition) || outputs.length !== 2
+        || outputs.filter(edge => edge.sourceHandle === 'yes').length !== 1
+        || outputs.filter(edge => edge.sourceHandle === 'no').length !== 1) {
+        await updateExecution(supabase, executionId, 'failed', node.id, params.loopCounters ?? {}, 'invalid_configuration');
+        return { success: false, status: 'failed', error: 'invalid_configuration', stepsExecuted: 0 };
+      }
+    }
   }
 
   const nodeMap = new Map<string, WorkflowNode>();
@@ -380,6 +413,23 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
         }
 
         case "condition": {
+          if (params.guidedVersionId) {
+            const evaluated = await evaluateGuidedCondition(supabase, {
+              organizationId, leadId, condition: node.data.guidedCondition,
+              authorization: { kind: 'organization', workflowId },
+            });
+            if (evaluated.status === 'error') {
+              await recordStep(supabase, executionId, node, 'failed', undefined, undefined, evaluated.code);
+              await updateExecution(supabase, executionId, 'failed', nodeId, loopCounters, evaluated.code);
+              return { success: false, status: 'failed', error: evaluated.code, stepsExecuted };
+            }
+            const handle = evaluated.matched ? 'yes' : 'no';
+            await recordStep(supabase, executionId, node, 'success', undefined,
+              { matched: evaluated.matched, version_id: params.guidedVersionId });
+            const selected = definition.edges.find(edge => edge.source === nodeId && edge.sourceHandle === handle)!;
+            nextNodes.push(selected.target);
+            break;
+          }
           const conditionMode = (node.data.conditionMode as string) || "field";
 
           if (conditionMode === "time_window") {

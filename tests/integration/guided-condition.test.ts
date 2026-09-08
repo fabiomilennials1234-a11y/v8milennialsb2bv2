@@ -1,3 +1,5 @@
+import '../helpers/deno-mock';
+import { executeWorkflow } from '../../supabase/functions/_shared/workflow-executor';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { evaluateGuidedCondition } from '../../supabase/functions/_shared/guided-condition';
@@ -394,6 +396,18 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const foreignEnqueue = await service.from('workflow_executions').insert({ workflow_id: workflowId, organization_id: orgB,
       lead_id: leadB, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' });
     expect(foreignEnqueue.error?.code).toBe('42501');
+    expect((await service.from('leads').update({ name: 'Mariana' }).eq('id', leadA).eq('organization_id', orgA)).error).toBeNull();
+    try {
+      const executed = await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA,
+        leadId: leadA, guidedVersionId: first.data.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {} });
+      expect(executed).toMatchObject({ success: true, status: 'completed' });
+      const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+      expect(steps.error).toBeNull();
+      expect(steps.data?.map(step => step.node_id).sort()).toEqual(['c', 'n', 't']);
+    } finally {
+      const restored = await service.from('leads').update({ name: 'José' }).eq('id', leadA).eq('organization_id', orgA);
+      if (restored.error) throw restored.error;
+    }
     expect(second.data.version_id).not.toBe(first.data.version_id);
     const original = await administrator.from('workflow_guided_versions').select('definition, settings, source_revision')
       .eq('organization_id', orgA).eq('workflow_id', workflowId).eq('id', first.data.version_id).single();
