@@ -14,7 +14,7 @@ const emptySale = () => ({ value: "", date: "" });
 
 export function RegisterHistoricalSalesDialog({ leadId, disabled }: { leadId: string; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
-  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [requestId, setRequestId] = useState<string>(() => crypto.randomUUID());
   const [submitted, setSubmitted] = useState<HistoricalSaleInput[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { timezone, organizationId } = useOrganization();
