@@ -757,6 +757,60 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect((await service.rpc('read_guided_condition_lead_fields', args)).error?.code).toBe('42501');
   }, 60000);
 
+  it('validates all tag identities before deciding membership through caller RLS', async () => {
+    const assigned = crypto.randomUUID();
+    const unassigned = crypto.randomUUID();
+    const foreign = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    try {
+      expect((await service.from('tags').insert([
+        { id: assigned, organization_id: orgA, name: 'Cliente prioritário', color: '#ffd700' },
+        { id: unassigned, organization_id: orgA, name: 'Sem atribuição', color: '#808080' },
+        { id: foreign, organization_id: orgB, name: 'Tag restrita', color: '#808080' },
+      ])).error).toBeNull();
+      expect((await service.from('lead_tags').insert({ lead_id: leadA, tag_id: assigned })).error).toBeNull();
+      const args = { p_organization_id: orgA, p_lead_id: leadA, p_tag_ids: [assigned, unassigned] };
+      const read = await caller.rpc('test_guided_condition_tags', args);
+      expect(read.error).toBeNull();
+      expect(read.data).toEqual(expect.arrayContaining([
+        { tag_id: assigned, tag_name: 'Cliente prioritário', assigned: true },
+        { tag_id: unassigned, tag_name: 'Sem atribuição', assigned: false },
+      ]));
+      expect(read.data).toHaveLength(2);
+      const condition = { version: 1, id: 'g', kind: 'group', match: 'all', children: [
+        { version: 1, id: 'has', field: 'lead.tags', operator: 'has_tag', tagId: assigned.toUpperCase() },
+        { version: 1, id: 'not-has', field: 'lead.tags', operator: 'not_has_tag', tagId: unassigned },
+      ] };
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition })).toMatchObject({
+        status: 'evaluated', matched: true, rules: [
+          { id: 'has', matched: true, actual: true, reference: { id: assigned, name: 'Cliente prioritário' } },
+          { id: 'not-has', matched: true, actual: false, reference: { id: unassigned, name: 'Sem atribuição' } },
+        ],
+      });
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true });
+      expect((await caller.rpc('test_guided_condition_tags', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
+      expect((await caller.rpc('test_guided_condition_tags', { ...args, p_tag_ids: [assigned, foreign] })).error?.code).toBe('PT422');
+      expect((await service.from('tags').delete().eq('id', unassigned)).error).toBeNull();
+      expect((await caller.rpc('test_guided_condition_tags', args)).error?.code).toBe('PT422');
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: {
+        version: 1, id: 'invalid-group', kind: 'group', match: 'any', children: [
+          { version: 1, id: 'name', field: 'lead.name', operator: 'equals', value: 'José' },
+          { version: 1, id: 'missing-tag', field: 'lead.tags', operator: 'not_has_tag', tagId: unassigned },
+        ],
+      } })).toEqual({ status: 'error', code: 'reference_unavailable' });
+    } finally {
+      await service.from('lead_tags').delete().eq('lead_id', leadA).in('tag_id', [assigned, unassigned, foreign]).throwOnError();
+      await service.from('tags').delete().in('id', [assigned, unassigned, foreign]).throwOnError();
+    }
+  }, 60000);
+
   it('honors explicit responsible-only access within the same organization', async () => {
     const workflowId = crypto.randomUUID();
     const password = `${crypto.randomUUID()}!Aa1`;
@@ -841,6 +895,9 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       expect(await evaluate(ownLead)).toEqual({ status: 'evaluated', matched: true,
         rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 'Ana' }] });
       expect(await evaluate(leadA)).toEqual({ status: 'error', code: 'context_unavailable' });
+      const tagProbe = { p_organization_id: orgA, p_lead_id: ownLead, p_tag_ids: [crypto.randomUUID()] };
+      expect((await caller.rpc('test_guided_condition_tags', tagProbe)).error?.code).toBe('PT422');
+      expect((await caller.rpc('test_guided_condition_tags', { ...tagProbe, p_lead_id: leadA })).error?.code).toBe('PT404');
       const revoked = await service.from('team_members').update({ is_active: false })
         .eq('organization_id', orgA).eq('id', memberId);
       if (revoked.error) throw revoked.error;

@@ -1,11 +1,15 @@
 import { GUIDED_TEXT_FIELDS, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-export type GuidedRule = {
+export type GuidedScalarRule = {
   version: 1;
   id: string;
   field: GuidedTextField;
 } & GuidedTextComparison;
+
+export type GuidedRule = GuidedScalarRule | {
+  version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
+};
 
 export interface GuidedConditionRequest {
   organizationId: string;
@@ -31,6 +35,8 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && rule.children.every(child => valid(child, groupDepth + 1));
     }
     if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
+    if (rule.field === 'lead.tags') return (rule.operator === 'has_tag' || rule.operator === 'not_has_tag')
+      && typeof rule.tagId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.tagId);
     return isGuidedTextField(rule.field) && (rule.operator === 'is_empty'
       || (isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
   }
@@ -60,7 +66,9 @@ export async function evaluateGuidedCondition(
   if (!isGuidedCondition(request.condition)) {
     return { status: 'error' as const, code: 'invalid_configuration' as const };
   }
-  const fields = guidedConditionFields(request.condition) as GuidedTextField[];
+  const requestedFields = guidedConditionFields(request.condition);
+  if (request.authorization && requestedFields.includes('lead.tags')) return { status: 'error' as const, code: 'access_denied' as const };
+  const fields = requestedFields.filter(isGuidedTextField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? usesFieldReader ? await caller.rpc('read_guided_condition_lead_fields', {
@@ -89,13 +97,42 @@ export async function evaluateGuidedCondition(
     };
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
+  type TagValue = { tag_id: string; tag_name: string; assigned: boolean };
+  const tags = new Map<string, TagValue>();
+  if (requestedFields.includes('lead.tags')) {
+    const tagIds = new Set<string>();
+    function collect(current: GuidedCondition): void {
+      if ('children' in current) current.children.forEach(collect);
+      else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
+    }
+    collect(request.condition);
+    const response = await caller.rpc('test_guided_condition_tags', {
+      p_organization_id: request.organizationId, p_lead_id: request.leadId, p_tag_ids: [...tagIds],
+    });
+    if (response.error) {
+      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
+        : response.error.code === 'PT404' ? 'context_unavailable' as const
+        : response.error.code === '42501' ? 'access_denied' as const
+        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+      return { status: 'error' as const, code };
+    }
+    const rows: unknown = response.data;
+    if (!Array.isArray(rows)) return { status: 'error' as const, code: 'source_unavailable' as const };
+    for (const tag of rows) {
+      if (!tag || typeof tag.tag_id !== 'string' || typeof tag.tag_name !== 'string' || typeof tag.assigned !== 'boolean') {
+        return { status: 'error' as const, code: 'source_unavailable' as const };
+      }
+      tags.set(tag.tag_id, tag);
+    }
+    if ([...tagIds].some(id => !tags.has(id))) return { status: 'error' as const, code: 'reference_unavailable' as const };
+  }
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   const record = (request.authorization && usesFieldReader
     ? (data as unknown as { field_values: Record<string, unknown> }).field_values : data) as Record<string, unknown>;
   if (!record || fields.some(field => !Object.prototype.hasOwnProperty.call(record, GUIDED_TEXT_FIELDS[field].column))) {
     return { status: 'error' as const, code: 'source_unavailable' as const };
   }
-  type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown }
+  type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string } }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
   const rules: RuleResult[] = [];
@@ -118,6 +155,13 @@ export async function evaluateGuidedCondition(
         decided = condition.match === 'all' ? !matched : matched;
       }
       return group.matched;
+    }
+    if (condition.field === 'lead.tags') {
+      const tag = tags.get(condition.tagId.toLowerCase())!;
+      const matched = condition.operator === 'has_tag' ? tag.assigned : !tag.assigned;
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual: tag.assigned,
+        reference: { id: tag.tag_id, name: tag.tag_name } });
+      return matched;
     }
     const actual = record[GUIDED_TEXT_FIELDS[condition.field].column];
     const empty = actual == null || actual === '';

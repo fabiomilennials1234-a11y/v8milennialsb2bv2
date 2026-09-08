@@ -50,6 +50,9 @@ const companyRollback = readFileSync(`supabase/migrations/rollback/${companyMigr
 const contactMigration = '20271017000013_guided_contact_authorization.sql';
 const contactForward = readFileSync(`supabase/migrations/${contactMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const contactRollback = readFileSync(`supabase/migrations/rollback/${contactMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const tagMigration = '20271017000014_guided_personal_tag_test.sql';
+const tagForward = readFileSync(`supabase/migrations/${tagMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const tagRollback = readFileSync(`supabase/migrations/rollback/${tagMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -70,6 +73,12 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${tagRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_tags(uuid,uuid,uuid[])') IS NOT NULL THEN
+    RAISE EXCEPTION 'personal tag test still callable after rollback';
+  END IF;
+END $$;
 ${contactRollback}
 ${companyRollback}
 DO $$ BEGIN
@@ -171,6 +180,14 @@ ${discoveryForward}
 ${activationForward}
 -- Migration 13 includes 12 definitions, preserving wider historical grants.
 ${contactForward}
+${tagForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_tags(uuid,uuid,uuid[])', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_tags(uuid,uuid,uuid[])', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_tags(uuid,uuid,uuid[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'personal tag test grants invalid';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.read_guided_condition_lead_fields(uuid,uuid,uuid,text[])', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.read_guided_condition_lead_fields(uuid,uuid,uuid,text[])', 'EXECUTE')
