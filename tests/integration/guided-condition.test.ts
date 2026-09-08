@@ -43,7 +43,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     });
     if (member.error) throw member.error;
     const leads = await service.from('leads').insert([
-      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', pre_sale_responsible_id: adminMemberId },
+      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', email: 'comercial@aurora.example', phone: '5511999990000', pre_sale_responsible_id: adminMemberId },
       { id: leadB, organization_id: orgB, name: 'Dado protegido' },
     ]);
     if (leads.error) throw leads.error;
@@ -250,7 +250,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }).abortSignal(AbortSignal.timeout(8000));
     expect(stale.error?.code).toBe('PT409');
     const unsupported = await caller.rpc('set_workflow_data_grant', {
-      p_workflow_id: workflowId, p_fields: ['lead.name', 'lead.email'], p_expected_revision: 1,
+      p_workflow_id: workflowId, p_fields: ['lead.name', 'lead.password'], p_expected_revision: 1,
     });
     expect(unsupported.error?.code).toBe('22023');
     const readable = await caller.from('workflow_data_grants').select('fields, revision')
@@ -684,19 +684,27 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect(await evaluate(leadB)).toEqual({ status: 422, body: { status: 'error', code: 'context_unavailable' } });
   }, 60000);
 
-  it('tests company through personal HTTP permissions without inheriting name authorization', async () => {
+  it.each([
+    { field: 'lead.company', value: 'AURORA', actual: 'Fábrica Aurora' },
+    { field: 'lead.email', value: '@aurora.example', actual: 'comercial@aurora.example' },
+    { field: 'lead.phone', value: '5511', actual: '5511999990000' },
+  ])('tests $field through personal HTTP permissions', async ({ field, value, actual }) => {
     const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
       body: JSON.stringify({ organizationId: orgA, leadId: leadA,
-        condition: { version: 1, id: 'company', field: 'lead.company', operator: 'contains', value: 'AURORA' } }),
+        condition: { version: 1, id: 'company', field, operator: 'contains', value } }),
     });
     expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: {
       status: 'evaluated', matched: true,
-      rules: [{ id: 'company', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' }],
+      rules: [{ id: 'company', status: 'evaluated', matched: true, actual }],
     } });
   }, 60000);
 
-  it('requires a separate company grant and atomically restricts requested organizational fields', async () => {
+  it.each([
+    { field: 'lead.company', column: 'company', actual: 'Fábrica Aurora', comparison: 'FABRICA AURORA', fragment: 'AURORA' },
+    { field: 'lead.email', column: 'email', actual: 'comercial@aurora.example', comparison: 'COMERCIAL@AURORA.EXAMPLE', fragment: '@aurora.example' },
+    { field: 'lead.phone', column: 'phone', actual: '5511999990000', comparison: '5511999990000', fragment: '5511' },
+  ])('requires explicit $field grant through publication and execution', async ({ field, column, actual, comparison, fragment }) => {
     const workflowId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
@@ -705,21 +713,21 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: { name: 'Company grant' },
     })).error).toBeNull();
     expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0 })).error).toBeNull();
-    const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA, p_fields: ['lead.company'] };
+    const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA, p_fields: [field] };
     expect((await service.rpc('read_guided_condition_lead_fields', args)).error?.code).toBe('42501');
-    expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.company'], p_expected_revision: 1 })).error).toBeNull();
+    expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [field], p_expected_revision: 1 })).error).toBeNull();
     const read = await service.rpc('read_guided_condition_lead_fields', args);
     expect(read.error).toBeNull();
-    expect(read.data).toEqual([{ id: leadA, organization_id: orgA, field_values: { company: 'Fábrica Aurora' } }]);
+    expect(read.data).toEqual([{ id: leadA, organization_id: orgA, field_values: { [column]: actual } }]);
     expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA,
       authorization: { kind: 'organization', workflowId },
-      condition: { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' },
+      condition: { version: 1, id: 'company', field, operator: 'equals', value: comparison },
     })).toEqual({ status: 'evaluated', matched: true,
-      rules: [{ id: 'company', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' }],
+      rules: [{ id: 'company', status: 'evaluated', matched: true, actual }],
     });
     const definition = { nodes: [
       { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
-      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field: 'lead.company', operator: 'contains', value: 'AURORA' } } },
+      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field, operator: 'contains', value: fragment } } },
       { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
     ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
     expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1,
@@ -741,7 +749,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect(steps.data?.map(step => step.node_id)).toContain('yes');
     expect(steps.data?.map(step => step.node_id)).not.toContain('no');
     expect((await caller.rpc('read_guided_condition_lead_fields', args)).error?.code).toBe('42501');
-    expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_fields: ['lead.name', 'lead.company'] })).error?.code).toBe('42501');
+    expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_fields: ['lead.name', field] })).error?.code).toBe('42501');
     expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_organization_id: orgB })).error?.code).toBe('42501');
     expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_lead_id: leadB })).data).toEqual([]);
     expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_fields: ['lead.password'] })).error?.code).toBe('22023');

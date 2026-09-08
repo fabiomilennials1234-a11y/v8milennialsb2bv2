@@ -678,3 +678,22 @@ test('troca operadores de texto preservando valor compatível e resumo no canvas
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Testar condição', exact: true })).toBeDisabled();
 });
+
+for (const [field, label, value] of [['lead.email', 'Email', 'comercial@aurora.example'], ['lead.phone', 'Telefone', '5511999990000']]) {
+  test(`seleciona ${label} e explica o valor sem confundir com Nome`, async ({ page }) => {
+    let submitted: unknown;
+    await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
+    await page.route('**/functions/v1/test-guided-condition', route => {
+      submitted = route.request().postDataJSON().condition;
+      return route.fulfill({ json: { status: 'evaluated', matched: true,
+        rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: value }] } });
+    });
+    await page.goto('/tests/browser/fixtures/guided-condition.html');
+    await page.getByLabel('Informação', { exact: true }).selectOption(field, { timeout: 3000 });
+    await page.getByLabel('Valor da comparação').fill(value);
+    await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+    await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText(`${label} do lead: ${value}`);
+    expect(submitted).toMatchObject({ field, operator: 'equals', value });
+  });
+}

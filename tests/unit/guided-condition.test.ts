@@ -175,3 +175,23 @@ it.each([
     organizationId: 'org-1', leadId: 'lead-1', condition: { version: 1, id: 'text', field: 'lead.name', operator, value },
   })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'text', status: 'evaluated', matched, actual }] });
 });
+
+it('compares email and phone as separate text fields without rewriting their stored values', async () => {
+  const caller = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => {
+      expect(new URL(String(input)).searchParams.get('select')?.replaceAll(' ', '').split(',').sort()).toEqual(['email', 'id', 'organization_id', 'phone']);
+      return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', email: 'Comercial@Aurora.example', phone: '5511999990000' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  expect(await evaluateGuidedCondition(caller, {
+    organizationId: 'org-1', leadId: 'lead-1', condition: { version: 1, id: 'g', kind: 'group', match: 'all', children: [
+      { version: 1, id: 'email', field: 'lead.email', operator: 'ends_with', value: '@AURORA.EXAMPLE' },
+      { version: 1, id: 'phone', field: 'lead.phone', operator: 'starts_with', value: '5511' },
+    ] },
+  })).toEqual({ status: 'evaluated', matched: true, groups: [{ id: 'g', status: 'evaluated', matched: true }], rules: [
+    { id: 'email', status: 'evaluated', matched: true, actual: 'Comercial@Aurora.example' },
+    { id: 'phone', status: 'evaluated', matched: true, actual: '5511999990000' },
+  ] });
+});
