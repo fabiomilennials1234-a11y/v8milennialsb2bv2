@@ -67,11 +67,21 @@ export async function evaluateGuidedCondition(
     return { status: 'error' as const, code: 'invalid_configuration' as const };
   }
   const requestedFields = guidedConditionFields(request.condition);
-  if (request.authorization && requestedFields.includes('lead.tags')) return { status: 'error' as const, code: 'access_denied' as const };
+  const tagIds = new Set<string>();
+  function collect(current: GuidedCondition): void {
+    if ('children' in current) current.children.forEach(collect);
+    else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
+  }
+  collect(request.condition);
   const fields = requestedFields.filter(isGuidedTextField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
+  const usesTagReader = Boolean(request.authorization && tagIds.size);
   const { data, error, status } = request.authorization?.kind === 'organization'
-    ? usesFieldReader ? await caller.rpc('read_guided_condition_lead_fields', {
+    ? usesTagReader ? await caller.rpc('read_guided_condition_data', {
+      p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
+      p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds],
+    }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
+    : usesFieldReader ? await caller.rpc('read_guided_condition_lead_fields', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
       p_lead_id: request.leadId, p_fields: fields,
     }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
@@ -86,6 +96,8 @@ export async function evaluateGuidedCondition(
       .is('deleted_at', null)
       .maybeSingle();
   if (error) {
+    if (error.code === 'PT404') return { status: 'error' as const, code: 'context_unavailable' as const };
+    if (error.code === 'PT422') return { status: 'error' as const, code: 'reference_unavailable' as const };
     if (status === 401 || status === 403 || error.code === '42501') {
       return { status: 'error' as const, code: 'access_denied' as const };
     }
@@ -100,13 +112,10 @@ export async function evaluateGuidedCondition(
   type TagValue = { tag_id: string; tag_name: string; assigned: boolean };
   const tags = new Map<string, TagValue>();
   if (requestedFields.includes('lead.tags')) {
-    const tagIds = new Set<string>();
-    function collect(current: GuidedCondition): void {
-      if ('children' in current) current.children.forEach(collect);
-      else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
-    }
-    collect(request.condition);
-    const response = await caller.rpc('test_guided_condition_tags', {
+    const response = usesTagReader ? {
+      data: (data as unknown as { field_values?: Record<string, unknown> }).field_values?.tags,
+      error: null, status: 200,
+    } : await caller.rpc('test_guided_condition_tags', {
       p_organization_id: request.organizationId, p_lead_id: request.leadId, p_tag_ids: [...tagIds],
     });
     if (response.error) {
@@ -127,7 +136,7 @@ export async function evaluateGuidedCondition(
     if ([...tagIds].some(id => !tags.has(id))) return { status: 'error' as const, code: 'reference_unavailable' as const };
   }
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-  const record = (request.authorization && usesFieldReader
+  const record = (request.authorization && (usesFieldReader || usesTagReader)
     ? (data as unknown as { field_values: Record<string, unknown> }).field_values : data) as Record<string, unknown>;
   if (!record || fields.some(field => !Object.prototype.hasOwnProperty.call(record, GUIDED_TEXT_FIELDS[field].column))) {
     return { status: 'error' as const, code: 'source_unavailable' as const };

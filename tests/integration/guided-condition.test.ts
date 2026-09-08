@@ -757,6 +757,50 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect((await service.rpc('read_guided_condition_lead_fields', args)).error?.code).toBe('42501');
   }, 60000);
 
+  it('requires current explicit tag scope and rejects foreign references during automatic reads', async () => {
+    const workflowId = crypto.randomUUID();
+    const tagId = crypto.randomUUID();
+    const foreignTag = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    try {
+      expect((await service.from('tags').insert([
+        { id: tagId, organization_id: orgA, name: 'Distribuidor', color: '#ffd700' },
+        { id: foreignTag, organization_id: orgB, name: 'Distribuidor', color: '#ffd700' },
+      ])).error).toBeNull();
+      expect((await service.from('lead_tags').insert({ lead_id: leadA, tag_id: tagId })).error).toBeNull();
+      expect((await caller.rpc('create_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: { name: 'Tag scope' },
+      })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0 })).error).toBeNull();
+      const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA, p_fields: ['lead.tags'], p_tag_ids: [tagId] };
+      expect((await service.rpc('read_guided_condition_data', args)).error?.code).toBe('42501');
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.tags'], p_expected_revision: 1 })).error).toBeNull();
+      const read = await service.rpc('read_guided_condition_data', args);
+      expect(read.error).toBeNull();
+      expect(read.data).toEqual([{ id: leadA, organization_id: orgA, field_values: {
+        tags: [{ tag_id: tagId, tag_name: 'Distribuidor', assigned: true }],
+      } }]);
+      const request = { organizationId: orgA, leadId: leadA, authorization: { kind: 'organization' as const, workflowId },
+        condition: { version: 1, id: 'tag-rule', field: 'lead.tags', operator: 'has_tag', tagId: tagId.toUpperCase() } };
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'evaluated', matched: true,
+        rules: [{ id: 'tag-rule', status: 'evaluated', matched: true, actual: true, reference: { id: tagId, name: 'Distribuidor' } }],
+      });
+      expect((await caller.rpc('read_guided_condition_data', args)).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_fields: ['lead.tags', 'lead.name'] })).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_organization_id: orgB })).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_tag_ids: [tagId, foreignTag] })).error?.code).toBe('PT422');
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 2 })).error).toBeNull();
+      expect((await service.rpc('read_guided_condition_data', args)).error?.code).toBe('42501');
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+    } finally {
+      await service.from('lead_tags').delete().eq('lead_id', leadA).eq('tag_id', tagId).throwOnError();
+      await service.from('tags').delete().in('id', [tagId, foreignTag]).throwOnError();
+    }
+  }, 60000);
+
   it('validates all tag identities before deciding membership through caller RLS', async () => {
     const assigned = crypto.randomUUID();
     const unassigned = crypto.randomUUID();
