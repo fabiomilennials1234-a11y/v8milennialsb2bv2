@@ -137,6 +137,7 @@ owner: claude-agent
 - [[2026-09-04-frontend-sai-dos-espelhos|SCRUM-673 — frontend deixa os espelhos]]
 - [[2026-09-04-migration-escritoras-saem-dos-espelhos|SCRUM-674 — escritoras SQL deixam os espelhos]]
 - [[2026-09-08-estudio-comando-desfecho-em-revisao|Estúdio, Comando e desfecho independente — em revisão]] 🟡 draft
+- [[2026-09-08-chat-envio-retry-unico|Uma bolha por envio com recuperação limitada]] 🟡 draft
 - [[2026-09-08-lei-relacao-abas-timeout|Corrigir timeout nas abas da Lei da Relação]]
 - [[2026-09-08-lei-relacao-perdido|Lei da Relação com ganho e perdido]]
 - [[2026-09-08-meeting-date-projection|Data da reunião no negócio sem deal_id]]

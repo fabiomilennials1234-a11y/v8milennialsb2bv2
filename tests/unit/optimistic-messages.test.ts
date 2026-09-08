@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  unconfirmedFailures,
+  mergeFetchedWithPending,
   isOptimisticMessage,
   makeOptimisticId,
   promoteOptimisticMessage,
@@ -187,4 +189,23 @@ describe("promoção + realtime combinados", () => {
     expect(final).toHaveLength(1);
     expect(final[0].message_id).toBe("real-123");
   });
+});
+
+
+describe("recovery during background refetch", () => {
+  it("keeps one pending bubble and its attempt counter", () => {
+    const pending = makeOptimistic({ retry_attempt: 5 });
+    expect(mergeFetchedWithPending([pending], [])).toEqual([pending]);
+  });
+  it("reconciles the provider conversation type with optimistic text", () => {
+    const pending = makeOptimistic({ retry_attempt: 5 });
+    const real = makeMessage({ message_type: "conversation", status: "delivered" });
+    expect(mergeFetchedWithPending([pending], [real])).toEqual([real]);
+  });
+});
+
+
+it("a late delivery removes one local failure, without collapsing intentional duplicate sends", () => {
+  const failure = { id: "f1", phoneNumber: "phone", instanceId: "inst-1", instanceName: "Main", message: "Bom dia", mediaUrl: null, mediaType: null, error: "Falha no envio", timestamp: BASE_TS, direction: "outgoing" as const, status: "failed" as const, sent_by_ai: false as const };
+  expect(unconfirmedFailures([failure, { ...failure, id: "f2" }], [makeMessage({status:"delivered"})])).toEqual([{...failure,id:"f2"}]);
 });
