@@ -1,4 +1,5 @@
-import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, GUIDED_SCALAR_FIELDS, GUIDED_NUMBER_OPERATORS, isGuidedNumberField, isGuidedNumberOperator, GUIDED_TEXT_OPERATORS, isGuidedTextField, isGuidedTextOperator } from '@/contracts/workflows/guided-fields';
+import { GuidedFieldPicker } from './GuidedFieldPicker';
+import { isGuidedResponsibleField, GUIDED_SCALAR_FIELDS, GUIDED_NUMBER_OPERATORS, isGuidedNumberField, isGuidedNumberOperator, GUIDED_TEXT_OPERATORS, isGuidedTextField, isGuidedTextOperator } from '@/contracts/workflows/guided-fields';
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
@@ -74,17 +75,17 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
   const missingValue = isIncompleteGuidedDraft(condition);
   return <div className="space-y-4">
     <div className="space-y-2"><Label htmlFor={`guided-field-${condition.id}`}>Informação</Label>
-      <select id={`guided-field-${condition.id}`} className={selectClass} value={condition.field} onChange={event => {
-        setFieldReset(condition.field !== event.target.value && !((isGuidedTextField(condition.field) && isGuidedTextField(event.target.value)) || (isGuidedResponsibleField(condition.field) && isGuidedResponsibleField(event.target.value))));
-        if (isGuidedResponsibleField(event.target.value)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
-          ? { ...condition, field: event.target.value } : { version: 1, id: condition.id, field: event.target.value, operator: 'equals', memberId: '' });
-        else if (event.target.value === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
-        else if (event.target.value === 'lead.tags') onChange({ version: 1, id: condition.id, field: 'lead.tags', operator: 'has_tag', tagId: '' });
-        else if (isGuidedNumberField(event.target.value)) onChange({ version: 1, id: condition.id, field: event.target.value, operator: 'equals', value: '' });
-        else if (isGuidedTextField(event.target.value)) onChange(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score'
-          ? { version: 1, id: condition.id, field: event.target.value, operator: 'equals', value: '' }
-          : { ...condition, field: event.target.value });
-      }}>{Object.entries(GUIDED_SCALAR_FIELDS).map(([value, field]) => <option key={value} value={value}>Lead · {field.label}</option>)}<option value="lead.tags">Lead · Tags</option><option value="lead.origin">Lead · Origem</option>{Object.entries(GUIDED_RESPONSIBLE_FIELDS).map(([value, field]) => <option key={value} value={value}>Lead · {field.label}</option>)}</select></div>
+      <GuidedFieldPicker id={`guided-field-${condition.id}`} value={condition.field} onChange={field => {
+        setFieldReset(condition.field !== field && !((isGuidedTextField(condition.field) && isGuidedTextField(field)) || (isGuidedResponsibleField(condition.field) && isGuidedResponsibleField(field))));
+        if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
+          ? { ...condition, field } : { version: 1, id: condition.id, field, operator: 'equals', memberId: '' });
+        else if (field === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
+        else if (field === 'lead.tags') onChange({ version: 1, id: condition.id, field: 'lead.tags', operator: 'has_tag', tagId: '' });
+        else if (isGuidedNumberField(field)) onChange({ version: 1, id: condition.id, field, operator: 'equals', value: '' });
+        else if (isGuidedTextField(field)) onChange(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score'
+          ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
+          : { ...condition, field });
+      }} /></div>
     {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
     {(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>

@@ -12,7 +12,7 @@ for (const [field, otherField, label] of [
   }));
   await openGuidedEditor(page, 'JOSE');
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption(field);
+  await selectInformation(page, field);
   await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
   await page.getByLabel('Buscar responsável', { exact: true }).fill('Mari');
   await page.getByRole('combobox', { name: 'Responsável', exact: true }).selectOption(memberId);
@@ -28,13 +28,13 @@ for (const [field, otherField, label] of [
   await page.getByRole('button', { name: 'Testar condição' }).click();
   await expect(page.getByRole('status')).toContainText('Marina atual');
   await page.getByLabel('Comparação', { exact: true }).selectOption('not_equals');
-  await page.getByLabel('Informação', { exact: true }).selectOption(otherField);
+  await selectInformation(page, otherField);
   await expect(page.getByRole('combobox', { name: 'Responsável', exact: true })).toHaveValue(memberId);
   await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('not_equals');
   await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toHaveCount(0);
   await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
   await expect(page.getByRole('combobox', { name: 'Responsável', exact: true })).toHaveCount(0);
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
+  await selectInformation(page, 'lead.name');
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
 });
 
@@ -85,7 +85,7 @@ test('falha no catálogo de responsáveis permite recuperar sem virar lista vazi
   await page.route('**/rest/v1/guided_responsible_members?*', route => route.fulfill({ status: 503, json: { message: 'unavailable' } }));
   await openGuidedEditor(page, 'JOSE');
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.sale_responsible_id');
+  await selectInformation(page, 'lead.sale_responsible_id');
   await expect(page.getByText('Não foi possível carregar responsáveis. Tente novamente.')).toBeVisible();
   await expect(page.getByText('Nenhum responsável encontrado. Tente outro nome.')).toHaveCount(0);
   await page.route('**/rest/v1/guided_responsible_members?*', route => route.fulfill({ json: [] }));
@@ -103,7 +103,7 @@ test('seleciona origem pelo cadastro e preserva identidade ao mudar comparação
   }));
   await openGuidedEditor(page, 'JOSE');
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.origin');
+  await selectInformation(page, 'lead.origin');
   await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
   await page.getByLabel('Buscar origem', { exact: true }).fill('Parc');
   await page.getByRole('combobox', { name: 'Origem', exact: true }).selectOption(originId);
@@ -124,7 +124,7 @@ test('seleciona origem pelo cadastro e preserva identidade ao mudar comparação
   await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
   await expect(page.getByRole('combobox', { name: 'Origem', exact: true })).toHaveCount(0);
   await expect(page.locator('.react-flow__node-condition')).toContainText('Origem está vazia');
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
+  await selectInformation(page, 'lead.name');
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
 });
 
@@ -133,8 +133,8 @@ test('troca tag por origem limpando referência com orientação no campo', asyn
   await page.route('**/rest/v1/tags?*', route => route.fulfill({ json: [] }));
   await openGuidedEditor(page, 'JOSE');
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.origin');
+  await selectInformation(page, 'lead.tags');
+  await selectInformation(page, 'lead.origin');
   await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Origem', exact: true })).toHaveValue('');
   await expect(page.getByText('Nenhuma origem encontrada. Tente outro nome.')).toBeVisible();
@@ -146,14 +146,14 @@ test('permite recuperar catálogo de tags após falha sem apagar a condição', 
   await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [] }));
   await page.route('**/rest/v1/tags?*', route => route.fulfill({ status: 503, json: { message: 'unavailable' } }));
   await page.goto('/tests/browser/fixtures/guided-condition.html');
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await selectInformation(page, 'lead.tags');
   await expect(page.getByRole('alert')).toContainText('Não foi possível carregar tags. Tente novamente.');
   await expect(page.getByText('Nenhuma tag encontrada. Tente outro nome.')).toHaveCount(0);
   await page.route('**/rest/v1/tags?*', route => route.fulfill({ json: [] }));
   await page.getByRole('button', { name: 'Tentar carregar tags novamente' }).click();
   await expect(page.getByText('Nenhuma tag encontrada. Tente outro nome.')).toBeVisible();
   await expect(page.getByRole('alert')).toHaveCount(0);
-  await expect(page.getByLabel('Informação', { exact: true })).toHaveValue('lead.tags');
+  await expect(page.getByLabel('Informação', { exact: true })).toContainText('Lead · Tags');
 });
 
 test('seleciona tag pelo nome e testa sua identidade sem digitar referência', async ({ page }) => {
@@ -170,7 +170,7 @@ test('seleciona tag pelo nome e testa sua identidade sem digitar referência', a
     ] } });
   });
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await selectInformation(page, 'lead.tags');
   await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
   await page.getByLabel('Buscar tag', { exact: true }).fill('Distrib');
   await page.getByRole('combobox', { name: 'Tag', exact: true }).selectOption(tagId);
@@ -187,7 +187,7 @@ test('seleciona tag pelo nome e testa sua identidade sem digitar referência', a
   await page.getByLabel('Comparação', { exact: true }).selectOption('not_has_tag');
   await expect(page.getByRole('combobox', { name: 'Tag', exact: true })).toHaveValue(tagId);
   await expect(page.locator('.react-flow__node-condition')).toContainText('Não tem tag “Distribuidor”');
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
+  await selectInformation(page, 'lead.name');
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
   await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toBeVisible();
 });
@@ -254,7 +254,7 @@ test('troca de usuário não reutiliza catálogo de tags da conta anterior', asy
       : [{ id: tagId, name: 'Tag da conta anterior' }],
   }));
   await page.goto('/tests/browser/fixtures/guided-condition.html?identity-switch=1');
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await selectInformation(page, 'lead.tags');
   await page.getByRole('combobox', { name: 'Tag', exact: true }).selectOption(tagId);
   await expect(page.getByRole('option', { name: 'Tag da conta anterior', exact: true })).toHaveCount(1);
   await page.route('**/rest/v1/tags?*', route => route.fulfill({ status: 403, json: { code: '42501', message: 'denied' } }));
@@ -536,7 +536,7 @@ test('cria condição pelo editor com seletores no ambiente de desenvolvimento',
   await expect(page.getByText('Nome informado', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Adicionar Nó' }).click();
   await page.getByRole('menuitem', { name: 'Condição', exact: true }).click();
-  await expect(page.getByLabel('Informação', { exact: true })).toHaveValue('lead.name');
+  await expect(page.getByLabel('Informação', { exact: true })).toContainText('Lead · Nome');
   await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('equals');
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
 });
@@ -930,7 +930,7 @@ test('seleciona Empresa mantendo comparação textual e explica dado correto', a
   });
   await page.goto('/tests/browser/fixtures/guided-condition.html');
   await page.getByLabel('Valor da comparação').fill('FABRICA AURORA');
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.company', { timeout: 3000 });
+  await selectInformation(page, 'lead.company');
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('FABRICA AURORA');
   await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
   await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
@@ -938,7 +938,7 @@ test('seleciona Empresa mantendo comparação textual e explica dado correto', a
   expect(submitted).toMatchObject({ field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' });
   await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
   await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
+  await selectInformation(page, 'lead.name');
   await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('is_empty');
 });
 
@@ -954,7 +954,7 @@ test('aprova Empresa explicitamente sem apagar concessão de Nome', async ({ pag
   });
   await openGuidedEditor(page, 'Aurora');
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.company');
+  await selectInformation(page, 'lead.company');
   await expect(page.getByText('Empresa de todos os leads desta organização')).toBeVisible({ timeout: 3000 });
   await page.getByRole('button', { name: 'Autorizar acesso à empresa dos leads', exact: true }).click();
   await expect(page.getByText('Acesso autorizado pela organização')).toBeVisible();
@@ -977,7 +977,7 @@ test('aprova Tags explicitamente sem apagar concessão de Nome', async ({ page }
   await page.route('**/rest/v1/tags?*', route => route.fulfill({ json: [] }));
   await openGuidedEditor(page, 'Aurora');
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await selectInformation(page, 'lead.tags');
   await expect(page.getByText('Tags de todos os leads desta organização')).toBeVisible({ timeout: 3000 });
   await expect(page.getByRole('button', { name: 'Autorizar acesso aos campos selecionados', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Autorizar acesso aos campos selecionados', exact: true }).click();
@@ -991,7 +991,7 @@ test('aprova Tags explicitamente sem apagar concessão de Nome', async ({ page }
 test('troca operadores de texto preservando valor compatível e resumo no canvas', async ({ page }) => {
   await openGuidedEditor(page, 'Aurora');
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.company');
+  await selectInformation(page, 'lead.company');
   for (const [operator, label] of [
     ['contains', 'contém'], ['not_contains', 'não contém'], ['starts_with', 'começa com'],
     ['ends_with', 'termina com'], ['not_equals', 'é diferente de'],
@@ -1017,7 +1017,7 @@ for (const [field, label, value] of [['lead.email', 'Email', 'comercial@aurora.e
         rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: value }] } });
     });
     await page.goto('/tests/browser/fixtures/guided-condition.html');
-    await page.getByLabel('Informação', { exact: true }).selectOption(field, { timeout: 3000 });
+    await selectInformation(page, field);
     await page.getByLabel('Valor da comparação').fill(value);
     await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
     await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
@@ -1033,7 +1033,7 @@ test('configura pontuação numérica sem confundir zero com comparação incomp
     return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 0 }] } });
   });
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.qualification_score');
+  await selectInformation(page, 'lead.qualification_score');
   const value = page.getByLabel('Valor da comparação');
   await expect(value).toHaveAttribute('type', 'number');
   await expect(value).toHaveValue('');
@@ -1070,7 +1070,7 @@ for (const [field, label] of [['utm_campaign', 'UTM Campaign'], ['utm_source', '
       ? [{ [field]: 'Atacado verão' }] : [{ [field]: 'Campanha inicial' }] });
   });
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption(`lead.${field}`);
+  await selectInformation(page, `lead.${field}`);
   const picker = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
   await picker.click();
   await expect(page.getByRole('option', { name: 'Campanha inicial', exact: true })).toBeVisible();
@@ -1097,7 +1097,7 @@ test('falha de sugestões UTM não vira lista vazia nem impede valor manual', as
     ? route.fulfill(failed ? { status: 503, json: { message: 'unavailable' } } : { json: [] })
     : route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.utm_campaign');
+  await selectInformation(page, 'lead.utm_campaign');
   await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toBeVisible();
   await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
   await expect(page.getByText('Nenhum valor encontrado nesta org — digite manualmente.')).toHaveCount(0);
@@ -1116,7 +1116,7 @@ test('valor manual UTM pode ser confirmado antes das sugestões responderem', as
     await route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] });
   });
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.utm_campaign');
+  await selectInformation(page, 'lead.utm_campaign');
   await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
   await expect(page.getByText('Carregando valores…')).toBeVisible();
   await page.getByPlaceholder('Buscar ou digitar valor…').fill('Campanha urgente');
@@ -1129,7 +1129,7 @@ test('troca de usuário não reutiliza sugestões UTM da conta anterior', async 
   await page.route('**/rest/v1/leads?*', route => new URL(route.request().url()).searchParams.get('select') === 'utm_campaign'
     ? route.fulfill({ json: [{ utm_campaign: 'Campanha restrita' }] }) : route.fulfill({ json: [] }));
   await page.goto('/tests/browser/fixtures/guided-condition.html?identity-switch=1');
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.utm_campaign');
+  await selectInformation(page, 'lead.utm_campaign');
   await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
   await expect(page.getByRole('option', { name: 'Campanha restrita', exact: true })).toBeVisible();
   await page.getByPlaceholder('Buscar ou digitar valor…').press('Escape');
@@ -1145,7 +1145,7 @@ for (const [field, label, actual] of [['lead.name', 'Nome', 'José'], ['lead.qua
   test(`configura ${label} preenchido sem valor adicional e mantém foco ao duplicar`, async ({ page }) => {
     await openGuidedEditor(page, 'JOSE');
     await page.getByText('Nome informado', { exact: true }).click();
-    await page.getByLabel('Informação', { exact: true }).selectOption(field);
+    await selectInformation(page, field);
     await page.getByLabel('Comparação', { exact: true }).selectOption('is_not_empty', { timeout: 3000 });
     await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
     await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} está ${field === 'lead.origin' ? 'preenchida' : 'preenchido'}`);
@@ -1178,7 +1178,7 @@ for (const [field, label, value, manual] of [
     return route.fulfill({ json: [{ [field]: value }] });
   });
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption(`lead.${field}`, { timeout: 3000 });
+  await selectInformation(page, `lead.${field}`);
   const picker = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
   await picker.click();
   await page.getByRole('option', { name: value, exact: true }).click();
@@ -1196,4 +1196,61 @@ for (const [field, label, value, manual] of [
   await expect(page.getByRole('option', { name: 'é maior que', exact: true })).toHaveCount(0);
   await page.getByLabel('Comparação', { exact: true }).selectOption('is_not_empty');
   await expect(page.getByRole('combobox', { name: 'Valor da comparação', exact: true })).toHaveCount(0);
+});
+
+test('encontra informação por vocabulário comercial e seleciona pelo teclado', async ({ page }) => {
+  await page.route('**/rest/v1/guided_responsible_members?*', route => route.fulfill({ json: [] }));
+  await openGuidedEditor(page, 'José');
+  await page.getByText('Nome informado', { exact: true }).click();
+  const information = page.getByRole('combobox', { name: 'Informação', exact: true });
+  await information.focus();
+  await information.press('Enter');
+  const search = page.getByRole('combobox', { name: 'Buscar informação', exact: true });
+  await expect(search).toBeFocused({ timeout: 3000 });
+  await expect(page.getByRole('group', { name: 'Lead', exact: true })).toBeVisible();
+  await search.fill('VENDEDOR');
+  await expect(page.getByRole('option', { name: 'Responsável de vendas', exact: true })).toBeVisible();
+  await expect(page.getByRole('option', { name: 'Nome', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('option', { name: 'Responsável de pré-vendas', exact: true })).toHaveCount(0);
+  await search.press('Enter');
+  await expect(information).toContainText('Responsável de vendas');
+  await expect(information).toBeFocused();
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_not_empty');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Responsável de vendas está preenchido');
+});
+
+
+async function selectInformation(page: Page, field: string) {
+  const labels: Record<string, string> = {
+    'lead.name': 'Nome', 'lead.company': 'Empresa', 'lead.email': 'Email', 'lead.phone': 'Telefone',
+    'lead.segment': 'Segmento', 'lead.urgency': 'Urgência', 'lead.faturamento': 'Faturamento informado',
+    'lead.qualification_score': 'Pontuação de qualificação', 'lead.tags': 'Tags', 'lead.origin': 'Origem',
+    'lead.pre_sale_responsible_id': 'Responsável de pré-vendas', 'lead.sale_responsible_id': 'Responsável de vendas',
+    'lead.utm_source': 'UTM Source', 'lead.utm_medium': 'UTM Medium', 'lead.utm_content': 'UTM Content',
+    'lead.utm_term': 'UTM Term', 'lead.utm_campaign': 'UTM Campaign',
+  };
+  if (!labels[field]) throw new Error(`Missing test label for ${field}`);
+  await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+  await page.getByRole('option', { name: labels[field], exact: true }).click();
+}
+
+test('busca informação sem acento e cancela sem perder comparação', async ({ page }) => {
+  await openGuidedEditor(page, 'José');
+  await page.getByText('Nome informado', { exact: true }).click();
+  const information = page.getByRole('combobox', { name: 'Informação', exact: true });
+  await information.click();
+  const search = page.getByRole('combobox', { name: 'Buscar informação', exact: true });
+  await search.fill('  QUALIFICACAO  ');
+  await expect(page.getByRole('option', { name: 'Pontuação de qualificação', exact: true })).toBeVisible();
+  await search.fill('campo inexistente xyz');
+  await expect(page.getByText('Nenhuma informação encontrada. Tente outro termo.')).toBeVisible();
+  await expect(page.getByRole('listbox', { name: 'Informações disponíveis' }).getByRole('option')).toHaveCount(0);
+  await search.press('Escape');
+  await expect(information).toBeFocused();
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveValue('José');
+  await information.click();
+  await expect(search).toHaveValue('');
+  await page.getByRole('option', { name: 'Nome', exact: true }).click();
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveValue('José');
+  await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toHaveCount(0);
 });

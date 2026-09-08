@@ -6,7 +6,7 @@ This is a requirements audit, not a completion certificate. All 21 tickets remai
 
 | Requirement | Current evidence | Remaining work |
 |---|---|---|
-| Existing catalogues, friendly names | Tag, origin and responsible selectors use organization-scoped catalogues; browser cases cover current names and inactive references. | Complete information-catalogue search/grouping and vocabulary aliases from PRD stories 1–3. Native field dropdown is not that search experience. |
+| Existing catalogues, friendly names | Tag, origin and responsible selectors use organization-scoped catalogues; browser cases cover current names and inactive references. | Information selector now searches supported Lead fields by labels and commercial aliases, with a Lead group and keyboard navigation. The remaining domain groups enter with their evaluators; complete cross-domain discovery still depends on those tickets. |
 | Reference identity survives names | Real integration proves foreign/deleted/master denial; browser cases prevent homonym replacement. | Wider external lifecycle and permission-change certification remains required. |
 | Appropriate typed operators; zero/false distinct from absence | Qualification score uses finite numbers; text uses textual operators. Zero is tested in real personal evaluation. | PRD story 11 explicitly requires both empty and filled. The guided contract now supports is_not_empty for text, qualification score, origin and responsible assignments through editor, evaluation and publication. Field scope remains mandatory without a comparison reference. Boolean/custom-type proof belongs to the custom-field work; canonical monetary deal values belong to the business work. Neither requirement is certified yet. |
 | Preserve compatible choices | Browser cases cover text operators, text-field changes and switching between responsible slots. | Extend matrix when the remaining field types arrive. |
@@ -19,7 +19,7 @@ The existing legacy ConditionPanel lists segment, urgency and faturamento alongs
 
 ## Next implementation priority
 
-Complete searchable information discovery/grouping and vocabulary aliases, then continue the dependent custom-field/business paths. Preserve every remaining criterion for final certification; green tests for the currently exposed subset are not proof of all 21 tickets.
+Information-catalogue regression passed (79 browser cases, followed by two focused alias/cancellation cases). Continue UUID-based custom-field evaluation and the dependent business paths. Preserve every remaining criterion for final certification; green tests for the currently exposed subset are not proof of all 21 tickets.
 
 
 ## Value representation confirmed in the current source
@@ -27,3 +27,10 @@ Complete searchable information discovery/grouping and vocabulary aliases, then 
 - Urgency is editable as free text. The kanban filter's four timeline presets are not an exhaustive set; suggestions must permit other persisted/manual values.
 - formatFaturamento documents numeric-looking values, ranges and free text received from forms/Meta Ads. Its display formatting is not a numeric comparison parser. Preserve that distinction when adding Faturamento.
 - Presence now has full current-field UI coverage (74 browser tests) and real reference/scalar evaluation/publication coverage (49 integration tests). This does not certify the additional fields or downstream domains.
+
+## Custom-field source inventory for ticket 07
+
+- Current definitions use UUID identity, organization_id, field_name, field_type and field_options (string array). Supported types are text, number, date, select and boolean. Values are string/null with a unique lead_id/field_id pair; deleting a definition cascades its values. Missing definition must therefore be checked separately from an unanswered field.
+- Lead editors persist boolean strings with String(value), including "false". The guided evaluator must preserve false as a value and reject malformed typed strings rather than adopting a display component's fallback.
+- Existing personal value RLS checks lead visibility; definitions use organization membership. Guided reads must additionally validate the selected definition belongs to the current organization and expected type, and reject unavailable references before short circuit. Existing catalogue hooks do not partition by actor and must not be copied unchanged.
+- These are source findings, not implementation or live-security evidence for custom fields.
