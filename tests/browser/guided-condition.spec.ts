@@ -637,3 +637,25 @@ test('seleciona Empresa mantendo comparação textual e explica dado correto', a
   await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
   await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('is_empty');
 });
+
+test('aprova Empresa explicitamente sem apagar concessão de Nome', async ({ page }) => {
+  let grant = { fields: ['lead.name'], revision: 1 };
+  const writes: string[][] = [];
+  await page.route('**/rest/v1/workflow_data_grants?*', route => route.fulfill({ json: grant }));
+  await page.route('**/rest/v1/rpc/set_workflow_data_grant', route => {
+    const body = route.request().postDataJSON();
+    writes.push(body.p_fields);
+    grant = { fields: body.p_fields, revision: grant.revision + 1 };
+    return route.fulfill({ json: grant });
+  });
+  await openGuidedEditor(page, 'Aurora');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.company');
+  await expect(page.getByText('Empresa de todos os leads desta organização')).toBeVisible({ timeout: 3000 });
+  await page.getByRole('button', { name: 'Autorizar acesso à empresa dos leads', exact: true }).click();
+  await expect(page.getByText('Acesso autorizado pela organização')).toBeVisible();
+  expect(writes[0]).toEqual(['lead.name', 'lead.company']);
+  await page.getByRole('button', { name: 'Revogar acesso', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Autorizar acesso à empresa dos leads', exact: true })).toBeVisible();
+  expect(writes[1]).toEqual(['lead.name']);
+});

@@ -696,6 +696,59 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     } });
   }, 60000);
 
+  it('requires a separate company grant and atomically restricts requested organizational fields', async () => {
+    const workflowId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    expect((await caller.rpc('create_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: { name: 'Company grant' },
+    })).error).toBeNull();
+    expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0 })).error).toBeNull();
+    const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA, p_fields: ['lead.company'] };
+    expect((await service.rpc('read_guided_condition_lead_fields', args)).error?.code).toBe('42501');
+    expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.company'], p_expected_revision: 1 })).error).toBeNull();
+    const read = await service.rpc('read_guided_condition_lead_fields', args);
+    expect(read.error).toBeNull();
+    expect(read.data).toEqual([{ id: leadA, organization_id: orgA, field_values: { company: 'Fábrica Aurora' } }]);
+    expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA,
+      authorization: { kind: 'organization', workflowId },
+      condition: { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' },
+    })).toEqual({ status: 'evaluated', matched: true,
+      rules: [{ id: 'company', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' }],
+    });
+    const definition = { nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' } } },
+      { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+    ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+    expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1,
+      p_definition: definition, p_settings: { name: 'Company grant' } })).error).toBeNull();
+    const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: 2 }),
+    });
+    expect(response.status).toBe(200);
+    const publication = await response.json();
+    const executionId = crypto.randomUUID();
+    expect((await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId, organization_id: orgA,
+      lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' })).error).toBeNull();
+    expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+      guidedVersionId: publication.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {},
+    })).toMatchObject({ success: true, status: 'completed' });
+    const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+    expect(steps.error).toBeNull();
+    expect(steps.data?.map(step => step.node_id)).toContain('yes');
+    expect(steps.data?.map(step => step.node_id)).not.toContain('no');
+    expect((await caller.rpc('read_guided_condition_lead_fields', args)).error?.code).toBe('42501');
+    expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_fields: ['lead.name', 'lead.company'] })).error?.code).toBe('42501');
+    expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_organization_id: orgB })).error?.code).toBe('42501');
+    expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_lead_id: leadB })).data).toEqual([]);
+    expect((await service.rpc('read_guided_condition_lead_fields', { ...args, p_fields: ['lead.password'] })).error?.code).toBe('22023');
+    expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 2 })).error).toBeNull();
+    expect((await service.rpc('read_guided_condition_lead_fields', args)).error?.code).toBe('42501');
+  }, 60000);
+
   it('honors explicit responsible-only access within the same organization', async () => {
     const workflowId = crypto.randomUUID();
     const password = `${crypto.randomUUID()}!Aa1`;

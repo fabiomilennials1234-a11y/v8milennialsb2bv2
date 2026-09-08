@@ -6,3 +6,7 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
   const label = GUIDED_TEXT_FIELDS[condition.field].label;
   return condition.operator === 'is_empty' ? `${label} está vazio` : `${label} é igual a “${condition.value}”`;
 }
+
+export function getGuidedConditionFields(condition: GuidedConditionDraft): Array<keyof typeof GUIDED_TEXT_FIELDS> {
+  return 'children' in condition ? [...new Set(condition.children.flatMap(getGuidedConditionFields))] : [condition.field];
+}

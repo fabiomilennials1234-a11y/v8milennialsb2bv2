@@ -1,3 +1,4 @@
+import { getGuidedConditionFields } from '../lib/guided-condition-summary';
 import { useState } from 'react';
 import { X, Trash2, AlertTriangle, Copy, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -111,6 +112,7 @@ export function WorkflowSidebar({
             key={`${actorId}:${organizationId}:${workflowId}`}
             actorId={actorId ?? ''}
             workflowId={workflowId} organizationId={organizationId} canManage={canManageDataGrant}
+            requiredFields={getGuidedConditionFields((nodeData as ConditionNodeData).guidedCondition!)}
           />}</>;
         }
         return <ConditionPanel data={nodeData as any} onUpdate={handleUpdate} />;

@@ -61,13 +61,13 @@ export async function evaluateGuidedCondition(
     return { status: 'error' as const, code: 'invalid_configuration' as const };
   }
   const fields = guidedConditionFields(request.condition) as GuidedTextField[];
-  // The existing organization RPC grants name only. Additional fields must
-  // remain denied until their atomic authorized reader is installed.
-  if (request.authorization && fields.some(field => field !== 'lead.name')) {
-    return { status: 'error' as const, code: 'access_denied' as const };
-  }
+  const usesFieldReader = fields.some(field => field !== 'lead.name');
   const { data, error, status } = request.authorization?.kind === 'organization'
-    ? await caller.rpc('read_guided_condition_lead', {
+    ? usesFieldReader ? await caller.rpc('read_guided_condition_lead_fields', {
+      p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
+      p_lead_id: request.leadId, p_fields: fields,
+    }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
+    : await caller.rpc('read_guided_condition_lead', {
       p_workflow_id: request.authorization.workflowId,
       p_organization_id: request.organizationId, p_lead_id: request.leadId,
     }).returns<Array<{ id: string; organization_id: string; name: string | null }>>().maybeSingle()
@@ -90,7 +90,11 @@ export async function evaluateGuidedCondition(
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-  const record = data as unknown as Record<string, unknown>;
+  const record = (request.authorization && usesFieldReader
+    ? (data as unknown as { field_values: Record<string, unknown> }).field_values : data) as Record<string, unknown>;
+  if (!record || fields.some(field => !Object.prototype.hasOwnProperty.call(record, GUIDED_TEXT_FIELDS[field].column))) {
+    return { status: 'error' as const, code: 'source_unavailable' as const };
+  }
   type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
