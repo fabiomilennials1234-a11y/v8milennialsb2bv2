@@ -234,7 +234,7 @@ export type { AttachedLeadTag } from "./hooks/lead/useLeadTagsAttached";
 // Org-scoped tag dictionary (CRUD). Consumed cross-module by the Disparo
 // audience-conditions selector (tag filter) and any surface that needs the
 // org's tag list outside a lead context.
-export { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "./hooks/useTags";
+export { useTags, useTagOptions, useCreateTag, useUpdateTag, useDeleteTag } from "./hooks/useTags";
 export type { Tag, TagInsert, TagUpdate } from "./hooks/useTags";
 
 // ── Components: lead-detail (modal redesign — ADR-2026-05-17) ──────────────

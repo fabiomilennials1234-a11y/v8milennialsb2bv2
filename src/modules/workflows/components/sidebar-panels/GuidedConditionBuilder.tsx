@@ -2,13 +2,14 @@ import { GUIDED_TEXT_FIELDS, GUIDED_TEXT_OPERATORS, isGuidedTextField, isGuidedT
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
+import { GuidedTagPicker } from './GuidedTagPicker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 
 export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolean {
   return 'children' in condition ? !condition.children.length || condition.children.some(isIncompleteGuidedDraft)
-    : condition.operator !== 'is_empty' && condition.value.length === 0;
+    : condition.field === 'lead.tags' ? !condition.tagId : condition.operator !== 'is_empty' && condition.value.length === 0;
 }
 const newRule = (): GuidedRuleDraft => ({ version: 1, id: crypto.randomUUID(), field: 'lead.name', operator: 'equals', value: '' });
 function duplicateCondition(condition: GuidedConditionDraft): GuidedConditionDraft {
@@ -18,10 +19,11 @@ function duplicateCondition(condition: GuidedConditionDraft): GuidedConditionDra
 }
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: {
-  condition: GuidedConditionDraft; groupDepth?: number; onChange: (condition: GuidedConditionDraft) => void;
+export function GuidedConditionBuilder({ condition, onChange, actorId, organizationId, groupDepth = 0 }: {
+  actorId: string; organizationId: string; condition: GuidedConditionDraft; groupDepth?: number; onChange: (condition: GuidedConditionDraft) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [fieldReset, setFieldReset] = useState(false);
   const pendingFocus = useRef<string | null>(null);
   useLayoutEffect(() => {
     if (pendingFocus.current) {
@@ -53,7 +55,7 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
           onChange({ ...condition, children: condition.children.filter(item => item.id !== child.id) });
           pendingFocus.current = `guided-match-${condition.id}`;
         }}>{'children' in child ? 'Excluir grupo' : 'Excluir regra'}</Button>
-        <GuidedConditionBuilder condition={child} groupDepth={groupDepth + 1} onChange={replacement => onChange({ ...condition,
+        <GuidedConditionBuilder actorId={actorId} organizationId={organizationId} condition={child} groupDepth={groupDepth + 1} onChange={replacement => onChange({ ...condition,
           children: condition.children.map(item => item.id === child.id ? replacement : item) })} />
       </div>)}
       <Button type="button" variant="outline" onClick={() => {
@@ -66,8 +68,21 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
   return <div className="space-y-4">
     <div className="space-y-2"><Label htmlFor={`guided-field-${condition.id}`}>Informação</Label>
       <select id={`guided-field-${condition.id}`} className={selectClass} value={condition.field} onChange={event => {
-        if (isGuidedTextField(event.target.value)) onChange({ ...condition, field: event.target.value });
-      }}>{Object.entries(GUIDED_TEXT_FIELDS).map(([value, field]) => <option key={value} value={value}>Lead · {field.label}</option>)}</select></div>
+        setFieldReset((condition.field === 'lead.tags') !== (event.target.value === 'lead.tags'));
+        if (event.target.value === 'lead.tags') onChange({ version: 1, id: condition.id, field: 'lead.tags', operator: 'has_tag', tagId: '' });
+        else if (isGuidedTextField(event.target.value)) onChange(condition.field === 'lead.tags'
+          ? { version: 1, id: condition.id, field: event.target.value, operator: 'equals', value: '' }
+          : { ...condition, field: event.target.value });
+      }}>{Object.entries(GUIDED_TEXT_FIELDS).map(([value, field]) => <option key={value} value={value}>Lead · {field.label}</option>)}<option value="lead.tags">Lead · Tags</option></select></div>
+    {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
+    {condition.field === 'lead.tags' ? <>
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator}
+        onChange={event => onChange({ ...condition, operator: event.target.value === 'not_has_tag' ? 'not_has_tag' : 'has_tag' })}>
+        <option value="has_tag">tem tag</option><option value="not_has_tag">não tem tag</option>
+      </select>
+      <GuidedTagPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
+    </> : <>
     <div className="space-y-2"><Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
         const base = { version: 1 as const, id: condition.id, field: condition.field };
@@ -81,6 +96,7 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
         onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: José" />
       {missingValue && <p id={`guided-value-error-${condition.id}`} className="text-xs text-destructive">Informe um valor ou escolha “está vazio”.</p>}
       <p className="text-xs text-muted-foreground">Maiúsculas e acentos não alteram a comparação.</p></div>}
+    </>}
     <Button type="button" variant="outline" disabled={groupDepth >= 3} title={groupDepth >= 3 ? "Limite de três níveis de grupos. Adicione regras ao grupo existente." : undefined} onClick={() => {
       const rule = newRule(); onChange({ version: 1, id: crypto.randomUUID(), kind: 'group', match: 'all', children: [condition, rule] }); focusValue(rule.id);
     }}>Adicionar condição</Button>

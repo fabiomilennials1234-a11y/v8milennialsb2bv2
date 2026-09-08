@@ -11,7 +11,7 @@ interface WorkflowDataGrant { fields: string[]; revision: number }
 const database: SupabaseClient = supabase;
 
 export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, canManage, requiredFields = ['lead.name'] }: {
-  actorId: string; workflowId: string; organizationId: string; canManage: boolean; requiredFields?: GuidedTextField[];
+  actorId: string; workflowId: string; organizationId: string; canManage: boolean; requiredFields?: Array<GuidedTextField | 'lead.tags'>;
 }) {
   const client = useQueryClient();
   const [pending, setPending] = useState(false);
@@ -27,8 +27,9 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
       return response.data;
     },
   });
+  const unsupportedScope = requiredFields.includes('lead.tags');
   const authorized = requiredFields.length > 0 && requiredFields.every(field => grant.data?.fields.includes(field));
-  const scopeLabel = requiredFields.map(field => GUIDED_TEXT_FIELDS[field].label).join(' e ');
+  const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : GUIDED_TEXT_FIELDS[field].label).join(' e ');
   const authorizeLabel = requiredFields.length === 1 && requiredFields[0] === 'lead.name' ? 'Autorizar acesso ao nome dos leads'
     : requiredFields.length === 1 && requiredFields[0] === 'lead.company' ? 'Autorizar acesso à empresa dos leads' : 'Autorizar acesso aos campos selecionados';
   async function update() {
@@ -59,8 +60,8 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
       {grant.isPending && <p className="text-sm text-muted-foreground">Consultando autorização…</p>}
       {grant.isError && <p role="alert" className="text-sm text-destructive">Não foi possível consultar a autorização.</p>}
       {grant.isSuccess && <>
-        <p className="text-sm text-muted-foreground">{authorized ? 'Acesso autorizado pela organização' : 'Acesso ainda não autorizado'}</p>
-        <Button type="button" variant={authorized ? 'outline' : 'default'} disabled={pending || grant.isFetching || requiredFields.length === 0} onClick={update}>
+        <p className="text-sm text-muted-foreground">{unsupportedScope ? 'Execução automática para tags ainda não disponível.' : authorized ? 'Acesso autorizado pela organização' : 'Acesso ainda não autorizado'}</p>
+        <Button type="button" variant={authorized ? 'outline' : 'default'} disabled={unsupportedScope || pending || grant.isFetching || requiredFields.length === 0} onClick={update}>
           {pending ? 'Atualizando…' : authorized ? 'Revogar acesso' : authorizeLabel}
         </Button>
       </>}

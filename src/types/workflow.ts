@@ -642,11 +642,18 @@ export interface ActionNodeData {
 }
 
 /** Draft for the guided contract; server validates before evaluation. */
-export type GuidedRuleDraft = {
+export type GuidedScalarRuleDraft = {
   version: 1;
   id: string;
   field: GuidedTextField;
 } & GuidedTextComparison;
+
+export type GuidedTagRuleDraft = {
+  version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
+  /** Display hint only. The evaluator always resolves the current name by ID. */
+  tagLabel?: string;
+};
+export type GuidedRuleDraft = GuidedScalarRuleDraft | GuidedTagRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

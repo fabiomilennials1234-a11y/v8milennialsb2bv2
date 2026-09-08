@@ -1,5 +1,55 @@
 import { test, expect, type Page } from '@playwright/test';
 
+test('permite recuperar catálogo de tags após falha sem apagar a condição', async ({ page }) => {
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ status: 503, json: { message: 'unavailable' } }));
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await expect(page.getByRole('alert')).toContainText('Não foi possível carregar tags. Tente novamente.');
+  await expect(page.getByText('Nenhuma tag encontrada. Tente outro nome.')).toHaveCount(0);
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ json: [] }));
+  await page.getByRole('button', { name: 'Tentar carregar tags novamente' }).click();
+  await expect(page.getByText('Nenhuma tag encontrada. Tente outro nome.')).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await expect(page.getByLabel('Informação', { exact: true })).toHaveValue('lead.tags');
+});
+
+test('seleciona tag pelo nome e testa sua identidade sem digitar referência', async ({ page }) => {
+  const tagId = 'abcd0000-0000-4000-8000-000000000001';
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id')
+      ? { id: tagId, name: 'Distribuidor' } : [{ id: tagId, name: 'Distribuidor' }],
+  }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.tags', operator: 'has_tag', tagId });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [
+      { id: 'rule-1', status: 'evaluated', matched: true, actual: true, reference: { id: tagId, name: 'Distribuidor' } },
+    ] } });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
+  await page.getByLabel('Buscar tag', { exact: true }).fill('Distrib');
+  await page.getByRole('combobox', { name: 'Tag', exact: true }).selectOption(tagId);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Tem tag “Distribuidor”');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('status')).toContainText('Distribuidor: atribuída');
+  await page.route('**/functions/v1/test-guided-condition', route => route.fulfill({
+    status: 422, json: { status: 'error', code: 'reference_unavailable' },
+  }));
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('region', { name: 'Teste da condição' }).getByRole('alert')).toContainText('Uma referência foi removida ou não está acessível. Revise as escolhas da condição.');
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await page.getByLabel('Comparação', { exact: true }).selectOption('not_has_tag');
+  await expect(page.getByRole('combobox', { name: 'Tag', exact: true })).toHaveValue(tagId);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Não tem tag “Distribuidor”');
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
+  await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toBeVisible();
+});
+
 test('troca de usuário remove seleção e resultado pessoal da conta anterior', async ({ page }) => {
   let reads = 0;
   await page.route('**/rest/v1/leads?*', route => ++reads === 1

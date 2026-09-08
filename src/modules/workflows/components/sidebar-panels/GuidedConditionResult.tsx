@@ -1,7 +1,7 @@
 import type { GuidedConditionDraft } from '@/types/workflow';
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 
-export type GuidedResultEntry = { id: string; status?: string; matched?: boolean };
+export type GuidedResultEntry = { id: string; status?: string; matched?: boolean; reference?: { id: string; name: string } };
 
 export function GuidedConditionResult({ condition, rules, groups }: {
   condition: GuidedConditionDraft; rules: GuidedResultEntry[]; groups: GuidedResultEntry[];
