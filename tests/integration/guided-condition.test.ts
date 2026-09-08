@@ -107,6 +107,24 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const version = await caller.from('workflow_guided_versions').select('definition, published_by').eq('id', publication.version_id).single();
     expect(version.error).toBeNull();
     expect(version.data).toEqual({ definition, published_by: userId });
+    const invalidDefinition = { ...definition, nodes: definition.nodes.map(node => node.id === 'y'
+      ? { ...node, type: 'unknown_action' } : node) };
+    const saved = await caller.rpc('save_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_definition: invalidDefinition, p_expected_revision: 1,
+      p_settings: { name: 'Invalid revision' },
+    });
+    expect(saved.error).toBeNull();
+    const rejected = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: 2 }),
+      signal: AbortSignal.timeout(15000),
+    });
+    expect(rejected.status).toBe(422);
+    expect(await rejected.json()).toMatchObject({ code: 'invalid_configuration',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'unknown_node_type', nodeId: 'y' })]) });
+    const unchanged = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data?.version_id).toBe(publication.version_id);
   }, 60000);
 
   it('lets an organization administrator explicitly approve and revoke lead-name access for one workflow', async () => {

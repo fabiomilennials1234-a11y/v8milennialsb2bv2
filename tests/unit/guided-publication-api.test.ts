@@ -115,3 +115,63 @@ it('reports an invalid persisted name without attempting publication', async () 
     issues: expect.arrayContaining([expect.objectContaining({ code: 'invalid_name' })]) });
   expect(attemptedPublication).toBe(false);
 });
+
+it.each([['mystery', {}, 'unknown_node_type'], ['action', { actionType: 'invented' }, 'unknown_action_type'], ['trigger', { triggerType: 'invented' }, 'unknown_trigger_type']])('rejects unsupported persisted vocabulary: %s', async (type, data, code) => {
+  const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
+  vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
+  let attemptedPublication = false;
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+    const path = new URL(String(input)).pathname;
+    const resources: Record<string, unknown> = {
+      '/auth/v1/user': { id: 'user-1', app_metadata: {}, user_metadata: {}, aud: 'authenticated' },
+      '/rest/v1/master_users': null,
+      '/rest/v1/team_members': { id: 'member-1', user_id: 'user-1', organization_id: 'org-1', role: 'admin' },
+      '/rest/v1/rpc/can_administer_guided_workflow': true,
+      '/rest/v1/workflow_guided_drafts': { revision: 3, settings: { name: 'Valid name' }, definition: {
+        nodes: [{ id: 'trigger', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+          { id: 'end', type, data }],
+        edges: [{ id: 'te', source: 'trigger', target: 'end' }],
+      } },
+    };
+    if (path === '/rest/v1/rpc/finalize_guided_workflow_publication') {
+      attemptedPublication = true;
+      return new Response(JSON.stringify({ code: '22023', message: 'invalid_configuration' }), { status: 400 });
+    }
+    if (!(path in resources)) throw new Error(`Unexpected external request ${path}`);
+    return new Response(JSON.stringify(resources[path]), { headers: { 'Content-Type': 'application/json' } });
+  });
+  const response = await handleGuidedWorkflowPublication(new Request('https://edge.test/publish', {
+    method: 'POST', headers: { Authorization: 'Bearer user-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organizationId: 'org-1', workflowId: 'workflow-1', expectedRevision: 3 }),
+  }));
+  expect(response.status).toBe(422);
+  expect(await response.json()).toMatchObject({ code: 'invalid_configuration',
+    issues: expect.arrayContaining([expect.objectContaining({ code, nodeId: 'end' })]) });
+  expect(attemptedPublication).toBe(false);
+});
+
+
+it('denies publication before reading a draft when current administration is absent', async () => {
+  const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
+  vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
+  const attemptedDraftReads: string[] = [];
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+    const path = new URL(String(input)).pathname;
+    if (path === '/rest/v1/workflow_guided_drafts') attemptedDraftReads.push(path);
+    const resources: Record<string, unknown> = {
+      '/auth/v1/user': { id: 'user-1', app_metadata: {}, user_metadata: {}, aud: 'authenticated' },
+      '/rest/v1/master_users': null,
+      '/rest/v1/team_members': { id: 'member-1', user_id: 'user-1', organization_id: 'org-1', role: 'member' },
+      '/rest/v1/rpc/can_administer_guided_workflow': false,
+    };
+    if (!(path in resources)) throw new Error(`Unexpected external request ${path}`);
+    return new Response(JSON.stringify(resources[path]), { headers: { 'Content-Type': 'application/json' } });
+  });
+  const response = await handleGuidedWorkflowPublication(new Request('https://edge.test/publish', {
+    method: 'POST', headers: { Authorization: 'Bearer user-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organizationId: 'org-1', workflowId: 'workflow-1', expectedRevision: 3 }),
+  }));
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ status: 'error', code: 'access_denied' });
+  expect(attemptedDraftReads).toEqual([]);
+});

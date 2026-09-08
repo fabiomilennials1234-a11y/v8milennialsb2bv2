@@ -160,3 +160,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Migration 20271017000008 applied and registered. Expanded actual reverse rollback/forward reapply rehearsal from eight to nine migrations: preserves synthetic draft, grant, immutable version and selected version; disables table access and finalizer, restores restricted EXECUTE and denies direct version/pointer writes. Outer transaction rolls rehearsal back. Rehearsal passed.
 - Checks: 12 live Auth/RLS/HTTP integration tests passed; 3 publication HTTP unit tests passed; Deno check and focused ESLint/diff check passed. All associated command sessions terminal. No production changes.
 - Still incomplete: full publication validation for all supported node/action/trigger settings and references; additional HTTP negative/concurrency coverage; publication UI; reader-permission protection (ticket 16); runtime version pinning (04). Ticket 03 is not certified. All 21 tickets and final integrated HITL remain the objective.
+
+## 2026-09-08 — publication vocabulary validation
+
+- Public HTTP red/green cases now reject unknown node, trigger and action types with node-localized issues. Reused the existing executor vocabulary sets guarded by repository parity tests; no new independent type catalog.
+- Expanded real HTTP publication scenario: save an invalid successor containing an unknown node, try publication, inspect selected version unchanged. Before deploying the change, real endpoint returned 200 (red); after preview deployment it returns 422 and preserves original pointer (green).
+- Added characterization coverage for current non-administrator denial before draft data is read. Existing authorization already passed; no implementation change was needed for that case.
+- Checks: 7 HTTP unit cases passed; 12 real Auth/RLS/HTTP integration cases passed; Deno entrypoint check and focused lint passed. No migration changes. All process handles terminal.
+- Next: complete supported-node configuration/reference validation and publication editor integration. Known vocabulary alone is not full validity. No ticket certified; all 21 remain in scope.

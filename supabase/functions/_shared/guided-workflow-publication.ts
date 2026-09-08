@@ -3,6 +3,7 @@ import { AuthError, requireAuth } from './user-auth.ts';
 import { getCorsHeaders } from './cors.ts';
 import { withSecurityHeaders } from './security-headers.ts';
 import { isGuidedCondition } from './guided-condition.ts';
+import { NODE_TYPE_SET, TRIGGER_TYPE_SET, ACTION_TYPE_SET } from './workflow-schema/enums.ts';
 import { validateWorkflow } from './workflow-schema/validator.ts';
 import type { WorkflowDefinition } from './workflow-schema/definition.ts';
 
@@ -18,6 +19,15 @@ function publicationIssues(value: unknown): PublicationIssue[] {
   const definition = value as unknown as WorkflowDefinition;
   const issues: PublicationIssue[] = validateWorkflow(definition).errors.filter(issue => issue.severity === 'error');
   for (const node of definition.nodes) {
+    if (!NODE_TYPE_SET.has(node.type)) {
+      issues.push({ code: 'unknown_node_type', nodeId: node.id, message: 'Tipo de node desconhecido.' });
+    }
+    if (node.type === 'trigger' && (typeof node.data.triggerType !== 'string' || !TRIGGER_TYPE_SET.has(node.data.triggerType))) {
+      issues.push({ code: 'unknown_trigger_type', nodeId: node.id, message: 'Selecione um gatilho válido.' });
+    }
+    if (node.type === 'action' && (typeof node.data.actionType !== 'string' || !ACTION_TYPE_SET.has(node.data.actionType))) {
+      issues.push({ code: 'unknown_action_type', nodeId: node.id, message: 'Selecione uma ação válida.' });
+    }
     if (node.type !== 'condition') continue;
     if (!isGuidedCondition(node.data.guidedCondition)) {
       issues.push({ code: 'invalid_condition', nodeId: node.id, message: 'Complete a condição antes de publicar.' });
