@@ -66,4 +66,35 @@ DO $$ BEGIN
   ASSERT (SELECT count(*) FROM sale_events) = 4, 'receita perdida com flag desligada';
   ASSERT (SELECT sum(sale_value) FROM sale_events) = 500, 'total incorreto';
 END $$;
+RESET ROLE;
+UPDATE team_members SET role='cliente';
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  BEGIN
+    PERFORM registrar_vendas_historicas('00000000-0000-0000-0000-000000000100','00000000-0000-0000-0000-000000001005','[{"value":10,"date":"2025-04-01"}]');
+    RAISE EXCEPTION 'papel sem permissão conseguiu registrar';
+  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+UPDATE team_members SET role='member';
+CREATE FUNCTION fail_second_historical_order_fixture() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.sale_value=777 THEN RAISE EXCEPTION 'forced_second_order_failure'; END IF;
+  RETURN NEW;
+END $$;
+CREATE TRIGGER fail_second_order BEFORE INSERT ON upsell_orders FOR EACH ROW
+  EXECUTE FUNCTION fail_second_historical_order_fixture();
+SET LOCAL ROLE authenticated;
+DO $$ BEGIN
+  BEGIN
+    PERFORM registrar_vendas_historicas('00000000-0000-0000-0000-000000000100','00000000-0000-0000-0000-000000001006','[{"value":50,"date":"2025-05-01"},{"value":777,"date":"2025-06-01"}]');
+    RAISE EXCEPTION 'falha simulada não aconteceu';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'forced_second_order_failure' THEN RAISE; END IF;
+  END;
+  ASSERT (SELECT count(*) FROM deals)=4, 'negócio parcial após falha na segunda venda';
+  ASSERT (SELECT count(*) FROM sale_events)=4, 'receita parcial após falha na segunda venda';
+  ASSERT (SELECT count(*) FROM upsell_orders)=4, 'pedido parcial após falha na segunda venda';
+  ASSERT NOT EXISTS(SELECT 1 FROM historical_sale_batches WHERE id='00000000-0000-0000-0000-000000001006'), 'lote parcial após falha';
+END $$;
 ROLLBACK;
