@@ -85,7 +85,8 @@ async function buscar(
   meuTeamMemberId: string | null,
   meuUserId: string | null,
 ): Promise<Buscado> {
-  const chamar = supabase.rpc as unknown as ComandoAgendaRpc;
+  // SupabaseClient.rpc acessa `this.rest`; preservar o cliente ao tipar a RPC.
+  const chamar = supabase.rpc.bind(supabase) as unknown as ComandoAgendaRpc;
   const { data, error } = await chamar("get_comando_agenda_events", {
     p_organization_id: organizationId,
     p_start: inicio.toISOString(),
