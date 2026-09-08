@@ -688,7 +688,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
       body: JSON.stringify({ organizationId: orgA, leadId: leadA,
-        condition: { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' } }),
+        condition: { version: 1, id: 'company', field: 'lead.company', operator: 'contains', value: 'AURORA' } }),
     });
     expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: {
       status: 'evaluated', matched: true,
@@ -719,7 +719,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     });
     const definition = { nodes: [
       { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
-      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' } } },
+      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field: 'lead.company', operator: 'contains', value: 'AURORA' } } },
       { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
     ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
     expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1,

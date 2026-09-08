@@ -162,3 +162,16 @@ it('compares company and name independently within one group using only requeste
     { id: 'company', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' },
   ] });
 });
+
+it.each([
+  ['contains', 'José da Silva', 'DA SIL', true], ['contains', 'José', 'Ana', false],
+  ['not_contains', 'José', 'Ana', true], ['not_contains', 'José', 'JOSE', false],
+  ['starts_with', 'José da Silva', 'JOSE', true], ['starts_with', 'José da Silva', 'Silva', false],
+  ['ends_with', 'José da Silva', 'SILVA', true], ['ends_with', 'José da Silva', 'José', false],
+  ['not_equals', 'José', 'Maria', true], ['not_equals', 'José', 'JOSE', false],
+  ['not_equals', null, 'José', false], ['not_contains', '', 'José', false],
+])('evaluates text operator %s on %s without treating missing text as a negative match', async (operator, actual, value, matched) => {
+  expect(await evaluateGuidedCondition(databaseLead(actual as string | null), {
+    organizationId: 'org-1', leadId: 'lead-1', condition: { version: 1, id: 'text', field: 'lead.name', operator, value },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'text', status: 'evaluated', matched, actual }] });
+});

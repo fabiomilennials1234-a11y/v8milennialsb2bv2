@@ -1,4 +1,4 @@
-import type { GuidedTextField } from '@/contracts/workflows/guided-fields';
+import type { GuidedTextField, GuidedTextComparison } from '@/contracts/workflows/guided-fields';
 import type { Node, Edge } from "@xyflow/react";
 
 /**
@@ -646,7 +646,7 @@ export type GuidedRuleDraft = {
   version: 1;
   id: string;
   field: GuidedTextField;
-} & ({ operator: 'equals'; value: string } | { operator: 'is_empty' });
+} & GuidedTextComparison;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

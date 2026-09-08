@@ -1,4 +1,4 @@
-import { GUIDED_TEXT_FIELDS, isGuidedTextField } from '@/contracts/workflows/guided-fields';
+import { GUIDED_TEXT_FIELDS, GUIDED_TEXT_OPERATORS, isGuidedTextField, isGuidedTextOperator } from '@/contracts/workflows/guided-fields';
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 
 export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolean {
   return 'children' in condition ? !condition.children.length || condition.children.some(isIncompleteGuidedDraft)
-    : condition.operator === 'equals' && condition.value.length === 0;
+    : condition.operator !== 'is_empty' && condition.value.length === 0;
 }
 const newRule = (): GuidedRuleDraft => ({ version: 1, id: crypto.randomUUID(), field: 'lead.name', operator: 'equals', value: '' });
 function duplicateCondition(condition: GuidedConditionDraft): GuidedConditionDraft {
@@ -47,7 +47,7 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
         <Button type="button" variant="ghost" onClick={() => {
           const copy = duplicateCondition(child);
           onChange({ ...condition, children: [...condition.children.slice(0, index + 1), copy, ...condition.children.slice(index + 1)] });
-          pendingFocus.current = `guided-${'children' in copy ? 'match' : copy.operator === 'equals' ? 'value' : 'operator'}-${copy.id}`;
+          pendingFocus.current = `guided-${'children' in copy ? 'match' : copy.operator !== 'is_empty' ? 'value' : 'operator'}-${copy.id}`;
         }}>{'children' in child ? 'Duplicar grupo' : 'Duplicar regra'}</Button>
         <Button type="button" variant="ghost" onClick={() => {
           onChange({ ...condition, children: condition.children.filter(item => item.id !== child.id) });
@@ -71,9 +71,11 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
     <div className="space-y-2"><Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
         const base = { version: 1 as const, id: condition.id, field: condition.field };
-        onChange(event.target.value === 'is_empty' ? { ...base, operator: 'is_empty' } : { ...base, operator: 'equals', value: '' });
-      }}><option value="equals">é igual a</option><option value="is_empty">está vazio</option></select></div>
-    {condition.operator === 'equals' && <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
+        const operator = event.target.value;
+        if (operator === 'is_empty') onChange({ ...base, operator });
+        else if (isGuidedTextOperator(operator)) onChange({ ...base, operator, value: 'value' in condition ? condition.value : '' });
+      }}>{Object.entries(GUIDED_TEXT_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazio</option></select></div>
+    {condition.operator !== 'is_empty' && <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
       <Input id={`guided-value-${condition.id}`} value={condition.value} aria-invalid={missingValue}
         aria-describedby={missingValue ? `guided-value-error-${condition.id}` : undefined}
         onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: José" />

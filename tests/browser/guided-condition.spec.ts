@@ -659,3 +659,22 @@ test('aprova Empresa explicitamente sem apagar concessão de Nome', async ({ pag
   await expect(page.getByRole('button', { name: 'Autorizar acesso à empresa dos leads', exact: true })).toBeVisible();
   expect(writes[1]).toEqual(['lead.name']);
 });
+
+test('troca operadores de texto preservando valor compatível e resumo no canvas', async ({ page }) => {
+  await openGuidedEditor(page, 'Aurora');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.company');
+  for (const [operator, label] of [
+    ['contains', 'contém'], ['not_contains', 'não contém'], ['starts_with', 'começa com'],
+    ['ends_with', 'termina com'], ['not_equals', 'é diferente de'],
+  ]) {
+    await page.getByLabel('Comparação', { exact: true }).selectOption(operator, { timeout: 3000 });
+    await expect(page.getByLabel('Valor da comparação')).toHaveValue('Aurora');
+    await expect(page.locator('.react-flow__node-condition')).toContainText(`Empresa ${label} “Aurora”`);
+  }
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
+  await page.getByLabel('Comparação', { exact: true }).selectOption('contains');
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Testar condição', exact: true })).toBeDisabled();
+});

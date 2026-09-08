@@ -1,11 +1,11 @@
-import { GUIDED_TEXT_FIELDS, isGuidedTextField, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
+import { GUIDED_TEXT_FIELDS, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export type GuidedRule = {
   version: 1;
   id: string;
   field: GuidedTextField;
-} & ({ operator: 'equals'; value: string } | { operator: 'is_empty' });
+} & GuidedTextComparison;
 
 export interface GuidedConditionRequest {
   organizationId: string;
@@ -32,7 +32,7 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
     }
     if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
     return isGuidedTextField(rule.field) && (rule.operator === 'is_empty'
-      || (rule.operator === 'equals' && typeof rule.value === 'string' && rule.value.length > 0));
+      || (isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
   }
   return valid(value, 0);
 }
@@ -121,8 +121,20 @@ export async function evaluateGuidedCondition(
     }
     const actual = record[GUIDED_TEXT_FIELDS[condition.field].column];
     const empty = actual == null || actual === '';
-    const matched = condition.operator === 'is_empty' ? empty
-      : !empty && typeof actual === 'string' && normalize(actual) === normalize(condition.value);
+    let matched = false;
+    if (condition.operator === 'is_empty') matched = empty;
+    else if (!empty && typeof actual === 'string') {
+      const text = normalize(actual);
+      const comparison = normalize(condition.value);
+      switch (condition.operator) {
+        case 'equals': matched = text === comparison; break;
+        case 'not_equals': matched = text !== comparison; break;
+        case 'contains': matched = text.includes(comparison); break;
+        case 'not_contains': matched = !text.includes(comparison); break;
+        case 'starts_with': matched = text.startsWith(comparison); break;
+        case 'ends_with': matched = text.endsWith(comparison); break;
+      }
+    }
     rules.push({ id: condition.id, status: 'evaluated', matched, actual });
     return matched;
   }
