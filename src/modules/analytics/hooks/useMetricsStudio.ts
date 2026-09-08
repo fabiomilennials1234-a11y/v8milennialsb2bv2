@@ -42,6 +42,7 @@ interface StudioState {
    * valha e a outra não.
    */
   org: string | null | undefined;
+  panelId?: string | null;
 }
 
 const EMPTY: StudioState = { windows: [], nextZ: 1, seq: 0, org: undefined };
@@ -123,9 +124,11 @@ function acomodar(
 }
 
 export interface MetricsStudioApi {
+  persistence: ReturnType<typeof useMetricsStudioPanel>;
   windows: StudioWindow[];
   openMetricIds: Set<string>;
   addMetric: (metric: EngineMetric, bounds: Bounds) => void;
+  addFixed: (id: string, size: { w: number; h: number }, bounds: Bounds) => void;
   removeWindow: (id: string) => void;
   moveWindow: (id: string, x: number, y: number) => void;
   resizeWindow: (id: string, w: number, h: number) => void;
@@ -174,7 +177,7 @@ export function useMetricsStudio(
    */
   const orgAtual = persistencia.organizationId;
   useEffect(() => {
-    if (state.org === orgAtual) return;
+    if (state.org === orgAtual && state.panelId === panelId) return;
 
     // Trocou de org: a cópia de trabalho da anterior não vale mais. Zerar ANTES
     // de o painel novo chegar é deliberado — deixar as janelas da org velha na
@@ -186,7 +189,7 @@ export function useMetricsStudio(
       return;
     }
 
-    if (!orgAtual || persistencia.isLoading || persistencia.layout === null) return;
+    if (!orgAtual || !panelId || persistencia.isLoading || persistencia.layout === null) return;
 
     const windows = persistencia.layout;
     ultimoSincronizado.current = windows;
@@ -195,10 +198,11 @@ export function useMetricsStudio(
       nextZ: windows.reduce((max, w) => Math.max(max, w.z), 0) + 1,
       seq: windows.length,
       org: orgAtual,
+      panelId,
     });
-  }, [orgAtual, persistencia.isLoading, persistencia.layout, state.org]);
+  }, [orgAtual, panelId, persistencia.isLoading, persistencia.layout, state.org, state.panelId]);
 
-  const windows = state.windows ?? EMPTY.windows;
+  const windows = state.org === orgAtual && state.panelId === panelId ? state.windows : EMPTY.windows;
 
   // A gravação é EFEITO, não parte do updater. Chamar `save()` de dentro de um
   // updater de estado seria efeito colateral em função que o StrictMode executa
@@ -210,11 +214,11 @@ export function useMetricsStudio(
     // em que `windows` já é o layout hidratado — nunca no commit da hidratação,
     // quando `windows` ainda era o `[]` inicial. Era ali que nascia o `save([])`
     // fantasma de toda montagem.
-    if (state.org === undefined || state.org !== orgAtual) return;
+    if (!panelId || state.org === undefined || state.org !== orgAtual || state.panelId !== panelId) return;
     if (windows === ultimoSincronizado.current) return; // hidratação, não mudança
     ultimoSincronizado.current = windows;
     save(windows);
-  }, [windows, save, orgAtual, state.org]);
+  }, [windows, save, orgAtual, panelId, state.org, state.panelId]);
 
   const mutar = useCallback((fn: (prev: StudioState) => StudioState) => setState(fn), []);
 
@@ -244,6 +248,16 @@ export function useMetricsStudio(
     (id: string) => mutar((prev) => ({ ...prev, windows: prev.windows.filter((w) => w.id !== id) })),
     [mutar],
   );
+
+  const addFixed = useCallback((id: string, size: { w: number; h: number }, bounds: Bounds) => {
+    mutar((prev) => {
+      const position = placeNext(prev.windows, size.w, size.h, bounds);
+      const seq = prev.seq + 1;
+      return { ...prev, seq, nextZ: prev.nextZ + 1, windows: [...prev.windows, {
+        id: `${id}-${seq}`, fixo: id, metricId: "", corte: "total", chart: "number", z: prev.nextZ, ...size, ...position,
+      }] };
+    });
+  }, [mutar]);
 
   const moveWindow = useCallback(
     (id: string, x: number, y: number) =>
@@ -322,7 +336,7 @@ export function useMetricsStudio(
   // Preserva `org`: esvaziar o painel é uma MUDANÇA que precisa ser gravada.
   // Cair para `EMPTY` cru zeraria a marca de hidratação e a guarda de gravação
   // engoliria o "Limpar" em silêncio — o painel voltaria no próximo refresh.
-  const clear = useCallback(() => mutar((prev) => ({ ...EMPTY, org: prev.org })), [mutar]);
+  const clear = useCallback(() => mutar((prev) => ({ ...EMPTY, org: prev.org, panelId: prev.panelId })), [mutar]);
 
   const openMetricIds = useMemo(
     () => new Set(windows.filter((w) => byId.has(w.metricId)).map((w) => w.metricId)),
@@ -330,9 +344,11 @@ export function useMetricsStudio(
   );
 
   return {
+    persistence: persistencia,
     windows,
     openMetricIds,
     addMetric,
+    addFixed,
     removeWindow,
     moveWindow,
     resizeWindow,

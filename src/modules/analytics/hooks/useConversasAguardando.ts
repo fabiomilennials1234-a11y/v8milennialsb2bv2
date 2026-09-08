@@ -165,7 +165,7 @@ type AwaitingRpc = (
  * (`pre_sale → sale → sdr → closer`). Duas ordens diferentes produziriam um
  * card que mostra "Ana" numa conversa que some da lista da Ana.
  */
-async function dadosDeLead(ids: string[]): Promise<Map<string, DadosDeLead>> {
+async function dadosDeLead(ids: string[], organizationId: string): Promise<Map<string, DadosDeLead>> {
   const mapa = new Map<string, DadosDeLead>();
   if (ids.length === 0) return mapa;
   const { data, error } = await supabase
@@ -173,7 +173,8 @@ async function dadosDeLead(ids: string[]): Promise<Map<string, DadosDeLead>> {
     .select(
       "id, name, pre_sale_responsible_id, sale_responsible_id, sdr_id, closer_id",
     )
-    .in("id", ids);
+    .in("id", ids)
+    .eq("organization_id", organizationId);
   // Nome é acessório: a lista é o payload. Degradar aqui mostra o push_name ou
   // o número, que continua sendo informação útil — mas deixa rastro.
   if (error) {
@@ -203,7 +204,7 @@ async function buscarPorInstancia(
   escopo: ComandoEscopo,
   meuTeamMemberId: string | null,
 ): Promise<InstanceQueryResult> {
-  const chamarRpc = supabase.rpc as unknown as AwaitingRpc;
+  const chamarRpc = supabase.rpc.bind(supabase) as unknown as AwaitingRpc;
   const { data, error } = await chamarRpc(
     "get_conversations_awaiting_human_reply",
     { p_org: organizationId, p_instance: instanceId, p_limit: limit },
@@ -214,7 +215,7 @@ async function buscarPorInstancia(
     const ids = [
       ...new Set(linhas.map((r) => r.lead_id).filter((id): id is string => !!id)),
     ];
-    const leads = await dadosDeLead(ids);
+    const leads = await dadosDeLead(ids, organizationId);
     return {
       total: linhas[0]?.waiting_total ?? 0,
       degraded: false,
@@ -266,7 +267,7 @@ async function buscarPorInstancia(
   const ids = [
     ...new Set(linhas.map((r) => r.lead_id).filter((id): id is string => !!id)),
   ];
-  const leads = await dadosDeLead(ids);
+  const leads = await dadosDeLead(ids, organizationId);
 
   const mapeadas = linhas.map((r) => ({
     key: `${instanceId}:${r.normalized_phone}`,
@@ -304,7 +305,7 @@ async function buscarPorInstancia(
 export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id ?? null;
-  const { data: instancias, isLoading: instLoading } =
+  const { data: instancias, isLoading: instLoading, isError: instError, refetch: refetchInstancias } =
     useWhatsAppInstancesForUser();
   const { escopo, isAdmin, meuTeamMemberId, isReady } = useComandoScope();
   const queryClient = useQueryClient();
@@ -329,6 +330,7 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
         chip.id,
         limiteBusca,
         escopo,
+        meuTeamMemberId,
       ],
       queryFn: () =>
         buscarPorInstancia(
@@ -368,9 +370,9 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
         // Um chip que falha não apaga os outros; só marca erro quando TODOS
         // falharam (ou quando o único que existe falhou).
         isError:
-          resultados.length > 0 && resultados.every((r) => r.isError),
+          !!instError || (resultados.length > 0 && resultados.every((r) => r.isError)),
         isDegraded: resultados.some((r) => r.data?.degraded === true),
-        semChips: !instLoading && !identidadePendente && chips.length === 0,
+        semChips: !instLoading && !instError && !identidadePendente && chips.length === 0,
         chipsComErro: resultados.filter((r) => r.isError).length,
         isAdmin,
       };
@@ -383,6 +385,7 @@ export function useConversasAguardando(limite = 10): ConversasAguardandoResult {
     // importante da tela ficava sem "tentar de novo" — erro virava beco sem
     // saída. Invalidar por prefixo relê todos os chips de uma vez.
     refetch: () => {
+      void refetchInstancias();
       void queryClient.invalidateQueries({
         queryKey: ["comando", "conversas-aguardando"],
       });

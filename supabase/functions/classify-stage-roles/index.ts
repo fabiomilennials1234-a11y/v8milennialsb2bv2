@@ -33,7 +33,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
 import {
-  planStageRoleSuggestions,
+  planAssignableStageRoles,
   type StagePlanItem,
   type StageToClassify,
   type SuggestableStageRole,
@@ -51,8 +51,6 @@ const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 const SUGGESTABLE_ROLES: SuggestableStageRole[] = [
   "meeting_booked",
   "meeting_held",
-  "won",
-  "lost",
 ];
 
 interface StageRow {
@@ -82,11 +80,9 @@ function buildPrompt(stages: StageRow[]): string {
   return [
     "Você classifica etapas de funil de vendas B2B (CRM, pt-BR) em papéis semânticos para métricas.",
     "Para CADA etapa, escolha UM papel pelo NOME:",
-    "- won: venda fechada/ganha (terminal positivo, gera receita)",
-    "- lost: oportunidade perdida/desistiu/sem interesse (terminal negativo)",
     "- meeting_booked: reunião/call/visita marcada ou aguardando confirmação",
     "- meeting_held: reunião/call/visita realizada, lead compareceu",
-    "- open: qualquer outra coisa (etapa intermediária, nutrição, negociação em curso)",
+    "- open: qualquer outra coisa, inclusive venda ganha ou perdida; o desfecho pertence ao negócio, não à etapa",
     "As flags [final positivo/negativo] são sinal fraco — o NOME decide. Na dúvida, use open.",
     "",
     "Etapas:",
@@ -247,7 +243,7 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
     }));
 
     // Passada 1 — determinística (nome + flag).
-    let plan = planStageRoleSuggestions(stages);
+    let plan = planAssignableStageRoles(stages);
 
     // Passada 2 — IA só pro resíduo não-óbvio.
     if (plan.unresolved.length > 0 && openRouter) {
@@ -264,7 +260,7 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
           raw,
           new Set(residueRows.map((r) => r.id)),
         );
-        plan = planStageRoleSuggestions(stages, aiClassification);
+        plan = planAssignableStageRoles(stages, aiClassification);
       } catch (err) {
         // IA indisponível não bloqueia a passada determinística.
         console.error(`classify-stage-roles: AI pass failed for org ${orgId}:`, err);

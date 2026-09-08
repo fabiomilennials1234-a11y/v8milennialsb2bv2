@@ -82,8 +82,22 @@ describe("resolveFixedCard", () => {
    */
   it("as chaves gravadas no banco não mudam sem alias", () => {
     expect(Object.keys(FIXED_CARDS).sort()).toEqual([
+      "atividade-equipe",
+      "briefing-oraculo",
       "campeoes-produto",
+      "funil-conversao",
+      "indicadores-operacao",
+      "jornada-lead",
+      "mapa-clientes",
+      "meta-mensal",
+      "metas-equipe",
+      "metas-individuais",
+      "motivos-perda",
+      "operacao-ao-vivo",
       "ranking-vendedores",
+      "real-esperado",
+      "receita-acumulada",
+      "saude-funil",
     ]);
   });
 });

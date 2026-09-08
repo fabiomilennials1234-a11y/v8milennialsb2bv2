@@ -8,6 +8,8 @@ import type { StudioWindow } from "@/modules/analytics/hooks/useMetricsStudio";
 import { MetricWindow } from "./MetricWindow";
 import { FixedWindow } from "./FixedWindow";
 import { isFixedWindow } from "@/modules/analytics/lib/metrics-studio-window";
+import type { FixedCardContext } from "@/modules/analytics/lib/metrics-studio-fixed-card-contract";
+import { projectStudioWindows } from "@/modules/analytics/lib/metrics-studio-projection";
 
 interface MetricsCanvasProps {
   windows: StudioWindow[];
@@ -30,7 +32,10 @@ interface MetricsCanvasProps {
    * Por isso vem PRONTO de cima, do mesmo `computePeriodRange` que o Comando já
    * usa para alimentar exatamente estes componentes.
    */
-  intervalo: { start: Date; end: Date };
+  intervalo: FixedCardContext["range"];
+  monthlyRange: FixedCardContext["range"];
+  month: number;
+  year: number;
   period: StudioPeriod;
   range?: StudioRange | null;
   podeVerPorPessoa: boolean;
@@ -58,14 +63,15 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, byId, intervalo, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, byId, intervalo, monthlyRange, month, year, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
   ref,
 ) {
   const empty = windows.length === 0;
+  const displayed = editavel ? windows : projectStudioWindows(windows, size.width);
 
   // O painel é uma região da página, não o viewport: quando as janelas passam
   // da dobra, o canvas cresce e rola em vez de empilhar em cascata.
-  const contentHeight = windows.reduce((acc, w) => Math.max(acc, w.y + w.h + 24), 0);
+  const contentHeight = displayed.reduce((acc, w) => Math.max(acc, w.y + w.h + 24), 0);
 
   return (
     <div className="h-full w-full overflow-auto">
@@ -112,7 +118,7 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
         </div>
       )}
 
-      {windows.map((win) => {
+      {displayed.map((win) => {
         // Janela cuja métrica sumiu do catálogo (personalizada apagada por um
         // admin, por exemplo) simplesmente não desenha. Não é erro: é uma
         // definição que deixou de existir, e o painel do usuário não some por
@@ -124,7 +130,8 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
             <FixedWindow
               key={win.id}
               win={win}
-              range={intervalo}
+              context={{ range: intervalo, monthlyRange, month, year, period }}
+              podeVerPorPessoa={podeVerPorPessoa}
               editavel={editavel}
               selected={selectedId === win.id}
               canvas={size}

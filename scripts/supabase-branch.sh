@@ -28,6 +28,12 @@
 
 set -euo pipefail
 
+# Git Bash no Windows: transporte pela Management API com as mesmas guardas.
+# A preparação do ledger/baseline é explícita, seguindo o runbook, sem psql.
+case "${OSTYPE:-}" in
+  msys*|cygwin*) exec node scripts/supabase-branch-win.mjs "$@" ;;
+esac
+
 PROD_REF="jsjsmuncfkbsbzqzqhfq"
 ACAO="${1:-}"
 ALVO="${2:-}"

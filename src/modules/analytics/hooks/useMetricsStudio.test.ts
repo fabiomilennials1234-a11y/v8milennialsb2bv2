@@ -59,6 +59,24 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
     painel.save = vi.fn();
   });
 
+  it("trocar de aba na mesma organização hidrata só o novo painel, sem gravar o anterior nele", () => {
+    painel.organizationId = "org-A";
+    painel.layout = [janela("a-1")];
+    const { result, rerender } = renderHook(({ id }) => useMetricsStudio(CATALOGO_VAZIO, id), { initialProps: { id: "aba-a" } });
+    painel.layout = null;
+    painel.isLoading = true;
+    rerender({ id: "aba-b" });
+    expect(result.current.windows).toEqual([]);
+    expect(painel.save).not.toHaveBeenCalled();
+    painel.layout = [janela("b-1")];
+    painel.isLoading = false;
+    rerender({ id: "aba-b" });
+    expect(result.current.windows.map((w) => w.id)).toEqual(["b-1"]);
+    expect(painel.save).not.toHaveBeenCalled();
+    act(() => result.current.moveWindow("b-1", 24, 24));
+    expect(painel.save.mock.calls[0][0]).toEqual([expect.objectContaining({ id: "b-1", x: 24 })]);
+  });
+
   it("não grava nada enquanto a organização não resolveu", () => {
     // `layout` vale `[]` (não `null`) quando o contexto ainda não resolveu — é
     // por isso que "layout vazio" nunca pode, sozinho, autorizar gravação.

@@ -27,6 +27,12 @@ const ymUTC = (d: Date): string => d.toISOString().slice(0, 7);
 const ymRef = (ref: string): string => ref.slice(0, 7);
 
 describe("mesDeReferencia", () => {
+  it("respeita o mês da organização na virada UTC sem quebrar em fuso desconhecido", () => {
+    const agora = new Date("2026-09-01T01:00:00Z");
+    expect(mesDeReferencia(agora, "America/Sao_Paulo")).toEqual({ month: 8, year: 2026 });
+    expect(mesDeReferencia(agora, "Asia/Tokyo")).toEqual({ month: 9, year: 2026 });
+    expect(() => mesDeReferencia(agora, "Timezone/Desconhecido")).not.toThrow();
+  });
   it("conta o mês a partir de 1, que é a convenção de computePeriodRange", () => {
     expect(mesDeReferencia(new Date(2026, 0, 15))).toEqual({ month: 1, year: 2026 });
     expect(mesDeReferencia(new Date(2026, 8, 4))).toEqual({ month: 9, year: 2026 });

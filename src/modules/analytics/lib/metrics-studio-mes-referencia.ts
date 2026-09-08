@@ -33,6 +33,8 @@
  * `metrics-studio-fixed-card-contract.ts` neste mesmo módulo.
  */
 
+import { zonedDateParts } from "@/shared/time/zoned-day";
+
 /** Mês/ano de referência para `computePeriodRange`, na convenção 1-based dela. */
 export interface MesDeReferencia {
   /** 1 = janeiro. A convenção de `computePeriodRange`, não a de `Date`. */
@@ -46,6 +48,10 @@ export interface MesDeReferencia {
  * O Estúdio não tem seletor de mês como o Comando: o período é sempre relativo
  * a hoje. `agora` é injetável para o teste não depender do relógio.
  */
-export function mesDeReferencia(agora: Date = new Date()): MesDeReferencia {
+export function mesDeReferencia(agora: Date = new Date(), timezone?: string): MesDeReferencia {
+  if (timezone) {
+    const { y: year, m: month } = zonedDateParts(agora, timezone);
+    return { month, year };
+  }
   return { month: agora.getMonth() + 1, year: agora.getFullYear() };
 }
