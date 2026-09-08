@@ -397,6 +397,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       lead_id: leadB, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' });
     expect(foreignEnqueue.error?.code).toBe('42501');
     expect((await service.from('leads').update({ name: 'Mariana' }).eq('id', leadA).eq('organization_id', orgA)).error).toBeNull();
+    let restoreError: unknown;
     try {
       const executed = await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA,
         leadId: leadA, guidedVersionId: first.data.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {} });
@@ -406,8 +407,9 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       expect(steps.data?.map(step => step.node_id).sort()).toEqual(['c', 'n', 't']);
     } finally {
       const restored = await service.from('leads').update({ name: 'José' }).eq('id', leadA).eq('organization_id', orgA);
-      if (restored.error) throw restored.error;
+      restoreError = restored.error;
     }
+    expect(restoreError).toBeNull();
     expect(second.data.version_id).not.toBe(first.data.version_id);
     const original = await administrator.from('workflow_guided_versions').select('definition, settings, source_revision')
       .eq('organization_id', orgA).eq('workflow_id', workflowId).eq('id', first.data.version_id).single();
