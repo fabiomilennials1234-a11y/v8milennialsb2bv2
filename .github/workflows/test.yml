@@ -154,6 +154,8 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: Prepare synthetic data required by historical backup migrations
+        run: node scripts/ci/prepare-historical-fixtures.mjs
       - run: supabase start
       - uses: actions/setup-node@v4
         with:
@@ -176,6 +178,8 @@ jobs:
           version: latest
       # Boots local Postgres and applies supabase/migrations/* — the clean
       # schema the invariant suite asserts against.
+      - name: Prepare synthetic data required by historical backup migrations
+        run: node scripts/ci/prepare-historical-fixtures.mjs
       - run: supabase start
       - name: Install pgTAP TAP harness (pg_prove)
         run: |
@@ -196,6 +200,8 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
+      - name: Prepare synthetic data required by historical backup migrations
+        run: node scripts/ci/prepare-historical-fixtures.mjs
       - run: supabase start
       - name: Seed test database
         run: PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres -f supabase/seed.sql
