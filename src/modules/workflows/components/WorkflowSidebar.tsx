@@ -4,6 +4,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { TriggerPanel } from "./sidebar-panels/TriggerPanel";
 import { ActionPanel } from "./sidebar-panels/ActionPanel";
 import { ConditionPanel } from "./sidebar-panels/ConditionPanel";
+import { GuidedConditionPanel } from "./sidebar-panels/GuidedConditionPanel";
+import { WorkflowDataGrantPanel } from "./sidebar-panels/WorkflowDataGrantPanel";
 import { DelayPanel } from "./sidebar-panels/DelayPanel";
 import { CopilotPanel } from "./sidebar-panels/CopilotPanel";
 import { WaitResponsePanel } from "./sidebar-panels/WaitResponsePanel";
@@ -16,7 +18,7 @@ import { CodeJsonPanel } from "./sidebar-panels/CodeJsonPanel";
 import { CodeJavascriptPanel } from "./sidebar-panels/CodeJavascriptPanel";
 import { CodeHttpsPanel } from "./sidebar-panels/CodeHttpsPanel";
 import { NODE_LABELS } from "@/types/workflow";
-import type { WorkflowNode, WorkflowNodeData } from "@/types/workflow";
+import type { WorkflowNode, WorkflowNodeData, ConditionNodeData } from "@/types/workflow";
 
 /**
  * Fields that reference org-specific resources.
@@ -52,6 +54,9 @@ function getUnresolvedFields(data: Record<string, unknown>): string[] {
 }
 
 interface WorkflowSidebarProps {
+  workflowId?: string;
+  canManageDataGrant?: boolean;
+  organizationId?: string;
   selectedNode: WorkflowNode | null;
   onClose: () => void;
   onUpdateNode: (nodeId: string, data: Partial<WorkflowNodeData>) => void;
@@ -61,6 +66,9 @@ interface WorkflowSidebarProps {
 }
 
 export function WorkflowSidebar({
+  workflowId,
+  canManageDataGrant = false,
+  organizationId,
   selectedNode,
   onClose,
   onUpdateNode,
@@ -87,6 +95,15 @@ export function WorkflowSidebar({
       case "action":
         return <ActionPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "condition":
+        if ((nodeData as ConditionNodeData).guidedCondition) {
+          return <><GuidedConditionPanel
+            organizationId={organizationId ?? ''}
+            condition={(nodeData as ConditionNodeData).guidedCondition!}
+            onChange={guidedCondition => handleUpdate({ guidedCondition })}
+          />{workflowId && organizationId && <WorkflowDataGrantPanel
+            workflowId={workflowId} organizationId={organizationId} canManage={canManageDataGrant}
+          />}</>;
+        }
         return <ConditionPanel data={nodeData as any} onUpdate={handleUpdate} />;
       case "delay":
         return <DelayPanel data={nodeData as any} onUpdate={handleUpdate} />;

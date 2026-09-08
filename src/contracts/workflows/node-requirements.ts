@@ -184,6 +184,13 @@ export function findNodeConfigIssues(nodes: WorkflowNodeLike[]): NodeConfigIssue
 
   for (const node of nodes ?? []) {
     const config = node.data ?? {};
+    // Both editor and list activation must preserve guided conditions as
+    // drafts until the organization-authorized publication path is available.
+    if (node.type === "condition" && Object.prototype.hasOwnProperty.call(config, "guidedCondition")) {
+      issues.push({ nodeId: node.id, nodeLabel: (config.label as string) || "Condição",
+        actionType: "condition", missing: "publicação autorizada da condição" });
+      continue;
+    }
     const actionType = config.actionType as string | undefined;
     if (!actionType) continue;
 

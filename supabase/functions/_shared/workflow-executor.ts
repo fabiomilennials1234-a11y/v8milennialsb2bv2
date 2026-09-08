@@ -163,6 +163,17 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
     context,
   } = params;
 
+  // Guided drafts cannot run through the legacy evaluator. The published,
+  // organization-authorized runtime must resolve them before graph traversal.
+  // Checking the entire definition also prevents earlier actions from running
+  // when an unpublished guided condition appears later in the graph.
+  const guidedDraft = definition.nodes.find(node =>
+    node.type === "condition" && Object.prototype.hasOwnProperty.call(node.data, "guidedCondition"));
+  if (guidedDraft) {
+    await updateExecution(supabase, executionId, "failed", guidedDraft.id, params.loopCounters ?? {}, "guided_publication_required");
+    return { success: false, status: "failed", error: "guided_publication_required", stepsExecuted: 0 };
+  }
+
   const nodeMap = new Map<string, WorkflowNode>();
   for (const node of definition.nodes) {
     nodeMap.set(node.id, node);

@@ -14,6 +14,7 @@ import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/c
 import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
 import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
+import { useOrganization } from "@/modules/identity";
 
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
@@ -79,7 +80,14 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
     case "action":
       return { type: "action", actionType: "send_whatsapp", label: "Ação" } as ActionNodeData;
     case "condition":
-      return { type: "condition", label: "Condição", field: "", operator: "equals", value: "", conditionMode: "field" } as ConditionNodeData;
+      return {
+        type: "condition", label: "Condição", field: "", operator: "equals", value: "", conditionMode: "field",
+        // New creation only. Saved legacy nodes retain their original contract.
+        // Production exposure waits for the complete publication/grant journey.
+        ...(import.meta.env.DEV && import.meta.env.VITE_GUIDED_CONDITIONS === "true" ? {
+          guidedCondition: { version: 1, id: crypto.randomUUID(), field: "lead.name", operator: "equals", value: "" },
+        } : {}),
+      } as ConditionNodeData;
     case "delay":
       return { type: "delay", label: "Delay", amount: 1, unit: "hours" } as DelayNodeData;
     case "copilot":
@@ -161,6 +169,7 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
 let nodeIdCounter = 1;
 
 export default function AutomacoesEditor() {
+  const { organizationId, role } = useOrganization();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -636,6 +645,9 @@ export default function AutomacoesEditor() {
         />
 
         <WorkflowSidebar
+          workflowId={isNew ? undefined : id}
+          canManageDataGrant={role === "admin"}
+          organizationId={organizationId ?? undefined}
           selectedNode={selectedNode as any}
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={handleUpdateNode}

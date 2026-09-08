@@ -640,6 +640,13 @@ export interface ActionNodeData {
   [key: string]: unknown;
 }
 
+/** Draft for the guided contract; server validates before evaluation. */
+export type GuidedConditionDraft = {
+  version: 1;
+  id: string;
+  field: 'lead.name';
+} & ({ operator: 'equals'; value: string } | { operator: 'is_empty' });
+
 export interface ConditionNodeData {
   type: "condition";
   label: string;
@@ -648,6 +655,7 @@ export interface ConditionNodeData {
   value: string;
   conditionMode?: ConditionMode;
   timeWindow?: TimeWindowConfig;
+  guidedCondition?: GuidedConditionDraft;
   [key: string]: unknown;
 }
 

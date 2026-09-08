@@ -1,0 +1,299 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { evaluateGuidedCondition } from '../../supabase/functions/_shared/guided-condition';
+
+// Explicit preview opt-in: never inherit another suite's production credentials.
+describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth and RLS', () => {
+  let service: SupabaseClient;
+  let token: string;
+  let userId: string;
+  const orgA = crypto.randomUUID();
+  const orgB = crypto.randomUUID();
+  const leadA = crypto.randomUUID();
+  const leadB = crypto.randomUUID();
+  const adminMemberId = crypto.randomUUID();
+
+  beforeAll(async () => {
+    const ref = process.env.GUIDED_PREVIEW_REF!;
+    if (['jsjsmuncfkbsbzqzqhfq', 'bcfadphgsibjzivtbjvc'].includes(ref)
+      || process.env.SUPABASE_URL !== `https://${ref}.supabase.co`) throw new Error('Refusing non-preview test target');
+    const auth = { persistSession: false, autoRefreshToken: false };
+    service = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { ...auth, storageKey: `guided-service-${orgA}` } });
+    const password = `${crypto.randomUUID()}!Aa1`;
+    const email = `guided-${crypto.randomUUID()}@example.test`;
+    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+    if (created.error) throw created.error;
+    userId = created.data.user.id;
+    const organizations = await service.from('organizations').insert([
+      { id: orgA, name: 'Guided test A', slug: `guided-${orgA}` },
+      { id: orgB, name: 'Guided test B', slug: `guided-${orgB}` },
+    ]);
+    if (organizations.error) throw organizations.error;
+    const quotas = await service.from('org_quotas').upsert([
+      { organization_id: orgA, resource_key: 'max_users', plan_base: 2 },
+      { organization_id: orgA, resource_key: 'max_leads', plan_base: 20 },
+      { organization_id: orgB, resource_key: 'max_leads', plan_base: 20 },
+    ], { onConflict: 'organization_id,resource_key' });
+    if (quotas.error) throw quotas.error;
+    const member = await service.from('team_members').insert({
+      id: adminMemberId, user_id: userId, organization_id: orgA, name: 'Guided tester', role: 'admin', is_active: true,
+    });
+    if (member.error) throw member.error;
+    const leads = await service.from('leads').insert([
+      { id: leadA, organization_id: orgA, name: 'José', pre_sale_responsible_id: adminMemberId },
+      { id: leadB, organization_id: orgB, name: 'Dado protegido' },
+    ]);
+    if (leads.error) throw leads.error;
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, { auth: { ...auth, storageKey: `guided-admin-${orgA}` } });
+    const signedIn = await caller.auth.signInWithPassword({ email, password });
+    if (signedIn.error) throw signedIn.error;
+    token = signedIn.data.session!.access_token;
+  }, 60000);
+
+  afterAll(async () => {
+    if (service) {
+      const failures: unknown[] = [];
+      // Existing stage-deletion triggers enqueue an org-owned job. Remove
+      // stages while the org still exists (canonical migration's QA order).
+      try {
+        const cleared = await service.from('organizations').update({ default_pipeline_id: null }).in('id', [orgA, orgB]);
+        if (cleared.error) throw cleared.error;
+        for (const table of ['workflows', 'leads', 'pipeline_stages', 'followup_reclassify_queue', 'pipelines']) {
+          const removed = await service.from(table).delete().in('organization_id', [orgA, orgB]);
+          if (removed.error) throw removed.error;
+        }
+        const removed = await service.from('organizations').delete().in('id', [orgA, orgB]);
+        if (removed.error) throw removed.error;
+      } catch (error) { failures.push(error); }
+      if (userId) {
+        const removed = await service.auth.admin.deleteUser(userId);
+        if (removed.error) failures.push(removed.error);
+      }
+      if (failures.length) throw new AggregateError(failures, 'Preview fixture cleanup failed');
+    }
+  }, 60000);
+
+  it('lets an organization administrator explicitly approve and revoke lead-name access for one workflow', async () => {
+    const workflowId = crypto.randomUUID();
+    const created = await service.from('workflows').insert({ id: workflowId, organization_id: orgA,
+      name: 'Grant test', trigger_type: 'manual', created_by: userId });
+    if (created.error) throw created.error;
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const approved = await caller.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0,
+    });
+    expect(approved.error).toBeNull();
+    expect(approved.data).toMatchObject({ workflow_id: workflowId, organization_id: orgA,
+      fields: ['lead.name'], resource_scope: 'organization_leads', revision: 1 });
+    const stale = await caller.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: [], p_expected_revision: 0,
+    }).abortSignal(AbortSignal.timeout(8000));
+    expect(stale.error?.code).toBe('PT409');
+    const unsupported = await caller.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: ['lead.name', 'lead.email'], p_expected_revision: 1,
+    });
+    expect(unsupported.error?.code).toBe('22023');
+    const readable = await caller.from('workflow_data_grants').select('fields, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(readable.error).toBeNull();
+    expect(readable.data).toEqual({ fields: ['lead.name'], revision: 1 });
+    const revoked = await caller.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1,
+    });
+    expect(revoked.error).toBeNull();
+    expect(revoked.data).toMatchObject({ workflow_id: workflowId, fields: [], revision: 2 });
+    const foreignWorkflow = crypto.randomUUID();
+    const foreignCreated = await service.from('workflows').insert({ id: foreignWorkflow, organization_id: orgB,
+      name: 'Other organization', trigger_type: 'manual' });
+    if (foreignCreated.error) throw foreignCreated.error;
+    const foreignApproval = await caller.rpc('set_workflow_data_grant', {
+      p_workflow_id: foreignWorkflow, p_fields: ['lead.name'], p_expected_revision: 0,
+    });
+    expect(foreignApproval.error?.code).toBe('42501');
+    const forged = await caller.from('workflow_data_grants').insert({ workflow_id: foreignWorkflow,
+      organization_id: orgB, fields: ['lead.name'], revision: 1 });
+    expect(forged.error?.code).toBe('42501');
+  }, 60000);
+
+  it('evaluates organizational data only while the workflow has a current explicit grant', async () => {
+    const workflowId = crypto.randomUUID();
+    const workflow = await service.from('workflows').insert({ id: workflowId, organization_id: orgA,
+      name: 'Organizational evaluation', trigger_type: 'manual', created_by: userId });
+    if (workflow.error) throw workflow.error;
+    const request = {
+      organizationId: orgA, leadId: leadA,
+      authorization: { kind: 'organization' as const, workflowId },
+      condition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: 'JOSE' },
+    };
+    expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+    const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const approved = await administrator.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0,
+    });
+    expect(approved.error).toBeNull();
+    expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'evaluated', matched: true,
+      rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 'José' }] });
+    expect(await evaluateGuidedCondition(administrator, request)).toEqual({ status: 'error', code: 'access_denied' });
+    expect(await evaluateGuidedCondition(service, { ...request, leadId: leadB }))
+      .toEqual({ status: 'error', code: 'context_unavailable' });
+    expect(await evaluateGuidedCondition(service, { ...request, organizationId: orgB, leadId: leadB }))
+      .toEqual({ status: 'error', code: 'access_denied' });
+    const revoked = await administrator.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1,
+    });
+    expect(revoked.error).toBeNull();
+    expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+  }, 60000);
+
+  it('saves an incomplete guided draft without rewriting the existing workflow definition', async () => {
+    const workflowId = crypto.randomUUID();
+    const existingDefinition = { nodes: [{ id: 'trigger-1', type: 'trigger', data: { triggerType: 'lead_created' } }], edges: [] };
+    const created = await service.from('workflows').insert({ id: workflowId, organization_id: orgA,
+      name: 'Separate guided draft', trigger_type: 'lead_created', definition: existingDefinition, created_by: userId });
+    if (created.error) throw created.error;
+    const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const incomplete = { nodes: [{ id: 'condition-1', type: 'condition', data: { guidedCondition: {} } }], edges: [] };
+    const saved = await administrator.rpc('save_guided_workflow_draft', {
+      p_workflow_id: workflowId, p_definition: incomplete, p_expected_revision: 0,
+    });
+    expect(saved.error).toBeNull();
+    expect(saved.data).toMatchObject({ workflow_id: workflowId, revision: 1 });
+    const draft = await administrator.from('workflow_guided_drafts').select('definition, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(draft.error).toBeNull();
+    expect(draft.data).toEqual({ definition: incomplete, revision: 1 });
+    const unchanged = await administrator.from('workflows').select('definition')
+      .eq('organization_id', orgA).eq('id', workflowId).single();
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data?.definition).toEqual(existingDefinition);
+    const concurrentDefinitions = [{ ...incomplete, label: 'Primeira edição' }, { ...incomplete, label: 'Segunda edição' }];
+    const concurrent = await Promise.all(concurrentDefinitions.map(definition => administrator.rpc('save_guided_workflow_draft', {
+      p_workflow_id: workflowId, p_definition: definition, p_expected_revision: 1,
+    })));
+    expect(concurrent.filter(response => response.error === null)).toHaveLength(1);
+    expect(concurrent.filter(response => response.error?.code === 'PT409')).toHaveLength(1);
+    const winner = concurrent.findIndex(response => response.error === null);
+    const latest = await administrator.from('workflow_guided_drafts').select('definition, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(latest.error).toBeNull();
+    expect(latest.data).toEqual({ definition: concurrentDefinitions[winner], revision: 2 });
+  }, 60000);
+
+  it('evaluates an accessible lead but cannot infer another organization through manipulated IDs', async () => {
+    const evaluate = async (organizationId: string, leadId: string) => {
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId, leadId,
+          condition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: 'JOSE' } }),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    expect(await evaluate(orgA, leadA)).toEqual({ status: 200, body: {
+      status: 'evaluated', matched: true,
+      rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 'José' }],
+    } });
+    expect(await evaluate(orgA, leadB)).toEqual({ status: 422, body: { status: 'error', code: 'context_unavailable' } });
+    expect(await evaluate(orgB, leadB)).toEqual({ status: 403, body: { status: 'error', code: 'access_denied' } });
+  }, 60000);
+
+  it('honors explicit responsible-only access within the same organization', async () => {
+    const workflowId = crypto.randomUUID();
+    const password = `${crypto.randomUUID()}!Aa1`;
+    const email = `guided-member-${crypto.randomUUID()}@example.test`;
+    const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
+    if (created.error) throw created.error;
+    const failures: unknown[] = [];
+    try {
+      const memberId = crypto.randomUUID();
+      const ownLead = crypto.randomUUID();
+      const member = await service.from('team_members').insert({ id: memberId, user_id: created.data.user.id,
+        // Current canonical storage key for the domain role “Membro”.
+        organization_id: orgA, name: 'Responsible tester', role: 'member', is_active: true });
+      if (member.error) throw member.error;
+      // The live catalog grants broad lead visibility by default. State the
+      // restrictive premise explicitly, as the repository's RLS seed does.
+      const permissions = await service.from('member_feature_permissions').insert(
+        ['leads.view_all', 'leads.view_unassigned', 'leads.view_subordinates'].map(feature_key => ({
+          team_member_id: memberId, organization_id: orgA, feature_key, enabled: false,
+        })),
+      );
+      if (permissions.error) throw permissions.error;
+      const lead = await service.from('leads').insert({ id: ownLead, organization_id: orgA, name: 'Ana', pre_sale_responsible_id: memberId });
+      if (lead.error) throw lead.error;
+      const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-member-${memberId}` },
+      });
+      const login = await caller.auth.signInWithPassword({ email, password });
+      if (login.error) throw login.error;
+      const workflow = await service.from('workflows').insert({ id: workflowId, organization_id: orgA,
+        name: 'Member-created workflow', trigger_type: 'manual', created_by: created.data.user.id });
+      if (workflow.error) throw workflow.error;
+      const forbiddenGrant = await caller.rpc('set_workflow_data_grant', {
+        p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0,
+      });
+      expect(forbiddenGrant.error?.code).toBe('42501');
+      const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const approval = await administrator.rpc('set_workflow_data_grant', {
+        p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0,
+      });
+      expect(approval.error).toBeNull();
+      const draft = await administrator.rpc('save_guided_workflow_draft', {
+        p_workflow_id: workflowId, p_definition: { nodes: [], edges: [] }, p_expected_revision: 0,
+      });
+      expect(draft.error).toBeNull();
+      const deniedDraft = await caller.rpc('save_guided_workflow_draft', {
+        p_workflow_id: workflowId, p_definition: { nodes: [], edges: [] }, p_expected_revision: 1,
+      });
+      expect(deniedDraft.error?.code).toBe('42501');
+      const hiddenDraft = await caller.from('workflow_guided_drafts').select('definition')
+        .eq('organization_id', orgA).eq('workflow_id', workflowId);
+      expect(hiddenDraft.error).toBeNull();
+      expect(hiddenDraft.data).toEqual([]);
+      const organizationalRequest = {
+        organizationId: orgA, leadId: leadA, authorization: { kind: 'organization' as const, workflowId },
+        condition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: 'JOSE' },
+      };
+      expect(await evaluateGuidedCondition(service, organizationalRequest)).toMatchObject({ status: 'evaluated', matched: true });
+      const hiddenGrant = await caller.from('workflow_data_grants').select('fields')
+        .eq('organization_id', orgA).eq('workflow_id', workflowId);
+      expect(hiddenGrant.error).toBeNull();
+      expect(hiddenGrant.data).toEqual([]);
+      const evaluate = async (leadId: string) => {
+        const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+          method: 'POST', headers: { Authorization: `Bearer ${login.data.session!.access_token}`,
+            apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizationId: orgA, leadId,
+            condition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: 'ANA' } }),
+        });
+        return response.json();
+      };
+      expect(await evaluate(ownLead)).toEqual({ status: 'evaluated', matched: true,
+        rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 'Ana' }] });
+      expect(await evaluate(leadA)).toEqual({ status: 'error', code: 'context_unavailable' });
+      const revoked = await service.from('team_members').update({ is_active: false })
+        .eq('organization_id', orgA).eq('id', memberId);
+      if (revoked.error) throw revoked.error;
+      expect(await evaluate(ownLead)).toEqual({ status: 'error', code: 'access_denied' });
+      const survivingApproval = await administrator.from('workflow_data_grants').select('fields, revision')
+        .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+      expect(survivingApproval.error).toBeNull();
+      expect(survivingApproval.data).toEqual({ fields: ['lead.name'], revision: 1 });
+      expect(await evaluateGuidedCondition(service, organizationalRequest)).toMatchObject({ status: 'evaluated', matched: true });
+    } catch (error) { failures.push(error); }
+    // Existing workflows.created_by restricts auth-user deletion. Remove this
+    // synthetic workflow before removing its creator, even after a failed test.
+    const removedWorkflow = await service.from('workflows').delete().eq('organization_id', orgA).eq('id', workflowId);
+    if (removedWorkflow.error) failures.push(removedWorkflow.error);
+    const deleted = await service.auth.admin.deleteUser(created.data.user.id);
+    if (deleted.error) failures.push(deleted.error);
+    if (failures.length) throw new AggregateError(failures, 'Responsible-only evaluation or cleanup failed');
+  }, 60000);
+});
