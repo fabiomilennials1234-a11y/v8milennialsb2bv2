@@ -349,7 +349,7 @@ SELECT p.organization_id, p.id, 'Novo', 'novo', 0, 'open'
 FROM pipelines p
 WHERE p.organization_id IN ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002')
   AND p.slug = 'whatsapp'
-ON CONFLICT DO NOTHING;
+ON CONFLICT (pipeline_id, stage_key) DO NOTHING;
 
 SELECT public.fn_entrada_sistema_criar(
   p_organization_id => fixture.org_id, p_slug => 'whatsapp',
@@ -411,7 +411,7 @@ INSERT INTO pipeline_stages (organization_id, pipeline_id, name, stage_key, posi
 VALUES
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000009e1', 'Novo', 'novo', 0, 'open'),
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000009e1', 'Proposta', 'proposta', 1, 'open')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (pipeline_id, stage_key) DO NOTHING;
 
 INSERT INTO pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_key, entered_at)
 VALUES
