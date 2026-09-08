@@ -21,8 +21,8 @@ const BR_AREA_CODES = new Set([
 ]);
 
 /**
- * Normaliza um telefone para o formato que a Uazapi espera: 55 + DDD + 9 dígitos.
- * Retorna `null` quando o telefone não pode ser um celular brasileiro.
+ * Normaliza para 55 + DDD + número (8 dígitos para fixos, 9 para celulares).
+ * Retorna `null` quando o telefone não pode ser um número brasileiro.
  *
  * Por que validar em vez de só concatenar: o código antigo fazia
  * `return '55' + cleaned` incondicionalmente, então qualquer lixo de 11 dígitos
@@ -54,7 +54,12 @@ export function formatPhoneForWhatsApp(phone: string | undefined): string | null
     cleaned = cleaned.substring(1);
   }
 
-  // Formato antigo (DDD + 8 dígitos): recebe o nono dígito.
+  // WhatsApp Business também usa fixos. Inserir 9 em um fixo muda o destino.
+  if (cleaned.length === 10 && /^[2-5]/.test(cleaned.substring(2))) {
+    return BR_AREA_CODES.has(Number(cleaned.substring(0, 2))) ? '55' + cleaned : null;
+  }
+
+  // Celular no formato antigo (DDD + 8 dígitos): recebe o nono dígito.
   if (cleaned.length === 10) {
     cleaned = cleaned.substring(0, 2) + '9' + cleaned.substring(2);
   }

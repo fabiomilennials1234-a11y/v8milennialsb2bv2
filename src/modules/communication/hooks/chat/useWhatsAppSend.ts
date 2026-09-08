@@ -37,7 +37,7 @@ function readProviderMessageId(data: unknown): string | undefined {
 
 /** Copy única pro telefone que não passa na normalização — aponta pra ação. */
 const INVALID_PHONE_MESSAGE =
-  "Número de telefone inválido para WhatsApp. Confira o telefone no cadastro do lead (precisa ser um celular brasileiro com DDD).";
+  "Número de telefone inválido para WhatsApp. Confira o telefone no cadastro do lead (precisa ser um número brasileiro com DDD).";
 
 // ─── Helpers privados ────────────────────────────────────────────────────────
 
@@ -337,7 +337,7 @@ export function useSendWhatsAppMessage() {
       }
       const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
       queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
-        ...prev.filter(m => m.id !== context?.optimisticId),
+        ...prev.filter((m) => m.id !== context?.optimisticId && (m.mediaType || m.message !== variables.message)),
         {
           id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
           retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
@@ -356,6 +356,11 @@ export function useSendWhatsAppMessage() {
       ]);
     },
     onSuccess: (data, variables, context) => {
+      // O operador pode reenviar pelo composer, sem clicar na bolha de retry.
+      queryClient.setQueryData<FailedMessage[]>(
+        ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
+        (prev = []) => prev.filter((m) => m.mediaType || m.message !== variables.message),
+      );
       // Carimba o id real do provider na bolha otimista assim que ele chega.
       // A partir daí o dedupe por message_id do realtime reconhece a linha do
       // webhook e não anexa uma segunda bolha.
