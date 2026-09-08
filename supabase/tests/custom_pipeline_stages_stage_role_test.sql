@@ -153,7 +153,7 @@ SELECT is(
 
 -- Move to the won stage 'fechado' (sync UPDATE → entry stage_key → stage_event → capture).
 UPDATE public.pipeline_entries
-  SET stage_id = 'a1000000-c5a6-0000-0000-00000000000f'   -- 'fechado' (won)
+  SET stage_id = 'a1000000-c5a6-0000-0000-00000000000f', stage_key = 'fechado'
   WHERE id = 'a1000000-e457-0000-0000-000000000001';
 
 SELECT is(
