@@ -168,7 +168,8 @@ jobs:
   rls-invariants:
     name: RLS Invariants (pgTAP)
     runs-on: ubuntu-latest
-    needs: [quality]
+    # Independent, still blocking: surface SQL/bootstrap regressions while
+    # quality runs, instead of waiting for the full TypeScript ratchet first.
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
