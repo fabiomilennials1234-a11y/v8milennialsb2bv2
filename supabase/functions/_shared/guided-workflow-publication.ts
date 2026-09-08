@@ -1,3 +1,4 @@
+import { findNodeConfigIssues } from '../../../src/contracts/workflows/node-requirements.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { AuthError, requireAuth } from './user-auth.ts';
 import { getCorsHeaders } from './cors.ts';
@@ -18,6 +19,11 @@ function publicationIssues(value: unknown): PublicationIssue[] {
   }
   const definition = value as unknown as WorkflowDefinition;
   const issues: PublicationIssue[] = validateWorkflow(definition).errors.filter(issue => issue.severity === 'error');
+  // Reuse the pure editor contract. Only action nodes participate here: its
+  // legacy activation gate for guided conditions is intentionally separate.
+  for (const issue of findNodeConfigIssues(definition.nodes.filter(node => node.type === 'action'))) {
+    issues.push({ code: 'incomplete_action', nodeId: issue.nodeId, message: `Preencha ${issue.missing}.` });
+  }
   for (const node of definition.nodes) {
     if (!NODE_TYPE_SET.has(node.type)) {
       issues.push({ code: 'unknown_node_type', nodeId: node.id, message: 'Tipo de node desconhecido.' });

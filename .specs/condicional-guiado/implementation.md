@@ -168,3 +168,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Added characterization coverage for current non-administrator denial before draft data is read. Existing authorization already passed; no implementation change was needed for that case.
 - Checks: 7 HTTP unit cases passed; 12 real Auth/RLS/HTTP integration cases passed; Deno entrypoint check and focused lint passed. No migration changes. All process handles terminal.
 - Next: complete supported-node configuration/reference validation and publication editor integration. Known vocabulary alone is not full validity. No ticket certified; all 21 remain in scope.
+
+## 2026-09-08 — shared action requirements on publication
+
+- TDD public HTTP case for known send_whatsapp_audio missing audioUrl failed (503 instead of localized 422); publication now applies existing pure findNodeConfigIssues to action nodes. The guided-condition legacy activation gate is not reused for publication. No copied action-requirement catalog.
+- Reused src/contracts/workflows/node-requirements.ts via explicit relative import. Its local mode import now has a .ts extension (supported by frontend tsconfig and required by Deno). Deno check passed; installed Supabase CLI bundled both pure contract files and deployed successfully to preview. No frontend component/context imports enter the Edge bundle.
+- Positive configured-audio publication and existing end path pass. Shared editor requirement regression suite passes. Real HTTP scenario saves an incomplete audio successor, receives localized 422, and confirms selected publication unchanged.
+- Checks: 33 unit cases across publication and existing node-requirement seam passed; 12 real Auth/RLS/HTTP cases passed; Deno and focused ESLint passed. No migration changes. All associated sessions terminal.
+- Limits: existing requirement catalog covers known mandatory fields, not all action semantics/reference validity. Continue full node/settings/reference validation and editor publication integration. No ticket certified, full 21-ticket objective retained.

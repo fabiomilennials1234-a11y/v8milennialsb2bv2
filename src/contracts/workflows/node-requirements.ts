@@ -20,7 +20,7 @@
  * A config do nó mora PLANA em `node.data` — o executor faz `params: {...ctx.nodeData}`.
  */
 
-import { ehModoTemplateMeta } from "./modo-de-mensagem";
+import { ehModoTemplateMeta } from "./modo-de-mensagem.ts";
 
 export type NodeConfig = Record<string, unknown>;
 

@@ -125,6 +125,24 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const unchanged = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
     expect(unchanged.error).toBeNull();
     expect(unchanged.data?.version_id).toBe(publication.version_id);
+    const audioDefinition = { ...definition, nodes: definition.nodes.map(node => node.id === 'y'
+      ? { ...node, type: 'action', data: { actionType: 'send_whatsapp_audio' } } : node) };
+    const incompleteAudio = await caller.rpc('save_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_definition: audioDefinition, p_expected_revision: 2,
+      p_settings: { name: 'Audio draft' },
+    });
+    expect(incompleteAudio.error).toBeNull();
+    const audioResponse = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: 3 }),
+      signal: AbortSignal.timeout(15000),
+    });
+    expect(audioResponse.status).toBe(422);
+    expect(await audioResponse.json()).toMatchObject({ code: 'invalid_configuration',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'incomplete_action', nodeId: 'y' })]) });
+    const afterAudio = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
+    expect(afterAudio.error).toBeNull();
+    expect(afterAudio.data?.version_id).toBe(publication.version_id);
   }, 60000);
 
   it('lets an organization administrator explicitly approve and revoke lead-name access for one workflow', async () => {
