@@ -70,6 +70,15 @@ export async function verifyStudioUI({ ref, token, api }) {
   let page;
   const failures = [];
   const output = resolve(root, 'test-results/studio-ui');
+  const capture = async (file) => {
+    // Espera as entradas CSS/Web Animations finitas. Uma moldura visível não
+    // prova que o corpo terminou de sair de opacity:0; pulses infinitos não bloqueiam.
+    await page.evaluate(async () => {
+      const entries = document.getAnimations().filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity);
+      await Promise.allSettled(entries.map((animation) => animation.finished));
+    });
+    await page.screenshot({ path: resolve(output, file), fullPage: true, animations: 'disabled' });
+  };
   await mkdir(output, { recursive: true });
   try {
     await server.listen();
@@ -108,7 +117,8 @@ export async function verifyStudioUI({ ref, token, api }) {
     await page.getByRole('tab', { name: 'Visão Geral', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Indicadores da operação', exact: true })).toBeVisible();
     await expect.poll(() => page.locator('#studio-panel .animate-pulse').count(), { timeout: 45_000 }).toBe(0);
-    await page.screenshot({ path: resolve(output, '01-visao-geral.png'), fullPage: true });
+    await expect(page.getByRole('group', { name: 'Indicadores da operação', exact: true }).getByRole('button', { name: /^Leads:/ })).toBeVisible();
+    await capture('01-visao-geral.png');
     await page.getByRole('button', { name: 'Editar', exact: true }).click();
     await page.getByRole('button', { name: 'Nova aba', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Visão Geral', exact: true }).click();
@@ -140,13 +150,13 @@ export async function verifyStudioUI({ ref, token, api }) {
       await page.getByRole('tab', { name: title, exact: true }).click();
       await expect(page.locator('#studio-panel [role="group"]')).toHaveCount([6, 8, 1, 1][index]);
       await expect.poll(() => page.locator('#studio-panel .animate-pulse').count(), { timeout: 45_000 }).toBe(0);
-      await page.screenshot({ path: resolve(output, `02-${index}-template.png`), fullPage: true });
+      await capture(`02-${index}-template.png`);
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('tab', { name: 'Visão Geral', exact: true }).click();
     await expect(page.getByRole('group', { name: 'Indicadores da operação', exact: true })).toBeVisible();
     await expect.poll(() => page.locator('#studio-panel .animate-pulse').count(), { timeout: 45_000 }).toBe(0);
-    await page.screenshot({ path: resolve(output, '03-mobile.png'), fullPage: true });
+    await capture('03-mobile.png');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('http://localhost:8091/dashboard');
@@ -154,7 +164,7 @@ export async function verifyStudioUI({ ref, token, api }) {
     await expect(page.getByRole('heading', { name: 'Central de trabalho da equipe', exact: true })).toBeVisible();
     await expect.poll(() => page.locator('.animate-pulse').count(), { timeout: 45_000 }).toBe(0);
     await expect(page.getByRole('tab', { name: 'Visão Geral', exact: true })).toHaveCount(0);
-    await page.screenshot({ path: resolve(output, '04-comando.png'), fullPage: true });
+    await capture('04-comando.png');
     expect(failures).toEqual([]);
     console.log('UI QA PASS: login real, quatro templates, cópia/renomeação/ordenação/limpeza/exclusão persistidas, mobile sem overflow e Comando sem dashboards.');
   } catch (error) {

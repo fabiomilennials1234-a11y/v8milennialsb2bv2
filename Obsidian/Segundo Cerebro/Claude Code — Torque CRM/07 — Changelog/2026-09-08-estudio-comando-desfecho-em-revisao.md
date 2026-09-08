@@ -113,6 +113,39 @@ dos números em produção. Nenhum mock de resposta de negócio foi usado.
 CI inicial #2040: CodeQL e secrets passaram; migration guard (colisão acima) e
 MOC falharam. Corrigir e reexecutar, sem ampliar baseline ou ignorar gates.
 
+### CI após correção — bloqueio histórico identificado
+
+Rodada `34241659690`, commit `2cb5c9a5`: Lint & Build, Unit Tests (ratchet), Edge
+Function Tests, Workflow System Tests passaram; CodeQL, secrets e ambos os
+checks do vault também passaram. Migration guard local confirmou zero
+duplicatas e zero colisões com origin/main após renumeração.
+
+Integration Tests, RLS Invariants e E2E **não chegaram a executar suas suítes**:
+os três pararam no bootstrap de
+`20270925000000_aposenta_calor_e_rating.sql`, statement 16, com
+`BACKUP rating incompleto: 0 copiadas vs 0 na origem` (`P0001`). A guarda de
+backup dessa migration exige dados existentes, incompatível com banco vazio.
+Arquivo idêntico à main, originado em `7fd0a9ca`; não foi alterado aqui.
+
+**Release bloqueado:** corrigir a preparação histórica do CI sem reescrever
+migrations já aplicadas, concluir a validação funcional contra schema atual e
+obter revisão. Não desabilitar gates nem considerar os três jobs como aprovados.
+PR permanece rascunho: https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/pull/2040
+
+### Capturas finais e cleanup
+
+Ensaio `pypwjcledasqroyagqfz`: ações autenticadas repetidas com sucesso e
+capturas após as animações finitas. Conteúdo dos KPIs conferido, templates
+renderizados, layout desktop e 390px inspecionados. QA visual administrativo
+concluído; os estados sem dados não validam a semântica das métricas nem
+substituem E2E sobre schema atual. As capturas ficam em
+`test-results/studio-ui/` (artefatos locais ignorados, somente fixtures).
+
+O ensaio intermediário `cffatewwkndtlbkmwxyt` e o final
+`pypwjcledasqroyagqfz` foram excluídos pelo lifecycle, com ausência confirmada.
+Todas as previews desta tarefa foram encerradas. A preview condicional de
+outra tarefa continua preservada até confirmação de que seu uso acabou.
+
 ## Próximos passos de release
 
 1. UI admin/membro/master: reload, troca de org/aba, períodos e erros/retry.
