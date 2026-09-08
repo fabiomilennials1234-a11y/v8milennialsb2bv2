@@ -218,11 +218,13 @@ export function LeadCardDeals({
   negocios,
   onOpenDeal,
   onNewDeal,
+  registrarVenda,
   atual,
 }: {
   negocios: LeadCardDeal[];
   onOpenDeal: (id: string) => void;
   onNewDeal: () => void;
+  registrarVenda?: React.ReactNode;
   /**
    * O negócio que já está aberto na tela, quando esta lista é montada DENTRO de
    * um painel de negócio. No card do Lead não há "atual" e a prop fica vazia.
@@ -244,7 +246,7 @@ export function LeadCardDeals({
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-2">
         {/* Sem título: a aba acima já diz "Negócios". Repetir o rótulo a 40px
             de distância é ruído, não hierarquia. */}
         <p className="text-[11.5px] text-muted-foreground">
@@ -252,6 +254,8 @@ export function LeadCardDeals({
             ? `${abertos.length} em andamento — clique para abrir o negócio`
             : "Nenhum negócio em andamento"}
         </p>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+        {registrarVenda}
         <button
           type="button"
           onClick={onNewDeal}
@@ -264,6 +268,7 @@ export function LeadCardDeals({
           <Plus className="size-3.5" />
           Criar negócio
         </button>
+        </div>
       </div>
 
       {abertos.length > 0 ? (
