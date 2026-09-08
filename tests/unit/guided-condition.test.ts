@@ -202,6 +202,14 @@ it.each([
   { score: null, operator: 'is_empty', matched: true },
   { score: null, operator: 'not_equals', value: 0, matched: false },
   { score: 80, operator: 'greater_than', value: 70, matched: true },
+  { score: 70, operator: 'greater_than', value: 70, matched: false },
+  { score: 70, operator: 'greater_than_or_equal', value: 70, matched: true },
+  { score: 69, operator: 'greater_than_or_equal', value: 70, matched: false },
+  { score: 69, operator: 'less_than', value: 70, matched: true },
+  { score: 70, operator: 'less_than', value: 70, matched: false },
+  { score: 70, operator: 'less_than_or_equal', value: 70, matched: true },
+  { score: 71, operator: 'less_than_or_equal', value: 70, matched: false },
+  { score: null, operator: 'less_than_or_equal', value: 70, matched: false },
 ])('compares qualification score without treating zero as absence: $operator / $score', async ({ score, operator, value, matched }) => {
   const database = createClient('https://db.example.test', 'test-anon-key', {
     auth: { persistSession: false, autoRefreshToken: false },

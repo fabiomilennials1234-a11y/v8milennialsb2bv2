@@ -383,3 +383,12 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Full browser regression: 52 passed. Post-migration integration proved numeric grant and exact read, then reproduced 422 at the old publication endpoint. Deployed publish-guided-workflow on preview with the validated numeric contract. Final live integration pending. Deno publication check, focused ESLint (only pre-existing Fast Refresh warning) and diff check passed.
 
 - Final real integration: 28 passed, including score publication, pinned-version Yes execution, caller/foreign-scope denial and revocation. All validation/deployment handles terminal. Personal and publication endpoints deployed only on preview; actual worker remains undeployed. This is a partial ticket 06 checkpoint, not full ticket or 21-ticket certification. Next: complete numeric operators and remaining responsible/origin/UTM/scalar requirements, retaining downstream scope.
+
+## 2026-09-08 — numeric comparison boundaries
+
+- Public evaluator red→green completes greater-than-or-equal, less-than and less-than-or-equal, preserving null-as-absence semantics. Explicit boundary cases distinguish strict comparisons from inclusive ones; no coercion or schema change.
+- Browser numeric scenario verifies each operator is selectable, retains the configured zero and updates the canvas label. Focused browser passed. Evaluator/executor/publication regression: 72 passed; both Deno checks passed.
+- Real HTTP tests reproduced rejection by prior personal/publication deployments. Both endpoints updated on preview only. Final integration and typecheck remain running; no worker or production deploy. Existing 19-migration rollback chain unchanged.
+- Next standard-field path: reuse existing UTM allowlist/catalogue and creatable selector, but preserve caller isolation, distinguish query errors/empty suggestions and never treat the limited suggestion page as the value universe. Existing useOrgUtmValues reads at most 1000 rows and lacks actor cache partitioning/error UI; guided use must address those limitations. Origin has a dynamic lead_origins registry, including organization overrides; do not replace with hardcoded origin labels.
+
+- Final live integration: 28 passed, including inclusive numeric publication/execution and current grant enforcement. Typecheck ratchet zero introduced errors (805 baseline + 11 inherited tolerated; 481 current). Focused ESLint/diff passed; all handles terminal. No ticket certified.

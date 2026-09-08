@@ -34,6 +34,7 @@ export function isGuidedNumberField(value: unknown): value is GuidedNumberField 
 }
 export const GUIDED_NUMBER_OPERATORS = {
   equals: 'é igual a', not_equals: 'é diferente de', greater_than: 'é maior que',
+  greater_than_or_equal: 'é maior ou igual a', less_than: 'é menor que', less_than_or_equal: 'é menor ou igual a',
 } as const;
 export type GuidedNumberOperator = keyof typeof GUIDED_NUMBER_OPERATORS;
 export type GuidedNumberComparison = { operator: GuidedNumberOperator; value: number } | { operator: 'is_empty' };

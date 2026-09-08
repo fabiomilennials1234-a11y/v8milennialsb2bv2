@@ -904,6 +904,14 @@ test('configura pontuação numérica sem confundir zero com comparação incomp
   await expect(page.locator('.react-flow__node-condition')).toContainText('Pontuação de qualificação é igual a 0');
   await page.getByRole('button', { name: 'Testar condição' }).click();
   await expect(page.getByRole('status')).toContainText('Pontuação de qualificação do lead: 0');
+  for (const [operator, label] of [
+    ['greater_than', 'é maior que'], ['greater_than_or_equal', 'é maior ou igual a'],
+    ['less_than', 'é menor que'], ['less_than_or_equal', 'é menor ou igual a'],
+  ]) {
+    await page.getByLabel('Comparação', { exact: true }).selectOption(operator);
+    await expect(value).toHaveValue('0');
+    await expect(page.locator('.react-flow__node-condition')).toContainText(`Pontuação de qualificação ${label} 0`);
+  }
   await value.fill('');
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
   await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');

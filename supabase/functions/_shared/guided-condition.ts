@@ -188,6 +188,9 @@ export async function evaluateGuidedCondition(
           case 'equals': matched = actual === condition.value; break;
           case 'not_equals': matched = actual !== condition.value; break;
           case 'greater_than': matched = actual > condition.value; break;
+          case 'greater_than_or_equal': matched = actual >= condition.value; break;
+          case 'less_than': matched = actual < condition.value; break;
+          case 'less_than_or_equal': matched = actual <= condition.value; break;
         }
       }
     } else if (!empty && typeof actual === 'string') {

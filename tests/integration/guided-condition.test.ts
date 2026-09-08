@@ -699,6 +699,9 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       status: 'evaluated', matched: true, rules: [{ id: 'score', actual: 0, matched: true }],
     } });
     expect(await evaluate(leadA, 'is_empty')).toMatchObject({ status: 200, body: { matched: false } });
+    expect(await evaluate(leadA, 'less_than', 0)).toMatchObject({ status: 200, body: { matched: false } });
+    expect(await evaluate(leadA, 'less_than_or_equal', 0)).toMatchObject({ status: 200, body: { matched: true } });
+    expect(await evaluate(leadA, 'greater_than_or_equal', 0)).toMatchObject({ status: 200, body: { matched: true } });
     expect((await service.from('leads').update({ qualification_score: null }).eq('id', leadA)).error).toBeNull();
     expect(await evaluate(leadA, 'is_empty')).toMatchObject({ status: 200, body: { matched: true } });
     expect(await evaluate(leadB, 'equals', 0)).toEqual({ status: 422, body: { status: 'error', code: 'context_unavailable' } });
@@ -749,7 +752,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     });
     const definition = { nodes: [
       { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
-      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field, operator: typeof fragment === 'number' ? 'equals' : 'contains', value: fragment } } },
+      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'company', field, operator: typeof fragment === 'number' ? 'greater_than_or_equal' : 'contains', value: fragment } } },
       { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
     ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
     expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1,
