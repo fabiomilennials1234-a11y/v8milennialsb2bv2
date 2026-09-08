@@ -992,7 +992,46 @@ test('aprova Tags explicitamente sem apagar concessão de Nome', async ({ page }
   expect(writes[1]).toEqual(['lead.name']);
 });
 
-test('aprova campo personalizado pelo nome atual e revoga somente seu UUID', async ({ page }) => {
+test('seleciona número personalizado com comparação numérica e preserva UUID ao verificar vazio', async ({ page }) => {
+  const fieldId = '11111111-1111-4111-8111-111111111112';
+  await openGuidedEditor(page, 'Aurora');
+  await page.route('**/rest/v1/lead_custom_fields?*', route => {
+    const field = { id: fieldId, field_name: 'Quantidade prevista', field_type: 'number' };
+    return route.fulfill({ json: new URL(route.request().url()).searchParams.has('id') ? field : [field] });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Quantidade');
+  await page.getByRole('option', { name: 'Quantidade prevista', exact: true }).click();
+  const value = page.getByRole('spinbutton', { name: 'Valor da comparação', exact: true });
+  await expect(value).toHaveValue('');
+  await expect(page.getByLabel('Comparação', { exact: true }).locator('option[value="contains"]')).toHaveCount(0);
+  await page.getByLabel('Comparação', { exact: true }).selectOption('greater_than');
+  await value.fill('10.5');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Quantidade prevista é maior que 10.5');
+  await selectInformation(page, 'lead.qualification_score');
+  await expect(value).toHaveValue('10.5');
+  await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('greater_than');
+  await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Quantidade');
+  await page.getByRole('option', { name: 'Quantidade prevista', exact: true }).click();
+  await expect(value).toHaveValue('10.5');
+  await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('greater_than');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.custom', fieldId, fieldType: 'number', operator: 'greater_than', value: 10.5 });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 20, reference: { id: fieldId, name: 'Quantidade prevista' } }] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Quantidade prevista');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(value).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Quantidade prevista está vazio');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('equals');
+  await expect(value).toHaveValue('');
+});
+
+for (const fieldType of ['text', 'number'] as const) test(`aprova campo personalizado ${fieldType} pelo nome atual e revoga somente seu UUID`, async ({ page }) => {
   const fieldId = '11111111-1111-4111-8111-111111111111';
   let grant = { fields: ['lead.name'], revision: 1 };
   const writes: string[][] = [];
@@ -1003,8 +1042,8 @@ test('aprova campo personalizado pelo nome atual e revoga somente seu UUID', asy
     grant = { fields: body.p_fields, revision: grant.revision + 1 };
     return route.fulfill({ json: grant });
   });
-  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType: 'text', fieldLabel: 'Nome antigo', operator: 'equals', value: 'Indústria' });
-  await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: { id: fieldId, field_name: 'Especialidade', field_type: 'text' } }));
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType, fieldLabel: 'Nome antigo', operator: 'equals', value: fieldType === 'number' ? 10 : 'Indústria' });
+  await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: { id: fieldId, field_name: 'Especialidade', field_type: fieldType } }));
   await page.reload();
   await page.getByText('Nome informado', { exact: true }).click();
   const access = page.getByRole('region', { name: 'Acesso da automação' });
@@ -1293,7 +1332,7 @@ test('seleciona campo personalizado pelo nome e testa preservando UUID', async (
     const field = { id: fieldId, field_name: 'Especialidade', field_type: 'text' };
     if (params.has('id')) return route.fulfill({ json: field });
     expect(params.get('limit')).toBe('25');
-    expect(params.get('field_type')).toBe('eq.text');
+    expect(params.get('field_type')).toBe('in.(text,number)');
     return route.fulfill({ json: [field] });
   });
   await page.getByText('Nome informado', { exact: true }).click();

@@ -17,7 +17,9 @@ export type GuidedResponsibleRule = { [Field in GuidedResponsibleField]: { versi
 
 export type GuidedCustomTextRule = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'text' } & GuidedTextComparison;
 
-export type GuidedRule = GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedCustomNumberRule = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'number' } & GuidedNumberComparison;
+
+export type GuidedRule = GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -48,10 +50,12 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
-    if (rule.field === 'lead.custom') return rule.fieldType === 'text' && typeof rule.fieldId === 'string'
+    if (rule.field === 'lead.custom') return (rule.fieldType === 'text' || rule.fieldType === 'number') && typeof rule.fieldId === 'string'
       && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.fieldId)
       && (rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
-        || (isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
+        || (rule.fieldType === 'number'
+          ? isGuidedNumberOperator(rule.operator) && typeof rule.value === 'number' && Number.isFinite(rule.value)
+          : isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
     if (rule.field === 'lead.origin') return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.originId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.originId));
@@ -67,6 +71,19 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
 
 export function guidedConditionFields(condition: GuidedCondition): string[] {
   return 'children' in condition ? [...new Set(condition.children.flatMap(guidedConditionFields))] : [condition.field === 'lead.custom' ? `lead.custom:${condition.fieldId.toLowerCase()}` : condition.field];
+}
+
+// Canonical decimal spelling permits harmless trailing zeroes/scientific
+// notation, but detects rounding or underflow across the numeric API boundary.
+function decimalIdentity(value: string): string {
+  const [mantissa, exponent = '0'] = value.toLowerCase().split('e');
+  const negative = mantissa.startsWith('-');
+  const unsigned = mantissa.replace(/^[+-]/, '');
+  const [integer, fraction = ''] = unsigned.split('.');
+  const digits = (integer + fraction).replace(/^0+/, '');
+  if (!digits) return '0';
+  const significant = digits.replace(/0+$/, '');
+  return `${negative ? '-' : ''}${significant}e${Number(exponent) - fraction.length + digits.length - significant.length}`;
 }
 
 /** Evaluate with a caller-scoped client. Never pass a service-role client for
@@ -92,12 +109,19 @@ export async function evaluateGuidedCondition(
   if (requestedFields.length > 256) return { status: 'error' as const, code: 'invalid_configuration' as const };
   const responsibleFields = requestedFields.filter(isGuidedResponsibleField);
   const customIds = new Set<string>();
+  const customExpectedTypes = new Map<string, Set<string>>();
   const memberIds = new Set<string>();
   const originIds = new Set<string>();
   const tagIds = new Set<string>();
   function collect(current: GuidedCondition): void {
     if ('children' in current) current.children.forEach(collect);
-    else if (current.field === 'lead.custom') customIds.add(current.fieldId.toLowerCase());
+    else if (current.field === 'lead.custom') {
+      const id = current.fieldId.toLowerCase();
+      customIds.add(id);
+      const types = customExpectedTypes.get(id) ?? new Set<string>();
+      types.add(current.fieldType);
+      customExpectedTypes.set(id, types);
+    }
     else if (isGuidedResponsibleField(current.field) && current.operator !== 'is_empty' && current.operator !== 'is_not_empty' && 'memberId' in current) memberIds.add(current.memberId.toLowerCase());
     else if (current.field === 'lead.origin' && current.operator !== 'is_empty' && current.operator !== 'is_not_empty') originIds.add(current.originId.toLowerCase());
     else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
@@ -154,7 +178,7 @@ export async function evaluateGuidedCondition(
     };
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
-  const customFields = new Map<string, { id: string; name: string; value: string | null }>();
+  const customFields = new Map<string, { id: string; name: string; value: string | number | null }>();
   if (customIds.size) {
     const response = usesCustomReader ? {
       data: (data as unknown as { field_values?: Record<string, unknown> }).field_values?.custom_fields, error: null, status: 200,
@@ -175,8 +199,26 @@ export async function evaluateGuidedCondition(
         || typeof row.field_type !== 'string' || (row.value !== null && typeof row.value !== 'string')) {
         return { status: 'error' as const, code: 'source_unavailable' as const };
       }
-      if (row.field_type !== 'text') return { status: 'error' as const, code: 'reference_unavailable' as const };
-      customFields.set(row.id.toLowerCase(), row);
+      const expectedTypes = customExpectedTypes.get(row.id.toLowerCase());
+      if (!expectedTypes || expectedTypes.size !== 1 || !expectedTypes.has(row.field_type)) {
+        return { status: 'error' as const, code: 'reference_unavailable' as const };
+      }
+      let value: string | number | null = row.value;
+      if (row.field_type === 'number') {
+        if (row.value === null || row.value === '') value = null;
+        else {
+          // HTML number inputs persist decimal/scientific strings. Reject
+          // ambiguous separators, whitespace and JS-only hex/Infinity syntax.
+          if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(row.value) || !Number.isFinite(Number(row.value))) {
+            return { status: 'error' as const, code: 'source_unavailable' as const };
+          }
+          value = Number(row.value);
+          if (decimalIdentity(row.value) !== decimalIdentity(String(value))) {
+            return { status: 'error' as const, code: 'source_unavailable' as const };
+          }
+        }
+      }
+      customFields.set(row.id.toLowerCase(), { id: row.id, name: row.name, value });
     }
     if ([...customIds].some(id => !customFields.has(id))) return { status: 'error' as const, code: 'reference_unavailable' as const };
   }
@@ -338,7 +380,7 @@ export async function evaluateGuidedCondition(
     let matched = false;
     if (condition.operator === 'is_empty') matched = empty;
     else if (condition.operator === 'is_not_empty') matched = !empty;
-    else if (condition.field === 'lead.qualification_score') {
+    else if (condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')) {
       if (!empty && typeof actual === 'number') {
         switch (condition.operator) {
           case 'equals': matched = actual === condition.value; break;

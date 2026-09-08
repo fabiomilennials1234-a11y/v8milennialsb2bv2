@@ -92,6 +92,9 @@ const customOrgRollback = readFileSync(`supabase/migrations/rollback/${customOrg
 const customPublicationMigration = '20271017000031_guided_custom_field_publication.sql';
 const customPublicationForward = readFileSync(`supabase/migrations/${customPublicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const customPublicationRollback = readFileSync(`supabase/migrations/rollback/${customPublicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const numericMigration = '20271017000032_guided_custom_numeric_publication.sql';
+const numericForward = readFileSync(`supabase/migrations/${numericMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const numericRollback = readFileSync(`supabase/migrations/rollback/${numericMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -121,6 +124,7 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${numericRollback}
 ${customPublicationRollback}
 ${customOrgRollback}
 DO $$ BEGIN
@@ -292,6 +296,7 @@ ${activationForward}
 -- Restore the complete field contract without narrowing retained grants.
 ${customOrgForward}
 ${customPublicationForward}
+${numericForward}
 ${tagForward}
 ${originForward}
 ${responsibleForward}

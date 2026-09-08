@@ -222,3 +222,11 @@ The finalizer accepts valid per-definition scopes, recursively validates every c
 Applied/registered on preview only. Effective EXECUTE checked live: anon=false, authenticated=false, service_role=true; SECURITY DEFINER search_path remains public. The publication endpoint was updated on preview after its previous validator produced a real HTTP 422 red; no worker or production deployment.
 
 Rollback restores migration 30's finalizer vocabulary, failing closed for custom publication while retaining versions, pins, approvals and definitions/answers. Coordinate endpoint rollback if removing the capability; existing immutable versions remain historical records. Reapply 31 to restore support. Full recovery now: 00..11,30,31,14,21,23,24,29; fresh install remains numerical. The thirty-two-migration reverse/recovery rehearsal passed and restored the exact current finalizer.
+
+## Migration 32 — numeric custom approvals/publication
+
+Allows current text or number definitions for new per-UUID approvals and immutable publication. Expected type must still match the current local definition, including all skipped branches and unary checks. No answer conversion occurs in SQL, and no customer data or table schema changes. Evaluator conversion is explicit and rejects decimal values changed by the numeric API representation.
+
+Applied and ledger-registered only on preview. Live effective privileges: writer authenticated=true/service_role=false/anon=false; finalizer service_role=true/authenticated=false/anon=false. Both SECURITY DEFINER functions retain search_path=public.
+
+Rollback restores migration 30's text-only new-approval writer and migration 31's text-only finalizer, retaining all approvals, versions, execution pins, definitions and answers. Coordinate application/endpoint rollback; a retained numeric rule may fail explicitly until supported code is restored. Forward recovery: 00..11,30,31,32,14,21,23,24,29. Thirty-three-migration reverse/recovery rehearsal passed, including exact current function restoration and historical scope preservation.

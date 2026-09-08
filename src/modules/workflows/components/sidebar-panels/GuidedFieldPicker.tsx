@@ -38,20 +38,20 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
   id: string; value: GuidedRuleDraft['field']; onChange: (field: Field) => void;
   actorId: string; organizationId: string;
   custom?: Extract<GuidedRuleDraft, { field: 'lead.custom' }>;
-  onCustomSelect: (fieldId: string, fieldLabel: string) => void;
+  onCustomSelect: (fieldId: string, fieldLabel: string, fieldType: 'text' | 'number') => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const term = useDebounce(search.trim(), 250);
   const { options, selected } = useCustomFieldCatalogue(actorId, organizationId, term, open, custom?.fieldId);
   const searching = term !== search.trim() || options.isPending;
-  const unavailable = custom && selected.isSuccess && (!selected.data || selected.data.field_type !== 'text');
+  const unavailable = custom && selected.isSuccess && (!selected.data || selected.data.field_type !== custom.fieldType);
   const name = value !== 'lead.custom' ? fields[value].label : selected.isError ? 'Campo não verificado'
     : selected.isPending ? 'Consultando campo…'
     : unavailable ? 'Campo indisponível' : selected.data?.field_name || 'Campo personalizado';
   useEffect(() => {
-    if (custom && selected.data?.field_type === 'text' && selected.data.field_name !== custom.fieldLabel) {
-      onCustomSelect(custom.fieldId, selected.data.field_name);
+    if (custom && selected.data?.field_type === custom.fieldType && selected.data.field_name !== custom.fieldLabel) {
+      onCustomSelect(custom.fieldId, selected.data.field_name, custom.fieldType);
     }
   }, [custom, selected.data, onCustomSelect]);
   return <div className="space-y-2"><Popover open={open} onOpenChange={next => { setOpen(next); if (!next) setSearch(''); }}>
@@ -84,9 +84,9 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
             </CommandItem>)}
           </CommandGroup>
           {!searching && !options.isError && <CommandGroup heading="Lead · Campos personalizados">
-            {options.data?.filter(field => field.field_type === 'text' && !(unavailable && field.id === custom?.fieldId)).map(field =>
+            {options.data?.filter(field => (field.field_type === 'text' || field.field_type === 'number') && !(unavailable && field.id === custom?.fieldId)).map(field =>
               <CommandItem key={field.id} value={`custom:${field.id}`} keywords={[field.field_name]} onSelect={() => {
-                onCustomSelect(field.id, field.field_name); setOpen(false); setSearch('');
+                onCustomSelect(field.id, field.field_name, field.field_type === 'number' ? 'number' : 'text'); setOpen(false); setSearch('');
               }}>
                 <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${custom?.fieldId === field.id ? 'opacity-100' : 'opacity-0'}`} />
                 <span>{field.field_name}</span>
@@ -100,6 +100,6 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
     {custom && selected.isError && <><p role="alert" className="text-sm text-destructive">Não foi possível verificar o campo selecionado.</p>
       <Button type="button" variant="outline" onClick={() => void selected.refetch()}>Tentar verificar campo novamente</Button></>}
     {custom && selected.isSuccess && !selected.data && <p role="alert" className="text-sm text-destructive">Campo removido ou sem acesso. Selecione outro campo.</p>}
-    {custom && selected.data && selected.data.field_type !== 'text' && <p role="alert" className="text-sm text-destructive">O tipo deste campo mudou. Selecione outra informação.</p>}
+    {custom && selected.data && selected.data.field_type !== custom.fieldType && <p role="alert" className="text-sm text-destructive">O tipo deste campo mudou. Selecione outra informação.</p>}
   </div>;
 }
