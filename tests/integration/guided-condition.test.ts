@@ -369,6 +369,12 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const first = await service.rpc('finalize_guided_workflow_publication', args);
     expect(first.error).toBeNull();
     expect(first.data).toMatchObject({ version_id: expect.any(String), version_number: 1 });
+    const executionId = crypto.randomUUID();
+    const enqueued = await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId,
+      organization_id: orgA, lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' })
+      .select('guided_version_id').single();
+    expect(enqueued.error).toBeNull();
+    expect(enqueued.data?.guided_version_id).toBe(first.data.version_id);
     const secondSettings = { name: 'Published second' };
     expect((await administrator.rpc('save_guided_workflow_draft_with_settings', {
       p_workflow_id: workflowId, p_definition: definition, p_settings: secondSettings, p_expected_revision: 1,
@@ -376,6 +382,18 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const second = await service.rpc('finalize_guided_workflow_publication', { ...args, p_expected_revision: 2, p_settings: secondSettings });
     expect(second.error).toBeNull();
     expect(second.data).toMatchObject({ version_number: 2 });
+    const later = await service.from('workflow_executions').insert({ workflow_id: workflowId, organization_id: orgA,
+      lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z', guided_version_id: first.data.version_id }).select('guided_version_id').single();
+    expect(later.error).toBeNull();
+    expect(later.data?.guided_version_id).toBe(second.data.version_id);
+    const originalExecution = await service.from('workflow_executions').select('guided_version_id').eq('id', executionId).single();
+    expect(originalExecution.error).toBeNull();
+    expect(originalExecution.data?.guided_version_id).toBe(first.data.version_id);
+    const repin = await service.from('workflow_executions').update({ guided_version_id: second.data.version_id }).eq('id', executionId);
+    expect(repin.error?.code).toBe('42501');
+    const foreignEnqueue = await service.from('workflow_executions').insert({ workflow_id: workflowId, organization_id: orgB,
+      lead_id: leadB, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' });
+    expect(foreignEnqueue.error?.code).toBe('42501');
     expect(second.data.version_id).not.toBe(first.data.version_id);
     const original = await administrator.from('workflow_guided_versions').select('definition, settings, source_revision')
       .eq('organization_id', orgA).eq('workflow_id', workflowId).eq('id', first.data.version_id).single();

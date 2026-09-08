@@ -36,6 +36,9 @@ const initialSettingsRollback = readFileSync(`supabase/migrations/rollback/${ini
 const publicationMigration = '20271017000008_guided_workflow_publication.sql';
 const publicationForward = readFileSync(`supabase/migrations/${publicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const publicationRollback = readFileSync(`supabase/migrations/rollback/${publicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const pinMigration = '20271017000009_guided_execution_version.sql';
+const pinForward = readFileSync(`supabase/migrations/${pinMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const pinRollback = readFileSync(`supabase/migrations/rollback/${pinMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -54,6 +57,9 @@ INSERT INTO public.workflow_guided_versions(workflow_id, organization_id, versio
   SELECT workflow_id, org_id, 1, 11, '{"nodes":[],"edges":[]}'::jsonb, '{"name":"Preserved publication"}'::jsonb, ARRAY['lead.name'] FROM guided_rollback_fixture;
 INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, version_id)
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
+INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
+  SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${pinRollback}
 ${publicationRollback}
 ${initialSettingsRollback}
 ${settingsRollback}
@@ -100,6 +106,16 @@ DO $$ BEGIN
       AND v.required_fields = ARRAY['lead.name']) THEN
     RAISE EXCEPTION 'publication history or selection lost';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.workflow_executions e JOIN guided_rollback_fixture f USING(workflow_id)
+    JOIN public.workflow_guided_publications p ON p.workflow_id = e.workflow_id
+    WHERE e.guided_version_id = p.version_id) THEN
+    RAISE EXCEPTION 'execution version lost';
+  END IF;
+  IF has_function_privilege('anon', 'public.pin_guided_execution_version()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.pin_guided_execution_version()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.pin_guided_execution_version()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'pin trigger function callable directly';
+  END IF;
 END $$;
 ${forward}
 ${conflictForward}
@@ -110,6 +126,7 @@ ${createForward}
 ${settingsForward}
 ${initialSettingsForward}
 ${publicationForward}
+${pinForward}
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])', 'EXECUTE')
@@ -174,6 +191,16 @@ DO $$ BEGIN
       AND v.settings = '{"name":"Preserved publication"}'::jsonb
       AND v.required_fields = ARRAY['lead.name']) THEN
     RAISE EXCEPTION 'publication history or selection lost';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.workflow_executions e JOIN guided_rollback_fixture f USING(workflow_id)
+    JOIN public.workflow_guided_publications p ON p.workflow_id = e.workflow_id
+    WHERE e.guided_version_id = p.version_id) THEN
+    RAISE EXCEPTION 'execution version lost';
+  END IF;
+  IF has_function_privilege('anon', 'public.pin_guided_execution_version()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.pin_guided_execution_version()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.pin_guided_execution_version()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'pin trigger function callable directly';
   END IF;
 END $$;
 ROLLBACK;

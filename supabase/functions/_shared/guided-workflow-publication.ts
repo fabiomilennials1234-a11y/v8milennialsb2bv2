@@ -34,6 +34,18 @@ function publicationIssues(value: unknown): PublicationIssue[] {
     if (node.type === 'action' && (typeof node.data.actionType !== 'string' || !ACTION_TYPE_SET.has(node.data.actionType))) {
       issues.push({ code: 'unknown_action_type', nodeId: node.id, message: 'Selecione uma ação válida.' });
     }
+    if (node.type === 'delay') {
+      const data = node.data;
+      const positive = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0;
+      const validAmount = data.randomized === true
+        ? positive(data.amountMin) && positive(data.amountMax) && data.amountMin <= data.amountMax
+        : positive(data.amount);
+      if ((data.randomized !== undefined && typeof data.randomized !== 'boolean')
+        || !validAmount || !['seconds', 'minutes', 'hours', 'days'].includes(String(data.unit))) {
+        issues.push({ code: 'invalid_delay', nodeId: node.id,
+          message: 'Informe tempo positivo, unidade válida e intervalo mínimo menor ou igual ao máximo.' });
+      }
+    }
     if (node.type !== 'condition') continue;
     if (!isGuidedCondition(node.data.guidedCondition)) {
       issues.push({ code: 'invalid_condition', nodeId: node.id, message: 'Complete a condição antes de publicar.' });

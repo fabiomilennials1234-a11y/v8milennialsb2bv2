@@ -3,14 +3,16 @@ import { handleGuidedWorkflowPublication } from '../../supabase/functions/_share
 
 afterEach(() => vi.unstubAllGlobals());
 
-it.each(['end', 'configured_audio'])('publishes only the persisted revision through the service-only finalizer: %s', async (successPath) => {
+it.each(['end', 'configured_audio', 'fixed_delay', 'random_delay'])('publishes only the persisted revision through the service-only finalizer: %s', async (successPath) => {
   const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
   vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
   const definition = { nodes: [
     { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
     { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
-    { id: 'y', type: successPath === 'configured_audio' ? 'action' : 'end',
-      data: successPath === 'configured_audio' ? { actionType: 'send_whatsapp_audio', audioUrl: 'https://media.example.test/audio.ogg' } : {} },
+    { id: 'y', type: successPath === 'configured_audio' ? 'action' : successPath.endsWith('_delay') ? 'delay' : 'end',
+      data: successPath === 'configured_audio' ? { actionType: 'send_whatsapp_audio', audioUrl: 'https://media.example.test/audio.ogg' }
+        : successPath === 'fixed_delay' ? { amount: 2, unit: 'hours' }
+        : successPath === 'random_delay' ? { randomized: true, amountMin: 2, amountMax: 5, unit: 'minutes' } : {} },
     { id: 'n', type: 'end', data: {} },
   ], edges: [{ id: 'tc', source: 't', target: 'c' },
     { id: 'cy', source: 'c', target: 'y', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'n', sourceHandle: 'no' }] };
@@ -182,6 +184,50 @@ it('rejects an audio action without its required media URL', async () => {
   const type = 'action';
   const data = { actionType: 'send_whatsapp_audio' };
   const code = 'incomplete_action';
+  const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
+  vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
+  let attemptedPublication = false;
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+    const path = new URL(String(input)).pathname;
+    const resources: Record<string, unknown> = {
+      '/auth/v1/user': { id: 'user-1', app_metadata: {}, user_metadata: {}, aud: 'authenticated' },
+      '/rest/v1/master_users': null,
+      '/rest/v1/team_members': { id: 'member-1', user_id: 'user-1', organization_id: 'org-1', role: 'admin' },
+      '/rest/v1/rpc/can_administer_guided_workflow': true,
+      '/rest/v1/workflow_guided_drafts': { revision: 3, settings: { name: 'Valid name' }, definition: {
+        nodes: [{ id: 'trigger', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+          { id: 'end', type, data }],
+        edges: [{ id: 'te', source: 'trigger', target: 'end' }],
+      } },
+    };
+    if (path === '/rest/v1/rpc/finalize_guided_workflow_publication') {
+      attemptedPublication = true;
+      return new Response(JSON.stringify({ code: '22023', message: 'invalid_configuration' }), { status: 400 });
+    }
+    if (!(path in resources)) throw new Error(`Unexpected external request ${path}`);
+    return new Response(JSON.stringify(resources[path]), { headers: { 'Content-Type': 'application/json' } });
+  });
+  const response = await handleGuidedWorkflowPublication(new Request('https://edge.test/publish', {
+    method: 'POST', headers: { Authorization: 'Bearer user-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organizationId: 'org-1', workflowId: 'workflow-1', expectedRevision: 3 }),
+  }));
+  expect(response.status).toBe(422);
+  expect(await response.json()).toMatchObject({ code: 'invalid_configuration',
+    issues: expect.arrayContaining([expect.objectContaining({ code, nodeId: 'end' })]) });
+  expect(attemptedPublication).toBe(false);
+});
+
+it.each([
+  { randomized: 'true', amount: 2, amountMin: -1, amountMax: 2, unit: 'hours' },
+  { amount: 0, unit: 'hours' },
+  { amount: -1, unit: 'hours' },
+  { amount: '2', unit: 'hours' },
+  { amount: 2, unit: 'unknown' },
+  { randomized: true, amountMin: 5, amountMax: 2, unit: 'minutes' },
+  { randomized: true, amountMin: 1, unit: 'minutes' },
+])('rejects an invalid persisted delay: %j', async (data) => {
+  const type = 'delay';
+  const code = 'invalid_delay';
   const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
   vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
   let attemptedPublication = false;
