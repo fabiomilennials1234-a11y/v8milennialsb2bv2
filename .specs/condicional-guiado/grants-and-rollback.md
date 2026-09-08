@@ -65,3 +65,9 @@ Rollback file: supabase/migrations/rollback/20271017000008_guided_workflow_publi
 Preview-only additive guided_version_id and composite version FK on workflow_executions. BEFORE INSERT captures selected version under parent workflow lock, overriding caller-supplied pin; BEFORE UPDATE prevents pin changes and reassignment of pinned workflow/org. Function is SECURITY DEFINER with public search_path; EXECUTE revoked from PUBLIC, anon, authenticated, service_role (trigger invocation only). No existing execution backfill.
 
 Rollback preserves pins/FK and UPDATE guard, disables automatic INSERT capture. Stop guided admission before reverting; keep version-aware executor until pinned runs drain. Roll back 09 before 08..00, reapply ascending. scripts/check-guided-grant-rollback.mjs now rehearses ten migrations and verifies retained execution pin and effective function grants inside a rolled-back preview transaction. Runtime gate is still closed at this checkpoint.
+
+### Discovery migration 20271017000010
+
+Preview applied/registered. AFTER INSERT/UPDATE of selected version synchronizes published name and trigger type/config to the existing workflow discovery surface. Same transaction as version selection; no activation, legacy-definition overwrite or data backfill. Trigger function direct EXECUTE denied to PUBLIC/anon/authenticated/service_role, search_path fixed.
+
+Rollback removes only sync trigger/function and keeps last published metadata, version history and pins. Stop guided admission first. Reverse order 10..00; ascending reapply. Eleven-file transactional rehearsal verifies retained discovery metadata, versions, pins, drafts, grants and restored restricted privileges. Full producer discovery and activation remain unfinished.

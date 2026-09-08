@@ -109,6 +109,9 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const version = await caller.from('workflow_guided_versions').select('definition, published_by').eq('id', publication.version_id).single();
     expect(version.error).toBeNull();
     expect(version.data).toEqual({ definition, published_by: userId });
+    const discoverable = await caller.from('workflows').select('name, trigger_type, trigger_config, is_active').eq('id', workflowId).eq('organization_id', orgA).single();
+    expect(discoverable.error).toBeNull();
+    expect(discoverable.data).toEqual({ name: 'HTTP publication', trigger_type: 'lead_created', trigger_config: {}, is_active: false });
     const invalidDefinition = { ...definition, nodes: definition.nodes.map(node => node.id === 'y'
       ? { ...node, type: 'unknown_action' } : node) };
     const saved = await caller.rpc('save_guided_workflow_draft_with_settings', {
@@ -147,7 +150,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect(afterAudio.data?.version_id).toBe(publication.version_id);
   }, 60000);
 
-  it('resumes old rules with current data after publication without repeating its completed action', async () => {
+  it.each([false, true])('resumes old rules without repeating actions and respects revocation during the wait: %s', async (revokeGrant) => {
     const workflowId = crypto.randomUUID();
     const executionId = crypto.randomUUID();
     const title = `Once ${workflowId}`;
@@ -185,18 +188,21 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
       p_definition: nextDefinition, p_settings: settings, p_expected_revision: 1 })).error).toBeNull();
     expect((await service.rpc('finalize_guided_workflow_publication', { ...args, p_expected_revision: 2, p_definition: nextDefinition })).error).toBeNull();
+    if (revokeGrant) {
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1 })).error).toBeNull();
+    }
     expect((await service.from('leads').update({ name: 'Mariana' }).eq('organization_id', orgA).eq('id', leadA)).error).toBeNull();
     let restoreError: unknown;
     try {
       const resumed = await executeWorkflow({ ...executionParams, currentNodeId: paused.data!.current_node_id,
         loopCounters: paused.data!.loop_counters, context: paused.data!.context, definition: nextDefinition });
-      expect(resumed).toMatchObject({ success: true, status: 'completed' });
+      expect(resumed).toMatchObject(revokeGrant ? { success: false, status: 'failed', error: 'access_denied' } : { success: true, status: 'completed' });
       const tasks = await service.from('follow_ups').select('id').eq('organization_id', orgA).eq('lead_id', leadA).eq('title', title);
       expect(tasks.error).toBeNull();
       expect(tasks.data).toHaveLength(1);
       const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
       expect(steps.error).toBeNull();
-      expect(steps.data?.map(step => step.node_id).sort()).toEqual(['action', 'c', 'no', 't', 'wait']);
+      expect(steps.data?.map(step => step.node_id).sort()).toEqual(revokeGrant ? ['action', 'c', 't', 'wait'] : ['action', 'c', 'no', 't', 'wait']);
     } finally {
       restoreError = (await service.from('leads').update({ name: 'José' }).eq('organization_id', orgA).eq('id', leadA)).error;
     }

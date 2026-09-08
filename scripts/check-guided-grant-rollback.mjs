@@ -39,6 +39,9 @@ const publicationRollback = readFileSync(`supabase/migrations/rollback/${publica
 const pinMigration = '20271017000009_guided_execution_version.sql';
 const pinForward = readFileSync(`supabase/migrations/${pinMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const pinRollback = readFileSync(`supabase/migrations/rollback/${pinMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const discoveryMigration = '20271017000010_guided_publication_discovery.sql';
+const discoveryForward = readFileSync(`supabase/migrations/${discoveryMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const discoveryRollback = readFileSync(`supabase/migrations/rollback/${discoveryMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -54,11 +57,12 @@ INSERT INTO public.workflow_guided_drafts(workflow_id, organization_id, definiti
 UPDATE public.workflow_guided_drafts SET settings = '{"name":"Preserved settings"}'::jsonb
   WHERE workflow_id = (SELECT workflow_id FROM guided_rollback_fixture);
 INSERT INTO public.workflow_guided_versions(workflow_id, organization_id, version_number, source_revision, definition, settings, required_fields)
-  SELECT workflow_id, org_id, 1, 11, '{"nodes":[],"edges":[]}'::jsonb, '{"name":"Preserved publication"}'::jsonb, ARRAY['lead.name'] FROM guided_rollback_fixture;
+  SELECT workflow_id, org_id, 1, 11, '{"nodes":[{"id":"t","type":"trigger","data":{"triggerType":"lead_created","config":{}}}],"edges":[]}'::jsonb, '{"name":"Preserved publication"}'::jsonb, ARRAY['lead.name'] FROM guided_rollback_fixture;
 INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, version_id)
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${discoveryRollback}
 ${pinRollback}
 ${publicationRollback}
 ${initialSettingsRollback}
@@ -70,7 +74,8 @@ ${readerRollback}
 ${conflictRollback}
 ${rollback}
 DO $$ BEGIN
-  IF to_regprocedure('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])') IS NOT NULL
+  IF to_regprocedure('public.sync_guided_publication_discovery()') IS NOT NULL
+    OR to_regprocedure('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])') IS NOT NULL
     OR has_table_privilege('authenticated', 'public.workflow_guided_versions', 'SELECT')
     OR has_table_privilege('service_role', 'public.workflow_guided_versions', 'SELECT')
     OR has_table_privilege('authenticated', 'public.workflow_guided_publications', 'SELECT')
@@ -101,7 +106,7 @@ DO $$ BEGIN
     JOIN public.workflow_guided_versions v ON v.id = p.version_id
     JOIN guided_rollback_fixture f ON f.workflow_id = p.workflow_id
     WHERE v.source_revision = 11 AND v.version_number = 1
-      AND v.definition = '{"nodes":[],"edges":[]}'::jsonb
+      AND v.definition = '{"nodes":[{"id":"t","type":"trigger","data":{"triggerType":"lead_created","config":{}}}],"edges":[]}'::jsonb
       AND v.settings = '{"name":"Preserved publication"}'::jsonb
       AND v.required_fields = ARRAY['lead.name']) THEN
     RAISE EXCEPTION 'publication history or selection lost';
@@ -116,6 +121,10 @@ DO $$ BEGIN
     OR has_function_privilege('service_role', 'public.pin_guided_execution_version()', 'EXECUTE') THEN
     RAISE EXCEPTION 'pin trigger function callable directly';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.workflows w JOIN guided_rollback_fixture f ON f.workflow_id = w.id
+    WHERE w.name = 'Preserved publication' AND w.trigger_type = 'lead_created' AND w.trigger_config = '{}'::jsonb) THEN
+    RAISE EXCEPTION 'published discovery metadata lost';
+  END IF;
 END $$;
 ${forward}
 ${conflictForward}
@@ -127,7 +136,13 @@ ${settingsForward}
 ${initialSettingsForward}
 ${publicationForward}
 ${pinForward}
+${discoveryForward}
 DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.sync_guided_publication_discovery()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.sync_guided_publication_discovery()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.sync_guided_publication_discovery()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'discovery function callable directly';
+  END IF;
   IF has_function_privilege('anon', 'public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])', 'EXECUTE')
     OR NOT has_function_privilege('service_role', 'public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])', 'EXECUTE')
@@ -187,7 +202,7 @@ DO $$ BEGIN
     JOIN public.workflow_guided_versions v ON v.id = p.version_id
     JOIN guided_rollback_fixture f ON f.workflow_id = p.workflow_id
     WHERE v.source_revision = 11 AND v.version_number = 1
-      AND v.definition = '{"nodes":[],"edges":[]}'::jsonb
+      AND v.definition = '{"nodes":[{"id":"t","type":"trigger","data":{"triggerType":"lead_created","config":{}}}],"edges":[]}'::jsonb
       AND v.settings = '{"name":"Preserved publication"}'::jsonb
       AND v.required_fields = ARRAY['lead.name']) THEN
     RAISE EXCEPTION 'publication history or selection lost';
@@ -201,6 +216,10 @@ DO $$ BEGIN
     OR has_function_privilege('authenticated', 'public.pin_guided_execution_version()', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.pin_guided_execution_version()', 'EXECUTE') THEN
     RAISE EXCEPTION 'pin trigger function callable directly';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.workflows w JOIN guided_rollback_fixture f ON f.workflow_id = w.id
+    WHERE w.name = 'Preserved publication' AND w.trigger_type = 'lead_created' AND w.trigger_config = '{}'::jsonb) THEN
+    RAISE EXCEPTION 'published discovery metadata lost';
   END IF;
 END $$;
 ROLLBACK;
