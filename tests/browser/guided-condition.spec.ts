@@ -919,34 +919,34 @@ test('configura pontuação numérica sem confundir zero com comparação incomp
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeEnabled();
 });
 
-test('seleciona campanha UTM por busca e aceita texto fora das sugestões', async ({ page }) => {
+for (const [field, label] of [['utm_campaign', 'UTM Campaign'], ['utm_source', 'UTM Source'], ['utm_medium', 'UTM Medium'], ['utm_content', 'UTM Content'], ['utm_term', 'UTM Term']]) test(`seleciona ${label} por busca e aceita texto fora das sugestões`, async ({ page }) => {
   await openGuidedEditor(page, '');
   await page.route('**/rest/v1/leads?*', route => {
     const params = new URL(route.request().url()).searchParams;
-    if (params.get('select') !== 'utm_campaign') return route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] });
+    if (params.get('select') !== field) return route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] });
     expect(params.get('limit')).toBe('25');
-    return route.fulfill({ json: params.getAll('utm_campaign').some(value => value.includes('Atacado'))
-      ? [{ utm_campaign: 'Atacado verão' }] : [{ utm_campaign: 'Campanha inicial' }] });
+    return route.fulfill({ json: params.getAll(field).some(value => value.includes('Atacado'))
+      ? [{ [field]: 'Atacado verão' }] : [{ [field]: 'Campanha inicial' }] });
   });
   await page.getByText('Nome informado', { exact: true }).click();
-  await page.getByLabel('Informação', { exact: true }).selectOption('lead.utm_campaign');
+  await page.getByLabel('Informação', { exact: true }).selectOption(`lead.${field}`);
   const picker = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
   await picker.click();
   await expect(page.getByRole('option', { name: 'Campanha inicial', exact: true })).toBeVisible();
   await page.getByPlaceholder('Buscar ou digitar valor…').fill('Atacado');
   await page.getByRole('option', { name: 'Atacado verão', exact: true }).click();
-  await expect(page.locator('.react-flow__node-condition')).toContainText('UTM Campaign é igual a “Atacado verão”');
+  await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} é igual a “Atacado verão”`);
   await picker.click();
   await page.getByPlaceholder('Buscar ou digitar valor…').fill('Nova campanha');
   await page.getByRole('option', { name: 'Usar "Nova campanha"', exact: true }).click();
-  await expect(page.locator('.react-flow__node-condition')).toContainText('UTM Campaign é igual a “Nova campanha”');
+  await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} é igual a “Nova campanha”`);
   await page.route('**/functions/v1/test-guided-condition', route => {
-    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.utm_campaign', value: 'Nova campanha' });
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: `lead.${field}`, value: 'Nova campanha' });
     return route.fulfill({ json: { status: 'evaluated', matched: false, rules: [{ id: 'rule-1', status: 'evaluated', matched: false, actual: 'Outra campanha' }] } });
   });
   await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
   await page.getByRole('button', { name: 'Testar condição' }).click();
-  await expect(page.getByRole('status')).toContainText('UTM Campaign do lead: Outra campanha');
+  await expect(page.getByRole('status')).toContainText(`${label} do lead: Outra campanha`);
 });
 
 test('falha de sugestões UTM não vira lista vazia nem impede valor manual', async ({ page }) => {
@@ -966,4 +966,35 @@ test('falha de sugestões UTM não vira lista vazia nem impede valor manual', as
   failed = false;
   await page.getByRole('button', { name: 'Tentar carregar sugestões novamente' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toHaveCount(0);
+});
+
+test('valor manual UTM pode ser confirmado antes das sugestões responderem', async ({ page }) => {
+  await openGuidedEditor(page, '');
+  await page.route('**/rest/v1/leads?*', async route => {
+    if (new URL(route.request().url()).searchParams.get('select') === 'utm_campaign') return;
+    await route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.utm_campaign');
+  await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
+  await expect(page.getByText('Carregando valores…')).toBeVisible();
+  await page.getByPlaceholder('Buscar ou digitar valor…').fill('Campanha urgente');
+  await expect(page.getByRole('option', { name: 'Usar "Campanha urgente"', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Buscar ou digitar valor…').press('Enter');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('“Campanha urgente”');
+});
+
+test('troca de usuário não reutiliza sugestões UTM da conta anterior', async ({ page }) => {
+  await page.route('**/rest/v1/leads?*', route => new URL(route.request().url()).searchParams.get('select') === 'utm_campaign'
+    ? route.fulfill({ json: [{ utm_campaign: 'Campanha restrita' }] }) : route.fulfill({ json: [] }));
+  await page.goto('/tests/browser/fixtures/guided-condition.html?identity-switch=1');
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.utm_campaign');
+  await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
+  await expect(page.getByRole('option', { name: 'Campanha restrita', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Buscar ou digitar valor…').press('Escape');
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ status: 403, json: { message: 'denied' } }));
+  await page.getByRole('button', { name: 'Trocar usuário' }).click();
+  await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
+  await expect(page.getByRole('option', { name: 'Campanha restrita', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toBeVisible();
 });

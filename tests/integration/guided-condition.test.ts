@@ -43,8 +43,8 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     });
     if (member.error) throw member.error;
     const leads = await service.from('leads').insert([
-      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', utm_campaign: '[VERÃO] B2B.', email: 'comercial@aurora.example', phone: '5511999990000', pre_sale_responsible_id: adminMemberId },
-      { id: leadB, organization_id: orgB, name: 'Dado protegido' },
+      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', utm_campaign: '[VERÃO] B2B.', utm_source: 'Google', utm_medium: 'Pesquisa', utm_content: 'Vídeo A', utm_term: 'Fábrica', email: 'comercial@aurora.example', phone: '5511999990000', pre_sale_responsible_id: adminMemberId },
+      { id: leadB, organization_id: orgB, name: 'Dado protegido', utm_campaign: 'Campanha restrita', utm_source: 'Fonte restrita', utm_medium: 'Meio restrito', utm_content: 'Conteúdo restrito', utm_term: 'Termo restrito' },
     ]);
     if (leads.error) throw leads.error;
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, { auth: { ...auth, storageKey: `guided-admin-${orgA}` } });
@@ -708,11 +708,29 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
   }, 60000);
 
   it.each([
+    { field: 'lead.utm_source', value: 'GOOGLE', actual: 'Google' },
+    { field: 'lead.utm_medium', value: 'PESQUISA', actual: 'Pesquisa' },
+    { field: 'lead.utm_content', value: 'VIDEO A', actual: 'Vídeo A' },
+    { field: 'lead.utm_term', value: 'FABRICA', actual: 'Fábrica' },
     { field: 'lead.utm_campaign', value: 'VERAO', actual: '[VERÃO] B2B.' },
     { field: 'lead.company', value: 'AURORA', actual: 'Fábrica Aurora' },
     { field: 'lead.email', value: '@aurora.example', actual: 'comercial@aurora.example' },
     { field: 'lead.phone', value: '5511', actual: '5511999990000' },
   ])('tests $field through personal HTTP permissions', async ({ field, value, actual }) => {
+    if (field.startsWith('lead.utm_')) {
+      const column = field.slice('lead.'.length);
+      const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+      });
+      const own = await caller.from('leads').select(column).eq('organization_id', orgA)
+        .is('deleted_at', null).not(column, 'is', null).neq(column, '').order(column).limit(25);
+      expect(own.error).toBeNull();
+      expect(own.data).toContainEqual({ [column]: actual });
+      const foreign = await caller.from('leads').select(column).eq('organization_id', orgB)
+        .is('deleted_at', null).not(column, 'is', null).neq(column, '').order(column).limit(25);
+      expect(foreign.error).toBeNull();
+      expect(foreign.data).toEqual([]);
+    }
     const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
       method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
       body: JSON.stringify({ organizationId: orgA, leadId: leadA,
@@ -726,6 +744,10 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
 
   it.each([
     { field: 'lead.qualification_score', column: 'qualification_score', actual: 0, comparison: 0, fragment: 0 },
+    { field: 'lead.utm_source', column: 'utm_source', actual: 'Google', comparison: 'GOOGLE', fragment: 'GOOGLE' },
+    { field: 'lead.utm_medium', column: 'utm_medium', actual: 'Pesquisa', comparison: 'PESQUISA', fragment: 'PESQUISA' },
+    { field: 'lead.utm_content', column: 'utm_content', actual: 'Vídeo A', comparison: 'VIDEO A', fragment: 'VIDEO A' },
+    { field: 'lead.utm_term', column: 'utm_term', actual: 'Fábrica', comparison: 'FABRICA', fragment: 'FABRICA' },
     { field: 'lead.utm_campaign', column: 'utm_campaign', actual: '[VERÃO] B2B.', comparison: '[verao] b2b.', fragment: 'verao' },
     { field: 'lead.company', column: 'company', actual: 'Fábrica Aurora', comparison: 'FABRICA AURORA', fragment: 'AURORA' },
     { field: 'lead.email', column: 'email', actual: 'comercial@aurora.example', comparison: 'COMERCIAL@AURORA.EXAMPLE', fragment: '@aurora.example' },

@@ -125,3 +125,9 @@ Rollback restores the exact previous writer/readers/finalizer while preserving w
 Applied/registered atomically on preview only. Adds explicit lead.utm_campaign scope and exact text projection to existing scalar/mixed readers and finalizer. No existing approval row is expanded. Effective reader/finalizer EXECUTE: anon/authenticated false, service true. Grant writer remains authenticated-only with business administration checks.
 
 Rollback restores migration 18's functions while retaining wider storage CHECK and all approval/version/pin history. Stop guided admission before rollback; unavailable campaign scope fails closed. Twenty-file reverse rollback/reapply passed with seven-field synthetic history. Full recovery is 00..11, 19 (superset of 12/13/15/16/17/18), then 14. Do not replay narrower constraints over retained campaign grants. Fresh installation remains numerical. No production change.
+
+### Complete UTM field authorization migration 20271017000020
+
+Applied/registered atomically on preview only. Source, Medium, Content and Term each have their own explicit grant, exact scalar projection and publication support. Existing campaign/name/tag/score approvals are not broadened. Effective privileges verified on the live database: readers/finalizer service-only; grant writer authenticated-only with unchanged business administration checks.
+
+Rollback restores migration 19 functions while keeping the wider CHECK, approval history, immutable versions and execution pins. Stop guided admission before rollback; the newly unsupported fields fail closed. Twenty-one-file reverse rollback/recovery passed with eleven-field synthetic history preserved. Full recovery now runs 00..11, 20 (supersedes 12/13/15/16/17/18/19), then 14. Do not replay narrower CHECK definitions over retained history. Fresh installation remains numerical. No production changes.

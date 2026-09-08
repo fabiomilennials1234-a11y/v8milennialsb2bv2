@@ -103,6 +103,17 @@ export function ValueCombobox({
             onValueChange={value => { setSearch(value); onSearchChange?.(value); }}
           />
           <CommandList>
+            {showCreate && (
+              <CommandGroup>
+                <CommandItem
+                  value={`__create__${term}`}
+                  onSelect={() => commit(term)}
+                >
+                  <Plus className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="truncate">Usar "{term}"</span>
+                </CommandItem>
+              </CommandGroup>
+            )}
             {isLoading ? (
               <div className="flex items-center gap-2 px-3 py-3 text-xs text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -131,20 +142,9 @@ export function ValueCombobox({
                     ))}
                   </CommandGroup>
                 )}
-
-                {showCreate && (
-                  <CommandGroup>
-                    <CommandItem
-                      value={`__create__${term}`}
-                      onSelect={() => commit(term)}
-                    >
-                      <Plus className="mr-2 h-4 w-4 shrink-0" />
-                      <span className="truncate">Usar "{term}"</span>
-                    </CommandItem>
-                  </CommandGroup>
-                )}
               </>
             )}
+
           </CommandList>
         </Command>
       </PopoverContent>

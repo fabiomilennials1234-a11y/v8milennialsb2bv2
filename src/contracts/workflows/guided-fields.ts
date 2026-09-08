@@ -4,6 +4,10 @@ export const GUIDED_TEXT_FIELDS = {
   'lead.name': { column: 'name', label: 'Nome', actualLabel: 'Nome do lead' },
   'lead.email': { column: 'email', label: 'Email', actualLabel: 'Email do lead' },
   'lead.phone': { column: 'phone', label: 'Telefone', actualLabel: 'Telefone do lead' },
+  'lead.utm_source': { column: 'utm_source', label: 'UTM Source', actualLabel: 'UTM Source do lead' },
+  'lead.utm_medium': { column: 'utm_medium', label: 'UTM Medium', actualLabel: 'UTM Medium do lead' },
+  'lead.utm_content': { column: 'utm_content', label: 'UTM Content', actualLabel: 'UTM Content do lead' },
+  'lead.utm_term': { column: 'utm_term', label: 'UTM Term', actualLabel: 'UTM Term do lead' },
   'lead.utm_campaign': { column: 'utm_campaign', label: 'UTM Campaign', actualLabel: 'UTM Campaign do lead' },
   'lead.company': { column: 'company', label: 'Empresa', actualLabel: 'Empresa do lead' },
 } as const;
