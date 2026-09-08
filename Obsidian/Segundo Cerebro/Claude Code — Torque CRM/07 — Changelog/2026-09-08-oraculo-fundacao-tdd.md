@@ -14,4 +14,4 @@ Correções: isolamento entre organizações e usuários, plano contratado, teto
 
 Frontend envia organização selecionada, particiona histórico/cache, preserva histórico ao continuar e ignora respostas atrasadas após trocar conversa. Carregamento e erro de histórico bloqueiam envio até resolução.
 
-Validação: 860 testes backend, 10 frontend, 8 PostgREST/Auth reais. Branches QA removidas; produção não alterada. Replay completo da main bloqueado por preflight herdado SCRUM-639; alvo do QA descrito em `.specs/oraculo/FUNDACAO-TDD.md`. E2E implantado e revisão de drift permanecem pendentes. Aplicar ambas migrations do Oráculo antes de implantar edge function.
+Validação: 860 testes backend, 10 frontend, 8 PostgREST/Auth reais. Branches QA removidas; produção não alterada. Replay completo da main bloqueado por preflight herdado SCRUM-639; alvo do QA descrito em `.specs/oraculo/FUNDACAO-TDD.md`. Smoke Chrome com Auth/PostgREST/edge/OpenRouter reais passou; login por formulário e shell global fora do harness. Gates gerais de CI e revisão de drift permanecem pendentes. Aplicar ambas migrations do Oráculo antes de implantar edge function.

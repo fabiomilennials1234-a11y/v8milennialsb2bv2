@@ -115,7 +115,7 @@ Resultado comprova SQL/RLS do Oráculo nesse schema, **não replay completo da m
 
 ### Publicação pendente
 
-Revisar PR; conferir drift do ambiente alvo; aplicar ambas as migrations antes de publicar `oraculo-turno`. A função depende da RPC nova. Produção continua exigindo autorização específica. Contrato frontend corrigido e validado pelos testes HTTP abaixo; E2E com interface autenticada e serviços implantados permanece pendente antes de ampliar acesso.
+Revisar PR; conferir drift do ambiente alvo; aplicar ambas as migrations antes de publicar `oraculo-turno`. A função depende da RPC nova. Produção continua exigindo autorização específica. Contrato frontend corrigido e validado pelos testes HTTP abaixo; Smoke da página autenticada com serviços implantados e modelo real concluído; gates de CI e revisão de drift permanecem pendentes.
 
 ## Limitações e continuidade do épico
 
@@ -130,8 +130,22 @@ Revisar PR; conferir drift do ambiente alvo; aplicar ambas as migrations antes d
 
 Página bloqueia envio e sugestões enquanto histórico da conversa existente carrega ou falha; erro apresenta botão de retry. Resposta confirmada invalida lista e turnos, inclusive quando usuário já abriu outra conversa. Build e ESLint passaram. Typecheck mantém erros herdados da base, sem regenerar baseline.
 
-Os testes comprovam contrato de rede e comportamento dos hooks. Não houve E2E de navegador contra frontend/edge implantados. PR deve permanecer em rascunho até completar smoke integrado e revisar drift de migrations no alvo. Não mesclar automaticamente.
+Os testes comprovam contrato de rede e comportamento dos hooks. Smoke de navegador com edge implantada e IA real concluído abaixo. PR permanece em rascunho pelos gates de CI e revisão de drift. Não mesclar automaticamente.
 
 ## Ajuste de CI
 
 Versões 20271018000000/001 colidiram com migrations novas da main após abertura do PR. Renumeradas para 20271019000000/001, SQL inalterado. Aplicações anteriores existiram somente nas branches QA já removidas; nenhuma versão do Oráculo aplicada em produção.
+
+## Smoke integrado real — 2026-09-08
+
+**Passou no Chrome em 11,7 s** (`tests/browser/oraculo/smoke.spec.ts`): página real + AuthProvider/useOrganization + SDK, sessão real obtida pela Auth API, PostgREST real, `oraculo-turno` implantada e OpenRouter real. Chave existente `Openrouter_Key` mapeada para secret `OPENROUTER_API_KEY` somente na branch QA. Nenhuma credencial incluída no repo.
+
+Percurso: abrir conversa com informação sintética → perguntar → HTTP 200 com resposta não vazia do modelo → recarregar página e recuperar pergunta/resposta → trocar organização e não exibir histórico anterior → trocar plano de fixture por plano cadastrado sem Oráculo → recusa visível. O harness monta a página diretamente; não cobre login por formulário nem shell global do aplicativo.
+
+Branch `codex-oraculo-smoke-20260908` (`oylwwsandispchczguhl`) removida ao terminar; sessão e credenciais temporárias apagadas. Produção intacta. Mesmo limite de schema do QA anterior: cadeia até20271007000030 mais migrations do Oráculo. Versões equivalentes reaplicadas pelo provisionamento foram preservadas pelos registros originais no snapshot, sem alterar ledger para simular aplicação.
+
+Para repetir: preparar branch descartável, aplicar migrations e implantar oraculo-turno; configurar secret de modelo nela. Exportar TEST_SUPABASE_URL/ANON_KEY/SERVICE_ROLE_KEY e ORACULO_SMOKE_SESSION_FILE fora do repo. Rodar `node tests/browser/oraculo/seed.mjs`, depois `npx playwright test --config tests/browser/oraculo/playwright.config.ts`. Chrome instalado é utilizado. Remover branch e arquivos de credenciais ao terminar.
+
+## CI restante
+
+Após renumeração, Lint & Build, CodeQL, secret scan e Edge Function Tests passaram. Vault: frontmatter corrigido; índice MOC regenerado. Integration, RLS e E2E gerais falham antes dos testes no mesmo bootstrap: `20270925000000_aposenta_calor_e_rating.sql`, `BACKUP rating incompleto: 0 copiadas vs 0 na origem`. Não enfraquecemos essa guarda nem marcamos esses jobs como verdes. Resolver bootstrap geral/replay antes do merge. Unit geral ainda estava em execução ao registrar este resultado.
