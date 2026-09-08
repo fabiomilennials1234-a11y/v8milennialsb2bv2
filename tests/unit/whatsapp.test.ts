@@ -2,6 +2,21 @@ import { describe, it, expect } from "vitest";
 import { formatPhoneForWhatsApp } from "../../src/modules/communication/lib/whatsapp";
 
 describe("formatPhoneForWhatsApp", () => {
+  it("preserves the existing WhatsApp Business landline from the Jurere incident", () => {
+    expect(formatPhoneForWhatsApp("555134073827")).toBe("555134073827");
+    expect(formatPhoneForWhatsApp("(51) 3407-3827")).toBe("555134073827");
+  });
+
+  it.each(["2", "3", "4", "5"])("preserves landlines starting with %s, including DDD 55", (prefix) => {
+    const phone = `55${prefix}4073827`;
+    expect(formatPhoneForWhatsApp(phone)).toBe(`55${phone}`);
+    expect(formatPhoneForWhatsApp(`55${phone}`)).toBe(`55${phone}`);
+  });
+
+  it("still rejects a landline with an invalid DDD", () => {
+    expect(formatPhoneForWhatsApp("2034073827")).toBeNull();
+  });
+
   it("returns null for undefined", () => {
     expect(formatPhoneForWhatsApp(undefined)).toBeNull();
   });

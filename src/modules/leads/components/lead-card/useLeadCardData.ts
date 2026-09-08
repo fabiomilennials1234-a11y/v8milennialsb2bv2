@@ -11,6 +11,7 @@ import { useLeadTimeline } from "../../hooks/useLeadTimeline";
 import { useLeadCustomFields, useLeadCustomFieldValues } from "../../hooks/useLeadCustomFields";
 import { mergeDataMetrics } from "../../lib/data-metrics";
 import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
+import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import type {
   LeadCardData,
   LeadCardDeal,
@@ -175,6 +176,7 @@ export interface LeadCardSource {
 }
 
 export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCardSource {
+  const { usaLeiDoErp } = useOrgUsaLeiDoErp();
   const { lead, isLoading, visibility } = useLeadDetail(leadId, isOpen);
   const { organizationId, teamMemberId, role } = useOrganization();
 
@@ -219,7 +221,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
     const vendas = vendasMap?.[id];
     const carteira = carteiraMap?.[id];
 
-    const standing = deriveLeadStanding({ deals: negociosCrus, vendas, carteira });
+    const standing = deriveLeadStanding({ deals: negociosCrus, vendas, carteira, usaLeiDoErp });
     const metricasDeCompra = mergeDataMetrics(carteiraMap, vendasMap)[id];
 
     const negocios: LeadCardDeal[] = negociosCrus.map((d) => ({
@@ -422,6 +424,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       historico,
     };
   }, [
+    usaLeiDoErp,
     lead,
     dealsMap,
     produtosPorNegocio,

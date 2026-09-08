@@ -8,7 +8,7 @@ import { useOrganization } from "@/modules/identity";
  * Decisão do CTO em 2026-09-04: a lei do ERP é **mandatória para quem tem a
  * integração feita**, e só para esses. Quem não tem integração segue a lei da
  * Relação — a mesma que a coluna "Relação" da lista já imprime
- * (`lead-relacao-situacao.ts`): comprou pelo funil OU tem pedido no ERP.
+ * (`lead-relacao-situacao.ts`): ganho prevalece; somente perdas = Perdido.
  *
  * O sinal é a flag que a própria lei do ERP já usa
  * (`toth_connections.classificar_leads_por_situacao`), e não um sinal novo:

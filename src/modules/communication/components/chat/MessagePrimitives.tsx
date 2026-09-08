@@ -356,7 +356,7 @@ export function MessageBubble({
           "max-w-[75%] min-w-0 px-4 py-2.5 overflow-hidden",
           radiusClass,
           bubbleColorClass,
-          isFailed && "border-destructive/40",
+          isFailed && "border-destructive/60 !bg-destructive/15 !text-destructive",
           !!meta.pinned_at && "ring-1 ring-primary/30"
         )}
       >
@@ -599,8 +599,14 @@ export function MessageBubble({
           </>
         )}
 
-        {/* Retry button for failed messages */}
-        {isFailed && onRetry && (
+        {!isFailed && (message.retry_attempt ?? 0) > 0 && (
+          <p role="status" className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+            Erro no envio, tentando novamente {message.retry_attempt}/10
+          </p>
+        )}
+        {isFailed && <p role="status" className="mt-1 text-[11px] text-destructive">Falha no envio</p>}
+        {/* Exhausted sends cannot restart an automatic loop. */}
+        {isFailed && onRetry && (message.retry_attempt ?? 0) < 10 && (
           <button
             type="button"
             onClick={() => onRetry(message as FailedMessage)}

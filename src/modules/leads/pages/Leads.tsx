@@ -99,6 +99,7 @@ import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/Sa
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import {
   CLASSIFICACAO_TODAS,
+  leadClassificacaoOptions,
   LEAD_CLASSIFICACOES,
   LEAD_CLASSIFICACAO_CONFIG,
   type LeadClassificacao,
@@ -178,7 +179,7 @@ type LeadsFilterState = {
   filterQualification: string;
   /** Dono da conta: id de `team_member`, `"all"` ou `"none"` (sem dono). */
   filterResponsible: string;
-  /** Gaveta: `"lead" | "cliente" | "indefinido"` ou `"all"`. */
+  /** Gaveta: `"lead" | "cliente" | "perdido" | "indefinido"` ou `"all"`. */
   filterClassificacao?: string;
 };
 
@@ -393,11 +394,13 @@ function LeadsInner() {
   const standings = useMemo(
     () =>
       deriveLeadStandings(allLeadIds, {
+        usaLeiDoErp,
+        relacoes: Object.fromEntries(leads.map((lead) => [lead.id, lead.relacao_negocios])),
         deals: leadDeals,
         vendas: salesMetrics,
         carteira: carteiraMetrics,
       }),
-    [allLeadIds, leadDeals, salesMetrics, carteiraMetrics],
+    [allLeadIds, leadDeals, salesMetrics, carteiraMetrics, usaLeiDoErp, leads],
   );
   const { isMobile } = useViewport();
 
@@ -473,7 +476,7 @@ function LeadsInner() {
    * org, que é o que o resto do produto usa.
    */
   const { data: orgStats } = useLeadsStats({
-    searchQuery, filterOrigin, filterQualification, filterResponsible,
+    searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterResponsible,
     filterUf: ufFilter, createdFrom, createdTo,
   });
 
@@ -745,26 +748,18 @@ function LeadsInner() {
             A fonte da verdade muda por organização; o controle, não:
               • org COM integração de ERP → a gaveta `leads.classificacao`,
                 onde `indefinido` faz sentido;
-              • org SEM integração → a lei da RELAÇÃO (venda no funil OU pedido
-                no ERP), a mesma que a coluna "Relação" desta lista imprime.
+              • org SEM integração → a lei da RELAÇÃO: ganho prevalece; somente
+                perdas = Perdido; demais = Lead.
 
             `Indefinido` só aparece no primeiro caso: numa org sem ERP a gaveta
             não existe, e oferecer um filtro que sempre devolve lista vazia é
             pior do que não oferecer. */}
         <SegmentedControl
-          label="Lead ou cliente"
+          label="Classificação dos leads"
           className="sm:ml-auto"
           value={filterClassificacao}
           onValueChange={setFilterClassificacao}
-          options={[
-            { value: CLASSIFICACAO_TODAS, label: "Todos" },
-            ...LEAD_CLASSIFICACOES.filter(
-              (c) => usaLeiDoErp || c !== "indefinido",
-            ).map((c) => ({
-              value: c,
-              label: LEAD_CLASSIFICACAO_CONFIG[c].label,
-            })),
-          ]}
+          options={leadClassificacaoOptions(usaLeiDoErp)}
         />
         <SavedViewsDropdown
           entityType="leads"
@@ -918,7 +913,7 @@ function LeadsInner() {
                               Mover aqui marca `classificacao_manual`, e a lei do
                               ERP deixa de tocar neste lead: é o que impede a
                               escolha de sumir na sincronização das 06:00. */}
-                          <DropdownMenuSub>
+                          {usaLeiDoErp && <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
                               <Tag className="w-4 h-4 mr-2" />
                               Classificação
@@ -947,7 +942,7 @@ function LeadsInner() {
                                 ))}
                               </DropdownMenuRadioGroup>
                             </DropdownMenuSubContent>
-                          </DropdownMenuSub>
+                          </DropdownMenuSub>}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => {
@@ -1003,7 +998,7 @@ function LeadsInner() {
       <ExportLeadsModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        listFilters={{ searchQuery, filterOrigin, filterQualification, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
+        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
       />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>

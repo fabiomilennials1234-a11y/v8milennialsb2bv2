@@ -187,3 +187,11 @@ com só 7, + maps locais). Slice A criou a tabela registry `lead_origins` e o ho
 - Auditoria duplicatas: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/06 — Features/modularizacao/auditoria-duplicatas.md`
 - SPEC modularização: `.specs/features/modularizacao/SPEC.md`
 - Slices roadmap: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/10 — Remodelagem/04-execucao/slices.md`
+
+### Lei da Relação — 2026-09-08
+
+Ganho atual ou venda histórica líquida prevalece: Cliente mesmo com perdas.
+Somente negócios perdidos, sem nenhum aberto ou ganho: Perdido. Demais: Lead.
+Pedido de ERP isolado não classifica na Lei da Relação. A Lei do ERP mantém
+classificacao e Indefinido. Filtro/contagem/exportação usam relacao_negocios(leads)
+no banco; migration deve preceder o frontend. Ver .specs/fixes/lei-relacao-ganho-perdido.md.
