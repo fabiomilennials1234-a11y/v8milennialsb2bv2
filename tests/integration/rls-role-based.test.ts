@@ -170,7 +170,8 @@ describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
             .eq('organization_id', TEST_ORG_B_ID),
           master
             .from('leads')
-            .select('id', { count: 'exact', head: true }),
+            .select('id', { count: 'exact', head: true })
+              .in('organization_id', [TEST_ORG_ID, TEST_ORG_B_ID]),
         ]);
 
         expect(orgA.error).toBeNull();
@@ -218,7 +219,8 @@ describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
             .eq('organization_id', TEST_ORG_B_ID),
           master
             .from('tags')
-            .select('id', { count: 'exact', head: true }),
+            .select('id', { count: 'exact', head: true })
+              .in('organization_id', [TEST_ORG_ID, TEST_ORG_B_ID]),
         ]);
 
         expect(orgA.error).toBeNull();
@@ -266,7 +268,8 @@ describe.skipIf(shouldSkip)('RLS: Role-based access', () => {
             .eq('organization_id', TEST_ORG_B_ID),
           master
             .from('team_members')
-            .select('id', { count: 'exact', head: true }),
+            .select('id', { count: 'exact', head: true })
+              .in('organization_id', [TEST_ORG_ID, TEST_ORG_B_ID]),
         ]);
 
         expect(orgA.error).toBeNull();

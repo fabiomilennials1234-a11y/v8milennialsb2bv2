@@ -123,3 +123,40 @@ não estão aprovadas nesta rodada. Produção não recebeu qualquer escrita.
 
 Publicação também requer superfície operacional: a descoberta de browsers
 nesta sessão retornou inventário vazio; não há acesso ao EasyPanel confirmado.
+
+## Continuação — suítes canônicas e controles de acesso
+
+O CTO autorizou a continuação do diagnóstico das suítes legadas. No commit
+`53a05d33`, execução `34269782402`, job `102208146009`, a suíte bloqueante SQL
+passou: **97 arquivos / 2074 asserções** em 2026-09-08 19:37:21 UTC. Backup,
+restauração exata, rollback/reapply, preservação e isolamento passaram novamente.
+As duas suítes de features futuras já separadas pelo runner continuam pendentes;
+não foram promovidas, removidas nem adicionadas novas exceções.
+
+Correções comprovadas nesta rodada:
+
+- Exportação de lead: nova migration corrige `search_path` que representava
+  `public, extensions` como um único schema. Corpo, autorização e ACL intactos;
+  testes de exportação autorizada e recusada passaram. Ainda não aplicada em prod.
+- Fixtures canônicas substituem espelhos removidos. Métricas leem desfecho do
+  negócio; baldes por etapa usam chave composta por funil e etapa.
+- Testes de guardas usam sessão authenticator, não sessão postgres com SET ROLE.
+  O runner CI isolado conecta como supabase_admin para permitir essa simulação.
+  Nenhum privilégio de aplicação ou política de produção foi ampliado.
+- Planos TAP e finish() corrigidos, incluindo VoIP. Controles negativos de
+  políticas agora isolam a condição que realmente pretendem demonstrar.
+
+**Ainda sem merge:** integração HTTP e E2E continuam pendentes. A execução
+anterior da integração teve 57 testes falhando em 22 arquivos; há referências
+a RPCs/views removidas e outras causas ainda não reconciliadas. Atualização
+das fixtures HTTP está em curso, mantendo as asserções de isolamento.
+
+O check Unit Tests verde não equivale à suíte inteira verde: usa ratchet.
+Na execução `34267423677`, a cobertura informativa registrou 9907 aprovados,
+106 falhos e 155 ignorados; nenhuma baseline foi ampliada nesta tarefa.
+
+Correção do registro de publicação: `CLAUDE.md` documenta webhook EasyPanel
+separado do workflow GHCR. Não se pode concluir deploy manual pela ausência
+dele no workflow. A leitura atual dos hooks foi recusada por falta de
+`admin:repo_hook`; versão servida deve ser verificada após o merge.
+Nenhuma escrita no banco de produção e nenhuma nova branch Supabase nesta rodada.

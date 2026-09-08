@@ -66,9 +66,12 @@ alterada para contornar o preflight.
    antigos ausentes e zero linhas antigas diferentes; somente novos templates.
    Se o seed já concluiu, NÃO repetir para "corrigir" abas ausentes: uma aba pode
    ter sido excluída intencionalmente depois do rollout.
-5. Mergear o PR revisado e aguardar Build Image. O workflow atual só publica
-   a imagem no GHCR; não faz deploy automático. Publicar explicitamente no
-   EasyPanel e conferir a versão servida. Validar primeiro com CTO na org canário:
+  5. Mergear o PR revisado e conferir a versão efetivamente servida. O workflow
+    Build Image publica no GHCR; segundo `CLAUDE.md`, um webhook separado do
+    GitHub aciona o EasyPanel automaticamente. Não inferir deploy manual apenas
+    pelo workflow. A consulta aos hooks nesta sessão foi recusada por falta de
+    `admin:repo_hook`; verificar o deploy antes de decidir por redeploy manual.
+    Validar primeiro com CTO na org canário:
    painel legado, templates, criar/editar/recarregar e excluir apenas aba de QA.
    Não testar destrutivamente no painel de um cliente.
 6. Monitorar erros de leitura/gravação e relatos nas primeiras 24h. A versão nova

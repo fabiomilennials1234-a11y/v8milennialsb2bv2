@@ -20,7 +20,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
       await supabase.from('leads').delete().in('id', createdLeadIds);
     }
     if (createdPipelineIds.length > 0) {
-      await supabase.from('custom_pipelines').delete().in('id', createdPipelineIds);
+      await supabase.from('pipelines').delete().in('id', createdPipelineIds);
     }
   });
 
@@ -90,16 +90,17 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
   });
 
   // ─── Custom Pipeline Import — regression tests ────────────
-  // Contexto: bug onde custom_pipe_entries.assigned_to era FK → profiles(id)
+  // Contexto: bug onde pipeline_entries.assigned_to era FK → profiles(id)
   // mas frontend enviava team_members.id → FK violation silenciosa no import.
   // Migration 20260918000000 corrige FK pra team_members(id).
 
-  describe('custom_pipe_entries.assigned_to FK alignment', () => {
+  describe('pipeline_entries.assigned_to FK alignment', () => {
     it('assigned_to aceita team_members.id (alinhado com resto do sistema)', async () => {
       // Cria pipeline custom
       const { data: pipeline, error: pipeErr } = await supabase
-        .from('custom_pipelines')
+        .from('pipelines')
         .insert({
+          type: 'custom',
           organization_id: TEST_ORG_ID,
           name: `Pipeline Teste FK ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           slug: `pipeline-teste-fk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -114,7 +115,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
 
       // Cria stage
       const { data: stage, error: stageErr } = await supabase
-        .from('custom_pipeline_stages')
+        .from('pipeline_stages')
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
@@ -140,9 +141,9 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
         .single();
       if (lead?.id) createdLeadIds.push(lead.id);
 
-      // INSERT em custom_pipe_entries com team_members.id — deve funcionar pós-migration
+      // INSERT em pipeline_entries com team_members.id — deve funcionar pós-migration
       const { data: entry, error: entryErr } = await supabase
-        .from('custom_pipe_entries')
+        .from('pipeline_entries')
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
@@ -159,8 +160,9 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
 
     it('assigned_to rejeita UUID inválido (FK violation explícita, não silenciosa)', async () => {
       const { data: pipeline } = await supabase
-        .from('custom_pipelines')
+        .from('pipelines')
         .insert({
+          type: 'custom',
           organization_id: TEST_ORG_ID,
           name: `Pipeline Teste FK Invalid ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           slug: `pipeline-teste-fk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -171,7 +173,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
       if (pipeline?.id) createdPipelineIds.push(pipeline.id);
 
       const { data: stage } = await supabase
-        .from('custom_pipeline_stages')
+        .from('pipeline_stages')
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
@@ -196,7 +198,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
 
       // UUID aleatório que não existe em team_members
       const { error: insertErr } = await supabase
-        .from('custom_pipe_entries')
+        .from('pipeline_entries')
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
@@ -214,8 +216,9 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
 
     it('assigned_to aceita null (responsável opcional)', async () => {
       const { data: pipeline } = await supabase
-        .from('custom_pipelines')
+        .from('pipelines')
         .insert({
+          type: 'custom',
           organization_id: TEST_ORG_ID,
           name: `Pipeline Teste Null ${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
           slug: `pipeline-teste-null-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -226,7 +229,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
       if (pipeline?.id) createdPipelineIds.push(pipeline.id);
 
       const { data: stage } = await supabase
-        .from('custom_pipeline_stages')
+        .from('pipeline_stages')
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
@@ -250,7 +253,7 @@ describe.skipIf(shouldSkip)('Lead Import — integration', () => {
       if (lead?.id) createdLeadIds.push(lead.id);
 
       const { data: entry, error } = await supabase
-        .from('custom_pipe_entries')
+        .from('pipeline_entries')
         .insert({
           organization_id: TEST_ORG_ID,
           pipeline_id: pipeline!.id,
