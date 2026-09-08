@@ -301,3 +301,25 @@ describe("evaluateCondition — custom fields", () => {
     expect(result).toBe(true);
   });
 });
+
+
+describe("legacy singular tag field", () => {
+  it.each([["VIP", true], ["Outra", false]])("matches %s from the lead tags", async (value, expected) => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("lead_tags", [{ lead_id: "lead-1", tag: { name: "VIP" } }]);
+    expect(await evaluateCondition(sb, "lead-1", { field: "tag", operator: "contains", value: String(value) })).toBe(expected);
+  });
+});
+
+
+describe("selected tag membership", () => {
+  it.each([["VIP, Ativo", "has_tag", true], ["VIP", "has_tag", false], ["VIP", "not_has_tag", true]])(
+    "%s %s compares whole tag names", async (value, operator, expected) => {
+      const { sb, mockTable } = createMockSupabase();
+      mockTable("leads", [LEAD]);
+      mockTable("lead_tags", [{ lead_id: "lead-1", tag: { name: "VIP, Ativo" } }]);
+      expect(await evaluateCondition(sb, "lead-1", { field: "tags", operator: String(operator), value: String(value) })).toBe(expected);
+    },
+  );
+});

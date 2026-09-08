@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useResponsibleMembers } from "@/modules/identity";
-import { useLeadOrigins, useLeadCustomFields } from "@/modules/leads";
+import { useLeadOrigins, useLeadCustomFields, useTags } from "@/modules/leads";
 import { useAllPipelineStages, useFunisDaOrg } from "@/modules/pipelines";
 import { CONDITION_OPERATOR_LABELS, WEEKDAY_OPTIONS } from "@/types/workflow";
 import type { ConditionNodeData, ConditionOperator, ConditionMode } from "@/types/workflow";
@@ -41,7 +41,7 @@ const FIELD_OPTIONS = [
   { value: "segment", label: "Segmento" },
   { value: "urgency", label: "Urgencia" },
   { value: "score", label: "Score" },
-  { value: "tag", label: "Tag" },
+  { value: "tags", label: "Tag" },
   { value: "stage_id", label: "Etapa atual do negócio" },
   // ── Negócio ── (ADR-0023: lead não tem etapa nem valor; negócio tem)
   { value: "deal_value", label: "Valor do negocio" },
@@ -90,6 +90,8 @@ const TEXT_SAFE_OPERATORS = new Set<ConditionOperator>([
   "is_not_empty",
 ]);
 
+const TAG_OPERATORS: ConditionOperator[] = ["has_tag", "not_has_tag", "is_empty", "is_not_empty"];
+
 const NO_VALUE_OPERATORS: ConditionOperator[] = ["is_empty", "is_not_empty"];
 
 // `data.field` guarda o campo personalizado como `custom.<field_name>` — é o
@@ -113,6 +115,10 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
   const members = useResponsibleMembers();
   const isResponsibleField = RESPONSIBLE_FIELDS.has(data.field || "");
   const isUtmField = UTM_FIELDS.has(data.field || "");
+  const isTagField = data.field === "tag" || data.field === "tags";
+  const { data: tags = [], isLoading: tagsLoading, isError: tagsError } = useTags();
+  const tagNames = [...new Set(tags.map((tag) => tag.name))];
+  const missingTag = isTagField && !!data.value && !tagsLoading && !tagsError && !tagNames.includes(data.value);
   const isOriginField = data.field === "origin";
   const isStageField = data.field === "stage" || data.field === "stage_id";
   const { values: utmValues, isLoading: utmLoading } = useOrgUtmValues(data.field);
@@ -177,7 +183,10 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
     const nowOrigin = v === "origin";
     const nowStage = v === "stage_id";
     const nowCustom = v === "custom";
+    const nowTag = v === "tags";
     const updates: Partial<ConditionNodeData> = { field: v };
+    if (nowTag !== isTagField) updates.value = "";
+    if (nowTag && !TAG_OPERATORS.includes(data.operator)) updates.operator = "has_tag";
     // Switching responsible <-> non-responsible swaps value semantics (member id vs free text) → clear.
     if (nowResponsible !== isResponsibleField) updates.value = "";
     // Same for origin: free text <-> origin slug are incompatible → clear.
@@ -212,7 +221,10 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
 
   const operatorEntries: Array<[string, string]> = isResponsibleField
     ? RESPONSIBLE_OPERATORS.map((k) => [k, CONDITION_OPERATOR_LABELS[k]])
-    : (Object.entries(CONDITION_OPERATOR_LABELS) as Array<[string, string]>);
+    : isTagField
+      ? [...TAG_OPERATORS, ...(!TAG_OPERATORS.includes(data.operator) ? [data.operator] : [])]
+          .map((k) => [k, CONDITION_OPERATOR_LABELS[k]] as [string, string])
+      : (Object.entries(CONDITION_OPERATOR_LABELS) as Array<[string, string]>);
 
   const timeWindow = data.timeWindow || {
     days: ["seg", "ter", "qua", "qui", "sex"],
@@ -292,7 +304,7 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
           <div className="space-y-2">
             <Label>Campo</Label>
             <Select
-              value={data.field?.startsWith("custom.") ? "custom" : data.field || ""}
+              value={data.field?.startsWith("custom.") ? "custom" : isTagField ? "tags" : data.field || ""}
               onValueChange={handleFieldChange}
             >
               <SelectTrigger>
@@ -360,7 +372,33 @@ export function ConditionPanel({ data, onUpdate }: ConditionPanelProps) {
           {needsValue && (
             <div className="space-y-2">
               <Label>Valor</Label>
-              {isStageField ? (
+              {isTagField ? (
+                <>
+                  <Select
+                    value={data.value || ""}
+                    disabled={tagsLoading || tagsError}
+                    onValueChange={(value) => onUpdate({
+                      field: "tags",
+                      value,
+                      operator: ["not_has_tag", "not_contains", "not_equals"].includes(data.operator)
+                        ? "not_has_tag" : "has_tag",
+                    })}
+                  >
+                    <SelectTrigger aria-label="Tag da organização">
+                      <SelectValue placeholder={tagsLoading ? "Carregando tags…" : "Selecione uma tag"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {missingTag && <SelectItem value={data.value}>{data.value} (fora do catálogo)</SelectItem>}
+                      {tagNames.map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+                      {!tagsLoading && tagNames.length === 0 && (
+                        <p className="px-2 py-1.5 text-xs text-muted-foreground">Nenhuma tag cadastrada nesta organização.</p>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  {tagsError && <p role="alert" className="text-xs text-destructive">Não foi possível carregar as tags. Tente novamente.</p>}
+                  {missingTag && <p className="text-xs text-amber-600 dark:text-amber-500">Valor salvo fora do catálogo atual. Selecione uma tag para atualizar a condição.</p>}
+                </>
+              ) : isStageField ? (
                 <Select
                   value={selectedStageValue}
                   onValueChange={(v) => onUpdate({ field: "stage_id", value: v })}

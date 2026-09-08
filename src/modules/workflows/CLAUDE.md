@@ -163,3 +163,15 @@ Backend (próximas slices):
 - Runbook cron+webhooks: `Obsidian/.../06 — Features/Infra/Runbook — Cron e Webhooks.md`
 - Event-bus piloto: `Obsidian/.../10 — Remodelagem/02-solucao/event-bus.md`
 - Slice de referência: slice 7 copilot (commit cf8c2163)
+
+## Condição Tag — seleção do catálogo
+
+`ConditionPanel` usa `useTags` (escopo da organização) e grava `field: "tags"`,
+valor = nome da tag, operador `has_tag`/`not_has_tag`. Sem criação por texto livre.
+Valores legados fora do catálogo permanecem visíveis; editar a escolha normaliza
+o campo singular `tag`. Executor aceita ambos os nomes e compara associação por
+nome inteiro, sem dividir tags que contêm vírgula. Operadores textuais salvos
+preservam semântica anterior. Edição não renomeia nem cria tags.
+
+Publicação desta correção requer frontend + `process-workflow-executions`
+(helper compartilhado `workflow-condition-evaluator.ts`). Sem migration.

@@ -23,6 +23,7 @@ const customFields = [
 vi.mock("@/modules/leads", () => ({
   useLeadOrigins: () => ({ origins: [] as Array<{ slug: string; label: string }> }),
   useLeadCustomFields: () => ({ data: customFields }),
+  useTags: () => ({ data: [{ id: "t1", name: "Cliente VIP" }, { id: "t2", name: "Retorno" }], isLoading: false, isError: false }),
 }));
 
 vi.mock("@/modules/pipelines", () => ({
@@ -268,5 +269,32 @@ describe("ConditionPanel — campo personalizado", () => {
     expect(onUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ field: "custom", operator: "contains" }),
     );
+  });
+});
+
+
+describe("Tag condition", () => {
+  it("selects an existing tag instead of accepting free text", () => {
+    const update = vi.fn();
+    render(<ConditionPanel data={baseData({ field: "tag" })} onUpdate={update} />);
+    expect(screen.queryByPlaceholderText("Ex: 50")).not.toBeInTheDocument();
+    fireEvent.change(selectWithOption("Cliente VIP"), { target: { value: "Cliente VIP" } });
+    expect(update).toHaveBeenCalledWith({ field: "tags", value: "Cliente VIP", operator: "has_tag" });
+  });
+  it("clears a numeric value and selects a membership operator when switching to tags", () => {
+    const update = vi.fn();
+    render(<ConditionPanel data={baseData({ field: "score", operator: "greater_than", value: "50" })} onUpdate={update} />);
+    fireEvent.change(selectWithValue("score"), { target: { value: "tags" } });
+    expect(update).toHaveBeenCalledWith({ field: "tags", value: "", operator: "has_tag" });
+  });
+  it("preserves a saved missing tag until the user replaces it", () => {
+    const update = vi.fn();
+    render(<ConditionPanel data={baseData({ field: "tags", operator: "has_tag", value: "Antiga" })} onUpdate={update} />);
+    expect(screen.getByText("Antiga (fora do catálogo)")).toBeInTheDocument();
+    expect(update).not.toHaveBeenCalled();
+  });
+  it("does not request a tag for the empty check", () => {
+    render(<ConditionPanel data={baseData({ field: "tags", operator: "is_empty" })} onUpdate={vi.fn()} />);
+    expect(screen.queryByText("Cliente VIP")).not.toBeInTheDocument();
   });
 });
