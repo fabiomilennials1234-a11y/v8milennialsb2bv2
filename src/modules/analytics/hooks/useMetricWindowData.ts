@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { useOrganization } from "@/modules/identity";
+import { useStudioClock } from "./useStudioClock";
 import { useMetricMeasure, type MetricMeasureResult } from "./useMetricMeasure";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import {
@@ -111,8 +113,10 @@ export function useMetricWindowData(
   // caminho não é alcançável pela UI — mas se alguém chamar este hook direto
   // sem o intervalo, é melhor estourar aqui do que medir um período que o
   // usuário não pediu.
-  const atual = periodoAtual(period, undefined, range);
-  const anterior = periodoAnterior(period, undefined, range);
+  const { timezone } = useOrganization();
+  const now = useStudioClock();
+  const atual = periodoAtual(period, now, range, timezone ?? "UTC");
+  const anterior = periodoAnterior(period, now, range, timezone ?? "UTC");
 
   const principal = useMetricMeasure({
     measureRef: metric.measureRef,

@@ -136,3 +136,4 @@ owner: claude-agent
 - [[2026-09-03-chat-cabecalho-ligar-layout|Chat: cabeçalho — Ligar ▾ sem esmagar o contato]]
 - [[2026-09-04-frontend-sai-dos-espelhos|SCRUM-673 — frontend deixa os espelhos]]
 - [[2026-09-04-migration-escritoras-saem-dos-espelhos|SCRUM-674 — escritoras SQL deixam os espelhos]]
+- [[2026-09-08-estudio-comando-desfecho-em-revisao|Estúdio, Comando e desfecho independente — em revisão]] 🟡 draft

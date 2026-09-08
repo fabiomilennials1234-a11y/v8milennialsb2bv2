@@ -7,7 +7,7 @@ import type { StudioWindow } from "./metrics-studio-window";
 
 describe("templates compartilhados do Estúdio", () => {
   it("os quatro templates da UI são exatamente os semeados no banco", () => {
-    const sql = readFileSync("supabase/migrations/20271005000000_dashboards_viram_templates.sql", "utf8");
+    const sql = readFileSync("supabase/migrations/20271017000000_dashboards_viram_templates.sql", "utf8");
     const payload = sql.match(/\$templates\$([\s\S]*?)\$templates\$/)?.[1];
     expect(payload).toBeTruthy();
     expect(JSON.parse(payload!)).toEqual(templates);

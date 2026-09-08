@@ -1,5 +1,6 @@
 BEGIN;
 DO $$ BEGIN
+  IF has_function_privilege('service_role', 'public._metrics_studio_factory_templates()', 'EXECUTE') OR has_function_privilege('service_role', 'public.seed_metrics_studio_templates_on_org_create()', 'EXECUTE') THEN RAISE EXCEPTION 'função interna exposta ao service_role'; END IF;
   IF (SELECT count(*) FROM public.metrics_studio_panels WHERE organization_id = '11111111-1111-4111-8111-111111111111') <> 5 THEN RAISE EXCEPTION 'seed A incorreto'; END IF;
   IF (SELECT count(*) FROM public.metrics_studio_panels WHERE organization_id = '22222222-2222-4222-8222-222222222222') <> 4 THEN RAISE EXCEPTION 'seed B incorreto'; END IF;
   IF NOT EXISTS (SELECT 1 FROM public.metrics_studio_panels WHERE id = 'cccccccc-cccc-4ccc-8ccc-ccccccccccc1' AND nome = 'Painel autoral preservado' AND ordem = 8 AND layout->0->>'id' = 'original') THEN RAISE EXCEPTION 'painel autoral alterado'; END IF;

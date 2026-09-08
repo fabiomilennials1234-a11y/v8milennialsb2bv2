@@ -21,6 +21,11 @@ export function studioInterval(period: StudioPeriod, now: Date, timezone: string
     end = calendar(y, firstMonth + months, 0);
     prevStart = calendar(y, firstMonth - months, 1);
     prevEnd = move(start, -1);
+    if (period === "quarter") {
+      // O motor usa trimestre ATÉ HOJE, com igual número de dias no comparativo.
+      end = today;
+      prevEnd = move(prevStart, Math.round((today.getTime() - start.getTime()) / DAY));
+    }
   } else {
     if (period === "week") {
       start = move(today, -weekdayMon0);

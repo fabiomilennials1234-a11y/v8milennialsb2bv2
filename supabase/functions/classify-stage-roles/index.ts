@@ -11,12 +11,11 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
  *      is_final_positive/negative como sinal fraco (fallback). Nomes óbvios
  *      ("Fechado", "Recomprou", "Reunião marcada") resolvem aqui, sem IA.
  *   2. IA (opcional, resíduo) — LLM classifica os nomes não-óbvios num dos
- *      5 roles, temperature 0, mesma mecânica do classify-followup-stages.
+ *      papéis de reunião, temperature 0, mesma mecânica do classify-followup-stages.
  *
- * Aplicação (ADR-0017 §1 — won/lost = dinheiro = confirmação humana):
+ * Aplicação: resultado financeiro pertence ao negócio, nunca à etapa.
  *   · meeting_booked / meeting_held → AUTO-APLICA (update stage_role direto)
- *   · won / lost → grava `suggested_stage_role` (fila da tela master
- *     /master/stage-roles). NUNCA aplica.
+ *   · won / lost → ignorados inclusive no determinístico; não entram na fila.
  *
  * Backfill das ~30 orgs: body {"all_orgs": true} — uma passada. On-demand:
  * {"organization_id": "..."}. {"dry_run": true} devolve o plano sem escrever;
@@ -185,10 +184,13 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
   if (stageRes.error) return json({ error: stageRes.error.message }, 500);
 
   type CanonicalStageRow = Omit<StageRow, "source_table"> & {
-    pipeline: { type: string } | null;
+    pipeline: { type: string } | { type: string }[] | null;
   };
   const stageRows: StageRow[] = ((stageRes.data ?? []) as CanonicalStageRow[]).map((row) => {
-    const custom = row.pipeline?.type === "custom";
+    // PostgREST usa objeto para many-to-one; cliente sem schema pode inferir
+    // array. Normalizamos ambas as formas, sem cast que esconda o contrato.
+    const pipeline = Array.isArray(row.pipeline) ? row.pipeline[0] : row.pipeline;
+    const custom = pipeline?.type === "custom";
     const { pipeline: _pipeline, ...stage } = row;
     return {
       ...stage,

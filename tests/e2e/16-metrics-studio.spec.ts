@@ -14,7 +14,7 @@
  * acrescentar lead ao seed depois. Se as duas medidas voltarem a devolver o
  * mesmo número, este teste cai — que é exatamente o ponto.
  *
- * Fixture: `supabase/seed.sql` bloco 11 (org A com `metrics_studio_enabled`,
+ * Fixture: `supabase/seed.sql` bloco 11 (org A,
  * funil "Funil Métricas", L1 com dois negócios, L2 com um, 2 vendas no mês).
  * O CI roda `supabase start` + `psql -f supabase/seed.sql` antes do Playwright.
  *
@@ -42,7 +42,7 @@ async function valorDaJanela(page: Page, rotulo: string): Promise<number> {
   return Number(bruto[1].replace(/\./g, '').replace(',', '.'));
 }
 
-/** Entra em Edição e limpa o painel — janela salva de um teste anterior sujaria o próximo. */
+/** Aba exclusiva desta suíte; não apaga templates nem painéis anteriores da org. */
 async function painelLimpoEmEdicao(page: Page) {
   await page.goto('/metricas');
   await page.waitForLoadState('networkidle');
@@ -52,26 +52,37 @@ async function painelLimpoEmEdicao(page: Page) {
     await editar.click();
   }
 
-  const limpar = page.getByRole('button', { name: 'Limpar' });
+  const aba = page.getByRole('tab', { name: 'E2E Métricas', exact: true });
+  if (await aba.count()) {
+    await aba.click();
+  } else {
+    await page.getByRole('button', { name: 'Nova aba', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Aba em branco', exact: true }).click();
+    await page.getByRole('button', { name: 'Opções da aba Nova aba', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Renomear', exact: true }).click();
+    await page.getByLabel('Nome da aba').fill('E2E Métricas');
+    await page.getByRole('button', { name: 'Salvar nome', exact: true }).click();
+    await expect(aba).toBeVisible();
+  }
+  const limpar = page.getByRole('button', { name: 'Limpar aba', exact: true });
   if (await limpar.isEnabled().catch(() => false)) {
     await limpar.click();
+    await page.getByRole('alertdialog').getByRole('button', { name: 'Limpar aba', exact: true }).click();
   }
 }
 
 // Serial de propósito: os testes compartilham UM painel persistido por
-// (org, membro). Em paralelo, o `Limpar` de um apagaria a janela do outro.
+// (org, aba). Em paralelo, o `Limpar` de um apagaria a janela do outro.
 test.describe.configure({ mode: 'serial' });
 
 test.describe('Estúdio de Métricas', () => {
-  test('a rota abre para org liberada', async ({ page }) => {
+  test('a rota nativa abre para a organização', async ({ page }) => {
     await page.goto('/metricas');
     await page.waitForLoadState('networkidle');
 
-    await expect(page.getByRole('heading', { name: 'Métricas', level: 1 })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Estúdio de Métricas', level: 1 })).toBeVisible({ timeout: 15_000 });
 
-    // A trava de rollout falha para FECHADO. Se a org não estivesse liberada,
-    // a tela seria "Métricas ainda não liberado" — e o resto deste arquivo não
-    // faria sentido. Afirmar aqui dá um erro legível em vez de dez timeouts.
+    // O rollout foi encerrado: a rota não depende mais de flag por organização.
     await expect(page.getByText('Métricas ainda não liberado')).toHaveCount(0);
   });
 
@@ -136,6 +147,7 @@ test.describe('Estúdio de Métricas', () => {
     await page.waitForTimeout(2_000);
     await page.reload();
     await page.waitForLoadState('networkidle');
+    await page.getByRole('tab', { name: 'E2E Métricas', exact: true }).click();
 
     await expect(page.getByRole('group', { name: 'Negócios na etapa' })).toBeVisible({ timeout: 20_000 });
   });

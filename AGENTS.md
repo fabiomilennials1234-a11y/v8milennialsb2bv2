@@ -178,6 +178,22 @@ Push em branch nova sempre. Nunca direto em `main`/`develop`.
   validação em branch efêmera a partir de prod, ver `CLAUDE.md` § Ambientes
   (bloqueio ativo: depende do baseline das migrations)
 
+### Lei de custo — branches efêmeras do Supabase
+
+- A branch é recurso temporário de teste, nunca ambiente permanente.
+- O responsável que cria deve excluir **imediatamente após o teste**, passando
+  ou falhando, e confirmar pela API/listagem que o ref deixou de existir.
+- Preparar cleanup antes de criar (try/finally ou trap). No Windows, usar
+  `scripts/supabase-branch.sh ensaio <nome> <arquivos-sql...>`.
+- Cleanup não confirmado = tarefa **não concluída**. Informar ref e risco de
+  cobrança; retomar a exclusão antes de declarar entrega.
+- Antes de suspender, trocar de tarefa ou fazer handoff, excluir a própria
+  preview. Ao retomar execução interrompida, conferir recursos remanescentes.
+  try/finally não executa enquanto o computador está suspenso/desligado.
+- Nunca excluir produção nem branch de outro trabalho. Nunca criar uma segunda
+  sem autorização explícita do CTO; `--allow-concurrent` só registra essa exceção,
+  não concede autorização por si.
+
 ## Vault
 
 Project documentation lives in

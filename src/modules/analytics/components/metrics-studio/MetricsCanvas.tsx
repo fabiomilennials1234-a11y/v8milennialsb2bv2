@@ -29,8 +29,8 @@ interface MetricsCanvasProps {
    * e usaria o fuso do browser contra o `organizations.timezone` do servidor.
    * Dois cards lado a lado mostrariam períodos diferentes, sem erro nenhum.
    *
-   * Por isso vem PRONTO de cima, do mesmo `computePeriodRange` que o Comando já
-   * usa para alimentar exatamente estes componentes.
+   * Por isso vem PRONTO de cima, de `studioInterval`, alinhado ao calendário
+   * da org e aos presets do motor (trimestre até hoje).
    */
   intervalo: FixedCardContext["range"];
   monthlyRange: FixedCardContext["range"];
