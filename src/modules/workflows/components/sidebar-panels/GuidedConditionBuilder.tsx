@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 
 export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolean {
   return 'children' in condition ? !condition.children.length || condition.children.some(isIncompleteGuidedDraft)
+    : condition.field === 'lead.custom' && !condition.fieldId ? true
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
     : condition.field === 'lead.origin' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.originId
     : condition.field === 'lead.tags' ? !condition.tagId : condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && (condition.value === '' || (typeof condition.value === 'number' && !Number.isFinite(condition.value)));
@@ -75,8 +76,19 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
   const missingValue = isIncompleteGuidedDraft(condition);
   return <div className="space-y-4">
     <div className="space-y-2"><Label htmlFor={`guided-field-${condition.id}`}>Informação</Label>
-      <GuidedFieldPicker id={`guided-field-${condition.id}`} value={condition.field} onChange={field => {
-        setFieldReset(condition.field !== field && !((isGuidedTextField(condition.field) && isGuidedTextField(field)) || (isGuidedResponsibleField(condition.field) && isGuidedResponsibleField(field))));
+      <GuidedFieldPicker id={`guided-field-${condition.id}`} value={condition.field} actorId={actorId} organizationId={organizationId}
+        custom={condition.field === 'lead.custom' ? condition : undefined}
+        onCustomSelect={(fieldId, fieldLabel) => {
+          const compatible = isGuidedTextField(condition.field) || condition.field === 'lead.custom';
+          setFieldReset(!compatible);
+          const comparison = compatible && (condition.operator === 'is_empty' || condition.operator === 'is_not_empty')
+            ? { operator: condition.operator }
+            : compatible && isGuidedTextOperator(condition.operator) && 'value' in condition && typeof condition.value === 'string'
+              ? { operator: condition.operator, value: condition.value }
+              : { operator: 'equals' as const, value: '' };
+          onChange({ version: 1, id: condition.id, field: 'lead.custom', fieldId, fieldType: 'text', fieldLabel, ...comparison });
+        }} onChange={field => {
+        setFieldReset(condition.field !== field && !(((isGuidedTextField(condition.field) || condition.field === 'lead.custom') && isGuidedTextField(field)) || (isGuidedResponsibleField(condition.field) && isGuidedResponsibleField(field))));
         if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
           ? { ...condition, field } : { version: 1, id: condition.id, field, operator: 'equals', memberId: '' });
         else if (field === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
@@ -84,7 +96,7 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         else if (isGuidedNumberField(field)) onChange({ version: 1, id: condition.id, field, operator: 'equals', value: '' });
         else if (isGuidedTextField(field)) onChange(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score'
           ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
-          : { ...condition, field });
+          : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
     {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
     {(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? <>
@@ -129,14 +141,16 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
     </> : <>
     <div className="space-y-2"><Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
-        const base = { version: 1 as const, id: condition.id, field: condition.field };
+        const base = condition.field === 'lead.custom'
+          ? { version: 1 as const, id: condition.id, field: condition.field, fieldId: condition.fieldId, fieldType: condition.fieldType, fieldLabel: condition.fieldLabel }
+          : { version: 1 as const, id: condition.id, field: condition.field };
         const operator = event.target.value;
         if (operator === 'is_empty' || operator === 'is_not_empty') onChange({ ...base, operator });
         else if (isGuidedTextOperator(operator)) onChange({ ...base, operator, value: 'value' in condition ? condition.value : '' });
       }}>{Object.entries(GUIDED_TEXT_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazio</option><option value="is_not_empty">está preenchido</option></select></div>
     {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
-      {['lead.segment', 'lead.urgency', 'lead.faturamento'].includes(condition.field) ? <GuidedLeadValuePicker key={condition.field} id={`guided-value-${condition.id}`} actorId={actorId} organizationId={organizationId}
-        field={GUIDED_SCALAR_FIELDS[condition.field].column} value={condition.value} onChange={value => onChange({ ...condition, value })} /> : isUtmValueField(GUIDED_SCALAR_FIELDS[condition.field].column) ? <GuidedUtmPicker key={condition.field} id={`guided-value-${condition.id}`} actorId={actorId} organizationId={organizationId}
+      {condition.field !== 'lead.custom' && ['lead.segment', 'lead.urgency', 'lead.faturamento'].includes(condition.field) ? <GuidedLeadValuePicker key={condition.field} id={`guided-value-${condition.id}`} actorId={actorId} organizationId={organizationId}
+        field={GUIDED_SCALAR_FIELDS[condition.field].column} value={condition.value} onChange={value => onChange({ ...condition, value })} /> : condition.field !== 'lead.custom' && isUtmValueField(GUIDED_SCALAR_FIELDS[condition.field].column) ? <GuidedUtmPicker key={condition.field} id={`guided-value-${condition.id}`} actorId={actorId} organizationId={organizationId}
         field={GUIDED_SCALAR_FIELDS[condition.field].column} value={condition.value} onChange={value => onChange({ ...condition, value })} /> : <Input id={`guided-value-${condition.id}`} value={condition.value} aria-invalid={missingValue}
         aria-describedby={missingValue ? `guided-value-error-${condition.id}` : undefined}
         onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: José" />}

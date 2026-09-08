@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useCustomFieldCatalogue } from '@/modules/leads';
+import { useDebounce } from '@/shared/hooks/useDebounce';
+import { useEffect, useState } from 'react';
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { GUIDED_RESPONSIBLE_FIELDS, GUIDED_SCALAR_FIELDS } from '@/contracts/workflows/guided-fields';
 import type { GuidedRuleDraft } from '@/types/workflow';
@@ -7,7 +9,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const fields = { ...GUIDED_SCALAR_FIELDS, ...GUIDED_RESPONSIBLE_FIELDS, 'lead.tags': { label: 'Tags' }, 'lead.origin': { label: 'Origem' } };
-type Field = GuidedRuleDraft['field'];
+type Field = Exclude<GuidedRuleDraft['field'], 'lead.custom'>;
 // This catalogue contains only capabilities supported by the guided evaluator.
 // The ordered record also makes new field types require an explicit discovery entry.
 const vocabulary = {
@@ -32,15 +34,31 @@ const vocabulary = {
 const entries = Object.entries(vocabulary) as [Field, string[]][];
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
-export function GuidedFieldPicker({ id, value, onChange }: {
-  id: string; value: Field; onChange: (field: Field) => void;
+export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId, custom, onCustomSelect }: {
+  id: string; value: GuidedRuleDraft['field']; onChange: (field: Field) => void;
+  actorId: string; organizationId: string;
+  custom?: Extract<GuidedRuleDraft, { field: 'lead.custom' }>;
+  onCustomSelect: (fieldId: string, fieldLabel: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  return <Popover open={open} onOpenChange={setOpen}>
+  const [search, setSearch] = useState('');
+  const term = useDebounce(search.trim(), 250);
+  const { options, selected } = useCustomFieldCatalogue(actorId, organizationId, term, open, custom?.fieldId);
+  const searching = term !== search.trim() || options.isPending;
+  const unavailable = custom && selected.isSuccess && (!selected.data || selected.data.field_type !== 'text');
+  const name = value !== 'lead.custom' ? fields[value].label : selected.isError ? 'Campo não verificado'
+    : selected.isPending ? 'Consultando campo…'
+    : unavailable ? 'Campo indisponível' : selected.data?.field_name || 'Campo personalizado';
+  useEffect(() => {
+    if (custom && selected.data?.field_type === 'text' && selected.data.field_name !== custom.fieldLabel) {
+      onCustomSelect(custom.fieldId, selected.data.field_name);
+    }
+  }, [custom, selected.data, onCustomSelect]);
+  return <div className="space-y-2"><Popover open={open} onOpenChange={next => { setOpen(next); if (!next) setSearch(''); }}>
     <PopoverTrigger asChild>
       <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open}
         aria-haspopup="listbox" aria-controls={open ? `${id}-list` : undefined} className="w-full justify-between font-normal">
-        <span className="truncate">Lead · {fields[value].label}</span>
+        <span className="truncate">Lead · {name}</span>
         <ChevronsUpDown aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
     </PopoverTrigger>
@@ -49,21 +67,39 @@ export function GuidedFieldPicker({ id, value, onChange }: {
         const haystack = normalize(keywords.join(' '));
         return normalize(search).split(/\s+/).every(term => haystack.includes(term)) ? 1 : 0;
       }}>
-        <CommandInput aria-label="Buscar informação" placeholder="Buscar informação…" />
+        <CommandInput value={search} onValueChange={setSearch} aria-label="Buscar informação" placeholder="Buscar informação…" />
         <CommandList id={`${id}-list`} aria-label="Informações disponíveis">
-          <CommandEmpty>Nenhuma informação encontrada. Tente outro termo.</CommandEmpty>
+          {!searching && !options.isError && !(custom && (selected.isPending || selected.isError || unavailable)) && <CommandEmpty>Nenhuma informação encontrada. Tente outro termo.</CommandEmpty>}
+          {searching && <p className="px-3 py-2 text-xs text-muted-foreground">Buscando campos personalizados…</p>}
+          {options.isError && <div className="p-3"><p role="alert" className="text-sm text-destructive">Não foi possível carregar campos personalizados.</p>
+            <Button type="button" variant="ghost" onClick={() => void options.refetch()}>Tentar carregar campos novamente</Button></div>}
           <CommandGroup heading="Lead">
             {entries.map(([field, aliases]) => <CommandItem key={field} value={field}
               keywords={['Lead', fields[field].label, ...aliases]} onSelect={() => {
                 if (field !== value) onChange(field);
-                setOpen(false);
+                setOpen(false); setSearch('');
               }}>
               <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${field === value ? 'opacity-100' : 'opacity-0'}`} />
               <span>{fields[field].label}</span>
             </CommandItem>)}
           </CommandGroup>
+          {!searching && !options.isError && <CommandGroup heading="Lead · Campos personalizados">
+            {options.data?.filter(field => field.field_type === 'text' && !(unavailable && field.id === custom?.fieldId)).map(field =>
+              <CommandItem key={field.id} value={`custom:${field.id}`} keywords={[field.field_name]} onSelect={() => {
+                onCustomSelect(field.id, field.field_name); setOpen(false); setSearch('');
+              }}>
+                <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${custom?.fieldId === field.id ? 'opacity-100' : 'opacity-0'}`} />
+                <span>{field.field_name}</span>
+              </CommandItem>)}
+          </CommandGroup>}
         </CommandList>
+        <p className="border-t px-3 py-2 text-xs text-muted-foreground">Até 25 resultados de campos personalizados. Refine a busca pelo nome.</p>
       </Command>
     </PopoverContent>
-  </Popover>;
+  </Popover>
+    {custom && selected.isError && <><p role="alert" className="text-sm text-destructive">Não foi possível verificar o campo selecionado.</p>
+      <Button type="button" variant="outline" onClick={() => void selected.refetch()}>Tentar verificar campo novamente</Button></>}
+    {custom && selected.isSuccess && !selected.data && <p role="alert" className="text-sm text-destructive">Campo removido ou sem acesso. Selecione outro campo.</p>}
+    {custom && selected.data && selected.data.field_type !== 'text' && <p role="alert" className="text-sm text-destructive">O tipo deste campo mudou. Selecione outra informação.</p>}
+  </div>;
 }

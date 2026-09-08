@@ -92,6 +92,14 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
         condition: { version: 1, id: 'custom-rule', field: 'lead.custom', fieldId, fieldType: 'text', operator: 'equals', value: 'DISTRIBUICAO ELETRICA' } });
       expect(result).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'custom-rule', status: 'evaluated', matched: true,
         actual: 'Distribuição elétrica', reference: { id: fieldId, name: 'Especialidade' } }] });
+      const catalogue = await caller.from('lead_custom_fields').select('id, field_name, field_type')
+        .eq('organization_id', orgA).eq('field_type', 'text').ilike('field_name', '%Especialidade%').order('field_name').order('id').limit(25);
+      expect(catalogue.error).toBeNull();
+      expect(catalogue.data).toContainEqual({ id: fieldId, field_name: 'Especialidade', field_type: 'text' });
+      const foreignCatalogue = await caller.from('lead_custom_fields').select('id, field_name, field_type')
+        .eq('organization_id', orgB).eq('field_type', 'text').limit(25);
+      expect(foreignCatalogue.error).toBeNull();
+      expect(foreignCatalogue.data).toEqual([]);
       const condition = { version: 1, id: 'custom-rule', field: 'lead.custom', fieldId, fieldType: 'text', operator: 'contains', value: 'eletrica' };
       const request = { organizationId: orgA, leadId: leadA, condition };
       await service.from('lead_custom_fields').update({ field_name: 'Especialidade atual' }).eq('id', fieldId).throwOnError();

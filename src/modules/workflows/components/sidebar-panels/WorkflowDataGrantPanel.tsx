@@ -1,4 +1,4 @@
-import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, GUIDED_SCALAR_FIELDS } from '@/contracts/workflows/guided-fields';
+import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, isGuidedScalarField, GUIDED_SCALAR_FIELDS } from '@/contracts/workflows/guided-fields';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -11,7 +11,7 @@ interface WorkflowDataGrant { fields: string[]; revision: number }
 const database: SupabaseClient = supabase;
 
 export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, canManage, requiredFields = ['lead.name'] }: {
-  actorId: string; workflowId: string; organizationId: string; canManage: boolean; requiredFields?: Array<keyof typeof GUIDED_SCALAR_FIELDS | keyof typeof GUIDED_RESPONSIBLE_FIELDS | 'lead.tags' | 'lead.origin'>;
+  actorId: string; workflowId: string; organizationId: string; canManage: boolean; requiredFields?: string[];
 }) {
   const client = useQueryClient();
   const [pending, setPending] = useState(false);
@@ -27,17 +27,19 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
       return response.data;
     },
   });
+  const customPending = requiredFields.some(field => field.startsWith('lead.custom:'));
   const authorized = requiredFields.length > 0 && requiredFields.every(field => grant.data?.fields.includes(field));
-  const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : field === 'lead.origin' ? 'Origem' : isGuidedResponsibleField(field) ? GUIDED_RESPONSIBLE_FIELDS[field].label : GUIDED_SCALAR_FIELDS[field].label).join(' e ');
+  const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : field === 'lead.origin' ? 'Origem' : isGuidedResponsibleField(field) ? GUIDED_RESPONSIBLE_FIELDS[field].label : isGuidedScalarField(field) ? GUIDED_SCALAR_FIELDS[field].label : 'Campo personalizado').join(' e ');
   const authorizeLabel = requiredFields.length === 1 && requiredFields[0] === 'lead.name' ? 'Autorizar acesso ao nome dos leads'
     : requiredFields.length === 1 && requiredFields[0] === 'lead.company' ? 'Autorizar acesso à empresa dos leads' : 'Autorizar acesso aos campos selecionados';
   async function update() {
+    if (customPending) return;
     setPending(true);
     setError('');
     try {
       const response = await database.rpc('set_workflow_data_grant', {
         p_workflow_id: workflowId, p_fields: authorized
-          ? (grant.data?.fields ?? []).filter(field => !requiredFields.includes(field as keyof typeof GUIDED_SCALAR_FIELDS))
+          ? (grant.data?.fields ?? []).filter(field => !requiredFields.includes(field))
           : [...new Set([...(grant.data?.fields ?? []), ...requiredFields])],
         p_expected_revision: grant.data?.revision ?? 0,
       });
@@ -55,7 +57,7 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
     <h4 className="font-medium">Acesso da automação</h4>
     <p className="text-sm">{scopeLabel} de todos os leads desta organização</p>
     <p className="text-xs text-muted-foreground">Permite consultar esse dado durante a execução automática, mesmo se o criador sair da equipe. Seu teste continua usando suas permissões pessoais.</p>
-    {!canManage ? <p className="text-sm text-muted-foreground">Um administrador precisa autorizar este acesso.</p> : <>
+    {customPending ? <p className="text-sm text-muted-foreground">Este campo pode ser testado, mas ainda não pode ser publicado.</p> : !canManage ? <p className="text-sm text-muted-foreground">Um administrador precisa autorizar este acesso.</p> : <>
       {grant.isPending && <p className="text-sm text-muted-foreground">Consultando autorização…</p>}
       {grant.isError && <p role="alert" className="text-sm text-destructive">Não foi possível consultar a autorização.</p>}
       {grant.isSuccess && <>

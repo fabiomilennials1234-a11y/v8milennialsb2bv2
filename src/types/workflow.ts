@@ -660,7 +660,8 @@ export type GuidedOriginRuleDraft = { version: 1; id: string; field: 'lead.origi
 export type GuidedResponsibleRuleDraft = { [Field in GuidedResponsibleField]: { version: 1; id: string; field: Field }
   & ({ operator: 'equals' | 'not_equals'; memberId: string; memberLabel?: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' })
 }[GuidedResponsibleField];
-export type GuidedRuleDraft = GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+export type GuidedCustomTextRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'text'; fieldLabel?: string } & GuidedTextComparison;
+export type GuidedRuleDraft = GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

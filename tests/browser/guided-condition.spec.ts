@@ -1,6 +1,10 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { GuidedConditionDraft } from '../../src/types/workflow';
 
+test.beforeEach(async ({ page }) => {
+  await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: [] }));
+});
+
 for (const [field, otherField, label] of [
   ['lead.pre_sale_responsible_id', 'lead.sale_responsible_id', 'Responsável de pré-vendas'],
   ['lead.sale_responsible_id', 'lead.pre_sale_responsible_id', 'Responsável de vendas'],
@@ -1253,4 +1257,119 @@ test('busca informação sem acento e cancela sem perder comparação', async ({
   await page.getByRole('option', { name: 'Nome', exact: true }).click();
   await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveValue('José');
   await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toHaveCount(0);
+});
+
+test('seleciona campo personalizado pelo nome e testa preservando UUID', async ({ page }) => {
+  const fieldId = 'abcd0000-0000-4000-8000-000000000022';
+  await openGuidedEditor(page, 'elétrica');
+  await page.route('**/rest/v1/lead_custom_fields?*', route => {
+    const params = new URL(route.request().url()).searchParams;
+    expect(params.get('organization_id')).toBe('eq.org-1');
+    const field = { id: fieldId, field_name: 'Especialidade', field_type: 'text' };
+    if (params.has('id')) return route.fulfill({ json: field });
+    expect(params.get('limit')).toBe('25');
+    expect(params.get('field_type')).toBe('eq.text');
+    return route.fulfill({ json: [field] });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Especialidade');
+  await page.getByRole('option', { name: 'Especialidade', exact: true }).click({ timeout: 3000 });
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveValue('elétrica');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('contains');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Especialidade contém “elétrica”');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.custom', fieldId, fieldType: 'text', operator: 'contains', value: 'elétrica' });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true,
+      actual: 'Distribuição elétrica', reference: { id: fieldId, name: 'Especialidade atual' } }] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Especialidade atual');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_not_empty');
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Especialidade está preenchido');
+});
+
+test('falha na referência personalizada não vira catálogo vazio e recupera pelo mesmo UUID', async ({ page }) => {
+  const fieldId = 'abcd0000-0000-4000-8000-000000000023';
+  let recovered = false;
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType: 'text', fieldLabel: 'Especialidade antiga', operator: 'equals', value: 'Indústria' });
+  await page.route('**/rest/v1/lead_custom_fields?*', route => {
+    if (!new URL(route.request().url()).searchParams.has('id')) return route.fulfill({ json: [] });
+    return recovered ? route.fulfill({ json: { id: fieldId, field_name: 'Especialidade atual', field_type: 'text' } })
+      : route.fulfill({ status: 503, json: { message: 'unavailable' } });
+  });
+  await page.reload();
+  await page.getByText('Nome informado', { exact: true }).click();
+  await expect(page.getByText('Não foi possível verificar o campo selecionado.')).toBeVisible();
+  const information = page.getByRole('combobox', { name: 'Informação', exact: true });
+  await expect(information).toContainText('Campo não verificado');
+  await information.click();
+  const search = page.getByRole('combobox', { name: 'Buscar informação', exact: true });
+  await search.fill('Especialidade');
+  await expect(page.getByText('Buscando campos personalizados…')).toHaveCount(0);
+  await expect(page.getByText('Nenhuma informação encontrada. Tente outro termo.')).toHaveCount(0);
+  await search.press('Escape');
+  recovered = true;
+  await page.getByRole('button', { name: 'Tentar verificar campo novamente' }).click();
+  await expect(information).toContainText('Especialidade atual');
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveValue('Indústria');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Especialidade atual é igual a “Indústria”');
+});
+
+for (const state of ['removed', 'type_changed'] as const) test(`cadastro personalizado ${state} exige escolha explícita de outro UUID`, async ({ page }) => {
+  const oldId = 'abcd0000-0000-4000-8000-000000000024';
+  const newId = 'abcd0000-0000-4000-8000-000000000025';
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId: oldId, fieldType: 'text', fieldLabel: 'Especialidade', operator: 'equals', value: 'Indústria' });
+  await page.route('**/rest/v1/lead_custom_fields?*', route => {
+    const requested = new URL(route.request().url()).searchParams.get('id');
+    if (requested === `eq.${oldId}`) return route.fulfill({ json: state === 'removed' ? null : { id: oldId, field_name: 'Especialidade', field_type: 'number' } });
+    if (requested) return route.fulfill({ json: { id: newId, field_name: 'Especialidade', field_type: 'text' } });
+    return route.fulfill({ json: [{ id: oldId, field_name: 'Especialidade', field_type: 'text' }, { id: newId, field_name: 'Especialidade', field_type: 'text' }] });
+  });
+  await page.reload();
+  await page.getByText('Nome informado', { exact: true }).click();
+  const message = state === 'removed' ? 'Campo removido ou sem acesso. Selecione outro campo.' : 'O tipo deste campo mudou. Selecione outra informação.';
+  await expect(page.getByText(message)).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Informação', exact: true })).toContainText('Campo indisponível');
+  await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Especialidade');
+  await expect(page.getByRole('option', { name: 'Especialidade', exact: true })).toHaveCount(1);
+  await page.getByRole('option', { name: 'Especialidade', exact: true }).click();
+  await expect(page.getByText(message)).toHaveCount(0);
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveValue('Indústria');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.custom', fieldId: newId, fieldType: 'text', value: 'Indústria' });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toBeVisible();
+});
+
+test('troca de usuário não mostra nome personalizado da conta anterior durante nova consulta', async ({ page }) => {
+  const fieldId = 'abcd0000-0000-4000-8000-000000000026';
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id') ? { id: fieldId, field_name: 'Preferência da conta anterior', field_type: 'text' }
+      : [{ id: fieldId, field_name: 'Preferência da conta anterior', field_type: 'text' }],
+  }));
+  await page.goto('/tests/browser/fixtures/guided-condition.html?identity-switch=1');
+  const information = page.getByRole('combobox', { name: 'Informação', exact: true });
+  await information.click();
+  await page.getByRole('option', { name: 'Preferência da conta anterior', exact: true }).click();
+  await expect(information).toContainText('Preferência da conta anterior');
+  let release: (() => void) | undefined;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/rest/v1/lead_custom_fields?*', async route => {
+    await gate;
+    await route.fulfill({ status: 403, json: { code: '42501', message: 'denied' } });
+  });
+  try {
+    await page.getByRole('button', { name: 'Trocar usuário' }).click();
+    await expect(information).toContainText('Consultando campo…', { timeout: 3000 });
+    await expect(information).not.toContainText('Preferência da conta anterior');
+  } finally { release?.(); }
+  await expect(page.getByText('Não foi possível verificar o campo selecionado.')).toBeVisible();
 });

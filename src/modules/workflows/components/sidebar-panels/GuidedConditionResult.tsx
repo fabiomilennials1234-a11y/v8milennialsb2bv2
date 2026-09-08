@@ -18,7 +18,10 @@ export function GuidedConditionResult({ condition, rules, groups }: {
         <ul className="space-y-2">{current.children.map((child, index) => <li key={child.id}>{render(child, path ? `${path}.${index + 1}` : String(index + 1))}</li>)}</ul>
       </div>;
     }
-    const explained = current.field === 'lead.tags' && entry?.status === 'evaluated'
+    const explained = current.field === 'lead.custom' && entry?.status === 'evaluated'
+      && typeof entry.reference?.id === 'string' && typeof entry.reference.name === 'string'
+      && entry.reference.id.toLowerCase() === current.fieldId.toLowerCase()
+      ? { ...current, fieldLabel: entry.reference.name } : current.field === 'lead.tags' && entry?.status === 'evaluated'
       && typeof entry.reference?.id === 'string' && typeof entry.reference.name === 'string'
       && entry.reference.id.toLowerCase() === current.tagId.toLowerCase()
       ? { ...current, tagLabel: entry.reference.name } : current.field === 'lead.origin' && current.operator !== 'is_empty' && current.operator !== 'is_not_empty'
