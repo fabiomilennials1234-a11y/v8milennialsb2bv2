@@ -43,8 +43,8 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     });
     if (member.error) throw member.error;
     const leads = await service.from('leads').insert([
-      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', utm_campaign: '[VERÃO] B2B.', utm_source: 'Google', utm_medium: 'Pesquisa', utm_content: 'Vídeo A', utm_term: 'Fábrica', email: 'comercial@aurora.example', phone: '5511999990000', pre_sale_responsible_id: adminMemberId },
-      { id: leadB, organization_id: orgB, name: 'Dado protegido', utm_campaign: 'Campanha restrita', utm_source: 'Fonte restrita', utm_medium: 'Meio restrito', utm_content: 'Conteúdo restrito', utm_term: 'Termo restrito' },
+      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', segment: 'Distribuição', urgency: 'Alta prioridade', faturamento: 'r$100_mil_a_r$150_mil', utm_campaign: '[VERÃO] B2B.', utm_source: 'Google', utm_medium: 'Pesquisa', utm_content: 'Vídeo A', utm_term: 'Fábrica', email: 'comercial@aurora.example', phone: '5511999990000', pre_sale_responsible_id: adminMemberId },
+      { id: leadB, organization_id: orgB, name: 'Dado protegido', segment: 'Segmento restrito', urgency: 'Urgência restrita', faturamento: '500', utm_campaign: 'Campanha restrita', utm_source: 'Fonte restrita', utm_medium: 'Meio restrito', utm_content: 'Conteúdo restrito', utm_term: 'Termo restrito' },
     ]);
     if (leads.error) throw leads.error;
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, { auth: { ...auth, storageKey: `guided-admin-${orgA}` } });
@@ -708,6 +708,9 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
   }, 60000);
 
   it.each([
+    { field: 'lead.segment', value: 'DISTRIBUICAO', actual: 'Distribuição' },
+    { field: 'lead.urgency', value: 'PRIORIDADE', actual: 'Alta prioridade' },
+    { field: 'lead.faturamento', value: '100_mil', actual: 'r$100_mil_a_r$150_mil' },
     { field: 'lead.utm_source', value: 'GOOGLE', actual: 'Google' },
     { field: 'lead.utm_medium', value: 'PESQUISA', actual: 'Pesquisa' },
     { field: 'lead.utm_content', value: 'VIDEO A', actual: 'Vídeo A' },
@@ -717,7 +720,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     { field: 'lead.email', value: '@aurora.example', actual: 'comercial@aurora.example' },
     { field: 'lead.phone', value: '5511', actual: '5511999990000' },
   ])('tests $field through personal HTTP permissions', async ({ field, value, actual }) => {
-    if (field.startsWith('lead.utm_')) {
+    if (field.startsWith('lead.utm_') || ['lead.segment', 'lead.urgency', 'lead.faturamento'].includes(field)) {
       const column = field.slice('lead.'.length);
       const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
         auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
@@ -743,6 +746,9 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
   }, 60000);
 
   it.each([
+    { field: 'lead.segment', column: 'segment', actual: 'Distribuição', comparison: 'DISTRIBUICAO', fragment: 'DISTRIBUI' },
+    { field: 'lead.urgency', column: 'urgency', actual: 'Alta prioridade', comparison: 'ALTA PRIORIDADE', fragment: 'PRIORIDADE' },
+    { field: 'lead.faturamento', column: 'faturamento', actual: 'r$100_mil_a_r$150_mil', comparison: 'R$100_MIL_A_R$150_MIL', fragment: '100_mil' },
     { field: 'lead.qualification_score', column: 'qualification_score', actual: 0, comparison: 0, fragment: 0 },
     { field: 'lead.utm_source', column: 'utm_source', actual: 'Google', comparison: 'GOOGLE', fragment: 'GOOGLE' },
     { field: 'lead.utm_medium', column: 'utm_medium', actual: 'Pesquisa', comparison: 'PESQUISA', fragment: 'PESQUISA' },

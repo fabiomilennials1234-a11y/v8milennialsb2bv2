@@ -1161,3 +1161,39 @@ for (const [field, label, actual] of [['lead.name', 'Nome', 'José'], ['lead.qua
     await expect(page.getByRole('combobox', { name: 'Comparação', exact: true }).nth(1)).toBeFocused();
   });
 }
+
+
+for (const [field, label, value, manual] of [
+  ['segment', 'Segmento', 'Distribuição', 'Indústria'],
+  ['urgency', 'Urgência', 'Alta prioridade', 'Próximo trimestre'],
+  ['faturamento', 'Faturamento informado', 'r$100_mil_a_r$150_mil', 'Mais de R$ 1 milhão'],
+]) test(`seleciona ${label} com sugestões e preserva texto informado`, async ({ page }) => {
+  await openGuidedEditor(page, '');
+  await page.route('**/rest/v1/leads?*', route => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get('select') !== field) return route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] });
+    expect(params.get('organization_id')).toBe('eq.org-1');
+    expect(params.get('deleted_at')).toBe('is.null');
+    expect(params.get('limit')).toBe('25');
+    return route.fulfill({ json: [{ [field]: value }] });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption(`lead.${field}`, { timeout: 3000 });
+  const picker = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
+  await picker.click();
+  await page.getByRole('option', { name: value, exact: true }).click();
+  await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} é igual a “${value}”`);
+  await picker.click();
+  await page.getByPlaceholder('Buscar ou digitar valor…').fill(manual);
+  await page.getByRole('option', { name: `Usar "${manual}"`, exact: true }).click();
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toEqual({ version: 1, id: 'rule-1', field: `lead.${field}`, operator: 'equals', value: manual });
+    return route.fulfill({ json: { status: 'evaluated', matched: false, rules: [{ id: 'rule-1', status: 'evaluated', matched: false, actual: value }] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText(value);
+  await expect(page.getByRole('option', { name: 'é maior que', exact: true })).toHaveCount(0);
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_not_empty');
+  await expect(page.getByRole('combobox', { name: 'Valor da comparação', exact: true })).toHaveCount(0);
+});

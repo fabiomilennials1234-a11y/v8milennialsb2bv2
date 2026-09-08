@@ -1,6 +1,9 @@
 /** Explicit scalar fields supported by the guided evaluator. Catalogue entries
  * are capabilities, not a list of every column in the lead table. */
 export const GUIDED_TEXT_FIELDS = {
+  'lead.segment': { column: 'segment', label: 'Segmento', actualLabel: 'Segmento do lead' },
+  'lead.urgency': { column: 'urgency', label: 'Urgência', actualLabel: 'Urgência do lead' },
+  'lead.faturamento': { column: 'faturamento', label: 'Faturamento informado', actualLabel: 'Faturamento informado do lead' },
   'lead.name': { column: 'name', label: 'Nome', actualLabel: 'Nome do lead' },
   'lead.email': { column: 'email', label: 'Email', actualLabel: 'Email do lead' },
   'lead.phone': { column: 'phone', label: 'Telefone', actualLabel: 'Telefone do lead' },

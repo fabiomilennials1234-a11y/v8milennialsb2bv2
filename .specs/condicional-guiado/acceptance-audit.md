@@ -15,11 +15,11 @@ This is a requirements audit, not a completion certificate. All 21 tickets remai
 
 ## Additional standard-field inventory
 
-The existing legacy ConditionPanel lists segment, urgency and faturamento alongside name/company/contact/UTM fields. They are not yet present in the guided field registry. Confirm the actual domain value representation before choosing operators or options; faturamento is stored as text and must not be silently treated as a numeric monetary amount. Retired rating and legacy score aliases must not be exposed as current canonical facts.
+The existing legacy ConditionPanel lists segment, urgency and faturamento alongside name/company/contact/UTM fields. They are now present in the guided field registry with text comparisons and creatable suggestions. The current representation was checked before choosing operators; faturamento is stored as text and must not be silently treated as a numeric monetary amount. Retired rating and legacy score aliases must not be exposed as current canonical facts.
 
 ## Next implementation priority
 
-Complete the standard-field catalogue inventory (segment, urgency and faturamento), then continue the dependent custom-field/business paths. Preserve every remaining criterion for final certification; green tests for the currently exposed subset are not proof of all 21 tickets.
+Complete searchable information discovery/grouping and vocabulary aliases, then continue the dependent custom-field/business paths. Preserve every remaining criterion for final certification; green tests for the currently exposed subset are not proof of all 21 tickets.
 
 
 ## Value representation confirmed in the current source
