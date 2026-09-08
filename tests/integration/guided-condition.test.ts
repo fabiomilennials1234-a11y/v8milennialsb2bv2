@@ -61,7 +61,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       try {
         const cleared = await service.from('organizations').update({ default_pipeline_id: null }).in('id', [orgA, orgB]);
         if (cleared.error) throw cleared.error;
-        for (const table of ['workflows', 'leads', 'pipeline_stages', 'followup_reclassify_queue', 'pipelines']) {
+        for (const table of ['workflows', 'follow_ups', 'leads', 'pipeline_stages', 'followup_reclassify_queue', 'pipelines']) {
           const removed = await service.from(table).delete().in('organization_id', [orgA, orgB]);
           if (removed.error) throw removed.error;
         }
@@ -145,6 +145,62 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const afterAudio = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
     expect(afterAudio.error).toBeNull();
     expect(afterAudio.data?.version_id).toBe(publication.version_id);
+  }, 60000);
+
+  it('resumes old rules with current data after publication without repeating its completed action', async () => {
+    const workflowId = crypto.randomUUID();
+    const executionId = crypto.randomUUID();
+    const title = `Once ${workflowId}`;
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const definition = { nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+      { id: 'action', type: 'action', data: { actionType: 'create_followup', followupTitle: title } },
+      { id: 'wait', type: 'delay', data: { amount: 2, unit: 'hours' } },
+      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
+      { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+    ], edges: [{ id: 'ta', source: 't', target: 'action' }, { id: 'aw', source: 'action', target: 'wait' },
+      { id: 'wc', source: 'wait', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+      { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+    const settings = { name: title };
+    expect((await caller.rpc('create_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: settings,
+    })).error).toBeNull();
+    expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0 })).error).toBeNull();
+    const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+      p_expected_revision: 1, p_definition: definition, p_settings: settings, p_required_fields: ['lead.name'] };
+    const first = await service.rpc('finalize_guided_workflow_publication', args);
+    expect(first.error).toBeNull();
+    expect((await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId,
+      organization_id: orgA, lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' })).error).toBeNull();
+    const executionParams = { supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+      guidedVersionId: first.data.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {} };
+    expect(await executeWorkflow(executionParams)).toMatchObject({ success: true, status: 'paused' });
+    const paused = await service.from('workflow_executions').select('current_node_id, loop_counters, context, guided_version_id').eq('id', executionId).single();
+    expect(paused.error).toBeNull();
+    expect(paused.data?.current_node_id).toBe('c');
+    const nextDefinition = { ...definition, nodes: definition.nodes.map(node => node.id === 'c'
+      ? { ...node, data: { guidedCondition: { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'Mariana' } } } : node) };
+    expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+      p_definition: nextDefinition, p_settings: settings, p_expected_revision: 1 })).error).toBeNull();
+    expect((await service.rpc('finalize_guided_workflow_publication', { ...args, p_expected_revision: 2, p_definition: nextDefinition })).error).toBeNull();
+    expect((await service.from('leads').update({ name: 'Mariana' }).eq('organization_id', orgA).eq('id', leadA)).error).toBeNull();
+    let restoreError: unknown;
+    try {
+      const resumed = await executeWorkflow({ ...executionParams, currentNodeId: paused.data!.current_node_id,
+        loopCounters: paused.data!.loop_counters, context: paused.data!.context, definition: nextDefinition });
+      expect(resumed).toMatchObject({ success: true, status: 'completed' });
+      const tasks = await service.from('follow_ups').select('id').eq('organization_id', orgA).eq('lead_id', leadA).eq('title', title);
+      expect(tasks.error).toBeNull();
+      expect(tasks.data).toHaveLength(1);
+      const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+      expect(steps.error).toBeNull();
+      expect(steps.data?.map(step => step.node_id).sort()).toEqual(['action', 'c', 'no', 't', 'wait']);
+    } finally {
+      restoreError = (await service.from('leads').update({ name: 'José' }).eq('organization_id', orgA).eq('id', leadA)).error;
+    }
+    expect(restoreError).toBeNull();
   }, 60000);
 
   it('lets an organization administrator explicitly approve and revoke lead-name access for one workflow', async () => {
