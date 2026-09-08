@@ -19,7 +19,10 @@ export type GuidedCustomTextRule = { version: 1; id: string; field: 'lead.custom
 
 export type GuidedCustomNumberRule = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'number' } & GuidedNumberComparison;
 
-export type GuidedRule = GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedCustomBooleanRule = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'boolean' }
+  & ({ operator: 'equals' | 'not_equals'; value: boolean } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+
+export type GuidedRule = GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -50,10 +53,12 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
-    if (rule.field === 'lead.custom') return (rule.fieldType === 'text' || rule.fieldType === 'number') && typeof rule.fieldId === 'string'
+    if (rule.field === 'lead.custom') return (rule.fieldType === 'text' || rule.fieldType === 'number' || rule.fieldType === 'boolean') && typeof rule.fieldId === 'string'
       && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.fieldId)
       && (rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
-        || (rule.fieldType === 'number'
+        || (rule.fieldType === 'boolean'
+          ? (rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.value === 'boolean'
+          : rule.fieldType === 'number'
           ? isGuidedNumberOperator(rule.operator) && typeof rule.value === 'number' && Number.isFinite(rule.value)
           : isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
     if (rule.field === 'lead.origin') return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
@@ -178,7 +183,7 @@ export async function evaluateGuidedCondition(
     };
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
-  const customFields = new Map<string, { id: string; name: string; value: string | number | null }>();
+  const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
   if (customIds.size) {
     const response = usesCustomReader ? {
       data: (data as unknown as { field_values?: Record<string, unknown> }).field_values?.custom_fields, error: null, status: 200,
@@ -203,8 +208,12 @@ export async function evaluateGuidedCondition(
       if (!expectedTypes || expectedTypes.size !== 1 || !expectedTypes.has(row.field_type)) {
         return { status: 'error' as const, code: 'reference_unavailable' as const };
       }
-      let value: string | number | null = row.value;
-      if (row.field_type === 'number') {
+      let value: string | number | boolean | null = row.value;
+      if (row.field_type === 'boolean') {
+        if (row.value === null || row.value === '') value = null;
+        else if (row.value === 'true' || row.value === 'false') value = row.value === 'true';
+        else return { status: 'error' as const, code: 'source_unavailable' as const };
+      } else if (row.field_type === 'number') {
         if (row.value === null || row.value === '') value = null;
         else {
           // HTML number inputs persist decimal/scientific strings. Reject
@@ -380,6 +389,9 @@ export async function evaluateGuidedCondition(
     let matched = false;
     if (condition.operator === 'is_empty') matched = empty;
     else if (condition.operator === 'is_not_empty') matched = !empty;
+    else if (condition.field === 'lead.custom' && condition.fieldType === 'boolean') {
+      matched = typeof actual === 'boolean' && (condition.operator === 'equals' ? actual === condition.value : actual !== condition.value);
+    }
     else if (condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')) {
       if (!empty && typeof actual === 'number') {
         switch (condition.operator) {

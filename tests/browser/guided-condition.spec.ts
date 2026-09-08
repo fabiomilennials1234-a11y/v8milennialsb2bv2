@@ -992,6 +992,41 @@ test('aprova Tags explicitamente sem apagar concessão de Nome', async ({ page }
   expect(writes[1]).toEqual(['lead.name']);
 });
 
+test('seleciona booleano personalizado com Sim ou Não sem confundir Não com vazio', async ({ page }) => {
+  const fieldId = '11111111-1111-4111-8111-111111111113';
+  await openGuidedEditor(page, 'Aurora');
+  await page.route('**/rest/v1/lead_custom_fields?*', route => {
+    const field = { id: fieldId, field_name: 'Aceita contato', field_type: 'boolean' };
+    return route.fulfill({ json: new URL(route.request().url()).searchParams.has('id') ? field : [field] });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Aceita contato');
+  await page.getByRole('option', { name: 'Aceita contato', exact: true }).click();
+  const value = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
+  await expect(value).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Testar condição', exact: true })).toBeDisabled();
+  await expect(page.getByLabel('Comparação', { exact: true }).locator('option[value="contains"]')).toHaveCount(0);
+  await value.selectOption({ label: 'Não' });
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Aceita contato é Não');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.custom', fieldId, fieldType: 'boolean', operator: 'equals', value: false });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: false, reference: { id: fieldId, name: 'Aceita contato' } }] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Aceita contato é Não');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(value).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Aceita contato está vazio');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('equals');
+  await expect(value).toHaveValue('');
+  await value.selectOption({ label: 'Sim' });
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Aceita contato é Sim');
+  await selectInformation(page, 'lead.company');
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveValue('');
+});
+
 test('seleciona número personalizado com comparação numérica e preserva UUID ao verificar vazio', async ({ page }) => {
   const fieldId = '11111111-1111-4111-8111-111111111112';
   await openGuidedEditor(page, 'Aurora');
@@ -1031,7 +1066,7 @@ test('seleciona número personalizado com comparação numérica e preserva UUID
   await expect(value).toHaveValue('');
 });
 
-for (const fieldType of ['text', 'number'] as const) test(`aprova campo personalizado ${fieldType} pelo nome atual e revoga somente seu UUID`, async ({ page }) => {
+for (const fieldType of ['text', 'number', 'boolean'] as const) test(`aprova campo personalizado ${fieldType} pelo nome atual e revoga somente seu UUID`, async ({ page }) => {
   const fieldId = '11111111-1111-4111-8111-111111111111';
   let grant = { fields: ['lead.name'], revision: 1 };
   const writes: string[][] = [];
@@ -1042,7 +1077,7 @@ for (const fieldType of ['text', 'number'] as const) test(`aprova campo personal
     grant = { fields: body.p_fields, revision: grant.revision + 1 };
     return route.fulfill({ json: grant });
   });
-  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType, fieldLabel: 'Nome antigo', operator: 'equals', value: fieldType === 'number' ? 10 : 'Indústria' });
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType, fieldLabel: 'Nome antigo', operator: 'equals', value: fieldType === 'boolean' ? false : fieldType === 'number' ? 10 : 'Indústria' });
   await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: { id: fieldId, field_name: 'Especialidade', field_type: fieldType } }));
   await page.reload();
   await page.getByText('Nome informado', { exact: true }).click();
@@ -1332,7 +1367,7 @@ test('seleciona campo personalizado pelo nome e testa preservando UUID', async (
     const field = { id: fieldId, field_name: 'Especialidade', field_type: 'text' };
     if (params.has('id')) return route.fulfill({ json: field });
     expect(params.get('limit')).toBe('25');
-    expect(params.get('field_type')).toBe('in.(text,number)');
+    expect(params.get('field_type')).toBe('in.(text,number,boolean)');
     return route.fulfill({ json: [field] });
   });
   await page.getByText('Nome informado', { exact: true }).click();
@@ -1353,6 +1388,15 @@ test('seleciona campo personalizado pelo nome e testa preservando UUID', async (
   await page.getByLabel('Comparação', { exact: true }).selectOption('is_not_empty');
   await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveCount(0);
   await expect(page.locator('.react-flow__node-condition')).toContainText('Especialidade está preenchido');
+  for (const operator of ['is_empty', 'is_not_empty']) {
+    await selectInformation(page, 'lead.company');
+    await page.getByLabel('Comparação', { exact: true }).selectOption(operator);
+    await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Especialidade');
+    await page.getByRole('option', { name: 'Especialidade', exact: true }).click();
+    await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue(operator);
+    await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveCount(0);
+  }
 });
 
 test('falha na referência personalizada não vira catálogo vazio e recupera pelo mesmo UUID', async ({ page }) => {

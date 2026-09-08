@@ -11,6 +11,11 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
     : condition.operator === 'is_not_empty' ? 'Origem está preenchida'
     : `Origem ${condition.operator === 'equals' ? 'é' : 'não é'} “${condition.originLabel || 'Selecione uma origem'}”`;
   if (condition.field === 'lead.tags') return `${condition.operator === 'has_tag' ? 'Tem tag' : 'Não tem tag'} “${condition.tagLabel || 'Selecione uma tag'}”`;
+  if (condition.field === 'lead.custom' && condition.fieldType === 'boolean') {
+    const label = condition.fieldLabel || 'Campo personalizado';
+    return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido`
+      : `${label} ${condition.operator === 'equals' ? 'é' : 'não é'} ${condition.value === '' ? '…' : condition.value ? 'Sim' : 'Não'}`;
+  }
   if (condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')) {
     const label = condition.field === 'lead.custom' ? condition.fieldLabel || 'Campo personalizado' : GUIDED_SCALAR_FIELDS[condition.field].label;
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido` : `${label} ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value}`;

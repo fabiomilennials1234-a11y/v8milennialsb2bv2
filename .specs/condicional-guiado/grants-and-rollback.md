@@ -230,3 +230,11 @@ Allows current text or number definitions for new per-UUID approvals and immutab
 Applied and ledger-registered only on preview. Live effective privileges: writer authenticated=true/service_role=false/anon=false; finalizer service_role=true/authenticated=false/anon=false. Both SECURITY DEFINER functions retain search_path=public.
 
 Rollback restores migration 30's text-only new-approval writer and migration 31's text-only finalizer, retaining all approvals, versions, execution pins, definitions and answers. Coordinate application/endpoint rollback; a retained numeric rule may fail explicitly until supported code is restored. Forward recovery: 00..11,30,31,32,14,21,23,24,29. Thirty-three-migration reverse/recovery rehearsal passed, including exact current function restoration and historical scope preservation.
+
+## Migration 33 — boolean custom approvals/publication
+
+Extends the existing per-definition authorization and finalizer to current text/number/boolean definitions. Expected type and UUID remain mandatory for every rule, including empty/filled and branches skipped at evaluation. Applied/ledger-registered on preview only, without rewriting any customer answers or changing table schema.
+
+Rollback restores migration 32's text/number writer and finalizer; no approvals, versions, execution pins, definitions or answers are deleted. Coordinate application/endpoint rollback; unsupported boolean rules must fail explicitly. Recovery sequence: 00..11,30,31,32,33,14,21,23,24,29. The thirty-four-migration reverse/recovery rehearsal passed with exact current function restoration and retained history.
+
+Effective preview EXECUTE: writer authenticated=true, service_role=false, anon=false; finalizer service_role=true, authenticated=false, anon=false. Both definers pin search_path=public and retain explicit business authorization. Personal/publication endpoints updated only on preview; worker remains undeployed.

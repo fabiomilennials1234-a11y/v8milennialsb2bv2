@@ -79,6 +79,15 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
       <GuidedFieldPicker id={`guided-field-${condition.id}`} value={condition.field} actorId={actorId} organizationId={organizationId}
         custom={condition.field === 'lead.custom' ? condition : undefined}
         onCustomSelect={(fieldId, fieldLabel, fieldType) => {
+          if (fieldType === 'boolean') {
+            const base = { version: 1 as const, id: condition.id, field: 'lead.custom' as const, fieldId, fieldType, fieldLabel };
+            const compatible = condition.field === 'lead.custom' && condition.fieldType === 'boolean';
+            setFieldReset(!compatible);
+            if (compatible) onChange(condition.operator === 'is_empty' || condition.operator === 'is_not_empty'
+              ? { ...base, operator: condition.operator } : { ...base, operator: condition.operator, value: condition.value });
+            else onChange({ ...base, operator: 'equals', value: '' });
+            return;
+          }
           if (fieldType === 'number') {
             const compatible = condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number');
             setFieldReset(!compatible);
@@ -90,12 +99,13 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
           }
           const compatible = isGuidedTextField(condition.field) || (condition.field === 'lead.custom' && condition.fieldType === 'text');
           setFieldReset(!compatible);
-          const comparison = compatible && (condition.operator === 'is_empty' || condition.operator === 'is_not_empty')
-            ? { operator: condition.operator }
-            : compatible && isGuidedTextOperator(condition.operator) && 'value' in condition && typeof condition.value === 'string'
-              ? { operator: condition.operator, value: condition.value }
-              : { operator: 'equals' as const, value: '' };
-          onChange({ version: 1, id: condition.id, field: 'lead.custom', fieldId, fieldType: 'text', fieldLabel, ...comparison });
+          const base = { version: 1 as const, id: condition.id, field: 'lead.custom' as const, fieldId, fieldType: 'text' as const, fieldLabel };
+          if (compatible && condition.operator === 'is_empty') onChange({ ...base, operator: 'is_empty' });
+          else if (compatible && condition.operator === 'is_not_empty') onChange({ ...base, operator: 'is_not_empty' });
+          else if (compatible && isGuidedTextOperator(condition.operator) && 'value' in condition && typeof condition.value === 'string') {
+            onChange({ ...base, operator: condition.operator, value: condition.value });
+          } else onChange({ ...base, operator: 'equals', value: '' });
+
         }} onChange={field => {
         setFieldReset(condition.field !== field && !(((isGuidedTextField(condition.field) || (condition.field === 'lead.custom' && condition.fieldType === 'text')) && isGuidedTextField(field)) || (isGuidedResponsibleField(condition.field) && isGuidedResponsibleField(field))));
         if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
@@ -109,7 +119,7 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
               ? { ...base, operator: condition.operator } : { ...base, operator: condition.operator, value: condition.value });
           } else onChange({ ...base, operator: 'equals', value: '' });
         }
-        else if (isGuidedTextField(field)) onChange(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')
+        else if (isGuidedTextField(field)) onChange(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
           ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
           : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
@@ -139,6 +149,23 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         <option value="has_tag">tem tag</option><option value="not_has_tag">não tem tag</option>
       </select>
       <GuidedTagPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
+    </> : (condition.field === 'lead.custom' && condition.fieldType === 'boolean') ? <>
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
+        const base = { version: 1 as const, id: condition.id, field: condition.field, fieldId: condition.fieldId, fieldType: condition.fieldType, fieldLabel: condition.fieldLabel };
+        const operator = event.target.value;
+        if (operator === 'is_empty') onChange({ ...base, operator: 'is_empty' });
+        else if (operator === 'is_not_empty') onChange({ ...base, operator: 'is_not_empty' });
+        else if (operator === 'equals' || operator === 'not_equals') onChange({ ...base, operator, value: 'value' in condition ? condition.value : '' });
+      }}><option value="equals">é</option><option value="not_equals">não é</option><option value="is_empty">está vazio</option><option value="is_not_empty">está preenchido</option></select>
+      {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <div className="space-y-2">
+        <Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
+        <select id={`guided-value-${condition.id}`} className={selectClass} value={String(condition.value)} aria-invalid={missingValue}
+          onChange={event => onChange({ ...condition, value: event.target.value === '' ? '' : event.target.value === 'true' })}>
+          <option value="">Selecione uma opção</option><option value="true">Sim</option><option value="false">Não</option>
+        </select>
+        {missingValue && <p className="text-xs text-destructive">Escolha Sim, Não ou “está vazio”.</p>}
+      </div>}
     </> : (condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType === 'number')) ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
