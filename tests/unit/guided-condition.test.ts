@@ -14,6 +14,12 @@ function databaseLead(name: string | null) {
 }
 
 describe('guided condition — public evaluation', () => {
+  it('rejects an equality missing its comparison value instead of deciding No', async () => {
+    expect(await evaluateGuidedCondition(databaseLead('José'), {
+      organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: '' },
+    })).toEqual({ status: 'error', code: 'invalid_configuration' });
+  });
   it('rejects an unknown authorization mode instead of reading with the supplied client', async () => {
     expect(await evaluateGuidedCondition(databaseLead('José'), {
       organizationId: 'org-1', leadId: 'lead-1',

@@ -31,6 +31,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     if (organizations.error) throw organizations.error;
     const quotas = await service.from('org_quotas').upsert([
       { organization_id: orgA, resource_key: 'max_users', plan_base: 2 },
+      { organization_id: orgB, resource_key: 'max_users', plan_base: 2 },
       { organization_id: orgA, resource_key: 'max_leads', plan_base: 20 },
       { organization_id: orgB, resource_key: 'max_leads', plan_base: 20 },
     ], { onConflict: 'organization_id,resource_key' });
@@ -183,6 +184,47 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
     expect(latest.error).toBeNull();
     expect(latest.data).toEqual({ definition: concurrentDefinitions[winner], revision: 2 });
+  }, 60000);
+
+  it('denies a foreign organization administrator draft reads, RPC writes and forged inserts', async () => {
+    const workflowId = crypto.randomUUID();
+    const created = await service.from('workflows').insert({ id: workflowId, organization_id: orgB,
+      name: 'Protected foreign draft', trigger_type: 'manual' });
+    if (created.error) throw created.error;
+    const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-foreign-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const temporaryMemberId = crypto.randomUUID();
+    const membership = await service.from('team_members').insert({ id: temporaryMemberId,
+      user_id: userId, organization_id: orgB, name: 'Draft fixture administrator', role: 'admin', is_active: true });
+    if (membership.error) throw membership.error;
+    let cleanupError: unknown = null;
+    try {
+      const seeded = await administrator.rpc('save_guided_workflow_draft', {
+        p_workflow_id: workflowId, p_definition: { nodes: [], edges: [], label: 'Protected draft B' }, p_expected_revision: 0,
+      });
+      expect(seeded.error).toBeNull();
+      const visible = await administrator.from('workflow_guided_drafts').select('revision')
+        .eq('workflow_id', workflowId).single();
+      expect(visible.data).toEqual({ revision: 1 });
+    } finally {
+      const removed = await service.from('team_members').delete().eq('id', temporaryMemberId);
+      cleanupError = removed.error;
+    }
+    expect(cleanupError).toBeNull();
+    const denied = await administrator.rpc('save_guided_workflow_draft', {
+      p_workflow_id: workflowId, p_definition: { nodes: [], edges: [] }, p_expected_revision: 1,
+    });
+    expect(denied.error?.code).toBe('42501');
+    const read = await administrator.from('workflow_guided_drafts').select('definition, revision')
+      .eq('organization_id', orgB).eq('workflow_id', workflowId);
+    expect(read.error).toBeNull();
+    expect(read.data).toEqual([]);
+    const forged = await administrator.from('workflow_guided_drafts').insert({
+      workflow_id: workflowId, organization_id: orgA, definition: { nodes: [], edges: [] }, revision: 1,
+    });
+    expect(forged.error?.code).toBe('42501');
   }, 60000);
 
   it('evaluates an accessible lead but cannot infer another organization through manipulated IDs', async () => {

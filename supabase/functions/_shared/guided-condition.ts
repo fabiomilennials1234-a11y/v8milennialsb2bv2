@@ -18,7 +18,7 @@ function isGuidedCondition(value: unknown): value is GuidedCondition {
   const rule = value as Record<string, unknown>;
   return rule.version === 1 && typeof rule.id === 'string' && rule.id.length > 0
     && rule.field === 'lead.name'
-    && (rule.operator === 'is_empty' || (rule.operator === 'equals' && typeof rule.value === 'string'));
+    && (rule.operator === 'is_empty' || (rule.operator === 'equals' && typeof rule.value === 'string' && rule.value.length > 0));
 }
 
 /** Evaluate with a caller-scoped client. Never pass a service-role client for

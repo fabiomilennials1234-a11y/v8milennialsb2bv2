@@ -9,15 +9,15 @@ interface WorkflowDataGrant { fields: string[]; revision: number }
 // response contract is explicit until the canonical types are regenerated.
 const database: SupabaseClient = supabase;
 
-export function WorkflowDataGrantPanel({ workflowId, organizationId, canManage }: {
-  workflowId: string; organizationId: string; canManage: boolean;
+export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, canManage }: {
+  actorId: string; workflowId: string; organizationId: string; canManage: boolean;
 }) {
   const client = useQueryClient();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const key = ['workflow-data-grant', organizationId, workflowId];
+  const key = ['workflow-data-grant', actorId, organizationId, workflowId];
   const grant = useQuery({
-    queryKey: key, enabled: canManage && Boolean(organizationId),
+    queryKey: key, enabled: canManage && Boolean(actorId && organizationId),
     queryFn: async ({ signal }) => {
       const response = await database.from('workflow_data_grants').select('fields, revision')
         .eq('organization_id', organizationId).eq('workflow_id', workflowId)

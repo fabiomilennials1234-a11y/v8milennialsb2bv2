@@ -14,7 +14,7 @@ import { HTTPS_CODE_EXAMPLE, validateCodeNodes } from "@/modules/workflows/lib/c
 import { findNodeConfigIssues } from "@/contracts/workflows/node-requirements";
 import { UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import { useFeatureFlag } from "@/modules/platform";
-import { useOrganization } from "@/modules/identity";
+import { useOrganization, useAuth } from "@/modules/identity";
 
 import { WorkflowCanvas } from "@/modules/workflows/components/WorkflowCanvas";
 import { WorkflowToolbar } from "@/modules/workflows/components/WorkflowToolbar";
@@ -169,6 +169,7 @@ function createDefaultNodeData(type: WorkflowNodeType): WorkflowNodeData {
 let nodeIdCounter = 1;
 
 export default function AutomacoesEditor() {
+  const { user } = useAuth();
   const { organizationId, role } = useOrganization();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -645,6 +646,7 @@ export default function AutomacoesEditor() {
         />
 
         <WorkflowSidebar
+          actorId={user?.id}
           workflowId={isNew ? undefined : id}
           canManageDataGrant={role === "admin"}
           organizationId={organizationId ?? undefined}

@@ -54,6 +54,7 @@ function getUnresolvedFields(data: Record<string, unknown>): string[] {
 }
 
 interface WorkflowSidebarProps {
+  actorId?: string;
   workflowId?: string;
   canManageDataGrant?: boolean;
   organizationId?: string;
@@ -66,6 +67,7 @@ interface WorkflowSidebarProps {
 }
 
 export function WorkflowSidebar({
+  actorId,
   workflowId,
   canManageDataGrant = false,
   organizationId,
@@ -97,10 +99,14 @@ export function WorkflowSidebar({
       case "condition":
         if ((nodeData as ConditionNodeData).guidedCondition) {
           return <><GuidedConditionPanel
+            key={`${actorId}:${organizationId}:${selectedNode.id}`}
+            actorId={actorId ?? ''}
             organizationId={organizationId ?? ''}
             condition={(nodeData as ConditionNodeData).guidedCondition!}
             onChange={guidedCondition => handleUpdate({ guidedCondition })}
           />{workflowId && organizationId && <WorkflowDataGrantPanel
+            key={`${actorId}:${organizationId}:${workflowId}`}
+            actorId={actorId ?? ''}
             workflowId={workflowId} organizationId={organizationId} canManage={canManageDataGrant}
           />}</>;
         }

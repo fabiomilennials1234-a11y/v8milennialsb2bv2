@@ -1,5 +1,24 @@
 import { test, expect, type Page } from '@playwright/test';
 
+test('troca de usuário remove seleção e resultado pessoal da conta anterior', async ({ page }) => {
+  let reads = 0;
+  await page.route('**/rest/v1/leads?*', route => ++reads === 1
+    ? route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] })
+    : route.fulfill({ status: 403, json: { code: '42501', message: 'denied' } }));
+  await page.route('**/functions/v1/test-guided-condition', route => route.fulfill({ json: {
+    status: 'evaluated', matched: true, rules: [{ id: 'rule-1', matched: true, actual: 'José' }],
+  } }));
+  await page.goto('/tests/browser/fixtures/guided-condition.html?identity-switch=1');
+  await page.getByLabel('Valor da comparação').fill('JOSE');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('status')).toContainText('José');
+  await page.getByRole('button', { name: 'Trocar usuário' }).click();
+  await expect(page.getByRole('option', { name: 'José', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('status')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
+});
+
 async function openGuidedEditor(page: Page) {
   await page.addInitScript(() => {
     const user = { id: 'user-1', aud: 'authenticated', role: 'authenticated', email: 'editor@example.test' };
@@ -86,6 +105,18 @@ test('distingue busca sem resultados de falha de carregamento', async ({ page })
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
 });
 
+test('comparação incompleta orienta preenchimento antes de testar', async ({ page }) => {
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
+  await expect(page.getByLabel('Valor da comparação')).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByText('Informe um valor ou escolha “está vazio”.')).toBeVisible();
+  await page.getByLabel('Valor da comparação').fill('José');
+  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeEnabled();
+  await expect(page.getByText('Informe um valor ou escolha “está vazio”.')).toHaveCount(0);
+});
+
 test('busca lead fora da lista inicial sem carregar cadastro inteiro', async ({ page }) => {
   await page.route('**/rest/v1/leads?*', route => {
     const search = new URL(route.request().url()).searchParams.get('name');
@@ -95,6 +126,7 @@ test('busca lead fora da lista inicial sem carregar cadastro inteiro', async ({ 
   await page.getByLabel('Buscar lead').fill('Mariana', { timeout: 4000 });
   await expect(page.getByRole('option', { name: 'Mariana', exact: true })).toBeAttached();
   await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-26');
+  await page.getByLabel('Valor da comparação').fill('Mariana');
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeEnabled();
 });
 
@@ -102,6 +134,7 @@ test('explica acesso negado sem mostrar resultado comercial', async ({ page }) =
   await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
   await page.route('**/functions/v1/test-guided-condition', route => route.fulfill({ status: 403, json: { status: 'error', code: 'access_denied' } }));
   await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('JOSE');
   await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
   await page.getByRole('button', { name: 'Testar condição' }).click();
   await expect(page.getByRole('alert')).toHaveText('Você não tem acesso aos dados necessários para este teste.');

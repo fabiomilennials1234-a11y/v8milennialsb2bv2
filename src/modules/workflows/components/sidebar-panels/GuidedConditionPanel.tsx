@@ -9,7 +9,8 @@ import { useDebounce } from '@/shared/hooks/useDebounce';
 
 import type { GuidedConditionDraft } from '@/types/workflow';
 
-export function GuidedConditionPanel({ organizationId, condition, onChange }: {
+export function GuidedConditionPanel({ actorId, organizationId, condition, onChange }: {
+  actorId: string;
   organizationId: string;
   condition: GuidedConditionDraft;
   onChange: (condition: GuidedConditionDraft) => void;
@@ -18,12 +19,13 @@ export function GuidedConditionPanel({ organizationId, condition, onChange }: {
   const [search, setSearch] = useState('');
   const searchTerm = useDebounce(search.trim(), 250);
   const [result, setResult] = useState<{ fingerprint: string; matched: boolean; actual: string | null } | null>(null);
-  const fingerprint = JSON.stringify({ organizationId, leadId, condition });
+  const fingerprint = JSON.stringify({ actorId, organizationId, leadId, condition });
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
+  const missingValue = condition.operator === 'equals' && condition.value.length === 0;
   const leads = useQuery({
-    queryKey: ['guided-condition-leads', organizationId, searchTerm],
-    enabled: Boolean(organizationId),
+    queryKey: ['guided-condition-leads', actorId, organizationId, searchTerm],
+    enabled: Boolean(actorId && organizationId),
     queryFn: async ({ signal }) => {
       let query = supabase.from('leads').select('id, name')
         .eq('organization_id', organizationId).is('deleted_at', null).order('name').limit(25).abortSignal(signal);
@@ -34,6 +36,7 @@ export function GuidedConditionPanel({ organizationId, condition, onChange }: {
     },
   });
   async function test() {
+    if (missingValue || !leadId || pending) return;
     setPending(true);
     setResult(null);
     setError('');
@@ -67,7 +70,8 @@ export function GuidedConditionPanel({ organizationId, condition, onChange }: {
         onChange(event.target.value === 'is_empty' ? { ...base, operator: 'is_empty' } : { ...base, operator: 'equals', value: '' });
       }}><option value="equals">é igual a</option><option value="is_empty">está vazio</option></select></div>
     {condition.operator === 'equals' && <div className="space-y-2"><Label htmlFor="guided-value">Valor da comparação</Label>
-      <Input id="guided-value" value={condition.value} onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: José" />
+      <Input id="guided-value" value={condition.value} aria-invalid={missingValue} aria-describedby={missingValue ? 'guided-value-error' : undefined} onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: José" />
+      {missingValue && <p id="guided-value-error" className="text-xs text-destructive">Informe um valor ou escolha “está vazio”.</p>}
       <p className="text-xs text-muted-foreground">Maiúsculas e acentos não alteram a comparação.</p></div>}
     <section className="space-y-3 rounded-xl border border-border bg-muted/20 p-4" aria-label="Teste da condição">
       <div><h4 className="font-medium">Confira com um lead</h4><p className="text-xs text-muted-foreground">Consulta dados atuais, sem executar ações.</p></div>
@@ -80,7 +84,7 @@ export function GuidedConditionPanel({ organizationId, condition, onChange }: {
       </select>
       {leads.isError && <p role="alert" className="text-sm text-destructive">Não foi possível carregar leads.</p>}
       {leads.isSuccess && leads.data.length === 0 && <p className="text-sm text-muted-foreground">Nenhum lead encontrado. Tente outro nome.</p>}
-      <Button type="button" disabled={!leadId || pending} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
+      <Button type="button" disabled={!leadId || pending || missingValue} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong><p>Nome do lead: {result.actual ?? 'Vazio'}</p></div>}
     </section>
