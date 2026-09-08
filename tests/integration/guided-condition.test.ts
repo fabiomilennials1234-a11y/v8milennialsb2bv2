@@ -137,6 +137,78 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   });
 
+  it('authorizes a custom definition independently for automatic evaluation', async () => {
+    const workflowId = crypto.randomUUID(), fieldId = crypto.randomUUID(), otherId = crypto.randomUUID(), foreignId = crypto.randomUUID(), tagId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `custom-grant-${fieldId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    await service.from('workflows').insert({ id: workflowId, organization_id: orgA, name: 'Custom approval', trigger_type: 'manual' }).throwOnError();
+    await service.from('lead_custom_fields').insert([
+      { id: fieldId, organization_id: orgA, field_name: 'Especialidade', field_type: 'text' },
+      { id: otherId, organization_id: orgA, field_name: 'Preferência', field_type: 'text' },
+      { id: foreignId, organization_id: orgB, field_name: 'Preferência', field_type: 'text' },
+    ]).throwOnError();
+    try {
+      await service.from('lead_custom_field_values').insert({ field_id: fieldId, lead_id: leadA, value: 'Indústria' }).throwOnError();
+      const request = { organizationId: orgA, leadId: leadA, authorization: { kind: 'organization' as const, workflowId },
+        condition: { version: 1, id: 'custom-org', field: 'lead.custom', fieldId, fieldType: 'text', operator: 'equals', value: 'INDUSTRIA' } };
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+      const approval = await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [`lead.custom:${fieldId}`], p_expected_revision: 0 });
+      expect(approval.error).toBeNull();
+      expect(await evaluateGuidedCondition(service, request)).toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: 'Indústria', reference: { id: fieldId, name: 'Especialidade' } }] });
+      const scope = `lead.custom:${fieldId}`;
+      const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA,
+        p_fields: [scope], p_tag_ids: [], p_origin_ids: [], p_member_ids: [] };
+      const projection = await service.rpc('read_guided_condition_custom_data', args);
+      expect(projection.error).toBeNull();
+      expect(projection.data).toEqual([{ id: leadA, organization_id: orgA, field_values: {
+        custom_fields: [{ id: fieldId, name: 'Especialidade', field_type: 'text', value: 'Indústria' }],
+      } }]);
+      expect((await caller.rpc('read_guided_condition_custom_data', args)).error?.code).toBe('42501');
+      const anonymous = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `custom-reader-anon-${fieldId}` },
+      });
+      expect((await anonymous.rpc('read_guided_condition_custom_data', args)).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_custom_data', { ...args, p_organization_id: orgB })).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_custom_data', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
+      expect((await service.rpc('read_guided_condition_custom_data', { ...args, p_fields: [scope, 'lead.name'] })).error?.code).toBe('42501');
+      expect(await evaluateGuidedCondition(service, { ...request, condition: { ...request.condition, fieldId: otherId } })).toEqual({ status: 'error', code: 'access_denied' });
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [scope, `lead.custom:${foreignId}`], p_expected_revision: 1 })).error?.code).toBe('PT422');
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.custom:*'], p_expected_revision: 1 })).error?.code).toBe('22023');
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: Array(257).fill('lead.name'), p_expected_revision: 1 })).error?.code).toBe('22023');
+      await service.from('tags').insert({ id: tagId, organization_id: orgA, name: 'Fabricante' }).throwOnError();
+      await service.from('lead_tags').insert({ lead_id: leadA, tag_id: tagId }).throwOnError();
+      const ordinary = ['lead.name', 'lead.tags', 'lead.origin', 'lead.pre_sale_responsible_id'];
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [scope, ...ordinary], p_expected_revision: 1 })).error).toBeNull();
+      const mixed = { ...request, condition: { version: 1, id: 'all', kind: 'group', match: 'all', children: [request.condition,
+        { version: 1, id: 'name', field: 'lead.name', operator: 'equals', value: 'JOSE' },
+        { version: 1, id: 'tag', field: 'lead.tags', operator: 'has_tag', tagId },
+        { version: 1, id: 'origin', field: 'lead.origin', operator: 'is_empty' },
+        { version: 1, id: 'responsible', field: 'lead.pre_sale_responsible_id', operator: 'is_not_empty' },
+      ] } };
+      expect(await evaluateGuidedCondition(service, mixed)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ id: 'custom-org', matched: true }, { id: 'name', matched: true }, { id: 'tag', matched: true }, { id: 'origin', matched: true }, { id: 'responsible', matched: true }] });
+      await service.from('lead_custom_fields').update({ field_type: 'number' }).eq('id', fieldId).throwOnError();
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'reference_unavailable' });
+      await service.from('lead_custom_fields').update({ field_type: 'text' }).eq('id', fieldId).throwOnError();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ordinary, p_expected_revision: 2 })).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [scope, ...ordinary], p_expected_revision: 3 })).error).toBeNull();
+      await service.from('lead_custom_fields').delete().eq('id', fieldId).throwOnError();
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'reference_unavailable' });
+      // Removing another scope must remain possible while a deleted field is retained.
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [scope], p_expected_revision: 4 })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 5 })).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId).throwOnError();
+      await service.from('lead_custom_fields').delete().in('id', [fieldId, otherId, foreignId]).throwOnError();
+      await service.from('lead_tags').delete().eq('tag_id', tagId).throwOnError();
+      await service.from('tags').delete().eq('id', tagId).throwOnError();
+    }
+  });
+
   it.each([false, true])('publishes a saved condition through the authenticated HTTP boundary (grouped=%s)', async (grouped) => {
     const workflowId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

@@ -82,14 +82,17 @@ const responsiblePublicationRollback = readFileSync(`supabase/migrations/rollbac
 const presenceMigration = '20271017000027_guided_reference_presence.sql';
 const presenceRollback = readFileSync(`supabase/migrations/rollback/${presenceMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const profileMigration = '20271017000028_guided_business_profile_fields.sql';
-const profileForward = readFileSync(`supabase/migrations/${profileMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const profileRollback = readFileSync(`supabase/migrations/rollback/${profileMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const customMigration = '20271017000029_guided_personal_custom_field_test.sql';
 const customForward = readFileSync(`supabase/migrations/${customMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const customRollback = readFileSync(`supabase/migrations/rollback/${customMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const customOrgMigration = '20271017000030_guided_custom_field_authorization.sql';
+const customOrgForward = readFileSync(`supabase/migrations/${customOrgMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const customOrgRollback = readFileSync(`supabase/migrations/rollback/${customOrgMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
+    pg_get_functiondef('public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])'::regprocedure) AS original_custom_org_definition,
     pg_get_functiondef('public.test_guided_condition_custom_fields(uuid,uuid,uuid[])'::regprocedure) AS original_custom_definition,
     pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure) AS original_definition,
     pg_get_functiondef('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])'::regprocedure) AS original_publication_definition;
@@ -104,17 +107,23 @@ INSERT INTO public.lead_custom_field_values(lead_id, field_id, value)
 INSERT INTO public.workflows(id, organization_id, name, trigger_type)
   SELECT workflow_id, org_id, 'Rollback rehearsal', 'manual' FROM guided_rollback_fixture;
 INSERT INTO public.workflow_data_grants(workflow_id, organization_id, fields, revision)
-  SELECT workflow_id, org_id, ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id'], 7 FROM guided_rollback_fixture;
+  SELECT workflow_id, org_id, (ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id'] || ARRAY['lead.custom:' || custom_field_id::text]), 7 FROM guided_rollback_fixture;
 INSERT INTO public.workflow_guided_drafts(workflow_id, organization_id, definition, revision)
   SELECT workflow_id, org_id, '{"nodes":[],"edges":[]}'::jsonb, 11 FROM guided_rollback_fixture;
 UPDATE public.workflow_guided_drafts SET settings = '{"name":"Preserved settings"}'::jsonb
   WHERE workflow_id = (SELECT workflow_id FROM guided_rollback_fixture);
 INSERT INTO public.workflow_guided_versions(workflow_id, organization_id, version_number, source_revision, definition, settings, required_fields)
-  SELECT workflow_id, org_id, 1, 11, '{"nodes":[{"id":"t","type":"trigger","data":{"triggerType":"lead_created","config":{}}}],"edges":[]}'::jsonb, '{"name":"Preserved publication"}'::jsonb, ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id'] FROM guided_rollback_fixture;
+  SELECT workflow_id, org_id, 1, 11, '{"nodes":[{"id":"t","type":"trigger","data":{"triggerType":"lead_created","config":{}}}],"edges":[]}'::jsonb, '{"name":"Preserved publication"}'::jsonb, (ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id'] || ARRAY['lead.custom:' || custom_field_id::text]) FROM guided_rollback_fixture;
 INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, version_id)
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${customOrgRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])') IS NOT NULL THEN
+    RAISE EXCEPTION 'custom organizational reader remains after rollback';
+  END IF;
+END $$;
 ${customRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.test_guided_condition_custom_fields(uuid,uuid,uuid[])') IS NOT NULL THEN
@@ -220,7 +229,7 @@ DO $$ BEGIN
     RAISE EXCEPTION 'rollback left access enabled';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.workflow_data_grants g JOIN guided_rollback_fixture f USING(workflow_id)
-    WHERE g.revision = 7 AND g.fields = ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id']) THEN
+    WHERE g.revision = 7 AND g.fields = (ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id'] || ARRAY['lead.custom:' || custom_field_id::text])) THEN
     RAISE EXCEPTION 'rollback lost approval history';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.workflow_guided_drafts d JOIN guided_rollback_fixture f USING(workflow_id)
@@ -234,7 +243,7 @@ DO $$ BEGIN
     WHERE v.source_revision = 11 AND v.version_number = 1
       AND v.definition = '{"nodes":[{"id":"t","type":"trigger","data":{"triggerType":"lead_created","config":{}}}],"edges":[]}'::jsonb
       AND v.settings = '{"name":"Preserved publication"}'::jsonb
-      AND v.required_fields = ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id']) THEN
+      AND v.required_fields = (ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id'] || ARRAY['lead.custom:' || custom_field_id::text])) THEN
     RAISE EXCEPTION 'publication history or selection lost';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.workflow_executions e JOIN guided_rollback_fixture f USING(workflow_id)
@@ -277,12 +286,24 @@ ${pinForward}
 ${discoveryForward}
 ${activationForward}
 -- Restore the complete field contract without narrowing retained grants.
-${profileForward}
+${customOrgForward}
 ${tagForward}
 ${originForward}
 ${responsibleForward}
 ${catalogueForward}
 ${customForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'custom organization reader privileges invalid';
+  END IF;
+  IF pg_get_functiondef('public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])'::regprocedure)
+    IS DISTINCT FROM (SELECT original_custom_org_definition FROM guided_rollback_fixture) THEN
+    RAISE EXCEPTION 'custom organizational reader not restored exactly';
+  END IF;
+END $$;
+
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_custom_fields(uuid,uuid,uuid[])', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_custom_fields(uuid,uuid,uuid[])', 'EXECUTE')
@@ -417,7 +438,7 @@ DO $$ BEGIN
     RAISE EXCEPTION 'reapply lost draft';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.workflow_data_grants g JOIN guided_rollback_fixture f USING(workflow_id)
-    WHERE g.revision = 7 AND g.fields = ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id']) THEN
+    WHERE g.revision = 7 AND g.fields = (ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id'] || ARRAY['lead.custom:' || custom_field_id::text])) THEN
     RAISE EXCEPTION 'reapply lost approval history';
   END IF;
   IF pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure)
@@ -430,7 +451,7 @@ DO $$ BEGIN
     WHERE v.source_revision = 11 AND v.version_number = 1
       AND v.definition = '{"nodes":[{"id":"t","type":"trigger","data":{"triggerType":"lead_created","config":{}}}],"edges":[]}'::jsonb
       AND v.settings = '{"name":"Preserved publication"}'::jsonb
-      AND v.required_fields = ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id']) THEN
+      AND v.required_fields = (ARRAY['lead.name','lead.company','lead.email','lead.phone','lead.qualification_score','lead.utm_campaign','lead.utm_source','lead.utm_medium','lead.utm_content','lead.utm_term','lead.segment','lead.urgency','lead.faturamento','lead.tags','lead.origin','lead.pre_sale_responsible_id','lead.sale_responsible_id'] || ARRAY['lead.custom:' || custom_field_id::text])) THEN
     RAISE EXCEPTION 'publication history or selection lost';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.workflow_executions e JOIN guided_rollback_fixture f USING(workflow_id)
@@ -451,6 +472,17 @@ DO $$ BEGIN
     OR has_function_privilege('authenticated', 'public.guard_guided_workflow_activation()', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.guard_guided_workflow_activation()', 'EXECUTE') THEN
     RAISE EXCEPTION 'activation guard callable directly';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure)
+    IS DISTINCT FROM (SELECT original_definition FROM guided_rollback_fixture) THEN
+    RAISE EXCEPTION 'grant writer not restored exactly';
+  END IF;
+  IF has_function_privilege('anon', 'public.valid_guided_data_scopes(text[])', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.valid_guided_data_scopes(text[])', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.valid_guided_data_scopes(text[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'scope validator privileges invalid';
   END IF;
 END $$;
 DO $$ BEGIN

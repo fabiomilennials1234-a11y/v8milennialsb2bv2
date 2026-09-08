@@ -202,3 +202,15 @@ Adds only test_guided_condition_custom_fields(uuid,uuid,uuid[]), a STABLE SECURI
 Effective preview privileges verified: authenticated=true, anon=false, service_role=false; prosecdef=false, provolatile=s. The evaluator currently accepts text definitions only, requires the expected type, and rejects organizational custom-field execution until its explicit grant/atomic reader is implemented. Future required scopes carry the custom UUID rather than a wildcard. This does not certify custom publication or the other four types.
 
 Rollback drops only the new reader. For a coordinated rollback, restore the personal endpoint's preceding build, then apply the matching rollback SQL. An endpoint calling a removed reader fails explicitly; it cannot decide No. Reapply the forward migration to restore capability. Full recovery sequence is now 00..11,28,14,21,23,24,29. The thirty-migration preview rehearsal verifies custom definitions/answers survive rollback and recovery, current grants/versions/pins remain intact, the exact custom function returns, and effective privileges are restored.
+
+## Migration 30 — per-definition organizational custom scopes
+
+Approval keys are lead.custom:<canonical UUID>, never a wildcard. The existing writer still derives the organization from the authorized workflow and uses its revision CAS. New custom scopes require an existing text definition in that organization; retained scopes may survive deletion/type changes so administrators can still revoke them or unrelated scopes. The format-only CHECK preserves approval history and must not depend on a mutable definition row.
+
+The new service-only read_guided_condition_custom_data entry point locks workflow/grant, lead and referenced definitions, checks every requested scope, and projects scalar/tag/origin/responsible/custom values in one SELECT. Personal RPCs are never used by this automatic path. Caller/anon execution is denied; service-role identity alone cannot bypass workflow/organization/grant checks.
+
+A defensive budget of 256 scope entries bounds the persisted grant validator; public evaluation rejects more than 256 distinct scopes before reading. This is an implementation limit, not a prior product decision or final performance certificate. Ticket 21 must measure representative load and align editor/publication limit feedback.
+
+Rollback drops the custom organization reader and restores the preceding approval writer, retaining the widened CHECK/helper and all custom approvals, versions and answers. Full recovery is 00..11,30,14,21,23,24,29; migration 30 contains the current legacy reader/publication definitions so recovery never narrows retained custom scope history. The thirty-one-migration rehearsal verifies that custom scope history survives and both writer/reader definitions are restored exactly. Effective privileges of all eight affected function signatures verified on preview.
+
+No custom publication support is claimed here. The existing finalizer remains unchanged and rejects custom scopes; its reference/type validation and UI grant gate removal are still required. No worker/endpoint/production deployment in this checkpoint.

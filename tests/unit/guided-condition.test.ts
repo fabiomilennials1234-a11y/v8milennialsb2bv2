@@ -14,6 +14,15 @@ function databaseLead(name: string | null) {
 }
 
 describe('guided condition — public evaluation', () => {
+  it('rejects a condition exceeding the explicit data-scope budget before reading', async () => {
+    const children = Array.from({ length: 257 }, (_, index) => ({
+      version: 1, id: `custom-${index}`, field: 'lead.custom', fieldId: crypto.randomUUID(), fieldType: 'text', operator: 'is_empty',
+    }));
+    expect(await evaluateGuidedCondition(databaseLead('José'), {
+      organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'all', kind: 'group', match: 'all', children },
+    })).toEqual({ status: 'error', code: 'invalid_configuration' });
+  });
   it('rejects an equality missing its comparison value instead of deciding No', async () => {
     expect(await evaluateGuidedCondition(databaseLead('José'), {
       organizationId: 'org-1', leadId: 'lead-1',
