@@ -312,3 +312,20 @@ describe("MessageList — separador de data", () => {
     expect(screen.getAllByText(/\d{2}\/\d{2}\/2025/)).toHaveLength(2);
   });
 });
+
+
+describe("message recovery UI", () => {
+  it("updates the same bubble through 1/10, 10/10 and terminal failure", () => {
+    const base = { ...msg("stable", new Date().toISOString(), "Minha mensagem"), direction: "outgoing" as const, status: "pending", retry_attempt: 1 };
+    const props = baseProps({ messages: [base] });
+    const view = render(<MessageList {...props} />);
+    expect(screen.getByText("Erro no envio, tentando novamente 1/10")).toBeInTheDocument();
+    view.rerender(<MessageList {...props} messages={[{ ...base, retry_attempt: 10 }]} />);
+    expect(screen.getAllByText("Minha mensagem")).toHaveLength(1);
+    expect(screen.getByText("Erro no envio, tentando novamente 10/10")).toBeInTheDocument();
+    view.rerender(<MessageList {...props} messages={[{ ...base, status: "failed", retry_attempt: 10 }]} />);
+    expect(screen.getAllByText("Minha mensagem")).toHaveLength(1);
+    expect(screen.getByText("Falha no envio")).toBeInTheDocument();
+    expect(screen.queryByText("Tentar novamente")).not.toBeInTheDocument();
+  });
+});
