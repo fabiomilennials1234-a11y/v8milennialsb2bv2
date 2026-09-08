@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import type { GuidedConditionDraft } from '../../src/types/workflow';
 
 test('permite recuperar catálogo de tags após falha sem apagar a condição', async ({ page }) => {
   await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [] }));
@@ -50,6 +51,99 @@ test('seleciona tag pelo nome e testa sua identidade sem digitar referência', a
   await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toBeVisible();
 });
 
+
+for (const uppercase of [false, true]) test(`renomeação de tag atualiza resumo sem trocar identidade nem operador (${uppercase ? 'UUID maiúsculo' : 'UUID canônico'})`, async ({ page }) => {
+  const tagId = 'abcd0000-0000-4000-8000-000000000001';
+  const savedTagId = uppercase ? tagId.toUpperCase() : tagId;
+  await page.route('**/rest/v1/tags?*', route => {
+    const params = new URL(route.request().url()).searchParams;
+    return route.fulfill({ json: params.has('id') ? { id: tagId, name: 'Distribuidor regional' }
+      : params.has('name') ? [] : [{ id: tagId, name: 'Nome antigo' }],
+    });
+  });
+  let saved: { p_definition: { nodes: Array<{ id: string; data: { guidedCondition?: GuidedConditionDraft } }> } } | undefined;
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
+    saved = route.request().postDataJSON();
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
+  });
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.tags', operator: 'not_has_tag', tagId: savedTagId, tagLabel: 'Nome antigo' });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Tag', exact: true }).locator('option:checked')).toHaveText('Distribuidor regional');
+  await expect(page.getByRole('combobox', { name: 'Tag', exact: true })).toHaveValue(tagId);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Não tem tag “Distribuidor regional”');
+  await page.getByLabel('Buscar tag', { exact: true }).fill('sem correspondência');
+  await expect(page.getByText('Nenhuma tag encontrada. Tente outro nome.')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Tag', exact: true })).toHaveValue(tagId);
+  await expect(page.getByRole('combobox', { name: 'Tag', exact: true })).toHaveAttribute('aria-invalid', 'false');
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect.poll(() => saved?.p_definition.nodes.find(node => node.id === 'condition-1')?.data.guidedCondition).toMatchObject({
+    id: 'rule-1', field: 'lead.tags', operator: 'not_has_tag', tagId: savedTagId, tagLabel: 'Distribuidor regional',
+  });
+});
+
+
+test('tag removida não é restaurada por lista antiga nem substituída por mesmo nome', async ({ page }) => {
+  const removedId = 'abcd0000-0000-4000-8000-000000000001';
+  const replacementId = 'abcd0000-0000-4000-8000-000000000002';
+  await page.route('**/rest/v1/tags?*', route => {
+    const id = new URL(route.request().url()).searchParams.get('id');
+    return route.fulfill({ json: id ? id === `eq.${removedId}` ? null : { id: replacementId, name: 'Distribuidor' }
+      : [{ id: removedId, name: 'Distribuidor' }, { id: replacementId, name: 'Distribuidor' }],
+    });
+  });
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.tags', operator: 'has_tag', tagId: removedId, tagLabel: 'Distribuidor' });
+  await page.getByText('Nome informado', { exact: true }).click();
+  const picker = page.getByRole('combobox', { name: 'Tag', exact: true });
+  await expect(page.getByRole('alert').filter({ hasText: 'Tag removida ou sem acesso. Selecione outra tag.' })).toBeVisible();
+  await expect(picker).toHaveValue(removedId);
+  await expect(picker.locator('option:checked')).toHaveText('Tag indisponível');
+  await expect(picker).toHaveAttribute('aria-invalid', 'true');
+  await picker.selectOption(replacementId);
+  await expect(picker).toHaveValue(replacementId);
+  await expect(picker).toHaveAttribute('aria-invalid', 'false');
+  await expect(page.getByRole('alert').filter({ hasText: 'Tag removida ou sem acesso. Selecione outra tag.' })).toHaveCount(0);
+});
+
+
+test('troca de usuário não reutiliza catálogo de tags da conta anterior', async ({ page }) => {
+  const tagId = 'abcd0000-0000-4000-8000-000000000001';
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id') ? { id: tagId, name: 'Tag da conta anterior' }
+      : [{ id: tagId, name: 'Tag da conta anterior' }],
+  }));
+  await page.goto('/tests/browser/fixtures/guided-condition.html?identity-switch=1');
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await page.getByRole('combobox', { name: 'Tag', exact: true }).selectOption(tagId);
+  await expect(page.getByRole('option', { name: 'Tag da conta anterior', exact: true })).toHaveCount(1);
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ status: 403, json: { code: '42501', message: 'denied' } }));
+  await page.getByRole('button', { name: 'Trocar usuário' }).click();
+  await expect(page.getByRole('option', { name: 'Tag da conta anterior', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('alert')).toContainText('Não foi possível carregar tags. Tente novamente.');
+});
+
+
+test('resultado de grupo usa nome da tag no momento da avaliação', async ({ page }) => {
+  const tagId = 'abcd0000-0000-4000-8000-000000000001';
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id') ? { id: tagId, name: 'Distribuidor antigo' }
+      : [{ id: tagId, name: 'Distribuidor antigo' }],
+  }));
+  await openGuidedEditor(page, { version: 1, id: 'group-1', kind: 'group', match: 'all', children: [
+    { version: 1, id: 'rule-1', field: 'lead.tags', operator: 'has_tag', tagId, tagLabel: 'Distribuidor antigo' },
+  ] });
+  await page.route('**/functions/v1/test-guided-condition', route => route.fulfill({ json: {
+    status: 'evaluated', matched: true, groups: [{ id: 'group-1', status: 'evaluated', matched: true }],
+    rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: true, reference: { id: tagId, name: 'Distribuidor atual' } }],
+  } }));
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByRole('button', { name: 'Recolher grupo', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('status')).toContainText('Tem tag “Distribuidor atual”: Sim');
+  await expect(page.getByRole('status')).not.toContainText('Distribuidor antigo');
+});
+
 test('troca de usuário remove seleção e resultado pessoal da conta anterior', async ({ page }) => {
   let reads = 0;
   await page.route('**/rest/v1/leads?*', route => ++reads === 1
@@ -69,7 +163,7 @@ test('troca de usuário remove seleção e resultado pessoal da conta anterior',
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
 });
 
-async function openGuidedEditor(page: Page, draftValue?: string, isNew = false, omitDraftTrigger = false, draftSettings?: Record<string, unknown>, liveActive = false, publishedVersion?: string | { unavailable: true }) {
+async function openGuidedEditor(page: Page, draftValue?: string | GuidedConditionDraft, isNew = false, omitDraftTrigger = false, draftSettings?: Record<string, unknown>, liveActive = false, publishedVersion?: string | { unavailable: true }) {
   await page.route('**/rest/v1/workflow_guided_publications?*', route => typeof publishedVersion === 'object'
     ? route.fulfill({ status: 503, json: { message: 'unavailable' } })
     : route.fulfill({ json: publishedVersion ? { version_id: publishedVersion } : null }));
@@ -77,7 +171,7 @@ async function openGuidedEditor(page: Page, draftValue?: string, isNew = false, 
     revision: 3, settings: draftSettings, definition: { nodes: [
       ...(!omitDraftTrigger ? [{ id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } }] : []),
       { id: 'condition-1', type: 'condition', position: { x: 400, y: 220 }, data: { type: 'condition', label: 'Nome informado',
-        guidedCondition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: draftValue } } },
+        guidedCondition: typeof draftValue === 'object' ? draftValue : { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: draftValue } } },
     ], edges: [] },
   } }));
   await page.addInitScript(() => {

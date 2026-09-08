@@ -897,12 +897,16 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
           { id: 'not-has', matched: true, actual: false, reference: { id: unassigned, name: 'Sem atribuição' } },
         ],
       });
+      expect((await service.from('tags').update({ name: 'Cliente preferencial' }).eq('id', assigned)).error).toBeNull();
       const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
         body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition }),
       });
       expect(response.status).toBe(200);
-      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true, rules: [
+        { id: 'has', reference: { id: assigned, name: 'Cliente preferencial' }, actual: true },
+        { id: 'not-has', reference: { id: unassigned, name: 'Sem atribuição' }, actual: false },
+      ] });
       expect((await caller.rpc('test_guided_condition_tags', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
       expect((await caller.rpc('test_guided_condition_tags', { ...args, p_tag_ids: [assigned, foreign] })).error?.code).toBe('PT422');
       expect((await service.from('tags').delete().eq('id', unassigned)).error).toBeNull();
