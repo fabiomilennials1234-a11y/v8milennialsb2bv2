@@ -25,7 +25,7 @@ export const GUIDED_TEXT_OPERATORS = {
   ends_with: 'termina com',
 } as const;
 export type GuidedTextOperator = keyof typeof GUIDED_TEXT_OPERATORS;
-export type GuidedTextComparison = { operator: GuidedTextOperator; value: string } | { operator: 'is_empty' };
+export type GuidedTextComparison = { operator: GuidedTextOperator; value: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' };
 export function isGuidedTextOperator(value: unknown): value is GuidedTextOperator {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(GUIDED_TEXT_OPERATORS, value);
 }
@@ -42,7 +42,7 @@ export const GUIDED_NUMBER_OPERATORS = {
   greater_than_or_equal: 'é maior ou igual a', less_than: 'é menor que', less_than_or_equal: 'é menor ou igual a',
 } as const;
 export type GuidedNumberOperator = keyof typeof GUIDED_NUMBER_OPERATORS;
-export type GuidedNumberComparison = { operator: GuidedNumberOperator; value: number } | { operator: 'is_empty' };
+export type GuidedNumberComparison = { operator: GuidedNumberOperator; value: number } | { operator: 'is_empty' } | { operator: 'is_not_empty' };
 export function isGuidedNumberOperator(value: unknown): value is GuidedNumberOperator {
   return typeof value === 'string' && Object.prototype.hasOwnProperty.call(GUIDED_NUMBER_OPERATORS, value);
 }

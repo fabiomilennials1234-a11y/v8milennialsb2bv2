@@ -326,3 +326,20 @@ it('denies organizational responsible evaluation when its current grant is revok
     condition: { version: 1, id: 'responsible', field: 'lead.sale_responsible_id', operator: 'is_empty' },
   })).toEqual({ status: 'error', code: 'access_denied' });
 });
+
+
+it.each([
+  { field: 'lead.name', column: 'name', actual: 'José', matched: true },
+  { field: 'lead.name', column: 'name', actual: '', matched: false },
+  { field: 'lead.name', column: 'name', actual: null, matched: false },
+  { field: 'lead.qualification_score', column: 'qualification_score', actual: 0, matched: true },
+  { field: 'lead.qualification_score', column: 'qualification_score', actual: null, matched: false },
+])('checks filled $field for $actual without a comparison value', async ({ field, column, actual, matched }) => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', [column]: actual }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1',
+    condition: { version: 1, id: 'filled', field, operator: 'is_not_empty' },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'filled', status: 'evaluated', matched, actual }] });
+});

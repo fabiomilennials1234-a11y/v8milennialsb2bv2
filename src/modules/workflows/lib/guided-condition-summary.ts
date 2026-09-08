@@ -11,10 +11,10 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
   if (condition.field === 'lead.tags') return `${condition.operator === 'has_tag' ? 'Tem tag' : 'Não tem tag'} “${condition.tagLabel || 'Selecione uma tag'}”`;
   if (condition.field === 'lead.qualification_score') {
     const label = GUIDED_SCALAR_FIELDS[condition.field].label;
-    return condition.operator === 'is_empty' ? `${label} está vazio` : `${label} ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value}`;
+    return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido` : `${label} ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value}`;
   }
   const label = GUIDED_SCALAR_FIELDS[condition.field].label;
-  return condition.operator === 'is_empty' ? `${label} está vazio` : `${label} ${GUIDED_TEXT_OPERATORS[condition.operator]} “${condition.value}”`;
+  return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido` : `${label} ${GUIDED_TEXT_OPERATORS[condition.operator]} “${condition.value}”`;
 }
 
 export function getGuidedConditionFields(condition: GuidedConditionDraft): Array<keyof typeof GUIDED_SCALAR_FIELDS | keyof typeof GUIDED_RESPONSIBLE_FIELDS | 'lead.tags' | 'lead.origin'> {

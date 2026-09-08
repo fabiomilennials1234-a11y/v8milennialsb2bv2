@@ -1048,6 +1048,60 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('publishes and evaluates filled scalars using current values and explicit scopes', async () => {
+    const workflowId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-filled-${workflowId}` }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1, id: 'filled', kind: 'group', match: 'all', children: [
+      { version: 1, id: 'name', field: 'lead.name', operator: 'is_not_empty' },
+      { version: 1, id: 'score', field: 'lead.qualification_score', operator: 'is_not_empty' },
+    ] };
+    const definition = { nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+      { id: 'c', type: 'condition', data: { guidedCondition: condition } },
+      { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+    ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+    const post = async (endpoint: string, body: unknown) => {
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/${endpoint}`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal: AbortSignal.timeout(15000),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    try {
+      await service.from('leads').update({ qualification_score: 0 }).eq('id', leadA).throwOnError();
+      const request = { organizationId: orgA, leadId: leadA, condition };
+      expect(await post('test-guided-condition', request)).toMatchObject({ status: 200, body: { status: 'evaluated', matched: true,
+        rules: [{ id: 'name', matched: true }, { id: 'score', matched: true, actual: 0 }],
+      } });
+      expect(await post('test-guided-condition', { ...request, leadId: leadB })).toMatchObject({ status: 422, body: { code: 'context_unavailable' } });
+      expect((await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_organization_id: orgA,
+        p_definition: definition, p_settings: { name: 'Filled scalar publication' } })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.name', 'lead.qualification_score'], p_expected_revision: 0 })).error).toBeNull();
+      const published = await post('publish-guided-workflow', { organizationId: orgA, workflowId, expectedRevision: 1 });
+      expect(published).toMatchObject({ status: 200, body: { status: 'published', version_id: expect.any(String) } });
+      const executionId = crypto.randomUUID();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId, organization_id: orgA,
+        lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' }).throwOnError();
+      expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        guidedVersionId: published.body.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {},
+      })).toMatchObject({ success: true, status: 'completed' });
+      const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+      expect(steps.error).toBeNull();
+      expect(steps.data?.map(step => step.node_id)).toContain('yes');
+      expect(steps.data?.map(step => step.node_id)).not.toContain('no');
+      await service.from('leads').update({ qualification_score: null }).eq('id', leadA).throwOnError();
+      expect(await post('test-guided-condition', request)).toMatchObject({ status: 200, body: { matched: false } });
+      const automatic = { ...request, authorization: { kind: 'organization' as const, workflowId } };
+      expect(await evaluateGuidedCondition(service, automatic)).toMatchObject({ status: 'evaluated', matched: false });
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 1 })).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, automatic)).toEqual({ status: 'error', code: 'access_denied' });
+    } finally {
+      await service.from('leads').update({ qualification_score: null }).eq('id', leadA).throwOnError();
+    }
+  }, 60000);
+
   it('evaluates organizational responsible conditions only within the granted assignment scope', async () => {
     const workflowId = crypto.randomUUID(), salesId = crypto.randomUUID(), foreignId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

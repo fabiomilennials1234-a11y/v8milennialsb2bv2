@@ -15,7 +15,7 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
   return 'children' in condition ? !condition.children.length || condition.children.some(isIncompleteGuidedDraft)
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && !condition.memberId
     : condition.field === 'lead.origin' ? condition.operator !== 'is_empty' && !condition.originId
-    : condition.field === 'lead.tags' ? !condition.tagId : condition.operator !== 'is_empty' && (condition.value === '' || (typeof condition.value === 'number' && !Number.isFinite(condition.value)));
+    : condition.field === 'lead.tags' ? !condition.tagId : condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && (condition.value === '' || (typeof condition.value === 'number' && !Number.isFinite(condition.value)));
 }
 const newRule = (): GuidedRuleDraft => ({ version: 1, id: crypto.randomUUID(), field: 'lead.name', operator: 'equals', value: '' });
 function duplicateCondition(condition: GuidedConditionDraft): GuidedConditionDraft {
@@ -55,7 +55,7 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         <Button type="button" variant="ghost" onClick={() => {
           const copy = duplicateCondition(child);
           onChange({ ...condition, children: [...condition.children.slice(0, index + 1), copy, ...condition.children.slice(index + 1)] });
-          pendingFocus.current = `guided-${'children' in copy ? 'match' : copy.operator !== 'is_empty' ? 'value' : 'operator'}-${copy.id}`;
+          pendingFocus.current = `guided-${'children' in copy ? 'match' : copy.operator !== 'is_empty' && copy.operator !== 'is_not_empty' ? 'value' : 'operator'}-${copy.id}`;
         }}>{'children' in child ? 'Duplicar grupo' : 'Duplicar regra'}</Button>
         <Button type="button" variant="ghost" onClick={() => {
           onChange({ ...condition, children: condition.children.filter(item => item.id !== child.id) });
@@ -115,10 +115,10 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
         const base = { version: 1 as const, id: condition.id, field: condition.field };
         const operator = event.target.value;
-        if (operator === 'is_empty') onChange({ ...base, operator });
+        if (operator === 'is_empty' || operator === 'is_not_empty') onChange({ ...base, operator });
         else if (isGuidedNumberOperator(operator)) onChange({ ...base, operator, value: 'value' in condition ? condition.value : '' });
-      }}>{Object.entries(GUIDED_NUMBER_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazio</option></select>
-      {condition.operator !== 'is_empty' && <div className="space-y-2">
+      }}>{Object.entries(GUIDED_NUMBER_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazio</option><option value="is_not_empty">está preenchido</option></select>
+      {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <div className="space-y-2">
         <Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
         <Input id={`guided-value-${condition.id}`} type="number" step="any" value={condition.value} aria-invalid={missingValue}
           onChange={event => onChange({ ...condition, value: event.target.value === '' ? '' : event.target.valueAsNumber })} />
@@ -129,10 +129,10 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
         const base = { version: 1 as const, id: condition.id, field: condition.field };
         const operator = event.target.value;
-        if (operator === 'is_empty') onChange({ ...base, operator });
+        if (operator === 'is_empty' || operator === 'is_not_empty') onChange({ ...base, operator });
         else if (isGuidedTextOperator(operator)) onChange({ ...base, operator, value: 'value' in condition ? condition.value : '' });
-      }}>{Object.entries(GUIDED_TEXT_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazio</option></select></div>
-    {condition.operator !== 'is_empty' && <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
+      }}>{Object.entries(GUIDED_TEXT_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazio</option><option value="is_not_empty">está preenchido</option></select></div>
+    {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
       {isUtmValueField(GUIDED_SCALAR_FIELDS[condition.field].column) ? <GuidedUtmPicker key={condition.field} id={`guided-value-${condition.id}`} actorId={actorId} organizationId={organizationId}
         field={GUIDED_SCALAR_FIELDS[condition.field].column} value={condition.value} onChange={value => onChange({ ...condition, value })} /> : <Input id={`guided-value-${condition.id}`} value={condition.value} aria-invalid={missingValue}
         aria-describedby={missingValue ? `guided-value-error-${condition.id}` : undefined}

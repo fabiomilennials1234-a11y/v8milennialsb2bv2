@@ -51,9 +51,9 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.originId));
     if (rule.field === 'lead.tags') return (rule.operator === 'has_tag' || rule.operator === 'not_has_tag')
       && typeof rule.tagId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.tagId);
-    if (isGuidedNumberField(rule.field)) return rule.operator === 'is_empty'
+    if (isGuidedNumberField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || (isGuidedNumberOperator(rule.operator) && typeof rule.value === 'number' && Number.isFinite(rule.value));
-    return isGuidedTextField(rule.field) && (rule.operator === 'is_empty'
+    return isGuidedTextField(rule.field) && (rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || (isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
   }
   return valid(value, 0);
@@ -294,6 +294,7 @@ export async function evaluateGuidedCondition(
     const empty = actual == null || actual === '';
     let matched = false;
     if (condition.operator === 'is_empty') matched = empty;
+    else if (condition.operator === 'is_not_empty') matched = !empty;
     else if (condition.field === 'lead.qualification_score') {
       if (!empty && typeof actual === 'number') {
         switch (condition.operator) {

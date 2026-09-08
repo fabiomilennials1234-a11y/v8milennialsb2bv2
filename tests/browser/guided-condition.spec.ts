@@ -1139,3 +1139,25 @@ test('troca de usuário não reutiliza sugestões UTM da conta anterior', async 
   await expect(page.getByRole('option', { name: 'Campanha restrita', exact: true })).toHaveCount(0);
   await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toBeVisible();
 });
+
+
+for (const [field, label, actual] of [['lead.name', 'Nome', 'José'], ['lead.qualification_score', 'Pontuação de qualificação', 0]] as const) {
+  test(`configura ${label} preenchido sem valor adicional e mantém foco ao duplicar`, async ({ page }) => {
+    await openGuidedEditor(page, 'JOSE');
+    await page.getByText('Nome informado', { exact: true }).click();
+    await page.getByLabel('Informação', { exact: true }).selectOption(field);
+    await page.getByLabel('Comparação', { exact: true }).selectOption('is_not_empty', { timeout: 3000 });
+    await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
+    await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} está preenchido`);
+    await page.route('**/functions/v1/test-guided-condition', route => {
+      expect(route.request().postDataJSON().condition).toEqual({ version: 1, id: 'rule-1', field, operator: 'is_not_empty' });
+      return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual }] } });
+    });
+    await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+    await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Sim');
+    await page.getByRole('button', { name: 'Adicionar condição', exact: true }).click();
+    await page.getByRole('button', { name: 'Duplicar regra', exact: true }).first().click();
+    await expect(page.getByRole('combobox', { name: 'Comparação', exact: true }).nth(1)).toBeFocused();
+  });
+}
