@@ -70,6 +70,9 @@ const originRollback = readFileSync(`supabase/migrations/rollback/${originMigrat
 const originAuthorizationMigration = '20271017000022_guided_origin_authorization.sql';
 const originAuthorizationForward = readFileSync(`supabase/migrations/${originAuthorizationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const originAuthorizationRollback = readFileSync(`supabase/migrations/rollback/${originAuthorizationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const responsibleMigration = '20271017000023_guided_personal_responsible_test.sql';
+const responsibleForward = readFileSync(`supabase/migrations/${responsibleMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const responsibleRollback = readFileSync(`supabase/migrations/rollback/${responsibleMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -90,6 +93,12 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${responsibleRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_responsibles(uuid,uuid,text[],uuid[])') IS NOT NULL THEN
+    RAISE EXCEPTION 'personal responsible test still callable after rollback';
+  END IF;
+END $$;
 ${originAuthorizationRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[],uuid[])') IS NOT NULL THEN
@@ -222,6 +231,14 @@ ${activationForward}
 ${originAuthorizationForward}
 ${tagForward}
 ${originForward}
+${responsibleForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_responsibles(uuid,uuid,text[],uuid[])', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_responsibles(uuid,uuid,text[],uuid[])', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_responsibles(uuid,uuid,text[],uuid[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'personal responsible test grants invalid';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[],uuid[])', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[],uuid[])', 'EXECUTE')

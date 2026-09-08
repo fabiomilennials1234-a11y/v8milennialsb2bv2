@@ -914,6 +914,102 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('rejects a master identity as a responsible even when its master registry row is hidden from the caller', async () => {
+    const memberId = crypto.randomUUID();
+    let shadowUserId: string | undefined;
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-shadow-${orgA}` }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    try {
+      const created = await service.auth.admin.createUser({ email: `guided-shadow-${crypto.randomUUID()}@example.test`, password: `${crypto.randomUUID()}!Aa1`, email_confirm: true });
+      if (created.error) throw created.error;
+      shadowUserId = created.data.user.id;
+      await service.from('team_members').insert({ id: memberId, user_id: shadowUserId, organization_id: orgA, name: 'Shadow member', role: 'member', is_active: true }).throwOnError();
+      await service.from('master_users').insert({ user_id: shadowUserId, is_active: true }).throwOnError();
+      const hiddenRegistry = await caller.from('master_users').select('user_id').eq('user_id', shadowUserId);
+      expect(hiddenRegistry.error).toBeNull();
+      expect(hiddenRegistry.data).toEqual([]);
+      const args = { p_organization_id: orgA, p_lead_id: leadA, p_fields: ['lead.pre_sale_responsible_id'], p_member_ids: [memberId] };
+      expect((await caller.rpc('test_guided_condition_responsibles', args)).error?.code).toBe('PT422');
+      const ordinaryMember = await caller.rpc('test_guided_condition_responsibles', { ...args, p_member_ids: [adminMemberId] });
+      expect(ordinaryMember.error).toBeNull();
+      expect(ordinaryMember.data).toEqual([{ field_values: { pre_sale_responsible_id: adminMemberId }, members: [{ id: adminMemberId, name: 'Guided tester' }] }]);
+    } finally {
+      await service.from('team_members').delete().eq('id', memberId).throwOnError();
+      if (shadowUserId) {
+        await service.from('master_users').delete().eq('user_id', shadowUserId).throwOnError();
+        const deleted = await service.auth.admin.deleteUser(shadowUserId);
+        expect(deleted.error).toBeNull();
+      }
+    }
+  }, 60000);
+
+  it('tests canonical responsible identities under caller RLS without mixing sales and presales', async () => {
+    const salesId = crypto.randomUUID(), foreignId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-responsible-${orgA}` }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    try {
+      await service.from('team_members').insert([
+        { id: salesId, organization_id: orgA, name: 'Marina', role: 'member', is_active: true },
+        { id: foreignId, organization_id: orgB, name: 'Marina', role: 'member', is_active: true },
+      ]).throwOnError();
+      await service.from('leads').update({ sale_responsible_id: salesId }).eq('id', leadA).throwOnError();
+      const args = { p_organization_id: orgA, p_lead_id: leadA,
+        p_fields: ['lead.pre_sale_responsible_id', 'lead.sale_responsible_id'], p_member_ids: [adminMemberId, salesId] };
+      const read = await caller.rpc('test_guided_condition_responsibles', args);
+      expect(read.error).toBeNull();
+      expect(read.data).toEqual([{ field_values: { pre_sale_responsible_id: adminMemberId, sale_responsible_id: salesId },
+        members: expect.arrayContaining([{ id: adminMemberId, name: 'Guided tester' }, { id: salesId, name: 'Marina' }]),
+      }]);
+      expect(read.data[0].members).toHaveLength(2);
+      const salesOnly = await caller.rpc('test_guided_condition_responsibles', { ...args, p_fields: ['lead.sale_responsible_id'], p_member_ids: [salesId] });
+      expect(salesOnly.error).toBeNull();
+      expect(salesOnly.data).toEqual([{ field_values: { sale_responsible_id: salesId }, members: [{ id: salesId, name: 'Marina' }] }]);
+      expect((await caller.rpc('test_guided_condition_responsibles', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
+      expect((await caller.rpc('test_guided_condition_responsibles', { ...args, p_member_ids: [foreignId] })).error?.code).toBe('PT422');
+      expect((await caller.rpc('test_guided_condition_responsibles', { ...args, p_fields: ['lead.password'] })).error?.code).toBe('22023');
+      expect((await service.rpc('test_guided_condition_responsibles', args)).error?.code).toBe('42501');
+      await service.from('team_members').update({ name: 'Marina atual', is_active: false }).eq('id', salesId).throwOnError();
+      expect((await caller.rpc('test_guided_condition_responsibles', { ...args, p_member_ids: [salesId] })).data).toEqual([
+        { field_values: { pre_sale_responsible_id: adminMemberId, sale_responsible_id: salesId }, members: [{ id: salesId, name: 'Marina atual' }] },
+      ]);
+      const condition = { version: 1, id: 'both', kind: 'group', match: 'all', children: [
+        { version: 1, id: 'presales', field: 'lead.pre_sale_responsible_id', operator: 'equals', memberId: adminMemberId.toUpperCase() },
+        { version: 1, id: 'sales', field: 'lead.sale_responsible_id', operator: 'equals', memberId: salesId },
+      ] };
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: 'evaluated', matched: true,
+        groups: [{ id: 'both', status: 'evaluated', matched: true }], rules: [
+          { id: 'presales', status: 'evaluated', matched: true, actual: adminMemberId, reference: { id: adminMemberId, name: 'Guided tester' } },
+          { id: 'sales', status: 'evaluated', matched: true, actual: salesId, reference: { id: salesId, name: 'Marina atual' } },
+        ],
+      });
+      await service.from('leads').update({ sale_responsible_id: null }).eq('id', leadA).throwOnError();
+      await service.from('team_members').delete().eq('id', salesId).throwOnError();
+      expect((await caller.rpc('test_guided_condition_responsibles', { ...args, p_member_ids: [salesId] })).error?.code).toBe('PT422');
+      expect((await caller.rpc('test_guided_condition_responsibles', { ...args, p_fields: ['lead.sale_responsible_id'], p_member_ids: [] })).data).toEqual([
+        { field_values: { sale_responsible_id: null }, members: [] },
+      ]);
+      const request = { organizationId: orgA, leadId: leadA };
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { version: 1, id: 'empty', field: 'lead.sale_responsible_id', operator: 'is_empty' } })).toEqual({
+        status: 'evaluated', matched: true, rules: [{ id: 'empty', status: 'evaluated', matched: true, actual: null }],
+      });
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { version: 1, id: 'different', field: 'lead.sale_responsible_id', operator: 'not_equals', memberId: adminMemberId } })).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { version: 1, id: 'any', kind: 'group', match: 'any', children: [
+        { version: 1, id: 'name', field: 'lead.name', operator: 'equals', value: 'José' },
+        { version: 1, id: 'deleted', field: 'lead.sale_responsible_id', operator: 'not_equals', memberId: salesId },
+      ] } })).toEqual({ status: 'error', code: 'reference_unavailable' });
+    } finally {
+      await service.from('leads').update({ sale_responsible_id: null }).eq('id', leadA).throwOnError();
+      await service.from('team_members').delete().in('id', [salesId, foreignId]).throwOnError();
+    }
+  }, 60000);
+
   it('authorizes origin explicitly and reads mixed fields without exposing unrequested data', async () => {
     const workflowId = crypto.randomUUID(), originId = crypto.randomUUID(), foreignId = crypto.randomUUID(), tagId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

@@ -447,3 +447,15 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 
 
 - Final full real integration: 40 passed. New origin journey proves authenticated HTTP publication, execution through the shared executor using the persisted version, Yes-only routing, rejection of deleted origin with the correct node location, active-version preservation and current grant revocation. All validation/deployment handles terminal. The real queue worker is still undeployed and its admission/resume journey remains an explicit later certification requirement. No ticket closed.
+
+
+## 2026-09-08 — canonical personal responsible evaluation
+
+- Confirmed two canonical lead assignment fields and their UUID foreign keys; legacy any_responsible/SDR aliases are not substituted for these relationships. Existing member catalogue uses org_visible_members and excludes active masters conceptually; virtual shadow IDs are UI-only and never persisted. Inactive real members may still be compared as historical assignments.
+- Initial real fixture used UI role spelling membro and failed setup; corrected to database enum member before establishing the meaningful red: missing personal RPC. Migration 23 then passed current assignment projection, foreign lead/member denial, invalid field rejection, service-role denial, rename/inactivation, deletion and null.
+- Public evaluator red→green compares the two slots independently by member UUID and explains current reference names. Member references are validated before short-circuit, null cannot satisfy not_equals, malformed assignment values fail as source_unavailable. Initial TypeScript union narrowing failed Deno checks; converted responsible rules to an explicit mapped discriminated union and both Deno checks passed.
+- Added a real hidden-master-registry test: ordinary caller cannot read the master_users row, but the authoritative helper still excludes that member reference and permits a normal teammate. Future selector must apply the same exclusion; do not rely only on the nested view filter under caller RLS. Existing global view was not changed.
+- Twenty-four-migration reverse rollback/reapply and effective privileges passed. Unit evaluator/HTTP/executor/publication tests: 86 passed across runs. Focused ESLint passed after removing an unsafe explicit throw from fixture cleanup. Personal HTTP reproduced old endpoint 422; deployed test-guided-condition on preview only. Full real integration running. Responsible UI/organizational grants/publication and all remaining ticket requirements remain pending; no ticket certified.
+
+
+- Final full real integration: 42 passed, including the personal HTTP responsible group, current names after inactivation, absent assignment, deleted reference in a dispensable branch and hidden master exclusion. All validation/deployment handles terminal. This checkpoint does not expose responsible options in the editor yet. Next: searchable selector with the same authoritative master exclusion, followed by explicit automatic scopes and mixed-reader/publication support. Full 21-ticket objective remains active; no HITL certification.

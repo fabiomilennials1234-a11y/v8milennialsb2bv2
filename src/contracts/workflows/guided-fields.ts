@@ -50,3 +50,14 @@ export const GUIDED_SCALAR_FIELDS = { ...GUIDED_TEXT_FIELDS, ...GUIDED_NUMBER_FI
 export function isGuidedScalarField(value: unknown): value is keyof typeof GUIDED_SCALAR_FIELDS {
   return isGuidedTextField(value) || isGuidedNumberField(value);
 }
+
+
+/** Canonical assignment slots; these are relationships, not free-text fields. */
+export const GUIDED_RESPONSIBLE_FIELDS = {
+  'lead.pre_sale_responsible_id': { column: 'pre_sale_responsible_id', label: 'Responsável de pré-vendas' },
+  'lead.sale_responsible_id': { column: 'sale_responsible_id', label: 'Responsável de vendas' },
+} as const;
+export type GuidedResponsibleField = keyof typeof GUIDED_RESPONSIBLE_FIELDS;
+export function isGuidedResponsibleField(value: unknown): value is GuidedResponsibleField {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(GUIDED_RESPONSIBLE_FIELDS, value);
+}

@@ -293,3 +293,38 @@ it('evaluates authorized origin and company from the same protected data respons
       { id: 'company', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' }],
   });
 });
+
+
+it('compares canonical sales and presales member identities independently', async () => {
+  const preSaleId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', saleId = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_responsibles')
+      ? [{ field_values: { pre_sale_responsible_id: preSaleId, sale_responsible_id: saleId }, members: [
+        { id: preSaleId, name: 'Ana' }, { id: saleId, name: 'Marina' },
+      ] }] : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, {
+    organizationId: 'org-1', leadId: 'lead-1', condition: { version: 1, id: 'both', kind: 'group', match: 'all', children: [
+      { version: 1, id: 'presales', field: 'lead.pre_sale_responsible_id', operator: 'equals', memberId: preSaleId.toUpperCase() },
+      { version: 1, id: 'sales', field: 'lead.sale_responsible_id', operator: 'not_equals', memberId: preSaleId },
+    ] },
+  })).toEqual({ status: 'evaluated', matched: true, groups: [{ id: 'both', status: 'evaluated', matched: true }], rules: [
+    { id: 'presales', status: 'evaluated', matched: true, actual: preSaleId, reference: { id: preSaleId, name: 'Ana' } },
+    { id: 'sales', status: 'evaluated', matched: true, actual: saleId, reference: { id: preSaleId, name: 'Ana' } },
+  ] });
+});
+
+
+it('does not fall back to name access for responsible fields without their organizational reader', async () => {
+  let reads = 0;
+  const database = createClient('https://db.example.test', 'test-service-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => { reads++; return new Response('{}'); } },
+  });
+  expect(await evaluateGuidedCondition(database, {
+    organizationId: 'org-1', leadId: 'lead-1', authorization: { kind: 'organization', workflowId: 'workflow-1' },
+    condition: { version: 1, id: 'responsible', field: 'lead.sale_responsible_id', operator: 'is_empty' },
+  })).toEqual({ status: 'error', code: 'access_denied' });
+  expect(reads).toBe(0);
+});

@@ -1,4 +1,4 @@
-import { GUIDED_SCALAR_FIELDS, isGuidedScalarField, isGuidedNumberField, isGuidedNumberOperator, type GuidedNumberField, type GuidedNumberComparison, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
+import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, type GuidedResponsibleField, GUIDED_SCALAR_FIELDS, isGuidedScalarField, isGuidedNumberField, isGuidedNumberOperator, type GuidedNumberField, type GuidedNumberComparison, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export type GuidedScalarRule = {
@@ -11,7 +11,11 @@ export type GuidedOriginRule = { version: 1; id: string; field: 'lead.origin' } 
   { operator: 'equals' | 'not_equals'; originId: string } | { operator: 'is_empty' }
 );
 
-export type GuidedRule = GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedResponsibleRule = { [Field in GuidedResponsibleField]: { version: 1; id: string; field: Field } & (
+  { operator: 'equals' | 'not_equals'; memberId: string } | { operator: 'is_empty' }
+) }[GuidedResponsibleField];
+
+export type GuidedRule = GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -39,6 +43,9 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && rule.children.every(child => valid(child, groupDepth + 1));
     }
     if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
+    if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty'
+      || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
     if (rule.field === 'lead.origin') return rule.operator === 'is_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.originId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.originId));
@@ -76,10 +83,15 @@ export async function evaluateGuidedCondition(
     return { status: 'error' as const, code: 'invalid_configuration' as const };
   }
   const requestedFields = guidedConditionFields(request.condition);
+  const responsibleFields = requestedFields.filter(isGuidedResponsibleField);
+  // Automatic reads require their own explicit scope and atomic reader.
+  if (request.authorization && responsibleFields.length) return { status: 'error' as const, code: 'access_denied' as const };
+  const memberIds = new Set<string>();
   const originIds = new Set<string>();
   const tagIds = new Set<string>();
   function collect(current: GuidedCondition): void {
     if ('children' in current) current.children.forEach(collect);
+    else if (isGuidedResponsibleField(current.field) && 'memberId' in current) memberIds.add(current.memberId.toLowerCase());
     else if (current.field === 'lead.origin' && current.operator !== 'is_empty') originIds.add(current.originId.toLowerCase());
     else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
   }
@@ -181,6 +193,36 @@ export async function evaluateGuidedCondition(
     }
     if ([...originIds].some(id => !origins.has(id))) return { status: 'error' as const, code: 'reference_unavailable' as const };
   }
+  const members = new Map<string, { id: string; name: string }>();
+  let assignments: Record<string, unknown> = {};
+  if (responsibleFields.length) {
+    const response = await caller.rpc('test_guided_condition_responsibles', {
+      p_organization_id: request.organizationId, p_lead_id: request.leadId,
+      p_fields: responsibleFields, p_member_ids: [...memberIds],
+    });
+    if (response.error) {
+      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
+        : response.error.code === 'PT404' ? 'context_unavailable' as const
+        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
+        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+      return { status: 'error' as const, code };
+    }
+    const rows = response.data;
+    if (!Array.isArray(rows) || rows.length !== 1 || !rows[0] || !Array.isArray(rows[0].members)
+      || !rows[0].field_values || typeof rows[0].field_values !== 'object' || Array.isArray(rows[0].field_values)) {
+      return { status: 'error' as const, code: 'source_unavailable' as const };
+    }
+    assignments = rows[0].field_values;
+    if (responsibleFields.some(field => {
+      const value = assignments[GUIDED_RESPONSIBLE_FIELDS[field].column];
+      return value !== null && (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value));
+    })) return { status: 'error' as const, code: 'source_unavailable' as const };
+    for (const member of rows[0].members) {
+      if (!member || typeof member.id !== 'string' || typeof member.name !== 'string') return { status: 'error' as const, code: 'source_unavailable' as const };
+      members.set(member.id.toLowerCase(), member);
+    }
+    if ([...memberIds].some(id => !members.has(id))) return { status: 'error' as const, code: 'reference_unavailable' as const };
+  }
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
   const record = (request.authorization && (usesFieldReader || usesTagReader || usesOriginReader)
     ? (data as unknown as { field_values: Record<string, unknown> }).field_values : data) as Record<string, unknown>;
@@ -214,6 +256,16 @@ export async function evaluateGuidedCondition(
         decided = condition.match === 'all' ? !matched : matched;
       }
       return group.matched;
+    }
+    if (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') {
+      const actual = assignments[GUIDED_RESPONSIBLE_FIELDS[condition.field].column];
+      const member = condition.operator === 'is_empty' ? undefined : members.get(condition.memberId.toLowerCase())!;
+      const matched = condition.operator === 'is_empty' ? actual === null
+        : typeof actual === 'string' && (condition.operator === 'equals'
+          ? actual.toLowerCase() === member!.id.toLowerCase() : actual.toLowerCase() !== member!.id.toLowerCase());
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual,
+        ...(member ? { reference: { id: member.id, name: member.name } } : {}) });
+      return matched;
     }
     if (condition.field === 'lead.origin') {
       const empty = actualOrigin === null || actualOrigin === '';
