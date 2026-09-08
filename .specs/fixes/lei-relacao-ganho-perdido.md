@@ -55,10 +55,14 @@ O campo calculado usa o recurso nativo de [filtros do PostgREST](https://docs.po
 4. Só então integrar o frontend. O filtro novo depende da função: não liberar
    o frontend antes da migration. Não executar `db push` com pendências alheias.
 
-Produção não foi alterada nesta implementação. Uma branch de preview já existente
+Antes da autorização, produção não foi alterada. Uma branch de preview já existente
 foi usada apenas com fixtures em transação desfeita; nenhuma branch nova criada.
 Rollback do frontend usa o commit anterior. A recuperação inclui instrução de
 rollback conservador das marcas; o campo calculado aditivo pode permanecer.
+
+Em 2026-09-08, após autorização explícita na sessão, migration aplicada às
+17:37:41 UTC e ledger conferido. Recuperação corrigiu 1.362 registros com backup.
+Smoke PostgREST dos três filtros passou, assim como a conferência dos grants.
 
 ## Segurança
 
