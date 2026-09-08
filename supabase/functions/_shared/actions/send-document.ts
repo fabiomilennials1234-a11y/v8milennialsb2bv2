@@ -167,6 +167,7 @@ export async function checkDocumentAlreadySent(
   filePath?: string | null,
   currentActionId?: string | null,
   organizationId?: string,
+  completedOnly = false,
 ): Promise<boolean> {
   // Exclude the current action's own row from the dedup query. `claim_pending_ai_actions`
   // sets status='processing' before the executor runs, so without this guard the gate
@@ -176,7 +177,7 @@ export async function checkDocumentAlreadySent(
     .select("id, payload")
     .eq("conversation_id", conversationId)
     .eq("action_type", "send_document")
-    .in("status", ["completed", "processing"]);
+    .in("status", completedOnly ? ["completed"] : ["completed", "processing"]);
 
   if (currentActionId) {
     query = query.neq("id", currentActionId);
@@ -418,7 +419,9 @@ export async function executeSendDocument(
     }
   }
   if (preventRepeatedDocuments && conversationId && await checkDocumentAlreadySent(
-    supabase, conversationId, documentId, leadId, doc.file_path, actionId, organizationId,
+    // Claimed siblings are not proof of delivery: otherwise two pending copies
+    // would suppress each other. The atomic lock below arbitrates in-flight sends.
+    supabase, conversationId, documentId, leadId, doc.file_path, actionId, organizationId, true,
   )) {
     await stampActionOutcome(supabase, actionId, payload, {
       document_id: documentId,

@@ -104,8 +104,15 @@ function buildSupabase(fx: SupabaseFixture) {
             },
             error: fx.docFound === false ? { message: "not found" } : null,
           });
-        case "pending_ai_actions":
-          return tableBuilder({ data: fx.priorAiActions ?? [], error: null });
+        case "pending_ai_actions": {
+          const result = { data: fx.priorAiActions ?? [], error: null };
+          const b = tableBuilder(result);
+          b.in = vi.fn((column: string, values: string[]) => {
+            if (column === "status") result.data = result.data.filter(row => !row.status || values.includes(row.status));
+            return b;
+          });
+          return b;
+        }
         case "whatsapp_messages": {
           const b = tableBuilder({ data: fx.priorWhatsapp ?? [], error: null });
           const origIlike = b.ilike;
@@ -159,6 +166,13 @@ beforeEach(() => {
 });
 
 describe("agent opt-in prevents repeated documents across new actions", () => {
+  it("does not confuse a claimed sibling with a confirmed delivery", async () => {
+    const { supabase, sendMedia } = buildSupabase({ preventRepeatedDocuments: true,
+      priorAiActions: [{ id: "claimed-sibling", status: "processing", payload: { document_id: VALID_DOC } }],
+    });
+    await executeSendDocument(supabase, { document_id: VALID_DOC }, "org-111", "lead-1", "conv-1", "first-action");
+    expect(sendMedia).toHaveBeenCalledTimes(1);
+  });
   it("attaches the operator's full product explanation to the actual media send", async () => {
     const explanation = "B.Tox White, 1 kg. Reduz volume, reconstrói a massa capilar e controla o frizz. Contém pequena quantidade de formol.";
     const { supabase, sendMedia } = buildSupabase({ preventRepeatedDocuments: true, approvedCaption: explanation });
