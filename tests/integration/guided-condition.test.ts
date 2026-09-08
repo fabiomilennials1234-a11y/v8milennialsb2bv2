@@ -792,7 +792,61 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       expect((await service.rpc('read_guided_condition_data', { ...args, p_organization_id: orgB })).error?.code).toBe('42501');
       expect((await service.rpc('read_guided_condition_data', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
       expect((await service.rpc('read_guided_condition_data', { ...args, p_tag_ids: [tagId, foreignTag] })).error?.code).toBe('PT422');
-      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 2 })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId,
+        p_fields: ['lead.name', 'lead.tags'], p_expected_revision: 2 })).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, { ...request, condition: {
+        version: 1, id: 'mixed', kind: 'group', match: 'all', children: [
+          { version: 1, id: 'name', field: 'lead.name', operator: 'equals', value: 'JOSE' }, request.condition,
+        ],
+      } })).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ id: 'name', actual: 'José', matched: true }, { id: 'tag-rule', actual: true, matched: true }],
+      });
+      const definitionFor = (condition: unknown) => ({ nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: condition } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+        { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] });
+      const definition = definitionFor(request.condition);
+      const settings = { name: 'Tag scope' };
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1,
+        p_definition: definition, p_settings: settings })).error).toBeNull();
+      const publishArgs = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+        p_expected_revision: 2, p_definition: definition, p_settings: settings, p_required_fields: ['lead.tags'] };
+      const published = await service.rpc('finalize_guided_workflow_publication', publishArgs);
+      expect(published.error).toBeNull();
+      expect(published.data).toMatchObject({ version_id: expect.any(String), version_number: 1 });
+      const publishHttp = async (expectedRevision: number) => {
+        const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+          method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision }),
+        });
+        return { status: response.status, body: await response.json() };
+      };
+      const publication = await publishHttp(2);
+      expect(publication).toMatchObject({ status: 200, body: { status: 'published', version_id: expect.any(String), version_number: 2 } });
+      const invalidDefinition = definitionFor({ version: 1, id: 'all-references', kind: 'group', match: 'any', children: [
+        request.condition, { version: 1, id: 'foreign', field: 'lead.tags', operator: 'not_has_tag', tagId: foreignTag },
+      ] });
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 2,
+        p_definition: invalidDefinition, p_settings: settings })).error).toBeNull();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publishArgs,
+        p_expected_revision: 3, p_definition: invalidDefinition })).error?.code).toBe('PT422');
+      expect(await publishHttp(3)).toEqual({ status: 422, body: { status: 'error', code: 'reference_unavailable' } });
+      const selected = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
+      expect(selected.error).toBeNull();
+      expect(selected.data?.version_id).toBe(publication.body.version_id);
+      const executionId = crypto.randomUUID();
+      expect((await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId, organization_id: orgA,
+        lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' })).error).toBeNull();
+      expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        guidedVersionId: publication.body.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {},
+      })).toMatchObject({ success: true, status: 'completed' });
+      const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+      expect(steps.error).toBeNull();
+      expect(steps.data?.map(step => step.node_id)).toContain('yes');
+      expect(steps.data?.map(step => step.node_id)).not.toContain('no');
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 3 })).error).toBeNull();
       expect((await service.rpc('read_guided_condition_data', args)).error?.code).toBe('42501');
       expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
     } finally {

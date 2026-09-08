@@ -55,6 +55,9 @@ const tagRollback = readFileSync(`supabase/migrations/rollback/${tagMigration}`,
 const tagAuthorizationMigration = '20271017000015_guided_tag_authorization.sql';
 const tagAuthorizationForward = readFileSync(`supabase/migrations/${tagAuthorizationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const tagAuthorizationRollback = readFileSync(`supabase/migrations/rollback/${tagAuthorizationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const tagPublicationMigration = '20271017000016_guided_tag_publication.sql';
+const tagPublicationForward = readFileSync(`supabase/migrations/${tagPublicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const tagPublicationRollback = readFileSync(`supabase/migrations/rollback/${tagPublicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -75,6 +78,7 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${tagPublicationRollback}
 ${tagAuthorizationRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[])') IS NOT NULL THEN
@@ -189,6 +193,7 @@ ${activationForward}
 -- Migration 15 includes 13 definitions, preserving wider tag approvals.
 ${tagAuthorizationForward}
 ${tagForward}
+${tagPublicationForward}
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[])', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[])', 'EXECUTE')

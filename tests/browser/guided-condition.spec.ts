@@ -710,6 +710,30 @@ test('aprova Empresa explicitamente sem apagar concessão de Nome', async ({ pag
   expect(writes[1]).toEqual(['lead.name']);
 });
 
+test('aprova Tags explicitamente sem apagar concessão de Nome', async ({ page }) => {
+  let grant = { fields: ['lead.name'], revision: 1 };
+  const writes: string[][] = [];
+  await page.route('**/rest/v1/workflow_data_grants?*', route => route.fulfill({ json: grant }));
+  await page.route('**/rest/v1/rpc/set_workflow_data_grant', route => {
+    const body = route.request().postDataJSON();
+    writes.push(body.p_fields);
+    grant = { fields: body.p_fields, revision: grant.revision + 1 };
+    return route.fulfill({ json: grant });
+  });
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ json: [] }));
+  await openGuidedEditor(page, 'Aurora');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await expect(page.getByText('Tags de todos os leads desta organização')).toBeVisible({ timeout: 3000 });
+  await expect(page.getByRole('button', { name: 'Autorizar acesso aos campos selecionados', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Autorizar acesso aos campos selecionados', exact: true }).click();
+  await expect(page.getByText('Acesso autorizado pela organização')).toBeVisible();
+  expect(writes[0]).toEqual(['lead.name', 'lead.tags']);
+  await page.getByRole('button', { name: 'Revogar acesso', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Autorizar acesso aos campos selecionados', exact: true })).toBeVisible();
+  expect(writes[1]).toEqual(['lead.name']);
+});
+
 test('troca operadores de texto preservando valor compatível e resumo no canvas', async ({ page }) => {
   await openGuidedEditor(page, 'Aurora');
   await page.getByText('Nome informado', { exact: true }).click();

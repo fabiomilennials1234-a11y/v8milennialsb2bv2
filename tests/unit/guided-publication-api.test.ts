@@ -265,3 +265,38 @@ it.each([
     issues: expect.arrayContaining([expect.objectContaining({ code, nodeId: 'end' })]) });
   expect(attemptedPublication).toBe(false);
 });
+
+it('reports a removed publication reference as configuration feedback rather than an outage', async () => {
+  const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
+  vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+    const path = new URL(String(input)).pathname;
+    if (path === '/rest/v1/rpc/finalize_guided_workflow_publication') {
+      return new Response(JSON.stringify({ code: 'PT422', message: 'reference_unavailable' }), {
+        status: 422, headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    const resources: Record<string, unknown> = {
+      '/auth/v1/user': { id: 'user-1', app_metadata: {}, user_metadata: {}, aud: 'authenticated' },
+      '/rest/v1/master_users': null,
+      '/rest/v1/team_members': { id: 'member-1', user_id: 'user-1', organization_id: 'org-1', role: 'admin' },
+      '/rest/v1/rpc/can_administer_guided_workflow': true,
+      '/rest/v1/workflow_guided_drafts': { revision: 3, settings: { name: 'Tag condition' }, definition: {
+        nodes: [
+          { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+          { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'r', field: 'lead.tags', operator: 'has_tag', tagId: 'abcd0000-0000-4000-8000-000000000001' } } },
+          { id: 'y', type: 'end', data: {} }, { id: 'n', type: 'end', data: {} },
+        ], edges: [{ id: 'tc', source: 't', target: 'c' },
+          { id: 'cy', source: 'c', target: 'y', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'n', sourceHandle: 'no' }],
+      } },
+    };
+    if (!(path in resources)) throw new Error(`Unexpected external request ${path}`);
+    return new Response(JSON.stringify(resources[path]), { headers: { 'Content-Type': 'application/json' } });
+  });
+  const response = await handleGuidedWorkflowPublication(new Request('https://edge.test/publish', {
+    method: 'POST', headers: { Authorization: 'Bearer user-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ organizationId: 'org-1', workflowId: 'workflow-1', expectedRevision: 3 }),
+  }));
+  expect(response.status).toBe(422);
+  expect(await response.json()).toEqual({ status: 'error', code: 'reference_unavailable' });
+});

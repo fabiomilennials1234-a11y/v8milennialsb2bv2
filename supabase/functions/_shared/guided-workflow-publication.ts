@@ -104,6 +104,7 @@ export async function handleGuidedWorkflowPublication(req: Request): Promise<Res
     });
     if (publication.error) {
       const code = publication.error.code;
+      if (code === 'PT422') return reply({ status: 'error', code: 'reference_unavailable' }, 422);
       return reply({ status: 'error', code: code === 'PT409' ? 'draft_revision_conflict'
         : code === '42501' ? 'access_denied' : 'source_unavailable' }, code === 'PT409' ? 409 : code === '42501' ? 403 : 503);
     }
