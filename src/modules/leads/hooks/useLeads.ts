@@ -10,6 +10,7 @@ import { useIdentity } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
 import { applyLeadListFilters } from "../lib/lead-list-filters";
 import { applyLeadListSort, DEFAULT_LEAD_SORT, type LeadListSort } from "../lib/lead-list-sort";
+import type { LeadRelacao } from "../lib/lead-relacao-situacao";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -22,7 +23,7 @@ export interface LeadsFilterParams {
   searchQuery?: string;
   filterOrigin?: string;
   filterQualification?: string;
-  /** Gaveta: lead | cliente | indefinido, ou "all". Recorta no BANCO. */
+  /** Gaveta: lead | cliente | perdido | indefinido, ou "all". Recorta no BANCO. */
   filterClassificacao?: string;
   /** A org classifica por ERP? Decide a FONTE do recorte Lead x Cliente. */
   usaLeiDoErp?: boolean;
@@ -78,6 +79,9 @@ export function useLeads(params: LeadsFilterParams = {}) {
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
+  useRealtimeSubscription("deals", ["leads", "leads-count", "leads-stats"]);
+  useRealtimeSubscription("pipeline_entries", ["leads", "leads-count", "leads-stats"]);
+  useRealtimeSubscription("sale_events", ["leads", "leads-count", "leads-stats"]);
 
   return useQuery({
     // Ordem e recorte entram na chave junto com filtros e pagina. Sem sort.*,
@@ -116,7 +120,20 @@ export function useLeads(params: LeadsFilterParams = {}) {
       const { data, error } = await applyLeadListSort(query, sort).range(from, to);
 
       if (error) throw error;
-      return data;
+      // Campo calculado ainda não está nos tipos gerados. Consulta estreita
+      // tipada separadamente conserva os tipos dos joins da lista.
+      const relacoes = new Map<string, LeadRelacao>();
+      if (!usaLeiDoErp && data.length > 0) {
+        const { data: rows, error: relationError } = await supabase
+          .from("leads")
+          .select("id, relacao_negocios")
+          .eq("organization_id", organizationId)
+          .in("id", data.map((lead) => lead.id))
+          .returns<Array<{ id: string; relacao_negocios: LeadRelacao }>>();
+        if (relationError) throw relationError;
+        for (const row of rows ?? []) relacoes.set(row.id, row.relacao_negocios);
+      }
+      return data.map((lead) => ({ ...lead, relacao_negocios: relacoes.get(lead.id) }));
     },
     enabled: isReady,
     staleTime: 5 * 60 * 1000, // 5 minutos

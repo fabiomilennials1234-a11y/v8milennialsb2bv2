@@ -99,7 +99,7 @@ export function LeadMobileCard({
             Cliente
           </span>
         ) : (
-          <span className="text-muted-foreground">Lead</span>
+          <span className="text-muted-foreground">{standing?.relacao === "perdido" ? "Perdido" : "Lead"}</span>
         )}
         <span className="text-border">·</span>
         {standing?.emNegociacao ? (

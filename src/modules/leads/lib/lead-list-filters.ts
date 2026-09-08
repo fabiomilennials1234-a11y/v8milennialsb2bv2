@@ -20,7 +20,7 @@ export interface LeadListFilterValues {
    * (leads sem tier — `qualification_tier IS NULL`, ≠ do tier "desqualificado"). */
   filterQualification?: string;
   /**
-   * Gaveta do lead: `"lead" | "cliente" | "indefinido"`, ou `"all"` (sem
+   * Gaveta do lead: `"lead" | "cliente" | "perdido" | "indefinido"`, ou `"all"` (sem
    * recorte). Filtra no BANCO, não na página carregada — a lista é paginada, e
    * filtrar no cliente mostraria "3 de 12.686" em vez dos 3 de verdade.
    */
@@ -29,8 +29,7 @@ export interface LeadListFilterValues {
    * De onde vem a verdade sobre "é cliente?" para ESTA organização.
    *
    * `true` — a org tem integração de ERP, e a gaveta é `leads.classificacao`.
-   * `false` (padrão) — a org não tem, e vale a lei da RELAÇÃO: venda no funil
-   * OU pedido no ERP, exatamente como a coluna "Relação" da lista.
+   * `false` (padrão) — ganho prevalece; somente perdas = Perdido; demais = Lead.
    *
    * Vem de `useOrgUsaLeiDoErp`. Ausente = `false`, que é a queda segura: a lei
    * da Relação deriva de dado que toda org tem.
@@ -215,23 +214,15 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   //   • org COM integração de ERP → `leads.classificacao` (a lei do ERP,
   //     migration 20270922000000). Aceita as quatro gavetas, inclusive
   //     `indefinido`, que só existe nesse mundo.
-  //   • org SEM integração → a lei da RELAÇÃO, que é a mesma que a coluna
-  //     "Relação" da lista já imprime: venda no funil OU pedido no ERP.
-  //
-  // As duas colunas são materializadas justamente porque a lista é paginada no
-  // servidor: `deriveLeadStandings` só enxerga os 50 leads da página, e
-  // recortar ali mostraria "3 de 12.686" em vez dos 3 de verdade.
+  //   • org SEM integração → relacao_negocios: ganho > só perdas > lead.
+  // Campo calculado evita filtrar só os 50 leads carregados no browser.
   if (filters.filterClassificacao && filters.filterClassificacao !== "all") {
     if (filters.usaLeiDoErp) {
       q = q.eq("classificacao", filters.filterClassificacao);
-    } else if (filters.filterClassificacao === "cliente") {
-      // Cliente = QUALQUER uma das duas provas. O `or` do PostgREST é o que
-      // mantém a lei inteira: cobrir só a venda deixaria de fora 178 leads que
-      // a coluna "Relação" da mesma linha chama de Cliente (medido em prod).
-      q = q.or("primeira_venda_at.not.is.null,primeiro_pedido_erp_at.not.is.null");
-    } else if (filters.filterClassificacao === "lead") {
-      // Lead = NENHUMA das duas provas.
-      q = q.is("primeira_venda_at", null).is("primeiro_pedido_erp_at", null);
+    } else if (["lead", "cliente", "perdido"].includes(filters.filterClassificacao)) {
+      // Campo calculado no banco: ganho prevalece; só perdas e nenhum aberto
+      // = Perdido. A mesma regra serve à página, contagem e exportação.
+      q = q.eq("relacao_negocios", filters.filterClassificacao);
     }
     // `indefinido` numa org sem ERP não recorta nada: a gaveta não existe
     // nesse mundo, e devolver lista vazia seria afirmar que não há ninguém.

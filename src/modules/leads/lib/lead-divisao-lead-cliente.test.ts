@@ -1,17 +1,4 @@
-/**
- * A DIVISÃO LEAD × CLIENTE — uma decisão, duas fontes.
- *
- * Decisão do CTO em 2026-09-04: a lei do ERP é mandatória para quem TEM a
- * integração; quem não tem segue a lei da RELAÇÃO, que é a que a coluna
- * "Relação" da lista já imprime (`lead-relacao-situacao.ts`):
- *
- *     cliente ⟺ saleCount > 0 OU orderCount > 0
- *
- * Medido em prod no mesmo dia, sobre 56.859 leads vivos: 1.558 são cliente só
- * pelo funil, **178 só pelo ERP** e 1.935 pela união. Cobrir só a venda — como
- * a primeira versão desta feature fazia — deixava esses 178 na gaveta "lead"
- * com a coluna da mesma linha imprimindo "Cliente".
- */
+/** Contrato compartilhado pela página, contagem e exportação: duas leis, um seletor. */
 import { describe, expect, it } from "vitest";
 import { applyLeadListFilters } from "./lead-list-filters";
 
@@ -32,40 +19,18 @@ function espiao() {
 }
 
 describe("org SEM integração de ERP — vale a lei da Relação", () => {
-  it("Cliente = venda OU pedido, num único `or`", () => {
+  it.each(["lead", "cliente", "perdido"])("%s usa o campo calculado do banco", (relacao) => {
     const { q, chamadas } = espiao();
-    applyLeadListFilters(q, { filterClassificacao: "cliente", usaLeiDoErp: false });
-    expect(chamadas).toContain(
-      'or("primeira_venda_at.not.is.null,primeiro_pedido_erp_at.not.is.null")',
-    );
-    // E NÃO pode filtrar pela gaveta do ERP: numa org sem integração,
-    // `classificacao` é 'lead' em 100% das linhas.
-    expect(chamadas.join()).not.toContain("classificacao");
+    applyLeadListFilters(q, { filterClassificacao: relacao, usaLeiDoErp: false });
+    expect(chamadas).toContain('eq("relacao_negocios","' + relacao + '")');
+    expect(chamadas.join()).not.toContain("primeira_venda_at");
+    expect(chamadas.join()).not.toContain("primeiro_pedido_erp_at");
+    expect(chamadas.join()).not.toContain('eq("classificacao"');
   });
-
-  it("Lead = nenhuma das duas provas", () => {
-    const { q, chamadas } = espiao();
-    applyLeadListFilters(q, { filterClassificacao: "lead", usaLeiDoErp: false });
-    expect(chamadas).toContain('is("primeira_venda_at",null)');
-    expect(chamadas).toContain('is("primeiro_pedido_erp_at",null)');
-  });
-
-  it("os 178 clientes-só-pelo-ERP NÃO caem em Lead", () => {
-    // O defeito que esta correção fecha: filtrar Lead só por `primeira_venda_at`
-    // (a versão anterior) devolveria quem tem pedido no ERP e nenhuma venda.
-    const { q, chamadas } = espiao();
-    applyLeadListFilters(q, { filterClassificacao: "lead", usaLeiDoErp: false });
-    const filtraPedido = chamadas.some((c) =>
-      c.includes("primeiro_pedido_erp_at"),
-    );
-    expect(filtraPedido).toBe(true);
-  });
-
-  it("`indefinido` não recorta nada — a gaveta não existe neste mundo", () => {
+  it("indefinido não recorta uma organização sem ERP", () => {
     const { q, chamadas } = espiao();
     applyLeadListFilters(q, { filterClassificacao: "indefinido", usaLeiDoErp: false });
-    expect(chamadas.join()).not.toContain("primeira_venda_at");
-    expect(chamadas.join()).not.toContain("classificacao");
+    expect(chamadas.join()).not.toContain("relacao_negocios");
   });
 });
 
@@ -107,7 +72,7 @@ describe("o sentinel `all` e a ausência", () => {
     // "lead" sem ninguém entender por quê.
     const { q, chamadas } = espiao();
     applyLeadListFilters(q, { filterClassificacao: "cliente" });
-    expect(chamadas.join()).toContain("primeira_venda_at");
+    expect(chamadas.join()).toContain("relacao_negocios");
     expect(chamadas.join()).not.toContain("classificacao");
   });
 });

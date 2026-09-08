@@ -8,6 +8,7 @@
 import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
 
 export interface WhatsAppMessage {
+  retry_attempt?: number;
   id: string;
   organization_id: string;
   instance_id: string | null;
@@ -39,6 +40,7 @@ export interface WhatsAppMessage {
 
 /** Mensagem que falhou ao ser enviada — armazenada em cache paralelo para retry. */
 export interface FailedMessage {
+  retry_attempt?: number;
   id: string;
   phoneNumber: string;
   instanceId: string | null;

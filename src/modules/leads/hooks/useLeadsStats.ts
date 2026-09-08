@@ -65,12 +65,12 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
   const { organizationId, isReady, timezone } = useOrganization();
   const timeZone = timezone || "America/Sao_Paulo";
 
-  const { searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterResponsible } = filters;
+  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterResponsible } = filters;
 
   return useQuery<LeadsStats>({
     queryKey: [
       "leads-stats", organizationId, timeZone,
-      searchQuery, filterOrigin, filterQualification, filterUf, createdFrom, createdTo, filterResponsible,
+      searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterResponsible,
     ],
     queryFn: async () => {
       if (!organizationId) return { thisMonth: 0, withOwner: 0 };
@@ -94,7 +94,7 @@ export function useLeadsStats(filters: Omit<LeadsFilterParams, "page"> = {}) {
         // então procurar por telefone dava contagem diferente do que estava na
         // tela.
         return applyLeadListFilters(q, {
-          searchQuery, filterOrigin, filterQualification,
+          searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp,
           filterUf, createdFrom, createdTo, filterResponsible,
         });
       };
