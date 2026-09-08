@@ -231,3 +231,10 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Checks: 26 browser tests passed; 14 real API/Auth/RLS tests passed; focused lint has zero errors and existing any warnings; diff check passed. Worker remains undeployed.
 - Outstanding: UI recovery when publication lookup fails (including deactivation access), stale-version refresh feedback, active-state cache coherence, remaining producer/discovery graph consumers, complete config/reference validation, and real deployed-worker journey. No ticket certified; all 21 tickets remain in scope.
 - Typecheck ratchet completed with zero introduced errors (805 baseline plus 11 inherited tolerated). All associated process handles terminal.
+
+## 2026-09-08 — activation lookup recovery
+
+- Browser TDD reproduced disabled deactivation when publication lookup failed. Active guided workflows now call deactivation RPC even without a readable publication; inactive activation remains blocked until lookup succeeds. This uses the API's existing deactivation-without-current-grant contract.
+- Browser TDD reproduced missing lookup recovery UI. Added persistent publication-read error and explicit refetch button. Recovery restores activation availability without replacing unsaved condition edits.
+- All 28 browser cases passed. Focused lint passed with existing any warnings; diff check passed. No database changes, worker deployment or additional typecheck baseline changes. All process sessions terminal.
+- Outstanding certification and later-ticket scope unchanged. Next substantial product slice is grouped All/Any rules (ticket 05), while producer/runtime end-to-end validation for 03/04 remains open. No ticket certified and no final HITL yet.

@@ -629,7 +629,7 @@ function AutomacoesEditorContent() {
   }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
 
   const handleToggleActive = useCallback(async () => {
-    if (!isNew && guidedDraft.data && guidedDraft.publication.data) {
+    if (!isNew && guidedDraft.data && (isActive || guidedDraft.publication.data)) {
       try {
         const result = await guidedDraft.setActive.mutateAsync(!isActive);
         setIsActive(result.is_active);
@@ -698,7 +698,7 @@ function AutomacoesEditorContent() {
         onNameChange={setName}
         isActive={isActive}
         onToggleActive={handleToggleActive}
-        isToggleDisabled={Boolean(guidedDraft.data) && (guidedDraft.publication.isPending || guidedDraft.publication.isError || guidedDraft.setActive.isPending)}
+        isToggleDisabled={Boolean(guidedDraft.data) && (guidedDraft.setActive.isPending || (!isActive && (guidedDraft.publication.isPending || guidedDraft.publication.isError)))}
         onSave={handleSave}
         isSaving={isSaving}
         onPublish={!isNew && guidedDraft.data ? handlePublish : undefined}
@@ -714,6 +714,11 @@ function AutomacoesEditorContent() {
         hiddenNodeTypes={["code_javascript"]}
       />
 
+      {guidedDraft.data && guidedDraft.publication.isError && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+        <p>Não foi possível consultar a versão publicada.</p>
+        <button type="button" className="mt-1 underline underline-offset-4" disabled={guidedDraft.publication.isFetching}
+          onClick={() => guidedDraft.publication.refetch()}>Recarregar publicação</button>
+      </div>}
       {publicationIssues.length > 0 && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
         <p className="font-medium">Publicação não concluída</p>
         <ul className="mt-1 space-y-1">{publicationIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>
