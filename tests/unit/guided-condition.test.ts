@@ -235,3 +235,15 @@ it.each(['', '0', false, 'not-a-score'])('rejects invalid numeric source %j inst
     version: 1, id: 'score', field: 'lead.qualification_score', operator: 'is_empty',
   } })).toEqual({ status: 'error', code: 'source_unavailable' });
 });
+
+it('compares a UTM campaign as text without requiring it to exist in a suggestion page', async () => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async () => new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', utm_campaign: '[VERÃO] B2B.' }), {
+      headers: { 'Content-Type': 'application/json' },
+    }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+    version: 1, id: 'campaign', field: 'lead.utm_campaign', operator: 'equals', value: '[verao] b2b.',
+  } })).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'campaign', status: 'evaluated', matched: true, actual: '[VERÃO] B2B.' }] });
+});

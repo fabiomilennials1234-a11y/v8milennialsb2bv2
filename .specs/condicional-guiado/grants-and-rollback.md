@@ -119,3 +119,9 @@ Rollback restores migration 16's validating finalizer without location details, 
 Applied/registered on preview only. Adds explicit lead.qualification_score to the grant writer, scalar and mixed-tag readers, and publication finalizer. Numeric projection preserves zero/null and returns only requested fields. Existing grant rows are not broadened. Effective EXECUTE verified live for all four functions: readers/finalizer service-only; grant writer authenticated-only with business administration checks unchanged.
 
 Rollback restores the exact previous writer/readers/finalizer while preserving wider storage CHECK, approval history, immutable versions and execution pins. Stop guided admission before rollback; numeric evaluation then fails closed. Nineteen-file reverse rollback/recovery rehearsal passed with synthetic six-field history. Full recovery now runs 00..11, 18 (supersedes 12/13/15/16/17), then 14 (personal tag RPC). Do not reapply earlier narrow constraints over retained score/tag approvals. Fresh installation remains numeric order. No production deployment.
+
+### UTM campaign migration 20271017000019
+
+Applied/registered atomically on preview only. Adds explicit lead.utm_campaign scope and exact text projection to existing scalar/mixed readers and finalizer. No existing approval row is expanded. Effective reader/finalizer EXECUTE: anon/authenticated false, service true. Grant writer remains authenticated-only with business administration checks.
+
+Rollback restores migration 18's functions while retaining wider storage CHECK and all approval/version/pin history. Stop guided admission before rollback; unavailable campaign scope fails closed. Twenty-file reverse rollback/reapply passed with seven-field synthetic history. Full recovery is 00..11, 19 (superset of 12/13/15/16/17/18), then 14. Do not replay narrower constraints over retained campaign grants. Fresh installation remains numerical. No production change.

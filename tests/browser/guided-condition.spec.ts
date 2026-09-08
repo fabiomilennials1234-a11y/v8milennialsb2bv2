@@ -918,3 +918,52 @@ test('configura pontuação numérica sem confundir zero com comparação incomp
   await expect(value).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeEnabled();
 });
+
+test('seleciona campanha UTM por busca e aceita texto fora das sugestões', async ({ page }) => {
+  await openGuidedEditor(page, '');
+  await page.route('**/rest/v1/leads?*', route => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.get('select') !== 'utm_campaign') return route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] });
+    expect(params.get('limit')).toBe('25');
+    return route.fulfill({ json: params.getAll('utm_campaign').some(value => value.includes('Atacado'))
+      ? [{ utm_campaign: 'Atacado verão' }] : [{ utm_campaign: 'Campanha inicial' }] });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.utm_campaign');
+  const picker = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
+  await picker.click();
+  await expect(page.getByRole('option', { name: 'Campanha inicial', exact: true })).toBeVisible();
+  await page.getByPlaceholder('Buscar ou digitar valor…').fill('Atacado');
+  await page.getByRole('option', { name: 'Atacado verão', exact: true }).click();
+  await expect(page.locator('.react-flow__node-condition')).toContainText('UTM Campaign é igual a “Atacado verão”');
+  await picker.click();
+  await page.getByPlaceholder('Buscar ou digitar valor…').fill('Nova campanha');
+  await page.getByRole('option', { name: 'Usar "Nova campanha"', exact: true }).click();
+  await expect(page.locator('.react-flow__node-condition')).toContainText('UTM Campaign é igual a “Nova campanha”');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.utm_campaign', value: 'Nova campanha' });
+    return route.fulfill({ json: { status: 'evaluated', matched: false, rules: [{ id: 'rule-1', status: 'evaluated', matched: false, actual: 'Outra campanha' }] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('status')).toContainText('UTM Campaign do lead: Outra campanha');
+});
+
+test('falha de sugestões UTM não vira lista vazia nem impede valor manual', async ({ page }) => {
+  await openGuidedEditor(page, '');
+  let failed = true;
+  await page.route('**/rest/v1/leads?*', route => new URL(route.request().url()).searchParams.get('select') === 'utm_campaign'
+    ? route.fulfill(failed ? { status: 503, json: { message: 'unavailable' } } : { json: [] })
+    : route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.utm_campaign');
+  await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Valor da comparação', exact: true }).click();
+  await expect(page.getByText('Nenhum valor encontrado nesta org — digite manualmente.')).toHaveCount(0);
+  await page.getByPlaceholder('Buscar ou digitar valor…').fill('Campanha manual');
+  await page.getByRole('option', { name: 'Usar "Campanha manual"', exact: true }).click();
+  await expect(page.locator('.react-flow__node-condition')).toContainText('“Campanha manual”');
+  failed = false;
+  await page.getByRole('button', { name: 'Tentar carregar sugestões novamente' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Não foi possível carregar sugestões UTM.' })).toHaveCount(0);
+});

@@ -80,3 +80,22 @@ export function useOrgUtmValues(field: string | undefined | null): UseOrgUtmValu
     isLoading: enabled && query.isLoading,
   };
 }
+
+/** Bounded caller-scoped suggestions. A page is never the set of valid values. */
+export function useGuidedUtmValues(actorId: string, organizationId: string, field: string, search: string) {
+  return useQuery({
+    queryKey: ['org-utm-values', field, organizationId, 'guided', actorId, search],
+    enabled: Boolean(actorId && organizationId && UTM_VALUE_FIELDS.has(field)),
+    queryFn: async ({ signal }) => {
+      if (!UTM_VALUE_FIELDS.has(field)) throw new Error('Unsupported UTM field');
+      let query = supabase.from('leads').select(field).eq('organization_id', organizationId)
+        .is('deleted_at', null).not(field, 'is', null).neq(field, '').order(field).limit(25).abortSignal(signal);
+      if (search) query = query.ilike(field, `%${search.replace(/[\\%_]/g, '\\$&')}%`);
+      const { data, error } = await query;
+      if (error) throw error;
+      const values = (data as unknown as Array<Record<string, unknown>>).map(row => row[field])
+        .filter((value): value is string => typeof value === 'string' && value.trim() !== '');
+      return [...new Set(values)];
+    },
+  });
+}

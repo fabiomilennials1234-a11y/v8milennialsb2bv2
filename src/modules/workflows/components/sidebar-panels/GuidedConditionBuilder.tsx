@@ -2,6 +2,8 @@ import { GUIDED_SCALAR_FIELDS, GUIDED_NUMBER_OPERATORS, isGuidedNumberField, isG
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
+import { GuidedUtmPicker } from './GuidedUtmPicker';
+import { isUtmValueField } from '../../hooks/useOrgUtmValues';
 import { GuidedTagPicker } from './GuidedTagPicker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -106,9 +108,10 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         else if (isGuidedTextOperator(operator)) onChange({ ...base, operator, value: 'value' in condition ? condition.value : '' });
       }}>{Object.entries(GUIDED_TEXT_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazio</option></select></div>
     {condition.operator !== 'is_empty' && <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
-      <Input id={`guided-value-${condition.id}`} value={condition.value} aria-invalid={missingValue}
+      {isUtmValueField(GUIDED_SCALAR_FIELDS[condition.field].column) ? <GuidedUtmPicker key={condition.field} id={`guided-value-${condition.id}`} actorId={actorId} organizationId={organizationId}
+        field={GUIDED_SCALAR_FIELDS[condition.field].column} value={condition.value} onChange={value => onChange({ ...condition, value })} /> : <Input id={`guided-value-${condition.id}`} value={condition.value} aria-invalid={missingValue}
         aria-describedby={missingValue ? `guided-value-error-${condition.id}` : undefined}
-        onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: José" />
+        onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: José" />}
       {missingValue && <p id={`guided-value-error-${condition.id}`} className="text-xs text-destructive">Informe um valor ou escolha “está vazio”.</p>}
       <p className="text-xs text-muted-foreground">Maiúsculas e acentos não alteram a comparação.</p></div>}
     </>}

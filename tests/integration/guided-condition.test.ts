@@ -43,7 +43,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     });
     if (member.error) throw member.error;
     const leads = await service.from('leads').insert([
-      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', email: 'comercial@aurora.example', phone: '5511999990000', pre_sale_responsible_id: adminMemberId },
+      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', utm_campaign: '[VERÃO] B2B.', email: 'comercial@aurora.example', phone: '5511999990000', pre_sale_responsible_id: adminMemberId },
       { id: leadB, organization_id: orgB, name: 'Dado protegido' },
     ]);
     if (leads.error) throw leads.error;
@@ -708,6 +708,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
   }, 60000);
 
   it.each([
+    { field: 'lead.utm_campaign', value: 'VERAO', actual: '[VERÃO] B2B.' },
     { field: 'lead.company', value: 'AURORA', actual: 'Fábrica Aurora' },
     { field: 'lead.email', value: '@aurora.example', actual: 'comercial@aurora.example' },
     { field: 'lead.phone', value: '5511', actual: '5511999990000' },
@@ -725,6 +726,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
 
   it.each([
     { field: 'lead.qualification_score', column: 'qualification_score', actual: 0, comparison: 0, fragment: 0 },
+    { field: 'lead.utm_campaign', column: 'utm_campaign', actual: '[VERÃO] B2B.', comparison: '[verao] b2b.', fragment: 'verao' },
     { field: 'lead.company', column: 'company', actual: 'Fábrica Aurora', comparison: 'FABRICA AURORA', fragment: 'AURORA' },
     { field: 'lead.email', column: 'email', actual: 'comercial@aurora.example', comparison: 'COMERCIAL@AURORA.EXAMPLE', fragment: '@aurora.example' },
     { field: 'lead.phone', column: 'phone', actual: '5511999990000', comparison: '5511999990000', fragment: '5511' },

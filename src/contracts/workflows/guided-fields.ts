@@ -4,6 +4,7 @@ export const GUIDED_TEXT_FIELDS = {
   'lead.name': { column: 'name', label: 'Nome', actualLabel: 'Nome do lead' },
   'lead.email': { column: 'email', label: 'Email', actualLabel: 'Email do lead' },
   'lead.phone': { column: 'phone', label: 'Telefone', actualLabel: 'Telefone do lead' },
+  'lead.utm_campaign': { column: 'utm_campaign', label: 'UTM Campaign', actualLabel: 'UTM Campaign do lead' },
   'lead.company': { column: 'company', label: 'Empresa', actualLabel: 'Empresa do lead' },
 } as const;
 export type GuidedTextField = keyof typeof GUIDED_TEXT_FIELDS;
