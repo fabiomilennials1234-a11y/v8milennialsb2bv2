@@ -1141,14 +1141,14 @@ test('troca de usuário não reutiliza sugestões UTM da conta anterior', async 
 });
 
 
-for (const [field, label, actual] of [['lead.name', 'Nome', 'José'], ['lead.qualification_score', 'Pontuação de qualificação', 0]] as const) {
+for (const [field, label, actual] of [['lead.name', 'Nome', 'José'], ['lead.qualification_score', 'Pontuação de qualificação', 0], ['lead.origin', 'Origem', 'web'], ['lead.pre_sale_responsible_id', 'Responsável de pré-vendas', 'abcd0000-0000-4000-8000-000000000001'], ['lead.sale_responsible_id', 'Responsável de vendas', 'abcd0000-0000-4000-8000-000000000001']] as const) {
   test(`configura ${label} preenchido sem valor adicional e mantém foco ao duplicar`, async ({ page }) => {
     await openGuidedEditor(page, 'JOSE');
     await page.getByText('Nome informado', { exact: true }).click();
     await page.getByLabel('Informação', { exact: true }).selectOption(field);
     await page.getByLabel('Comparação', { exact: true }).selectOption('is_not_empty', { timeout: 3000 });
     await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
-    await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} está preenchido`);
+    await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} está ${field === 'lead.origin' ? 'preenchida' : 'preenchido'}`);
     await page.route('**/functions/v1/test-guided-condition', route => {
       expect(route.request().postDataJSON().condition).toEqual({ version: 1, id: 'rule-1', field, operator: 'is_not_empty' });
       return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual }] } });

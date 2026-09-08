@@ -180,3 +180,10 @@ Rollback restores the previous finalizer and leaves all approval/version/assignm
 ### Scalar presence comparison (no migration)
 
 The is_not_empty scalar operator reuses existing field grants, exact-projection readers and immutable publication storage. No schema, grant or migration-ledger changes were required. Personal-test and publication endpoints were updated on preview; the queue worker was not deployed. To roll back this capability, revert the scalar-presence code change and redeploy those two endpoints from the prior code. Retain saved drafts and published versions unchanged: an older runtime rejects the new operator as invalid configuration rather than guessing a Boolean result. Restoring the new code restores evaluation without rewriting stored conditions.
+
+
+### Reference presence migration 20271017000027
+
+Applied and registered atomically on preview only. Updates the publication finalizer so origin/responsible is_empty and is_not_empty require the exact field scope but do not validate unused comparison UUIDs. Equality/inequality retain all reference validation. Existing grant vocabulary and readers are unchanged. Effective EXECUTE verified: anon/authenticated false, service_role true; search_path=public.
+
+Rollback restores migration 26's finalizer only, preserving every saved condition, approval, version, member and lead. Coordinate a code rollback to the prior operator contract when disabling this feature; do not rewrite persisted definitions. Twenty-eight-migration rehearsal passed with exact current finalizer restoration and preserved approval/version/pin history. Full recovery: 00..11, 26, 27, 14, 21, 23, 24; fresh installation remains numerical. Personal-test/publication endpoints updated only on preview; queue worker and production untouched.

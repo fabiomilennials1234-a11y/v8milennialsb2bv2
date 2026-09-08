@@ -13,8 +13,8 @@ import { Button } from '@/components/ui/button';
 
 export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolean {
   return 'children' in condition ? !condition.children.length || condition.children.some(isIncompleteGuidedDraft)
-    : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && !condition.memberId
-    : condition.field === 'lead.origin' ? condition.operator !== 'is_empty' && !condition.originId
+    : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
+    : condition.field === 'lead.origin' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.originId
     : condition.field === 'lead.tags' ? !condition.tagId : condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && (condition.value === '' || (typeof condition.value === 'number' && !Number.isFinite(condition.value)));
 }
 const newRule = (): GuidedRuleDraft => ({ version: 1, id: crypto.randomUUID(), field: 'lead.name', operator: 'equals', value: '' });
@@ -89,20 +89,20 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
         const base = { version: 1 as const, id: condition.id, field: condition.field };
-        if (event.target.value === 'is_empty') onChange({ ...base, operator: 'is_empty' });
+        if (event.target.value === 'is_empty' || event.target.value === 'is_not_empty') onChange({ ...base, operator: event.target.value });
         else onChange({ ...base, operator: event.target.value === 'not_equals' ? 'not_equals' : 'equals',
           memberId: 'memberId' in condition ? condition.memberId : '', memberLabel: 'memberLabel' in condition ? condition.memberLabel : undefined });
-      }}><option value="equals">é</option><option value="not_equals">não é</option><option value="is_empty">está vazio</option></select>
-      {condition.operator !== 'is_empty' && <GuidedResponsiblePicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />}
+      }}><option value="equals">é</option><option value="not_equals">não é</option><option value="is_empty">está vazio</option><option value="is_not_empty">está preenchido</option></select>
+      {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <GuidedResponsiblePicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />}
     </> : condition.field === 'lead.origin' ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
         const base = { version: 1 as const, id: condition.id, field: condition.field };
-        if (event.target.value === 'is_empty') onChange({ ...base, operator: 'is_empty' });
+        if (event.target.value === 'is_empty' || event.target.value === 'is_not_empty') onChange({ ...base, operator: event.target.value });
         else onChange({ ...base, operator: event.target.value === 'not_equals' ? 'not_equals' : 'equals',
           originId: 'originId' in condition ? condition.originId : '', originLabel: 'originLabel' in condition ? condition.originLabel : undefined });
-      }}><option value="equals">é</option><option value="not_equals">não é</option><option value="is_empty">está vazia</option></select>
-      {condition.operator !== 'is_empty' && <GuidedOriginPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />}
+      }}><option value="equals">é</option><option value="not_equals">não é</option><option value="is_empty">está vazia</option><option value="is_not_empty">está preenchida</option></select>
+      {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <GuidedOriginPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />}
     </> : condition.field === 'lead.tags' ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator}

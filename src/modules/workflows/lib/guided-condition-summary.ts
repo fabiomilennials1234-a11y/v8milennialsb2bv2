@@ -5,8 +5,10 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
   if ('children' in condition) return `${condition.match === 'all' ? 'Todas' : 'Qualquer'}: (${condition.children.map(summarizeGuidedCondition).join(condition.match === 'all' ? ' E ' : ' OU ')})`;
   if (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') return condition.operator === 'is_empty'
     ? `${GUIDED_RESPONSIBLE_FIELDS[condition.field].label} está vazio`
+    : condition.operator === 'is_not_empty' ? `${GUIDED_RESPONSIBLE_FIELDS[condition.field].label} está preenchido`
     : `${GUIDED_RESPONSIBLE_FIELDS[condition.field].label} ${condition.operator === 'equals' ? 'é' : 'não é'} “${condition.memberLabel || 'Selecione um responsável'}”`;
   if (condition.field === 'lead.origin') return condition.operator === 'is_empty' ? 'Origem está vazia'
+    : condition.operator === 'is_not_empty' ? 'Origem está preenchida'
     : `Origem ${condition.operator === 'equals' ? 'é' : 'não é'} “${condition.originLabel || 'Selecione uma origem'}”`;
   if (condition.field === 'lead.tags') return `${condition.operator === 'has_tag' ? 'Tem tag' : 'Não tem tag'} “${condition.tagLabel || 'Selecione uma tag'}”`;
   if (condition.field === 'lead.qualification_score') {

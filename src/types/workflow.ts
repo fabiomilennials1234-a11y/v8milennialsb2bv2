@@ -656,9 +656,9 @@ export type GuidedTagRuleDraft = {
 export type GuidedNumberRuleDraft = { version: 1; id: string; field: GuidedNumberField }
   & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
 export type GuidedOriginRuleDraft = { version: 1; id: string; field: 'lead.origin' }
-  & ({ operator: 'equals' | 'not_equals'; originId: string; originLabel?: string } | { operator: 'is_empty' });
+  & ({ operator: 'equals' | 'not_equals'; originId: string; originLabel?: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
 export type GuidedResponsibleRuleDraft = { [Field in GuidedResponsibleField]: { version: 1; id: string; field: Field }
-  & ({ operator: 'equals' | 'not_equals'; memberId: string; memberLabel?: string } | { operator: 'is_empty' })
+  & ({ operator: 'equals' | 'not_equals'; memberId: string; memberLabel?: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' })
 }[GuidedResponsibleField];
 export type GuidedRuleDraft = GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 

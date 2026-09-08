@@ -8,11 +8,11 @@ export type GuidedScalarRule = {
 } & GuidedTextComparison;
 
 export type GuidedOriginRule = { version: 1; id: string; field: 'lead.origin' } & (
-  { operator: 'equals' | 'not_equals'; originId: string } | { operator: 'is_empty' }
+  { operator: 'equals' | 'not_equals'; originId: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' }
 );
 
 export type GuidedResponsibleRule = { [Field in GuidedResponsibleField]: { version: 1; id: string; field: Field } & (
-  { operator: 'equals' | 'not_equals'; memberId: string } | { operator: 'is_empty' }
+  { operator: 'equals' | 'not_equals'; memberId: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' }
 ) }[GuidedResponsibleField];
 
 export type GuidedRule = GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
@@ -43,10 +43,10 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && rule.children.every(child => valid(child, groupDepth + 1));
     }
     if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
-    if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty'
+    if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
-    if (rule.field === 'lead.origin') return rule.operator === 'is_empty'
+    if (rule.field === 'lead.origin') return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.originId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.originId));
     if (rule.field === 'lead.tags') return (rule.operator === 'has_tag' || rule.operator === 'not_has_tag')
@@ -89,8 +89,8 @@ export async function evaluateGuidedCondition(
   const tagIds = new Set<string>();
   function collect(current: GuidedCondition): void {
     if ('children' in current) current.children.forEach(collect);
-    else if (isGuidedResponsibleField(current.field) && 'memberId' in current) memberIds.add(current.memberId.toLowerCase());
-    else if (current.field === 'lead.origin' && current.operator !== 'is_empty') originIds.add(current.originId.toLowerCase());
+    else if (isGuidedResponsibleField(current.field) && current.operator !== 'is_empty' && current.operator !== 'is_not_empty' && 'memberId' in current) memberIds.add(current.memberId.toLowerCase());
+    else if (current.field === 'lead.origin' && current.operator !== 'is_empty' && current.operator !== 'is_not_empty') originIds.add(current.originId.toLowerCase());
     else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
   }
   collect(request.condition);
@@ -265,8 +265,9 @@ export async function evaluateGuidedCondition(
     }
     if (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') {
       const actual = assignments[GUIDED_RESPONSIBLE_FIELDS[condition.field].column];
-      const member = condition.operator === 'is_empty' ? undefined : members.get(condition.memberId.toLowerCase())!;
+      const member = condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? undefined : members.get(condition.memberId.toLowerCase())!;
       const matched = condition.operator === 'is_empty' ? actual === null
+        : condition.operator === 'is_not_empty' ? actual !== null
         : typeof actual === 'string' && (condition.operator === 'equals'
           ? actual.toLowerCase() === member!.id.toLowerCase() : actual.toLowerCase() !== member!.id.toLowerCase());
       rules.push({ id: condition.id, status: 'evaluated', matched, actual,
@@ -275,9 +276,10 @@ export async function evaluateGuidedCondition(
     }
     if (condition.field === 'lead.origin') {
       const empty = actualOrigin === null || actualOrigin === '';
-      const origin = condition.operator === 'is_empty' ? undefined : origins.get(condition.originId.toLowerCase())!;
+      const origin = condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? undefined : origins.get(condition.originId.toLowerCase())!;
       // Slugs encode catalogue identity: unlike display text, their case is significant.
       const matched = condition.operator === 'is_empty' ? empty
+        : condition.operator === 'is_not_empty' ? !empty
         : !empty && (condition.operator === 'equals' ? actualOrigin === origin!.slug : actualOrigin !== origin!.slug);
       rules.push({ id: condition.id, status: 'evaluated', matched, actual: actualOrigin,
         ...(origin ? { reference: { id: origin.id, name: origin.name } } : {}) });

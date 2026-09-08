@@ -505,3 +505,15 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 
 
 - Final scalar-presence verification: 71 browser tests passed, 46 real integration tests passed, and typecheck ratchet reported zero introduced errors (805 baseline + 11 inherited; 481 current). All test/deployment handles terminal. No migration was added; code rollback is documented. Next: presence on origin/responsible fields, then the remaining standard catalogue requirements. No ticket closed.
+
+
+## 2026-09-08 — origin and responsible presence
+
+- Real evaluator red rejected is_not_empty for origin and both assignment slots. Added their unary presence contracts, current-value evaluation and UI controls. Five focused browser cases passed for scalar/reference presence, no extra comparison input, faithful summary and copied-rule keyboard focus.
+- Presence ignores unused comparison IDs, including stale extra memberId on existing is_empty rules; those IDs are not active references. A presence check still reads the current field under the personal or organizational scope and produces no reference metadata.
+- Database red then reproduced PT422 from the prior finalizer when presence carried unused reference IDs. Migration 27 updates only the finalizer's reference collection. Exact field authorization remains required, including forged empty required_fields rejection. Applied/registered on preview and deployed personal-test/publication endpoints there only. Three focused real journeys passed presence, null absence, publication and revocation.
+- Twenty-eight-migration reverse rollback/recovery passed with retained grants/versions/pins and exact finalizer restoration. Effective finalizer privileges verified: anon/authenticated false, service_role true, search_path=public. Deno checks, 91 unit tests and focused ESLint passed; full browser/integration/typecheck checks are running. No worker/production deployment or ticket certification.
+
+
+- Final reference-presence verification: 74 browser tests, 49 real integration tests and 91 unit tests passed. Typecheck ratchet: zero introduced errors (805 baseline + 11 inherited; 481 current). All validation/deployment handles terminal. No ticket closed.
+- Next field inventory evidence: the lead editor accepts free-text urgency (examples Alta/Média/Baixa), whereas the kanban filter has a narrower timeline preset list. Do not treat that preset list as the exhaustive domain. formatFaturamento documents mixed free text, ranges and numeric-looking strings; do not convert a range into a scalar currency amount. These findings guide the next standard-field selectors.

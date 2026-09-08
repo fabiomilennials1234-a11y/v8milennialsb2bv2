@@ -80,6 +80,9 @@ const responsibleReadRollback = readFileSync(`supabase/migrations/rollback/${res
 const responsiblePublicationMigration = '20271017000026_guided_responsible_publication.sql';
 const responsiblePublicationForward = readFileSync(`supabase/migrations/${responsiblePublicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const responsiblePublicationRollback = readFileSync(`supabase/migrations/rollback/${responsiblePublicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const presenceMigration = '20271017000027_guided_reference_presence.sql';
+const presenceForward = readFileSync(`supabase/migrations/${presenceMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const presenceRollback = readFileSync(`supabase/migrations/rollback/${presenceMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -101,6 +104,7 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${presenceRollback}
 ${responsiblePublicationRollback}
 ${responsibleReadRollback}
 DO $$ BEGIN
@@ -250,6 +254,7 @@ ${discoveryForward}
 ${activationForward}
 -- Migration 22 restores the complete field contract without narrowing retained grants.
 ${responsiblePublicationForward}
+${presenceForward}
 ${tagForward}
 ${originForward}
 ${responsibleForward}
