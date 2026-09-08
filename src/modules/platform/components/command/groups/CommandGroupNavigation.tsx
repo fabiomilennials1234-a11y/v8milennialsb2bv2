@@ -24,7 +24,6 @@ import { CommandGroup, CommandItem } from "cmdk";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/modules/identity";
 import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
-import { useMetricsStudioEnabled } from "@/modules/analytics";
 import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
 import { pushRecent } from "../recentCommands";
 
@@ -34,8 +33,7 @@ interface CommandGroupNavigationProps {
 
 const NAV_ITEMS = [
   { id: "nav-dashboard",   label: "Dashboard",      path: "/dashboard",      Icon: LayoutDashboard },
-  // `rollout: true` = item some quando a org não está liberada (G5).
-  { id: "nav-metricas",    label: "Métricas",        path: "/metricas",       Icon: ChartNoAxesCombined, rollout: true },
+  { id: "nav-metricas",    label: "Métricas",        path: "/metricas",       Icon: ChartNoAxesCombined },
   { id: "nav-leads",       label: "Leads",           path: "/leads",          Icon: Users },
   { id: "nav-chat",        label: "Chat WhatsApp",   path: "/chat-whatsapp",   Icon: MessageSquare },
   { id: "nav-copilot",     label: "Copilot IA",      path: "/copilot",        Icon: Bot },
@@ -52,10 +50,6 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
   const navigate = useNavigate();
   const { user } = useAuth();
   const orgFeatures = useOrgFeaturesOptional();
-  const metricsStudio = useMetricsStudioEnabled();
-
-  // Palette não deve oferecer porta que leva a "ainda não liberado".
-  const itens = NAV_ITEMS.filter((i) => !("rollout" in i && i.rollout) || metricsStudio.enabled);
 
   // Plan gating — item bloqueado mostra cadeado e navega pro estado
   // bloqueado da rota (FeatureRoute), sem entrar nos recentes.
@@ -76,7 +70,7 @@ export function CommandGroupNavigation({ onClose }: CommandGroupNavigationProps)
       heading="Navegação"
       className="[&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5"
     >
-      {itens.map(({ id, label, path, Icon }) => {
+      {NAV_ITEMS.map(({ id, label, path, Icon }) => {
         const locked = isItemLocked(path);
         return (
           <CommandItem

@@ -50,7 +50,7 @@ export interface NavNode {
   /** Item só aparece para master. */
   masterOnly?: boolean;
   /** Gate de runtime resolvido pelo hook (ex.: páginas Meta conectadas). */
-  gate?: "meta_pages_connected" | "metrics_studio_enabled";
+  gate?: "meta_pages_connected";
   /** Cor própria do item. Nenhum item usa hoje — funil não tem mais classe. */
   color?: string;
   /**
@@ -109,7 +109,6 @@ export const SIDEBAR_PRIMARY: NavNode[] = [
     label: "Métricas",
     icon: ChartNoAxesCombined,
     path: "/metricas",
-    gate: "metrics_studio_enabled",
   },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   { label: "Disparos", icon: Send, path: "/disparos" },
@@ -233,6 +232,7 @@ export const TURBO_PATHS = ["/copilot", "/automacoes"] as const;
  */
 export const OUTBOUND_MEMBER_ALLOWED_PATHS = [
   "/dashboard",
+  "/metricas",
   "/chat",
   "/chat-whatsapp",
   // SCRUM-637: os pipes de sistema vivem em `/funil/:slug` — entrada por

@@ -19,7 +19,6 @@ import { MetricsStudioSidebar } from "@/modules/analytics/components/metrics-stu
 import { StudioTabs } from "@/modules/analytics/components/metrics-studio/StudioTabs";
 import { useMetricsStudio } from "@/modules/analytics/hooks/useMetricsStudio";
 import { useMetricsStudioPanels, type StudioPanel } from "@/modules/analytics/hooks/useMetricsStudioPanels";
-import { useMetricsStudioEnabled } from "@/modules/analytics/hooks/useMetricsStudioEnabled";
 import { useMetricsStudioReport } from "@/modules/analytics/hooks/useMetricsStudioReport";
 import { useStudioCatalog } from "@/modules/analytics/hooks/useStudioCatalog";
 import { useStudioClock } from "@/modules/analytics/hooks/useStudioClock";
@@ -40,18 +39,15 @@ const showError = (error: unknown) => toast.error(error instanceof Error ? error
 export default function MetricsStudio() {
   const catalogo = useStudioCatalog();
   const abas = useMetricsStudioPanels();
-  const rollout = useMetricsStudioEnabled();
   const { timezone } = useOrganization();
   const { isMaster } = useIdentity();
   const { data: membro } = useCurrentTeamMember();
   const { allowed: podeVerPorPessoa } = useFeaturePermission("performance.view");
-  const podeEditar = rollout.enabled && membro?.role === "admin" && membro?.is_active !== false;
+  const podeEditar = membro?.role === "admin" && membro?.is_active !== false;
   const [modo, setModo] = useState<"ver" | "editar">("ver");
   const editando = modo === "editar" && podeEditar;
   const [ativaId, setAtivaId] = useState<string | null>(null);
-  // As duas orgs fora do rollout mantêm os dashboards que já viam no Comando,
-  // sem ganhar composição, edição ou métricas personalizadas.
-  const paineisVisiveis = rollout.enabled ? abas.paineis : abas.paineis.filter((panel) => templates.some((template) => template.key === panel.templateKey));
+  const paineisVisiveis = abas.paineis;
   const ativa = paineisVisiveis.find((p) => p.id === ativaId) ?? paineisVisiveis[0] ?? null;
   const studio = useMetricsStudio(catalogo.byId, ativa?.id ?? null);
   const persistence = studio.persistence;
@@ -101,7 +97,7 @@ export default function MetricsStudio() {
     observer.observe(canvas);
     window.addEventListener("resize", measure);
     return () => { observer.disconnect(); window.removeEventListener("resize", measure); };
-  }, [rollout.enabled, rollout.isLoading, carregando, erro, editando, ativa?.id]);
+  }, [carregando, erro, editando, ativa?.id]);
 
   const add = useCallback((metric: EngineMetric) => studio.addMetric(metric, size), [studio, size]);
   const criar = async (template?: typeof templates[number]) => {
@@ -110,9 +106,8 @@ export default function MetricsStudio() {
       if (id) { setAtivaId(id); setSelectedId(null); setNovaAba(false); setModo("editar"); }
     } catch (error) { showError(error); }
   };
-  const podeExportar = rollout.enabled && studio.windows.some((win) => !win.fixo && catalogo.byId.has(win.metricId));
+  const podeExportar = studio.windows.some((win) => !win.fixo && catalogo.byId.has(win.metricId));
 
-  if (rollout.isLoading) return <TorqueLoader variant="inline" />;
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -150,7 +145,6 @@ export default function MetricsStudio() {
         {persistence.saveError}. Mantenha esta página aberta. <Button variant="outline" onClick={persistence.retrySave} disabled={persistence.isSaving}>Tentar salvar novamente</Button>
       </AlertDescription></Alert>}
       {incompleto && <Alert><AlertTitle>Intervalo incompleto</AlertTitle><AlertDescription>Escolha a data inicial e a final. Todos os cards continuam no último período completo.</AlertDescription></Alert>}
-      {!rollout.enabled && <Alert><AlertTitle>Dashboards em modo de leitura</AlertTitle><AlertDescription>Os dashboards do Comando continuam disponíveis aqui. A personalização do Estúdio ainda não está liberada nesta organização.</AlertDescription></Alert>}
       <StudioTabs paineis={paineisVisiveis} ativoId={ativa?.id ?? null} editavel={editando} busy={abas.isPending}
         onSelecionar={(id) => { setAtivaId(id); setSelectedId(null); }}
         onCriar={() => setNovaAba(true)}
@@ -170,7 +164,7 @@ export default function MetricsStudio() {
           <div className="min-h-0 min-w-0 flex-1">
             {!ativa ? <div className="flex h-full flex-col items-center justify-center gap-3 p-5 text-center"><p>Nenhuma aba nesta organização.</p>
               {podeEditar ? <Button onClick={() => setNovaAba(true)}><Plus className="mr-2 size-4" />Criar uma aba</Button> : <p className="text-sm text-muted-foreground">Um administrador pode criar abas a partir dos templates.</p>}</div> :
-              <MetricsCanvas ref={canvasRef} windows={rollout.enabled ? studio.windows : studio.windows.filter((win) => !!win.fixo)} byId={catalogo.byId} intervalo={intervalo} monthlyRange={monthlyRange} month={month} year={year}
+              <MetricsCanvas ref={canvasRef} windows={studio.windows} byId={catalogo.byId} intervalo={intervalo} monthlyRange={monthlyRange} month={month} year={year}
                 period={efetivo.period} range={efetivo.range} podeVerPorPessoa={podeVerPorPessoa} editavel={editando} podeEditar={podeEditar}
                 onEditar={() => setModo("editar")} selectedId={selectedId} size={size} onSelect={(id) => { setSelectedId(id); if (id && editando) studio.focusWindow(id); }}
                 onMove={studio.moveWindow} onResize={studio.resizeWindow} onChart={(id, chart) => studio.setChart(id, chart, size)}
