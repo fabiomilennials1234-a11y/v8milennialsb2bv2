@@ -599,3 +599,19 @@ test('resultado preserva hierarquia de grupos e distingue ramo não avaliado', a
   await expect(nested).not.toContainText('Condição 2');
   await expect(result).toContainText('Condição 2 · Nome é igual a “José”: Sim');
 });
+
+test('amplia painel pelo teclado sem perder edição e respeita viewport estreito', async ({ page }) => {
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('José');
+  const panel = page.getByRole('complementary', { name: 'Configurar Condição', exact: true });
+  const initial = await panel.boundingBox({ timeout: 3000 });
+  await page.getByRole('button', { name: 'Ampliar painel', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBeGreaterThan(initial!.width + 100);
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('José');
+  await expect(page.getByRole('button', { name: 'Reduzir painel', exact: true })).toBeFocused();
+  await page.setViewportSize({ width: 600, height: 800 });
+  await expect.poll(async () => { const box = (await panel.boundingBox())!; return box.x >= 0 && box.x + box.width <= 600; }).toBe(true);
+  await page.getByRole('button', { name: 'Reduzir painel', exact: true }).click();
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('José');
+});

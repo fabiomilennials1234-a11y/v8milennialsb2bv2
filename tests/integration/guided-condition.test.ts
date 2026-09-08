@@ -167,7 +167,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect(bypass.error?.code).toBe('42501');
   }, 60000);
 
-  it.each([false, true])('resumes old rules without repeating actions and respects revocation during the wait: %s', async (revokeGrant) => {
+  it.each([{ revokeGrant: false, grouped: false }, { revokeGrant: true, grouped: false }, { revokeGrant: false, grouped: true }, { revokeGrant: true, grouped: true }])('resumes old rules without repeating actions (revoked=$revokeGrant, grouped=$grouped)', async ({ revokeGrant, grouped }) => {
     const workflowId = crypto.randomUUID();
     const executionId = crypto.randomUUID();
     const title = `Once ${workflowId}`;
@@ -178,7 +178,12 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
       { id: 'action', type: 'action', data: { actionType: 'create_followup', followupTitle: title } },
       { id: 'wait', type: 'delay', data: { amount: 2, unit: 'hours' } },
-      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
+      { id: 'c', type: 'condition', data: { guidedCondition: grouped ? {
+        version: 1, id: 'group', kind: 'group', match: 'any', children: [
+          { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' },
+          { version: 1, id: 'r2', field: 'lead.name', operator: 'is_empty' },
+        ],
+      } : { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
       { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
     ], edges: [{ id: 'ta', source: 't', target: 'action' }, { id: 'aw', source: 'action', target: 'wait' },
       { id: 'wc', source: 'wait', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },

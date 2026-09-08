@@ -1,5 +1,5 @@
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,7 +21,14 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
   condition: GuidedConditionDraft; groupDepth?: number; onChange: (condition: GuidedConditionDraft) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
-  const focusValue = (id: string) => requestAnimationFrame(() => document.getElementById(`guided-value-${id}`)?.focus());
+  const pendingFocus = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    if (pendingFocus.current) {
+      document.getElementById(pendingFocus.current)?.focus();
+      pendingFocus.current = null;
+    }
+  });
+  const focusValue = (id: string) => { pendingFocus.current = `guided-value-${id}`; };
   if ('children' in condition) {
     return <fieldset className="space-y-4 rounded-xl border border-border p-3">
       <legend className="px-1 text-sm font-medium">Grupo de condições</legend>
@@ -39,11 +46,11 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
         <Button type="button" variant="ghost" onClick={() => {
           const copy = duplicateCondition(child);
           onChange({ ...condition, children: [...condition.children.slice(0, index + 1), copy, ...condition.children.slice(index + 1)] });
-          requestAnimationFrame(() => document.getElementById(`guided-${'children' in copy ? 'match' : copy.operator === 'equals' ? 'value' : 'operator'}-${copy.id}`)?.focus());
+          pendingFocus.current = `guided-${'children' in copy ? 'match' : copy.operator === 'equals' ? 'value' : 'operator'}-${copy.id}`;
         }}>{'children' in child ? 'Duplicar grupo' : 'Duplicar regra'}</Button>
         <Button type="button" variant="ghost" onClick={() => {
           onChange({ ...condition, children: condition.children.filter(item => item.id !== child.id) });
-          requestAnimationFrame(() => document.getElementById(`guided-match-${condition.id}`)?.focus());
+          pendingFocus.current = `guided-match-${condition.id}`;
         }}>{'children' in child ? 'Excluir grupo' : 'Excluir regra'}</Button>
         <GuidedConditionBuilder condition={child} groupDepth={groupDepth + 1} onChange={replacement => onChange({ ...condition,
           children: condition.children.map(item => item.id === child.id ? replacement : item) })} />

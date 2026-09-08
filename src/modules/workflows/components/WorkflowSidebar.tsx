@@ -1,4 +1,5 @@
-import { X, Trash2, AlertTriangle, Copy } from "lucide-react";
+import { useState } from 'react';
+import { X, Trash2, AlertTriangle, Copy, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TriggerPanel } from "./sidebar-panels/TriggerPanel";
@@ -78,12 +79,14 @@ export function WorkflowSidebar({
   onDuplicateNode,
   allNodes = [],
 }: WorkflowSidebarProps) {
+  const [expanded, setExpanded] = useState(false);
   if (!selectedNode) return null;
 
   const nodeData = selectedNode.data as unknown as WorkflowNodeData;
   const nodeType = nodeData.type;
   // Trigger is singular per workflow — never duplicable.
   const canDuplicate = nodeType !== "trigger";
+  const guided = nodeType === 'condition' && Boolean((nodeData as ConditionNodeData).guidedCondition);
   const title = NODE_LABELS[nodeType] || "Configuração";
 
   const handleUpdate = (updates: Partial<WorkflowNodeData>) => {
@@ -145,13 +148,18 @@ export function WorkflowSidebar({
   };
 
   return (
-    <div className="w-[360px] border-l bg-card flex flex-col h-full">
+    <div role="complementary" aria-label={`Configurar ${title}`} className="min-w-0 max-w-full shrink-0 border-l bg-card flex flex-col h-full" style={{ width: guided && expanded ? 640 : 360 }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b">
         <h3 className="font-semibold text-sm">Configurar {title}</h3>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+        <div className="flex items-center gap-1">
+        {guided && <Button variant="ghost" size="icon" className="h-7 w-7" aria-label={expanded ? 'Reduzir painel' : 'Ampliar painel'} aria-pressed={expanded} onClick={() => setExpanded(value => !value)}>
+          {expanded ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+        </Button>}
+        <Button variant="ghost" size="icon" className="h-7 w-7" aria-label="Fechar painel" onClick={onClose}>
           <X className="w-4 h-4" />
         </Button>
+        </div>
       </div>
 
       {/* Unresolved references warning */}
