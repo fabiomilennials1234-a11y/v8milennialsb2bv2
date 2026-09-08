@@ -21,10 +21,11 @@ import { requireAuth, AuthError, authErrorResponse, resolvePermission } from "..
 import { ACTION_TO_FEATURE } from "../_shared/permission-actions.ts";
 import { handleTurn } from "../_shared/oraculo/turn-handler.ts";
 import { createOpenRouterLlm } from "../_shared/oraculo/openrouter.ts";
-import { createTurnStore } from "../_shared/oraculo/store.ts";
+import { createTurnStore, TurnConflictError } from "../_shared/oraculo/store.ts";
 import { metricasTool } from "../_shared/oraculo/tools/metricas.ts";
 import { DEFAULT_MAX_TOOL_CALLS } from "../_shared/oraculo/loop.ts";
 import type { OracleScope } from "../_shared/oraculo/scope.ts";
+import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
 
 const SYSTEM_PROMPT = `Você é o Oráculo Comercial do Torque CRM: um analista da operação de vendas.
 
@@ -65,7 +66,7 @@ Deno.serve(withErrorBoundary("oraculo-turno", async (req) => {
   const db = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    { auth: { persistSession: false } },
+    { auth: { persistSession: false, autoRefreshToken: false } },
   );
 
   try {
@@ -76,6 +77,7 @@ Deno.serve(withErrorBoundary("oraculo-turno", async (req) => {
         // ativo" avaliaria um usuário multi-org contra a organização errada.
         auth: async (r, body) => {
           const ctx = await requireAuth(r, { body, requireOrganization: true });
+          await assertPlanFeature(db, ctx.organizationId, "oraculo");
           return {
             userId: ctx.userId,
             teamMemberId: ctx.teamMemberId,
@@ -108,7 +110,13 @@ Deno.serve(withErrorBoundary("oraculo-turno", async (req) => {
       cors,
     );
   } catch (err) {
+    if (err instanceof TurnConflictError) {
+      return new Response(JSON.stringify({ error: err.message }), {
+        status: 409, headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
     if (err instanceof AuthError) return authErrorResponse(err, cors);
+    if (err instanceof PlanFeatureDeniedError) return planDeniedResponse(err, cors);
     throw err;
   }
 }));

@@ -26,6 +26,10 @@ export interface LlmReply {
 export interface LlmRequest {
   messages: Turn[];
   toolResults: Array<{ name: string; result: unknown }>;
+  /** Finalização sem permitir novas ferramentas após esgotar o orçamento. */
+  finalAnswer?: boolean;
+  summary?: string | null;
+  purpose?: "summary";
 }
 
 export interface Llm {
@@ -42,6 +46,7 @@ export interface RunTurnArgs {
   tools: OracleTool[];
   scope: OracleScope;
   messages: Turn[];
+  summary?: string | null;
   /**
    * Teto de chamadas de ferramenta por turno. Ao atingi-lo o laço para e
    * responde com o que já apurou — um modelo que se enrosca não vira conta
@@ -93,6 +98,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   let model = "";
   let inputTokens = 0;
   let outputTokens = 0;
+  let attempts = 0;
 
   const finish = (text: string, hitToolCeiling: boolean): TurnResult => ({
     text,
@@ -109,19 +115,23 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   });
 
   for (;;) {
-    const reply = await args.llm.complete({ messages: args.messages, toolResults });
+    const finalAnswer = attempts >= ceiling;
+    const reply = await args.llm.complete({ messages: args.messages, toolResults, finalAnswer, summary: args.summary });
     model = reply.model;
     inputTokens += reply.inputTokens;
     outputTokens += reply.outputTokens;
+
+    if (finalAnswer) {
+      return finish(reply.text?.trim() || "Atingi o limite de consultas deste turno. Refine a pergunta para continuar.", true);
+    }
 
     if (!reply.toolCalls?.length) {
       return finish(reply.text ?? "", false);
     }
 
     for (const call of reply.toolCalls) {
-      if (toolsUsed.length >= ceiling) {
-        return finish(reply.text ?? "", true);
-      }
+      if (attempts >= ceiling) break;
+      attempts++;
       const tool = catalog.get(call.name);
       if (!tool) {
         rejectedToolCalls.push(call.name);

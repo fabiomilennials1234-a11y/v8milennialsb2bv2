@@ -19,6 +19,7 @@ export interface ConversationState {
   id: string;
   summary: string | null;
   history: Turn[];
+  lastMessageAt?: string | null;
 }
 
 export interface TurnStore {
@@ -30,6 +31,7 @@ export interface TurnStore {
     actor: OracleActor;
     pergunta: string;
     resultado: TurnResult;
+    summary?: string | null;
   }): Promise<void>;
 }
 
@@ -77,14 +79,30 @@ export async function handleTurn(
     keepLastTurns: KEEP_LAST_TURNS,
   });
 
+  const inferenceStartedAt = Date.now();
+  let summary = contexto.summary;
+  let summaryTokens = { input: 0, output: 0 };
+  if (contexto.evicted.length > 0) {
+    const compacted = await deps.llm.complete({
+      messages: contexto.evicted, summary, toolResults: [], purpose: "summary",
+    });
+    if (!compacted.text?.trim()) throw new Error("Não foi possível atualizar a memória do Oráculo.");
+    summary = compacted.text.trim();
+    summaryTokens = { input: compacted.inputTokens, output: compacted.outputTokens };
+  }
+
   const resultado = await runTurn({
     llm: deps.llm,
     tools: deps.tools,
     scope,
     messages: contexto.messages,
+    summary,
   });
+  resultado.telemetry.latencyMs = Date.now() - inferenceStartedAt;
+  resultado.telemetry.inputTokens += summaryTokens.input;
+  resultado.telemetry.outputTokens += summaryTokens.output;
 
-  await deps.store.saveTurn({ conversation, actor, pergunta, resultado });
+  await deps.store.saveTurn({ conversation, actor, pergunta, resultado, summary });
 
   return json(200, {
     conversa_id: conversation.id,

@@ -6,8 +6,8 @@
  * chega do servidor com a procedência que o servidor registrou. O cliente não
  * fabrica fala do assistente nem adivinha o que foi consultado.
  */
-import { useCallback, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useCallback, useRef, useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface OraculoMensagem {
@@ -41,22 +41,27 @@ function atingiuLimite(e: unknown): boolean {
   return mensagem.includes("limite_diario");
 }
 
-export function useOraculoTurno(conversaInicial?: string) {
+export function useOraculoTurno(organizationId: string | null, conversaInicial?: string) {
+  const queryClient = useQueryClient();
+  const viewRevision = useRef(0);
   const [mensagens, setMensagens] = useState<OraculoMensagem[]>([]);
   const [conversaId, setConversaId] = useState<string | null>(conversaInicial ?? null);
   const [restantesHoje, setRestantesHoje] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async (pergunta: string) => {
+    mutationFn: async ({ pergunta, conversationId }: { pergunta: string; conversationId: string | null; revision: number }) => {
       const { data, error } = await supabase.functions.invoke<RespostaTurno>("oraculo-turno", {
-        body: { pergunta, conversa_id: conversaId },
+        body: { pergunta, conversa_id: conversationId, organization_id: organizationId },
       });
       if (error) throw error;
       if (!data) throw new Error("resposta_vazia");
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ["oraculo_conversations"] });
+      void queryClient.invalidateQueries({ queryKey: ["oraculo_turns"] });
+      if (variables.revision !== viewRevision.current) return;
       setConversaId(data.conversa_id);
       setRestantesHoje(data.restantes_hoje);
       setMensagens((anteriores) => [
@@ -70,7 +75,18 @@ export function useOraculoTurno(conversaInicial?: string) {
         },
       ]);
     },
-    onError: (e: unknown) => {
+    onError: (e: unknown, variables) => {
+      if (variables.revision !== viewRevision.current) return;
+      const status = (e as { context?: { status?: number } })?.context?.status;
+      if (status === 409) {
+        void queryClient.invalidateQueries({ queryKey: ["oraculo_turns"] });
+        setErro("A conversa recebeu outra resposta. Abra novamente para atualizar.");
+        return;
+      }
+      if (status === 403) {
+        setErro("Seu acesso ao Oráculo não está disponível nesta organização. Consulte o administrador.");
+        return;
+      }
       setErro(
         atingiuLimite(e)
           ? "Você atingiu o limite de perguntas de hoje. O contador zera amanhã."
@@ -80,21 +96,30 @@ export function useOraculoTurno(conversaInicial?: string) {
   });
 
   const perguntar = useCallback(
-    (pergunta: string) => {
+    (pergunta: string, historico: OraculoMensagem[] | null = []) => {
       const texto = pergunta.trim();
       if (!texto || mutation.isPending) return;
+      if (!organizationId) {
+        setErro("Selecione uma organização antes de perguntar.");
+        return;
+      }
 
+      if (historico === null) {
+        setErro("Aguarde o histórico da conversa antes de continuar.");
+        return;
+      }
       setErro(null);
       setMensagens((anteriores) => [
-        ...anteriores,
+        ...(anteriores.length ? anteriores : historico),
         { id: crypto.randomUUID(), role: "user", content: texto, criadaEm: new Date() },
       ]);
-      mutation.mutate(texto);
+      mutation.mutate({ pergunta: texto, conversationId: conversaId, revision: viewRevision.current });
     },
-    [mutation],
+    [mutation, organizationId, conversaId],
   );
 
   const abrirConversa = useCallback((id: string | null, historico: OraculoMensagem[]) => {
+    viewRevision.current++;
     setConversaId(id);
     setMensagens(historico);
     setErro(null);

@@ -11,7 +11,7 @@
 import type { OracleScope } from "../scope.ts";
 
 export interface ToolDb {
-  rpc(name: string, args: Record<string, unknown>): Promise<{ data: unknown; error: unknown }>;
+  rpc(name: string, args: Record<string, unknown>): PromiseLike<{ data: unknown; error: unknown }>;
 }
 
 export interface ToolDeps {
