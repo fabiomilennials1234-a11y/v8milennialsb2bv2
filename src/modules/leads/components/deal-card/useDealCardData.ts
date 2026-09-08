@@ -10,6 +10,7 @@ import { useProdutosPorNegocio } from "../lead-card/useProdutosPorNegocio";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
 import { useLeadsCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
+import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import { montarReuniaoDoNegocio } from "./reuniao-do-negocio";
 import type { DealCardData, DealCardMove, DealCardStage } from "./types";
 
@@ -56,6 +57,7 @@ function papelDaEtapa(role: unknown): DealCardStage["papel"] {
 }
 
 export function useDealCardData(entryId: string | null, leadId: string | null, isOpen: boolean) {
+  const { usaLeiDoErp } = useOrgUsaLeiDoErp();
   const { organizationId, teamMemberId, role } = useOrganization();
   const { lead, isLoading: carregandoLead } = useLeadDetail(leadId, isOpen);
 
@@ -258,6 +260,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     const l = lead as Linha;
 
     const standing = deriveLeadStanding({
+      usaLeiDoErp,
       deals: dealsMap?.[String(l.id)] ?? [],
       vendas: vendasMap?.[String(l.id)],
       carteira: carteiraMap?.[String(l.id)],
@@ -532,6 +535,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       })),
     };
   }, [
+    usaLeiDoErp,
     lead,
     negocioBase,
     dealsMap,
