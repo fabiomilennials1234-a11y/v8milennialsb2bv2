@@ -5,7 +5,7 @@
  * Helpers privados co-locados: isSzChatInstance, assertCanReplyOnInstance,
  * sanitizeFileName, normalizeMimeType, getMimeType, uploadMediaToStorage.
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { track } from "@/lib/analytics";
@@ -14,6 +14,7 @@ import {
   friendlyWhatsAppSendError,
   whatsAppSendErrorMessage,
 } from "@/modules/communication/lib/edgeFunctionError";
+import { sendWithBoundedRecovery, MAX_SEND_RETRIES, type SendResponse } from "./shared/send-recovery";
 import type { WhatsAppMessage, FailedMessage } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
 
@@ -59,16 +60,43 @@ async function isSzChatInstanceCached(instanceId: string | null | undefined): Pr
   return result;
 }
 
-async function invokeWithTimeout<T>(
+function recoveryContext(queryClient: QueryClient, org: string, phone: string, instanceId: string | null | undefined, sendId: string | undefined, content: string | null, mediaUrl?: string) {
+  const key = ["whatsapp_messages", org, phone, instanceId];
+  const original = queryClient.getQueryData<WhatsAppMessage[]>(key)?.find(m => m.id === sendId);
+  const since = new Date(new Date(original?.timestamp ?? Date.now()).getTime() - 1000).toISOString();
+  return {
+    onRetry: (attempt: number) => queryClient.setQueryData<WhatsAppMessage[]>(key, old =>
+      (old ?? []).map(m => m.id === sendId ? { ...m, retry_attempt: attempt } : m)),
+    confirm: async (): Promise<SendResponse | null> => {
+      const normalizedPhone = formatPhoneForWhatsApp(phone);
+      if (!instanceId || !normalizedPhone) return null;
+      let q = supabase.from("whatsapp_messages").select("message_id")
+        .eq("organization_id", org).eq("instance_id", instanceId)
+        .eq("phone_number", normalizedPhone).eq("direction", "outgoing")
+        .in("status", ["sent", "delivered", "read", "played"])
+        .gte("timestamp", since);
+      if (mediaUrl) q = q.eq("media_url", mediaUrl);
+      else q = q.eq("content", content ?? "");
+      const { data, error } = await q.order("timestamp", { ascending: false }).limit(1);
+      if (error || !data?.[0]) return null;
+      return { data: { _confirmed: true, result: { message_id: data[0].message_id } }, error: null };
+    },
+  };
+}
+
+async function invokeWithTimeout(
   fnName: string,
   body: Record<string, unknown>,
   timeoutMs = SEND_TIMEOUT_MS,
-): Promise<{ data: T; error: unknown }> {
-  const invoke = supabase.functions.invoke(fnName, { body });
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("Envio expirou. Tente novamente.")), timeoutMs),
-  );
-  return Promise.race([invoke, timeout]) as Promise<{ data: T; error: unknown }>;
+  recovery?: ReturnType<typeof recoveryContext>,
+): Promise<{ data: Record<string, unknown>; error: unknown }> {
+  const result = await sendWithBoundedRecovery({
+    send: () => supabase.functions.invoke(fnName, { body }),
+    confirm: recovery?.confirm ?? (async () => null),
+    onRetry: recovery?.onRetry ?? (() => {}),
+    timeoutMs,
+  });
+  return { data: result.data ?? {}, error: result.error };
 }
 
 /** Sanitiza nome de arquivo para ser compatível com Storage */
@@ -175,18 +203,21 @@ export function useSendWhatsAppMessage() {
   const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
+    retry: false, // one recovery controller owns the ten-attempt budget
     mutationFn: async ({
       phoneNumber,
       message,
       instanceName,
       instanceId,
       leadId,
+      _sendId,
     }: {
       phoneNumber: string;
       message: string;
       instanceName: string;
       instanceId?: string | null;
       leadId?: string | null;
+      _sendId?: string;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
@@ -206,7 +237,7 @@ export function useSendWhatsAppMessage() {
           organization_id: teamMember.organization_id,
           phone_number: formattedNumber,
           message,
-        });
+        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, message));
         data = result.data;
         error = result.error;
       } else {
@@ -224,7 +255,7 @@ export function useSendWhatsAppMessage() {
             text: message,
             ...(leadId ? { lead_id: leadId } : {}),
           },
-        });
+        }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, message));
         data = result.data;
         error = result.error;
       }
@@ -241,7 +272,7 @@ export function useSendWhatsAppMessage() {
       const timestamp = new Date().toISOString();
 
       // Fire-and-forget — webhook send.message is the authoritative save
-      supabase.from("whatsapp_messages").upsert({
+      if (!data._confirmed && !messageId.startsWith("local_")) supabase.from("whatsapp_messages").upsert({
         organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
         message_id: messageId,
@@ -268,7 +299,8 @@ export function useSendWhatsAppMessage() {
         ["whatsapp_messages", orgId, phone, instId]
       );
 
-      const optimisticId = makeOptimisticId();
+      const optimisticId = variables._sendId ?? makeOptimisticId();
+      variables._sendId = optimisticId;
       const optimisticMsg: WhatsAppMessage = {
         id: optimisticId,
         organization_id: orgId || "",
@@ -286,6 +318,7 @@ export function useSendWhatsAppMessage() {
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         sent_by_ai: false,
+        sent_source: "manual",
       };
 
       queryClient.setQueryData<WhatsAppMessage[]>(
@@ -293,20 +326,21 @@ export function useSendWhatsAppMessage() {
         (old) => [...(old || []), optimisticMsg]
       );
 
-      return { previousMessages, optimisticId };
+      return { previousMessages, optimisticId, timestamp: optimisticMsg.timestamp };
     },
     onError: (err, variables, context) => {
-      if (context?.previousMessages) {
+      if (context?.optimisticId) {
         queryClient.setQueryData(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
-          context.previousMessages
+          (old: WhatsAppMessage[] = []) => old.filter(m => m.id !== context.optimisticId)
         );
       }
       const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
       queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
-        ...prev,
+        ...prev.filter(m => m.id !== context?.optimisticId),
         {
-          id: `failed-${Date.now()}-${Math.random()}`,
+          id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
+          retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
           phoneNumber: variables.phoneNumber,
           instanceId: variables.instanceId ?? null,
           instanceName: variables.instanceName,
@@ -314,7 +348,7 @@ export function useSendWhatsAppMessage() {
           mediaUrl: null,
           mediaType: null,
           error: err instanceof Error ? err.message : "Falha ao enviar",
-          timestamp: new Date().toISOString(),
+          timestamp: context?.timestamp ?? new Date().toISOString(),
           direction: "outgoing",
           status: "failed",
           sent_by_ai: false,
@@ -326,10 +360,12 @@ export function useSendWhatsAppMessage() {
       // A partir daí o dedupe por message_id do realtime reconhece a linha do
       // webhook e não anexa uma segunda bolha.
       const realMessageId = readProviderMessageId(data);
-      if (context?.optimisticId && realMessageId) {
+      if (context?.optimisticId) {
         queryClient.setQueryData<WhatsAppMessage[]>(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
-          (old) => promoteOptimisticMessage(old, context.optimisticId, realMessageId),
+          (old) => realMessageId
+            ? promoteOptimisticMessage(old, context.optimisticId, realMessageId)
+            : (old ?? []).map(m => m.id === context.optimisticId ? { ...m, status: "sent", retry_attempt: undefined } : m),
         );
       }
 
@@ -354,6 +390,7 @@ export function useSendWhatsAppMedia() {
   const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
+    retry: false, // one recovery controller owns the ten-attempt budget
     mutationFn: async ({
       phoneNumber,
       instanceName,
@@ -364,6 +401,7 @@ export function useSendWhatsAppMedia() {
       fileName,
       mimetype,
       leadId,
+      _sendId,
     }: {
       phoneNumber: string;
       instanceName: string;
@@ -374,6 +412,7 @@ export function useSendWhatsAppMedia() {
       fileName?: string;
       mimetype?: string;
       leadId?: string | null;
+      _sendId?: string;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
@@ -405,7 +444,7 @@ export function useSendWhatsAppMedia() {
           message: caption || "",
           message_type: "media",
           media_url: mediaUrl,
-        });
+        }, 60_000, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl));
         data = result.data;
         error = result.error;
 
@@ -439,6 +478,7 @@ export function useSendWhatsAppMedia() {
             payload: proxyPayload,
           },
           60_000, // media needs more time (upload + Uazapi)
+          recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, caption ?? null, mediaUrl),
         );
         data = result.data;
         error = result.error;
@@ -464,7 +504,7 @@ export function useSendWhatsAppMedia() {
       const messageId = d?.result?.message_id ?? d?.key?.id ?? `local_${Date.now()}`;
 
       // Fire-and-forget — webhook send.message is the authoritative save
-      supabase.from("whatsapp_messages").upsert({
+      if (!data._confirmed && !messageId.startsWith("local_")) supabase.from("whatsapp_messages").upsert({
         organization_id: teamMember.organization_id,
         instance_id: instanceId || null,
         message_id: messageId,
@@ -494,7 +534,8 @@ export function useSendWhatsAppMedia() {
         ["whatsapp_messages", orgId, phone, instId]
       );
 
-      const optimisticId = makeOptimisticId();
+      const optimisticId = variables._sendId ?? makeOptimisticId();
+      variables._sendId = optimisticId;
       const optimisticMsg: WhatsAppMessage = {
         id: optimisticId,
         organization_id: orgId || "",
@@ -512,6 +553,7 @@ export function useSendWhatsAppMedia() {
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         sent_by_ai: false,
+        sent_source: "manual",
       };
 
       queryClient.setQueryData<WhatsAppMessage[]>(
@@ -519,38 +561,41 @@ export function useSendWhatsAppMedia() {
         (old) => [...(old || []), optimisticMsg]
       );
 
-      return { previousMessages, optimisticId };
+      return { previousMessages, optimisticId, timestamp: optimisticMsg.timestamp };
     },
     onSuccess: (data, variables, context) => {
       // Mesma promoção do envio de texto — ver comentário lá.
       const realMessageId = readProviderMessageId(data);
-      if (context?.optimisticId && realMessageId) {
+      if (context?.optimisticId) {
         queryClient.setQueryData<WhatsAppMessage[]>(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
-          (old) => promoteOptimisticMessage(old, context.optimisticId, realMessageId),
+          (old) => realMessageId
+            ? promoteOptimisticMessage(old, context.optimisticId, realMessageId)
+            : (old ?? []).map(m => m.id === context.optimisticId ? { ...m, status: "sent", retry_attempt: undefined } : m),
         );
       }
     },
     onError: (err, variables, context) => {
-      if (context?.previousMessages) {
+      if (context?.optimisticId) {
         queryClient.setQueryData(
           ["whatsapp_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
-          context.previousMessages
+          (old: WhatsAppMessage[] = []) => old.filter(m => m.id !== context.optimisticId)
         );
       }
       const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
       queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
-        ...prev,
+        ...prev.filter(m => m.id !== context?.optimisticId),
         {
-          id: `failed-${Date.now()}-${Math.random()}`,
+          id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
+          retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
           phoneNumber: variables.phoneNumber,
           instanceId: variables.instanceId ?? null,
           instanceName: variables.instanceName,
           message: variables.caption ?? null,
-          mediaUrl: null,
+          mediaUrl: variables.media,
           mediaType: variables.mediaType,
           error: err instanceof Error ? err.message : "Falha ao enviar mídia",
-          timestamp: new Date().toISOString(),
+          timestamp: context?.timestamp ?? new Date().toISOString(),
           direction: "outgoing",
           status: "failed",
           sent_by_ai: false,
@@ -570,12 +615,11 @@ export function useSendWhatsAppMedia() {
  * Hook para ler mensagens com falha de envio (cache paralelo, não persiste no banco).
  */
 export function useFailedMessages(phoneNumber: string, instanceId: string | null) {
-  const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
 
   const key = ["whatsapp_failed_messages", organizationId, phoneNumber, instanceId];
-  return queryClient.getQueryData<FailedMessage[]>(key) ?? [];
+  return useQuery<FailedMessage[]>({ queryKey: key, queryFn: async () => [], enabled: false, initialData: [] }).data;
 }
 
 /**
@@ -590,11 +634,13 @@ export function useRetryMessage() {
   const sendMedia = useSendWhatsAppMedia();
 
   return async (failed: FailedMessage) => {
+    if ((failed.retry_attempt ?? 0) >= MAX_SEND_RETRIES) return;
     const key = ["whatsapp_failed_messages", organizationId, failed.phoneNumber, failed.instanceId];
     queryClient.setQueryData<FailedMessage[]>(key, (prev = []) => prev.filter((m) => m.id !== failed.id));
 
     if (failed.mediaType && failed.mediaUrl) {
       await sendMedia.mutateAsync({
+        _sendId: failed.id,
         phoneNumber: failed.phoneNumber,
         instanceName: failed.instanceName,
         instanceId: failed.instanceId,
@@ -604,6 +650,7 @@ export function useRetryMessage() {
       });
     } else if (failed.message) {
       await sendMessage.mutateAsync({
+        _sendId: failed.id,
         phoneNumber: failed.phoneNumber,
         message: failed.message,
         instanceName: failed.instanceName,

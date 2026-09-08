@@ -20,7 +20,7 @@
  *
  * Módulo PURO — sem React, sem Supabase. Testável direto.
  */
-import type { WhatsAppMessage } from "../types";
+import type { WhatsAppMessage, FailedMessage } from "../types";
 
 /** Prefixo dos ids sintéticos da bolha otimista. */
 export const OPTIMISTIC_ID_PREFIX = "optimistic_";
@@ -54,7 +54,9 @@ function normalizeContent(content: string | null | undefined): string {
 function matchesOptimistic(candidate: WhatsAppMessage, incoming: WhatsAppMessage): boolean {
   if (!isOptimisticMessage(candidate)) return false;
   if (candidate.direction !== "outgoing" || incoming.direction !== "outgoing") return false;
-  if (candidate.message_type !== incoming.message_type) return false;
+  const textTypes = ["text", "conversation", "extendedTextMessage"];
+  if (candidate.message_type !== incoming.message_type &&
+      !(textTypes.includes(candidate.message_type) && textTypes.includes(incoming.message_type))) return false;
   if (normalizeContent(candidate.content) !== normalizeContent(incoming.content)) return false;
 
   const candidateAt = new Date(candidate.timestamp).getTime();
@@ -124,6 +126,28 @@ export function promoteOptimisticMessage(
   }
 
   return existing.map((m) =>
-    m.id === optimisticId ? { ...m, message_id: realMessageId, status: "sent" } : m,
+    m.id === optimisticId ? { ...m, message_id: realMessageId, status: "sent", retry_attempt: undefined } : m,
   );
+}
+
+/** A background refetch must not erase an in-flight send or create its second bubble. */
+export function mergeFetchedWithPending(existing: WhatsAppMessage[], fetched: WhatsAppMessage[]): WhatsAppMessage[] {
+  return fetched.reduce(upsertRealtimeMessage, existing.filter(m => isOptimisticMessage(m) && m.status === "pending"))
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+}
+
+/** A late receipt consumes at most one local failure, never every repeated phrase. */
+export function unconfirmedFailures(failures: FailedMessage[], messages: WhatsAppMessage[]): FailedMessage[] {
+  const receipts = messages.filter(m => m.direction === "outgoing" && ["sent", "delivered", "read", "played"].includes(m.status));
+  const consumed = new Set<string>();
+  return failures.filter(f => {
+    const receipt = receipts.find(m => !consumed.has(m.id) &&
+      normalizeContent(m.content) === normalizeContent(f.message) &&
+      (!f.mediaType || (!!f.mediaUrl && m.media_url === f.mediaUrl)) &&
+      new Date(m.timestamp).getTime() >= new Date(f.timestamp).getTime() - 1000 &&
+      new Date(m.timestamp).getTime() - new Date(f.timestamp).getTime() <= OPTIMISTIC_MATCH_WINDOW_MS);
+    if (!receipt) return true;
+    consumed.add(receipt.id);
+    return false;
+  });
 }

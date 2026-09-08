@@ -6,7 +6,9 @@
  * Polling de 20s era o comportamento anterior; agora o canal realtime em
  * useWhatsAppMessagesRealtime aplica patches incrementais sem refetch.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { mergeFetchedWithPending } from "./shared/optimistic-messages";
+import type { WhatsAppMessage } from "./types";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { fetchConversationMessages } from "@/modules/communication/lib/whatsappMessagesQuery";
 import { chatQueryKeys } from "./shared/queryKeys";
@@ -28,6 +30,7 @@ export function useWhatsAppMessages(
   phoneNumber: string | null,
   instanceId: string | null
 ) {
+  const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
   const { shouldPoll } = useWhatsAppRealtimeFallback(organizationId);
@@ -36,7 +39,9 @@ export function useWhatsAppMessages(
     queryKey: chatQueryKeys.messages(organizationId, phoneNumber, instanceId),
     queryFn: async () => {
       if (!organizationId || !phoneNumber || !instanceId) return [];
-      return fetchConversationMessages({ organizationId, instanceId, phoneNumber });
+      const fetched = await fetchConversationMessages({ organizationId, instanceId, phoneNumber });
+      return mergeFetchedWithPending(queryClient.getQueryData<WhatsAppMessage[]>(
+        chatQueryKeys.messages(organizationId, phoneNumber, instanceId)) ?? [], fetched);
     },
     enabled: !!organizationId && !!phoneNumber && !!instanceId,
     // Backstop de reconciliação: se um postgres_changes é dropado pelo apply_rls
