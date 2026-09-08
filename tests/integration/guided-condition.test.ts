@@ -76,6 +76,59 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('evaluates a custom text field by UUID and current definition', async () => {
+    const fieldId = crypto.randomUUID(), foreignId = crypto.randomUUID(), replacementId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-custom-${fieldId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    await service.from('lead_custom_fields').insert([
+      { id: fieldId, organization_id: orgA, field_name: 'Especialidade', field_type: 'text' },
+      { id: foreignId, organization_id: orgB, field_name: 'Especialidade', field_type: 'text' },
+    ]).throwOnError();
+    try {
+      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: 'Distribuição elétrica' }).throwOnError();
+      const result = await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA,
+        condition: { version: 1, id: 'custom-rule', field: 'lead.custom', fieldId, fieldType: 'text', operator: 'equals', value: 'DISTRIBUICAO ELETRICA' } });
+      expect(result).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'custom-rule', status: 'evaluated', matched: true,
+        actual: 'Distribuição elétrica', reference: { id: fieldId, name: 'Especialidade' } }] });
+      const condition = { version: 1, id: 'custom-rule', field: 'lead.custom', fieldId, fieldType: 'text', operator: 'contains', value: 'eletrica' };
+      const request = { organizationId: orgA, leadId: leadA, condition };
+      await service.from('lead_custom_fields').update({ field_name: 'Especialidade atual' }).eq('id', fieldId).throwOnError();
+      expect(await evaluateGuidedCondition(caller, request)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ reference: { id: fieldId, name: 'Especialidade atual' } }] });
+      expect(await evaluateGuidedCondition(caller, { ...request, leadId: leadB })).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { ...condition, fieldId: foreignId } })).toEqual({ status: 'error', code: 'reference_unavailable' });
+      expect(await evaluateGuidedCondition(service, { ...request, authorization: { kind: 'organization', workflowId: crypto.randomUUID() } })).toEqual({ status: 'error', code: 'access_denied' });
+      const args = { p_organization_id: orgA, p_lead_id: leadA, p_field_ids: [fieldId] };
+      expect((await service.rpc('test_guided_condition_custom_fields', args)).error?.code).toBe('42501');
+      const anonymous = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-custom-anon-${fieldId}` },
+      });
+      expect((await anonymous.rpc('test_guided_condition_custom_fields', args)).error?.code).toBe('42501');
+      await service.from('lead_custom_fields').update({ field_type: 'number' }).eq('id', fieldId).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { version: 1, id: 'any', kind: 'group', match: 'any', children: [
+        { version: 1, id: 'name', field: 'lead.name', operator: 'is_not_empty' }, condition,
+      ] } })).toEqual({ status: 'error', code: 'reference_unavailable' });
+      await service.from('lead_custom_fields').update({ field_type: 'text' }).eq('id', fieldId).throwOnError();
+      await service.from('lead_custom_field_values').delete().eq('field_id', fieldId).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { ...condition, operator: 'is_empty' } })).toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: null }] });
+      expect(await evaluateGuidedCondition(caller, { ...request, condition: { ...condition, operator: 'not_equals' } })).toMatchObject({ status: 'evaluated', matched: false });
+      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: 'Distribuição elétrica' }).throwOnError();
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify(request), signal: AbortSignal.timeout(15000),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true, rules: [{ reference: { id: fieldId, name: 'Especialidade atual' } }] });
+      await service.from('lead_custom_fields').delete().eq('id', fieldId).throwOnError();
+      await service.from('lead_custom_fields').insert({ id: replacementId, organization_id: orgA, field_name: 'Especialidade atual', field_type: 'text' }).throwOnError();
+      expect(await evaluateGuidedCondition(caller, request)).toEqual({ status: 'error', code: 'reference_unavailable' });
+    } finally {
+      await service.from('lead_custom_fields').delete().in('id', [fieldId, foreignId, replacementId]).throwOnError();
+    }
+  });
+
   it.each([false, true])('publishes a saved condition through the authenticated HTTP boundary (grouped=%s)', async (grouped) => {
     const workflowId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
@@ -1508,7 +1561,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
   }, 60000);
 
   it('honors explicit responsible-only access within the same organization', async () => {
-    const workflowId = crypto.randomUUID();
+    const workflowId = crypto.randomUUID(), customFieldId = crypto.randomUUID();
     const password = `${crypto.randomUUID()}!Aa1`;
     const email = `guided-member-${crypto.randomUUID()}@example.test`;
     const created = await service.auth.admin.createUser({ email, password, email_confirm: true });
@@ -1536,6 +1589,19 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       });
       const login = await caller.auth.signInWithPassword({ email, password });
       if (login.error) throw login.error;
+      await service.from('lead_custom_fields').insert({ id: customFieldId, organization_id: orgA,
+        field_name: 'Preferência restrita', field_type: 'text' }).throwOnError();
+      await service.from('lead_custom_field_values').insert([
+        { lead_id: ownLead, field_id: customFieldId, value: 'Liberado' },
+        { lead_id: leadA, field_id: customFieldId, value: 'Protegido' },
+      ]).throwOnError();
+      const customRequest = { organizationId: orgA, leadId: ownLead,
+        condition: { version: 1, id: 'personal-custom', field: 'lead.custom', fieldId: customFieldId, fieldType: 'text', operator: 'equals', value: 'LIBERADO' } };
+      expect(await evaluateGuidedCondition(caller, customRequest)).toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: 'Liberado' }] });
+      expect(await evaluateGuidedCondition(caller, { ...customRequest, leadId: leadA })).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect((await caller.rpc('test_guided_condition_custom_fields', {
+        p_organization_id: orgA, p_lead_id: leadA, p_field_ids: [customFieldId],
+      })).error?.code).toBe('PT404');
       const workflow = await service.from('workflows').insert({ id: workflowId, organization_id: orgA,
         name: 'Member-created workflow', trigger_type: 'manual', created_by: created.data.user.id });
       if (workflow.error) throw workflow.error;
@@ -1606,6 +1672,8 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     } catch (error) { failures.push(error); }
     // Existing workflows.created_by restricts auth-user deletion. Remove this
     // synthetic workflow before removing its creator, even after a failed test.
+    const removedCustom = await service.from('lead_custom_fields').delete().eq('id', customFieldId);
+    if (removedCustom.error) failures.push(removedCustom.error);
     const removedWorkflow = await service.from('workflows').delete().eq('organization_id', orgA).eq('id', workflowId);
     if (removedWorkflow.error) failures.push(removedWorkflow.error);
     const deleted = await service.auth.admin.deleteUser(created.data.user.id);

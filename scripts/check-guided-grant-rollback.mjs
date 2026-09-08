@@ -84,13 +84,23 @@ const presenceRollback = readFileSync(`supabase/migrations/rollback/${presenceMi
 const profileMigration = '20271017000028_guided_business_profile_fields.sql';
 const profileForward = readFileSync(`supabase/migrations/${profileMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const profileRollback = readFileSync(`supabase/migrations/rollback/${profileMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const customMigration = '20271017000029_guided_personal_custom_field_test.sql';
+const customForward = readFileSync(`supabase/migrations/${customMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const customRollback = readFileSync(`supabase/migrations/rollback/${customMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
-  SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
+  SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
+    pg_get_functiondef('public.test_guided_condition_custom_fields(uuid,uuid,uuid[])'::regprocedure) AS original_custom_definition,
     pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure) AS original_definition,
     pg_get_functiondef('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])'::regprocedure) AS original_publication_definition;
 INSERT INTO public.organizations(id, name, slug)
   SELECT org_id, 'Guided rollback rehearsal', 'guided-rollback-' || org_id FROM guided_rollback_fixture;
+INSERT INTO public.leads(id, organization_id, name)
+  SELECT custom_lead_id, org_id, 'Custom rollback lead' FROM guided_rollback_fixture;
+INSERT INTO public.lead_custom_fields(id, organization_id, field_name, field_type)
+  SELECT custom_field_id, org_id, 'Custom rollback field', 'text' FROM guided_rollback_fixture;
+INSERT INTO public.lead_custom_field_values(lead_id, field_id, value)
+  SELECT custom_lead_id, custom_field_id, 'Preserved custom answer' FROM guided_rollback_fixture;
 INSERT INTO public.workflows(id, organization_id, name, trigger_type)
   SELECT workflow_id, org_id, 'Rollback rehearsal', 'manual' FROM guided_rollback_fixture;
 INSERT INTO public.workflow_data_grants(workflow_id, organization_id, fields, revision)
@@ -105,6 +115,18 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${customRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_custom_fields(uuid,uuid,uuid[])') IS NOT NULL THEN
+    RAISE EXCEPTION 'personal custom field reader remains after rollback';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.lead_custom_field_values v
+    JOIN guided_rollback_fixture f ON f.custom_field_id = v.field_id AND f.custom_lead_id = v.lead_id
+    JOIN public.lead_custom_fields d ON d.id = v.field_id AND d.organization_id = f.org_id
+    WHERE v.value = 'Preserved custom answer' AND d.field_type = 'text') THEN
+    RAISE EXCEPTION 'custom field definition or answer lost during rollback';
+  END IF;
+END $$;
 ${profileRollback}
 ${presenceRollback}
 ${responsiblePublicationRollback}
@@ -254,12 +276,29 @@ ${publicationForward}
 ${pinForward}
 ${discoveryForward}
 ${activationForward}
--- Migration 22 restores the complete field contract without narrowing retained grants.
+-- Restore the complete field contract without narrowing retained grants.
 ${profileForward}
 ${tagForward}
 ${originForward}
 ${responsibleForward}
 ${catalogueForward}
+${customForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_custom_fields(uuid,uuid,uuid[])', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_custom_fields(uuid,uuid,uuid[])', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_custom_fields(uuid,uuid,uuid[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'personal custom field test grants invalid';
+  END IF;
+  IF pg_get_functiondef('public.test_guided_condition_custom_fields(uuid,uuid,uuid[])'::regprocedure)
+    IS DISTINCT FROM (SELECT original_custom_definition FROM guided_rollback_fixture) THEN
+    RAISE EXCEPTION 'personal custom reader not restored exactly';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.lead_custom_field_values v
+    JOIN guided_rollback_fixture f ON f.custom_field_id = v.field_id AND f.custom_lead_id = v.lead_id
+    WHERE v.value = 'Preserved custom answer') THEN
+    RAISE EXCEPTION 'custom answer lost during recovery';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])', 'EXECUTE')
