@@ -1,9 +1,10 @@
-import { GUIDED_SCALAR_FIELDS, GUIDED_NUMBER_OPERATORS, isGuidedNumberField, isGuidedNumberOperator, GUIDED_TEXT_OPERATORS, isGuidedTextField, isGuidedTextOperator } from '@/contracts/workflows/guided-fields';
+import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, GUIDED_SCALAR_FIELDS, GUIDED_NUMBER_OPERATORS, isGuidedNumberField, isGuidedNumberOperator, GUIDED_TEXT_OPERATORS, isGuidedTextField, isGuidedTextOperator } from '@/contracts/workflows/guided-fields';
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
 import { GuidedUtmPicker } from './GuidedUtmPicker';
 import { isUtmValueField } from '../../hooks/useOrgUtmValues';
+import { GuidedResponsiblePicker } from './GuidedResponsiblePicker';
 import { GuidedOriginPicker } from './GuidedOriginPicker';
 import { GuidedTagPicker } from './GuidedTagPicker';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,7 @@ import { Button } from '@/components/ui/button';
 
 export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolean {
   return 'children' in condition ? !condition.children.length || condition.children.some(isIncompleteGuidedDraft)
+    : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && !condition.memberId
     : condition.field === 'lead.origin' ? condition.operator !== 'is_empty' && !condition.originId
     : condition.field === 'lead.tags' ? !condition.tagId : condition.operator !== 'is_empty' && (condition.value === '' || (typeof condition.value === 'number' && !Number.isFinite(condition.value)));
 }
@@ -72,16 +74,27 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
   return <div className="space-y-4">
     <div className="space-y-2"><Label htmlFor={`guided-field-${condition.id}`}>Informação</Label>
       <select id={`guided-field-${condition.id}`} className={selectClass} value={condition.field} onChange={event => {
-        setFieldReset(condition.field !== event.target.value && !(isGuidedTextField(condition.field) && isGuidedTextField(event.target.value)));
-        if (event.target.value === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
+        setFieldReset(condition.field !== event.target.value && !((isGuidedTextField(condition.field) && isGuidedTextField(event.target.value)) || (isGuidedResponsibleField(condition.field) && isGuidedResponsibleField(event.target.value))));
+        if (isGuidedResponsibleField(event.target.value)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
+          ? { ...condition, field: event.target.value } : { version: 1, id: condition.id, field: event.target.value, operator: 'equals', memberId: '' });
+        else if (event.target.value === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
         else if (event.target.value === 'lead.tags') onChange({ version: 1, id: condition.id, field: 'lead.tags', operator: 'has_tag', tagId: '' });
         else if (isGuidedNumberField(event.target.value)) onChange({ version: 1, id: condition.id, field: event.target.value, operator: 'equals', value: '' });
-        else if (isGuidedTextField(event.target.value)) onChange(condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score'
+        else if (isGuidedTextField(event.target.value)) onChange(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score'
           ? { version: 1, id: condition.id, field: event.target.value, operator: 'equals', value: '' }
           : { ...condition, field: event.target.value });
-      }}>{Object.entries(GUIDED_SCALAR_FIELDS).map(([value, field]) => <option key={value} value={value}>Lead · {field.label}</option>)}<option value="lead.tags">Lead · Tags</option><option value="lead.origin">Lead · Origem</option></select></div>
+      }}>{Object.entries(GUIDED_SCALAR_FIELDS).map(([value, field]) => <option key={value} value={value}>Lead · {field.label}</option>)}<option value="lead.tags">Lead · Tags</option><option value="lead.origin">Lead · Origem</option>{Object.entries(GUIDED_RESPONSIBLE_FIELDS).map(([value, field]) => <option key={value} value={value}>Lead · {field.label}</option>)}</select></div>
     {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
-    {condition.field === 'lead.origin' ? <>
+    {(condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? <>
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
+        const base = { version: 1 as const, id: condition.id, field: condition.field };
+        if (event.target.value === 'is_empty') onChange({ ...base, operator: 'is_empty' });
+        else onChange({ ...base, operator: event.target.value === 'not_equals' ? 'not_equals' : 'equals',
+          memberId: 'memberId' in condition ? condition.memberId : '', memberLabel: 'memberLabel' in condition ? condition.memberLabel : undefined });
+      }}><option value="equals">é</option><option value="not_equals">não é</option><option value="is_empty">está vazio</option></select>
+      {condition.operator !== 'is_empty' && <GuidedResponsiblePicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />}
+    </> : condition.field === 'lead.origin' ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
         const base = { version: 1 as const, id: condition.id, field: condition.field };

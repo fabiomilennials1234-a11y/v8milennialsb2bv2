@@ -459,3 +459,15 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 
 
 - Final full real integration: 42 passed, including the personal HTTP responsible group, current names after inactivation, absent assignment, deleted reference in a dispensable branch and hidden master exclusion. All validation/deployment handles terminal. This checkpoint does not expose responsible options in the editor yet. Next: searchable selector with the same authoritative master exclusion, followed by explicit automatic scopes and mixed-reader/publication support. Full 21-ticket objective remains active; no HITL certification.
+
+
+## 2026-09-08 — responsible selectors and protected catalogue
+
+- Real catalogue red reproduced missing projection. Migration 24 adds a read-only caller-RLS view containing only selector metadata, reusing the existing visible-member source plus authoritative master exclusion. Live positive/negative tests passed for normal member, master hidden by registry RLS and foreign organization. Effective SELECT/write grants and invoker/barrier options verified.
+- Browser red→green adds both canonical responsible fields, name search, inactive labels and UUID persistence. Switching between sales/presales preserves the compatible member and operator; switching to text clears identity. Empty hides the selector. Canvas uses friendly labels and result explanation prefers the matching UUID's current server name.
+- Public Identity hook partitions cache by actor/organization, limits and escapes server search, aborts obsolete queries and resolves the selected UUID independently of the search page. Existing team-member mutation invalidations cover its query-key prefix. No generated database types changed.
+- Four focused browser cases passed, including removed reference not being replaced by a homonym and query failure/retry distinct from empty results. Typecheck ratchet zero introduced errors (805 baseline + 11 inherited tolerated; 481 current). Focused ESLint passed with only existing any/Fast Refresh warnings. Twenty-five-migration rollback/reapply passed.
+- Full browser and real integration regressions running. No endpoint deployment needed for this UI/catalogue checkpoint. Responsible automatic scopes and publication/atomic reader still require implementation; broader lifecycle/a11y/performance certification and all downstream tickets remain in scope. No ticket certified.
+
+
+- Final full browser regression: 66 passed. Final full real integration: 42 passed. All validation handles terminal. No endpoint or worker deployment in this checkpoint; preview migration/view only. Next: explicit pre-sales/sales grants and atomic mixed responsible evaluation/publication, while preserving existing approvals and rollback history. All 21 tickets remain open.

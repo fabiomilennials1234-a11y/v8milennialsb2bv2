@@ -915,7 +915,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
   }, 60000);
 
   it('rejects a master identity as a responsible even when its master registry row is hidden from the caller', async () => {
-    const memberId = crypto.randomUUID();
+    const memberId = crypto.randomUUID(), foreignId = crypto.randomUUID();
     let shadowUserId: string | undefined;
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-shadow-${orgA}` }, global: { headers: { Authorization: `Bearer ${token}` } },
@@ -925,17 +925,30 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       if (created.error) throw created.error;
       shadowUserId = created.data.user.id;
       await service.from('team_members').insert({ id: memberId, user_id: shadowUserId, organization_id: orgA, name: 'Shadow member', role: 'member', is_active: true }).throwOnError();
+      await service.from('team_members').insert({ id: foreignId, organization_id: orgB, name: 'Guided foreign', role: 'member', is_active: false }).throwOnError();
       await service.from('master_users').insert({ user_id: shadowUserId, is_active: true }).throwOnError();
       const hiddenRegistry = await caller.from('master_users').select('user_id').eq('user_id', shadowUserId);
       expect(hiddenRegistry.error).toBeNull();
       expect(hiddenRegistry.data).toEqual([]);
+      const catalogue = await caller.from('guided_responsible_members').select('id, name, is_active')
+        .eq('organization_id', orgA).order('name').order('id').limit(25);
+      expect(catalogue.error).toBeNull();
+      expect(catalogue.data).toEqual([{ id: adminMemberId, name: 'Guided tester', is_active: true }]);
+      const shadowSelection = await caller.from('guided_responsible_members').select('id, name, is_active')
+        .eq('organization_id', orgA).eq('id', memberId).maybeSingle();
+      expect(shadowSelection.error).toBeNull();
+      expect(shadowSelection.data).toBeNull();
+      const foreignCatalogue = await caller.from('guided_responsible_members').select('id, name, is_active')
+        .eq('organization_id', orgB).order('name').order('id').limit(25);
+      expect(foreignCatalogue.error).toBeNull();
+      expect(foreignCatalogue.data).toEqual([]);
       const args = { p_organization_id: orgA, p_lead_id: leadA, p_fields: ['lead.pre_sale_responsible_id'], p_member_ids: [memberId] };
       expect((await caller.rpc('test_guided_condition_responsibles', args)).error?.code).toBe('PT422');
       const ordinaryMember = await caller.rpc('test_guided_condition_responsibles', { ...args, p_member_ids: [adminMemberId] });
       expect(ordinaryMember.error).toBeNull();
       expect(ordinaryMember.data).toEqual([{ field_values: { pre_sale_responsible_id: adminMemberId }, members: [{ id: adminMemberId, name: 'Guided tester' }] }]);
     } finally {
-      await service.from('team_members').delete().eq('id', memberId).throwOnError();
+      await service.from('team_members').delete().in('id', [memberId, foreignId]).throwOnError();
       if (shadowUserId) {
         await service.from('master_users').delete().eq('user_id', shadowUserId).throwOnError();
         const deleted = await service.auth.admin.deleteUser(shadowUserId);

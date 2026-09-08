@@ -1,4 +1,4 @@
-import type { GuidedTextField, GuidedTextComparison, GuidedNumberField, GuidedNumberOperator } from '@/contracts/workflows/guided-fields';
+import type { GuidedResponsibleField, GuidedTextField, GuidedTextComparison, GuidedNumberField, GuidedNumberOperator } from '@/contracts/workflows/guided-fields';
 import type { Node, Edge } from "@xyflow/react";
 
 /**
@@ -657,7 +657,10 @@ export type GuidedNumberRuleDraft = { version: 1; id: string; field: GuidedNumbe
   & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' });
 export type GuidedOriginRuleDraft = { version: 1; id: string; field: 'lead.origin' }
   & ({ operator: 'equals' | 'not_equals'; originId: string; originLabel?: string } | { operator: 'is_empty' });
-export type GuidedRuleDraft = GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+export type GuidedResponsibleRuleDraft = { [Field in GuidedResponsibleField]: { version: 1; id: string; field: Field }
+  & ({ operator: 'equals' | 'not_equals'; memberId: string; memberLabel?: string } | { operator: 'is_empty' })
+}[GuidedResponsibleField];
+export type GuidedRuleDraft = GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

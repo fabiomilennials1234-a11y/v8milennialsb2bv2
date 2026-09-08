@@ -1,6 +1,73 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { GuidedConditionDraft } from '../../src/types/workflow';
 
+for (const [field, otherField, label] of [
+  ['lead.pre_sale_responsible_id', 'lead.sale_responsible_id', 'Responsável de pré-vendas'],
+  ['lead.sale_responsible_id', 'lead.pre_sale_responsible_id', 'Responsável de vendas'],
+] as const) test(`seleciona ${label} por nome e mantém pessoa entre funções compatíveis`, async ({ page }) => {
+  const memberId = 'abcd0000-0000-4000-8000-000000000003';
+  await page.route('**/rest/v1/guided_responsible_members?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id')
+      ? { id: memberId, name: 'Marina', is_active: false } : [{ id: memberId, name: 'Marina', is_active: false }],
+  }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption(field);
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
+  await page.getByLabel('Buscar responsável', { exact: true }).fill('Mari');
+  await page.getByRole('combobox', { name: 'Responsável', exact: true }).selectOption(memberId);
+  await expect(page.getByRole('option', { name: 'Marina (inativo)' })).toHaveCount(1);
+  await expect(page.locator('.react-flow__node-condition')).toContainText(`${label} é “Marina”`);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field, operator: 'equals', memberId });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [
+      { id: 'rule-1', status: 'evaluated', matched: true, actual: memberId, reference: { id: memberId, name: 'Marina atual' } },
+    ] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('status')).toContainText('Marina atual');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('not_equals');
+  await page.getByLabel('Informação', { exact: true }).selectOption(otherField);
+  await expect(page.getByRole('combobox', { name: 'Responsável', exact: true })).toHaveValue(memberId);
+  await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('not_equals');
+  await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toHaveCount(0);
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(page.getByRole('combobox', { name: 'Responsável', exact: true })).toHaveCount(0);
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
+});
+
+test('responsável removido não é substituído por cadastro homônimo', async ({ page }) => {
+  const removedId = 'abcd0000-0000-4000-8000-000000000004';
+  const replacementId = 'abcd0000-0000-4000-8000-000000000005';
+  await page.route('**/rest/v1/guided_responsible_members?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id') ? null : [
+      { id: removedId, name: 'Marina', is_active: true }, { id: replacementId, name: 'Marina', is_active: true },
+    ],
+  }));
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.sale_responsible_id', operator: 'equals', memberId: removedId, memberLabel: 'Marina' });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await expect(page.getByText('Responsável removido ou sem acesso. Selecione outro responsável.')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Responsável', exact: true })).toHaveValue(removedId);
+  await expect(page.getByRole('option', { name: 'Responsável indisponível', exact: true })).toBeDisabled();
+  await expect(page.getByRole('option', { name: 'Marina', exact: true })).toHaveCount(1);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Responsável de vendas é “Marina”');
+});
+
+test('falha no catálogo de responsáveis permite recuperar sem virar lista vazia', async ({ page }) => {
+  await page.route('**/rest/v1/guided_responsible_members?*', route => route.fulfill({ status: 503, json: { message: 'unavailable' } }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.sale_responsible_id');
+  await expect(page.getByText('Não foi possível carregar responsáveis. Tente novamente.')).toBeVisible();
+  await expect(page.getByText('Nenhum responsável encontrado. Tente outro nome.')).toHaveCount(0);
+  await page.route('**/rest/v1/guided_responsible_members?*', route => route.fulfill({ json: [] }));
+  await page.getByRole('button', { name: 'Tentar carregar responsáveis novamente' }).click();
+  await expect(page.getByText('Nenhum responsável encontrado. Tente outro nome.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
+});
+
 test('seleciona origem pelo cadastro e preserva identidade ao mudar comparação', async ({ page }) => {
   const originId = 'abcd0000-0000-4000-8000-000000000002';
   await page.route('**/rest/v1/lead_origins?*', route => route.fulfill({ json:
