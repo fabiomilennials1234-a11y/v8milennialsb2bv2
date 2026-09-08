@@ -186,6 +186,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libtap-parser-sourcehandler-pgtap-perl postgresql-client
+      - name: Studio rollout preservation, backup restoration and tenant permissions
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for fixture in \
+            .specs/project/studio-preview-fixtures.sql \
+            .specs/project/studio-preview-legacy-state.sql \
+            scripts/backup-metrics-studio-before-rollout.sql \
+            scripts/seed-metrics-studio-templates.sql \
+            scripts/seed-metrics-studio-templates.sql \
+            .specs/project/studio-preview-restore-proof.sql \
+            .specs/project/studio-preview-assertions.sql; do
+            psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -p 54322 -U postgres -d postgres -f "$fixture"
+          done
       - name: Run RLS invariant suite (red fixture + clean gate)
         run: bash supabase/tests/run.sh
         env:

@@ -53,7 +53,7 @@ END $$;
 
 SELECT set_config('request.jwt.claims', '{"sub":"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3","role":"authenticated"}', true);
 DO $$ DECLARE affected integer; BEGIN
-  IF (SELECT count(*) FROM public.metrics_studio_panels) <> 8 THEN RAISE EXCEPTION 'master sem leitura cross-org'; END IF;
+  IF (SELECT count(*) FROM public.metrics_studio_panels WHERE organization_id IN ('11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222')) <> 8 THEN RAISE EXCEPTION 'master sem leitura cross-org'; END IF;
   UPDATE public.metrics_studio_panels SET nome = 'Master QA' WHERE organization_id = '22222222-2222-4222-8222-222222222222' AND template_key = 'mapa';
   GET DIAGNOSTICS affected = ROW_COUNT;
   IF affected <> 1 THEN RAISE EXCEPTION 'master sem edição cross-org'; END IF;

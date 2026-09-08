@@ -26,10 +26,13 @@ nunca corrigir editando uma migration já aplicada.
 2. Inventariar por org os IDs, nomes, ordens, `template_key`, número de cards e
    hash do JSON completo. Conferir também `metric_custom_definitions`: os
    layouts contêm referências a essas definições.
-3. Exportar ambas as tabelas com `pg_dump --data-only` usando conexão segura e
-   credenciais fora do comando/log. Guardar arquivo cifrado em armazenamento
-   restrito, nunca no Git/vault. Registrar hash, horário, responsável e retenção.
-   Testar a restauração numa base isolada; backup sem teste não libera rollout.
+3. Executar `scripts/backup-metrics-studio-before-rollout.sql`: cópias integrais
+   de ambas as tabelas no schema privado `backup`, com RLS e sem grants para
+   anon/authenticated/service_role. O script recusa sobrescrever snapshot
+   anterior; registrar recibo, horário e responsável. Mantém configurações de
+   clientes no domínio de backup do banco, sem exportar dados para um laptop.
+   Ensaiar antes com `.specs/project/studio-preview-restore-proof.sql` e fixtures
+   sintéticas. Retenção: não remover os snapshots antes de aprovação do CTO.
 4. Ensaiar schema + seed + frontend com organizações sintéticas: painel autoral
    preenchido, vazio, nomes repetidos, múltiplas abas e métricas personalizadas.
    Verificar RLS admin positivo, member negativo e isolamento entre duas orgs.
@@ -52,7 +55,7 @@ nunca corrigir editando uma migration já aplicada.
    `scripts/seed-metrics-studio-templates.sql`. A transação bloqueia escritores,
    captura todas as linhas anteriores e aborta se qualquer campo de uma delas
    mudar/desaparecer. Timeouts curtos impedem lock indefinido. A captura TEMP é
-   apenas a asserção transacional, não substitui o backup externo.
+   apenas a asserção transacional, não substitui o backup privado durável.
 4. Conferir hashes/contagens anteriores e posteriores. Deve haver zero IDs
    antigos ausentes e zero linhas antigas diferentes; somente novos templates.
    Se o seed já concluiu, NÃO repetir para "corrigir" abas ausentes: uma aba pode

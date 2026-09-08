@@ -14,7 +14,7 @@ const setup = () => {
   mkdirSync(join(dir, "supabase/migrations"), { recursive: true });
   return dir;
 };
-const run = (cwd: string, env: Record<string, string> = {}) => spawnSync(process.execPath, [script], {
+const run = (cwd: string, env: NodeJS.ProcessEnv = {}) => spawnSync(process.execPath, [script], {
   cwd, encoding: "utf8", env: { ...process.env, CI: "true", GITHUB_ACTIONS: "true", SUPABASE_URL: "", VITE_SUPABASE_URL: "", ...env },
 });
 afterEach(() => {
