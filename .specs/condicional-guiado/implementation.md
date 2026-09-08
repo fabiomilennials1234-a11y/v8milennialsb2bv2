@@ -255,3 +255,14 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Browser TDD red→green: collapse/expand works with Enter, retains toggle focus and comparison values, and shows a parenthesized All/Any summary while collapsed. This is the panel summary only; canvas integration and hierarchical test results remain pending.
 - Focused lint: zero errors, existing builder Fast Refresh mixed-export warning. No database changes or deployments. Full editor browser regression running for this checkpoint; no ticket certified and no final HITL.
 - Full browser regression completed: 33 passed. All process sessions terminal. Ticket 05 still needs canvas/hierarchical result summaries, panel sizing, real grouped service/publication/execution validation and complete keyboard/structural coverage.
+
+## 2026-09-08 — canvas and hierarchical results
+
+- Browser TDD red→green: canvas now derives its guided summary from the current draft tree, sharing the panel's parenthesized All/Any semantics. Native title retains the full summary when the canvas line truncates.
+- Browser TDD red→green: test results render groups and numbered descendant rules under their actual parent. IDs, not response order, associate outcomes. Missing outcomes display Resultado indisponível; skipped branches display Não avaliada. Existing single-rule explanation remains.
+- Full editor regression: 35 browser cases passed. Focused lint has zero errors and the existing builder Fast Refresh warning; diff check passed.
+- Real preview HTTP test red: grouped personal evaluation returned invalid_configuration from the previous deployed endpoint. Deployed only test-guided-condition to healthy non-default preview mkpjjtwjyvgabavnxqgp. Green: 15 real Auth/RLS/HTTP/executor cases passed, including grouped skip explanation and rejection of a foreign lead with no values exposed. No migration or production deployment.
+- Follow-up grouped publication scenario now being verified against the deployed publication endpoint. Typecheck ratchet still running. Ticket 05 and the complete 21-ticket objective remain open.
+- Grouped publication red returned HTTP 422 on the previous deployment. Deployed publish-guided-workflow to the same preview. Green: all 16 real integration cases passed, including both leaf/group immutable publication, current grant activation and preservation on invalid successor publication. Worker remains undeployed.
+- Typecheck ratchet completed with zero introduced errors (805 baseline + 11 inherited tolerated; 481 current occurrences). Integration lint and diff check passed. All process handles terminal.
+- No new migrations. Existing rollback chain remains unchanged. Remaining ticket 05: panel sizing, broader keyboard/structural cases, invalid-reference handling across future field domains and grouped execution coverage; ticket 03/04 producer/runtime gaps and tickets 06–21 remain in scope. No ticket certified complete.

@@ -1,3 +1,4 @@
+import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
 import { Input } from '@/components/ui/input';
@@ -14,10 +15,6 @@ function duplicateCondition(condition: GuidedConditionDraft): GuidedConditionDra
     ? { ...condition, id: crypto.randomUUID(), children: condition.children.map(duplicateCondition) }
     : { ...condition, id: crypto.randomUUID() };
 }
-function summarize(condition: GuidedConditionDraft): string {
-  if ('children' in condition) return `${condition.match === 'all' ? 'Todas' : 'Qualquer'}: (${condition.children.map(summarize).join(condition.match === 'all' ? ' E ' : ' OU ')})`;
-  return condition.operator === 'is_empty' ? 'Nome está vazio' : `Nome é igual a “${condition.value}”`;
-}
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: {
@@ -29,7 +26,7 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
     return <fieldset className="space-y-4 rounded-xl border border-border p-3">
       <legend className="px-1 text-sm font-medium">Grupo de condições</legend>
       <Button type="button" variant="ghost" aria-expanded={!collapsed} aria-controls={`guided-content-${condition.id}`} onClick={() => setCollapsed(value => !value)}>{collapsed ? 'Expandir grupo' : 'Recolher grupo'}</Button>
-      {collapsed && <p className="break-words text-sm">{summarize(condition)}</p>}
+      {collapsed && <p className="break-words text-sm">{summarizeGuidedCondition(condition)}</p>}
       {!collapsed && <div id={`guided-content-${condition.id}`} className="space-y-4">
       <Label htmlFor={`guided-match-${condition.id}`}>Combinação</Label>
       <select id={`guided-match-${condition.id}`} className={selectClass} value={condition.match}

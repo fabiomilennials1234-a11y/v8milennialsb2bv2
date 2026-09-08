@@ -556,3 +556,46 @@ test('recolhe grupo pelo teclado mantendo resumo e valores ao expandir', async (
   await expect(page.getByLabel('Valor da comparação').first()).toHaveValue('José');
   await expect(page.getByLabel('Valor da comparação').nth(1)).toHaveValue('Maria');
 });
+
+test('canvas resume grupo guiado com combinação e valores atuais', async ({ page }) => {
+  await openGuidedEditor(page, 'José');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).click();
+  await page.getByLabel('Valor da comparação').nth(1).fill('Maria');
+  await page.getByLabel('Combinação').selectOption('any');
+  const node = page.locator('.react-flow__node-condition');
+  await expect(node).toContainText('Qualquer: (Nome é igual a “José” OU Nome é igual a “Maria”)', { timeout: 3000 });
+  await expect(node.getByTitle('Qualquer: (Nome é igual a “José” OU Nome é igual a “Maria”)')).toBeVisible();
+});
+
+test('resultado preserva hierarquia de grupos e distingue ramo não avaliado', async ({ page }) => {
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    const root = route.request().postDataJSON().condition;
+    const nested = root.children[0];
+    return route.fulfill({ json: { status: 'evaluated', matched: true, groups: [
+      { id: root.id, status: 'evaluated', matched: true }, { id: nested.id, status: 'evaluated', matched: true },
+    ], rules: [
+      { id: root.children[1].id, status: 'evaluated', matched: true, actual: 'José' },
+      { id: nested.children[1].id, status: 'not_evaluated' },
+      { id: nested.children[0].id, status: 'evaluated', matched: true, actual: 'José' },
+    ] } });
+  });
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('José');
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).first().click();
+  await page.getByLabel('Valor da comparação').nth(1).fill('José');
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).first().click();
+  await page.getByLabel('Valor da comparação').nth(1).fill('Maria');
+  await page.getByLabel('Combinação').nth(1).selectOption('any');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  const result = page.getByRole('status');
+  await expect(result.getByText('Grupo principal · Todas: Sim', { exact: true })).toBeVisible({ timeout: 3000 });
+  const nested = result.getByRole('group', { name: 'Grupo 1', exact: true });
+  await expect(nested.getByText('Grupo 1 · Qualquer: Sim', { exact: true })).toBeVisible();
+  await expect(nested).toContainText('Condição 1.1 · Nome é igual a “José”: Sim');
+  await expect(nested).toContainText('Condição 1.2 · Nome é igual a “Maria”: Não avaliada');
+  await expect(nested).not.toContainText('Condição 2');
+  await expect(result).toContainText('Condição 2 · Nome é igual a “José”: Sim');
+});

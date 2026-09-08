@@ -76,14 +76,19 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
-  it('publishes a saved condition through the authenticated HTTP boundary', async () => {
+  it.each([false, true])('publishes a saved condition through the authenticated HTTP boundary (grouped=%s)', async (grouped) => {
     const workflowId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
     });
     const definition = { nodes: [
       { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
-      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
+      { id: 'c', type: 'condition', data: { guidedCondition: grouped ? {
+        version: 1, id: 'group', kind: 'group', match: 'any', children: [
+          { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' },
+          { version: 1, id: 'r2', field: 'lead.name', operator: 'is_empty' },
+        ],
+      } : { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
       { id: 'y', type: 'end', data: {} }, { id: 'n', type: 'end', data: {} },
     ], edges: [{ id: 'tc', source: 't', target: 'c' },
       { id: 'cy', source: 'c', target: 'y', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'n', sourceHandle: 'no' }] };
@@ -652,6 +657,26 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     } });
     expect(await evaluate(orgA, leadB)).toEqual({ status: 422, body: { status: 'error', code: 'context_unavailable' } });
     expect(await evaluate(orgB, leadB)).toEqual({ status: 403, body: { status: 'error', code: 'access_denied' } });
+  }, 60000);
+
+  it('evaluates grouped conditions through deployed HTTP without exposing a foreign lead', async () => {
+    const condition = { version: 1, id: 'root', kind: 'group', match: 'any', children: [
+      { version: 1, id: 'jose', field: 'lead.name', operator: 'equals', value: 'JOSE' },
+      { version: 1, id: 'maria', field: 'lead.name', operator: 'equals', value: 'Maria' },
+    ] };
+    const evaluate = async (leadId: string) => {
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId, condition }),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    expect(await evaluate(leadA)).toEqual({ status: 200, body: {
+      status: 'evaluated', matched: true,
+      groups: [{ id: 'root', status: 'evaluated', matched: true }],
+      rules: [{ id: 'jose', status: 'evaluated', matched: true, actual: 'José' }, { id: 'maria', status: 'not_evaluated' }],
+    } });
+    expect(await evaluate(leadB)).toEqual({ status: 422, body: { status: 'error', code: 'context_unavailable' } });
   }, 60000);
 
   it('honors explicit responsible-only access within the same organization', async () => {
