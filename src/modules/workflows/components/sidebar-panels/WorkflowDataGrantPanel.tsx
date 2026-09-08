@@ -31,7 +31,7 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
   const customIds = requiredFields.filter(field => field.startsWith('lead.custom:')).map(field => field.slice('lead.custom:'.length));
   const customReferences = useCustomFieldReferences(actorId, organizationId, customIds);
   const customPending = customReferences.some(reference => reference.isPending);
-  const customUnavailable = customReferences.some(reference => reference.isError || (reference.isSuccess && !['text', 'number', 'boolean', 'date'].includes(reference.data?.field_type ?? '')));
+  const customUnavailable = customReferences.some(reference => reference.isError || (reference.isSuccess && !['text', 'number', 'boolean', 'date', 'select'].includes(reference.data?.field_type ?? '')));
   const customLabels = new Map(customIds.map((id, index) => [id, customReferences[index].data?.field_name]));
   const authorized = requiredFields.length > 0 && requiredFields.every(field => grant.data?.fields.includes(field));
   const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : field === 'lead.origin' ? 'Origem' : isGuidedResponsibleField(field) ? GUIDED_RESPONSIBLE_FIELDS[field].label : isGuidedScalarField(field) ? GUIDED_SCALAR_FIELDS[field].label : customLabels.get(field.slice('lead.custom:'.length)) ?? 'Campo personalizado').join(' e ');

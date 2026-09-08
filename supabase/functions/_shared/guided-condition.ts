@@ -25,7 +25,10 @@ export type GuidedCustomBooleanRule = { version: 1; id: string; field: 'lead.cus
 
 export type GuidedCustomDateRule = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'date' } & GuidedDateComparison;
 
-export type GuidedRule = GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedCustomSelectRule = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'select' }
+  & ({ operator: 'equals' | 'not_equals'; value: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+
+export type GuidedRule = GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -56,10 +59,12 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
-    if (rule.field === 'lead.custom') return (rule.fieldType === 'text' || rule.fieldType === 'number' || rule.fieldType === 'boolean' || rule.fieldType === 'date') && typeof rule.fieldId === 'string'
+    if (rule.field === 'lead.custom') return (rule.fieldType === 'text' || rule.fieldType === 'number' || rule.fieldType === 'boolean' || rule.fieldType === 'date' || rule.fieldType === 'select') && typeof rule.fieldId === 'string'
       && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.fieldId)
       && (rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
-        || (rule.fieldType === 'date'
+        || (rule.fieldType === 'select'
+          ? (rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.value === 'string' && rule.value.length > 0
+          : rule.fieldType === 'date'
           ? isGuidedDateOperator(rule.operator) && isGuidedCalendarDate(rule.value)
           : rule.fieldType === 'boolean'
           ? (rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.value === 'boolean'
@@ -120,6 +125,7 @@ export async function evaluateGuidedCondition(
   const responsibleFields = requestedFields.filter(isGuidedResponsibleField);
   const customIds = new Set<string>();
   const customExpectedTypes = new Map<string, Set<string>>();
+  const customOptionReferences = new Map<string, Set<string>>();
   const memberIds = new Set<string>();
   const originIds = new Set<string>();
   const tagIds = new Set<string>();
@@ -131,6 +137,11 @@ export async function evaluateGuidedCondition(
       const types = customExpectedTypes.get(id) ?? new Set<string>();
       types.add(current.fieldType);
       customExpectedTypes.set(id, types);
+      if (current.fieldType === 'select' && current.operator !== 'is_empty' && current.operator !== 'is_not_empty') {
+        const options = customOptionReferences.get(id) ?? new Set<string>();
+        options.add(current.value);
+        customOptionReferences.set(id, options);
+      }
     }
     else if (isGuidedResponsibleField(current.field) && current.operator !== 'is_empty' && current.operator !== 'is_not_empty' && 'memberId' in current) memberIds.add(current.memberId.toLowerCase());
     else if (current.field === 'lead.origin' && current.operator !== 'is_empty' && current.operator !== 'is_not_empty') originIds.add(current.originId.toLowerCase());
@@ -192,7 +203,7 @@ export async function evaluateGuidedCondition(
   if (customIds.size) {
     const response = usesCustomReader ? {
       data: (data as unknown as { field_values?: Record<string, unknown> }).field_values?.custom_fields, error: null, status: 200,
-    } : await caller.rpc('test_guided_condition_custom_fields', {
+    } : await caller.rpc([...customExpectedTypes.values()].some(types => types.has('select')) ? 'test_guided_condition_custom_options' : 'test_guided_condition_custom_fields', {
       p_organization_id: request.organizationId, p_lead_id: request.leadId, p_field_ids: [...customIds],
     });
     if (response.error) {
@@ -214,7 +225,18 @@ export async function evaluateGuidedCondition(
         return { status: 'error' as const, code: 'reference_unavailable' as const };
       }
       let value: string | number | boolean | null = row.value;
-      if (row.field_type === 'date') {
+      if (row.field_type === 'select') {
+        const options = row.field_options === null ? [] : row.field_options;
+        if (!Array.isArray(options) || options.some(option => typeof option !== 'string' || option.length === 0)) {
+          return { status: 'error' as const, code: 'source_unavailable' as const };
+        }
+        const registered = new Set<string>(options);
+        if ([...(customOptionReferences.get(row.id.toLowerCase()) ?? [])].some(option => !registered.has(option))) {
+          return { status: 'error' as const, code: 'reference_unavailable' as const };
+        }
+        if (row.value === null || row.value === '') value = null;
+        else if (!registered.has(row.value)) return { status: 'error' as const, code: 'source_unavailable' as const };
+      } else if (row.field_type === 'date') {
         if (row.value === null || row.value === '') value = null;
         else if (!isGuidedCalendarDate(row.value)) return { status: 'error' as const, code: 'source_unavailable' as const };
       } else if (row.field_type === 'boolean') {
@@ -397,6 +419,9 @@ export async function evaluateGuidedCondition(
     let matched = false;
     if (condition.operator === 'is_empty') matched = empty;
     else if (condition.operator === 'is_not_empty') matched = !empty;
+    else if (condition.field === 'lead.custom' && condition.fieldType === 'select') {
+      matched = !empty && typeof actual === 'string' && (condition.operator === 'equals' ? actual === condition.value : actual !== condition.value);
+    }
     else if (condition.field === 'lead.custom' && condition.fieldType === 'date') {
       if (!empty && typeof actual === 'string') {
         switch (condition.operator) {

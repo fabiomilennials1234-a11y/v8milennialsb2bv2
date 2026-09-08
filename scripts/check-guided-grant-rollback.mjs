@@ -101,19 +101,26 @@ const booleanRollback = readFileSync(`supabase/migrations/rollback/${booleanMigr
 const dateMigration = '20271017000034_guided_custom_date_publication.sql';
 const dateForward = readFileSync(`supabase/migrations/${dateMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const dateRollback = readFileSync(`supabase/migrations/rollback/${dateMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const optionsMigration = '20271017000035_guided_personal_custom_options.sql';
+const optionsForward = readFileSync(`supabase/migrations/${optionsMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const optionsRollback = readFileSync(`supabase/migrations/rollback/${optionsMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const selectMigration = '20271017000036_guided_custom_select_publication.sql';
+const selectForward = readFileSync(`supabase/migrations/${selectMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const selectRollback = readFileSync(`supabase/migrations/rollback/${selectMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
     pg_get_functiondef('public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])'::regprocedure) AS original_custom_org_definition,
     pg_get_functiondef('public.test_guided_condition_custom_fields(uuid,uuid,uuid[])'::regprocedure) AS original_custom_definition,
+    pg_get_functiondef('public.test_guided_condition_custom_options(uuid,uuid,uuid[])'::regprocedure) AS original_options_definition,
     pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure) AS original_definition,
     pg_get_functiondef('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])'::regprocedure) AS original_publication_definition;
 INSERT INTO public.organizations(id, name, slug)
   SELECT org_id, 'Guided rollback rehearsal', 'guided-rollback-' || org_id FROM guided_rollback_fixture;
 INSERT INTO public.leads(id, organization_id, name)
   SELECT custom_lead_id, org_id, 'Custom rollback lead' FROM guided_rollback_fixture;
-INSERT INTO public.lead_custom_fields(id, organization_id, field_name, field_type)
-  SELECT custom_field_id, org_id, 'Custom rollback field', 'text' FROM guided_rollback_fixture;
+INSERT INTO public.lead_custom_fields(id, organization_id, field_name, field_type, field_options)
+  SELECT custom_field_id, org_id, 'Custom rollback field', 'select', '["Preserved custom answer","Another option"]'::jsonb FROM guided_rollback_fixture;
 INSERT INTO public.lead_custom_field_values(lead_id, field_id, value)
   SELECT custom_lead_id, custom_field_id, 'Preserved custom answer' FROM guided_rollback_fixture;
 INSERT INTO public.workflows(id, organization_id, name, trigger_type)
@@ -130,6 +137,13 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${selectRollback}
+${optionsRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_custom_options(uuid,uuid,uuid[])') IS NOT NULL THEN
+    RAISE EXCEPTION 'rollback left personal options reader enabled';
+  END IF;
+END $$;
 ${dateRollback}
 ${booleanRollback}
 ${numericRollback}
@@ -148,7 +162,7 @@ DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.lead_custom_field_values v
     JOIN guided_rollback_fixture f ON f.custom_field_id = v.field_id AND f.custom_lead_id = v.lead_id
     JOIN public.lead_custom_fields d ON d.id = v.field_id AND d.organization_id = f.org_id
-    WHERE v.value = 'Preserved custom answer' AND d.field_type = 'text') THEN
+    WHERE v.value = 'Preserved custom answer' AND d.field_type = 'select' AND d.field_options = '["Preserved custom answer","Another option"]'::jsonb) THEN
     RAISE EXCEPTION 'custom field definition or answer lost during rollback';
   END IF;
 END $$;
@@ -307,6 +321,20 @@ ${customPublicationForward}
 ${numericForward}
 ${booleanForward}
 ${dateForward}
+${optionsForward}
+${selectForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_custom_options(uuid,uuid,uuid[])', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_custom_options(uuid,uuid,uuid[])', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_custom_options(uuid,uuid,uuid[])', 'EXECUTE') THEN
+    RAISE EXCEPTION 'personal options reader privileges invalid';
+  END IF;
+  IF pg_get_functiondef('public.test_guided_condition_custom_options(uuid,uuid,uuid[])'::regprocedure)
+    IS DISTINCT FROM (SELECT original_options_definition FROM guided_rollback_fixture) THEN
+    RAISE EXCEPTION 'personal options reader not restored exactly';
+  END IF;
+END $$;
+
 ${tagForward}
 ${originForward}
 ${responsibleForward}
@@ -336,7 +364,8 @@ DO $$ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.lead_custom_field_values v
     JOIN guided_rollback_fixture f ON f.custom_field_id = v.field_id AND f.custom_lead_id = v.lead_id
-    WHERE v.value = 'Preserved custom answer') THEN
+    WHERE v.value = 'Preserved custom answer' AND EXISTS (SELECT 1 FROM public.lead_custom_fields d WHERE d.id = f.custom_field_id
+      AND d.field_type = 'select' AND d.field_options = '["Preserved custom answer","Another option"]'::jsonb)) THEN
     RAISE EXCEPTION 'custom answer lost during recovery';
   END IF;
 END $$;

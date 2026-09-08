@@ -59,3 +59,11 @@ Boolean evaluation now preserves false as a filled value, distinguishes unanswer
 ## Calendar-date custom fields
 
 Calendar dates now have strict shared validation, date-specific operators and native date inputs. Comparison and display avoid timestamp conversion. Two browser timezone contexts preserve the exact same day; real tests cover leap/century/month/year boundaries, absence, invalid dates and expected-type/tenant checks. Date approval/publication is implemented, with 64 real integration tests and 92 browser tests passing, including impossible-date publication rejection. TypeScript reports zero introduced errors. Registered options and the broader ticket 07 acceptance audit remain open.
+
+## Ticket 07 — registered option implementation checkpoint
+
+Select now joins text, number, boolean and calendar date. Registered strings are exact identities; there is no independent option UUID in the current schema. The editor searches the complete option list with at most 25 visible matches and resolves the selected option independently. Removed configured values fail before short circuiting; stale nonempty answers and malformed metadata fail explicitly. Personal RLS and organizational grant/publication paths are covered by real integration; browser covers selection, typed payload, removal, retry, keyboard focus, current definition labels and explicit grant/revocation. Migration rollback and effective privileges checked live.
+
+This implements registered-option behavior, not a ticket certificate. Remaining audit includes the complete actual-type inventory, cross-type/actor lifecycle matrix, malformed persisted drafts, broader accessibility, performance/limit evidence and a real editor-to-preview journey. All 21 tickets remain in scope.
+
+Live preview CHECK constraint and source manager confirm the five custom types above. Verification: 66 integration, 92 units; browser 94 passed in full run plus the corrected four-to-five-type expectation passed in focused rerun. Final TypeScript ratchet zero introduced errors. Rollback rehearsal additionally preserves a select definition's exact option list and selected answer.

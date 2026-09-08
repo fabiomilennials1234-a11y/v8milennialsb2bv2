@@ -667,7 +667,9 @@ export type GuidedCustomNumberRuleDraft = { version: 1; id: string; field: 'lead
 export type GuidedCustomBooleanRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'boolean'; fieldLabel?: string }
   & ({ operator: 'equals' | 'not_equals'; value: boolean | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
 export type GuidedCustomDateRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'date'; fieldLabel?: string } & GuidedDateComparison;
-export type GuidedRuleDraft = GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+export type GuidedCustomSelectRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'select'; fieldLabel?: string }
+  & ({ operator: 'equals' | 'not_equals'; value: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
+export type GuidedRuleDraft = GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

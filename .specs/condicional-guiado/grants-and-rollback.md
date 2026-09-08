@@ -246,3 +246,11 @@ Adds date to the current custom-definition types eligible for per-UUID new appro
 Rollback restores migration 33's text/number/boolean writer and finalizer, retaining all definitions, answers, approvals, versions and pins. Coordinate the application/endpoint rollback; an unsupported date rule must fail explicitly, never route as No. Recovery: 00..11,30,31,32,33,34,14,21,23,24,29. The thirty-five-migration reverse/recovery rehearsal passed with exact current function restoration and historical data intact.
 
 Effective privileges verified on preview: writer authenticated-only, finalizer service-only, anon denied for both; both definers pin search_path=public. Personal/publication endpoints updated only on preview. Worker remains undeployed.
+
+## Migrations 35–36 — registered custom options
+
+35 creates `test_guided_condition_custom_options(uuid,uuid,uuid[])`, an authenticated-only SECURITY INVOKER reader using caller RLS, current live lead and own-organization definitions. It returns `field_options` alongside each selected definition/answer. The previous personal reader remains available. 36 extends current writer/finalizer support to select definitions and adds `field_options` only to organizational select projections. Publication checks exact registered string values for every rule under definition locks, including branches that evaluation might skip. Unary rules still require the exact field scope.
+
+Applied/ledger-registered only on preview. Verified effective EXECUTE: personal options reader and grant writer authenticated-only; organization reader and finalizer service-only; anon denied on all four. All pin search_path=public; the organizational path retains explicit workflow/organization/grant authorization.
+
+Rollback 36 restores the date-era writer/finalizer and previous custom organizational reader. Rollback 35 drops only the new personal options RPC. Neither deletes definitions, options, answers, approvals, immutable versions or pins. Coordinate application/endpoint rollback: unsupported select rules must fail explicitly. Recovery sequence: 00..11,30,31,32,33,34,35,36,14,21,23,24,29. Complete 37-migration reverse/recovery passed, including exact function definitions/privileges and preserved approval/version/answer history. Personal/publication endpoints updated only in preview; worker remains undeployed.

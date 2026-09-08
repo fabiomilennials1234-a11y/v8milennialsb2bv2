@@ -992,6 +992,72 @@ test('aprova Tags explicitamente sem apagar concessão de Nome', async ({ page }
   expect(writes[1]).toEqual(['lead.name']);
 });
 
+test('opção removida exige nova escolha e erro de consulta permite recuperar sem trocar identidade', async ({ page }) => {
+  const fieldId = '11111111-1111-4111-8111-111111111117';
+  let recovered = false;
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType: 'select', fieldLabel: 'Nome antigo', operator: 'equals', value: 'Indústria' });
+  await page.route('**/rest/v1/lead_custom_fields?*', route => {
+    if (!recovered) return route.fulfill({ status: 503, json: { message: 'unavailable' } });
+    const field = { id: fieldId, field_name: 'Canal atual', field_type: 'select', field_options: ['industria', 'Revenda'] };
+    return route.fulfill({ json: new URL(route.request().url()).searchParams.has('id') ? field : [field] });
+  });
+  await page.reload();
+  await page.getByText('Nome informado', { exact: true }).click();
+  const value = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
+  await expect(page.getByText('Não foi possível verificar as opções cadastradas.')).toBeVisible();
+  await expect(value).toContainText('Opções não verificadas');
+  await expect(value).toBeDisabled();
+  await expect(page.getByText('A opção selecionada foi removida. Selecione uma opção cadastrada.')).toHaveCount(0);
+  recovered = true;
+  await page.getByRole('button', { name: 'Tentar verificar opções novamente' }).click();
+  await expect(value).toContainText('Opção removida');
+  await expect(page.getByText('A opção selecionada foi removida. Selecione uma opção cadastrada.')).toBeVisible();
+  await value.click();
+  await page.getByRole('combobox', { name: 'Buscar opção cadastrada', exact: true }).fill('industria');
+  await page.getByRole('combobox', { name: 'Buscar opção cadastrada', exact: true }).press('ArrowDown');
+  await page.getByRole('combobox', { name: 'Buscar opção cadastrada', exact: true }).press('Enter');
+  await expect(value).toContainText('industria');
+  await expect(value).toBeFocused();
+  await expect(page.getByText('A opção selecionada foi removida. Selecione uma opção cadastrada.')).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Canal atual é “industria”');
+  await selectInformation(page, 'lead.company');
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveValue('');
+});
+
+test('busca opção cadastrada fora dos primeiros resultados e envia valor exato', async ({ page }) => {
+  const fieldId = '11111111-1111-4111-8111-111111111116';
+  await openGuidedEditor(page, 'Aurora');
+  await page.route('**/rest/v1/lead_custom_fields?*', route => {
+    const field = { id: fieldId, field_name: 'Canal cadastrado', field_type: 'select',
+      field_options: [...Array.from({ length: 30 }, (_, i) => `Canal ${i + 1}`), 'Indústria', 'industria'] };
+    return route.fulfill({ json: new URL(route.request().url()).searchParams.has('id') ? field : [field] });
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Canal cadastrado');
+  await page.getByRole('option', { name: 'Canal cadastrado', exact: true }).click({ timeout: 3000 });
+  const value = page.getByRole('combobox', { name: 'Valor da comparação', exact: true });
+  await expect(value).toContainText('Selecione uma opção');
+  await value.click();
+  await expect(page.getByRole('option', { name: 'Indústria', exact: true })).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Buscar opção cadastrada', exact: true }).fill('industria');
+  await expect(page.getByRole('listbox', { name: 'Opções cadastradas' }).getByRole('option')).toHaveCount(2);
+  await page.getByRole('option', { name: 'Indústria', exact: true }).click();
+  await expect(value).toContainText('Indústria');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Canal cadastrado é “Indústria”');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.custom', fieldId, fieldType: 'select', operator: 'equals', value: 'Indústria' });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 'Indústria', reference: { id: fieldId, name: 'Canal cadastrado' } }] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Canal cadastrado é “Indústria”');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(value).toHaveCount(0);
+  await page.getByLabel('Comparação', { exact: true }).selectOption('equals');
+  await expect(value).toContainText('Selecione uma opção');
+});
+
 for (const timezoneId of ['America/Sao_Paulo', 'Asia/Tokyo']) test.describe(`datas personalizadas em ${timezoneId}`, () => {
   test.use({ timezoneId });
   test('seleciona data pelo calendário e mantém o dia no resumo e no teste', async ({ page }) => {
@@ -1113,7 +1179,7 @@ test('seleciona número personalizado com comparação numérica e preserva UUID
   await expect(value).toHaveValue('');
 });
 
-for (const fieldType of ['text', 'number', 'boolean', 'date'] as const) test(`aprova campo personalizado ${fieldType} pelo nome atual e revoga somente seu UUID`, async ({ page }) => {
+for (const fieldType of ['text', 'number', 'boolean', 'date', 'select'] as const) test(`aprova campo personalizado ${fieldType} pelo nome atual e revoga somente seu UUID`, async ({ page }) => {
   const fieldId = '11111111-1111-4111-8111-111111111111';
   let grant = { fields: ['lead.name'], revision: 1 };
   const writes: string[][] = [];
@@ -1125,7 +1191,7 @@ for (const fieldType of ['text', 'number', 'boolean', 'date'] as const) test(`ap
     return route.fulfill({ json: grant });
   });
   await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType, fieldLabel: 'Nome antigo', operator: 'equals', value: fieldType === 'date' ? '2024-02-29' : fieldType === 'boolean' ? false : fieldType === 'number' ? 10 : 'Indústria' });
-  await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: { id: fieldId, field_name: 'Especialidade', field_type: fieldType } }));
+  await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: { id: fieldId, field_name: 'Especialidade', field_type: fieldType, ...(fieldType === 'select' ? { field_options: ['Indústria'] } : {}) } }));
   await page.reload();
   await page.getByText('Nome informado', { exact: true }).click();
   const access = page.getByRole('region', { name: 'Acesso da automação' });
@@ -1414,7 +1480,7 @@ test('seleciona campo personalizado pelo nome e testa preservando UUID', async (
     const field = { id: fieldId, field_name: 'Especialidade', field_type: 'text' };
     if (params.has('id')) return route.fulfill({ json: field });
     expect(params.get('limit')).toBe('25');
-    expect(params.get('field_type')).toBe('in.(text,number,boolean,date)');
+    expect(params.get('field_type')).toBe('in.(text,number,boolean,date,select)');
     return route.fulfill({ json: [field] });
   });
   await page.getByText('Nome informado', { exact: true }).click();

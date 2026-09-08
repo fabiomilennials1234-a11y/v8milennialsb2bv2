@@ -209,6 +209,61 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   });
 
+  it('compares registered custom options exactly and rejects removed options before short circuiting', async () => {
+    const fieldId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `custom-select-${fieldId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1, id: 'select', field: 'lead.custom', fieldId, fieldType: 'select', operator: 'equals', value: 'Indústria' };
+    await service.from('lead_custom_fields').insert({ id: fieldId, organization_id: orgA, field_name: 'Canal cadastrado', field_type: 'select', field_options: ['Indústria', 'industria', 'Revenda'] }).throwOnError();
+    try {
+      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: 'Indústria' }).throwOnError();
+      const evaluate = (rule: unknown) => evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: rule });
+      expect(await evaluate(condition)).toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: 'Indústria', reference: { id: fieldId, name: 'Canal cadastrado' } }] });
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition }), signal: AbortSignal.timeout(15000),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: 'Indústria' }] });
+      expect(await evaluate({ ...condition, value: 'industria' })).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluate({ ...condition, operator: 'not_equals', value: 'industria' })).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate({ ...condition, operator: 'contains' })).toEqual({ status: 'error', code: 'invalid_configuration' });
+      expect(await evaluate({ ...condition, value: '' })).toEqual({ status: 'error', code: 'invalid_configuration' });
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadB, condition })).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluate({ version: 1, id: 'any', kind: 'group', match: 'any', children: [condition,
+        { ...condition, id: 'removed', value: 'Não cadastrada' },
+      ] })).toEqual({ status: 'error', code: 'reference_unavailable' });
+      for (const answer of [null, '']) {
+        await service.from('lead_custom_field_values').update({ value: answer }).eq('lead_id', leadA).eq('field_id', fieldId).throwOnError();
+        expect(await evaluate(condition)).toMatchObject({ status: 'evaluated', matched: false });
+        expect(await evaluate({ ...condition, operator: 'not_equals' })).toMatchObject({ status: 'evaluated', matched: false });
+        expect(await evaluate({ ...condition, operator: 'is_empty' })).toMatchObject({ status: 'evaluated', matched: true });
+      }
+      await service.from('lead_custom_field_values').update({ value: 'Revenda' }).eq('lead_id', leadA).eq('field_id', fieldId).throwOnError();
+      await service.from('lead_custom_fields').update({ field_options: ['industria', 'Revenda'] }).eq('id', fieldId).throwOnError();
+      expect(await evaluate(condition)).toEqual({ status: 'error', code: 'reference_unavailable' });
+      await service.from('lead_custom_fields').update({ field_options: ['industria'] }).eq('id', fieldId).throwOnError();
+      expect(await evaluate({ ...condition, value: 'industria', operator: 'not_equals' })).toEqual({ status: 'error', code: 'source_unavailable' });
+      expect(await evaluate({ ...condition, operator: 'is_empty' })).toEqual({ status: 'error', code: 'source_unavailable' });
+      await service.from('lead_custom_field_values').update({ value: null }).eq('lead_id', leadA).eq('field_id', fieldId).throwOnError();
+      await service.from('lead_custom_fields').update({ field_options: null }).eq('id', fieldId).throwOnError();
+      expect(await evaluate({ ...condition, operator: 'is_empty' })).toMatchObject({ status: 'evaluated', matched: true });
+      expect(await evaluate(condition)).toEqual({ status: 'error', code: 'reference_unavailable' });
+      for (const options of [{ value: 'Indústria' }, ['Indústria', 1], ['']]) {
+        await service.from('lead_custom_fields').update({ field_options: options }).eq('id', fieldId).throwOnError();
+        expect(await evaluate({ ...condition, operator: 'is_empty' })).toEqual({ status: 'error', code: 'source_unavailable' });
+      }
+      const args = { p_organization_id: orgA, p_lead_id: leadA, p_field_ids: [fieldId] };
+      expect((await service.rpc('test_guided_condition_custom_options', args)).error?.code).toBe('42501');
+      const anonymous = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, { auth: { persistSession: false, storageKey: `anonymous-select-${fieldId}` } });
+      expect((await anonymous.rpc('test_guided_condition_custom_options', args)).error?.code).toBe('42501');
+    } finally {
+      await service.from('lead_custom_fields').delete().eq('id', fieldId).throwOnError();
+    }
+  }, 60000);
+
   it('compares custom calendar dates without timezone shifts or normalized invalid dates', async () => {
     const fieldId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
@@ -371,13 +426,13 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
-  it.each(['text', 'number', 'boolean', 'date'] as const)('publishes a custom %s condition and rejects changed references without replacing its version', async fieldType => {
+  it.each(['text', 'number', 'boolean', 'date', 'select'] as const)('publishes a custom %s condition and rejects changed references without replacing its version', async fieldType => {
     const workflowId = crypto.randomUUID(), fieldId = crypto.randomUUID(), foreignId = crypto.randomUUID(), replacementId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false, storageKey: `custom-publish-${fieldId}` },
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
-    const condition = { version: 1, id: 'custom', field: 'lead.custom', fieldId, fieldType, ...(fieldType === 'text' ? { operator: 'contains', value: 'eletrica' } : fieldType === 'number' ? { operator: 'greater_than', value: 10 } : fieldType === 'date' ? { operator: 'equals', value: '2024-02-29' } : { operator: 'equals', value: false }) };
+    const condition = { version: 1, id: 'custom', field: 'lead.custom', fieldId, fieldType, ...(fieldType === 'text' ? { operator: 'contains', value: 'eletrica' } : fieldType === 'number' ? { operator: 'greater_than', value: 10 } : fieldType === 'select' ? { operator: 'equals', value: 'Indústria' } : fieldType === 'date' ? { operator: 'equals', value: '2024-02-29' } : { operator: 'equals', value: false }) };
     const definitionFor = (rule: unknown) => ({ nodes: [
       { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
       { id: 'c', type: 'condition', data: { guidedCondition: rule } },
@@ -391,9 +446,9 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       });
       return { status: response.status, body: await response.json() };
     };
-    await service.from('lead_custom_fields').insert({ id: fieldId, organization_id: orgA, field_name: 'Especialidade', field_type: fieldType }).throwOnError();
+    await service.from('lead_custom_fields').insert({ id: fieldId, organization_id: orgA, field_name: 'Especialidade', field_type: fieldType, ...(fieldType === 'select' ? { field_options: ['Indústria', 'industria'] } : {}) }).throwOnError();
     try {
-      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: fieldType === 'text' ? 'Distribuição elétrica' : fieldType === 'number' ? '10.5' : fieldType === 'date' ? '2024-02-29' : 'false' }).throwOnError();
+      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: fieldType === 'text' ? 'Distribuição elétrica' : fieldType === 'number' ? '10.5' : fieldType === 'select' ? 'Indústria' : fieldType === 'date' ? '2024-02-29' : 'false' }).throwOnError();
       expect((await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: settings })).error).toBeNull();
       expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [`lead.custom:${fieldId}`], p_expected_revision: 0 })).error).toBeNull();
       const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1,
@@ -411,10 +466,19 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       expect(steps.error).toBeNull();
       expect(steps.data?.map(step => step.node_id)).toContain('yes');
       expect(steps.data?.map(step => step.node_id)).not.toContain('no');
+      if (fieldType === 'select') {
+        await service.from('lead_custom_fields').update({ field_options: ['industria'] }).eq('id', fieldId).throwOnError();
+        expect(await publish(1)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
+        const denied = await service.rpc('finalize_guided_workflow_publication', args);
+        expect(denied.error?.code).toBe('PT422');
+        expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA, condition,
+          authorization: { kind: 'organization', workflowId } })).toEqual({ status: 'error', code: 'reference_unavailable' });
+        await service.from('lead_custom_fields').update({ field_options: ['Indústria', 'industria'] }).eq('id', fieldId).throwOnError();
+      }
       await service.from('lead_custom_fields').update({ field_type: fieldType === 'text' ? 'number' : 'text' }).eq('id', fieldId).throwOnError();
       expect(await publish(1)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
       await service.from('lead_custom_fields').update({ field_type: fieldType }).eq('id', fieldId).throwOnError();
-      await service.from('lead_custom_fields').insert({ id: foreignId, organization_id: orgB, field_name: 'Especialidade', field_type: fieldType }).throwOnError();
+      await service.from('lead_custom_fields').insert({ id: foreignId, organization_id: orgB, field_name: 'Especialidade', field_type: fieldType, ...(fieldType === 'select' ? { field_options: ['Indústria', 'industria'] } : {}) }).throwOnError();
       const invalid = definitionFor({ version: 1, id: 'any', kind: 'group', match: 'any', children: [condition, { ...condition, id: 'foreign', fieldId: foreignId }] });
       expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1, p_definition: invalid, p_settings: settings })).error).toBeNull();
       expect(await publish(2)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
@@ -431,7 +495,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
         finalRevision = 6;
       }
       await service.from('lead_custom_fields').delete().eq('id', fieldId).throwOnError();
-      await service.from('lead_custom_fields').insert({ id: replacementId, organization_id: orgA, field_name: 'Especialidade', field_type: fieldType }).throwOnError();
+      await service.from('lead_custom_fields').insert({ id: replacementId, organization_id: orgA, field_name: 'Especialidade', field_type: fieldType, ...(fieldType === 'select' ? { field_options: ['Indústria', 'industria'] } : {}) }).throwOnError();
       expect(await publish(finalRevision)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
       const active = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
       expect(active.error).toBeNull();

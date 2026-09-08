@@ -1,3 +1,4 @@
+import { GuidedCustomOptionPicker } from './GuidedCustomOptionPicker';
 import { GUIDED_DATE_OPERATORS, isGuidedCalendarDate, isGuidedDateOperator } from '@/contracts/workflows/guided-dates';
 import { GuidedFieldPicker } from './GuidedFieldPicker';
 import { isGuidedResponsibleField, GUIDED_SCALAR_FIELDS, GUIDED_NUMBER_OPERATORS, isGuidedNumberField, isGuidedNumberOperator, GUIDED_TEXT_OPERATORS, isGuidedTextField, isGuidedTextOperator } from '@/contracts/workflows/guided-fields';
@@ -81,6 +82,16 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
       <GuidedFieldPicker id={`guided-field-${condition.id}`} value={condition.field} actorId={actorId} organizationId={organizationId}
         custom={condition.field === 'lead.custom' ? condition : undefined}
         onCustomSelect={(fieldId, fieldLabel, fieldType) => {
+          if (fieldType === 'select') {
+            const base = { version: 1 as const, id: condition.id, field: 'lead.custom' as const, fieldId, fieldType, fieldLabel };
+            const sameField = condition.field === 'lead.custom' && condition.fieldType === 'select' && condition.fieldId === fieldId;
+            setFieldReset(!sameField);
+            if (sameField && condition.operator === 'is_empty') onChange({ ...base, operator: 'is_empty' });
+            else if (sameField && condition.operator === 'is_not_empty') onChange({ ...base, operator: 'is_not_empty' });
+            else if (sameField && (condition.operator === 'equals' || condition.operator === 'not_equals') && 'value' in condition) onChange({ ...base, operator: condition.operator, value: condition.value });
+            else onChange({ ...base, operator: 'equals', value: '' });
+            return;
+          }
           if (fieldType === 'date') {
             const base = { version: 1 as const, id: condition.id, field: 'lead.custom' as const, fieldId, fieldType, fieldLabel };
             const compatible = condition.field === 'lead.custom' && condition.fieldType === 'date';
@@ -161,6 +172,18 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         <option value="has_tag">tem tag</option><option value="not_has_tag">não tem tag</option>
       </select>
       <GuidedTagPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
+    </> : (condition.field === 'lead.custom' && condition.fieldType === 'select') ? <>
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
+        const base = { version: 1 as const, id: condition.id, field: condition.field, fieldId: condition.fieldId, fieldType: condition.fieldType, fieldLabel: condition.fieldLabel };
+        const operator = event.target.value;
+        if (operator === 'is_empty') onChange({ ...base, operator: 'is_empty' });
+        else if (operator === 'is_not_empty') onChange({ ...base, operator: 'is_not_empty' });
+        else if (operator === 'equals' || operator === 'not_equals') onChange({ ...base, operator, value: 'value' in condition ? condition.value : '' });
+      }}><option value="equals">é</option><option value="not_equals">não é</option><option value="is_empty">está vazio</option><option value="is_not_empty">está preenchido</option></select>
+      {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <GuidedCustomOptionPicker
+        actorId={actorId} organizationId={organizationId} fieldId={condition.fieldId} id={`guided-value-${condition.id}`}
+        value={condition.value} onChange={value => onChange({ ...condition, value })} />}
     </> : (condition.field === 'lead.custom' && condition.fieldType === 'date') ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {

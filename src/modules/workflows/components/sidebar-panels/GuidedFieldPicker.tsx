@@ -38,7 +38,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
   id: string; value: GuidedRuleDraft['field']; onChange: (field: Field) => void;
   actorId: string; organizationId: string;
   custom?: Extract<GuidedRuleDraft, { field: 'lead.custom' }>;
-  onCustomSelect: (fieldId: string, fieldLabel: string, fieldType: 'text' | 'number' | 'boolean' | 'date') => void;
+  onCustomSelect: (fieldId: string, fieldLabel: string, fieldType: 'text' | 'number' | 'boolean' | 'date' | 'select') => void;
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -84,9 +84,9 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
             </CommandItem>)}
           </CommandGroup>
           {!searching && !options.isError && <CommandGroup heading="Lead · Campos personalizados">
-            {options.data?.filter(field => (field.field_type === 'text' || field.field_type === 'number' || field.field_type === 'boolean' || field.field_type === 'date') && !(unavailable && field.id === custom?.fieldId)).map(field =>
+            {options.data?.filter(field => (field.field_type === 'text' || field.field_type === 'number' || field.field_type === 'boolean' || field.field_type === 'date' || field.field_type === 'select') && !(unavailable && field.id === custom?.fieldId)).map(field =>
               <CommandItem key={field.id} value={`custom:${field.id}`} keywords={[field.field_name]} onSelect={() => {
-                onCustomSelect(field.id, field.field_name, field.field_type === 'date' ? 'date' : field.field_type === 'boolean' ? 'boolean' : field.field_type === 'number' ? 'number' : 'text'); setOpen(false); setSearch('');
+                onCustomSelect(field.id, field.field_name, field.field_type === 'select' ? 'select' : field.field_type === 'date' ? 'date' : field.field_type === 'boolean' ? 'boolean' : field.field_type === 'number' ? 'number' : 'text'); setOpen(false); setSearch('');
               }}>
                 <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${custom?.fieldId === field.id ? 'opacity-100' : 'opacity-0'}`} />
                 <span>{field.field_name}</span>
