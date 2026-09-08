@@ -247,3 +247,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Verification: 30 browser cases passed (external transport substituted), 37 evaluator/publication/executor unit cases passed, Deno checks for evaluator/publication passed, focused ESLint zero errors (one Fast Refresh mixed-export warning in the builder), diff check passed. No migration or deployment in this checkpoint. Frontend typecheck ratchet still being observed separately.
 - Remaining ticket 05: duplication/removal/collapse, hierarchical results and canvas summary, panel sizing, keyboard journey, real grouped HTTP/publication/execution proof. This checkpoint does not certify ticket 05 or any of the 21 tickets. All original scope, rollback requirements and final HITL gate retained.
 - Typecheck ratchet finished: zero introduced errors; 805 baseline plus 11 inherited tolerated, 481 current occurrences. All associated process handles terminal.
+
+## 2026-09-08 — group editing operations
+
+- Browser TDD red→green: duplicating a nested group inserts an independent sibling with fresh IDs throughout its subtree. Public test-request payload proves preserved source values, independently edited copy and seven distinct descendant identities.
+- Browser TDD red→green: removing rules preserves remaining values and moves focus to the parent's combination selector. Empty groups remain editable, show an explicit empty-state error, and cannot be tested. Keyboard Enter adds a replacement rule and focuses its input. The same removal operation is exposed for nested groups.
+- Browser TDD red→green: collapse/expand works with Enter, retains toggle focus and comparison values, and shows a parenthesized All/Any summary while collapsed. This is the panel summary only; canvas integration and hierarchical test results remain pending.
+- Focused lint: zero errors, existing builder Fast Refresh mixed-export warning. No database changes or deployments. Full editor browser regression running for this checkpoint; no ticket certified and no final HITL.
+- Full browser regression completed: 33 passed. All process sessions terminal. Ticket 05 still needs canvas/hierarchical result summaries, panel sizing, real grouped service/publication/execution validation and complete keyboard/structural coverage.

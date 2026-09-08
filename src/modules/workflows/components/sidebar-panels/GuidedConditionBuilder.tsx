@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,28 +9,52 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
     : condition.operator === 'equals' && condition.value.length === 0;
 }
 const newRule = (): GuidedRuleDraft => ({ version: 1, id: crypto.randomUUID(), field: 'lead.name', operator: 'equals', value: '' });
+function duplicateCondition(condition: GuidedConditionDraft): GuidedConditionDraft {
+  return 'children' in condition
+    ? { ...condition, id: crypto.randomUUID(), children: condition.children.map(duplicateCondition) }
+    : { ...condition, id: crypto.randomUUID() };
+}
+function summarize(condition: GuidedConditionDraft): string {
+  if ('children' in condition) return `${condition.match === 'all' ? 'Todas' : 'Qualquer'}: (${condition.children.map(summarize).join(condition.match === 'all' ? ' E ' : ' OU ')})`;
+  return condition.operator === 'is_empty' ? 'Nome está vazio' : `Nome é igual a “${condition.value}”`;
+}
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: {
   condition: GuidedConditionDraft; groupDepth?: number; onChange: (condition: GuidedConditionDraft) => void;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
   const focusValue = (id: string) => requestAnimationFrame(() => document.getElementById(`guided-value-${id}`)?.focus());
   if ('children' in condition) {
     return <fieldset className="space-y-4 rounded-xl border border-border p-3">
       <legend className="px-1 text-sm font-medium">Grupo de condições</legend>
+      <Button type="button" variant="ghost" aria-expanded={!collapsed} aria-controls={`guided-content-${condition.id}`} onClick={() => setCollapsed(value => !value)}>{collapsed ? 'Expandir grupo' : 'Recolher grupo'}</Button>
+      {collapsed && <p className="break-words text-sm">{summarize(condition)}</p>}
+      {!collapsed && <div id={`guided-content-${condition.id}`} className="space-y-4">
       <Label htmlFor={`guided-match-${condition.id}`}>Combinação</Label>
       <select id={`guided-match-${condition.id}`} className={selectClass} value={condition.match}
         onChange={event => onChange({ ...condition, match: event.target.value as 'all' | 'any' })}>
         <option value="all">Todas as condições (E)</option><option value="any">Qualquer condição (OU)</option>
       </select>
+      {condition.children.length === 0 && <p className="text-sm text-destructive" role="alert">Grupo vazio. Adicione uma condição.</p>}
       {condition.children.map((child, index) => <div key={child.id} className="space-y-3 border-l-2 border-border pl-3">
         <p className="text-xs text-muted-foreground">Condição {index + 1}</p>
+        <Button type="button" variant="ghost" onClick={() => {
+          const copy = duplicateCondition(child);
+          onChange({ ...condition, children: [...condition.children.slice(0, index + 1), copy, ...condition.children.slice(index + 1)] });
+          requestAnimationFrame(() => document.getElementById(`guided-${'children' in copy ? 'match' : copy.operator === 'equals' ? 'value' : 'operator'}-${copy.id}`)?.focus());
+        }}>{'children' in child ? 'Duplicar grupo' : 'Duplicar regra'}</Button>
+        <Button type="button" variant="ghost" onClick={() => {
+          onChange({ ...condition, children: condition.children.filter(item => item.id !== child.id) });
+          requestAnimationFrame(() => document.getElementById(`guided-match-${condition.id}`)?.focus());
+        }}>{'children' in child ? 'Excluir grupo' : 'Excluir regra'}</Button>
         <GuidedConditionBuilder condition={child} groupDepth={groupDepth + 1} onChange={replacement => onChange({ ...condition,
           children: condition.children.map(item => item.id === child.id ? replacement : item) })} />
       </div>)}
       <Button type="button" variant="outline" onClick={() => {
         const rule = newRule(); onChange({ ...condition, children: [...condition.children, rule] }); focusValue(rule.id);
       }}>Adicionar condição</Button>
+      </div>}
     </fieldset>;
   }
   const missingValue = isIncompleteGuidedDraft(condition);

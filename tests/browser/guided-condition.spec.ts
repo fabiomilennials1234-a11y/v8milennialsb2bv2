@@ -497,3 +497,62 @@ test('limita grupos a três níveis sem impedir novas regras no terceiro', async
   await expect(page.getByLabel('Valor da comparação').nth(2)).toBeFocused();
   await expect(page.getByRole('group', { name: 'Grupo de condições', exact: true })).toHaveCount(3);
 });
+
+test('duplica grupo com valores independentes e identidades novas', async ({ page }) => {
+  let submitted: { children: Array<{ id: string; children?: Array<{ id: string; value: string }> }> } | undefined;
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    submitted = route.request().postDataJSON().condition;
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [] } });
+  });
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('José');
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).first().click();
+  await page.getByLabel('Valor da comparação').nth(1).fill('Maria');
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).first().click();
+  await page.getByLabel('Valor da comparação').nth(1).fill('Ana');
+  await page.getByRole('button', { name: 'Duplicar grupo', exact: true }).click({ timeout: 3000 });
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(5);
+  await page.getByLabel('Valor da comparação').nth(2).fill('João');
+  await expect(page.getByLabel('Valor da comparação').first()).toHaveValue('José');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect.poll(() => submitted).toBeTruthy();
+  expect(submitted?.children[0].children?.map(rule => rule.value)).toEqual(['José', 'Ana']);
+  expect(submitted?.children[1].children?.map(rule => rule.value)).toEqual(['João', 'Ana']);
+  const ids = submitted!.children.flatMap(child => [child.id, ...(child.children?.map(rule => rule.id) ?? [])]);
+  expect(new Set(ids).size).toBe(7);
+});
+
+test('exclui regras sem perder restantes e permite reconstruir grupo vazio pelo teclado', async ({ page }) => {
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('José');
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).click();
+  await page.getByLabel('Valor da comparação').nth(1).fill('Maria');
+  await page.getByRole('button', { name: 'Excluir regra', exact: true }).first().click({ timeout: 3000 });
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('Maria');
+  await expect(page.getByLabel('Combinação')).toBeFocused();
+  await page.getByRole('button', { name: 'Excluir regra', exact: true }).click();
+  await expect(page.getByText('Grupo vazio. Adicione uma condição.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Testar condição', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Valor da comparação')).toBeFocused();
+});
+
+test('recolhe grupo pelo teclado mantendo resumo e valores ao expandir', async ({ page }) => {
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('José');
+  await page.getByRole('button', { name: 'Adicionar condição', exact: true }).click();
+  await page.getByLabel('Valor da comparação').nth(1).fill('Maria');
+  await page.getByLabel('Combinação').selectOption('any');
+  const toggle = page.getByRole('button', { name: 'Recolher grupo', exact: true });
+  await toggle.focus({ timeout: 3000 });
+  await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
+  await expect(page.getByText('Qualquer: (Nome é igual a “José” OU Nome é igual a “Maria”)', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Expandir grupo', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByLabel('Valor da comparação').first()).toHaveValue('José');
+  await expect(page.getByLabel('Valor da comparação').nth(1)).toHaveValue('Maria');
+});
