@@ -1,9 +1,10 @@
+import { GUIDED_TEXT_FIELDS, isGuidedTextField, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 export type GuidedRule = {
   version: 1;
   id: string;
-  field: 'lead.name';
+  field: GuidedTextField;
 } & ({ operator: 'equals'; value: string } | { operator: 'is_empty' });
 
 export interface GuidedConditionRequest {
@@ -30,7 +31,7 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && rule.children.every(child => valid(child, groupDepth + 1));
     }
     if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
-    return rule.field === 'lead.name' && (rule.operator === 'is_empty'
+    return isGuidedTextField(rule.field) && (rule.operator === 'is_empty'
       || (rule.operator === 'equals' && typeof rule.value === 'string' && rule.value.length > 0));
   }
   return valid(value, 0);
@@ -59,13 +60,19 @@ export async function evaluateGuidedCondition(
   if (!isGuidedCondition(request.condition)) {
     return { status: 'error' as const, code: 'invalid_configuration' as const };
   }
+  const fields = guidedConditionFields(request.condition) as GuidedTextField[];
+  // The existing organization RPC grants name only. Additional fields must
+  // remain denied until their atomic authorized reader is installed.
+  if (request.authorization && fields.some(field => field !== 'lead.name')) {
+    return { status: 'error' as const, code: 'access_denied' as const };
+  }
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? await caller.rpc('read_guided_condition_lead', {
       p_workflow_id: request.authorization.workflowId,
       p_organization_id: request.organizationId, p_lead_id: request.leadId,
     }).returns<Array<{ id: string; organization_id: string; name: string | null }>>().maybeSingle()
     : await caller.from('leads')
-      .select('id, organization_id, name')
+      .select(['id', 'organization_id', ...fields.map(field => GUIDED_TEXT_FIELDS[field].column)].join(', '))
       .eq('organization_id', request.organizationId)
       .eq('id', request.leadId)
       .is('deleted_at', null)
@@ -83,7 +90,7 @@ export async function evaluateGuidedCondition(
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-  const empty = data.name == null || data.name === '';
+  const record = data as unknown as Record<string, unknown>;
   type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
@@ -108,9 +115,11 @@ export async function evaluateGuidedCondition(
       }
       return group.matched;
     }
+    const actual = record[GUIDED_TEXT_FIELDS[condition.field].column];
+    const empty = actual == null || actual === '';
     const matched = condition.operator === 'is_empty' ? empty
-      : !empty && typeof data!.name === 'string' && normalize(data!.name) === normalize(condition.value);
-    rules.push({ id: condition.id, status: 'evaluated', matched, actual: data!.name });
+      : !empty && typeof actual === 'string' && normalize(actual) === normalize(condition.value);
+    rules.push({ id: condition.id, status: 'evaluated', matched, actual });
     return matched;
   }
   const matched = evaluate(request.condition);

@@ -43,7 +43,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     });
     if (member.error) throw member.error;
     const leads = await service.from('leads').insert([
-      { id: leadA, organization_id: orgA, name: 'José', pre_sale_responsible_id: adminMemberId },
+      { id: leadA, organization_id: orgA, name: 'José', company: 'Fábrica Aurora', pre_sale_responsible_id: adminMemberId },
       { id: leadB, organization_id: orgB, name: 'Dado protegido' },
     ]);
     if (leads.error) throw leads.error;
@@ -682,6 +682,18 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       rules: [{ id: 'jose', status: 'evaluated', matched: true, actual: 'José' }, { id: 'maria', status: 'not_evaluated' }],
     } });
     expect(await evaluate(leadB)).toEqual({ status: 422, body: { status: 'error', code: 'context_unavailable' } });
+  }, 60000);
+
+  it('tests company through personal HTTP permissions without inheriting name authorization', async () => {
+    const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId: orgA, leadId: leadA,
+        condition: { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' } }),
+    });
+    expect({ status: response.status, body: await response.json() }).toEqual({ status: 200, body: {
+      status: 'evaluated', matched: true,
+      rules: [{ id: 'company', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' }],
+    } });
   }, 60000);
 
   it('honors explicit responsible-only access within the same organization', async () => {

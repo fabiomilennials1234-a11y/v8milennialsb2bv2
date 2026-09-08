@@ -1,3 +1,4 @@
+import { GUIDED_TEXT_FIELDS, isGuidedTextField } from '@/contracts/workflows/guided-fields';
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
@@ -64,10 +65,12 @@ export function GuidedConditionBuilder({ condition, onChange, groupDepth = 0 }: 
   const missingValue = isIncompleteGuidedDraft(condition);
   return <div className="space-y-4">
     <div className="space-y-2"><Label htmlFor={`guided-field-${condition.id}`}>Informação</Label>
-      <select id={`guided-field-${condition.id}`} className={selectClass} value="lead.name" disabled><option value="lead.name">Lead · Nome</option></select></div>
+      <select id={`guided-field-${condition.id}`} className={selectClass} value={condition.field} onChange={event => {
+        if (isGuidedTextField(event.target.value)) onChange({ ...condition, field: event.target.value });
+      }}>{Object.entries(GUIDED_TEXT_FIELDS).map(([value, field]) => <option key={value} value={value}>Lead · {field.label}</option>)}</select></div>
     <div className="space-y-2"><Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
-        const base = { version: 1 as const, id: condition.id, field: 'lead.name' as const };
+        const base = { version: 1 as const, id: condition.id, field: condition.field };
         onChange(event.target.value === 'is_empty' ? { ...base, operator: 'is_empty' } : { ...base, operator: 'equals', value: '' });
       }}><option value="equals">é igual a</option><option value="is_empty">está vazio</option></select></div>
     {condition.operator === 'equals' && <div className="space-y-2"><Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>

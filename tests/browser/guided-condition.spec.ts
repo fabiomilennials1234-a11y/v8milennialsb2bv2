@@ -615,3 +615,25 @@ test('amplia painel pelo teclado sem perder edição e respeita viewport estreit
   await page.getByRole('button', { name: 'Reduzir painel', exact: true }).click();
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('José');
 });
+
+test('seleciona Empresa mantendo comparação textual e explica dado correto', async ({ page }) => {
+  let submitted: unknown;
+  await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [{ id: 'lead-1', name: 'José' }] }));
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    submitted = route.request().postDataJSON().condition;
+    return route.fulfill({ json: { status: 'evaluated', matched: true,
+      rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' }] } });
+  });
+  await page.goto('/tests/browser/fixtures/guided-condition.html');
+  await page.getByLabel('Valor da comparação').fill('FABRICA AURORA');
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.company', { timeout: 3000 });
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('FABRICA AURORA');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Empresa do lead: Fábrica Aurora');
+  expect(submitted).toMatchObject({ field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' });
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
+  await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('is_empty');
+});

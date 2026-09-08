@@ -1,3 +1,4 @@
+import { GUIDED_TEXT_FIELDS } from '@/contracts/workflows/guided-fields';
 import { GuidedConditionResult, type GuidedResultEntry } from './GuidedConditionResult';
 import { GuidedConditionBuilder, isIncompleteGuidedDraft } from './GuidedConditionBuilder';
 import { useState } from 'react';
@@ -78,7 +79,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
       {leads.isSuccess && leads.data.length === 0 && <p className="text-sm text-muted-foreground">Nenhum lead encontrado. Tente outro nome.</p>}
       <Button type="button" disabled={!leadId || pending || missingValue} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{'children' in condition ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : <p>Nome do lead: {result.actual ?? 'Vazio'}</p>}</div>}
+      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{'children' in condition ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : <p>{GUIDED_TEXT_FIELDS[condition.field].actualLabel}: {result.actual ?? 'Vazio'}</p>}</div>}
     </section>
   </div>;
 }

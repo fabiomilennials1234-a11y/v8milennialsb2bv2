@@ -1,3 +1,4 @@
+import type { GuidedTextField } from '@/contracts/workflows/guided-fields';
 import type { Node, Edge } from "@xyflow/react";
 
 /**
@@ -644,7 +645,7 @@ export interface ActionNodeData {
 export type GuidedRuleDraft = {
   version: 1;
   id: string;
-  field: 'lead.name';
+  field: GuidedTextField;
 } & ({ operator: 'equals'; value: string } | { operator: 'is_empty' });
 
 export type GuidedConditionDraft = GuidedRuleDraft | {

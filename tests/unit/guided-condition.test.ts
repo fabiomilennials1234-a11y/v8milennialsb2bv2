@@ -141,3 +141,24 @@ it('rejects a leaf carrying group children before reading personal data', async 
   })).toEqual({ status: 'error', code: 'invalid_configuration' });
   expect(reads).toBe(0);
 });
+
+it('compares company and name independently within one group using only requested fields', async () => {
+  const caller = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => {
+      const selected = new URL(String(input)).searchParams.get('select')?.replaceAll(' ', '').split(',');
+      expect(selected?.sort()).toEqual(['company', 'id', 'name', 'organization_id']);
+      return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', name: 'José', company: 'Fábrica Aurora' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  expect(await evaluateGuidedCondition(caller, {
+    organizationId: 'org-1', leadId: 'lead-1', condition: { version: 1, id: 'g', kind: 'group', match: 'all', children: [
+      { version: 1, id: 'name', field: 'lead.name', operator: 'equals', value: 'JOSE' },
+      { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' },
+    ] },
+  })).toEqual({ status: 'evaluated', matched: true, groups: [{ id: 'g', status: 'evaluated', matched: true }], rules: [
+    { id: 'name', status: 'evaluated', matched: true, actual: 'José' },
+    { id: 'company', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' },
+  ] });
+});
