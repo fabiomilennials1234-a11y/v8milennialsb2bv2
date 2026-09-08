@@ -126,3 +126,31 @@ export function useLeadOrigins(): UseLeadOriginsResult {
 
   return { origins, labelOf, colorOf, isLoading: query.isLoading };
 }
+
+/** Caller-RLS catalogue for searchable selectors. Scope comes from the editor's
+ * authenticated context; each identity gets independent cached results. */
+export function useLeadOriginOptions(actorId: string, organizationId: string, search: string, selectedId: string) {
+  const enabled = Boolean(actorId && organizationId);
+  const options = useQuery({
+    queryKey: ['lead_origins', organizationId, 'options', actorId, search], enabled,
+    queryFn: async ({ signal }) => {
+      let query = supabase.from('lead_origins').select('id, name, is_active').eq('organization_id', organizationId)
+        .order('name').order('id').limit(25).abortSignal(signal);
+      if (search) query = query.ilike('name', `%${search.replace(/[\\%_]/g, '\\$&')}%`);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+  });
+  // A search page cannot prove that the selected identity was removed.
+  const selected = useQuery({
+    queryKey: ['lead_origins', organizationId, 'selected', actorId, selectedId], enabled: enabled && Boolean(selectedId),
+    queryFn: async ({ signal }) => {
+      const { data, error } = await supabase.from('lead_origins').select('id, name, is_active')
+        .eq('organization_id', organizationId).eq('id', selectedId).abortSignal(signal).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+  return { options, selected };
+}

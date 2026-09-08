@@ -925,6 +925,18 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
         { id: foreignId, organization_id: orgB, name: 'Indicação comercial', slug: 'guided_referral' },
       ])).error).toBeNull();
       expect((await service.from('leads').update({ origin: 'guided_referral' }).eq('id', leadA)).error).toBeNull();
+      const suggestions = await caller.from('lead_origins').select('id, name, is_active').eq('organization_id', orgA)
+        .ilike('name', '%comercial%').order('name').order('id').limit(25);
+      expect(suggestions.error).toBeNull();
+      expect(suggestions.data).toEqual([{ id: originId, name: 'Indicação comercial', is_active: true }]);
+      const foreignSuggestions = await caller.from('lead_origins').select('id, name, is_active').eq('organization_id', orgB)
+        .ilike('name', '%comercial%').order('name').order('id').limit(25);
+      expect(foreignSuggestions.error).toBeNull();
+      expect(foreignSuggestions.data).toEqual([]);
+      const foreignSelection = await caller.from('lead_origins').select('id, name, is_active')
+        .eq('organization_id', orgB).eq('id', foreignId).maybeSingle();
+      expect(foreignSelection.error).toBeNull();
+      expect(foreignSelection.data).toBeNull();
       const args = { p_organization_id: orgA, p_lead_id: leadA, p_origin_ids: [originId] };
       const read = await caller.rpc('test_guided_condition_origins', args);
       expect(read.error).toBeNull();

@@ -655,7 +655,9 @@ export type GuidedTagRuleDraft = {
 };
 export type GuidedNumberRuleDraft = { version: 1; id: string; field: GuidedNumberField }
   & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' });
-export type GuidedRuleDraft = GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+export type GuidedOriginRuleDraft = { version: 1; id: string; field: 'lead.origin' }
+  & ({ operator: 'equals' | 'not_equals'; originId: string; originLabel?: string } | { operator: 'is_empty' });
+export type GuidedRuleDraft = GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

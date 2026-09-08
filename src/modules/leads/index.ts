@@ -69,6 +69,7 @@ export type {
 // ── Hooks: lead origins registry (fonte única de lista/label/cor) ──────────
 export {
   useLeadOrigins,
+  useLeadOriginOptions,
   BUILTIN_LEAD_ORIGINS,
   FALLBACK_ORIGIN_COLOR,
 } from "./hooks/useLeadOrigins";

@@ -425,3 +425,14 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 
 
 - Final full real integration: 39 passed. Typecheck ratchet: zero introduced errors (805 baseline + 11 inherited tolerated; 481 current). All validation handles terminal. Personal endpoint deployed only on preview. Next path is the origin catalogue selector plus summary/result metadata, followed by explicit organizational scope/atomic reader/publication; these remain implementation work, not release-ready capability. All 21 tickets remain open.
+
+
+## 2026-09-08 — origin catalogue in the editor
+
+- Browser red→green adds the origin field, searchable organization catalogue and UUID-valued selector. Inactive entries are visibly marked and remain selectable for historical comparisons. Guided lookup has no hardcoded fallback. Equality/difference retain the chosen UUID; empty hides the selector; switching to text clears incompatible identity. Canvas and evaluated result use display names, with evaluated server reference metadata taking precedence for the matching UUID.
+- Added the public Leads useLeadOriginOptions hook alongside the existing legacy slug adapter. It uses actor/organization cache partitioning, exact selected-UUID lookup independent of the search page, abort signals, escaped server search, caller RLS and a 25-row bound. Query failure and empty results have distinct messages; removed selected identity remains explicit rather than selecting a similarly named row.
+- A second browser red exposed missing reset guidance when switching between two reference fields (tag to origin). Corrected the compatibility predicate; both focused browser scenarios pass. Real catalogue-query integration passed positive own-organization selection and negative foreign-organization list/selected-UUID access using the actual browser query projection.
+- Focused ESLint/diff passed (existing Fast Refresh warning only). Full browser regression and typecheck running. No new migration or deployment in this UI checkpoint; rollback is a code revert, with migration 21 retained for the personal evaluator. Origin organizational grant/reader/publication and broader catalogue lifecycle/a11y proof remain pending; no ticket certified.
+
+
+- Final full browser regression: 62 passed. Typecheck ratchet: zero introduced errors (805 baseline + 11 inherited tolerated; 481 current). All validation handles terminal. The existing backend checkpoint has 39 real integration cases passing; the added direct catalogue access scenario also passed on preview. No further migration/deployment was required. Next: authorize origin explicitly in organizational execution/publication and retain reference validation across mixed conditions; final catalogue lifecycle verification remains outstanding.

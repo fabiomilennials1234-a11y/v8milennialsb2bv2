@@ -1,6 +1,54 @@
 import { test, expect, type Page } from '@playwright/test';
 import type { GuidedConditionDraft } from '../../src/types/workflow';
 
+test('seleciona origem pelo cadastro e preserva identidade ao mudar comparação', async ({ page }) => {
+  const originId = 'abcd0000-0000-4000-8000-000000000002';
+  await page.route('**/rest/v1/lead_origins?*', route => route.fulfill({ json:
+    new URL(route.request().url()).searchParams.has('id')
+      ? { id: originId, name: 'Parceiros', is_active: false }
+      : [{ id: originId, name: 'Parceiros', is_active: false }],
+  }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.origin');
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
+  await page.getByLabel('Buscar origem', { exact: true }).fill('Parc');
+  await page.getByRole('combobox', { name: 'Origem', exact: true }).selectOption(originId);
+  await expect(page.getByRole('option', { name: 'Parceiros (inativa)' })).toHaveCount(1);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Origem é “Parceiros”');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('not_equals');
+  await expect(page.getByRole('combobox', { name: 'Origem', exact: true })).toHaveValue(originId);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Origem não é “Parceiros”');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.origin', operator: 'not_equals', originId });
+    return route.fulfill({ json: { status: 'evaluated', matched: false, rules: [
+      { id: 'rule-1', status: 'evaluated', matched: false, actual: 'referral', reference: { id: originId, name: 'Parceiros atuais' } },
+    ] } });
+  });
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('button', { name: 'Testar condição' }).click();
+  await expect(page.getByRole('status')).toContainText('Parceiros atuais');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(page.getByRole('combobox', { name: 'Origem', exact: true })).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Origem está vazia');
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.name');
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
+});
+
+test('troca tag por origem limpando referência com orientação no campo', async ({ page }) => {
+  await page.route('**/rest/v1/lead_origins?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/tags?*', route => route.fulfill({ json: [] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.tags');
+  await page.getByLabel('Informação', { exact: true }).selectOption('lead.origin');
+  await expect(page.getByText('A informação mudou. Defina uma nova comparação.')).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Origem', exact: true })).toHaveValue('');
+  await expect(page.getByText('Nenhuma origem encontrada. Tente outro nome.')).toBeVisible();
+  await expect(page.getByRole('option', { name: 'WhatsApp', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
+});
+
 test('permite recuperar catálogo de tags após falha sem apagar a condição', async ({ page }) => {
   await page.route('**/rest/v1/leads?*', route => route.fulfill({ json: [] }));
   await page.route('**/rest/v1/tags?*', route => route.fulfill({ status: 503, json: { message: 'unavailable' } }));

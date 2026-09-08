@@ -21,7 +21,10 @@ export function GuidedConditionResult({ condition, rules, groups }: {
     const explained = current.field === 'lead.tags' && entry?.status === 'evaluated'
       && typeof entry.reference?.id === 'string' && typeof entry.reference.name === 'string'
       && entry.reference.id.toLowerCase() === current.tagId.toLowerCase()
-      ? { ...current, tagLabel: entry.reference.name } : current;
+      ? { ...current, tagLabel: entry.reference.name } : current.field === 'lead.origin' && current.operator !== 'is_empty'
+        && entry?.status === 'evaluated' && typeof entry.reference?.id === 'string' && typeof entry.reference.name === 'string'
+        && entry.reference.id.toLowerCase() === current.originId.toLowerCase()
+        ? { ...current, originLabel: entry.reference.name } : current;
     return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}</p>;
   }
   return render(condition, '');
