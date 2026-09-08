@@ -120,7 +120,7 @@ export async function verifyStudioUI({ ref, token, api }) {
     await expect(page.getByRole('group', { name: 'Indicadores da operação', exact: true }).getByRole('button', { name: /^Leads:/ })).toBeVisible();
     await capture('01-visao-geral.png');
     await page.getByRole('button', { name: 'Editar', exact: true }).click();
-    await page.getByRole('button', { name: 'Nova aba', exact: true }).click();
+    await page.getByRole('button', { name: 'Nova Aba', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Visão Geral', exact: true }).click();
     await expect(page.getByRole('tab', { name: 'Visão Geral', exact: true })).toHaveCount(2);
     await page.getByRole('button', { name: 'Opções da aba Visão Geral', exact: true }).click();

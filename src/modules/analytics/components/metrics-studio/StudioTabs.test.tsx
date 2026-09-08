@@ -14,9 +14,28 @@ describe("abas — teclado e controles de edição", () => {
   });
   it("não oferece ações de escrita no modo leitura", () => {
     render(<StudioTabs {...props()} editavel={false} />);
-    expect(screen.queryByRole("button", { name: "Nova aba" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Nova Aba" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Opções da aba/ })).toBeNull();
     expect(screen.getAllByRole("tab")).toHaveLength(4);
+  });
+  it("admin cria uma aba sem entrar no modo de edição", async () => {
+    const handlers = props();
+    render(<StudioTabs {...handlers} editavel={false} podeCriar />);
+    await userEvent.click(screen.getByRole("button", { name: "Nova Aba" }));
+    expect(handlers.onCriar).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: /Opções da aba/ })).toBeNull();
+  });
+  it("não duplica criação enquanto está salvando", () => {
+    render(<StudioTabs {...props()} editavel={false} podeCriar busy />);
+    expect(screen.getByRole("button", { name: "Nova Aba" })).toBeDisabled();
+  });
+  it("admin solicita exclusão da aba ativa sem entrar em edição", async () => {
+    const handlers = props();
+    render(<StudioTabs {...handlers} editavel={false} podeGerenciar />);
+    await userEvent.click(screen.getByRole("button", { name: "Opções da aba Visão Geral" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Excluir aba" }));
+    expect(handlers.onRemover).toHaveBeenCalledWith("0");
+    expect(handlers.onSelecionar).not.toHaveBeenCalled();
   });
   it("reordena pela opção visível do menu", async () => {
     const handlers = props();

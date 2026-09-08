@@ -56,7 +56,7 @@ async function painelLimpoEmEdicao(page: Page) {
   if (await aba.count()) {
     await aba.click();
   } else {
-    await page.getByRole('button', { name: 'Nova aba', exact: true }).click();
+    await page.getByRole('button', { name: 'Nova Aba', exact: true }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Aba em branco', exact: true }).click();
     await page.getByRole('button', { name: 'Opções da aba Nova aba', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Renomear', exact: true }).click();

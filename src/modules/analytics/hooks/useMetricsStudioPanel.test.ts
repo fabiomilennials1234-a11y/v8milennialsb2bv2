@@ -1,9 +1,12 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
+import { createElement, type ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createWrapper } from "../../../../tests/helpers/hook-test-utils";
 import type { StudioWindow } from "../lib/metrics-studio-window";
 
 const writes = vi.fn();
+const reads = vi.fn();
 const context = { organizationId: "org-a" as string | null, teamMemberId: "tm-a", isReady: true };
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: () => {
@@ -13,7 +16,7 @@ vi.mock("@/integrations/supabase/client", () => ({
       select: () => builder,
       eq: (column: string, value: string) => { filters[column] = value; return builder; },
       update: (value: unknown) => { body = value; return builder; },
-      single: () => body ? writes({ body, filters }) : Promise.resolve({ data: { layout: [] }, error: null }),
+      single: () => body ? writes({ body, filters }) : reads(),
     };
     return builder;
   } },
@@ -30,6 +33,7 @@ describe("persistência das abas — destino, filas e falhas", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     writes.mockReset().mockResolvedValue({ data: { id: "panel" }, error: null });
+    reads.mockReset().mockResolvedValue({ data: { layout: [] }, error: null });
     Object.assign(context, { organizationId: "org-a", teamMemberId: "tm-a", isReady: true });
   });
   afterEach(() => vi.useRealTimers());
@@ -83,5 +87,45 @@ describe("persistência das abas — destino, filas e falhas", () => {
     act(() => result.current.save([windowA]));
     await flush();
     expect(writes).not.toHaveBeenCalled();
+  });
+
+  it("uma releitura atrasada não apaga a edição salva do cache ao voltar à aba", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+    const { result, rerender } = renderHook(({ id }) => useMetricsStudioPanel(id), { initialProps: { id: "a" }, wrapper });
+    await flush();
+    let finishRead!: (value: unknown) => void;
+    reads.mockImplementationOnce(() => new Promise((resolve) => { finishRead = resolve; }));
+    act(() => result.current.refetch());
+    act(() => result.current.save([windowA]));
+    await flush();
+    await act(async () => { finishRead({ data: { layout: [] }, error: null }); });
+    rerender({ id: "b" });
+    await flush();
+    rerender({ id: "a" });
+    expect(result.current.layout).toEqual([windowA]);
+  });
+
+  it("reler durante o debounce preserva o rascunho sem consultar o layout antigo", async () => {
+    const { result } = renderHook(() => useMetricsStudioPanel("a"), { wrapper: createWrapper() });
+    await flush();
+    act(() => result.current.save([windowA]));
+    await act(async () => { result.current.refetch(); });
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(result.current.layout).toEqual([windowA]);
+    await flush();
+  });
+
+  it("reler durante uma escrita em andamento preserva o rascunho", async () => {
+    let finishWrite!: (value: unknown) => void;
+    writes.mockImplementationOnce(() => new Promise((resolve) => { finishWrite = resolve; }));
+    const { result } = renderHook(() => useMetricsStudioPanel("a"), { wrapper: createWrapper() });
+    await flush();
+    act(() => result.current.save([windowA]));
+    await flush();
+    await act(async () => { result.current.refetch(); });
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(result.current.layout).toEqual([windowA]);
+    await act(async () => { finishWrite({ data: { id: "a" }, error: null }); });
   });
 });

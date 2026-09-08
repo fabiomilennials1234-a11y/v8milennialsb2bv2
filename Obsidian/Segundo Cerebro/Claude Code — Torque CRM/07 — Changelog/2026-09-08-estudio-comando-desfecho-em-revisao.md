@@ -152,3 +152,30 @@ outra tarefa continua preservada até confirmação de que seu uso acabou.
 2. Medir ledger/painéis/ACL de produção, capturar rollback,
    aplicar schema e carga inicial, publicar classificador e integrar frontend.
 3. Smoke test e atualizar este status. Cada preview é encerrada ao fim do seu ensaio.
+
+## Ajustes locais — exclusão, persistência e plano de preservação
+
+CTO esclareceu que o desaparecimento ocorre **em produção**, não na demo.
+Leitura READ ONLY encontrou 32 abas em 19 orgs, 20 vazias; vazio não comprova
+perda e nenhuma aba real foi alterada. A tabela não possui trigger de histórico
+de layout (somente atualização de timestamp). Organização/horário do incidente
+específico ainda precisam ser identificados antes de atribuir causa definitiva.
+
+Reproduzida uma corrida no hook real: refetch atrasado substitui o cache por
+layout antigo depois do save, e voltar à aba mostra menos cards. Teste falhou
+antes e passou após cancelar leituras anteriores ao save e preservar o rascunho
+nas leituras durante debounce/escrita/retry. Catálogo indisponível agora mantém
+o card identificado na tela, sem descartar sua configuração.
+
+Menu de exclusão/renomeação/ordenação acessível ao admin também no modo de
+visualização; exclusão mantém confirmação com nome e efeito para toda a org.
+Membro continua sem ações de escrita. 33 testes direcionados e ESLint passaram;
+Playwright local confirmou criação/exclusão fora da edição, cancelamento,
+persistência da exclusão após reload e layout móvel sem overflow.
+
+Plano operacional em `docs/metrics-studio-rollout.md`: backup externo e ensaio,
+templates aditivos, comparação de todos os campos do legado, ordem de release,
+canário e recuperação por ID. O seed ganhou transação, locks com timeout e
+asserção de preservação integral. **Esta nova versão do seed ainda requer
+ensaio SQL antes de release.** Nenhuma migration, seed ou frontend foi aplicado
+em produção nesta etapa; nenhuma nova branch efêmera foi criada.

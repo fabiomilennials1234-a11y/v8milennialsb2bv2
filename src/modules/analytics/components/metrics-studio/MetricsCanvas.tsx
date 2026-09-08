@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import type { StudioPeriod, StudioRange } from "@/modules/analytics/lib/metrics-studio-period";
@@ -12,6 +13,7 @@ import type { FixedCardContext } from "@/modules/analytics/lib/metrics-studio-fi
 import { projectStudioWindows } from "@/modules/analytics/lib/metrics-studio-projection";
 
 interface MetricsCanvasProps {
+  fillWidth?: boolean;
   windows: StudioWindow[];
   /**
    * Resolvedor de `metricId` → métrica. Vem do catálogo do Estúdio, que junta
@@ -63,11 +65,11 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, byId, intervalo, monthlyRange, month, year, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, byId, intervalo, monthlyRange, month, year, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove, fillWidth },
   ref,
 ) {
   const empty = windows.length === 0;
-  const displayed = editavel ? windows : projectStudioWindows(windows, size.width);
+  const displayed = editavel ? windows : projectStudioWindows(windows, size.width, fillWidth);
 
   // O painel é uma região da página, não o viewport: quando as janelas passam
   // da dobra, o canvas cresce e rola em vez de empilhar em cascata.
@@ -119,10 +121,6 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
       )}
 
       {displayed.map((win) => {
-        // Janela cuja métrica sumiu do catálogo (personalizada apagada por um
-        // admin, por exemplo) simplesmente não desenha. Não é erro: é uma
-        // definição que deixou de existir, e o painel do usuário não some por
-        // causa disso.
         // Card sob medida resolve pelo registry e IGNORA `metricId` — precisa
         // vir antes da busca no catálogo, que não o encontraria.
         if (isFixedWindow(win)) {
@@ -144,7 +142,14 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
         }
 
         const metric = byId.get(win.metricId);
-        if (!metric) return null;
+        if (!metric) return (
+          <div key={win.id} role="group" aria-label="Métrica indisponível"
+            className="absolute overflow-auto p-3" style={{ left: win.x, top: win.y, width: win.w, height: win.h, zIndex: win.z }}>
+            <Alert><AlertTitle>Métrica indisponível</AlertTitle><AlertDescription>
+              O card continua salvo. O catálogo pode estar carregando ou esta métrica não está mais disponível.
+            </AlertDescription></Alert>
+          </div>
+        );
         return (
           <MetricWindow
             key={win.id}

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ArrowLeft, ArrowRight, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsAction } from "@/components/ui/tabs";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { StudioPanel } from "@/modules/analytics/hooks/useMetricsStudioPanels";
 
@@ -10,6 +10,8 @@ interface StudioTabsProps {
   paineis: StudioPanel[];
   ativoId: string | null;
   editavel: boolean;
+  podeCriar?: boolean;
+  podeGerenciar?: boolean;
   busy?: boolean;
   onSelecionar: (id: string) => void;
   onCriar: () => void;
@@ -18,7 +20,7 @@ interface StudioTabsProps {
   onReordenar: (ids: string[]) => void;
 }
 
-export function StudioTabs({ paineis, ativoId, editavel, busy, onSelecionar, onCriar, onRenomear, onRemover, onReordenar }: StudioTabsProps) {
+export function StudioTabs({ paineis, ativoId, editavel, podeCriar = editavel, podeGerenciar = editavel, busy, onSelecionar, onCriar, onRenomear, onRemover, onReordenar }: StudioTabsProps) {
   const [renomeando, setRenomeando] = useState<{ id: string; nome: string } | null>(null);
   const activeIndex = paineis.findIndex((p) => p.id === ativoId);
   const active = paineis[activeIndex];
@@ -31,8 +33,8 @@ export function StudioTabs({ paineis, ativoId, editavel, busy, onSelecionar, onC
   };
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <Tabs value={ativoId ?? ""} onValueChange={onSelecionar} className="flex min-w-0 items-center gap-2">
-        <div className="min-w-0 flex-1 overflow-x-auto">
+      <Tabs value={ativoId ?? ""} onValueChange={onSelecionar} className="flex min-w-0 items-center gap-6">
+        <div className="min-w-0 overflow-x-auto">
           <TabsList aria-label="Painéis de métricas" className="h-auto justify-start">
             {paineis.map((panel) => (
               <TabsTrigger key={panel.id} value={panel.id} id={`studio-tab-${panel.id}`}
@@ -42,7 +44,8 @@ export function StudioTabs({ paineis, ativoId, editavel, busy, onSelecionar, onC
             ))}
           </TabsList>
         </div>
-        {editavel && active && (
+        {podeCriar && <TabsAction onClick={onCriar} disabled={busy} className="shrink-0 self-stretch border-b border-border"><Plus className="size-3.5" aria-hidden="true" />Nova Aba</TabsAction>}
+        {podeGerenciar && active && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="icon" variant="ghost" className="size-11 shrink-0" disabled={busy} aria-label={`Opções da aba ${active.nome}`}>
@@ -67,9 +70,8 @@ export function StudioTabs({ paineis, ativoId, editavel, busy, onSelecionar, onC
             </DropdownMenuContent>
           </DropdownMenu>
         )}
-        {editavel && <Button variant="outline" onClick={onCriar} disabled={busy} className="min-h-11 shrink-0"><Plus className="mr-2 size-4" />Nova aba</Button>}
       </Tabs>
-      {editavel && renomeando && (
+      {podeGerenciar && renomeando && (
         <form className="flex flex-wrap items-center gap-2" onSubmit={(event) => {
           event.preventDefault();
           if (!renomeando.nome.trim()) return;

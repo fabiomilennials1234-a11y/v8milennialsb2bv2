@@ -34,6 +34,7 @@ export function useMetricsStudioPanel(panelId: string | null): PanelPersistence 
   const [saveError, setSaveError] = useState<string | null>(null);
   const pending = useRef(new Map<string, PendingLayout>());
   const failed = useRef(new Map<string, PendingLayout>());
+  const writing = useRef<PendingLayout | null>(null);
   const inFlight = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ativa = isReady && !!organizationId;
@@ -42,6 +43,11 @@ export function useMetricsStudioPanel(panelId: string | null): PanelPersistence 
   const query = useQuery({
     queryKey: key(organizationId ?? "", panelId ?? ""),
     queryFn: async (): Promise<StudioWindow[]> => {
+      // Refetch durante o debounce/retry não pode hidratar um layout anterior.
+      const id = JSON.stringify([organizationId, panelId]);
+      const local = pending.current.get(id) ?? failed.current.get(id)
+        ?? (writing.current?.organizationId === organizationId && writing.current.panelId === panelId ? writing.current : null);
+      if (local) return local.layout;
       const { data, error } = await supabase.from("metrics_studio_panels")
         .select("layout").eq("id", panelId!).eq("organization_id", organizationId!).single();
       if (error) throw new Error(`Carregar painel: ${error.message}`);
@@ -60,6 +66,7 @@ export function useMetricsStudioPanel(panelId: string | null): PanelPersistence 
       while (pending.current.size) {
         const [id, target] = pending.current.entries().next().value!;
         pending.current.delete(id);
+        writing.current = target;
         try {
           // UPDATE, nunca upsert: um debounce não pode ressuscitar uma aba excluída.
           const { error } = await supabase.from("metrics_studio_panels")
@@ -71,6 +78,8 @@ export function useMetricsStudioPanel(panelId: string | null): PanelPersistence 
         } catch (error) {
           failed.current.set(id, target);
           setSaveError(message(error));
+        } finally {
+          writing.current = null;
         }
       }
     } finally {
@@ -91,6 +100,9 @@ export function useMetricsStudioPanel(panelId: string | null): PanelPersistence 
     const id = JSON.stringify([organizationId, panelId]);
     pending.current.set(id, { organizationId, panelId, editorId, layout });
     failed.current.delete(id);
+    // Uma leitura iniciada ANTES da edição também pode chegar DEPOIS do save.
+    // Cancelar no QueryClient impede sua resposta antiga de substituir o cache.
+    void queryClient.cancelQueries({ queryKey: key(organizationId, panelId), exact: true });
     queryClient.setQueryData(key(organizationId, panelId), layout);
     schedule();
   }, [ativa, organizationId, panelId, editorId, queryClient, schedule]);

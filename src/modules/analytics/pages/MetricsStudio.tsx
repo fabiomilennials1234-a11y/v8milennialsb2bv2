@@ -145,7 +145,7 @@ export default function MetricsStudio() {
         {persistence.saveError}. Mantenha esta página aberta. <Button variant="outline" onClick={persistence.retrySave} disabled={persistence.isSaving}>Tentar salvar novamente</Button>
       </AlertDescription></Alert>}
       {incompleto && <Alert><AlertTitle>Intervalo incompleto</AlertTitle><AlertDescription>Escolha a data inicial e a final. Todos os cards continuam no último período completo.</AlertDescription></Alert>}
-      <StudioTabs paineis={paineisVisiveis} ativoId={ativa?.id ?? null} editavel={editando} busy={abas.isPending}
+      <StudioTabs paineis={paineisVisiveis} ativoId={ativa?.id ?? null} editavel={editando} podeCriar={podeEditar} podeGerenciar={podeEditar} busy={abas.isPending}
         onSelecionar={(id) => { setAtivaId(id); setSelectedId(null); }}
         onCriar={() => setNovaAba(true)}
         onRenomear={(id, nome) => void abas.renomear(id, nome).catch(showError)}
@@ -164,7 +164,7 @@ export default function MetricsStudio() {
           <div className="min-h-0 min-w-0 flex-1">
             {!ativa ? <div className="flex h-full flex-col items-center justify-center gap-3 p-5 text-center"><p>Nenhuma aba nesta organização.</p>
               {podeEditar ? <Button onClick={() => setNovaAba(true)}><Plus className="mr-2 size-4" />Criar uma aba</Button> : <p className="text-sm text-muted-foreground">Um administrador pode criar abas a partir dos templates.</p>}</div> :
-              <MetricsCanvas ref={canvasRef} windows={studio.windows} byId={catalogo.byId} intervalo={intervalo} monthlyRange={monthlyRange} month={month} year={year}
+              <MetricsCanvas ref={canvasRef} fillWidth={!!ativa.templateKey} windows={studio.windows} byId={catalogo.byId} intervalo={intervalo} monthlyRange={monthlyRange} month={month} year={year}
                 period={efetivo.period} range={efetivo.range} podeVerPorPessoa={podeVerPorPessoa} editavel={editando} podeEditar={podeEditar}
                 onEditar={() => setModo("editar")} selectedId={selectedId} size={size} onSelect={(id) => { setSelectedId(id); if (id && editando) studio.focusWindow(id); }}
                 onMove={studio.moveWindow} onResize={studio.resizeWindow} onChart={(id, chart) => studio.setChart(id, chart, size)}
