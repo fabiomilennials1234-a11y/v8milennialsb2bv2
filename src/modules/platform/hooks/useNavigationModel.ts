@@ -17,7 +17,6 @@ import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { funisDeSistemaNavegaveis } from "@/contracts/pipe/nome-do-funil";
 import { useFeaturePermissions, useIdentity, useOrganization, useUserRole } from "@/modules/identity";
 import { useMetaPages } from "@/modules/communication/hooks/chat-meta/useMetaPages";
-import { useMetricsStudioEnabled } from "@/modules/analytics";
 import {
   funilIcon,
   useActiveTemporaryFunnels,
@@ -81,11 +80,9 @@ export function useNavigationModel(): NavigationModel {
   // escolheu (SCRUM-637), em vez do ícone fixo pra todo mundo.
   const { data: pipelineRows = [] } = usePipelines();
   const { data: metaPages } = useMetaPages();
-  const metricsStudio = useMetricsStudioEnabled();
 
   const isOutboundMember = orgType === "outbound" && userRole?.role === "member";
   const metaPagesConnected = (metaPages?.pages.length ?? 0) > 0;
-  const metricsStudioEnabled = metricsStudio.enabled;
 
   const canViewRoute = useMemo(
     () => makeCanViewRoute({ isMaster, isAdmin, featurePerms }),
@@ -183,7 +180,7 @@ export function useNavigationModel(): NavigationModel {
     const filtered = filterByPermission(
       filterByGate(
         filterByMaster(filterByOutbound(withChildren, isOutboundMember), isMaster),
-        { metaPagesConnected, metricsStudioEnabled },
+        { metaPagesConnected },
       ),
       canViewRoute,
     );
@@ -193,7 +190,6 @@ export function useNavigationModel(): NavigationModel {
     isOutboundMember,
     isMaster,
     metaPagesConnected,
-    metricsStudioEnabled,
     canViewRoute,
   ]);
 
@@ -210,14 +206,13 @@ export function useNavigationModel(): NavigationModel {
     return groups
       .map((group) => ({
         ...group,
-        // O Pitstop passa pelo mesmo gate da lateral: Métricas vive aqui e
-        // continua escondida enquanto a org não estiver no rollout.
-        items: filterByGate(group.items, { metaPagesConnected, metricsStudioEnabled }).filter(
+        // O Pitstop respeita os mesmos gates de runtime e permissões da lateral.
+        items: filterByGate(group.items, { metaPagesConnected }).filter(
           (item) => canViewRoute(item.path),
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, metricsStudioEnabled, orgType]);
+  }, [canViewRoute, isAdmin, isOutboundMember, metaPagesConnected, orgType]);
 
   const isActive = useMemo(
     () =>
