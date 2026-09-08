@@ -96,11 +96,18 @@ export async function verifyStudioUI({ ref, token, api }) {
     await page.getByRole('button', { name: /entrar|login|sign in/i }).click();
     await page.waitForURL(/\/(dashboard|leads|follow-ups|$)/, { timeout: 45_000 });
     await page.goto('http://localhost:8091/metricas');
+    // A fixture é um usuário novo: fechar os dois anúncios reais, sem remover
+    // overlays via DOM nem desabilitar proteções de acesso do produto.
+    await page.getByRole('button', { name: 'Agora não', exact: true }).click();
+    await page.getByRole('button', { name: 'Explorar depois', exact: true }).click();
+    await page.getByRole('button', { name: 'Entendi', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Estúdio de Métricas', exact: true })).toBeVisible({ timeout: 60_000 });
     for (const title of ['Visão Geral', 'Performance', 'Saúde', 'Mapa']) {
       await expect(page.getByRole('tab', { name: title, exact: true })).toBeVisible();
     }
     await page.getByRole('tab', { name: 'Visão Geral', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Indicadores da operação', exact: true })).toBeVisible();
+    await expect.poll(() => page.locator('#studio-panel .animate-pulse').count(), { timeout: 45_000 }).toBe(0);
     await page.screenshot({ path: resolve(output, '01-visao-geral.png'), fullPage: true });
     await page.getByRole('button', { name: 'Editar', exact: true }).click();
     await page.getByRole('button', { name: 'Nova aba', exact: true }).click();
@@ -131,15 +138,21 @@ export async function verifyStudioUI({ ref, token, api }) {
     await page.getByRole('button', { name: 'Concluir edição', exact: true }).click();
     for (const [index, title] of ['Visão Geral', 'Performance', 'Saúde', 'Mapa'].entries()) {
       await page.getByRole('tab', { name: title, exact: true }).click();
+      await expect(page.locator('#studio-panel [role="group"]')).toHaveCount([6, 8, 1, 1][index]);
+      await expect.poll(() => page.locator('#studio-panel .animate-pulse').count(), { timeout: 45_000 }).toBe(0);
       await page.screenshot({ path: resolve(output, `02-${index}-template.png`), fullPage: true });
     }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('tab', { name: 'Visão Geral', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Indicadores da operação', exact: true })).toBeVisible();
+    await expect.poll(() => page.locator('#studio-panel .animate-pulse').count(), { timeout: 45_000 }).toBe(0);
     await page.screenshot({ path: resolve(output, '03-mobile.png'), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto('http://localhost:8091/dashboard');
     await expect(page.getByRole('heading', { name: 'Comando', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Central de trabalho da equipe', exact: true })).toBeVisible();
+    await expect.poll(() => page.locator('.animate-pulse').count(), { timeout: 45_000 }).toBe(0);
     await expect(page.getByRole('tab', { name: 'Visão Geral', exact: true })).toHaveCount(0);
     await page.screenshot({ path: resolve(output, '04-comando.png'), fullPage: true });
     expect(failures).toEqual([]);

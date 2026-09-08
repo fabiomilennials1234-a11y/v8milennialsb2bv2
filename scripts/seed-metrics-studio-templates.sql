@@ -1,4 +1,4 @@
--- Operação única de rollout, APÓS a migration 20271017000000 e ANTES do frontend.
+-- Operação única de rollout, APÓS a migration 20271017113742 e ANTES do frontend.
 -- Produção requer autorização CTO e captura prévia dos painéis existentes.
 -- Não executar como cron nem no caminho de leitura: abas excluídas não renascem.
 -- Não sobrescreve layout, nome ou ordem de qualquer painel existente.

@@ -37,9 +37,14 @@ Escopo: #1994, #1996, #1990, #1972 e correção de mês 61323102.
 
 ## Banco e histórico
 
-Schema novo: `20271017000000_dashboards_viram_templates.sql`.
+Schema novo: `20271017113742_dashboards_viram_templates.sql`.
 Carga inicial separada: `scripts/seed-metrics-studio-templates.sql`.
 Não semeia no caminho de leitura.
+
+O CI identificou nova colisão: #2039 ocupou 20271017000000 na main durante o
+trabalho. Schema e rollback desta entrega foram somente renomeados para
+20271017113742, **sem alterar o SQL já testado**. O ledger da preview anterior
+foi descartado junto com o projeto; nenhuma dessas versões rodou em produção.
 
 O SQL de ensaio 20271005 foi aplicado e revertido apenas na preview, sem
 fixtures válidas. A main depois ocupou esse prefixo. Ele foi arquivado intacto
@@ -93,6 +98,20 @@ que seu banco temporário já foi liberado. Exclusão condicionada ao fim do uso
 **Ainda bloqueia release:** QA visual/E2E autenticado, review/CI, deploy e
 smoke test do alvo. Autorização CTO já recebida nesta sessão, condicionada aos gates.
 Scripts positivos/negativos: `.specs/project/studio-preview-*.sql`.
+
+### QA autenticado — operações passaram, validação visual ainda parcial
+
+`gdsoctoimwcxpqhumxof`: login real, quatro abas, cópia de template, renomeação,
+ordenação, limpeza e exclusão passaram, com leitura de confirmação no banco.
+390px sem overflow da página. Preview excluída e ausência confirmada.
+Capturas iniciais ainda continham tooltip do suporte e carregamento transitório:
+não aprovam o visual final. Runner reforçado para esperar cards e fechar avisos.
+O baseline reconstruído não contém todas as migrations atuais; 400/404 de
+objetos herdados (ex. negocio_projetado) impedem tomar este ensaio como prova
+dos números em produção. Nenhum mock de resposta de negócio foi usado.
+
+CI inicial #2040: CodeQL e secrets passaram; migration guard (colisão acima) e
+MOC falharam. Corrigir e reexecutar, sem ampliar baseline ou ignorar gates.
 
 ## Próximos passos de release
 
