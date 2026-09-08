@@ -316,15 +316,13 @@ it('compares canonical sales and presales member identities independently', asyn
 });
 
 
-it('does not fall back to name access for responsible fields without their organizational reader', async () => {
-  let reads = 0;
+it('denies organizational responsible evaluation when its current grant is revoked', async () => {
   const database = createClient('https://db.example.test', 'test-service-key', {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { fetch: async () => { reads++; return new Response('{}'); } },
+    global: { fetch: async () => new Response(JSON.stringify({ code: '42501', message: 'access_denied' }), { status: 403, headers: { 'Content-Type': 'application/json' } }) },
   });
   expect(await evaluateGuidedCondition(database, {
     organizationId: 'org-1', leadId: 'lead-1', authorization: { kind: 'organization', workflowId: 'workflow-1' },
     condition: { version: 1, id: 'responsible', field: 'lead.sale_responsible_id', operator: 'is_empty' },
   })).toEqual({ status: 'error', code: 'access_denied' });
-  expect(reads).toBe(0);
 });

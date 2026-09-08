@@ -947,6 +947,19 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       const ordinaryMember = await caller.rpc('test_guided_condition_responsibles', { ...args, p_member_ids: [adminMemberId] });
       expect(ordinaryMember.error).toBeNull();
       expect(ordinaryMember.data).toEqual([{ field_values: { pre_sale_responsible_id: adminMemberId }, members: [{ id: adminMemberId, name: 'Guided tester' }] }]);
+      const workflowId = crypto.randomUUID();
+      expect((await caller.rpc('create_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: { name: 'Protected responsible scope' },
+      })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.pre_sale_responsible_id'], p_expected_revision: 0 })).error).toBeNull();
+      const authorizedArgs = { ...args, p_workflow_id: workflowId, p_tag_ids: [], p_origin_ids: [] };
+      expect((await service.rpc('read_guided_condition_data', authorizedArgs)).error?.code).toBe('PT422');
+      const authorizedMember = await service.rpc('read_guided_condition_data', { ...authorizedArgs, p_member_ids: [adminMemberId] });
+      expect(authorizedMember.error).toBeNull();
+      expect(authorizedMember.data).toEqual([{ id: leadA, organization_id: orgA, field_values: {
+        responsibles: { field_values: { pre_sale_responsible_id: adminMemberId }, members: [{ id: adminMemberId, name: 'Guided tester' }] },
+      } }]);
+
     } finally {
       await service.from('team_members').delete().in('id', [memberId, foreignId]).throwOnError();
       if (shadowUserId) {
@@ -1017,6 +1030,60 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
         { version: 1, id: 'name', field: 'lead.name', operator: 'equals', value: 'José' },
         { version: 1, id: 'deleted', field: 'lead.sale_responsible_id', operator: 'not_equals', memberId: salesId },
       ] } })).toEqual({ status: 'error', code: 'reference_unavailable' });
+    } finally {
+      await service.from('leads').update({ sale_responsible_id: null }).eq('id', leadA).throwOnError();
+      await service.from('team_members').delete().in('id', [salesId, foreignId]).throwOnError();
+    }
+  }, 60000);
+
+  it('evaluates organizational responsible conditions only within the granted assignment scope', async () => {
+    const workflowId = crypto.randomUUID(), salesId = crypto.randomUUID(), foreignId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-responsible-grant-${orgA}` }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    try {
+      await service.from('team_members').insert([
+        { id: salesId, organization_id: orgA, name: 'Marina', role: 'member', is_active: false },
+        { id: foreignId, organization_id: orgB, name: 'Marina', role: 'member', is_active: true },
+      ]).throwOnError();
+      await service.from('leads').update({ sale_responsible_id: salesId }).eq('id', leadA).throwOnError();
+      expect((await caller.rpc('create_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: { name: 'Responsible scope' },
+      })).error).toBeNull();
+      const grant = (fields: string[], revision: number) => caller.rpc('set_workflow_data_grant', {
+        p_workflow_id: workflowId, p_fields: fields, p_expected_revision: revision,
+      });
+      expect((await grant(['lead.sale_responsible_id'], 0)).error).toBeNull();
+      const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA,
+        p_fields: ['lead.sale_responsible_id'], p_tag_ids: [], p_origin_ids: [], p_member_ids: [salesId] };
+      const read = await service.rpc('read_guided_condition_data', args);
+      expect(read.error).toBeNull();
+      expect(read.data).toEqual([{ id: leadA, organization_id: orgA, field_values: {
+        responsibles: { field_values: { sale_responsible_id: salesId }, members: [{ id: salesId, name: 'Marina' }] },
+      } }]);
+      expect((await caller.rpc('read_guided_condition_data', args)).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_fields: ['lead.pre_sale_responsible_id'] })).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_organization_id: orgB })).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_member_ids: [foreignId] })).error?.code).toBe('PT422');
+      const request = { organizationId: orgA, leadId: leadA, authorization: { kind: 'organization' as const, workflowId },
+        condition: { version: 1, id: 'sales', field: 'lead.sale_responsible_id', operator: 'equals', memberId: salesId } };
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'evaluated', matched: true,
+        rules: [{ id: 'sales', status: 'evaluated', matched: true, actual: salesId, reference: { id: salesId, name: 'Marina' } }],
+      });
+      expect((await grant(['lead.pre_sale_responsible_id'], 1)).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+      expect(await evaluateGuidedCondition(service, { ...request, condition: { ...request.condition, field: 'lead.pre_sale_responsible_id', memberId: adminMemberId } })).toMatchObject({ status: 'evaluated', matched: true });
+      expect((await grant(['lead.pre_sale_responsible_id', 'lead.sale_responsible_id', 'lead.company'], 2)).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, { ...request, condition: { version: 1, id: 'all', kind: 'group', match: 'all', children: [
+        request.condition,
+        { version: 1, id: 'pre', field: 'lead.pre_sale_responsible_id', operator: 'equals', memberId: adminMemberId },
+        { version: 1, id: 'company', field: 'lead.company', operator: 'contains', value: 'AURORA' },
+      ] } })).toMatchObject({ status: 'evaluated', matched: true });
+      await service.from('leads').update({ sale_responsible_id: null }).eq('id', leadA).throwOnError();
+      await service.from('team_members').delete().eq('id', salesId).throwOnError();
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'reference_unavailable' });
+      expect(await evaluateGuidedCondition(service, { ...request, condition: { version: 1, id: 'empty', field: 'lead.sale_responsible_id', operator: 'is_empty' } })).toMatchObject({ status: 'evaluated', matched: true });
     } finally {
       await service.from('leads').update({ sale_responsible_id: null }).eq('id', leadA).throwOnError();
       await service.from('team_members').delete().in('id', [salesId, foreignId]).throwOnError();

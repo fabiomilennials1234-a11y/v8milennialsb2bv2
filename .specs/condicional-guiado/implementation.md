@@ -471,3 +471,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 
 
 - Final full browser regression: 66 passed. Final full real integration: 42 passed. All validation handles terminal. No endpoint or worker deployment in this checkpoint; preview migration/view only. Next: explicit pre-sales/sales grants and atomic mixed responsible evaluation/publication, while preserving existing approvals and rollback history. All 21 tickets remain open.
+
+
+## 2026-09-08 — authorized responsible reads
+
+- Real public integration red reproduced invalid_scope for an explicit sales assignment grant. Migration 25 expands approval vocabulary to the two independent canonical slots and adds a seven-argument atomic reader, preserving older overloads and publication behavior. The evaluator now uses this reader for organizational responsible conditions, including mixed scalar/tag/origin data.
+- Real positive/negative tests prove exact projection, independent pre-sales/sales approval, caller/service separation, organization/lead/member isolation, inactive reference validity, revocation, deletion and null. Hidden-master integration additionally proves the organizational reader excludes the active master while returning an ordinary member.
+- Full real integration: 43 passed; later focused hidden-master extension passed. Public evaluator/HTTP/publication/executor units: 86 passed. Deno check and focused ESLint passed. Typecheck ratchet zero introduced errors (805 baseline + 11 inherited; 481 current). Twenty-six-migration reverse/reapply passed, retaining fourteen-field grants/versions/pins. Effective new RPC grants and search_path verified live.
+- No endpoint or worker deployment. Responsible publication remains unsupported pending its own reference validation and scoped finalizer; no ticket closed. Full 21-ticket objective remains active.
