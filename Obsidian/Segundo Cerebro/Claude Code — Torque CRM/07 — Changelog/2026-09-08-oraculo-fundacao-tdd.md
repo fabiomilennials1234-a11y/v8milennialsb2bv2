@@ -1,3 +1,11 @@
+---
+type: changelog
+title: Oráculo — fundação e contrato frontend
+status: in-progress
+created: 2026-09-08
+tags: [oraculo, copilot, tdd]
+---
+
 # Oráculo — fundação e contrato frontend
 
 Data: 2026-09-08. SCRUM-587 / SCRUM-594. Branch `codex/oraculo-fundacao-tdd`.

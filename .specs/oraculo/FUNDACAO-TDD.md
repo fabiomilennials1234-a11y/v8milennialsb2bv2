@@ -96,7 +96,7 @@ Exceção à regra de uma branch autorizada pelo CTO nesta sessão. Criada `code
 - outra pessoa não lê conversa/turnos, dono não fabrica resposta diretamente;
 - revogação do vínculo A remove acesso em A e preserva acesso legítimo em B.
 
-**Defeito descoberto no QA:** `40001` não concluiu via PostgREST antes de 20 s, inclusive com HTTP direto. Nova migration `20271018000001_oraculo_conflito_http.sql` usa `PT409`, conflito definitivo. Mesmo teste passou em 142 ms. A primeira migration foi preservada porque já havia sido aplicada. Store aceita os dois códigos durante a transição.
+**Defeito descoberto no QA:** `40001` não concluiu via PostgREST antes de 20 s, inclusive com HTTP direto. Nova migration `20271019000001_oraculo_conflito_http.sql` usa `PT409`, conflito definitivo. Mesmo teste passou em 142 ms. A primeira migration foi preservada porque já havia sido aplicada. Store aceita os dois códigos durante a transição.
 
 ### Limite do ambiente
 
@@ -131,3 +131,7 @@ Revisar PR; conferir drift do ambiente alvo; aplicar ambas as migrations antes d
 Página bloqueia envio e sugestões enquanto histórico da conversa existente carrega ou falha; erro apresenta botão de retry. Resposta confirmada invalida lista e turnos, inclusive quando usuário já abriu outra conversa. Build e ESLint passaram. Typecheck mantém erros herdados da base, sem regenerar baseline.
 
 Os testes comprovam contrato de rede e comportamento dos hooks. Não houve E2E de navegador contra frontend/edge implantados. PR deve permanecer em rascunho até completar smoke integrado e revisar drift de migrations no alvo. Não mesclar automaticamente.
+
+## Ajuste de CI
+
+Versões 20271018000000/001 colidiram com migrations novas da main após abertura do PR. Renumeradas para 20271019000000/001, SQL inalterado. Aplicações anteriores existiram somente nas branches QA já removidas; nenhuma versão do Oráculo aplicada em produção.
