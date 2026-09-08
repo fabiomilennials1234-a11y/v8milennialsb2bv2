@@ -89,6 +89,16 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
     expect(painel.save).not.toHaveBeenCalled();
   });
 
+  it("reabrir após remover cards não reutiliza o id de um card restante", () => {
+    painel.organizationId = "org-A";
+    painel.layout = [{ ...janela("ranking-vendedores-2"), fixo: "ranking-vendedores" }];
+    const { result } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO, PAINEL_ID));
+    act(() => result.current.addFixed("ranking-vendedores", { w: 320, h: 200 }, { width: 1400, height: 800 }));
+    expect(result.current.windows).toHaveLength(2);
+    expect(new Set(result.current.windows.map((win) => win.id)).size).toBe(2);
+    expect(result.current.windows[0].id).toBe("ranking-vendedores-2");
+  });
+
   it("hidrata com o painel da org e só grava depois de o usuário mexer", () => {
     painel.organizationId = "org-A";
     painel.layout = [janela("a-1")];

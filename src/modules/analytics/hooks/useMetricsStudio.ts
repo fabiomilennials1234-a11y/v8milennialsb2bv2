@@ -229,7 +229,9 @@ export function useMetricsStudio(
         const chart = graficosPara(metric, corte)[0];
         const { w, h } = initialSize(chart);
         const { x, y } = placeNext(prev.windows, w, h, bounds);
-        const seq = prev.seq + 1;
+        let seq = prev.seq + 1;
+        // Após reload, o tamanho do layout não é o maior sufixo já usado.
+        while (prev.windows.some((win) => win.id === `${metric.id}-${seq}`)) seq++;
         return {
           ...prev,
           windows: [
@@ -252,7 +254,8 @@ export function useMetricsStudio(
   const addFixed = useCallback((id: string, size: { w: number; h: number }, bounds: Bounds) => {
     mutar((prev) => {
       const position = placeNext(prev.windows, size.w, size.h, bounds);
-      const seq = prev.seq + 1;
+      let seq = prev.seq + 1;
+      while (prev.windows.some((win) => win.id === `${id}-${seq}`)) seq++;
       return { ...prev, seq, nextZ: prev.nextZ + 1, windows: [...prev.windows, {
         id: `${id}-${seq}`, fixo: id, metricId: "", corte: "total", chart: "number", z: prev.nextZ, ...size, ...position,
       }] };
