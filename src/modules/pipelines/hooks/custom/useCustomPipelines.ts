@@ -5,6 +5,7 @@ import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscripti
 import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanDo } from "@/modules/identity";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
+import { chaveDeNovaEtapa } from "../../lib/chave-de-nova-etapa";
 import {
   createCustomPipelineEntry,
   createSystemPipelineEntry,
@@ -818,13 +819,17 @@ export function useCreateCustomPipelineStage() {
       // excluída continua ocupando posição (soft delete). Quem decide o número
       // é o funil inteiro — ver `proximaPosicaoDeEtapa`.
       const posicaoLivre = await proximaPosicaoDeEtapa({ pipelineId: pipeline_id });
+      const stageKey = await chaveDeNovaEtapa({
+        organizationId: teamMember.organization_id,
+        pipelineId: pipeline_id,
+      }, name, generateStageKey(name));
 
       let stageId: string;
       try {
         stageId = await createCustomPipelineStage({
           organization_id: teamMember.organization_id,
           pipeline_id,
-          stage_key: generateStageKey(name),
+          stage_key: stageKey,
           name,
           color: color || "#64748b",
           position: posicaoLivre,
