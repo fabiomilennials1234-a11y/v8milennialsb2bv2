@@ -38,7 +38,7 @@ export function GuidedResponsiblePicker({ actorId, organizationId, condition, on
         onChange({ ...condition, memberId: member?.id ?? '', memberLabel: member?.name });
       }}>
       <option value="">{options.isPending ? 'Carregando responsáveis…' : 'Selecione um responsável'}</option>
-      {condition.memberId && !choices.some(member => member.id.toLowerCase() === selectedId) && <option disabled value={selectedId}>{unavailable ? 'Responsável indisponível' : 'Consultando responsável selecionado…'}</option>}
+      {condition.memberId && !choices.some(member => member.id.toLowerCase() === selectedId) && <option disabled value={selectedId}>{selected.isError && !selected.isFetching ? 'Responsável não verificado' : unavailable ? 'Responsável indisponível' : 'Consultando responsável selecionado…'}</option>}
       {choices.map(member => <option key={member.id} value={member.id}>{member.name}{member.is_active === false ? ' (inativo)' : ''}</option>)}
     </select>
     {(options.isError || (condition.memberId && selected.isError)) && <>
@@ -49,7 +49,7 @@ export function GuidedResponsiblePicker({ actorId, organizationId, condition, on
       }}>Tentar carregar responsáveis novamente</Button>
     </>}
     {unavailable && <p role="alert" className="text-sm text-destructive">Responsável removido ou sem acesso. Selecione outro responsável.</p>}
-    {options.isSuccess && options.data.length === 0 && <p className="text-sm text-muted-foreground">Nenhum responsável encontrado. Tente outro nome.</p>}
+    {options.isSuccess && options.data.length === 0 && (!condition.memberId || (selected.isSuccess && Boolean(selected.data))) && <p className="text-sm text-muted-foreground">Nenhum responsável encontrado. Tente outro nome.</p>}
     {options.data?.length === 25 && <p className="text-xs text-muted-foreground">Mostrando até 25 responsáveis. Refine a busca.</p>}
   </div>;
 }

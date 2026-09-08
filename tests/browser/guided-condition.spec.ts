@@ -38,6 +38,32 @@ for (const [field, otherField, label] of [
   await expect(page.getByLabel('Valor da comparação')).toHaveValue('');
 });
 
+for (const item of [
+  { table: 'guided_responsible_members', field: 'lead.sale_responsible_id', key: 'memberId', label: 'Responsável', plural: 'responsáveis', empty: 'Nenhum responsável encontrado. Tente outro nome.' },
+  { table: 'lead_origins', field: 'lead.origin', key: 'originId', label: 'Origem', plural: 'origens', empty: 'Nenhuma origem encontrada. Tente outro nome.' },
+  { table: 'tags', field: 'lead.tags', key: 'tagId', label: 'Tag', plural: 'tags', empty: 'Nenhuma tag encontrada. Tente outro nome.' },
+]) test(`falha na consulta do cadastro de ${item.label} não aparece como catálogo vazio`, async ({ page }) => {
+  const id = 'abcd0000-0000-4000-8000-000000000010';
+  let recovered = false;
+  await page.route(`**/rest/v1/${item.table}?*`, route => {
+    if (!new URL(route.request().url()).searchParams.has('id')) return route.fulfill({ json: [] });
+    return recovered ? route.fulfill({ json: { id, name: 'Cadastro atual', is_active: true } })
+      : route.fulfill({ status: 503, json: { message: 'unavailable' } });
+  });
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: item.field,
+    operator: item.field === 'lead.tags' ? 'has_tag' : 'equals', [item.key]: id } as GuidedConditionDraft);
+  await page.getByText('Nome informado', { exact: true }).click();
+  await expect(page.getByText(`Não foi possível carregar ${item.plural}. Tente novamente.`)).toBeVisible();
+  await expect(page.getByText(item.empty)).toHaveCount(0);
+  await expect(page.getByRole('option', { name: `${item.label} não ${item.label === 'Responsável' ? 'verificado' : 'verificada'}`, exact: true })).toBeDisabled();
+  await expect(page.getByRole('combobox', { name: item.label, exact: true })).toHaveValue(id);
+  recovered = true;
+  await page.getByRole('button', { name: `Tentar carregar ${item.plural} novamente` }).click();
+  await expect(page.getByRole('option', { name: 'Cadastro atual', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('combobox', { name: item.label, exact: true })).toHaveValue(id);
+  await expect(page.getByText(`Não foi possível carregar ${item.plural}. Tente novamente.`)).toHaveCount(0);
+});
+
 test('responsável removido não é substituído por cadastro homônimo', async ({ page }) => {
   const removedId = 'abcd0000-0000-4000-8000-000000000004';
   const replacementId = 'abcd0000-0000-4000-8000-000000000005';

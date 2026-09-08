@@ -38,7 +38,7 @@ export function GuidedTagPicker({ actorId, organizationId, condition, onChange }
         onChange({ ...condition, tagId: tag?.id ?? '', tagLabel: tag?.name });
       }}>
       <option value="">{options.isPending ? 'Carregando tags…' : 'Selecione uma tag'}</option>
-      {condition.tagId && !choices.some(tag => tag.id.toLowerCase() === selectedId) && <option disabled value={selectedId}>{unavailable ? 'Tag indisponível' : 'Consultando tag selecionada…'}</option>}
+      {condition.tagId && !choices.some(tag => tag.id.toLowerCase() === selectedId) && <option disabled value={selectedId}>{selected.isError && !selected.isFetching ? 'Tag não verificada' : unavailable ? 'Tag indisponível' : 'Consultando tag selecionada…'}</option>}
       {choices.map(tag => <option key={tag.id} value={tag.id}>{tag.name}</option>)}
     </select>
     {(options.isError || (condition.tagId && selected.isError)) && <>
@@ -49,7 +49,7 @@ export function GuidedTagPicker({ actorId, organizationId, condition, onChange }
       }}>Tentar carregar tags novamente</Button>
     </>}
     {unavailable && <p role="alert" className="text-sm text-destructive">Tag removida ou sem acesso. Selecione outra tag.</p>}
-    {options.isSuccess && options.data.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma tag encontrada. Tente outro nome.</p>}
+    {options.isSuccess && options.data.length === 0 && (!condition.tagId || (selected.isSuccess && Boolean(selected.data))) && <p className="text-sm text-muted-foreground">Nenhuma tag encontrada. Tente outro nome.</p>}
     {options.data?.length === 25 && <p className="text-xs text-muted-foreground">Mostrando até 25 tags. Refine a busca.</p>}
   </div>;
 }

@@ -38,7 +38,7 @@ export function GuidedOriginPicker({ actorId, organizationId, condition, onChang
         onChange({ ...condition, originId: origin?.id ?? '', originLabel: origin?.name });
       }}>
       <option value="">{options.isPending ? 'Carregando origens…' : 'Selecione uma origem'}</option>
-      {condition.originId && !choices.some(origin => origin.id.toLowerCase() === selectedId) && <option disabled value={selectedId}>{unavailable ? 'Origem indisponível' : 'Consultando origem selecionada…'}</option>}
+      {condition.originId && !choices.some(origin => origin.id.toLowerCase() === selectedId) && <option disabled value={selectedId}>{selected.isError && !selected.isFetching ? 'Origem não verificada' : unavailable ? 'Origem indisponível' : 'Consultando origem selecionada…'}</option>}
       {choices.map(origin => <option key={origin.id} value={origin.id}>{origin.name}{origin.is_active === false ? ' (inativa)' : ''}</option>)}
     </select>
     {(options.isError || (condition.originId && selected.isError)) && <>
@@ -49,7 +49,7 @@ export function GuidedOriginPicker({ actorId, organizationId, condition, onChang
       }}>Tentar carregar origens novamente</Button>
     </>}
     {unavailable && <p role="alert" className="text-sm text-destructive">Origem removida ou sem acesso. Selecione outra origem.</p>}
-    {options.isSuccess && options.data.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma origem encontrada. Tente outro nome.</p>}
+    {options.isSuccess && options.data.length === 0 && (!condition.originId || (selected.isSuccess && Boolean(selected.data))) && <p className="text-sm text-muted-foreground">Nenhuma origem encontrada. Tente outro nome.</p>}
     {options.data?.length === 25 && <p className="text-xs text-muted-foreground">Mostrando até 25 origens. Refine a busca.</p>}
   </div>;
 }
