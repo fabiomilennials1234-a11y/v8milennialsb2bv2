@@ -166,6 +166,7 @@ export async function checkDocumentAlreadySent(
   leadId?: string | null,
   filePath?: string | null,
   currentActionId?: string | null,
+  organizationId?: string,
 ): Promise<boolean> {
   // Exclude the current action's own row from the dedup query. `claim_pending_ai_actions`
   // sets status='processing' before the executor runs, so without this guard the gate
@@ -180,6 +181,7 @@ export async function checkDocumentAlreadySent(
   if (currentActionId) {
     query = query.neq("id", currentActionId);
   }
+  if (organizationId) query = query.eq("organization_id", organizationId);
 
   const { data } = await query;
 
@@ -226,7 +228,7 @@ export async function checkDocumentAlreadySent(
   // the URL.
   const encodedBasename = encodeURIComponent(basename);
 
-  const { data: sentMessages } = await supabase
+  let sentQuery = supabase
     .from("whatsapp_messages")
     .select("id")
     .eq("phone_number", lead.phone)
@@ -236,6 +238,8 @@ export async function checkDocumentAlreadySent(
     .ilike("media_url", `%${encodedBasename}%`)
     .gte("timestamp", new Date(Date.now() - 3600_000).toISOString())
     .limit(1);
+  if (organizationId) sentQuery = sentQuery.eq("organization_id", organizationId);
+  const { data: sentMessages } = await sentQuery;
 
   if (sentMessages && sentMessages.length > 0) {
     logEvent("copilot_duplicate_document_blocked_whatsapp_fallback", {
@@ -292,6 +296,7 @@ async function acquireSendDocumentLock(
   supabase: SupabaseClient,
   organizationId: string,
   lockKey: string,
+  requireLock = false,
 ): Promise<boolean> {
   const { data, error } = await supabase.rpc("copilot_v2_acquire_dedup_lock", {
     p_dedup_key: lockKey,
@@ -299,6 +304,7 @@ async function acquireSendDocumentLock(
     p_window_seconds: SEND_DOCUMENT_LOCK_TTL_SECONDS,
   });
   if (error) {
+    if (requireLock) throw new Error(`Document send lock unavailable: ${error.message}`);
     // Fail-open: erro transitório no lock não pode bloquear envio legítimo.
     // O custo de uma mídia repetida é menor que o de uma mídia que nunca chega.
     console.warn("[executeSendDocument] dedup lock acquire failed:", error.message);
@@ -327,7 +333,7 @@ export async function executeSendDocument(
   actionId: string | null = null,
 ): Promise<ActionResult> {
   let documentId = payload.document_id as string;
-  const caption = payload.caption as string | undefined;
+  let caption = payload.caption as string | undefined;
 
   if (!documentId) {
     return { success: false, error: "document_id is required" };
@@ -369,7 +375,7 @@ export async function executeSendDocument(
   const fetchDoc = (id: string) =>
     supabase
       .from("copilot_agent_documents")
-      .select("id, file_name, file_path, mime_type, organization_id, file_type")
+      .select("id, agent_id, file_name, file_path, mime_type, organization_id, file_type")
       .eq("id", id)
       .eq("organization_id", organizationId)
       .maybeSingle();
@@ -397,6 +403,32 @@ export async function executeSendDocument(
     return { success: false, error: `Document not found: ${docError?.message || "not found"}` };
   }
 
+  // Operator opt-in: a model cannot bypass conversation-wide dedup by making
+  // a new tool call. Other agents keep the existing explicit-resend behavior.
+  let preventRepeatedDocuments = false;
+  if (doc.agent_id) {
+    const { data: agent, error: policyError } = await supabase.from("copilot_agents")
+      .select("conversation_style").eq("id", doc.agent_id)
+      .eq("organization_id", organizationId).maybeSingle();
+    if (policyError) return { success: false, error: `Document policy unavailable: ${policyError.message}` };
+    preventRepeatedDocuments = agent?.conversation_style?.document_delivery_policy?.prevent_repeated_documents === true;
+    const approvedCaption = agent?.conversation_style?.document_delivery_policy?.captions_by_document?.[documentId];
+    if (typeof approvedCaption === "string" && approvedCaption.trim()) {
+      caption = approvedCaption.trim();
+    }
+  }
+  if (preventRepeatedDocuments && conversationId && await checkDocumentAlreadySent(
+    supabase, conversationId, documentId, leadId, doc.file_path, actionId, organizationId,
+  )) {
+    await stampActionOutcome(supabase, actionId, payload, {
+      document_id: documentId,
+      [SUPPRESSED_AT_KEY]: new Date().toISOString(),
+      [SUPPRESSED_REASON_KEY]: "duplicate_document",
+    });
+    return { success: true, message: "Document already delivered — skipped",
+      data: { skipped: true, reason: "duplicate_document" } };
+  }
+
   // 2. Reenvio pedido pelo lead SEMPRE vale — o gate vitalício virou TELEMETRIA.
   //
   // 🚨 2026-09-03, decisão do produto: "se o cliente pediu a imagem, manda a
@@ -414,8 +446,8 @@ export async function executeSendDocument(
   // proteção: é read-then-act, e portanto nunca foi race-free.
   //
   // Mantido como observação para não perder o sinal de laço do modelo.
-  if (conversationId) {
-    checkDocumentAlreadySent(supabase, conversationId, documentId, leadId, doc.file_path, actionId)
+  if (conversationId && !preventRepeatedDocuments) {
+    checkDocumentAlreadySent(supabase, conversationId, documentId, leadId, doc.file_path, actionId, organizationId)
       .then((repeat) => {
         if (!repeat) return;
         logEvent("copilot_document_resent_on_request", {
@@ -516,8 +548,9 @@ export async function executeSendDocument(
 
   // Idempotência atômica: reserva o envio (conversa, documento) ANTES de
   // despachar. Retry após timeout / órfão de envio colide aqui e vira no-op.
-  const lockKey = buildSendDocumentLockKey(conversationId, leadId, documentId, actionId);
-  const lockAcquired = await acquireSendDocumentLock(supabase, organizationId, lockKey);
+  const lockKey = buildSendDocumentLockKey(conversationId, leadId, documentId,
+    preventRepeatedDocuments ? null : actionId);
+  const lockAcquired = await acquireSendDocumentLock(supabase, organizationId, lockKey, preventRepeatedDocuments);
   if (!lockAcquired) {
     console.debug("[executeSendDocument] Send already in-flight/done (lock held), skipping:", {
       lockKey,

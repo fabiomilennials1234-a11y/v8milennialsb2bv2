@@ -330,10 +330,12 @@ export class UazapiClient {
   async sendMedia(
     input: UazapiSendMediaInput
   ): Promise<UazapiMessageResponse> {
+    // The adapter uses caption/filename; /send/media expects text/docName.
+    const { caption, filename, ...media } = input;
     return this.request<UazapiMessageResponse>(
       "POST",
       "/send/media",
-      input,
+      { ...media, text: caption, docName: filename },
       { timeoutMs: MEDIA_TIMEOUT_MS }
     );
   }
