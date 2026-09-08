@@ -31,7 +31,7 @@ import {
   useUpdateWorkflow,
 } from "@/modules/workflows/hooks/useWorkflows";
 import { useExportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
-import { useGuidedWorkflowDraft } from "@/modules/workflows/hooks/useGuidedWorkflowDraft";
+import { useGuidedWorkflowDraft, GuidedPublicationError, type GuidedPublicationIssue } from "@/modules/workflows/hooks/useGuidedWorkflowDraft";
 import type {
   WorkflowNode,
   WorkflowEdge,
@@ -206,6 +206,7 @@ function AutomacoesEditorContent() {
   const [isActive, setIsActive] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [publicationIssues, setPublicationIssues] = useState<GuidedPublicationIssue[]>([]);
   const [draftRevision, setDraftRevision] = useState(0);
   const [newGuidedId] = useState(() => crypto.randomUUID());
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -607,7 +608,7 @@ function AutomacoesEditorContent() {
           const saved = await guidedDraft.save.mutateAsync({ definition, revision: draftRevision, settings: { name, ...extraFields } });
           setDraftRevision(saved.revision);
           toast.success("Rascunho salvo. A versão publicada permanece igual.");
-          return;
+          return saved.revision;
         }
         await updateWorkflow.mutateAsync({
           id: id!,
@@ -626,6 +627,26 @@ function AutomacoesEditorContent() {
         : err.message || "Erro ao salvar workflow");
     }
   }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId, workflow?.is_active]);
+
+  const handlePublish = useCallback(async () => {
+    setPublicationIssues([]);
+    const revision = await handleSave();
+    if (typeof revision !== 'number') return;
+    try {
+      const published = await guidedDraft.publish.mutateAsync(revision);
+      toast.success(`Versão ${published.version_number} publicada.`);
+    } catch (error) {
+      if (error instanceof GuidedPublicationError) {
+        const messages: Record<string, string> = {
+          access_denied: 'Acesso negado. Verifique sua permissão e a autorização de dados da automação.',
+          draft_revision_conflict: 'Outra pessoa alterou o rascunho. Compare a versão atual antes de publicar.',
+        };
+        setPublicationIssues(error.issues.length ? error.issues : [{ code: error.code,
+          message: messages[error.code] ?? 'Não foi possível publicar. Seu rascunho foi preservado.' }]);
+      }
+      toast.error('Não foi possível publicar. Seu rascunho foi preservado.');
+    }
+  }, [handleSave, guidedDraft.publish]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null
@@ -665,6 +686,8 @@ function AutomacoesEditorContent() {
         onToggleActive={() => setIsActive(!isActive)}
         onSave={handleSave}
         isSaving={isSaving}
+        onPublish={!isNew && guidedDraft.data ? handlePublish : undefined}
+        isPublishing={guidedDraft.publish.isPending}
         onAddNode={handleAddNode}
         isNew={isNew}
         workflowId={id}
@@ -676,6 +699,13 @@ function AutomacoesEditorContent() {
         hiddenNodeTypes={["code_javascript"]}
       />
 
+      {publicationIssues.length > 0 && <div role="alert" className="border-b border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
+        <p className="font-medium">Publicação não concluída</p>
+        <ul className="mt-1 space-y-1">{publicationIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>
+          {issue.nodeId ? <button type="button" className="text-left underline underline-offset-4"
+            onClick={() => setSelectedNodeId(issue.nodeId!)}>{issue.message}</button> : issue.message}
+        </li>)}</ul>
+      </div>}
       <div className="flex flex-1 overflow-hidden">
         <WorkflowCanvas
           initialNodes={nodes}

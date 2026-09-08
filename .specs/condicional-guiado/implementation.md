@@ -176,3 +176,12 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Positive configured-audio publication and existing end path pass. Shared editor requirement regression suite passes. Real HTTP scenario saves an incomplete audio successor, receives localized 422, and confirms selected publication unchanged.
 - Checks: 33 unit cases across publication and existing node-requirement seam passed; 12 real Auth/RLS/HTTP cases passed; Deno and focused ESLint passed. No migration changes. All associated sessions terminal.
 - Limits: existing requirement catalog covers known mandatory fields, not all action semantics/reference validity. Continue full node/settings/reference validation and editor publication integration. No ticket certified, full 21-ticket objective retained.
+
+## 2026-09-08 — editor publication path
+
+- Browser TDD: missing Publicar button red -> editor saves current draft, takes returned revision and invokes authenticated publication using only workflow/org/revision -> success version shown. Existing workflow with a saved guided draft exposes publication; new drafts first use creation/navigation.
+- Browser TDD: rejected publication previously showed only generic toast -> parses structured HTTP issues, renders persistent alert with node links, preserves current comparison and re-enables retry. Server access-denied/revision-conflict codes have explicit guidance. Save conflict stops the chain before any publication request and preserves local edits.
+- Save/Publish controls are disabled while the relevant persistence request is pending. Publication does not toggle workflow activation. Runtime still awaits version pinning; this UI path publishes version snapshots only.
+- Checks: all 25 browser cases passed (external transport harness, not proof of real DB publication); focused lint has zero errors and existing any warnings; diff check passed. Real Auth/RLS/HTTP publication was verified in preceding checkpoints. No migrations in this change.
+- Incomplete: complete config/reference validation, robust malformed draft loading, actionable conflict comparison, publication status after reload, and full real-browser preview journey. No ticket certified. Full 21-ticket goal remains active.
+- Typecheck ratchet completed: zero new errors; tolerated repository debt 805 baseline plus 11 inherited (481 current occurrences). All test/check handles terminal.

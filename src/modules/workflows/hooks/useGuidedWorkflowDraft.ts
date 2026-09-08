@@ -3,6 +3,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import type { WorkflowDefinition } from '@/types/workflow';
 
+export interface GuidedPublicationIssue { code: string; message: string; nodeId?: string }
+export class GuidedPublicationError extends Error {
+  constructor(public code: string, public issues: GuidedPublicationIssue[]) {
+    super('Não foi possível publicar. Seu rascunho foi preservado.');
+  }
+}
+
 export interface GuidedWorkflowSettings {
   name: string;
   enrollment_criteria: { enabled: boolean; match_all: boolean; conditions: Array<{ field: string; operator: string; value: string }> };
@@ -45,5 +52,23 @@ export function useGuidedWorkflowDraft(actorId?: string, organizationId?: string
       return response.data as { workflow_id: string; revision: number };
     },
   });
-  return { ...query, save, create };
+  const publish = useMutation({
+    mutationFn: async (revision: number) => {
+      const response = await database.functions.invoke('publish-guided-workflow', {
+        body: { organizationId, workflowId, expectedRevision: revision },
+      });
+      if (response.error) {
+        const body = response.error.context instanceof Response
+          ? await response.error.context.json().catch(() => null) : null;
+        const issues = Array.isArray(body?.issues) ? body.issues.filter((issue: unknown): issue is GuidedPublicationIssue =>
+          !!issue && typeof issue === 'object' && 'code' in issue && typeof issue.code === 'string'
+          && 'message' in issue && typeof issue.message === 'string'
+          && (!('nodeId' in issue) || typeof issue.nodeId === 'string')) : [];
+        throw new GuidedPublicationError(typeof body?.code === 'string' ? body.code : 'source_unavailable', issues);
+      }
+      if (response.data?.status !== 'published') throw new Error('Não foi possível publicar.');
+      return response.data as { version_id: string; version_number: number };
+    },
+  });
+  return { ...query, save, create, publish };
 }

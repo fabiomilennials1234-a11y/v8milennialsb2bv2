@@ -367,3 +367,52 @@ test('configura nome por seletores e explica teste sem executar ações', async 
   await page.getByLabel('Valor da comparação').fill('Maria');
   await expect(page.getByRole('status')).toHaveCount(0);
 });
+
+test('publica a edição atual somente depois de salvar sua revisão', async ({ page }) => {
+  const operations: string[] = [];
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
+    operations.push('save');
+    expect(route.request().postDataJSON().p_definition.nodes[1].data.guidedCondition.value).toBe('Ana');
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
+  });
+  await page.route('**/functions/v1/publish-guided-workflow', route => {
+    operations.push('publish');
+    expect(route.request().postDataJSON()).toEqual({ organizationId: 'org-1', workflowId: 'workflow-1', expectedRevision: 4 });
+    return route.fulfill({ json: { status: 'published', version_id: 'version-2', version_number: 2 } });
+  });
+  await openGuidedEditor(page, 'Mariana');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Valor da comparação').fill('Ana');
+  await page.getByRole('button', { name: 'Publicar', exact: true }).click({ timeout: 5000 });
+  await expect(page.getByText('Versão 2 publicada.')).toBeVisible();
+  expect(operations).toEqual(['save', 'publish']);
+});
+
+test('publicação recusada explica erro no node e preserva edição', async ({ page }) => {
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } }));
+  await page.route('**/functions/v1/publish-guided-workflow', route => route.fulfill({ status: 422, json: {
+    status: 'error', code: 'invalid_configuration', issues: [{ code: 'invalid_condition_outputs', nodeId: 'condition-1', message: 'Conecte as saídas Sim e Não uma vez cada.' }],
+  } }));
+  await openGuidedEditor(page, 'Mariana');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Valor da comparação').fill('Ana');
+  await page.getByRole('button', { name: 'Publicar', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Conecte as saídas Sim e Não uma vez cada.' })).toBeVisible({ timeout: 5000 });
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('Ana');
+  await expect(page.getByRole('button', { name: 'Publicar', exact: true })).toBeEnabled();
+});
+
+test('conflito ao salvar impede publicação sem perder edição local', async ({ page }) => {
+  const publications: string[] = [];
+  page.on('request', request => {
+    if (request.url().includes('/functions/v1/publish-guided-workflow')) publications.push(request.url());
+  });
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => route.fulfill({ status: 409, json: { code: 'PT409', message: 'draft_revision_conflict' } }));
+  await openGuidedEditor(page, 'Mariana');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Valor da comparação').fill('Ana');
+  await page.getByRole('button', { name: 'Publicar', exact: true }).click();
+  await expect(page.getByText('Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar.')).toBeVisible();
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('Ana');
+  expect(publications).toEqual([]);
+});
