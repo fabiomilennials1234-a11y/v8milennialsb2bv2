@@ -87,7 +87,7 @@ export function InstagramChannelSettings() {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold">Instagram (oficial)</h3>
-            {instagramChannels.length > 0 && (
+            {instagramChannels.some((channel) => channel.status === "connected") && (
               <Badge
                 variant="outline"
                 className="border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400"

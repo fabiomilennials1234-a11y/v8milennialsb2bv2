@@ -35,13 +35,11 @@ export function filterByMaster(items: NavNode[], isMaster: boolean): NavNode[] {
 
 export interface RuntimeGates {
   metaPagesConnected: boolean;
-  metricsStudioEnabled: boolean;
 }
 
 export function filterByGate(items: NavNode[], gates: RuntimeGates): NavNode[] {
   return items.filter((item) => {
     if (item.gate === "meta_pages_connected") return gates.metaPagesConnected;
-    if (item.gate === "metrics_studio_enabled") return gates.metricsStudioEnabled;
     return true;
   });
 }
