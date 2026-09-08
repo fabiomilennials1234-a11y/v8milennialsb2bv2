@@ -57,8 +57,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FollowupRule, FollowupTriggerType, FollowupStyle, SequenceStep } from "@/types/copilot";
-import { usePipeTypeOptions } from "../../hooks/usePipeTypeOptions";
-import { useAllPipelineStageOptions } from "@/modules/pipelines";
+import { useCopilotFunnelOptions } from "../../hooks/usePipeTypeOptions";
 import {
   useAgentFollowupRules,
   useCreateFollowupRule,
@@ -252,8 +251,7 @@ function FollowupRuleCard({
   const [localRule, setLocalRule] = useState(rule);
   const [tagInput, setTagInput] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
-  const { stagesByPipe } = useAllPipelineStageOptions();
-  const pipeTypeOptions = usePipeTypeOptions();
+  const { options: pipeTypeOptions, stagesByPipe, labelForRef } = useCopilotFunnelOptions();
 
   const isCadenceMode = !!(localRule.sequenceSteps && localRule.sequenceSteps.length > 0);
 
@@ -619,7 +617,7 @@ function FollowupRuleCard({
                 {/* Pipelines + Stages */}
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Pipelines</Label>
+                    <Label>Funis</Label>
                     <Select
                       value=""
                       onValueChange={(value) => {
@@ -648,7 +646,7 @@ function FollowupRuleCard({
                           className="cursor-pointer"
                           onClick={() => updateLocalRule("filterPipes", (localRule.filterPipes || []).filter((p) => p !== pipe))}
                         >
-                          {pipeTypeOptions.find((p) => p.value === pipe)?.label || pipe} x
+                          {labelForRef(pipe)} x
                         </Badge>
                       ))}
                     </div>

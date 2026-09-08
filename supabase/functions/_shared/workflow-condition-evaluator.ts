@@ -99,6 +99,12 @@ export async function evaluateCondition(
     fieldValue = await getStageDoNegocio(
       supabase, leadId, leadData.organization_id as string, entryId ?? null,
     );
+  } else if (field === "stage_id") {
+    // Contrato atual do editor: etapa exata por UUID. Stage keys podem se
+    // repetir entre funis; comparar só a key tornava a condição ambígua.
+    fieldValue = await getCurrentStageId(
+      supabase, leadId, leadData.organization_id as string, entryId ?? null,
+    );
   } else if (field === "deal_value") {
     /**
      * O valor do NEGÓCIO da execução — `deals.value`.
@@ -203,7 +209,7 @@ async function currentEntry(
   if (entryId) {
     const { data } = await supabase
       .from("pipeline_entries")
-      .select("id, deal_id, stage_changed_at, created_at, organization_id")
+      .select("id, deal_id, pipeline_id, stage_key, stage_changed_at, created_at, organization_id")
       .eq("id", entryId)
       .maybeSingle();
     if (data && data.organization_id === organizationId) return data as Record<string, unknown>;
@@ -211,7 +217,7 @@ async function currentEntry(
 
   const { data } = await supabase
     .from("pipeline_entries")
-    .select("id, deal_id, stage_changed_at, created_at, closed_at")
+    .select("id, deal_id, pipeline_id, stage_key, stage_changed_at, created_at, closed_at")
     .eq("lead_id", leadId)
     .eq("organization_id", organizationId)
     .order("closed_at", { ascending: false, nullsFirst: true })
@@ -220,6 +226,29 @@ async function currentEntry(
     .limit(1);
 
   return (data?.[0] as Record<string, unknown>) ?? null;
+}
+
+/** UUID da etapa atual do negócio, resolvido dentro do funil dono da entrada. */
+async function getCurrentStageId(
+  supabase: SupabaseClient,
+  leadId: string,
+  organizationId: string,
+  entryId: string | null,
+): Promise<string> {
+  const entry = await currentEntry(supabase, leadId, organizationId, entryId);
+  const pipelineId = entry?.pipeline_id;
+  const stageKey = entry?.stage_key;
+  if (typeof pipelineId !== "string" || typeof stageKey !== "string") return "";
+
+  const { data } = await supabase
+    .from("pipeline_stages")
+    .select("id")
+    .eq("organization_id", organizationId)
+    .eq("pipeline_id", pipelineId)
+    .eq("stage_key", stageKey)
+    .maybeSingle();
+
+  return typeof data?.id === "string" ? data.id : "";
 }
 
 /**

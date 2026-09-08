@@ -266,7 +266,6 @@ export function useUpdateLead() {
       }
 
       // SECURITY: Remove organization_id from updates to prevent tampering
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { organization_id: _, ...safeUpdates } = updates as LeadUpdate & { organization_id?: string };
 
       // Optimistic lock (#307): when caller passes the original
@@ -291,47 +290,9 @@ export function useUpdateLead() {
         throw error;
       }
 
-      // Sync responsible_id to all pipe tables that contain this lead
-      if (safeUpdates.responsible_id !== undefined) {
-        const responsibleUpdate = { responsible_id: safeUpdates.responsible_id || null };
-        await supabase.from("pipe_whatsapp").update(responsibleUpdate).eq("lead_id", id);
-        await supabase.from("pipe_confirmacao").update(responsibleUpdate).eq("lead_id", id);
-        await supabase.from("pipe_propostas").update(responsibleUpdate).eq("lead_id", id);
-      }
-
-      // Sync pre_sale_responsible_id / sale_responsible_id to all pipe tables
-      if (safeUpdates.pre_sale_responsible_id !== undefined || safeUpdates.sale_responsible_id !== undefined) {
-        const pipeUpdate: Record<string, unknown> = {};
-        if (safeUpdates.pre_sale_responsible_id !== undefined) {
-          pipeUpdate.pre_sale_responsible_id = safeUpdates.pre_sale_responsible_id || null;
-        }
-        if (safeUpdates.sale_responsible_id !== undefined) {
-          pipeUpdate.sale_responsible_id = safeUpdates.sale_responsible_id || null;
-        }
-        if (Object.keys(pipeUpdate).length > 0) {
-          await supabase.from("pipe_whatsapp").update(pipeUpdate).eq("lead_id", id);
-          await supabase.from("pipe_confirmacao").update(pipeUpdate).eq("lead_id", id);
-          await supabase.from("pipe_propostas").update(pipeUpdate).eq("lead_id", id);
-        }
-      }
-
-      // Sync compromisso_date → pipe_confirmacao.meeting_date (espelho inverso).
-      // Best-effort: pode não existir entrada em pipe_confirmacao para esse lead — nesse
-      // caso UPDATE afeta 0 linhas sem erro. Nunca usar upsert/insert aqui (Security: D5).
-      // Payload literal — nunca spread; nunca tocar em status neste caminho.
-      if (safeUpdates.compromisso_date !== undefined) {
-        const { error: syncErr } = await supabase
-          .from("pipe_confirmacao")
-          .update({ meeting_date: safeUpdates.compromisso_date })
-          .eq("lead_id", id)
-          .eq("organization_id", organizationId);
-        if (syncErr) {
-          console.warn(
-            "[useUpdateLead] failed to sync compromisso_date → pipe_confirmacao.meeting_date",
-            syncErr,
-          );
-        }
-      }
+      // Responsáveis e compromisso são projetados nas entries por triggers de
+      // `leads`, na mesma transação deste UPDATE. O cliente não faz segunda
+      // escrita: evita sucesso parcial e elimina as views do caminho.
 
       return data;
     },
@@ -425,7 +386,7 @@ const FETCH_PAGE_SIZE = 1000;
 /**
  * Fetch all lead ids for the organization, including:
  * - leads.organization_id = org (base de leads)
- * - lead_id present in pipe_whatsapp / pipe_confirmacao / pipe_propostas for this org (todos que estão no funil/etapa)
+ * - lead_id presente nos três funis de sistema da organização
  * Uses pagination so no row limit (e.g. 30/1000) cuts the list.
  * SECURITY: Only returns ids for the given organization_id.
  */
@@ -433,23 +394,6 @@ async function fetchAllLeadIdsForOrganization(
   organizationId: string
 ): Promise<string[]> {
   const idSet = new Set<string>();
-
-  const fetchPage = async (table: string, orderBy: string, selectCol: string): Promise<void> => {
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from(table)
-        .select(selectCol)
-        .eq("organization_id", organizationId)
-        .order(orderBy, { ascending: true })
-        .range(offset, offset + FETCH_PAGE_SIZE - 1);
-      if (error) throw error;
-      const list = (data ?? []).map((r: Record<string, string>) => r[selectCol]).filter(Boolean);
-      list.forEach((id) => idSet.add(id));
-      if (list.length < FETCH_PAGE_SIZE) break;
-      offset += FETCH_PAGE_SIZE;
-    }
-  };
 
   const fetchLeadsPage = async (): Promise<void> => {
     let offset = 0;
@@ -468,23 +412,32 @@ async function fetchAllLeadIdsForOrganization(
     }
   };
 
-  await Promise.all([
-    fetchLeadsPage(),
-    fetchPage("pipe_whatsapp", "lead_id", "lead_id"),
-    fetchPage("pipe_confirmacao", "lead_id", "lead_id"),
-    fetchPage("pipe_propostas", "lead_id", "lead_id"),
-  ]);
+  const fetchSystemPipelineLeads = async (): Promise<void> => {
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("negocio_projetado")
+        .select("lead_id")
+        .eq("organization_id", organizationId)
+        .in("funil_sistema", ["whatsapp", "confirmacao", "propostas"])
+        .order("lead_id", { ascending: true })
+        .range(offset, offset + FETCH_PAGE_SIZE - 1);
+      if (error) throw error;
+      const list = (data ?? [])
+        .map((row: { lead_id: string | null }) => row.lead_id)
+        .filter((id): id is string => !!id);
+      list.forEach((id) => idSet.add(id));
+      if ((data ?? []).length < FETCH_PAGE_SIZE) break;
+      offset += FETCH_PAGE_SIZE;
+    }
+  };
+
+  await Promise.all([fetchLeadsPage(), fetchSystemPipelineLeads()]);
 
   return Array.from(idSet);
 }
 
-const PIPE_TABLES = {
-  whatsapp: "pipe_whatsapp",
-  propostas: "pipe_propostas",
-  confirmacao: "pipe_confirmacao",
-} as const;
-
-export type PipeTypeForDelete = keyof typeof PIPE_TABLES;
+export type PipeTypeForDelete = "whatsapp" | "propostas" | "confirmacao";
 
 /**
  * Fetch all lead_ids that are in a given pipe for the organization.
@@ -496,16 +449,16 @@ async function fetchAllLeadIdsInPipe(
   pipeType: PipeTypeForDelete,
   stageId?: string
 ): Promise<string[]> {
-  const table = PIPE_TABLES[pipeType];
   const idSet = new Set<string>();
   let offset = 0;
   while (true) {
     let query = supabase
-      .from(table)
+      .from("negocio_projetado")
       .select("lead_id")
-      .eq("organization_id", organizationId);
+      .eq("organization_id", organizationId)
+      .eq("funil_sistema", pipeType);
     if (stageId) {
-      query = query.eq("status", stageId);
+      query = query.eq("stage_key", stageId);
     }
     const { data, error } = await query
       .order("lead_id", { ascending: true })

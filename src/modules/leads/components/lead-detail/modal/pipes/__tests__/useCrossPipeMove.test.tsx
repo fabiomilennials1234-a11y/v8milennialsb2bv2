@@ -27,6 +27,7 @@ vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.f
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
+    rpc: () => Promise.resolve({ data: null, error: h.error }),
     from: () => ({
       update: () => ({
         eq: () => Promise.resolve({ error: h.error }),

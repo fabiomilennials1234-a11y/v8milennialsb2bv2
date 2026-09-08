@@ -32,16 +32,16 @@ const str = (description: string) => ({ type: "string", description });
 
 export const TOOL_REGISTRY: ToolMeta[] = [
   // ── Read / introspect ──
-  { name: "get_lead_360", kind: "read", description: "Snapshot do lead no CRM (dados, responsáveis, pipes).", parameters: obj({}) },
+  { name: "get_lead_360", kind: "read", description: "Snapshot do lead no CRM (dados e responsáveis).", parameters: obj({}) },
   { name: "get_contact_status", kind: "read", description: "Status do contato pelo telefone: NOVO / LEAD_NO_PIPELINE / QUALIFIED / CLIENTE_CARTEIRA.", parameters: obj({}) },
   { name: "get_conversation_history", kind: "read", description: "Histórico recente da conversa.", parameters: obj({ limit: { type: "number" } }) },
-  { name: "list_pipeline_stages", kind: "read", description: "Estágios reais e atuais do pipeline (introspecção antes de mover).", parameters: obj({ pipe: str("pipe alvo, opcional") }) },
+  { name: "list_pipeline_stages", kind: "read", description: "Etapas reais e atuais de um funil (introspecção antes de mover).", parameters: obj({ pipe: str("UUID ou slug do funil alvo") }, ["pipe"]) },
   { name: "list_custom_fields", kind: "read", description: "Campos do lead reais e atuais (introspecção antes de preencher).", parameters: obj({}) },
   { name: "search_knowledge", kind: "read", description: "Busca híbrida na base de conhecimento da org (catálogo/specs ingeridos como texto).", parameters: obj({ query: str("o que buscar") }, ["query"]) },
   { name: "check_agenda_availability", kind: "read", description: "Horários realmente livres (introspecção antes de agendar).", parameters: obj({ date_range: str("janela desejada") }) },
 
   // ── Write (gated; every structural write preceded by its introspect read) ──
-  { name: "move_lead_stage", kind: "write", capability: "can_move_stage", targetArg: "stage", description: "Move o lead para um estágio que existe (após list_pipeline_stages).", parameters: obj({ stage: str("stage_key alvo"), pipe: str("pipe alvo, opcional") }, ["stage"]) },
+  { name: "move_lead_stage", kind: "write", capability: "can_move_stage", targetArg: "stage", description: "Move o negócio para uma etapa existente do funil informado (após list_pipeline_stages no mesmo funil).", parameters: obj({ stage: str("stage_key alvo"), pipe: str("UUID ou slug do funil alvo") }, ["stage", "pipe"]) },
   { name: "fill_lead_field", kind: "write", capability: "can_fill_field", targetArg: "field", description: "Grava um campo que existe (após list_custom_fields).", parameters: obj({ field: str("field_key"), value: str("valor") }, ["field", "value"]) },
   { name: "schedule_meeting", kind: "write", capability: "can_schedule_meeting", description: "Agenda reunião em horário confirmado livre (após check_agenda_availability).", parameters: obj({ datetime: str("ISO 8601"), title: str("título") }, ["datetime"]) },
   { name: "set_qualification_tier", kind: "write", capability: "can_set_tier", description: "Registra os SINAIS B2B extraídos; a rúbrica determinística decide o tier (o LLM nunca decide).", parameters: obj({ signals: { type: "object", description: "faturamento/volume/recorrencia/urgencia/icp/regiao com evidência" } }, ["signals"]) },

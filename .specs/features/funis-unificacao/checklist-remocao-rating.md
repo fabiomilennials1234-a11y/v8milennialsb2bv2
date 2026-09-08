@@ -59,7 +59,7 @@ régua. Não estamos removendo um sinal — estamos removendo a aparência de um
       `checklist-demolicao.md`: `supabase db push` é inutilizável neste estado
       (7 versões em prod sem arquivo, 2 arquivos fora do ledger, e a colisão em
       `20270917000000`). **Aplicar cirurgicamente, com ledger explícito.**
-- [ ] **1.5 — Ordem entre as duas migrations pendentes.** A `20270920000000`
+- [ ] **1.5 — Ordem entre as duas migrations pendentes.** A `20271015000000`
       (demolição dos espelhos, agente A) e esta comutam **por desenho**: esta
       opera sobre o corpo VIVO das funções (`pg_get_functiondef`), nunca sobre
       um corpo colado neste repositório. Se a demolição for aplicada primeiro,
@@ -178,7 +178,7 @@ DROP TABLE backup.leads_rating_20270925, backup.entry_calor_20270925;
   comentado, caso a decisão mude.
 - **Não toca em `pipe_propostas_insert_fn` / `pipe_propostas_update_fn`.** São
   os gatilhos INSTEAD OF do espelho `pipe_propostas`, território da
-  `20270920000000`, que os apaga inteiros. Escrevem `calor` no metadata a
+  `20271015000000`, que os apaga inteiros. Escrevem `calor` no metadata a
   partir de `NEW.calor` — coluna da **view**, não de `leads` — e por isso não
   quebram com este DROP. Estão explicitamente excluídos da asserção 8.2.
 - **Não mexe em `src/`.** Território do agente B (Etapa 1).

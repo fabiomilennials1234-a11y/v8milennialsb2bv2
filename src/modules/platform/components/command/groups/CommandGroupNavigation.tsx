@@ -41,7 +41,7 @@ const NAV_ITEMS = [
   { id: "nav-copilot",     label: "Copilot IA",      path: "/copilot",        Icon: Bot },
   { id: "nav-agenda",      label: "Agenda",          path: "/agenda",         Icon: CalendarDays },
   { id: "nav-analytics",   label: "Analytics",       path: "/analytics",      Icon: BarChart3 },
-  { id: "nav-funis",       label: "Funis & Pipes",   path: "/funis",          Icon: Megaphone },
+  { id: "nav-funis",       label: "Funis",   path: "/funis",          Icon: Megaphone },
   { id: "nav-automacoes",  label: "Automações",      path: "/automacoes",     Icon: Zap },
   { id: "nav-produtos",    label: "Produtos",        path: "/produtos",       Icon: ShoppingBag },
   { id: "nav-equipe",      label: "Equipe",          path: "/equipe",         Icon: Trophy },

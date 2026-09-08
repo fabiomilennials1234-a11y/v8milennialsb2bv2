@@ -68,7 +68,7 @@ async function resolveStageDoFunil(
 const CUSTOM_PIPE_ENTRY_READ_CAP = 50;
 
 /**
- * Lê TODAS as entries de `(pipeline_id, lead_id)` em `custom_pipe_entries` e
+ * Lê TODAS as entries de `(pipeline_id, lead_id)` na projeção canônica e
  * devolve a corrente, tolerando N linhas.
  *
  * Este caminho é o do Copilot e dos workflows — roda sem ninguém olhando, o que
@@ -82,20 +82,23 @@ const CUSTOM_PIPE_ENTRY_READ_CAP = 50;
  * o kanban discordarem sobre QUAL negócio é o corrente, a tela mostra um e a
  * automação move outro.
  *
- * "Aberto" vem do papel da etapa: `custom_pipe_entries` não tem `closed_at`.
+ * "Aberto" vem do papel da etapa projetado em `negocio_projetado`.
  * Nunca mover um negócio GANHO para fora da etapa de ganho — é o que dispara
  * `sale_reversed`, que é irreversível (decisão G do CTO).
  */
 async function readActiveCustomPipeEntry(
   supabase: ActionInput["supabase"],
+  organizationId: string,
   pipelineId: string,
   leadId: string,
 ): Promise<{ id: string } | null> {
   const { data, error } = await supabase
-    .from("custom_pipe_entries")
-    .select("id, stage:custom_pipeline_stages(stage_role)")
+    .from("negocio_projetado")
+    .select("id, stage_role")
+    .eq("organization_id", organizationId)
     .eq("lead_id", leadId)
     .eq("pipeline_id", pipelineId)
+    .eq("pipeline_type", "custom")
     .order("stage_changed_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false })
@@ -105,19 +108,9 @@ async function readActiveCustomPipeEntry(
   // duplicado a cada erro transitório, sem ninguém para desfazer.
   if (error) throw error;
 
-  // `as unknown as` e não `as` direto: `stage:custom_pipeline_stages(stage_role)`
-  // é embed MUITOS-PARA-UM (`custom_pipe_entries.stage_id → custom_pipeline_stages.id`),
-  // então em tempo de execução o PostgREST devolve objeto (ou null) — que é o que
-  // esta asserção diz. O parser de tipos do postgrest-js, porém, infere ARRAY para
-  // embed com alias, e TS recusa a ponte entre os dois formatos (TS2352).
-  //
-  // A asserção descreve o runtime corretamente; o desvio por `unknown` é só para
-  // atravessar a inferência. Trocar a query para agradar o parser mudaria
-  // comportamento, e `isClosed` aqui embaixo decide se um negócio GANHO sai da
-  // etapa de ganho — o gatilho de `sale_reversed`, irreversível (decisão G do CTO).
-  const rows = (data ?? []) as unknown as Array<{ id: string; stage: { stage_role: string } | null }>;
+  const rows = (data ?? []) as Array<{ id: string; stage_role: string | null }>;
   const isClosed = (row: (typeof rows)[number]) =>
-    row.stage?.stage_role === "won" || row.stage?.stage_role === "lost";
+    row.stage_role === "won" || row.stage_role === "lost";
 
   return rows.find((row) => !isClosed(row)) ?? rows[0] ?? null;
 }
@@ -219,11 +212,10 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
     return { success: false, error: "target_stage é obrigatório" };
   }
 
-  // Default legado DELIBERADO: nós salvos antes do editor gravar funil sempre
-  // assumiam Oportunidades — tanto aqui quanto no mapeamento do action-handler.
-  // O editor NOVO (SCRUM-627) grava `pipelineId` sempre; este fallback existe
-  // só para os nós antigos não quebrarem, e morre quando o último for migrado.
-  const targetPipeRef = String((params.target_pipe as string) || "whatsapp");
+  const targetPipeRef = String((params.target_pipe as string) || "").trim();
+  if (!targetPipeRef) {
+    return { success: false, error: "No target funnel configured" };
+  }
   const rawStageRef = String(targetStage).trim();
   const normalizedStage = rawStageRef.toLowerCase();
 
@@ -337,23 +329,30 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
     };
   }
 
-  const existingEntry = await readActiveCustomPipeEntry(supabase, pipeline.id, leadId);
+  const existingEntry = await readActiveCustomPipeEntry(
+    supabase,
+    organizationId,
+    pipeline.id,
+    leadId,
+  );
 
   const now = new Date().toISOString();
   if (existingEntry) {
-    await supabase
-      .from("custom_pipe_entries")
-      .update({ stage_id: stageRow.id, stage_changed_at: now })
-      .eq("id", existingEntry.id);
-  } else {
-    await supabase.from("custom_pipe_entries").insert({
-      lead_id: leadId,
-      organization_id: organizationId,
-      pipeline_id: pipeline.id,
-      stage_id: stageRow.id,
-      entered_at: now,
-      stage_changed_at: now,
+    const { error } = await supabase.rpc("fn_entrada_custom_atualizar", {
+      p_entry_id: existingEntry.id,
+      p_patch: { stage_id: stageRow.id, stage_changed_at: now },
     });
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.rpc("fn_entrada_custom_criar", {
+      p_lead_id: leadId,
+      p_organization_id: organizationId,
+      p_pipeline_id: pipeline.id,
+      p_stage_id: stageRow.id,
+      p_entered_at: now,
+      p_stage_changed_at: now,
+    });
+    if (error) throw error;
   }
 
   // Auto-transition on is_final_positive
@@ -361,19 +360,26 @@ export async function moveStage(input: ActionInput): Promise<ActionResult> {
     if (stageRow.target_pipeline_id && stageRow.target_stage_id) {
       const targetEntry = await readActiveCustomPipeEntry(
         supabase,
+        organizationId,
         stageRow.target_pipeline_id,
         leadId,
       );
       if (targetEntry) {
-        await supabase.from("custom_pipe_entries")
-          .update({ stage_id: stageRow.target_stage_id, stage_changed_at: now })
-          .eq("id", targetEntry.id);
-      } else {
-        await supabase.from("custom_pipe_entries").insert({
-          lead_id: leadId, organization_id: organizationId,
-          pipeline_id: stageRow.target_pipeline_id, stage_id: stageRow.target_stage_id,
-          entered_at: now, stage_changed_at: now,
+        const { error } = await supabase.rpc("fn_entrada_custom_atualizar", {
+          p_entry_id: targetEntry.id,
+          p_patch: { stage_id: stageRow.target_stage_id, stage_changed_at: now },
         });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.rpc("fn_entrada_custom_criar", {
+          p_lead_id: leadId,
+          p_organization_id: organizationId,
+          p_pipeline_id: stageRow.target_pipeline_id,
+          p_stage_id: stageRow.target_stage_id,
+          p_entered_at: now,
+          p_stage_changed_at: now,
+        });
+        if (error) throw error;
       }
     } else if (stageRow.target_pipe_type && stageRow.target_stage_key) {
       const transPipe = stageRow.target_pipe_type;

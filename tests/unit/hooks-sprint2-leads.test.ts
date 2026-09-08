@@ -230,7 +230,7 @@ describe("useDeleteAllLeadsInPipe", () => {
       } catch {}
     });
     expect(mockRpc).toHaveBeenCalled();
-    expect(mockFrom).toHaveBeenCalledWith("pipe_whatsapp");
+    expect(mockFrom).toHaveBeenCalledWith("negocio_projetado");
   });
 });
 

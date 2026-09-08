@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const STEPS: { key: OnboardingState; label: string }[] = [
   { key: "pending_whatsapp", label: "WhatsApp" },
   { key: "pending_profile", label: "Perfil" },
-  { key: "pending_pipelines", label: "Pipelines" },
+  { key: "pending_pipelines", label: "Funis" },
   { key: "pending_automations", label: "Automações" },
 ];
 

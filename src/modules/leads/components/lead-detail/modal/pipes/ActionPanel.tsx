@@ -86,8 +86,8 @@ export const ActionPanel = memo(function ActionPanel({
                 <AlertDialogHeader>
                   <AlertDialogTitle>Remover de {pipeLabel}?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Lead continua existindo. Métricas deste pipe vão ignorar
-                    este lead. Ação irreversível.
+                    Lead continua existindo. Métricas deste funil vão ignorar
+                    este negócio. Ação irreversível.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>

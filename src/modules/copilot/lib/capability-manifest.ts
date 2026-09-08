@@ -59,8 +59,8 @@ const CAPABILITY_GUIDE: Record<string, CapabilityGuide> = {
   },
   MOVER_CARD: {
     whenToUse:
-      "Enable when the agent should advance leads through the funnel automatically as the conversation progresses. Auto-enabled whenever the agent has active pipes configured.",
-    notes: "Use the org's real pipeline stages — never invent stage names.",
+      "Enable when the agent should advance leads through the funnel automatically as the conversation progresses. Auto-enabled whenever the agent has active funnels configured.",
+    notes: "Use the organization's real funnel stages — never invent stage names.",
   },
   TRANSFERIR_HUMANO: {
     whenToUse:

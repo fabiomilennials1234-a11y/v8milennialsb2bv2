@@ -25,7 +25,11 @@ import type {
   UseMutationResult,
   QueryClient,
 } from "@tanstack/react-query";
-import type { Tables } from "@/integrations/supabase/types";
+import type {
+  ProjectedConfirmacaoPipe,
+  ProjectedPropostaPipe,
+  ProjectedWhatsappPipe,
+} from "@/integrations/supabase/projected-pipe-types";
 import type {
   PipelineType,
   PipelineStage,
@@ -39,9 +43,9 @@ import type {
   SystemPipeDisplay,
 } from "@/contracts/pipe";
 
-type PipeWhatsappRow = Tables<"pipe_whatsapp">;
-type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
-type PipePropostaRow = Tables<"pipe_propostas">;
+type PipeWhatsappRow = ProjectedWhatsappPipe;
+type PipeConfirmacaoRow = ProjectedConfirmacaoPipe;
+type PipePropostaRow = ProjectedPropostaPipe;
 
 type PipeWhatsappInsert = Partial<PipeWhatsappRow> & { lead_id: string };
 type PipeConfirmacaoInsert = Partial<PipeConfirmacaoRow> & { lead_id: string };

@@ -32,7 +32,7 @@ import { ptBR } from "date-fns/locale";
 import { isConfirmacaoOverdue } from "@/modules/identity";
 import { QuickAddDailyAction } from "./QuickAddDailyAction";
 import { MeetingCountdown } from "./MeetingCountdown";
-import { supabase } from "@/integrations/supabase/client";
+import { updateSystemPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useState, useEffect } from "react";
@@ -198,12 +198,7 @@ export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, on
         localStorage.setItem(`confirmed_on_day_${card.confirmacaoId}`, "true");
         setIsConfirmadoNoDiaState(true);
         
-        const { error } = await supabase
-          .from("pipe_confirmacao")
-          .update({ is_confirmed: true })
-          .eq("id", card.confirmacaoId);
-        
-        if (error) throw error;
+        await updateSystemPipelineEntry(card.confirmacaoId, { is_confirmed: true });
         
         queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
         toast.success("✅ Reunião confirmada no dia!");
@@ -214,12 +209,7 @@ export const ConfirmacaoCard = memo(function ConfirmacaoCard({ card, onClick, on
       // Toggle pre-confirmed state
       const newIsConfirmed = !card.isConfirmed;
 
-      const { error } = await supabase
-        .from("pipe_confirmacao")
-        .update({ is_confirmed: newIsConfirmed })
-        .eq("id", card.confirmacaoId);
-      
-      if (error) throw error;
+      await updateSystemPipelineEntry(card.confirmacaoId, { is_confirmed: newIsConfirmed });
       
       queryClient.invalidateQueries({ queryKey: ["pipeline_entries"] });
       

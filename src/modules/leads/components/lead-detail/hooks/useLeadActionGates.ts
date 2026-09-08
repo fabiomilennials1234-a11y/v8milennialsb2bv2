@@ -118,7 +118,7 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
     : deny("Sem permissão para atribuir responsáveis");
   const canRemoveFromPipe: Gate = removeFromPipeCheck.allowed
     ? allow(removeFromPipeCheck.reason ?? "remove_lead_from_pipe")
-    : deny("Sem permissão para remover de pipe");
+    : deny("Sem permissão para remover do funil");
 
   // Cotidianos — admin/master sempre OK; membro OK por padrão.
   const cotidianoOk = isAdmin || isMember;
@@ -130,7 +130,7 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
   // Move stage / meeting / proposal usa o gate explícito existente.
   const canMoveMeeting: Gate = movePipeCheck.allowed
     ? allow("move_pipe_record")
-    : deny("Sem permissão para mover no pipe");
+    : deny("Sem permissão para mover no funil");
   const canEditProposal: Gate = movePipeCheck.allowed
     ? allow("move_pipe_record")
     : deny("Sem permissão para editar propostas");
@@ -138,7 +138,7 @@ export function useLeadActionGates(leadId: string | null | undefined): LeadActio
   // Add to pipe — gate de criação genérico.
   const canAddToPipe: Gate = createLeadCheck.allowed
     ? allow("create_lead")
-    : deny("Sem permissão para adicionar a pipes");
+    : deny("Sem permissão para adicionar a funis");
 
   return {
     canEditField: cotidianoGate,

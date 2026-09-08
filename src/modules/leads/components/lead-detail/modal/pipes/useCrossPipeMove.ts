@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { updateCustomPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
 import { toast } from "sonner";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 
@@ -17,9 +18,9 @@ import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
  *    idêntico; mesmo caminho do `useMoverCardNoFunil` da página unificada),
  *    keyed by `pipeId` (= pipeline_entries.id). Morreu o mapa `PIPE_TABLE`:
  *    funil de sistema com slug novo movia nada em silêncio.
- *  - Custom pipes: write `{ stage_id: <uuid> }` into
- *    `custom_pipe_entries`, keyed by `entryId` — o INSTEAD OF da view carrega
- *    a lógica viva do board custom (auto-transition, gatilhos de workflow).
+ *  - Custom pipes: envia `{ stage_id: <uuid> }` para
+ *    `fn_entrada_custom_atualizar`, keyed by `entryId`. A função deriva também
+ *    `stage_key`, mantendo auto-transition, workflow, checklist e histórico.
  *
  * Invalidates the queries the CrossPipePanel + activity column rely on, o board
  * de funil que hospeda o modal (`pipeline-page` / `pipeline-stage-counts`, ou o
@@ -69,14 +70,10 @@ export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
             .eq("id", target.pipeId);
           if (error) throw error;
         } else {
-          const { error } = await supabase
-            .from("custom_pipe_entries")
-            .update({
-              stage_id: target.stageId,
-              stage_changed_at: new Date().toISOString(),
-            })
-            .eq("id", target.entryId);
-          if (error) throw error;
+          await updateCustomPipelineEntry(target.entryId, {
+            stage_id: target.stageId,
+            stage_changed_at: new Date().toISOString(),
+          });
         }
 
         logAction({

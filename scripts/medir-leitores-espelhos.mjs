@@ -29,6 +29,7 @@ import { join } from 'node:path';
 
 const PROJECT_REF = 'jsjsmuncfkbsbzqzqhfq';
 const DIR = '.specs/features/funis-unificacao/medicoes';
+const forceBaseline = process.argv.includes('--baseline');
 
 const ALVOS = [
   'pipe_whatsapp', 'pipe_confirmacao', 'pipe_propostas',
@@ -78,7 +79,7 @@ const anterior = anteriores.length ? JSON.parse(readFileSync(join(DIR, anteriore
 
 writeFileSync(arquivo, JSON.stringify({ medido_em: agora, linhas }, null, 2) + '\n');
 
-if (!anterior) {
+if (forceBaseline || !anterior) {
   console.log(`Baseline gravado em ${arquivo}. Rode de novo amanhã para ter delta.`);
   for (const l of linhas) console.log(`  ${l.nome.padEnd(34)} calls=${l.calls}`);
   process.exit(0);
@@ -98,5 +99,5 @@ for (const l of linhas) {
 console.log(`\nVEREDITO DO DIA: ${veredito}`);
 console.log(veredito === 'ZERO'
   ? '  Conta este dia na janela de 7. Sete ZEROs seguidos liberam o DROP.'
-  : '  A janela ZERA. Não aplique a 20270920000000.');
+  : '  A janela ZERA. Não aplique a 20271015000000.');
 process.exit(veredito === 'ZERO' ? 0 : 1);

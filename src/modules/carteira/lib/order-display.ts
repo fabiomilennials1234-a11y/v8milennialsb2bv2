@@ -11,7 +11,7 @@
 export function sourceLabel(source: string | null): string {
   switch (source) {
     case "pipe":
-      return "Pipeline";
+      return "Funil";
     case "manual":
       return "Manual";
     case "erp":

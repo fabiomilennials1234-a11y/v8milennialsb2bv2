@@ -101,7 +101,7 @@ export function SlaConfigPanel() {
             SLA por etapa
           </h3>
           <p className="text-sm text-muted-foreground">
-            Defina prazos maximos por etapa do pipeline e acoes em caso de atraso
+            Defina prazos maximos por etapa do funil e ações em caso de atraso
           </p>
         </div>
         <Button
@@ -175,7 +175,7 @@ export function SlaConfigPanel() {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Pipeline</Label>
+              <Label className="text-xs">Funil</Label>
               <Select
                 value={form.pipeline_type}
                 onValueChange={(v) => setForm({ ...form, pipeline_type: v, stage_id: "" })}

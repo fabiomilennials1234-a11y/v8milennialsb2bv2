@@ -112,7 +112,7 @@ export function PixButtonNodeConfig({ data, onUpdate }: Props) {
       <div className="text-xs text-muted-foreground pt-2 border-t">
         Valor será cobrado via PIX direto. Se precisar integração Asaas
         (geração dinâmica de cobrança), use o botão "Cobrar PIX" no
-        pipe_propostas detail.
+        detalhe do negócio no funil de propostas.
       </div>
     </div>
   );

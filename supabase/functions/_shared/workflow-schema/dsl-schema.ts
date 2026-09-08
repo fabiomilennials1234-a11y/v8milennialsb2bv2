@@ -50,7 +50,20 @@ const CURATED_ACTION_CHECK: Record<string, (c: Record<string, unknown>) => strin
     if (!c.messageTemplate) return "send_to_number requires messageTemplate";
     return null;
   },
-  move_stage: (c) => (c.targetStage ? null : "move_stage requires targetStage"),
+  move_stage: (c) => {
+    if (!c.pipelineId && !c.pipeType) return "move_stage requires pipelineId";
+    return c.targetStage ? null : "move_stage requires targetStage";
+  },
+  duplicate_to_pipe: (c) => {
+    if (!c.pipelineId && !c.targetPipeType) return "duplicate_to_pipe requires pipelineId";
+    return c.targetStage || c.targetPipeStage ? null : "duplicate_to_pipe requires targetStage";
+  },
+  remove_from_pipe: (c) => c.pipelineId || c.pipeType
+    ? null
+    : "remove_from_pipe requires pipelineId",
+  mark_as_lost: (c) => c.pipelineId || c.pipeType
+    ? null
+    : "mark_as_lost requires pipelineId",
   add_tag: (c) => (c.tagId || c.tagName ? null : "add_tag requires tagId or tagName"),
   remove_tag: (c) => (c.tagId || c.tagName ? null : "remove_tag requires tagId or tagName"),
   update_lead_field: (c) => (c.fieldName ? null : "update_lead_field requires fieldName"),

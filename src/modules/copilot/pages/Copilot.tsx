@@ -61,6 +61,7 @@ import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { useOrgQuotas } from "@/modules/identity";
 import { toast } from "sonner";
 import type { CopilotAgentWithRelations } from "@/types/copilot";
+import { useCopilotFunnelOptions } from "@/modules/copilot/hooks/usePipeTypeOptions";
 
 export default function Copilot() {
   const navigate = useNavigate();
@@ -75,6 +76,7 @@ export default function Copilot() {
   const createAgent = useCreateCopilotAgent();
   const { enabled: builderEnabled } = useFeatureFlag("copilot_builder");
   const { data: drafts = [] } = useDraftCopilotAgents();
+  const { labelForRef } = useCopilotFunnelOptions();
 
   const [agentToDelete, setAgentToDelete] = useState<string | null>(null);
   const [pendingActivation, setPendingActivation] = useState<{ id: string; name: string } | null>(null);
@@ -360,7 +362,7 @@ export default function Copilot() {
                       {((agent.active_pipes as string[]) || []).length > 0 ? (
                         ((agent.active_pipes as string[]) || []).map((pipe) => (
                           <Badge key={pipe} variant="secondary" className="text-xs capitalize">
-                            {pipe}
+                            {labelForRef(pipe)}
                           </Badge>
                         ))
                       ) : (

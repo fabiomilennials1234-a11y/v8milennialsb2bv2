@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
 import { nomeDoFunil, type SystemPipeDisplay } from "@/contracts/pipe";
+import { updateSystemPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
 
 // ─── Types ───────────────────────────────────────────────────
 
@@ -436,6 +437,7 @@ export function useAddLeadToStandardPipe() {
 
 export function useMoveLeadInStandardPipe() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -447,18 +449,18 @@ export function useMoveLeadInStandardPipe() {
       pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
       newStageId: string;
     }) => {
-      const table =
-        pipeType === "whatsapp" ? "pipe_whatsapp"
-        : pipeType === "confirmacao" ? "pipe_confirmacao"
-        : pipeType === "propostas" ? "pipe_propostas"
-        : "upsell";
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      if (pipeType === "upsell") {
+        const { error } = await supabase
+          .from("upsell")
+          .update({ status: newStageId })
+          .eq("id", pipeId)
+          .eq("organization_id", teamMember.organization_id);
+        if (error) throw error;
+        return;
+      }
 
-      const { error } = await supabase
-        .from(table)
-        .update({ status: newStageId })
-        .eq("id", pipeId);
-
-      if (error) throw error;
+      await updateSystemPipelineEntry(pipeId, { stage_key: newStageId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
@@ -474,6 +476,7 @@ export function useMoveLeadInStandardPipe() {
 
 export function useRemoveLeadFromStandardPipe() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -483,13 +486,10 @@ export function useRemoveLeadFromStandardPipe() {
       pipeId: string;
       pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
     }) => {
-      const table =
-        pipeType === "whatsapp" ? "pipe_whatsapp"
-        : pipeType === "confirmacao" ? "pipe_confirmacao"
-        : pipeType === "propostas" ? "pipe_propostas"
-        : "upsell";
-
-      const { error } = await supabase.from(table).delete().eq("id", pipeId);
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      const { error } = pipeType === "upsell"
+        ? await supabase.from("upsell").delete().eq("id", pipeId).eq("organization_id", teamMember.organization_id)
+        : await supabase.from("pipeline_entries").delete().eq("id", pipeId).eq("organization_id", teamMember.organization_id);
       if (error) throw error;
     },
     onSuccess: () => {

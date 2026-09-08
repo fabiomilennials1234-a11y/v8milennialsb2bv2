@@ -59,3 +59,18 @@ O custo não é estético. Cada feature nova nasce duas vezes ou nasce só para 
 - Os 3 aliases de slug ficam na API para sempre, documentados — contrato externo é aditivo (D10), 73 chaves em 49 orgs não quebram.
 - Duas semânticas coexistem durante as fases: views de compat e colunas-espelho vivem até a F6, com o critério de saída medido, não prometido.
 - Cada janela de produção é aprovada pelo CTO uma a uma (D7); o rollout de comportamento/UI é piloto Milennials → lotes. A trava "nada em produção" do redesign de funis não vale para este projeto.
+
+## Amendment 1 — gate técnico de demolição (2026-09-07)
+
+O CTO autorizou substituir, para o cutover F6, a espera de sete dias por um
+gate técnico reforçado e concluir o épico no mesmo dia. A premissa temporal do
+D5 não era verificável com a precisão exigida: `pg_stat_statements` 1.11 não
+expõe `last_call`, sofre eviction LRU e `track=top` omite statements
+aninhados.
+
+O novo gate exige simultaneamente: zero leitor no grafo de runtime e nas Edge
+Functions; zero função/procedure SQL; zero dependência de view/rule; inspeção
+de todos os workflows n8n ativos; paridade linha a linha dos seis espelhos;
+catálogo pré-DROP exato; rollback integral comparado ao catálogo vivo; CI,
+regeneração de tipos e smoke pós-apply. Evidência:
+`.specs/features/funis-unificacao/revisao-final-2026-09-07.md`.

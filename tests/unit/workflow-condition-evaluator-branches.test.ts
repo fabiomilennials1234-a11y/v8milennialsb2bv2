@@ -99,6 +99,33 @@ describe("evaluateCondition — field resolution", () => {
     expect(result).toBe(true);
   });
 
+  it("field='stage_id' compara a etapa exata por UUID dentro do funil", async () => {
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("pipeline_entries", [{
+      id: "entry-c1",
+      lead_id: "lead-1",
+      organization_id: "org-1",
+      pipeline_id: "pipe-custom-1",
+      stage_key: "triagem",
+      closed_at: null,
+    }]);
+    mockTable("pipeline_stages", [{
+      id: "stage-custom-1",
+      organization_id: "org-1",
+      pipeline_id: "pipe-custom-1",
+      stage_key: "triagem",
+    }]);
+
+    const result = await evaluateCondition(sb, "lead-1", {
+      field: "stage_id",
+      operator: "equals",
+      value: "stage-custom-1",
+    });
+
+    expect(result).toBe(true);
+  });
+
   it("SCRUM-627: entry declarada no contexto vence o fallback", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD]);

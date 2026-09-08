@@ -9,7 +9,7 @@ interface Props {
 const LAUNCH_ITEMS = [
   {
     icon: GitBranch,
-    label: "Pipeline configurado",
+    label: "Funil configurado",
     description: "Funil de vendas pronto para receber leads",
   },
   {
@@ -25,7 +25,7 @@ const LAUNCH_ITEMS = [
   {
     icon: UserPlus,
     label: "Primeiro lead cadastrado",
-    description: "Pipeline já tem seu primeiro contato",
+    description: "Funil já tem seu primeiro contato",
   },
 ];
 

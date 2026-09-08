@@ -5,19 +5,12 @@
  * nova. Este arquivo guarda os modos de falha que fazem a exclusão PARECER ter
  * funcionado (ou parecer ter falhado), que são os caros:
  *
- *   1. **a tabela errada.** `custom_pipe_entries` e `pipeline_entries` dividem
- *      a mesma primary key. Apagar o espelho de um card custom não apaga a
- *      linha custom, e o kanban custom lê a linha custom: o card some da tela
- *      e volta no refetch. Nenhum erro em lugar nenhum;
- *   2. **o discriminador errado.** Rotear por `pipeTable` (nome de VIEW, `null`
- *      em funil de sistema fora dos três slugs) manda funil de sistema para a
- *      tabela custom. Este é o ramo que a primeira versão do diff errava e
- *      NENHUM teste cobria, porque os testes já chamavam `excluir()` com a
- *      família resolvida;
- *   3. **o DELETE que a RLS recusa.** O PostgREST não devolve erro: devolve
+ *   1. **a tabela errada.** Todo card vive em `pipeline_entries`; o espelho
+ *      custom não pode decidir a exclusão;
+ *   2. **o DELETE que a RLS recusa.** O PostgREST não devolve erro: devolve
  *      zero linhas. E zero linhas tem DOIS diagnósticos — acusar sempre o
  *      errado prende o usuário num painel que não fecha;
- *   4. **o erro que não é `Error`.** `PostgrestError` só é instanciado com
+ *   3. **o erro que não é `Error`.** `PostgrestError` só é instanciado com
  *      `.throwOnError()`; sem ele o erro é objeto puro, e um `instanceof Error`
  *      esconde a mensagem real do banco atrás de um genérico.
  */
@@ -88,6 +81,9 @@ const registrou = vi.fn();
 vi.mock("@/shared/hooks/useLogLeadAction", () => ({
   useLogLeadAction: () => registrou,
 }));
+vi.mock("@/modules/identity", () => ({
+  useOrganization: () => ({ organizationId: "org-t" }),
+}));
 
 import { useExcluirNegocio } from "@/modules/leads/components/deal-card/useExcluirNegocio";
 
@@ -116,8 +112,8 @@ beforeEach(() => {
   registrou.mockClear();
 });
 
-describe("A tabela é escolhida pela FAMÍLIA do funil", () => {
-  it("funil custom apaga a linha custom, e não o espelho", async () => {
+describe("Todo card é excluído na fonte única", () => {
+  it("funil custom apaga em pipeline_entries", async () => {
     const { result } = montar();
     let r: string | undefined;
     await act(async () => {
@@ -126,11 +122,9 @@ describe("A tabela é escolhida pela FAMÍLIA do funil", () => {
 
     expect(r).toBe("excluido");
     expect(apagados()).toHaveLength(1);
-    expect(apagados()[0].tabela).toBe("custom_pipe_entries");
-    expect(apagados()[0].filtros).toEqual(["id=e1"]);
-    // O espelho sai pelo gatilho `TG_OP='DELETE'`, não por uma segunda chamada
-    // daqui — tocar nele à mão é como as duas linhas divergem.
-    expect(chamadas.some((c) => c.tabela === "pipeline_entries")).toBe(false);
+    expect(apagados()[0].tabela).toBe("pipeline_entries");
+    expect(apagados()[0].filtros).toEqual(["id=e1", "organization_id=org-t"]);
+    expect(chamadas.some((c) => c.tabela === "custom_pipe_entries")).toBe(false);
   });
 
   it("funil de sistema apaga em pipeline_entries", async () => {
@@ -174,8 +168,8 @@ describe("Nada de `deals`: a exclusão não destrói o que o produto guarda em l
 
 describe("DELETE de 0 linhas: dois diagnósticos, não um", () => {
   it("linha ainda lá = sem permissão; não fecha o painel", async () => {
-    respostas["delete:custom_pipe_entries"] = { data: [], error: null };
-    respostas["select:custom_pipe_entries"] = { data: [{ id: "e1" }], error: null };
+    respostas["delete:pipeline_entries"] = { data: [], error: null };
+    respostas["select:pipeline_entries"] = { data: [{ id: "e1" }], error: null };
 
     const { result } = montar();
     let r: string | undefined;
@@ -190,8 +184,8 @@ describe("DELETE de 0 linhas: dois diagnósticos, não um", () => {
   });
 
   it("linha já não existe = alguém chegou antes; NÃO acusa permissão", async () => {
-    respostas["delete:custom_pipe_entries"] = { data: [], error: null };
-    respostas["select:custom_pipe_entries"] = { data: [], error: null };
+    respostas["delete:pipeline_entries"] = { data: [], error: null };
+    respostas["select:pipeline_entries"] = { data: [], error: null };
 
     const { result } = montar();
     let r: string | undefined;

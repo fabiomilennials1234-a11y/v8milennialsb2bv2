@@ -25,6 +25,21 @@ vi.mock("@/modules/leads", () => ({
   useLeadCustomFields: () => ({ data: customFields }),
 }));
 
+vi.mock("@/modules/pipelines", () => ({
+  useFunisDaOrg: () => ({
+    data: [{ id: "pipeline-1", label: "Comercial" }],
+  }),
+  useAllPipelineStages: () => ({
+    data: [{
+      id: "stage-1",
+      pipeline_id: "pipeline-1",
+      stage_key: "qualificado",
+      name: "Qualificado",
+      is_active: true,
+    }],
+  }),
+}));
+
 // Hooks read-only stubados — o comportamento deles tem teste próprio.
 vi.mock("@/modules/workflows/hooks/useOrgUtmValues", () => ({
   UTM_VALUE_FIELDS: new Set([

@@ -6,6 +6,18 @@ import { triggerLeadCreatedInCustomPipeline } from "@/lib/workflowTrigger";
 import { useCanDo } from "@/modules/identity";
 import { upsertLeadIntoCustomPipe } from "@/modules/pipelines/lib/stageTransition";
 import {
+  createCustomPipelineEntry,
+  createSystemPipelineEntry,
+  updateCustomPipelineEntry,
+  updateSystemPipelineEntry,
+} from "@/integrations/supabase/pipeline-entry-rpc";
+import {
+  createCustomPipelineStage,
+  createCustomPipelineWithStages,
+  updateCustomPipelineRecord,
+  updateCustomPipelineStage,
+} from "@/integrations/supabase/custom-pipeline-rpc";
+import {
   proximaPosicaoDeEtapa,
   mensagemDeConflitoDeEtapa,
 } from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
@@ -22,6 +34,8 @@ import type {
   CustomPipelineStage,
   CustomPipeEntry,
 } from "@/contracts/pipe";
+import type { Json } from "@/integrations/supabase/types";
+import type { Tables } from "@/integrations/supabase/types";
 export type {
   LifecycleType,
   FunnelStatus,
@@ -51,6 +65,75 @@ function generateStageKey(name: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
+}
+
+type PipelineRow = Tables<"pipelines">;
+const CUSTOM_PIPELINE_COLUMNS =
+  "id, organization_id, name, slug, description, icon, color, display_order, is_active, created_by, created_at, updated_at, type, stage_dispatch_enabled, stage_dispatch_enabled_at, config";
+
+function configObject(config: Json | null): Record<string, Json | undefined> {
+  return config && typeof config === "object" && !Array.isArray(config)
+    ? config as Record<string, Json | undefined>
+    : {};
+}
+
+function optionalNumber(value: Json | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Mantém o contrato público antigo enquanto a fonte passa a ser `pipelines`. */
+function toCustomPipeline(row: PipelineRow): CustomPipeline {
+  const config = configObject(row.config);
+  const leadSource = config.lead_source_config;
+  return {
+    id: row.id,
+    organization_id: row.organization_id,
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    icon: row.icon ?? "kanban",
+    color: row.color ?? "#3b82f6",
+    position: (row.display_order ?? 3) - 3,
+    is_active: row.is_active ?? true,
+    created_by: row.created_by,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    lifecycle_type: config.lifecycle_type === "temporary" ? "temporary" : "permanent",
+    starts_at: typeof config.starts_at === "string" ? config.starts_at : null,
+    ends_at: typeof config.ends_at === "string" ? config.ends_at : null,
+    status: config.status === "draft" || config.status === "paused" || config.status === "ended"
+      ? config.status
+      : "active",
+    team_goal: optionalNumber(config.team_goal),
+    individual_goal: optionalNumber(config.individual_goal),
+    bonus_value: optionalNumber(config.bonus_value),
+    bonus_description: typeof config.bonus_description === "string" ? config.bonus_description : null,
+    objective_pipe_type: typeof config.objective_pipe_type === "string" ? config.objective_pipe_type : null,
+    objective_stage_key: typeof config.objective_stage_key === "string" ? config.objective_stage_key : null,
+    template_type: config.template_type === "indicacao"
+      || config.template_type === "prospeccao"
+      || config.template_type === "reativacao"
+      ? config.template_type
+      : null,
+    lead_source_config: leadSource && typeof leadSource === "object" && !Array.isArray(leadSource)
+      ? leadSource as Record<string, unknown>
+      : null,
+  };
+}
+
+async function readCustomPipelines(organizationId: string): Promise<CustomPipeline[]> {
+  const { data, error } = await supabase
+    .from("pipelines")
+    .select(CUSTOM_PIPELINE_COLUMNS)
+    .eq("organization_id", organizationId)
+    .eq("type", "custom")
+    .eq("is_active", true)
+    .order("display_order", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map(toCustomPipeline);
 }
 
 // Etapas padrão para novos funis permanentes
@@ -97,15 +180,7 @@ export function useCustomPipelines() {
     queryFn: async () => {
       if (!organizationId) return [];
 
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .order("position", { ascending: true });
-
-      if (error) throw error;
-      return (data || []) as CustomPipeline[];
+      return readCustomPipelines(organizationId);
     },
     enabled: !!organizationId,
     staleTime: 5 * 60 * 1000, // 5 minutos — pipelines raramente mudam
@@ -122,16 +197,8 @@ export function usePermanentCustomFunnels() {
     queryFn: async () => {
       if (!organizationId) return [];
 
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .eq("lifecycle_type", "permanent")
-        .order("position", { ascending: true });
-
-      if (error) throw error;
-      return (data || []) as CustomPipeline[];
+      const pipelines = await readCustomPipelines(organizationId);
+      return pipelines.filter((pipeline) => pipeline.lifecycle_type === "permanent");
     },
     enabled: !!organizationId,
     staleTime: 5 * 60 * 1000,
@@ -148,16 +215,10 @@ export function useTemporaryFunnels() {
     queryFn: async () => {
       if (!organizationId) return [];
 
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .eq("lifecycle_type", "temporary")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return (data || []) as CustomPipeline[];
+      const pipelines = await readCustomPipelines(organizationId);
+      return pipelines
+        .filter((pipeline) => pipeline.lifecycle_type === "temporary")
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
     },
     enabled: !!organizationId,
     staleTime: 60 * 1000, // 1 min — temporary funnels change more often
@@ -174,17 +235,13 @@ export function useActiveTemporaryFunnels() {
     queryFn: async () => {
       if (!organizationId) return [];
 
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .select("*")
-        .eq("organization_id", organizationId)
-        .eq("is_active", true)
-        .eq("lifecycle_type", "temporary")
-        .in("status", ["active", "paused", "draft"])
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return (data || []) as CustomPipeline[];
+      const pipelines = await readCustomPipelines(organizationId);
+      return pipelines
+        .filter((pipeline) =>
+          pipeline.lifecycle_type === "temporary"
+          && pipeline.status !== "ended"
+        )
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
     },
     enabled: !!organizationId,
     staleTime: 60 * 1000,
@@ -202,15 +259,16 @@ export function useCustomPipeline(slug: string | undefined) {
       if (!organizationId || !slug) return null;
 
       const { data, error } = await supabase
-        .from("custom_pipelines")
-        .select("*")
+        .from("pipelines")
+        .select(CUSTOM_PIPELINE_COLUMNS)
         .eq("organization_id", organizationId)
         .eq("slug", slug)
+        .eq("type", "custom")
         .eq("is_active", true)
         .single();
 
       if (error) throw error;
-      return data as CustomPipeline;
+      return toCustomPipeline(data);
     },
     enabled: !!organizationId && !!slug,
   });
@@ -222,14 +280,18 @@ export function useCustomPipeline(slug: string | undefined) {
 
 /** Busca etapas de um funil customizado */
 export function useCustomPipelineStages(pipelineId: string | undefined) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
   return useQuery({
-    queryKey: ["custom_pipeline_stages", pipelineId],
+    queryKey: ["custom_pipeline_stages", pipelineId, organizationId],
     queryFn: async () => {
-      if (!pipelineId) return [];
+      if (!pipelineId || !organizationId) return [];
 
       const { data, error } = await supabase
-        .from("custom_pipeline_stages")
+        .from("pipeline_stages")
         .select("*")
+        .eq("organization_id", organizationId)
         .eq("pipeline_id", pipelineId)
         .eq("is_active", true)
         .order("position", { ascending: true });
@@ -237,7 +299,7 @@ export function useCustomPipelineStages(pipelineId: string | undefined) {
       if (error) throw error;
       return (data || []) as CustomPipelineStage[];
     },
-    enabled: !!pipelineId,
+    enabled: !!pipelineId && !!organizationId,
   });
 }
 
@@ -247,22 +309,25 @@ export function useCustomPipelineStages(pipelineId: string | undefined) {
 
 /** Busca leads de um funil customizado com joins */
 export function useCustomPipeEntries(pipelineId: string | undefined) {
+  const { data: teamMember } = useCurrentTeamMember();
+  const organizationId = teamMember?.organization_id;
+
   // Realtime: a fonte única é pipeline_entries (SCRUM-621) — custom_pipe_entries
   // virou view e view não emite postgres_changes (aliás, nunca esteve na
   // publication: a subscription antiga era um no-op medido). Assinar a fonte
   // cobre import-leads, mutations no UI, triggers do banco etc.
-  useRealtimeSubscription("pipeline_entries", ["custom_pipe_entries", pipelineId ?? ""]);
+  useRealtimeSubscription("pipeline_entries", ["custom_pipe_entries", pipelineId ?? "", organizationId ?? ""]);
 
   return useQuery({
-    queryKey: ["custom_pipe_entries", pipelineId],
+    queryKey: ["custom_pipe_entries", pipelineId, organizationId],
     queryFn: async () => {
-      if (!pipelineId) return [];
+      if (!pipelineId || !organizationId) return [];
 
       // FK assigned_to migrou de profiles → team_members (migration 20260918).
       // Faz 2-hop: team_members → profiles via team_members.user_id pra manter
       // o display name e avatar (compatibilidade com CustomPipeLeadCard).
       const { data, error } = await supabase
-        .from("custom_pipe_entries")
+        .from("negocio_projetado")
         .select(`
           *,
           lead:leads(
@@ -273,12 +338,14 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
             closer:team_members!leads_closer_id_fkey(id, name, avatar_url),
             lead_tags(tag:tags(id, name, color))
           ),
-          stage:custom_pipeline_stages(id, name, color, stage_key, position),
+          stage:pipeline_stages(id, organization_id, pipeline_id, stage_key, name, color, position, is_active, is_final_positive, is_final_negative, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key, checklist_template_id, stage_role, requires_sale_value, created_at, updated_at),
           assigned_member:team_members!pipeline_entries_assigned_to_fkey(
             id, name, user_id
           )
         `)
+        .eq("organization_id", organizationId)
         .eq("pipeline_id", pipelineId)
+        .eq("pipeline_type", "custom")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -318,7 +385,7 @@ export function useCustomPipeEntries(pipelineId: string | undefined) {
 
       return enriched as CustomPipeEntry[];
     },
-    enabled: !!pipelineId,
+    enabled: !!pipelineId && !!organizationId,
   });
 }
 
@@ -349,7 +416,7 @@ export function useCustomPipeStageCounts(
   const search = searchQuery?.trim() || null;
 
   return useQuery({
-    queryKey: ["custom_pipe_stage_counts", pipelineId, search],
+    queryKey: ["custom_pipe_stage_counts", pipelineId, search, organizationId],
     queryFn: async () => {
       if (!pipelineId || !organizationId) return {} as Record<string, number>;
 
@@ -435,10 +502,13 @@ export function useCreateCustomPipeline() {
       const slug = generateSlug(name);
       const isTemporary = lifecycle_type === "temporary";
 
-      // 1. Criar pipeline
-      const { data: pipeline, error: pipeError } = await supabase
-        .from("custom_pipelines")
-        .insert({
+      const stageDefs = custom_stages
+        || (isTemporary && template_type ? TEMPORARY_FUNNEL_STAGES[template_type] : null)
+        || DEFAULT_CUSTOM_STAGES;
+
+      let pipelineId: string;
+      try {
+        pipelineId = await createCustomPipelineWithStages({
           organization_id: teamMember.organization_id,
           name,
           slug,
@@ -457,44 +527,38 @@ export function useCreateCustomPipeline() {
           objective_pipe_type: objective_pipe_type || null,
           objective_stage_key: objective_stage_key || null,
           template_type: template_type || null,
-          lead_source_config: lead_source_config || null,
-        })
-        .select()
-        .single();
-
-      if (pipeError) {
-        if (pipeError.code === "23505" || pipeError.message?.includes("duplicate")) {
+          lead_source_config: (lead_source_config || null) as Json,
+        }, stageDefs.map((stage, index) => ({
+          organization_id: teamMember.organization_id,
+          stage_key: generateStageKey(stage.name),
+          name: stage.name,
+          color: stage.color,
+          position: index,
+          is_final_positive: stage.is_final_positive,
+          is_final_negative: stage.is_final_negative,
+        })));
+      } catch (error) {
+        if (
+          typeof error === "object"
+          && error !== null
+          && ("code" in error && error.code === "23505"
+            || "message" in error && String(error.message).includes("duplicate"))
+        ) {
           throw new Error("Já existe um funil ativo com esse nome nesta organização");
         }
-        throw pipeError;
+        throw error;
       }
 
-      // 2. Criar etapas — do template ou padrão
-      const stageDefs = custom_stages
-        || (isTemporary && template_type ? TEMPORARY_FUNNEL_STAGES[template_type] : null)
-        || DEFAULT_CUSTOM_STAGES;
+      const { data: pipeline, error: pipeError } = await supabase
+        .from("pipelines")
+        .select(CUSTOM_PIPELINE_COLUMNS)
+        .eq("id", pipelineId)
+        .eq("organization_id", teamMember.organization_id)
+        .eq("type", "custom")
+        .single();
+      if (pipeError) throw pipeError;
 
-      const stageInserts = stageDefs.map((stage, index) => ({
-        organization_id: teamMember.organization_id,
-        pipeline_id: pipeline.id,
-        stage_key: generateStageKey(stage.name),
-        name: stage.name,
-        color: stage.color,
-        position: index,
-        is_final_positive: stage.is_final_positive,
-        is_final_negative: stage.is_final_negative,
-      }));
-
-      const { error: stagesError } = await supabase
-        .from("custom_pipeline_stages")
-        .insert(stageInserts);
-
-      if (stagesError) {
-        await supabase.from("custom_pipelines").delete().eq("id", pipeline.id);
-        throw stagesError;
-      }
-
-      return pipeline as CustomPipeline;
+      return toCustomPipeline(pipeline);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -502,25 +566,36 @@ export function useCreateCustomPipeline() {
   });
 }
 
-/** Ativar funil temporário (draft → active) */
+async function readCustomPipelineById(
+  id: string,
+  organizationId: string,
+): Promise<CustomPipeline> {
+  const { data, error } = await supabase
+    .from("pipelines")
+    .select(CUSTOM_PIPELINE_COLUMNS)
+    .eq("id", id)
+    .eq("organization_id", organizationId)
+    .eq("type", "custom")
+    .single();
+
+  if (error) throw error;
+  return toCustomPipeline(data);
+}
+
+/** Ativar funil temporário (draft → active). */
 export function useActivateTemporaryFunnel() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .update({
-          status: "active",
-          starts_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .eq("lifecycle_type", "temporary")
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as CustomPipeline;
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      await updateCustomPipelineRecord(id, {
+        status: "active",
+        starts_at: new Date().toISOString(),
+        _expected_lifecycle_type: "temporary",
+      });
+      return readCustomPipelineById(id, teamMember.organization_id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -528,22 +603,19 @@ export function useActivateTemporaryFunnel() {
   });
 }
 
-/** Pausar funil temporário */
+/** Pausar funil temporário. */
 export function usePauseTemporaryFunnel() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .update({ status: "paused" })
-        .eq("id", id)
-        .eq("lifecycle_type", "temporary")
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as CustomPipeline;
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      await updateCustomPipelineRecord(id, {
+        status: "paused",
+        _expected_lifecycle_type: "temporary",
+      });
+      return readCustomPipelineById(id, teamMember.organization_id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -551,22 +623,19 @@ export function usePauseTemporaryFunnel() {
   });
 }
 
-/** Encerrar funil temporário */
+/** Encerrar funil temporário. */
 export function useEndTemporaryFunnel() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .update({ status: "ended" })
-        .eq("id", id)
-        .eq("lifecycle_type", "temporary")
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data as CustomPipeline;
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      await updateCustomPipelineRecord(id, {
+        status: "ended",
+        _expected_lifecycle_type: "temporary",
+      });
+      return readCustomPipelineById(id, teamMember.organization_id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -574,9 +643,10 @@ export function useEndTemporaryFunnel() {
   });
 }
 
-/** Atualizar funil customizado */
+/** Atualizar funil customizado. */
 export function useUpdateCustomPipeline() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -590,25 +660,12 @@ export function useUpdateCustomPipeline() {
       color?: string;
       position?: number;
     }) => {
-      const updateData: Record<string, unknown> = { ...updates };
-      if (updates.name) {
-        updateData.slug = generateSlug(updates.name);
-      }
-
-      const { data, error } = await supabase
-        .from("custom_pipelines")
-        .update(updateData)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) {
-        if (error.code === "23505" || error.message?.includes("duplicate")) {
-          throw new Error("Já existe um funil ativo com esse nome nesta organização");
-        }
-        throw error;
-      }
-      return data as CustomPipeline;
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      await updateCustomPipelineRecord(id, {
+        ...updates,
+        slug: updates.name ? generateSlug(updates.name) : undefined,
+      });
+      return readCustomPipelineById(id, teamMember.organization_id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipelines"] });
@@ -762,9 +819,9 @@ export function useCreateCustomPipelineStage() {
       // é o funil inteiro — ver `proximaPosicaoDeEtapa`.
       const posicaoLivre = await proximaPosicaoDeEtapa({ pipelineId: pipeline_id });
 
-      const { data, error } = await supabase
-        .from("custom_pipeline_stages")
-        .insert({
+      let stageId: string;
+      try {
+        stageId = await createCustomPipelineStage({
           organization_id: teamMember.organization_id,
           pipeline_id,
           stage_key: generateStageKey(name),
@@ -773,16 +830,21 @@ export function useCreateCustomPipelineStage() {
           position: posicaoLivre,
           is_final_positive: is_final_positive || false,
           is_final_negative: is_final_negative || false,
-          ...(stage_role ? { stage_role } : {}),
-        })
-        .select()
-        .single();
-
-      if (error) {
+          stage_role,
+        });
+      } catch (error) {
         const conflito = mensagemDeConflitoDeEtapa(error);
         if (conflito) throw new Error(conflito);
         throw error;
       }
+      const { data, error } = await supabase
+        .from("pipeline_stages")
+        .select("*")
+        .eq("id", stageId)
+        .eq("organization_id", teamMember.organization_id)
+        .single();
+
+      if (error) throw error;
       return data as CustomPipelineStage;
     },
     onSuccess: (_, variables) => {
@@ -796,6 +858,7 @@ export function useCreateCustomPipelineStage() {
 /** Atualizar etapa */
 export function useUpdateCustomPipelineStage() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -818,11 +881,13 @@ export function useUpdateCustomPipelineStage() {
       /** ADR-0017 §1 — só chega aqui por escolha explícita no editor único. */
       stage_role?: import("@/contracts/pipe").StageRole;
     }) => {
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      await updateCustomPipelineStage(id, updates);
       const { data, error } = await supabase
-        .from("custom_pipeline_stages")
-        .update(updates)
+        .from("pipeline_stages")
+        .select("*")
         .eq("id", id)
-        .select()
+        .eq("organization_id", teamMember.organization_id)
         .single();
 
       if (error) throw error;
@@ -836,25 +901,15 @@ export function useUpdateCustomPipelineStage() {
 }
 
 /**
- * Desativar etapa — SUPERADO (SCRUM-636).
- *
- * @deprecated O editor único de etapas usa `useDeletePipelineStage`
- * (`../model/usePipelineStages`) com `pipelineId` explícito, que migra os
- * cards e respeita a guarda de regra de disparo — este aqui desativava a
- * etapa SEM migrar (cards fantasmas). Sem chamador vivo; morre na W6 junto
- * com as views de compat.
+ * Compatibilidade do hook antigo. O editor novo usa `useDeletePipelineStage`,
+ * que migra cards antes; este contrato continua fazendo somente soft delete.
  */
 export function useDeleteCustomPipelineStage() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, pipeline_id }: { id: string; pipeline_id: string }) => {
-      const { error } = await supabase
-        .from("custom_pipeline_stages")
-        .update({ is_active: false })
-        .eq("id", id);
-
-      if (error) throw error;
+    mutationFn: async ({ id }: { id: string; pipeline_id: string }) => {
+      await updateCustomPipelineStage(id, { is_active: false });
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipeline_id] });
@@ -917,35 +972,39 @@ export function useAddLeadToCustomPipe() {
         throw new Error("Organização não encontrada");
       }
 
-      const { data, error } = await supabase
-        .from("custom_pipe_entries")
-        .insert({
-          organization_id: teamMember.organization_id,
-          pipeline_id,
-          lead_id,
-          stage_id,
-          assigned_to: assigned_to || null,
+      let entryId: string;
+      try {
+        entryId = await createCustomPipelineEntry({
+          organizationId: teamMember.organization_id,
+          pipelineId: pipeline_id,
+          leadId: lead_id,
+          stageId: stage_id,
+          assignedTo: assigned_to || null,
           notes: notes || null,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        if (error.message?.includes("duplicate")) {
+        });
+      } catch (error) {
+        if (
+          typeof error === "object"
+          && error !== null
+          && "message" in error
+          && String(error.message).includes("duplicate")
+        ) {
           throw new Error("Este lead já está neste funil");
         }
         throw error;
       }
+      const { data, error } = await supabase
+        .from("pipeline_entries")
+        .select("*")
+        .eq("id", entryId)
+        .eq("organization_id", teamMember.organization_id)
+        .single();
+
+      if (error) throw error;
 
       // Fire workflow triggers for lead entering custom pipeline
       if (data) {
         try {
-          const { data: stageData } = await supabase
-            .from("custom_pipeline_stages")
-            .select("stage_key")
-            .eq("id", data.stage_id)
-            .maybeSingle();
-
           // stage_changed handled by PG trigger (trg_workflow_custom_pipe_stage_change)
 
           // Fire lead_created scoped to this custom pipeline
@@ -984,8 +1043,8 @@ const SYSTEM_PIPE_ENTRY_READ_CAP = 50;
  * Lê `pipeline_entries` em vez das views `pipe_*` porque `pipe_whatsapp` e
  * `pipe_confirmacao` não expõem `closed_at`, e sem ele não dá pra aplicar o
  * mesmo critério que o kanban e o Copilot já usam. O `pipelines!inner`
- * reproduz o JOIN da view; a escrita continua indo pela view, que traduz
- * `status` → `stage_key` no INSTEAD OF.
+ * reproduz o JOIN da view; a escrita chama as funções compartilhadas, que
+ * traduzem o vocabulário da UI para `pipeline_entries`.
  *
  * Corrente = ABERTO primeiro, depois o de movimentação mais recente — mesma
  * regra de `readActivePipelineEntry` (`../model/usePipelineEntries.ts`) e de
@@ -1002,10 +1061,15 @@ const SYSTEM_PIPE_ENTRY_READ_CAP = 50;
  * Lança em falha de leitura: o `catch` da auto-transição pula a transição e
  * loga, em vez de inserir às cegas e duplicar o negócio.
  */
-async function readCurrentSystemPipeEntry(slug: SystemPipeSlug, leadId: string) {
+async function readCurrentSystemPipeEntry(
+  slug: SystemPipeSlug,
+  leadId: string,
+  organizationId: string,
+) {
   const { data, error } = await supabase
     .from("pipeline_entries")
     .select("id, closed_at, pipeline:pipelines!inner(slug)")
+    .eq("organization_id", organizationId)
     .eq("lead_id", leadId)
     .eq("pipeline.slug", slug)
     .eq("pipeline.type", "system")
@@ -1031,6 +1095,7 @@ async function readCurrentSystemPipeEntry(slug: SystemPipeSlug, leadId: string) 
 export function useMoveLeadInCustomPipe() {
   const queryClient = useQueryClient();
   const movePermission = useCanDo("move_pipe_record");
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -1042,28 +1107,33 @@ export function useMoveLeadInCustomPipe() {
       pipeline_id: string;
       stage_id: string;
     }) => {
+      if (!teamMember?.organization_id) {
+        throw new Error("Organização não encontrada");
+      }
       if (!movePermission.allowed) {
         throw new Error(movePermission.isLoading
           ? "Permissões ainda carregando — tente novamente"
           : "Sem permissão para mover registros no pipe");
       }
+      await updateCustomPipelineEntry(entry_id, {
+        stage_id,
+        stage_changed_at: new Date().toISOString(),
+      });
       const { data, error } = await supabase
-        .from("custom_pipe_entries")
-        .update({
-          stage_id,
-          stage_changed_at: new Date().toISOString(),
-        })
+        .from("pipeline_entries")
+        .select("*")
         .eq("id", entry_id)
-        .select()
+        .eq("organization_id", teamMember.organization_id)
         .single();
 
       if (error) throw error;
 
       // Fetch stage data for workflow trigger and auto-transition
       const { data: stageRow } = await supabase
-        .from("custom_pipeline_stages")
+        .from("pipeline_stages")
         .select("stage_key, is_final_positive, target_pipeline_id, target_stage_id, target_pipe_type, target_stage_key")
         .eq("id", stage_id)
+        .eq("organization_id", teamMember.organization_id)
         .maybeSingle();
 
       // stage_changed handled by PG trigger (trg_workflow_custom_pipe_stage_change)
@@ -1101,30 +1171,39 @@ export function useMoveLeadInCustomPipe() {
             //
             // A coluna é dropada na fatia 3 (SCRUM-222); esta linha viraria erro
             // de coluna inexistente derrubando a transição inteira.
-            const existing = await readCurrentSystemPipeEntry("whatsapp", data.lead_id);
+            const existing = await readCurrentSystemPipeEntry("whatsapp", data.lead_id, data.organization_id);
             if (existing) {
-              await supabase.from("pipe_whatsapp").update({ status: targetStageKey }).eq("id", existing.id);
+              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
             } else {
-              await supabase.from("pipe_whatsapp").insert({
-                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              await createSystemPipelineEntry({
+                leadId: data.lead_id,
+                organizationId: data.organization_id,
+                slug: "whatsapp",
+                stageKey: targetStageKey,
               });
             }
           } else if (pipeType === "confirmacao") {
-            const existing = await readCurrentSystemPipeEntry("confirmacao", data.lead_id);
+            const existing = await readCurrentSystemPipeEntry("confirmacao", data.lead_id, data.organization_id);
             if (existing) {
-              await supabase.from("pipe_confirmacao").update({ status: targetStageKey }).eq("id", existing.id);
+              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
             } else {
-              await supabase.from("pipe_confirmacao").insert({
-                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              await createSystemPipelineEntry({
+                leadId: data.lead_id,
+                organizationId: data.organization_id,
+                slug: "confirmacao",
+                stageKey: targetStageKey,
               });
             }
           } else if (pipeType === "propostas") {
-            const existing = await readCurrentSystemPipeEntry("propostas", data.lead_id);
+            const existing = await readCurrentSystemPipeEntry("propostas", data.lead_id, data.organization_id);
             if (existing) {
-              await supabase.from("pipe_propostas").update({ status: targetStageKey }).eq("id", existing.id);
+              await updateSystemPipelineEntry(existing.id, { stage_key: targetStageKey });
             } else {
-              await supabase.from("pipe_propostas").insert({
-                lead_id: data.lead_id, organization_id: data.organization_id, status: targetStageKey,
+              await createSystemPipelineEntry({
+                leadId: data.lead_id,
+                organizationId: data.organization_id,
+                slug: "propostas",
+                stageKey: targetStageKey,
               });
             }
           } else if (pipeType === "upsell_base") {
@@ -1155,13 +1234,17 @@ export function useMoveLeadInCustomPipe() {
 /** Remover lead de funil customizado */
 export function useRemoveLeadFromCustomPipe() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({ entry_id, pipeline_id }: { entry_id: string; pipeline_id: string }) => {
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
       const { error } = await supabase
-        .from("custom_pipe_entries")
+        .from("pipeline_entries")
         .delete()
-        .eq("id", entry_id);
+        .eq("id", entry_id)
+        .eq("organization_id", teamMember.organization_id)
+        .eq("pipeline_id", pipeline_id);
 
       if (error) throw error;
     },

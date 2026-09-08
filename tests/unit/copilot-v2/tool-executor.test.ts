@@ -95,11 +95,11 @@ describe('list_pipeline_stages', () => {
     expect(q.order).toEqual(['position', { ascending: true }]);
   });
 
-  it('sem filtro de pipe lista as etapas da org inteira (sem resolver funil)', async () => {
+  it('sem funil falha fechado: etapas de funis diferentes nunca são misturadas', async () => {
     const sb = mockSupabase({ pipeline_stages: [{ stage_key: 'x', position: 0 }] });
-    const out = await createToolExecutor(sb, ctx)('list_pipeline_stages', {});
-    expect(out).toEqual([{ stage_key: 'x', position: 0 }]);
-    expect(sb.queries.some((x) => x.table === 'pipelines')).toBe(false);
+    await expect(createToolExecutor(sb, ctx)('list_pipeline_stages', {}))
+      .rejects.toMatchObject({ code: 'missing_context' });
+    expect(sb.queries.some((x) => x.table === 'pipeline_stages')).toBe(false);
   });
 });
 
@@ -123,6 +123,13 @@ describe('move_lead_stage (write) — SCRUM-628: qualquer funil, via pipeline_en
     expect((upd as any).update).toMatchObject({ stage_key: 'abordado' });
     expect(upd.filters).toContainEqual(['id', 'entry-1']);
     expect(sb.queries.some((x) => x.table === 'pipe_whatsapp')).toBe(false);
+  });
+
+  it('sem funil não assume WhatsApp', async () => {
+    const sb = mockSupabase(baseResults());
+    await expect(createToolExecutor(sb, ctx)('move_lead_stage', { stage: 'abordado' }))
+      .rejects.toMatchObject({ code: 'missing_context' });
+    expect(sb.queries.some((x) => x.table === 'pipelines')).toBe(false);
   });
 
   it('never takes org from args on a write', async () => {

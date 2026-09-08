@@ -418,7 +418,7 @@
       "get": {
         "operationId": "api-get-lead",
         "summary": "Lead 360",
-        "description": "Retorna um lead completo: tier, tags, custom fields (valores), responsáveis e posições em todos os pipes (com vendido/valor). 404 se não existir na org. Escopo: lead:read.",
+        "description": "Retorna um lead completo: tier, tags, campos personalizados, responsáveis e posições em todos os funis. O campo `pipes` permanece no contrato somente para compatibilidade; novas integrações devem usar `/leads/{id}/deals`. 404 se não existir na organização. Escopo: lead:read.",
         "tags": [
           "REST API v1"
         ],
@@ -735,7 +735,7 @@
       "get": {
         "operationId": "api-list-pipelines",
         "summary": "Listar funis",
-        "description": "Catálogo de funis com etapas — TODOS os funis, de sistema e personalizados, vêm com `stages` completo (cada etapa traz `id` e `stage_key`; os dois são aceitos como `stage` nos POSTs de Negócio em funil personalizado). Escopo: pipeline:read.\n\nCatálogo sem paginação (next_cursor sempre null).",
+        "description": "Catálogo único de funis da organização. Todos seguem o mesmo contrato e vêm com `stages` completo; cada etapa traz `id` e `stage_key`. O campo `type` informa somente a origem histórica e não deve controlar comportamento. Escopo: pipeline:read.\n\nCatálogo sem paginação (next_cursor sempre null).",
         "tags": [
           "REST API v1"
         ],
@@ -752,7 +752,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Devolve só um funil. Aceita o id (uuid) OU o slug de qualquer funil, de sistema ou personalizado — todo funil tem slug, único na organização. Funil inexistente devolve lista vazia."
+            "description": "Devolve só um funil. Aceita id (uuid) ou slug de qualquer funil da organização. Funil inexistente devolve lista vazia."
           },
           {
             "name": "only_active_stages",
@@ -1077,8 +1077,8 @@
     "/api/v1/leads/{id}/stage": {
       "post": {
         "operationId": "api-move-stage",
-        "summary": "Mover etapa",
-        "description": "⚠️ **DEPRECIADA.** Move um *Lead* para uma etapa — e no modelo atual um Lead nunca tem etapa; quem ocupa etapa é o Negócio. Use `POST /api/v1/deals/{id}/move`. Mantida viva para não quebrar integrações existentes.\n\nMove o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, auto-Orçamentos ao compareceu). Escopo: lead:write.\n\n400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).\n\nmeeting_date não é suportado no v1.",
+        "summary": "Mover lead (legado)",
+        "description": "⚠️ **DEPRECIADA.** Move um *Lead* para uma etapa — e no modelo atual um Lead nunca tem etapa; quem ocupa etapa é o Negócio. Use `POST /api/v1/deals/{id}/move`. Mantida viva para não quebrar integrações existentes.\n\nRota legada mantida para integrações existentes. Novas integrações devem mover o Negócio, que é a entidade posicionada no funil. Escopo: lead:write.\n\n400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).\n\nmeeting_date não é suportado no v1.",
         "tags": [
           "REST API v1"
         ],
@@ -1436,7 +1436,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Slug do funil"
+            "description": "Id (uuid) ou slug de qualquer funil da organização"
           },
           {
             "name": "stage",

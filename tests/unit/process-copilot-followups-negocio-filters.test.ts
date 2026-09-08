@@ -75,16 +75,16 @@ const { getHandler, envStore } = vi.hoisted(() => {
 });
 
 // ── Estado controlado pelos casos ────────────────────────────────────────────
-type Entry = { lead_id: string; stage_key: string };
+type Entry = { lead_id: string; stage_key: string; pipeline_id?: string; pipeline_slug?: string };
 
 const state: {
   rules: any[];
   candidates: any[];
   leads: any[];
   execRows: any[];
-  entries: Record<"whatsapp" | "confirmacao" | "propostas", Entry[]>;
+  entries: Record<string, Entry[]>;
   leadsSelectArgs: string[];
-  adapterCalls: { leadIds: string[]; orgId: string; slug: string }[];
+  adapterCalls: { leadIds: string[]; orgId: string }[];
   sends: { leadId: string; messageContent: string }[];
 } = {
   rules: [],
@@ -135,12 +135,20 @@ vi.mock("../../supabase/functions/_shared/followup-sender.ts", () => ({
 // espelho-congelado × Negócio-real possa ser construída. A corretude do próprio
 // adapter é coberta por `supabase/functions/_shared/pipeline-adapter*.test.ts`.
 vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
-  getPipeEntriesByLeads: vi.fn(
-    async (_sb: any, leadIds: string[], orgId: string, slug: string) => {
-      state.adapterCalls.push({ leadIds: [...leadIds], orgId, slug });
-      return state.entries[slug].filter((e) => leadIds.includes(e.lead_id));
-    },
-  ),
+  getCurrentFunnelEntriesByLeads: vi.fn(async (_sb: any, leadIds: string[], orgId: string) => {
+    state.adapterCalls.push({ leadIds: [...leadIds], orgId });
+    return Object.entries(state.entries).flatMap(([slug, entries]) =>
+      entries
+        .filter((entry) => leadIds.includes(entry.lead_id))
+        .map((entry) => ({
+          ...entry,
+          pipeline_id: entry.pipeline_id ?? `pipeline-${slug}`,
+          pipeline_slug: entry.pipeline_slug ?? slug,
+          pipeline_name: slug,
+          stage_changed_at: ONTEM,
+        })),
+    );
+  }),
 }));
 
 vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
@@ -447,7 +455,7 @@ describe("process-copilot-followups — filter_stages lê o stage do Negócio, n
 
 // ═════════════════════════════════════════════════════════════════════════════
 describe("process-copilot-followups — contrato de leitura do funil", () => {
-  it("consulta os TRÊS funis de sistema pelo adapter de Negócio, com os leads do lote e a org do agente", async () => {
+  it("consulta todos os funis em lote, com os leads e a org do agente", async () => {
     // Multi-tenant: a org vem da junção copilot_agents, não do corpo da regra.
     state.rules = [makeRule({ filter_pipes: ["whatsapp"] })];
     state.candidates = [{ lead_id: "lead-a", last_outgoing_at: ONTEM }];
@@ -456,15 +464,30 @@ describe("process-copilot-followups — contrato de leitura do funil", () => {
 
     await runCron();
 
-    expect(state.adapterCalls.map((c) => c.slug).sort()).toEqual([
-      "confirmacao",
-      "propostas",
-      "whatsapp",
-    ]);
+    expect(state.adapterCalls).toHaveLength(1);
     for (const call of state.adapterCalls) {
       expect(call.orgId).toBe(ORG);
       expect(call.leadIds).toEqual(["lead-a"]);
     }
+  });
+
+  it("funil criado pela organização casa por UUID e por slug", async () => {
+    const customId = "11111111-2222-3333-4444-555555555555";
+    state.rules = [makeRule({ filter_pipes: [customId], filter_stages: ["negociando"] })];
+    state.candidates = [{ lead_id: "lead-custom", last_outgoing_at: ONTEM }];
+    state.leads = [makeLead("lead-custom", null)];
+    state.entries.custom = [{
+      lead_id: "lead-custom",
+      stage_key: "negociando",
+      pipeline_id: customId,
+      pipeline_slug: "vendas-industria",
+    }];
+
+    expect((await runCron()).body.sent).toBe(1);
+
+    state.rules = [makeRule({ id: "rule-2", filter_pipes: ["vendas-industria"] })];
+    state.sends = [];
+    expect((await runCron()).body.sent).toBe(1);
   });
 
   it("o SELECT de leads não pede a coluna-espelho pipe_whatsapp (complemento: a prova principal é comportamental, acima)", async () => {

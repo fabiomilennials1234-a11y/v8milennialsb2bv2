@@ -7,9 +7,11 @@
 
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { updateSystemPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
 import { useCreateLeadFromWhatsApp } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { useUpdateLead } from "../useLeads";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
+import { useCurrentTeamMember } from "@/modules/identity";
 import type { CreateLeadPayload } from "../../components/lead/create/LeadCreateForm";
 
 interface UseLeadCreateHandlerOptions {
@@ -26,6 +28,7 @@ export function useLeadCreateHandler({ pushName, onSuccess }: UseLeadCreateHandl
   const createLead = useCreateLeadFromWhatsApp();
   const updateLead = useUpdateLead();
   const logAction = useLogLeadAction();
+  const { data: teamMember } = useCurrentTeamMember();
 
   const create = async (payload: CreateLeadPayload) => {
     try {
@@ -61,18 +64,30 @@ export function useLeadCreateHandler({ pushName, onSuccess }: UseLeadCreateHandl
       customStageId: payload.customStageId,
     });
 
-    if (payload.stageId && result.leadId) {
-      const tableMap: Record<string, string> = {
-        qualificacao: "pipe_whatsapp",
-        confirmacao: "pipe_confirmacao",
-        propostas: "pipe_propostas",
-      };
-      const table = tableMap[payload.destination];
-      if (table) {
-        await supabase
-          .from(table)
-          .update({ status: payload.stageId })
-          .eq("lead_id", result.leadId);
+    const targetStageKey = payload.stageId;
+    if (targetStageKey && result.leadId) {
+      const slug = payload.destination === "qualificacao"
+        ? "whatsapp"
+        : payload.destination === "confirmacao" || payload.destination === "propostas"
+          ? payload.destination
+          : null;
+      if (slug) {
+        if (!teamMember?.organization_id) {
+          throw new Error("Organização ativa não encontrada para mover a etapa do lead");
+        }
+        const { data: entries, error } = await supabase
+          .from("negocio_projetado")
+          .select("id")
+          .eq("organization_id", teamMember.organization_id)
+          .eq("lead_id", result.leadId)
+          .eq("funil_sistema", slug)
+          .order("closed_at", { ascending: true, nullsFirst: true })
+          .order("stage_changed_at", { ascending: false })
+          .limit(1);
+        if (error) throw error;
+        if (entries?.[0]?.id) {
+          await updateSystemPipelineEntry(entries[0].id, { stage_key: targetStageKey });
+        }
       }
     }
 

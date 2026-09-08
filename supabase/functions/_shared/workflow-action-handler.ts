@@ -522,13 +522,10 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
 
     // ── Lead Management ──
     case "move_stage": {
-      // SCRUM-627: o editor grava `pipelineId` (uuid — qualquer funil, via
-      // adapter). `pipeType` é o campo legado dos nós salvos; o "whatsapp"
-      // final é o default histórico dos nós que nunca gravaram funil nenhum —
-      // morre quando o último nó legado for migrado, não antes.
+      // UUID canônico; slug/uuid em pipeType sobrevive só para nós antigos.
       const pipeRef = (ctx.nodeData.pipelineId as string)
-        || (ctx.nodeData.pipeType as string)
-        || "whatsapp";
+        || (ctx.nodeData.pipeType as string);
+      if (!pipeRef) { result = { success: false, error: "No target funnel configured" }; break; }
       const targetStage = ctx.nodeData.targetStage as string;
       if (!targetStage) { result = { success: false, error: "No target stage configured" }; break; }
       result = await sharedMoveStage({
@@ -582,19 +579,28 @@ export async function executeWorkflowAction(ctx: ActionContext): Promise<ActionR
     case "duplicate_to_pipe":
       result = await sharedDuplicateToPipe({
         ...toActionInput(ctx),
-        params: { targetPipeType: ctx.nodeData.targetPipeType, targetPipeStage: ctx.nodeData.targetPipeStage },
+        params: {
+          pipelineId: ctx.nodeData.pipelineId,
+          targetStage: ctx.nodeData.targetStage,
+          targetPipeType: ctx.nodeData.targetPipeType,
+          targetPipeStage: ctx.nodeData.targetPipeStage,
+        },
       });
       break;
     case "remove_from_pipe":
       result = await sharedRemoveFromPipe({
         ...toActionInput(ctx),
-        params: { pipeType: ctx.nodeData.pipeType },
+        params: { pipelineId: ctx.nodeData.pipelineId, pipeType: ctx.nodeData.pipeType },
       });
       break;
     case "mark_as_lost":
       result = await sharedMarkAsLost({
         ...toActionInput(ctx),
-        params: { pipeType: ctx.nodeData.pipeType, lostReason: ctx.nodeData.lostReason },
+        params: {
+          pipelineId: ctx.nodeData.pipelineId,
+          pipeType: ctx.nodeData.pipeType,
+          lostReason: ctx.nodeData.lostReason,
+        },
       });
       break;
 

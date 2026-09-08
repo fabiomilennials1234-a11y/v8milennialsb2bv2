@@ -41,25 +41,28 @@ function WeeklyChartBase() {
           .lte("created_at", dayEnd);
 
         const { count: meetings } = await supabase
-          .from("pipe_confirmacao")
+          .from("negocio_projetado")
           .select("*", { count: "exact", head: true })
           .eq("organization_id", organizationId)
+          .eq("funil_sistema", "confirmacao")
           .gte("meeting_date", dayStart)
           .lte("meeting_date", dayEnd);
 
         const { count: attended } = await supabase
-          .from("pipe_confirmacao")
+          .from("negocio_projetado")
           .select("*", { count: "exact", head: true })
           .eq("organization_id", organizationId)
-          .eq("status", "compareceu")
+          .eq("funil_sistema", "confirmacao")
+          .eq("stage_key", "compareceu")
           .gte("meeting_date", dayStart)
           .lte("meeting_date", dayEnd);
 
         const { count: sales } = await supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("*", { count: "exact", head: true })
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("funil_sistema", "propostas")
+          .eq("stage_key", "vendido")
           .gte("closed_at", dayStart)
           .lte("closed_at", dayEnd);
 

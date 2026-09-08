@@ -19,7 +19,7 @@ import {
   type PipePropostasStatus,
   propostasStatusColumns as statusColumns,
 } from "@/contracts/pipe";
-import type { Tables } from "@/integrations/supabase/types";
+import type { ProjectedPropostaPipe } from "@/integrations/supabase/projected-pipe-types";
 import { usePipeOps } from "../../../pipe-ops";
 import { useNomeDoPipeDeSistema } from "../../../hooks/useNomeDoPipeDeSistema";
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
@@ -27,7 +27,7 @@ import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 
-type PipeProposta = Tables<"pipe_propostas">;
+type PipeProposta = ProjectedPropostaPipe;
 import { ProductCombobox } from "@/modules/carteira/components/proposal/ProductCombobox";
 import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";
 import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";

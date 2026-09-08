@@ -16,13 +16,15 @@ jobs:
     name: Lint vault Obsidian
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Run vault-lint
-        run: node scripts/vault-lint.mjs
+        run: node scripts/vault-lint.mjs --changed-from "${{ github.event.pull_request.base.sha }}"
 
       - name: Check MOCs up-to-date
-        run: node scripts/vault-regen-indexes.mjs --check
+        run: node scripts/vault-regen-indexes.mjs --check --changed-from "${{ github.event.pull_request.base.sha }}"

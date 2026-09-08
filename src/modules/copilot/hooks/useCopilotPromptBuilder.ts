@@ -548,7 +548,7 @@ function buildDynamicContext(
   if (context) {
     sections.push("# CONTEXTO ATUAL");
     sections.push("");
-    sections.push(`**Pipeline:** ${context.currentPipe}`);
+    sections.push(`**Funil:** ${context.currentPipe}`);
     sections.push(`**Etapa:** ${context.currentStage}`);
 
     if (context.leadName) {

@@ -130,7 +130,7 @@ export function OnboardingWizard() {
       // CUSTOM sugeridos acima — criados pelo fluxo normal. O rename do funil
       // padrão fica ao alcance do usuário como em qualquer funil.
       await markApplied();
-      toast.success("Pipelines configurados!");
+      toast.success("Funis configurados!");
       setCurrentStep(4); // advance to Equipe
     } catch (err) {
       console.error("Apply config error:", err);

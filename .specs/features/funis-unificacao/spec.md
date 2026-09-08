@@ -112,7 +112,11 @@ O que trava (alvos do plano): CHECK `pipeline_stages_pipeline_type_check` (5 val
 ### F6 — Demolição (critério de "entregue")
 - Caem: views `pipe_whatsapp/confirmacao/propostas` (+`*_compat`), views de compat `custom_*`, espelho `stage_key` (se nenhum leitor restar), espelho `leads.pipe_whatsapp` (coordenar — tem leitores vivos em RPCs de no-response), wrappers de RPC legados, eco `pipe_type` nos contextos de workflow.
 - `supabase gen types` regenerado; `as never`/casts removidos; `git grep -c "pipe_whatsapp\|pipe_type\|PipelineType"` no src ≈ 0 (exceto migrations históricas e aliases documentados da API).
-- **Exit criteria:** espelhos = 0 · 6 lint-allows apagados · funil custom com paridade total medida (disparo, Copilot, analytics, filtros, API) · zero leitura das views em 7 dias de `runtime_logs` antes de cada DROP.
+- **Exit criteria:** espelhos = 0 · 6 lint-allows apagados · funil custom com
+  paridade total medida (disparo, Copilot, analytics, filtros, API) · gate de
+  cutover da Emenda 1 do ADR-0034. Em 2026-09-07, o CTO substituiu a janela de
+  sete dias por revisão técnica reforçada porque a telemetria disponível não
+  mede recência com precisão suficiente.
 
 ## 6. Riscos e freios
 

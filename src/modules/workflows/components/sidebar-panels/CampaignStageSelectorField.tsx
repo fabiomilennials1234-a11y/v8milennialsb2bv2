@@ -26,8 +26,8 @@ export function CampaignStageSelectorField({
   if (isLoading) {
     return (
       <div className="space-y-2">
-        <Label>Estágio da Campanha</Label>
-        <p className="text-xs text-muted-foreground">Carregando estágios...</p>
+        <Label>Etapa da Campanha</Label>
+        <p className="text-xs text-muted-foreground">Carregando etapas...</p>
       </div>
     );
   }
@@ -36,10 +36,10 @@ export function CampaignStageSelectorField({
 
   return (
     <div className="space-y-2">
-      <Label>Estágio da Campanha</Label>
+      <Label>Etapa da Campanha</Label>
       {stageList.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Nenhum estágio encontrado nesta campanha.
+          Nenhuma etapa encontrada nesta campanha.
         </p>
       ) : (
         <Select
@@ -50,7 +50,7 @@ export function CampaignStageSelectorField({
           }}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Selecione o estágio" />
+            <SelectValue placeholder="Selecione a etapa" />
           </SelectTrigger>
           <SelectContent>
             {stageList.map((s) => (

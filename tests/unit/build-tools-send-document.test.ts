@@ -71,3 +71,42 @@ describe("buildDynamicTools — send_document trigger", () => {
     expect(sendDoc.description).not.toContain("Enviar quando");
   });
 });
+
+describe("buildDynamicTools — funis configurados do agente", () => {
+  const stages = [
+    { stage_key: "novo", name: "Novo", pipeline_id: "pipe-wa", pipeline_slug: "whatsapp", pipeline_name: "Entrada" },
+    { stage_key: "abordado", name: "Abordado", pipeline_id: "pipe-wa", pipeline_slug: "whatsapp", pipeline_name: "Entrada" },
+    { stage_key: "negociando", name: "Negociando", pipeline_id: "pipe-custom", pipeline_slug: "vendas-industria", pipeline_name: "Vendas Indústria" },
+    { stage_key: "ganho", name: "Ganho", pipeline_id: "pipe-custom", pipeline_slug: "vendas-industria", pipeline_name: "Vendas Indústria" },
+  ];
+
+  it("expõe somente funis e etapas selecionados no agente", async () => {
+    const tools = await buildDynamicTools({
+      ...baseParams([]),
+      capabilities: {
+        id: "agent-1",
+        can_move_stage: true,
+        active_pipes: ["pipe-custom"],
+        active_stages: { "pipe-custom": ["negociando"] },
+      },
+      pipelineStages: stages,
+    });
+
+    const move = tools.find((tool) => tool.name === "advance_stage");
+    expect(move.input_schema.properties.target_pipe.enum).toEqual(["vendas-industria"]);
+    expect(move.description).toContain("negociando");
+    expect(move.description).not.toContain("whatsapp");
+    expect(move.description).not.toContain("ganho");
+    expect(move.input_schema.required).toContain("target_pipe");
+  });
+
+  it("não oferece movimentação sem funil ativo configurado", async () => {
+    const tools = await buildDynamicTools({
+      ...baseParams([]),
+      capabilities: { id: "agent-1", can_move_stage: true, active_pipes: [] },
+      pipelineStages: stages,
+    });
+
+    expect(tools.some((tool) => tool.name === "advance_stage")).toBe(false);
+  });
+});

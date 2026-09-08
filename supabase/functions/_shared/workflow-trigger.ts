@@ -76,6 +76,7 @@ async function resolveStageRole(
       .from("pipeline_stages")
       .select("stage_role, organization_id")
       .eq("id", stageId)
+      .eq("organization_id", organizationId)
       .maybeSingle();
     if (data && data.organization_id === organizationId) {
       return (data.stage_role as string) ?? null;
@@ -85,6 +86,20 @@ async function resolveStageRole(
   const toStage = typeof ctx.to_stage === "string" ? ctx.to_stage : null;
   if (!toStage) return null;
 
+  const pipelineId = typeof ctx.pipeline_id === "string" ? ctx.pipeline_id : null;
+  if (pipelineId) {
+    const { data } = await supabase
+      .from("pipeline_stages")
+      .select("stage_role")
+      .eq("organization_id", organizationId)
+      .eq("pipeline_id", pipelineId)
+      .eq("stage_key", toStage)
+      .eq("is_active", true)
+      .maybeSingle();
+    return (data?.stage_role as string) ?? null;
+  }
+
+  // Compatibilidade de contexto anterior ao pipeline_id obrigatório.
   const pipeType = typeof ctx.pipe_type === "string" ? ctx.pipe_type : null;
   if (pipeType) {
     const { data } = await supabase
@@ -94,17 +109,6 @@ async function resolveStageRole(
       .eq("pipeline_type", pipeType)
       .eq("stage_key", toStage)
       .eq("is_active", true)
-      .maybeSingle();
-    return (data?.stage_role as string) ?? null;
-  }
-
-  const pipelineId = typeof ctx.pipeline_id === "string" ? ctx.pipeline_id : null;
-  if (pipelineId) {
-    const { data } = await supabase
-      .from("custom_pipeline_stages")
-      .select("stage_role")
-      .eq("pipeline_id", pipelineId)
-      .eq("stage_key", toStage)
       .maybeSingle();
     return (data?.stage_role as string) ?? null;
   }
@@ -138,6 +142,30 @@ export function normalizePipelineIds(value: unknown): string[] {
     if (id) seen.add(id);
   }
   return [...seen];
+}
+
+type StrictIdFilter = { valid: boolean; ids: string[] };
+
+/**
+ * Filtro novo de posição: ausência/lista vazia desliga o filtro; qualquer forma
+ * presente que não seja uma lista integral de strings não vazias falha fechada.
+ */
+function parseStrictIdFilter(config: Record<string, unknown>, key: string): StrictIdFilter {
+  if (!Object.prototype.hasOwnProperty.call(config, key)) return { valid: true, ids: [] };
+  const raw = config[key];
+  if (!Array.isArray(raw)) return { valid: false, ids: [] };
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const value of raw) {
+    if (typeof value !== "string" || value.trim() === "") return { valid: false, ids: [] };
+    const id = value.trim();
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return { valid: true, ids };
 }
 
 /**
@@ -604,11 +632,11 @@ export function matchesTriggerConfig(
       const ctxPipelineId = asUuidOrNull(context.pipeline_id);
       const ctxPipeType = typeof context.pipe_type === "string" && context.pipe_type.trim() ? context.pipe_type.trim() : null;
 
-      if (cfgPipelineId && ctxPipelineId && cfgPipelineId !== ctxPipelineId) return false;
+      if (cfgPipelineId && (!ctxPipelineId || cfgPipelineId !== ctxPipelineId)) return false;
       if (cfgPipeType) {
         if (ctxPipeType) {
           if (cfgPipeType !== ctxPipeType) return false;
-        } else if (ctxPipelineId) {
+        } else {
           // Config legada de funil de SISTEMA vs. move num funil que não ecoa
           // slug (custom). Antes isto passava em silêncio — o filtro
           // simplesmente não era aplicado e o workflow disparava para o funil
@@ -657,14 +685,14 @@ export function matchesTriggerConfig(
       // `from_stage`+`from_stage_id`) — aceitar id OU key cobre os dois.
       const ctxStageId = asUuidOrNull(context.stage_id);
       const ctxFromStageId = asUuidOrNull(context.from_stage_id);
-      if (config.from_stage && context.from_stage
+      if (config.from_stage
           && config.from_stage !== context.from_stage
           && config.from_stage !== ctxFromStageId) return false;
       const stages = config.stages as string[] | undefined;
       const toStage = context.to_stage as string;
-      if (stages && stages.length > 0 && toStage) {
-        if (!stages.includes(toStage) && !(ctxStageId && stages.includes(ctxStageId))) return false;
-      } else if (config.to_stage && toStage) {
+      if (stages && stages.length > 0) {
+        if ((!toStage || !stages.includes(toStage)) && !(ctxStageId && stages.includes(ctxStageId))) return false;
+      } else if (config.to_stage) {
         if (config.to_stage !== toStage && config.to_stage !== ctxStageId) return false;
       }
       return true;
@@ -679,15 +707,23 @@ export function matchesTriggerConfig(
         const got = context.origin == null ? "" : String(context.origin).toLowerCase().trim();
         if (!got || got !== want) return false;
       }
-      // filter_pipe: e.g. "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas"
-      const ctxPipe = (context.pipe ?? context.pipe_type) as string | undefined;
-      if (config.filter_pipe && ctxPipe && config.filter_pipe !== ctxPipe) return false;
-      // Custom pipeline filtering
-      if (config.filter_pipeline_id && context.pipeline_id) {
-        if (config.filter_pipeline_id !== context.pipeline_id) return false;
-      } else if (!config.filter_pipeline_id && context.pipeline_id) {
-        // Fired from custom pipeline entry — skip workflows without pipeline filter to avoid duplicates
+      // Escrita nova: UUID de pipelines para qualquer funil. Filtro ativo sem
+      // contexto é inavaliável e falha fechado.
+      if (config.filter_pipeline_id) {
+        if (!context.pipeline_id || config.filter_pipeline_id !== context.pipeline_id) return false;
+      } else if (!config.filter_pipe && context.pipeline_id) {
+        // INSERT da posição também dispara este evento. O workflow genérico já
+        // nasceu no INSERT do lead; pular aqui evita execução duplicada.
         return false;
+      }
+
+      // Leitura legada: os três funis semeados eram salvos como pipe_whatsapp
+      // etc.; alguns produtores mandam o prefixo, outros só o slug.
+      if (!config.filter_pipeline_id && config.filter_pipe) {
+        const normalize = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/^pipe_/, "");
+        const want = normalize(config.filter_pipe);
+        const got = normalize(context.pipe ?? context.pipe_type);
+        if (!got || got !== want) return false;
       }
       return true;
     }
@@ -857,6 +893,23 @@ export function matchesTriggerConfig(
 
       const source = (config.source as string) || "any";
       if (source !== "any" && source !== context.deal_source) return false;
+
+      const pipelines = parseStrictIdFilter(config, "pipeline_ids");
+      if (!pipelines.valid) return false;
+      if (pipelines.ids.length > 0) {
+        const pipelineId = asUuidOrNull(context.pipeline_id);
+        if (!pipelineId || !pipelines.ids.includes(pipelineId)) return false;
+      }
+
+      const stages = parseStrictIdFilter(config, "stage_ids");
+      if (!stages.valid) return false;
+      if (stages.ids.length > 0) {
+        // Etapa sem funil selecionado é uma config incoerente: a interface só
+        // oferece etapas dentro dos funis marcados e o matcher falha fechado.
+        if (pipelines.ids.length === 0) return false;
+        const stageId = asUuidOrNull(context.stage_id);
+        if (!stageId || !stages.ids.includes(stageId)) return false;
+      }
 
       if (config.filter_owner_id && config.filter_owner_id !== context.owner_id) return false;
 
@@ -1054,6 +1107,8 @@ export interface LeadMeeting {
   lead_id: string;
   pipeline_id: string;
   stage_key: string;
+  /** UUID canônico; ausente só em linhas/configs anteriores à migração. */
+  stage_id?: string | null;
   meeting_date: string; // ISO timestamptz
   origin?: string | null;
 }
@@ -1191,7 +1246,9 @@ export function planScheduledDateDispatches(
       // ── Audiência ──
       if (lm.organization_id !== wf.organization_id) continue;
       if (lm.pipeline_id !== wf.pipeline_id) continue;
-      if (stages.length > 0 && !stages.includes(lm.stage_key)) continue;
+      if (stages.length > 0
+          && !stages.includes(lm.stage_key)
+          && !(lm.stage_id && stages.includes(lm.stage_id))) continue;
       if (wf.filter_origin) {
         // Slug normalizado (lowercase/trim) — mesma regra do lead_created em matchesTriggerConfig.
         const want = String(wf.filter_origin).toLowerCase().trim();
@@ -1285,7 +1342,7 @@ export async function processScheduledDateTriggers(supabase: SupabaseClient): Pr
   const pipelineIds = [...new Set(resolved.map((w) => w.pipeline_id))];
   const { data: entries } = await supabase
     .from("pipeline_entries")
-    .select("organization_id, lead_id, pipeline_id, stage_key, metadata")
+    .select("organization_id, lead_id, pipeline_id, stage_id, stage_key, metadata")
     .in("pipeline_id", pipelineIds)
     .limit(2000);
 
@@ -1298,6 +1355,7 @@ export async function processScheduledDateTriggers(supabase: SupabaseClient): Pr
         organization_id: e.organization_id as string,
         lead_id: e.lead_id as string,
         pipeline_id: e.pipeline_id as string,
+        stage_id: (e.stage_id as string | null) ?? null,
         stage_key: e.stage_key as string,
         meeting_date: meetingDate,
         origin: null,
