@@ -68,10 +68,11 @@ function recoveryContext(queryClient: QueryClient, org: string, phone: string, i
     onRetry: (attempt: number) => queryClient.setQueryData<WhatsAppMessage[]>(key, old =>
       (old ?? []).map(m => m.id === sendId ? { ...m, retry_attempt: attempt } : m)),
     confirm: async (): Promise<SendResponse | null> => {
-      if (!instanceId) return null;
+      const normalizedPhone = formatPhoneForWhatsApp(phone);
+      if (!instanceId || !normalizedPhone) return null;
       let q = supabase.from("whatsapp_messages").select("message_id")
         .eq("organization_id", org).eq("instance_id", instanceId)
-        .eq("phone_number", formatPhoneForWhatsApp(phone)).eq("direction", "outgoing")
+        .eq("phone_number", normalizedPhone).eq("direction", "outgoing")
         .in("status", ["sent", "delivered", "read", "played"])
         .gte("timestamp", since);
       if (mediaUrl) q = q.eq("media_url", mediaUrl);
@@ -317,6 +318,7 @@ export function useSendWhatsAppMessage() {
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         sent_by_ai: false,
+        sent_source: "manual",
       };
 
       queryClient.setQueryData<WhatsAppMessage[]>(
@@ -551,6 +553,7 @@ export function useSendWhatsAppMedia() {
         timestamp: new Date().toISOString(),
         created_at: new Date().toISOString(),
         sent_by_ai: false,
+        sent_source: "manual",
       };
 
       queryClient.setQueryData<WhatsAppMessage[]>(
