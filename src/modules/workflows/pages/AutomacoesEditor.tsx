@@ -30,6 +30,7 @@ import {
   useUpdateWorkflow,
 } from "@/modules/workflows/hooks/useWorkflows";
 import { useExportWorkflow } from "@/modules/workflows/hooks/useWorkflowPortability";
+import { useGuidedWorkflowDraft } from "@/modules/workflows/hooks/useGuidedWorkflowDraft";
 import type {
   WorkflowNode,
   WorkflowEdge,
@@ -188,6 +189,7 @@ export default function AutomacoesEditor() {
   }, [searchParams]);
 
   const { data: workflow, isLoading } = useWorkflow(isNew ? undefined : id);
+  const guidedDraft = useGuidedWorkflowDraft(user?.id, organizationId, isNew ? undefined : id);
   const createWorkflow = useCreateWorkflow();
   const updateWorkflow = useUpdateWorkflow();
   const handleExport = useExportWorkflow();
@@ -196,6 +198,7 @@ export default function AutomacoesEditor() {
   const [isActive, setIsActive] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
+  const [draftRevision, setDraftRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [enrollment, setEnrollment] = useState(EMPTY_ENROLLMENT);
   const [reenrollment, setReenrollment] = useState(DEFAULT_REENROLLMENT);
@@ -254,21 +257,23 @@ export default function AutomacoesEditor() {
   useEffect(() => {
     // Aguarda a flag resolver antes de inicializar, para não migrar nós com o
     // valor fail-closed (false) e depois "pular" para o convertido.
-    if (workflow && !initialized && !unifiedLoading) {
+    if (workflow && !initialized && !unifiedLoading && guidedDraft.isSuccess) {
       setName(workflow.name);
       setIsActive(workflow.is_active);
-      if (workflow.definition?.nodes?.length) {
+      const definition = guidedDraft.data?.definition ?? workflow.definition;
+      setDraftRevision(guidedDraft.data?.revision ?? 0);
+      if (definition?.nodes) {
         // Lazy migration (ADR-0012): legacy WhatsApp send nodes become the
         // unified send_whatsapp_message node; persisted on next save. Gateado
         // por org — orgs sem a flag mantêm os nós legados intactos.
         setNodes(
           unifiedEnabled
-            ? upgradeWorkflowNodes(workflow.definition.nodes)
-            : workflow.definition.nodes,
+            ? upgradeWorkflowNodes(definition.nodes)
+            : definition.nodes,
         );
-        setEdges(workflow.definition.edges || []);
+        setEdges(definition.edges || []);
         // Track max node id for counter
-        const maxId = workflow.definition.nodes.reduce((max, n) => {
+        const maxId = definition.nodes.reduce((max, n) => {
           const num = parseInt(n.id.split("-").pop() || "0");
           return num > max ? num : max;
         }, 0);
@@ -292,7 +297,7 @@ export default function AutomacoesEditor() {
       }
       setInitialized(true);
     }
-  }, [workflow, initialized, setNodes, setEdges, unifiedEnabled, unifiedLoading]);
+  }, [workflow, initialized, setNodes, setEdges, unifiedEnabled, unifiedLoading, guidedDraft.data, guidedDraft.isSuccess]);
 
   // For new workflows, apply pre-configured trigger if present
   useEffect(() => {
@@ -581,6 +586,12 @@ export default function AutomacoesEditor() {
         toast.success("Workflow criado!");
         navigate(`/automacoes/${result.id}`, { replace: true });
       } else {
+        if (guidedDraft.data || nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'))) {
+          const saved = await guidedDraft.save.mutateAsync({ definition, revision: draftRevision });
+          setDraftRevision(saved.revision);
+          toast.success("Rascunho salvo. A versão publicada permanece igual.");
+          return;
+        }
         await updateWorkflow.mutateAsync({
           id: id!,
           name,
@@ -593,17 +604,24 @@ export default function AutomacoesEditor() {
         toast.success("Workflow salvo!");
       }
     } catch (err: any) {
-      toast.error(err.message || "Erro ao salvar workflow");
+      toast.error(err.code === 'PT409'
+        ? "Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar."
+        : err.message || "Erro ao salvar workflow");
     }
-  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment]);
+  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, draftRevision]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null
     : null;
 
-  const isSaving = createWorkflow.isPending || updateWorkflow.isPending;
+  const isSaving = createWorkflow.isPending || updateWorkflow.isPending || guidedDraft.save.isPending;
 
-  if (!isNew && isLoading) {
+  if (!isNew && guidedDraft.isError) {
+    return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar o rascunho.</p>
+      <button type="button" onClick={() => guidedDraft.refetch()}>Tentar novamente</button></div>;
+  }
+
+  if (!isNew && (isLoading || guidedDraft.isPending)) {
     return (
       <div className="flex items-center justify-center h-[80vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />

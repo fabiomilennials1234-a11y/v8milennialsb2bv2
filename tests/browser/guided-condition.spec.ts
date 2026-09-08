@@ -19,7 +19,14 @@ test('troca de usuário remove seleção e resultado pessoal da conta anterior',
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
 });
 
-async function openGuidedEditor(page: Page) {
+async function openGuidedEditor(page: Page, draftValue?: string) {
+  await page.route('**/rest/v1/workflow_guided_drafts?*', route => route.fulfill({ json: draftValue === undefined ? null : {
+    revision: 3, definition: { nodes: [
+      { id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } },
+      { id: 'condition-1', type: 'condition', position: { x: 400, y: 220 }, data: { type: 'condition', label: 'Nome informado',
+        guidedCondition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: draftValue } } },
+    ], edges: [] },
+  } }));
   await page.addInitScript(() => {
     const user = { id: 'user-1', aud: 'authenticated', role: 'authenticated', email: 'editor@example.test' };
     const expires = Math.floor(Date.now() / 1000) + 3600;
@@ -50,6 +57,48 @@ async function openGuidedEditor(page: Page) {
   });
   await page.goto('/tests/browser/fixtures/guided-editor.html');
 }
+
+test('abre rascunho separado sem substituir sua edição pela definição publicada', async ({ page }) => {
+  await openGuidedEditor(page, 'Mariana');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('Mariana');
+});
+
+test('salva comparação incompleta em rascunho sem escrever na definição em execução', async ({ page }) => {
+  const writes: string[] = [];
+  let saved: Record<string, unknown> | undefined;
+  page.on('request', request => {
+    if (request.method() !== 'GET' && request.url().includes('/rest/v1/workflows')) writes.push(request.method());
+  });
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft', route => {
+    saved = route.request().postDataJSON();
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
+  });
+  await openGuidedEditor(page, 'Mariana');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Valor da comparação').fill('');
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect(page.getByText('Rascunho salvo. A versão publicada permanece igual.')).toBeVisible();
+  expect(saved).toMatchObject({ p_workflow_id: 'workflow-1', p_expected_revision: 3,
+    p_definition: { nodes: expect.arrayContaining([expect.objectContaining({ id: 'condition-1',
+      data: expect.objectContaining({ guidedCondition: expect.objectContaining({ value: '' }) }) })]) } });
+  expect(writes).toEqual([]);
+});
+
+test('conflito de rascunho preserva edição local e não tenta sobrescrever revisão alheia', async ({ page }) => {
+  const revisions: number[] = [];
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft', route => {
+    revisions.push(route.request().postDataJSON().p_expected_revision);
+    return route.fulfill({ status: 409, json: { code: 'PT409', message: 'draft_revision_conflict' } });
+  });
+  await openGuidedEditor(page, 'Mariana');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Valor da comparação').fill('Ana');
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect(page.getByText('Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar.')).toBeVisible();
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('Ana');
+  expect(revisions).toEqual([3]);
+});
 
 test('cria condição pelo editor com seletores no ambiente de desenvolvimento', async ({ page }) => {
   await openGuidedEditor(page);
