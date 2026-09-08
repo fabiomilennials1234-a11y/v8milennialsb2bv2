@@ -11,6 +11,7 @@
  */
 
 const MESSAGES: Record<string, string> = {
+  order_historical_readonly: "Venda histórica vinculada a um negócio ganho. A edição por Pedidos não está disponível.",
   order_not_found:
     "Pedido não encontrado. Ele pode ter sido removido — atualize a lista.",
   // O gate é PROCEDÊNCIA, não nota fiscal: a mensagem nunca manda cancelar uma

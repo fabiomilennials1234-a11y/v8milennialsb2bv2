@@ -9,6 +9,7 @@
 // ─── Origem do registro (upsell_orders.source) ──────────────────────────────
 
 export function sourceLabel(source: string | null): string {
+  if (source === "historical") return "Venda histórica";
   switch (source) {
     case "pipe":
       return "Funil";

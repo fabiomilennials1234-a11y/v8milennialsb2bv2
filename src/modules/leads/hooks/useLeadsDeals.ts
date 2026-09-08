@@ -26,6 +26,8 @@ import { useOrganization } from "@/modules/identity";
 export type DealOutcome = "open" | "won" | "lost";
 
 export interface LeadDeal {
+  /** Venda anterior ao CRM: negócio ganho sem posição em funil. */
+  historicalSale?: boolean;
   /** id da `pipeline_entries` — a POSIÇÃO. A identidade é `deals.id`. */
   id: string;
   leadId: string;
@@ -327,6 +329,27 @@ export function useLeadsDeals(leadIds: string[]) {
         };
 
         (map[raw.lead_id] ??= []).push(deal);
+      }
+
+      const { data: historicalRows, error: historicalError } = await supabase
+        .from("deals")
+        .select("id, source_lead_id, title, value, closed_at")
+        .eq("organization_id", organizationId)
+        .in("source_lead_id", ids)
+        .eq("metadata->>historical_sale", "true")
+        .eq("won", true)
+        .is("deleted_at", null);
+      if (historicalError) throw historicalError;
+      for (const sale of historicalRows ?? []) {
+        if (!sale.source_lead_id) continue;
+        (map[sale.source_lead_id] ??= []).push({
+          id: sale.id, leadId: sale.source_lead_id, title: sale.title,
+          historicalSale: true, funnelName: "Venda histórica", funnelColor: "hsl(var(--success))",
+          pipelineId: "", pipelineSlug: "", isSystem: false,
+          stageKey: null, stageName: "Ganho", stagePosition: null, stageIndex: null, stageCount: 0,
+          outcome: "won", won: true, value: toNumber(sale.value), meetingDate: null,
+          enteredAt: sale.closed_at, stageChangedAt: sale.closed_at, daysInStage: null,
+        });
       }
 
       // System primeiro (qualificação → confirmação → propostas), custom depois.
