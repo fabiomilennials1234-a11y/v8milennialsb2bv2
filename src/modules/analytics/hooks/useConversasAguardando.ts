@@ -204,6 +204,7 @@ async function buscarPorInstancia(
   escopo: ComandoEscopo,
   meuTeamMemberId: string | null,
 ): Promise<InstanceQueryResult> {
+  // SupabaseClient.rpc acessa `this.rest`; preservar o cliente ao tipar a RPC.
   const chamarRpc = supabase.rpc.bind(supabase) as unknown as AwaitingRpc;
   const { data, error } = await chamarRpc(
     "get_conversations_awaiting_human_reply",
