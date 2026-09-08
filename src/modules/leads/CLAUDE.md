@@ -1,5 +1,13 @@
 # Module — leads
 
+## Vendas históricas
+
+`RegisterHistoricalSalesDialog` na aba Negócios registra valor/data em lote pela
+RPC `registrar_vendas_historicas`. Cria negócio ganho sem posição em funil e
+pedido/evento de receita vinculados. `useLeadsDeals` inclui também esses negócios
+sem `pipeline_entries`; `historicalSale` os distingue dos cards. Detalhes:
+`docs/historical-sales.md`.
+
 **Status:** 🟢 Active (slice 4 + cleanup longtail slice 16 — 2026-05-28)
 **BC:** leads
 **Entidade primária:** Lead
