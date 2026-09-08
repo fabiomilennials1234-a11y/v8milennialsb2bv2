@@ -914,6 +914,112 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('authorizes origin explicitly and reads mixed fields without exposing unrequested data', async () => {
+    const workflowId = crypto.randomUUID(), originId = crypto.randomUUID(), foreignId = crypto.randomUUID(), tagId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    try {
+      await service.from('tags').insert({ id: tagId, organization_id: orgA, name: 'Distribuidor', color: '#ffd700' }).throwOnError();
+      await service.from('lead_tags').insert({ lead_id: leadA, tag_id: tagId }).throwOnError();
+      await service.from('lead_origins').insert([
+        { id: originId, organization_id: orgA, name: 'Parceiros', slug: 'guided_partner' },
+        { id: foreignId, organization_id: orgB, name: 'Parceiros', slug: 'guided_partner' },
+      ]).throwOnError();
+      await service.from('leads').update({ origin: 'guided_partner' }).eq('id', leadA).throwOnError();
+      expect((await caller.rpc('create_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: { name: 'Origin scope' },
+      })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.origin'], p_expected_revision: 0 })).error).toBeNull();
+      const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA,
+        p_fields: ['lead.origin'], p_tag_ids: [], p_origin_ids: [originId] };
+      const read = await service.rpc('read_guided_condition_data', args);
+      expect(read.error).toBeNull();
+      expect(read.data).toEqual([{ id: leadA, organization_id: orgA, field_values: {
+        origin: { actual_origin: 'guided_partner', origins: [{ id: originId, name: 'Parceiros', slug: 'guided_partner' }] },
+      } }]);
+      expect((await caller.rpc('read_guided_condition_data', args)).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_fields: ['lead.origin', 'lead.name'] })).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_organization_id: orgB })).error?.code).toBe('42501');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_lead_id: leadB })).error?.code).toBe('PT404');
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_origin_ids: [foreignId] })).error?.code).toBe('PT422');
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.origin', 'lead.company', 'lead.tags'], p_expected_revision: 1 })).error).toBeNull();
+      const mixed = await service.rpc('read_guided_condition_data', { ...args, p_fields: ['lead.origin', 'lead.company', 'lead.tags'], p_tag_ids: [tagId] });
+      expect(mixed.error).toBeNull();
+      expect(mixed.data).toEqual([{ id: leadA, organization_id: orgA, field_values: {
+        tags: [{ tag_id: tagId, tag_name: 'Distribuidor', assigned: true }], company: 'Fábrica Aurora', origin: { actual_origin: 'guided_partner', origins: [{ id: originId, name: 'Parceiros', slug: 'guided_partner' }] },
+      } }]);
+      const condition = { version: 1, id: 'origin', field: 'lead.origin', operator: 'equals', originId };
+      const request = { organizationId: orgA, leadId: leadA, authorization: { kind: 'organization' as const, workflowId }, condition };
+      expect(await evaluateGuidedCondition(service, { ...request, condition: {
+        version: 1, id: 'mixed', kind: 'group', match: 'all', children: [condition,
+          { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' },
+          { version: 1, id: 'tag', field: 'lead.tags', operator: 'has_tag', tagId },
+        ],
+      } })).toMatchObject({ status: 'evaluated', matched: true, rules: [
+        { id: 'origin', matched: true, reference: { id: originId, name: 'Parceiros' } },
+        { id: 'company', matched: true, actual: 'Fábrica Aurora' }, { id: 'tag', matched: true, actual: true },
+      ] });
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: condition } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+      const settings = { name: 'Origin scope' };
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_expected_revision: 1, p_definition: definition, p_settings: settings,
+      })).error).toBeNull();
+      const publishArgs = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+        p_expected_revision: 2, p_definition: definition, p_settings: settings, p_required_fields: ['lead.origin'] };
+      const published = await service.rpc('finalize_guided_workflow_publication', publishArgs);
+      expect(published.error).toBeNull();
+      expect(published.data).toMatchObject({ version_id: expect.any(String), version_number: 1 });
+      const publishHttp = () => fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: 2 }),
+      });
+      const publishResponse = await publishHttp();
+      expect(publishResponse.status).toBe(200);
+      const publication = await publishResponse.json();
+      const executionId = crypto.randomUUID();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId, organization_id: orgA,
+        lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' }).throwOnError();
+      expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        guidedVersionId: publication.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {},
+      })).toMatchObject({ success: true, status: 'completed' });
+      const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+      expect(steps.error).toBeNull();
+      expect(steps.data?.map(step => step.node_id)).toContain('yes');
+      expect(steps.data?.map(step => step.node_id)).not.toContain('no');
+      await service.from('lead_origins').delete().eq('id', originId).throwOnError();
+      expect((await service.rpc('read_guided_condition_data', args)).error?.code).toBe('PT422');
+      const rejected = await service.rpc('finalize_guided_workflow_publication', publishArgs);
+      expect(rejected.error?.code).toBe('PT422');
+      expect(JSON.parse(rejected.error?.details || '{}')).toEqual({ nodeIds: ['c'] });
+      const rejectedHttp = await publishHttp();
+      expect(rejectedHttp.status).toBe(422);
+      expect(await rejectedHttp.json()).toEqual({ status: 'error', code: 'reference_unavailable', issues: [
+        { nodeId: 'c', code: 'reference_unavailable', message: 'Uma referência foi removida ou não está acessível. Revise as escolhas desta condição.' },
+      ] });
+      const selected = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
+      expect(selected.error).toBeNull();
+      expect(selected.data?.version_id).toBe(publication.version_id);
+
+      await service.from('leads').update({ origin: null }).eq('id', leadA).throwOnError();
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_origin_ids: [] })).data).toEqual([
+        { id: leadA, organization_id: orgA, field_values: { origin: { actual_origin: null, origins: [] } } },
+      ]);
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 2 })).error).toBeNull();
+      expect((await service.rpc('read_guided_condition_data', { ...args, p_origin_ids: [] })).error?.code).toBe('42501');
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+    } finally {
+      await service.from('lead_tags').delete().eq('lead_id', leadA).eq('tag_id', tagId).throwOnError();
+      await service.from('tags').delete().eq('id', tagId).throwOnError();
+      await service.from('leads').update({ origin: null }).eq('id', leadA).throwOnError();
+      await service.from('lead_origins').delete().in('id', [originId, foreignId]).throwOnError();
+    }
+  }, 60000);
+
   it('resolves origin identity and current lead code together under caller RLS', async () => {
     const originId = crypto.randomUUID(), foreignId = crypto.randomUUID(), replacementId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

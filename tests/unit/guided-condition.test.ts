@@ -270,15 +270,26 @@ it('compares a selected origin identity using its current code and explains its 
 });
 
 
-it('denies organizational origin evaluation until its explicit authorized reader exists', async () => {
-  let reads = 0;
+it('evaluates authorized origin and company from the same protected data response', async () => {
+  const originId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   const database = createClient('https://db.example.test', 'test-service-key', {
     auth: { persistSession: false, autoRefreshToken: false },
-    global: { fetch: async () => { reads++; return new Response('{}'); } },
+    global: { fetch: async input => {
+      if (!String(input).includes('/rpc/read_guided_condition_data')) throw new Error('Organizational data must use the authorized reader');
+      return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', field_values: {
+        company: 'Fábrica Aurora', origin: { actual_origin: 'referral', origins: [{ id: originId, name: 'Parceiros', slug: 'referral' }] },
+      } }), { headers: { 'Content-Type': 'application/json' } });
+    } },
   });
   expect(await evaluateGuidedCondition(database, {
     organizationId: 'org-1', leadId: 'lead-1', authorization: { kind: 'organization', workflowId: 'workflow-1' },
-    condition: { version: 1, id: 'origin', field: 'lead.origin', operator: 'is_empty' },
-  })).toEqual({ status: 'error', code: 'access_denied' });
-  expect(reads).toBe(0);
+    condition: { version: 1, id: 'all', kind: 'group', match: 'all', children: [
+      { version: 1, id: 'origin', field: 'lead.origin', operator: 'equals', originId },
+      { version: 1, id: 'company', field: 'lead.company', operator: 'equals', value: 'FABRICA AURORA' },
+    ] },
+  })).toEqual({ status: 'evaluated', matched: true,
+    groups: [{ id: 'all', status: 'evaluated', matched: true }],
+    rules: [{ id: 'origin', status: 'evaluated', matched: true, actual: 'referral', reference: { id: originId, name: 'Parceiros' } },
+      { id: 'company', status: 'evaluated', matched: true, actual: 'Fábrica Aurora' }],
+  });
 });

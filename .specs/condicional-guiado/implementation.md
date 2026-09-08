@@ -436,3 +436,14 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 
 
 - Final full browser regression: 62 passed. Typecheck ratchet: zero introduced errors (805 baseline + 11 inherited tolerated; 481 current). All validation handles terminal. The existing backend checkpoint has 39 real integration cases passing; the added direct catalogue access scenario also passed on preview. No further migration/deployment was required. Next: authorize origin explicitly in organizational execution/publication and retain reference validation across mixed conditions; final catalogue lifecycle verification remains outstanding.
+
+
+## 2026-09-08 — organizational origin authorization
+
+- Real integration red reproduced invalid_scope for lead.origin. Migration 22 adds explicit scope, an unambiguous six-argument mixed reader and origin reference validation in publication. Data projection remains atomic for scalar fields, tags and origins under current grant and catalogue locks; the five-argument reader stays compatible. All modified function EXECUTE grants verified live.
+- Public evaluator red→green replaces the temporary unconditional organizational origin denial with the authorized mixed reader. Personal tests retain their caller-RLS path. The mixed evaluator test uses origin, company and tags together and verifies explained values; revoked grants still return access_denied before reference resolution.
+- Real SQL integration passed explicit scope, exact projection, unauthorized additional fields, caller/foreign organization denial, foreign/deleted references, empty origin, publication and preservation of the active version. Extended HTTP journey reproduced the older publication endpoint's 422; deployed publish-guided-workflow on preview only. Final full real integration, including pinned execution and HTTP reference diagnostics, is running.
+- Twenty-three-migration reverse rollback/reapply passed, preserving twelve-field history. Evaluator/HTTP/executor/publication unit suites: 84 passed. Both Deno checks and focused ESLint/diff passed. No frontend changes in this checkpoint; previous 62 browser cases remain the last browser evidence. No worker or production deployment, no ticket certification. Remaining ticket 06 includes responsible selectors, additional scalar/type requirements and final catalogue lifecycle validation; downstream tickets remain in scope.
+
+
+- Final full real integration: 40 passed. New origin journey proves authenticated HTTP publication, execution through the shared executor using the persisted version, Yes-only routing, rejection of deleted origin with the correct node location, active-version preservation and current grant revocation. All validation/deployment handles terminal. The real queue worker is still undeployed and its admission/resume journey remains an explicit later certification requirement. No ticket closed.

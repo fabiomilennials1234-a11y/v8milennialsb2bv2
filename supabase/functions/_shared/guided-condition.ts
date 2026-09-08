@@ -76,10 +76,6 @@ export async function evaluateGuidedCondition(
     return { status: 'error' as const, code: 'invalid_configuration' as const };
   }
   const requestedFields = guidedConditionFields(request.condition);
-  // Origin organizational reads remain disabled until their explicit grant and atomic reader exist.
-  if (request.authorization && requestedFields.includes('lead.origin')) {
-    return { status: 'error' as const, code: 'access_denied' as const };
-  }
   const originIds = new Set<string>();
   const tagIds = new Set<string>();
   function collect(current: GuidedCondition): void {
@@ -90,9 +86,14 @@ export async function evaluateGuidedCondition(
   collect(request.condition);
   const fields = requestedFields.filter(isGuidedScalarField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
+  const usesOriginReader = Boolean(request.authorization && requestedFields.includes('lead.origin'));
   const usesTagReader = Boolean(request.authorization && tagIds.size);
   const { data, error, status } = request.authorization?.kind === 'organization'
-    ? usesTagReader ? await caller.rpc('read_guided_condition_data', {
+    ? usesOriginReader ? await caller.rpc('read_guided_condition_data', {
+      p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
+      p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds],
+    }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
+    : usesTagReader ? await caller.rpc('read_guided_condition_data', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
       p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds],
     }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
@@ -127,7 +128,7 @@ export async function evaluateGuidedCondition(
   type TagValue = { tag_id: string; tag_name: string; assigned: boolean };
   const tags = new Map<string, TagValue>();
   if (requestedFields.includes('lead.tags')) {
-    const response = usesTagReader ? {
+    const response = (usesTagReader || usesOriginReader) ? {
       data: (data as unknown as { field_values?: Record<string, unknown> }).field_values?.tags,
       error: null, status: 200,
     } : await caller.rpc('test_guided_condition_tags', {
@@ -154,7 +155,10 @@ export async function evaluateGuidedCondition(
   const origins = new Map<string, OriginValue>();
   let actualOrigin: string | null = null;
   if (requestedFields.includes('lead.origin')) {
-    const response = await caller.rpc('test_guided_condition_origins', {
+    const response = usesOriginReader ? {
+      data: [(data as unknown as { field_values?: Record<string, unknown> }).field_values?.origin],
+      error: null, status: 200,
+    } : await caller.rpc('test_guided_condition_origins', {
       p_organization_id: request.organizationId, p_lead_id: request.leadId, p_origin_ids: [...originIds],
     });
     if (response.error) {
@@ -178,7 +182,7 @@ export async function evaluateGuidedCondition(
     if ([...originIds].some(id => !origins.has(id))) return { status: 'error' as const, code: 'reference_unavailable' as const };
   }
   const normalize = (value: string) => value.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-  const record = (request.authorization && (usesFieldReader || usesTagReader)
+  const record = (request.authorization && (usesFieldReader || usesTagReader || usesOriginReader)
     ? (data as unknown as { field_values: Record<string, unknown> }).field_values : data) as Record<string, unknown>;
   if (!record || fields.some(field => !Object.prototype.hasOwnProperty.call(record, GUIDED_SCALAR_FIELDS[field].column))) {
     return { status: 'error' as const, code: 'source_unavailable' as const };
