@@ -136,6 +136,78 @@ test('rascunho guiado pode ser salvo durante reconstrução do gatilho', async (
   expect(saved?.p_definition.nodes.map(node => node.type)).toEqual(['condition']);
 });
 
+test('trocar automação reinicia rascunho, seleção e revisão no editor', async ({ page }) => {
+  await openGuidedEditor(page, 'Mariana');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByLabel('Valor da comparação').fill('Edição local A');
+  await page.route('**/rest/v1/workflow_guided_drafts?*', route => route.fulfill({ json: {
+    revision: 9, settings: { name: 'Automação B' }, definition: { nodes: [
+      { id: 'condition-b', type: 'condition', position: { x: 400, y: 220 }, data: { type: 'condition', label: 'Condição B',
+        guidedCondition: { version: 1, id: 'rule-b', field: 'lead.name', operator: 'equals', value: 'Bruno' } } },
+    ], edges: [] },
+  } }));
+  await page.getByRole('link', { name: 'Automação B' }).click();
+  await expect(page.getByPlaceholder('Nome do workflow')).toHaveValue('Automação B');
+  await expect(page.getByText('Nome informado', { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Valor da comparação')).toHaveCount(0);
+  await page.getByText('Condição B', { exact: true }).click();
+  await expect(page.getByLabel('Valor da comparação')).toHaveValue('Bruno');
+  let revision: number | undefined;
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft_with_settings', route => {
+    const request = route.request().postDataJSON();
+    expect(request.p_workflow_id).toBe('workflow-2');
+    revision = request.p_expected_revision;
+    return route.fulfill({ json: { workflow_id: 'workflow-2', revision: 10 } });
+  });
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect(page.getByText('Rascunho salvo. A versão publicada permanece igual.')).toBeVisible();
+  expect(revision).toBe(9);
+});
+
+test('reabrir automação aguarda revisão atual em vez de restaurar cache antigo', async ({ page }) => {
+  await openGuidedEditor(page, 'Mariana');
+  await expect(page.getByText('Nome informado', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Automação B' }).click();
+  await expect(page.getByText('Nome informado', { exact: true })).toBeVisible();
+  let release!: () => void;
+  const responseGate = new Promise<void>(resolve => { release = resolve; });
+  await page.route('**/rest/v1/workflow_guided_drafts?*', async route => {
+    await responseGate;
+    await route.fulfill({ json: { revision: 7, settings: { name: 'Revisão atual A' }, definition: { nodes: [], edges: [] } } });
+  });
+  await page.getByRole('link', { name: 'Automação A' }).click();
+  try {
+    await expect(page.getByPlaceholder('Nome do workflow')).toHaveCount(0);
+  } finally { release(); }
+  await expect(page.getByPlaceholder('Nome do workflow')).toHaveValue('Revisão atual A');
+  await expect(page.getByText('Nome informado', { exact: true })).toHaveCount(0);
+});
+
+test('automação indisponível não deixa editor carregando nem permite salvar', async ({ page }) => {
+  await openGuidedEditor(page, 'Mariana');
+  await expect(page.getByText('Nome informado', { exact: true })).toBeVisible();
+  await page.route('**/rest/v1/workflows?*', route => route.fulfill({ json: null }));
+  await page.getByRole('link', { name: 'Automação B' }).click();
+  await expect(page.getByRole('alert')).toContainText('Automação indisponível ou sem acesso.');
+  await expect(page.getByRole('button', { name: 'Salvar', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Nome informado', { exact: true })).toHaveCount(0);
+});
+
+test('falha ao carregar automação permite tentar novamente sem abrir editor vazio', async ({ page }) => {
+  await openGuidedEditor(page, 'Mariana');
+  await expect(page.getByText('Nome informado', { exact: true })).toBeVisible();
+  await page.route('**/rest/v1/workflows?*', route => route.fulfill({ status: 503, json: { message: 'Unavailable' } }));
+  await page.getByRole('link', { name: 'Automação B' }).click();
+  await expect(page.getByRole('alert')).toContainText('Não foi possível carregar a automação.');
+  await expect(page.getByPlaceholder('Nome do workflow')).toHaveCount(0);
+  await page.unroute('**/rest/v1/workflows?*');
+  await page.route('**/rest/v1/workflows?*', route => route.fulfill({ json: {
+    id: 'workflow-2', name: 'Recuperada', is_active: false, definition: { nodes: [], edges: [] },
+  } }));
+  await page.getByRole('button', { name: 'Tentar novamente' }).click();
+  await expect(page.getByPlaceholder('Nome do workflow')).toHaveValue('Recuperada');
+});
+
 test('rascunho incompleto pode mudar enquanto versão publicada continua ativa', async ({ page }) => {
   const liveWrites: string[] = [];
   let saves = 0;

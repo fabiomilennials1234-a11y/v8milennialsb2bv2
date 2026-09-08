@@ -23,6 +23,7 @@ import { WorkflowAnalytics } from "@/modules/workflows/components/WorkflowAnalyt
 import { ReenrollmentConfig, DEFAULT_REENROLLMENT } from "@/modules/workflows/components/ReenrollmentConfig";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   useWorkflow,
@@ -171,6 +172,13 @@ let nodeIdCounter = 1;
 
 export default function AutomacoesEditor() {
   const { user } = useAuth();
+  const { organizationId } = useOrganization();
+  const { id } = useParams<{ id: string }>();
+  return <AutomacoesEditorContent key={`${user?.id}:${organizationId}:${id}`} />;
+}
+
+function AutomacoesEditorContent() {
+  const { user } = useAuth();
   const { organizationId, role } = useOrganization();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -188,7 +196,7 @@ export default function AutomacoesEditor() {
     return { pipe_type, pipeline_id, stage, stage_name };
   }, [searchParams]);
 
-  const { data: workflow, isLoading } = useWorkflow(isNew ? undefined : id);
+  const { data: workflow, isLoading, isError: workflowLoadFailed, refetch: retryWorkflow } = useWorkflow(isNew ? undefined : id);
   const guidedDraft = useGuidedWorkflowDraft(user?.id, organizationId, isNew ? undefined : id);
   const createWorkflow = useCreateWorkflow();
   const updateWorkflow = useUpdateWorkflow();
@@ -258,7 +266,7 @@ export default function AutomacoesEditor() {
   useEffect(() => {
     // Aguarda a flag resolver antes de inicializar, para não migrar nós com o
     // valor fail-closed (false) e depois "pular" para o convertido.
-    if (workflow && !initialized && !unifiedLoading && guidedDraft.isSuccess) {
+    if (workflow && !initialized && !unifiedLoading && guidedDraft.isSuccess && !guidedDraft.isFetching) {
       setName(guidedDraft.data?.settings?.name ?? workflow.name);
       setIsActive(workflow.is_active);
       const definition = guidedDraft.data?.definition ?? workflow.definition;
@@ -298,7 +306,7 @@ export default function AutomacoesEditor() {
       }
       setInitialized(true);
     }
-  }, [workflow, initialized, setNodes, setEdges, unifiedEnabled, unifiedLoading, guidedDraft.data, guidedDraft.isSuccess]);
+  }, [workflow, initialized, setNodes, setEdges, unifiedEnabled, unifiedLoading, guidedDraft.data, guidedDraft.isSuccess, guidedDraft.isFetching]);
 
   // For new workflows, apply pre-configured trigger if present
   useEffect(() => {
@@ -625,12 +633,22 @@ export default function AutomacoesEditor() {
 
   const isSaving = createWorkflow.isPending || updateWorkflow.isPending || guidedDraft.save.isPending || guidedDraft.create.isPending;
 
+  if (!isNew && workflowLoadFailed) {
+    return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar a automação.</p>
+      <Button variant="outline" onClick={() => retryWorkflow()}>Tentar novamente</Button></div>;
+  }
+
+  if (!isNew && workflow === null) {
+    return <div role="alert" className="space-y-3 p-6"><p>Automação indisponível ou sem acesso.</p>
+      <Button variant="outline" onClick={() => navigate('/automacoes')}>Voltar às automações</Button></div>;
+  }
+
   if (!isNew && guidedDraft.isError) {
     return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar o rascunho.</p>
       <button type="button" onClick={() => guidedDraft.refetch()}>Tentar novamente</button></div>;
   }
 
-  if (!isNew && (isLoading || guidedDraft.isPending)) {
+  if (!isNew && (isLoading || guidedDraft.isPending || !initialized)) {
     return (
       <div className="flex items-center justify-center h-[80vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />

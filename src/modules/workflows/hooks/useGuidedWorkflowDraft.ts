@@ -17,6 +17,7 @@ export function useGuidedWorkflowDraft(actorId?: string, organizationId?: string
   const query = useQuery({
     queryKey: ['guided-workflow-draft', actorId, organizationId, workflowId],
     enabled: Boolean(actorId && organizationId && workflowId),
+    refetchOnMount: 'always',
     queryFn: async ({ signal }) => {
       const response = await database.from('workflow_guided_drafts').select('definition, settings, revision')
         .eq('organization_id', organizationId!).eq('workflow_id', workflowId!)
