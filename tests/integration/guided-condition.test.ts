@@ -209,6 +209,57 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   });
 
+  it('compares custom calendar dates without timezone shifts or normalized invalid dates', async () => {
+    const fieldId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `custom-date-${fieldId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1, id: 'date', field: 'lead.custom', fieldId, fieldType: 'date', operator: 'equals', value: '2024-02-29' };
+    await service.from('lead_custom_fields').insert({ id: fieldId, organization_id: orgA, field_name: 'Próxima compra', field_type: 'date' }).throwOnError();
+    try {
+      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: '2024-02-29' }).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition })).toMatchObject({
+        status: 'evaluated', matched: true, rules: [{ actual: '2024-02-29', reference: { id: fieldId, name: 'Próxima compra' } }],
+      });
+      const evaluate = (rule: unknown) => evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: rule });
+      for (const [operator, value, matched] of [
+        ['equals', '2024-02-29', true], ['not_equals', '2024-02-29', false], ['not_equals', '2024-03-01', true],
+        ['before', '2024-03-01', true], ['before', '2024-02-29', false], ['on_or_before', '2024-02-29', true],
+        ['after', '2024-02-28', true], ['after', '2024-02-29', false], ['on_or_after', '2024-02-29', true],
+      ] as const) expect(await evaluate({ ...condition, operator, value })).toMatchObject({ status: 'evaluated', matched });
+      for (const answer of [null, '']) {
+        await service.from('lead_custom_field_values').update({ value: answer }).eq('lead_id', leadA).eq('field_id', fieldId).throwOnError();
+        expect(await evaluate(condition)).toMatchObject({ status: 'evaluated', matched: false });
+        expect(await evaluate({ ...condition, operator: 'not_equals' })).toMatchObject({ status: 'evaluated', matched: false });
+        expect(await evaluate({ ...condition, operator: 'is_empty' })).toMatchObject({ status: 'evaluated', matched: true });
+      }
+      for (const answer of ['2023-02-29', '1900-02-29', '2024-04-31', '2024-13-01', '2024-00-01', '0000-01-01', '10000-01-01', '29/02/2024', '2024-02-29T00:00:00Z', ' 2024-02-29']) {
+        await service.from('lead_custom_field_values').update({ value: answer }).eq('lead_id', leadA).eq('field_id', fieldId).throwOnError();
+        expect(await evaluate({ ...condition, operator: 'is_empty' })).toEqual({ status: 'error', code: 'source_unavailable' });
+        expect(await evaluate({ ...condition, value: answer })).toEqual({ status: 'error', code: 'invalid_configuration' });
+      }
+      await service.from('lead_custom_field_values').update({ value: '2000-02-29' }).eq('lead_id', leadA).eq('field_id', fieldId).throwOnError();
+      expect(await evaluate({ ...condition, value: '2000-02-29' })).toMatchObject({ status: 'evaluated', matched: true });
+      await service.from('lead_custom_field_values').update({ value: '2025-01-01' }).eq('lead_id', leadA).eq('field_id', fieldId).throwOnError();
+      expect(await evaluate({ ...condition, operator: 'after', value: '2024-12-31' })).toMatchObject({ status: 'evaluated', matched: true });
+      await service.from('lead_custom_field_values').update({ value: '2024-02-29' }).eq('lead_id', leadA).eq('field_id', fieldId).throwOnError();
+      expect(await evaluate({ ...condition, operator: 'contains' })).toEqual({ status: 'error', code: 'invalid_configuration' });
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadB, condition })).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluate({ version: 1, id: 'any', kind: 'group', match: 'any', children: [condition,
+        { ...condition, id: 'changed', fieldType: 'text' },
+      ] })).toEqual({ status: 'error', code: 'reference_unavailable' });
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition }), signal: AbortSignal.timeout(15000),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: '2024-02-29' }] });
+    } finally {
+      await service.from('lead_custom_fields').delete().eq('id', fieldId).throwOnError();
+    }
+  }, 60000);
+
   it('compares custom booleans without treating false as an unanswered field', async () => {
     const fieldId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
@@ -320,13 +371,13 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
-  it.each(['text', 'number', 'boolean'] as const)('publishes a custom %s condition and rejects changed references without replacing its version', async fieldType => {
+  it.each(['text', 'number', 'boolean', 'date'] as const)('publishes a custom %s condition and rejects changed references without replacing its version', async fieldType => {
     const workflowId = crypto.randomUUID(), fieldId = crypto.randomUUID(), foreignId = crypto.randomUUID(), replacementId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
       auth: { persistSession: false, autoRefreshToken: false, storageKey: `custom-publish-${fieldId}` },
       global: { headers: { Authorization: `Bearer ${token}` } },
     });
-    const condition = { version: 1, id: 'custom', field: 'lead.custom', fieldId, fieldType, ...(fieldType === 'text' ? { operator: 'contains', value: 'eletrica' } : fieldType === 'number' ? { operator: 'greater_than', value: 10 } : { operator: 'equals', value: false }) };
+    const condition = { version: 1, id: 'custom', field: 'lead.custom', fieldId, fieldType, ...(fieldType === 'text' ? { operator: 'contains', value: 'eletrica' } : fieldType === 'number' ? { operator: 'greater_than', value: 10 } : fieldType === 'date' ? { operator: 'equals', value: '2024-02-29' } : { operator: 'equals', value: false }) };
     const definitionFor = (rule: unknown) => ({ nodes: [
       { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
       { id: 'c', type: 'condition', data: { guidedCondition: rule } },
@@ -342,7 +393,7 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     };
     await service.from('lead_custom_fields').insert({ id: fieldId, organization_id: orgA, field_name: 'Especialidade', field_type: fieldType }).throwOnError();
     try {
-      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: fieldType === 'text' ? 'Distribuição elétrica' : fieldType === 'number' ? '10.5' : 'false' }).throwOnError();
+      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: fieldType === 'text' ? 'Distribuição elétrica' : fieldType === 'number' ? '10.5' : fieldType === 'date' ? '2024-02-29' : 'false' }).throwOnError();
       expect((await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: settings })).error).toBeNull();
       expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [`lead.custom:${fieldId}`], p_expected_revision: 0 })).error).toBeNull();
       const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1,
@@ -371,9 +422,17 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 2, p_definition: empty, p_settings: settings })).error).toBeNull();
       expect((await service.rpc('finalize_guided_workflow_publication', { ...args, p_expected_revision: 3, p_definition: empty, p_required_fields: [] })).error?.code).toBe('42501');
       expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 3, p_definition: definition, p_settings: settings })).error).toBeNull();
+      let finalRevision = 4;
+      if (fieldType === 'date') {
+        const invalidDate = definitionFor({ ...condition, value: '2023-02-29' });
+        expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 4, p_definition: invalidDate, p_settings: settings })).error).toBeNull();
+        expect(await publish(5)).toMatchObject({ status: 422, body: { code: 'invalid_configuration', issues: [{ nodeId: 'c', code: 'invalid_condition' }] } });
+        expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 5, p_definition: definition, p_settings: settings })).error).toBeNull();
+        finalRevision = 6;
+      }
       await service.from('lead_custom_fields').delete().eq('id', fieldId).throwOnError();
       await service.from('lead_custom_fields').insert({ id: replacementId, organization_id: orgA, field_name: 'Especialidade', field_type: fieldType }).throwOnError();
-      expect(await publish(4)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
+      expect(await publish(finalRevision)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
       const active = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
       expect(active.error).toBeNull();
       expect(active.data?.version_id).toBe(published.body.version_id);

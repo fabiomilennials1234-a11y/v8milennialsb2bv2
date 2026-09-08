@@ -1,3 +1,4 @@
+import type { GuidedDateComparison } from '@/contracts/workflows/guided-dates';
 import type { GuidedResponsibleField, GuidedTextField, GuidedTextComparison, GuidedNumberField, GuidedNumberOperator } from '@/contracts/workflows/guided-fields';
 import type { Node, Edge } from "@xyflow/react";
 
@@ -665,7 +666,8 @@ export type GuidedCustomNumberRuleDraft = { version: 1; id: string; field: 'lead
   & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
 export type GuidedCustomBooleanRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'boolean'; fieldLabel?: string }
   & ({ operator: 'equals' | 'not_equals'; value: boolean | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
-export type GuidedRuleDraft = GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
+export type GuidedCustomDateRuleDraft = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'date'; fieldLabel?: string } & GuidedDateComparison;
+export type GuidedRuleDraft = GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
 export type GuidedConditionDraft = GuidedRuleDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];

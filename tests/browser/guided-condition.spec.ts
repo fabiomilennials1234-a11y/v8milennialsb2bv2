@@ -992,6 +992,53 @@ test('aprova Tags explicitamente sem apagar concessão de Nome', async ({ page }
   expect(writes[1]).toEqual(['lead.name']);
 });
 
+for (const timezoneId of ['America/Sao_Paulo', 'Asia/Tokyo']) test.describe(`datas personalizadas em ${timezoneId}`, () => {
+  test.use({ timezoneId });
+  test('seleciona data pelo calendário e mantém o dia no resumo e no teste', async ({ page }) => {
+    const fieldId = '11111111-1111-4111-8111-111111111114', otherId = '11111111-1111-4111-8111-111111111115';
+    await openGuidedEditor(page, '2024-02-29');
+    await page.route('**/rest/v1/lead_custom_fields?*', route => {
+      const field = { id: fieldId, field_name: 'Próxima compra', field_type: 'date' };
+      const other = { id: otherId, field_name: 'Data limite', field_type: 'date' };
+      const requested = new URL(route.request().url()).searchParams.get('id');
+      return route.fulfill({ json: requested ? requested === `eq.${otherId}` ? other : field : [field, other] });
+    });
+    await page.getByText('Nome informado', { exact: true }).click();
+    await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill('Próxima compra');
+    await page.getByRole('option', { name: 'Próxima compra', exact: true }).click({ timeout: 3000 });
+    const value = page.getByLabel('Valor da comparação', { exact: true });
+    await expect(value).toHaveAttribute('type', 'date');
+    await expect(value).toHaveValue('');
+    await value.fill('2024-02-29');
+    await expect(page.locator('.react-flow__node-condition')).toContainText('Próxima compra é em 29/02/2024');
+    await page.getByLabel('Comparação', { exact: true }).selectOption('before');
+    await expect(value).toHaveValue('2024-02-29');
+    await value.fill('2024-03-01');
+    for (const name of ['Data limite', 'Próxima compra']) {
+      await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
+      await page.getByRole('combobox', { name: 'Buscar informação', exact: true }).fill(name);
+      await page.getByRole('option', { name, exact: true }).click();
+      await expect(value).toHaveValue('2024-03-01');
+      await expect(page.getByLabel('Comparação', { exact: true })).toHaveValue('before');
+    }
+    await page.route('**/functions/v1/test-guided-condition', route => {
+      expect(route.request().postDataJSON().condition).toMatchObject({ field: 'lead.custom', fieldId, fieldType: 'date', operator: 'before', value: '2024-03-01' });
+      return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: '2024-02-29', reference: { id: fieldId, name: 'Próxima compra' } }] } });
+    });
+    await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+    await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Próxima compra é antes de 01/03/2024');
+    await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+    await expect(value).toHaveCount(0);
+    await expect(page.locator('.react-flow__node-condition')).toContainText('Próxima compra está vazio');
+    await page.getByLabel('Comparação', { exact: true }).selectOption('equals');
+    await expect(value).toHaveValue('');
+    await selectInformation(page, 'lead.company');
+    await expect(value).toHaveValue('');
+  });
+});
+
 test('seleciona booleano personalizado com Sim ou Não sem confundir Não com vazio', async ({ page }) => {
   const fieldId = '11111111-1111-4111-8111-111111111113';
   await openGuidedEditor(page, 'Aurora');
@@ -1066,7 +1113,7 @@ test('seleciona número personalizado com comparação numérica e preserva UUID
   await expect(value).toHaveValue('');
 });
 
-for (const fieldType of ['text', 'number', 'boolean'] as const) test(`aprova campo personalizado ${fieldType} pelo nome atual e revoga somente seu UUID`, async ({ page }) => {
+for (const fieldType of ['text', 'number', 'boolean', 'date'] as const) test(`aprova campo personalizado ${fieldType} pelo nome atual e revoga somente seu UUID`, async ({ page }) => {
   const fieldId = '11111111-1111-4111-8111-111111111111';
   let grant = { fields: ['lead.name'], revision: 1 };
   const writes: string[][] = [];
@@ -1077,7 +1124,7 @@ for (const fieldType of ['text', 'number', 'boolean'] as const) test(`aprova cam
     grant = { fields: body.p_fields, revision: grant.revision + 1 };
     return route.fulfill({ json: grant });
   });
-  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType, fieldLabel: 'Nome antigo', operator: 'equals', value: fieldType === 'boolean' ? false : fieldType === 'number' ? 10 : 'Indústria' });
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType, fieldLabel: 'Nome antigo', operator: 'equals', value: fieldType === 'date' ? '2024-02-29' : fieldType === 'boolean' ? false : fieldType === 'number' ? 10 : 'Indústria' });
   await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: { id: fieldId, field_name: 'Especialidade', field_type: fieldType } }));
   await page.reload();
   await page.getByText('Nome informado', { exact: true }).click();
@@ -1367,7 +1414,7 @@ test('seleciona campo personalizado pelo nome e testa preservando UUID', async (
     const field = { id: fieldId, field_name: 'Especialidade', field_type: 'text' };
     if (params.has('id')) return route.fulfill({ json: field });
     expect(params.get('limit')).toBe('25');
-    expect(params.get('field_type')).toBe('in.(text,number,boolean)');
+    expect(params.get('field_type')).toBe('in.(text,number,boolean,date)');
     return route.fulfill({ json: [field] });
   });
   await page.getByText('Nome informado', { exact: true }).click();

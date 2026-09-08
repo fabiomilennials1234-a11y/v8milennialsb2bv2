@@ -238,3 +238,11 @@ Extends the existing per-definition authorization and finalizer to current text/
 Rollback restores migration 32's text/number writer and finalizer; no approvals, versions, execution pins, definitions or answers are deleted. Coordinate application/endpoint rollback; unsupported boolean rules must fail explicitly. Recovery sequence: 00..11,30,31,32,33,14,21,23,24,29. The thirty-four-migration reverse/recovery rehearsal passed with exact current function restoration and retained history.
 
 Effective preview EXECUTE: writer authenticated=true, service_role=false, anon=false; finalizer service_role=true, authenticated=false, anon=false. Both definers pin search_path=public and retain explicit business authorization. Personal/publication endpoints updated only on preview; worker remains undeployed.
+
+## Migration 34 — calendar-date custom approvals/publication
+
+Adds date to the current custom-definition types eligible for per-UUID new approvals and publication. Current organization, expected type, exact scope and every reference remain mandatory, including unary rules and branches skipped during evaluation. No answers or table schema are changed. Applied/ledger-registered only on preview after the real grant red.
+
+Rollback restores migration 33's text/number/boolean writer and finalizer, retaining all definitions, answers, approvals, versions and pins. Coordinate the application/endpoint rollback; an unsupported date rule must fail explicitly, never route as No. Recovery: 00..11,30,31,32,33,34,14,21,23,24,29. The thirty-five-migration reverse/recovery rehearsal passed with exact current function restoration and historical data intact.
+
+Effective privileges verified on preview: writer authenticated-only, finalizer service-only, anon denied for both; both definers pin search_path=public. Personal/publication endpoints updated only on preview. Worker remains undeployed.
