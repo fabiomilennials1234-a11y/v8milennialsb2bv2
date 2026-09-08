@@ -33,6 +33,9 @@ const settingsRollback = readFileSync(`supabase/migrations/rollback/${settingsMi
 const initialSettingsMigration = '20271017000007_create_guided_workflow_draft_settings.sql';
 const initialSettingsForward = readFileSync(`supabase/migrations/${initialSettingsMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const initialSettingsRollback = readFileSync(`supabase/migrations/rollback/${initialSettingsMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const publicationMigration = '20271017000008_guided_workflow_publication.sql';
+const publicationForward = readFileSync(`supabase/migrations/${publicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const publicationRollback = readFileSync(`supabase/migrations/rollback/${publicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -47,6 +50,11 @@ INSERT INTO public.workflow_guided_drafts(workflow_id, organization_id, definiti
   SELECT workflow_id, org_id, '{"nodes":[],"edges":[]}'::jsonb, 11 FROM guided_rollback_fixture;
 UPDATE public.workflow_guided_drafts SET settings = '{"name":"Preserved settings"}'::jsonb
   WHERE workflow_id = (SELECT workflow_id FROM guided_rollback_fixture);
+INSERT INTO public.workflow_guided_versions(workflow_id, organization_id, version_number, source_revision, definition, settings, required_fields)
+  SELECT workflow_id, org_id, 1, 11, '{"nodes":[],"edges":[]}'::jsonb, '{"name":"Preserved publication"}'::jsonb, ARRAY['lead.name'] FROM guided_rollback_fixture;
+INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, version_id)
+  SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
+${publicationRollback}
 ${initialSettingsRollback}
 ${settingsRollback}
 ${createRollback}
@@ -56,7 +64,12 @@ ${readerRollback}
 ${conflictRollback}
 ${rollback}
 DO $$ BEGIN
-  IF to_regprocedure('public.set_workflow_data_grant(uuid,text[],integer)') IS NOT NULL
+  IF to_regprocedure('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])') IS NOT NULL
+    OR has_table_privilege('authenticated', 'public.workflow_guided_versions', 'SELECT')
+    OR has_table_privilege('service_role', 'public.workflow_guided_versions', 'SELECT')
+    OR has_table_privilege('authenticated', 'public.workflow_guided_publications', 'SELECT')
+    OR has_table_privilege('service_role', 'public.workflow_guided_publications', 'SELECT')
+    OR to_regprocedure('public.set_workflow_data_grant(uuid,text[],integer)') IS NOT NULL
     OR to_regprocedure('public.can_administer_guided_workflow(uuid)') IS NOT NULL
     OR to_regprocedure('public.create_guided_workflow_draft(uuid,uuid,text,jsonb)') IS NOT NULL
     OR to_regprocedure('public.save_guided_workflow_draft_with_settings(uuid,jsonb,integer,jsonb)') IS NOT NULL
@@ -78,6 +91,15 @@ DO $$ BEGIN
       AND d.settings = '{"name":"Preserved settings"}'::jsonb) THEN
     RAISE EXCEPTION 'rollback lost draft';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.workflow_guided_publications p
+    JOIN public.workflow_guided_versions v ON v.id = p.version_id
+    JOIN guided_rollback_fixture f ON f.workflow_id = p.workflow_id
+    WHERE v.source_revision = 11 AND v.version_number = 1
+      AND v.definition = '{"nodes":[],"edges":[]}'::jsonb
+      AND v.settings = '{"name":"Preserved publication"}'::jsonb
+      AND v.required_fields = ARRAY['lead.name']) THEN
+    RAISE EXCEPTION 'publication history or selection lost';
+  END IF;
 END $$;
 ${forward}
 ${conflictForward}
@@ -87,7 +109,17 @@ ${masterForward}
 ${createForward}
 ${settingsForward}
 ${initialSettingsForward}
+${publicationForward}
 DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])', 'EXECUTE')
+    OR has_table_privilege('authenticated', 'public.workflow_guided_versions', 'INSERT,UPDATE,DELETE')
+    OR has_table_privilege('service_role', 'public.workflow_guided_versions', 'INSERT,UPDATE,DELETE')
+    OR has_table_privilege('authenticated', 'public.workflow_guided_publications', 'INSERT,UPDATE,DELETE')
+    OR has_table_privilege('service_role', 'public.workflow_guided_publications', 'INSERT,UPDATE,DELETE') THEN
+    RAISE EXCEPTION 'publication privileges incorrect';
+  END IF;
   IF has_function_privilege('anon', 'public.save_guided_workflow_draft_with_settings(uuid,jsonb,integer,jsonb)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.save_guided_workflow_draft_with_settings(uuid,jsonb,integer,jsonb)', 'EXECUTE')
     OR NOT has_function_privilege('authenticated', 'public.save_guided_workflow_draft_with_settings(uuid,jsonb,integer,jsonb)', 'EXECUTE')
@@ -133,6 +165,15 @@ DO $$ BEGIN
   IF pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure)
     <> (SELECT original_definition FROM guided_rollback_fixture) THEN
     RAISE EXCEPTION 'reapply did not restore the original function';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.workflow_guided_publications p
+    JOIN public.workflow_guided_versions v ON v.id = p.version_id
+    JOIN guided_rollback_fixture f ON f.workflow_id = p.workflow_id
+    WHERE v.source_revision = 11 AND v.version_number = 1
+      AND v.definition = '{"nodes":[],"edges":[]}'::jsonb
+      AND v.settings = '{"name":"Preserved publication"}'::jsonb
+      AND v.required_fields = ARRAY['lead.name']) THEN
+    RAISE EXCEPTION 'publication history or selection lost';
   END IF;
 END $$;
 ROLLBACK;

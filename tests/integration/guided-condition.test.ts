@@ -74,6 +74,41 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('publishes a saved condition through the authenticated HTTP boundary', async () => {
+    const workflowId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const definition = { nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
+      { id: 'y', type: 'end', data: {} }, { id: 'n', type: 'end', data: {} },
+    ], edges: [{ id: 'tc', source: 't', target: 'c' },
+      { id: 'cy', source: 'c', target: 'y', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'n', sourceHandle: 'no' }] };
+    const created = await caller.rpc('create_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: { name: 'HTTP publication' },
+    });
+    expect(created.error).toBeNull();
+    const approved = await caller.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0,
+    });
+    expect(approved.error).toBeNull();
+    const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: 1 }),
+      signal: AbortSignal.timeout(15000),
+    });
+    expect(response.status).toBe(200);
+    const publication = await response.json();
+    expect(publication).toMatchObject({ status: 'published', version_number: 1 });
+    const selected = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
+    expect(selected.error).toBeNull();
+    expect(selected.data?.version_id).toBe(publication.version_id);
+    const version = await caller.from('workflow_guided_versions').select('definition, published_by').eq('id', publication.version_id).single();
+    expect(version.error).toBeNull();
+    expect(version.data).toEqual({ definition, published_by: userId });
+  }, 60000);
+
   it('lets an organization administrator explicitly approve and revoke lead-name access for one workflow', async () => {
     const workflowId = crypto.randomUUID();
     const created = await service.from('workflows').insert({ id: workflowId, organization_id: orgA,
@@ -268,6 +303,61 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     const preserved = await administrator.from('workflow_guided_drafts').select('definition, settings, revision')
       .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
     expect(preserved.data).toEqual({ definition, settings, revision: 2 });
+  }, 60000);
+
+  it('publishes immutable versions atomically and preserves the active version after stale or unauthorized attempts', async () => {
+    const workflowId = crypto.randomUUID();
+    const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-publish-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const definition = { nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+      { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
+      { id: 'y', type: 'end', data: {} }, { id: 'n', type: 'end', data: {} },
+    ], edges: [{ id: 'tc', source: 't', target: 'c' },
+      { id: 'cy', source: 'c', target: 'y', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'n', sourceHandle: 'no' }] };
+    const settings = { name: 'Published first' };
+    const created = await administrator.rpc('create_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: settings,
+    });
+    expect(created.error).toBeNull();
+    const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+      p_expected_revision: 1, p_definition: definition, p_settings: settings, p_required_fields: ['lead.name'] };
+    const unapproved = await service.rpc('finalize_guided_workflow_publication', args);
+    expect(unapproved.error?.code).toBe('42501');
+    expect((await administrator.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: ['lead.name'], p_expected_revision: 0,
+    })).error).toBeNull();
+    expect((await administrator.rpc('finalize_guided_workflow_publication', args)).error?.code).toBe('42501');
+    const first = await service.rpc('finalize_guided_workflow_publication', args);
+    expect(first.error).toBeNull();
+    expect(first.data).toMatchObject({ version_id: expect.any(String), version_number: 1 });
+    const secondSettings = { name: 'Published second' };
+    expect((await administrator.rpc('save_guided_workflow_draft_with_settings', {
+      p_workflow_id: workflowId, p_definition: definition, p_settings: secondSettings, p_expected_revision: 1,
+    })).error).toBeNull();
+    const second = await service.rpc('finalize_guided_workflow_publication', { ...args, p_expected_revision: 2, p_settings: secondSettings });
+    expect(second.error).toBeNull();
+    expect(second.data).toMatchObject({ version_number: 2 });
+    expect(second.data.version_id).not.toBe(first.data.version_id);
+    const original = await administrator.from('workflow_guided_versions').select('definition, settings, source_revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).eq('id', first.data.version_id).single();
+    expect(original.error).toBeNull();
+    expect(original.data).toEqual({ definition, settings, source_revision: 1 });
+    for (const client of [administrator, service]) {
+      expect((await client.from('workflow_guided_versions').update({ settings: {} })
+        .eq('organization_id', orgA).eq('id', first.data.version_id)).error?.code).toBe('42501');
+    }
+    expect((await service.rpc('finalize_guided_workflow_publication', args)).error?.code).toBe('PT409');
+    expect((await administrator.rpc('set_workflow_data_grant', {
+      p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1,
+    })).error).toBeNull();
+    expect((await service.rpc('finalize_guided_workflow_publication', { ...args, p_expected_revision: 2, p_settings: secondSettings })).error?.code).toBe('42501');
+    const active = await administrator.from('workflow_guided_publications').select('version_id')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(active.error).toBeNull();
+    expect(active.data).toEqual({ version_id: second.data.version_id });
   }, 60000);
 
   it('saves an incomplete guided draft without rewriting the existing workflow definition', async () => {

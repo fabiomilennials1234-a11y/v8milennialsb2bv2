@@ -13,7 +13,7 @@ export interface GuidedConditionRequest {
   authorization?: { kind: 'organization'; workflowId: string };
 }
 
-function isGuidedCondition(value: unknown): value is GuidedCondition {
+export function isGuidedCondition(value: unknown): value is GuidedCondition {
   if (!value || typeof value !== 'object') return false;
   const rule = value as Record<string, unknown>;
   return rule.version === 1 && typeof rule.id === 'string' && rule.id.length > 0

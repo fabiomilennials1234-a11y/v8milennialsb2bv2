@@ -53,3 +53,9 @@ A quinta permite administração guiada por master pleno ativo, com `permissions
 `node scripts/test-guided-preview.mjs <preview-ref>` testa aprovação, revogação, concorrência, escopo, RLS e teste pessoal usando Auth/PostgREST reais. Credenciais ficam apenas em memória.
 
 Verificar no alvo os privilégios de `set_workflow_data_grant(uuid,text[],integer)`: anon=false, authenticated=true, service_role=false; INSERT/UPDATE direto por authenticated=false. Migração aplicada não substitui essa verificação.
+
+### Publication migration 20271017000008
+
+Applied/registered only on preview mkpjjtwjyvgabavnxqgp. Forward adds workflow_guided_versions and workflow_guided_publications plus service-only finalize_guided_workflow_publication. Authenticated clients may read under administration RLS; service/authenticated clients have no direct INSERT/UPDATE/DELETE. Finalizer EXECUTE is service_role only, checks verified actor authority, exact draft revision/content and current grant under locks.
+
+Rollback file: supabase/migrations/rollback/20271017000008_guided_workflow_publication.sql. Drops finalizer and policies and revokes table access; preserves version records and selected pointer. Roll back 08 before 07..00 because policies depend on the administration helper. Reapply in ascending order. Expanded scripts/check-guided-grant-rollback.mjs rehearsed all nine migrations in one preview transaction and verified preservation plus effective grants. This is schema rollback evidence; runtime publication is still gated and production deployment remains unauthorized.

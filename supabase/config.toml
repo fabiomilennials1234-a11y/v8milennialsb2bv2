@@ -574,3 +574,8 @@ verify_jwt = false
 # same JWT so current RLS applies. No internal-key or service-role evaluation.
 [functions.test-guided-condition]
 verify_jwt = false
+
+# Publication authenticates the caller explicitly and validates the persisted
+# draft before a service-only finalizer rechecks current authority and grants.
+[functions.publish-guided-workflow]
+verify_jwt = false
