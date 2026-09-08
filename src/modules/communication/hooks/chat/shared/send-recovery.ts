@@ -25,7 +25,10 @@ export async function sendWithBoundedRecovery(options: {
   const launch = () => options.send().catch(error => ({ data: null, error }));
   let pending = launch();
   let result = await waitForResult(pending, options.timeoutMs);
-  const successful = (r: SendResponse | undefined) => r && !r.error && !r.data?.error;
+  const successful = (r: SendResponse | undefined) => {
+    const status = (r?.data?.result as { status?: string } | undefined)?.status ?? r?.data?.status;
+    return !!r?.data && !r.error && !r.data.error && status !== "failed" && status !== "error";
+  };
   if (successful(result)) return result!;
   for (let attempt = 1; attempt <= MAX_SEND_RETRIES; attempt++) {
     options.onRetry(attempt);

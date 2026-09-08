@@ -35,3 +35,13 @@ describe('bounded message recovery', () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 });
+
+
+it('does not mark a provider failed status as sent just because HTTP succeeded', async () => {
+  vi.useFakeTimers();
+  const send=vi.fn().mockResolvedValue({data:{result:{status:'failed'}},error:null});
+  const outcome=sendWithBoundedRecovery({send,confirm:async()=>null,onRetry:vi.fn(),timeoutMs:1,retryDelayMs:1}).catch(e=>e);
+  await vi.runAllTimersAsync();
+  expect((await outcome).retryAttempts).toBe(10);
+  expect(send).toHaveBeenCalledTimes(1);
+});
