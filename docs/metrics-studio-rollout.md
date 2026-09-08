@@ -1,6 +1,9 @@
 # Estúdio — rollout sem substituir painéis existentes
 
 Estado em 2026-09-08: preparado para revisão, **não executado em produção**.
+Ensaio SQL aprovado em CI no commit `9841adf0` (preservação, backup/restauração,
+rollback/reapply e RLS). A suíte geral continua bloqueada por testes legados;
+ver `docs/metrics-studio-review-20260908.md` para evidência e limites.
 PR de trabalho: #2040. Produção exige autorização explícita do CTO na sessão,
 review e CI verde. A proposta não aplicada de aposentadoria de rating foi
 preservada em `supabase/proposals/`, fora da cadeia automática; ver README

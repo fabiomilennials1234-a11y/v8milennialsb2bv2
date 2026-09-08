@@ -179,3 +179,26 @@ canário e recuperação por ID. O seed ganhou transação, locks com timeout e
 asserção de preservação integral. **Esta nova versão do seed ainda requer
 ensaio SQL antes de release.** Nenhuma migration, seed ou frontend foi aplicado
 em produção nesta etapa; nenhuma nova branch efêmera foi criada.
+
+## Reconciliação autorizada e ensaio SQL — 2026-09-08 19:07 UTC
+
+CTO autorizou reconciliar as migrations e os testes bloqueantes. O ledger de
+produção confirma que a aposentadoria de rating (`20270925000000`) nunca foi
+aplicada, enquanto leitores posteriores e demolição dos espelhos já foram.
+A proposta foi preservada integralmente em `supabase/proposals/`, fora da
+cadeia automática; nenhuma migration aplicada foi editada. O seed sintético
+foi atualizado para entradas/etapas canônicas. Os 14 testes de recriação de
+etapa passaram com mock RPC atualizado; rodada local teve 287 testes verdes.
+
+CI `34266909890`, commit `9841adf0`: cadeia completa + seed passaram. O ensaio
+do Estúdio comprovou preservação integral, backup privado sem grants de API,
+restauração exata, rollback/reapply DDL sem remover abas, ACL, isolamento
+member/admin/master, exclusão e templates de org nova. Esta evidência supera
+a pendência anterior de ensaio do seed. Backup fica no próprio banco, não em
+arquivo externo; o plano atual está em `docs/metrics-studio-rollout.md`.
+
+O job segue vermelho pela suíte geral pgTAP (97 arquivos, 1959 asserções):
+contratos/fixtures legados, funções/views demolidas, planos TAP inconsistentes
+e controles de permissões a diagnosticar. Detalhes na revisão
+`docs/metrics-studio-review-20260908.md`. Não houve bypass de gates, merge,
+deploy ou escrita em produção. Nenhuma branch Supabase nova foi criada.

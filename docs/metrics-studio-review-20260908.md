@@ -77,3 +77,49 @@ excluída sem comprovação de desuso.
 - Rollback DDL de templates agora preserva TODAS as abas, inclusive templates
   intocados; ensaio executável de rollback/reapply adicionado ao CI.
 - CI e rollout ainda aguardam validação; esta seção não libera o merge.
+
+## Resultado do ensaio SQL — commit 9841adf0
+
+Execução: https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/actions/runs/34266909890
+Job RLS: `102198448642`. Em 2026-09-08 19:07:27 UTC passaram:
+
+- Cadeia completa de migrations e seed de testes. O seed usa a RPC canônica
+  de entrada e cria etapas reais; `ON CONFLICT` escolhe a chave não diferível.
+- Backup privado, restauração exata do painel sintético e rollback/reapply
+  executados. Todas as linhas anteriores preservadas pelo seed.
+- ACL das funções privadas; RLS member/admin/master; isolamento cross-org;
+  exclusão sem recriação e templates de organização nova.
+
+Depois, a suíte geral pgTAP executou 97 arquivos / 1959 asserções e falhou.
+Os arquivos abaixo não foram alterados neste PR (diff contra origin/main
+vazio para `supabase/tests/`). Não se presume que todas as falhas sejam apenas
+fixtures: devem ser diagnosticadas antes de alterar contratos ou proteções.
+
+Principais grupos encontrados:
+
+- `stage_role_test`, `stage_role_money_guard`, `get_funnel_flow`: contrato
+  legado de ganho/perda por etapa e função `system_stage_role` demolida.
+- `custom_pipeline_stages_stage_role`, `funnel_stream_by_customer_moment`,
+  `metric_conversao_etapas`, `metric_coorte_canonica`: fixtures usam views
+  removidas (`custom_pipelines`/`custom_pipeline_stages`).
+- `export_lead_data_authz`: erro de resolução de `leads`; investigar contrato
+  e search_path, sem afrouxar autorização.
+- `auto_seed_card_morto`, `tv_s2_stage_label_scope`: conflito com constraint
+  diferível nas fixtures.
+- `metric_negocio_semantica`, `metric_custom_tree`: divergências de leitura
+  por etapa e contagem de policies.
+- `disparo_resolvers_org_scope`: RPC removida e expectativas antigas de
+  isolamento/master. `lead_custom_fields_org_em_uso` e
+  `org_plural_em_todas_as_policies`: controles negativos plantados não se
+  comportam como esperado.
+- Várias suítes emitem TAP sem plano final; `voip_can_see_call_dono_canonico`
+  declara 11 asserções, mas executa 12.
+
+Isso expõe um trabalho de atualização/diagnóstico das suítes legadas além
+do bootstrap e dos seis mocks originalmente autorizados. Nenhum teste foi
+ignorado, baseline ampliado, proteção afrouxada ou migration aplicada editada.
+O merge continua bloqueado. As suítes unitária completa, integração e E2E
+não estão aprovadas nesta rodada. Produção não recebeu qualquer escrita.
+
+Publicação também requer superfície operacional: a descoberta de browsers
+nesta sessão retornou inventário vazio; não há acesso ao EasyPanel confirmado.
