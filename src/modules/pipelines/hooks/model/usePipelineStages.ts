@@ -4,6 +4,7 @@ import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { PipelineType, StageFamily, PipelineStage, PipelineStageInsert, DefaultStage } from "@/contracts/pipe";
 import { FALLBACK_STAGES } from "@/contracts/pipe";
+import { chaveDeNovaEtapa } from "../../lib/chave-de-nova-etapa";
 import {
   proximaPosicaoDeEtapa,
   mensagemDeConflitoDeEtapa,
@@ -224,11 +225,16 @@ export function useCreatePipelineStage() {
         organizationId: teamMember.organization_id,
         pipelineType: stage.pipeline_type,
       });
+      const stageKey = await chaveDeNovaEtapa({
+        organizationId: teamMember.organization_id,
+        pipelineType: stage.pipeline_type,
+      }, stage.name, stage.stage_key);
 
       const { data, error } = await supabase
         .from("pipeline_stages")
         .insert({
           ...stage,
+          stage_key: stageKey,
           position: posicaoLivre,
           organization_id: teamMember.organization_id,
         })
