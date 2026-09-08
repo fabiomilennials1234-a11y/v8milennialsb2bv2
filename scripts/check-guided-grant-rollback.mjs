@@ -68,7 +68,6 @@ const originMigration = '20271017000021_guided_personal_origin_test.sql';
 const originForward = readFileSync(`supabase/migrations/${originMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const originRollback = readFileSync(`supabase/migrations/rollback/${originMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const originAuthorizationMigration = '20271017000022_guided_origin_authorization.sql';
-const originAuthorizationForward = readFileSync(`supabase/migrations/${originAuthorizationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const originAuthorizationRollback = readFileSync(`supabase/migrations/rollback/${originAuthorizationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const responsibleMigration = '20271017000023_guided_personal_responsible_test.sql';
 const responsibleForward = readFileSync(`supabase/migrations/${responsibleMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
@@ -77,12 +76,15 @@ const catalogueMigration = '20271017000024_guided_responsible_catalogue.sql';
 const catalogueForward = readFileSync(`supabase/migrations/${catalogueMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const catalogueRollback = readFileSync(`supabase/migrations/rollback/${catalogueMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const responsibleReadMigration = '20271017000025_guided_responsible_authorized_read.sql';
-const responsibleReadForward = readFileSync(`supabase/migrations/${responsibleReadMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const responsibleReadRollback = readFileSync(`supabase/migrations/rollback/${responsibleReadMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const responsiblePublicationMigration = '20271017000026_guided_responsible_publication.sql';
+const responsiblePublicationForward = readFileSync(`supabase/migrations/${responsiblePublicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const responsiblePublicationRollback = readFileSync(`supabase/migrations/rollback/${responsiblePublicationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
-    pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure) AS original_definition;
+    pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure) AS original_definition,
+    pg_get_functiondef('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])'::regprocedure) AS original_publication_definition;
 INSERT INTO public.organizations(id, name, slug)
   SELECT org_id, 'Guided rollback rehearsal', 'guided-rollback-' || org_id FROM guided_rollback_fixture;
 INSERT INTO public.workflows(id, organization_id, name, trigger_type)
@@ -99,6 +101,7 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${responsiblePublicationRollback}
 ${responsibleReadRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.read_guided_condition_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])') IS NOT NULL THEN
@@ -246,8 +249,7 @@ ${pinForward}
 ${discoveryForward}
 ${activationForward}
 -- Migration 22 restores the complete field contract without narrowing retained grants.
-${originAuthorizationForward.replace(/ALTER TABLE public.workflow_data_grants DROP CONSTRAINT[\s\S]*?\n\);/, '')}
-${responsibleReadForward}
+${responsiblePublicationForward}
 ${tagForward}
 ${originForward}
 ${responsibleForward}
@@ -404,6 +406,12 @@ DO $$ BEGIN
     OR has_function_privilege('authenticated', 'public.guard_guided_workflow_activation()', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.guard_guided_workflow_activation()', 'EXECUTE') THEN
     RAISE EXCEPTION 'activation guard callable directly';
+  END IF;
+END $$;
+DO $$ BEGIN
+  IF pg_get_functiondef('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])'::regprocedure)
+    IS DISTINCT FROM (SELECT original_publication_definition FROM guided_rollback_fixture) THEN
+    RAISE EXCEPTION 'publication definition not restored';
   END IF;
 END $$;
 ROLLBACK;

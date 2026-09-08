@@ -948,10 +948,22 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
       expect(ordinaryMember.error).toBeNull();
       expect(ordinaryMember.data).toEqual([{ field_values: { pre_sale_responsible_id: adminMemberId }, members: [{ id: adminMemberId, name: 'Guided tester' }] }]);
       const workflowId = crypto.randomUUID();
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: { version: 1, id: 'master', field: 'lead.pre_sale_responsible_id', operator: 'equals', memberId } } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+      const settings = { name: 'Protected responsible scope' };
       expect((await caller.rpc('create_guided_workflow_draft_with_settings', {
-        p_workflow_id: workflowId, p_organization_id: orgA, p_definition: { nodes: [], edges: [] }, p_settings: { name: 'Protected responsible scope' },
+        p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: settings,
       })).error).toBeNull();
       expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['lead.pre_sale_responsible_id'], p_expected_revision: 0 })).error).toBeNull();
+      const rejectedPublication = await service.rpc('finalize_guided_workflow_publication', {
+        p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1,
+        p_definition: definition, p_settings: settings, p_required_fields: ['lead.pre_sale_responsible_id'],
+      });
+      expect(rejectedPublication.error?.code).toBe('PT422');
+      expect(JSON.parse(rejectedPublication.error?.details || '{}')).toEqual({ nodeIds: ['c'] });
       const authorizedArgs = { ...args, p_workflow_id: workflowId, p_tag_ids: [], p_origin_ids: [] };
       expect((await service.rpc('read_guided_condition_data', authorizedArgs)).error?.code).toBe('PT422');
       const authorizedMember = await service.rpc('read_guided_condition_data', { ...authorizedArgs, p_member_ids: [adminMemberId] });
@@ -1087,6 +1099,72 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     } finally {
       await service.from('leads').update({ sale_responsible_id: null }).eq('id', leadA).throwOnError();
       await service.from('team_members').delete().in('id', [salesId, foreignId]).throwOnError();
+    }
+  }, 60000);
+
+  it.each(['lead.pre_sale_responsible_id', 'lead.sale_responsible_id'])('publishes $0 with valid responsible references and preserves its active version on rejection', async field => {
+    const workflowId = crypto.randomUUID(), memberId = crypto.randomUUID(), foreignId = crypto.randomUUID();
+    const column = field.slice('lead.'.length);
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-publish-responsible-${workflowId}` }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1, id: 'responsible', field, operator: 'equals', memberId };
+    const definitionFor = (rule: unknown) => ({ nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+      { id: 'c', type: 'condition', data: { guidedCondition: rule } },
+      { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+    ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] });
+    const definition = definitionFor(condition), settings = { name: 'Responsible publication' };
+    const publish = async (revision: number) => {
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: revision }), signal: AbortSignal.timeout(15000),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    try {
+      await service.from('team_members').insert([
+        { id: memberId, organization_id: orgA, name: 'Marina', role: 'member', is_active: false },
+        { id: foreignId, organization_id: orgB, name: 'Marina', role: 'member', is_active: true },
+      ]).throwOnError();
+      await service.from('leads').update({ [column]: memberId }).eq('id', leadA).throwOnError();
+      expect((await caller.rpc('create_guided_workflow_draft_with_settings', {
+        p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: settings,
+      })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [field], p_expected_revision: 0 })).error).toBeNull();
+      const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+        p_expected_revision: 1, p_definition: definition, p_settings: settings, p_required_fields: [field] };
+      const finalized = await service.rpc('finalize_guided_workflow_publication', args);
+      expect(finalized.error).toBeNull();
+      const published = await publish(1);
+      expect(published).toMatchObject({ status: 200, body: { status: 'published', version_id: expect.any(String) } });
+      const executionId = crypto.randomUUID();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId, organization_id: orgA,
+        lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' }).throwOnError();
+      expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        guidedVersionId: published.body.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {},
+      })).toMatchObject({ success: true, status: 'completed' });
+      const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+      expect(steps.error).toBeNull();
+      expect(steps.data?.map(step => step.node_id)).toContain('yes');
+      expect(steps.data?.map(step => step.node_id)).not.toContain('no');
+      const invalid = definitionFor({ version: 1, id: 'any', kind: 'group', match: 'any', children: [condition, { ...condition, id: 'foreign', memberId: foreignId }] });
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1, p_definition: invalid, p_settings: settings })).error).toBeNull();
+      const rejected = await publish(2);
+      expect(rejected).toMatchObject({ status: 422, body: { status: 'error', code: 'reference_unavailable', issues: [{ nodeId: 'c', code: 'reference_unavailable' }] } });
+      const empty = definitionFor({ version: 1, id: 'empty', field, operator: 'is_empty' });
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 2, p_definition: empty, p_settings: settings })).error).toBeNull();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...args, p_expected_revision: 3, p_definition: empty, p_required_fields: [] })).error?.code).toBe('42501');
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 3, p_definition: definition, p_settings: settings })).error).toBeNull();
+      await service.from('leads').update({ [column]: null }).eq('id', leadA).throwOnError();
+      await service.from('team_members').delete().eq('id', memberId).throwOnError();
+      expect(await publish(4)).toMatchObject({ status: 422, body: { status: 'error', code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
+      const active = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
+      expect(active.error).toBeNull();
+      expect(active.data?.version_id).toBe(published.body.version_id);
+    } finally {
+      await service.from('leads').update({ [column]: column === 'pre_sale_responsible_id' ? adminMemberId : null }).eq('id', leadA).throwOnError();
+      await service.from('team_members').delete().in('id', [memberId, foreignId]).throwOnError();
     }
   }, 60000);
 
