@@ -305,4 +305,4 @@ export { PipeOpsContextProvider, usePipeOps } from "./pipe-ops";
 // pipelines para leads na inversão F7. pipelines consome via este barrel.
 export { CompareceuModal } from "./components/leads/funnel-contexts/modals/CompareceuModal";
 
-export { useCustomFieldCatalogue } from './hooks/useCustomFieldCatalogue';
+export { useCustomFieldCatalogue, useCustomFieldReferences } from './hooks/useCustomFieldCatalogue';

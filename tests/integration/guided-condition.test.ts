@@ -209,6 +209,69 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   });
 
+  it('publishes a custom text condition and rejects changed references without replacing its version', async () => {
+    const workflowId = crypto.randomUUID(), fieldId = crypto.randomUUID(), foreignId = crypto.randomUUID(), replacementId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `custom-publish-${fieldId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1, id: 'custom', field: 'lead.custom', fieldId, fieldType: 'text', operator: 'contains', value: 'eletrica' };
+    const definitionFor = (rule: unknown) => ({ nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+      { id: 'c', type: 'condition', data: { guidedCondition: rule } },
+      { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+    ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] });
+    const definition = definitionFor(condition), settings = { name: 'Custom publication' };
+    const publish = async (revision: number) => {
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/publish-guided-workflow`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, workflowId, expectedRevision: revision }), signal: AbortSignal.timeout(15000),
+      });
+      return { status: response.status, body: await response.json() };
+    };
+    await service.from('lead_custom_fields').insert({ id: fieldId, organization_id: orgA, field_name: 'Especialidade', field_type: 'text' }).throwOnError();
+    try {
+      await service.from('lead_custom_field_values').insert({ lead_id: leadA, field_id: fieldId, value: 'Distribuição elétrica' }).throwOnError();
+      expect((await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_organization_id: orgA, p_definition: definition, p_settings: settings })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [`lead.custom:${fieldId}`], p_expected_revision: 0 })).error).toBeNull();
+      const args = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1,
+        p_definition: definition, p_settings: settings, p_required_fields: [`lead.custom:${fieldId}`] };
+      expect((await service.rpc('finalize_guided_workflow_publication', args)).error).toBeNull();
+      const published = await publish(1);
+      expect(published).toMatchObject({ status: 200, body: { status: 'published', version_id: expect.any(String) } });
+      const executionId = crypto.randomUUID();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId, organization_id: orgA,
+        lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' }).throwOnError();
+      expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        guidedVersionId: published.body.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {},
+      })).toMatchObject({ success: true, status: 'completed' });
+      const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+      expect(steps.error).toBeNull();
+      expect(steps.data?.map(step => step.node_id)).toContain('yes');
+      expect(steps.data?.map(step => step.node_id)).not.toContain('no');
+      await service.from('lead_custom_fields').update({ field_type: 'number' }).eq('id', fieldId).throwOnError();
+      expect(await publish(1)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
+      await service.from('lead_custom_fields').update({ field_type: 'text' }).eq('id', fieldId).throwOnError();
+      await service.from('lead_custom_fields').insert({ id: foreignId, organization_id: orgB, field_name: 'Especialidade', field_type: 'text' }).throwOnError();
+      const invalid = definitionFor({ version: 1, id: 'any', kind: 'group', match: 'any', children: [condition, { ...condition, id: 'foreign', fieldId: foreignId }] });
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 1, p_definition: invalid, p_settings: settings })).error).toBeNull();
+      expect(await publish(2)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
+      const empty = definitionFor({ version: 1, id: 'empty', field: 'lead.custom', fieldId, fieldType: 'text', operator: 'is_empty' });
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 2, p_definition: empty, p_settings: settings })).error).toBeNull();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...args, p_expected_revision: 3, p_definition: empty, p_required_fields: [] })).error?.code).toBe('42501');
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId, p_expected_revision: 3, p_definition: definition, p_settings: settings })).error).toBeNull();
+      await service.from('lead_custom_fields').delete().eq('id', fieldId).throwOnError();
+      await service.from('lead_custom_fields').insert({ id: replacementId, organization_id: orgA, field_name: 'Especialidade', field_type: 'text' }).throwOnError();
+      expect(await publish(4)).toMatchObject({ status: 422, body: { code: 'reference_unavailable', issues: [{ nodeId: 'c' }] } });
+      const active = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
+      expect(active.error).toBeNull();
+      expect(active.data?.version_id).toBe(published.body.version_id);
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId).throwOnError();
+      await service.from('lead_custom_fields').delete().in('id', [fieldId, foreignId, replacementId]).throwOnError();
+    }
+  });
+
   it.each([false, true])('publishes a saved condition through the authenticated HTTP boundary (grouped=%s)', async (grouped) => {
     const workflowId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

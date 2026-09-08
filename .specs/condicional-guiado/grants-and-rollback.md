@@ -214,3 +214,11 @@ A defensive budget of 256 scope entries bounds the persisted grant validator; pu
 Rollback drops the custom organization reader and restores the preceding approval writer, retaining the widened CHECK/helper and all custom approvals, versions and answers. Full recovery is 00..11,30,14,21,23,24,29; migration 30 contains the current legacy reader/publication definitions so recovery never narrows retained custom scope history. The thirty-one-migration rehearsal verifies that custom scope history survives and both writer/reader definitions are restored exactly. Effective privileges of all eight affected function signatures verified on preview.
 
 No custom publication support is claimed here. The existing finalizer remains unchanged and rejects custom scopes; its reference/type validation and UI grant gate removal are still required. No worker/endpoint/production deployment in this checkpoint.
+
+## Migration 31 — custom publication reference validation
+
+The finalizer accepts valid per-definition scopes, recursively validates every custom reference UUID and expected text type, requires its exact approval scope including unary presence, and locks current local definitions before committing an immutable version. Missing, foreign or type-changed definitions return located PT422. Actor/admin, workflow/org, draft revision/settings identity and current grant checks remain in place.
+
+Applied/registered on preview only. Effective EXECUTE checked live: anon=false, authenticated=false, service_role=true; SECURITY DEFINER search_path remains public. The publication endpoint was updated on preview after its previous validator produced a real HTTP 422 red; no worker or production deployment.
+
+Rollback restores migration 30's finalizer vocabulary, failing closed for custom publication while retaining versions, pins, approvals and definitions/answers. Coordinate endpoint rollback if removing the capability; existing immutable versions remain historical records. Reapply 31 to restore support. Full recovery now: 00..11,30,31,14,21,23,24,29; fresh install remains numerical. The thirty-two-migration reverse/recovery rehearsal passed and restored the exact current finalizer.

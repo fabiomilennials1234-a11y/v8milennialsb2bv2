@@ -1,3 +1,4 @@
+import { useCustomFieldReferences } from '@/modules/leads';
 import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, isGuidedScalarField, GUIDED_SCALAR_FIELDS } from '@/contracts/workflows/guided-fields';
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,13 +28,17 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
       return response.data;
     },
   });
-  const customPending = requiredFields.some(field => field.startsWith('lead.custom:'));
+  const customIds = requiredFields.filter(field => field.startsWith('lead.custom:')).map(field => field.slice('lead.custom:'.length));
+  const customReferences = useCustomFieldReferences(actorId, organizationId, customIds);
+  const customPending = customReferences.some(reference => reference.isPending);
+  const customUnavailable = customReferences.some(reference => reference.isError || (reference.isSuccess && reference.data?.field_type !== 'text'));
+  const customLabels = new Map(customIds.map((id, index) => [id, customReferences[index].data?.field_name]));
   const authorized = requiredFields.length > 0 && requiredFields.every(field => grant.data?.fields.includes(field));
-  const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : field === 'lead.origin' ? 'Origem' : isGuidedResponsibleField(field) ? GUIDED_RESPONSIBLE_FIELDS[field].label : isGuidedScalarField(field) ? GUIDED_SCALAR_FIELDS[field].label : 'Campo personalizado').join(' e ');
+  const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : field === 'lead.origin' ? 'Origem' : isGuidedResponsibleField(field) ? GUIDED_RESPONSIBLE_FIELDS[field].label : isGuidedScalarField(field) ? GUIDED_SCALAR_FIELDS[field].label : customLabels.get(field.slice('lead.custom:'.length)) ?? 'Campo personalizado').join(' e ');
   const authorizeLabel = requiredFields.length === 1 && requiredFields[0] === 'lead.name' ? 'Autorizar acesso ao nome dos leads'
     : requiredFields.length === 1 && requiredFields[0] === 'lead.company' ? 'Autorizar acesso à empresa dos leads' : 'Autorizar acesso aos campos selecionados';
   async function update() {
-    if (customPending) return;
+    if (!authorized && (customPending || customUnavailable)) return;
     setPending(true);
     setError('');
     try {
@@ -57,12 +62,14 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
     <h4 className="font-medium">Acesso da automação</h4>
     <p className="text-sm">{scopeLabel} de todos os leads desta organização</p>
     <p className="text-xs text-muted-foreground">Permite consultar esse dado durante a execução automática, mesmo se o criador sair da equipe. Seu teste continua usando suas permissões pessoais.</p>
-    {customPending ? <p className="text-sm text-muted-foreground">Este campo pode ser testado, mas ainda não pode ser publicado.</p> : !canManage ? <p className="text-sm text-muted-foreground">Um administrador precisa autorizar este acesso.</p> : <>
+    {customPending && <p className="text-sm text-muted-foreground">Consultando campos personalizados…</p>}
+    {customUnavailable && <p role="alert" className="text-sm text-destructive">Confira os campos indisponíveis antes de autorizar o acesso.</p>}
+    {!canManage ? <p className="text-sm text-muted-foreground">Um administrador precisa autorizar este acesso.</p> : <>
       {grant.isPending && <p className="text-sm text-muted-foreground">Consultando autorização…</p>}
       {grant.isError && <p role="alert" className="text-sm text-destructive">Não foi possível consultar a autorização.</p>}
       {grant.isSuccess && <>
         <p className="text-sm text-muted-foreground">{authorized ? 'Acesso autorizado pela organização' : 'Acesso ainda não autorizado'}</p>
-        <Button type="button" variant={authorized ? 'outline' : 'default'} disabled={pending || grant.isFetching || requiredFields.length === 0} onClick={update}>
+        <Button type="button" variant={authorized ? 'outline' : 'default'} disabled={pending || grant.isFetching || requiredFields.length === 0 || (!authorized && (customPending || customUnavailable))} onClick={update}>
           {pending ? 'Atualizando…' : authorized ? 'Revogar acesso' : authorizeLabel}
         </Button>
       </>}

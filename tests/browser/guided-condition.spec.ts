@@ -992,6 +992,31 @@ test('aprova Tags explicitamente sem apagar concessão de Nome', async ({ page }
   expect(writes[1]).toEqual(['lead.name']);
 });
 
+test('aprova campo personalizado pelo nome atual e revoga somente seu UUID', async ({ page }) => {
+  const fieldId = '11111111-1111-4111-8111-111111111111';
+  let grant = { fields: ['lead.name'], revision: 1 };
+  const writes: string[][] = [];
+  await page.route('**/rest/v1/workflow_data_grants?*', route => route.fulfill({ json: grant }));
+  await page.route('**/rest/v1/rpc/set_workflow_data_grant', route => {
+    const body = route.request().postDataJSON();
+    writes.push(body.p_fields);
+    grant = { fields: body.p_fields, revision: grant.revision + 1 };
+    return route.fulfill({ json: grant });
+  });
+  await openGuidedEditor(page, { version: 1, id: 'rule-1', field: 'lead.custom', fieldId, fieldType: 'text', fieldLabel: 'Nome antigo', operator: 'equals', value: 'Indústria' });
+  await page.route('**/rest/v1/lead_custom_fields?*', route => route.fulfill({ json: { id: fieldId, field_name: 'Especialidade', field_type: 'text' } }));
+  await page.reload();
+  await page.getByText('Nome informado', { exact: true }).click();
+  const access = page.getByRole('region', { name: 'Acesso da automação' });
+  await expect(access.getByText('Especialidade de todos os leads desta organização')).toBeVisible();
+  await access.getByRole('button', { name: 'Autorizar acesso aos campos selecionados', exact: true }).click();
+  await expect(access.getByText('Acesso autorizado pela organização')).toBeVisible();
+  expect(writes[0]).toEqual(['lead.name', `lead.custom:${fieldId}`]);
+  await access.getByRole('button', { name: 'Revogar acesso', exact: true }).click();
+  await expect(access.getByText('Acesso ainda não autorizado')).toBeVisible();
+  expect(writes[1]).toEqual(['lead.name']);
+});
+
 test('troca operadores de texto preservando valor compatível e resumo no canvas', async ({ page }) => {
   await openGuidedEditor(page, 'Aurora');
   await page.getByText('Nome informado', { exact: true }).click();

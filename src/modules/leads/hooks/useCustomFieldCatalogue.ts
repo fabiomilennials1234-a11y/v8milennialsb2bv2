@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 
 /** Minimal definition catalogue; answers are never loaded by a selector. */
@@ -27,4 +27,18 @@ export function useCustomFieldCatalogue(actorId: string, organizationId: string,
     },
   });
   return { options, selected };
+}
+
+/** Resolve current definition names for an explicit automation approval. */
+export function useCustomFieldReferences(actorId: string, organizationId: string, fieldIds: string[]) {
+  return useQueries({ queries: fieldIds.map(fieldId => ({
+    queryKey: ['lead-custom-fields', organizationId, 'selected', actorId, fieldId],
+    enabled: Boolean(actorId && organizationId && fieldId),
+    queryFn: async ({ signal }: { signal: AbortSignal }) => {
+      const { data, error } = await supabase.from('lead_custom_fields').select('id, field_name, field_type')
+        .eq('organization_id', organizationId).eq('id', fieldId).abortSignal(signal).maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  })) });
 }
