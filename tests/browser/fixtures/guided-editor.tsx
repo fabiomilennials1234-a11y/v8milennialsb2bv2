@@ -10,7 +10,7 @@ import '../../../src/index.css';
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 createRoot(document.getElementById('root')!).render(
   <QueryClientProvider client={client}><AuthProvider>
-    <MemoryRouter initialEntries={['/automacoes/workflow-1']}>
+    <MemoryRouter initialEntries={[new URLSearchParams(location.search).has('new') ? '/automacoes/novo' : '/automacoes/workflow-1']}>
       <div className="h-screen"><Routes><Route path="/automacoes/:id" element={<AutomacoesEditor />} /></Routes><Toaster /></div>
     </MemoryRouter>
   </AuthProvider></QueryClientProvider>,

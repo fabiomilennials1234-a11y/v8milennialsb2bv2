@@ -19,6 +19,7 @@ Alvo desta sessão: `mkpjjtwjyvgabavnxqgp`, não produção. Aplicadas em ordem:
 3. `20271017000002_guided_condition_authorized_read.sql`
 4. `20271017000003_guided_workflow_drafts.sql`
 5. `20271017000004_guided_workflow_master_authorization.sql`
+6. `20271017000005_create_guided_workflow_draft.sql`
 
 A segunda é correção aditiva: a primeira migração aplicada permanece imutável. O teste real revelou timeout na resposta de revisão antiga com o SQLSTATE de serialização original.
 
@@ -26,13 +27,16 @@ A segunda é correção aditiva: a primeira migração aplicada permanece imutá
 
 Interromper novas execuções guiadas antes de reverter. Nesta etapa elas já estão bloqueadas pelo executor.
 
-1. Aplicar rollback de `20271017000004_guided_workflow_master_authorization.sql`.
-2. Aplicar rollback de `20271017000003_guided_workflow_drafts.sql`.
-3. Aplicar rollback de `20271017000002_guided_condition_authorized_read.sql`.
-4. Aplicar rollback de `20271017000001_workflow_grant_revision_conflict.sql`.
-5. Aplicar rollback de `20271017000000_workflow_data_grants.sql`.
+1. Aplicar rollback de `20271017000005_create_guided_workflow_draft.sql`.
+2. Aplicar rollback de `20271017000004_guided_workflow_master_authorization.sql`.
+3. Aplicar rollback de `20271017000003_guided_workflow_drafts.sql`.
+4. Aplicar rollback de `20271017000002_guided_condition_authorized_read.sql`.
+5. Aplicar rollback de `20271017000001_workflow_grant_revision_conflict.sql`.
+6. Aplicar rollback de `20271017000000_workflow_data_grants.sql`.
 
-Rollback completo remove RPC/policy e revoga permissões, preservando tabela e histórico. Não desabilita RLS, não concede acesso amplo e não altera workflows legados. Reaplicar as cinco migrações na ordem original restaura a funcionalidade. Não reaplicar apenas a primeira em uma instalação que já recebeu a correção de conflitos.
+Rollback completo remove RPC/policy e revoga permissões, preservando tabela e histórico. Não desabilita RLS, não concede acesso amplo e não altera workflows legados. Reaplicar as seis migrações na ordem original restaura a funcionalidade. Não reaplicar apenas a primeira em uma instalação que já recebeu a correção de conflitos.
+
+A sexta cria automação inativa e rascunho na mesma transação. Seu rollback remove apenas a RPC de criação, sem apagar dados. `create_guided_workflow_draft(uuid,uuid,text,jsonb)` conferida no preview: anon=false, authenticated=true, service_role=false. Ensaio das seis migrations passou em 2026-09-08.
 
 A quinta permite administração guiada por master pleno ativo, com `permissions.all` booleano verdadeiro. Preserva helper existente para administradores e gestores. Não amplia permissões de outros módulos. Seu rollback isolado restaura autorização anterior e mantém aprovações e rascunhos. Helper `can_administer_guided_workflow(uuid)` verificado no preview: anon=false, authenticated=true, service_role=false. Ensaio das cinco migrações passou em 2026-09-08.
 

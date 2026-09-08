@@ -24,6 +24,9 @@ const draftRollback = readFileSync(`supabase/migrations/rollback/${draftMigratio
 const masterMigration = '20271017000004_guided_workflow_master_authorization.sql';
 const masterForward = readFileSync(`supabase/migrations/${masterMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const masterRollback = readFileSync(`supabase/migrations/rollback/${masterMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const createMigration = '20271017000005_create_guided_workflow_draft.sql';
+const createForward = readFileSync(`supabase/migrations/${createMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const createRollback = readFileSync(`supabase/migrations/rollback/${createMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id,
@@ -36,6 +39,7 @@ INSERT INTO public.workflow_data_grants(workflow_id, organization_id, fields, re
   SELECT workflow_id, org_id, ARRAY['lead.name'], 7 FROM guided_rollback_fixture;
 INSERT INTO public.workflow_guided_drafts(workflow_id, organization_id, definition, revision)
   SELECT workflow_id, org_id, '{"nodes":[],"edges":[]}'::jsonb, 11 FROM guided_rollback_fixture;
+${createRollback}
 ${masterRollback}
 ${draftRollback}
 ${readerRollback}
@@ -44,6 +48,7 @@ ${rollback}
 DO $$ BEGIN
   IF to_regprocedure('public.set_workflow_data_grant(uuid,text[],integer)') IS NOT NULL
     OR to_regprocedure('public.can_administer_guided_workflow(uuid)') IS NOT NULL
+    OR to_regprocedure('public.create_guided_workflow_draft(uuid,uuid,text,jsonb)') IS NOT NULL
     OR to_regprocedure('public.read_guided_condition_lead(uuid,uuid,uuid)') IS NOT NULL
     OR to_regprocedure('public.save_guided_workflow_draft(uuid,jsonb,integer)') IS NOT NULL
     OR has_table_privilege('authenticated', 'public.workflow_guided_drafts', 'SELECT')
@@ -66,7 +71,13 @@ ${conflictForward}
 ${readerForward}
 ${draftForward}
 ${masterForward}
+${createForward}
 DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.create_guided_workflow_draft(uuid,uuid,text,jsonb)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.create_guided_workflow_draft(uuid,uuid,text,jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.create_guided_workflow_draft(uuid,uuid,text,jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'reapply did not restore creation privileges';
+  END IF;
   IF has_function_privilege('anon', 'public.can_administer_guided_workflow(uuid)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.can_administer_guided_workflow(uuid)', 'EXECUTE')
     OR NOT has_function_privilege('authenticated', 'public.can_administer_guided_workflow(uuid)', 'EXECUTE') THEN

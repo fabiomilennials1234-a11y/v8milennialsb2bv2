@@ -19,10 +19,10 @@ test('troca de usuário remove seleção e resultado pessoal da conta anterior',
   await expect(page.getByRole('button', { name: 'Testar condição' })).toBeDisabled();
 });
 
-async function openGuidedEditor(page: Page, draftValue?: string) {
+async function openGuidedEditor(page: Page, draftValue?: string, isNew = false, omitDraftTrigger = false) {
   await page.route('**/rest/v1/workflow_guided_drafts?*', route => route.fulfill({ json: draftValue === undefined ? null : {
     revision: 3, definition: { nodes: [
-      { id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } },
+      ...(!omitDraftTrigger ? [{ id: 'trigger-1', type: 'trigger', position: { x: 400, y: 50 }, data: { type: 'trigger', label: 'Entrada', triggerType: 'lead_created', config: {} } }] : []),
       { id: 'condition-1', type: 'condition', position: { x: 400, y: 220 }, data: { type: 'condition', label: 'Nome informado',
         guidedCondition: { version: 1, id: 'rule-1', field: 'lead.name', operator: 'equals', value: draftValue } } },
     ], edges: [] },
@@ -55,8 +55,29 @@ async function openGuidedEditor(page: Page, draftValue?: string) {
     expect(route.request().postDataJSON().organizationId).toBe('org-1');
     return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true, actual: 'José' }] } });
   });
-  await page.goto('/tests/browser/fixtures/guided-editor.html');
+  await page.goto(`/tests/browser/fixtures/guided-editor.html${isNew ? '?new=1' : ''}`);
 }
+
+test('nova automação guiada cria rascunho separado sem enviar definição ao cadastro ativo', async ({ page }) => {
+  let created: Record<string, unknown> | undefined;
+  const directWrites: string[] = [];
+  page.on('request', request => {
+    if (request.method() === 'POST' && request.url().includes('/rest/v1/workflows')) directWrites.push(request.url());
+  });
+  await page.route('**/rest/v1/rpc/create_guided_workflow_draft', route => {
+    created = route.request().postDataJSON();
+    return route.fulfill({ json: { workflow_id: created!.p_workflow_id, revision: 1 } });
+  });
+  await openGuidedEditor(page, undefined, true);
+  await page.getByRole('button', { name: 'Adicionar Nó' }).click();
+  await page.getByRole('menuitem', { name: 'Condição', exact: true }).click();
+  await page.getByRole('button', { name: 'Criar', exact: true }).click();
+  await expect(page.getByText('Rascunho criado. Publique quando estiver pronto.')).toBeVisible();
+  expect(created).toMatchObject({ p_organization_id: 'org-1', p_name: 'Novo Workflow',
+    p_workflow_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+    p_definition: { nodes: expect.arrayContaining([expect.objectContaining({ type: 'condition' })]) } });
+  expect(directWrites).toEqual([]);
+});
 
 test('abre rascunho separado sem substituir sua edição pela definição publicada', async ({ page }) => {
   await openGuidedEditor(page, 'Mariana');
@@ -83,6 +104,19 @@ test('salva comparação incompleta em rascunho sem escrever na definição em e
     p_definition: { nodes: expect.arrayContaining([expect.objectContaining({ id: 'condition-1',
       data: expect.objectContaining({ guidedCondition: expect.objectContaining({ value: '' }) }) })]) } });
   expect(writes).toEqual([]);
+});
+
+test('rascunho guiado pode ser salvo durante reconstrução do gatilho', async ({ page }) => {
+  let saved: { p_definition: { nodes: Array<{ type: string }> } } | undefined;
+  await page.route('**/rest/v1/rpc/save_guided_workflow_draft', route => {
+    saved = route.request().postDataJSON();
+    return route.fulfill({ json: { workflow_id: 'workflow-1', revision: 4 } });
+  });
+  await openGuidedEditor(page, 'Mariana', false, true);
+  await expect(page.getByText('Nome informado', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Salvar', exact: true }).click();
+  await expect(page.getByText('Rascunho salvo. A versão publicada permanece igual.')).toBeVisible();
+  expect(saved?.p_definition.nodes.map(node => node.type)).toEqual(['condition']);
 });
 
 test('conflito de rascunho preserva edição local e não tenta sobrescrever revisão alheia', async ({ page }) => {

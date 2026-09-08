@@ -199,6 +199,7 @@ export default function AutomacoesEditor() {
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [draftRevision, setDraftRevision] = useState(0);
+  const [newGuidedId] = useState(() => crypto.randomUUID());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [enrollment, setEnrollment] = useState(EMPTY_ENROLLMENT);
   const [reenrollment, setReenrollment] = useState(DEFAULT_REENROLLMENT);
@@ -509,7 +510,8 @@ export default function AutomacoesEditor() {
     }
 
     const triggerNode = nodes.find((n) => n.type === "trigger");
-    if (!triggerNode) {
+    const isGuidedDraft = Boolean(guidedDraft.data) || nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'));
+    if (!triggerNode && !isGuidedDraft) {
       toast.error("O workflow precisa de um nó Trigger");
       return;
     }
@@ -523,7 +525,7 @@ export default function AutomacoesEditor() {
       return;
     }
 
-    const triggerData = triggerNode.data as unknown as TriggerNodeData;
+    const triggerData = triggerNode?.data as unknown as TriggerNodeData;
 
     // Nó de ação incompleto não impede SALVAR (rascunho pela metade é legítimo),
     // mas impede ATIVAR. Medido em produção: ~6.400 execuções morreram em 90 dias
@@ -575,6 +577,13 @@ export default function AutomacoesEditor() {
 
     try {
       if (isNew) {
+        if (nodes.some(node => Object.hasOwn(node.data, 'guidedCondition'))) {
+          const created = await guidedDraft.create.mutateAsync({ id: newGuidedId, name, definition });
+          setDraftRevision(created.revision);
+          toast.success("Rascunho criado. Publique quando estiver pronto.");
+          navigate(`/automacoes/${created.workflow_id}`, { replace: true });
+          return;
+        }
         const result = await createWorkflow.mutateAsync({
           name,
           is_active: isActive,
@@ -608,13 +617,13 @@ export default function AutomacoesEditor() {
         ? "Outra pessoa alterou este rascunho. Sua edição continua nesta tela; compare com a versão atual antes de salvar."
         : err.message || "Erro ao salvar workflow");
     }
-  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, draftRevision]);
+  }, [name, isActive, nodes, edges, setNodes, isNew, id, createWorkflow, updateWorkflow, navigate, enrollment, reenrollment, guidedDraft.data, guidedDraft.save, guidedDraft.create, draftRevision, newGuidedId]);
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId) || null
     : null;
 
-  const isSaving = createWorkflow.isPending || updateWorkflow.isPending || guidedDraft.save.isPending;
+  const isSaving = createWorkflow.isPending || updateWorkflow.isPending || guidedDraft.save.isPending || guidedDraft.create.isPending;
 
   if (!isNew && guidedDraft.isError) {
     return <div role="alert" className="space-y-3 p-6"><p>Não foi possível carregar o rascunho.</p>

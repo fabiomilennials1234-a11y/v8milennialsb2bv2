@@ -150,6 +150,53 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
   }, 60000);
 
+  it('creates a new guided workflow inactive with a separate incomplete draft and no implicit data grant', async () => {
+    const workflowId = crypto.randomUUID();
+    const administrator = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `guided-create-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const definition = { nodes: [{ id: 'condition-1', type: 'condition', data: { guidedCondition: {} } }], edges: [] };
+    const created = await administrator.rpc('create_guided_workflow_draft', {
+      p_workflow_id: workflowId, p_organization_id: orgA, p_name: 'New guided draft', p_definition: definition,
+    });
+    expect(created.error).toBeNull();
+    expect(created.data).toEqual({ workflow_id: workflowId, revision: 1 });
+    const workflow = await administrator.from('workflows').select('name, is_active, definition, created_by')
+      .eq('organization_id', orgA).eq('id', workflowId).single();
+    expect(workflow.error).toBeNull();
+    expect(workflow.data).toEqual({ name: 'New guided draft', is_active: false,
+      definition: { nodes: [], edges: [] }, created_by: userId });
+    const draft = await administrator.from('workflow_guided_drafts').select('definition, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(draft.error).toBeNull();
+    expect(draft.data).toEqual({ definition, revision: 1 });
+    const grants = await administrator.from('workflow_data_grants').select('fields')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId);
+    expect(grants.error).toBeNull();
+    expect(grants.data).toEqual([]);
+    const duplicate = await administrator.rpc('create_guided_workflow_draft', {
+      p_workflow_id: workflowId, p_organization_id: orgA, p_name: 'Duplicate', p_definition: {},
+    });
+    expect(duplicate.error?.code).toBe('23505');
+    const unchanged = await administrator.from('workflow_guided_drafts').select('definition, revision')
+      .eq('organization_id', orgA).eq('workflow_id', workflowId).single();
+    expect(unchanged.data).toEqual({ definition, revision: 1 });
+    const rejectedId = crypto.randomUUID();
+    const foreign = await administrator.rpc('create_guided_workflow_draft', {
+      p_workflow_id: rejectedId, p_organization_id: orgB, p_name: 'Foreign creation', p_definition: {},
+    });
+    expect(foreign.error?.code).toBe('42501');
+    const invalid = await administrator.rpc('create_guided_workflow_draft', {
+      p_workflow_id: rejectedId, p_organization_id: orgA, p_name: 'Invalid draft', p_definition: [],
+    });
+    expect(invalid.error?.code).toBe('22023');
+    const absent = await administrator.from('workflows').select('id')
+      .eq('organization_id', orgA).eq('id', rejectedId);
+    expect(absent.error).toBeNull();
+    expect(absent.data).toEqual([]);
+  }, 60000);
+
   it('saves an incomplete guided draft without rewriting the existing workflow definition', async () => {
     const workflowId = crypto.randomUUID();
     const existingDefinition = { nodes: [{ id: 'trigger-1', type: 'trigger', data: { triggerType: 'lead_created' } }], edges: [] };
