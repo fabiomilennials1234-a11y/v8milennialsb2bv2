@@ -24,6 +24,9 @@ import {
   TEST_ORG_ID,
   TEST_ORG_B_ID,
   TEST_ORG_A_LEAD_IDS,
+  TEST_LEAD_ALPHA_ID,
+  TEST_LEAD_DOIS_NEGOCIOS_ID,
+  TEST_LEAD_UM_NEGOCIO_ID,
   TEST_LEAD_ORGB_1_ID,
   TEST_LEAD_ORGB_2_ID,
 } from './setup';
@@ -135,12 +138,20 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
   });
 
   describe('pipeline_entries', () => {
-    it('Org A admin sees exactly 1 pipeline_entries', async () => {
-      await expectRowCount(adminA, 'pipeline_entries', 1);
+    it('Org A admin sees seeded system and metrics deals, never Org B deals', async () => {
+      const { data, error } = await adminA.from('pipeline_entries').select('id, lead_id, organization_id');
+      expect(error).toBeNull();
+      expect(data!.map(entry => entry.lead_id)).toContain(TEST_LEAD_ALPHA_ID);
+      expect(data!.filter(entry => entry.lead_id === TEST_LEAD_DOIS_NEGOCIOS_ID)).toHaveLength(2);
+      expect(data!.filter(entry => entry.lead_id === TEST_LEAD_UM_NEGOCIO_ID)).toHaveLength(1);
+      for (const entry of data!) expect(entry.organization_id).toBe(TEST_ORG_ID);
     });
 
-    it('Org B admin sees exactly 1 pipeline_entries', async () => {
-      await expectRowCount(adminB, 'pipeline_entries', 1);
+    it('Org B admin sees its seeded deal, never Org A deals', async () => {
+      const { data, error } = await adminB.from('pipeline_entries').select('lead_id, organization_id');
+      expect(error).toBeNull();
+      expect(data!.map(entry => entry.lead_id)).toContain(TEST_LEAD_ORGB_1_ID);
+      for (const entry of data!) expect(entry.organization_id).toBe(TEST_ORG_B_ID);
     });
   });
 
@@ -196,8 +207,14 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
       expect(orgs.has('00000000-0000-0000-0000-000000000002')).toBe(true);
     });
 
-    it('master sees all pipeline_entries (2 = 1 + 1)', async () => {
-      await expectRowCount(master, 'pipeline_entries', 2);
+    it('master sees seeded deals from both organizations, including metrics deals', async () => {
+      const { data, error } = await master.from('pipeline_entries').select('lead_id, organization_id');
+      expect(error).toBeNull();
+      for (const leadId of [TEST_LEAD_ALPHA_ID, TEST_LEAD_DOIS_NEGOCIOS_ID, TEST_LEAD_UM_NEGOCIO_ID]) {
+        expect(data).toContainEqual({ lead_id: leadId, organization_id: TEST_ORG_ID });
+      }
+      expect(data).toContainEqual({ lead_id: TEST_LEAD_ORGB_1_ID, organization_id: TEST_ORG_B_ID });
+      expect(data!.filter(entry => entry.lead_id === TEST_LEAD_DOIS_NEGOCIOS_ID)).toHaveLength(2);
     });
 
     it('master sees all team_members (7 = 5 + 2)', async () => {

@@ -148,7 +148,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: [quality]
+    # Independent and still blocking, like RLS: report database regressions
+    # while the TypeScript quality gate runs. No check is skipped.
     steps:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
