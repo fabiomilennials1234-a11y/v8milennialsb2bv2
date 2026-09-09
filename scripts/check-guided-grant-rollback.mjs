@@ -113,6 +113,15 @@ const limitRollback = readFileSync(`supabase/migrations/rollback/${limitMigratio
 const stageClockMigration = '20271017000038_restart_stage_time_on_funnel_change.sql';
 const stageClockForward = readFileSync(`supabase/migrations/${stageClockMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const stageClockRollback = readFileSync(`supabase/migrations/rollback/${stageClockMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessPersonalMigration = '20271017000039_guided_personal_trigger_business_stage.sql';
+const businessPersonalForward = readFileSync(`supabase/migrations/${businessPersonalMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessPersonalRollback = readFileSync(`supabase/migrations/rollback/${businessPersonalMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessAuthorizationMigration = '20271017000040_guided_trigger_business_stage_authorization.sql';
+const businessAuthorizationForward = readFileSync(`supabase/migrations/${businessAuthorizationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessAuthorizationRollback = readFileSync(`supabase/migrations/rollback/${businessAuthorizationMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessVolatilityMigration = '20271017000041_fix_trigger_business_reader_volatility.sql';
+const businessVolatilityForward = readFileSync(`supabase/migrations/${businessVolatilityMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessVolatilityRollback = readFileSync(`supabase/migrations/rollback/${businessVolatilityMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -144,6 +153,16 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${businessVolatilityRollback}
+${businessAuthorizationRollback}
+${businessPersonalRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)') IS NOT NULL
+    OR to_regprocedure('public.read_guided_condition_trigger_business_stage(uuid,uuid,uuid,uuid,jsonb)') IS NOT NULL
+    OR to_regprocedure('public.validate_guided_trigger_business_stage_version()') IS NOT NULL THEN
+    RAISE EXCEPTION 'trigger-business rollback left callable objects';
+  END IF;
+END $$;
 ${stageClockRollback}
 ${limitRollback}
 ${selectRollback}
@@ -341,6 +360,25 @@ ${catalogueForward}
 ${customForward}
 ${limitForward}
 ${stageClockForward}
+${businessPersonalForward}
+${businessAuthorizationForward}
+${businessVolatilityForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.read_guided_condition_trigger_business_stage(uuid,uuid,uuid,uuid,jsonb)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.read_guided_condition_trigger_business_stage(uuid,uuid,uuid,uuid,jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.read_guided_condition_trigger_business_stage(uuid,uuid,uuid,uuid,jsonb)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.validate_guided_trigger_business_stage_version()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.validate_guided_trigger_business_stage_version()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.validate_guided_trigger_business_stage_version()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'trigger-business reapply privileges invalid';
+  END IF;
+  IF NOT public.valid_guided_data_scopes(ARRAY['business.trigger.stage']) THEN
+    RAISE EXCEPTION 'trigger-business scope not restored';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF pg_get_functiondef('public.set_pipeline_entry_stage_changed()'::regprocedure)
     IS DISTINCT FROM (SELECT original_stage_clock_definition FROM guided_rollback_fixture) THEN

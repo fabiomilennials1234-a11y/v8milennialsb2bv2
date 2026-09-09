@@ -250,6 +250,139 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('compares the current stage of the exact triggering business without substituting another card', async () => {
+    const pipelineId = crypto.randomUUID(), otherPipelineId = crypto.randomUUID();
+    const stageId = crypto.randomUUID(), otherStageId = crypto.randomUUID();
+    const entryId = crypto.randomUUID(), otherEntryId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `trigger-business-${entryId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1, id: 'stage', field: 'business.trigger.stage', operator: 'equals', pipelineId, stageId };
+    await service.from('pipelines').insert([
+      { id: pipelineId, organization_id: orgA, name: 'Comercial', slug: `commercial-${pipelineId}`, type: 'custom' },
+      { id: otherPipelineId, organization_id: orgA, name: 'Renovação', slug: `renewal-${otherPipelineId}`, type: 'custom' },
+    ]).throwOnError();
+    try {
+      await service.from('pipeline_stages').insert([
+        { id: stageId, organization_id: orgA, pipeline_id: pipelineId, stage_key: 'proposal', name: 'Proposta', position: 0 },
+        { id: otherStageId, organization_id: orgA, pipeline_id: otherPipelineId, stage_key: 'proposal', name: 'Proposta renovação', position: 0 },
+      ]).throwOnError();
+      await service.from('pipeline_entries').insert([
+        { id: entryId, organization_id: orgA, lead_id: leadA, pipeline_id: pipelineId, stage_id: stageId, stage_key: 'proposal' },
+        { id: otherEntryId, organization_id: orgA, lead_id: leadA, pipeline_id: otherPipelineId, stage_id: otherStageId, stage_key: 'proposal' },
+      ]).throwOnError();
+      const evaluate = (rule: unknown, selectedEntryId: string | null = entryId) => evaluateGuidedCondition(caller, {
+        organizationId: orgA, leadId: leadA, entryId: selectedEntryId, condition: rule,
+      });
+      expect(await evaluate(condition)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: stageId, reference: { id: stageId, name: 'Proposta' }, context: { entryId, pipeline: { id: pipelineId, name: 'Comercial' } } }],
+      });
+      expect(await evaluate({ ...condition, operator: 'not_equals' })).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluate({ ...condition, stageId: otherStageId, pipelineId: otherPipelineId })).toMatchObject({ status: 'evaluated', matched: false });
+      expect(await evaluate({ ...condition, stageId: otherStageId })).toEqual({ status: 'error', code: 'reference_unavailable' });
+      expect(await evaluate(condition, null)).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluate(condition, otherEntryId)).toMatchObject({ status: 'evaluated', matched: false });
+      await service.from('pipeline_entries').delete().eq('id', entryId).throwOnError();
+      expect(await evaluate(condition)).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgB, leadId: leadB, entryId: otherEntryId, condition }))
+        .toEqual({ status: 'error', code: 'context_unavailable' });
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, entryId: otherEntryId,
+          condition: { ...condition, pipelineId: otherPipelineId, stageId: otherStageId } }), signal: AbortSignal.timeout(15000),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: otherStageId, reference: { id: otherStageId, name: 'Proposta renovação' } }],
+      });
+    } finally {
+      await service.from('pipeline_entries').delete().in('id', [entryId, otherEntryId]).throwOnError();
+      await service.from('pipeline_stages').delete().in('id', [stageId, otherStageId]).throwOnError();
+      await service.from('followup_reclassify_queue').delete().eq('organization_id', orgA).throwOnError();
+      await service.from('pipelines').delete().in('id', [pipelineId, otherPipelineId]).throwOnError();
+    }
+  }, 60000);
+
+  it('publishes and executes a trigger-business stage rule through its atomic organization grant', async () => {
+    const workflowId = crypto.randomUUID(), pipelineId = crypto.randomUUID(), stageId = crypto.randomUUID();
+    const entryId = crypto.randomUUID(), executionId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `business-publish-${workflowId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const condition = { version: 1, id: 'stage', field: 'business.trigger.stage', operator: 'equals', pipelineId, stageId };
+    const definition = { nodes: [
+      { id: 't', type: 'trigger', data: { triggerType: 'pipeline_stage_changed', config: {} } },
+      { id: 'c', type: 'condition', data: { guidedCondition: condition } },
+      { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+    ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+      { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+    const settings = { name: 'Etapa do negócio do gatilho' };
+    await service.from('pipelines').insert({ id: pipelineId, organization_id: orgA, name: 'Comercial', slug: `guided-${pipelineId}`, type: 'custom' }).throwOnError();
+    try {
+      await service.from('pipeline_stages').insert({ id: stageId, organization_id: orgA, pipeline_id: pipelineId,
+        stage_key: 'proposal', name: 'Proposta', position: 0 }).throwOnError();
+      await service.from('pipeline_entries').insert({ id: entryId, organization_id: orgA, lead_id: leadA,
+        pipeline_id: pipelineId, stage_id: stageId, stage_key: 'proposal' }).throwOnError();
+      expect((await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_definition: definition, p_settings: settings })).error).toBeNull();
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId,
+        p_fields: ['business.trigger.stage'], p_expected_revision: 0 })).error).toBeNull();
+      const readArgs = { p_workflow_id: workflowId, p_organization_id: orgA, p_lead_id: leadA,
+        p_entry_id: entryId, p_references: [{ pipelineId, stageId }] };
+      expect((await caller.rpc('read_guided_condition_trigger_business_stage', readArgs)).error?.code).toBe('42501');
+      const authorizedRead = await service.rpc('read_guided_condition_trigger_business_stage', readArgs);
+      expect(authorizedRead.error).toBeNull();
+      expect(authorizedRead.data).toMatchObject({
+        entry: { id: entryId, pipeline_id: pipelineId, stage_id: stageId },
+        pipelines: [{ id: pipelineId, name: 'Comercial' }], stages: [{ id: stageId, name: 'Proposta', pipeline_id: pipelineId }],
+      });
+      expect((await service.rpc('read_guided_condition_trigger_business_stage', { ...readArgs,
+        p_references: [{ pipelineId, stageId: crypto.randomUUID() }] })).error?.code).toBe('PT422');
+      const request = { organizationId: orgA, leadId: leadA, entryId, condition,
+        authorization: { kind: 'organization' as const, workflowId } };
+      expect(await evaluateGuidedCondition(service, request)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: stageId, reference: { id: stageId, name: 'Proposta' } }],
+      });
+      expect(await evaluateGuidedCondition(service, { ...request, entryId: null })).toEqual({ status: 'error', code: 'context_unavailable' });
+      const finalized = await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1, p_definition: definition,
+        p_settings: settings, p_required_fields: ['business.trigger.stage'] });
+      expect(finalized.error).toBeNull();
+      expect((await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId,
+        organization_id: orgA, lead_id: leadA, pipeline_entry_id: entryId, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' })).error).toBeNull();
+      expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        entryId, guidedVersionId: finalized.data.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {} }))
+        .toMatchObject({ success: true, status: 'completed' });
+      const steps = await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId);
+      expect(steps.data?.map(step => step.node_id)).toContain('yes');
+      const missingStage = crypto.randomUUID();
+      const invalidDefinition = { ...definition, nodes: definition.nodes.map(node => node.id === 'c'
+        ? { ...node, data: { guidedCondition: { ...condition, stageId: missingStage } } } : node) };
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_expected_revision: 1, p_definition: invalidDefinition, p_settings: settings })).error).toBeNull();
+      const rejected = await service.rpc('finalize_guided_workflow_publication', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 2, p_definition: invalidDefinition,
+        p_settings: settings, p_required_fields: ['business.trigger.stage'] });
+      expect(rejected.error?.code).toBe('PT422');
+      expect(JSON.parse(rejected.error?.details || '{}')).toEqual({ nodeIds: ['c'] });
+      const active = await caller.from('workflow_guided_publications').select('version_id').eq('workflow_id', workflowId).single();
+      expect(active.data?.version_id).toBe(finalized.data.version_id);
+      await service.from('pipeline_entries').delete().eq('id', entryId).throwOnError();
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'context_unavailable' });
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId,
+        p_fields: [], p_expected_revision: 1 })).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, request)).toEqual({ status: 'error', code: 'access_denied' });
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId).throwOnError();
+      await service.from('pipeline_entries').delete().eq('id', entryId).throwOnError();
+      await service.from('pipeline_stages').delete().eq('id', stageId).throwOnError();
+      await service.from('followup_reclassify_queue').delete().eq('organization_id', orgA).throwOnError();
+      await service.from('pipelines').delete().eq('id', pipelineId).throwOnError();
+    }
+  }, 60000);
+
   it.each(['test_guided_condition_custom_fields', 'test_guided_condition_custom_options'] as const)('%s bounds direct personal requests before reading definitions', async rpc => {
     const fieldId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

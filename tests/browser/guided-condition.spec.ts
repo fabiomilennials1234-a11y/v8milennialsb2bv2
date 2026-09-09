@@ -1444,11 +1444,54 @@ async function selectInformation(page: Page, field: string) {
     'lead.pre_sale_responsible_id': 'Responsável de pré-vendas', 'lead.sale_responsible_id': 'Responsável de vendas',
     'lead.utm_source': 'UTM Source', 'lead.utm_medium': 'UTM Medium', 'lead.utm_content': 'UTM Content',
     'lead.utm_term': 'UTM Term', 'lead.utm_campaign': 'UTM Campaign',
+    'business.trigger.stage': 'Etapa',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
   await page.getByRole('option', { name: labels[field], exact: true }).click();
 }
+
+test('configura etapa com funil filtrado e testa o negócio exato do gatilho', async ({ page }) => {
+  const pipelineId = 'abcd0000-0000-4000-8000-000000000031';
+  const otherPipelineId = 'abcd0000-0000-4000-8000-000000000032';
+  const stageId = 'abcd0000-0000-4000-8000-000000000033';
+  const otherStageId = 'abcd0000-0000-4000-8000-000000000034';
+  const entryId = 'abcd0000-0000-4000-8000-000000000035';
+  await page.route('**/rest/v1/pipeline_display_config?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/pipelines?*', route => route.fulfill({ json: [
+    { id: pipelineId, organization_id: 'org-1', name: 'Comercial', slug: 'comercial', type: 'custom', is_active: true, display_order: 0 },
+    { id: otherPipelineId, organization_id: 'org-1', name: 'Renovação', slug: 'renovacao', type: 'custom', is_active: true, display_order: 1 },
+  ] }));
+  await page.route('**/rest/v1/pipeline_stages?*', route => {
+    const pipeline = new URL(route.request().url()).searchParams.get('pipeline_id');
+    return route.fulfill({ json: pipeline === `eq.${pipelineId}`
+      ? [{ id: stageId, pipeline_id: pipelineId, stage_key: 'proposal', name: 'Proposta', position: 0 }]
+      : [{ id: otherStageId, pipeline_id: otherPipelineId, stage_key: 'proposal', name: 'Proposta renovação', position: 0 }] });
+  });
+  await page.route('**/rest/v1/pipeline_entries?*', route => route.fulfill({ json: [
+    { id: entryId, pipeline_id: pipelineId, stage_id: stageId },
+  ] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'business.trigger.stage');
+  await expect(page.getByRole('combobox', { name: 'Informação', exact: true })).toContainText('Negócio do gatilho · Etapa');
+  await page.getByRole('combobox', { name: 'Funil', exact: true }).selectOption(pipelineId);
+  await expect(page.getByRole('combobox', { name: 'Etapa', exact: true }).getByRole('option', { name: 'Proposta renovação' })).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Etapa', exact: true }).selectOption(stageId);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Negócio do gatilho · Etapa é “Comercial · Proposta”');
+  await expect(page.getByText('Etapa do negócio do gatilho em execuções desta organização')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true }).selectOption(entryId);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ entryId, condition: {
+      field: 'business.trigger.stage', operator: 'equals', pipelineId, stageId,
+    } });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true,
+      actual: stageId, reference: { id: stageId, name: 'Proposta' }, context: { entryId, pipeline: { id: pipelineId, name: 'Comercial' } } }] } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Comercial · Proposta');
+});
 
 test('busca informação sem acento e cancela sem perder comparação', async ({ page }) => {
   await openGuidedEditor(page, 'José');

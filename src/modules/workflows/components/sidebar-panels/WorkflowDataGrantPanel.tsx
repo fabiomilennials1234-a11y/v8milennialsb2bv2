@@ -34,7 +34,7 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
   const customUnavailable = customReferences.some(reference => reference.isError || (reference.isSuccess && !['text', 'number', 'boolean', 'date', 'select'].includes(reference.data?.field_type ?? '')));
   const customLabels = new Map(customIds.map((id, index) => [id, customReferences[index].data?.field_name]));
   const authorized = requiredFields.length > 0 && requiredFields.every(field => grant.data?.fields.includes(field));
-  const scopeLabel = requiredFields.map(field => field === 'lead.tags' ? 'Tags' : field === 'lead.origin' ? 'Origem' : isGuidedResponsibleField(field) ? GUIDED_RESPONSIBLE_FIELDS[field].label : isGuidedScalarField(field) ? GUIDED_SCALAR_FIELDS[field].label : customLabels.get(field.slice('lead.custom:'.length)) ?? 'Campo personalizado').join(' e ');
+  const scopeLabel = requiredFields.map(field => field === 'business.trigger.stage' ? 'Etapa do negócio do gatilho' : field === 'lead.tags' ? 'Tags' : field === 'lead.origin' ? 'Origem' : isGuidedResponsibleField(field) ? GUIDED_RESPONSIBLE_FIELDS[field].label : isGuidedScalarField(field) ? GUIDED_SCALAR_FIELDS[field].label : customLabels.get(field.slice('lead.custom:'.length)) ?? 'Campo personalizado').join(' e ');
   const authorizeLabel = requiredFields.length === 1 && requiredFields[0] === 'lead.name' ? 'Autorizar acesso ao nome dos leads'
     : requiredFields.length === 1 && requiredFields[0] === 'lead.company' ? 'Autorizar acesso à empresa dos leads' : 'Autorizar acesso aos campos selecionados';
   async function update() {
@@ -60,7 +60,7 @@ export function WorkflowDataGrantPanel({ actorId, workflowId, organizationId, ca
   }
   return <section className="mt-6 space-y-3 rounded-xl border border-border p-4" aria-label="Acesso da automação">
     <h4 className="font-medium">Acesso da automação</h4>
-    <p className="text-sm">{scopeLabel} de todos os leads desta organização</p>
+    <p className="text-sm">{scopeLabel}{requiredFields.includes('business.trigger.stage') ? ' em execuções desta organização' : ' de todos os leads desta organização'}</p>
     <p className="text-xs text-muted-foreground">Permite consultar esse dado durante a execução automática, mesmo se o criador sair da equipe. Seu teste continua usando suas permissões pessoais.</p>
     {customPending && <p className="text-sm text-muted-foreground">Consultando campos personalizados…</p>}
     {customUnavailable && <p role="alert" className="text-sm text-destructive">Confira os campos indisponíveis antes de autorizar o acesso.</p>}

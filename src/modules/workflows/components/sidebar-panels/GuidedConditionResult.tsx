@@ -1,7 +1,8 @@
 import type { GuidedConditionDraft } from '@/types/workflow';
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 
-export type GuidedResultEntry = { id: string; status?: string; matched?: boolean; reference?: { id: string; name: string } };
+export type GuidedResultEntry = { id: string; status?: string; matched?: boolean; reference?: { id: string; name: string };
+  context?: { entryId?: string; pipeline?: { id: string; name: string } } };
 
 export function GuidedConditionResult({ condition, rules, groups }: {
   condition: GuidedConditionDraft; rules: GuidedResultEntry[]; groups: GuidedResultEntry[];
@@ -30,7 +31,12 @@ export function GuidedConditionResult({ condition, rules, groups }: {
         ? { ...current, originLabel: entry.reference.name } : (current.field === 'lead.pre_sale_responsible_id' || current.field === 'lead.sale_responsible_id')
           && current.operator !== 'is_empty' && current.operator !== 'is_not_empty' && entry?.status === 'evaluated' && typeof entry.reference?.id === 'string' && typeof entry.reference.name === 'string'
           && entry.reference.id.toLowerCase() === current.memberId.toLowerCase()
-          ? { ...current, memberLabel: entry.reference.name } : current;
+          ? { ...current, memberLabel: entry.reference.name } : current.field === 'business.trigger.stage'
+            && entry?.status === 'evaluated' && typeof entry.reference?.id === 'string' && typeof entry.reference.name === 'string'
+            && entry.reference.id.toLowerCase() === current.stageId.toLowerCase()
+            ? { ...current, stageLabel: entry.reference.name,
+              pipelineLabel: entry.context?.pipeline?.id.toLowerCase() === current.pipelineId.toLowerCase()
+                ? entry.context.pipeline.name : current.pipelineLabel } : current;
     return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}</p>;
   }
   return render(condition, '');

@@ -625,3 +625,12 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Business selectors/evaluator, current-entry scope, financial absence, reliable-time error handling and existence-of-one-business groups are still pending. No ticket certified, production/worker deployment or final HITL.
 
 - Final checkpoint: 69 real integration tests passed after both migrations; 105 browser tests passed; TypeScript ratchet introduced zero errors. Focused ESLint/whitespace passed. The 39-migration rollback/recovery passed, including exact stage-clock function restoration and denied direct EXECUTE after recovery. Live privileges independently verified. All test/migration handles terminal. No endpoint/worker/production deployment during this checkpoint. Next: guided triggering-entry stage contract, scoped approval and UI; remaining ticket 07 performance/real-journey certification stays tracked in the acceptance audit.
+
+## 2026-09-09 — ticket 08 stage vertical slice
+
+- `business.trigger.stage` persists canonical pipeline/stage UUIDs plus display hints. Personal tests and automatic execution require exact `pipeline_entry_id`; null, removed, foreign or lead-mismatched entries return context_unavailable. No recent-card lookup exists in guided path.
+- Personal and organization readers validate every pipeline/stage pair before short-circuit evaluation. Organization reads lock workflow, grant, entry and references. Explicit scope: `business.trigger.stage`; revocation denies next automatic evaluation.
+- Publication validates all nested business-stage references before inserting version. Missing, foreign or cross-pipeline stages return located PT422 and preserve active version. Shared executor forwards execution entry ID.
+- Editor groups field under “Negócio do gatilho”. Funil and etapa dropdowns filter by canonical pipeline ID, persist readable labels, expose unavailable references and require exact business choice for personal test.
+- Final checkpoint evidence: 71 real integration tests, 106 browser tests, 92 evaluator/API/publication/executor unit tests, zero introduced TypeScript errors and 42-migration rollback/reapply. The initial full browser run exposed an unnecessary `entryId: null` on lead-only requests; the compatibility correction passed both affected journeys before the clean full rerun.
+- Ticket 08 remains open: business value and elapsed-stage-time rules still pending. Ticket 09 existence semantics remain separate.

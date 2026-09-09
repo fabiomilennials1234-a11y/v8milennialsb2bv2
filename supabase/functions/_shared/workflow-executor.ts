@@ -415,7 +415,7 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
         case "condition": {
           if (params.guidedVersionId) {
             const evaluated = await evaluateGuidedCondition(supabase, {
-              organizationId, leadId, condition: node.data.guidedCondition,
+              organizationId, leadId, entryId: params.entryId ?? null, condition: node.data.guidedCondition,
               authorization: { kind: 'organization', workflowId },
             });
             if (evaluated.status === 'error') {

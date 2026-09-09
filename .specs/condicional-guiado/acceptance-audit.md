@@ -76,3 +76,11 @@ Live preview CHECK constraint and source manager confirm the five custom types a
 - Next implementation: exact triggering entry context and stage selector/evaluation with explicit organization approval. Then value/elapsed-time rules and the separate existence query. No fallback to another lead entry; no absent-value-to-zero conversion. No ticket closed by this audit.
 
 Additional business-source finding to retain for ticket 08: several existing stage-event/workflow triggers still compare only stage_key. Equal-key cross-funnel transfer now corrects the stage clock, but event fan-out for that transfer was not changed or certified here. Canonical guided context must use the triggering execution's pipeline_entry_id and never infer a replacement from the lead's most recent card.
+
+## Ticket 08 — exact triggering-business stage checkpoint
+
+Stage comparison now uses `workflow_executions.pipeline_entry_id` as mandatory identity. Real tests cover two cards for one lead, identical stage keys in different funnels, equality/inequality, cross-pipeline reference rejection, missing/deleted entry, tenant mismatch, personal HTTP, organization grant/revocation, immutable publication and pinned worker routing. Missing context errors; no card substitution.
+
+Editor offers separate funil and filtered etapa dropdowns, current readable names, dedicated business selector for personal testing and unavailable states. Publication rejects removed/mismatched references without replacing active version. Scope copy names trigger business.
+
+Checkpoint does not satisfy full ticket. Value must preserve absence without zero. Elapsed time must consume only trusted stage clock with relevant writers audited. Those slices remain next.

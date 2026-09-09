@@ -28,13 +28,23 @@ export type GuidedCustomDateRule = { version: 1; id: string; field: 'lead.custom
 export type GuidedCustomSelectRule = { version: 1; id: string; field: 'lead.custom'; fieldId: string; fieldType: 'select' }
   & ({ operator: 'equals' | 'not_equals'; value: string } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
 
-export type GuidedRule = GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedTriggerBusinessStageRule = {
+  version: 1;
+  id: string;
+  field: 'business.trigger.stage';
+  operator: 'equals' | 'not_equals';
+  pipelineId: string;
+  stageId: string;
+};
+
+export type GuidedRule = GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
 export interface GuidedConditionRequest {
   organizationId: string;
   leadId: string;
+  entryId?: string | null;
   condition: unknown;
   authorization?: { kind: 'organization'; workflowId: string };
 }
@@ -56,6 +66,9 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && rule.children.every(child => valid(child, groupDepth + 1));
     }
     if ('children' in rule || 'match' in rule || 'kind' in rule) return false;
+    if (rule.field === 'business.trigger.stage') return (rule.operator === 'equals' || rule.operator === 'not_equals')
+      && typeof rule.pipelineId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.pipelineId)
+      && typeof rule.stageId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.stageId);
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
@@ -129,6 +142,7 @@ export async function evaluateGuidedCondition(
   const memberIds = new Set<string>();
   const originIds = new Set<string>();
   const tagIds = new Set<string>();
+  const businessStageReferences = new Map<string, { pipelineId: string; stageId: string }>();
   function collect(current: GuidedCondition): void {
     if ('children' in current) current.children.forEach(collect);
     else if (current.field === 'lead.custom') {
@@ -146,6 +160,10 @@ export async function evaluateGuidedCondition(
     else if (isGuidedResponsibleField(current.field) && current.operator !== 'is_empty' && current.operator !== 'is_not_empty' && 'memberId' in current) memberIds.add(current.memberId.toLowerCase());
     else if (current.field === 'lead.origin' && current.operator !== 'is_empty' && current.operator !== 'is_not_empty') originIds.add(current.originId.toLowerCase());
     else if (current.field === 'lead.tags') tagIds.add(current.tagId.toLowerCase());
+    else if (current.field === 'business.trigger.stage') businessStageReferences.set(
+      `${current.pipelineId.toLowerCase()}:${current.stageId.toLowerCase()}`,
+      { pipelineId: current.pipelineId.toLowerCase(), stageId: current.stageId.toLowerCase() },
+    );
   }
   collect(request.condition);
   const usesCustomReader = Boolean(request.authorization && customIds.size);
@@ -154,8 +172,10 @@ export async function evaluateGuidedCondition(
   const usesResponsibleReader = Boolean(request.authorization && responsibleFields.length);
   const usesOriginReader = Boolean(request.authorization && requestedFields.includes('lead.origin'));
   const usesTagReader = Boolean(request.authorization && tagIds.size);
+  const usesOnlyBusinessStage = requestedFields.every(field => field === 'business.trigger.stage');
   const { data, error, status } = request.authorization?.kind === 'organization'
-    ? usesCustomReader ? await caller.rpc('read_guided_condition_custom_data', {
+    ? usesOnlyBusinessStage ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
+    : usesCustomReader ? await caller.rpc('read_guided_condition_custom_data', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
       p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds], p_member_ids: [...memberIds],
     }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
@@ -199,6 +219,46 @@ export async function evaluateGuidedCondition(
     };
   }
   if (!data) return { status: 'error' as const, code: 'context_unavailable' as const };
+  type BusinessStageData = {
+    entry: { id: string; pipeline_id: string; stage_id: string };
+    pipelines: Array<{ id: string; name: string }>;
+    stages: Array<{ id: string; name: string; pipeline_id: string }>;
+  };
+  let businessStageData: BusinessStageData | null = null;
+  if (businessStageReferences.size) {
+    if (!request.entryId) return { status: 'error' as const, code: 'context_unavailable' as const };
+    const response = await caller.rpc(request.authorization?.kind === 'organization'
+      ? 'read_guided_condition_trigger_business_stage' : 'test_guided_condition_trigger_business_stage', {
+      ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+      p_organization_id: request.organizationId,
+      p_lead_id: request.leadId,
+      p_entry_id: request.entryId,
+      p_references: [...businessStageReferences.values()],
+    });
+    if (response.error) {
+      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
+        : response.error.code === 'PT404' ? 'context_unavailable' as const
+        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
+        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+      return { status: 'error' as const, code };
+    }
+    const payload = response.data as unknown;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { status: 'error' as const, code: 'source_unavailable' as const };
+    const candidate = payload as BusinessStageData;
+    if (!candidate.entry || typeof candidate.entry.id !== 'string' || typeof candidate.entry.pipeline_id !== 'string'
+      || typeof candidate.entry.stage_id !== 'string' || !Array.isArray(candidate.pipelines) || !Array.isArray(candidate.stages)
+      || candidate.pipelines.some(pipeline => !pipeline || typeof pipeline.id !== 'string' || typeof pipeline.name !== 'string')
+      || candidate.stages.some(stage => !stage || typeof stage.id !== 'string' || typeof stage.name !== 'string' || typeof stage.pipeline_id !== 'string')) {
+      return { status: 'error' as const, code: 'source_unavailable' as const };
+    }
+    businessStageData = candidate;
+    const pipelineIds = new Set(candidate.pipelines.map(pipeline => pipeline.id.toLowerCase()));
+    const stagePairs = new Set(candidate.stages.map(stage => `${stage.pipeline_id.toLowerCase()}:${stage.id.toLowerCase()}`));
+    if ([...businessStageReferences.values()].some(reference => !pipelineIds.has(reference.pipelineId)
+      || !stagePairs.has(`${reference.pipelineId}:${reference.stageId}`))) {
+      return { status: 'error' as const, code: 'source_unavailable' as const };
+    }
+  }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
   if (customIds.size) {
     const response = usesCustomReader ? {
@@ -360,7 +420,8 @@ export async function evaluateGuidedCondition(
     const value = record[GUIDED_SCALAR_FIELDS[field].column];
     return value !== null && (typeof value !== 'number' || !Number.isFinite(value));
   })) return { status: 'error' as const, code: 'source_unavailable' as const };
-  type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string } }
+  type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string };
+    context?: { entryId: string; pipeline: { id: string; name: string } } }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
   const rules: RuleResult[] = [];
@@ -411,6 +472,19 @@ export async function evaluateGuidedCondition(
       const matched = condition.operator === 'has_tag' ? tag.assigned : !tag.assigned;
       rules.push({ id: condition.id, status: 'evaluated', matched, actual: tag.assigned,
         reference: { id: tag.tag_id, name: tag.tag_name } });
+      return matched;
+    }
+    if (condition.field === 'business.trigger.stage') {
+      const pipeline = businessStageData!.pipelines.find(item => item.id.toLowerCase() === condition.pipelineId.toLowerCase())!;
+      const stage = businessStageData!.stages.find(item => item.id.toLowerCase() === condition.stageId.toLowerCase())!;
+      const actual = businessStageData!.entry.stage_id;
+      const samePipeline = businessStageData!.entry.pipeline_id.toLowerCase() === condition.pipelineId.toLowerCase();
+      const sameStage = actual.toLowerCase() === condition.stageId.toLowerCase();
+      const matched = condition.operator === 'equals' ? samePipeline && sameStage : !(samePipeline && sameStage);
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual,
+        reference: { id: stage.id, name: stage.name },
+        context: { entryId: businessStageData!.entry.id, pipeline: { id: pipeline.id, name: pipeline.name } },
+      });
       return matched;
     }
     const customField = condition.field === 'lead.custom' ? customFields.get(condition.fieldId.toLowerCase())! : undefined;
