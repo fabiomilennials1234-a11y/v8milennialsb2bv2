@@ -142,3 +142,4 @@ owner: claude-agent
 - [[2026-09-08-lei-relacao-abas-timeout|Corrigir timeout nas abas da Lei da Relação]]
 - [[2026-09-08-lei-relacao-perdido|Lei da Relação com ganho e perdido]]
 - [[2026-09-08-meeting-date-projection|Data da reunião no negócio sem deal_id]]
+- [[2026-09-08-registrar-vendas-historicas|Registrar vendas históricas no lead]]

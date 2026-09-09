@@ -227,19 +227,20 @@ export function OrdersTable({
           <TableBody>
             {rows.map((order) => {
               const itemCount = order.items?.length ?? 0;
+              const readOnly = order.is_erp_linked || order.source === "historical";
 
               // O botão é montado uma vez e envolvido condicionalmente —
               // padrão canônico de StageRail.tsx:304-315.
               const editBtn = (
                 <button
                   type="button"
-                  disabled={order.is_erp_linked}
-                  aria-disabled={order.is_erp_linked || undefined}
-                  onClick={order.is_erp_linked ? undefined : () => onEdit(order)}
-                  title={order.is_erp_linked ? undefined : "Editar pedido"}
+                  disabled={readOnly}
+                  aria-disabled={readOnly || undefined}
+                  onClick={readOnly ? undefined : () => onEdit(order)}
+                  title={order.source === "historical" ? "Venda histórica vinculada a negócio ganho" : order.is_erp_linked ? undefined : "Editar pedido"}
                   className={cn(
                     iconBtnClass,
-                    order.is_erp_linked &&
+                    readOnly &&
                       "opacity-50 cursor-not-allowed pointer-events-none",
                   )}
                 >

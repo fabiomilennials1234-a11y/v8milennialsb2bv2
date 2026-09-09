@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
 
+import { RegisterHistoricalSalesDialog } from "../lead-detail/modal/pipes/RegisterHistoricalSalesDialog";
 import { LeadCard } from "./LeadCard";
 import { LeadCardAside } from "./LeadCardAside";
 import { LeadCardControles } from "./LeadCardControles";
@@ -266,6 +267,7 @@ export function LeadCardContainer({
       onSaveNote={salvarNota}
       onOpenDeal={onOpenDeal ? (entryId) => onOpenDeal(entryId, data.id) : undefined}
       onNewDeal={onNewDeal}
+      registrarVenda={leadId ? <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} /> : undefined}
       onSaveField={salvarCampo}
       // Sem org conhecida a caixa de escrever some: a policy de INSERT exige a
       // org, e oferecer uma ação cujo gravar falharia é pior que não oferecer.
