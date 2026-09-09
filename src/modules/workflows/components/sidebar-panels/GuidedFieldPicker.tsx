@@ -57,7 +57,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
   return <div className="space-y-2"><Popover open={open} onOpenChange={next => { setOpen(next); if (!next) setSearch(''); }}>
     <PopoverTrigger asChild>
       <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open}
-        aria-haspopup="listbox" aria-controls={open ? `${id}-list` : undefined} className="w-full justify-between font-normal">
+        aria-haspopup="dialog" className="w-full justify-between font-normal">
         <span className="truncate">Lead · {name}</span>
         <ChevronsUpDown aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
@@ -68,7 +68,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
         return normalize(search).split(/\s+/).every(term => haystack.includes(term)) ? 1 : 0;
       }}>
         <CommandInput value={search} onValueChange={setSearch} aria-label="Buscar informação" placeholder="Buscar informação…" />
-        <CommandList id={`${id}-list`} aria-label="Informações disponíveis">
+        <CommandList label="Informações disponíveis">
           {!searching && !options.isError && !(custom && (selected.isPending || selected.isError || unavailable)) && <CommandEmpty>Nenhuma informação encontrada. Tente outro termo.</CommandEmpty>}
           {searching && <p className="px-3 py-2 text-xs text-muted-foreground">Buscando campos personalizados…</p>}
           {options.isError && <div className="p-3"><p role="alert" className="text-sm text-destructive">Não foi possível carregar campos personalizados.</p>

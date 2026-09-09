@@ -254,3 +254,13 @@ Effective privileges verified on preview: writer authenticated-only, finalizer s
 Applied/ledger-registered only on preview. Verified effective EXECUTE: personal options reader and grant writer authenticated-only; organization reader and finalizer service-only; anon denied on all four. All pin search_path=public; the organizational path retains explicit workflow/organization/grant authorization.
 
 Rollback 36 restores the date-era writer/finalizer and previous custom organizational reader. Rollback 35 drops only the new personal options RPC. Neither deletes definitions, options, answers, approvals, immutable versions or pins. Coordinate application/endpoint rollback: unsupported select rules must fail explicitly. Recovery sequence: 00..11,30,31,32,33,34,35,36,14,21,23,24,29. Complete 37-migration reverse/recovery passed, including exact function definitions/privileges and preserved approval/version/answer history. Personal/publication endpoints updated only in preview; worker remains undeployed.
+
+## Migration 37 — bound direct personal custom requests
+
+Both existing personal custom RPC signatures keep their invoker/RLS behavior and authenticated-only EXECUTE. Requests above the evaluator's existing 256-reference ceiling now fail before definition reads. No definitions, answers or history are rewritten. Rollback restores the 29/35 reader bodies. Recovery order appends 37 after the last restoration of 29; the 38-migration rehearsal passed with exact reader/ACL restoration and preserved select options/answers. Effective privileges verified live in preview.
+
+## Migration 38 — stage time on funnel transfer
+
+`set_pipeline_entry_stage_changed()` has one live consumer, the existing BEFORE UPDATE trigger on pipeline_entries. Its transition predicate now considers pipeline_id as well as stage_key, so an equal key in another funnel starts a new stay. No new trigger, historical data rewrite, timestamp fallback or financial coercion. Direct EXECUTE is revoked from PUBLIC/anon/authenticated/service_role; triggering updates keep working, verified with an authenticated public API call.
+
+Rollback restores the prior stage-key-only body and captured original ACL (PUBLIC plus explicit anon/authenticated/service_role EXECUTE), without rewriting timestamps recorded since apply. Application rollback cannot reconstruct historic dates and must not attempt it. The complete rehearsal additionally checks exact current clock restoration and denied direct EXECUTE after recovery. Recovery sequence: 00..11,30,31,32,33,34,35,36,14,21,23,24,29,37,38. Preview only; production and worker remain unchanged.

@@ -107,12 +107,19 @@ const optionsRollback = readFileSync(`supabase/migrations/rollback/${optionsMigr
 const selectMigration = '20271017000036_guided_custom_select_publication.sql';
 const selectForward = readFileSync(`supabase/migrations/${selectMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const selectRollback = readFileSync(`supabase/migrations/rollback/${selectMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const limitMigration = '20271017000037_guided_custom_read_limits.sql';
+const limitForward = readFileSync(`supabase/migrations/${limitMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const limitRollback = readFileSync(`supabase/migrations/rollback/${limitMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const stageClockMigration = '20271017000038_restart_stage_time_on_funnel_change.sql';
+const stageClockForward = readFileSync(`supabase/migrations/${stageClockMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const stageClockRollback = readFileSync(`supabase/migrations/rollback/${stageClockMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
     pg_get_functiondef('public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])'::regprocedure) AS original_custom_org_definition,
     pg_get_functiondef('public.test_guided_condition_custom_fields(uuid,uuid,uuid[])'::regprocedure) AS original_custom_definition,
     pg_get_functiondef('public.test_guided_condition_custom_options(uuid,uuid,uuid[])'::regprocedure) AS original_options_definition,
+    pg_get_functiondef('public.set_pipeline_entry_stage_changed()'::regprocedure) AS original_stage_clock_definition,
     pg_get_functiondef('public.set_workflow_data_grant(uuid,text[],integer)'::regprocedure) AS original_definition,
     pg_get_functiondef('public.finalize_guided_workflow_publication(uuid,uuid,uuid,integer,jsonb,jsonb,text[])'::regprocedure) AS original_publication_definition;
 INSERT INTO public.organizations(id, name, slug)
@@ -137,6 +144,8 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${stageClockRollback}
+${limitRollback}
 ${selectRollback}
 ${optionsRollback}
 DO $$ BEGIN
@@ -323,6 +332,26 @@ ${booleanForward}
 ${dateForward}
 ${optionsForward}
 ${selectForward}
+
+
+${tagForward}
+${originForward}
+${responsibleForward}
+${catalogueForward}
+${customForward}
+${limitForward}
+${stageClockForward}
+DO $$ BEGIN
+  IF pg_get_functiondef('public.set_pipeline_entry_stage_changed()'::regprocedure)
+    IS DISTINCT FROM (SELECT original_stage_clock_definition FROM guided_rollback_fixture) THEN
+    RAISE EXCEPTION 'stage clock not restored exactly';
+  END IF;
+  IF has_function_privilege('anon', 'public.set_pipeline_entry_stage_changed()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.set_pipeline_entry_stage_changed()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.set_pipeline_entry_stage_changed()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'stage clock callable directly';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_custom_options(uuid,uuid,uuid[])', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_custom_options(uuid,uuid,uuid[])', 'EXECUTE')
@@ -334,12 +363,6 @@ DO $$ BEGIN
     RAISE EXCEPTION 'personal options reader not restored exactly';
   END IF;
 END $$;
-
-${tagForward}
-${originForward}
-${responsibleForward}
-${catalogueForward}
-${customForward}
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])', 'EXECUTE')
     OR has_function_privilege('authenticated', 'public.read_guided_condition_custom_data(uuid,uuid,uuid,text[],uuid[],uuid[],uuid[])', 'EXECUTE')

@@ -209,6 +209,66 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   });
 
+  it('restarts stage time when the same business enters another funnel with the same stage key', async () => {
+    const pipelineA = crypto.randomUUID(), pipelineB = crypto.randomUUID();
+    const stageA = crypto.randomUUID(), stageB = crypto.randomUUID(), entryId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `stage-time-${entryId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const originalTime = '2024-01-01T00:00:00+00:00';
+    await service.from('pipelines').insert([
+      { id: pipelineA, organization_id: orgA, name: 'Canal A', slug: `stage-a-${pipelineA}`, type: 'custom' },
+      { id: pipelineB, organization_id: orgA, name: 'Canal B', slug: `stage-b-${pipelineB}`, type: 'custom' },
+    ]).throwOnError();
+    try {
+      await service.from('pipeline_stages').insert([
+        { id: stageA, organization_id: orgA, pipeline_id: pipelineA, stage_key: 'proposal', name: 'Proposta A', position: 0 },
+        { id: stageB, organization_id: orgA, pipeline_id: pipelineB, stage_key: 'proposal', name: 'Proposta B', position: 0 },
+      ]).throwOnError();
+      await service.from('pipeline_entries').insert({ id: entryId, organization_id: orgA, lead_id: leadA,
+        pipeline_id: pipelineA, stage_id: stageA, stage_key: 'proposal', stage_changed_at: originalTime }).throwOnError();
+      const update = async (patch: Record<string, unknown>) => {
+        const result = await caller.from('pipeline_entries').update(patch).eq('organization_id', orgA).eq('id', entryId)
+          .select('id,pipeline_id,stage_id,stage_key,stage_changed_at').single();
+        expect(result.error).toBeNull();
+        return result.data!;
+      };
+      expect((await update({ notes: 'Nota comercial' })).stage_changed_at).toBe(originalTime);
+      const moved = await update({ pipeline_id: pipelineB, stage_id: stageB });
+      expect(moved).toMatchObject({ id: entryId, pipeline_id: pipelineB, stage_id: stageB, stage_key: 'proposal' });
+      expect(moved.stage_changed_at).not.toBe(originalTime);
+      expect((await update({ notes: 'Outra nota' })).stage_changed_at).toBe(moved.stage_changed_at);
+      const returned = await update({ pipeline_id: pipelineA, stage_id: stageA });
+      expect(returned).toMatchObject({ id: entryId, pipeline_id: pipelineA, stage_id: stageA });
+      expect(Date.parse(returned.stage_changed_at)).toBeGreaterThan(Date.parse(moved.stage_changed_at));
+    } finally {
+      await service.from('pipeline_entries').delete().eq('id', entryId).throwOnError();
+      await service.from('pipeline_stages').delete().in('id', [stageA, stageB]).throwOnError();
+      await service.from('followup_reclassify_queue').delete().eq('organization_id', orgA).throwOnError();
+      await service.from('pipelines').delete().in('id', [pipelineA, pipelineB]).throwOnError();
+    }
+  }, 60000);
+
+  it.each(['test_guided_condition_custom_fields', 'test_guided_condition_custom_options'] as const)('%s bounds direct personal requests before reading definitions', async rpc => {
+    const fieldId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `custom-limit-${fieldId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    await service.from('lead_custom_fields').insert({ id: fieldId, organization_id: orgA, field_name: 'Limite de consulta', field_type: 'text' }).throwOnError();
+    try {
+      const args = { p_organization_id: orgA, p_lead_id: leadA, p_field_ids: Array(257).fill(fieldId) };
+      expect((await caller.rpc(rpc, args)).error?.code).toBe('22023');
+      const allowed = await caller.rpc(rpc, { ...args, p_field_ids: Array(256).fill(fieldId) });
+      expect(allowed.error).toBeNull();
+      expect(allowed.data).toHaveLength(1);
+      expect(allowed.data[0]).toMatchObject({ id: fieldId, name: 'Limite de consulta', field_type: 'text', value: null });
+    } finally {
+      await service.from('lead_custom_fields').delete().eq('id', fieldId).throwOnError();
+    }
+  }, 60000);
+
   it('compares registered custom options exactly and rejects removed options before short circuiting', async () => {
     const fieldId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {

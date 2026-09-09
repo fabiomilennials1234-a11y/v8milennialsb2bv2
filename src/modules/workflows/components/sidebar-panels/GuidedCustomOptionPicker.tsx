@@ -28,7 +28,7 @@ export function GuidedCustomOptionPicker({ actorId, organizationId, fieldId, id,
     <Label htmlFor={id}>Valor da comparação</Label>
     <Popover open={open} onOpenChange={next => { setOpen(next); if (!next) setSearch(''); }}>
       <PopoverTrigger asChild><Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open}
-        aria-haspopup="listbox" aria-invalid={!value || missing || unavailable}
+        aria-haspopup="dialog" aria-invalid={!value || missing || unavailable}
         disabled={selected.isPending || selected.isError || unavailable} className="w-full justify-between font-normal">
         <span className="truncate">{label}</span><ChevronsUpDown aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button></PopoverTrigger>
