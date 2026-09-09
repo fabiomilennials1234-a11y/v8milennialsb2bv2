@@ -1,3 +1,4 @@
+import { enrichSavedContactNames } from "./shared/savedContactNames";
 /**
  * useWhatsAppContacts — lista de contatos/conversas do WhatsApp de uma instância.
  * Extraído de src/hooks/useWhatsAppChat.ts (C12).
@@ -197,7 +198,7 @@ export function useWhatsAppContacts(
         // porque a lista por CONJUNTO de caixas (caixa unificada) precisa do
         // mesmo tratamento — inclusive da regra de que a falha SOBE quando o
         // filtro recorta por etiqueta.
-        await enriquecerContatos(contacts, { tagsCriticas: tagsAreFilterCritical });
+        await enriquecerContatos(contacts, { tagsCriticas: tagsAreFilterCritical, organizationId });
 
         return contacts;
       }
@@ -467,6 +468,7 @@ export function useWhatsAppContacts(
         results.push(contact);
       }
 
+      await enrichSavedContactNames(results, organizationId, instanceId);
       return results;
     },
     enabled: !!organizationId && !!instanceId,

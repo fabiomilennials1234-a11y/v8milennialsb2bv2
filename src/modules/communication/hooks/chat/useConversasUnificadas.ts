@@ -292,7 +292,7 @@ export function useConversasUnificadas(
         qualification_tier: null,
       }));
 
-      await enriquecerContatos(contatos, { tagsCriticas });
+      await enriquecerContatos(contatos, { tagsCriticas, organizationId });
 
       // `cheia` é medido, não presumido: é o que sustenta o piso de confiança do
       // motor. Uma org com menos conversas que o limite ficaria marcada como
