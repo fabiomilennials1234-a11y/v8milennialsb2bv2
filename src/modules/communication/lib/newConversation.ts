@@ -1,6 +1,6 @@
 import { buildWhatsAppConversationKey, contactKey, type ChatContact, type InboxBox } from "../hooks/chat/types";
 import { boxUsesChannelMessages } from "../hooks/chat/inbox-box-source";
-import { formatPhoneForWhatsApp } from "./whatsapp";
+import { formatPhoneForWhatsApp } from "./whatsappPhone";
 
 export function hasEstablishedOutgoing(messages: readonly { direction: string; status: string }[]) {
   return messages.some((message) => message.direction === "outgoing" && ["sent", "delivered", "read"].includes(message.status));
