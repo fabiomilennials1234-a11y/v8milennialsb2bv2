@@ -1,0 +1,30 @@
+name: Stage reorder regression
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/stage-reorder.yml'
+      - 'scripts/test-reorder-pipeline-stages.mjs'
+      - 'supabase/migrations/**reorder_pipeline_stages*.sql'
+      - 'supabase/migrations/rollback/**reorder_pipeline_stages*.sql'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/stage-reorder.yml'
+      - 'scripts/test-reorder-pipeline-stages.mjs'
+      - 'supabase/migrations/**reorder_pipeline_stages*.sql'
+      - 'supabase/migrations/rollback/**reorder_pipeline_stages*.sql'
+permissions:
+  contents: read
+jobs:
+  stage-reorder:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test SQL, permissions and rollback in isolated PostgreSQL
+        run: |
+          npm install --prefix "$RUNNER_TEMP/stage-reorder" @electric-sql/pglite@0.3.14 --no-audit --no-fund
+          PGLITE_MODULE="file://$RUNNER_TEMP/stage-reorder/node_modules/@electric-sql/pglite/dist/index.js" node scripts/test-reorder-pipeline-stages.mjs
