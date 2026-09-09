@@ -194,7 +194,8 @@ export function MessageBubble({
   // Os botões de um template ENVIADO. Acréscimo à bolha, não um tipo dela: o
   // selo e o texto continuam vindo do caminho de sempre.
   const botoesDoTemplate = botoesDaMensagem((message as { metadata?: unknown }).metadata ?? null);
-  const citacao = citacaoDaMensagem((message as { metadata?: unknown }).metadata ?? null);
+  const replyContext = "reply_context" in message ? message.reply_context : "replyContext" in message ? message.replyContext : null;
+  const citacao = citacaoDaMensagem((message as { metadata?: unknown }).metadata ?? null) ?? (replyContext ? { providerMessageId: replyContext.messageId, de: null } : null);
 
 
   const isInteractive = messageType === "interactive" || messageType === "collection" || messageType === "list" || isTemplate || messageType === "url";
@@ -394,7 +395,7 @@ export function MessageBubble({
             {citacao && (
               <div className="mb-1.5 border-l-2 border-current/30 pl-2 opacity-70">
                 <p className="truncate text-xs">
-                  {textoCitado?.(citacao.providerMessageId)?.trim() || "Mensagem citada"}
+                  {replyContext?.text || textoCitado?.(citacao.providerMessageId)?.trim() || "Mensagem citada"}
                 </p>
               </div>
             )}

@@ -7,7 +7,10 @@
 
 import { rotuloDeIdentificadorOculto } from "../../lib/identificadorOculto";
 
+export interface ReplyContext { messageId: string; text: string; direction: "incoming" | "outgoing"; }
+
 export interface WhatsAppMessage {
+  reply_context?: ReplyContext | null;
   retry_attempt?: number;
   id: string;
   organization_id: string;
@@ -40,6 +43,7 @@ export interface WhatsAppMessage {
 
 /** Mensagem que falhou ao ser enviada — armazenada em cache paralelo para retry. */
 export interface FailedMessage {
+  replyContext?: ReplyContext;
   retry_attempt?: number;
   id: string;
   phoneNumber: string;

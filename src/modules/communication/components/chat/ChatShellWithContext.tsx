@@ -1,3 +1,5 @@
+import { queueConversationReadChange } from "../../lib/conversationReadQueue";
+import { ChatReplyProvider } from "./ReplyContext";
 /**
  * ChatShellWithContext — consumer real do ChatShell 3-col.
  *
@@ -311,6 +313,7 @@ function ChatView({
   const conversationKey = `${instanceId}:${phoneNumber}`;
 
   return (
+    <ChatReplyProvider key={conversationKey} messages={messages}>
     <div className="flex flex-col h-full min-h-0 min-w-0">
       {/* C1 — Banner WAITING_HUMAN */}
       {isWaitingHuman && (
@@ -478,6 +481,7 @@ function ChatView({
         onClose={() => setPreviewUrl(null)}
       />
     </div>
+    </ChatReplyProvider>
   );
 }
 
@@ -988,6 +992,20 @@ export function ChatShellWithContext() {
   // a RPC conta as incoming dos últimos 7 dias pra sempre → conversa nunca sai de
   // "não lida". Espelha o padrão que o chat-bubble flutuante já usa
   // (ChatBubbleContext.markReadServer). Otimista no cache + RPC fire-and-forget.
+  const handleMarkUnread = useCallback(async (phone: string, instanceId?: string | null) => {
+    const norm = normalizePhone(phone);
+    if (!instanceId || !norm) return;
+    // Close first so opening again is the explicit acknowledgement of this reminder.
+    if (telefoneSelecionado === phone && selectedInstanceId === instanceId) setSelectedKey(null);
+    const { error } = await queueConversationReadChange(`${instanceId}:${norm}`, () => supabase.rpc("mark_conversation_unread" as never, {
+      p_instance_id: instanceId, p_normalized_phone: norm,
+    } as never)).catch(() => ({ error: new Error("Falha de conexão") }));
+    if (error) { toast.error("Não foi possível marcar como não lido"); return; }
+    await queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+    await queryClient.invalidateQueries({ predicate: query => query.queryKey.some(key => typeof key === "string" && /unread|nao.lidas/.test(key)) });
+    toast.success("Conversa marcada como não lida");
+  }, [telefoneSelecionado, selectedInstanceId, queryClient]);
+
   const markConversationRead = useCallback(
     (phone: string, instanceId: string) => {
       const norm = normalizePhone(phone);
@@ -1012,11 +1030,10 @@ export function ChatShellWithContext() {
           c.phone_number === phone &&
           (c.instance_id == null || c.instance_id === instanceId),
       );
-      void supabase
-        .rpc("mark_conversation_read", {
+      void queueConversationReadChange(`${instanceId}:${norm}`, () => supabase.rpc("mark_conversation_read", {
           p_instance_id: instanceId,
           p_normalized_phone: norm,
-        })
+        }))
         .then(undefined, () => {
           /* tabela/perm indisponível — sem-op, backstop cobre no próximo refetch */
         });
@@ -1358,6 +1375,7 @@ export function ChatShellWithContext() {
             // A lista NÃO relê a flag: quem manda `p_include_groups` na busca é
             // este componente, e as duas pontas têm que ser a mesma leitura.
             abasDeGrupos={abasDeGrupos}
+            onMarkUnread={handleMarkUnread}
             onArchive={handleArchive}
             onUnarchive={handleUnarchive}
             onDelete={handleDelete}

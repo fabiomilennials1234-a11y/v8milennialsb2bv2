@@ -15,6 +15,7 @@
  * Phase 3 adds: sendText, sendMedia (via senders)
  */
 
+import { replySnapshot, type ReplySnapshot } from "../_shared/whatsapp-reply.ts";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
@@ -941,6 +942,18 @@ Deno.serve(
         supabaseAdmin
       );
 
+      let quoted: ReplySnapshot | null = null;
+      if (instance.provider === "uazapi" && ["sendText", "sendMedia", "sendAudio"].includes(action) && payload.replyid != null) {
+        if (typeof payload.replyid !== "string" || !payload.replyid.trim() || typeof payload.number !== "string") {
+          return jsonResponse(400, { error: "Resposta inválida" }, corsHeaders);
+        }
+        const { data: original, error: quoteError } = await supabaseAdmin.from("whatsapp_messages")
+          .select("message_id,normalized_phone,content,message_type,direction")
+          .eq("organization_id", callerOrgId).eq("instance_id", instanceId)
+          .eq("message_id", payload.replyid).is("deleted_at", null).maybeSingle();
+        quoted = original ? replySnapshot(original, payload.number) : null;
+        if (quoteError || !quoted) return jsonResponse(400, { error: "Mensagem citada não disponível nesta conversa" }, corsHeaders);
+      }
       let result: unknown;
 
       switch (action) {
@@ -1027,6 +1040,7 @@ Deno.serve(
             filename,
             caption,
             delay,
+            replyid: quoted?.messageId,
             trackSource: "whatsapp-api-proxy",
             trackId: callerTeamMemberId ?? undefined,
           });
@@ -1047,6 +1061,7 @@ Deno.serve(
             type: "ptt",
             file,
             delay,
+            replyid: quoted?.messageId,
             trackSource: "whatsapp-api-proxy",
             trackId: callerTeamMemberId ?? undefined,
           });
@@ -1480,6 +1495,26 @@ Deno.serve(
           );
       }
 
+      // Save only the quote on an existing webhook row; never regress delivery status.
+      // Provider already accepted: a persistence failure must not trigger a duplicate send.
+      if (quoted && result && typeof result === "object" && "message_id" in result) {
+        try {
+          const messageId = String(result.message_id);
+          const row = {
+            organization_id: callerOrgId, instance_id: instanceId, message_id: messageId,
+            remote_jid: `${payload.number}@s.whatsapp.net`, phone_number: String(payload.number),
+            direction: "outgoing", message_type: action === "sendText" ? "text" : action === "sendAudio" ? "audio" : String(payload.type),
+            content: action === "sendText" ? String(payload.text) : (payload.caption ?? null),
+            media_url: payload.file ?? null, status: "sent", timestamp: new Date().toISOString(),
+            reply_context: quoted,
+          };
+          const inserted = await supabaseAdmin.from("whatsapp_messages").upsert(row, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+          if (inserted.error) throw inserted.error;
+          const updated = await supabaseAdmin.from("whatsapp_messages").update({ reply_context: quoted })
+            .eq("organization_id", callerOrgId).eq("instance_id", instanceId).eq("message_id", messageId);
+          if (updated.error) throw updated.error;
+        } catch { console.warn("[whatsapp-api-proxy] quote persistence failed after accepted send"); }
+      }
       return jsonResponse(200, { ok: true, result }, corsHeaders);
     } catch (e) {
       const msg = (e as Error).message ?? "Internal error";

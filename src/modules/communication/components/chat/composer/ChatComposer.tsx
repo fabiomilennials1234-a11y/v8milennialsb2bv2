@@ -1,3 +1,5 @@
+import { ReplyPreview } from "../ReplyContext";
+import { useChatReply } from "../../../hooks/chat/useChatReply";
 /**
  * ChatComposer — input standalone do chat.
  *
@@ -168,7 +170,9 @@ export function ChatComposer({
   const [isPreparing, setIsPreparing] = useState(false);
 
   // Refs
+  const reply = useChatReply();
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (reply?.target?.messageId) inputRef.current?.focus(); }, [reply?.target?.messageId]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mutations
@@ -455,6 +459,7 @@ export function ChatComposer({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      <ReplyPreview />
       {/* Sem permissão */}
       {!canReply ? (
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">

@@ -107,6 +107,7 @@ interface ConversationListProps {
    * telefone), e no modo unificado a linha clicada pode não ser da caixa da
    * conversa aberta. Opcional para não quebrar quem chama sem ela.
    */
+  onMarkUnread?: (phone: string, instanceId?: string | null) => void;
   onArchive: (phone: string, instanceId?: string | null) => void;
   onUnarchive: (conversationId: string) => void;
   onDelete: (phone: string, instanceId?: string | null) => void;
@@ -159,6 +160,7 @@ export function ConversationList({
   activeTab,
   onTabChange,
   abasDeGrupos = false,
+  onMarkUnread,
   onArchive,
   onUnarchive,
   onDelete,
@@ -601,6 +603,7 @@ export function ConversationList({
                     instanceId={instanceId}
                     organizationId={organizationId}
                     allTags={allTags}
+                    onMarkUnread={onMarkUnread}
                     onArchive={onArchive}
                     onUnarchive={onUnarchive}
                     onDelete={onDelete}
@@ -637,7 +640,8 @@ export function ConversationList({
                   instanceId={instanceId}
                   organizationId={organizationId}
                   allTags={allTags}
-                  onArchive={onArchive}
+                  onMarkUnread={onMarkUnread}
+                    onArchive={onArchive}
                   onUnarchive={onUnarchive}
                   onDelete={onDelete}
                   onAddTag={onAddTag}
