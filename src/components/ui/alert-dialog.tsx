@@ -25,12 +25,27 @@ const AlertDialogOverlay = React.forwardRef<
 ));
 AlertDialogOverlay.displayName = AlertDialogPrimitive.Overlay.displayName;
 
+/**
+ * `overlayClassName` existe para o caso em que o `z-50` padrão perde.
+ *
+ * O overlay é irmão do conteúdo dentro do mesmo portal, então subir só o
+ * `className` deixa o escurecido para trás — e um AlertDialog pintado acima de
+ * um overlay que ficou abaixo do painel é meio conserto. Quem sobe, sobe os
+ * dois. O caso conhecido é o `SheetContent`, que é `z-[51]`: qualquer
+ * confirmação aberta de dentro de uma folha (o painel do Negócio no celular,
+ * por exemplo) nasce ATRÁS dela e trava a tela, porque é modal e no celular não
+ * há Esc. A convenção do repo para "acima da folha" é `z-[60]`.
+ *
+ * Opcional e sem default novo: omitir mantém exatamente o comportamento antigo.
+ */
 const AlertDialogContent = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content>
->(({ className, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Content> & {
+    overlayClassName?: string;
+  }
+>(({ className, overlayClassName, ...props }, ref) => (
   <AlertDialogPortal>
-    <AlertDialogOverlay />
+    <AlertDialogOverlay className={overlayClassName} />
     <AlertDialogPrimitive.Content
       ref={ref}
       className={cn(

@@ -63,7 +63,7 @@ export const STAGE_DEFS: StageDef[] = [
   {
     key: "compraram",
     label: "Compraram",
-    tooltip: "Leads que fecharam negócio — chegaram à etapa de venda no funil de Orçamentos.",
+    tooltip: "Leads que fecharam negócio — chegaram à etapa de venda no funil de fechamento.",
     goal: 25,
   },
 ];

@@ -2,14 +2,22 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 
 import { cn } from "@/lib/utils";
+import { useLeadCallAction } from "@/shared/components/LeadCallActionSlot";
 
+import { RegisterHistoricalSalesDialog } from "../lead-detail/modal/pipes/RegisterHistoricalSalesDialog";
 import { LeadCard } from "./LeadCard";
 import { LeadCardAside } from "./LeadCardAside";
 import { LeadCardControles } from "./LeadCardControles";
+import { LeadCardEtiquetas } from "./LeadCardEtiquetas";
 import { useLeadCardData } from "./useLeadCardData";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { useUpdateLead, useToggleLeadAI, useDeleteLead } from "../../hooks/useLeads";
 import { useSaveCustomFieldValue } from "../../hooks/useLeadCustomFields";
+import {
+  useCreateLeadComment,
+  useDeleteLeadComment,
+  useUpdateLeadComment,
+} from "../lead-detail/hooks/useLeadComments";
 
 /**
  * O Card do Lead ligado ao banco.
@@ -36,11 +44,21 @@ export function LeadCardContainer({
   onNewDeal,
   forma = "card",
   onAbrirFicha,
+  podeCriarEtiqueta = false,
 }: {
   leadId: string | null;
   isOpen: boolean;
   onOpenDeal?: (entryId: string, leadId: string) => void;
   onNewDeal?: () => void;
+  /**
+   * Oferece criar etiqueta NOVA a partir do card, e não só pendurar uma que já
+   * existe. Só de admin: `tags_insert_admin_only` exige `is_user_admin()` no
+   * INSERT em `tags`, enquanto `lead_tags_insert_organization` deixa qualquer
+   * pessoa da org pendurar. Quem sabe a resposta passa adiante — o painel do
+   * Negócio já tem `souAdmin` em mãos — em vez de este container perguntar de
+   * novo em toda abertura de card.
+   */
+  podeCriarEtiqueta?: boolean;
   /**
    * `card` é a ficha inteira; `coluna` é a faixa de 356px que o painel do
    * Negócio encosta à esquerda (o print do DataCrazy).
@@ -55,11 +73,15 @@ export function LeadCardContainer({
   /** Só na forma `coluna`: leva para a ficha inteira do lead. */
   onAbrirFicha?: () => void;
 }) {
-  const { data, isLoading, visibility } = useLeadCardData(leadId, isOpen);
+  const { data, isLoading, visibility, organizacaoId } = useLeadCardData(leadId, isOpen);
+  const renderLigar = useLeadCallAction();
   const updateLead = useUpdateLead();
   const saveCustomField = useSaveCustomFieldValue();
   const toggleAI = useToggleLeadAI();
   const deleteLead = useDeleteLead();
+  const criarComentario = useCreateLeadComment();
+  const atualizarComentario = useUpdateLeadComment();
+  const removerComentario = useDeleteLeadComment();
 
   /**
    * Grava um campo do bloco Dados.
@@ -100,6 +122,54 @@ export function LeadCardContainer({
       );
     },
     [leadId, updateLead],
+  );
+
+  /**
+   * ── Comentar PELA ficha da pessoa ────────────────────────────────────────
+   * Sem `pipelineEntryId`: o comentário escrito aqui é do LEAD, não de um
+   * negócio. É a semântica que a coluna já documenta — NULL quer dizer
+   * "nasceu fora de um negócio" — e é o que os 2.867 comentários antigos de
+   * prod são. Carimbar um negócio escolhido pela ficha inventaria vínculo, e
+   * vínculo inventado faz o selo do painel do Negócio mentir.
+   */
+  const comentar = useCallback(
+    async (texto: string) => {
+      if (!leadId || !organizacaoId) return;
+      try {
+        await criarComentario.mutateAsync({ leadId, organizationId: organizacaoId, body: texto });
+      } catch {
+        toast.error("Não foi possível publicar o comentário. O texto continua na caixa.");
+        // Reergue para a caixa NÃO esvaziar — engolir aqui apagaria o texto.
+        throw new Error("comentario-nao-publicado");
+      }
+    },
+    [leadId, organizacaoId, criarComentario],
+  );
+
+  const editarComentario = useCallback(
+    async (id: string, texto: string) => {
+      if (!leadId) return;
+      try {
+        await atualizarComentario.mutateAsync({ commentId: id, leadId, body: texto });
+      } catch {
+        toast.error("Não foi possível salvar a edição do comentário.");
+        throw new Error("comentario-nao-editado");
+      }
+    },
+    [leadId, atualizarComentario],
+  );
+
+  const apagarComentario = useCallback(
+    async (id: string) => {
+      if (!leadId) return;
+      try {
+        await removerComentario.mutateAsync({ commentId: id, leadId });
+        toast.success("Comentário apagado.");
+      } catch {
+        toast.error("Não foi possível apagar o comentário.");
+      }
+    },
+    [leadId, removerComentario],
   );
 
   if (!isOpen) return null;
@@ -166,6 +236,15 @@ export function LeadCardContainer({
         onSaveNote={salvarNota}
         onSaveField={salvarCampo}
         onAbrirFicha={onAbrirFicha}
+        editorDeEtiquetas={
+          leadId ? (
+            <LeadCardEtiquetas
+              leadId={leadId}
+              podeCriar={podeCriarEtiqueta}
+              alinhamento="centro"
+            />
+          ) : undefined
+        }
         controles={
           leadId && e ? (
             <LeadCardControles
@@ -188,7 +267,22 @@ export function LeadCardContainer({
       onSaveNote={salvarNota}
       onOpenDeal={onOpenDeal ? (entryId) => onOpenDeal(entryId, data.id) : undefined}
       onNewDeal={onNewDeal}
+      registrarVenda={leadId ? <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} /> : undefined}
       onSaveField={salvarCampo}
+      // Sem org conhecida a caixa de escrever some: a policy de INSERT exige a
+      // org, e oferecer uma ação cujo gravar falharia é pior que não oferecer.
+      onComentar={leadId && organizacaoId ? comentar : undefined}
+      onEditarComentario={leadId ? editarComentario : undefined}
+      onApagarComentario={leadId ? apagarComentario : undefined}
+      comentando={criarComentario.isPending}
+      editorDeEtiquetas={
+        leadId ? (
+          <LeadCardEtiquetas leadId={leadId} podeCriar={podeCriarEtiqueta} />
+        ) : undefined
+      }
+      // Vê o lead → pode ligar. Quem desenha o botão é a raiz (App.tsx), via
+      // LeadCallActionSlot; ele some sozinho sem número de voz ao alcance.
+      acaoLigar={leadId && renderLigar ? renderLigar({ id: leadId, nome: data.nome }) : undefined}
       onToggleCopilot={(ativo) =>
         leadId && toggleAI.mutate({ leadId, disabled: !ativo })
       }

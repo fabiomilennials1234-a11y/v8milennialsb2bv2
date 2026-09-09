@@ -110,3 +110,61 @@ describe("Instagram", () => {
     expect(r.resolverEsperaPorLead).toBe("11111111-2222-3333-4444-555555555555");
   });
 });
+
+// ─── contexto do gatilho ──────────────────────────────────────────────────
+// O disparo saía SEM contexto. Como o matcher só compara quando o contexto traz
+// o campo, um workflow restrito a "canal WhatsApp" disparava também com resposta
+// de Instagram — filtro que passa sempre é filtro que não existe. E o filtro por
+// número de origem, que é novo, teria o mesmo destino.
+describe("contexto do gatilho lead_replied", () => {
+  it("declara o canal de onde a resposta veio", () => {
+    const reacoes = reacoesDoEvento({
+      direcao: "incoming",
+      canal: "whatsapp",
+      telefone: "5547999999999",
+      leadId: null,
+    });
+
+    expect(reacoes.contextoDoGatilho).toEqual({
+      trigger: "lead_replied",
+      channel: "whatsapp",
+    });
+  });
+
+  it("no Instagram o canal é meta, que é como o seletor da tela chama", () => {
+    const reacoes = reacoesDoEvento({
+      direcao: "incoming",
+      canal: "instagram",
+      telefone: null,
+      leadId: "lead-1",
+    });
+
+    expect(reacoes.contextoDoGatilho?.channel).toBe("meta");
+  });
+
+  // Sem Instance no contexto, o matcher reprova por fail-closed qualquer
+  // workflow que filtre por número — que é o certo: o canal oficial não tem
+  // Instance de WhatsApp, e fingir que tem seria mentir para o filtro.
+  it("não inventa uma Instance que o canal oficial não tem", () => {
+    const reacoes = reacoesDoEvento({
+      direcao: "incoming",
+      canal: "whatsapp",
+      telefone: "5547999999999",
+      leadId: null,
+    });
+
+    expect(reacoes.contextoDoGatilho).not.toHaveProperty("instance_id");
+  });
+
+  it("evento que não dispara nada não carrega contexto", () => {
+    const reacoes = reacoesDoEvento({
+      direcao: "outgoing",
+      canal: "whatsapp",
+      telefone: "5547999999999",
+      leadId: null,
+    });
+
+    expect(reacoes.dispararLeadRespondeu).toBe(false);
+    expect(reacoes.contextoDoGatilho).toBeNull();
+  });
+});

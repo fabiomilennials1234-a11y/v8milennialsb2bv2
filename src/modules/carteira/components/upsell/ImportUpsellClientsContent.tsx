@@ -11,7 +11,7 @@ import {
   parseFileToRows,
   type FilePreviewResult,
 } from "@/modules/leads";
-import { usePipelineStages } from "@/modules/pipelines";
+import { useCarteiraStages, type CarteiraStageFamily } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useTeamMembers } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
@@ -107,7 +107,6 @@ const UPSELL_SYSTEM_FIELDS: { key: string; label: string; required?: boolean }[]
   { key: "segment", label: "Segmento" },
   { key: "notes", label: "Notas / Observações" },
   { key: "origin", label: "Origem" },
-  { key: "rating", label: "Prioridade" },
 ];
 
 /** Campos adicionais disponíveis quando a flag customer_portfolio está ativa */
@@ -144,7 +143,7 @@ interface ImportResult {
 }
 
 interface ImportUpsellClientsContentProps {
-  pipeType: "upsell_base" | "upsell_gestao";
+  pipeType: CarteiraStageFamily;
   onDone?: () => void;
 }
 
@@ -174,8 +173,8 @@ export function ImportUpsellClientsContent({
   const { organizationId } = useOrganization();
   const { hasFeature } = useOrgFeatures();
   const hasPortfolio = hasFeature("customer_portfolio");
-  const { data: stages = [] } = usePipelineStages(pipeType);
-  const { data: baseStages = [] } = usePipelineStages("upsell_base");
+  const { data: stages = [] } = useCarteiraStages(pipeType);
+  const { data: baseStages = [] } = useCarteiraStages("upsell_base");
   const { data: members = [] } = useTeamMembers();
 
   /** Combined field list — order fields only when feature flag is ON */
@@ -514,7 +513,6 @@ export function ImportUpsellClientsContent({
                 continue;
               }
             } else {
-              const ratingNum = lead.rating ? parseInt(lead.rating, 10) : 0;
               const { data: newLead, error: leadError } = await supabase
                 .from("leads")
                 .insert({
@@ -527,7 +525,6 @@ export function ImportUpsellClientsContent({
                   segment: lead.segment || null,
                   notes: lead.notes || null,
                   origin: "outro" as const,
-                  rating: isNaN(ratingNum) ? 0 : ratingNum,
                 })
                 .select("id")
                 .single();

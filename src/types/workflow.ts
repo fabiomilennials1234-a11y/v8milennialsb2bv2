@@ -31,8 +31,19 @@ export type WorkflowTriggerType =
   // Novos triggers
   | "lead_replied"
   | "lead_no_reply"
+  // ⚠️ MORTOS. Nunca dispararam: a função de banco foi escrita para
+  // `pipe_confirmacao.is_confirmed` e `pipe_confirmacao` virou VIEW compat, então
+  // nenhum trigger jamais esteve anexado. Medido em prod: 0 workflows usando os
+  // dois. Ficam na união para que um workflow gravado no passado ainda renderize
+  // um NOME em vez do identificador cru — mas saíram do seletor
+  // (`TRIGGER_CATEGORIES`), para ninguém criar um nó novo que não faz nada.
+  // Quem quer reagir a reunião usa `meeting_held` / `meeting_no_show`.
   | "meeting_confirmed"
   | "meeting_not_confirmed"
+  // Comparecimento — disparados por `meeting_events` (20270907000040), que é
+  // onde AS DUAS origens de desfecho desembocam: a Agenda e o movimento de card.
+  | "meeting_held"
+  | "meeting_no_show"
   | "proposal_accepted"
   | "proposal_lost"
   | "followup_overdue"
@@ -45,7 +56,15 @@ export type WorkflowTriggerType =
   | "campaign_lead_no_reply"
   | "campaign_completed"
   | "field_changed"
-  | "scheduled_date";
+  | "scheduled_date"
+  | "deal_created"
+  // Ganhar e perder são MOVIMENTOS para a etapa terminal (ADR-0023 §4/§5), não
+  // campos. Estes dois são DERIVADOS de `stage_changed` no servidor, pelo papel
+  // da etapa de destino — não têm gatilho de banco próprio. `deals.won` não
+  // serve de fonte: o backfill deixou 34.662 linhas com `won = false` que
+  // ninguém perdeu, e ele é cego aos 26% de cards sem linha em `deals`.
+  | "deal_won"
+  | "deal_lost";
 
 export type WorkflowNodeType =
   | "trigger"
@@ -124,6 +143,12 @@ export type WorkflowActionType =
   // Agenda
   | "create_calendar_event"
   | "schedule_meeting"
+  // Negócios
+  | "create_deal"
+  | "win_deal"
+  | "lose_deal"
+  | "set_deal_value"
+  | "set_deal_owner"
   // TinyERP
   | "create_tinyerp_order"
   | "create_tinyerp_upsell_order"
@@ -215,15 +240,27 @@ export const WEEKDAY_OPTIONS = [
 
 export interface TriggerConfigLeadCreated {
   filter_origin?: string;
+  /** @deprecated Slug legado com/sem prefixo pipe_. */
   filter_pipe?: string;
-  filter_pipeline_id?: string;    // UUID for custom pipelines
+  /** UUID de pipelines para qualquer funil. */
+  filter_pipeline_id?: string;
 }
 
 export interface TriggerConfigStageChanged {
-  pipe_type?: string;       // "whatsapp" | "confirmacao" | "propostas" | etc.
-  pipeline_id?: string;     // UUID for custom pipelines
+  /**
+   * O funil (`pipelines.id`) — canônico para QUALQUER funil, sistema ou custom
+   * (SCRUM-627). O editor grava sempre este; o par redundante com `pipe_type`
+   * colapsou.
+   */
+  pipeline_id?: string;
+  /**
+   * @deprecated Legado (slug de funil de sistema, ex.: "whatsapp"). O editor
+   * não grava mais; configs salvas continuam casando via o eco `pipe_type` do
+   * contexto do gatilho até a W6. Medido em prod 2026-09-02: 67 ativos.
+   */
+  pipe_type?: string;
   campanha_id?: string;     // UUID for campaigns
-  from_stage?: string;
+  from_stage?: string;      // stage_key (id de etapa também é aceito pelo matcher)
   to_stage?: string;
   stages?: string[];        // multiple target stages (replaces to_stage for multi-select)
 }
@@ -242,6 +279,12 @@ export interface TriggerConfigCron {
   description?: string;
 }
 
+/** O que conta como "responder". Ver `_shared/workflow-trigger.ts`. */
+export type ReplyMode = "any" | "after_outbound" | "first_of_thread";
+
+/** Origem da resposta. Hoje só Instance de WhatsApp; o contrato já cabe o resto. */
+export type ReplySourceType = "whatsapp_instance";
+
 export interface TriggerConfigLeadReplied {
   channel?: "whatsapp" | "meta" | "any";
   contains_text?: string;
@@ -251,6 +294,38 @@ export interface TriggerConfigLeadReplied {
    * Semântica OR; vazio/ausente = qualquer funil.
    */
   pipeline_ids?: string[];
+  /**
+   * Etapas em que o lead precisa ter card (`pipeline_stages.id`). Semântica OR;
+   * vazio/ausente = qualquer etapa. Chave é o uuid e não o `stage_key`: o
+   * apelido de etapa se repete entre funis, o uuid não.
+   *
+   * Filtro PURO: basta o lead ter ALGUM card numa das etapas. A execução não se
+   * amarra ao Negócio que casou, e um lead com dois cards elegíveis gera UMA
+   * execução (ADR-0023 + spec do gatilho).
+   */
+  stage_ids?: string[];
+  /**
+   * De qual das NOSSAS caixas a resposta precisa ter vindo. Existe para a org
+   * com dois números falando com o mesmo lead: só o número escolhido conta.
+   *
+   * `source_type` já nasce como discriminador para o dia em que Instagram e
+   * WhatsApp oficial entrarem — hoje só o ramo `whatsapp_instance` é avaliado.
+   * Semântica OR; vazio/ausente = qualquer origem.
+   */
+  source_type?: ReplySourceType;
+  source_ids?: string[];
+  /** Padrão `any`. */
+  reply_mode?: ReplyMode;
+  /** Só em `after_outbound`: quanto tempo depois do nosso envio ainda conta. */
+  reply_window_hours?: number;
+  /** Só em `first_of_thread`: silêncio que faz a próxima mensagem virar conversa nova. */
+  new_thread_after_hours?: number;
+  /**
+   * Freio. Mesmo workflow não roda duas vezes para o mesmo lead dentro da
+   * janela. Padrão 60 — sem ele, a rajada normal do WhatsApp ("oi" + "tudo
+   * bem?" + "?") dispara a automação três vezes em 40 segundos.
+   */
+  cooldown_minutes?: number;
 }
 
 export interface TriggerConfigLeadNoReply {
@@ -294,7 +369,7 @@ export interface TriggerConfigFieldChanged {
  * Trigger "Antes de uma data" (scheduled_date).
  *
  * Alvo = data da reunião marcada de cada lead (`pipeline_entries.metadata->>'meeting_date'`),
- * por-lead (não uma data global fixa). Audiência = 1 pipe + etapa(s) + origem opcional.
+ * por-lead (não uma data global fixa). Audiência = 1 funil + etapa(s) + origem opcional.
  * Cada item de `dispatches` dispara uma vez por lead por reunião; remarcar re-arma todos os itens.
  */
 export type ScheduledDispatchUnit = "days" | "hours" | "minutes";
@@ -316,11 +391,33 @@ export interface ScheduledDispatchBefore {
 export type ScheduledDispatchItem = ScheduledDispatchOnBook | ScheduledDispatchBefore;
 
 export interface TriggerConfigScheduledDate {
-  pipe_type?: string;       // slug do pipe de sistema: "whatsapp" | "confirmacao" | "propostas"
-  pipeline_id?: string;     // UUID para funis custom (alternativa a pipe_type)
-  stages?: string[];        // etapa(s) selecionada(s); vazio = qualquer etapa do pipe
+  /** O funil (`pipelines.id`) — canônico para qualquer funil (SCRUM-627). */
+  pipeline_id?: string;
+  /** @deprecated Legado: slug do funil semeado. O editor não grava mais. */
+  pipe_type?: string;
+  /** UUIDs de pipeline_stages; stage_key legado também é aceito. */
+  stages?: string[];
   filter_origin?: string;   // origem opcional
   dispatches: ScheduledDispatchItem[];
+}
+
+/**
+ * deal_created — disparado quando a posição canônica do Negócio fica completa.
+ * O lead do workflow é `deals.source_lead_id`.
+ */
+export interface TriggerConfigDealCreated {
+  /** Funis de nascimento (`pipelines.id`); vazio/ausente = qualquer funil. */
+  pipeline_ids?: string[];
+  /** Etapas de nascimento (`pipeline_stages.id`); vazio = qualquer etapa dos funis. */
+  stage_ids?: string[];
+  /** Só dispara para negócios vinculados a um lead. Default: true (fail-closed —
+   *  a maioria dos nós downstream precisa de lead). */
+  require_lead?: boolean;
+  /** Procedência do negócio — espelha `deals.source` (CHECK: human/workflow/api/import/backfill). */
+  source?: "any" | "human" | "workflow" | "api" | "import";
+  filter_owner_id?: string;
+  /** Valor mínimo do negócio (R$) para disparar. */
+  min_value?: number;
 }
 
 export type TriggerConfig =
@@ -338,7 +435,8 @@ export type TriggerConfig =
   | TriggerConfigLeadAssigned
   | TriggerConfigCampaignStatus
   | TriggerConfigFieldChanged
-  | TriggerConfigScheduledDate;
+  | TriggerConfigScheduledDate
+  | TriggerConfigDealCreated;
 
 // =====================================================
 // NODE DATA
@@ -455,7 +553,14 @@ export interface ActionNodeData {
   notifyPhones?: string[];
   includeConversationSummary?: boolean;
   // Move stage
+  /** O funil de destino (`pipelines.id`) — canônico, qualquer funil (SCRUM-627). */
+  pipelineId?: string;
+  /**
+   * @deprecated Legado dos nós salvos: slug de sistema ("whatsapp") OU uuid de
+   * funil custom. O executor ainda aceita; o editor grava só `pipelineId`.
+   */
   pipeType?: string;
+  /** Etapa de destino: stage_key (legado) ou `pipeline_stages.id` — os dois valem. */
   targetStage?: string;
   // Tag
   tagId?: string;
@@ -468,8 +573,10 @@ export interface ActionNodeData {
   customFieldValue?: string;
   // Update rating
   ratingValue?: number;
-  // Duplicate to pipe
+  // Duplicate to funnel — campos abaixo existem só para leitura de nós antigos.
+  /** @deprecated Use `pipelineId`. */
   targetPipeType?: string;
+  /** @deprecated Use `targetStage`. */
   targetPipeStage?: string;
   // Mark as lost
   lostReason?: string;
@@ -488,6 +595,20 @@ export interface ActionNodeData {
   // Schedule meeting
   meetingDate?: string;
   meetingCloserId?: string;
+  // Negócio (create_deal)
+  dealTitleTemplate?: string;
+  dealValueMode?: "fixed" | "proposal";
+  dealValue?: number;
+  dealProbability?: number;
+  dealOwnerMode?: "lead_responsible" | "specific";
+  dealOwnerId?: string;
+  /** `lose_deal` — motivo gravado em `deals.loss_reason`. */
+  lossReason?: string;
+  dealOwnerName?: string;
+  dealExpectedCloseDays?: number;
+  dealNotes?: string;
+  /** Não cria segundo negócio aberto para o mesmo lead. Default: true. */
+  dealSkipIfOpenExists?: boolean;
   // TinyERP
   tinyProductId?: string;
   tinyProductName?: string;
@@ -956,26 +1077,32 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
   send_semi_automatic: "Envio Semi-Automático",
   send_to_number: "Enviar p/ número fixo",
   // Lead Management
-  move_stage: "Mover Estágio",
+  move_stage: "Mover para Etapa",
   add_tag: "Adicionar Tag",
   remove_tag: "Remover Tag",
   update_lead_field: "Atualizar Campo do Lead",
   update_custom_field: "Atualizar Campo Customizado",
   update_rating: "Atualizar Rating",
   calculate_score: "Calcular Lead Score (IA)",
-  duplicate_to_pipe: "Duplicar em Outro Pipe",
-  remove_from_pipe: "Remover do Pipe",
+  duplicate_to_pipe: "Adicionar a Outro Funil",
+  remove_from_pipe: "Remover do Funil",
   mark_as_lost: "Marcar como Perdido",
   // Campanhas
   add_to_campaign: "Adicionar à Campanha",
   remove_from_campaign: "Remover da Campanha",
-  move_campaign_stage: "Mover Estágio na Campanha",
+  move_campaign_stage: "Mover Etapa na Campanha",
   send_campaign_message: "Enviar Mensagem da Campanha",
   pause_campaign_sequence: "Pausar Sequência da Campanha",
   resume_campaign_sequence: "Retomar Sequência da Campanha",
   // Agenda
   create_calendar_event: "Criar Evento no Calendar",
   schedule_meeting: "Agendar Reunião",
+  // Negócios
+  create_deal: "Criar Negócio",
+  win_deal: "Ganhar Negócio",
+  lose_deal: "Perder Negócio",
+  set_deal_value: "Definir Valor do Negócio",
+  set_deal_owner: "Definir Dono do Negócio",
   // TinyERP
   create_tinyerp_order: "Criar Pedido TinyERP",
   create_tinyerp_upsell_order: "Criar Pedido Upsell TinyERP",
@@ -997,7 +1124,7 @@ export const ACTION_LABELS: Record<WorkflowActionType, string> = {
 
 export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   lead_created: "Lead Criado",
-  stage_changed: "Mudança de Estágio",
+  stage_changed: "Mudança de Etapa",
   tag_added: "Tag Adicionada",
   score_reached: "Score Atingido",
   cron: "Agendamento (Cron)",
@@ -1005,6 +1132,8 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   lead_no_reply: "Lead Não Respondeu",
   meeting_confirmed: "Reunião Confirmada",
   meeting_not_confirmed: "Reunião Não Confirmada",
+  meeting_held: "Compareceu à Reunião",
+  meeting_no_show: "Não Compareceu à Reunião",
   proposal_accepted: "Proposta Aceita",
   proposal_lost: "Proposta Perdida",
   followup_overdue: "Follow-up Vencido",
@@ -1018,6 +1147,9 @@ export const TRIGGER_LABELS: Record<WorkflowTriggerType, string> = {
   campaign_completed: "Lead Concluiu a Campanha",
   field_changed: "Campo do Lead Alterado",
   scheduled_date: "Antes de uma data",
+  deal_created: "Negócio Criado",
+  deal_won: "Negócio Ganho",
+  deal_lost: "Negócio Perdido",
 };
 
 export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
@@ -1033,8 +1165,8 @@ export const CONDITION_OPERATOR_LABELS: Record<ConditionOperator, string> = {
   is_not_empty: "Não está vazio",
   has_tag: "Tem a tag",
   not_has_tag: "Não tem a tag",
-  in_stage: "Está no estágio",
-  not_in_stage: "Não está no estágio",
+  in_stage: "Está na etapa",
+  not_in_stage: "Não está na etapa",
   starts_with: "Começa com",
   ends_with: "Termina com",
   in_list: "Está na lista",
@@ -1095,6 +1227,10 @@ export const ACTION_CATEGORIES: ActionCategory[] = [
   {
     label: "Agenda",
     actions: ["create_calendar_event", "schedule_meeting"],
+  },
+  {
+    label: "Negócios",
+    actions: ["create_deal", "win_deal", "lose_deal", "set_deal_value", "set_deal_owner"],
   },
   {
     label: "TinyERP",
@@ -1174,6 +1310,7 @@ export interface WorkflowVariable {
 export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   // Lead
   { key: "{{nome}}",          label: "Nome do lead",                  category: "Lead" },
+  { key: "{{primeiro_nome}}", label: "Primeiro nome do lead",         category: "Lead" },
   { key: "{{empresa}}",       label: "Empresa",                       category: "Lead" },
   { key: "{{email}}",         label: "Email",                         category: "Lead" },
   { key: "{{telefone}}",      label: "Telefone",                      category: "Lead" },
@@ -1184,18 +1321,22 @@ export const WORKFLOW_VARIABLES: WorkflowVariable[] = [
   { key: "{{origem}}",        label: "Origem do lead",                category: "Lead" },
   { key: "{{urgencia}}",      label: "Urgência",                      category: "Lead" },
   { key: "{{observacoes}}",   label: "Observações",                   category: "Lead" },
-  // Pipeline
-  { key: "{{estagio}}",       label: "Estágio atual no funil",        category: "Pipeline" },
-  { key: "{{data_reuniao}}",  label: "Data da reunião",               category: "Pipeline" },
-  { key: "{{valor_proposta}}",label: "Valor da proposta",             category: "Pipeline" },
+  // Funil
+  { key: "{{estagio}}",       label: "Etapa atual no funil",          category: "Funil" },
+  { key: "{{data_reuniao}}",  label: "Data da reunião",               category: "Funil" },
+  { key: "{{valor_proposta}}",label: "Valor da proposta",             category: "Funil" },
   // Responsável
   { key: "{{responsavel}}",            label: "Nome do responsável",          category: "Responsável" },
   { key: "{{responsavel_telefone}}",   label: "Telefone do responsável",      category: "Responsável" },
   { key: "{{sdr}}",                    label: "SDR (legado)",                 category: "Responsável" },
   { key: "{{closer}}",                 label: "Vendedor (legado)",            category: "Responsável" },
   // Campanha
+  // Negócio (trigger deal_created / nó Criar Negócio)
+  { key: "{{negocio_id}}",       label: "ID do negócio",       category: "Negócio" },
+  { key: "{{negocio_titulo}}",   label: "Título do negócio",   category: "Negócio" },
+  { key: "{{negocio_valor}}",    label: "Valor do negócio",    category: "Negócio" },
   { key: "{{campanha_nome}}",    label: "Nome da campanha",    category: "Campanha" },
-  { key: "{{campanha_estagio}}", label: "Estágio na campanha", category: "Campanha" },
+  { key: "{{campanha_estagio}}", label: "Etapa na campanha", category: "Campanha" },
   // I.A.
   { key: "{{ai_resumo}}",        label: "Resumo da conversa (I.A.)",       category: "I.A." },
   { key: "{{ai_sentimento}}",    label: "Sentimento (positive/neutral/negative)", category: "I.A." },
@@ -1220,12 +1361,19 @@ export const TRIGGER_CATEGORIES: TriggerCategory[] = [
     triggers: ["lead_replied", "lead_no_reply"],
   },
   {
-    label: "Pipeline",
-    triggers: ["stage_changed", "meeting_confirmed", "meeting_not_confirmed", "scheduled_date", "proposal_accepted", "proposal_lost"],
+    label: "Funil",
+    // `meeting_confirmed`/`meeting_not_confirmed` SAÍRAM daqui: nunca
+    // dispararam (ver a nota na união de tipos) e ofereciam um nó que não faz
+    // nada, ao lado de dois que fazem.
+    triggers: ["stage_changed", "meeting_held", "meeting_no_show", "scheduled_date", "proposal_accepted", "proposal_lost"],
   },
   {
     label: "Campanhas",
     triggers: ["campaign_status_changed", "lead_added_to_campaign", "lead_removed_from_campaign", "campaign_lead_replied", "campaign_lead_no_reply", "campaign_completed"],
+  },
+  {
+    label: "Negócios",
+    triggers: ["deal_created", "deal_won", "deal_lost"],
   },
   {
     label: "Automação",

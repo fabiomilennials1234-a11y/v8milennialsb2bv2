@@ -2,68 +2,46 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
-import type { PipelineType, PipelineStage, PipelineStageInsert, DefaultStage } from "@/contracts/pipe";
-import { DEFAULT_STAGES } from "@/contracts/pipe";
+import type { PipelineType, StageFamily, PipelineStage, PipelineStageInsert, DefaultStage } from "@/contracts/pipe";
+import { FALLBACK_STAGES } from "@/contracts/pipe";
+import { chaveDeNovaEtapa } from "../../lib/chave-de-nova-etapa";
+import {
+  proximaPosicaoDeEtapa,
+  mensagemDeConflitoDeEtapa,
+} from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
+import { rpcNaoTipada } from "@/modules/pipelines/lib/rpc-nao-tipada";
 
 // `PipelineType` + `PipelineStage(Insert)` + `getPipelineTypeName` +
 // `stagesToColumns` têm definição canônica em contracts (puros, sem
 // side-effect) — quebra import direto leads→pipelines. Re-exportados aqui
 // mantendo a API pública inalterada.
-export type { PipelineType, PipelineStage, PipelineStageInsert, DefaultStage };
-// DEFAULT_STAGES: constante PURA movida para `@/contracts/pipe` (quebra ciclo
+export type { PipelineType, StageFamily, PipelineStage, PipelineStageInsert, DefaultStage };
+// FALLBACK_STAGES: constante PURA em `@/contracts/pipe` (quebra ciclo
 // communication/leads -> pipelines via barrel). Re-exportada aqui p/ API estável.
-export { DEFAULT_STAGES };
-
-// Controle para garantir que etapas padrão existam no banco (uma vez por sessão)
-const defaultsEnsuredForSession = new Set<string>();
-
+// SCRUM-641: o antigo `DEFAULT_STAGES` (Record por trio) morreu — funil é
+// funil, e o fallback de exibição é uma trilha só.
+export { FALLBACK_STAGES };
 
 /**
- * Garante que as etapas padrão de TODOS os pipelines existam no banco para uma organização.
- * Usa upsert com ignoreDuplicates (ON CONFLICT DO NOTHING), então é idempotente e segura.
+ * Os tipos de funil de sistema que a org tem, lidos do registro.
+ *
+ * Leitura direta (não o hook `usePipelineDisplayConfig`) de propósito: isto roda
+ * DENTRO do `queryFn`, onde não se pode chamar hook.
+ *
+ * ⚠️ Em erro devolve conjunto VAZIO, não "todos". Um erro transitório de rede
+ * não pode ressuscitar um funil que a org excluiu.
  */
-async function ensureDefaultStagesInDb(organizationId: string) {
-  const allStages: Record<string, unknown>[] = [];
-
-  // Carteira fora da semeadura: `upsell_base`/`upsell_gestao` foram aposentados
-  // (ADR-0023 §8, migration 20270805000010). Esta função é a torneira VIVA —
-  // é ela, e não `create_default_pipeline_stages`, que dá etapas às orgs novas
-  // (Liris e Bolivar nasceram com as 8 etapas de `propostas` do DEFAULT_STAGES,
-  // não com as 7 da função SQL). Continuar semeando carteira aqui recriaria,
-  // ATIVA, em toda org nova, exatamente o que a migration desativou em 98.
-  //
-  // `DEFAULT_STAGES` MANTÉM as duas famílias de propósito: é o fallback em
-  // memória de `buildFallbackStages` que segura `/upsell` de pé enquanto a
-  // rota não for terminada ou enterrada (decisão em aberto, ADR-0005).
-  for (const pipeType of ["whatsapp", "confirmacao", "propostas"] as PipelineType[]) {
-    for (let i = 0; i < DEFAULT_STAGES[pipeType].length; i++) {
-      const stage = DEFAULT_STAGES[pipeType][i];
-      allStages.push({
-        organization_id: organizationId,
-        pipeline_type: pipeType,
-        stage_key: stage.id,
-        name: stage.title,
-        color: stage.color,
-        position: i,
-        is_active: true,
-        is_final_positive: stage.is_final_positive ?? false,
-        is_final_negative: stage.is_final_negative ?? false,
-        target_pipe_type: stage.target_pipe_type ?? null,
-        target_stage_key: stage.target_stage_key ?? null,
-      });
-    }
-  }
-
-  const { error } = await supabase
-    .from("pipeline_stages")
-    .upsert(allStages, {
-      onConflict: "organization_id,pipeline_type,stage_key",
-      ignoreDuplicates: true,
-    });
+async function lerTiposHabilitados(organizationId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from("pipeline_display_config")
+    .select("pipe_type")
+    .eq("organization_id", organizationId);
 
   if (error) {
-    console.warn("Error ensuring default stages via upsert:", error.message);
+    console.warn("Não foi possível ler pipeline_display_config:", error.message);
+    return new Set();
   }
+  return new Set((data ?? []).map((r) => r.pipe_type as string));
 }
 
 /**
@@ -89,12 +67,14 @@ function buildFallbackStages(
   // contexto para dentro do literal — sem isso `stage_role: "open"` alarga para
   // `string` e não satisfaz o enum `StageRole`.
   const syntheticTimestamp = new Date(0).toISOString();
-  return DEFAULT_STAGES[pipelineType].map((stage, index): PipelineStage => ({
+  return FALLBACK_STAGES.map((stage, index): PipelineStage => ({
     id: stage.id,
     // Etapa sintética, nunca persistida: sem org dona, e timestamp de epoch
     // sinaliza "não veio do banco" sem fingir uma data plausível.
     organization_id: organizationId ?? "",
     pipeline_type: pipelineType,
+    // Etapa sintética: não pertence a nenhum funil persistido.
+    pipeline_id: null,
     stage_key: stage.id,
     name: stage.title,
     color: stage.color,
@@ -102,9 +82,11 @@ function buildFallbackStages(
     is_active: true,
     is_final_positive: stage.is_final_positive ?? false,
     is_final_negative: stage.is_final_negative ?? false,
-    // NOT NULL, default 'open' no banco. `ensureDefaultStagesInDb` não escreve
-    // este campo, então a linha real destas mesmas etapas também nasce 'open'.
-    // won/lost é papel governado (ADR-0017 §1), nunca derivado de is_final_*.
+    // NOT NULL, default 'open' no banco. O seed server-side
+    // (`create_default_pipeline_stages`) também não escreve este campo — a
+    // linha real destas mesmas etapas nasce 'open' e o trigger do #990 aplica
+    // o papel de sistema. won/lost é papel governado (ADR-0017 §1), nunca
+    // derivado de is_final_*.
     stage_role: "open",
     suggested_stage_role: null,
     stage_role_suggested_at: null,
@@ -143,15 +125,19 @@ export function usePipelineStages(pipelineType: PipelineType) {
       const fallbackStages = buildFallbackStages(pipelineType, organizationId);
 
       try {
-        // Garantir que etapas padrão existam no banco (uma vez por sessão).
-        // Resolve o cenário onde a organização não tem etapas padrão criadas,
-        // fazendo o sistema depender de um fallback em memória que não é persistido.
-        // Usa upsert direto com ignoreDuplicates (ON CONFLICT DO NOTHING).
-        const ensureKey = `${organizationId}`;
-        if (!defaultsEnsuredForSession.has(ensureKey)) {
-          defaultsEnsuredForSession.add(ensureKey);
-          await ensureDefaultStagesInDb(organizationId);
-        }
+        // ── Portão do registro ────────────────────────────────────────────
+        // Só funil que a org registra em `pipeline_display_config` existe.
+        // Todo `PipelineType` é registrável desde SCRUM-618 (as famílias
+        // `upsell_*` saíram do union — a Carteira lê etapas pelo caminho
+        // dedicado dela, `useCarteiraStages`).
+        const tiposHabilitados = await lerTiposHabilitados(organizationId);
+
+        // 🚨 Torneira nº 4. A org não tem este funil (nunca teve, ou
+        // excluiu): devolver lista VAZIA, nunca `fallbackStages`. Enquanto
+        // este ramo caía no fallback, o funil excluído continuava
+        // renderizando com as etapas padrão em memória — o banco ficava
+        // limpo e a tela mentia.
+        if (!tiposHabilitados.has(pipelineType)) return [];
 
         const { data, error } = await supabase
           .from("pipeline_stages")
@@ -161,18 +147,19 @@ export function usePipelineStages(pipelineType: PipelineType) {
           .eq("is_active", true)
           .order("position", { ascending: true });
 
-        // Se houver erro (tabela não existe, etc), usa fallback
+        // Erro de leitura: fallback RENDER-ONLY (nunca é escrito no banco) —
+        // segura a tela num blip de rede sem inventar estado.
         if (error) {
           console.warn("Pipeline stages table not available, using defaults:", error.message);
           return fallbackStages;
         }
 
-        // Se não houver etapas (mesmo após ensure), usar fallback
-        if (!data || data.length === 0) {
-          return fallbackStages;
-        }
-
-        return data as PipelineStage[];
+        // SCRUM-618: lista vazia é estado LEGÍTIMO. O seed é 100% server-side
+        // (`enable_system_pipeline` → `create_default_pipeline_stages`) e o
+        // front não semeia nem finge etapa: funil habilitado sem etapa ativa
+        // renderiza vazio. Medido em prod (2026-09-01): zero orgs neste
+        // estado — o ramo só aparece se a org desativar todas as etapas.
+        return (data ?? []) as PipelineStage[];
       } catch (err) {
         // Fallback em caso de qualquer erro
         console.warn("Error fetching pipeline stages, using defaults:", err);
@@ -226,21 +213,39 @@ export function useCreatePipelineStage() {
         throw new Error("Organização não encontrada");
       }
 
-      // Garantir que etapas padrão existam no banco antes de criar nova etapa.
-      // Isso previne o bug onde criar uma etapa fazia as padrão (fallback) sumirem,
-      // pois o fallback só é ativado quando não há nenhuma etapa no banco.
-      await ensureDefaultStagesInDb(teamMember.organization_id);
+      // SCRUM-618: nada de semear defaults antes de criar — o seed é
+      // server-side e lista vazia é estado legítimo. A etapa criada é a
+      // primeira coluna real do board se o funil estava vazio.
+      // A `position` que o editor manda é contada sobre as etapas VISÍVEIS, e
+      // etapa excluída segue ocupando posição (soft delete `is_active=false`).
+      // Quem decide o número é o funil inteiro — ver `proximaPosicaoDeEtapa`.
+      // Sem isto o INSERT bate em `pipeline_stages_pipeline_id_position_key` e
+      // o usuário lê "Já existe uma etapa com esse nome".
+      const posicaoLivre = await proximaPosicaoDeEtapa({
+        organizationId: teamMember.organization_id,
+        pipelineType: stage.pipeline_type,
+      });
+      const stageKey = await chaveDeNovaEtapa({
+        organizationId: teamMember.organization_id,
+        pipelineType: stage.pipeline_type,
+      }, stage.name, stage.stage_key);
 
       const { data, error } = await supabase
         .from("pipeline_stages")
         .insert({
           ...stage,
+          stage_key: stageKey,
+          position: posicaoLivre,
           organization_id: teamMember.organization_id,
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        const conflito = mensagemDeConflitoDeEtapa(error);
+        if (conflito) throw new Error(conflito);
+        throw error;
+      }
       return data as PipelineStage;
     },
     onSuccess: (_, variables) => {
@@ -263,7 +268,9 @@ export function useUpdatePipelineStage() {
       ...updates
     }: {
       id: string;
-      pipeline_type: PipelineType;
+      // StageFamily, não PipelineType: o editor compartilhado também edita as
+      // etapas do resíduo Carteira (SCRUM-618). Usado só como chave de cache.
+      pipeline_type: StageFamily;
       name?: string;
       color?: string;
       position?: number;
@@ -301,6 +308,18 @@ export function useUpdatePipelineStage() {
   });
 }
 
+
+/**
+ * O funil de sistema por trás de uma família de etapa — ou null quando a
+ * família é resíduo Carteira (D9): carteira nunca teve linha em `pipelines`,
+ * então não há id a resolver (mesmo null que o resolve devolvia antes).
+ */
+function asSystemPipelineType(family: StageFamily): PipelineType | null {
+  return family === "whatsapp" || family === "confirmacao" || family === "propostas"
+    ? family
+    : null;
+}
+
 /**
  * Resolve o pipeline_id do pipe de sistema (org + slug + type=system).
  * Usado pela migração de leads no delete de etapa.
@@ -325,16 +344,31 @@ async function resolveSystemPipelineId(
  * antes de desativar (senão os leads viram "fantasmas" — caem numa etapa que
  * o Kanban não renderiza). Ver `useDeletePipelineStage`.
  */
-export function usePipelineStageLeadCounts(pipelineType: PipelineType) {
+export function usePipelineStageLeadCounts(
+  pipelineType: StageFamily | null,
+  /**
+   * SCRUM-636 (D3): id explícito do funil — o caminho canônico pós-626. Quando
+   * presente, dispensa a resolução por família e serve QUALQUER funil (custom
+   * incluso, que não tem família). Sem ele, o comportamento antigo permanece.
+   */
+  explicitPipelineId?: string | null,
+) {
   const { data: teamMember } = useCurrentTeamMember();
   const organizationId = teamMember?.organization_id;
 
   return useQuery({
-    queryKey: ["pipeline_stage_lead_counts", pipelineType, organizationId],
+    queryKey: [
+      "pipeline_stage_lead_counts",
+      explicitPipelineId ?? pipelineType,
+      organizationId,
+    ],
     queryFn: async () => {
       if (!organizationId) return {} as Record<string, number>;
 
-      const pipelineId = await resolveSystemPipelineId(organizationId, pipelineType);
+      const systemType = pipelineType ? asSystemPipelineType(pipelineType) : null;
+      const pipelineId =
+        explicitPipelineId ??
+        (systemType ? await resolveSystemPipelineId(organizationId, systemType) : null);
       if (!pipelineId) return {} as Record<string, number>;
 
       const { data, error } = await supabase
@@ -364,8 +398,36 @@ export function usePipelineStageLeadCounts(pipelineType: PipelineType) {
  * Soft-delete (is_active=false) preserva histórico. PORÉM, se a etapa ainda tem
  * leads, eles precisam ser migrados para uma etapa ativa ANTES de desativar —
  * caso contrário ficam num stage_key que o Kanban não renderiza (leads
- * "fantasmas"). `migrateToStageKey` é obrigatório quando há leads na etapa.
+ * "fantasmas"). `destinationStageId` é obrigatório quando há cards na etapa.
+ * A RPC valida e aplica todas as mudanças na mesma transação.
  */
+export interface PipelineStageDeleteImpact {
+  stage_id: string;
+  pipeline_id: string;
+  cards: number;
+  automacoes: number;
+  regras_disparo: number;
+}
+
+export interface PipelineStageDeleteResult extends PipelineStageDeleteImpact {
+  cards_migrados: number;
+  automacoes_desativadas: number;
+}
+
+export function usePipelineStageDeleteImpact(stageId: string | null, enabled: boolean) {
+  return useQuery({
+    queryKey: ["pipeline-stage-delete-impact", stageId],
+    queryFn: async () => {
+      if (!stageId) return null;
+      return rpcNaoTipada<PipelineStageDeleteImpact>("pipeline_stage_delete_impact", {
+        p_stage_id: stageId,
+      });
+    },
+    enabled: enabled && !!stageId,
+    staleTime: 0,
+  });
+}
+
 export function useDeletePipelineStage() {
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
@@ -374,62 +436,60 @@ export function useDeletePipelineStage() {
     mutationFn: async ({
       id,
       pipeline_type,
-      stageKey,
-      migrateToStageKey,
+      destinationStageId,
+      pipelineId: explicitPipelineId,
     }: {
       id: string;
-      pipeline_type: PipelineType;
-      stageKey: string;
-      migrateToStageKey?: string;
+      /**
+       * Família de sistema/carteira — usada como chave de cache e, na ausência
+       * de `pipelineId`, para resolver o funil. Funil custom não tem família:
+       * passa `pipelineId` e omite esta.
+       */
+      pipeline_type?: StageFamily;
+      destinationStageId?: string;
+      /**
+       * SCRUM-636 (D3): id explícito do funil — serve qualquer espécie. Com
+       * ele, a migração de cards e a contagem valem também para funil custom
+       * (antes o delete custom desativava a etapa SEM migrar os cards).
+       */
+      pipelineId?: string | null;
     }) => {
       const organizationId = teamMember?.organization_id;
       if (!organizationId) throw new Error("Organização não encontrada");
 
-      const pipelineId = await resolveSystemPipelineId(organizationId, pipeline_type);
+      const systemType = pipeline_type ? asSystemPipelineType(pipeline_type) : null;
+      const pipelineId =
+        explicitPipelineId ??
+        (systemType ? await resolveSystemPipelineId(organizationId, systemType) : null);
+      if (!pipelineId) throw new Error("Funil da etapa não encontrado");
 
-      // Migrar leads que ainda estão nesta etapa antes de desativar.
-      if (pipelineId) {
-        const { count, error: countError } = await supabase
-          .from("pipeline_entries")
-          .select("id", { count: "exact", head: true })
-          .eq("pipeline_id", pipelineId)
-          .eq("stage_key", stageKey);
-
-        if (countError) throw countError;
-
-        if ((count ?? 0) > 0) {
-          if (!migrateToStageKey) {
-            throw new Error(
-              `Esta etapa tem ${count} lead(s). Escolha uma etapa de destino para migrar antes de remover.`,
-            );
-          }
-          if (migrateToStageKey === stageKey) {
-            throw new Error("A etapa de destino deve ser diferente da etapa removida.");
-          }
-
-          const { error: migrateError } = await supabase
-            .from("pipeline_entries")
-            .update({ stage_key: migrateToStageKey, updated_at: new Date().toISOString() })
-            .eq("pipeline_id", pipelineId)
-            .eq("stage_key", stageKey);
-
-          if (migrateError) throw migrateError;
-        }
-      }
-
-      // Ao invés de deletar, desativamos a etapa para preservar dados históricos
-      const { error } = await supabase
-        .from("pipeline_stages")
-        .update({ is_active: false, updated_at: new Date().toISOString() })
-        .eq("id", id);
-
-      if (error) throw error;
+      return rpcNaoTipada<PipelineStageDeleteResult>("delete_pipeline_stage", {
+        p_stage_id: id,
+        p_destination_stage_id: destinationStageId ?? null,
+      });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["pipeline_stages", variables.pipeline_type] });
+      // Chaves de SISTEMA (por família) — comportamento histórico.
+      if (variables.pipeline_type) {
+        queryClient.invalidateQueries({ queryKey: ["pipeline_stages", variables.pipeline_type] });
+        queryClient.invalidateQueries({ queryKey: ["pipeline_entries", variables.pipeline_type] });
+      }
       queryClient.invalidateQueries({ queryKey: ["all_pipeline_stages"] });
-      queryClient.invalidateQueries({ queryKey: ["pipeline_stage_lead_counts", variables.pipeline_type] });
-      queryClient.invalidateQueries({ queryKey: ["pipeline_entries", variables.pipeline_type] });
+      queryClient.invalidateQueries({ queryKey: ["workflows"] });
+      queryClient.invalidateQueries({ queryKey: ["pipeline-stage-delete-impact"] });
+      queryClient.invalidateQueries({
+        queryKey: ["pipeline_stage_lead_counts", variables.pipelineId ?? variables.pipeline_type],
+      });
+      // Chaves UNIFICADAS/CUSTOM (por id) — SCRUM-636: o mesmo delete serve o
+      // funil custom, cujas telas leem por estas chaves. Sem elas, a etapa
+      // removida continuaria renderizando até o debounce do realtime.
+      if (variables.pipelineId) {
+        queryClient.invalidateQueries({ queryKey: ["custom_pipeline_stages", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["funil-stages", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["custom_pipe_entries", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["custom_pipe_stage_counts", variables.pipelineId] });
+        queryClient.invalidateQueries({ queryKey: ["pipeline-stage-counts", variables.pipelineId] });
+      }
     },
   });
 }
@@ -445,22 +505,18 @@ export function useReorderPipelineStages() {
       pipeline_type,
       stages,
     }: {
-      pipeline_type: PipelineType;
+      pipeline_type: StageFamily;
       stages: { id: string; position: number }[];
     }) => {
-      const updates = stages.map((stage) =>
-        supabase
-          .from("pipeline_stages")
-          .update({ position: stage.position, updated_at: new Date().toISOString() })
-          .eq("id", stage.id)
-      );
-
-      const results = await Promise.all(updates);
-      const errors = results.filter((r) => r.error);
-
-      if (errors.length > 0) {
-        throw errors[0].error;
-      }
+      // SCRUM-616: UNIQUE (pipeline_id, position) tornou o UPDATE por linha
+      // inviável (cada request é uma transação; a permutação transita por
+      // posições ocupadas). A RPC faz a permutação em statement único e já
+      // grava updated_at.
+      const ordered = [...stages].sort((a, b) => a.position - b.position);
+      const { error } = await supabase.rpc("reorder_pipeline_stages" as never, {
+        p_stage_ids: ordered.map((s) => s.id),
+      } as never);
+      if (error) throw error;
 
       return true;
     },
@@ -473,7 +529,7 @@ export function useReorderPipelineStages() {
 
 // `getPipelineTypeName` movido para contracts (puro). Re-exportado para manter
 // a API pública do módulo.
-export { getPipelineTypeName } from "@/contracts/pipe";
+export { getPipelineTypeName, getStageFamilyName } from "@/contracts/pipe";
 
 /**
  * Converte etapas do banco para o formato {value, label} usado nos selects/checkboxes.

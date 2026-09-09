@@ -30,11 +30,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import {
-  STAGE_ROLES,
+  STAGE_ROLES_ATRIBUIVEIS,
   STAGE_ROLE_META,
   STAGE_ROLE_SOURCE_LABEL,
-  getPipelineTypeName,
-  type PipelineType,
   type StageRole,
 } from "@/modules/pipelines";
 import {
@@ -46,12 +44,10 @@ import {
   type StageRoleSuggestionRow,
 } from "../lib/stage-role-review";
 
-function pipeLabel(pipelineType: string): string {
-  try {
-    return getPipelineTypeName(pipelineType as PipelineType);
-  } catch {
-    return pipelineType;
-  }
+function pipeLabel(row: StageRoleSuggestionRow): string {
+  // O funil como a ORG o vê (resolvido no hook via nomeDoFunil) — nunca o
+  // catálogo. Etapa órfã (pipeline_id nulo) ganha o fallback honesto.
+  return row.funil_label ?? "Funil removido";
 }
 
 function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {
@@ -85,7 +81,7 @@ function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {
         <div className="min-w-0">
           <p className="font-medium text-sm truncate">{row.name}</p>
           <p className="text-xs text-muted-foreground truncate">
-            {pipeLabel(row.pipeline_type)}
+            {pipeLabel(row)}
             <span className="mx-1.5 opacity-40">·</span>
             <span className="font-mono opacity-70">{row.stage_key}</span>
           </p>
@@ -114,7 +110,8 @@ function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {
         <Button
           size="sm"
           className="h-8"
-          disabled={busy}
+          disabled={busy || !STAGE_ROLES_ATRIBUIVEIS.includes(row.suggested_stage_role)}
+          title="Ganho e perda são definidos no negócio, não na etapa"
           onClick={() => act("approve")}
         >
           {pendingAction === "approve" ? (
@@ -133,7 +130,7 @@ function SuggestionRow({ row }: { row: StageRoleSuggestionRow }) {
             <SelectValue placeholder="Corrigir para…" />
           </SelectTrigger>
           <SelectContent>
-            {STAGE_ROLES.filter((r) => r !== row.suggested_stage_role).map((role) => (
+            {STAGE_ROLES_ATRIBUIVEIS.filter((r) => r !== row.suggested_stage_role).map((role) => (
               <SelectItem key={role} value={role}>
                 <div className="flex items-center gap-2">
                   <span className={cn("w-1.5 h-1.5 rounded-full", STAGE_ROLE_META[role].dotClassName)} />

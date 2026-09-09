@@ -3,9 +3,10 @@ import { ThemeProvider } from "next-themes";
 import { ThemeTransitionProvider } from "@/contexts/ThemeTransitionContext";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { PilhaDeCartoes } from "@/modules/platform/components/notifications/PilhaDeCartoes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/modules/identity/auth";
 import { useOrganization } from "@/modules/identity/org-team/hooks/useOrganization";
 import { RealtimeOrgProvider } from "@/shared/realtime/realtime-org-context";
@@ -27,7 +28,6 @@ import { FeatureRoute } from "@/modules/platform";
 import { TorqueLoader } from "@/components/ui/branding/TorqueLoader";
 import { ServiceWorkerUpdater } from "@/modules/platform/components/ServiceWorkerUpdater";
 import { PushPermissionPrompt } from "@/modules/platform/components/PushPermissionPrompt";
-import { B2BSummitTicketPopup } from "@/modules/platform/components/promo/B2BSummitTicketPopup";
 
 // Retry helper para chunks que falham ao carregar (comum após deploy)
 function lazyRetry<T extends { default: any }>(
@@ -48,9 +48,6 @@ function lazyRetry<T extends { default: any }>(
 const Auth = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Auth")));
 const Dashboard = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Dashboard")));
 const MetricsStudio = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/MetricsStudio")));
-const PipeConfirmacao = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeConfirmacao")));
-const PipePropostas = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipePropostas")));
-const PipeWhatsapp = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/PipeWhatsapp")));
 const Revisao = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Revisao")));
 const Performance = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/Performance")));
 const Equipe = lazy(() => lazyRetry(() => import("@/modules/identity/org-team/pages/Equipe")));
@@ -70,15 +67,21 @@ const FunisHub = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Fu
 const Produtos = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Produtos")));
 const Copilot = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Copilot")));
 const CopilotMetrics = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/CopilotMetrics")));
+const Oraculo = lazy(() => lazyRetry(() => import("@/modules/copilot/pages/Oraculo")));
 const ChatWhatsApp = lazy(() => lazyRetry(() => import("@/modules/communication/pages/ChatWhatsApp")));
 const AtendimentoMeta = lazy(() => lazyRetry(() => import("@/modules/communication/pages/AtendimentoMeta")));
 // ChatSkeleton é eager (não lazy) — precisa estar disponível no instante
 // em que o chunk de ChatWhatsApp começa a ser baixado.
 import { ChatSkeleton } from "@/modules/communication/components/chat/ChatSkeleton";
-import { VoiceCallProvider } from "@/modules/communication";
+import { VoiceCallButton, VoiceCallProvider } from "@/modules/communication";
+import { LeadCallActionProvider, type LeadCallActionRenderer } from "@/shared/components/LeadCallActionSlot";
 const Upsell = lazy(() => lazyRetry(() => import("@/modules/carteira/pages/Upsell")));
 const ClienteDetail = lazy(() => lazyRetry(() => import("@/modules/carteira/components/client/ClienteDetailPage")));
-const CustomPipeline = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/CustomPipeline")));
+// CustomPipeline saiu das rotas (redirect → /funil/:slug, SCRUM-632); o
+// arquivo segue no repo até a demolição (SCRUM-637).
+// SCRUM-632 (F4, expand-contract): a página ÚNICA de funil. Convive com as 4
+// páginas antigas atrás das rotas até a paridade fechar (morrem na SCRUM-637).
+const Funil = lazy(() => lazyRetry(() => import("@/modules/pipelines/pages/Funil")));
 const Agenda = lazy(() => lazyRetry(() => import("@/modules/engagement/pages/Agenda")));
 const Privacidade = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Privacidade")));
 const Faq = lazy(() => lazyRetry(() => import("@/modules/platform/pages/Faq")));
@@ -102,6 +105,7 @@ const Landing = lazy(() => lazyRetry(() => import("@/modules/marketing/pages/Lan
 const TvTypeScale = lazy(() => lazyRetry(() => import("@/modules/analytics/pages/TvTypeScale")));
 const Signup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/Signup")));
 const ResetPassword = lazy(() => lazyRetry(() => import("@/modules/identity/pages/ResetPassword")));
+const MfaSetup = lazy(() => lazyRetry(() => import("@/modules/identity/pages/MfaSetup")));
 
 // Master Admin — lazy loaded (com retry)
 const MasterDashboard = lazy(() => lazyRetry(() => import("@/modules/identity/master/pages/MasterDashboard")));
@@ -197,8 +201,6 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
     <OrgFeaturesProvider>
       <OnboardingGate>
         <SubscriptionProtectedRoute>
-          {/* Promo B2B Summit (23 jul 2026) — remover após o evento */}
-          <B2BSummitTicketPopup />
           <MainLayout>{children}</MainLayout>
         </SubscriptionProtectedRoute>
       </OnboardingGate>
@@ -253,6 +255,19 @@ function AppRoutes() {
       <Route path="/reset-password" element={<ResetPassword />} />
       {/* Signup dedicado — renderiza a página (honra ?plan vindo do pricing) em vez de redirecionar p/ /auth e perder o plano */}
       <Route path="/signup" element={<Signup />} />
+      {/* MFA (TOTP) — FORA do gate de master de propósito. Exige apenas sessão
+          autenticada: nem master, nem org, nem aal2. Se ficasse atrás do
+          MasterRoute (que exige aal2) o master sem fator nunca conseguiria
+          cadastrar o primeiro — deadlock. requireOrganization={false} porque
+          há masters sem team_member (entram só pelo master). */}
+      <Route
+        path="/seguranca/mfa"
+        element={
+          <ProtectedRoute requireOrganization={false}>
+            <MfaSetup />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/privacidade" element={<Privacidade />} />
       {/* #1223 — calibração da escala tipográfica da TV. Pública de propósito:
           é instrumento de medição com valores fictícios, não expõe dado algum. */}
@@ -278,17 +293,6 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/* DEV-only: preview do popup B2B Summit sem auth */}
-      {import.meta.env.DEV && (
-        <Route
-          path="/b2b-summit-preview"
-          element={
-            <div className="dark min-h-screen bg-background">
-              <B2BSummitTicketPopup forceOpen />
-            </div>
-          }
-        />
-      )}
       {/* Old onboarding/checkout routes removed — OnboardingGate handles inline */}
       <Route path="/" element={<RootRedirect />} />
       <Route path="/pricing" element={<Navigate to="/#pricing" replace />} />
@@ -302,18 +306,22 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      {/* SCRUM-11 — Estúdio de Métricas. SEM PermissionProtectedRoute de
-          propósito, espelhando /dashboard: `useFeaturePermission` é fail-closed
-          (`features?.[key] === true`), então gatear numa chave que a
-          `get-member-permissions` ainda não semeia trancaria todo membro
-          não-admin. Quando `metrics.view` existir no modelo de permissão, o
-          gate entra aqui e a rota entra no NAV_VIEW_PERMISSIONS. */}
+      {/* SCRUM-11 / SCRUM-430 — Estúdio de Métricas.
+          O gate ficou de fora até agora porque `useFeaturePermission` é
+          fail-closed (`features?.[key] === true`): gatear numa chave que a
+          `get-member-permissions` não semeia trancaria todo membro não-admin.
+          `metrics.view` entrou no catálogo pela migration 20270828000000, que é
+          PRÉ-REQUISITO deste gate — aplicada em prod antes deste código subir.
+          Se um dia a chave sair do catálogo, TIRE ESTE GATE PRIMEIRO: é o bug
+          vivo de `checklists.view` (SCRUM-431). */}
       <Route
         path="/metricas"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
-              <MetricsStudio />
+              <PermissionProtectedRoute featureKey="metrics.view">
+                <MetricsStudio />
+              </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -329,6 +337,20 @@ function AppRoutes() {
             </LayoutWrapper>
           </ProtectedRoute>
         }
+      />
+      {/* /turbo — Turbo é grupo da lateral (Copilot + Automações), não tela.
+          A lateral NÃO navega mais pra cá: o item é `expandOnly`, só abre o
+          grupo. Esta rota fica de rede pra link antigo e bookmark.
+          Vai pra Automações porque é o que "Turbo" nomeia no produto.
+
+          ⚠️ Não devolva a navegação ao item pai sem antes envolver esta rota
+          num LayoutWrapper. Sendo um <Navigate> nu, entrar aqui desmonta
+          MainLayout > Sidebar e zera o estado de expansão — era exatamente
+          assim que o submenu fechava no mesmo frame em que abria, deixando o
+          "Copilot" inalcançável no desktop. */}
+      <Route
+        path="/turbo"
+        element={<Navigate to="/automacoes" replace />}
       />
       {/* /campanhas — Kanban de campanhas legado RETIRADO; redireciona pros funis (links antigos) */}
       <Route
@@ -358,30 +380,8 @@ function AppRoutes() {
       />
       <Route path="/marketing" element={<Navigate to="/dashboard" replace />} />
       <Route path="/analytics" element={<Navigate to="/dashboard" replace />} />
-      <Route
-        path="/pipe-confirmacao"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <FeatureRoute feature="funnels"><PipeConfirmacao /></FeatureRoute>
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/pipe-propostas"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <FeatureRoute feature="funnels"><PipePropostas /></FeatureRoute>
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/pipe-confirmacao" element={<RedirectPipeParaFunil slug="confirmacao" />} />
+      <Route path="/pipe-propostas" element={<RedirectPipeParaFunil slug="propostas" />} />
       <Route
         path="/performance"
         element={
@@ -410,18 +410,7 @@ function AppRoutes() {
         path="/gestao-metas"
         element={<Navigate to="/performance" replace />}
       />
-      <Route
-        path="/pipe-whatsapp"
-        element={
-          <ProtectedRoute>
-            <LayoutWrapper>
-              <PermissionProtectedRoute featureKey="pipeline.view">
-                <FeatureRoute feature="funnels"><PipeWhatsapp /></FeatureRoute>
-              </PermissionProtectedRoute>
-            </LayoutWrapper>
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/pipe-whatsapp" element={<RedirectPipeParaFunil slug="whatsapp" />} />
       <Route
         path="/faq"
         element={
@@ -528,6 +517,23 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* Rota própria só para as três de uso diário — `/configuracoes/tags`,
+          `/configuracoes/notificacoes`, `/configuracoes/whatsapp` — mais
+          `/configuracoes/outros`, que guarda o resto e troca de aba por `?tab=`.
+          Um `:tab` só: a página resolve o segmento e normaliza o que não
+          reconhece. Mesmo gate da tela-mãe. */}
+      <Route
+        path="/configuracoes/:tab"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <PermissionProtectedRoute featureKey="settings.view">
+                <Configuracoes />
+              </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/tv"
         element={
@@ -549,6 +555,18 @@ function AppRoutes() {
               <PermissionProtectedRoute featureKey="products.view">
                 <FeatureRoute feature="products"><Produtos /></FeatureRoute>
               </PermissionProtectedRoute>
+            </LayoutWrapper>
+          </ProtectedRoute>
+        }
+      />
+      {/* Oráculo Comercial — endereço próprio (SCRUM-594). O recorte de quem
+          alcança o quê é do servidor: a tela não filtra nada. */}
+      <Route
+        path="/oraculo"
+        element={
+          <ProtectedRoute>
+            <LayoutWrapper>
+              <Oraculo />
             </LayoutWrapper>
           </ProtectedRoute>
         }
@@ -640,18 +658,25 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      {/* SCRUM-632 — rota ÚNICA de funil (F4). Aceita slug OU uuid; serve
+          qualquer funil pela via canônica (get_pipeline_page por pipeline_id).
+          As 3 rotas /pipe-* seguem nas páginas antigas até a paridade de
+          sistema (633/634) — mas /funil/whatsapp já funciona p/ A/B manual. */}
       <Route
-        path="/pipe/custom/:slug"
+        path="/funil/:slug"
         element={
           <ProtectedRoute>
             <LayoutWrapper>
               <PermissionProtectedRoute featureKey="pipeline.view">
-                <CustomPipeline />
+                <FeatureRoute feature="funnels"><Funil /></FeatureRoute>
               </PermissionProtectedRoute>
             </LayoutWrapper>
           </ProtectedRoute>
         }
       />
+      {/* Rota antiga do funil custom — redirect permanente pra página nova.
+          A página CustomPipeline.tsx segue no repo (morre na SCRUM-637). */}
+      <Route path="/pipe/custom/:slug" element={<RedirectPipeCustomParaFunil />} />
       <Route
         path="/agenda"
         element={
@@ -808,6 +833,40 @@ function NavigateComQuery({ to }: { to: string }) {
   return <Navigate to={`${to}${search}${hash}`} replace />;
 }
 
+/**
+ * `/pipe/custom/:slug` → `/funil/:slug` (SCRUM-632, expand-contract).
+ *
+ * O funil custom é o primeiro a usar a página unificada — é upgrade de
+ * paridade (ganha paginação real por coluna). Preserva query/hash pelo mesmo
+ * motivo de `NavigateComQuery`. A navegação interna já aponta direto para
+ * `/funil/…`; este redirect segura bookmark e link antigo.
+ */
+/**
+ * SCRUM-637 — flip das rotas de sistema: /pipe-* viraram redirects pra rota
+ * única `/funil/:slug`, preservando query (?view=...) e hash. As 3 páginas
+ * velhas morreram no mesmo diff; bookmark e link antigo caem aqui.
+ */
+function RedirectPipeParaFunil({ slug }: { slug: string }) {
+  const { search, hash } = useLocation();
+  return <Navigate to={`/funil/${slug}${search}${hash}`} replace />;
+}
+
+function RedirectPipeCustomParaFunil() {
+  const { slug } = useParams<{ slug: string }>();
+  const { search, hash } = useLocation();
+  return <Navigate to={`/funil/${slug}${search}${hash}`} replace />;
+}
+
+
+/**
+ * Vê o lead → pode ligar. O botão some sozinho sem número de voz ao alcance; a
+ * única condição sobre o lead é ele estar na tela. Constante de módulo para a
+ * identidade não mudar a cada render da raiz.
+ */
+const renderLeadCallAction: LeadCallActionRenderer = (lead) => (
+  <VoiceCallButton variant="icon" leadId={lead.id} leadName={lead.nome} />
+);
+
 const App = () => {
   const hasSupabaseEnv = Boolean(SUPABASE_URL?.trim() && SUPABASE_ANON_KEY?.trim());
   if (!hasSupabaseEnv) {
@@ -824,6 +883,12 @@ const App = () => {
             <BrowserRouter>
               <AuthProvider>
                 <TorqueIntro />
+                {/* PilhaDeCartoes usa useNavigate() para abrir o link do
+                    cartão, então PRECISA ficar dentro do BrowserRouter.
+                    Montado fora, o hook lança no primeiro render e derruba a
+                    árvore inteira: tela branca em todas as rotas, para todos
+                    os usuários. Foi exatamente o que quebrou a produção. */}
+                <PilhaDeCartoes />
                 <RealtimeOrgBridge>
                   <PipeOpsProvider>
                     <GlobalErrorBoundary>
@@ -838,10 +903,16 @@ const App = () => {
                                   sobrevive à navegação e ao fechamento do modal
                                   do lead que a originou. */}
                               <VoiceCallProvider>
-                                <AppRoutes />
-                                <CommandPaletteComponent />
-                                <SupportPanel />
-                                <SupportAnnouncement />
+                                {/* O botão de ligar dos cards de `leads` é
+                                    injetado daqui: `leads` não pode importar
+                                    `communication` sem fechar ciclo entre os
+                                    dois módulos. Ver LeadCallActionSlot. */}
+                                <LeadCallActionProvider value={renderLeadCallAction}>
+                                  <AppRoutes />
+                                  <CommandPaletteComponent />
+                                  <SupportPanel />
+                                  <SupportAnnouncement />
+                                </LeadCallActionProvider>
                               </VoiceCallProvider>
                             </GlobalShortcutsProvider>
                           </CommandPaletteProvider>

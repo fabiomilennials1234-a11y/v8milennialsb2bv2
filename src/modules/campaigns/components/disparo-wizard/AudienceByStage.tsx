@@ -38,16 +38,12 @@ import {
 } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import {
-  AudienceConditionsControls,
-  type SystemPipelineType,
-} from "@/modules/pipelines";
+import { AudienceConditionsControls } from "@/modules/pipelines";
 import { useTags } from "@/modules/leads";
 import { useAudienceResolve } from "@/modules/campaigns/hooks/useAudienceResolve";
 import {
   ALL_FUNNELS_LABEL,
   ALL_STAGES_LABEL,
-  SYSTEM_FUNNELS,
   applySelection,
   buildAudienceLabel,
   buildAudienceSource,
@@ -77,15 +73,24 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
 export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
   const sel = draft.audience;
 
-  const { customPipelines, stages, stagesLoading, funnelLabel } = useFunnelStageOptions(sel);
+  const { funnels, stages, stagesLoading, funnelLabel } = useFunnelStageOptions(sel);
   const { data: tags = [] } = useTags();
 
-  const stageName = stages.find((s) => s.key === sel.stageKey)?.name ?? "";
+  const stageName = stages.find((s) => s.key === sel.stageId)?.name ?? "";
 
   const resolved = useAudienceResolve(sel);
   const ready = selectionReady(sel);
-  const allFunnels = sel.funnelKind === "all";
-  const totalFunis = SYSTEM_FUNNELS.length + customPipelines.length;
+  const allFunnels = sel.funnelScope === "all";
+  const totalFunis = funnels.length;
+
+  // Semeia o primeiro funil real da org quando nada foi escolhido ainda — o
+  // core puro não conhece a org, então o default vem da tela (Fatia B).
+  useEffect(() => {
+    if (sel.funnelScope === "one" && !sel.pipelineId && funnels.length > 0) {
+      patch({ audience: applySelection(sel, { pipelineId: funnels[0].id }) });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel.funnelScope, sel.pipelineId, funnels]);
 
   // Derived here (not read back off the draft) so the visible title never lags a
   // render behind the selection that produced it.
@@ -117,9 +122,10 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
     resolved.count,
     audienceLabel,
     ready,
-    sel.funnelKind,
+    sel.funnelScope,
+    sel.pipelineId,
     sel.stageScope,
-    sel.stageKey,
+    sel.stageId,
     sel.conditions,
   ]);
 
@@ -129,29 +135,17 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
   const onFunnelChange = (value: string) => {
     if (value === ALL_FUNNELS_VALUE) {
       // applySelection re-establishes the invariant (stageScope "all", no
-      // stageKey/pipelineId); conditions are cleared like any funnel switch.
-      setSelection({ funnelKind: "all", conditions: emptyConditions() });
+      // stageId/pipelineId); conditions are cleared like any funnel switch.
+      setSelection({ funnelScope: "all", conditions: emptyConditions() });
       return;
     }
-    const [kind, id] = value.split(":");
-    if (kind === "system") {
-      setSelection({
-        funnelKind: "system",
-        pipelineType: id as SystemPipelineType,
-        pipelineId: null,
-        stageKey: "",
-        stageScope: "one",
-        conditions: emptyConditions(),
-      });
-    } else {
-      setSelection({
-        funnelKind: "custom",
-        pipelineId: id,
-        stageKey: "",
-        stageScope: "one",
-        conditions: emptyConditions(),
-      });
-    }
+    setSelection({
+      funnelScope: "one",
+      pipelineId: value,
+      stageId: "",
+      stageScope: "one",
+      conditions: emptyConditions(),
+    });
   };
 
   const onStageChange = (value: string) => setSelection(parseStageSelectValue(value));
@@ -211,13 +205,8 @@ export function AudienceByStage({ draft, patch }: AudienceByStageProps) {
                 <SelectLabel className="px-2 pl-8 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Funis
                 </SelectLabel>
-                {SYSTEM_FUNNELS.map((f) => (
-                  <SelectItem key={f.value} value={`system:${f.value}`}>
-                    {f.label}
-                  </SelectItem>
-                ))}
-                {customPipelines.map((p) => (
-                  <SelectItem key={p.id} value={`custom:${p.id}`}>
+                {funnels.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
                     {p.name}
                   </SelectItem>
                 ))}

@@ -78,7 +78,6 @@ vi.mock("@/modules/communication/hooks/useVoipSession", () => ({
   // provider quebra no render e todo teste deste arquivo morre por uma razão que
   // não tem nada a ver com o que eles afirmam.
   useAnswerableVoiceNumbers: () => ({ numbers: [NUMERO], isLoading: false }),
-  useCanCallLead: () => true,
 }));
 
 /**

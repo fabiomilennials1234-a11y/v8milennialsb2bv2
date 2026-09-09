@@ -41,11 +41,12 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
   const [priority, setPriority] = useState(0);
   const [isActive, setIsActive] = useState(true);
   const [matchCriteria, setMatchCriteria] = useState<Record<string, string[]>>({});
-  const [defaultConfig, setDefaultConfig] = useState<Record<string, any>>({
-    pipe_whatsapp: { visible: true },
-    pipe_confirmacao: { visible: false },
-    pipe_propostas: { visible: true },
-  });
+  // SCRUM-641: os toggles fixos do trio legado MORRERAM — template é lista
+  // livre de funis custom, e a org nova já nasce com o "Funil de Vendas"
+  // semeado como padrão (trigger trg_seed_default_funnel). `defaultConfig`
+  // sobrevive só como passagem: preserva a chave de template ANTIGO no save
+  // (o onboarding-engine a ignora), sem oferecê-la na tela.
+  const [defaultConfig, setDefaultConfig] = useState<Record<string, any>>({});
   const [customPipelines, setCustomPipelines] = useState<CustomPipeline[]>([]);
 
   useEffect(() => {
@@ -158,30 +159,11 @@ export function PipelineTemplateEditor({ templateId, onClose }: Props) {
           </div>
         </div>
 
-        <div>
-          <Label className="mb-2 block">Default Pipelines Config</Label>
-          {["pipe_whatsapp", "pipe_confirmacao", "pipe_propostas"].map((key) => (
-            <div key={key} className="flex items-center gap-3 mb-2">
-              <Switch
-                checked={defaultConfig[key]?.visible ?? false}
-                onCheckedChange={(v) =>
-                  setDefaultConfig((prev) => ({ ...prev, [key]: { ...prev[key], visible: v } }))
-                }
-              />
-              <span className="text-sm w-36">{key}</span>
-              <Input
-                placeholder="Label (opcional)"
-                value={defaultConfig[key]?.label ?? ""}
-                onChange={(e) =>
-                  setDefaultConfig((prev) => ({
-                    ...prev,
-                    [key]: { ...prev[key], label: e.target.value || undefined },
-                  }))
-                }
-                className="flex-1"
-              />
-            </div>
-          ))}
+        <div className="p-3 rounded-lg border border-border/40 bg-muted/30">
+          <p className="text-xs text-muted-foreground">
+            Toda org nova já nasce com o <strong>Funil de Vendas</strong> como funil padrão.
+            O template soma a ele os funis da lista abaixo.
+          </p>
         </div>
 
         <div>

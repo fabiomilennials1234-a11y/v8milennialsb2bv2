@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor, act } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
+import { supabase } from "@/integrations/supabase/client";
 
 // ---- Chain mock helper ----
 
@@ -65,8 +66,9 @@ import {
   stagesToColumns,
   stagesToSelectOptions,
   getPipelineTypeName,
+  getStageFamilyName,
   getSuccessStageTransition,
-  DEFAULT_STAGES,
+  FALLBACK_STAGES,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
 
 // ---- Pure function tests ----
@@ -76,8 +78,14 @@ describe("getPipelineTypeName", () => {
     expect(getPipelineTypeName("whatsapp")).toBe("Qualificação");
     expect(getPipelineTypeName("confirmacao")).toBe("Confirmação");
     expect(getPipelineTypeName("propostas")).toBe("Propostas");
-    expect(getPipelineTypeName("upsell_base")).toBe("Carteira Base");
-    expect(getPipelineTypeName("upsell_gestao")).toBe("Carteira Gestão");
+  });
+});
+
+describe("getStageFamilyName", () => {
+  it("resolve funis e o resíduo Carteira (editor compartilhado)", () => {
+    expect(getStageFamilyName("whatsapp")).toBe("Qualificação");
+    expect(getStageFamilyName("upsell_base")).toBe("Carteira Base");
+    expect(getStageFamilyName("upsell_gestao")).toBe("Carteira Gestão");
   });
 });
 
@@ -139,21 +147,12 @@ describe("getSuccessStageTransition", () => {
   });
 });
 
-describe("DEFAULT_STAGES", () => {
-  it("has all pipeline types", () => {
-    expect(DEFAULT_STAGES).toHaveProperty("whatsapp");
-    expect(DEFAULT_STAGES).toHaveProperty("confirmacao");
-    expect(DEFAULT_STAGES).toHaveProperty("propostas");
-    expect(DEFAULT_STAGES).toHaveProperty("upsell_base");
-    expect(DEFAULT_STAGES).toHaveProperty("upsell_gestao");
-  });
-
-  it("whatsapp has correct stages", () => {
-    const stages = DEFAULT_STAGES.whatsapp;
-    expect(stages.length).toBeGreaterThan(0);
-    expect(stages[0].id).toBe("novo");
-    const agendado = stages.find(s => s.id === "agendado");
-    expect(agendado?.is_final_positive).toBe(true);
+describe("FALLBACK_STAGES (SCRUM-641)", () => {
+  it("é a trilha única do Funil de Vendas — o Record por trio morreu", () => {
+    expect(Array.isArray(FALLBACK_STAGES)).toBe(true);
+    expect(FALLBACK_STAGES[0].id).toBe("novo");
+    expect(FALLBACK_STAGES.find((s) => s.id === "ganhou")?.is_final_positive).toBe(true);
+    expect(FALLBACK_STAGES.find((s) => s.id === "perdeu")?.is_final_negative).toBe(true);
   });
 });
 
@@ -164,24 +163,90 @@ describe("usePipelineStages", () => {
     vi.clearAllMocks();
   });
 
+  /**
+   * Desde 20270902000000, `usePipelineStages` consulta primeiro
+   * `pipeline_display_config` — o REGISTRO de quais funis de sistema a org tem.
+   * Por isso o mock precisa responder por TABELA: devolver a mesma lista para
+   * todo mundo faria o registro parecer conter etapas.
+   */
+  function mockPorTabela(registro: unknown[], etapas: unknown[]) {
+    mockFrom.mockImplementation((tabela: string) =>
+      createChainMock(tabela === "pipeline_display_config" ? registro : etapas),
+    );
+  }
+
+  const REGISTRO_COM_WHATSAPP = [{ pipe_type: "whatsapp" }];
+
   it("fetches pipeline stages from DB", async () => {
     const dbStages = [
       { id: "ps-1", organization_id: "org-t", pipeline_type: "whatsapp", stage_key: "novo", name: "Novo Custom", color: "#123", position: 0, is_active: true, is_final_positive: false, is_final_negative: false, target_pipe_type: null, target_stage_key: null },
     ];
-    mockFrom.mockReturnValue(createChainMock(dbStages));
+    mockPorTabela(REGISTRO_COM_WHATSAPP, dbStages);
 
     const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
     expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
   });
 
-  it("returns default stages when no data from DB", async () => {
-    mockFrom.mockReturnValue(createChainMock([]));
+  /**
+   * SCRUM-618: lista vazia é estado LEGÍTIMO. O seed é 100% server-side
+   * (enable_system_pipeline → create_default_pipeline_stages) e o front nem
+   * semeia nem fabrica etapa para funil habilitado — devolver o fallback aqui
+   * faria a tela mentir sobre o banco de novo. Se alguém reintroduzir o
+   * fallback (ou o upsert do ensureDefaultStagesInDb), este teste cai.
+   */
+  it("funil habilitado sem etapa: devolve [] e NÃO semeia nada", async () => {
+    mockPorTabela(REGISTRO_COM_WHATSAPP, []);
     const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
-    if (result.current.data) {
-      expect(result.current.data.length).toBeGreaterThan(0);
+    expect(result.current.data).toEqual([]);
+    // Nenhuma escrita: o caminho de seed do cliente morreu (SCRUM-618).
+    const chains = mockFrom.mock.results.map((r) => r.value);
+    for (const chain of chains) {
+      expect(chain.upsert).not.toHaveBeenCalled();
+      expect(chain.insert).not.toHaveBeenCalled();
     }
+  });
+
+  /**
+   * 🚨 A guarda que torna a EXCLUSÃO de funil de sistema possível.
+   *
+   * Este era o quarto vazamento: sem registro, o hook caía em
+   * `buildFallbackStages` e devolvia as etapas padrão fabricadas em memória. O
+   * banco ficava limpo e a tela continuava desenhando o funil — o usuário
+   * excluía e nada acontecia.
+   *
+   * Se alguém reintroduzir o fallback neste ramo, este teste cai.
+   */
+  it("org SEM o funil no registro: devolve [] e nem consulta pipeline_stages", async () => {
+    mockPorTabela([{ pipe_type: "propostas" }], FALLBACK_STAGES);
+
+    const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
+
+    expect(result.current.data).toEqual([]);
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_display_config");
+    expect(mockFrom).not.toHaveBeenCalledWith("pipeline_stages");
+  });
+
+  /**
+   * Falhar para o lado de NÃO semear. Um erro transitório de rede na leitura do
+   * registro não pode ressuscitar um funil que a org excluiu — por isso
+   * `lerTiposHabilitados` devolve conjunto vazio em erro, nunca "todos".
+   */
+  it("erro ao ler o registro NÃO ressuscita o funil", async () => {
+    mockFrom.mockImplementation((tabela: string) => {
+      if (tabela !== "pipeline_display_config") return createChainMock(FALLBACK_STAGES);
+      const chain = createChainMock([]);
+      chain.then = (resolve: (v: unknown) => unknown) =>
+        Promise.resolve({ data: null, error: { message: "network" } }).then(resolve);
+      return chain;
+    });
+
+    const { result } = renderHook(() => usePipelineStages("whatsapp"), { wrapper: createWrapper() });
+    await waitFor(() => expect(result.current.isSuccess || result.current.isError).toBe(true));
+
+    expect(result.current.data).toEqual([]);
   });
 });
 
@@ -245,14 +310,17 @@ describe("useDeletePipelineStage", () => {
     mockFrom.mockReturnValue(createChainMock());
   });
 
-  it("soft deletes a stage", async () => {
+  it("delegates stage deletion to the transactional RPC", async () => {
     const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
     await act(async () => {
       try {
         await result.current.mutateAsync({ id: "ps-1", pipeline_type: "whatsapp" });
       } catch {}
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
+    expect(supabase.rpc).toHaveBeenCalledWith("delete_pipeline_stage", {
+      p_stage_id: "ps-1",
+      p_destination_stage_id: null,
+    });
   });
 });
 
@@ -262,7 +330,7 @@ describe("useReorderPipelineStages", () => {
     mockFrom.mockReturnValue(createChainMock());
   });
 
-  it("reorders stages", async () => {
+  it("reorders stages via RPC de statement único (SCRUM-616)", async () => {
     const { result } = renderHook(() => useReorderPipelineStages(), { wrapper: createWrapper() });
     await act(async () => {
       try {
@@ -275,7 +343,11 @@ describe("useReorderPipelineStages", () => {
         });
       } catch {}
     });
-    expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
+    // UNIQUE (pipeline_id, position): a permutação vai numa RPC única, ids na
+    // ordem final (position asc), nunca em UPDATEs por linha.
+    expect(supabase.rpc).toHaveBeenCalledWith("reorder_pipeline_stages", {
+      p_stage_ids: ["ps-2", "ps-1"],
+    });
   });
 });
 

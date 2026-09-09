@@ -92,27 +92,11 @@ describe("useLeads — deeper", () => {
     expect(result.current).toBeDefined();
   });
 
-  it("with filter rating high", () => {
-    const { result } = renderHook(() => useLeads({ filterRating: "high" }), { wrapper: createWrapper() });
-    expect(result.current).toBeDefined();
-  });
-
-  it("with filter rating medium", () => {
-    const { result } = renderHook(() => useLeads({ filterRating: "medium" }), { wrapper: createWrapper() });
-    expect(result.current).toBeDefined();
-  });
-
-  it("with filter rating low", () => {
-    const { result } = renderHook(() => useLeads({ filterRating: "low" }), { wrapper: createWrapper() });
-    expect(result.current).toBeDefined();
-  });
-
   it("with all filters combined", () => {
     const { result } = renderHook(() => useLeads({
       page: 1,
       searchQuery: "test",
       filterOrigin: "whatsapp",
-      filterRating: "high",
     }), { wrapper: createWrapper() });
     expect(result.current).toBeDefined();
   });

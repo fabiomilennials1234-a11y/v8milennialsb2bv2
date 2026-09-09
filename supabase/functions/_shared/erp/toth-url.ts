@@ -44,7 +44,22 @@ export interface BaseUrlPolicy {
   allowHttp?: boolean;
   /** Aceita loopback e faixas privadas. SOMENTE desenvolvimento local. */
   allowPrivateHosts?: boolean;
+  /**
+   * Sufixos de endpoint a remover da base colada. Default: os do
+   * `/toth/services`. O serviço Flow (pedidos) tem outros — ver
+   * `FLOW_ENDPOINT_SUFFIXES`.
+   */
+  endpointSuffixes?: string[];
 }
+
+/** Sufixos que a pessoa cola junto no campo da base do `/toth/services`. */
+export const TOTH_ENDPOINT_SUFFIXES = ["/users/login", "/clientes", "/cobrancas"];
+
+/**
+ * Idem, para o serviço Flow. Colar `.../flow/crm/pedidos` do Postman é o modo
+ * mais provável de preencher o campo — é a URL que a pessoa tem à mão.
+ */
+export const FLOW_ENDPOINT_SUFFIXES = ["/auth", "/pedidos"];
 
 /** Hostnames que nunca podem ser alvo, mesmo com DNS público. */
 const BLOCKED_HOSTNAMES = new Set([
@@ -194,7 +209,10 @@ export function assertSafeErpBaseUrl(raw: string, policy: BaseUrlPolicy = {}): U
   // `${base}/users/login` e uma barra duplicada quebra roteador de path.
   url.search = "";
   url.hash = "";
-  url.pathname = stripEndpointSuffix(url.pathname.replace(/\/+$/, ""));
+  url.pathname = stripEndpointSuffix(
+    url.pathname.replace(/\/+$/, ""),
+    policy.endpointSuffixes ?? TOTH_ENDPOINT_SUFFIXES,
+  );
   return url;
 }
 
@@ -210,10 +228,8 @@ export function assertSafeErpBaseUrl(raw: string, policy: BaseUrlPolicy = {}): U
  * barato que explicar na mensagem de erro, e cada sufixo removido é um caminho
  * a menos para um 404 sem causa aparente.
  */
-const ENDPOINT_SUFFIXES = ["/users/login", "/clientes", "/cobrancas"];
-
-function stripEndpointSuffix(pathname: string): string {
-  for (const suffix of ENDPOINT_SUFFIXES) {
+function stripEndpointSuffix(pathname: string, suffixes: string[]): string {
+  for (const suffix of suffixes) {
     if (pathname.toLowerCase().endsWith(suffix)) {
       return pathname.slice(0, -suffix.length);
     }

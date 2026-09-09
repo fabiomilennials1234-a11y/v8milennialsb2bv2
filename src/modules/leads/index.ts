@@ -36,6 +36,23 @@ export type {
   PipeTypeForDelete,
 } from "./hooks/useLeads";
 
+// ── Hooks: leads de UM funil (sistema ou custom) ───────────────────────────
+// Recorte por funil com busca server-side. Consumido pelo seletor
+// Funil → Lead da Agenda. Ver o cabeçalho do arquivo para por que a raiz da
+// consulta é `leads` e não `pipeline_entries`.
+export {
+  useLeadsPorFunil,
+  LEADS_POR_FUNIL_PAGE_SIZE,
+} from "./hooks/useLeadsPorFunil";
+export type {
+  LeadDoFunil,
+  // S6: a entrada no funil é o NEGÓCIO (1:1 por `uq_pipeline_entries_deal_id`).
+  // O seletor da Agenda precisa do tipo para desempatar o caso ambíguo.
+  EntradaDoFunil,
+  LeadsPorFunilResult,
+  UseLeadsPorFunilParams,
+} from "./hooks/useLeadsPorFunil";
+
 // ── Hooks: lead × pipelines (cross-pipe placement) ─────────────────────────
 export {
   useLeadAllPipelines,
@@ -161,8 +178,19 @@ export type {
   FunnelDestination,
   ImportLeadsToCustomPipelineOptions,
   ImportLeadsToFunnelOptions,
+  ImportLeadsToPipelineOptions,
+  ImportLeadsOnlyOptions,
   ImportFunnelResult,
 } from "./hooks/useImportLeads";
+
+// ── Recompra: ciclo médio de compra (lista de leads) ───────────────────────
+export { useLeadsReorderCycle, computeReorderCycles } from "./hooks/useLeadsReorderCycle";
+export type { LeadReorderCycleMap } from "./hooks/useLeadsReorderCycle";
+export {
+  calcularCicloDeRecompra,
+  JANELA_DE_RECOMPRA_DIAS,
+} from "./lib/reorder-cycle";
+export type { CicloDeRecompra, EstadoDoCiclo } from "./lib/reorder-cycle";
 
 // ── Hooks: export ──────────────────────────────────────────────────────────
 export { useExportLeads, EXPORT_LEAD_HEADERS } from "./hooks/useExportLeads";
@@ -210,12 +238,11 @@ export { useTags, useCreateTag, useUpdateTag, useDeleteTag } from "./hooks/useTa
 export type { Tag, TagInsert, TagUpdate } from "./hooks/useTags";
 
 // ── Components: lead-detail (modal redesign — ADR-2026-05-17) ──────────────
-// V2 é o modal redesenhado (feature-flag `new_lead_modal_v2`). V1 = legado.
+// Sempre V2 desde a SCRUM-637 (V1 demolido; 108/108 orgs já migradas).
 // LeadDetailSheet é alias de LeadDetailDialog para compat com call sites antigos.
 export {
   LeadDetailDialog,
   LeadDetailSheet,
-  LeadDetailDialogV1,
   LeadDetailDialogV2,
   LeadPanelProvider,
   useLeadSheet,
@@ -260,6 +287,7 @@ export { TimelineItem } from "./components/leads/TimelineItem";
 export { CustomFieldsManager } from "./components/leads/CustomFieldsManager";
 export { ExportLeadsContent } from "./components/leads/ExportLeadsModal";
 export { ImportLeadsFunnelContent } from "./components/leads/ImportLeadsFunnelModal";
+export { ImportLeadsContent, ImportLeadsModal } from "./components/leads/ImportLeadsModal";
 
 // ── Components: lead form internals usadas cross-module ────────────────────
 export { LeadDetailContent } from "./components/lead/LeadDetailContent";
@@ -269,7 +297,7 @@ export { LeadTabHistory } from "./components/lead/tabs/LeadTabHistory";
 
 // ── PipeOpsPort: inversão de dependência leads↔pipelines (arch-deepening F7) ─
 // leads define a abstração (DIP); pipelines implementa+injeta via context.
-export type { PipeOpsPort, RescheduleModalSlotProps, MergedMeetingEditorSlotProps } from "./pipe-ops";
+export type { PipeOpsPort, RescheduleModalSlotProps, MergedMeetingEditorSlotProps, FunnelOption, FunnelStageOption } from "./pipe-ops";
 export { PipeOpsContextProvider, usePipeOps } from "./pipe-ops";
 
 // CompareceuModal: apresentacional (só identity + onConfirm), movido de

@@ -43,6 +43,7 @@ import {
   reserveSendOrSkip,
 } from "../send-dedup.ts";
 import { logRuntime } from "../logger.ts";
+import { isOrgBlocked } from "../org-status.ts";
 import {
   incrementAutomationUsage,
   recordBanSignal,
@@ -240,6 +241,40 @@ export async function governSend<T>(
   // org and the fail-open path leave zero governor footprint.
   let governed = false;
 
+  // ── Assinatura da org ─────────────────────────────────────────────────────
+  // Primeiro de tudo, e antes até do 'manual_exempt': org com assinatura
+  // bloqueada não envia NADA. O gate de RLS não alcança aqui — o backend roda
+  // como service_role e bypassa policy. Sem este ponto, suspender uma org
+  // deixava automação, follow-up, campanha e Copilot cuspindo WhatsApp (e
+  // queimando custo) por tempo indeterminado.
+  //
+  // Aqui no choke porque TODOS os caminhos de envio passam por governSend:
+  // os helpers de whatsapp-dispatch, copilot-v2-worker, dispatch-router,
+  // followup-sender e outbound-sender. Colocar nos callers deixaria buraco.
+  //
+  // Fail-open (isOrgBlocked engole erro e devolve false): blip de banco não
+  // pode calar org pagante.
+  if (await isOrgBlocked(supabaseAdmin, ctx.orgId)) {
+    // await (e não fire-and-forget): não há envio para proteger de latência
+    // aqui, e este é o registro de que uma org suspensa tentou disparar — num
+    // isolate de vida curta o `void` pode morrer antes de escrever.
+    await logRuntime({
+      organizationId: ctx.orgId,
+      module: "billing",
+      action: "send_bloqueado_assinatura",
+      status: "skipped",
+      payloadSnapshot: { category: ctx.category, track_source: ctx.trackSource },
+    }).catch(() => {});
+    return makeSkipped({
+      action: "block",
+      wouldBe: "block",
+      reason: "subscription_blocked",
+      category: ctx.category,
+      mode: "enforce",
+      shadowed: false,
+    });
+  }
+
   // ── Governor decision (fully guarded; any throw/timeout → fail-open allow) ─
   // State resolution is the ONLY governor work in front of the send, so it is
   // time-boxed: a slow/hanging DB can never delay delivery (STATE_TIMEOUT_MS →
@@ -252,6 +287,7 @@ export async function governSend<T>(
         instanceId: ctx.instanceId ?? undefined,
         category: ctx.category,
         recipientPhone: ctx.recipientPhone ?? undefined,
+        isApprovedTemplate: ctx.isApprovedTemplate,
       }),
       STATE_TIMEOUT_MS,
     );

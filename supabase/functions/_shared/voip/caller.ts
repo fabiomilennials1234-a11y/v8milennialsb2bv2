@@ -28,6 +28,17 @@ export interface Caller {
   readonly role: string | null;
   readonly isMaster: boolean;
   readonly isGestor: boolean;
+  /**
+   * Cliente com o JWT do chamador — a RLS aplica.
+   *
+   * Existe para o plano de chamada perguntar ao banco "este usuário ENXERGA
+   * este lead?" com a MESMA policy que decide se o lead aparece na tela
+   * (`leads_select_by_responsibility_and_permissions`), em vez de reescrever
+   * a regra em TypeScript. Vive dentro do `Caller` — e não como parâmetro
+   * solto — pelo mesmo motivo de `orgId`: só `resolveCaller()` fabrica um, e
+   * o JWT que ele carrega é o que foi validado aqui.
+   */
+  readonly asUser: SupabaseClient;
 }
 
 export type ResolveCallerResult =
@@ -115,6 +126,7 @@ export async function resolveCaller(
         role: null,
         isMaster: true,
         isGestor: false,
+        asUser: supabaseUser,
       }),
     };
   }
@@ -138,6 +150,7 @@ export async function resolveCaller(
         role: null,
         isMaster: false,
         isGestor: true,
+        asUser: supabaseUser,
       }),
     };
   }
@@ -177,6 +190,7 @@ export async function resolveCaller(
       role: member.role,
       isMaster: false,
       isGestor: false,
+      asUser: supabaseUser,
     }),
   };
 }

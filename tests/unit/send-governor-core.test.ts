@@ -354,6 +354,81 @@ describe("sessionWindowApplies — allowlist de provider e de categoria", () => 
     expect(sessionWindowApplies("notificame", "automation")).toBe(true);
     expect(sessionWindowApplies("notificame", "mass")).toBe(true);
   });
+
+  it("template aprovado sai do alcance da P5 — é a saída da janela, não a infração", () => {
+    expect(sessionWindowApplies("notificame", "automation", true)).toBe(false);
+    expect(sessionWindowApplies("notificame", "mass", true)).toBe(false);
+    // Ausente e false continuam sendo texto livre, e a regra segue inteira.
+    expect(sessionWindowApplies("notificame", "automation", false)).toBe(true);
+    expect(sessionWindowApplies("notificame", "automation")).toBe(true);
+  });
+});
+
+/**
+ * O CICLO FECHADO — medido em produção em 27/08.
+ *
+ * A P5 barrava o template com `outside_24h_window`, e template aprovado é a
+ * ÚNICA mensagem que a Meta aceita nessa situação. O escape de janela (#1689)
+ * era circular: acionado pelo bloqueio, respondia com template, e batia no
+ * mesmo bloqueio. O nó de template nunca enviou; o disparo oficial em massa,
+ * que também manda template, estava no mesmo beco.
+ *
+ * Não apareceu antes porque só UMA org está em `enforce` e o único caminho de
+ * template já exercitado era o manual, isento na regra 1.
+ *
+ * ⚠️ OS TRÊS ÚLTIMOS CASOS SÃO O ASSUNTO, e não enfeite: uma isenção que
+ * vazasse para quarentena ou para o cap diário trocaria um defeito por um vetor
+ * de ban. A isenção é de UMA regra.
+ */
+describe("evaluateSend — template aprovado e a P5", () => {
+  const OFICIAL = { instanceProvider: "notificame", windowResolved: true } as const;
+  const TEMPLATE = { isApprovedTemplate: true };
+
+  it("template PASSA com a janela fechada — o defeito que fechava o ciclo", () => {
+    const d = evaluateSend(ctx(TEMPLATE), state({ ...OFICIAL, lastInboundIso: null }));
+    expect(d.action).toBe("allow");
+    expect(d.reason).not.toBe("outside_24h_window");
+  });
+
+  it("texto livre na MESMA situação continua barrado — a regra não morreu", () => {
+    const d = evaluateSend(ctx(), state({ ...OFICIAL, lastInboundIso: null }));
+    expect(d.action).toBe("block");
+    expect(d.reason).toBe("outside_24h_window");
+  });
+
+  it("disparo em massa de template passa — é o caso do canal oficial", () => {
+    const d = evaluateSend(
+      ctx({ ...TEMPLATE, category: "mass" }),
+      state({ ...OFICIAL, lastInboundIso: null }),
+    );
+    expect(d.action).toBe("allow");
+  });
+
+  it("NÃO é passe-livre: quarentena continua barrando o template", () => {
+    const d = evaluateSend(
+      ctx(TEMPLATE),
+      state({ ...OFICIAL, lastInboundIso: null, reputation: "quarantined", quarantineUntil: null }),
+    );
+    expect(d.action).toBe("block");
+    expect(d.reason).toBe("quarantined");
+  });
+
+  it("NÃO é passe-livre: o cap diário continua valendo para o template", () => {
+    const d = evaluateSend(
+      ctx(TEMPLATE),
+      state({ ...OFICIAL, lastInboundIso: null, usedToday: 80, instanceCap: 80 }),
+    );
+    expect(d.action).toBe("defer");
+    expect(d.reason).toBe("per_number_cap");
+  });
+
+  it("NÃO é passe-livre: o gate de contato frio continua valendo", () => {
+    const d = evaluateSend(
+      ctx(TEMPLATE),
+      state({ ...OFICIAL, lastInboundIso: null, coldGateEnabled: true, isColdContact: true }),
+    );
+    expect(d.action).not.toBe("allow");
+  });
 });
 
 describe("evaluateSend — P5 no núcleo", () => {

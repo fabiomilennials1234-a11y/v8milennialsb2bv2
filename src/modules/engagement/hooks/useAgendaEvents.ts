@@ -6,7 +6,19 @@ import { useOrganization } from "@/modules/identity";
 
 export interface AgendaEvent {
   id: string;
-  source: "meeting" | "follow_up" | "scheduled_message" | "pipe_confirmacao";
+  /**
+   * ⚠️ São CINCO fontes no PROD, não quatro. `meeting_event` (o funil mergeado
+   * — ADR-0004/ADR-0007) entrou na RPC em 2026-07-30 e este tipo nunca soube:
+   * a migration `20270730000000_agenda_meeting_events_source.sql` foi aplicada
+   * à mão e ficou fora do repo. O valor sempre chegou aqui em runtime — são
+   * 836 linhas no PROD — apenas tipado como algo que ele não é.
+   */
+  source:
+    | "meeting"
+    | "follow_up"
+    | "scheduled_message"
+    | "pipe_confirmacao"
+    | "meeting_event";
   title: string;
   description: string | null;
   start_at: string;
@@ -27,10 +39,45 @@ export interface AgendaEvent {
 
 // ─── Hook ────────────────────────────────────────────────────────────────────
 
+/** A RPC com recorte ainda não está no `types.ts` (gerado do PROD). */
+type RpcName = Parameters<typeof supabase.rpc>[0];
+const RPC_COM_RECORTE = "get_agenda_events_scoped" as RpcName;
+const RPC_BASE = "get_agenda_events" as RpcName;
+
+/** `PGRST202`: a função não existe no schema cache — migration ainda não aplicada. */
+function isMissingFunctionError(error: unknown): boolean {
+  const e = error as PgError;
+  return (
+    e?.code === "PGRST202" ||
+    /Could not find the function|schema cache/i.test(e?.message ?? "")
+  );
+}
+
 /**
  * Unified agenda feed that aggregates meetings, follow-ups,
- * scheduled messages, and pipe_confirmacao events via the
- * get_agenda_events RPC.
+ * scheduled messages, pipe_confirmacao and meeting_events.
+ *
+ * ─── Por que `get_agenda_events_scoped` e não a base ─────────────────────────
+ *
+ * A base é org-wide de propósito (o COMMENT dela diz isso) e NUNCA recortou por
+ * pessoa: quem recortava era o filtro de tela em `AgendaAtividades`. Filtro de
+ * tela não é fronteira — o compromisso do colega atravessava a rede e era
+ * descartado no navegador.
+ *
+ * A `_scoped` compõe sobre a base e decide o escopo DENTRO do banco: org
+ * inteira para admin e para quem tem `agenda.view_all` (que nasce ligada);
+ * "os meus + os órfãos + os que me convidaram" para quem está com ela
+ * desligada. Nenhum parâmetro de escopo viaja na requisição — não há o que o
+ * cliente adulterar.
+ *
+ * ─── Os dois caminhos degradados ─────────────────────────────────────────────
+ *
+ * 1. `PGRST202` — a migration ainda não foi aplicada. Cai na base, e o filtro
+ *    de tela volta a ser o único recorte (o comportamento de antes desta
+ *    mudança). Remendo para o intervalo entre deploy do front e apply, que foi
+ *    como um parâmetro novo derrubou o board inteiro na #1774.
+ * 2. `42P01` — banco parcialmente migrado (dev sem `scheduled_user_messages`).
+ *    Reconstrói o feed a partir das tabelas que existem. Inerte em produção.
  */
 export function useAgendaEvents(startDate?: Date, endDate?: Date) {
   const { organizationId, isReady } = useOrganization();
@@ -45,11 +92,17 @@ export function useAgendaEvents(startDate?: Date, endDate?: Date) {
     queryFn: async () => {
       if (!organizationId || !startDate || !endDate) return [];
 
-      const { data, error } = await supabase.rpc("get_agenda_events", {
+      const args = {
         p_organization_id: organizationId,
         p_start: startDate.toISOString(),
         p_end: endDate.toISOString(),
-      });
+      } as never;
+
+      let { data, error } = await supabase.rpc(RPC_COM_RECORTE, args);
+
+      if (error && isMissingFunctionError(error)) {
+        ({ data, error } = await supabase.rpc(RPC_BASE, args));
+      }
 
       if (error) {
         // Dev-environment drift fallback: get_agenda_events UNIONs several
@@ -155,12 +208,13 @@ async function fetchAgendaFallback(
         .gte("due_date", startIso)
         .lt("due_date", endIso) as never,
     ),
-    // Source 4: pipe_confirmacao (non-null meeting_date in range)
+    // Source 4: funil de confirmação (meeting_date preenchido no intervalo)
     safe<Record<string, unknown>>(
-      from("pipe_confirmacao")
+      from("negocio_projetado")
         .select(
-          "id, notes, meeting_date, status, lead_id, lead:leads(name, company)",
+          "id, notes, meeting_date, stage_key, lead_id, lead:leads(name, company)",
         )
+        .eq("funil_sistema", "confirmacao")
         .eq("organization_id", organizationId)
         .not("meeting_date", "is", null)
         .gte("meeting_date", startIso)
@@ -231,7 +285,7 @@ async function fetchAgendaFallback(
       end_at: addMinutesIso(md, 60),
       all_day: false,
       event_type: "meeting",
-      status: (r.status as string) ?? "scheduled",
+      status: (r.stage_key as string) ?? "scheduled",
       lead_id: (r.lead_id as string) ?? null,
       lead_name: lead?.name ?? null,
       lead_company: lead?.company ?? null,

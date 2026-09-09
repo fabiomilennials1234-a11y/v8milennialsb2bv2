@@ -1,11 +1,12 @@
 /**
- * `useLeadsStats` — os três cards do topo da lista contam a ORGANIZAÇÃO.
+ * `useLeadsStats` — os cards do topo da lista contam a ORGANIZAÇÃO.
  *
  * ── O DEFEITO QUE ISTO IMPEDE ─────────────────────────────────────────────
- * Até a correção da ADR-0024 §2, "Alto rating", "Deste mês" e "Com dono"
- * viviam num `useMemo` dentro de `Leads.tsx` que filtrava o array `leads` — e
- * `leads` é **a página corrente, 25 linhas**. O quarto card, "Total", vinha de
- * `useLeadsCount`, que conta a org inteira. Três números de página encostados
+ * Até a correção da ADR-0024 §2, "Alto rating" (que morreu com o calor em
+ * 2026-09-03), "Deste mês" e "Com dono" viviam num `useMemo` dentro de
+ * `Leads.tsx` que filtrava o array `leads` — e `leads` é **a página corrente,
+ * 25 linhas**. O card "Total" vinha de `useLeadsCount`, que conta a org
+ * inteira. Números de página encostados
  * num total de organização, sem nada na tela marcando a diferença: numa org
  * com **2.987 leads**, "leads deste mês" reportava o que coubesse na primeira
  * página.
@@ -37,8 +38,8 @@ const org = vi.hoisted(() => ({
   timezone: "America/Sao_Paulo" as string | null,
 }));
 
-/** Contagens que o "servidor" devolve para cada um dos três recortes. */
-const contagens = vi.hoisted(() => ({ alto: 0, mes: 0, comDono: 0 }));
+/** Contagens que o "servidor" devolve para cada um dos dois recortes. */
+const contagens = vi.hoisted(() => ({ mes: 0, comDono: 0 }));
 
 /** Toda consulta emitida, com a cadeia de operadores na ordem. */
 const consultas = vi.hoisted(
@@ -53,11 +54,10 @@ vi.mock("@/integrations/supabase/client", () => {
     "in", "order", "limit", "range", "neq", "filter",
   ];
 
-  /** O último operador da cadeia é o que distingue os três cards. */
+  /** O último operador da cadeia é o que distingue os dois cards. */
   const contagemDe = (ops: Array<[string, ...unknown[]]>): number => {
     const ultima = ops[ops.length - 1];
     if (!ultima) return 0;
-    if (ultima[0] === "gte" && ultima[1] === "rating") return contagens.alto;
     if (ultima[0] === "gte" && ultima[1] === "created_at") return contagens.mes;
     if (ultima[0] === "not" && ultima[1] === "responsible_id") return contagens.comDono;
     return 0;
@@ -104,7 +104,6 @@ beforeEach(() => {
   org.organizationId = "org-1";
   org.isReady = true;
   org.timezone = "America/Sao_Paulo";
-  contagens.alto = 0;
   contagens.mes = 0;
   contagens.comDono = 0;
   consultas.length = 0;
@@ -118,26 +117,25 @@ describe("os cards do topo contam a organização, não a página", () => {
   it("devolve o número da org mesmo acima do que cabe numa página de 25", async () => {
     // 2.987 é o tamanho medido da org que expôs o defeito. Se o hook voltasse
     // a contar a página, nenhum destes números seria alcançável.
-    contagens.alto = 311;
     contagens.mes = 2987;
     contagens.comDono = 1544;
 
     const data = await medir();
 
-    expect(data).toEqual({ highRating: 311, thisMonth: 2987, withOwner: 1544 });
+    expect(data).toEqual({ thisMonth: 2987, withOwner: 1544 });
   });
 
   it("pede CONTAGEM ao Postgres, não linhas — `head` com `count: exact`", async () => {
     await medir();
 
-    expect(consultas).toHaveLength(3);
+    expect(consultas).toHaveLength(2);
     for (const c of consultas) {
       expect(c.tabela).toBe("leads");
       expect(c.ops[0]).toEqual(["select", "*", { count: "exact", head: true }]);
     }
   });
 
-  it("nenhuma das três consultas recorta uma página de leads", async () => {
+  it("nenhuma das consultas recorta uma página de leads", async () => {
     // A prova direta de que o número não é o da página: sem `in(id, …)`, sem
     // `limit`, sem `range`. É esta asserção que reprova a volta do `useMemo`.
     await medir();
@@ -150,7 +148,7 @@ describe("os cards do topo contam a organização, não a página", () => {
     }
   });
 
-  it("as três contagens são escopadas pela org e ignoram a lixeira", async () => {
+  it("as contagens são escopadas pela org e ignoram a lixeira", async () => {
     // Multi-tenancy: o filtro explícito vive além da RLS. E `deleted_at` é
     // soft-delete — sem o `is null` o card contaria lead que a lista não mostra.
     await medir();
@@ -165,7 +163,6 @@ describe("os cards do topo contam a organização, não a página", () => {
     await medir();
 
     const finais = consultas.map((c) => assinatura(c)[c.ops.length - 1]);
-    expect(finais).toContain("gte|rating|7");
     expect(finais).toContain("not|responsible_id|is|null");
     expect(finais.some((f) => f.startsWith("gte|created_at"))).toBe(true);
   });
@@ -175,7 +172,7 @@ describe("os cards do topo contam a organização, não a página", () => {
 
     const data = await medir();
 
-    expect(data).toEqual({ highRating: 0, thisMonth: 0, withOwner: 0 });
+    expect(data).toEqual({ thisMonth: 0, withOwner: 0 });
     expect(consultas).toHaveLength(0);
   });
 });
@@ -239,7 +236,7 @@ describe('"deste mês" é cortado no fuso da organização', () => {
 });
 
 describe("o card concorda com a lista embaixo dele", () => {
-  it("os filtros ativos entram nas TRÊS contagens, não só numa", async () => {
+  it("os filtros ativos entram nas DUAS contagens, não só numa", async () => {
     // Card que ignora o filtro ativo é outra forma de mentir: o usuário filtra
     // por origem e vê o topo continuar falando da org inteira.
     await medir({
@@ -250,7 +247,7 @@ describe("o card concorda com a lista embaixo dele", () => {
       createdTo: "2026-07-31T02:59:59.999Z",
     });
 
-    expect(consultas).toHaveLength(3);
+    expect(consultas).toHaveLength(2);
     for (const c of consultas) {
       const sig = assinatura(c);
       expect(sig.some((s) => s.startsWith("or|") && s.includes("acme"))).toBe(true);

@@ -75,7 +75,6 @@ describe("KNOWN_LEAD_FIELDS", () => {
     const fields = [...KNOWN_LEAD_FIELDS];
     expect(fields).toContain("stage");
     expect(fields).toContain("vendedor");
-    expect(fields).toContain("temperatura");
     expect(fields).toContain("valor");
     expect(fields).toContain("produto");
   });

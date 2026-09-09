@@ -9,6 +9,21 @@ vi.mock("@/modules/communication/hooks/chat-meta/useMetaSend", () => ({
   useMetaSend: () => ({ mutateAsync, isPending: false }),
 }));
 
+/**
+ * O composer passou a ler `useCurrentTeamMember`, que desce até `useAuth` e
+ * exige o `AuthProvider` — sem ele o componente lança na renderização e os dois
+ * testes deste arquivo quebram na montagem, antes de qualquer asserção.
+ *
+ * O dublê é por SPREAD do módulo real: uma lista de exports faria um export
+ * novo do barrel de identidade sumir daqui e o teste passar por ausência.
+ */
+vi.mock("@/modules/identity", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useCurrentTeamMember: () => ({
+    data: { id: "tm-1", organization_id: "org-1" },
+  }),
+}));
+
 import { MetaComposer } from "@/modules/communication/components/chat-meta/MetaComposer";
 
 function wrapper({ children }: { children: React.ReactNode }) {

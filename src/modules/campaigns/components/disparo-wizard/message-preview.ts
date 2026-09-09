@@ -8,6 +8,8 @@
  * always yields the same preview, so the wizard can render it on every keystroke.
  */
 
+import { personalizationFirstName } from "@/shared/format/first-name";
+
 export interface PreviewSample {
   nome: string;
   empresa: string;
@@ -19,7 +21,7 @@ function valueFor(token: string, sample: PreviewSample): string {
     case "nome":
       return sample.nome;
     case "primeiro_nome":
-      return sample.nome.trim().split(/\s+/)[0] ?? "";
+      return personalizationFirstName(sample.nome);
     case "empresa":
       return sample.empresa;
     case "segmento":

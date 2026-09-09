@@ -217,10 +217,29 @@ describe("triggerReactions", () => {
       push_name: "Lead Test",
       incoming_message_type: "text",
       media_url: null,
+      instance_id: "inst-1",
     });
   });
 
   // ─── Scenario 2: Copilot skipped (no content / shouldTriggerCopilot false)
+
+  // O gatilho `lead_replied` filtra por número de origem, e quem conhece a
+  // Instance é ESTE webhook — o `fireTrigger` roda lá dentro do agent-message.
+  // Sem o campo no payload a identidade do número se perde no caminho e o
+  // filtro vira "qualquer número" em silêncio.
+  it("leva o instance_id no payload do agent-message", async () => {
+    mockQueueInsert.mockResolvedValueOnce({ error: { message: "queue_down" } });
+
+    await triggerReactions(mockSupabase, basePersisted, {
+      shouldTriggerCopilot: true,
+      shouldResolveWaitResponse: true,
+      isGroup: false,
+      replaySource: null,
+    });
+
+    const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+    expect(body.instance_id).toBe(basePersisted.instance_id);
+  });
 
   it("skips copilot when shouldTriggerCopilot is false", async () => {
     await triggerReactions(mockSupabase, basePersisted, {

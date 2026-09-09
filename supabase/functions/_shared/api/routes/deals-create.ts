@@ -65,6 +65,11 @@ function traduzErro(err: unknown): { status: number; code: string; message: stri
   if (e?.code === "P0002" || /não encontrado|nao encontrado/i.test(msg)) {
     return { status: 404, code: "lead_not_found", message: "Lead não encontrado nesta organização" };
   }
+  // Funil inativo é 409, como no move e no lead-webhook (SCRUM-624/625): não é
+  // endereço errado nem corpo malformado — é estado do recurso.
+  if (e?.code === "55000" || /^funil .*está inativo/i.test(msg)) {
+    return { status: 409, code: "pipeline_inactive", message: msg || "Funil está inativo nesta organização" };
+  }
   if (e?.code === "22023" || /não abre negócio|nao abre negocio|funil/i.test(msg)) {
     return {
       status: 422,
@@ -99,6 +104,8 @@ export async function createDeal(ctx: ApiRouteContext): Promise<Response> {
   }
 
   const supabase = ctx.supabase as unknown as RpcClient;
+  // `pipeline` aceita id (uuid) ou slug de QUALQUER funil da org (SCRUM-625);
+  // etapa de funil custom aceita stage_key ou uuid — a tradução vive no banco.
   const { data, error } = await supabase.rpc("api_create_deal", {
     p_org: ctx.organizationId,
     p_lead_id: leadId,

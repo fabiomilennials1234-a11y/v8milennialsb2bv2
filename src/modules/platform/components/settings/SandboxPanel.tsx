@@ -69,7 +69,7 @@ export function SandboxPanel() {
             <div>
               <p className="text-sm font-medium">Criar sandbox</p>
               <p className="text-xs text-muted-foreground">
-                Clona configuracoes da org (stages, tags, pipelines). Nenhum dado de lead e copiado.
+                Clona configurações da organização (etapas, tags e funis). Nenhum dado de lead e copiado.
               </p>
             </div>
           </div>
@@ -81,7 +81,7 @@ export function SandboxPanel() {
             <ul className="space-y-1.5 text-sm">
               <li className="flex items-center gap-2">
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
-                Pipeline stages e configuracoes
+                Etapas e configurações dos funis
               </li>
               <li className="flex items-center gap-2">
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />

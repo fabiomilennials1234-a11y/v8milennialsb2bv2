@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { X, Search, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUpsellClients } from "@/modules/carteira/hooks/useUpsellClients";
+import { erpLabel } from "@/shared/format/erp-code";
 import {
   Command,
   CommandInput,
@@ -103,8 +104,18 @@ export function ClientChipSelector({
     );
   }
 
+  /*
+   * `modal`: os dois únicos usos deste seletor são dentro de diálogo —
+   * `NewOrderModal.tsx:275` e `EditOrderDialog.tsx:254`, ambos dentro do próprio
+   * `DialogContent`. O `react-remove-scroll` do Dialog engole o `wheel` de tudo
+   * que sai por portal, e a lista aqui é a carteira INTEIRA de clientes ativos
+   * (`CommandList`, `max-h-[300px] overflow-y-auto` em `ui/command.tsx:63`).
+   *
+   * É o mesmo conserto que o `ProductCombobox.tsx:155` — que fica ao lado dele,
+   * no mesmo `DialogContent` — já tinha desde a #1862. Este ficou para trás.
+   */
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -129,7 +140,10 @@ export function ClientChipSelector({
               {activeClients.map((c) => (
                 <CommandItem
                   key={c.id}
-                  value={`${c.name} ${c.company ?? ""}`}
+                  // O código do ERP entra no `value` porque é ele que o cmdk
+                  // filtra: sem isso, digitar "1234" não acharia o cliente que a
+                  // lista logo abaixo mostra como "1234 - …".
+                  value={`${c.external_id ?? ""} ${c.name} ${c.company ?? ""}`}
                   onSelect={() => handleSelect(c.id)}
                   className="flex items-center gap-2 py-2"
                 >
@@ -139,7 +153,7 @@ export function ClientChipSelector({
                     </span>
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm truncate">{c.name}</div>
+                    <div className="text-sm truncate">{erpLabel(c)}</div>
                     {c.company && (
                       <div className="text-xs text-muted-foreground flex items-center gap-1">
                         <Building2 className="h-3 w-3" />

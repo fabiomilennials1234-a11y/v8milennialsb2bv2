@@ -88,7 +88,7 @@ describe("useLeads", () => {
   });
 
   it("accepts filter params", () => {
-    const params: LeadsFilterParams = { page: 1, searchQuery: "test", filterOrigin: "meta_ads", filterRating: "high" };
+    const params: LeadsFilterParams = { page: 1, searchQuery: "test", filterOrigin: "meta_ads" };
     const { result } = renderHook(() => useLeads(params), { wrapper: createWrapper() });
     expect(result.current).toBeDefined();
   });

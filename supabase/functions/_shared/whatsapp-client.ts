@@ -63,6 +63,7 @@ export type SendTextOptions = {
 };
 
 export type SendMediaOptions = {
+  replyid?: string;
   number: string;
   type: "image" | "video" | "audio" | "document" | "ptt" | "sticker";
   file: string; // base64 or URL

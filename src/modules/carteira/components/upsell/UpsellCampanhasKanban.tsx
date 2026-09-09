@@ -5,7 +5,6 @@ import { useUpsellCampanhas, useUpdateUpsellCampanha } from "@/modules/carteira/
 import { LeadCard } from "@/modules/leads";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
-import { useUpdateLead } from "@/modules/leads";
 import { toast } from "sonner";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -32,7 +31,6 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
   const { data: campanhas = [] } = useUpsellCampanhas();
   const updateCampanha = useUpdateUpsellCampanha();
   const createAcaoDoDia = useCreateAcaoDoDia();
-  const updateLead = useUpdateLead();
   const navigate = useNavigate();
 
   const [selectedCampanha, setSelectedCampanha] = useState<any>(null);
@@ -204,6 +202,7 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
                       lead={{
                         id: campanha.id,
                         name: (campanha.client as any)?.name || "Cliente",
+                        erpCode: (campanha.client as any)?.external_id ?? null,
                         company: (campanha.client as any)?.company,
                         potencial: (campanha.client as any)?.potencial,
                         responsible: (campanha.closer as any)?.name,
@@ -222,9 +221,6 @@ function UpsellCampanhasKanbanInner({ searchQuery, filterStatus, filterResponsib
                       }}
                       onQuickAction={(title) => {
                         createAcaoDoDia.mutate({ title, lead_id: (campanha.client as any)?.lead_id || undefined });
-                      }}
-                      onCalorChange={(calor) => {
-                        if ((campanha as any).lead_id || (campanha.client as any)?.lead_id) updateLead.mutate({ id: (campanha as any).lead_id || (campanha.client as any)?.lead_id!, rating: calor });
                       }}
                     />
                   </motion.div>

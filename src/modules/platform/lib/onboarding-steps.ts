@@ -112,7 +112,7 @@ export const ONBOARDING_STEPS: OnboardingStepConfig[] = [
     label: "Fechar primeira venda",
     icon: Trophy,
     href: "/funis",
-    hint: "Mova um lead para 'Vendido' no pipe de propostas",
+    hint: "Mova um negócio para 'Vendido' no funil de propostas",
     tutorialUrl: "", // TODO CTO: link do tutorial
   },
 ];

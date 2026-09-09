@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ExternalLink, Pencil, UserRound } from "lucide-react";
+import { ExternalLink, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LeadCardMetrics } from "./LeadCardMetrics";
 import { LeadCardNotes } from "./LeadCardNotes";
@@ -41,12 +41,22 @@ export function LeadCardAside({
   onSaveField,
   onAbrirFicha,
   controles,
+  editorDeEtiquetas,
 }: {
   lead: LeadCardData;
   onSaveNote?: (texto: string) => void;
   onSaveField?: (chave: string, valor: string) => Promise<void>;
   /** Abre a ficha inteira do lead. Sem ela o lápis não aparece. */
   onAbrirFicha?: () => void;
+  /**
+   * A faixa de etiquetas QUE ESCREVE, montada pronta por quem tem banco.
+   *
+   * Mesma razão de `controles`: `LeadCardEtiquetas` fala com react-query e com
+   * o Supabase, e este arquivo está no grafo de `/preview.html`, onde
+   * `preview-cards-sem-banco.test.ts` reprova esse caminho. Sem a prop, a faixa
+   * abaixo continua como era — chips de leitura e a pílula "sem etiqueta".
+   */
+  editorDeEtiquetas?: React.ReactNode;
   /**
    * Qualificação e responsáveis, montados PRONTOS por quem tem acesso ao banco.
    *
@@ -127,7 +137,11 @@ export function LeadCardAside({
           )}
 
           {/* Relação e etiquetas. A faixa fica mesmo vazia: sumir quando não há
-              etiqueta é o que faz ninguém nunca etiquetar. */}
+              etiqueta é o que faz ninguém nunca etiquetar.
+
+              Com `editorDeEtiquetas` a faixa passa a ESCREVER — e as pílulas
+              saem de lá, não daqui, para não haver duas listas da mesma coisa a
+              um centímetro de distância, uma que reage ao clique e outra não. */}
           <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5">
             {lead.relacao === "cliente" && (
               <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/40 bg-primary/10 px-2.5 py-[3px] text-[11.5px] font-semibold text-primary">
@@ -135,39 +149,25 @@ export function LeadCardAside({
                 Cliente
               </span>
             )}
-            {lead.tags.map((t) => (
-              <span
-                key={t.id}
-                className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-[3px] text-[11.5px] text-muted-foreground"
-              >
-                {t.nome}
-              </span>
-            ))}
-            {lead.tags.length === 0 && (
-              <span className="inline-flex rounded-full border border-dashed border-border px-2.5 py-[3px] text-[11.5px] text-muted-foreground/70">
-                sem etiqueta
-              </span>
+            {editorDeEtiquetas ?? (
+              <>
+                {lead.tags.map((t) => (
+                  <span
+                    key={t.id}
+                    className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-[3px] text-[11.5px] text-muted-foreground"
+                  >
+                    {t.nome}
+                  </span>
+                ))}
+                {lead.tags.length === 0 && (
+                  <span className="inline-flex rounded-full border border-dashed border-border px-2.5 py-[3px] text-[11.5px] text-muted-foreground/70">
+                    sem etiqueta
+                  </span>
+                )}
+              </>
             )}
           </div>
 
-          {/* "Sem atendente" do print — link azul quando vazio, que é o padrão
-              do DataCrazy inteiro: campo vazio é convite, não lacuna. */}
-          <div className="mt-3 flex w-full items-center justify-center gap-2 border-t border-border pt-3 text-[12.5px]">
-            <UserRound className="size-[15px] shrink-0 text-muted-foreground" aria-hidden="true" />
-            {lead.dono ? (
-              <span className="truncate text-foreground/90" title={lead.dono.papel}>
-                {lead.dono.nome}
-              </span>
-            ) : (
-              <span className="text-primary underline underline-offset-2">Sem atendente</span>
-            )}
-          </div>
-
-          {/* Os controles ficam logo abaixo da linha do atendente porque é a
-              mesma pergunta — "quem cuida disto?" — só que acionável. A linha
-              de cima continua existindo: ela mostra o NOME do responsável
-              efetivo, e os círculos dos slots mostram só as iniciais. Trocar
-              uma pela outra ganharia um clique e perderia a leitura. */}
           {controles && (
             <div className="mt-3 w-full border-t border-border pt-3">{controles}</div>
           )}
@@ -194,10 +194,16 @@ export function LeadCardAside({
 
         {grupos.length > 0 && (
           <div className="flex flex-col border-t border-border">
-            {/* As abas Perfil | Endereço | Campos adicionais do print. Os grupos
-                já vêm prontos de `useLeadCardData`; aqui só se escolhe um por
-                vez, porque a coluna tem 356px e a pilha inteira empurrava a
-                anotação para 4 telas abaixo. */}
+            {/* As abas Perfil | Endereço | Comercial | Campos a preencher. Os
+                grupos já vêm prontos de `useLeadCardData`; aqui só se escolhe um
+                por vez, porque a coluna tem 356px e a pilha inteira empurrava a
+                anotação para 4 telas abaixo.
+
+                A PRIMEIRA aba é a que abre, e é por isso que os campos da
+                organização já RESPONDIDOS vivem dentro do "Perfil" — quem abre o
+                negócio vê o que o formulário trouxe sem clicar em nada. A última
+                aba fica só com o que ninguém preencheu ainda. Ver o bloco de
+                decisão em `useLeadCardData`. */}
             <nav className="flex items-center gap-1 overflow-x-auto border-b border-border px-3">
               {grupos.map((g, i) => {
                 const acesa = i === Math.min(grupo, grupos.length - 1);

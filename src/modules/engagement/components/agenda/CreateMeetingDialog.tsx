@@ -5,12 +5,11 @@
  * with a richer internal meeting form that uses useCreateMeeting.
  */
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import { format, addHours } from "date-fns";
 import {
   Plus,
   Loader2,
-  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -29,7 +28,7 @@ import {
   type CreateMeetingInput,
 } from "@/modules/engagement/hooks/useMeetings";
 import { useTeamMembers } from "@/modules/identity";
-import { useLeads } from "@/modules/leads";
+import { LeadPorFunilPicker } from "./LeadPorFunilPicker";
 
 // â”€â”€â”€ Constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -60,6 +59,38 @@ interface CreateMeetingDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Pre-filled slot start (set when clicking a time grid slot). */
   initialStart?: Date;
+  /**
+   * Lead já escolhido — quando o diálogo é aberto de FORA da Agenda (card do
+   * funil, ficha do lead) e a pessoa já disse de quem é a reunião.
+   *
+   * O `LeadPorFunilPicker` resolve o chip sozinho por `useLeadById`, então
+   * mandar só o id basta: o funil fica em branco e continua editável. Vem sem
+   * `pipeline_id` de propósito — o card sabe o lead, e adivinhar o funil
+   * gravaria uma origem que a pessoa não escolheu.
+   */
+  initialLeadId?: string | null;
+  /**
+   * Nome do lead, só para semear o título.
+   *
+   * `handleSubmit` EXIGE título não-vazio (`!form.title.trim()` bloqueia). Sem
+   * semear, quem abre pelo card cai num diálogo com o botão morto e sem dizer
+   * por quê — o mesmo defeito de "botão que não faz nada" que o campo de data
+   * já teve aqui.
+   */
+  initialLeadName?: string | null;
+  /**
+   * Funil de onde o diálogo foi aberto — S6.
+   *
+   * Quem abre pelo CARD DO FUNIL já está dentro de um funil; sem receber isso o
+   * picker abriria "Nenhum funil" e o negócio nunca seria resolvido (o negócio
+   * sai da ENTRADA, e a entrada só existe dentro de um funil). Com o par
+   * (funil, lead) semeado, a resolução acontece sem clique nenhum.
+   *
+   * NÃO existe `initialDealId` de propósito: quem resolve o negócio é SEMPRE o
+   * picker, a partir do par. Um só resolvedor no app é o que garante que o caso
+   * ambíguo tenha sempre uma pessoa na frente dele.
+   */
+  initialPipelineId?: string | null;
 }
 
 interface FormState {
@@ -70,10 +101,40 @@ interface FormState {
   end_at: string;
   all_day: boolean;
   event_type: MeetingEventType;
+  /** Funil de onde o lead sai. `""` = nenhum. */
+  pipeline_id: string;
   lead_id: string;
+  /** Negócio resolvido pelo picker a partir do par (funil, lead). `""` = nenhum. */
+  deal_id: string;
   color: string;
   meet_link: string;
   participant_ids: string[];
+}
+
+const FORM_VAZIO: Omit<FormState, "start_at" | "end_at"> = {
+  title: "",
+  description: "",
+  location: "",
+  all_day: false,
+  event_type: "meeting",
+  pipeline_id: "",
+  lead_id: "",
+  deal_id: "",
+  color: "",
+  meet_link: "",
+  participant_ids: [],
+};
+
+/**
+ * Título inicial quando a reunião nasce de um lead conhecido.
+ *
+ * "Reunião - <lead>" é o mesmo formato que a Agenda já mostra no popover, e
+ * fica editável. Sem lead, volta a string vazia — o campo é obrigatório e o
+ * placeholder pede o título.
+ */
+function tituloSemeado(leadName: string | null | undefined): string {
+  const nome = (leadName ?? "").trim();
+  return nome ? `Reuniao - ${nome}` : "";
 }
 
 // â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -82,73 +143,46 @@ export function CreateMeetingDialog({
   open,
   onOpenChange,
   initialStart,
+  initialLeadId,
+  initialLeadName,
+  initialPipelineId,
 }: CreateMeetingDialogProps) {
   const createMeeting = useCreateMeeting();
   const { data: teamMembers = [] } = useTeamMembers();
-  const { data: leadsRaw } = useLeads();
-  const leads = useMemo(() => leadsRaw ?? [], [leadsRaw]);
-
-  const [leadSearch, setLeadSearch] = useState("");
-  const [showLeadDropdown, setShowLeadDropdown] = useState(false);
 
   const defaultStart = initialStart ?? new Date();
 
   const [form, setForm] = useState<FormState>({
-    title: "",
-    description: "",
-    location: "",
+    ...FORM_VAZIO,
+    lead_id: initialLeadId ?? "",
+    pipeline_id: initialPipelineId ?? "",
+    title: tituloSemeado(initialLeadName),
     start_at: format(defaultStart, "yyyy-MM-dd'T'HH:mm"),
     end_at: format(addHours(defaultStart, 1), "yyyy-MM-dd'T'HH:mm"),
-    all_day: false,
-    event_type: "meeting",
-    lead_id: "",
-    color: "",
-    meet_link: "",
-    participant_ids: [],
   });
 
-  // Reset form when dialog opens or initialStart changes
+  // Reset form when dialog opens or the seeded values change.
+  //
+  // ⚠️ `initialLeadId`/`initialLeadName` PRECISAM estar nas deps: o mesmo
+  // diálogo é montado uma vez por superfície e reaberto para leads diferentes.
+  // Sem elas, abrir pelo segundo card traria o lead do primeiro — e o campo é
+  // editável, então nada na tela denunciaria a troca.
   useEffect(() => {
     if (open) {
       const start = initialStart ?? new Date();
       setForm({
-        title: "",
-        description: "",
-        location: "",
+        ...FORM_VAZIO,
+        lead_id: initialLeadId ?? "",
+        pipeline_id: initialPipelineId ?? "",
+        title: tituloSemeado(initialLeadName),
         start_at: format(start, "yyyy-MM-dd'T'HH:mm"),
         end_at: format(addHours(start, 1), "yyyy-MM-dd'T'HH:mm"),
-        all_day: false,
-        event_type: "meeting",
-        lead_id: "",
-        color: "",
-        meet_link: "",
-        participant_ids: [],
       });
-      setLeadSearch("");
-      setShowLeadDropdown(false);
     }
-  }, [open, initialStart]);
+  }, [open, initialStart, initialLeadId, initialLeadName, initialPipelineId]);
 
   const update = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
-
-  const filteredLeads = useMemo(() => {
-    if (!leadSearch.trim()) return leads.slice(0, 10);
-    const q = leadSearch.toLowerCase();
-    return leads
-      .filter(
-        (l) =>
-          l.name?.toLowerCase().includes(q) ||
-          l.company?.toLowerCase().includes(q) ||
-          l.email?.toLowerCase().includes(q),
-      )
-      .slice(0, 10);
-  }, [leads, leadSearch]);
-
-  const selectedLead = useMemo(
-    () => leads.find((l) => l.id === form.lead_id),
-    [leads, form.lead_id],
-  );
 
   const toggleParticipant = (id: string) => {
     setForm((prev) => ({
@@ -162,8 +196,22 @@ export function CreateMeetingDialog({
   const endBeforeStart =
     !form.all_day && new Date(form.end_at) <= new Date(form.start_at);
 
+  /**
+   * 🚨 HERDADO, corrigido junto porque é o mesmo defeito do diálogo de edição e
+   * a expressão é copiada entre os dois: `endBeforeStart` NÃO cobre campo
+   * vazio. `<input type="datetime-local">` devolve `""` quando a pessoa apaga a
+   * data para redigitar, e comparação com `Invalid Date` é `false` nos DOIS
+   * sentidos — o botão continuava habilitado e o clique morria em
+   * `new Date("").toISOString() → RangeError`, dentro de um event handler, que
+   * nenhum error boundary pega. Resultado: "Criar Evento" virava um botão que
+   * não faz nada e não explica.
+   */
+  const dataInvalida =
+    Number.isNaN(new Date(form.start_at).getTime()) ||
+    Number.isNaN(new Date(form.end_at).getTime());
+
   const handleSubmit = () => {
-    if (!form.title.trim() || endBeforeStart) return;
+    if (!form.title.trim() || endBeforeStart || dataInvalida) return;
 
     const input: CreateMeetingInput = {
       title: form.title.trim(),
@@ -174,6 +222,14 @@ export function CreateMeetingDialog({
       all_day: form.all_day,
       event_type: form.event_type,
       lead_id: form.lead_id || null,
+      // Sem lead não há funil a guardar: gravar o funil sozinho deixaria a
+      // reunião afirmando uma origem que não aponta para ninguém.
+      pipeline_id: form.lead_id ? form.pipeline_id || null : null,
+      // Mesma regra, um degrau acima: o negócio é a ENTRADA do lead NAQUELE
+      // funil. Sem os dois não há o que ele signifique, e gravá-lo assim mesmo
+      // penduraria a reunião num card que ninguém escolheu.
+      deal_id:
+        form.lead_id && form.pipeline_id ? form.deal_id || null : null,
       color: form.color || null,
       meet_link: form.meet_link || null,
       participant_ids:
@@ -193,7 +249,7 @@ export function CreateMeetingDialog({
             <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
               <Plus className="w-3.5 h-3.5 text-primary" />
             </div>
-            Novo Evento
+            Nova atividade
           </DialogTitle>
         </DialogHeader>
 
@@ -244,8 +300,14 @@ export function CreateMeetingDialog({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Inicio *</Label>
+              <Label
+                htmlFor="meeting-start"
+                className="text-xs text-muted-foreground"
+              >
+                Inicio *
+              </Label>
               <Input
+                id="meeting-start"
                 type={form.all_day ? "date" : "datetime-local"}
                 value={
                   form.all_day
@@ -262,8 +324,14 @@ export function CreateMeetingDialog({
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Fim *</Label>
+              <Label
+                htmlFor="meeting-end"
+                className="text-xs text-muted-foreground"
+              >
+                Fim *
+              </Label>
               <Input
+                id="meeting-end"
                 type={form.all_day ? "date" : "datetime-local"}
                 value={
                   form.all_day
@@ -280,11 +348,15 @@ export function CreateMeetingDialog({
               />
             </div>
           </div>
-          {endBeforeStart && (
+          {dataInvalida ? (
+            <p className="text-[11px] text-destructive">
+              Informe inicio e fim
+            </p>
+          ) : endBeforeStart ? (
             <p className="text-[11px] text-destructive">
               Fim deve ser depois do inicio
             </p>
-          )}
+          ) : null}
 
           {/* Location */}
           <div className="space-y-1.5">
@@ -307,71 +379,22 @@ export function CreateMeetingDialog({
             />
           </div>
 
-          {/* Lead selector */}
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Lead</Label>
-            {selectedLead ? (
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border/40 bg-muted/20">
-                <span className="text-xs text-foreground flex-1 truncate">
-                  {selectedLead.name}
-                  {selectedLead.company ? ` - ${selectedLead.company}` : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    update("lead_id", "");
-                    setLeadSearch("");
-                  }}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  <span className="text-xs">Limpar</span>
-                </button>
-              </div>
-            ) : (
-              <div className="relative">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
-                  <Input
-                    placeholder="Buscar lead..."
-                    className="pl-8"
-                    value={leadSearch}
-                    onChange={(e) => {
-                      setLeadSearch(e.target.value);
-                      setShowLeadDropdown(true);
-                    }}
-                    onFocus={() => setShowLeadDropdown(true)}
-                    onBlur={() =>
-                      setTimeout(() => setShowLeadDropdown(false), 200)
-                    }
-                  />
-                </div>
-                {showLeadDropdown && filteredLeads.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 z-20 bg-card border border-border/50 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                    {filteredLeads.map((lead) => (
-                      <button
-                        key={lead.id}
-                        type="button"
-                        className="w-full text-left px-3 py-2 text-xs hover:bg-muted/40 transition-colors"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          update("lead_id", lead.id);
-                          setLeadSearch("");
-                          setShowLeadDropdown(false);
-                        }}
-                      >
-                        <span className="text-foreground">{lead.name}</span>
-                        {lead.company && (
-                          <span className="text-muted-foreground ml-1.5">
-                            - {lead.company}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Funil → Lead */}
+          <LeadPorFunilPicker
+            value={{
+              pipelineId: form.pipeline_id || null,
+              leadId: form.lead_id || null,
+              dealId: form.deal_id || null,
+            }}
+            onChange={({ pipelineId, leadId, dealId }) =>
+              setForm((prev) => ({
+                ...prev,
+                pipeline_id: pipelineId ?? "",
+                lead_id: leadId ?? "",
+                deal_id: dealId ?? "",
+              }))
+            }
+          />
 
           {/* Participants */}
           {teamMembers.length > 0 && (
@@ -447,7 +470,12 @@ export function CreateMeetingDialog({
             <Button
               size="sm"
               onClick={handleSubmit}
-              disabled={createMeeting.isPending || !form.title.trim() || endBeforeStart}
+              disabled={
+                createMeeting.isPending ||
+                !form.title.trim() ||
+                endBeforeStart ||
+                dataInvalida
+              }
             >
               {createMeeting.isPending ? (
                 <>
@@ -455,7 +483,7 @@ export function CreateMeetingDialog({
                   Criando...
                 </>
               ) : (
-                "Criar Evento"
+                "Criar atividade"
               )}
             </Button>
           </div>

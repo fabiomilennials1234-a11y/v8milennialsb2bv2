@@ -1,7 +1,22 @@
 import type { ActionInput, ActionResult } from "./types.ts";
 
+/**
+ * `apply_checklist` — o checklist é DO NEGÓCIO (decisão do CTO, 2026-08-25).
+ *
+ * ── O QUE MUDA, E O QUE NÃO MUDA ──────────────────────────────────────────
+ * Quando a execução sabe qual Negócio disparou (gatilho de funil), o checklist
+ * nasce preso a ele: `pipeline_entry_id` preenchido, e a idempotência passa a
+ * ser por `(negócio, template)`. Era por `(lead, template)`, e com isso o
+ * SEGUNDO negócio do mesmo lead a passar pela etapa não recebia nada — 146 dos
+ * 759 checklists de template em prod estão em leads com 2+ negócios.
+ *
+ * Quando não sabe (gatilho da pessoa: `tag_added`, `lead_created`), o checklist
+ * continua sendo da PESSOA — `pipeline_entry_id` nulo, idempotência por lead,
+ * exatamente como era. Não é meio-termo: é a regra. Ver a migration
+ * `20270827000020_checklist_do_negocio.sql`.
+ */
 export async function applyChecklist(input: ActionInput): Promise<ActionResult> {
-  const { supabase, organizationId, leadId, params } = input;
+  const { supabase, organizationId, leadId, entryId, dealId, params } = input;
   const templateId = (params.checklistTemplateId as string | undefined)?.trim();
 
   if (!templateId) {
@@ -44,21 +59,29 @@ export async function applyChecklist(input: ActionInput): Promise<ActionResult> 
     return { success: false, error: "Lead nao pertence a esta organizacao" };
   }
 
-  // Idempotencia: espelha o trigger de stage (uniq_checklists_lead_source).
-  // Se este template ja foi aplicado neste lead, no-op em vez de duplicar.
-  const { data: existing } = await supabase
+  /**
+   * Idempotência no MESMO escopo em que a linha vai nascer.
+   *
+   * Com negócio: `(pipeline_entry_id, source_template_id)`. Sem: `(lead_id,
+   * source_template_id)` entre os que também não têm negócio — o
+   * `.is("pipeline_entry_id", null)` não é detalhe: sem ele, um checklist que
+   * já pertence a OUTRO negócio do mesmo lead seria lido como "já aplicado" e
+   * este negócio sairia sem nada, que é o defeito de novo por outro caminho.
+   */
+  const escopo = supabase
     .from("checklists")
     .select("id")
     .eq("organization_id", organizationId)
-    .eq("lead_id", leadId)
-    .eq("source_template_id", templateId)
-    .maybeSingle();
+    .eq("source_template_id", templateId);
+  const { data: existing } = entryId
+    ? await escopo.eq("pipeline_entry_id", entryId).maybeSingle()
+    : await escopo.eq("lead_id", leadId).is("pipeline_entry_id", null).maybeSingle();
 
   if (existing) {
     return {
       success: true,
       message: `Checklist "${template.title}" ja aplicado (idempotente)`,
-      data: { checklist_id: existing.id, template_id: templateId, idempotent: true },
+      data: { checklist_id: existing.id, template_id: templateId, idempotent: true, entry_id: entryId ?? null },
     };
   }
 
@@ -78,8 +101,13 @@ export async function applyChecklist(input: ActionInput): Promise<ActionResult> 
       title: template.title,
       description: template.description,
       lead_id: leadId,
-      // Marca a origem → habilita dedup via indice parcial unico (lead_id, source_template_id),
-      // igual ao trigger de stage. Tambem deixa o checklist auditavel.
+      // O lead continua gravado mesmo no escopo de negócio: o checklist é do
+      // Negócio E da pessoa por trás dele, e sem isto a ficha do lead perderia
+      // de vista o que a automação aplicou.
+      pipeline_entry_id: entryId ?? null,
+      deal_id: dealId ?? null,
+      // Marca a origem → habilita dedup via indice parcial unico, igual ao
+      // trigger de stage. Tambem deixa o checklist auditavel.
       source_template_id: templateId,
     })
     .select("id")
@@ -89,13 +117,14 @@ export async function applyChecklist(input: ActionInput): Promise<ActionResult> 
     // Corrida: outro processo aplicou o mesmo template entre o pre-check e o insert.
     // O indice parcial unico garante no-duplicado; tratamos 23505 como sucesso idempotente.
     if (cErr.code === "23505") {
-      const { data: raced } = await supabase
+      const corrida = supabase
         .from("checklists")
         .select("id")
         .eq("organization_id", organizationId)
-        .eq("lead_id", leadId)
-        .eq("source_template_id", templateId)
-        .maybeSingle();
+        .eq("source_template_id", templateId);
+      const { data: raced } = entryId
+        ? await corrida.eq("pipeline_entry_id", entryId).maybeSingle()
+        : await corrida.eq("lead_id", leadId).is("pipeline_entry_id", null).maybeSingle();
       return {
         success: true,
         message: `Checklist "${template.title}" ja aplicado (idempotente)`,

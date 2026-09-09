@@ -132,3 +132,4 @@ scripts/recovery/
 
 # Ensaio transacional do #1721 — artefato montado, nao versionado
 .ensaio-*.montado.sql
+.apply-*.montado.sql

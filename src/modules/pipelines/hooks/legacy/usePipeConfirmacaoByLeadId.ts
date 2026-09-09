@@ -1,27 +1,37 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import { useOrganization } from "@/modules/identity";
+import type { ProjectedConfirmacaoPipe } from "@/integrations/supabase/projected-pipe-types";
 
-export type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
+export type PipeConfirmacaoRow = ProjectedConfirmacaoPipe;
 
 /**
- * Fetch the lead's most recent pipe_confirmacao entry (or null when the lead
- * isn't in the Confirmação pipe yet).
+ * Fetch the lead's most recent entrada do funil de Confirmação (or null when the
+ * lead isn't in it yet).
  *
- * Reads from the compat view over pipeline_entries (migration 20260983).
- * The view exposes legacy columns including `status` (= stage_key),
- * `meeting_date`, `responsible_id`, etc.
+ * Lê da projeção canônica `negocio_projetado` (funil_sistema = "confirmacao"),
+ * que substitui o espelho pipe_confirmacao.
+ *
+ * O consumidor (`MeetingFieldBlock`) lê `pipeData.status`. Na projeção essa
+ * coluna chama `stage_key`, então o alias do PostgREST devolve as duas — sem o
+ * alias, `status` vem `undefined`, o select de etapa cai no default
+ * "reuniao_marcada", `dirty` fica preso em true e o Salvar REBAIXA a etapa do
+ * card no banco sem o usuário ter tocado no campo.
  */
 export function usePipeConfirmacaoByLeadId(leadId: string | null | undefined) {
+  const { organizationId } = useOrganization();
+
   return useQuery({
-    queryKey: ["pipe_confirmacao_by_lead", leadId],
-    enabled: !!leadId,
+    queryKey: ["pipe_confirmacao_by_lead", leadId, organizationId],
+    enabled: !!leadId && !!organizationId,
     staleTime: 30_000,
     queryFn: async (): Promise<PipeConfirmacaoRow | null> => {
-      if (!leadId) return null;
+      if (!leadId || !organizationId) return null;
       const { data, error } = await supabase
-        .from("pipe_confirmacao")
-        .select("*")
+        .from("negocio_projetado")
+        .select("*, status:stage_key")
+        .eq("organization_id", organizationId)
+        .eq("funil_sistema", "confirmacao")
         .eq("lead_id", leadId)
         .order("created_at", { ascending: false })
         .limit(1)

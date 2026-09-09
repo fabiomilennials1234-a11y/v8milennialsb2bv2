@@ -104,7 +104,7 @@ export function PipeWhatsappAnalytics({ items, range, responsibleMembers }: Pipe
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        <AnalyticsPanel title="Funil de Qualificação" subtitle="Volume por etapa e perda entre etapas">
+        <AnalyticsPanel title="Saúde do Funil" subtitle="Volume por etapa e perda entre etapas">
           <ContinuousFunnel stages={funnelStages} unit="leads" />
         </AnalyticsPanel>
 

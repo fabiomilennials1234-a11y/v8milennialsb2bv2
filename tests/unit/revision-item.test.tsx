@@ -35,6 +35,17 @@ vi.mock("@/modules/communication/components/chat/ScheduleMessageModal", () => ({
   ScheduleMessageModal: () => null,
 }));
 
+// SCRUM-641: o item resolve o nome do funil de origem pelo display config da
+// org; sem AuthProvider no teste, o hook real explode — dublê identidade.
+vi.mock("@/modules/engagement/hooks/useNomeDoPipe", () => ({
+  // Nome que a ORG usa (SCRUM-641): o dublê devolve o nome de fábrica para o
+  // teste provar que o rótulo NÃO é mais o seed ("WhatsApp"/"Confirmação").
+  useNomeDoPipe: () => (pipeType: string) =>
+    ({ whatsapp: "Oportunidades", confirmacao: "Agendamentos", propostas: "Orçamentos" })[
+      pipeType
+    ] ?? pipeType,
+}));
+
 vi.mock("@/modules/engagement/components/followups/ScheduleFollowUpModal", () => ({
   ScheduleFollowUpModal: () => null,
 }));
@@ -149,8 +160,10 @@ describe("RevisionItem", () => {
     // Click to expand
     fireEvent.click(screen.getByText("Ligar para João"));
 
-    // Quick actions should be visible (WhatsApp appears in both meta info and action button)
-    expect(screen.getAllByText("WhatsApp").length).toBeGreaterThanOrEqual(2);
+    // Quick actions should be visible. O meta agora mostra o nome do funil da
+    // ORG (SCRUM-641); "WhatsApp" sobra só no botão de ação (canal).
+    expect(screen.getByText("Oportunidades")).toBeTruthy();
+    expect(screen.getAllByText("WhatsApp").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Reagendar")).toBeTruthy();
     expect(screen.getByText("Novo FU")).toBeTruthy();
     expect(screen.getByText("Ver Lead")).toBeTruthy();
@@ -284,12 +297,12 @@ describe("RevisionItem", () => {
 
     fireEvent.click(screen.getByText("Ligar para João"));
 
-    // "WhatsApp" still shows in meta info (source pipe label), but the action button should not be present.
-    // The action button uses MessageCircle icon with text "WhatsApp" inside a <button>.
-    const allWhatsApp = screen.getAllByText("WhatsApp");
-    const whatsAppButtons = allWhatsApp.filter(
-      (el) => el.closest("button") !== null,
-    );
+    // O meta mostra o nome do funil da ORG (SCRUM-641), não mais "WhatsApp";
+    // sem telefone, o botão de ação (canal WhatsApp) também não existe.
+    expect(screen.getByText("Oportunidades")).toBeTruthy();
+    const whatsAppButtons = screen
+      .queryAllByText("WhatsApp")
+      .filter((el) => el.closest("button") !== null);
     expect(whatsAppButtons).toHaveLength(0);
   });
 });

@@ -9,12 +9,7 @@ export type WebhookUpdate = TablesUpdate<"webhooks">;
 export const WEBHOOK_EVENTS = [
   { value: "lead.created", label: "Lead criado" },
   { value: "lead.updated", label: "Lead atualizado" },
-  { value: "pipe_whatsapp.created", label: "Pipe WhatsApp – criado" },
-  { value: "pipe_whatsapp.updated", label: "Pipe WhatsApp – atualizado" },
-  { value: "pipe_confirmacao.created", label: "Pipe Confirmação – criado" },
-  { value: "pipe_confirmacao.updated", label: "Pipe Confirmação – atualizado" },
-  { value: "pipe_propostas.created", label: "Pipe Propostas – criado" },
-  { value: "pipe_propostas.updated", label: "Pipe Propostas – atualizado" },
+  { value: "negocio.stage_changed", label: "Negócio mudou de etapa (qualquer funil)" },
   { value: "follow_up.created", label: "Follow-up criado" },
   { value: "follow_up.updated", label: "Follow-up atualizado" },
   { value: "follow_up.completed", label: "Follow-up concluído" },

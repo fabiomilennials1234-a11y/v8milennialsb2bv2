@@ -1,3 +1,4 @@
+import { unconfirmedFailures } from "../../../hooks/chat/shared/optimistic-messages";
 /**
  * MessageList — timeline de mensagens: grouping, unread divider, date separators,
  * motion de entrada, transfer events, ScrollToBottomFab.
@@ -126,16 +127,16 @@ function buildTimeline(
     // `started_at` vira `timestamp` para entrar na MESMA ordenação das
     // mensagens — a linha do tempo tem um relógio só.
     ...calls.map((c) => ({ _type: "call" as const, timestamp: c.started_at, call: c })),
-    ...failedMessages.map((f) => ({
+    ...unconfirmedFailures(failedMessages, messages).map((f) => ({
       ...f,
       _type: "message" as const,
       message_type: "text",
       content: f.message,
       media_url: f.mediaUrl ?? null,
-      id: f.tempId ?? `failed-${Date.now()}`,
+      id: f.id,
       organization_id: "",
       instance_id: null,
-      message_id: f.tempId ?? "",
+      message_id: f.id,
       remote_jid: "",
       phone_number: "",
       direction: "outgoing" as const,

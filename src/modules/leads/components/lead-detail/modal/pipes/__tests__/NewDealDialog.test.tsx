@@ -11,7 +11,7 @@ vi.mock("@/modules/identity", () => ({
 }));
 
 const QUALIFICACAO: NewDealOption = {
-  key: "sys:qualificacao",
+  key: "sys:whatsapp",
   label: "Qualificação",
   color: "#6366f1",
   stages: [
@@ -58,7 +58,7 @@ describe("NewDealDialog — porta única de criação", () => {
 
   it("pré-seleciona o primeiro funil disponível e a primeira etapa dele", () => {
     open([QUALIFICACAO, PROPOSTAS]);
-    expect(screen.getByTestId("new-deal-option-sys:qualificacao")).toHaveAttribute(
+    expect(screen.getByTestId("new-deal-option-sys:whatsapp")).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -105,7 +105,7 @@ describe("NewDealDialog — submit", () => {
 
     await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
     const [option, values] = onCreate.mock.calls[0];
-    expect(option.key).toBe("sys:qualificacao");
+    expect(option.key).toBe("sys:whatsapp");
     expect(values).toMatchObject({
       stageId: "novo",
       ownerId: "tm-1",

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, User, Building2, Star, Zap, Globe, Calendar } from "lucide-react";
+import { Search, User, Building2, Zap, Globe, Calendar } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Dialog,
@@ -257,19 +257,6 @@ export function CreateOpportunityModal({
                                 )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-0.5">
-                              {[...Array(5)].map((_, i) => (
-                                <Star
-                                  key={i}
-                                  className={cn(
-                                    "w-3 h-3",
-                                    i < (lead.rating || 0)
-                                      ? "text-chart-5 fill-chart-5"
-                                      : "text-muted-foreground/30"
-                                  )}
-                                />
-                              ))}
-                            </div>
                           </div>
                         </motion.button>
                       );
@@ -395,7 +382,7 @@ export function CreateOpportunityModal({
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
                     O lead entrará na etapa "Novo" e poderá ser movido através do funil.
-                    Quando chegar em "Agendado", será automaticamente criado no Pipe de Confirmação.
+                    Etapas de sucesso com transição configurada movem o negócio ao funil de destino automaticamente.
                   </p>
                 </motion.div>
               </div>

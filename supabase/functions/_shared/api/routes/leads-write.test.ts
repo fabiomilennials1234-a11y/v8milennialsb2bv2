@@ -123,6 +123,43 @@ Deno.test("moveLeadStage — calls injected mover with mapped params, 200 on suc
   assertEquals(moverArg!.params.target_stage, "compareceu");
 });
 
+Deno.test("SCRUM-641: moveLeadStage sem `pipe` cai no funil PADRÃO da org, não mais no literal whatsapp", async () => {
+  const c = ctx("POST", "https://x/api/v1/leads/l-1/stage", { stage: "novo" }, { data: true });
+  // O default lê organizations.default_pipeline_id — dá um .from ao fake.
+  (c.supabase as Record<string, unknown>).from = (_t: string) => {
+    const b: Record<string, unknown> = {};
+    b.select = () => b;
+    b.eq = () => b;
+    b.maybeSingle = () => Promise.resolve({ data: { default_pipeline_id: "11111111-1111-4111-8111-111111111111" }, error: null });
+    return b;
+  };
+  let moverArg: ActionInput | null = null;
+  const res = await moveLeadStage(c, (input) => {
+    moverArg = input;
+    return Promise.resolve({ success: true });
+  });
+  assertEquals(res.status, 200);
+  assertEquals(moverArg!.params.target_pipe, "11111111-1111-4111-8111-111111111111");
+});
+
+Deno.test("SCRUM-641: moveLeadStage sem `pipe` e org SEM funil padrão preserva o literal legado (erra tipado adiante)", async () => {
+  const c = ctx("POST", "https://x/api/v1/leads/l-1/stage", { stage: "novo" }, { data: true });
+  (c.supabase as Record<string, unknown>).from = (_t: string) => {
+    const b: Record<string, unknown> = {};
+    b.select = () => b;
+    b.eq = () => b;
+    b.maybeSingle = () => Promise.resolve({ data: { default_pipeline_id: null }, error: null });
+    return b;
+  };
+  let moverArg: ActionInput | null = null;
+  const res = await moveLeadStage(c, (input) => {
+    moverArg = input;
+    return Promise.resolve({ success: true });
+  });
+  assertEquals(res.status, 200);
+  assertEquals(moverArg!.params.target_pipe, "whatsapp");
+});
+
 Deno.test("moveLeadStage — 422 when mover fails (invalid stage)", async () => {
   const c = ctx("POST", "https://x/api/v1/leads/l-1/stage", { pipe: "whatsapp", stage: "bogus" }, { data: true });
   const res = await moveLeadStage(c, () => Promise.resolve({ success: false, error: "Etapa inválida" }));
@@ -187,4 +224,73 @@ Deno.test("putCustomFields — 422 when rpc reports unknown_field", async () => 
 Deno.test("putCustomFields — 400 when body is not an object", async () => {
   const c = ctx("PUT", "https://x/api/v1/leads/l-1/custom-fields", [1, 2], { data: { ok: true } });
   assertEquals((await putCustomFields(c)).status, 400);
+});
+
+// ── create_missing ──────────────────────────────────────────────────────────
+//
+// O caminho do integrador é o inverso do nosso: ele tem o valor na mão e
+// descobre no envio que o campo não estava cadastrado. Com `create_missing=true`
+// o campo nasce como `text` em vez de 422 — mas continua opt-in, para que
+// estrutura não apareça por integração em quem não pediu.
+
+Deno.test("putCustomFields — create_missing=true usa a RPC que cria o campo ausente", async () => {
+  const calls: RpcCall[] = [];
+  const c = ctx("PUT", "https://x/api/v1/leads/l-1/custom-fields?create_missing=true",
+    { novo_campo: "x" }, { data: { ok: true, created_fields: ["novo_campo"] } }, calls);
+  const res = await putCustomFields(c);
+  assertEquals(calls[0].name, "api_set_custom_fields_creating");
+  assertEquals(res.status, 200);
+});
+
+Deno.test("putCustomFields — sem o parâmetro, campo desconhecido continua sendo 422", async () => {
+  const calls: RpcCall[] = [];
+  const c = ctx("PUT", "https://x/api/v1/leads/l-1/custom-fields", { ghost: "x" },
+    { data: { ok: false, code: "unknown_field", unknown_fields: ["ghost"] } }, calls);
+  const res = await putCustomFields(c);
+  assertEquals(calls[0].name, "api_set_custom_fields");
+  assertEquals(res.status, 422);
+});
+
+Deno.test("putCustomFields — só o literal 'true' liga a criação", async () => {
+  for (const v of ["1", "yes", "false"]) {
+    const calls: RpcCall[] = [];
+    const c = ctx("PUT", `https://x/api/v1/leads/l-1/custom-fields?create_missing=${v}`,
+      { x: "1" }, { data: { ok: true } }, calls);
+    await putCustomFields(c);
+    assertEquals(calls[0].name, "api_set_custom_fields", `valor ${v} não deveria criar`);
+  }
+});
+
+// ── colunas que o lead-webhook já gravava ───────────────────────────────────
+//
+// A migração dos cenários do Make depende disto: UTM, segmento e faturamento são
+// COLUNAS de `leads`, lidas pelas telas e por funções de métrica. Mandá-los como
+// campo personalizado gravaria noutro lugar e deixaria a tela vazia para lead
+// novo — regressão silenciosa, que é a pior.
+
+Deno.test("patchLead — grava utm_*, segment e faturamento nas colunas", async () => {
+  const calls: RpcCall[] = [];
+  const c = ctx("PATCH", "https://x/api/v1/leads/l-1", {
+    utm_source: "facebook", utm_medium: "cpc", utm_campaign: "b2b-agosto",
+    utm_content: "criativo-3", utm_term: "distribuidora",
+    segment: "alimentos", faturamento: "R$100 mil a R$150 mil",
+  }, { data: { ok: true } }, calls);
+  const res = await patchLead(c);
+  assertEquals(res.status, 200);
+  const patch = calls[0].args.p_patch as Record<string, unknown>;
+  assertEquals(patch.utm_source, "facebook");
+  assertEquals(patch.utm_campaign, "b2b-agosto");
+  assertEquals(patch.utm_term, "distribuidora");
+  assertEquals(patch.segment, "alimentos");
+  assertEquals(patch.faturamento, "R$100 mil a R$150 mil");
+});
+
+Deno.test("patchLead — campo não enviado continua fora do patch", async () => {
+  const calls: RpcCall[] = [];
+  const c = ctx("PATCH", "https://x/api/v1/leads/l-1", { utm_source: "google" },
+    { data: { ok: true } }, calls);
+  await patchLead(c);
+  const patch = calls[0].args.p_patch as Record<string, unknown>;
+  assertEquals("utm_campaign" in patch, false);
+  assertEquals("segment" in patch, false);
 });

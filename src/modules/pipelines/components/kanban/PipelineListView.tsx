@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
-import { Star, ArrowRightLeft, Inbox } from "lucide-react";
+import { ArrowRightLeft, Inbox } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 
@@ -20,7 +20,6 @@ interface Lead {
   name: string;
   company?: string;
   phone?: string;
-  rating?: number;
   stage_key: string;
   created_at: string;
   updated_at?: string;
@@ -54,28 +53,6 @@ function relativeTime(dateStr: string): string {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function RatingStars({ rating }: { rating: number }) {
-  return (
-    <div className="flex gap-0.5">
-      {Array.from({ length: 5 }).map((_, i) =>
-        i < rating ? (
-          <Star
-            key={i}
-            data-testid="star-filled"
-            className="w-3.5 h-3.5 fill-[hsl(47_100%_50%)] text-[hsl(47_100%_50%)]"
-          />
-        ) : (
-          <Star
-            key={i}
-            data-testid="star-empty"
-            className="w-3.5 h-3.5 text-muted-foreground/30"
-          />
-        )
-      )}
-    </div>
-  );
-}
 
 function MoveMenu({
   leadId,
@@ -177,12 +154,9 @@ function LeadCardItem({
           <p className="text-xs text-muted-foreground truncate">{lead.company}</p>
         )}
 
-        <div className="flex items-center gap-3">
-          {lead.phone && (
-            <span className="text-xs text-muted-foreground">{lead.phone}</span>
-          )}
-          {(lead.rating ?? 0) > 0 && <RatingStars rating={lead.rating!} />}
-        </div>
+        {lead.phone && (
+          <p className="text-xs text-muted-foreground truncate">{lead.phone}</p>
+        )}
       </div>
 
       {/* Move action — simple menu (mobile-friendly, no portal) */}

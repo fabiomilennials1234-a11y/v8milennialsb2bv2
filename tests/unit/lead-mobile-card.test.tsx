@@ -30,7 +30,6 @@ const LEAD: LeadMobileCardLead = {
   company: "Distética Comércio Ltda",
   phone: "(11) 98472-1130",
   email: "compras@distetica.com.br",
-  rating: 4,
   origin: "meta_ads",
 };
 
@@ -139,15 +138,6 @@ describe("LeadMobileCard — o resto do cartão", () => {
 
     expect(screen.getByText("Luiza")).toBeInTheDocument();
     expect(screen.getByText("Marcos")).toBeInTheDocument();
-  });
-
-  it("rating nulo vira zero estrela em vez de quebrar", () => {
-    montar({ lead: { ...LEAD, rating: null } });
-
-    // 10 botões de estrela, nenhum preenchido.
-    const estrelas = screen.getAllByRole("button");
-    expect(estrelas).toHaveLength(10);
-    expect(document.querySelectorAll(".fill-chart-5")).toHaveLength(0);
   });
 
   it("pinta a borda quando selecionado", () => {

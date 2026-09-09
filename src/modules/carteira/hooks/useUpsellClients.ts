@@ -27,7 +27,14 @@ export function useUpsellClients() {
       if (!organizationId) return [];
       const { data, error } = await supabase
         .from("upsell_clients")
-        .select("*, lead:leads(*), closer:team_members(*)")
+        // 🔴 A FK é NOMEADA de propósito: `upsell_clients` tem QUATRO chaves
+        // estrangeiras para `team_members` — `closer_id`, `responsible_id`,
+        // `sale_responsible_id`, `pre_sale_responsible_id` (conferido em prod,
+        // 2026-08-31). `closer:team_members(*)` não diz qual seguir.
+        // Os tipos antigos engoliam; os gerados de prod devolvem
+        // `SelectQueryError` no embed ambíguo — era o TS2352 daqui. O apelido
+        // `closer` era intenção; agora é instrução.
+        .select("*, lead:leads(*), closer:team_members!upsell_clients_closer_id_fkey(*)")
         .eq("organization_id", organizationId)
         .order("name");
 
@@ -50,7 +57,14 @@ export function useUpsellClient(id: string | undefined) {
       if (!organizationId || !id) return null;
       const { data, error } = await supabase
         .from("upsell_clients")
-        .select("*, lead:leads(*), closer:team_members(*)")
+        // 🔴 A FK é NOMEADA de propósito: `upsell_clients` tem QUATRO chaves
+        // estrangeiras para `team_members` — `closer_id`, `responsible_id`,
+        // `sale_responsible_id`, `pre_sale_responsible_id` (conferido em prod,
+        // 2026-08-31). `closer:team_members(*)` não diz qual seguir.
+        // Os tipos antigos engoliam; os gerados de prod devolvem
+        // `SelectQueryError` no embed ambíguo — era o TS2352 daqui. O apelido
+        // `closer` era intenção; agora é instrução.
+        .select("*, lead:leads(*), closer:team_members!upsell_clients_closer_id_fkey(*)")
         .eq("id", id)
         .eq("organization_id", organizationId)
         .maybeSingle();

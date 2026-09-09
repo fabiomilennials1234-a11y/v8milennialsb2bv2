@@ -18,22 +18,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  PipelineStage,
-  PipelineType,
+  StageFamily,
   useCreatePipelineStage,
   useUpdatePipelineStage,
   useDeletePipelineStage,
+  usePipelineStageDeleteImpact,
   useReorderPipelineStages,
   usePipelineStageLeadCounts,
-  getPipelineTypeName,
+  getStageFamilyName,
 } from "@/modules/pipelines/hooks/model/usePipelineStages";
-import { useCustomPipelines } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
+import {
+  useCustomPipelines,
+  useCreateCustomPipelineStage,
+  useUpdateCustomPipelineStage,
+  useReorderCustomPipelineStages,
+} from "@/modules/pipelines/hooks/custom/useCustomPipelines";
+import { usePipeDispatchRules } from "@/modules/pipelines/hooks/config/usePipeDispatchRules";
+import { usePipelineDisplayConfig } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import {
   TransitionSelector,
   type TransitionTarget,
 } from "@/modules/pipelines/components/shared/TransitionSelector";
 import { classifyStageRole } from "@/modules/pipelines/lib/stage-role-classifier";
-import { STAGE_ROLES, STAGE_ROLE_META } from "@/modules/pipelines/lib/stage-role";
+import { STAGE_ROLES_ATRIBUIVEIS, STAGE_ROLE_META, papelAtribuivel } from "@/modules/pipelines/lib/stage-role";
 import type { StageRole } from "@/contracts/pipe";
 import {
   Plus,
@@ -45,10 +53,13 @@ import {
   Loader2,
   AlertTriangle,
   Sparkles,
+  Send,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
+import { mensagemDeConflitoDeEtapa } from "@/modules/pipelines/lib/proxima-posicao-de-etapa";
+import { StageDeleteAutomationImpact } from "./StageDeleteAutomationImpact";
 import { ClipboardList } from "lucide-react";
 import {
   DndContext,
@@ -78,11 +89,38 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
+/**
+ * Etapa como o EDITOR ÚNICO a enxerga (SCRUM-636, D3).
+ *
+ * Shape estrutural mínimo que `PipelineStage` (sistema/carteira) e
+ * `CustomPipelineStage` (funil custom) satisfazem. Os campos de papel
+ * semântico são opcionais porque o contrato custom ainda não os declara —
+ * quando ausentes (`undefined`), o editor NÃO os escreve de volta, para nunca
+ * rebaixar um won/lost governado (ADR-0017 §1) por não ter lido o valor.
+ */
+export interface EditorStage {
+  id: string;
+  stage_key: string;
+  name: string;
+  color: string | null;
+  is_final_positive: boolean;
+  is_final_negative: boolean;
+  target_pipeline_id?: string | null;
+  target_stage_id?: string | null;
+  target_pipe_type?: string | null;
+  target_stage_key?: string | null;
+  checklist_template_id?: string | null;
+  stage_role?: StageRole | null;
+  suggested_stage_role?: StageRole | null;
+}
+
 interface ManagePipelineStagesModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  pipelineType: PipelineType;
-  stages: PipelineStage[];
+  pipelineType: StageFamily;
+  stages: EditorStage[];
+  /** Id do funil em `pipelines` — afina contagens/guardas por id (626). */
+  pipelineId?: string | null;
 }
 
 // Cores predefinidas para etapas
@@ -101,9 +139,8 @@ const STAGE_COLORS = [
 /**
  * Dropdown do papel semântico da etapa (stage_role, ADR-0017 §1).
  *
- * won/lost selecionáveis manualmente — escolha explícita do admin conta como
- * confirmação humana. A sugestão do classifier (#991) só PRÉ-PREENCHE; quem
- * decide é sempre quem salva.
+ * Ganho/perda são desfechos do negócio, não opções de etapa.
+ * Valores históricos permanecem legíveis sem poder ser atribuídos de novo.
  */
 function StageRoleSelect({
   value,
@@ -134,7 +171,12 @@ function StageRoleSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {STAGE_ROLES.map((role) => (
+          {!STAGE_ROLES_ATRIBUIVEIS.includes(value) && (
+            <SelectItem value={value} disabled>
+              {STAGE_ROLE_META[value].label} — legado; definido pelo negócio
+            </SelectItem>
+          )}
+          {STAGE_ROLES_ATRIBUIVEIS.map((role) => (
             <SelectItem key={role} value={role}>
               <div className="flex items-center gap-2.5 py-0.5">
                 <span
@@ -171,6 +213,7 @@ function generateStageKey(name: string): string {
 function SortableStageItem({
   stage,
   pipelineType,
+  currentPipelineId,
   onEdit,
   onDelete,
   isEditing,
@@ -195,8 +238,9 @@ function SortableStageItem({
   templates,
   onChecklistTemplateChange,
 }: {
-  stage: PipelineStage;
-  pipelineType: PipelineType;
+  stage: EditorStage;
+  pipelineType?: StageFamily;
+  currentPipelineId?: string | null;
   onEdit: () => void;
   onDelete: () => void;
   isEditing: boolean;
@@ -231,6 +275,13 @@ function SortableStageItem({
   } = useSortable({ id: stage.id });
 
   const { data: customPipelines } = useCustomPipelines();
+  // Nome do funil de sistema alvo como a ORG o vê (SCRUM-641): display_config
+  // manda; linha ausente = a org não tem mais o funil → fallback honesto.
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const nomeDoPipeAlvo = (pipeType: string): string => {
+    const c = displayConfigs?.find((x) => x.pipe_type === pipeType);
+    return c ? c.display_name || NOME_DE_FABRICA[pipeType] || pipeType : "Funil removido";
+  };
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -341,6 +392,7 @@ function SortableStageItem({
                 targetPipeType={editTargetPipeType}
                 targetStageKey={editTargetStageKey}
                 currentPipeType={pipelineType}
+                currentPipelineId={!pipelineType ? currentPipelineId ?? undefined : undefined}
                 onChangeTarget={onEditTargetChange}
               />
             </div>
@@ -384,7 +436,7 @@ function SortableStageItem({
               )}
               {stage.is_final_positive && stage.target_pipe_type && (
                 <span className="text-xs text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                  → {getPipelineTypeName(stage.target_pipe_type as PipelineType)}
+                  → {nomeDoPipeAlvo(stage.target_pipe_type)}
                 </span>
               )}
               {stage.is_final_positive && stage.target_pipeline_id && (
@@ -440,21 +492,41 @@ function SortableStageItem({
   );
 }
 
+/**
+ * Props do EDITOR ÚNICO de etapas (SCRUM-636, D3).
+ *
+ * Uma superfície, qualquer funil:
+ *   · sistema/carteira → `pipelineType` (família); `pipelineId` opcional afina
+ *     contagens por id (626) em vez da resolução por (org, slug).
+ *   · custom           → `pipelineId` OBRIGATÓRIO + `pipelineSlug` (eco em
+ *     `pipe_dispatch_rules.pipe_type`); `pipelineType` omitido.
+ */
 interface ManagePipelineStagesContentProps {
-  pipelineType: PipelineType;
-  stages: PipelineStage[];
+  pipelineType?: StageFamily;
+  pipelineId?: string | null;
+  pipelineSlug?: string;
+  stages: EditorStage[];
 }
 
 export function ManagePipelineStagesContent({
   pipelineType,
+  pipelineId,
+  pipelineSlug,
   stages,
 }: ManagePipelineStagesContentProps) {
+  /** Funil custom = sem família. Decide o TRILHO de escrita, nunca a UI. */
+  const isCustom = !pipelineType;
+
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editColor, setEditColor] = useState("");
   const [editIsFinalPositive, setEditIsFinalPositive] = useState(false);
   const [editIsFinalNegative, setEditIsFinalNegative] = useState(false);
   const [editStageRole, setEditStageRole] = useState<StageRole>("open");
+  // Se a etapa veio SEM stage_role no shape (host custom antigo) e o admin não
+  // tocou no dropdown, o papel NÃO entra no payload — nunca rebaixar won/lost
+  // governado por não ter lido o valor (ADR-0017 §1).
+  const [editStageRoleKnown, setEditStageRoleKnown] = useState(false);
   const [editTargetPipelineId, setEditTargetPipelineId] = useState<string | null>(null);
   const [editTargetStageId, setEditTargetStageId] = useState<string | null>(null);
   const [editTargetPipeType, setEditTargetPipeType] = useState<string | null>(null);
@@ -469,15 +541,38 @@ export function ManagePipelineStagesContent({
   const [newStageRoleManual, setNewStageRoleManual] = useState<StageRole>("open");
   const [showNewStageForm, setShowNewStageForm] = useState(false);
   const [deleteStageId, setDeleteStageId] = useState<string | null>(null);
-  const [migrateToStageKey, setMigrateToStageKey] = useState<string>("");
-  const [localStages, setLocalStages] = useState<PipelineStage[]>(stages);
+  const [migrateToStageId, setMigrateToStageId] = useState<string>("");
+  const [localStages, setLocalStages] = useState<EditorStage[]>(stages);
 
+  // Trilho SISTEMA (pipeline_stages por família) + trilho CUSTOM (view de
+  // compat por pipeline_id). Ambos montados sempre — hooks não podem ser
+  // condicionais — e o dispatch acontece nos handlers.
   const createStage = useCreatePipelineStage();
   const updateStage = useUpdatePipelineStage();
-  const deleteStage = useDeletePipelineStage();
+  const createCustomStage = useCreateCustomPipelineStage();
+  const updateCustomStage = useUpdateCustomPipelineStage();
+  const deleteStage = useDeletePipelineStage(); // único: migra cards por pipeline_id (636)
+  const {
+    data: stageDeleteImpact,
+    isLoading: isStageDeleteImpactLoading,
+    isError: isStageDeleteImpactError,
+  } = usePipelineStageDeleteImpact(
+    deleteStageId,
+    !!deleteStageId,
+  );
   const reorderStages = useReorderPipelineStages();
+  const reorderCustomStages = useReorderCustomPipelineStages();
   const { data: templates = [] } = useChecklistTemplates();
-  const { data: stageLeadCounts = {} } = usePipelineStageLeadCounts(pipelineType);
+  const { data: stageLeadCounts = {} } = usePipelineStageLeadCounts(
+    pipelineType ?? null,
+    pipelineId,
+  );
+  // Guarda F0 promovida a UX (636): regra de disparo ativa apontando para a
+  // etapa BLOQUEIA a remoção — e o diálogo mostra o que aponta antes de tentar.
+  const { data: dispatchRules = [] } = usePipeDispatchRules(
+    pipelineType ?? pipelineSlug ?? "",
+    isCustom ? pipelineId : undefined,
+  );
 
   // Sugestão do classifier pro nome digitado (flags entram como sinal fraco).
   const newStageRoleSuggestion = classifyStageRole({
@@ -487,26 +582,43 @@ export function ManagePipelineStagesContent({
   });
   const newStageRole: StageRole = newStageRoleTouched
     ? newStageRoleManual
-    : newStageRoleSuggestion?.role ?? "open";
+    : papelAtribuivel(newStageRoleSuggestion?.role);
 
-  // Etapa marcada para remoção + quantos leads ela ainda tem.
+  // Etapa marcada para remoção + quantos cards ela ainda tem.
   const stageToDelete = localStages.find((s) => s.id === deleteStageId) ?? null;
-  const leadsInStageToDelete = stageToDelete
-    ? stageLeadCounts[stageToDelete.stage_key] ?? 0
-    : 0;
+  const leadsInStageToDelete = stageDeleteImpact?.cards ?? (
+    stageToDelete ? stageLeadCounts[stageToDelete.stage_key] ?? 0 : 0
+  );
+  // Regras de disparo ativas que apontam para a etapa (trigger por movimento).
+  const blockingRules = deleteStageId
+    ? dispatchRules.filter((r) => r.is_active && r.pipeline_stage_id === deleteStageId)
+    : [];
+  const blockingRuleCount = Math.max(
+    blockingRules.length,
+    stageDeleteImpact?.regras_disparo ?? 0,
+  );
+  const deleteBlocked = blockingRuleCount > 0;
   // Destinos possíveis: outras etapas (exclui a que está sendo removida).
   const migrationTargets = localStages.filter((s) => s.id !== deleteStageId);
 
   const handleChecklistTemplateChange = async (
-    stage: PipelineStage,
+    stage: EditorStage,
     templateId: string | null,
   ) => {
     try {
-      await updateStage.mutateAsync({
-        id: stage.id,
-        pipeline_type: pipelineType,
-        checklist_template_id: templateId,
-      });
+      if (isCustom && pipelineId) {
+        await updateCustomStage.mutateAsync({
+          id: stage.id,
+          pipeline_id: pipelineId,
+          checklist_template_id: templateId,
+        });
+      } else if (pipelineType) {
+        await updateStage.mutateAsync({
+          id: stage.id,
+          pipeline_type: pipelineType,
+          checklist_template_id: templateId,
+        });
+      }
       toast.success(
         templateId
           ? "Checklist automático configurado"
@@ -540,12 +652,19 @@ export function ManagePipelineStagesContent({
       const newOrder = arrayMove(localStages, oldIndex, newIndex);
       setLocalStages(newOrder);
 
-      // Atualizar posições no banco
+      // Atualizar posições no banco — mesma RPC nos dois trilhos (616).
       try {
-        await reorderStages.mutateAsync({
-          pipeline_type: pipelineType,
-          stages: newOrder.map((s, i) => ({ id: s.id, position: i })),
-        });
+        if (isCustom && pipelineId) {
+          await reorderCustomStages.mutateAsync({
+            pipeline_id: pipelineId,
+            stages: newOrder.map((s, i) => ({ id: s.id, position: i })),
+          });
+        } else if (pipelineType) {
+          await reorderStages.mutateAsync({
+            pipeline_type: pipelineType,
+            stages: newOrder.map((s, i) => ({ id: s.id, position: i })),
+          });
+        }
         toast.success("Ordem das etapas atualizada");
       } catch (error) {
         console.error("Error reordering stages:", error);
@@ -555,13 +674,14 @@ export function ManagePipelineStagesContent({
     }
   };
 
-  const startEditing = (stage: PipelineStage) => {
+  const startEditing = (stage: EditorStage) => {
     setEditingId(stage.id);
     setEditName(stage.name);
     setEditColor(stage.color || STAGE_COLORS[0]);
     setEditIsFinalPositive(stage.is_final_positive);
     setEditIsFinalNegative(stage.is_final_negative);
     setEditStageRole(stage.stage_role ?? "open");
+    setEditStageRoleKnown(stage.stage_role !== undefined);
     setEditTargetPipelineId(stage.target_pipeline_id || null);
     setEditTargetStageId(stage.target_stage_id || null);
     setEditTargetPipeType(stage.target_pipe_type || null);
@@ -575,6 +695,7 @@ export function ManagePipelineStagesContent({
     setEditIsFinalPositive(false);
     setEditIsFinalNegative(false);
     setEditStageRole("open");
+    setEditStageRoleKnown(false);
     setEditTargetPipelineId(null);
     setEditTargetStageId(null);
     setEditTargetPipeType(null);
@@ -584,25 +705,44 @@ export function ManagePipelineStagesContent({
   const handleSaveEdit = async () => {
     if (!editingId || !editName.trim()) return;
 
+    // Só persiste destino em etapa de sucesso. Destino é custom XOR standard.
+    const targets = {
+      target_pipe_type: editIsFinalPositive && editTargetPipeType ? editTargetPipeType : null,
+      target_stage_key:
+        editIsFinalPositive && editTargetPipeType && editTargetStageKey ? editTargetStageKey : null,
+      target_pipeline_id: editIsFinalPositive && editTargetPipelineId ? editTargetPipelineId : null,
+      target_stage_id:
+        editIsFinalPositive && editTargetPipelineId && editTargetStageId ? editTargetStageId : null,
+    };
+
     try {
-      await updateStage.mutateAsync({
-        id: editingId,
-        pipeline_type: pipelineType,
-        name: editName.trim(),
-        color: editColor,
-        is_final_positive: editIsFinalPositive,
-        is_final_negative: editIsFinalNegative,
-        // Escolha explícita do admin no dropdown = confirmação humana
-        // (won/lost permitido por este caminho — ADR-0017 §1).
-        stage_role: editStageRole,
-        // Só persiste destino em etapa de sucesso. Destino é custom XOR standard.
-        target_pipe_type: editIsFinalPositive && editTargetPipeType ? editTargetPipeType : null,
-        target_stage_key:
-          editIsFinalPositive && editTargetPipeType && editTargetStageKey ? editTargetStageKey : null,
-        target_pipeline_id: editIsFinalPositive && editTargetPipelineId ? editTargetPipelineId : null,
-        target_stage_id:
-          editIsFinalPositive && editTargetPipelineId && editTargetStageId ? editTargetStageId : null,
-      });
+      if (isCustom && pipelineId) {
+        await updateCustomStage.mutateAsync({
+          id: editingId,
+          pipeline_id: pipelineId,
+          name: editName.trim(),
+          color: editColor,
+          is_final_positive: editIsFinalPositive,
+          is_final_negative: editIsFinalNegative,
+          // Papel só entra no payload quando o valor atual era conhecido —
+          // ver comentário de `editStageRoleKnown`.
+          ...(editStageRoleKnown ? { stage_role: editStageRole } : {}),
+          ...targets,
+        });
+      } else if (pipelineType) {
+        await updateStage.mutateAsync({
+          id: editingId,
+          pipeline_type: pipelineType,
+          name: editName.trim(),
+          color: editColor,
+          is_final_positive: editIsFinalPositive,
+          is_final_negative: editIsFinalNegative,
+          // Escolha explícita do admin no dropdown = confirmação humana
+          // (won/lost permitido por este caminho — ADR-0017 §1).
+          stage_role: editStageRole,
+          ...targets,
+        });
+      }
       toast.success("Etapa atualizada");
       cancelEditing();
     } catch (error) {
@@ -615,18 +755,30 @@ export function ManagePipelineStagesContent({
     if (!newStageName.trim()) return;
 
     try {
-      await createStage.mutateAsync({
-        pipeline_type: pipelineType,
-        stage_key: generateStageKey(newStageName),
-        name: newStageName.trim(),
-        color: newStageColor,
-        position: localStages.length,
-        is_final_positive: newStageIsFinalPositive,
-        is_final_negative: newStageIsFinalNegative,
-        // Sugestão pré-preenchida do classifier OU escolha manual — em ambos
-        // os casos o humano vê e salva (confirmação explícita, ADR-0017 §1).
-        stage_role: newStageRole,
-      });
+      if (isCustom && pipelineId) {
+        await createCustomStage.mutateAsync({
+          pipeline_id: pipelineId,
+          name: newStageName.trim(),
+          color: newStageColor,
+          position: localStages.length,
+          is_final_positive: newStageIsFinalPositive,
+          is_final_negative: newStageIsFinalNegative,
+          stage_role: newStageRole,
+        });
+      } else if (pipelineType) {
+        await createStage.mutateAsync({
+          pipeline_type: pipelineType,
+          stage_key: generateStageKey(newStageName),
+          name: newStageName.trim(),
+          color: newStageColor,
+          position: localStages.length,
+          is_final_positive: newStageIsFinalPositive,
+          is_final_negative: newStageIsFinalNegative,
+          // Sugestão pré-preenchida do classifier OU escolha manual — em ambos
+          // os casos o humano vê e salva (confirmação explícita, ADR-0017 §1).
+          stage_role: newStageRole,
+        });
+      }
       toast.success("Etapa criada");
       setNewStageName("");
       setNewStageColor(STAGE_COLORS[0]);
@@ -637,8 +789,21 @@ export function ManagePipelineStagesContent({
       setShowNewStageForm(false);
     } catch (error: any) {
       console.error("Error creating stage:", error);
-      if (error.message?.includes("duplicate")) {
-        toast.error("Já existe uma etapa com esse nome");
+      // 🚨 Este ramo traduzia QUALQUER `duplicate key` para "nome duplicado".
+      // Três uniques convivem em `pipeline_stages` e só duas falam de nome; a
+      // terceira é de `position`. Foi assim que uma colisão de posição — etapa
+      // excluída que continua ocupando o número — virou, para quem usa, "o
+      // sistema não deixa repetir nome de etapa entre funis", uma regra que o
+      // banco nunca teve.
+      //
+      // Os hooks agora classificam pelo NOME DA CONSTRAINT
+      // (`mensagemDeConflitoDeEtapa`) e chegam aqui com a frase certa; o
+      // fallback só cobre o erro que não passou por eles.
+      const mensagem = mensagemDeConflitoDeEtapa(error);
+      if (mensagem) {
+        toast.error(mensagem);
+      } else if (typeof error?.message === "string" && error.message.trim()) {
+        toast.error(error.message);
       } else {
         toast.error("Erro ao criar etapa");
       }
@@ -648,33 +813,40 @@ export function ManagePipelineStagesContent({
   const handleDeleteStage = async () => {
     if (!deleteStageId || !stageToDelete) return;
 
-    // Etapa com leads exige destino de migração (evita leads fantasmas).
-    if (leadsInStageToDelete > 0 && !migrateToStageKey) {
-      toast.error("Escolha uma etapa de destino para os leads antes de remover.");
+    // Regra de disparo ativa apontando = bloqueio (o hook recusa igual; aqui
+    // é para o clique nem sair).
+    if (deleteBlocked) return;
+
+    // Etapa com cards exige destino de migração (evita cards fantasmas).
+    if (leadsInStageToDelete > 0 && !migrateToStageId) {
+      toast.error("Escolha uma etapa de destino para os cards antes de remover.");
       return;
     }
 
     try {
-      await deleteStage.mutateAsync({
+      const result = await deleteStage.mutateAsync({
         id: deleteStageId,
         pipeline_type: pipelineType,
-        stageKey: stageToDelete.stage_key,
-        migrateToStageKey: leadsInStageToDelete > 0 ? migrateToStageKey : undefined,
+        pipelineId: pipelineId ?? undefined,
+        destinationStageId: leadsInStageToDelete > 0 ? migrateToStageId : undefined,
       });
-      toast.success(
-        leadsInStageToDelete > 0
-          ? `Etapa removida. ${leadsInStageToDelete} lead(s) migrado(s).`
-          : "Etapa removida",
-      );
+      const details = [
+        result.cards_migrados > 0 ? `${result.cards_migrados} card(s) migrado(s)` : null,
+        result.automacoes_desativadas > 0
+          ? `${result.automacoes_desativadas} automação(ões) desativada(s)`
+          : null,
+      ].filter(Boolean).join(" · ");
+      toast.success(details ? `Etapa removida. ${details}.` : "Etapa removida");
       setDeleteStageId(null);
-      setMigrateToStageKey("");
+      setMigrateToStageId("");
     } catch (error: any) {
       console.error("Error deleting stage:", error);
       toast.error(error.message || "Erro ao remover etapa");
     }
   };
 
-  const pipelineName = getPipelineTypeName(pipelineType);
+  const isSavingEdit = updateStage.isPending || updateCustomStage.isPending;
+  const isCreating = createStage.isPending || createCustomStage.isPending;
 
   return (
     <>
@@ -695,6 +867,7 @@ export function ManagePipelineStagesContent({
                       key={stage.id}
                       stage={stage}
                       pipelineType={pipelineType}
+                      currentPipelineId={pipelineId}
                       onEdit={() => startEditing(stage)}
                       onDelete={() => setDeleteStageId(stage.id)}
                       isEditing={editingId === stage.id}
@@ -711,7 +884,10 @@ export function ManagePipelineStagesContent({
                       onEditColorChange={setEditColor}
                       onEditIsFinalPositiveChange={setEditIsFinalPositive}
                       onEditIsFinalNegativeChange={setEditIsFinalNegative}
-                      onEditStageRoleChange={setEditStageRole}
+                      onEditStageRoleChange={(role) => {
+                        setEditStageRole(role);
+                        setEditStageRoleKnown(true);
+                      }}
                       onEditTargetChange={(t) => {
                         setEditTargetPipelineId(t.targetPipelineId);
                         setEditTargetStageId(t.targetStageId);
@@ -720,7 +896,7 @@ export function ManagePipelineStagesContent({
                       }}
                       onSaveEdit={handleSaveEdit}
                       onCancelEdit={cancelEditing}
-                      isSaving={updateStage.isPending}
+                      isSaving={isSavingEdit}
                       templates={templates}
                       onChecklistTemplateChange={(templateId) =>
                         handleChecklistTemplateChange(stage, templateId)
@@ -804,10 +980,10 @@ export function ManagePipelineStagesContent({
                 <div className="flex gap-2">
                   <Button
                     onClick={handleCreateStage}
-                    disabled={!newStageName.trim() || createStage.isPending}
+                    disabled={!newStageName.trim() || isCreating}
                     className="flex-1"
                   >
-                    {createStage.isPending ? (
+                    {isCreating ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     ) : (
                       <Check className="w-4 h-4 mr-2" />
@@ -839,13 +1015,16 @@ export function ManagePipelineStagesContent({
             )}
           </div>
 
-      {/* Confirmação de exclusão */}
+      {/* Confirmação de exclusão — o diálogo definitivo (D3):
+          1) regra de disparo apontando  → BLOQUEIO, mostrando o que aponta;
+          2) etapa com N cards          → "mover os N cards para ___" obrigatório;
+          3) etapa vazia                → confirmação simples. */}
       <AlertDialog
         open={!!deleteStageId}
         onOpenChange={(open) => {
           if (!open) {
             setDeleteStageId(null);
-            setMigrateToStageKey("");
+            setMigrateToStageId("");
           }
         }}
       >
@@ -853,7 +1032,7 @@ export function ManagePipelineStagesContent({
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-destructive" />
-              Remover Etapa
+              Remover Etapa{stageToDelete ? ` "${stageToDelete.name}"` : ""}
             </AlertDialogTitle>
             <AlertDialogDescription>
               A etapa será desativada — os dados históricos são preservados e ela
@@ -861,26 +1040,55 @@ export function ManagePipelineStagesContent({
             </AlertDialogDescription>
           </AlertDialogHeader>
 
-          {leadsInStageToDelete > 0 ? (
+          {deleteBlocked ? (
+            <div className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+              <div className="flex items-start gap-2 text-sm">
+                <Send className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <span>
+                  <strong>Não dá para remover agora.</strong>{" "}
+                  {blockingRuleCount === 1
+                    ? "1 regra de disparo automático ativa aponta"
+                    : `${blockingRuleCount} regras de disparo automático ativas apontam`}{" "}
+                  para esta etapa — remover a etapa deixaria{" "}
+                  {blockingRuleCount === 1 ? "o disparo" : "os disparos"} sem alvo.
+                </span>
+              </div>
+              <ul className="ml-6 list-disc space-y-1 text-xs text-muted-foreground">
+                {blockingRules.map((r) => (
+                  <li key={r.id}>
+                    {r.trigger_type === "lead_moved_to_stage"
+                      ? "Sequência disparada ao mover card para esta etapa"
+                      : "Sequência disparada ao adicionar card"}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-muted-foreground">
+                Desative ou reaponte a(s) regra(s) na aba{" "}
+                <strong>Disparos</strong> das configurações do funil e tente de novo.
+              </p>
+            </div>
+          ) : leadsInStageToDelete > 0 ? (
             <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
               <div className="flex items-start gap-2 text-sm">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
                 <span>
                   Esta etapa tem{" "}
                   <strong>
-                    {leadsInStageToDelete} lead{leadsInStageToDelete > 1 ? "s" : ""}
+                    {leadsInStageToDelete} card{leadsInStageToDelete > 1 ? "s" : ""}
                   </strong>
-                  . Escolha para onde migrá-los antes de remover.
+                  . Escolha para onde movê-los antes de remover.
                 </span>
               </div>
-              <Label className="text-xs text-muted-foreground">Migrar leads para:</Label>
-              <Select value={migrateToStageKey} onValueChange={setMigrateToStageKey}>
+              <Label className="text-xs text-muted-foreground">
+                Mover os {leadsInStageToDelete} card{leadsInStageToDelete > 1 ? "s" : ""} para:
+              </Label>
+              <Select value={migrateToStageId} onValueChange={setMigrateToStageId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione a etapa de destino" />
                 </SelectTrigger>
                 <SelectContent>
                   {migrationTargets.map((s) => (
-                    <SelectItem key={s.id} value={s.stage_key}>
+                    <SelectItem key={s.id} value={s.id}>
                       {s.name}
                     </SelectItem>
                   ))}
@@ -889,27 +1097,44 @@ export function ManagePipelineStagesContent({
             </div>
           ) : null}
 
+          {!deleteBlocked && (
+            <StageDeleteAutomationImpact automations={stageDeleteImpact?.automacoes ?? 0} />
+          )}
+
+          {isStageDeleteImpactLoading && (
+            <p className="text-xs text-muted-foreground">Calculando impacto da remoção…</p>
+          )}
+          {isStageDeleteImpactError && (
+            <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Não foi possível calcular o impacto. A remoção foi bloqueada.
+            </p>
+          )}
+
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={(e) => {
-                // Não fechar o dialog quando faltar destino — deixa o usuário escolher.
-                if (leadsInStageToDelete > 0 && !migrateToStageKey) {
-                  e.preventDefault();
+            <AlertDialogCancel>{deleteBlocked ? "Entendi" : "Cancelar"}</AlertDialogCancel>
+            {!deleteBlocked && (
+              <AlertDialogAction
+                onClick={(e) => {
+                  // Não fechar o dialog quando faltar destino — deixa o usuário escolher.
+                  if (leadsInStageToDelete > 0 && !migrateToStageId) {
+                    e.preventDefault();
+                  }
+                  handleDeleteStage();
+                }}
+                disabled={
+                  deleteStage.isPending ||
+                  isStageDeleteImpactLoading ||
+                  isStageDeleteImpactError ||
+                  (leadsInStageToDelete > 0 && !migrateToStageId)
                 }
-                handleDeleteStage();
-              }}
-              disabled={
-                deleteStage.isPending ||
-                (leadsInStageToDelete > 0 && !migrateToStageKey)
-              }
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {deleteStage.isPending ? (
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              ) : null}
-              {leadsInStageToDelete > 0 ? "Migrar e remover" : "Remover"}
-            </AlertDialogAction>
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                {deleteStage.isPending ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : null}
+                {leadsInStageToDelete > 0 ? "Mover e remover" : "Remover"}
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -921,19 +1146,33 @@ export function ManagePipelineStagesModal({
   open,
   onOpenChange,
   pipelineType,
+  pipelineId,
   stages,
 }: ManagePipelineStagesModalProps) {
+  // SCRUM-641: família de sistema é batizada pelo display_config da org;
+  // `getStageFamilyName` fica só para o resíduo Carteira (upsell_*).
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const configDaFamilia = displayConfigs?.find((c) => c.pipe_type === pipelineType);
+  const nomeDaFamilia = configDaFamilia
+    ? configDaFamilia.display_name || NOME_DE_FABRICA[pipelineType] || pipelineType
+    : pipelineType === "upsell_base" || pipelineType === "upsell_gestao"
+      ? getStageFamilyName(pipelineType)
+      : "Funil removido";
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Gerenciar Etapas - {getPipelineTypeName(pipelineType)}</DialogTitle>
+          <DialogTitle>Gerenciar Etapas - {nomeDaFamilia}</DialogTitle>
           <DialogDescription>
             Crie, edite, reordene ou remova etapas do funil. Arraste para reordenar.
           </DialogDescription>
         </DialogHeader>
         <div className="overflow-y-auto max-h-[calc(85vh-10rem)] pr-1">
-          <ManagePipelineStagesContent pipelineType={pipelineType} stages={stages} />
+          <ManagePipelineStagesContent
+            pipelineType={pipelineType}
+            pipelineId={pipelineId}
+            stages={stages}
+          />
         </div>
       </DialogContent>
     </Dialog>

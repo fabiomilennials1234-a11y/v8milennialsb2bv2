@@ -165,6 +165,55 @@ Deno.test("createDeal — funil inexistente vira 422 com código próprio", asyn
   assertEquals((await res.json()).error.code, "invalid_pipeline_or_stage");
 });
 
+// ── Qualquer funil abre Negócio (SCRUM-625) ────────────────────────────────
+//
+// `pipeline` aceita id (uuid) ou slug de qualquer funil; etapa de funil custom
+// aceita stage_key ou uuid. O handler repassa CRU — a tradução vive no banco
+// (porta única `abrir_negocio`), então aqui o contrato é só o repasse e o mapa
+// de erros.
+
+Deno.test("createDeal — funil custom por uuid e etapa por stage_key chegam crus ao banco", async () => {
+  const calls: RpcCall[] = [];
+  await createDeal(ctx(
+    { lead_id: "l-1", pipeline: "3a4a1a6e-9c1e-4f0a-8a2b-111111111111", stage: "onboarding" },
+    OK,
+    calls,
+  ));
+
+  assertEquals(calls[0].args.p_pipe, "3a4a1a6e-9c1e-4f0a-8a2b-111111111111");
+  assertEquals(calls[0].args.p_stage, "onboarding");
+});
+
+Deno.test("createDeal — funil que não existe (mensagem nova do resolvedor) segue 422", async () => {
+  const res = await createDeal(ctx(
+    { lead_id: "l-1", pipeline: "nao-existe", stage: "novo" },
+    { error: { code: "22023", message: 'Funil "nao-existe" não existe nesta organização. Use o id (uuid) ou o slug de um funil da organização.' } },
+  ));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_pipeline_or_stage");
+});
+
+Deno.test("createDeal — funil inativo vira 409 pipeline_inactive, como no move", async () => {
+  const res = await createDeal(ctx(
+    { lead_id: "l-1", pipeline: "pausado", stage: "novo" },
+    { error: { code: "55000", message: 'Funil "pausado" está inativo nesta organização.' } },
+  ));
+
+  assertEquals(res.status, 409);
+  assertEquals((await res.json()).error.code, "pipeline_inactive");
+});
+
+Deno.test("createDeal — etapa que não existe no funil custom vira 422", async () => {
+  const res = await createDeal(ctx(
+    { lead_id: "l-1", pipeline: "pos-venda", stage: "fantasma" },
+    { error: { code: "22023", message: 'Etapa "fantasma" não existe no funil 3a4a1a6e-9c1e-4f0a-8a2b-111111111111.' } },
+  ));
+
+  assertEquals(res.status, 422);
+  assertEquals((await res.json()).error.code, "invalid_pipeline_or_stage");
+});
+
 Deno.test("createDeal — Lead de outra organização vira 404, não 500", async () => {
   const res = await createDeal(ctx(
     { lead_id: "l-de-outra-org", pipeline: "whatsapp", stage: "novo" },

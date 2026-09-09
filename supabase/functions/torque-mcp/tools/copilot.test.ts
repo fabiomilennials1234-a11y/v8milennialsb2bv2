@@ -210,6 +210,123 @@ Deno.test("buildSetSectionsUpdate — faithful recompile keeps enabled tool bloc
   assertStringIncludes(String(update.system_prompt), "## Qualificar Lead");
 });
 
+Deno.test("buildSetSectionsUpdate — tool patch rewrites the tool block and persists", () => {
+  // Regressão Loo/Loofting (2026-08-31): a seção nova proibia descartar lojista por
+  // região, mas o bloco ## Qualificar Lead seguia mandando "fora da região" porque
+  // toolInstructions não tinha porta de escrita fora da UI.
+  const agentRow = {
+    id: "a1",
+    organization_id: "o1",
+    name: "Loo",
+    can_qualify_lead: true,
+    conversation_style: {
+      promptSections: { personality: "Sou a Loo." },
+      toolInstructions: { QUALIFICAR_LEAD: "Desqualifique fora da região." },
+    },
+  };
+  const update = buildSetSectionsUpdate(
+    {},
+    agentRow.conversation_style as Record<string, unknown>,
+    [],
+    agentRow,
+    { QUALIFICAR_LEAD: "Cidade sem representante NÃO desqualifica." },
+  );
+  const sp = String(update.system_prompt);
+  assertStringIncludes(sp, "Cidade sem representante NÃO desqualifica.");
+  assertEquals(sp.includes("Desqualifique fora da região."), false);
+  const tools =
+    (update.conversation_style as { toolInstructions: Record<string, string> }).toolInstructions;
+  assertEquals(tools.QUALIFICAR_LEAD, "Cidade sem representante NÃO desqualifica.");
+});
+
+Deno.test("buildSetSectionsUpdate — tool patch preserves untouched tool keys", () => {
+  const agentRow = {
+    can_qualify_lead: true,
+    can_send_document: true,
+    conversation_style: {
+      promptSections: { personality: "Sou a Loo." },
+      toolInstructions: { QUALIFICAR_LEAD: "regra A", ENVIAR_DOCUMENTO: "regra B" },
+    },
+  };
+  const update = buildSetSectionsUpdate(
+    {},
+    agentRow.conversation_style as Record<string, unknown>,
+    [],
+    agentRow,
+    { QUALIFICAR_LEAD: "regra A2" },
+  );
+  const tools =
+    (update.conversation_style as { toolInstructions: Record<string, string> }).toolInstructions;
+  assertEquals(tools.QUALIFICAR_LEAD, "regra A2");
+  assertEquals(tools.ENVIAR_DOCUMENTO, "regra B");
+  assertStringIncludes(String(update.system_prompt), "regra B");
+});
+
+Deno.test("copilot.set_sections — tool_instructions alone is a valid edit", async () => {
+  const db = makeStub({
+    agent: {
+      id: "a1",
+      organization_id: "o1",
+      name: "Loo",
+      can_qualify_lead: true,
+      conversation_style: { promptSections: { personality: "Sou a Loo." } },
+    },
+  });
+  const res = await copilotSetSectionsTool.handler(
+    { agent_id: "a1", tool_instructions: { QUALIFICAR_LEAD: "nova regra" } },
+    ctxOf(db),
+  );
+  const parsed = JSON.parse(res.content[0].text);
+  assertEquals(parsed.dryRun, true);
+  assertEquals(parsed.plan.changed, []);
+  assertEquals(parsed.plan.tools_changed, ["QUALIFICAR_LEAD"]);
+});
+
+Deno.test("copilot.set_sections — tool_instructions as JSON string is accepted", async () => {
+  // Cliente MCP com schema em cache manda objeto como string; sem isso,
+  // Object.entries itera os índices do texto e tudo vira "chave desconhecida".
+  const db = makeStub({
+    agent: {
+      id: "a1",
+      organization_id: "o1",
+      name: "Loo",
+      can_qualify_lead: true,
+      conversation_style: { promptSections: { personality: "Sou a Loo." } },
+    },
+  });
+  const res = await copilotSetSectionsTool.handler(
+    { agent_id: "a1", tool_instructions: JSON.stringify({ QUALIFICAR_LEAD: "nova regra" }) },
+    ctxOf(db),
+  );
+  const parsed = JSON.parse(res.content[0].text);
+  assertEquals(parsed.plan.tools_changed, ["QUALIFICAR_LEAD"]);
+  assertStringIncludes(String(parsed.plan.update.system_prompt), "nova regra");
+});
+
+Deno.test("copilot.set_sections — tool_instructions string that isn't an object is refused", async () => {
+  const db = makeStub({
+    agent: { id: "a1", organization_id: "o1", name: "Loo", conversation_style: {} },
+  });
+  const res = await copilotSetSectionsTool.handler(
+    { agent_id: "a1", tool_instructions: "QUALIFICAR_LEAD: nova regra" },
+    ctxOf(db),
+  );
+  assertEquals(res.isError, true);
+  assertStringIncludes(res.content[0].text, "must be an object");
+});
+
+Deno.test("copilot.set_sections — unknown tool id is refused, not silently dropped", async () => {
+  const db = makeStub({
+    agent: { id: "a1", organization_id: "o1", name: "Loo", conversation_style: {} },
+  });
+  const res = await copilotSetSectionsTool.handler(
+    { agent_id: "a1", tool_instructions: { QUALIFICAR_LEED: "typo" } },
+    ctxOf(db),
+  );
+  assertEquals(res.isError, true);
+  assertStringIncludes(res.content[0].text, "Unknown tool id");
+});
+
 Deno.test("copilot.set_sections — dry-run returns confirmToken and does NOT write", async () => {
   let writes = 0;
   const db = makeStub({

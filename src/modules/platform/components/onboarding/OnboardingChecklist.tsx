@@ -103,7 +103,7 @@ const STEPS: StepConfig[] = [
     label: "Fechar primeira venda",
     icon: Trophy,
     href: "/funis",
-    hint: "Mova um lead para 'Vendido' no pipe de propostas",
+    hint: "Mova um negócio para 'Vendido' no funil de propostas",
   },
 ];
 
@@ -208,7 +208,7 @@ function DemoDataSection() {
             <AlertDialogHeader>
               <AlertDialogTitle>Remover dados demo?</AlertDialogTitle>
               <AlertDialogDescription>
-                Isso vai deletar os leads e o pipeline de demonstração.
+                Isso vai deletar os leads e o funil de demonstração.
                 Dados reais ficam completamente intactos.
               </AlertDialogDescription>
             </AlertDialogHeader>

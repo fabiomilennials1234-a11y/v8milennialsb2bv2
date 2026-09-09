@@ -20,7 +20,7 @@ import type { PipelineType } from "./usePipelineEntries";
  * The first four mirror exactly the dimensions the board resolves SERVER-SIDE.
  * The tier/origin trio are the Disparo Phase-1 audience conditions, shared with
  * the custom-funnel and carteira resolvers. The board's other panel filters
- * (`calor`, `priority`, `urgency`, `product-type`, `status-multi`, `scheduled`,
+ * (`urgency`, `product-type`, `status-multi`, `scheduled`,
  * date-range) are applied client-side on the loaded kanban page only
  * (PipeWhatsapp `filterItemsLocal`) and are NOT part of the board's full result
  * set, so they remain absent here. See the RPC migrations (20261120000000,

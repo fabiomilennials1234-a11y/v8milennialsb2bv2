@@ -81,6 +81,9 @@ export function createMockSupabase() {
     let orderField: string | null = null;
     let orderAsc = true;
     let limitCount: number | null = null;
+    /** `.range(from, to)` — inclusivo nas duas pontas, como o PostgREST. */
+    let rangeFrom: number | null = null;
+    let rangeTo: number | null = null;
     let selectOpts: { count?: string; head?: boolean } | null = null;
     let insertError: { code: string; message: string } | null = null;
     let isUpdate = false;
@@ -91,8 +94,50 @@ export function createMockSupabase() {
     const pendingSelectError = () =>
       !isWrite && !isUpdate && selectErrors[tableName] ? selectErrors[tableName] : null;
 
+    /**
+     * Resolve o campo de um filtro, inclusive quando ele aponta para uma
+     * TABELA EMBUTIDA (`pipeline_entries.pipeline_id`) — a forma que o
+     * PostgREST usa para recortar um embed com `!inner`.
+     *
+     * Sem isto, `.eq("pipeline_entries.pipeline_id", x)` procurava uma coluna
+     * chamada literalmente `"pipeline_entries.pipeline_id"`, não achava, e o
+     * dublê devolvia lista vazia. Um teste escrito contra esse comportamento
+     * ficaria verde por engano: passaria tanto com o recorte por funil quanto
+     * sem ele.
+     *
+     * Quando o embed é um ARRAY (o caso do `!inner`), devolve a lista de
+     * valores — e o `eq` casa se QUALQUER elemento bater, que é a semântica do
+     * inner join.
+     */
+    const resolveField = (row: Record<string, unknown>, field: string): unknown => {
+      if (!field.includes('.')) return row[field];
+      const [head, ...rest] = field.split('.');
+      const tail = rest.join('.');
+      const embedded = row[head];
+      if (Array.isArray(embedded)) {
+        return embedded.map((item) =>
+          item && typeof item === 'object'
+            ? (item as Record<string, unknown>)[tail]
+            : undefined,
+        );
+      }
+      if (embedded && typeof embedded === 'object') {
+        return (embedded as Record<string, unknown>)[tail];
+      }
+      return undefined;
+    };
+
     const applyOp = (row: Record<string, unknown>, f: { field: string; op: string; value: unknown }): boolean => {
-      const val = row[f.field];
+      const val = resolveField(row, f.field);
+      // Embed em array: casa se QUALQUER linha embutida satisfizer o filtro —
+      // é a semântica do inner join do PostgREST.
+      if (f.field.includes('.') && Array.isArray(val)) {
+        return val.some((v) => compareOp(v, f));
+      }
+      return compareOp(val, f);
+    };
+
+    const compareOp = (val: unknown, f: { field: string; op: string; value: unknown }): boolean => {
       switch (f.op) {
         case 'eq': return val === f.value;
         case 'neq': return val !== f.value;
@@ -103,8 +148,18 @@ export function createMockSupabase() {
         // Postgres `IS NULL` matches absent columns; a fixture that omits the
         // field (undefined) must behave like a real NULL column.
         case 'is': return f.value === null ? (val === null || val === undefined) : val === f.value;
-        case 'ilike': return typeof val === 'string' && typeof f.value === 'string' &&
-          val.toLowerCase() === f.value.toLowerCase();
+        // `ilike` honra os curingas `%` e `_` do Postgres. Antes comparava por
+        // IGUALDADE exata, então `name.ilike.%maria%` só casava com um lead
+        // chamado literalmente "%maria%" — e todo teste de BUSCA escrito com
+        // este dublê passava por acidente (nenhum resultado, nenhuma asserção
+        // sobre o que deveria ter voltado) ou era escrito ao contrário para
+        // acomodar o defeito.
+        case 'ilike': {
+          if (typeof val !== 'string' || typeof f.value !== 'string') return false;
+          const escapado = f.value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const padrao = escapado.replace(/%/g, '.*').replace(/_/g, '.');
+          return new RegExp(`^${padrao}$`, 'i').test(val);
+        }
         case 'contains': return Array.isArray(val) && Array.isArray(f.value) &&
           f.value.every((v: unknown) => val.includes(v));
         case 'in': return Array.isArray(f.value) && (f.value as unknown[]).includes(val);
@@ -169,6 +224,12 @@ export function createMockSupabase() {
       if (limitCount !== null) {
         result = result.slice(0, limitCount);
       }
+      // `.range(from, to)` é INCLUSIVO nos dois extremos no PostgREST — daí o
+      // `to + 1`. Errar isso devolveria uma linha a menos e faria um teste de
+      // paginação afirmar corte onde não há.
+      if (rangeFrom !== null) {
+        result = result.slice(rangeFrom, rangeTo === null ? undefined : rangeTo + 1);
+      }
       return result;
     };
 
@@ -194,6 +255,11 @@ export function createMockSupabase() {
         return chain;
       },
       limit: (n: number) => { limitCount = n; return chain; },
+      range: (from: number, to: number) => {
+        rangeFrom = from;
+        rangeTo = to;
+        return chain;
+      },
       // `.returns<T>()` is a type-only helper on the real client; pass through.
       returns: () => chain,
       insert: (rows: unknown) => {

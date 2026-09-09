@@ -25,7 +25,8 @@ export type AppAction =
   | "manage_team"
   | "manage_copilot"
   | "reassign_lead"
-  | "remove_lead_from_pipe";
+  | "remove_lead_from_pipe"
+  | "view_org_metrics";
 
 export type FeatureKey =
   | "leads.import"
@@ -44,7 +45,8 @@ export type FeatureKey =
   | "team.view"
   | "copilot.create"
   | "leads.reassign"
-  | "leads.remove_from_pipe";
+  | "leads.remove_from_pipe"
+  | "metrics.view_org";
 
 export const ACTION_TO_FEATURE: Record<AppAction, FeatureKey> = {
   import_leads: "leads.import",
@@ -64,6 +66,9 @@ export const ACTION_TO_FEATURE: Record<AppAction, FeatureKey> = {
   manage_copilot: "copilot.create",
   reassign_lead: "leads.reassign",
   remove_lead_from_pipe: "leads.remove_from_pipe",
+  // ADR-0032 §5 — leitura agregada do Oráculo. Sem esta chave o recorte fica
+  // implícito no papel e nenhuma organização consegue afrouxá-lo sem código.
+  view_org_metrics: "metrics.view_org",
 };
 
 export interface ResolveContext {

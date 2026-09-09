@@ -57,3 +57,37 @@ export function isRpcAbsentError(
   const code = (error as PostgrestError).code ?? "";
   return code === "PGRST202" || code === "42883";
 }
+
+/**
+ * Marcador da recusa do banco quando um negócio é fechado como ganho sem valor.
+ *
+ * CONTRATO com `fn_exige_valor_no_negocio` (migration 20270916000010): a função
+ * levanta `check_violation` com exatamente esta frase, e a tela reconhece a
+ * recusa por ela para abrir o campo de valor em vez de despejar erro de banco
+ * num toast.
+ *
+ * `tests/unit/sale-value-guard.contrato.test.ts` lê a migration e falha se as
+ * pontas divergirem. Reescrever a mensagem sem reescrever este marcador devolve
+ * o usuário ao beco: a tela pede um valor que a tela não deixa digitar.
+ *
+ * Mora AQUI, e não no módulo `pipelines`, porque quem precisa dela é o painel
+ * de negócio, em `leads`. `pipelines/index.ts` já importa `leads/index.ts` —
+ * qualquer import na volta fecha ciclo estático, medido pelo dep-cruiser. Este
+ * arquivo é neutro e já é a casa dos predicados de erro de banco.
+ */
+export const SALE_VALUE_REQUIRED_MARKER = "valor antes de marcar";
+
+/**
+ * A recusa veio da trava de valor no negócio?
+ *
+ * Dois sinais, ambos exigidos: o SQLSTATE `23514` (check_violation) e o
+ * marcador acima. Só o código seria largo demais — qualquer CHECK da tabela
+ * cairia aqui e a tela pediria um valor que não resolveria nada.
+ */
+export function isSaleValueRequiredError(
+  error: { code?: string; message?: string } | null | undefined,
+): boolean {
+  if (!error) return false;
+  if (error.code !== "23514") return false;
+  return (error.message ?? "").includes(SALE_VALUE_REQUIRED_MARKER);
+}

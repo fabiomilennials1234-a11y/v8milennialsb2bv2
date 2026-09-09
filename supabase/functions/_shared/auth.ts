@@ -5,6 +5,7 @@
  */
 
 import { createHmac, timingSafeEqual } from "https://deno.land/std@0.177.0/node/crypto.ts";
+import { isOrgBlocked } from "./org-status.ts";
 
 /**
  * Comparação de tempo constante.
@@ -311,6 +312,13 @@ export interface ApiKeyValidation {
   rateLimitPerMinute?: number;
   scopes?: string[];
   error?: string;
+  /**
+   * true quando a chave é boa mas a assinatura da org está bloqueada.
+   * Quem chama deve responder 402, não 401 — a chave não é inválida, a conta
+   * é que está suspensa, e confundir os dois manda o integrador rotacionar
+   * chave à toa.
+   */
+  subscriptionBlocked?: boolean;
 }
 
 /**
@@ -391,6 +399,18 @@ export async function validateApiKey(
         .catch((err: unknown) =>
           console.error("[AUTH] Failed to update last_used_at:", err)
         );
+
+      // Chave válida não basta: org com assinatura bloqueada não responde API.
+      // Sem isto, suspender uma org deixava a integração dela (n8n, Make,
+      // webhooks de anúncio) despejando lead lá dentro como se nada fosse.
+      if (await isOrgBlocked(supabase, row.organization_id)) {
+        return {
+          valid: false,
+          organizationId: row.organization_id,
+          subscriptionBlocked: true,
+          error: "Assinatura da organização suspensa. Regularize para reativar a API.",
+        };
+      }
 
       return {
         valid: true,

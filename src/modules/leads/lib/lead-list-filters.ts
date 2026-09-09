@@ -3,7 +3,7 @@
  *
  * Módulo PURO — sem dependência de React/Supabase-client. Recebe um query
  * builder do Supabase (postgrest) já escopado por tenant e aplica os filtros
- * visíveis ao usuário (busca, origem, UF, rating, qualificação). Reutilizado por:
+ * visíveis ao usuário (busca, origem, UF, qualificação). Reutilizado por:
  *   - `useLeads` / `useLeadsCount` (lista + contagem, via `applyLeadsFilters`)
  *   - `useExportLeads` (exportação espelha o que está na tela)
  *
@@ -16,10 +16,25 @@ export interface LeadListFilterValues {
   /** Busca livre — casa contra nome, empresa, e-mail e telefone. */
   searchQuery?: string;
   filterOrigin?: string;
-  filterRating?: string;
   /** Tier de qualificação, ou os sentinels `"all"` (sem filtro) e `"none"`
    * (leads sem tier — `qualification_tier IS NULL`, ≠ do tier "desqualificado"). */
   filterQualification?: string;
+  /**
+   * Gaveta do lead: `"lead" | "cliente" | "perdido" | "indefinido"`, ou `"all"` (sem
+   * recorte). Filtra no BANCO, não na página carregada — a lista é paginada, e
+   * filtrar no cliente mostraria "3 de 12.686" em vez dos 3 de verdade.
+   */
+  filterClassificacao?: string;
+  /**
+   * De onde vem a verdade sobre "é cliente?" para ESTA organização.
+   *
+   * `true` — a org tem integração de ERP, e a gaveta é `leads.classificacao`.
+   * `false` (padrão) — ganho prevalece; somente perdas = Perdido; demais = Lead.
+   *
+   * Vem de `useOrgUsaLeiDoErp`. Ausente = `false`, que é a queda segura: a lei
+   * da Relação deriva de dado que toda org tem.
+   */
+  usaLeiDoErp?: boolean;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -35,6 +50,59 @@ export interface LeadListFilterValues {
    * produto considera atribuído — e o admin atribuiria por cima do dono real.
    */
   filterAssignment?: "all" | "unassigned";
+  /**
+   * Recorte pelo **Dono da conta** — a coluna que a lista exibe. Aceita o id de
+   * um `team_member`, ou os sentinels `"all"` (sem filtro) e `"none"` (leads sem
+   * dono).
+   *
+   * Distinto de `filterAssignment`, e de propósito: `filterAssignment` responde
+   * "quem enxerga este lead?" (as quatro colunas que o RLS e o chat consideram —
+   * pre_sale, sale, sdr, closer) e serve ao deep-link da política de isolamento.
+   * Este responde "de quem é este lead na tela?", que é a precedência
+   * `sale ?? pre_sale ?? responsible` renderizada em `LeadListRow`. Unificar os
+   * dois faria um dos lados mentir: filtrar por Fulano devolveria linha cuja
+   * célula diz outro nome, ou "sem dono" esconderia linha que a tela mostra
+   * vazia.
+   */
+  filterResponsible?: string;
+}
+
+/**
+ * Colunas do "Dono da conta", na MESMA ordem de precedência que a lista pinta
+ * (`LeadListRow`: `sale_responsible ?? pre_sale_responsible ?? responsible`).
+ *
+ * Mudou a precedência lá? Muda aqui junto — senão o filtro passa a devolver
+ * linha cujo nome na célula é outro.
+ */
+const OWNER_COLUMNS = [
+  "sale_responsible_id",
+  "pre_sale_responsible_id",
+  "responsible_id",
+] as const;
+
+/** Sentinel do filtro de dono: leads sem nenhuma das colunas de `OWNER_COLUMNS`. */
+const OWNER_NONE = "none";
+
+/**
+ * Um id de `team_member` só entra no `or()` do PostgREST depois de provado
+ * UUID. O valor vem de um Select nosso, mas também de localStorage (visão
+ * salva persistida) — e ali é texto que o usuário pode editar. Sem esta
+ * checagem, uma vírgula ou parêntese no valor reescreve a árvore de filtros.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Predicado PostgREST que casa EXATAMENTE as linhas cuja célula "Dono da conta"
+ * mostra `memberId` — não basta `col.eq.X` nas três, porque um lead com
+ * `sale_responsible = A` e `responsible = B` exibe "A" e não pode aparecer ao
+ * filtrar por B. Por isso cada nível carrega o `is.null` dos anteriores.
+ */
+function buildOwnerMatch(memberId: string): string {
+  return OWNER_COLUMNS.map((col, i) => {
+    const anteriores = OWNER_COLUMNS.slice(0, i).map((c) => `${c}.is.null`);
+    const igual = `${col}.eq.${memberId}`;
+    return anteriores.length ? `and(${[...anteriores, igual].join(",")})` : igual;
+  }).join(",");
 }
 
 /**
@@ -79,6 +147,17 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
     for (const col of RESPONSIBLE_COLUMNS) q = q.is(col, null);
   }
 
+  const owner = filters.filterResponsible;
+  if (owner && owner !== "all") {
+    if (owner === OWNER_NONE) {
+      for (const col of OWNER_COLUMNS) q = q.is(col, null);
+    } else if (UUID_RE.test(owner)) {
+      q = q.or(buildOwnerMatch(owner));
+    }
+    // Valor fora do contrato (visão salva adulterada): ignorado — mesma escolha
+    // de `parseInstantParam` na página. Não vira predicado cru.
+  }
+
   const search = filters.searchQuery?.trim();
   if (search) {
     const pattern = `%${search}%`;
@@ -87,6 +166,11 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
       `company.ilike.${pattern}`,
       `email.ilike.${pattern}`,
       `phone.ilike.${pattern}`,
+      // 🔴 EXIGE a migration `20270921000010` APLICADA. A lista mostra o lead
+      // como "1234 - João" e digitar o código tem que achá-lo; mas o PostgREST
+      // devolve 400 para coluna inexistente, e um 400 aqui não degrada — apaga a
+      // busca inteira. Aplicar a migration ANTES de mergear o frontend.
+      `erp_code.ilike.${pattern}`,
     ];
 
     // Telefone é digitado com máscara ("(21) 99999-8888", "21 99999 8888") mas
@@ -110,12 +194,6 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
     q = q.eq("uf", filters.filterUf);
   }
 
-  if (filters.filterRating && filters.filterRating !== "all") {
-    if (filters.filterRating === "high") q = q.gte("rating", 7);
-    else if (filters.filterRating === "medium") q = q.gte("rating", 4).lt("rating", 7);
-    else if (filters.filterRating === "low") q = q.lt("rating", 4);
-  }
-
   // Janela de criação (deep-link do card "Leads" do Comando). Os limites chegam
   // como instantes ISO absolutos já cortados na fronteira de dia do fuso da org
   // (`computePeriodRange`/`zoned-day`), então aqui é comparação direta de
@@ -126,6 +204,29 @@ export function applyLeadListFilters<Q>(query: Q, filters: LeadListFilterValues)
   }
   if (filters.createdTo) {
     q = q.lte("created_at", filters.createdTo);
+  }
+
+  // ── A DIVISÃO LEAD × CLIENTE — uma decisão, duas fontes ───────────────────
+  //
+  // O MESMO seletor da tela governa nos dois casos; o que muda é de onde vem a
+  // verdade, e isso é por organização (decisão do CTO em 2026-09-04):
+  //
+  //   • org COM integração de ERP → `leads.classificacao` (a lei do ERP,
+  //     migration 20270922000000). Aceita as quatro gavetas, inclusive
+  //     `indefinido`, que só existe nesse mundo.
+  //   • org SEM integração → relacao_negocios: ganho > só perdas > lead.
+  // Campo calculado evita filtrar só os 50 leads carregados no browser.
+  if (filters.filterClassificacao && filters.filterClassificacao !== "all") {
+    if (filters.usaLeiDoErp) {
+      q = q.eq("classificacao", filters.filterClassificacao);
+    } else if (["lead", "cliente", "perdido"].includes(filters.filterClassificacao)) {
+      // Campo calculado no banco: ganho prevalece; só perdas e nenhum aberto
+      // = Perdido. A mesma regra serve à página, contagem e exportação.
+      q = q.eq("relacao_negocios", filters.filterClassificacao);
+    }
+    // `indefinido` numa org sem ERP não recorta nada: a gaveta não existe
+    // nesse mundo, e devolver lista vazia seria afirmar que não há ninguém.
+    // A tela nem oferece a opção — isto aqui é a rede embaixo dela.
   }
 
   if (filters.filterQualification && filters.filterQualification !== "all") {

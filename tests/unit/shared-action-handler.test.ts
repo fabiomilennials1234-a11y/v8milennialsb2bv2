@@ -902,48 +902,87 @@ describe("handleDuplicateToPipe — deep", () => {
 });
 
 describe("handleMarkAsLost — deep", () => {
-  it("marks lead as lost in propostas with reason", async () => {
+  it("marks the current deal as lost in any selected funnel", async () => {
+    const pipelineId = "11111111-1111-4111-8111-111111111111";
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("pipe_propostas", [{ id: "pp-1", lead_id: "lead-1", status: "proposta_enviada" }]);
+    mockTable("pipelines", [{
+      id: pipelineId,
+      organization_id: "org-1",
+      slug: "renovacoes",
+      name: "Renovações",
+      type: "custom",
+      is_active: true,
+    }]);
+    mockTable("pipeline_stages", [{
+      id: "stage-lost",
+      organization_id: "org-1",
+      pipeline_id: pipelineId,
+      stage_key: "nao-renovou",
+      stage_role: "lost",
+      is_final_negative: true,
+      is_active: true,
+      position: 3,
+    }]);
+    mockTable("pipeline_entries", [{
+      id: "entry-1",
+      organization_id: "org-1",
+      lead_id: "lead-1",
+      pipeline_id: pipelineId,
+      stage_key: "negociando",
+      metadata: {},
+    }]);
     mockTable("lead_history", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
-      nodeData: { actionType: "mark_as_lost", pipeType: "propostas", lostReason: "Sem orçamento" },
+      nodeData: { actionType: "mark_as_lost", pipelineId, lostReason: "Sem orçamento" },
       executionContext: {},
     });
     expect(result.success).toBe(true);
-    expect(result.message).toContain("lost");
+    expect(result.message).toContain("Renovações");
   });
 
-  it("marks lead as lost with default pipeType (propostas)", async () => {
-    const { sb, mockTable } = createMockSupabase();
-    mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("pipe_propostas", [{ id: "pp-1", lead_id: "lead-1" }]);
-    mockTable("lead_history", []);
-
+  it("fails closed when no funnel was selected", async () => {
+    const { sb } = createMockSupabase();
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
       nodeData: { actionType: "mark_as_lost" },
       executionContext: {},
     });
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("propostas");
+    expect(result).toMatchObject({ success: false, error: "No funnel configured" });
   });
 
-  it("marks lead as lost in non-propostas pipe (no DB update)", async () => {
+  it("does not report success when the lead has no deal in the selected funnel", async () => {
+    const pipelineId = "22222222-2222-4222-8222-222222222222";
     const { sb, mockTable } = createMockSupabase();
-    mockTable("leads", [LEAD_WITH_PHONE]);
-    mockTable("lead_history", []);
+    mockTable("pipelines", [{
+      id: pipelineId,
+      organization_id: "org-1",
+      slug: "whatsapp",
+      name: "Oportunidades",
+      type: "system",
+      is_active: true,
+    }]);
+    mockTable("pipeline_stages", [{
+      id: "stage-lost",
+      organization_id: "org-1",
+      pipeline_id: pipelineId,
+      stage_key: "sem-interesse",
+      stage_role: "lost",
+      is_final_negative: true,
+      is_active: true,
+      position: 3,
+    }]);
+    mockTable("pipeline_entries", []);
 
     const result = await executeWorkflowAction({
       supabase: sb, organizationId: "org-1", leadId: "lead-1",
-      nodeData: { actionType: "mark_as_lost", pipeType: "whatsapp", lostReason: "Desistiu" },
+      nodeData: { actionType: "mark_as_lost", pipelineId, lostReason: "Desistiu" },
       executionContext: {},
     });
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("whatsapp");
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("não possui negócio");
   });
 });
 
@@ -1273,7 +1312,7 @@ describe("handleMoveStage — deep", () => {
 });
 
 describe("handleRemoveFromPipe — deep", () => {
-  it("removes from whatsapp pipe", async () => {
+  it("removes from the selected funnel and returns its display name", async () => {
     const { sb, mockTable } = createMockSupabase();
     mockTable("leads", [LEAD_WITH_PHONE]);
     mockTable("pipe_whatsapp", [{ id: "pw-1", lead_id: "lead-1" }]);
@@ -1284,7 +1323,7 @@ describe("handleRemoveFromPipe — deep", () => {
       executionContext: {},
     });
     expect(result.success).toBe(true);
-    expect(result.message).toContain("whatsapp");
+    expect(result.message).toContain("Oportunidades");
   });
 
   it("removes from confirmacao pipe", async () => {

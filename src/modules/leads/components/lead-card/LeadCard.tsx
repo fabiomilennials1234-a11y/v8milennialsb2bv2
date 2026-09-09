@@ -97,9 +97,16 @@ export function LeadCard({
   onSaveNote,
   onOpenDeal,
   onNewDeal,
+  registrarVenda,
   onSaveField,
   onToggleCopilot,
   onDelete,
+  onComentar,
+  onEditarComentario,
+  onApagarComentario,
+  comentando,
+  editorDeEtiquetas,
+  acaoLigar,
 }: {
   lead: LeadCardData;
   /** Persiste a anotação. Sem ela o campo edita mas não grava (visualização). */
@@ -107,10 +114,47 @@ export function LeadCard({
   /** Recebe o `pipeline_entries.id` — abre o card do Negócio. */
   onOpenDeal?: (entryId: string) => void;
   onNewDeal?: () => void;
+  registrarVenda?: React.ReactNode;
   /** Persiste um campo do bloco Dados. Sem ela o bloco fica só de leitura. */
   onSaveField?: (chave: string, valor: string) => Promise<void>;
   onToggleCopilot?: (ativo: boolean) => void;
   onDelete?: () => void;
+  /**
+   * Comentário da equipe, dentro do Histórico. As três são opcionais pela mesma
+   * razão das de cima: sem elas a ficha continua mostrando o histórico inteiro,
+   * só não deixa escrever — que é o certo quando não se sabe sob qual org
+   * gravar.
+   */
+  onComentar?: (texto: string) => void | Promise<void>;
+  onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
+  onApagarComentario?: (id: string) => void | Promise<void>;
+  comentando?: boolean;
+  /**
+   * A faixa de etiquetas QUE ESCREVE, montada pronta pelo `LeadCardContainer`.
+   *
+   * Aqui havia um `+ etiqueta` sem `onClick` — botão morto desde o primeiro
+   * commit do card. Ele não podia ser ligado neste arquivo: `LeadCard.tsx` é
+   * alcançável a partir de `src/preview/main.tsx`, e
+   * `preview-cards-sem-banco.test.ts` reprova qualquer arquivo daquele grafo
+   * que alcance react-query ou o Supabase. Mesmo escape de `onSaveField`: quem
+   * tem o banco entrega o controle pronto. Sem a prop ficam só as pílulas de
+   * leitura — e nenhum botão, porque botão que não faz nada é pior que a
+   * ausência dele.
+   */
+  editorDeEtiquetas?: React.ReactNode;
+  /**
+   * O botão de LIGAR, montado pronto por quem tem o banco (`VoiceCallButton`,
+   * variante ícone) — mesmo escape de `editorDeEtiquetas`: este arquivo é
+   * alcançável a partir de `src/preview/main.tsx` e não pode importar o
+   * provider de voz, que lê react-query e Supabase.
+   *
+   * Aqui havia um `AcaoRapida` "Ligar" sem `onClick` — botão morto desde o
+   * primeiro commit do card, desabilitado por `!lead.telefone` e nada mais.
+   * Sem a prop não fica nada no lugar: botão que não faz nada é pior que a
+   * ausência dele, e o `VoiceCallButton` já some sozinho quando não há número
+   * de voz ao alcance — a mesma regra do chat.
+   */
+  acaoLigar?: React.ReactNode;
 }) {
   const [aba, setAba] = useState<Aba>("historico");
   const [nota, setNota] = useState(lead.nota);
@@ -168,7 +212,7 @@ export function LeadCard({
                   Cliente
                 </span>
               ) : (
-                <span className="shrink-0 text-[13px] text-muted-foreground">Lead</span>
+                <span className="shrink-0 text-[13px] text-muted-foreground">{lead.relacao === "perdido" ? "Perdido" : "Lead"}</span>
               )}
 
               <span className="h-3 w-px shrink-0 bg-border" aria-hidden="true" />
@@ -237,7 +281,7 @@ export function LeadCard({
 
           <div className="flex shrink-0 items-center gap-1.5">
             <AcaoRapida icone={MessageCircle} rotulo="Abrir conversa" />
-            <AcaoRapida icone={Phone} rotulo="Ligar" desabilitado={!lead.telefone} />
+            {acaoLigar}
             <AcaoRapida icone={Mail} rotulo="Enviar e-mail" desabilitado={!lead.email} />
             <AcaoRapida icone={CalendarPlus} rotulo="Agendar mensagem" />
             <AcaoRapida
@@ -251,7 +295,10 @@ export function LeadCard({
 
         {/* Sempre visível, mesmo sem dono e sem etiqueta. Escondendo a faixa
             quando está vazia, o lead novo — 94% da base — perde justamente os
-            dois convites que ele mais precisa: atribuir dono e etiquetar. */}
+            dois convites que ele mais precisa: atribuir dono e etiquetar.
+
+            O convite de etiquetar só é convite quando `editorDeEtiquetas` vem:
+            até então este lugar tinha um "+ etiqueta" que não abria nada. */}
         <div className="flex flex-wrap items-center gap-1.5">
             {lead.dono ? (
               <span
@@ -266,24 +313,15 @@ export function LeadCard({
                 Sem dono
               </span>
             )}
-            {lead.tags.map((t) => (
-              <span
-                key={t.id}
-                className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-[3px] text-[12px] text-muted-foreground"
-              >
-                {t.nome}
-              </span>
-            ))}
-            <button
-              type="button"
-              className={cn(
-                "inline-flex rounded-full border border-dashed border-border px-2.5 py-[3px] text-[12px] text-muted-foreground",
-                "transition-colors hover:border-muted-foreground/40 hover:text-foreground",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              )}
-            >
-              + etiqueta
-            </button>
+            {editorDeEtiquetas ??
+              lead.tags.map((t) => (
+                <span
+                  key={t.id}
+                  className="inline-flex rounded-full border border-border bg-muted/50 px-2.5 py-[3px] text-[12px] text-muted-foreground"
+                >
+                  {t.nome}
+                </span>
+              ))}
         </div>
       </header>
 
@@ -345,10 +383,19 @@ export function LeadCard({
           </nav>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
-            {aba === "historico" && <LeadCardHistory eventos={lead.historico} />}
+            {aba === "historico" && (
+              <LeadCardHistory
+                eventos={lead.historico}
+                onComentar={onComentar}
+                onEditarComentario={onEditarComentario}
+                onApagarComentario={onApagarComentario}
+                comentando={comentando}
+              />
+            )}
             {aba === "negocios" && (
               <LeadCardDeals
                 negocios={lead.negocios}
+                registrarVenda={registrarVenda}
                 onOpenDeal={(id) => onOpenDeal?.(id)}
                 onNewDeal={() => onNewDeal?.()}
               />

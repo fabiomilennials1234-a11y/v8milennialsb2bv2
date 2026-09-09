@@ -419,6 +419,12 @@ export async function sendTemplateViaInstance(
     // Send Governor (SHADOW seam) — mesmo contrato de `sendTextViaInstance`.
     // O conteúdo que alimenta o dedup é o texto RENDERIZADO: dois envios do
     // mesmo template com parâmetros diferentes são mensagens diferentes.
+    //
+    // ⚠️ `isApprovedTemplate` É MARCADO AQUI, NO CHOKE, e não nos chamadores.
+    // São dois hoje — o nó de workflow (`enviar-template.ts`) e o disparo
+    // oficial (`process-blast-recipients`) — e um terceiro que esquecesse a
+    // marca voltaria a ser barrado pela P5 em silêncio. Esta função é a
+    // definição de "envio de template": não há como entrar aqui sem ser um.
     const governed = await governSend(
       supabaseAdmin,
       {
@@ -429,6 +435,7 @@ export async function sendTemplateViaInstance(
         trackSource: opts.trackSource,
         content: template.previewText,
         idempotencyKey: opts.idempotencyKey,
+        isApprovedTemplate: true,
       },
       async () =>
         await provider.sendTemplate!({

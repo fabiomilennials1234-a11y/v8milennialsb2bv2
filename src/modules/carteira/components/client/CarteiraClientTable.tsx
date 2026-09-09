@@ -36,6 +36,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import type { useBulkSelection } from "@/shared/hooks/useBulkSelection";
+import { erpLabel } from "@/shared/format/erp-code";
 
 export type { PortfolioClientRow };
 
@@ -215,7 +216,11 @@ export function CarteiraClientTable({
     pageSize: PAGE_SIZE,
   });
 
-  const rows = data?.rows ?? [];
+  // Memoizado porque a identidade importa duas vezes logo abaixo: `rowIds` é um
+  // useMemo com `[rows]` na dependência, e o efeito que chama `onRowsChange`
+  // também. Com `data?.rows ?? []` cru, o `[]` do ramo vazio nasce novo a cada
+  // render e os dois disparam sem que nada tenha mudado.
+  const rows = useMemo(() => data?.rows ?? [], [data]);
   const total = data?.total ?? 0;
   const totalPages = data?.total_pages ?? 1;
   const rowIds = useMemo(() => rows.map((r) => r.id), [rows]);
@@ -445,8 +450,11 @@ export function CarteiraClientTable({
                   )}
                   <TableCell className={cn("py-3", bulk ? "" : "pl-4")}>
                     <div className="flex flex-col gap-px min-w-0">
-                      <span className="text-sm font-semibold text-foreground truncate max-w-[220px]">
-                        {client.name}
+                      <span
+                        className="text-sm font-semibold text-foreground truncate max-w-[220px]"
+                        title={erpLabel(client)}
+                      >
+                        {erpLabel(client)}
                       </span>
                       <span className="text-xs text-muted-foreground truncate max-w-[220px]">
                         {[

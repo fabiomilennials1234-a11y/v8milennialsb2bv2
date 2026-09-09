@@ -1,18 +1,22 @@
 import { useMemo } from "react";
 
-import { useTeamMembers } from "@/modules/identity";
+import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useLeadDetail } from "../lead-detail/hooks/useLeadDetail";
+import { useLeadComments } from "../lead-detail/hooks/useLeadComments";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
+import { useProdutosPorNegocio } from "./useProdutosPorNegocio";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
 import { useLeadsCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import { useLeadTimeline } from "../../hooks/useLeadTimeline";
 import { useLeadCustomFields, useLeadCustomFieldValues } from "../../hooks/useLeadCustomFields";
 import { mergeDataMetrics } from "../../lib/data-metrics";
 import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
+import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
 import type {
   LeadCardData,
   LeadCardDeal,
   LeadCardEvent,
+  LeadCardField,
   LeadCardFieldGroup,
   TipoDeEvento,
 } from "./types";
@@ -101,24 +105,109 @@ function diasDesde(iso: string | null | undefined): number | null {
   return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
 }
 
+/**
+ * ── CAMPO DA ORG RESPONDIDO SOBE PARA O PERFIL ────────────────────────────
+ * Decisão do CTO (25/08): o que veio do FORMULÁRIO — comprador, prazo, volume,
+ * o que cada org perguntou no seu funil — é dado de qualificação, e estava
+ * atrás da ÚLTIMA aba de uma coluna de 356px. Quem abre o negócio para decidir
+ * não ia até lá; na prática o lead chegava qualificado e a resposta morria a
+ * dois cliques de distância.
+ *
+ * O corte deixa de ser "de onde o campo veio" (sistema × org) e passa a ser
+ * "alguém já respondeu isto":
+ *   · respondido    → entra no Perfil, junto de nome/e-mail/telefone;
+ *   · nunca tocado  → fica em "Campos a preencher", que continua VISÍVEL pelo
+ *                     mesmo motivo de sempre (sumir é o que faz ninguém
+ *                     preencher) e agora diz na aba o que espera de quem lê.
+ *
+ * Cada campo aparece em exatamente UM dos dois. Uma aba "Campos da organização"
+ * repetindo os respondidos seria a segunda verdade que este arquivo existe para
+ * evitar.
+ *
+ * ── POR QUE "TEM LINHA" E NÃO "O VALOR NÃO ESTÁ VAZIO" ────────────────────
+ * A diferença aparece no segundo em que alguém APAGA o conteúdo de um campo do
+ * Perfil: pelo valor, o campo pularia de aba embaixo do cursor de quem acabou
+ * de editá-lo. Pela linha em `lead_custom_field_values`, ele fica onde está,
+ * vazio, e pode ser repreenchido ali mesmo. Campo nunca respondido não tem
+ * linha e continua na outra aba.
+ * O custo são 115 linhas de valor vazio em 64.397 (prod, 25/08) subindo para o
+ * Perfil — 0,2%, todas de webhook que gravou string vazia.
+ *
+ * Escala: média de 4 respondidos por lead, p90 = 9, 27 no pior lead de prod. O
+ * Perfil cresce com o que tem dado, não com os 38 rótulos vazios da maior org.
+ *
+ * ⚠️ `tipo` fica de fora de propósito. `field_type` da definição conhece
+ * `date`, e virar `tipo: "data"` poria um `<input type="date">` na frente de
+ * valor que veio de webhook em formato livre ("31/12/2024"): o input recusa,
+ * mostra vazio, e o primeiro blur GRAVA o vazio por cima. Texto não perde dado.
+ */
+export function separarCamposDaOrg(
+  definicoes: { id: string; field_name: string }[],
+  valores: { field_id: string; value: string | null }[],
+): { respondidos: LeadCardField[]; aPreencher: LeadCardField[] } {
+  const porDefinicao = new Map(valores.map((v) => [v.field_id, v.value]));
+  const respondidos: LeadCardField[] = [];
+  const aPreencher: LeadCardField[] = [];
+
+  for (const d of definicoes) {
+    const campo: LeadCardField = {
+      chave: d.id,
+      rotulo: d.field_name,
+      valor: porDefinicao.get(d.id) ?? null,
+      personalizado: true,
+      vazio: "Não informado",
+    };
+    (porDefinicao.has(d.id) ? respondidos : aPreencher).push(campo);
+  }
+
+  return { respondidos, aPreencher };
+}
+
 export interface LeadCardSource {
   data: LeadCardData | null;
   isLoading: boolean;
   /** Ecoa `useLeadDetail` — quem decide o que a tela mostra quando nega. */
   visibility: ReturnType<typeof useLeadDetail>["visibility"];
+  /** Org sob a qual se grava um comentário. `null` = a ficha fica só de leitura. */
+  organizacaoId: string | null;
+  /** `team_members.id` de quem olha — é por ele que se decide quem edita. */
+  membroId: string | null;
+  souAdmin: boolean;
 }
 
 export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCardSource {
+  const { usaLeiDoErp } = useOrgUsaLeiDoErp();
   const { lead, isLoading, visibility } = useLeadDetail(leadId, isOpen);
+  const { organizationId, teamMemberId, role } = useOrganization();
 
   // Os três hooks de lote aceitam lista; aqui a lista tem um id só. A queryKey
   // deles é ordenada, então o cache da aba de Leads não colide com o do card.
   const ids = useMemo(() => (leadId ? [leadId] : []), [leadId]);
   const { data: dealsMap } = useLeadsDeals(ids);
+  // Os produtos de cada negócio. Consulta própria, e não mais um campo em
+  // `useLeadsDeals`: aquele hook é o de LOTE da aba de Leads, e pendurar
+  // `deal_items` nele custaria a consulta em toda listagem de lead, por uma
+  // informação que só esta ficha desenha.
+  const { data: produtosPorNegocio } = useProdutosPorNegocio(leadId, isOpen);
   const { data: vendasMap } = useLeadsSalesMetrics(ids);
   const { data: carteiraMap } = useLeadsCarteiraMetrics(ids);
 
   const timeline = useLeadTimeline(leadId ?? undefined);
+  /**
+   * ── Por que os comentários entram por FORA da timeline ───────────────────
+   * `useLeadTimeline` pagina em 20 (`PAGE_SIZE`) e esta ficha nunca chama
+   * `loadMore` — não há "carregar mais" no Histórico. Como 73% de
+   * `lead_history` é tráfego de WhatsApp, o comentário de julho cai fora da
+   * janela: medido em prod, **401 dos 2.906 comentários (13,8%) e 144 leads
+   * inteiros** não têm um único comentário dentro dos 20 eventos mais
+   * recentes. Filtrar pelo chip "Comentários" não resolve — ele filtra o que
+   * já veio cortado.
+   *
+   * Ler `lead_comments` direto conserta as duas coisas de uma vez: traz o
+   * histórico COMPLETO e traz o corpo INTEIRO (a linha de histórico só tem
+   * "Comentário adicionado" mais um preview de 120 caracteres).
+   */
+  const { data: comentarios = [] } = useLeadComments(isOpen ? leadId : null);
   const { data: definicoes = [] } = useLeadCustomFields();
   const { data: valores = [] } = useLeadCustomFieldValues(leadId);
   const { data: equipe = [] } = useTeamMembers();
@@ -132,7 +221,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
     const vendas = vendasMap?.[id];
     const carteira = carteiraMap?.[id];
 
-    const standing = deriveLeadStanding({ deals: negociosCrus, vendas, carteira });
+    const standing = deriveLeadStanding({ deals: negociosCrus, vendas, carteira, usaLeiDoErp });
     const metricasDeCompra = mergeDataMetrics(carteiraMap, vendasMap)[id];
 
     const negocios: LeadCardDeal[] = negociosCrus.map((d) => ({
@@ -147,6 +236,7 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       diasEmAberto: diasDesde(d.enteredAt),
       etapaIndice: d.stageIndex,
       etapaTotal: d.stageCount,
+      produtos: produtosPorNegocio?.[d.id] ?? [],
     }));
 
     // Autor: `lead_history.created_by` ora traz o id do membro, ora o do
@@ -162,24 +252,64 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       if (typeof m.user_id === "string") nomePorId.set(m.user_id, nome);
     }
 
-    const historico: LeadCardEvent[] = (timeline.data?.events ?? []).map((e) => ({
-      id: e.id,
-      tipo: tipoDoEvento(e.action, e.source),
-      // A frase pronta vem do banco. O card não a reescreve nem a fatia — dado
-      // com chave dentro vira bug de exibição.
-      texto: e.description ?? e.action.replace(/_/g, " "),
-      autor: (e.created_by ? nomePorId.get(e.created_by) : undefined) ?? autorDeSistema(e.source),
-      quando: e.created_at,
-    }));
+    /**
+     * `comment_added` sai da timeline e volta pela lista de comentários.
+     *
+     * Sem esta linha o mesmo comentário apareceria DUAS vezes: uma como linha
+     * de histórico sem texto, outra como comentário de verdade. Descartar a de
+     * histórico não perde nada — ela não carrega nenhum dado que a linha de
+     * `lead_comments` não tenha melhor.
+     */
+    const eventos: LeadCardEvent[] = (timeline.data?.events ?? [])
+      .filter((e) => e.action !== "comment_added")
+      .map((e) => ({
+        id: e.id,
+        tipo: tipoDoEvento(e.action, e.source),
+        // A frase pronta vem do banco. O card não a reescreve nem a fatia —
+        // dado com chave dentro vira bug de exibição.
+        texto: e.description ?? e.action.replace(/_/g, " "),
+        autor: (e.created_by ? nomePorId.get(e.created_by) : undefined) ?? autorDeSistema(e.source),
+        quando: e.created_at,
+      }));
 
-    const porDefinicao = new Map(valores.map((v) => [v.field_id, v.value]));
-    const camposDaOrg = definicoes.map((d) => ({
-      chave: d.id,
-      rotulo: d.field_name,
-      valor: porDefinicao.get(d.id) ?? null,
-      personalizado: true,
-      vazio: "Não informado",
-    }));
+    /**
+     * Apagado é soft-delete e continua na tabela. Fica de fora pela mesma
+     * decisão já tomada no painel do Negócio: a lápide "Comentário apagado"
+     * virava ruído, e a auditoria não se perde — `fn_log_lead_comment_event`
+     * grava `comment_deleted` em `lead_history`.
+     */
+    const deComentario: LeadCardEvent[] = comentarios
+      .filter((c) => !c.deleted_at)
+      .map((c) => {
+        // Autoria pelo MEMBRO, não pelo usuário: é o mesmo critério do painel
+        // do Negócio, e falha fechada — sem membro conhecido ninguém edita.
+        const souOAutor = !!teamMemberId && c.author_team_member_id === teamMemberId;
+        return {
+          id: `comentario:${c.id}`,
+          tipo: "comentario" as const,
+          // O texto do evento existe para o chip e para a busca; quem desenha o
+          // corpo é o bloco de comentário, com quebra de linha preservada.
+          texto: "Comentário",
+          autor: c.author?.name ?? nomePorId.get(c.author_user_id ?? "") ?? null,
+          quando: c.created_at,
+          comentario: {
+            id: c.id,
+            corpo: c.body,
+            editadoEm: c.updated_at ?? null,
+            podeEditar: souOAutor,
+            podeApagar: souOAutor || role === "admin",
+          },
+        };
+      });
+
+    const historico: LeadCardEvent[] = [...eventos, ...deComentario].sort(
+      (a, b) => new Date(b.quando).getTime() - new Date(a.quando).getTime(),
+    );
+
+    const { respondidos: orgPreenchidos, aPreencher: orgVazios } = separarCamposDaOrg(
+      definicoes,
+      valores,
+    );
 
     // ⚠️ A `chave` de campo do sistema É O NOME DA COLUNA em `leads` — o
     // container a usa direto no `update`. Rótulo em português aqui grava
@@ -199,6 +329,10 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
           { somenteLeitura: true, chave: "documento", rotulo: "CPF / CNPJ", valor: null, tipo: "documento", vazio: "Informe o documento" },
           { somenteLeitura: true, chave: "site", rotulo: "Site", valor: null, tipo: "url", vazio: "www.exemplo.com.br" },
           { somenteLeitura: true, chave: "nascimento", rotulo: "Nascimento / fundação", valor: null, tipo: "data", vazio: "dd/mm/aaaa" },
+          // O que a org perguntou no formulário e o lead respondeu. Vem por
+          // último para não empurrar telefone e e-mail para baixo da dobra da
+          // coluna — a ordem é "quem é" antes de "o que respondeu".
+          ...orgPreenchidos,
         ],
       },
       {
@@ -222,8 +356,8 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
           { somenteLeitura: true, chave: "qualification_tier", rotulo: "Qualificação", valor: texto(l, "qualification_tier"), tipo: "texto", vazio: "Sem qualificação" },
         ],
       },
-      ...(camposDaOrg.length > 0
-        ? [{ titulo: "Campos da organização", campos: camposDaOrg }]
+      ...(orgVazios.length > 0
+        ? [{ titulo: "Campos a preencher", campos: orgVazios }]
         : []),
     ];
 
@@ -289,7 +423,39 @@ export function useLeadCardData(leadId: string | null, isOpen: boolean): LeadCar
       campos,
       historico,
     };
-  }, [lead, dealsMap, vendasMap, carteiraMap, timeline.data, definicoes, valores, equipe]);
+  }, [
+    usaLeiDoErp,
+    lead,
+    dealsMap,
+    produtosPorNegocio,
+    vendasMap,
+    carteiraMap,
+    timeline.data,
+    comentarios,
+    definicoes,
+    valores,
+    equipe,
+    teamMemberId,
+    role,
+  ]);
 
-  return { data, isLoading, visibility };
+  /**
+   * A org do LEAD vem antes da associação de quem olha — é o que mantém o
+   * usuário master comentando: ele não está em `team_members`, então
+   * `useOrganization()` devolve `null` para ele, mas as policies de
+   * `lead_comments` têm bypass de master. Mesmo critério do `useDealCardData`.
+   */
+  const organizacaoDoLead = (() => {
+    const v = (lead as Linha | null)?.organization_id;
+    return typeof v === "string" && v !== "" ? v : null;
+  })();
+
+  return {
+    data,
+    isLoading,
+    visibility,
+    organizacaoId: organizacaoDoLead ?? organizationId ?? null,
+    membroId: teamMemberId ?? null,
+    souAdmin: role === "admin",
+  };
 }

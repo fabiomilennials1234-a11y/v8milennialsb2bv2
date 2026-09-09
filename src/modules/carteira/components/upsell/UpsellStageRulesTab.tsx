@@ -5,7 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { type PipelineStage, useUpdatePipelineStage, usePipelineStages } from "@/modules/pipelines";
+import { type PipelineStage, useUpdatePipelineStage } from "@/modules/pipelines";
+import { useCarteiraStages } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useUpsellGestaoRules, useSaveGestaoRules } from "@/modules/carteira/hooks/useUpsellGestaoRules";
 import { toast } from "sonner";
 
@@ -34,7 +35,7 @@ export function UpsellStageRulesTab({ stages }: UpsellStageRulesTabProps) {
   const isBase = stages.length > 0 && stages[0].pipeline_type === "upsell_base";
 
   // Gestao stages (for sync dropdowns) — only fetched for upsell_base
-  const { data: gestaoStages = [] } = usePipelineStages("upsell_gestao");
+  const { data: gestaoStages = [] } = useCarteiraStages("upsell_gestao");
   const { data: existingGestaoRules = [] } = useUpsellGestaoRules();
   const saveGestaoRules = useSaveGestaoRules();
 

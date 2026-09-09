@@ -15,7 +15,7 @@ import {
   CAP_MAX,
   CAP_RECOMMENDED,
   NEW_NUMBER_CAP,
-} from "@/modules/campaigns/components/disparo-wizard/speed-safety";
+} from "@/shared/disparo/speed-safety";
 
 describe("effectiveCap — per-number cap after the new-number clamp", () => {
   it("uses the slider value for an established number", () => {

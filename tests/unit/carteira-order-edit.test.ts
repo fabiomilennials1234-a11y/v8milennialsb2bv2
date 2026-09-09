@@ -336,8 +336,9 @@ describe("order-display", () => {
   });
 
   it("sourceLabel é o mesmo mapa que ClienteOrderHistory usava", () => {
-    expect(sourceLabel("pipe")).toBe("Pipeline");
+    expect(sourceLabel("pipe")).toBe("Funil");
     expect(sourceLabel("csv_import")).toBe("CSV");
+    expect(sourceLabel("historical")).toBe("Venda histórica");
     expect(sourceLabel(null)).toBe("—");
   });
 });

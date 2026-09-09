@@ -15,7 +15,10 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getPipeEntry, getPipeEntriesByLeads, resolvePipelineId } from "../pipeline-adapter.ts";
+import {
+  getCurrentFunnelEntriesByLeads,
+  getPipeEntriesByLeads,
+} from "../pipeline-adapter.ts";
 
 const SELECT_AGENT = "*, copilot_agent_faqs(*), copilot_agent_kanban_rules(*)";
 
@@ -110,33 +113,23 @@ export async function loadCapabilities(
   // Routing por stage/origin/segment requer leadId
   if (leadId) {
     try {
-      // ADR-0023 §10: o funil WhatsApp entra pelo NEGÓCIO (`pipeline_entries`), igual
-      // confirmação e propostas. `leads.pipe_whatsapp` é espelho legado e não roteia mais.
-      const [leadRes, upsellRes, whatsappRes, confirmacaoRes, propostasRes, campanhaRes] = await Promise.all([
+      const [leadRes, upsellRes, funnelEntries, campanhaRes] = await Promise.all([
         supabase.from("leads").select("origin, segment").eq("id", leadId).maybeSingle(),
         supabase.from("upsell_clients").select("tipo_cliente_tempo, gestao_stage").eq("lead_id", leadId).maybeSingle(),
-        getPipeEntry(supabase, leadId, organizationId, "whatsapp"),
-        getPipeEntry(supabase, leadId, organizationId, "confirmacao"),
-        getPipeEntry(supabase, leadId, organizationId, "propostas"),
+        getCurrentFunnelEntriesByLeads(supabase, [leadId], organizationId),
         supabase.from("campanha_leads").select("stage_id, campanha_stages(name)").eq("lead_id", leadId).limit(1).maybeSingle(),
       ]);
 
       const leadRow = leadRes.data as { origin?: string; segment?: string } | null;
       const upsellRow = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string } | null;
-      const whatsappRow = whatsappRes ? { status: whatsappRes.stage_key } : null;
-      const confirmacaoRow = confirmacaoRes ? { status: confirmacaoRes.stage_key } : null;
-      const propostasRow = propostasRes ? { status: propostasRes.stage_key } : null;
       const campanhaRow = campanhaRes.data as { campanha_stages?: { name?: string } } | null;
 
       leadOrigin = leadRow?.origin;
 
-      if (leadRow || upsellRow || whatsappRow || confirmacaoRow || propostasRow || campanhaRow) {
-        const allStages: string[] = [];
-        if (whatsappRow?.status) allStages.push(whatsappRow.status);
+      if (leadRow || upsellRow || funnelEntries.length > 0 || campanhaRow) {
+        const allStages: string[] = funnelEntries.map((entry) => entry.stage_key);
         if (upsellRow?.tipo_cliente_tempo) allStages.push(upsellRow.tipo_cliente_tempo);
         if (upsellRow?.gestao_stage) allStages.push(upsellRow.gestao_stage);
-        if (confirmacaoRow?.status) allStages.push(confirmacaoRow.status);
-        if (propostasRow?.status) allStages.push(propostasRow.status);
         const campanhaStage = campanhaRow?.campanha_stages?.name;
         if (campanhaStage) allStages.push(campanhaStage);
 
@@ -234,23 +227,84 @@ export async function loadOrgCustomFields(
 /**
  * Carrega stages de TODOS os pipelines ativos da org.
  */
+export interface LoadedPipelineStage {
+  stage_key: string;
+  name: string;
+  /** Espelho transitório — NULL nas etapas de funil custom (W2). Não use para agrupar. */
+  pipeline_type: string | null;
+  pipeline_id: string | null;
+  /** Slug real do funil dono da etapa (via `pipelines`). NULL para etapa órfã. */
+  pipeline_slug: string | null;
+  /** Nome humano do funil. */
+  pipeline_name: string | null;
+}
+
+/**
+ * SCRUM-628: as etapas passam a vir com a identidade REAL do funil
+ * (`pipeline_id` + slug + nome via `pipelines`), não só o espelho
+ * `pipeline_type` — que é NULL em toda etapa de funil custom (W2) e fazia o
+ * build-tools agrupar etapa custom como se fosse do WhatsApp. Etapa sem
+ * `pipeline_id` (órfã — SCRUM-618) sai da lista: o agente não pode oferecer
+ * etapa de funil que não existe.
+ */
 export async function loadPipelineStages(
   supabase: SupabaseClient,
   organizationId: string,
-): Promise<{ stage_key: string; name: string; pipeline_type: string }[]> {
+): Promise<LoadedPipelineStage[]> {
   try {
-    const { data, error } = await supabase
-      .from("pipeline_stages")
-      .select("stage_key, name, pipeline_type")
-      .eq("organization_id", organizationId)
-      .eq("is_active", true)
-      .order("pipeline_type", { ascending: true })
-      .order("position", { ascending: true });
-    if (error) {
-      console.warn("[context-loader] loadPipelineStages error:", error.message);
+    const [stagesRes, pipelinesRes] = await Promise.all([
+      supabase
+        .from("pipeline_stages")
+        .select("stage_key, name, pipeline_type, pipeline_id, position")
+        .eq("organization_id", organizationId)
+        .eq("is_active", true)
+        .order("position", { ascending: true }),
+      supabase
+        .from("pipelines")
+        .select("id, slug, name, is_active, display_order")
+        .eq("organization_id", organizationId)
+        .order("display_order", { ascending: true }),
+    ]);
+    if (stagesRes.error) {
+      console.warn("[context-loader] loadPipelineStages error:", stagesRes.error.message);
       return [];
     }
-    return (data ?? []) as { stage_key: string; name: string; pipeline_type: string }[];
+    if (pipelinesRes.error) {
+      console.warn("[context-loader] loadPipelineStages pipelines error:", pipelinesRes.error.message);
+    }
+
+    const pipelines = new Map<string, { slug: string; name: string; is_active: boolean; order: number }>();
+    const pipelineRows = (pipelinesRes.data ?? []) as Array<{
+      id: string; slug: string; name: string; is_active: boolean | null;
+    }>;
+    pipelineRows.forEach((p, i) => {
+      pipelines.set(p.id, { slug: p.slug, name: p.name, is_active: p.is_active !== false, order: i });
+    });
+
+    const rows = ((stagesRes.data ?? []) as Array<{
+      stage_key: string; name: string; pipeline_type: string | null; pipeline_id: string | null;
+    }>)
+      .filter((s) => {
+        if (!s.pipeline_id) return false;
+        const p = pipelines.get(s.pipeline_id);
+        return !!p && p.is_active;
+      })
+      .map((s) => {
+        const p = pipelines.get(s.pipeline_id!)!;
+        return {
+          stage_key: s.stage_key,
+          name: s.name,
+          pipeline_type: s.pipeline_type,
+          pipeline_id: s.pipeline_id,
+          pipeline_slug: p.slug,
+          pipeline_name: p.name,
+        };
+      });
+
+    // Ordena por funil (display_order) preservando position dentro do funil.
+    rows.sort((a, b) =>
+      (pipelines.get(a.pipeline_id!)?.order ?? 0) - (pipelines.get(b.pipeline_id!)?.order ?? 0));
+    return rows;
   } catch (e) {
     console.warn("[context-loader] loadPipelineStages exception:", e);
     return [];
@@ -430,7 +484,7 @@ export async function loadLeadData(
 
     const orgId = (lead as Record<string, unknown>).organization_id as string;
 
-    const [customFieldsRes, upsellRes, whatsappEntry, confirmacaoEntry, propostasEntry, campanhaRes] = await Promise.all([
+    const [customFieldsRes, upsellRes, funnelEntries, campanhaRes] = await Promise.all([
       supabase
         .from("lead_custom_field_values")
         .select(`value, field:lead_custom_fields(id, field_name, field_type)`)
@@ -440,9 +494,7 @@ export async function loadLeadData(
         .select("tipo_cliente_tempo, gestao_stage, potencial, is_active")
         .eq("lead_id", leadId)
         .maybeSingle(),
-      getPipeEntry(supabase, leadId, orgId, "whatsapp"),
-      getPipeEntry(supabase, leadId, orgId, "confirmacao"),
-      getPipeEntry(supabase, leadId, orgId, "propostas"),
+      getCurrentFunnelEntriesByLeads(supabase, [leadId], orgId),
       supabase
         .from("campanha_leads")
         .select("stage_id, campanha_id, campanha_stages(name)")
@@ -462,6 +514,9 @@ export async function loadLeadData(
     }
 
     const upsellData = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string; potencial?: string; is_active?: boolean } | null;
+    const whatsappEntry = funnelEntries.find((entry) => entry.pipeline_slug === "whatsapp");
+    const confirmacaoEntry = funnelEntries.find((entry) => entry.pipeline_slug === "confirmacao");
+    const propostasEntry = funnelEntries.find((entry) => entry.pipeline_slug === "propostas");
     const confMeta = (confirmacaoEntry?.metadata ?? {}) as Record<string, unknown>;
     const propMeta = (propostasEntry?.metadata ?? {}) as Record<string, unknown>;
     const campanhaData = campanhaRes.data as { campanha_id?: string; campanha_stages?: { name?: string } } | null;
@@ -486,6 +541,13 @@ export async function loadLeadData(
     return {
       ...(lead as Record<string, unknown>),
       customFields,
+      funnel_positions: funnelEntries.map((entry) => ({
+        pipeline_id: entry.pipeline_id,
+        pipeline_slug: entry.pipeline_slug,
+        pipeline_name: entry.pipeline_name,
+        stage_id: entry.stage_id ?? null,
+        stage_key: entry.stage_key,
+      })),
       upsell_base_stage: upsellData?.tipo_cliente_tempo ?? null,
       upsell_gestao_stage: upsellData?.gestao_stage ?? null,
       upsell_potencial: upsellData?.potencial ?? null,

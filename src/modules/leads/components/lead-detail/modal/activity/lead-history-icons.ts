@@ -22,15 +22,15 @@ export type LeadHistoryIconConfig = {
 export const LEAD_HISTORY_ICONS: Record<string, LeadHistoryIconConfig> = {
   // Lead lifecycle
   lead_created:           { icon: UserPlus, label: "Lead criado", tone: "bg-blue-500/15 text-blue-500 border-blue-500/30" },
-  stage_changed:          { icon: ArrowRight, label: "Stage", tone: "bg-amber-500/15 text-amber-500 border-amber-500/30" },
+  stage_changed:          { icon: ArrowRight, label: "Etapa", tone: "bg-amber-500/15 text-amber-500 border-amber-500/30" },
   sdr_assigned:           { icon: UserCheck, label: "Responsável", tone: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
   closer_assigned:        { icon: UserCheck, label: "Vendedor", tone: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
   responsible_assigned:   { icon: UserCheck, label: "Responsável", tone: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
   field_updated:          { icon: Edit2, label: "Campo", tone: "bg-muted text-muted-foreground border-border/40" },
 
   // Pipe ops
-  pipe_added:             { icon: Plus, label: "Pipe", tone: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
-  pipe_removed:           { icon: Trash2, label: "Pipe", tone: "bg-red-500/15 text-red-500 border-red-500/30" },
+  pipe_added:             { icon: Plus, label: "Funil", tone: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
+  pipe_removed:           { icon: Trash2, label: "Funil", tone: "bg-red-500/15 text-red-500 border-red-500/30" },
 
   // Meeting
   meeting_scheduled:      { icon: Calendar, label: "Reunião", tone: "bg-blue-500/15 text-blue-500 border-blue-500/30" },

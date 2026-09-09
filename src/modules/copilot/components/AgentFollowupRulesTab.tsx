@@ -59,8 +59,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { FollowupRule } from "@/types/copilot";
-import { PIPE_TYPES } from "@/types/copilot";
-import { useAllPipelineStageOptions } from "@/modules/pipelines";
+import { useCopilotFunnelOptions } from "../hooks/usePipeTypeOptions";
 import {
   useAgentFollowupRules,
   useCreateFollowupRule,
@@ -138,7 +137,7 @@ function RuleCard({
   const [localRule, setLocalRule] = useState(rule);
   const [tagInput, setTagInput] = useState("");
   const [hasChanges, setHasChanges] = useState(false);
-  const { stagesByPipe } = useAllPipelineStageOptions();
+  const { options: pipeTypeOptions, stagesByPipe, labelForRef } = useCopilotFunnelOptions();
 
   const updateLocalRule = (field: string, value: any) => {
     setLocalRule((prev) => ({ ...prev, [field]: value }));
@@ -336,7 +335,7 @@ function RuleCard({
               {/* Pipelines */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Pipelines</Label>
+                  <Label>Funis</Label>
                   <Select
                     value=""
                     onValueChange={(value) => {
@@ -350,7 +349,7 @@ function RuleCard({
                       <SelectValue placeholder="Selecione" />
                     </SelectTrigger>
                     <SelectContent>
-                      {PIPE_TYPES.map((pipe) => (
+                      {pipeTypeOptions.map((pipe) => (
                         <SelectItem key={pipe.value} value={pipe.value}>
                           {pipe.label}
                         </SelectItem>
@@ -367,7 +366,7 @@ function RuleCard({
                           updateLocalRule("filterPipes", (localRule.filterPipes || []).filter((p) => p !== pipe));
                         }}
                       >
-                        {PIPE_TYPES.find(p => p.value === pipe)?.label || pipe} ×
+                        {labelForRef(pipe)} ×
                       </Badge>
                     ))}
                   </div>
@@ -473,7 +472,7 @@ function RuleCard({
                         <Info className="w-3 h-3 ml-1 inline text-muted-foreground" />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Variáveis: {"{nome}"}, {"{empresa}"}, {"{ultimo_assunto}"}</p>
+                        <p>Variáveis: {"{nome}"}, {"{primeiro_nome}"}, {"{empresa}"}, {"{ultimo_assunto}"}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

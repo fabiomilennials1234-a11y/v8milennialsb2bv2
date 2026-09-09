@@ -202,7 +202,9 @@ describe("executeSendDocument — atomic send lock (at-most-once)", () => {
     expect(sendMedia).not.toHaveBeenCalled();
     expect(rpc).toHaveBeenCalledWith(
       "copilot_v2_acquire_dedup_lock",
-      expect.objectContaining({ p_dedup_key: "send_document:conv:conv-aaa:" + VALID_DOC }),
+      expect.objectContaining({
+        p_dedup_key: "send_document:conv:conv-aaa:" + VALID_DOC + ":action:action-1",
+      }),
     );
   });
 
@@ -248,7 +250,79 @@ describe("executeSendDocument — atomic send lock (at-most-once)", () => {
 
     expect(rpc).toHaveBeenCalledWith(
       "copilot_v2_acquire_dedup_lock",
-      expect.objectContaining({ p_dedup_key: "send_document:lead:lead-123:" + VALID_DOC }),
+      expect.objectContaining({
+        p_dedup_key: "send_document:lead:lead-123:" + VALID_DOC + ":action:action-1",
+      }),
     );
+  });
+
+  // 2026-09-03 — o defeito que este bloco existe para impedir de voltar.
+  //
+  // Com a chave ancorada só em (conversa, documento), a 1ª entrega tomava o lock
+  // por 24h e QUALQUER pedido posterior do lead morria contra ele. Na Forever
+  // Bella (02/09) o lead pediu a mesma foto 4 vezes em 2h e não recebeu nenhuma.
+  // O `actionId` na chave separa "retry da mesma ação" (tem de colidir) de
+  // "pedido novo do lead" (tem de passar).
+  it("gives a NEW request its own lock — the lead asking again must not collide with the earlier delivery", async () => {
+    const { supabase, rpc, sendMedia } = buildSupabase({ lockAcquired: true });
+
+    await executeSendDocument(
+      supabase, { document_id: VALID_DOC }, "org-111", "lead-123", "conv-aaa", "action-1",
+    );
+    await executeSendDocument(
+      supabase, { document_id: VALID_DOC }, "org-111", "lead-123", "conv-aaa", "action-2",
+    );
+
+    const keys = rpc.mock.calls
+      .filter((c: unknown[]) => c[0] === "copilot_v2_acquire_dedup_lock")
+      .map((c: unknown[]) => (c[1] as { p_dedup_key: string }).p_dedup_key);
+
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).not.toBe(keys[1]);
+    // Decisive: the second ask actually put the file on the wire.
+    expect(sendMedia).toHaveBeenCalledTimes(2);
+  });
+
+  // 🚨 A regra de produto, medida por MUTAÇÃO: com uma entrega REAL anterior na
+  // mesma conversa, o envio novo tem de sair mesmo assim. Se alguém reintroduzir
+  // o `return { skipped: true, reason: "duplicate_document" }`, este teste cai.
+  it("sends anyway when the same document was already DELIVERED in this conversation", async () => {
+    const { supabase, sendMedia } = buildSupabase({
+      lockAcquired: true,
+      priorAiActions: [
+        {
+          id: "action-old",
+          // O id TEM de ser o mesmo que está sendo enviado agora — com um
+          // `document_id` diferente o gate nunca casaria e o teste passaria
+          // verde mesmo com o bloqueio de volta no lugar.
+          payload: { document_id: VALID_DOC, delivered_at: "2026-09-02T17:27:18.882Z" },
+        },
+      ],
+    });
+
+    const result = await executeSendDocument(
+      supabase, { document_id: VALID_DOC }, "org-111", "lead-123", "conv-aaa", "action-new",
+    );
+
+    expect(result.data).not.toMatchObject({ skipped: true });
+    expect(result.data).not.toMatchObject({ reason: "duplicate_document" });
+    expect(sendMedia).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps colliding when the SAME action is re-claimed — the 2026-06-02 incident stays fixed", async () => {
+    const { supabase, rpc } = buildSupabase({ lockAcquired: false });
+
+    await executeSendDocument(
+      supabase, { document_id: VALID_DOC }, "org-111", "lead-123", "conv-aaa", "action-1",
+    );
+    await executeSendDocument(
+      supabase, { document_id: VALID_DOC }, "org-111", "lead-123", "conv-aaa", "action-1",
+    );
+
+    const keys = rpc.mock.calls
+      .filter((c: unknown[]) => c[0] === "copilot_v2_acquire_dedup_lock")
+      .map((c: unknown[]) => (c[1] as { p_dedup_key: string }).p_dedup_key);
+
+    expect(keys[0]).toBe(keys[1]);
   });
 });

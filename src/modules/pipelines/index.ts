@@ -22,12 +22,11 @@
  * `funis`, `legacy/confirmacao`). Os paths legados `hooks/useX` permanecem como
  * shims de re-export para não quebrar deep-imports externos.
  *
- * ⚠️ Dual model crítico:
- * - Hooks `usePipe{Whatsapp,Confirmacao,Propostas}*` operam **views legacy** `pipe_*`
- *   (coluna `status` = stage_key slug)
- * - Hooks `usePipeline{s,Entries,Stages}*` operam **modelo novo** `pipeline_entries`
- *   (coluna `stage_id` uuid)
- * - NÃO unificar agora — cleanup futuro (out-of-scope slice 5)
+ * ⚠️ Compatibilidade em demolição:
+ * - Hooks `usePipe{Whatsapp,Confirmacao,Propostas}*` ainda leem views legacy.
+ * - Escrita frontend nas seis views é proibida desde SCRUM-673; as mutações
+ *   passam pelas funções compartilhadas e chegam ao modelo canônico.
+ * - Leitores restantes migram na SCRUM-639 antes do DROP das views.
  *
  * Realtime: subscriptions em `pipeline_entries`, NUNCA em `pipe_*` views.
  */
@@ -87,6 +86,11 @@ export type {
 } from "./hooks/legacy";
 
 // ── Hooks: pipeline modelo novo (pipeline_entries + pipeline_stages) ──────
+// Funis da org COM o nome que ela usa. Prefira este a `usePipelines` em
+// qualquer lugar que desenhe o funil na tela — `pipelines.name` é o seed
+// congelado para funil de sistema (SCRUM-608).
+export { useFunisDaOrg, useFunisAtivosDaOrg } from "./hooks/model/useFunisDaOrg";
+export type { FunilDaOrg } from "./hooks/model/useFunisDaOrg";
 export {
   usePipelines,
   usePipeline,
@@ -105,7 +109,8 @@ export {
   useCreatePipelineStage,
   useUpdatePipelineStage,
   useDeletePipelineStage,
-  DEFAULT_STAGES,
+  usePipelineStageDeleteImpact,
+  FALLBACK_STAGES,
   useAllPipelineStageOptions,
   usePipelineStageOptions,
   getPipelineTypeName,
@@ -113,6 +118,11 @@ export {
   useFilteredLeadIds,
   useCustomFilteredLeadIds,
   useAllFunnelsLeadIds,
+  // SCRUM-633 — blocos por pipeline_id (paridade W4)
+  usePipelineLeadIds,
+  useStagesDoFunil,
+  useFunilFilters,
+  createInitialFunilFilterState,
 } from "./hooks/model";
 export type {
   Pipeline,
@@ -123,16 +133,27 @@ export type {
   FilteredLeadIdsParams,
   CustomFilteredLeadIdsParams,
   AllFunnelsLeadIdsParams,
+  PipelineLeadIdsParams,
+  StageDoFunil,
+  FunilFilterState,
+  FunilFiltersController,
 } from "./hooks/model";
 
 // ── Hooks: display config + metrics + dispatch + distribution ─────────────
 export {
   usePipelineDisplayConfig,
-  useHiddenDefaultPipes,
+  // `useHiddenDefaultPipes` virou `useAvailableSystemPipes` (20270902000000):
+  // com a auto-semeadura morta, "não ter a linha" é o estado normal de org
+  // nova, então a lista de ativáveis não pode ser só `is_visible = false`.
+  useAvailableSystemPipes,
+  useEnabledSystemPipeTypes,
+  useEnableSystemPipe,
   useTogglePipeVisibility,
+  SYSTEM_PIPE_CATALOG,
   usePipePropostasMetrics,
   usePipeConfirmacaoMetrics,
   usePipeWhatsappMetrics,
+  useFunilMetrics,
   computeConfirmacaoStats,
   usePipeDispatchRules,
   usePipeDispatchRuleSteps,
@@ -144,9 +165,13 @@ export {
 } from "./hooks/config";
 export type {
   PipelineDisplayConfig,
+  SystemPipeType,
   PipePropostasMetrics,
   PipeConfirmacaoMetrics,
   PipeWhatsappMetrics,
+  FunilMetrics,
+  FunilGenericMetrics,
+  FunilMetricsKind,
   MetricsPeriod,
   DateRange,
   MetricsPeriodState,
@@ -164,6 +189,7 @@ export type {
 // ── Hooks: custom pipelines + temporary funnels + members ─────────────────
 export {
   useCustomPipelines,
+  useCreateCustomPipeline,
   useCustomPipelineStages,
   useAddLeadToCustomPipe,
   useMoveLeadInCustomPipe,
@@ -204,7 +230,6 @@ export {
   ALL_ORIGIN_OPTIONS,
   countActiveFilters,
   PipelineListView,
-  PipeTableView,
   StageWorkflowsBadge,
   StageWorkflowsBadgeWrapper,
 } from "./components/kanban";
@@ -220,12 +245,14 @@ export type {
 
 // ── Components: shared (Ghost, MetricsPeriod, Manage/Dispatch/Distribution/Settings)
 export {
-  GhostLeadsBanner,
   ManagePipelineStagesContent,
   ManagePipelineStagesModal,
   PipeDispatchRulesSection,
   PipeDistributionSection,
   PipeSettingsDialog,
+  DeletePipelineDialog,
+  FunnelIdentitySection,
+  FunnelIdentityDialog,
 } from "./components/shared";
 
 // ── Components: custom pipelines ──────────────────────────────────────────
@@ -234,8 +261,6 @@ export {
   CreatePipelineModal,
   PIPELINE_COLORS,
   PIPELINE_ICONS,
-  CustomPipeLeadCard,
-  CustomPipelineKanban,
   CustomPipeSettingsDialog,
   ImportCustomPipelineContent,
 } from "./components/custom";
@@ -244,6 +269,7 @@ export {
 export {
   CreateFunilOuCampanhaModal,
   CreateTemporaryFunnelModal,
+  FunnelActionsMenu,
 } from "./components/funis";
 
 // ── Components: disparo (Quick Blast wizard — mass send) ──────────────────
@@ -272,7 +298,6 @@ export type { AudienceConditions } from "./components/disparo";
 export {
   AddMeetingModal,
   ConfirmacaoCard,
-  ConfirmacaoDetailModal,
   ConfirmacaoStats,
   MeetingCountdown,
   MeetingTimeline,
@@ -295,7 +320,7 @@ export {
   normalizeStageName,
 } from "./lib/stage-role-classifier";
 export type { StageRoleSuggestion, StageRoleAction } from "./lib/stage-role-classifier";
-export { STAGE_ROLES, STAGE_ROLE_META, STAGE_ROLE_SOURCE_LABEL } from "./lib/stage-role";
+export { STAGE_ROLES, STAGE_ROLES_ATRIBUIVEIS, STAGE_ROLE_META, STAGE_ROLE_SOURCE_LABEL } from "./lib/stage-role";
 export type { StageRoleMeta } from "./lib/stage-role";
 export type {
   StageRole,
@@ -308,3 +333,8 @@ export type {
 // a transição compareceu → Orçamentos, e cross-module só entra pelo barrel.
 export { moverNegocio, invalidateAfterMove } from "./lib/moverNegocio";
 export type { MoverNegocioParams } from "./lib/moverNegocio";
+
+// ── Identidade visual do funil (SCRUM-637) ────────────────────────────────
+// Cor/ícone de QUALQUER funil vêm de `pipelines`; a lateral (platform) resolve
+// o ícone por aqui — mapa canônico único, sem cópias por tela.
+export { FUNIL_ICON_MAP, funilIcon } from "./lib/funil-icons";

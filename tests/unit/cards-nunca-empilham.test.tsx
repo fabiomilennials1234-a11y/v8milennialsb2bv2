@@ -33,6 +33,7 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import type { DealCardData } from "@/modules/leads/components/deal-card/types";
@@ -71,8 +72,63 @@ vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
 vi.mock("@/modules/leads/components/lead-detail/modal/pipes/useCrossPipeMove", () => ({
   useCrossPipeMove: () => ({ move: vi.fn(), pendingStageKey: null, recentlyMovedStageKey: null }),
 }));
+/**
+ * O portão de "Excluir negócio" lê a SESSÃO: `useFeaturePermission` desce por
+ * `useCurrentTeamMember` até `useAuth`, que **lança** fora do `AuthProvider` —
+ * e este arquivo monta os painéis de verdade sem ele, de propósito (o que se
+ * prova aqui é a máquina de estados dos dois contextos, não a autorização).
+ *
+ * Mock PARCIAL, e no módulo-fonte em vez do barril: `@/modules/identity` é
+ * porta de entrada de meia dúzia de coisas que estes painéis usam, e substituí-lo
+ * inteiro trocaria um provider ausente por um grafo inteiro fingido.
+ */
+vi.mock("@/modules/identity/permissions/hooks/useUserRole", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useFeaturePermission: () => ({ allowed: true, isLoading: false, hasError: false }),
+}));
+/** Mesmo motivo: `useLogLeadAction` desce por `useOrganization` até `useAuth`. */
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({
+  useLogLeadAction: () => vi.fn(),
+  logLeadActionDirect: vi.fn(),
+}));
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: { from: () => ({ update: () => ({ eq: async () => ({ error: null }) }) }) },
+}));
+/**
+ * A faixa de etiquetas do card do Lead fala com banco — e, por `useOrganization`,
+ * com o `AuthContext`, cujo `useAuth` LANÇA fora do provider. Esta montagem não
+ * tem `AuthProvider` de propósito (o que se prova aqui é a máquina de estados
+ * dos dois painéis), então os hooks dela entram na lista de mocks pela mesma
+ * razão que `useLeads` e `useCrossPipeMove` já estavam nela.
+ */
+vi.mock("@/modules/leads/hooks/lead/useLeadTagsAttached", () => ({
+  useLeadTagsAttached: () => ({ data: [], isLoading: false }),
+  useAddLeadTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+  useRemoveLeadTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+}));
+vi.mock("@/modules/leads/hooks/useTags", () => ({
+  useTags: () => ({ data: [], isLoading: false }),
+  useCreateTag: () => ({ mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }),
+}));
+vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
+/**
+ * `LeadCardPanel` lê `role` para decidir se oferece CRIAR etiqueta nova.
+ * O mock é do MÓDULO FUNDO, não do barril `@/modules/identity`: o barril
+ * reexporta daqui, então isto basta para o painel — e o resto do barril
+ * (`useAuth`, `useMasterAuth`, tipos) continua real para quem mais precisar.
+ */
+vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
+  useOrganization: () => ({
+    organizationId: "org-1",
+    teamMemberId: "tm-1",
+    role: "admin",
+    orgType: "crm",
+    timezone: null,
+    isLoading: false,
+    isReady: true,
+    error: null,
+  }),
+  useRequiredOrganization: () => ({ organizationId: "org-1" }),
 }));
 vi.mock("@/shared/hooks/use-viewport", () => ({
   useViewport: () => ({ isMobile: false, isTablet: false, isDesktop: true }),
@@ -152,8 +208,19 @@ const NOME_LEAD = LEAD_EXEMPLO.nome;
  * papel devolveria "um só" exatamente no caso que este arquivo existe para
  * pegar.
  */
+/**
+ * ⚠️ `[role=alertdialog]` entra junto, e não é detalhe.
+ *
+ * O Radix marca o `AlertDialogContent` com `role="alertdialog"`, não `dialog`.
+ * Enquanto o seletor era só `[role=dialog]`, o contador que dá nome a este
+ * arquivo era CEGO à confirmação de "Excluir negócio" — a suíte ficaria verde
+ * mesmo que alguém movesse aquele `AlertDialog` para dentro do `DealCard`, que
+ * é o lugar aparentemente óbvio (o item de menu vive lá) e o que os comentários
+ * de `DealCardPanel` e `DealCard` dizem, em prosa, que não se pode fazer.
+ * Prosa não é guarda.
+ */
 function overlaysAbertos(): number {
-  return document.querySelectorAll("[role=dialog]").length;
+  return document.querySelectorAll("[role=dialog],[role=alertdialog]").length;
 }
 
 /**
@@ -222,6 +289,45 @@ describe("O Lead e o Negócio abrem juntos, num overlay só", { timeout: TIMEOUT
       screen.getByRole("button", { name: new RegExp(NEGOCIO_ESTAGNADO.lead.empresa!, "i") }),
     );
 
+    expect(overlaysAbertos()).toBe(1);
+    expect(fichasAbertas()).toEqual([TITULO_NEGOCIO]);
+  });
+
+  /**
+   * A confirmação de excluir é a única exceção à conta de um overlay só, e não
+   * é uma segunda FICHA — que é o que este arquivo proíbe. É um passo modal
+   * sobre a tela que a disparou, e sai assim que se decide.
+   *
+   * ⚠️ **Um guarda anterior aqui era tautológico e foi removido.** Ele
+   * afirmava que a confirmação nunca é DESCENDENTE do painel no DOM. Isso é
+   * verdade sempre, inclusive quando ela é aninhada no React: o
+   * `AlertDialogContent` sai por `AlertDialogPortal`, direto no `body`. O teste
+   * não podia falhar. Medido em 27/08/2026 movendo o `AlertDialog` para dentro
+   * do `DealCard` — nos DOIS arranjos o Esc fecha só a confirmação e o painel
+   * sobrevive, e nos dois o DOM é idêntico.
+   *
+   * O que fica é o que o usuário sente e o que PODE quebrar: abrir a
+   * confirmação não pode derrubar o painel, e desistir dela tem de devolver a
+   * tela em que ele estava — e não fechar as duas coisas de uma vez.
+   */
+  it("abrir e desistir da confirmação de excluir devolve o painel intacto", async () => {
+    montarFunil();
+    fireEvent.click(screen.getByText("abrir negócio do funil"));
+    expect(overlaysAbertos()).toBe(1);
+
+    // `userEvent`, não `fireEvent`: o `DropdownMenuTrigger` do Radix abre em
+    // `pointerdown`, e um `click` sintético do fireEvent não o alcança.
+    const usuario = userEvent.setup();
+    await usuario.click(screen.getByTestId("deal-card-kebab"));
+    await usuario.click(await screen.findByTestId("deal-card-excluir"));
+
+    // Com a confirmação aberta o painel continua montado, com a MESMA ficha.
+    expect(await screen.findByTestId("deal-card-excluir-dialogo")).toBeTruthy();
+    expect(fichasAbertas()).toEqual([TITULO_NEGOCIO]);
+
+    await usuario.keyboard("{Escape}");
+
+    expect(screen.queryByTestId("deal-card-excluir-dialogo")).toBeNull();
     expect(overlaysAbertos()).toBe(1);
     expect(fichasAbertas()).toEqual([TITULO_NEGOCIO]);
   });

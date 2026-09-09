@@ -118,8 +118,13 @@ export const LeadChecklistSection = memo(function LeadChecklistSection({ leadId 
           <ClipboardList className="w-3.5 h-3.5" />
           Checklists
         </h3>
+        {/* `modal`: este Popover vive dentro de um Dialog — o `LeadContactModal`
+            do chat (`LeadContactModal.tsx:22`) —, cujo `react-remove-scroll`
+            engole o `wheel` de tudo que sai por portal. Sem isto o
+            `max-h-40 overflow-y-auto` da lista de templates (:136) não rola com
+            a roda do mouse. Mesmo conserto das #1862/#1867. */}
         {templates.length > 0 && (
-          <Popover>
+          <Popover modal>
             <PopoverTrigger asChild>
               <button
                 type="button"

@@ -14,7 +14,8 @@ import type { StageRole, SuggestableStageRole, StageRoleSuggestionSource } from 
 export interface StageRoleSuggestionRow {
   id: string;
   organization_id: string;
-  pipeline_type: string;
+  /** NULL nas etapas de funil custom (pós-SCRUM-616 todas vivem em pipeline_stages). */
+  pipeline_type: string | null;
   stage_key: string;
   name: string;
   color: string | null;
@@ -23,6 +24,15 @@ export interface StageRoleSuggestionRow {
   stage_role_suggested_at: string | null;
   stage_role_suggestion_source: StageRoleSuggestionSource | null;
   organization: { name: string } | null;
+  /** Funil dono da etapa — é o rótulo quando pipeline_type é NULL (custom). */
+  pipeline: { name: string; slug: string | null; type: string | null } | null;
+  /**
+   * O nome do funil como a ORG o vê (display_config → nome de fábrica →
+   * pipelines.name), resolvido no hook. NULL quando a etapa está órfã
+   * (pipeline_id nulo — funil excluído/legacy): a tela mostra o fallback
+   * honesto em vez de inventar um nome de catálogo (SCRUM-641).
+   */
+  funil_label: string | null;
 }
 
 export interface OrgSuggestionGroup {
@@ -54,7 +64,9 @@ export function groupSuggestionsByOrg(
   for (const group of groups) {
     group.suggestions.sort(
       (a, b) =>
-        a.pipeline_type.localeCompare(b.pipeline_type) || a.name.localeCompare(b.name),
+        (a.pipeline_type ?? a.pipeline?.name ?? "").localeCompare(
+          b.pipeline_type ?? b.pipeline?.name ?? "",
+        ) || a.name.localeCompare(b.name),
     );
   }
   return groups.sort((a, b) => a.orgName.localeCompare(b.orgName));
@@ -87,6 +99,10 @@ export function buildReviewUpdate(params: {
   nowIso?: string;
 }): ReviewUpdatePayload {
   const { action, suggestedRole, correctedRole, reviewerId } = params;
+  const aplicado = action === "approve" ? suggestedRole : action === "correct" ? correctedRole : null;
+  if (aplicado === "won" || aplicado === "lost") {
+    throw new Error("Ganho e perda são definidos no negócio, não na etapa");
+  }
   const nowIso = params.nowIso ?? new Date().toISOString();
 
   const base: ReviewUpdatePayload = {

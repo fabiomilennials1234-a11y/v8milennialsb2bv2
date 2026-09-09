@@ -42,6 +42,17 @@ Detalhe completo em `10 — Remodelagem/03-to-be/principios-modulo.md`.
 
 - `src/ui/` ou `src/components/ui/` — primitivos shadcn
 - `src/shared/` — utils puros sem dependência de domínio
+  - `src/shared/disparo/` — a decisão de Disparo que DOIS bounded contexts compartilham
+    (#1846): quais números existem e em que regime (`disparo-numbers`), o teto por número
+    (`speed-safety`), e o contrato do Template oficial (`template-escolhido`). O wizard
+    vive em `campaigns` e o Disparo Rápido em `leads`; publicar isto pelo barrel de um dos
+    dois fechava ciclo. **Os três são folha do grafo — zero import de módulo. Um único
+    `@/modules/...` aqui recria o ciclo.**
+    ⚠️ Carregam domínio (allowlist de provedor, regime do ADR-0028), o que tensiona a linha
+    acima. A decisão de mover foi do CTO na #1846; a frase "sem dependência de domínio" já
+    não descreve a árvore (`shared/components/CreateNewModal.tsx`,
+    `shared/hooks/useDataExport.ts` importam módulo — estes três não). Ver
+    `.specs/blast/HANDOFF-1846.md` §5.
 - `src/core/` — supabase client, env, types globais, observability boot
 
 ## Convenção interna do módulo

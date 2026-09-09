@@ -10,3 +10,5 @@ export * from "./pipe-defaults";
 export * from "./pipe-columns";
 export * from "./pipe-entities";
 export * from "./kanban";
+export * from "./nome-do-funil";
+export * from "./funil-de-vendas";

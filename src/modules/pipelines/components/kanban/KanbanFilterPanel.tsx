@@ -3,8 +3,6 @@ import {
   Filter,
   User,
   Tag,
-  Flame,
-  Star,
   Clock,
   Package,
   Globe,
@@ -65,6 +63,16 @@ import {
   stalledBucketLabel,
 } from "@/modules/pipelines/lib/stalled-buckets";
 import { cn } from "@/lib/utils";
+import {
+  countActiveFilters,
+  type FilterSectionConfig,
+} from "@/modules/pipelines/lib/kanban-filter-config";
+// FilterSectionConfig e countActiveFilters vivem em `lib/kanban-filter-config`
+// para que o hook que MONTA a config não precise importar deste componente.
+// Reexportados aqui porque `components/kanban/index.ts` e a API pública do
+// módulo já os expõem por este caminho.
+export { countActiveFilters, type FilterSectionConfig };
+
 
 // ─── Origin labels (shared source of truth) ────��────────────────────────────
 export const originLabels: Record<string, { label: string; color: string }> = {
@@ -107,42 +115,6 @@ const URGENCY_OPTIONS = [
   { value: "6-meses", label: "6+ meses" },
 ];
 
-// ─── Section types ───────────────────���──────────────────────────────���────────
-export type FilterSectionConfig =
-  | { type: "responsible"; value: string; onChange: (v: string) => void; members: { id: string; name: string }[] }
-  | { type: "origin-single"; value: string; onChange: (v: string) => void }
-  | { type: "origin-multi"; value: string[]; onChange: (v: string[]) => void }
-  | { type: "tags"; value: string[]; onChange: (v: string[]) => void; tags: { id: string; name: string; color: string | null }[] }
-  | { type: "product-type"; value: string; onChange: (v: string) => void }
-  | { type: "calor"; value: string; onChange: (v: string) => void }
-  | { type: "priority"; value: string; onChange: (v: string) => void }
-  | { type: "urgency"; value: string; onChange: (v: string) => void }
-  | { type: "status-multi"; value: string[]; onChange: (v: string[]) => void; options: { id: string; title: string; color: string }[] }
-  | { type: "qualification-tier"; value: string[]; onChange: (v: string[]) => void }
-  | { type: "pre-qualification-tier"; value: string[]; onChange: (v: string[]) => void }
-  | { type: "scheduled"; value: boolean; onChange: (v: boolean) => void }
-  /** Data de criação do lead. Voltou do cabeçalho pro painel — é aqui que compõe com o resto. */
-  | { type: "created-period"; value: MetricsPeriodState; onChange: (v: MetricsPeriodState) => void }
-  /** Dias na etapa atual — "quem está encalhado?". Ver `lib/stalled-buckets`. */
-  | { type: "stalled-days"; value: string; onChange: (v: string) => void }
-  /**
-   * Escolha única genérica, pra dimensão que só um funil tem — a faixa de tempo
-   * da reunião em Confirmação é o primeiro caso. Existe pra esse tipo de filtro
-   * ter casa no painel em vez de virar mais uma fileira de botões no cabeçalho,
-   * que é justamente o que o Modelo 1 veio desfazer. `allValue` é o valor que
-   * significa "sem filtro" (não conta no badge nem vira chip).
-   */
-  | {
-      type: "single-choice";
-      id: string;
-      label: string;
-      value: string;
-      onChange: (v: string) => void;
-      options: { value: string; label: string }[];
-      allValue?: string;
-      icon?: React.ElementType;
-    };
-
 // Ordered tier labels for chips (canonical labels come from the leads module).
 function tierChipLabel(value: string[]): string {
   const labels = value
@@ -158,45 +130,6 @@ export interface KanbanFilterPanelProps {
   onClearAll: () => void;
 }
 
-// ─── Helper: count active filters from sections ──────────────���───────────────
-export function countActiveFilters(sections: FilterSectionConfig[]): number {
-  let count = 0;
-  for (const section of sections) {
-    switch (section.type) {
-      case "responsible":
-      case "origin-single":
-      case "product-type":
-      case "calor":
-      case "priority":
-      case "urgency":
-        if (section.value !== "all") count++;
-        break;
-      case "origin-multi":
-      case "tags":
-      case "status-multi":
-      case "qualification-tier":
-      case "pre-qualification-tier":
-        if (section.value.length > 0) count++;
-        break;
-      case "scheduled":
-        if (section.value) count++;
-        break;
-      case "created-period":
-        // "Geral" e uma seleção pela metade (só a data inicial) não filtram
-        // nada — getDateRange devolve null nos dois casos, então contar aqui
-        // acenderia o badge sem nenhum card sair da tela.
-        if (getDateRange(section.value)) count++;
-        break;
-      case "stalled-days":
-        if (section.value && section.value !== STALLED_ALL) count++;
-        break;
-      case "single-choice":
-        if (section.value !== (section.allValue ?? "all")) count++;
-        break;
-    }
-  }
-  return count;
-}
 
 // ─── Helper: generate filter chips from sections ─────────────────────────────
 export interface FilterChipData {
@@ -267,28 +200,6 @@ export function getFilterChips(sections: FilterSectionConfig[]): FilterChipData[
           chips.push({
             id: "product-type",
             label: `Tipo: ${typeLabel}`,
-            onRemove: () => section.onChange("all"),
-          });
-        }
-        break;
-      }
-      case "calor": {
-        if (section.value !== "all") {
-          const calorLabel = section.value === "hot" ? "Quente" : section.value === "warm" ? "Morno" : "Frio";
-          chips.push({
-            id: "calor",
-            label: `Calor: ${calorLabel}`,
-            onRemove: () => section.onChange("all"),
-          });
-        }
-        break;
-      }
-      case "priority": {
-        if (section.value !== "all") {
-          const prioLabel = section.value === "high" ? "Alta" : section.value === "medium" ? "Média" : "Baixa";
-          chips.push({
-            id: "priority",
-            label: `Prioridade: ${prioLabel}`,
             onRemove: () => section.onChange("all"),
           });
         }
@@ -618,70 +529,6 @@ function SectionRenderer({ section }: { section: FilterSectionConfig }) {
               <SelectItem value="all">Todos os tipos</SelectItem>
               <SelectItem value="mrr">Recorrência</SelectItem>
               <SelectItem value="projeto">Projeto</SelectItem>
-            </SelectContent>
-          </Select>
-        </FilterSectionWrapper>
-      );
-
-    case "calor":
-      return (
-        <FilterSectionWrapper icon={Flame} label="Calor">
-          <Select value={section.value} onValueChange={section.onChange}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todos" />
-            </SelectTrigger>
-            <SelectContent className="z-[60]">
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="hot">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-3 h-3 text-destructive" />
-                  Quente (7-10)
-                </div>
-              </SelectItem>
-              <SelectItem value="warm">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-3 h-3 text-chart-5" />
-                  Morno (4-6)
-                </div>
-              </SelectItem>
-              <SelectItem value="cold">
-                <div className="flex items-center gap-2">
-                  <Flame className="w-3 h-3 text-muted-foreground" />
-                  Frio (0-3)
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </FilterSectionWrapper>
-      );
-
-    case "priority":
-      return (
-        <FilterSectionWrapper icon={Star} label="Prioridade">
-          <Select value={section.value} onValueChange={section.onChange}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Todas" />
-            </SelectTrigger>
-            <SelectContent className="z-[60]">
-              <SelectItem value="all">Todas as prioridades</SelectItem>
-              <SelectItem value="high">
-                <div className="flex items-center gap-2">
-                  <span className="text-chart-5">★★★</span>
-                  Alta (8-10)
-                </div>
-              </SelectItem>
-              <SelectItem value="medium">
-                <div className="flex items-center gap-2">
-                  <span className="text-chart-5">★★</span>
-                  Média (5-7)
-                </div>
-              </SelectItem>
-              <SelectItem value="low">
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">★</span>
-                  Baixa (0-4)
-                </div>
-              </SelectItem>
             </SelectContent>
           </Select>
         </FilterSectionWrapper>

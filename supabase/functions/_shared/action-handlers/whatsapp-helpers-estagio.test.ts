@@ -68,8 +68,14 @@ function fakeSupabase(opts: { entries?: EntryFake[]; semFunil?: boolean; captura
           }
           return Promise.resolve({ data: null, error: null });
         },
-        then: (resolve: (v: { data: unknown[]; error: unknown }) => unknown) =>
-          resolve({ data: table === "pipeline_entries" ? (opts.entries ?? []) : [], error: null }),
+        then: (resolve: (v: { data: unknown[]; error: unknown }) => unknown) => {
+          const entries = [...(opts.entries ?? [])].sort((a, b) => {
+            if (a.closed_at === null && b.closed_at !== null) return -1;
+            if (a.closed_at !== null && b.closed_at === null) return 1;
+            return 0;
+          });
+          return resolve({ data: table === "pipeline_entries" ? entries : [], error: null });
+        },
       };
       return builder;
     },

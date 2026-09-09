@@ -12,6 +12,7 @@ import {
 } from "./navigation-filters";
 import {
   FUNIS_PATHS,
+  NAV_VIEW_PERMISSIONS,
   PITSTOP_GROUPS,
   SIDEBAR_PRIMARY,
   TURBO_PATHS,
@@ -37,11 +38,11 @@ describe("filterByOutbound", () => {
   });
 
   it("mantém o pai quando só os filhos estão liberados", () => {
-    const funis = node("/funis", { children: [node("/pipe-whatsapp")] });
+    const funis = node("/funis", { children: [node("/funil/whatsapp")] });
     // /funis está no recorte, mas o que importa aqui é o pai sobreviver
     // mesmo quando a própria rota não estivesse — por isso o pai de teste
     // usa uma rota fora da lista.
-    const grupo = node("/inexistente", { children: [node("/pipe-propostas")] });
+    const grupo = node("/inexistente", { children: [node("/funil/propostas")] });
     expect(filterByOutbound([funis, grupo], true).map((i) => i.path)).toEqual([
       "/funis",
       "/inexistente",
@@ -63,27 +64,12 @@ describe("filterByMaster", () => {
 });
 
 describe("filterByGate", () => {
-  const gates = { metaPagesConnected: false, metricsStudioEnabled: false };
+  const gates = { metaPagesConnected: false };
 
   it("respeita o gate de páginas Meta conectadas", () => {
     const items = [node("/dashboard"), node("/atendimento/meta", { gate: "meta_pages_connected" })];
     expect(filterByGate(items, gates).map((i) => i.path)).toEqual(["/dashboard"]);
     expect(filterByGate(items, { ...gates, metaPagesConnected: true })).toHaveLength(2);
-  });
-
-  it("esconde Métricas enquanto a org não está no rollout", () => {
-    const items = [node("/performance"), node("/metricas", { gate: "metrics_studio_enabled" })];
-    expect(filterByGate(items, gates).map((i) => i.path)).toEqual(["/performance"]);
-    expect(filterByGate(items, { ...gates, metricsStudioEnabled: true })).toHaveLength(2);
-  });
-
-  it("os dois gates são independentes", () => {
-    const items = [
-      node("/atendimento/meta", { gate: "meta_pages_connected" }),
-      node("/metricas", { gate: "metrics_studio_enabled" }),
-    ];
-    const soMetrics = filterByGate(items, { metaPagesConnected: false, metricsStudioEnabled: true });
-    expect(soMetrics.map((i) => i.path)).toEqual(["/metricas"]);
   });
 });
 
@@ -111,14 +97,36 @@ describe("inventário da navegação", () => {
     expect(rotulos).not.toContain("Combustível");
   });
 
-  it("Métricas está no Pitstop e mantém o gate de rollout", () => {
-    const metricas = itensPitstop.find((item) => item.path === "/metricas");
+  it("Métricas é porta da lateral, entre Comando e Chat, sem gate de rollout", () => {
+    const metricas = SIDEBAR_PRIMARY.find((item) => item.path === "/metricas");
     expect(metricas).toBeDefined();
-    expect(metricas?.gate).toBe("metrics_studio_enabled");
+    expect(metricas?.gate).toBeUndefined();
+    // A posição é o pedido, não detalhe: entre Comando e Chat.
+    expect(caminhosLaterais.indexOf("/metricas")).toBe(caminhosLaterais.indexOf("/dashboard") + 1);
+    expect(caminhosLaterais.indexOf("/chat-whatsapp")).toBe(caminhosLaterais.indexOf("/metricas") + 1);
   });
 
-  it("a lateral tem seis portas", () => {
-    expect(SIDEBAR_PRIMARY).toHaveLength(6);
+  it("Métricas saiu do Pitstop e não ficou duplicada", () => {
+    expect(itensPitstop.some((item) => item.path === "/metricas")).toBe(false);
+  });
+
+  it("a lateral tem sete portas", () => {
+    expect(SIDEBAR_PRIMARY).toHaveLength(7);
+  });
+
+  // SCRUM-430. As duas travas de Métricas são independentes e ambas precisam
+  // existir: o gate de ROLLOUT (a org entrou na feature) e o de PERMISSÃO (este
+  // membro pode ver). Perder qualquer uma passa despercebido na tela de quem
+  // testa — admin e master recebem `true` antes de qualquer camada.
+  it("Métricas exige metrics.view, além do gate de rollout", () => {
+    expect(NAV_VIEW_PERMISSIONS["/metricas"]).toBe("metrics.view");
+  });
+
+  // A chave do corte por pessoa NÃO é a mesma da tela: closer/SDR seguem em
+  // `performance.view`, a mesma trava do Ranking. Se um dia alguém "unificar",
+  // que seja por decisão, não por descuido.
+  it("Métricas e Ranking não compartilham a mesma chave", () => {
+    expect(NAV_VIEW_PERMISSIONS["/metricas"]).not.toBe(NAV_VIEW_PERMISSIONS["/performance"]);
   });
 });
 
@@ -149,18 +157,31 @@ describe("makeCanViewRoute", () => {
     const can = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: undefined });
     expect(can("/leads")).toBe(true);
   });
+
+  it("/funil/<slug> herda a permissão do prefixo /funil (flip da 637)", () => {
+    const can = makeCanViewRoute({
+      isMaster: false,
+      isAdmin: false,
+      featurePerms: { "pipeline.view": false },
+    });
+    expect(can("/funil/whatsapp")).toBe(false);
+    expect(can("/funil/pos-venda")).toBe(false);
+    // negação some → liberado (chave ausente é liberada)
+    const canSem = makeCanViewRoute({ isMaster: false, isAdmin: false, featurePerms: {} });
+    expect(canSem("/funil/whatsapp")).toBe(true);
+  });
 });
 
 describe("filterByPermission", () => {
   const negaFunis = (path: string) => path !== "/funis";
 
   it("mantém o pai negado quando ao menos um filho é visível", () => {
-    const funis = node("/funis", { children: [node("/pipe-whatsapp")] });
+    const funis = node("/funis", { children: [node("/funil/whatsapp")] });
     expect(filterByPermission([funis], negaFunis).map((i) => i.path)).toEqual(["/funis"]);
   });
 
   it("corta o pai quando ele e todos os filhos estão negados", () => {
-    const funis = node("/funis", { children: [node("/pipe-whatsapp")] });
+    const funis = node("/funis", { children: [node("/funil/whatsapp")] });
     expect(filterByPermission([funis], () => false)).toEqual([]);
   });
 
@@ -171,9 +192,9 @@ describe("filterByPermission", () => {
 
 describe("pruneChildren", () => {
   it("remove os filhos negados sem derrubar o pai", () => {
-    const funis = node("/funis", { children: [node("/pipe-whatsapp"), node("/pipe-propostas")] });
-    const [result] = pruneChildren([funis], (path) => path !== "/pipe-propostas");
-    expect(result.children?.map((c) => c.path)).toEqual(["/pipe-whatsapp"]);
+    const funis = node("/funis", { children: [node("/funil/whatsapp"), node("/funil/propostas")] });
+    const [result] = pruneChildren([funis], (path) => path !== "/funil/propostas");
+    expect(result.children?.map((c) => c.path)).toEqual(["/funil/whatsapp"]);
   });
 });
 
@@ -188,14 +209,25 @@ describe("isRouteActive", () => {
     expect(isRouteActive("/leads/123", "/leads")).toBe(true);
   });
 
-  it("ativa Funis a partir das rotas de pipe", () => {
-    expect(isRouteActive("/pipe-whatsapp", "/funis", FUNIS_PATHS)).toBe(true);
-    expect(isRouteActive("/pipe-propostas/abc", "/funis", FUNIS_PATHS)).toBe(true);
+  it("ativa Funis a partir da rota única /funil/:slug (SCRUM-632)", () => {
+    expect(isRouteActive("/funil/prospeccao-cnae", "/funis", FUNIS_PATHS)).toBe(true);
+    expect(isRouteActive("/funil/whatsapp", "/funis", FUNIS_PATHS)).toBe(true);
   });
 
   it("ativa Turbo a partir de Copilot e Automações", () => {
     expect(isRouteActive("/copilot", "/turbo", TURBO_PATHS)).toBe(true);
     expect(isRouteActive("/automacoes/novo", "/turbo", TURBO_PATHS)).toBe(true);
     expect(isRouteActive("/leads", "/turbo", TURBO_PATHS)).toBe(false);
+  });
+});
+
+// The actual navigation inventory must expose native metrics to every org type.
+describe("native metrics navigation", () => {
+  it.each([false, true])("shows metrics to a regular member (outbound=%s)", (outbound) => {
+    const visible = filterByGate(
+      filterByMaster(filterByOutbound(SIDEBAR_PRIMARY, outbound), false),
+      { metaPagesConnected: false },
+    );
+    expect(visible.some((item) => item.path === "/metricas")).toBe(true);
   });
 });

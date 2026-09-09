@@ -231,6 +231,10 @@ export interface CopilotWizardData {
   canCreateLead: boolean;
   canTransferHuman: boolean;
   canMoveCards: boolean;
+  // Opcionais: o Playground é a única superfície que edita estas duas. Ausente
+  // significa "não mexa na flag do banco" — nunca false.
+  canSendDocument?: boolean;
+  canTransferSzChat?: boolean;
   maxConversationTurns: number;
   responseDelayMs: number;
 
@@ -385,8 +389,11 @@ export interface AgentTemplate {
 export interface AgentContext {
   leadName?: string;
   leadCompany?: string;
-  currentPipe: string; // 'confirmacao', 'propostas', 'whatsapp', 'campanha'
-  currentStage: string; // Status específico da etapa
+  currentPipe: string; // slug do funil ('whatsapp', 'confirmacao', ..., ou slug de funil custom) ou 'campanha'
+  currentStage: string; // Status específico da etapa (stage_key)
+  /** SCRUM-628: identidade real do funil/etapa — permite casar regras salvas no formato novo (uuid). */
+  currentPipelineId?: string;
+  currentStageId?: string;
   leadHistory?: string[]; // Histórico de ações do lead
   leadTags?: string[]; // Tags associadas ao lead
   leadScore?: number; // Score de 0-100
@@ -496,17 +503,9 @@ export const AVAILABLE_SKILLS = [
   "Manter relacionamento",
 ] as const;
 
-/**
- * Pipelines disponíveis no sistema
- */
-export const PIPE_TYPES = [
-  { value: "confirmacao", label: "Pipe Confirmação" },
-  { value: "propostas", label: "Pipe Propostas" },
-  { value: "whatsapp", label: "Pipe WhatsApp" },
-  { value: "campanha", label: "Campanhas" },
-  { value: "upsell_base", label: "Carteira Base" },
-  { value: "upsell_gestao", label: "Carteira Gestão" },
-] as const;
+// SCRUM-641: PIPE_TYPES (catálogo cravado "Pipe Confirmação"/"Pipe Propostas"/
+// "Pipe WhatsApp") morreu — as telas resolvem as opções com os funis REAIS da
+// org via `usePipeTypeOptions` (@/modules/copilot/hooks).
 
 /**
  * @deprecated Use useAllPipelineStageOptions() ou usePipelineStageOptions(type) do hook usePipelineStages.

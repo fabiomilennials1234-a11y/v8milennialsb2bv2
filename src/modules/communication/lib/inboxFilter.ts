@@ -22,6 +22,18 @@ import type { ChatContact } from "@/modules/communication/hooks/chat/types";
 export type SourceFilter = "ia" | "humano";
 export type LeadPresenceFilter = "com" | "sem";
 
+/**
+ * Recorte de escopo da lista — as abas do topo do inbox.
+ *
+ * `"grupos"` só existe para org com a flag `chat_abas_de_grupos`: sem ela a aba
+ * não é renderizada e o valor nunca chega aqui. Ele é um TERCEIRO escopo, e não
+ * um filtro somado aos outros, porque grupo não tem lead — funil, etapa,
+ * vendedor e qualificação não têm o que recortar, e misturá-lo em "Ativas"
+ * empurraria conversa individual para fora da página (grupo é ~40% das
+ * mensagens).
+ */
+export type InboxTab = "active" | "archived" | "grupos";
+
 /** Funil ativo em que o lead está, mais a etapa atual dentro dele. */
 export interface ContactFunnelEntry {
   /** pipeline_id (uuid) — chave canônica que unifica pipes de sistema e custom. */
@@ -137,30 +149,37 @@ function matchesLeadPresence(c: ChatContact, lead: LeadPresenceFilter | null): b
 
 /**
  * Aplica o estado de filtro + a busca textual + a tab de escopo a uma lista de
- * contatos. Grupos são sempre removidos. Retorna nova lista (não muta).
+ * contatos. Retorna nova lista (não muta).
+ *
+ * Grupo só aparece na aba `"grupos"`, que por sua vez só existe na org flagada.
+ * Nas outras duas abas a recusa continua sendo a de #1632.
  */
 export function applyInboxFilters(
   contacts: ChatContact[],
   state: InboxFilterState,
   ctx: InboxFilterContext,
-  opts: { searchQuery?: string; tab?: "active" | "archived" } = {},
+  opts: { searchQuery?: string; tab?: InboxTab } = {},
 ): ChatContact[] {
   const search = (opts.searchQuery ?? "").trim().toLowerCase();
   const tab = opts.tab ?? "active";
 
   return contacts.filter((c) => {
-    // Grupo não é exibido, ponto. Não há toggle a consultar (#1632).
+    // GRUPO É ESCOPO PRÓPRIO, e o default continua sendo escondê-lo.
     //
-    // Histórico: em 23/07/2026 (6356ef92) o desktop passou a esconder grupo
-    // incondicionalmente por acidente; em julho o toggle "Grupos" foi reposto
-    // para desfazer isso. Agora a exclusão é deliberada — `capture_groups`
-    // está `false` nas 104 orgs e o whatsapp-webhook dropa mensagem de grupo,
-    // então o que o toggle revelava era histórico congelado atrás de um
-    // controle que o próprio membro ligava.
-    //
-    // A recusa é incondicional de propósito: estado antigo persistido ou um
-    // chamador que ainda passe `showGroups` não podem ressuscitar a lista.
-    if (c.is_group) return false;
+    // Histórico: em 23/07/2026 (6356ef92) o desktop passou a esconder grupo por
+    // acidente; um toggle "Grupos" foi reposto para desfazer isso; em #1632 a
+    // exclusão virou incondicional em toda camada. O que volta agora NÃO é
+    // aquele toggle — é uma aba, ligada por org (`chat_abas_de_grupos`), sem
+    // estado persistido por membro. Org sem a flag nunca passa `tab: "grupos"`,
+    // e para ela esta função devolve exatamente o que devolvia antes.
+    if (tab === "grupos") {
+      if (!c.is_group) return false;
+      // Arquivar grupo é possível (a conversa existe em `whatsapp_conversations`),
+      // e arquivada não é "ativa" em aba nenhuma — inclusive nesta.
+      if (c.archived_at) return false;
+    } else {
+      if (c.is_group) return false;
+    }
 
     if (tab === "active" && c.archived_at) return false;
     if (tab === "archived" && !c.archived_at) return false;

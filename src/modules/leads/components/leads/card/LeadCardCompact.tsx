@@ -12,6 +12,7 @@ import { ptBR } from "date-fns/locale";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { LeadCardAvatar } from "./LeadCardAvatar";
 import { LeadCardLabels } from "./LeadCardLabels";
+import { LeadEtiquetasPopover } from "../../etiquetas/LeadEtiquetasPopover";
 import { LeadCardChecklistPopover } from "./LeadCardChecklistPopover";
 import { LeadCardQualificationPopover } from "./LeadCardQualificationPopover";
 // Mesma origem que o `LeadCardAvatar` usa: ele importa o tipo, não o reexporta.
@@ -70,10 +71,15 @@ interface LeadCardCompactProps {
     /** Id do LEAD (o `id` acima é o da ENTRADA no funil). O chat precisa deste. */
     leadId?: string | null;
     name: string;
+    /**
+     * Código do cliente no ERP, exibido como prefixo ("1234 - João"). Campo
+     * próprio, não nome composto: a inicial do avatar sai do `name`, e
+     * prefixado todo cliente do ERP viraria um avatar "1".
+     */
+    erpCode?: string | null;
     company?: string | null;
     phone?: string | null;
     email?: string | null;
-    rating?: number;
     tags?: Tag[] | null;
     value?: number | null;
     faturamento?: string | number | null;
@@ -97,6 +103,14 @@ interface LeadCardCompactProps {
   config: {
     showContact: boolean; showValue: boolean; showDate: boolean;
     showProducts: boolean; showMeetLink: boolean; showNotes: boolean;
+    /**
+     * Se a linha de data aparece VAZIA (o convite azul "Sem data") quando não
+     * há compromisso. Opcional e default `true` para não mexer em quem já
+     * monta este card sem a chave — o funil custom é quem a manda `false`
+     * (S6): lá a data existe porque a Agenda a espelhou, e funil de assunto
+     * nenhum deve ganhar um convite a marcar reunião.
+     */
+    showDateEmpty?: boolean;
   };
   origin: { bg: string; text: string; label: string };
   urgency: { label: string; className: string } | null;
@@ -293,7 +307,13 @@ export const LeadCardCompact = memo(function LeadCardCompact({
             </div>
 
             <div className="min-w-0 flex-1">
-              <h4 className="truncate text-[12.5px] font-semibold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary">
+              <h4
+                className="truncate text-[12.5px] font-semibold leading-[1.18] tracking-[-0.012em] transition-colors group-hover:text-primary"
+                title={lead.erpCode ? `${lead.erpCode} - ${lead.name}` : lead.name}
+              >
+                {lead.erpCode && (
+                  <span className="font-normal text-muted-foreground">{lead.erpCode} - </span>
+                )}
                 {lead.name}
               </h4>
               {lead.company && (
@@ -383,7 +403,10 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                 </Linha>
               )}
 
-              {config.showDate && (
+              {/* A data é regida pelo DADO: existe compromisso → existe linha.
+                  O convite "Sem data" continua nos funis onde a data é
+                  esperada, e some onde `showDateEmpty` é `false`. */}
+              {config.showDate && (parsedDate || config.showDateEmpty !== false) && (
                 <Linha icone={<CalendarDays className="size-[13px]" />} vazio="Sem data">
                   {parsedDate ? (
                     <>
@@ -399,8 +422,16 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                   completo (cabeçalho sticky, seções colapsáveis, itens
                   marcáveis) mas só era montado pelo ramo confortável, que
                   funil nenhum renderiza — ou seja, checklist não existia nos
-                  funis. Sem `leadId` ou sem checklist, volta a ser só texto. */}
-              {lead.leadId && totalCk > 0 ? (
+                  funis.
+
+                  O portão é só o `leadId`. Exigir `totalCk > 0` — como aqui se
+                  fazia — deixava justamente o card SEM checklist sem porta: a
+                  linha "Sem atividades" era o convite a aplicar o primeiro, e
+                  não abria nada. O ramo confortável já tinha corrigido isso
+                  (`LeadCardMetrics`, `checklistInteractive = !!leadId`); o card
+                  do funil ficou para trás. E checklist com zero itens conta
+                  0/0: existia no banco e sumia da tela. */}
+              {lead.leadId ? (
                 <LeadCardChecklistPopover
                   leadId={lead.leadId}
                   completed={feitos}
@@ -463,11 +494,6 @@ export const LeadCardCompact = memo(function LeadCardCompact({
               {origin.label}
             </Badge>
 
-            {/* O calor sem a pílula de 1 a 10: só o corte que muda a ação. */}
-            {lead.rating != null && lead.rating >= 8 && (
-              <Badge className="border-amber-500/30 bg-amber-500/10 text-amber-500">Alto potencial</Badge>
-            )}
-
             {urgency && <Badge className={urgency.className}>{urgency.label}</Badge>}
 
             {lead.potencial && (
@@ -499,6 +525,25 @@ export const LeadCardCompact = memo(function LeadCardCompact({
                 <Clock className="size-[9px]" />
                 {formatDistanceToNowStrict(new Date(lead.createdAt), { addSuffix: true, locale: ptBR })}
               </Badge>
+            )}
+
+            {/* A porta das etiquetas fica NESTA linha, e não junto das pílulas
+                do rodapé, por uma razão de layout: a linha de badges existe
+                sempre (a origem nunca falta), enquanto o rodapé só aparece
+                quando o lead já tem etiqueta. No rodapé, o botão obrigaria a
+                desenhar uma faixa vazia em todo card sem etiqueta — mais 22px
+                em cada um dos 30 de uma coluna — ou a mudar de lugar conforme
+                o lead, que é pior: some a posição que a mão já decorou.
+
+                Sem `leadId` não há em quem pendurar: `id` aqui é da ENTRADA no
+                funil, não do lead. Botão que escreveria no id errado é pior que
+                botão ausente. */}
+            {lead.leadId && (
+              <LeadEtiquetasPopover
+                leadId={lead.leadId}
+                quantidade={lead.tags?.length ?? 0}
+                rotulo={lead.tags?.length ? undefined : "etiqueta"}
+              />
             )}
           </div>
 

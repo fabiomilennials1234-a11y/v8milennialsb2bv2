@@ -13,14 +13,22 @@
  *    contato, que é a forma gravada em `whatsapp_messages`.
  */
 import { normalizePhone } from "@/lib/normalizePhone";
+import { buildWhatsAppConversationKey } from "@/modules/communication/hooks/chat/types";
 
 export interface ResolvePendingDeepLinkArgs {
   /** Telefone que veio no deep-link, ainda não casado com um contato. */
   pendingPhone: string | null;
-  /** Contatos já carregados para a caixa selecionada. */
-  contacts: ReadonlyArray<{ phone_number: string }>;
+  /** Contatos já carregados para as caixas marcadas. */
+  contacts: ReadonlyArray<{ phone_number: string; instance_id?: string | null }>;
   /** `true` enquanto a query de contatos ainda não respondeu. */
   contactsLoading: boolean;
+  /**
+   * A caixa que o deep-link abriu. Só é usada quando o telefone NÃO está na
+   * lista: sem contato não há `instance_id` para compor a chave, e a caixa
+   * aberta é a única resposta possível para "por qual número esta conversa
+   * abre?".
+   */
+  caixaSelecionada?: string | null;
 }
 
 export type ResolvePendingDeepLinkResult =
@@ -33,6 +41,7 @@ export function resolvePendingDeepLink({
   pendingPhone,
   contacts,
   contactsLoading,
+  caixaSelecionada = null,
 }: ResolvePendingDeepLinkArgs): ResolvePendingDeepLinkResult {
   if (contactsLoading) return { action: "wait" };
 
@@ -40,5 +49,14 @@ export function resolvePendingDeepLink({
   if (!target) return { action: "abort" };
 
   const match = contacts.find((c) => normalizePhone(c.phone_number) === target);
-  return { action: "select", contactKey: match?.phone_number ?? target };
+  // A chave da conversa é `(caixa, telefone)` desde a caixa unificada: devolver
+  // o telefone sozinho selecionaria uma linha que não existe quando duas caixas
+  // estão marcadas — e nenhuma quando o mesmo número fala pelas duas.
+  return {
+    action: "select",
+    contactKey: buildWhatsAppConversationKey(
+      match?.instance_id ?? caixaSelecionada,
+      match?.phone_number ?? target,
+    ),
+  };
 }

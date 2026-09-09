@@ -91,6 +91,27 @@ voltaram assim:
 Também confirmou que **não existe campo de situação** e que `valorDocumento` é o
 **saldo** — as duas informações que corrigiram o cálculo de inadimplência.
 
+**Segunda rodada, 21–25/08.** Ele voltou com três coisas, e as três foram
+medidas contra o servidor real em 25/08:
+
+| Entrega dele | O que a medição mostrou |
+|---|---|
+| "na café tem apenas 6 marcas cadastradas" (`marcas=1,2,3,4,5,6`) | 🔑 **É a chave que liga `diasCompras`.** Sozinha, a janela devolve 12.633 linhas — a base inteira. Com as marcas, 550. |
+| `dataEmissaoUltimoPedidoFaturado` em `/clientes` | ✅ **Vivo.** 5.091 dos 12.632 clientes (40%) têm; dentro do recorte de marcas, 78%. Sempre `aaaa-mm-dd`, anos de 2012 a 2026. |
+| Retorno de `/pedidos` com itens | 🟠 **Formato entregue, caminho ainda 404.** Ele aguarda a GON liberar um redirecionamento. |
+
+🔴 **A afirmação "o ERP ignora `diasCompras`", de 21/08, está superada.** Ela
+descrevia certo o que tinha sido medido — a janela testada sozinha — e
+generalizava errado. O parâmetro funciona; ele exige companhia.
+
+Consequência prática, além do recorte: com marcas + janela de 60 dias a resposta
+cai de **21 MB para menos de 1 MB**, e a leitura que gastava um minuto de CPU do
+worker passa a ser barata.
+
+⚠️ `diasCompras` filtra por **pedido**; o campo novo diz quando saiu o último
+pedido **faturado**. Não são a mesma pergunta: 131 dos 550 clientes da janela de
+60 dias não têm data nenhuma — pediram e ainda não faturaram.
+
 O que segue aberto, em ordem de valor:
 
 ### 2.1 `dataUltimoPagamento` no retorno de `/cobrancas`
@@ -236,7 +257,181 @@ Ou seja: terminado o bloco 3, o Toth sincroniza e **ninguém vê o resultado**.
 Esta é a fatia que transforma dado em produto — receita em risco por cliente,
 lista de atrasados, e o alerta que faz o vendedor agir.
 
-### 4.2 Pedidos de venda — 🟢 em desenvolvimento no fornecedor
+### 4.2 Pedidos de venda — OUTRO SERVIDOR, já alcançável; falta a credencial
+
+**Atualizado em 28/08, e esta atualização inverte a anterior.** `/pedidos` nunca
+foi um caminho faltante do `/toth/services`: o fornecedor publicou pedidos num
+**serviço separado**, com endereço, credencial e contrato próprios.
+
+| | `/toth/services` (clientes, cobranças) | `/flow/crm` (pedidos) |
+|---|---|---|
+| endereço | `http://cafejurere.ddns.net:8080/toth/services` | `http://cafejurere.ddns.net:3000/flow/crm` |
+| login | `POST /users/login`, form urlencoded | `POST /auth`, JSON |
+| credencial | `user` + `password` | `client_id` + `client_secret` |
+| resposta do login | `{login, user, token}` | `{success, data:"<JWT>", elapsed, count}` |
+| token viaja | query string `?token=` | `Authorization: Bearer` |
+| leitura | GET com query params | **POST com corpo JSON** |
+| filtro de data | não tem | **obrigatório** (`dataInicial`, `dataFinal`) |
+
+Corpo real da chamada, das capturas do Postman do fornecedor:
+
+```json
+{ "dataInicial": "2025-01-01", "dataFinal": "2026-07-31",
+  "numeroInscricao": ["44750277000107", "06320524000146"], "page": 1 }
+```
+
+**Consequência prática:** o `endpoint_indisponivel: true` que a função devolvia
+era uma leitura errada da mesma medição. O 404 estava certo — aquele caminho não
+existe naquele servidor e nunca vai existir. Nenhum "redirecionamento da GON"
+faria o `/toth/services` servir pedidos.
+
+✅ **A porta 3000 ABRIU — medido 01/09, 13:00 UTC.** Isto supera o parágrafo de
+28/08 ("aceita TCP e fecha sem devolver um byte"). Do mesmo lugar, hoje:
+
+| chamada | 28/08 | 01/09 |
+|---|---|---|
+| `GET :3000/` | TCP aceito, 0 byte, `curl exit 52` | **302** |
+| `POST :3000/flow/crm/auth` | idem | **401, com corpo JSON** |
+
+O 401 veio com envelope real do serviço — `nginx/1.29.7`, `x-powered-by:
+Total.js`, corpo
+`{"error":{"message":"Credenciais rejeitadas pelo ERP","status":401,"providerStatus":401}}`
+— com `client_id`/`client_secret` propositalmente falsos. **É aplicação
+recusando credencial, não silêncio de rede.** A pergunta que estava aberta com a
+GON está respondida; o item sai da lista deles.
+
+⚠️ **Esse 401 prova alcance, não contrato.** O caminho de leitura
+(`POST /pedidos` com janela) segue sem nunca ter rodado com credencial válida.
+
+🔴 **O bloqueio agora é a credencial, e ela não está em nada nosso.**
+`loadTothFlowCredentials` lê só do cofre (`toth_connection_secrets`), preenchido
+pela tela de conexão — sem fallback de env, de propósito. Sem o par
+`client_id`/`client_secret` do fornecedor, o dry-run não sai do lugar.
+
+Construído contra esse contrato (PR desta sessão): `TothFlowClient`,
+`resolvePedidosWindow`, colunas `flow_base_url` / `pedidos_janela_dias` /
+`pedidos_data_inicial`, par `client_id`/`client_secret` no mesmo cofre cifrado,
+campos na tela de conexão, e `toth-sync-pedidos` reescrito para o transporte
+novo. O mapeador **não mudou** — `pickField` normaliza a chave, então a caixa
+baixa colada de `numeropedido` já casava.
+
+## ✅ Contrato de `/flow/crm/pedidos` — MEDIDO em 01/09, não mais suposto
+
+Com a credencial do fornecedor (`client_id: milennialstech`, entregue por print
+no WhatsApp — **par a rotar**, ele ofereceu ligar para passar outro), o serviço
+foi sondado de verdade pela primeira vez.
+
+| fato | valor |
+|---|---|
+| Login | `200 OK`, JWT de 725 chars |
+| Validade do token | **5 dias**, e pedir um novo **expira o velho** (palavra dele) |
+| `numeroInscricao` | **não é obrigatório** — só o período. Confirmado por ele E medido |
+| Tamanho da página | **25 ITENS**, não 25 pedidos → 9 a 13 pedidos por página |
+| Volume | 145 pedidos em 12 páginas numa janela de 7 dias (~21/dia) |
+| Encoding | **UTF-8 correto** (`CAF\xc3\x89`); `?` no terminal é o console do Windows |
+
+🔴 **Campo desconhecido no corpo ZERA o resultado, com `HTTP 200`.** Mandar
+`limit`, `pageSize`, `rows`, `per_page`, `porPagina` ou `tamanho` devolve
+`data: []` onde o corpo limpo devolve 10 pedidos — sem erro, sem aviso. "Zero
+pedidos" é indistinguível de "não houve vendas". `buildPedidosBody` monta só
+`dataInicial`/`dataFinal`/`page` (+`numeroInscricao` quando há documentos), então
+está imune — **mas nunca acrescente campo "por via das dúvidas" nesse corpo.**
+
+### 🔴 O bug que a medição destapou (corrigido no PR #1910)
+
+Como a página é de 25 **itens**, **um pedido é partido na fronteira**. Em todas
+as fronteiras testadas (1×2, 2×3, 3×4, 4×5) um `numeropedido` aparece nas duas
+páginas, com os itens repartidos e o `valortotalliquido` **repetido inteiro** em
+cada fatia:
+
+| pedido | itens pág. N | itens pág. N+1 | total |
+|---|---:|---:|---|
+| 23974 | 2 | 3 | 1.073,60 nas duas |
+| 24243 | 6 | 8 | 32.031,00 nas duas |
+| 24252 | 1 | 3 | 20.836,00 nas duas |
+| 24264 | 2 | 6 | 2.128,52 nas duas |
+
+`replaceOrderItems` **apaga** os itens do pedido antes de inserir a fatia nova —
+o 24243 terminaria com 8 de 14 itens, `line_no` reiniciado em 1, sem erro e sem
+log. A receita não sofria (upsert idempotente, total repetido e não rateado); a
+composição do pedido, sim, em ~1 pedido a cada 10. **Nada foi corrompido:
+`flow_base_url` estava `NULL` e o sync nunca rodou.**
+
+Correção: montar por número ao longo da volta e segurar o último pedido de cada
+página até a seguinte confirmar que ele acabou; o cursor aponta para onde o
+pedido **começou**, inclusive no caminho de erro.
+
+### Situação do pedido — enum completo
+
+O fornecedor mandou o fonte do `StatusPedido`: NORMAL(0) · BLOQUEADO(1) ·
+DEVOLVIDO(2) · CANCELADO(3) · FATURADO(4) · BAIXADO(5) · PENDENTE_ANALISE(6) ·
+FATURADO_PARCIAL(7) · DEVOLVIDO_PARCIAL(8) · FATURADO_COMPATIBILIDADE(9).
+Conhecíamos **dois**.
+
+Peso real em 554 pedidos (jun–ago): FATURADO 405 · **CANCELADO 122** · NORMAL 39
+· DEVOLVIDO 8 · FATURADO_PARCIAL 2.
+
+- `CANCELADO`/`DEVOLVIDO` → **`rejected`** (decisão do CTO, 01/09): são desfecho,
+  não pendência. Eram 22% do volume pendurado como "carteira em formação" morta.
+- ⏳ **`FATURADO_PARCIAL` deveria entrar proporcional — a API não permite.** O
+  item traz `qtdpedido` e `valorunitario` e **nenhum campo de quantidade
+  faturada** (verificado nos 554). Fica `pending` até o fornecedor expor
+  `qtdFaturada`/`valorFaturado`. **Pedir junto com a rotação da credencial.**
+
+⚠️ **Ainda não exercitado de dentro da edge function.** A sondagem acima rodou da
+máquina do CTO. O fornecedor avisou em 31/08 que **bloqueiam IP de fora do
+Brasil**; o projeto é `sa-east-1` (São Paulo), então a expectativa é boa, mas
+expectativa não é medição. Ordem: gravar o par pela tela → `{"dry_run": true}` →
+conferir a amostra contra a tela do Toth **no mesmo dia** → só então ligar o cron.
+
+⚠️ **A migration foi renumerada `20270905000000` → `20270906000000` (01/09).**
+Não foi capricho: `20270905000000` **já estava aplicada em prod** como
+`oraculo_autoria_da_mensagem`, junto de `...010` e `...020`. Com o número
+antigo, `db push` trataria esta migration como já aplicada e a **pularia em
+silêncio** — a terceira vez que essa armadilha aparece no projeto. O guarda do
+CI pegou a colisão repo×repo; o ledger de prod é que deu o número certo.
+
+<details>
+<summary>Histórico — como estava em 25/08 (o retorno de `/pedidos`)</summary>
+
+**Atualizado em 25/08.** O fornecedor mandou o retorno real de `/pedidos`:
+
+```json
+{ "data": [ { "numeropedido": "19400", "dataemissao": "2026-07-29T00:00:00.000Z",
+              "numeroinscricao": "67964429000501", "valortotalliquido": 884.4,
+              "statuspedido": "NORMAL",
+              "itens": [ { "codigoproduto": "3686", "descricaoproduto": "DRIP COFFEE…",
+                           "qtdpedido": 6, "valorunitario": 19.9 } ] } ],
+  "page": 1, "hasNext": true }
+```
+
+Construído contra esse contrato: `mapTothPedidoToCanonical`, `erp_order_items`,
+`toth-sync-pedidos`. **Falta o caminho existir** — `GET /pedidos` responde 404 no
+ERP, e o fornecedor aguarda a GON liberar um redirecionamento.
+
+</details>
+
+Três coisas que só o payload real vai fechar:
+
+1. **Vocabulário de `statuspedido`.** Conhecemos `NORMAL` e `FATURADO`; não
+   sabemos como cancelado, bloqueado ou orçamento aparecem. Hoje só `FATURADO`
+   entra como receita aprovada — o resto entra pendente, que é o lado seguro.
+2. **Tamanho da página.** A captura tem cerca de 10 pedidos; o teto por execução
+   é 20 páginas, com cursor em `toth_connections.pedidos_cursor`.
+3. 🔑 **`numeroInscricao` é obrigatório?** A captura manda uma lista de dois
+   CNPJs; outra captura do mesmo endpoint devolve um documento fora dessa lista,
+   o que **sugere** que o filtro é opcional. O padrão do código é OMITIR a
+   lista — filtro que ninguém pediu vira "não houve vendas". Se o serviço
+   exigir, `{"cnpj_da_carteira": true}` preenche com os documentos da carteira.
+
+Quando ligar: a linha "Pedidos de venda" e o botão de sincronizar acendem
+sozinhos assim que `flow_base_url` estiver preenchida — o gate passou a ser a
+**configuração da org**, não o manifesto estático. Ter o serviço publicado varia
+por instalação, e isso um manifesto de provider não representa. Aí vale agendar
+o cron (depois de clientes, como cobranças).
+
+<details>
+<summary>Histórico — como estava em 18/08</summary>
 
 Fecha o ciclo dos três momentos do dinheiro. Hoje temos o **quem** (clientes) e o
 **recebido** (cobranças); falta o **vendido**.
@@ -251,6 +446,17 @@ que a capacidade virar — sem edição de texto.
 mapeador. É para isso que a ferramenta existe — descreve a forma do retorno sem
 devolver dado de cliente, e evita repetir o erro de mapear por suposição (foi
 assim que `numeroInscricao` e o saldo passaram despercebidos na primeira volta).
+
+</details>
+
+### 4.3 Recorte de cliente ativo — ✅ passa a funcionar
+
+Com `marcas` + `diasCompras`, a janela da tela deixa de ser decorativa. Falta a
+**decisão de negócio**: qual janela a Café Jurerê quer (60 dias corta para 550
+clientes; 365 dias, para 1.615) e se o recorte deve exigir compra faturada.
+
+⚠️ Ligar as marcas **não apaga** quem já está na carteira: quem sai do recorte
+para de ser atualizado e permanece. Reduzir a carteira de fato é decisão à parte.
 
 ---
 

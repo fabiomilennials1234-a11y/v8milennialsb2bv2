@@ -4,11 +4,15 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
+import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
+import { ReorderCycleRing } from "./ReorderCycleRing";
+import type { CicloDeRecompra } from "../../lib/reorder-cycle";
 import { LEAD_SORT_COLUMNS, type LeadListSort, type LeadSortKey } from "../../lib/lead-list-sort";
 import type { LeadStanding } from "../../lib/lead-relacao-situacao";
 import type { Lead } from "../../hooks/useLeads";
 import type { LeadCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import type { LeadDeal } from "../../hooks/useLeadsDeals";
+import { erpLabel } from "@/shared/format/erp-code";
 
 /**
  * Linha da lista de leads — cartão solto, não célula de tabela.
@@ -20,7 +24,7 @@ import type { LeadDeal } from "../../hooks/useLeadsDeals";
 
 /** Colunas compartilhadas entre cabeçalho e linha — precisam casar. */
 const GRID_COLS =
-  "grid items-center gap-x-4 grid-cols-[34px_minmax(210px,1.5fr)_minmax(140px,0.9fr)_minmax(140px,1fr)_minmax(84px,0.45fr)_minmax(176px,1.1fr)_minmax(200px,1.4fr)_minmax(104px,0.7fr)_minmax(104px,0.7fr)_40px]";
+  "grid items-center gap-x-4 grid-cols-[34px_minmax(210px,1.5fr)_minmax(140px,0.9fr)_minmax(140px,1fr)_minmax(84px,0.45fr)_minmax(176px,1.1fr)_minmax(200px,1.4fr)_minmax(60px,0.32fr)_minmax(104px,0.7fr)_minmax(104px,0.7fr)_40px]";
 
 /**
  * Largura mínima da lista — abaixo disso o contêiner rola no eixo X.
@@ -29,8 +33,11 @@ const GRID_COLS =
  * decisão 1) e volta a 1242px agora: Relação (84px) e Situação (176px) mais os
  * dois `gap-x-4` somam 292px, dentro dos 306px que aquela coluna liberou
  * (290px de mínimo + o gap dela).
+ *
+ * A coluna Recompra somou os 60px do anel mais um `gap-x-4`, e o mínimo foi de
+ * 1242px para 1318px.
  */
-export const LEAD_LIST_MIN_WIDTH = "min-w-[1242px]";
+export const LEAD_LIST_MIN_WIDTH = "min-w-[1318px]";
 
 export interface LeadTagRef {
   id: string;
@@ -59,6 +66,8 @@ interface LeadListRowProps {
   deals?: LeadDealRef[];
   /** Relação + Situação já derivadas — ver `lib/lead-relacao-situacao`. */
   standing?: LeadStanding;
+  /** Tempo médio de recompra — ver `lib/reorder-cycle`. */
+  ciclo?: CicloDeRecompra;
   selected: boolean;
   onToggleSelect: () => void;
   onOpen: () => void;
@@ -182,6 +191,9 @@ export function LeadListHeader({ selectAll, sort, onSortChange }: LeadListHeader
       <span>Relação</span>
       <span>Situação</span>
       <span>Negócios</span>
+      {/* "Recompra", não "Tempo médio de recompra": o cabeçalho tem 60px e o
+          anel abaixo dele já diz a unidade ("45D"). */}
+      <span>Recompra</span>
       <span>Dono da conta</span>
       {sortable("Data de criação", "created_at")}
       <span />
@@ -199,7 +211,7 @@ export function LeadListHeader({ selectAll, sort, onSortChange }: LeadListHeader
  */
 function RelacaoCell({ standing }: { standing?: LeadStanding }) {
   if (standing?.relacao !== "cliente") {
-    return <span className="text-[13px] text-muted-foreground">Lead</span>;
+    return <span className="text-[13px] text-muted-foreground">{standing?.relacao === "perdido" ? "Perdido" : "Lead"}</span>;
   }
 
   return (
@@ -259,6 +271,7 @@ export function LeadListRow({
   metrics,
   deals = [],
   standing,
+  ciclo,
   selected,
   onToggleSelect,
   onOpen,
@@ -297,6 +310,12 @@ export function LeadListRow({
         GRID_COLS,
         "mb-2.5 cursor-pointer rounded-lg border border-border bg-card px-[18px] py-3.5 shadow-sm",
         "transition-[box-shadow,border-color] hover:border-muted-foreground/30 hover:shadow-md",
+        // Época de recompra: a LINHA INTEIRA esverdeia. O anel sozinho seria um
+        // detalhe de 52px numa lista de 35 mil linhas — quem varre a tela de
+        // cima a baixo procurando quem ligar precisa enxergar a faixa, não o
+        // ícone. Tinta discreta de propósito: o verde marca a linha, não compete
+        // com o conteúdo dela.
+        ciclo?.emEpoca && "border-success/45 bg-success/[0.06]",
         selected && "border-primary/55 bg-primary/5",
       )}
     >
@@ -314,7 +333,7 @@ export function LeadListRow({
         <LeadAvatar name={lead.name} />
         <div className="min-w-0">
           <p className="truncate text-[14.5px] font-semibold tracking-[-0.01em]">
-            {lead.company ? `${lead.name} — ${lead.company}` : lead.name}
+            {lead.company ? `${erpLabel(lead)} — ${lead.company}` : erpLabel(lead)}
           </p>
           <p className="mt-px text-xs text-muted-foreground">
             Ticket médio{" "}
@@ -341,7 +360,7 @@ export function LeadListRow({
       </div>
 
       {/* tags */}
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
         <Badge variant="outline" className={originClassName}>
           {originLabel}
         </Badge>
@@ -355,6 +374,15 @@ export function LeadListRow({
             +{tags.length - 2}
           </Badge>
         )}
+        {/* A coluna mostrava as etiquetas e não deixava mexer: tirar uma exigia
+            abrir a ficha, uma por uma. Aqui `lead.id` é o id do LEAD mesmo (a
+            lista lê `leads`, não entradas de funil), então o botão pode ir sem
+            guarda. */}
+        <LeadEtiquetasPopover
+          leadId={lead.id}
+          quantidade={tags.length}
+          rotulo={tags.length ? undefined : "etiqueta"}
+        />
         {metrics?.segment && (
           <Badge variant="outline" className="gap-1.5 text-muted-foreground">
             <span className="size-1.5 rounded-full bg-success" />
@@ -437,6 +465,18 @@ export function LeadListRow({
           <span className="inline-block rounded-md border border-dashed border-border px-2.5 py-0.5 text-[12.5px] text-muted-foreground">
             sem negócio
           </span>
+        )}
+      </div>
+
+      {/* recompra — de quanto em quanto tempo esta pessoa compra */}
+      <div className="flex justify-center">
+        {ciclo ? (
+          <ReorderCycleRing ciclo={ciclo} />
+        ) : (
+          // Enquanto a consulta em lote não volta: espaço reservado do tamanho
+          // exato do anel. Sem ele a coluna nasce com 0px e as outras dançam de
+          // posição quando o dado chega.
+          <span className="inline-block size-[52px]" aria-hidden="true" />
         )}
       </div>
 

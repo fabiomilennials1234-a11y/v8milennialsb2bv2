@@ -56,7 +56,7 @@ const MEMBER = {
 };
 
 // Legacy fallback source (product_type based). Note: the hook fires two parallel
-// pipe_propostas queries (metrics_period_at not-null / null) that share this mock,
+// negocio_projetado queries (metrics_period_at not-null / null) that share this mock,
 // so the legacy array is counted twice — accounted for deterministically below.
 const LEGACY_SALES = [{ sale_value: 1000, product_type: "mrr" }];
 
@@ -86,7 +86,7 @@ function routeFrom() {
     switch (table) {
       case "team_members":
         return chain({ data: MEMBER, error: null });
-      case "pipe_propostas":
+      case "negocio_projetado":
         return chain({ data: LEGACY_SALES, error: null });
       case "goals":
         // Individual "vendas" goal in R$ (>=500 → treated as revenue target).

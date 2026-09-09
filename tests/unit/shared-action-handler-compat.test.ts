@@ -17,6 +17,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import "../../tests/helpers/deno-mock";
 import { setDenoEnv, clearDenoEnv } from "../../tests/helpers/deno-mock";
 import { createMockSupabase } from "../helpers/supabase-mock";
+import { __clearPipelineResolutionCache } from "../../supabase/functions/_shared/pipeline-adapter";
 
 const mockFetch = vi.fn().mockResolvedValue({
   ok: true,
@@ -44,6 +45,9 @@ setDenoEnv("SUPABASE_URL", "https://test.supabase.co");
 setDenoEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
 
 beforeEach(() => {
+  // SCRUM-627/623: o adapter tem cache de módulo por (org, ref) — sem limpar,
+  // a resolução de um caso vaza pro seguinte e mascara a validação de etapa.
+  __clearPipelineResolutionCache();
   clearDenoEnv();
   setDenoEnv("SUPABASE_URL", "https://test.supabase.co");
   setDenoEnv("SUPABASE_SERVICE_ROLE_KEY", "test-key");
@@ -107,8 +111,14 @@ describe("AI dispatcher backward compat — advance_stage uses shared handler", 
       "../../supabase/functions/_shared/actions/index"
     );
     const { sb, mockTable } = createMockSupabase();
+    // SCRUM-627: moveStage resolve o funil em `pipelines` e valida a etapa por
+    // pipeline_id — sem o funil no dublê a resolução falha e o caminho degrada
+    // permissivo, o que mascarava esta asserção.
+    mockTable("pipelines", [
+      { id: "pipe-1", organization_id: "org-1", slug: "whatsapp", name: "Qualificação", type: "system", is_active: true },
+    ]);
     mockTable("pipeline_stages", [
-      { stage_key: "novo", organization_id: "org-1", pipeline_type: "whatsapp", is_active: true },
+      { id: "stage-1", stage_key: "novo", organization_id: "org-1", pipeline_id: "pipe-1", pipeline_type: "whatsapp", is_active: true },
     ]);
 
     const result = await executeAiAction(sb, {

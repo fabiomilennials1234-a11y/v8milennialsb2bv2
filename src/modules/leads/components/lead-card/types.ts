@@ -12,7 +12,7 @@
  * `relacao: "cliente"`. O sistema inteiro tem dois cards: este e o do Negócio.
  */
 
-export type LeadRelacao = "lead" | "cliente";
+export type LeadRelacao = "lead" | "cliente" | "perdido";
 
 /** Prova de que já comprou. `null` enquanto é `lead`. */
 export type ProvaDeCompra = "funil" | "erp" | "ambas";
@@ -26,6 +26,22 @@ export type EstadoDoNegocio = "aberto" | "ganho" | "perdido";
  * edita valor. Isso é do Card do Negócio. Por isso aqui não há nada de
  * controle: só o que se lê e o `id` para abrir o outro card.
  */
+/**
+ * Uma linha de `deal_items` vista de dentro da ficha da PESSOA.
+ *
+ * É de propósito mais magra que a `DealCardItem` do painel do Negócio: aqui
+ * ninguém edita. A ficha da pessoa responde "o que está sendo vendido", e
+ * quem mexe é o painel do negócio, a um clique.
+ */
+export interface LeadCardDealProduto {
+  nome: string;
+  quantidade: number;
+  precoUnitario: number;
+  total: number;
+  /** `product_id` nulo — produto digitado na hora, fora do catálogo da org. */
+  avulso: boolean;
+}
+
 export interface LeadCardDeal {
   id: string;
   titulo: string;
@@ -46,6 +62,16 @@ export interface LeadCardDeal {
    */
   etapaIndice: number | null;
   etapaTotal: number;
+  /**
+   * Os produtos lançados NESTE negócio (`deal_items`).
+   *
+   * Vazio quer dizer duas coisas diferentes e a tela não tenta separá-las:
+   * negócio sem produto lançado, ou card sem linha em `deals` (o `deal_id`
+   * nulo dos cards que o backfill M4 não alcançou). Nos dois casos a resposta
+   * honesta na ficha da pessoa é a mesma — não há produto para mostrar —, e a
+   * explicação de por quê mora no painel do negócio, que é onde se resolve.
+   */
+  produtos: LeadCardDealProduto[];
 }
 
 /**
@@ -110,6 +136,26 @@ export type TipoDeEvento =
   | "comentario"
   | "automacao";
 
+/**
+ * O comentário em si, quando o evento é um.
+ *
+ * Vem de `lead_comments`, e **não** de `lead_history` — a linha de histórico
+ * carrega só a frase "Comentário adicionado" e um `metadata.preview` cortado em
+ * **120 caracteres**, que mutila 747 dos 2.909 comentários de prod (25,7%; o
+ * maior tem 1.885). Histórico de comentário que corta comentário não é
+ * histórico de comentário.
+ */
+export interface LeadCardComentario {
+  id: string;
+  /** O texto inteiro, sem corte. */
+  corpo: string;
+  editadoEm: string | null;
+  /** Só o autor edita o próprio; o painel do Negócio usa a mesma regra. */
+  podeEditar: boolean;
+  /** Autor ou admin. Apagar é soft-delete (`deleted_at`). */
+  podeApagar: boolean;
+}
+
 export interface LeadCardEvent {
   id: string;
   tipo: TipoDeEvento;
@@ -118,6 +164,12 @@ export interface LeadCardEvent {
   realces?: string[];
   autor: string | null;
   quando: string;
+  /**
+   * Presente só quando o evento É um comentário da equipe. Sua ausência num
+   * evento de tipo `comentario` é legítima: `note_added` também cai nesse tipo
+   * e não tem linha em `lead_comments`.
+   */
+  comentario?: LeadCardComentario;
 }
 
 export interface LeadCardTag {

@@ -16,6 +16,20 @@ export type ChecklistItemUpdate = TablesUpdate<"checklist_items">;
 export interface ChecklistWithCounts extends Checklist {
   total_items: number;
   completed_items: number;
+  // `pipeline_entry_id` e `deal_id` eram declarados à mão AQUI porque
+  // `types.ts` ainda não tinha sido regenerado. O comentário original dizia
+  // "sai junto com o apply, num commit só" — é este.
+  //
+  // Não é só limpeza: declarados como OPCIONAIS (`?`), eles ESTREITAVAM o tipo
+  // gerado, onde as duas colunas são obrigatórias (`string | null`). Uma
+  // interface não pode estender outra afrouxando um campo, e era isso o
+  // TS2430.
+  //
+  // O significado continua valendo e vale repetir, porque agora ele não mora
+  // mais em lugar nenhum: **`pipeline_entry_id` nulo = o checklist é da
+  // PESSOA**, vale para todos os negócios dela — o caso dos 1.338 aplicados
+  // antes de a coluna existir. Preenchido = é daquele negócio só
+  // (ADR-0023 §1, decisão do CTO em 2026-08-25).
 }
 
 // ─── Queries ─────────────────────────────────────────────
@@ -129,18 +143,28 @@ export function useCreateChecklist() {
   const { organizationId, teamMemberId } = useOrganization();
 
   return useMutation({
-    mutationFn: async (input: { title: string; description?: string; lead_id?: string }) => {
+    mutationFn: async (input: {
+      title: string;
+      description?: string;
+      lead_id?: string;
+      /** `pipeline_entries.id` — nasce DESTE negócio. Ausente = da pessoa. */
+      pipeline_entry_id?: string | null;
+    }) => {
       if (!organizationId) throw new Error("Organização não disponível");
 
       const { data, error } = await supabase
         .from("checklists")
+        // `as never`: `pipeline_entry_id` existe na tabela desde a migration
+        // `20270827000020` e ainda não está nos tipos gerados — ver a nota em
+        // `ChecklistWithCounts.pipeline_entry_id`.
         .insert({
           organization_id: organizationId,
           created_by: teamMemberId && !isVirtualTeamMember(teamMemberId) ? teamMemberId : null,
           title: input.title,
           description: input.description ?? null,
           lead_id: input.lead_id ?? null,
-        })
+          pipeline_entry_id: input.pipeline_entry_id ?? null,
+        } as never)
         .select()
         .single();
 

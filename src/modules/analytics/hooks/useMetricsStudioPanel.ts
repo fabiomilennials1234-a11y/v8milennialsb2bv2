@@ -1,164 +1,146 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useOrganization } from "@/modules/identity";
-import { isMissingSchemaError } from "@/lib/rpc-errors";
-// Do módulo do tipo, NÃO de "./useMetricsStudio": aquele hook importa este, e o
-// import de volta — mesmo sendo só de tipo — fecha ciclo no grafo de módulos e
-// reprova o dep-cruiser. Foi o que derrubou o Lint & Build do #1497.
+import { isVirtualTeamMember, useOrganization } from "@/modules/identity";
+import type { Json } from "@/integrations/supabase/types";
 import type { StudioWindow } from "@/modules/analytics/lib/metrics-studio-window";
 
-/**
- * Persistência do painel do Estúdio no SERVIDOR (SCRUM-309).
- *
- * Substitui o `usePersistedState` em localStorage, que morria ao trocar de
- * máquina, sumia com a limpeza de cache e não sobrevivia ao TTL de 30 dias.
- *
- * Tabela `metrics_studio_panels`, um painel por (org, membro). NÃO é
- * `dashboard_widgets`: aquela é grade, é admin-only e o trigger dela exige a
- * flag da TV — ver o cabeçalho da migration 20270811110000.
- *
- * ESCRITA ADIADA. Arrastar uma janela dispara dezenas de mudanças por segundo;
- * gravar cada uma seria uma requisição por quadro. O salvamento espera o
- * silêncio (debounce) e manda o layout inteiro num upsert — o painel é
- * pequeno e o conflito não existe, porque cada linha tem um dono só.
- *
- * DEGRADA SEM QUEBRAR. Enquanto a migration não estiver em prod, a leitura
- * devolve o painel vazio e a escrita falha em silêncio: o usuário monta o
- * painel e usa normalmente na sessão, só não persiste. Melhor que uma tela de
- * erro por uma feature que ainda está subindo.
- */
-
-const DEBOUNCE_MS = 800;
-
+interface PendingLayout {
+  organizationId: string;
+  panelId: string;
+  editorId: string | null;
+  layout: StudioWindow[];
+}
 export interface PanelPersistence {
+  organizationId: string | null;
   layout: StudioWindow[] | null;
   isLoading: boolean;
-  /** Agenda a gravação. Chamadas seguidas colapsam numa só. */
+  error: Error | null;
   save: (windows: StudioWindow[]) => void;
-  /** `true` entre a última mudança e a gravação efetiva. */
   isSaving: boolean;
+  saveError: string | null;
+  retrySave: () => void;
+  discardPanel: (id: string) => void;
+  refetch: () => void;
 }
+const key = (org: string, panel: string) => ["metrics-studio-panel", org, panel];
+const message = (error: unknown) => error instanceof Error ? error.message : "Não foi possível salvar o painel";
 
-export function useMetricsStudioPanel(): PanelPersistence {
+/** Fila por org+aba: mudar de aba nunca troca o destino nem descarta outra edição. */
+export function useMetricsStudioPanel(panelId: string | null): PanelPersistence {
   const { organizationId, teamMemberId, isReady } = useOrganization();
   const queryClient = useQueryClient();
   const [isSaving, setIsSaving] = useState(false);
-
-  const ativa = isReady && !!organizationId && !!teamMemberId;
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const pending = useRef(new Map<string, PendingLayout>());
+  const failed = useRef(new Map<string, PendingLayout>());
+  const writing = useRef<PendingLayout | null>(null);
+  const inFlight = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ativa = isReady && !!organizationId;
+  const editorId = isVirtualTeamMember(teamMemberId) ? null : teamMemberId ?? null;
 
   const query = useQuery({
-    queryKey: ["metrics-studio-panel", organizationId, teamMemberId],
+    queryKey: key(organizationId ?? "", panelId ?? ""),
     queryFn: async (): Promise<StudioWindow[]> => {
-      // PONTE DE COMPATIBILIDADE — some junto com o apply em prod.
-      //
-      // `metrics_studio_panels` nasce na migration 20270811110000, que ainda
-      // NÃO está em produção. `src/integrations/supabase/types.ts` é gerado A
-      // PARTIR DE PROD (`supabase gen types`), então a tabela não existe para o
-      // cliente tipado. Sem assinatura conhecida, o TypeScript percorre a cadeia
-      // do PostgrestBuilder sem fim e estoura TS2589 "Type instantiation is
-      // excessively deep" — que reprovava o TSC ratchet do job `Lint & Build`
-      // e, com ele, os outros SEIS jobs (`needs: [quality]`) e os cinco PRs
-      // empilhados sobre esta branch.
-      //
-      // A chamada é ISOLADA numa variável e a resposta é lida como forma PLANA:
-      // não basta silenciar o erro na linha do `.from`, porque o tipo profundo
-      // continua fluindo para a anotação de retorno da queryFn (o erro reaparece
-      // ali, e foi o que aconteceu na primeira tentativa). Cortar aqui é o que
-      // impede a cadeia de sair deste bloco.
-      //
-      // Ordem correta (runbook): apply em prod → `gen types` apontando para
-      // PROD → apagar as duas pontes deste arquivo. Nunca gerar types a partir
-      // de branch efêmera: faltam a ela as versões órfãs de prod.
-      const tabela = (supabase as unknown as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (c: string, v: string) => {
-              eq: (c: string, v: string) => {
-                maybeSingle: () => Promise<{
-                  data: { layout?: unknown } | null;
-                  error: { message: string; code?: string } | null;
-                }>;
-              };
-            };
-          };
-        };
-      }).from("metrics_studio_panels");
-
-      const { data, error } = await tabela
-        .select("layout")
-        .eq("organization_id", organizationId!)
-        .eq("team_member_id", teamMemberId!)
-        .maybeSingle();
-
-      // Tabela ainda não aplicada em prod → painel vazio, sem erro na tela.
-      if (error) {
-        if (isMissingSchemaError(error)) return [];
-        throw new Error(`Painel do Estúdio: ${error.message}`);
-      }
-      const layout = (data as { layout?: unknown } | null)?.layout;
-      return Array.isArray(layout) ? (layout as StudioWindow[]) : [];
+      // Refetch durante o debounce/retry não pode hidratar um layout anterior.
+      const id = JSON.stringify([organizationId, panelId]);
+      const local = pending.current.get(id) ?? failed.current.get(id)
+        ?? (writing.current?.organizationId === organizationId && writing.current.panelId === panelId ? writing.current : null);
+      if (local) return local.layout;
+      const { data, error } = await supabase.from("metrics_studio_panels")
+        .select("layout").eq("id", panelId!).eq("organization_id", organizationId!).single();
+      if (error) throw new Error(`Carregar painel: ${error.message}`);
+      if (!Array.isArray(data.layout)) throw new Error("O layout salvo não é válido");
+      return data.layout as unknown as StudioWindow[];
     },
-    enabled: ativa,
-    // O painel só muda por ação do próprio usuário nesta aba. Refetch em foco
-    // sobrescreveria o que ele acabou de mexer.
+    enabled: ativa && !!panelId,
     staleTime: Infinity,
     refetchOnWindowFocus: false,
   });
 
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendente = useRef<StudioWindow[] | null>(null);
-
-  const gravar = useCallback(async () => {
-    const layout = pendente.current;
-    if (!layout || !organizationId || !teamMemberId) return;
-    pendente.current = null;
-
-    const { error } = await supabase
-      // PONTE DE COMPATIBILIDADE — ver o bloco na leitura, acima. Some no mesmo
-      // commit, depois do apply em prod e do `gen types`.
-      // @ts-expect-error tabela ausente de types.ts até o apply em produção
-      .from("metrics_studio_panels")
-      .upsert(
-        { organization_id: organizationId, team_member_id: teamMemberId, layout },
-        { onConflict: "organization_id,team_member_id" },
-      );
-
-    setIsSaving(false);
-    if (error) {
-      // Falha de persistência não pode derrubar o painel que está na tela.
-      // O estado local segue válido; o próximo save tenta de novo.
-      console.warn("[metrics-studio] painel não salvo:", error.message);
-      return;
+  const flush = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      while (pending.current.size) {
+        const [id, target] = pending.current.entries().next().value!;
+        pending.current.delete(id);
+        writing.current = target;
+        try {
+          // UPDATE, nunca upsert: um debounce não pode ressuscitar uma aba excluída.
+          const { error } = await supabase.from("metrics_studio_panels")
+            .update({ team_member_id: target.editorId, layout: target.layout as unknown as Json })
+            .eq("id", target.panelId).eq("organization_id", target.organizationId)
+            .select("id").single();
+          if (error) throw new Error(error.message);
+          failed.current.delete(id);
+        } catch (error) {
+          failed.current.set(id, target);
+          setSaveError(message(error));
+        } finally {
+          writing.current = null;
+        }
+      }
+    } finally {
+      inFlight.current = false;
+      setIsSaving(false);
+      if (!failed.current.size) setSaveError(null);
     }
-    queryClient.setQueryData(["metrics-studio-panel", organizationId, teamMemberId], layout);
-  }, [organizationId, teamMemberId, queryClient]);
+  }, []);
 
-  const save = useCallback(
-    (windows: StudioWindow[]) => {
-      if (!ativa) return;
-      pendente.current = windows;
-      setIsSaving(true);
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void gravar(), DEBOUNCE_MS);
-    },
-    [ativa, gravar],
-  );
+  const schedule = useCallback(() => {
+    setIsSaving(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { timer.current = null; void flush(); }, 800);
+  }, [flush]);
 
-  // Sair da página com gravação pendente perderia a última mexida.
+  const save = useCallback((layout: StudioWindow[]) => {
+    if (!ativa || !organizationId || !panelId) return;
+    const id = JSON.stringify([organizationId, panelId]);
+    pending.current.set(id, { organizationId, panelId, editorId, layout });
+    failed.current.delete(id);
+    // Uma leitura iniciada ANTES da edição também pode chegar DEPOIS do save.
+    // Cancelar no QueryClient impede sua resposta antiga de substituir o cache.
+    void queryClient.cancelQueries({ queryKey: key(organizationId, panelId), exact: true });
+    queryClient.setQueryData(key(organizationId, panelId), layout);
+    schedule();
+  }, [ativa, organizationId, panelId, editorId, queryClient, schedule]);
+
+  const retrySave = useCallback(() => {
+    for (const [id, target] of failed.current) {
+      if (!pending.current.has(id)) pending.current.set(id, target);
+    }
+    if (pending.current.size) schedule();
+  }, [schedule]);
+
   useEffect(() => {
-    return () => {
-      if (timer.current) {
-        clearTimeout(timer.current);
-        void gravar();
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (pending.current.size || inFlight.current || failed.current.size) {
+        event.preventDefault();
+        event.returnValue = "";
       }
     };
-  }, [gravar]);
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      if (timer.current) clearTimeout(timer.current);
+      void flush();
+    };
+  }, [flush]);
 
   return {
-    layout: ativa ? (query.data ?? null) : [],
-    isLoading: ativa && query.isLoading,
-    save,
-    isSaving,
+    organizationId: ativa ? organizationId : null,
+    layout: ativa ? query.data ?? null : [],
+    isLoading: ativa && !!panelId && query.isLoading,
+    error: query.error,
+    save, isSaving, saveError, retrySave,
+    discardPanel: (id: string) => {
+      const target = JSON.stringify([organizationId, id]);
+      pending.current.delete(target);
+      failed.current.delete(target);
+      if (!failed.current.size) setSaveError(null);
+    },
+    refetch: () => { void query.refetch(); },
   };
 }

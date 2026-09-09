@@ -25,7 +25,11 @@ import type {
   UseMutationResult,
   QueryClient,
 } from "@tanstack/react-query";
-import type { Tables } from "@/integrations/supabase/types";
+import type {
+  ProjectedConfirmacaoPipe,
+  ProjectedPropostaPipe,
+  ProjectedWhatsappPipe,
+} from "@/integrations/supabase/projected-pipe-types";
 import type {
   PipelineType,
   PipelineStage,
@@ -36,11 +40,12 @@ import type {
   PipePropostaItemInsert,
   LossReason,
   ReschedulingMode,
+  SystemPipeDisplay,
 } from "@/contracts/pipe";
 
-type PipeWhatsappRow = Tables<"pipe_whatsapp">;
-type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
-type PipePropostaRow = Tables<"pipe_propostas">;
+type PipeWhatsappRow = ProjectedWhatsappPipe;
+type PipeConfirmacaoRow = ProjectedConfirmacaoPipe;
+type PipePropostaRow = ProjectedPropostaPipe;
 
 type PipeWhatsappInsert = Partial<PipeWhatsappRow> & { lead_id: string };
 type PipeConfirmacaoInsert = Partial<PipeConfirmacaoRow> & { lead_id: string };
@@ -85,6 +90,27 @@ type AddLeadToCustomPipeVars = {
   assigned_to?: string;
   notes?: string;
 };
+
+/**
+ * Funil da org no modelo unificado (SCRUM-633) — QUALQUER funil, sistema ou
+ * custom, endereçado por `pipelines.id`. Shape mínimo que os diálogos de bulk
+ * precisam; a implementação real (pipelines) pode devolver linhas mais ricas.
+ */
+export interface FunnelOption {
+  id: string;
+  name: string;
+  slug: string;
+  type: "system" | "custom";
+  is_active: boolean;
+}
+
+/** Etapa de qualquer funil por uuid (`pipeline_stages.id`) — alvo canônico de escrita. */
+export interface FunnelStageOption {
+  id: string;
+  stage_key: string;
+  name: string;
+  position: number;
+}
 
 /** Props do RescheduleModal (slot — implementação fica em pipelines). */
 export interface RescheduleModalSlotProps {
@@ -141,6 +167,34 @@ export interface PipeOpsPort {
   // ── Stages (canônico) ────────────────────────────────────────────────────
   usePipelineStages: (pipelineType: PipelineType) => UseQueryResult<PipelineStage[]>;
   useAllPipelineStageOptions: () => StageOptionsByPipe;
+
+  // ── Modelo unificado por pipeline_id (SCRUM-633) ─────────────────────────
+  // Um funil, um id: os diálogos de bulk listam TODOS os funis da org e as
+  // etapas do escolhido sem saber a família — mata o sentinela `custom:<id>`
+  // e o hack `(isCustom ? "whatsapp" : pipe)` do BulkMoveDialog.
+  //
+  // 🚨 `FunnelOption.name` é `pipelines.name` — para funil de SISTEMA esse é o
+  // nome CONGELADO do seed ("Qualificação"/"Confirmação"/"Propostas"), que a
+  // navegação nunca mostra. Ao exibir um `FunnelOption` de sistema, passe por
+  // `nomeDoFunil` (`@/contracts/pipe`) com o display config da org — senão o
+  // defeito da SCRUM-608 reaparece nas telas novas.
+  useFunnels: () => UseQueryResult<FunnelOption[]>;
+  useFunnelStages: (
+    pipelineId: string | undefined,
+  ) => UseQueryResult<FunnelStageOption[]>;
+
+  /**
+   * Os funis de SISTEMA que esta organização tem, com o nome que ela usa.
+   *
+   * Existe porque `leads` monta o cadastro e precisa rotular funil pelo
+   * `display_name` da org — não pelo `pipelines.name` do seed, e muito menos
+   * por string cravada (SCRUM-608). Lista vazia é resposta legítima: a org
+   * pode ter excluído todos os funis de sistema.
+   *
+   * Não se sobrepõe a `useFunnels`: aquele responde "quais funis existem, por
+   * id"; este responde "quais funis de sistema a org TEM e como ela os chama".
+   */
+  useSystemPipes: () => UseQueryResult<SystemPipeDisplay[]>;
 
   // ── Custom pipelines ──────────────────────────────────────────────────────
   useCustomPipelines: () => UseQueryResult<CustomPipeline[]>;

@@ -349,6 +349,47 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
       }
     }
 
+    // ── Resolve deal_id a partir do lead (S6) ──
+    //
+    // O webhook não tem funil nem pessoa na frente da tela. A regra é a mais
+    // conservadora possível: só vincula quando NÃO HÁ escolha a fazer — o lead
+    // tem exatamente UMA entrada de funil cujo negócio está com desfecho aberto.
+    //
+    // Havendo duas ou mais (9,0% dos leads com entrada aberta em prod,
+    // 2.990 de 33.381 — medido em 2026-09-03), grava NULL. Escolher por conta
+    // própria — a primeira, a mais recente, a de maior valor — é exatamente o
+    // que faz a reunião aparecer no card errado, e ninguém percebe porque a
+    // reunião existe e parece certa.
+    //
+    // NULL não é falha: a reunião nasce igual, só não é projetada em card
+    // nenhum. Nunca deixar a resolução do negócio derrubar a criação.
+    let resolvedDealId: string | null = null;
+
+    if (resolvedLeadId) {
+      const { data: entradasAbertas, error: entradasErr } = await supabase
+        .from('pipeline_entries')
+        .select('deal_id, deals!inner(id, outcome, deleted_at)')
+        .eq('organization_id', organizationId)
+        .eq('lead_id', resolvedLeadId)
+        .not('deal_id', 'is', null)
+        .eq('deals.outcome', 'open')
+        .is('deals.deleted_at', null)
+        // 2 basta para saber que há mais de uma — não se paga um count exato
+        // para responder "é ambíguo?".
+        .limit(2);
+
+      if (entradasErr) {
+        console.warn('[meeting-webhook] Falha ao resolver deal_id:', entradasErr.message);
+      } else if (entradasAbertas?.length === 1) {
+        resolvedDealId = entradasAbertas[0].deal_id as string;
+        console.log(`[meeting-webhook] Negócio resolvido pelo lead: ${resolvedDealId}`);
+      } else if ((entradasAbertas?.length ?? 0) > 1) {
+        console.log(
+          `[meeting-webhook] Lead ${resolvedLeadId} tem mais de um negócio aberto — reunião criada sem vínculo.`,
+        );
+      }
+    }
+
     // ── Resolve assigned_to (created_by team_member fallback) ──
     let resolvedAssignedTo = payload.assigned_to ?? null;
 
@@ -395,6 +436,7 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
       event_type: payload.event_type ?? 'meeting',
       created_by: resolvedAssignedTo,
       lead_id: resolvedLeadId,
+      deal_id: resolvedDealId,
     };
 
     if (payload.location) meetingData.location = payload.location;
@@ -487,6 +529,7 @@ Deno.serve(withErrorBoundary('meeting-webhook', async (req) => {
         event_type: payload.event_type ?? 'meeting',
         external_ref: payload.external_ref ?? null,
         lead_id: resolvedLeadId,
+        deal_id: resolvedDealId,
         participants_count: participantsCreated,
       },
     }).catch((e: unknown) => console.warn('[meeting-webhook] logRuntime failed:', e));

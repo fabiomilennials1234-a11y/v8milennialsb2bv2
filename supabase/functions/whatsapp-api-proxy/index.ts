@@ -15,11 +15,13 @@
  * Phase 3 adds: sendText, sendMedia (via senders)
  */
 
+import { replySnapshot, type ReplySnapshot } from "../_shared/whatsapp-reply.ts";
 import { withErrorBoundary } from "../_shared/error-boundary.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { logRuntime } from "../_shared/logger.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { isOrgBlocked } from "../_shared/org-status.ts";
 import { assertPlanFeature, PlanFeatureDeniedError, planDeniedResponse } from "../_shared/plan-gate.ts";
 import {
   getWhatsAppProvider,
@@ -295,6 +297,9 @@ Deno.serve(
     const isMaster = !!masterRow;
 
     let callerOrgId: string;
+    // NULL quando o ator não tem cadeira na org alvo (Master, Gestor de
+    // Portfólio): a mensagem sai, apenas sem autor.
+    let callerTeamMemberId: string | null = null;
 
     if (isMaster) {
       // Master can act on any org. Require explicit target so we never assume.
@@ -326,7 +331,7 @@ Deno.serve(
     } else {
       const { data: userOrg, error: orgErr } = await supabaseAdmin
         .from("team_members")
-        .select("organization_id")
+        .select("id, organization_id")
         .eq("user_id", user.id)
         .eq("is_active", true)
         .maybeSingle();
@@ -335,6 +340,10 @@ Deno.serve(
         return jsonResponse(403, { error: "No organization" }, corsHeaders);
       }
       callerOrgId = userOrg.organization_id;
+      // Autoria da mensagem enviada (SCRUM-593, ADR-0033 §4). Viaja com o
+      // envio em `track_id` e volta no webhook — não há backfill, e casar dois
+      // espaços de id depois já rendeu zero coincidências nesta base.
+      callerTeamMemberId = userOrg.id;
 
       // If a target org was supplied, it must match the user's own org —
       // prevents a regular user from acting on another tenant via the param.
@@ -345,6 +354,25 @@ Deno.serve(
           corsHeaders
         );
       }
+    }
+
+    // -------------------------------------------------------------------------
+    // 3.5 Gate de assinatura — org bloqueada não opera WhatsApp
+    // -------------------------------------------------------------------------
+    // Este proxy é o caminho MANUAL (a pessoa mandando pelo inbox) e não passa
+    // pelo choke `governSend`, então precisa do gate próprio. A tela já está
+    // bloqueada para org suspensa, mas a sessão continua autenticada e o
+    // endpoint é alcançável com o token que a pessoa já tem.
+    // Master passa por fora, como no plan gate logo abaixo.
+    if (!isMaster && (await isOrgBlocked(supabaseAdmin, callerOrgId))) {
+      return jsonResponse(
+        402,
+        {
+          error: "subscription_blocked",
+          message: "Assinatura da organização suspensa.",
+        },
+        corsHeaders
+      );
     }
 
     // -------------------------------------------------------------------------
@@ -914,6 +942,18 @@ Deno.serve(
         supabaseAdmin
       );
 
+      let quoted: ReplySnapshot | null = null;
+      if (instance.provider === "uazapi" && ["sendText", "sendMedia", "sendAudio"].includes(action) && payload.replyid != null) {
+        if (typeof payload.replyid !== "string" || !payload.replyid.trim() || typeof payload.number !== "string") {
+          return jsonResponse(400, { error: "Resposta inválida" }, corsHeaders);
+        }
+        const { data: original, error: quoteError } = await supabaseAdmin.from("whatsapp_messages")
+          .select("message_id,normalized_phone,content,message_type,direction")
+          .eq("organization_id", callerOrgId).eq("instance_id", instanceId)
+          .eq("message_id", payload.replyid).is("deleted_at", null).maybeSingle();
+        quoted = original ? replySnapshot(original, payload.number) : null;
+        if (quoteError || !quoted) return jsonResponse(400, { error: "Mensagem citada não disponível nesta conversa" }, corsHeaders);
+      }
       let result: unknown;
 
       switch (action) {
@@ -976,6 +1016,7 @@ Deno.serve(
             delay,
             replyid,
             trackSource: "whatsapp-api-proxy",
+            trackId: callerTeamMemberId ?? undefined,
           });
           break;
         }
@@ -999,7 +1040,9 @@ Deno.serve(
             filename,
             caption,
             delay,
+            replyid: quoted?.messageId,
             trackSource: "whatsapp-api-proxy",
+            trackId: callerTeamMemberId ?? undefined,
           });
           break;
         }
@@ -1018,7 +1061,9 @@ Deno.serve(
             type: "ptt",
             file,
             delay,
+            replyid: quoted?.messageId,
             trackSource: "whatsapp-api-proxy",
+            trackId: callerTeamMemberId ?? undefined,
           });
           break;
         }
@@ -1450,6 +1495,26 @@ Deno.serve(
           );
       }
 
+      // Save only the quote on an existing webhook row; never regress delivery status.
+      // Provider already accepted: a persistence failure must not trigger a duplicate send.
+      if (quoted && result && typeof result === "object" && "message_id" in result) {
+        try {
+          const messageId = String(result.message_id);
+          const row = {
+            organization_id: callerOrgId, instance_id: instanceId, message_id: messageId,
+            remote_jid: `${payload.number}@s.whatsapp.net`, phone_number: String(payload.number),
+            direction: "outgoing", message_type: action === "sendText" ? "text" : action === "sendAudio" ? "audio" : String(payload.type),
+            content: action === "sendText" ? String(payload.text) : (payload.caption ?? null),
+            media_url: payload.file ?? null, status: "sent", timestamp: new Date().toISOString(),
+            reply_context: quoted,
+          };
+          const inserted = await supabaseAdmin.from("whatsapp_messages").upsert(row, { onConflict: "message_id,instance_id", ignoreDuplicates: true });
+          if (inserted.error) throw inserted.error;
+          const updated = await supabaseAdmin.from("whatsapp_messages").update({ reply_context: quoted })
+            .eq("organization_id", callerOrgId).eq("instance_id", instanceId).eq("message_id", messageId);
+          if (updated.error) throw updated.error;
+        } catch { console.warn("[whatsapp-api-proxy] quote persistence failed after accepted send"); }
+      }
       return jsonResponse(200, { ok: true, result }, corsHeaders);
     } catch (e) {
       const msg = (e as Error).message ?? "Internal error";

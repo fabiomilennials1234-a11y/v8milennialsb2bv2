@@ -16,6 +16,7 @@
 import type { ApiRouteContext } from "../router.ts";
 import { apiError, apiResource } from "../responses.ts";
 import { moveStage } from "../../action-handlers/move-stage.ts";
+import { getOrgDefaultPipelineRef } from "../../pipeline-destination.ts";
 import type { ActionInput, ActionResult } from "../../action-handlers/types.ts";
 
 interface RpcClient {
@@ -41,10 +42,31 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 
 const TIERS = ["diamante", "ouro", "prata", "bronze", "desqualificado"];
 
-// Public field name → leads column. Custom fields (segmento, faturamento, …)
-// are NOT here — they go through PUT /custom-fields.
-const TEXT_FIELDS = ["name", "company", "email", "phone", "notes"];
-const NUM_FIELDS = ["rating", "qualification_score"];
+// Public field name → leads column. Campos personalizados de verdade continuam
+// fora daqui — vão por PUT /custom-fields.
+// `segment`, `faturamento` e os cinco UTM são COLUNAS de `leads`, não campos
+// personalizados — 5.181 leads com utm_campaign e 9.987 com segment nos últimos
+// 90 dias, lidos por 11 arquivos do front e 3 funções do banco. Gravá-los em
+// outro lugar deixaria a tela vazia para todo lead novo, sem erro nenhum
+// aparecendo. Entraram aqui para que a migração dos cenários do Make preserve o
+// que o `lead-webhook` já gravava.
+const TEXT_FIELDS = [
+  "name", "company", "email", "phone", "notes",
+  "segment", "faturamento",
+  "utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term",
+];
+// `rating` saiu daqui (SCRUM-647, Etapa 2): a coluna `leads.rating` foi
+// aposentada. A chave continua ACEITA no corpo do PATCH e passa a ser
+// ignorada — o laço abaixo só olha os campos desta lista, então uma chave
+// desconhecida já é descartada em silêncio, sem 422.
+//
+// Ignorar em vez de recusar é decisão, não descuido: quem envia `rating` envia
+// junto com `name`, `phone` e o resto. Um 422 reprovaria o PATCH INTEIRO por
+// causa de um campo aposentado, e a integração perderia a atualização toda.
+// O aviso às orgs (.specs/features/funis-unificacao/aviso-remocao-rating.md) é
+// o canal para contar que o campo saiu; a API não é lugar de dar essa notícia
+// derrubando escrita boa.
+const NUM_FIELDS = ["qualification_score"];
 const UUID_FIELDS = [
   "responsible_id", "sdr_id", "closer_id",
   "pre_sale_responsible_id", "sale_responsible_id",
@@ -116,7 +138,13 @@ export async function moveLeadStage(
   if (body === INVALID || !isPlainObject(body)) {
     return apiError(400, "invalid_body", "Corpo deve ser um objeto JSON", ctx.cors);
   }
-  const pipe = typeof body.pipe === "string" && body.pipe ? body.pipe : "whatsapp";
+  // SCRUM-641: `pipe` omitido cai no funil PADRÃO da org (D4), não mais no
+  // literal 'whatsapp'. Para as orgs antigas é o mesmo funil (106/108 têm o
+  // default apontando o whatsapp semeado); org sem funil padrão mantém o
+  // literal legado — que, sem o funil, vira o erro tipado do adapter (D6).
+  const pipe = typeof body.pipe === "string" && body.pipe
+    ? body.pipe
+    : (await getOrgDefaultPipelineRef(ctx.supabase as never, ctx.organizationId)) ?? "whatsapp";
   const stage = body.stage;
   if (typeof stage !== "string" || !stage) {
     return apiError(400, "missing_stage", "Campo 'stage' é obrigatório", ctx.cors);
@@ -135,6 +163,11 @@ export async function moveLeadStage(
     supabase: ctx.supabase as any,
     organizationId: ctx.organizationId,
     leadId: ctx.params.id,
+    // `PATCH /leads/:id/pipeline` move o LEAD por definição — a rota recebe o id
+    // da pessoa e não o do negócio. Mover um negócio específico é rota própria
+    // (`/deals`), não um parâmetro escondido aqui.
+    entryId: null,
+    dealId: null,
     conversationId: null,
     params: { target_pipe: pipe, target_stage: stage },
   });
@@ -182,12 +215,23 @@ export async function putCustomFields(ctx: ApiRouteContext): Promise<Response> {
   if (body === INVALID || !isPlainObject(body)) {
     return apiError(400, "invalid_body", "Corpo deve ser um objeto { campo: valor }", ctx.cors);
   }
+  // `create_missing=true` cria como `text` o campo que ainda não existe, em vez
+  // de recusar com 422. O caminho do integrador é o inverso do nosso: ele tem o
+  // valor na mão (a resposta de um formulário) e descobre no envio que o campo
+  // não estava cadastrado — sem isto, teria que parar o cenário, abrir o CRM,
+  // criar o campo e voltar. Continua sendo opt-in: sem o parâmetro, campo
+  // desconhecido segue recusado, e quem não quer estrutura nascendo por
+  // integração não precisa fazer nada.
+  const criarAusentes = new URL(ctx.req.url).searchParams.get("create_missing") === "true";
   const supabase = ctx.supabase as RpcClient;
-  const { data, error } = await supabase.rpc("api_set_custom_fields", {
-    p_org: ctx.organizationId,
-    p_lead_id: ctx.params.id,
-    p_values: body,
-  });
+  const { data, error } = await supabase.rpc(
+    criarAusentes ? "api_set_custom_fields_creating" : "api_set_custom_fields",
+    {
+      p_org: ctx.organizationId,
+      p_lead_id: ctx.params.id,
+      p_values: body,
+    },
+  );
   if (error) return apiError(500, "internal_error", "Erro ao salvar campos", ctx.cors);
   const r = (data ?? {}) as { ok?: boolean; code?: string; unknown_fields?: unknown };
   if (!r.ok) {

@@ -140,6 +140,15 @@ export const COMPATIBILIDADE: Record<string, MetricRecorte[]> = {
   // soma da receita de itens, que já é `receita` por um caminho líquido de
   // estorno — este não é.
   curva_abc: ["produto"],
+  // SCRUM-545 fatia 2 — dinheiro do funil (20270903000010).
+  //
+  // Sem `tempo`: é estado, e uma série diária de snapshot repetiria o mesmo
+  // número em cada ponto. Sem `sdr`/`tag`/`stream`: a atribuição do negócio
+  // aberto é `deals.owner_id`, uma chave só — ver o cabeçalho da migration.
+  valor_em_aberto: ["total", "etapa", "pipeline", "closer", "origem"],
+  // Espelha `negocios_perdidos` linha a linha: mesma fonte (`sale_events`,
+  // `sale_lost` não estornado), mesmos filtros, SUM no lugar de COUNT.
+  valor_perdido: ["total", "closer", "origem", "pipeline", "tempo"],
 };
 
 /** Formato único por medida, de `metric_catalog_measure_formats` em prod. */
@@ -168,6 +177,8 @@ export const FORMATO_DA_MEDIDA: Record<string, MetricFormatId> = {
   disparos_respondidos: "integer",
   clientes_sem_atuacao: "integer",
   curva_abc: "currency_brl",
+  valor_em_aberto: "currency_brl",
+  valor_perdido: "currency_brl",
 };
 
 /**
@@ -202,6 +213,8 @@ export const UNIDADE_DA_MEDIDA: Record<string, MetricUnit> = {
   disparos_respondidos: "count",
   clientes_sem_atuacao: "count",
   curva_abc: "currency",
+  valor_em_aberto: "currency",
+  valor_perdido: "currency",
 };
 
 /**
@@ -295,8 +308,31 @@ export const ENGINE_METRICS: EngineMetric[] = [
     label: "Tempo médio na etapa",
     measureRef: { kind: "leaf", id: "tempo_medio_etapa" },
     // Sem 'total': o catálogo de prod não aceita. Default vira 'etapa'.
+    //
+    // 🔴 Até 20270903000000 esse default caía numa degradação silenciosa: o
+    // motor devolvia um escalar rotulado `total` quando nenhum funil estava
+    // filtrado, e a janela mostrava UM número numa métrica chamada "na etapa".
+    // Agora o recorte quebra por (funil, etapa) sem precisar de filtro.
     cortes: ["etapa", "pipeline"],
     formatId: "duration_human",
+  },
+
+  // ── Dinheiro do funil (SCRUM-545 fatia 2 · 20270903000010) ───────────────
+  {
+    // A pergunta do CTO: "quanto R$ tenho parado na etapa X". `receita` não
+    // responde — ela é venda FECHADA, e negócio fechado saiu do funil.
+    id: "valor_em_aberto",
+    label: "Valor parado na etapa",
+    measureRef: { kind: "leaf", id: "valor_em_aberto" },
+    cortes: ["etapa", "total", "pipeline", "closer", "origem"],
+    formatId: "currency_brl",
+  },
+  {
+    id: "valor_perdido",
+    label: "Valor perdido",
+    measureRef: { kind: "leaf", id: "valor_perdido" },
+    cortes: ["total", "tempo", "closer", "origem", "pipeline"],
+    formatId: "currency_brl",
   },
 
   // SCRUM-311 fatias 2-8 — o motor já as calcula desde a pilha do épico; até

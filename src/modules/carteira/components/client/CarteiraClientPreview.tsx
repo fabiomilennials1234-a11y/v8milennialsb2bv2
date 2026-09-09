@@ -8,6 +8,7 @@ import { useClientAlerts } from "@/modules/carteira/hooks/useClientAlerts";
 import { useHealthHistory } from "@/modules/platform/hooks/useHealthHistory";
 import { HealthSparkline } from "./HealthSparkline";
 import type { PortfolioClientRow } from "@/modules/carteira/hooks/usePortfolioClients";
+import { erpLabel } from "@/shared/format/erp-code";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -79,8 +80,8 @@ export function CarteiraClientPreview({
       {/* Header */}
       <div className="flex items-start justify-between gap-2 px-4 py-3 border-b border-border">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">
-            {client?.name ?? "Carregando…"}
+          <p className="text-sm font-semibold text-foreground truncate" title={erpLabel(client)}>
+            {client ? erpLabel(client) : "Carregando…"}
           </p>
           {client?.company && (
             <p className="text-xs text-muted-foreground truncate">{client.company}</p>

@@ -13,7 +13,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { useSlaConfigs, useCreateSlaConfig, useUpdateSlaConfig, useDeleteSlaConfig, SlaConfig } from "@/modules/platform/hooks/useSlaConfigs";
-import { useAllPipelineStages, getPipelineTypeName, PipelineType } from "@/modules/pipelines";
+import { useAllPipelineStages, usePipelineDisplayConfig } from "@/modules/pipelines";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 
 const ESCALATION_ACTIONS = [
   { value: "notify", label: "Notificar responsavel" },
@@ -22,11 +23,28 @@ const ESCALATION_ACTIONS = [
   { value: "create_followup", label: "Criar follow-up" },
 ];
 
-const PIPELINE_TYPES: PipelineType[] = ["whatsapp", "confirmacao", "propostas"];
+/**
+ * `sla_configs` é chaveada por `pipeline_type` TEXT (sem `pipeline_id`) e tem
+ * 0 linhas em prod (medido 2026-09-02) — o painel só alcança o trio de fábrica
+ * até a tabela ganhar FK de funil (W6). O rótulo, ao menos, sai do display
+ * config real da org (rename prevalece) em vez do nome hardcoded.
+ */
+const PIPELINE_TYPES = ["whatsapp", "confirmacao", "propostas"] as const;
 
 export function SlaConfigPanel() {
   const { data: configs = [], isLoading } = useSlaConfigs();
   const { data: allStages = [] } = useAllPipelineStages();
+  const { data: displayConfig = [] } = usePipelineDisplayConfig();
+
+  // SCRUM-641: sem catálogo de fallback. Linha de display ausente = a org não
+  // tem o funil — SLA existente ganha rótulo honesto e o funil some do "Novo".
+  function pipeName(type: string): string {
+    const c = displayConfig.find((x) => x.pipe_type === type);
+    return c ? c.display_name || NOME_DE_FABRICA[type] || type : "Funil removido";
+  }
+  const tiposDaOrg = PIPELINE_TYPES.filter((t) =>
+    displayConfig.some((c) => c.pipe_type === t),
+  );
   const createSla = useCreateSlaConfig();
   const updateSla = useUpdateSlaConfig();
   const deleteSla = useDeleteSlaConfig();
@@ -83,10 +101,22 @@ export function SlaConfigPanel() {
             SLA por etapa
           </h3>
           <p className="text-sm text-muted-foreground">
-            Defina prazos maximos por etapa do pipeline e acoes em caso de atraso
+            Defina prazos maximos por etapa do funil e ações em caso de atraso
           </p>
         </div>
-        <Button size="sm" onClick={() => setDialogOpen(true)}>
+        <Button
+          size="sm"
+          onClick={() => {
+            // Abre já apontando para um funil que a org TEM — o default
+            // estático "whatsapp" pode não existir nela (SCRUM-641).
+            setForm((f) =>
+              tiposDaOrg.includes(f.pipeline_type as (typeof PIPELINE_TYPES)[number])
+                ? f
+                : { ...f, pipeline_type: tiposDaOrg[0] ?? f.pipeline_type, stage_id: "" },
+            );
+            setDialogOpen(true);
+          }}
+        >
           <Plus className="mr-1 h-4 w-4" /> Novo SLA
         </Button>
       </div>
@@ -106,7 +136,7 @@ export function SlaConfigPanel() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <CardTitle className="text-sm">
-                      {getPipelineTypeName(config.pipeline_type as PipelineType)} — {getStageName(config.stage_id)}
+                      {pipeName(config.pipeline_type)} — {getStageName(config.stage_id)}
                     </CardTitle>
                     <Badge variant="outline" className="text-xs tabular-nums">
                       {config.max_hours}h
@@ -145,7 +175,7 @@ export function SlaConfigPanel() {
 
           <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">Pipeline</Label>
+              <Label className="text-xs">Funil</Label>
               <Select
                 value={form.pipeline_type}
                 onValueChange={(v) => setForm({ ...form, pipeline_type: v, stage_id: "" })}
@@ -154,8 +184,8 @@ export function SlaConfigPanel() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PIPELINE_TYPES.map((p) => (
-                    <SelectItem key={p} value={p}>{getPipelineTypeName(p)}</SelectItem>
+                  {tiposDaOrg.map((p) => (
+                    <SelectItem key={p} value={p}>{pipeName(p)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

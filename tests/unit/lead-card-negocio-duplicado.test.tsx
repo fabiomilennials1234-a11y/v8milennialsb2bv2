@@ -40,6 +40,12 @@ function negocio(over: Partial<LeadCardDeal> & { id: string }): LeadCardDeal {
     diasNaEtapa: 3,
     diasEmAberto: 10,
     progresso: { indice: 1, total: 5 },
+    // `produtos` é obrigatório em `LeadCardDeal` desde que a lista passou a
+    // dizer o que está sendo vendido em cada negócio. Vazio aqui de propósito:
+    // este arquivo mede a marca de duplicado, não a linha de produto — e sem o
+    // campo o componente estoura, porque `tests/` não é checado por tipo e o
+    // `as` abaixo engole a falta.
+    produtos: [],
     ...over,
   } as LeadCardDeal;
 }

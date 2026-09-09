@@ -164,4 +164,5 @@ SELECT throws_ok(
   '22023', NULL,
   '(PROCEDÊNCIA) valor fora do vocabulário é recusado com mensagem, não com erro de constraint');
 
+SELECT * FROM finish();
 ROLLBACK;

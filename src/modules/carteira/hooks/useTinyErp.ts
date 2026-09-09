@@ -13,6 +13,7 @@ import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { toast } from "sonner";
+import { invalidateProductQueries } from "./useProducts";
 
 /**
  * Extracts the actual error message from a Supabase FunctionsHttpError.
@@ -164,7 +165,7 @@ export function useTinyErpSyncProducts() {
       return data;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
+      invalidateProductQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ["tinyerp-status"] });
       queryClient.invalidateQueries({ queryKey: ["tinyerp-sync-logs"] });
       const created = data?.items_created || 0;

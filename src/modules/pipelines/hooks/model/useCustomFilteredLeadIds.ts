@@ -82,11 +82,13 @@ export function useCustomFilteredLeadIds(
       organizationId,
     ],
     queryFn: async (): Promise<string[]> => {
-      // `as any` on the RPC name: get_custom_filtered_lead_ids is newer than the
-      // last generated types.ts (regen after the migration applies). Same
-      // pattern as useFilteredLeadIds. Result shape is asserted below.
+      // SCRUM-626: caminho por id — get_pipeline_lead_ids é o motor único que
+      // fundiu get_stage/get_filtered/get_custom_filtered_lead_ids (mesmos
+      // parâmetros deste chamador; o wrapper legado segue vivo até a W6).
+      // `as any` on the RPC name: newer than the last generated types.ts
+      // (regen after the migration applies). Result shape is asserted below.
       const { data, error } = await supabase.rpc(
-        "get_custom_filtered_lead_ids" as any,
+        "get_pipeline_lead_ids" as any,
         {
           p_pipeline_id: pipelineId,
           p_stage_id: pStageId,

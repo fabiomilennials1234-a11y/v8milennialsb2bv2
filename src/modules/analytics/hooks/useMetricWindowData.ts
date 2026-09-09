@@ -1,4 +1,6 @@
 import { useMemo } from "react";
+import { useOrganization } from "@/modules/identity";
+import { useStudioClock } from "./useStudioClock";
 import { useMetricMeasure, type MetricMeasureResult } from "./useMetricMeasure";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import {
@@ -31,10 +33,41 @@ import { headValueFromMeasure, type MetricSeriesPoint } from "@/modules/analytic
  * principal. O número aparece assim que existe, e a setinha entra depois.
  */
 
+/**
+ * Cobertura do preenchimento de uma medida de dinheiro do funil (SCRUM-545).
+ *
+ * `null` quando a medida não devolve cobertura — a maioria. Ausência é
+ * "não se aplica", nunca "cobertura total".
+ */
+export interface MetricCoverage {
+  total: number;
+  comValor: number;
+  /** 0–100. `0` quando não há negócio nenhum, e aí a janela já está vazia. */
+  percentual: number;
+  /** Abaixo de 80% o número parcial engana mais do que informa. */
+  parcial: boolean;
+}
+
+export function coberturaDaMedida(medida: MetricMeasureResult | null): MetricCoverage | null {
+  const total = medida?.coverage_total;
+  const comValor = medida?.coverage_com_valor;
+  // Checagem por tipo, não por veracidade: `0` é cobertura legítima e
+  // `comValor > 0` seria falso justamente no caso que mais precisa do aviso.
+  if (typeof total !== "number" || typeof comValor !== "number") return null;
+  if (total <= 0) return { total: 0, comValor: 0, percentual: 0, parcial: false };
+  const percentual = (comValor / total) * 100;
+  return { total, comValor, percentual, parcial: percentual < 80 };
+}
+
 export interface MetricWindowData {
   medida: MetricMeasureResult | null;
   /** Já ordenada: cronológica em `tempo`, por valor nos demais cortes. */
   series: MetricSeriesPoint[];
+  /**
+   * Quantos negócios sustentam o número, e em quantos há valor lançado.
+   * `null` na maioria das medidas — ver `coberturaDaMedida`.
+   */
+  cobertura: MetricCoverage | null;
   valorAnterior: number | null;
   /** Alvo do período (SCRUM-389). `null` = medida sem alvo ou mês sem meta. */
   meta: number | null;
@@ -80,8 +113,10 @@ export function useMetricWindowData(
   // caminho não é alcançável pela UI — mas se alguém chamar este hook direto
   // sem o intervalo, é melhor estourar aqui do que medir um período que o
   // usuário não pediu.
-  const atual = periodoAtual(period, undefined, range);
-  const anterior = periodoAnterior(period, undefined, range);
+  const { timezone } = useOrganization();
+  const now = useStudioClock();
+  const atual = periodoAtual(period, now, range, timezone ?? "UTC");
+  const anterior = periodoAnterior(period, now, range, timezone ?? "UTC");
 
   const principal = useMetricMeasure({
     measureRef: metric.measureRef,
@@ -118,6 +153,7 @@ export function useMetricWindowData(
   return {
     medida,
     series,
+    cobertura: coberturaDaMedida(medida),
     valorAnterior: headValueFromMeasure(comparativo.data ?? null),
     meta,
     atingimento: percentualDaMeta(headValueFromMeasure(medida), meta),

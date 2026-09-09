@@ -39,6 +39,35 @@ vi.mock("@/modules/platform", () => ({
   useFeatureFlag: () => ({ enabled: true, isLoading: false }),
 }));
 
+const { FUNNEL_ID, STAGE_ID, SECOND_STAGE_ID } = vi.hoisted(() => ({
+  FUNNEL_ID: "11111111-1111-4111-8111-111111111111",
+  STAGE_ID: "22222222-2222-4222-8222-222222222222",
+  SECOND_STAGE_ID: "33333333-3333-4333-8333-333333333333",
+}));
+
+vi.mock("@/modules/pipelines", () => ({
+  useFunisDaOrg: () => ({
+    data: [{ id: FUNNEL_ID, slug: "black-friday", label: "Black Friday", name: "Black Friday", is_active: true }],
+    isLoading: false,
+  }),
+  useEtapasDoFunil: (pipelineId?: string) => ({
+    etapas: pipelineId
+      ? [
+          { id: STAGE_ID, stageKey: "entrada", label: "Entrada", position: 0 },
+          { id: SECOND_STAGE_ID, stageKey: "qualificado", label: "Qualificado", position: 1 },
+        ]
+      : [],
+    isLoading: false,
+  }),
+  usePipelineDisplayConfig: () => ({ data: [] }),
+}));
+
+// A categoria "Negócios" do picker é gateada pela feature `deals` da org
+// (o painel chama `useOrgFeatures`). Ligada para estes testes de render.
+vi.mock("@/contexts/OrgFeaturesContext", () => ({
+  useOrgFeatures: () => ({ hasFeature: (key: string) => key === "deals" }),
+}));
+
 import { ActionPanel } from "@/modules/workflows/components/sidebar-panels/ActionPanel";
 import type { ActionNodeData } from "@/types/workflow";
 
@@ -122,5 +151,46 @@ describe("ActionPanel — unified message node", () => {
     renderPanel(baseData(), onUpdate);
     fireEvent.click(screen.getByRole("switch"));
     expect(onUpdate).toHaveBeenCalledWith({ semiAutomatic: true });
+  });
+});
+
+describe("ActionPanel — ações de funil", () => {
+  function openSelect(label: string) {
+    const proto = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+    proto.hasPointerCapture = () => false;
+    proto.setPointerCapture = () => {};
+    proto.releasePointerCapture = () => {};
+    proto.scrollIntoView = () => {};
+    const combobox = screen.getByText(label).parentElement?.querySelector("[role='combobox']");
+    if (!combobox) throw new Error(`Select não encontrado: ${label}`);
+    fireEvent.keyDown(combobox, { key: "Enter" });
+  }
+
+  it("Adicionar a outro funil mostra catálogo único e converte stage_key legado", () => {
+    renderPanel(baseData({
+      actionType: "duplicate_to_pipe",
+      pipelineId: FUNNEL_ID,
+      targetStage: "entrada",
+    }));
+    expect(screen.getByText("Black Friday")).toBeInTheDocument();
+    expect(screen.getByText("Entrada")).toBeInTheDocument();
+    expect(screen.queryByText(/Pipes Padrão/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Funis Custom/i)).not.toBeInTheDocument();
+  });
+
+  it("Adicionar a outro funil grava UUID da etapa", () => {
+    const onUpdate = vi.fn();
+    renderPanel(baseData({ actionType: "duplicate_to_pipe", pipelineId: FUNNEL_ID }), onUpdate);
+    openSelect("Etapa inicial");
+    fireEvent.click(screen.getByText("Qualificado"));
+    expect(onUpdate).toHaveBeenCalledWith({ targetStage: SECOND_STAGE_ID, targetPipeStage: "" });
+  });
+
+  it("Mover para etapa usa UUIDs do funil e da etapa", () => {
+    const onUpdate = vi.fn();
+    renderPanel(baseData({ actionType: "move_stage", pipelineId: FUNNEL_ID }), onUpdate);
+    openSelect("Etapa de destino");
+    fireEvent.click(screen.getByText("Entrada"));
+    expect(onUpdate).toHaveBeenCalledWith({ targetStage: STAGE_ID });
   });
 });

@@ -3,11 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization, useTeamMembers } from "@/modules/identity";
+import { useLeadChecklists } from "@/modules/engagement";
 import { useLeadDetail } from "../lead-detail/hooks/useLeadDetail";
 import { useLeadsDeals } from "../../hooks/useLeadsDeals";
+import { useProdutosPorNegocio } from "../lead-card/useProdutosPorNegocio";
 import { useLeadsSalesMetrics } from "../../hooks/useLeadsSalesMetrics";
 import { useLeadsCarteiraMetrics } from "../../hooks/useLeadsCarteiraMetrics";
 import { deriveLeadStanding } from "../../lib/lead-relacao-situacao";
+import { useOrgUsaLeiDoErp } from "../../hooks/useOrgUsaLeiDoErp";
+import { montarReuniaoDoNegocio } from "./reuniao-do-negocio";
 import type { DealCardData, DealCardMove, DealCardStage } from "./types";
 
 /**
@@ -22,7 +26,10 @@ import type { DealCardData, DealCardMove, DealCardStage } from "./types";
  *   2. **a movimentação da entry** — `pipeline_stage_events`, 49.739 linhas em
  *      prod que hoje não aparecem em tela nenhuma;
  *   3. **a mediana de dias parado** da mesma etapa na mesma org, que é o que
- *      transforma "74 dias" em "74 contra 21".
+ *      transforma "74 dias" em "74 contra 21";
+ *   4. **as reuniões da Agenda** (`meetings` por `deal_id`), de onde sai o
+ *      DESFECHO. A DATA continua vindo da projeção do metadata — o porquê está
+ *      inteiro em `reuniao-do-negocio.ts`, junto da função que decide.
  *
  * A mediana é calculada no cliente sobre uma amostra limitada de propósito: um
  * `percentile_disc` server-side exigiria RPC nova — mais uma função
@@ -49,23 +56,39 @@ function papelDaEtapa(role: unknown): DealCardStage["papel"] {
   return role === "won" ? "ganho" : role === "lost" ? "perdido" : "aberto";
 }
 
-/** `pipelines.slug` → `pipeline_stages.pipeline_type` dos funis system. */
-const SLUG_TO_STAGE_TYPE: Record<string, string> = {
-  whatsapp: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-  upsell: "upsell_base",
-};
-
 export function useDealCardData(entryId: string | null, leadId: string | null, isOpen: boolean) {
-  const { organizationId } = useOrganization();
+  const { usaLeiDoErp } = useOrgUsaLeiDoErp();
+  const { organizationId, teamMemberId, role } = useOrganization();
   const { lead, isLoading: carregandoLead } = useLeadDetail(leadId, isOpen);
 
   const ids = useMemo(() => (leadId ? [leadId] : []), [leadId]);
   const { data: dealsMap } = useLeadsDeals(ids);
+  const { data: produtosPorNegocio } = useProdutosPorNegocio(leadId, isOpen);
   const { data: vendasMap } = useLeadsSalesMetrics(ids);
   const { data: carteiraMap } = useLeadsCarteiraMetrics(ids);
   const { data: equipe = [] } = useTeamMembers();
+
+  /**
+   * Só o SELO da aba de Checklists. O conteúdo da aba refaz a MESMA query
+   * (`["checklists","lead",leadId]`) quando é montado — o React Query serve as
+   * duas com uma requisição só, e marcar um item lá dentro atualiza o selo no
+   * mesmo frame.
+   *
+   * Mora aqui, e não no `DealCardPanel`, pelo mesmo motivo já documentado no pé
+   * deste arquivo: `useLeadChecklists` chama `useOrganization`, que passa por
+   * `useAuth` e **lança** fora do `AuthProvider`. `cards-nunca-empilham.test`
+   * monta o painel de verdade sem esse provider e mocka este hook inteiro — o
+   * selo simplesmente não vem, e a aba abre sem número, que é o certo quando
+   * não se sabe de quem é a organização.
+   */
+  const { data: checklistsDoLead } = useLeadChecklists(isOpen ? leadId : null);
+  const resumoChecklists = useMemo(() => {
+    if (!checklistsDoLead) return null;
+    return {
+      feitos: checklistsDoLead.reduce((s, c) => s + c.completed_items, 0),
+      total: checklistsDoLead.reduce((s, c) => s + c.total_items, 0),
+    };
+  }, [checklistsDoLead]);
 
   const negocioBase = useMemo(
     () => (dealsMap?.[leadId ?? ""] ?? []).find((d) => d.id === entryId) ?? null,
@@ -78,32 +101,25 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     staleTime: 60_000,
     queryFn: async () => {
       const pipelineId = negocioBase!.pipelineId;
-      const isSystem = negocioBase!.isSystem;
-      const stageType = SLUG_TO_STAGE_TYPE[negocioBase!.pipelineSlug] ?? negocioBase!.pipelineSlug;
 
-      const [entryRes, etapasRes, movRes, amostraRes, ativRes] = await Promise.all([
+      const [entryRes, etapasRes, movRes, amostraRes, ativRes, tarefasRes] = await Promise.all([
         supabase
           .from("pipeline_entries")
           // `deal_id` entra aqui para o negócio poder ser lido de `deals`.
           .select("id, notes, assigned_to, metadata, entered_at, deal_id")
           .eq("id", entryId!)
           .maybeSingle(),
-        isSystem
-          ? supabase
-              .from("pipeline_stages")
-              .select("stage_key, name, stage_role, position")
-              .eq("organization_id", organizationId!)
-              .eq("pipeline_type", stageType)
-              .eq("is_active", true)
-              .order("position")
-          : supabase
-              .from("custom_pipeline_stages")
-              // `stage_key` entra para a régua conseguir casar a etapa: é o
-              // slug que o gatilho grava em `pipeline_entries.stage_key`.
-              .select("id, stage_key, name, stage_role, position")
-              .eq("pipeline_id", pipelineId)
-              .eq("is_active", true)
-              .order("position"),
+        // Pós-F1 (20270906001000) TODA etapa vive em `pipeline_stages` com FK
+        // `pipeline_id` — uma query serve as duas famílias. Morreram a
+        // bifurcação por `isSystem` e o mapa slug→pipeline_type (SCRUM-637).
+        supabase
+          .from("pipeline_stages")
+          // `stage_key` entra para a régua conseguir casar a etapa: é o
+          // slug que os gatilhos gravam em `pipeline_entries.stage_key`.
+          .select("id, stage_key, name, stage_role, position")
+          .eq("pipeline_id", pipelineId)
+          .eq("is_active", true)
+          .order("position"),
         supabase
           .from("pipeline_stage_events")
           .select("id, from_stage_key, to_stage_key, occurred_at, actor, source")
@@ -135,6 +151,28 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
               .order("created_at", { ascending: false })
               .limit(50)
           : Promise.resolve({ data: [] as Linha[] }),
+
+        /**
+         * ── AS TAREFAS DESTE NEGÓCIO ──────────────────────────────────────
+         * Follow-up e ação do dia passaram a ser do Negócio (decisão do CTO,
+         * 2026-08-25 — mesma regra do checklist). A aba "Atividades" lia só
+         * `activities`, que tem **0 linhas em produção**: ela abria vazia para
+         * todo mundo desde que nasceu. Agora ela mostra o que existe.
+         *
+         * Filtra por ENTRADA, não por lead: tarefa presa a outro negócio da
+         * mesma pessoa é trabalho de outro card. As da pessoa
+         * (`pipeline_entry_id` nulo) também não entram aqui — elas aparecem na
+         * ficha do Lead, que é de quem elas são.
+         */
+        entryId
+          ? supabase
+              .from("follow_ups")
+              .select("id, title, description, due_date, completed_at, created_at, is_automated, priority")
+              .eq("pipeline_entry_id", entryId)
+              .is("archived_at", null)
+              .order("due_date", { ascending: true })
+              .limit(50)
+          : Promise.resolve({ data: [] as Linha[] }),
       ]);
 
       /**
@@ -148,7 +186,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
        * teve um leitor.
        */
       const dealId = typeof entryRes.data?.deal_id === "string" ? entryRes.data.deal_id : null;
-      const [negocioRes, itensRes] = dealId
+      const [negocioRes, itensRes, reunioesRes] = dealId
         ? await Promise.all([
             supabase
               .from("deals")
@@ -158,10 +196,41 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
             supabase
               .from("deal_items")
               // a coluna e `product_name`, nao `name` — o tipo gerado pegou o erro
-              .select("id, product_name, quantity, unit_price, total, sort_order")
+              .select(
+                "id, product_id, product_name, quantity, unit_price, discount_percent, total, sort_order",
+              )
+              // A ordem PRECISA ser pedida. `sort_order` já vinha na projeção e
+              // era descartado; sem `.order()` o Postgres devolve na ordem que
+              // quiser, e a tabela de produtos reembaralhava sozinha entre dois
+              // carregamentos. `created_at` desempata os itens antigos, que
+              // nasceram todos com `sort_order = 0`.
+              .order("sort_order", { ascending: true })
+              .order("created_at", { ascending: true })
               .eq("deal_id", dealId),
+            /**
+             * ── AS REUNIÕES DA AGENDA DESTE NEGÓCIO ─────────────────────────
+             * Vem por `deal_id`, que esta rodada já tem em mãos — nenhuma
+             * consulta nova de identidade. Traz o DESFECHO, que a projeção do
+             * metadata não carrega: até aqui o card do Negócio não tinha como
+             * dizer se a reunião aconteceu.
+             *
+             * `event_type = 'meeting'` não é filtro decorativo: em prod há 22
+             * `call`, 7 `follow_up` e 1 `other` em `meetings`, e sem ele um
+             * "Retornar contato" viraria A reunião do negócio no card.
+             */
+            supabase
+              .from("meetings")
+              .select("id, start_at, status, meet_link")
+              .eq("deal_id", dealId)
+              // Org explícita além da RLS — regra do repo, e aqui ela também é
+              // a mesma guarda do espelho: reunião de outra org não projeta
+              // nesta entrada, então também não pode aparecer neste card.
+              .eq("organization_id", organizationId!)
+              .eq("event_type", "meeting")
+              .order("start_at", { ascending: true })
+              .limit(50),
           ])
-        : [{ data: null }, { data: [] }];
+        : [{ data: null }, { data: [] }, { data: [] }];
 
       return {
         entry: (entryRes.data ?? null) as Linha | null,
@@ -169,8 +238,10 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         movimentos: (movRes.data ?? []) as Linha[],
         amostra: (amostraRes.data ?? []) as Linha[],
         atividades: (ativRes.data ?? []) as Linha[],
+        tarefas: (tarefasRes.data ?? []) as Linha[],
         negocio: (negocioRes?.data ?? null) as Linha | null,
         itens: (itensRes?.data ?? []) as Linha[],
+        reunioes: (reunioesRes?.data ?? []) as Linha[],
         /**
          * O id da linha em `deals`, que até aqui era calculado e descartado.
          *
@@ -189,6 +260,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
     const l = lead as Linha;
 
     const standing = deriveLeadStanding({
+      usaLeiDoErp,
       deals: dealsMap?.[String(l.id)] ?? [],
       vendas: vendasMap?.[String(l.id)],
       carteira: carteiraMap?.[String(l.id)],
@@ -231,7 +303,22 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       .map((a) => diasDesde(typeof a.stage_changed_at === "string" ? a.stage_changed_at : null))
       .filter((d): d is number => d !== null);
 
-    const meetingDate = typeof metadata.meeting_date === "string" ? metadata.meeting_date : null;
+    /**
+     * A reunião do negócio — projeção do metadata + desfecho de `meetings`.
+     *
+     * A montagem é pura e mora em `reuniao-do-negocio.ts`: é ela que decide de
+     * quem é cada campo, e a decisão precisa ser testável sem montar hook,
+     * provedor de auth e client de Supabase.
+     */
+    const reuniao = montarReuniaoDoNegocio(
+      metadata,
+      (extras.data?.reunioes ?? []).map((r) => ({
+        id: String(r.id),
+        start_at: typeof r.start_at === "string" ? r.start_at : "",
+        status: typeof r.status === "string" ? r.status : null,
+        meet_link: typeof r.meet_link === "string" ? r.meet_link : null,
+      })),
+    );
 
     return {
       id: negocioBase.id,
@@ -293,15 +380,7 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
 
       funil: negocioBase.funnelName,
       funilCor: negocioBase.funnelColor,
-      pipeTable: negocioBase.isSystem
-        ? negocioBase.pipelineSlug === "whatsapp"
-          ? "pipe_whatsapp"
-          : negocioBase.pipelineSlug === "confirmacao"
-            ? "pipe_confirmacao"
-            : negocioBase.pipelineSlug === "propostas"
-              ? "pipe_propostas"
-              : null
-        : null,
+      funilEhSystem: negocioBase.isSystem,
       etapas,
       etapaAtual: negocioBase.stageKey ?? "",
 
@@ -362,17 +441,14 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
             quantidade: num(i.quantity) ?? 1,
             precoUnitario: num(i.unit_price) ?? 0,
             total: num(i.total) ?? 0,
+            produtoId: typeof i.product_id === "string" ? i.product_id : null,
+            descontoPercent: num(i.discount_percent) ?? 0,
+            ordem: num(i.sort_order) ?? 0,
           })),
         };
       })(),
 
-      reuniao: meetingDate
-        ? {
-            data: meetingDate,
-            confirmada: metadata.is_confirmed === true,
-            link: typeof metadata.meet_link === "string" ? metadata.meet_link : null,
-          }
-        : null,
+      reuniao,
 
       // O desfecho vem da posição enquanto `deals.closed_at` não existe em
       // prod (0 linhas). Quando o backfill do L3 rodar, a fonte troca sem
@@ -389,7 +465,29 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
       movimentacoes,
       nota: typeof entry?.notes === "string" ? entry.notes : "",
 
-      atividades: (extras.data?.atividades ?? []).map((a) => {
+      /**
+       * As tarefas do negócio entram na MESMA lista da aba, e antes das
+       * `activities`: as duas respondem "o que foi feito / o que falta fazer
+       * com esta pessoa neste negócio", e separá-las em duas listas obrigaria o
+       * vendedor a olhar em dois lugares para montar o dia dele.
+       */
+      atividades: ([
+        ...(extras.data?.tarefas ?? []).map((t) => {
+          const txt = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : null);
+          return {
+            id: String(t.id),
+            tipo: "task",
+            titulo: txt(t.title) ?? "Tarefa",
+            descricao: txt(t.description),
+            resultado: txt(t.priority) === "urgent" || txt(t.priority) === "high"
+              ? `prioridade ${String(t.priority)}`
+              : null,
+            automatica: t.is_automated === true,
+            quando: txt(t.completed_at) ?? txt(t.due_date) ?? String(t.created_at ?? ""),
+            concluida: txt(t.completed_at) !== null,
+          };
+        }),
+        ...(extras.data?.atividades ?? []).map((a) => {
         const txt = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : null);
         return {
           id: String(a.id),
@@ -405,7 +503,8 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
           quando: txt(a.completed_at) ?? txt(a.due_date) ?? String(a.created_at ?? ""),
           concluida: txt(a.completed_at) !== null,
         };
-      }),
+        }),
+      ]),
 
       // Mesmo mapeamento do card do Lead (`useLeadCardData.ts:123-135`), sobre a
       // MESMA lista que já está em memória — `useLeadsDeals` foi consultado no
@@ -426,9 +525,55 @@ export function useDealCardData(entryId: string | null, leadId: string | null, i
         diasEmAberto: diasDesde(d.enteredAt),
         etapaIndice: d.stageIndex,
         etapaTotal: d.stageCount,
+        // Mesma consulta que a coluna do lead usa (`["lead-card-produtos",
+        // leadId]`): as duas ficam montadas juntas no painel de duas colunas e
+        // o react-query resolve numa busca só. A aba "Negócios" passa a dizer
+        // o que está sendo vendido em CADA negócio da pessoa, que é a pergunta
+        // que ela existe para responder ("esta pessoa tem outra coisa em
+        // aberto?" fica melhor respondida com o quê, não só com o quanto).
+        produtos: produtosPorNegocio?.[d.id] ?? [],
       })),
     };
-  }, [lead, negocioBase, dealsMap, vendasMap, carteiraMap, extras.data, equipe]);
+  }, [
+    usaLeiDoErp,
+    lead,
+    negocioBase,
+    dealsMap,
+    produtosPorNegocio,
+    vendasMap,
+    carteiraMap,
+    extras.data,
+    equipe,
+  ]);
 
-  return { data, isLoading: carregandoLead || extras.isLoading };
+  /**
+   * ── Quem está olhando, e sob qual org se grava ──────────────────────────
+   * Sai daqui, e não de `useIdentity` no painel, por um motivo mecânico: todo
+   * hook de identidade deste repo passa por `useAuth`, que **lança** fora de um
+   * `AuthProvider`. `cards-nunca-empilham.test.tsx` monta o painel de verdade
+   * sem esse provider — chamar identidade lá derrubaria seis casos de um
+   * guarda que não tem nada a ver com comentário. Aqui o hook inteiro já é
+   * mockado naquele teste, então o campo simplesmente não vem e o painel
+   * degrada para leitura, que é o comportamento certo quando não se sabe quem
+   * está escrevendo.
+   *
+   * A org vem do LEAD antes de vir da associação de quem olha — é o que o
+   * `DealDetailDialog` fazia (`lead.organization_id ?? ""`, l.188) e é o que
+   * mantém o usuário master comentando: ele não está em `team_members`, então
+   * `useOrganization()` devolve `null` para ele, mas as policies da tabela têm
+   * bypass de master e só exigem `author_user_id = auth.uid()`.
+   */
+  const organizacaoDoLead = (() => {
+    const v = (lead as Linha | null)?.organization_id;
+    return typeof v === "string" && v !== "" ? v : null;
+  })();
+
+  return {
+    data,
+    isLoading: carregandoLead || extras.isLoading,
+    organizacaoId: organizacaoDoLead ?? organizationId ?? null,
+    membroId: teamMemberId ?? null,
+    souAdmin: role === "admin",
+    resumoChecklists,
+  };
 }

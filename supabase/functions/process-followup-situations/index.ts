@@ -28,6 +28,7 @@ import { getSituationDefault } from "../_shared/copilot/followup-catalog.ts";
 import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
 import type { EnabledSituation, SituationLeadState } from "../_shared/copilot/followup-situations.ts";
 import type { StepLogEntry } from "../_shared/copilot/followup-cadence.ts";
+import { personalizationFirstName } from "../_shared/lead-name.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -327,6 +328,7 @@ Deno.serve(withErrorBoundary("process-followup-situations", async (req) => {
       const timeVars = getTimeVars(now);
       const messageContent = composeBaseText(decision.step.message_template ?? "", {
         nome: lead.name || "você",
+        primeiro_nome: personalizationFirstName(lead.name) || "você",
         empresa: lead.company || "",
         email: lead.email || "",
         telefone: lead.phone || "",

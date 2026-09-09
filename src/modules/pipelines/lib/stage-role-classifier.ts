@@ -49,10 +49,6 @@ interface Rule {
 // Ordem importa: negações de comparecimento primeiro; won antes de
 // meeting_held ("venda realizada"); lost antes dos meeting_*.
 const RULES: readonly Rule[] = [
-  // ── Negações / no-show (antes de "compareceu") ─────────────────────────
-  { role: "lost", pattern: /\b(nao|sem)\s+(compareceu|comparecimento)\b/ },
-  { role: "lost", pattern: /\bno\s?show\b/ },
-
   // ── won — fechado/ganhou/vendido/comprou/recomprou ─────────────────────
   { role: "won", pattern: /\b(fechado|fechada|fechou)\b/ },
   { role: "won", pattern: /\b(ganho|ganha|ganhou|ganhamos)\b/ },
@@ -85,6 +81,42 @@ const RULES: readonly Rule[] = [
 ] as const;
 
 /**
+ * Nomes que VETAM qualquer sugestão — o classificador devolve `null` e a etapa
+ * fica com o `open` que já é o padrão.
+ *
+ * Estes dois padrões existiam como `{ role: "lost" }` e essa era a redação
+ * errada de uma intenção certa. A intenção: "não compareceu" contém
+ * "compareceu", então precisa ser decidido ANTES da regra de `meeting_held`,
+ * senão vira reunião realizada. O erro: resolver isso chamando a falta de
+ * PERDA.
+ *
+ * Falta não é perda. O enum diz:
+ *   open = "não gera métrica de reunião nem de venda"
+ *   lost = "encerra a oportunidade sem venda — conta como perda"
+ * Quem faltou não encerrou nada — segue vivo e precisa de nova data. Medido em
+ * prod: 140 leads da Milennials contavam como perdidos por terem faltado.
+ *
+ * 🚨 O veto corta o classificador INTEIRO, não só a etapa do nome. As duas
+ * linhas erradas em prod tinham `is_final_negative = true` junto, e o fallback
+ * de flag em `classifyStageRole` devolve `lost` por conta própria — vetar só o
+ * nome deixaria a flag reconduzir ao mesmo destino.
+ *
+ * `SuggestableStageRole` é `Exclude<StageRole, "open">`: sugerir `open` é
+ * impossível por tipo, e é por isso que isto é um veto e não mais uma regra.
+ */
+const VETOS: readonly RegExp[] = [
+  /\b(nao|sem)\s+(compareceu|comparecimento)\b/,
+  /\bno\s?show\b/,
+];
+
+/** O nome é uma falta — nenhuma sugestão vale, nem a vinda de flag. */
+export function nomeVetaSugestao(name: string): boolean {
+  const normalized = normalizeStageName(name);
+  if (!normalized) return false;
+  return VETOS.some((v) => v.test(normalized));
+}
+
+/**
  * Classificação determinística pelo NOME. `null` = nome não-óbvio.
  */
 export function classifyStageNameDeterministic(
@@ -92,6 +124,7 @@ export function classifyStageNameDeterministic(
 ): SuggestableStageRole | null {
   const normalized = normalizeStageName(name);
   if (!normalized) return null;
+  if (nomeVetaSugestao(name)) return null;
   for (const rule of RULES) {
     if (rule.pattern.test(normalized)) return rule.role;
   }
@@ -111,6 +144,9 @@ export interface StageClassifierInput {
 export function classifyStageRole(
   input: StageClassifierInput,
 ): StageRoleSuggestion | null {
+  // Antes de tudo: falta não vira sugestão nenhuma — nem pelo nome, nem pela
+  // flag de board logo abaixo. Ver `VETOS`.
+  if (nomeVetaSugestao(input.name)) return null;
   const byName = classifyStageNameDeterministic(input.name);
   if (byName) return { role: byName, source: "deterministic" };
   if (input.isFinalPositive) return { role: "won", source: "flag" };

@@ -21,7 +21,6 @@ const tables: Record<string, Row[]> = {
   whatsapp_instances: [],
   whatsapp_instance_allowed_members: [],
   voip_sessions: [],
-  leads: [],
 };
 
 function project(row: Row, cols: string[]): Row {
@@ -126,11 +125,7 @@ vi.mock("@/modules/identity", () => ({
   }),
 }));
 
-import {
-  useAnswerableVoiceNumbers,
-  useCallableVoiceNumbers,
-  useCanCallLead,
-} from "./useVoipSession";
+import { useAnswerableVoiceNumbers, useCallableVoiceNumbers } from "./useVoipSession";
 
 // JSX exige extensão .tsx neste projeto (o parser oxc do Vite rejeita `<Tag>`
 // em `.ts`); createElement mantém o arquivo alinhado com useVoipSessions.test.ts.
@@ -146,6 +141,9 @@ function instancia(over: Partial<Row> & { id: string; instance_name: string }): 
     status: "connected",
     provider: "uazapi",
     voice_calls_enabled: true,
+    // Vai para o menu de escolha do número (2026-09-03). `null` é o caso de
+    // instância que o provider ainda não devolveu o telefone.
+    phone_number: null,
     ...over,
   };
 }
@@ -168,7 +166,6 @@ beforeEach(() => {
   tables.whatsapp_instances = [];
   tables.whatsapp_instance_allowed_members = [];
   tables.voip_sessions = [];
-  tables.leads = [];
 });
 
 /** Um número perfeito: ao alcance de todos, com voz e com sessão aberta. */
@@ -178,7 +175,7 @@ function umNumeroPronto() {
 }
 
 /** Só a consulta que monta a lista de instâncias permitidas. */
-const CONSULTA_DA_REGRA = "whatsapp_instances:id,instance_name,status,provider";
+const CONSULTA_DA_REGRA = "whatsapp_instances:id,instance_name,status,provider,phone_number";
 
 describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma nova", () => {
   it("sem nenhum número com voz ao alcance, a lista é vazia (o botão some)", async () => {
@@ -192,8 +189,22 @@ describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma 
     tables.voip_sessions = [sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" })];
     const result = await listar();
     expect(result.current.numbers).toEqual([
-      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial" },
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: null },
     ]);
+  });
+
+  // O telefone da instância é o que o cliente vê tocar; o menu de escolha do
+  // número mostra-o ao lado do nome. Vem da mesma leitura, sem consulta a mais.
+  it("o telefone da instância chega como phoneNumber, sem consulta a mais", async () => {
+    tables.whatsapp_instances = [
+      instancia({ id: "i-1", instance_name: "Comercial", phone_number: "5548991199347" }),
+    ];
+    tables.voip_sessions = [sessao({ tc_session_id: "tc-1", whatsapp_instance_id: "i-1" })];
+    const result = await listar();
+    expect(result.current.numbers).toEqual([
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: "5548991199347" },
+    ]);
+    expect(consultas.filter((c) => c.startsWith("whatsapp_instances:"))).toHaveLength(2);
   });
 
   it("instância COM lista não aparece para quem está fora dela", async () => {
@@ -237,7 +248,7 @@ describe("useCallableVoiceNumbers — a regra de acesso é a do inbox, não uma 
     ];
     const result = await listar();
     expect(result.current.numbers).toEqual([
-      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial" },
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: null },
     ]);
   });
 
@@ -401,7 +412,7 @@ describe("useAnswerableVoiceNumbers — quem DEVE ser chamado", () => {
     umNumeroPronto();
     const result = await listarParaReceber();
     expect(result.current.numbers).toEqual([
-      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial" },
+      { tcSessionId: "tc-1", instanceId: "i-1", instanceName: "Comercial", phoneNumber: null },
     ]);
   });
 
@@ -577,149 +588,5 @@ describe("useAnswerableVoiceNumbers — o custo, num provider que vive fora das 
     umNumeroPronto();
     await listarParaReceber();
     expect(consultas.filter((c) => c.startsWith("voip_sessions"))).toEqual([]);
-  });
-});
-
-// ─── useCanCallLead ──────────────────────────────────────────────────────────
-
-/**
- * Um lead da org com as três colunas que o servidor lê, mais as duas que ele
- * NÃO lê. As duas extras existem de propósito: se alguém acrescentar
- * `pre_sale_responsible_id` ou `sale_responsible_id` à regra do front, ela passa
- * a liberar quem o servidor recusa — e o teste "sale/pre-sale não são a mesma
- * pergunta" fica vermelho.
- */
-function lead(over: Partial<Row> & { id: string }): Row {
-  return {
-    organization_id: "org-1",
-    sdr_id: null,
-    closer_id: null,
-    responsible_id: null,
-    pre_sale_responsible_id: null,
-    sale_responsible_id: null,
-    ...over,
-  };
-}
-
-/** Só as consultas que o `useCanCallLead` faz. */
-const consultasDeLead = () => consultas.filter((c) => c.startsWith("leads:"));
-
-async function assertPodeLigar(leadId: string | null, valor: boolean) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const { result } = renderHook(() => useCanCallLead(leadId), {
-    wrapper: ({ children }: { children: ReactNode }) =>
-      React.createElement(QueryClientProvider, { client: qc }, children),
-  });
-  // `false` também é a resposta de "ainda não perguntei". Sem esperar a
-  // consulta assentar, TODO caso negativo passaria por acaso — inclusive contra
-  // uma implementação que nunca perguntasse nada.
-  await waitFor(() => expect(qc.isFetching()).toBe(0));
-  await waitFor(() => expect(result.current).toBe(valor));
-}
-
-describe("useCanCallLead — a dona do lead, a mesma pergunta do servidor", () => {
-  // `_shared/voip/call-plane.ts` recusa com `not_lead_owner` quem não é SDR,
-  // closer nem responsável do lead. As três colunas, e só elas.
-  it("lead em que ele é o responsável: pode ligar", async () => {
-    tables.leads = [lead({ id: "lead-1", responsible_id: "tm-1" })];
-    await assertPodeLigar("lead-1", true);
-  });
-
-  it("lead em que ele é o SDR: pode ligar", async () => {
-    tables.leads = [lead({ id: "lead-1", sdr_id: "tm-1" })];
-    await assertPodeLigar("lead-1", true);
-  });
-
-  it("lead em que ele é o closer: pode ligar", async () => {
-    tables.leads = [lead({ id: "lead-1", closer_id: "tm-1" })];
-    await assertPodeLigar("lead-1", true);
-  });
-
-  // O caso do defeito: `leads.view_all` nasce `true`, então o vendedor ENXERGA
-  // todo lead da organização. Ver não é poder ligar.
-  it("lead de um colega: não pode ligar", async () => {
-    tables.leads = [lead({ id: "lead-1", responsible_id: "tm-colega", sdr_id: "tm-colega" })];
-    await assertPodeLigar("lead-1", false);
-  });
-
-  // Pré-venda e vendas são OUTRA divisão de trabalho, e o servidor não olha para
-  // elas. Somá-las aqui ofereceria o botão para quem tomaria `not_lead_owner`.
-  it("sale/pre-sale não são a mesma pergunta: não liberam a ligação", async () => {
-    tables.leads = [
-      lead({ id: "lead-1", pre_sale_responsible_id: "tm-1", sale_responsible_id: "tm-1" }),
-    ];
-    await assertPodeLigar("lead-1", false);
-  });
-
-  it("lead que não existe (ou que a RLS esconde): não pode ligar", async () => {
-    tables.leads = [];
-    await assertPodeLigar("lead-1", false);
-  });
-
-  // `lead_org_mismatch` no servidor. Em produção quem barra é a RLS de `leads`;
-  // o `.eq("organization_id", ...)` é o mesmo filtro, explícito.
-  it("lead de outra organização: não pode ligar", async () => {
-    tables.leads = [
-      lead({ id: "lead-1", organization_id: "org-9", responsible_id: "tm-1" }),
-    ];
-    await assertPodeLigar("lead-1", false);
-  });
-});
-
-describe("useCanCallLead — quem bypassa é o mesmo trio do servidor", () => {
-  // `isOrgAdmin` em `_shared/voip/caller.ts` é `isMaster || isGestor || role
-  // === "admin"` — NÃO é só admin. No front os dois shadow users chegam como
-  // team_member virtual (`master-virtual-*` / `gestor-virtual-*`), que é como o
-  // resto do produto já os reconhece (`useWhatsAppInstancesForUser`).
-  it("admin da org alcança lead de qualquer colega", async () => {
-    currentMember = { id: "tm-1", organization_id: "org-1", role: "admin" };
-    tables.leads = [lead({ id: "lead-1", responsible_id: "tm-colega" })];
-    await assertPodeLigar("lead-1", true);
-  });
-
-  it("master alcança lead de qualquer colega", async () => {
-    currentMember = { id: "master-virtual-u1", organization_id: "org-1", role: "admin" };
-    tables.leads = [lead({ id: "lead-1", responsible_id: "tm-colega" })];
-    await assertPodeLigar("lead-1", true);
-  });
-
-  it("gestor de portfólio alcança lead de qualquer colega", async () => {
-    currentMember = { id: "gestor-virtual-u1", organization_id: "org-1", role: "admin" };
-    tables.leads = [lead({ id: "lead-1", responsible_id: "tm-colega" })];
-    await assertPodeLigar("lead-1", true);
-  });
-
-  // O id virtual nunca vai bater com uma coluna de lead: sem o bypass, master e
-  // gestor perderiam o botão em TODO lead — e o teste acima passaria por acaso
-  // se o bypass fosse trocado por "id que não bate, então libera".
-  it("membro comum com id que não bate em nada continua sem o botão", async () => {
-    currentMember = { id: "tm-1", organization_id: "org-1", role: "member" };
-    tables.leads = [lead({ id: "lead-1", responsible_id: null })];
-    await assertPodeLigar("lead-1", false);
-  });
-});
-
-describe("useCanCallLead — o custo, que o provider da raiz não pode pagar", () => {
-  // O botão só monta no chat, e só pergunta quando já existe número ao alcance.
-  // `null` é como o botão diz "ainda não vale perguntar".
-  it("sem lead para perguntar, nenhuma consulta sai", async () => {
-    tables.leads = [lead({ id: "lead-1", responsible_id: "tm-1" })];
-    await assertPodeLigar(null, false);
-    expect(consultasDeLead()).toEqual([]);
-  });
-
-  // Admin/master/gestor não precisam da linha do lead para saber a resposta.
-  it("admin não paga consulta nenhuma", async () => {
-    currentMember = { id: "tm-1", organization_id: "org-1", role: "admin" };
-    tables.leads = [lead({ id: "lead-1", responsible_id: "tm-colega" })];
-    await assertPodeLigar("lead-1", true);
-    expect(consultasDeLead()).toEqual([]);
-  });
-
-  // Uma consulta, e só ela — e pedindo exatamente as três colunas da regra.
-  it("membro comum paga UMA consulta, com as três colunas da regra", async () => {
-    tables.leads = [lead({ id: "lead-1", responsible_id: "tm-1" })];
-    await assertPodeLigar("lead-1", true);
-    expect(consultasDeLead()).toEqual(["leads:sdr_id,closer_id,responsible_id"]);
   });
 });

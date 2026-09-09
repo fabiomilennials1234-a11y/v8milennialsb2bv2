@@ -50,7 +50,6 @@ describe("StageRail", () => {
     fireEvent.click(screen.getByText("Respondeu"));
     expect(onMove).toHaveBeenCalledWith({
       kind: "system",
-      pipeTable: "pipe_whatsapp",
       pipeId: "entry-1",
       stageKey: "respondeu",
       stageLabel: "Respondeu",

@@ -2,10 +2,10 @@ import { useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useSavedViews } from "./useSavedViews";
 import { useOrganization } from "@/modules/identity";
-import { resolveFilters } from "@/types/saved-views";
+import { resolveFilters, type SavedViewEntityType } from "@/types/saved-views";
 
 export function useApplyViewFromUrl<T extends Record<string, unknown>>(
-  entityType: string,
+  entityType: SavedViewEntityType,
   defaultFilters: T,
   onApplyFilters: (filters: T) => void,
   onActiveViewChange: (viewId: string | null) => void

@@ -26,6 +26,8 @@ const row = (over: Partial<StageRoleSuggestionRow>): StageRoleSuggestionRow => (
   stage_role_suggested_at: "2026-07-07T12:00:00Z",
   stage_role_suggestion_source: "deterministic",
   organization: { name: "Org A" },
+  pipeline: null,
+  funil_label: null,
   ...over,
 });
 
@@ -58,12 +60,18 @@ describe("buildReviewUpdate — confirmação humana obrigatória", () => {
   };
 
   it("approve aplica exatamente o role sugerido e limpa a pendência", () => {
-    expect(buildReviewUpdate({ ...base, action: "approve" })).toEqual({
-      stage_role: "won",
+    expect(buildReviewUpdate({ ...base, suggestedRole: "meeting_booked", action: "approve" })).toEqual({
+      stage_role: "meeting_booked",
       suggested_stage_role: null,
       stage_role_reviewed_at: "2026-07-07T15:00:00Z",
       stage_role_reviewed_by: "master-1",
     });
+  });
+
+  it.each(["won", "lost"] as const)("não permite aprovar nem corrigir para %s", (role) => {
+    expect(() => buildReviewUpdate({ ...base, suggestedRole: role, action: "approve" })).toThrow("negócio");
+    expect(() => buildReviewUpdate({ ...base, correctedRole: role, action: "correct" })).toThrow("negócio");
+    expect(buildReviewUpdate({ ...base, suggestedRole: role, action: "dismiss" })).not.toHaveProperty("stage_role");
   });
 
   it("correct aplica o role escolhido pelo master (não o sugerido)", () => {

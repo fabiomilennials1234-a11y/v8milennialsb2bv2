@@ -5,3 +5,4 @@
  */
 export { CreateFunilOuCampanhaModal } from "./CreateFunilOuCampanhaModal";
 export { CreateTemporaryFunnelModal } from "./CreateTemporaryFunnelModal";
+export { FunnelActionsMenu } from "./FunnelActionsMenu";

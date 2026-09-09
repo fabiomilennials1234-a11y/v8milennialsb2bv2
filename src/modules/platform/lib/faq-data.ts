@@ -369,7 +369,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como exporto meus leads para uma planilha?",
-        "answer": "Você pode exportar seus leads em CSV. A exportação é feita por etapa do funil, então selecione o estágio desejado antes de exportar. O arquivo abre normalmente no Excel ou no Google Sheets.",
+        "answer": "Você pode exportar seus leads em CSV. A exportação é feita por etapa do funil, então selecione a etapa desejada antes de exportar. O arquivo abre normalmente no Excel ou no Google Sheets.",
         "keywords": [
           "exportar",
           "CSV",
@@ -398,7 +398,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
     "items": [
       {
         "question": "O que é um funil no Torque e para que serve?",
-        "answer": "Um funil é o caminho visual que o lead percorre da entrada até o fechamento, organizado em etapas (colunas) no formato Kanban. O Torque já vem com três funis prontos: Qualificação, Confirmação de Reuniões e Propostas/Fechamento. Você acompanha em que ponto cada lead está pelo menu Funis.",
+        "answer": "Um funil é o caminho visual que o lead percorre da entrada até o fechamento, organizado em etapas (colunas) no formato Kanban. Cada organização monta os funis que precisa — toda conta nasce com um Funil de Vendas pronto e você cria, renomeia ou exclui funis livremente. Você acompanha em que ponto cada lead está pelo menu Funis.",
         "keywords": [
           "funil",
           "pipeline",
@@ -419,7 +419,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como agendo uma reunião com um lead?",
-        "answer": "No funil de Confirmação de Reuniões, ou pelo card do lead, agende informando data, hora, responsável e observações. Se sua conta estiver conectada ao Google Calendar, a reunião é sincronizada. O funil mostra uma contagem regressiva até o dia e você marca depois se o lead compareceu ou faltou.",
+        "answer": "Pelo card do lead, ou no funil onde ele está, agende informando data, hora, responsável e observações. Se sua conta estiver conectada ao Google Calendar, a reunião é sincronizada. O funil mostra uma contagem regressiva até o dia e você marca depois se o lead compareceu ou faltou.",
         "keywords": [
           "agendar reunião",
           "data",
@@ -430,7 +430,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Preciso remarcar uma reunião. Como faço?",
-        "answer": "No card do lead, no funil de Confirmação, use a opção de remarcar e defina a nova data e hora. Se o Google Calendar estiver conectado, o evento é atualizado junto. A reunião continua aparecendo na sua Agenda com a nova data.",
+        "answer": "No card do lead, use a opção de remarcar e defina a nova data e hora. Se o Google Calendar estiver conectado, o evento é atualizado junto. A reunião continua aparecendo na sua Agenda com a nova data.",
         "keywords": [
           "remarcar",
           "reagendar",
@@ -440,7 +440,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como crio um funil personalizado para o meu processo?",
-        "answer": "Além dos três funis padrão, você pode criar quantos quiser. No menu Funis, crie um novo definindo nome, cor e ícone, e adicione as etapas que fizerem sentido para o seu processo. Você pode editar o nome, a cor e o ícone de cada etapa, reordená-las ou excluí-las quando precisar.",
+        "answer": "Você pode criar quantos funis quiser. No menu Funis, crie um novo definindo nome, cor e ícone, e adicione as etapas que fizerem sentido para o seu processo. Você pode editar o nome, a cor e o ícone de cada etapa, reordená-las ou excluí-las quando precisar.",
         "keywords": [
           "funil personalizado",
           "criar funil",
@@ -605,7 +605,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como uso o nome do lead e outros dados dentro das mensagens?",
-        "answer": "Use variáveis entre chaves duplas e o Turbo troca pelo valor real na hora do envio. As mais usadas são {{nome}}, {{empresa}}, {{telefone}}, {{estagio}}, {{responsavel}} e {{saudacao}} (que vira Bom dia ou Boa tarde automaticamente). Para campos personalizados, use {{custom.nome_do_campo}}. As variáveis só preenchem valores, não fazem contas.",
+        "answer": "Use variáveis entre chaves duplas e o Turbo troca pelo valor real na hora do envio. As mais usadas são {{nome}}, {{primeiro_nome}} (só o primeiro nome do lead), {{empresa}}, {{telefone}}, {{estagio}}, {{responsavel}} e {{saudacao}} (que vira Bom dia ou Boa tarde automaticamente). Para campos personalizados, use {{custom.nome_do_campo}}. As variáveis só preenchem valores, não fazem contas.",
         "keywords": [
           "variável",
           "nome do lead",
@@ -675,7 +675,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como uso o nome do lead e outros dados na mensagem do disparo?",
-        "answer": "Use variáveis entre chaves duplas e o sistema troca pelo valor real de cada lead no envio: {{nome}}, {{empresa}}, {{saudacao}} (que vira Bom dia ou Boa tarde) e campos personalizados com {{custom.nome_do_campo}}. Personalizar a mensagem, em vez de mandar um texto idêntico para todo mundo, deixa o disparo mais natural e ajuda a proteger o seu número.",
+        "answer": "Use variáveis entre chaves duplas e o sistema troca pelo valor real de cada lead no envio: {{nome}}, {{primeiro_nome}} (só o primeiro nome do lead), {{empresa}}, {{saudacao}} (que vira Bom dia ou Boa tarde) e campos personalizados com {{custom.nome_do_campo}}. Personalizar a mensagem, em vez de mandar um texto idêntico para todo mundo, deixa o disparo mais natural e ajuda a proteger o seu número.",
         "keywords": [
           "variável",
           "personalizar",
@@ -757,7 +757,7 @@ export const FAQ_CATEGORIES: FaqCategory[] = [
       },
       {
         "question": "Como crio e envio uma proposta para o cliente?",
-        "answer": "Monte a proposta escolhendo produtos, valores e validade. Ela ganha uma data com contagem regressiva e fica ligada ao funil de Propostas, então você acompanha o fechamento no Kanban. Quando é marcada como vendida ou perdida, isso reflete nas métricas e pode disparar suas automações.",
+        "answer": "Monte a proposta escolhendo produtos, valores e validade. Ela ganha uma data com contagem regressiva e fica ligada ao funil de fechamento da sua organização, então você acompanha tudo no Kanban. Quando é marcada como vendida ou perdida, isso reflete nas métricas e pode disparar suas automações.",
         "keywords": [
           "proposta",
           "criar proposta",

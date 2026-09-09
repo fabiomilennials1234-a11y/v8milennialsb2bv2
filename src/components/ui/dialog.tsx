@@ -27,12 +27,28 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+/**
+ * `overlayClassName` existe para o caso em que o `z-50` padrão perde.
+ *
+ * O overlay é irmão do conteúdo dentro do mesmo portal, então subir só o
+ * `className` deixa o escurecido para trás — e um diálogo pintado acima de um
+ * overlay que ficou abaixo do painel é meio conserto. Quem sobe, sobe os dois.
+ * O caso conhecido é o `SheetContent`, que é `z-[51]`: qualquer diálogo aberto
+ * de dentro de uma folha (o painel do Negócio no celular) nasce ATRÁS dela,
+ * invisível, e ainda assim é ele quem recebe o toque — porque o Radix põe a
+ * camada de baixo em `pointer-events: none`. A convenção do repo para "acima
+ * da folha" é `z-[60]`, a mesma de `ui/alert-dialog.tsx`.
+ *
+ * Opcional e sem default novo: omitir mantém exatamente o comportamento antigo.
+ */
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+    overlayClassName?: string;
+  }
+>(({ className, overlayClassName, children, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay />
+    <DialogOverlay className={overlayClassName} />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(

@@ -2,7 +2,7 @@
 /**
  * RLS Integration Tests — Responsibility-based visibility.
  *
- * Validates that leads and pipe_whatsapp rows are visible (or hidden) based on
+ * Validates that leads and pipeline_entries rows are visible (or hidden) based on
  * sdr_id / closer_id assignment, admin status, and feature permissions
  * (leads.view_all, see_unassigned_cards).
  *
@@ -13,7 +13,7 @@
  *   Lead Delta  (1004): sdr_id = Member1, closer_id = Member2
  *   Member1: role=member, NO leads.view_all, see_unassigned_cards=false
  *   Member2: role=member, leads.view_all=true (via member_feature_permissions)
- *   pipe_whatsapp has entry for Lead Alpha in Org A
+ *   pipeline_entries has entry for Lead Alpha in Org A
  *
  * Prerequisites:
  *   1. `supabase start` must be running
@@ -61,10 +61,10 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
       expect(new Set(data!.map((l) => l.id))).toEqual(new Set(TEST_ORG_A_LEAD_IDS));
     });
 
-    it('2. Admin sees pipe_whatsapp entry for Org A', async () => {
+    it('2. Admin sees pipeline_entries entry for Org A', async () => {
       const admin = await getOrgAAdmin();
       const { data, error } = await admin
-        .from('pipe_whatsapp')
+        .from('pipeline_entries')
         .select('id')
         .eq('organization_id', TEST_ORG_ID);
 
@@ -134,19 +134,19 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
     });
 
     /**
-     * pipe_whatsapp rows carry their own sdr_id column (separate from leads.sdr_id).
-     * The seed inserts the pipe_whatsapp entry for Lead Alpha WITHOUT setting sdr_id
+     * pipeline_entries rows carry their own sdr_id column (separate from leads.sdr_id).
+     * The seed inserts the pipeline_entries entry for Lead Alpha WITHOUT setting sdr_id
      * on the pipe row itself, so the pipe RLS `can_see_lead_by_permissions(sdr_id, NULL)`
      * receives (NULL, NULL). With see_unassigned_cards=false, this resolves to false.
      *
      * Whether Member1 sees this row depends on whether application code or a trigger
-     * has synced sdr_id from the lead to the pipe_whatsapp row. We assert <= 1 to
+     * has synced sdr_id from the lead to the pipeline_entries row. We assert <= 1 to
      * document the actual behavior without masking a potential gap.
      */
-    it('8. Member1 queries pipe_whatsapp for Lead Alpha', async () => {
+    it('8. Member1 queries pipeline_entries for Lead Alpha', async () => {
       const member1 = await getOrgAMember1();
       const { data, error } = await member1
-        .from('pipe_whatsapp')
+        .from('pipeline_entries')
         .select('id, lead_id')
         .eq('lead_id', TEST_LEAD_ALPHA_ID);
 
@@ -236,17 +236,17 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
       });
     });
 
-    it('16. Member1 CANNOT see Org B pipe_whatsapp entries', async () => {
+    it('16. Member1 CANNOT see Org B pipeline_entries entries', async () => {
       const member1 = await getOrgAMember1();
-      await expectRowCount(member1, 'pipe_whatsapp', 0, {
+      await expectRowCount(member1, 'pipeline_entries', 0, {
         column: 'organization_id',
         value: TEST_ORG_B_ID,
       });
     });
 
-    it('17. Member2 CANNOT see Org B pipe_whatsapp entries', async () => {
+    it('17. Member2 CANNOT see Org B pipeline_entries entries', async () => {
       const member2 = await getOrgAMember2();
-      await expectRowCount(member2, 'pipe_whatsapp', 0, {
+      await expectRowCount(member2, 'pipeline_entries', 0, {
         column: 'organization_id',
         value: TEST_ORG_B_ID,
       });
@@ -269,10 +269,10 @@ describe.skipIf(shouldSkip)('RLS — Responsibility-based visibility', () => {
       expect(data).toHaveLength(0);
     });
 
-    it('19. Member2 with leads.view_all sees pipe_whatsapp for Org A', async () => {
+    it('19. Member2 with leads.view_all sees pipeline_entries for Org A', async () => {
       const member2 = await getOrgAMember2();
       const { data, error } = await member2
-        .from('pipe_whatsapp')
+        .from('pipeline_entries')
         .select('id')
         .eq('organization_id', TEST_ORG_ID);
 

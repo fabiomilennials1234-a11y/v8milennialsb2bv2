@@ -26,16 +26,26 @@ import { supabase } from "@/integrations/supabase/client";
 /** Espelho manual das colunas lidas pela UI. Fonte: a migration do Toth. */
 export interface TothConnectionRow {
   base_url: string | null;
+  /**
+   * Base do serviço **Flow** — o de pedidos, que roda em outro servidor do
+   * mesmo ERP (porta 3000, `/flow/crm`). `null` = a org não tem esse serviço.
+   */
+  flow_base_url: string | null;
+  pedidos_janela_dias: number | null;
+  pedidos_data_inicial: string | null;
   token_transport: string | null;
   allow_insecure_transport: boolean | null;
   connected_at: string | null;
   status: string | null;
   erp_sync_mode: string | null;
   clientes_dias_compras: number | null;
+  clientes_marcas: string | null;
+  clientes_somente_com_compra: boolean | null;
   clientes_empresa: string | null;
   clientes_incluir_sem_empresa: boolean | null;
   last_clientes_sync_at: string | null;
   last_cobrancas_sync_at: string | null;
+  last_pedidos_sync_at: string | null;
   last_error: string | null;
 }
 

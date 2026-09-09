@@ -20,6 +20,7 @@ import { HealthSparkline } from "./HealthSparkline";
 import { NewOrderModal } from "./NewOrderModal";
 import { formatBRL } from "@/lib/format";
 import { useClientInadimplencia } from "@/modules/carteira/hooks/useClientInadimplencia";
+import { withErpCode } from "@/shared/format/erp-code";
 
 // ─── Derived types ────────────────────────────────────────────────────────────
 
@@ -135,6 +136,14 @@ export default function ClienteDetailPage() {
   const dashArray = `${Math.round((score / 100) * circumference)} ${circumference}`;
 
   const clientName = client?.name ?? client?.lead?.name ?? "Cliente";
+  /**
+   * Rótulo do cabeçalho: "1234 - João da Silva".
+   *
+   * 🔴 Separado de `clientName` de propósito. `clientName` continua limpo porque
+   * segue para `ClienteCopilotSuggestion`, que redige a mensagem sugerida ao
+   * cliente — com o código junto, a sugestão viraria "Olá 1234 - João da Silva".
+   */
+  const clientLabel = withErpCode(clientName, client?.external_id);
   const clientCompany = client?.company ?? client?.lead?.company ?? null;
   const clientPhone = client?.lead?.phone ?? null;
 
@@ -209,8 +218,11 @@ export default function ClienteDetailPage() {
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">
-              <h1 className="text-lg font-semibold text-foreground truncate leading-tight">
-                {clientName}
+              <h1
+                className="text-lg font-semibold text-foreground truncate leading-tight"
+                title={clientLabel}
+              >
+                {clientLabel}
               </h1>
               {healthHistory.length >= 2 && (
                 <HealthSparkline

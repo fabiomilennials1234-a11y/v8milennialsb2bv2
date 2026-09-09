@@ -3,11 +3,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
 import { useCanDo } from "@/modules/identity";
 import { applyLeadListFilters, type LeadListFilterValues } from "../lib/lead-list-filters";
+import {
+  buildExportHeaders,
+  buildFunnelCells,
+  isStageUuid,
+  orderPipelinesForExport,
+  pickLatestEntryPerFunnel,
+  type ExportPipeline,
+  type ExportPipelineEntry,
+  type ExportPipelineStage,
+} from "../lib/export-columns";
 const BATCH_SIZE = 500;
 
-/** Cabeçalhos completos: lead + pipe Qualificação + pipe Confirmação + pipe Propostas */
+/**
+ * Bloco FIXO do lead no arquivo exportado.
+ *
+ * SCRUM-635: este const era "lead + os 3 pipes de sistema" (a união de tipo dos
+ * 3 cabeçalhos fixos). Os blocos por pipe morreram — agora as colunas de funil
+ * são DINÂMICAS, derivadas dos funis reais da org (`pipelines` +
+ * `pipeline_stages`), um bloco por funil com o nome dele (ver
+ * `../lib/export-columns.ts`). Aqui fica só o que é do lead.
+ */
 export const EXPORT_LEAD_HEADERS = [
-  // Lead
   "ID Lead",
   "Nome",
   "Empresa",
@@ -17,7 +34,6 @@ export const EXPORT_LEAD_HEADERS = [
   "Segmento",
   "Urgência",
   "Notas",
-  "Prioridade do lead",
   "Público de origem",
   "utm_campaign",
   "utm_source",
@@ -29,52 +45,27 @@ export const EXPORT_LEAD_HEADERS = [
   "Data período métricas lead",
   "Responsável (lead)",
   "Data compromisso (lead)",
-  // Pipe WhatsApp
-  "Etapa Pipe Qualificação",
-  "Responsável Pipe Qualificação",
-  "Data agendada (Qualificação)",
-  "Notas Pipe Qualificação",
-  "Data criação Pipe Qualificação",
-  "Data atualização Pipe Qualificação",
-  // Pipe Confirmação
-  "Etapa Pipe Confirmação",
-  "Responsável Pipe Confirmação",
-  "Data reunião",
-  "Reunião confirmada (sim/não)",
-  "Notas Pipe Confirmação",
-  "Data criação Pipe Confirmação",
-  "Data atualização Pipe Confirmação",
-  "Data período métricas Confirmação",
-  // Pipe Propostas
-  "Etapa Pipe Propostas",
-  "Responsável Pipe Propostas",
-  "Valor venda (R$)",
-  "Tipo produto",
-  "Calor (0-100)",
-  "Data fechamento",
-  "Data compromisso (proposta)",
-  "Duração contrato (meses)",
-  "Notas Pipe Propostas",
-  "Data criação Pipe Propostas",
-  "Data atualização Pipe Propostas",
-  "Data período métricas Propostas",
 ] as const;
 
 type ExportFormat = "csv" | "xlsx";
 
 /**
  * Filtro por etapa do Kanban: limita a exportação aos leads que estejam na
- * etapa indicada do pipe especificado. Para pipes fixos (whatsapp/confirmacao/
- * propostas) `stageId` é o `status` enum. Para `custom`, `stageId` é o UUID
- * da stage em `custom_pipelines_stages` e `customPipelineId` é obrigatório.
+ * etapa indicada do funil especificado.
+ *
+ * SCRUM-635/637: o MOTOR é único — (pipeline_id, etapa) resolve direto em
+ * `pipeline_entries` (fonte única pós-W3). Os braços legados por slug
+ * ("whatsapp"/"confirmacao"/"propostas") e "custom" morreram no flip da 637
+ * junto com as páginas que os alimentavam — este é o único formato.
  */
 export interface ExportStageFilter {
-  pipe: "whatsapp" | "confirmacao" | "propostas" | "custom";
+  /** `pipelines.id` — endereça QUALQUER funil (sistema ou custom). */
+  pipelineId: string;
+  /** uuid de `pipeline_stages` (canônico) ou stage_key. */
   stageId: string;
-  customPipelineId?: string;
 }
 
-/** Filtros ativos da lista de leads (busca, origem, rating, qualificação, UF).
+/** Filtros ativos da lista de leads (busca, origem, qualificação, UF).
  * Mesma semântica de `applyLeadListFilters` — reaproveita a fonte única. */
 export type ExportListFilters = LeadListFilterValues;
 
@@ -87,8 +78,14 @@ export interface ExportLeadsOptions {
   /** Título legível da etapa — usado apenas para compor o nome do arquivo. */
   stageTitle?: string;
   /** Filtros ativos da lista — aplicados à exportação para espelhar o que o
-   * usuário vê na tela (busca, origem, rating, qualificação, UF). */
+   * usuário vê na tela (busca, origem, qualificação, UF). */
   listFilters?: ExportListFilters;
+  /**
+   * Restringe a exportação a um conjunto EXPLÍCITO de leads — a seleção
+   * manual do bulk (SCRUM-633). Compõe por interseção com stageFilter e
+   * listFilters quando presentes. Lista vazia exporta nada.
+   */
+  leadIds?: string[];
 }
 
 export interface UseExportLeadsResult {
@@ -107,17 +104,8 @@ function slugify(value: string): string {
     .slice(0, 60) || "etapa";
 }
 
-function ratingToLabel(rating: number | null | undefined): string {
-  if (rating == null) return "";
-  if (rating >= 9) return "Máxima";
-  if (rating >= 7) return "Alta";
-  if (rating >= 4) return "Média";
-  if (rating >= 1) return "Baixa";
-  return "";
-}
-
 function fmtDate(v: string | null | undefined): string {
-  if (v == null) return "";
+  if (v == null || v === "") return "";
   try {
     return new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
   } catch {
@@ -144,59 +132,76 @@ export function useExportLeads(): UseExportLeadsResult {
     try {
       const limit = Math.min(options.limit ?? 10_000, 50_000);
 
-      // 0) Quando stageFilter está presente, primeiro restringimos ao
-      //    conjunto de lead_ids da etapa indicada — sempre filtrando por
-      //    organization_id como camada de segurança extra (RLS já protege).
+      // 0) Funis reais da org — servem tanto à resolução do stageFilter quanto
+      //    aos cabeçalhos dinâmicos do arquivo (SCRUM-635).
+      const { data: pipelinesData, error: pipelinesError } = await supabase
+        .from("pipelines")
+        .select("id, name, slug, type")
+        .eq("organization_id", organizationId)
+        .eq("is_active", true);
+      if (pipelinesError) throw pipelinesError;
+      const pipelines = orderPipelinesForExport((pipelinesData ?? []) as ExportPipeline[]);
+      const pipelineIds = pipelines.map((p) => p.id);
+
+      // Etapas dos funis — sem filtro de is_active de propósito: entry parada
+      // em etapa desativada ainda precisa sair com o NOME da etapa, não o cru.
+      // `as any` no from: pipeline_stages.pipeline_id (20270906001000) ainda
+      // não está no types.ts gerado — mesmo padrão de usePipelines.
+      let stages: ExportPipelineStage[] = [];
+      if (pipelineIds.length > 0) {
+        const { data: stagesData, error: stagesError } = await (supabase.from as any)(
+          "pipeline_stages",
+        )
+          .select("id, pipeline_id, stage_key, name")
+          .eq("organization_id", organizationId)
+          .in("pipeline_id", pipelineIds);
+        if (stagesError) throw stagesError;
+        stages = (stagesData ?? []) as ExportPipelineStage[];
+      }
+      const stagesById = new Map(stages.map((s) => [s.id, s]));
+      const stagesByPipelineAndKey = new Map(
+        stages.filter((s) => s.pipeline_id && s.stage_key).map((s) => [`${s.pipeline_id}:${s.stage_key}`, s]),
+      );
+
+      // 0.25) stageFilter — MOTOR ÚNICO (SCRUM-635): todo modo colapsa em
+      //       (pipeline_id, etapa) e resolve direto em `pipeline_entries`.
       let stageLeadIds: string[] | null = null;
       if (options.stageFilter) {
         const sf = options.stageFilter;
-        if (sf.pipe === "custom") {
-          if (!sf.customPipelineId) {
-            throw new Error("customPipelineId é obrigatório quando pipe='custom'");
-          }
-          const { data: entries, error: entriesError } = await supabase
-            .from("custom_pipe_entries")
-            .select("lead_id")
-            .eq("organization_id", organizationId)
-            .eq("pipeline_id", sf.customPipelineId)
-            .eq("stage_id", sf.stageId);
-          if (entriesError) throw entriesError;
-          stageLeadIds = Array.from(new Set((entries ?? []).map((e: { lead_id: string }) => e.lead_id))).filter(Boolean);
-        } else {
-          // Pipes fixos — branch explícito por nome de tabela para preservar
-          // tipagem do Supabase client.
-          let entries: Array<{ lead_id: string }> | null = null;
-          let entriesError: unknown = null;
-          if (sf.pipe === "whatsapp") {
-            const r = await supabase
-              .from("pipe_whatsapp")
-              .select("lead_id")
-              .eq("organization_id", organizationId)
-              .eq("status", sf.stageId);
-            entries = r.data as Array<{ lead_id: string }> | null;
-            entriesError = r.error;
-          } else if (sf.pipe === "confirmacao") {
-            const r = await supabase
-              .from("pipe_confirmacao")
-              .select("lead_id")
-              .eq("organization_id", organizationId)
-              .eq("status", sf.stageId);
-            entries = r.data as Array<{ lead_id: string }> | null;
-            entriesError = r.error;
-          } else {
-            const r = await supabase
-              .from("pipe_propostas")
-              .select("lead_id")
-              .eq("organization_id", organizationId)
-              .eq("status", sf.stageId);
-            entries = r.data as Array<{ lead_id: string }> | null;
-            entriesError = r.error;
-          }
-          if (entriesError) throw entriesError;
-          stageLeadIds = Array.from(new Set((entries ?? []).map((e) => e.lead_id))).filter(Boolean);
+        if (!sf.pipelineId) {
+          throw new Error("pipelineId é obrigatório no stageFilter");
         }
+        const targetPipelineId = sf.pipelineId;
+
+        // `as any` no from: pipeline_entries.stage_id (20270906002000) ainda
+        // não está no types.ts gerado — mesmo padrão de usePipelines.
+        let entriesQuery = (supabase.from as any)("pipeline_entries")
+          .select("lead_id")
+          .eq("organization_id", organizationId)
+          .eq("pipeline_id", targetPipelineId);
+        // Etapa por uuid (canônico) ou stage_key (formato legado dos 3 pipes).
+        entriesQuery = isStageUuid(sf.stageId)
+          ? entriesQuery.eq("stage_id", sf.stageId)
+          : entriesQuery.eq("stage_key", sf.stageId);
+        const { data: entries, error: entriesError } = await entriesQuery;
+        if (entriesError) throw entriesError;
+        stageLeadIds = Array.from(
+          new Set(((entries ?? []) as Array<{ lead_id: string | null }>).map((e) => e.lead_id)),
+        ).filter(Boolean) as string[];
 
         // Etapa vazia: nada a exportar — retorna sem gerar arquivo.
+        if (stageLeadIds.length === 0) {
+          return { count: 0 };
+        }
+      }
+
+      // 0.5) Seleção manual (bulk, SCRUM-633): interseção explícita com o que
+      // o stageFilter resolveu (ou o recorte inteiro quando não há stageFilter).
+      if (options.leadIds) {
+        const sel = new Set(options.leadIds);
+        stageLeadIds = stageLeadIds
+          ? stageLeadIds.filter((id) => sel.has(id))
+          : Array.from(sel);
         if (stageLeadIds.length === 0) {
           return { count: 0 };
         }
@@ -206,7 +211,7 @@ export function useExportLeads(): UseExportLeadsResult {
       let leadsQuery = supabase
         .from("leads")
         .select(
-          "id, name, company, email, phone, faturamento, segment, urgency, notes, rating, origin, responsible_id, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
+          "id, name, company, email, phone, faturamento, segment, urgency, notes, origin, responsible_id, sdr_id, closer_id, compromisso_date, utm_campaign, utm_source, utm_medium, utm_content, utm_term, created_at, updated_at, metrics_period_at"
         )
         .eq("organization_id", organizationId);
 
@@ -214,7 +219,7 @@ export function useExportLeads(): UseExportLeadsResult {
         leadsQuery = leadsQuery.in("id", stageLeadIds);
       }
 
-      // Espelha os filtros ativos da lista (busca, origem, rating, qualificação,
+      // Espelha os filtros ativos da lista (busca, origem, qualificação,
       // UF) — mesma semântica da tela via helper compartilhado.
       if (options.listFilters) {
         leadsQuery = applyLeadListFilters(leadsQuery, options.listFilters);
@@ -237,100 +242,68 @@ export function useExportLeads(): UseExportLeadsResult {
       (members ?? []).forEach((m: { id: string; name: string }) => {
         memberByName[m.id] = m.name ?? "";
       });
+      const memberName = (id: string | null | undefined) => (id ? memberByName[id] ?? "" : "");
 
-      // 3) Pipe WhatsApp, Confirmação, Propostas em lotes
-      const pwByLead: Record<string, Record<string, unknown>> = {};
-      const pcByLead: Record<string, Record<string, unknown>> = {};
-      const ppByLead: Record<string, Record<string, unknown>> = {};
-
-      for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
-        const batch = leadIds.slice(i, i + BATCH_SIZE);
-        const [pwRes, pcRes, ppRes] = await Promise.all([
-          supabase.from("pipe_whatsapp").select("*").eq("organization_id", organizationId).in("lead_id", batch),
-          supabase.from("pipe_confirmacao").select("*").eq("organization_id", organizationId).in("lead_id", batch),
-          supabase.from("pipe_propostas").select("*").eq("organization_id", organizationId).in("lead_id", batch),
-        ]);
-        (pwRes.data ?? []).forEach((r: Record<string, unknown>) => {
-          const lid = r.lead_id as string;
-          if (!pwByLead[lid] || new Date((r.updated_at as string) ?? 0) > new Date((pwByLead[lid].updated_at as string) ?? 0)) {
-            pwByLead[lid] = r;
-          }
-        });
-        (pcRes.data ?? []).forEach((r: Record<string, unknown>) => {
-          const lid = r.lead_id as string;
-          if (!pcByLead[lid] || new Date((r.updated_at as string) ?? 0) > new Date((pcByLead[lid].updated_at as string) ?? 0)) {
-            pcByLead[lid] = r;
-          }
-        });
-        (ppRes.data ?? []).forEach((r: Record<string, unknown>) => {
-          const lid = r.lead_id as string;
-          if (!ppByLead[lid] || new Date((r.updated_at as string) ?? 0) > new Date((ppByLead[lid].updated_at as string) ?? 0)) {
-            ppByLead[lid] = r;
-          }
-        });
+      // 3) Entries de TODOS os funis da org, em lotes de leads — uma query por
+      //    lote no lugar das 3 fixas por pipe (SCRUM-635). O desempate por
+      //    (funil, lead) segue o legado: updated_at mais recente vence.
+      const allEntries: ExportPipelineEntry[] = [];
+      if (pipelineIds.length > 0) {
+        for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
+          const batch = leadIds.slice(i, i + BATCH_SIZE);
+          // `as any`: pipeline_entries.stage_id fora do types.ts (ver acima).
+          const { data: batchEntries, error: batchError } = await (supabase.from as any)(
+            "pipeline_entries",
+          )
+            .select(
+              "pipeline_id, lead_id, stage_id, stage_key, assigned_to, notes, closed_at, created_at, updated_at, metadata",
+            )
+            .eq("organization_id", organizationId)
+            .in("lead_id", batch);
+          if (batchError) throw batchError;
+          allEntries.push(...((batchEntries ?? []) as ExportPipelineEntry[]));
+        }
       }
+      const entryByFunnelAndLead = pickLatestEntryPerFunnel(allEntries);
+
+      const cellCtx = { stagesById, stagesByPipelineAndKey, memberName, fmtDate };
 
       const rows = leadList.map((lead: Record<string, unknown>) => {
         const lid = lead.id as string;
-        const pw = pwByLead[lid];
-        const pc = pcByLead[lid];
-        const pp = ppByLead[lid];
-        return {
+        const row: Record<string, string | number> = {
           "ID Lead": lid ?? "",
-          Nome: lead.name ?? "",
-          Empresa: lead.company ?? "",
-          Email: lead.email ?? "",
-          Telefone: lead.phone ?? "",
-          Faturamento: lead.faturamento ?? "",
-          Segmento: lead.segment ?? "",
-          Urgência: lead.urgency ?? "",
-          Notas: lead.notes ?? "",
-          "Prioridade do lead": ratingToLabel(lead.rating as number),
-          "Público de origem": lead.origin ?? "",
-          utm_campaign: lead.utm_campaign ?? "",
-          utm_source: lead.utm_source ?? "",
-          utm_medium: lead.utm_medium ?? "",
-          utm_content: lead.utm_content ?? "",
-          utm_term: lead.utm_term ?? "",
+          Nome: (lead.name as string) ?? "",
+          Empresa: (lead.company as string) ?? "",
+          Email: (lead.email as string) ?? "",
+          Telefone: (lead.phone as string) ?? "",
+          Faturamento: (lead.faturamento as string) ?? "",
+          Segmento: (lead.segment as string) ?? "",
+          Urgência: (lead.urgency as string) ?? "",
+          Notas: (lead.notes as string) ?? "",
+          "Público de origem": (lead.origin as string) ?? "",
+          utm_campaign: (lead.utm_campaign as string) ?? "",
+          utm_source: (lead.utm_source as string) ?? "",
+          utm_medium: (lead.utm_medium as string) ?? "",
+          utm_content: (lead.utm_content as string) ?? "",
+          utm_term: (lead.utm_term as string) ?? "",
           "Data criação lead": fmtDate(lead.created_at as string),
           "Data atualização lead": fmtDate(lead.updated_at as string),
           "Data período métricas lead": fmtDate(lead.metrics_period_at as string),
-          "Responsável (lead)": memberByName[lead.responsible_id as string] ?? "",
+          "Responsável (lead)": memberName(lead.responsible_id as string),
           "Data compromisso (lead)": fmtDate(lead.compromisso_date as string),
-          "Etapa Pipe Qualificação": pw?.status ?? "",
-          "Responsável Pipe Qualificação": memberByName[(pw?.responsible_id || pw?.sdr_id) as string] ?? "",
-          "Data agendada (Qualificação)": fmtDate(pw?.scheduled_date as string),
-          "Notas Pipe Qualificação": pw?.notes ?? "",
-          "Data criação Pipe Qualificação": fmtDate(pw?.created_at as string),
-          "Data atualização Pipe Qualificação": fmtDate(pw?.updated_at as string),
-          "Etapa Pipe Confirmação": pc?.status ?? "",
-          "Responsável Pipe Confirmação": memberByName[(pc?.responsible_id || pc?.closer_id || pc?.sdr_id) as string] ?? "",
-          "Data reunião": fmtDate(pc?.meeting_date as string),
-          "Reunião confirmada (sim/não)": pc?.is_confirmed ? "sim" : (pc ? "não" : ""),
-          "Notas Pipe Confirmação": pc?.notes ?? "",
-          "Data criação Pipe Confirmação": fmtDate(pc?.created_at as string),
-          "Data atualização Pipe Confirmação": fmtDate(pc?.updated_at as string),
-          "Data período métricas Confirmação": fmtDate(pc?.metrics_period_at as string),
-          "Etapa Pipe Propostas": pp?.status ?? "",
-          "Responsável Pipe Propostas": memberByName[(pp?.responsible_id || pp?.closer_id) as string] ?? "",
-          "Valor venda (R$)": pp?.sale_value != null ? Number(pp.sale_value) : "",
-          "Tipo produto": pp?.product_type ?? "",
-          "Calor (0-100)": pp?.calor != null ? Number(pp.calor) : "",
-          "Data fechamento": fmtDate(pp?.closed_at as string),
-          "Data compromisso (proposta)": fmtDate(pp?.commitment_date as string),
-          "Duração contrato (meses)": pp?.contract_duration != null ? Number(pp.contract_duration) : "",
-          "Notas Pipe Propostas": pp?.notes ?? "",
-          "Data criação Pipe Propostas": fmtDate(pp?.created_at as string),
-          "Data atualização Pipe Propostas": fmtDate(pp?.updated_at as string),
-          "Data período métricas Propostas": fmtDate(pp?.metrics_period_at as string),
         };
+        for (const pipeline of pipelines) {
+          const entry = entryByFunnelAndLead.get(`${pipeline.id}:${lid}`);
+          Object.assign(row, buildFunnelCells(pipeline.name ?? "", entry, cellCtx));
+        }
+        return row;
       });
 
       const dateStamp = new Date().toISOString().slice(0, 10);
       const filename = options.stageFilter
-        ? `leads_${options.stageFilter.pipe}_${slugify(options.stageTitle ?? options.stageFilter.stageId)}_${dateStamp}`
+        ? `leads_funil_${slugify(options.stageTitle ?? options.stageFilter.stageId)}_${dateStamp}`
         : `leads_export_${dateStamp}`;
-      const headers = [...EXPORT_LEAD_HEADERS];
+      const headers = buildExportHeaders(EXPORT_LEAD_HEADERS, pipelines);
 
       if (options.format === "csv") {
         const escape = (v: string | number) => {

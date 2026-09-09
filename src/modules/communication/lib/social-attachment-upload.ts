@@ -50,7 +50,14 @@ export async function uploadSocialAttachment(
   if (!check.ok) throw new Error(check.error);
 
   const seguro = file.name.replace(/[^\w.-]/g, "_").slice(-80) || "anexo";
-  const path = `notificame/outbound/${organizationId}/${crypto.randomUUID()}-${seguro}`;
+  // A ORG VEM NO SEGUNDO SEGMENTO, e isso não é estética: a policy
+  // `media_insert_org_scoped` do bucket lê exatamente `foldername(name)[2]` e exige
+  // que seja uma org do usuário. Com `notificame/outbound/<org>/…` o segmento 2 era
+  // "outbound", a regex de uuid não casava e TODO anexo do vendedor morria em
+  // "new row violates row-level security policy" — invisível para quem testava como
+  // master (a policy curto-circuita em `is_master_user()`) e para as edge functions
+  // (service_role bypassa RLS). Mover o segmento é o que faz o upload existir.
+  const path = `notificame/${organizationId}/outbound/${crypto.randomUUID()}-${seguro}`;
 
   const { error } = await supabase.storage.from("media").upload(path, file, {
     contentType: file.type || "application/octet-stream",

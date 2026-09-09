@@ -5,7 +5,7 @@
  *
  * Usa LeadFieldGrid para unificar campos padrão + personalizados em grid única.
  * LeadResponsibles, LeadQualification e LeadSource mantidos como sections
- * separadas no topo (são semânticas — papéis, score/rating, origem).
+ * separadas no topo (são semânticas — papéis, score, origem).
  * AddCustomFieldPopover integrado no final da grid.
  *
  * Props backwards-compat: formData + onChange para campos padrão.
@@ -78,12 +78,8 @@ export function LeadTabInfo({
 
   return (
     <div className="space-y-4">
-      {/* Rating + score IA — semântico, fica separado no topo */}
-      <LeadQualification
-        formData={formData}
-        onChange={onChange}
-        qualificationScore={qualificationScore}
-      />
+      {/* Score IA — semântico, fica separado no topo */}
+      <LeadQualification qualificationScore={qualificationScore} />
 
       {/* Responsáveis — SDR/Closer/Responsible, semântico */}
       <LeadResponsibles responsible={responsible} sdr={sdr} closer={closer} />
@@ -128,13 +124,13 @@ export function LeadTabInfo({
         <AddCustomFieldPopover />
       </div>
 
-      {/* Ações de save do formData principal (rating, notas, etc.) */}
+      {/* Ações de save do formData principal (notas, etc.) */}
       <div className="flex gap-2 pt-2">
         <Button
           variant="outline"
           size="sm"
           className="flex-1"
-          onClick={() => window.open(`/leads?id=${leadId}`, "_blank")}
+          onClick={() => window.open(`/leads?lead=${leadId}`, "_blank")}
         >
           <ExternalLink className="w-4 h-4 mr-2" />
           Ver Completo

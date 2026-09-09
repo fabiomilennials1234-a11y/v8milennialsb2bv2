@@ -6,6 +6,7 @@ import { useUpsellClients } from "@/modules/carteira/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
 import { ClientDetailModal } from "./ClientDetailModal";
 import { NewOrderModal } from "@/modules/carteira/components/client/NewOrderModal";
+import { erpLabel } from "@/shared/format/erp-code";
 
 interface UpsellBaseListProps {
   searchQuery: string;
@@ -83,7 +84,7 @@ export function UpsellBaseList({ searchQuery, filterPotencial, filterActive }: U
                     className="cursor-pointer hover:bg-muted/50 border-b border-border"
                     onClick={() => { setDetailClientId(client.id); setDetailOpen(true); }}
                   >
-                    <TableCell className="font-medium">{client.name}</TableCell>
+                    <TableCell className="font-medium">{erpLabel(client)}</TableCell>
                     <TableCell className="text-muted-foreground">{client.company || "-"}</TableCell>
                     <TableCell>
                       <Badge className={`text-[10px] border-0 ${config.class}`}>

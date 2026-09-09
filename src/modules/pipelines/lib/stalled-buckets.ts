@@ -30,27 +30,6 @@ export const STALLED_BUCKETS: StalledBucket[] = [
 
 export const STALLED_ALL = "all";
 
-/**
- * O filtro "Parado há" está disponível nos funis do SISTEMA?
- *
- * 🔴 Vire para `true` **só depois** de aplicar
- * `supabase/migrations/20270729000010_pipeline_page_stalled_days_filter.sql`
- * no banco alvo.
- *
- * Por que existe um interruptor em vez de simplesmente mostrar o filtro: os
- * funis do sistema resolvem o recorte no servidor, e um parâmetro que o banco
- * ainda não conhece faz o PostgREST recusar a chamada inteira (PGRST202). O
- * board não mostra erro nesse caso — mostra **coluna vazia**. O operador leria
- * "nenhum lead parado há 15 dias" como um fato sobre a carteira dele.
- *
- * Um board mudo mentindo é pior que um filtro ausente, então até a migration
- * existir o filtro não aparece onde não funciona.
- *
- * O funil CUSTOM não passa por aqui: ele não é paginado no servidor e filtra no
- * cliente, então "Parado há" já funciona lá hoje, sem migration.
- */
-export const STALLED_FILTER_ENABLED_FOR_SYSTEM_PIPES = false;
-
 export function getStalledBucket(id: string): StalledBucket | null {
   if (!id || id === STALLED_ALL) return null;
   return STALLED_BUCKETS.find((b) => b.id === id) ?? null;

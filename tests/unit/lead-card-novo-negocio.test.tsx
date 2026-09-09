@@ -43,7 +43,7 @@ import { MockPipeOpsProvider } from "@/modules/leads/pipe-ops/testing";
 
 const QUALIFICACAO_COM_NEGOCIO: PipelineStatus = {
   type: "standard",
-  pipeType: "qualificacao",
+  pipeType: "whatsapp",
   label: "Qualificação",
   color: "#6366f1",
   pipelineDbId: "pl-q",
@@ -155,7 +155,7 @@ describe("buildNewDealOptions — funil com negócio não é opção de negócio
     const opcoes = buildNewDealOptions(semNegocio, { canAdd: PODE, vendaFechada: false });
 
     expect(opcoes.map((o) => o.key)).toEqual([
-      "sys:qualificacao",
+      "sys:whatsapp",
       "sys:confirmacao",
       "sys:propostas",
     ]);
@@ -282,9 +282,12 @@ vi.mock("@/modules/leads/components/deal-detail/deal-sheet-context", () => ({
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 vi.mock("@/modules/identity", () => ({
+  useIdentity: () => ({ userId: "user-1" }),
   useResponsibleMembers: () => [{ id: "tm-1", name: "Ana" }],
   useCurrentTeamMember: () => ({ data: { id: "tm-1", organization_id: "org-1" } }),
   isVirtualTeamMember: (id: string) => String(id).startsWith("master-virtual-"),
+  // `LeadCardPanel` lê `role` para decidir se oferece CRIAR etiqueta nova.
+  useOrganization: () => ({ organizationId: "org-1", teamMemberId: "tm-1", role: "admin", isReady: true }),
 }));
 
 const pipelinesMock = vi.fn(() => ({ data: FUNIS as PipelineStatus[], isLoading: false }));
@@ -365,6 +368,18 @@ vi.mock("@/modules/leads/hooks/useLeads", () => ({
 vi.mock("@/modules/leads/hooks/useLeadCustomFields", () => ({
   useSaveCustomFieldValue: () => ({ mutateAsync: vi.fn() }),
 }));
+/* A faixa de etiquetas do card lê banco e org. O mock de `@/modules/identity`
+   acima é parcial (só `useOrganization` não está nele), então `useTags` cairia
+   direto no buraco — mocke a folha, não o barril. */
+vi.mock("@/modules/leads/hooks/lead/useLeadTagsAttached", () => ({
+  useLeadTagsAttached: () => ({ data: [], isLoading: false }),
+  useAddLeadTag: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useRemoveLeadTag: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
+vi.mock("@/modules/leads/hooks/useTags", () => ({
+  useTags: () => ({ data: [], isLoading: false }),
+  useCreateTag: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
 
 import { LeadCardPanel } from "@/modules/leads/components/lead-card/LeadCardPanel";
 
@@ -443,7 +458,7 @@ describe("Card do Lead — o botão 'Criar negócio' abre a porta única", { tim
     expect(screen.getByTestId("new-deal-option-sys:propostas")).toBeInTheDocument();
     expect(screen.getByTestId("new-deal-option-custom:cp-1")).toBeInTheDocument();
     // Qualificação já tem negócio; Carteira está travada e vira chip, não opção.
-    expect(screen.queryByTestId("new-deal-option-sys:qualificacao")).toBeNull();
+    expect(screen.queryByTestId("new-deal-option-sys:whatsapp")).toBeNull();
     expect(screen.queryByTestId("new-deal-option-sys:upsell")).toBeNull();
   });
 
@@ -604,5 +619,31 @@ describe("Card do Lead — o que o diálogo recusa", { timeout: TIMEOUT_RENDER_M
     clicarCriarNegocio();
 
     expect(screen.getByTestId("new-deal-option-sys:upsell")).toBeInTheDocument();
+  });
+});
+
+const registrarVendas = vi.fn().mockResolvedValue(["sale-1"]);
+vi.mock("@/modules/leads/hooks/useRegisterHistoricalSales", () => ({
+  useRegisterHistoricalSales: () => ({ mutateAsync: registrarVendas, isPending: false }),
+}));
+
+describe("Registrar venda pelo Card do Lead", { timeout: TIMEOUT_RENDER_MS }, () => {
+  it("abre pelo card sem negócios e só grava a lista ao salvar", async () => {
+    montarCard();
+    fireEvent.click(screen.getByRole("button", { name: /negócios/i }));
+    expect(screen.getByRole("button", { name: /criar negócio/i })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Registrar Venda" }));
+    fireEvent.change(screen.getByLabelText("Valor (R$)"), { target: { value: "100" } });
+    fireEvent.change(screen.getByLabelText("Data da venda"), { target: { value: "2025-01-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Próxima venda" }));
+    await waitFor(() => expect(screen.getAllByLabelText("Valor (R$)")).toHaveLength(2));
+    expect(registrarVendas).not.toHaveBeenCalled();
+    fireEvent.change(screen.getAllByLabelText("Valor (R$)")[1], { target: { value: "200" } });
+    fireEvent.change(screen.getAllByLabelText("Data da venda")[1], { target: { value: "2025-02-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Salvar vendas" }));
+    await waitFor(() => expect(registrarVendas).toHaveBeenCalledWith({
+      requestId: expect.any(String), sales: [{ value: 100, date: "2025-01-01" }, { value: 200, date: "2025-02-01" }],
+    }));
+    await waitFor(() => expect(screen.queryByText("Registrar vendas")).not.toBeInTheDocument());
   });
 });

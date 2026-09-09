@@ -31,7 +31,9 @@ import {
   Lock,
   Users,
   Receipt,
+  ShoppingCart,
   FlaskConical,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -63,12 +65,14 @@ import {
   useDisconnectToth,
   useSyncTothClientes,
   useSyncTothCobrancas,
+  useSyncTothPedidos,
   useUpdateTothSyncMode,
   useSimulateTothClientes,
   useUpdateTothActiveWindow,
   useUpdateTothEmpresa,
   readTothEndpoint,
   canSubmitTothConnection,
+  isFlowPartValid,
   TOTH_CAPABILITIES,
   type TothSyncMode,
   type TothDryRunResult,
@@ -94,25 +98,38 @@ const SYNC_MODE_LABELS: Record<TothSyncMode, { label: string; hint: string }> = 
 const PLACEHOLDER = "https://erp.suaempresa.com.br/toth/services";
 
 /**
- * A lista sai do manifesto, não de texto solto: quando o fornecedor entregar o
- * endpoint de pedidos e `TOTH_CAPABILITIES.syncPedidos` virar `true`, a tela
- * acompanha sozinha. Duas listas separadas divergem — e a que mente é sempre a
- * da tela, porque ninguém a relê.
+ * A lista sai do manifesto, não de texto solto: quando uma capacidade virar
+ * `true`, a tela acompanha sozinha. Duas listas separadas divergem — e a que
+ * mente é sempre a da tela, porque ninguém a relê.
+ *
+ * Pedidos é a exceção e por um motivo estrutural: não é uma capacidade do
+ * provider, é uma capacidade **da instalação**. O serviço roda em outro
+ * servidor, e ter ou não esse servidor publicado varia por organização — coisa
+ * que um manifesto estático não consegue representar. Por isso a linha lê a
+ * conexão, e o restante lê o manifesto.
  */
-const CAPABILITY_LINES = [
-  { text: "Clientes do ERP, casados por CNPJ", live: TOTH_CAPABILITIES.syncClientes },
-  { text: "Cobranças em aberto, pagas e atrasadas", live: TOTH_CAPABILITIES.receivables },
-  { text: "Pedidos de venda", live: TOTH_CAPABILITIES.syncPedidos },
-  { text: "Faturamento (NF-e)", live: TOTH_CAPABILITIES.fetchNfe },
-];
+function capabilityLines(flowConfigurado: boolean) {
+  return [
+    { text: "Clientes do ERP, casados por CNPJ", live: TOTH_CAPABILITIES.syncClientes },
+    { text: "Cobranças em aberto, pagas e atrasadas", live: TOTH_CAPABILITIES.receivables },
+    { text: "Pedidos de venda (servidor separado)", live: flowConfigurado },
+    { text: "Faturamento (NF-e)", live: TOTH_CAPABILITIES.fetchNfe },
+  ];
+}
 
 export function TothSettings() {
   const [endpoint, setEndpoint] = useState("");
   const [user, setUser] = useState("");
   const [password, setPassword] = useState("");
   const [acceptedInsecure, setAcceptedInsecure] = useState(false);
+  // Serviço de pedidos (Flow) — outro servidor do mesmo ERP, credencial própria.
+  const [flowEndpoint, setFlowEndpoint] = useState("");
+  const [flowClientId, setFlowClientId] = useState("");
+  const [flowClientSecret, setFlowClientSecret] = useState("");
   const [confirmCanonical, setConfirmCanonical] = useState(false);
   const [janela, setJanela] = useState("");
+  const [marcas, setMarcas] = useState("");
+  const [somenteComCompra, setSomenteComCompra] = useState(false);
   const [empresa, setEmpresa] = useState("");
   const [incluirSemEmpresa, setIncluirSemEmpresa] = useState(false);
   const [simulacao, setSimulacao] = useState<TothDryRunResult | null>(null);
@@ -122,6 +139,7 @@ export function TothSettings() {
   const disconnect = useDisconnectToth();
   const syncClientes = useSyncTothClientes();
   const syncCobrancas = useSyncTothCobrancas();
+  const syncPedidos = useSyncTothPedidos();
   const updateSyncMode = useUpdateTothSyncMode();
   const simular = useSimulateTothClientes();
   const updateJanela = useUpdateTothActiveWindow();
@@ -132,9 +150,26 @@ export function TothSettings() {
   const janelaSalva = status?.clientes_dias_compras != null
     ? String(status.clientes_dias_compras)
     : "";
+  const marcasSalvas = status?.clientes_marcas ?? "";
+  const somenteComCompraSalvo = status?.clientes_somente_com_compra === true;
   useEffect(() => {
     setJanela(janelaSalva);
-  }, [janelaSalva]);
+    setMarcas(marcasSalvas);
+    setSomenteComCompra(somenteComCompraSalvo);
+  }, [janelaSalva, marcasSalvas, somenteComCompraSalvo]);
+
+  /** O ERP aceita só dígitos e vírgulas em `marcas`. */
+  const marcasInvalidas = marcas.trim() !== "" && !/^\d+(,\d+)*$/.test(marcas.trim());
+  const recorteMudou =
+    janela !== janelaSalva ||
+    marcas.trim() !== marcasSalvas ||
+    somenteComCompra !== somenteComCompraSalvo;
+  /**
+   * Janela gravada sem marcas: o número está lá e não recorta nada. É o estado
+   * que a tela precisa denunciar — foi ele que fez a carteira da Café Jurerê
+   * receber doze mil clientes com uma "janela de 150 dias" configurada.
+   */
+  const janelaInerte = status?.clientes_dias_compras != null && !status?.clientes_marcas;
 
   // Mesmo padrão da janela: o input só assume o controle quando o valor salvo
   // chega, senão pisca vazio e parece que não havia configuração.
@@ -161,7 +196,12 @@ export function TothSettings() {
   const handleSaveJanela = async () => {
     const parsed = janela.trim() === "" ? null : Number(janela);
     if (parsed !== null && (!Number.isFinite(parsed) || parsed <= 0)) return;
-    await updateJanela.mutateAsync(parsed);
+    if (marcasInvalidas) return;
+    await updateJanela.mutateAsync({
+      dias: parsed,
+      marcas: marcas.trim() === "" ? null : marcas.trim(),
+      somenteComCompra,
+    });
     // A simulação anterior descreve outro recorte — mantê-la na tela seria
     // mostrar um número que não corresponde mais à configuração.
     setSimulacao(null);
@@ -173,7 +213,16 @@ export function TothSettings() {
   };
 
   const reading = readTothEndpoint(endpoint);
-  const canSubmit = canSubmitTothConnection({ endpoint, user, password, acceptedInsecure });
+  const flowReading = readTothEndpoint(flowEndpoint);
+  const canSubmit = canSubmitTothConnection({
+    endpoint,
+    user,
+    password,
+    acceptedInsecure,
+    flowEndpoint,
+    flowClientId,
+    flowClientSecret,
+  });
   const isConnected = status?.connected ?? false;
 
   const handleConnect = async () => {
@@ -182,12 +231,25 @@ export function TothSettings() {
       baseUrl: endpoint.trim(),
       user: user.trim(),
       password,
-      allowInsecureTransport: reading.insecure,
+      // Um aceite só para os dois serviços: mesma máquina, mesma rede, mesmo
+      // risco. `flowReading.insecure` entra no OU porque o admin pode apontar o
+      // principal para https e o de pedidos para http.
+      allowInsecureTransport: reading.insecure || flowReading.insecure,
+      ...(flowEndpoint.trim()
+        ? {
+            flowBaseUrl: flowEndpoint.trim(),
+            flowClientId: flowClientId.trim(),
+            flowClientSecret,
+          }
+        : {}),
     });
     setEndpoint("");
     setUser("");
     setPassword("");
     setAcceptedInsecure(false);
+    setFlowEndpoint("");
+    setFlowClientId("");
+    setFlowClientSecret("");
   };
 
   // Cobranças são consultadas por CNPJ de cliente já casado, então a ordem
@@ -325,8 +387,96 @@ export function TothSettings() {
             </div>
           </div>
 
-          {/* Aceite de tráfego sem TLS — aparece só quando o risco é real */}
-          {reading.verdict === "inseguro" && (
+          {/* Serviço de pedidos — servidor separado, credencial separada.
+              Fica depois das credenciais principais porque é opcional: só a
+              org que tem o Flow publicado preenche. */}
+          <div className="rounded-lg border border-border/60 p-3 space-y-3">
+            <div className="space-y-1">
+              <p className="text-xs font-medium flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                Serviço de pedidos (opcional)
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Pedidos de venda vêm de um <span className="text-foreground">servidor separado</span>{" "}
+                do Toth, com endereço e credencial próprios. Deixe em branco se o seu ERP não tem
+                esse serviço publicado.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="toth-flow-endpoint" className="text-xs">
+                Endereço do serviço de pedidos
+              </Label>
+              <Input
+                id="toth-flow-endpoint"
+                type="url"
+                inputMode="url"
+                placeholder="http://seu-erp.ddns.net:3000/flow/crm"
+                value={flowEndpoint}
+                onChange={(e) => {
+                  setFlowEndpoint(e.target.value);
+                  setAcceptedInsecure(false);
+                }}
+                autoComplete="off"
+                spellCheck={false}
+                aria-invalid={flowReading.verdict === "invalido"}
+                className={cn(
+                  flowReading.verdict === "invalido" &&
+                    "border-destructive focus-visible:ring-destructive",
+                  flowReading.verdict === "inseguro" &&
+                    "border-amber-500/60 focus-visible:ring-amber-500",
+                )}
+              />
+              {flowReading.verdict === "invalido" && (
+                <p className="text-[11px] text-destructive flex items-start gap-1">
+                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                  {flowReading.message}
+                </p>
+              )}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="toth-flow-client-id" className="text-xs">
+                  client_id
+                </Label>
+                <Input
+                  id="toth-flow-client-id"
+                  placeholder="Identificador da integração"
+                  value={flowClientId}
+                  onChange={(e) => setFlowClientId(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="toth-flow-client-secret" className="text-xs">
+                  client_secret
+                </Label>
+                <Input
+                  id="toth-flow-client-secret"
+                  type="password"
+                  placeholder="••••••••"
+                  value={flowClientSecret}
+                  onChange={(e) => setFlowClientSecret(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            {!isFlowPartValid({ flowEndpoint, flowClientId, flowClientSecret }) && (
+              <p className="text-[11px] text-amber-500 flex items-start gap-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                Preencha os três campos do serviço de pedidos — ou deixe os três em branco.
+              </p>
+            )}
+          </div>
+
+          {/* Aceite de tráfego sem TLS — aparece quando QUALQUER um dos dois
+              endereços vai sem criptografia. Cobrar um aceite só é decisão: é a
+              mesma máquina e a mesma rede; dois consentimentos para o mesmo
+              fato seriam duas chances de divergir. */}
+          {(reading.verdict === "inseguro" || flowReading.verdict === "inseguro") && (
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
@@ -337,7 +487,8 @@ export function TothSettings() {
                 Este endereço não usa criptografia
               </p>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {reading.message} Peça ao responsável pela rede um endereço{" "}
+                {(reading.insecure ? reading : flowReading).message} Peça ao responsável pela rede um
+                endereço{" "}
                 <span className="font-medium text-foreground">https://</span> — um túnel reverso ou
                 um proxy com certificado resolve sem abrir porta no firewall.
               </p>
@@ -471,26 +622,74 @@ export function TothSettings() {
                 placeholder="—"
               />
               <span className="text-xs text-muted-foreground">dias</span>
+            </div>
+
+            {/* 🔑 As marcas moram DENTRO deste bloco de propósito: sem elas, o
+                ERP ignora a janela e devolve a base inteira (medido em 25/08 —
+                12.633 linhas com `diasCompras=60` sozinho, 550 com as marcas).
+                Separá-las em outro cartão convidaria a configurar uma sem a
+                outra, que é exatamente o estado que não funciona. */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground shrink-0">das marcas</span>
+              <Input
+                id="toth-marcas"
+                className="h-8"
+                inputMode="numeric"
+                value={marcas}
+                onChange={(e) => setMarcas(e.target.value)}
+                placeholder="1,2,3,4,5,6"
+                aria-label="Códigos de marca do ERP, separados por vírgula"
+              />
+            </div>
+
+            <label className="flex items-start gap-2 text-[11px] text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={somenteComCompra}
+                onChange={(e) => setSomenteComCompra(e.target.checked)}
+              />
+              <span>
+                Só quem já faturou alguma coisa. Dentro da janela existe quem fez pedido e
+                ainda não faturou — 131 dos 550 na última medição.
+              </span>
+            </label>
+
+            <div className="flex items-center gap-2">
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-8 px-2 text-[11px] ml-auto"
                 onClick={handleSaveJanela}
-                disabled={updateJanela.isPending || janela === janelaSalva}
+                disabled={updateJanela.isPending || !recorteMudou || marcasInvalidas}
               >
                 {updateJanela.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Salvar"}
               </Button>
             </div>
-            {/* Medido em 21/08: o ERP aceita `diasCompras` e devolve a MESMA
-                contagem com e sem a janela. Enquanto o fornecedor não confirmar
-                qual parâmetro filtra de verdade, a tela não pode prometer um
-                recorte que não acontece. */}
-            <p className="text-[11px] text-amber-500 leading-relaxed flex items-start gap-1">
-              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
-              {status?.clientes_dias_compras == null
-                ? "Sem janela definida: a carga traz o cadastro inteiro do ERP, histórico incluído."
-                : "O ERP hoje IGNORA esta janela — a última medição trouxe a mesma quantidade com e sem ela. Pendente de resposta do fornecedor."}
-            </p>
+
+            {marcasInvalidas ? (
+              <p className="text-[11px] text-destructive leading-relaxed flex items-start gap-1">
+                <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                Só números separados por vírgula — é o formato que o ERP aceita em `marcas`.
+              </p>
+            ) : (
+              <p
+                className={`text-[11px] leading-relaxed flex items-start gap-1 ${
+                  janelaInerte || status?.clientes_dias_compras == null
+                    ? "text-amber-500"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {(janelaInerte || status?.clientes_dias_compras == null) && (
+                  <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+                )}
+                {status?.clientes_dias_compras == null
+                  ? "Sem janela definida: a carga traz o cadastro inteiro do ERP, histórico incluído."
+                  : janelaInerte
+                    ? "A janela só vale acompanhada das marcas — sem elas o ERP devolve a base inteira, medido em 25/08. Preencha as marcas ou o número acima não recorta nada."
+                    : `Entram os clientes que compraram das marcas ${status?.clientes_marcas} nos últimos ${status?.clientes_dias_compras} dias.`}
+              </p>
+            )}
           </div>
 
           {/* Empresa do grupo */}
@@ -591,6 +790,26 @@ export function TothSettings() {
                     : undefined
                 }
               />
+              {/* Gate por CONFIGURAÇÃO, não por manifesto estático.
+                  Pedidos vêm de um servidor separado que a maioria das orgs não
+                  tem — o manifesto não sabe disso, a conexão sabe. Mostrar a
+                  linha só para quem configurou o Flow é a diferença entre um
+                  botão que funciona e um que só sabe falhar. */}
+              {status?.flow_base_url && (
+                <SyncRow
+                  icon={<ShoppingCart className="w-3.5 h-3.5" />}
+                  label="Pedidos"
+                  at={status?.last_pedidos_sync_at ?? null}
+                  busy={syncPedidos.isPending}
+                  onRun={() => syncPedidos.mutate({})}
+                  disabled={isSyncing || neverSyncedClients}
+                  note={
+                    neverSyncedClients
+                      ? "Sincronize os clientes primeiro — o pedido é ligado ao cliente pelo CNPJ."
+                      : undefined
+                  }
+                />
+              )}
             </div>
           </div>
 
@@ -661,7 +880,7 @@ export function TothSettings() {
           <div className="bg-sky-500/5 border border-sky-500/20 rounded-lg p-3 text-xs text-muted-foreground space-y-2">
             <p className="font-medium text-sky-500">O que o Toth traz para a Carteira:</p>
             <ul className="space-y-1">
-              {CAPABILITY_LINES.map((line) => (
+              {capabilityLines(Boolean(status?.flow_base_url)).map((line) => (
                 <li key={line.text} className="flex items-start gap-1.5">
                   <span className={line.live ? "text-sky-500" : "text-muted-foreground/40"}>•</span>
                   <span className={line.live ? "" : "text-muted-foreground/60"}>
@@ -718,12 +937,47 @@ function DryRunReport({ data }: { data: TothDryRunResult }) {
             </Badge>
           )}
           {data.janela_dias_compras && (
-            <Badge variant="secondary" className="text-[10px]">
+            <Badge
+              variant={data.janela_inerte ? "outline" : "secondary"}
+              className={`text-[10px] ${data.janela_inerte ? "text-amber-500 border-amber-500/40" : ""}`}
+            >
               últimos {data.janela_dias_compras} dias
+              {data.janela_inerte ? " · sem efeito" : ""}
+            </Badge>
+          )}
+          {data.marcas && (
+            <Badge variant="secondary" className="text-[10px]">
+              marcas {data.marcas}
             </Badge>
           )}
         </div>
       </div>
+
+      {/* A janela sem marcas devolve a base inteira. Sem este aviso, a
+          simulação mostra doze mil clientes e parece que o recorte está errado,
+          quando o que está faltando é o parâmetro que o liga. */}
+      {data.janela_inerte && (
+        <p className="text-[11px] text-amber-500 leading-relaxed">
+          A janela de {data.janela_dias_compras} dias não filtrou nada: o ERP só a aplica
+          acompanhada das marcas.
+        </p>
+      )}
+
+      {/* Quantos vieram sem último pedido faturado. É o número que diz quanto
+          da carteira nunca comprou — e ele muda a leitura de qualquer média. */}
+      {(data.sem_ultima_compra?.recebidos > 0 || data.sem_ultima_compra?.descartados > 0) && (
+        <p className="text-[11px] text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">
+            {(
+              data.sem_ultima_compra.recebidos + data.sem_ultima_compra.descartados
+            ).toLocaleString("pt-BR")}
+          </span>{" "}
+          sem data de último pedido faturado no ERP
+          {data.somente_com_compra
+            ? ` — ${data.sem_ultima_compra.descartados.toLocaleString("pt-BR")} deixados de fora pelo recorte estrito.`
+            : " — entram assim mesmo; são clientes que pediram e ainda não faturaram."}
+        </p>
+      )}
 
       {/* O que o filtro de empresa descartou. Silenciar isso faria a queda na
           contagem parecer erro de leitura do ERP. */}

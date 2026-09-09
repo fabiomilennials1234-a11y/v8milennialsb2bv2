@@ -11,7 +11,7 @@
  * leads pode importar direto sem criar edge para pipelines.
  */
 
-import type { PipelineType } from "./pipe-status";
+import type { StageFamily } from "./pipe-status";
 
 export type LifecycleType = "permanent" | "temporary";
 export type FunnelStatus = "draft" | "active" | "paused" | "ended";
@@ -56,6 +56,18 @@ export interface CustomPipelineStage {
   is_active: boolean;
   is_final_positive: boolean;
   is_final_negative: boolean;
+  /**
+   * Papel semântico governado (won/lost/meeting_*) — opcional porque nem todo
+   * escritor deste shape o carrega; a query única `useFunilStages` SEMPRE o
+   * seleciona (SCRUM-637: é por ele que comportamento de etapa se decide).
+   */
+  stage_role?: StageRole | null;
+  /**
+   * Opt-in da guarda de valor por etapa (SCRUM-545 f3, 20270903000020).
+   * Opcional: escritores antigos não o carregam — a guarda cai no fallback por
+   * won-resolution, nunca em `false` (ver `lib/sale-value-guard`).
+   */
+  requires_sale_value?: boolean | null;
   target_pipeline_id: string | null;
   target_stage_id: string | null;
   target_pipe_type: string | null;
@@ -91,7 +103,6 @@ export interface CustomPipeEntry {
     // Campos que `useCustomPipeEntries` já seleciona e que o card do kanban lê.
     // Estavam ausentes daqui e o consumo se virava com `as any` — declarados
     // porque o filtro "Responsável" precisa navegar este mesmo objeto tipado.
-    rating?: number | null;
     origin?: string | null;
     urgency?: string | null;
     faturamento?: string | null;
@@ -164,11 +175,21 @@ export type SuggestableStageRole = Exclude<StageRole, "open">;
 /** Origem de uma sugestão do classifier (#991). */
 export type StageRoleSuggestionSource = "deterministic" | "ai" | "flag";
 
-/** Etapa de pipeline canônico (tabela `pipeline_stages`). */
+/**
+ * Etapa de pipeline canônico (tabela `pipeline_stages`).
+ *
+ * `pipeline_type` é `StageFamily` (não `PipelineType`): a tabela ainda guarda
+ * as famílias `upsell_*` do resíduo Carteira (D9/ADR-0034) — o union de FUNIL
+ * não as contém, mas as linhas existem e o editor compartilhado as edita.
+ */
 export interface PipelineStage {
   id: string;
   organization_id: string;
-  pipeline_type: PipelineType;
+  pipeline_type: StageFamily;
+  // Funil dono da etapa (`pipelines.id`). Medido em prod: 3.578 das 4.759
+  // etapas têm; os NULL são as famílias `upsell_*`, que não têm linha em
+  // `pipelines` e por isso nunca aparecem como funil na interface.
+  pipeline_id: string | null;
   stage_key: string;
   name: string;
   color: string | null;
@@ -200,7 +221,7 @@ export interface PipelineStage {
 }
 
 export interface PipelineStageInsert {
-  pipeline_type: PipelineType;
+  pipeline_type: StageFamily;
   stage_key: string;
   name: string;
   color?: string;
@@ -217,3 +238,26 @@ export interface PipelineStageInsert {
 
 /** Modo de agendamento usado pelo RescheduleModal (slot do PipeOpsPort). */
 export type ReschedulingMode = "schedule" | "reschedule";
+
+/**
+ * O funil de sistema COMO A ORGANIZAÇÃO O CHAMA — a linha de
+ * `pipeline_display_config`.
+ *
+ * Vive em `contracts` porque `leads` precisa dela para montar o cadastro e não
+ * pode importar `@/modules/pipelines` (o barrel arrasta o PipeOpsProvider). É
+ * um subconjunto estrutural de `PipelineDisplayConfig`: só o que atravessa a
+ * fronteira, sem `id` nem `organization_id`.
+ *
+ * 🚨 Este é o nome CANÔNICO. `pipelines.name` NÃO é: para funil de sistema ele
+ * fica congelado no seed de `create_default_pipelines()` ("Qualificação",
+ * "Confirmação", "Propostas") enquanto a navegação, o hub de funis e o que a
+ * org renomeou vivem aqui. Rotular por `pipelines.name` — ou pior, por string
+ * cravada no JSX — é como o cadastro de lead passou a oferecer "Qualificação"
+ * para uma org cujo funil se chama "Oportunidades" (SCRUM-608).
+ */
+export interface SystemPipeDisplay {
+  pipe_type: string;
+  display_name: string;
+  is_visible: boolean;
+  position: number;
+}

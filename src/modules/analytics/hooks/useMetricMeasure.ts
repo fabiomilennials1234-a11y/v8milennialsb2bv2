@@ -63,6 +63,21 @@ export interface MetricMeasureResult {
    */
   target?: number | null;
   empty_reason: string | null;
+  /**
+   * COBERTURA do preenchimento (SCRUM-545 fatia 2) — só nas medidas de dinheiro
+   * do funil, `valor_em_aberto` e `valor_perdido`.
+   *
+   * `coverage_total` é quantos negócios entram na conta; `coverage_com_valor`,
+   * em quantos deles há valor lançado. A janela usa o par para dizer "valor em
+   * 12 de 4.093 negócios" em vez de deixar um número parcial ser lido como o
+   * funil inteiro — em prod, `deals.value` está em 0,88% dos negócios.
+   *
+   * `null`/ausente nas demais medidas, e aí a janela não desenha aviso nenhum.
+   * NÃO invente cobertura para medida que não a devolve: ausência de aviso
+   * significa "não se aplica", nunca "cobertura total".
+   */
+  coverage_total?: number | null;
+  coverage_com_valor?: number | null;
   /** Só em kind='ratio': os 2 filhos da razão (profundidade 1, exatamente 2). */
   num?: { measure_id: string; value: number | null; unit: string };
   den?: { measure_id: string; value: number | null; unit: string };

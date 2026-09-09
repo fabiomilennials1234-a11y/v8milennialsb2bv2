@@ -1,9 +1,15 @@
-import { render, screen, within } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitForElementToBeRemoved,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { Gauge, GitBranch, Send, Settings, Trophy, Wallet, Zap } from "lucide-react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SIDEBAR_FEATURE_MAP } from "@/modules/platform/lib/feature-registry";
 import type { NavigationModel } from "@/modules/platform/hooks/useNavigationModel";
 import type { NavNode, PitstopGroup } from "@/modules/platform/lib/navigation-model";
 import { Sidebar } from "./Sidebar";
@@ -24,8 +30,18 @@ vi.mock("./SidebarMasterLinks", () => ({
   SidebarMasterLinks: () => <div data-testid="master-links" />,
 }));
 vi.mock("./SidebarUserMenu", () => ({ SidebarUserMenu: () => <div data-testid="user-menu" /> }));
+// O dublê HONRA `rotulo` porque o real também honra
+// (`AlertsDropdown.tsx`: `{rotulo && <span>{rotulo}</span>}`).
+//
+// Ele ignorava a prop, e isso quebrou a asserção de "Notificações" no rodapé
+// no dia em que o Sidebar parou de renderizar a palavra num <span> inerte e
+// passou a entregá-la ao componente. O teste ficou vermelho na main sem que
+// nada no PRODUTO tivesse regredido: dublê mais frouxo que o real transforma
+// refatoração correta em falha.
 vi.mock("@/modules/platform/components/notifications/AlertsDropdown", () => ({
-  AlertsDropdown: () => <div data-testid="alerts" />,
+  AlertsDropdown: ({ rotulo }: { rotulo?: string }) => (
+    <div data-testid="alerts">{rotulo}</div>
+  ),
 }));
 vi.mock("@/shared/components/UpgradeModal", () => ({
   UpgradeModal: ({ featureKey }: { featureKey: string }) => {
@@ -113,7 +129,11 @@ describe("Sidebar", () => {
     for (const label of ["Comando", "Chat", "Disparos", "Funis", "Carteira", "Turbo"]) {
       expect(screen.getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
     }
-    expect(screen.getByRole("link", { name: /Agenda/ })).toBeInTheDocument();
+    // A Agenda é BOTÃO, não link: ela abre painel sobreposto por cima da tela
+    // atual em vez de navegar. A rota `/agenda` continua existindo para o
+    // celular e para link direto — ver `AgendaPanel`.
+    expect(screen.getByRole("button", { name: /Agenda/ })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Agenda/ })).not.toBeInTheDocument();
     expect(screen.getByText("Notificações")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Ajuda/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Pitstop/ })).toBeInTheDocument();
@@ -199,7 +219,11 @@ describe("Sidebar", () => {
     renderSidebar(
       makeModel({
         isLocked: (path) => path === "/turbo",
-        featureKeyFor: (path) => (path === "/turbo" ? ("copilot" as never) : undefined),
+        // O mapa REAL, não um dublê. A versão anterior devolvia "copilot" na
+        // mão para "/turbo" — chave que o catálogo não tinha. O teste passava
+        // verde enquanto em produção `openUpgrade` engolia o clique e o modal
+        // nunca abria. Fixture que inventa dado não é guarda, é enfeite.
+        featureKeyFor: (path) => SIDEBAR_FEATURE_MAP[path],
       }),
     );
 
@@ -218,6 +242,32 @@ describe("Sidebar", () => {
 
   it("esconde a Agenda quando a permissão nega", () => {
     renderSidebar(makeModel({ agenda: null }));
+    expect(screen.queryByRole("button", { name: /Agenda/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /Agenda/ })).not.toBeInTheDocument();
+  });
+
+  it("o botão da Agenda abre e fecha o painel, sem navegar", async () => {
+    const user = userEvent.setup();
+    renderSidebar();
+
+    const botao = screen.getByRole("button", { name: /Agenda/ });
+    expect(botao).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(botao);
+    expect(screen.getByRole("button", { name: /Agenda/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    // O painel é `React.lazy`: o que se vê no primeiro paint é o fallback.
+    expect(await screen.findByLabelText("Atividades")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Agenda/ }));
+    expect(screen.getByRole("button", { name: /Agenda/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    // `AnimatePresence` mantém o painel montado durante a saída — esperar a
+    // remoção, e não afirmar ausência no mesmo tick.
+    await waitForElementToBeRemoved(() => screen.queryByLabelText("Atividades"));
   });
 });

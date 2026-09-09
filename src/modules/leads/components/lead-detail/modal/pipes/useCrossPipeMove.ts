@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { updateCustomPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
 import { toast } from "sonner";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 
@@ -10,12 +11,16 @@ import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
  * `MoveStageButton`. Returns a `move` callback plus a `pendingStageKey`
  * marker for optimistic-loading UI (StageSegment overlay/pulse).
  *
- * Contract per pipe family:
- *  - System pipes (whatsapp / confirmacao / propostas): write
- *    `{ status: stage_key }` into the compat view `pipe_<tipo>`, keyed by
- *    `pipeId` (= pipeline_entries.id).
- *  - Custom pipes: write `{ stage_id: <uuid> }` into
- *    `custom_pipe_entries`, keyed by `entryId`.
+ * Contract per pipe family (SCRUM-637 — a view de compat saiu do caminho):
+ *  - System pipes: write `{ stage_key, stage_changed_at }` DIRETO em
+ *    `pipeline_entries` (fonte única desde a SCRUM-621 — a MESMA linha que as
+ *    views `pipe_*` escreviam, então os gatilhos de métrica/venda disparam
+ *    idêntico; mesmo caminho do `useMoverCardNoFunil` da página unificada),
+ *    keyed by `pipeId` (= pipeline_entries.id). Morreu o mapa `PIPE_TABLE`:
+ *    funil de sistema com slug novo movia nada em silêncio.
+ *  - Custom pipes: envia `{ stage_id: <uuid> }` para
+ *    `fn_entrada_custom_atualizar`, keyed by `entryId`. A função deriva também
+ *    `stage_key`, mantendo auto-transition, workflow, checklist e histórico.
  *
  * Invalidates the queries the CrossPipePanel + activity column rely on, o board
  * de funil que hospeda o modal (`pipeline-page` / `pipeline-stage-counts`, ou o
@@ -26,7 +31,6 @@ import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 export type CrossPipeMoveTarget =
   | {
       kind: "system";
-      pipeTable: "pipe_whatsapp" | "pipe_confirmacao" | "pipe_propostas";
       pipeId: string;
       stageKey: string;
       stageLabel: string;
@@ -60,19 +64,16 @@ export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
       setPendingStageKey(targetKey);
       try {
         if (target.kind === "system") {
-          const { error } = await (supabase.from(target.pipeTable) as any)
-            .update({ status: target.stageKey })
+          const { error } = await supabase
+            .from("pipeline_entries")
+            .update({ stage_key: target.stageKey, stage_changed_at: new Date().toISOString() })
             .eq("id", target.pipeId);
           if (error) throw error;
         } else {
-          const { error } = await supabase
-            .from("custom_pipe_entries")
-            .update({
-              stage_id: target.stageId,
-              stage_changed_at: new Date().toISOString(),
-            })
-            .eq("id", target.entryId);
-          if (error) throw error;
+          await updateCustomPipelineEntry(target.entryId, {
+            stage_id: target.stageId,
+            stage_changed_at: new Date().toISOString(),
+          });
         }
 
         logAction({
@@ -115,10 +116,16 @@ export function useCrossPipeMove(leadId: string): UseCrossPipeMoveResult {
          * (`useCustomPipelines.ts:345`) e teria o mesmo furo — daí o par aqui também.
          */
         if (target.kind === "system") {
-          qc.invalidateQueries({ queryKey: [target.pipeTable] });
-          const slug = target.pipeTable.replace("pipe_", "");
-          qc.invalidateQueries({ queryKey: ["pipeline-page", slug] });
-          qc.invalidateQueries({ queryKey: ["pipeline-stage-counts", slug] });
+          // Sem `pipeTable` o alvo não sabe mais o slug — invalida por
+          // PREFIXO (match parcial do TanStack v5): cobre as chaves por slug
+          // do board legado E as por pipeline_id da página unificada. As três
+          // chaves de view seguem invalidadas pelo painel de performance
+          // (`useCloserPerformance` — `["pipe_propostas","perf",…]`).
+          qc.invalidateQueries({ queryKey: ["pipe_whatsapp"] });
+          qc.invalidateQueries({ queryKey: ["pipe_confirmacao"] });
+          qc.invalidateQueries({ queryKey: ["pipe_propostas"] });
+          qc.invalidateQueries({ queryKey: ["pipeline-page"] });
+          qc.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
         } else {
           qc.invalidateQueries({ queryKey: ["custom_pipe_entries"] });
           qc.invalidateQueries({ queryKey: ["custom_pipe_stage_counts"] });

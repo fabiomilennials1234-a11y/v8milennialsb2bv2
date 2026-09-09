@@ -1,21 +1,25 @@
 /**
  * Ações de card por stage no funil mergeado Oportunidades (ADR-0004, Slice 4 + fix).
  *
- * Renderiza:
- * - foco da reunião (dia + horário) sempre que há meeting_date num stage de reunião
- * - o controle por stage:
+ * Renderiza o controle por stage:
  *   - agendado        → botão de confirmação (date-aware)
  *   - remarcar        → CTA "Nova data → Agendado" (reseta confirmação)
  *   - nao_compareceu  → "Remarcar" + "Marcar perdido" (loss reason)
  *
- * Auto-gateia na flag merged_opportunity_funnel. Render slot: LeadCard.extraActions.
+ * NÃO renderiza mais o "foco da reunião" (dia + horário). No S6 a data virou
+ * linha de primeira classe do próprio card (`LeadCardData.date`), regida só
+ * pelo dado — mantê-la aqui também desenharia a MESMA reunião duas vezes no
+ * card das orgs que têm a flag do funil mergeado.
+ *
+ * Os BOTÕES seguem gateados em `merged_opportunity_funnel` (é comportamento
+ * do funil mergeado, não do produto todo). Render slot: LeadCard.extraActions.
  */
 import { useState } from "react";
-import { CalendarPlus, RotateCcw, XCircle, CalendarClock } from "lucide-react";
-import { format, isValid } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { CalendarPlus, RotateCcw, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
+import type { StageRole } from "@/contracts/pipe";
+import { ehEtapaDeReuniao } from "../../lib/etapa-de-reuniao";
 import type { ConfirmationStatus } from "../../lib/confirmation-button";
 import { useMarkLost } from "../../hooks/model/useMergedFunnelActions";
 import { MeetingConfirmationButton } from "./MeetingConfirmationButton";
@@ -25,11 +29,11 @@ import { LossReasonDialog } from "./LossReasonDialog";
 const SMALL_BTN =
   "flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-xs font-semibold transition-colors";
 
-const MEETING_STAGES = new Set(["agendado", "remarcar", "compareceu", "nao_compareceu"]);
-
 export interface MergedFunnelCardActionsProps {
   entryId: string;
   stageKey?: string | null;
+  /** Papel semântico da etapa, resolvido no cliente pelo board (ADR-0017 §1). */
+  stageRole?: StageRole | null;
   meetingDate?: string | null;
   confirmationStatus?: ConfirmationStatus | null;
   /** Stage is_final_negative da org — destino do "Marcar perdido". */
@@ -41,20 +45,10 @@ export interface MergedFunnelCardActionsProps {
   leadPhone?: string | null;
 }
 
-/** Cor do foco de data por stage/confirmação. */
-function dateToneClass(stageKey: string, status: ConfirmationStatus | null | undefined): string {
-  if (stageKey === "compareceu") return "text-green-600 bg-green-500/10 border-green-500/25";
-  if (stageKey === "nao_compareceu") return "text-destructive bg-destructive/10 border-destructive/25";
-  if (stageKey === "remarcar") return "text-amber-600 bg-amber-500/10 border-amber-500/25";
-  // agendado: segue o status de confirmação
-  if (status === "confirmado") return "text-green-600 bg-green-500/10 border-green-500/25";
-  if (status === "pre_confirmado") return "text-amber-600 bg-amber-500/10 border-amber-500/25";
-  return "text-muted-foreground bg-muted/40 border-border";
-}
-
 export function MergedFunnelCardActions({
   entryId,
   stageKey,
+  stageRole,
   meetingDate,
   confirmationStatus,
   lostStageKey,
@@ -69,24 +63,8 @@ export function MergedFunnelCardActions({
   const [lossOpen, setLossOpen] = useState(false);
   const markLost = useMarkLost();
 
-  if (!hasFeature("merged_opportunity_funnel") || !stageKey || !MEETING_STAGES.has(stageKey)) return null;
-
-  // ── Foco da reunião: dia + horário ──
-  const parsed = meetingDate ? new Date(meetingDate) : null;
-  const dateLine =
-    parsed && isValid(parsed) ? (
-      <div
-        className={cn(
-          "flex items-center gap-1.5 px-2 py-1 rounded-md border text-[11px] font-semibold",
-          dateToneClass(stageKey, confirmationStatus),
-        )}
-      >
-        <CalendarClock className="w-3.5 h-3.5 shrink-0" />
-        <span className="capitalize">{format(parsed, "EEE, dd/MM", { locale: ptBR })}</span>
-        <span className="opacity-70">·</span>
-        <span>{format(parsed, "HH:mm", { locale: ptBR })}</span>
-      </div>
-    ) : null;
+  if (!hasFeature("merged_opportunity_funnel")) return null;
+  if (!ehEtapaDeReuniao(stageKey, stageRole, meetingDate)) return null;
 
   // ── Controle por stage ──
   let control: React.ReactNode = null;
@@ -167,12 +145,7 @@ export function MergedFunnelCardActions({
     );
   }
 
-  if (!dateLine && !control) return null;
+  if (!control) return null;
 
-  return (
-    <div className="flex flex-col gap-1.5">
-      {dateLine}
-      {control}
-    </div>
-  );
+  return <div className="flex flex-col gap-1.5">{control}</div>;
 }

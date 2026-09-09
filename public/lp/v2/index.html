@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Torque — Automatizamos seu comercial para seu time vender mais</title>
+  <meta name="description" content="O único CRM especializado em B2B. Assista ao vídeo, veja o Torque funcionando e agende uma demonstração ao vivo de 30 minutos." />
+  <meta property="og:title" content="Torque — Automatizamos seu comercial. Seu time foca em vender." />
+  <meta property="og:description" content="Assista ao vídeo, veja o Torque funcionando e agende uma demonstração gratuita. 30 minutos, sem compromisso." />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#161519" />
+  <meta name="robots" content="noindex" />
+
+  <link rel="icon" type="image/png" href="assets/TORQUE_Logo_Icone.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://app.cal.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/styles.css?v=20260909" />
+  <link rel="stylesheet" href="css/prints.css?v=20260909" />
+</head>
+<body>
+
+  <!-- ============ TOPO MÍNIMO (página de VSL: sem navegação que vaze atenção) ============ -->
+  <header class="top">
+    <img src="assets/TORQUE_Logo_Claro_Horizontal.png" alt="Torque" width="132" height="21" />
+  </header>
+
+  <!-- ============ 01-05 · HERO + VSL ============ -->
+  <section class="hero" id="topo">
+    <canvas id="bgCanvas" class="hero__canvas" aria-hidden="true"></canvas>
+    <div class="hero__grid-bg" aria-hidden="true"></div>
+
+    <div class="container container--narrow hero__inner">
+      <p class="eyebrow eyebrow--center" data-hero-fade>
+        <span class="eyebrow__hex" aria-hidden="true"></span>
+        O único CRM especializado em B2B
+      </p>
+
+      <h1 class="hero__title" data-hero-fade>
+        Automatizamos todo seu comercial para seu time <em>vender mais</em>
+      </h1>
+
+      <p class="hero__sub" data-hero-fade>
+        O Torque entra na sua operação e automatiza follow-ups, tarefas, ligações,
+        distribuição de leads, reativação de oportunidades e outras etapas do seu
+        processo comercial.
+        <strong>Seu vendedor ganha mais tempo para vender. E você ganha mais controle
+        sobre tudo o que está acontecendo.</strong>
+        Assista ao vídeo abaixo e veja o Torque funcionando.
+      </p>
+
+      <div class="hero__cta-inline" data-hero-fade>
+        <button class="btn btn--primary btn--lg" data-open-modal>
+          <span>Quero ver o Torque funcionando →</span>
+        </button>
+        <p class="cta-block__note">Demonstração ao vivo · 30 minutos · Sem compromisso</p>
+      </div>
+
+      <!-- ============ 04 · VSL — protagonista ============ -->
+      <div class="vsl" data-hero-fade>
+        <div class="vsl__frame" id="vslFrame">
+          <!-- VSL hospedada na Hostinger; autoplay mudo + overlay "Clique para ouvir" -->
+          <video id="vslVideo" class="vsl__video" playsinline muted loop preload="metadata" poster="assets/vsl-torque-poster.jpg">
+            <source src="https://lightseagreen-goat-143541.hostingersite.com/torque/VSL-Curta_Torque.mp4" type="video/mp4" />
+          </video>
+          <button class="vsl__overlay" id="vslOverlay" type="button" aria-label="Ativar o som do vídeo">
+            <span class="vsl__card">
+              <span class="vsl__card-title">Seu vídeo já começou</span>
+              <span class="vsl__card-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="30" height="30"><path d="M11 5 6 9H2v6h4l5 4V5z"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+              </span>
+              <span class="vsl__card-hint">Clique para ouvir</span>
+            </span>
+          </button>
+        </div>
+        <p class="vsl__caption" aria-hidden="true">
+          <span></span> demonstração real do sistema <span></span>
+        </p>
+      </div>
+
+      <!-- ============ 05 · CTA PRINCIPAL ============ -->
+      <div class="cta-block" data-hero-fade>
+        <h2 class="cta-block__title">Veja como o Torque pode entrar na sua operação e <em>automatizar seu comercial</em> para vender mais</h2>
+        <p class="cta-block__sub">Em 30 minutos, entendemos como sua empresa vende hoje e mostramos, na prática,
+        como o Torque pode automatizar sua operação, aumentar a produtividade dos vendedores
+        e fazer seu time trabalhar mais oportunidades.</p>
+        <button class="btn btn--primary btn--lg" data-open-modal>
+          <span>Quero ver o Torque funcionando →</span>
+        </button>
+        <p class="cta-block__note">Demonstração gratuita · Sem compromisso</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ POR DENTRO DO SISTEMA ============ -->
+  <section class="section section--prints" id="por-dentro">
+    <div class="container">
+      <div class="section__head section__head--center" data-reveal>
+        <p class="eyebrow eyebrow--center"><span class="eyebrow__hex" aria-hidden="true"></span>Por dentro do sistema</p>
+        <h2 class="h2">Seu comercial continua andando <em>sem depender da memória do vendedor</em>.</h2>
+      </div>
+      <div class="prints" data-reveal-group>
+        <figure class="print" data-reveal>
+          <div class="pm" role="img" aria-label="Tela de funil do Torque com negócios em Contato, Proposta e Fechamento">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Funil · Vendas B2B</span></div>
+            <div class="pm__body">
+              <div class="pm__cols">
+                <div>
+                  <div class="pm__colhead"><span><i></i>Contato</span><b>14</b></div>
+                  <div class="pm__card"><b>Metalúrgica Andrade</b><small>2 tentativas · hoje</small></div>
+                  <div class="pm__card"><b>AgroSul Insumos</b><small>sem contato · <span class="c-red">2d</span></small></div>
+                </div>
+                <div>
+                  <div class="pm__colhead"><span><i style="background:#ED9227"></i>Proposta</span><b>6</b></div>
+                  <div class="pm__card pm__card--hot"><b>Embalagens Rio Claro</b><small class="c-orange">R$ 48.000 · follow-up amanhã</small></div>
+                  <div class="pm__card"><b>Distribuidora Pampa</b><small>R$ 22.500 · <span class="c-yellow">parado 6d</span></small></div>
+                </div>
+                <div>
+                  <div class="pm__colhead"><span><i style="background:#22c55e"></i>Fechamento</span><b>3</b></div>
+                  <div class="pm__card pm__card--won"><b>Móveis Planalto</b><small class="c-green">R$ 61.200 · contrato enviado</small></div>
+                </div>
+              </div>
+              <div class="pm__foot"><span>Vendedor: <b>Ana</b> · 23 negócios ativos</span><span class="c-orange">Ver todos →</span></div>
+            </div>
+          </div>
+          <figcaption><b>Funil e oportunidades</b><span>Veja em qual etapa está cada oportunidade, o que está avançando e quais negócios estão parados. <strong>Seu vendedor sabe onde agir. Seu gestor sabe o que está acontecendo.</strong></span></figcaption>
+        </figure>
+        <figure class="print" data-reveal>
+          <div class="pm" role="img" aria-label="Tela de automações do Torque com workflows ativos">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Automações · Workflows</span></div>
+            <div class="pm__body">
+              <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span>Lead sem contato em 24h → <em>criar tarefa p/ vendedor</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+              <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg><span>Proposta parada 5 dias → <em>follow-up automático</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+              <div class="pm__row"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFD400" stroke-width="2"><path d="M20 8a8 8 0 1 0 1.5 6.5"/><path d="M21 3v5h-5"/></svg><span>Base fria 90 dias → <em>campanha de reativação</em></span><i class="pm__tag pm__tag--ok">ativa</i></div>
+              <div class="pm__row pm__row--hot"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#ED9227" stroke-width="2"><rect x="5" y="7" width="14" height="11" rx="2"/><path d="M12 7V4M9 12h.01M15 12h.01"/></svg><span>Copilot: novo lead → <em>qualifica e encaminha</em></span><i class="pm__tag pm__tag--ia">IA</i></div>
+              <div class="pm__live">Executando · 247 ações processadas hoje</div>
+            </div>
+          </div>
+          <figcaption><b>Follow-ups e automações</b><span>Lead sem contato? Proposta parada? Hora de um novo follow-up? O Torque cria tarefas e automatiza os próximos passos. <strong>Menos oportunidades esquecidas. Mais vendas sendo trabalhadas.</strong></span></figcaption>
+        </figure>
+        <figure class="print" data-reveal>
+          <div class="pm" role="img" aria-label="Tela de métricas do Torque com conversão, ciclo médio, valor em aberto e um insight do Oráculo">
+            <div class="pm__bar"><i class="pm__dot pm__dot--r"></i><i class="pm__dot pm__dot--y"></i><i class="pm__dot pm__dot--g"></i><span>Métricas · Visão do gestor</span></div>
+            <div class="pm__body">
+              <div class="pm__kpis">
+                <div class="pm__kpi"><small>Conversão</small><b>11,4%</b><i>▲ 2,1pp</i></div>
+                <div class="pm__kpi"><small>Ciclo médio</small><b>38d</b><i>▼ 6d</i></div>
+                <div class="pm__kpi"><small>Em aberto</small><b class="c-orange">R$ 1,4M</b><i style="color:#8a857a">86 negócios</i></div>
+              </div>
+              <div class="pm__bars"><span style="height:40%"></span><span style="height:52%"></span><span style="height:64%"></span><span style="height:48%"></span><span style="height:78%"></span><span style="height:60%"></span><span style="height:90%;background:#ED9227"></span><span style="height:100%;background:#FFD400"></span></div>
+              <div class="pm__insight"><span>★</span><span><b>Oráculo:</b> a etapa Proposta acumulou 40% mais negócios que o normal — 6 deles com score alto podem fechar até sexta.</span></div>
+            </div>
+          </div>
+          <figcaption><b>Métricas e IA</b><span>Vendedores, atividades, conversões, oportunidades e resultados em um só lugar — e a IA apontando gargalos. <strong>Mais controle para tomar decisões e vender mais.</strong></span></figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06 · AGENDE E VEJA COMO ============ -->
+  <section class="section section--alt" id="beneficios">
+    <div class="container">
+      <div class="section__head section__head--center" data-reveal>
+        <p class="eyebrow eyebrow--center"><span class="eyebrow__hex" aria-hidden="true"></span>O que automatizamos</p>
+        <h2 class="h2">Nós automatizamos o <em>trabalho do seu comercial</em>.</h2>
+      </div>
+
+      <div class="benefits" data-reveal-group>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Distribuição de leads</h3>
+          <p>Um novo lead entrou? O Torque distribui automaticamente para o vendedor
+          responsável e coloca a oportunidade dentro do processo comercial.
+          <strong>O lead entra e seu time já sabe o que fazer.</strong></p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Ligações automáticas</h3>
+          <p>Seu vendedor não precisa ligar contato por contato e esperar alguém atender.
+          A discadora do Torque faz várias ligações ao mesmo tempo e conecta o vendedor
+          com o primeiro lead que atender.
+          <strong>Mais conversas. Mais oportunidades. Mais tempo vendendo.</strong></p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Follow-ups automáticos</h3>
+          <p>Seu vendedor não precisa lembrar sozinho de cada oportunidade. O Torque
+          automatiza tarefas e próximos contatos para o processo continuar andando.
+          <strong>Menos vendas perdidas por falta de acompanhamento.</strong></p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Oportunidades paradas</h3>
+          <p>O Torque mostra quais negócios estão sem movimentação e precisam de atenção.
+          <strong>Seu time sabe exatamente onde precisa agir.</strong></p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Reativação da base</h3>
+          <p>Clientes antigos e oportunidades perdidas não precisam ficar esquecidos dentro
+          do CRM. O Torque ajuda seu time a voltar a trabalhar essa base e encontrar novas
+          oportunidades de venda.
+          <strong>Sua próxima venda pode já estar dentro da sua empresa.</strong></p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 06b · VENDEDOR × GESTOR ============ -->
+  <section class="section section--duo">
+    <div class="container">
+      <div class="duo">
+        <article class="duo__card" data-reveal>
+          <p class="eyebrow"><span class="eyebrow__hex" aria-hidden="true"></span>Para o vendedor</p>
+          <h3 class="h2 duo__title">Mais tempo <em>para vender</em></h3>
+          <p class="prose">Seu vendedor abre o Torque e sabe:</p>
+          <ul class="duo__list">
+            <li><span aria-hidden="true">✓</span>Quem precisa de contato</li>
+            <li><span aria-hidden="true">✓</span>Quais oportunidades precisam de atenção</li>
+            <li><span aria-hidden="true">✓</span>Quais follow-ups precisam ser feitos</li>
+            <li><span aria-hidden="true">✓</span>Qual é o próximo passo de cada negociação</li>
+          </ul>
+          <p class="prose duo__mid">Enquanto isso, o Torque automatiza grande parte do trabalho
+          repetitivo do comercial.</p>
+          <p class="duo__punch">Menos tempo no operacional. Mais tempo conversando, negociando e vendendo.</p>
+        </article>
+        <article class="duo__card" data-reveal>
+          <p class="eyebrow"><span class="eyebrow__hex" aria-hidden="true"></span>Para o gestor</p>
+          <h3 class="h2 duo__title">Mais controle <em>da operação</em></h3>
+          <p class="prose">Você acompanha em um só lugar:</p>
+          <ul class="duo__list">
+            <li><span aria-hidden="true">✓</span>O que cada vendedor está fazendo</li>
+            <li><span aria-hidden="true">✓</span>Quais oportunidades estão paradas</li>
+            <li><span aria-hidden="true">✓</span>Follow-ups pendentes</li>
+            <li><span aria-hidden="true">✓</span>Ligações realizadas</li>
+            <li><span aria-hidden="true">✓</span>Funil comercial</li>
+            <li><span aria-hidden="true">✓</span>Conversões e métricas da equipe</li>
+          </ul>
+          <p class="duo__punch">Você sabe onde seu comercial está travando e onde precisa agir
+          para aumentar as vendas.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 07 · POR QUE O TORQUE ============ -->
+  <section class="section section--why" id="por-que">
+    <div class="container container--narrow">
+      <div class="section__head section__head--center" data-reveal>
+        <p class="eyebrow eyebrow--center"><span class="eyebrow__hex" aria-hidden="true"></span>100% B2B</p>
+        <h2 class="h2">O único CRM <em>especializado em B2B</em>.</h2>
+      </div>
+      <p class="prose prose--center" data-reveal>
+        O Torque foi criado para empresas que vendem para outras empresas. Porque venda B2B
+        tem prospecção, tentativas de contato, reuniões, propostas, negociação, follow-ups
+        e ciclos comerciais que podem durar semanas ou meses.
+        <strong>O Torque entra nessa operação, automatiza o processo e ajuda seus vendedores
+        a trabalhar mais oportunidades para vender mais.</strong>
+      </p>
+      <p class="statement" data-reveal><em>Gestão comercial feita por quem entende de B2B.</em></p>
+    </div>
+  </section>
+
+  <!-- ============ 07b · AGENDE E VEJA COMO ============ -->
+  <section class="section section--alt" id="agende">
+    <div class="container">
+      <div class="section__head section__head--center" data-reveal>
+        <p class="eyebrow eyebrow--center"><span class="eyebrow__hex" aria-hidden="true"></span>Agende e veja como</p>
+        <h2 class="h2">Em 30 minutos, veja o que podemos <em>automatizar no seu comercial</em>.</h2>
+      </div>
+      <p class="prose prose--center" data-reveal>
+        Não é uma apresentação genérica de software. Primeiro entendemos como sua empresa
+        vende hoje. Depois mostramos como o Torque pode entrar na sua operação, automatizar
+        seu processo comercial e ajudar seu time a vender mais.
+        <strong>Na demonstração, você vai ver como:</strong>
+      </p>
+      <div class="benefits" data-reveal-group>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Automatizar follow-ups e tarefas</h3>
+          <p>Faça o processo continuar andando sem depender da memória do vendedor.</p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Fazer mais ligações em menos tempo</h3>
+          <p>Use a discadora para colocar seu vendedor falando com mais potenciais clientes.</p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Acompanhar seus vendedores</h3>
+          <p>Veja atividades, oportunidades e movimentações da equipe.</p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Identificar oportunidades paradas</h3>
+          <p>Saiba quais negócios precisam de atenção antes que sejam perdidos.</p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Reativar sua base</h3>
+          <p>Volte a trabalhar clientes e oportunidades antigas.</p>
+        </article>
+        <article class="benefit" data-reveal>
+          <span class="benefit__check" aria-hidden="true">✓</span>
+          <h3>Acompanhar métricas e gargalos</h3>
+          <p>Entenda onde sua operação está perdendo vendas e onde precisa melhorar.</p>
+        </article>
+      </div>
+      <div class="agende__cta" data-reveal>
+        <button class="btn btn--primary btn--lg" data-open-modal><span>Quero minha demonstração →</span></button>
+        <p class="cta-block__note">30 minutos · Ao vivo · Sem compromisso</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 08 · CTA DE REFORÇO ============ -->
+  <section class="final" id="cta-final">
+    <div class="final__glow" aria-hidden="true"></div>
+    <div class="container container--narrow final__inner">
+      <h2 class="final__title" data-reveal>Automatizamos seu comercial.<br /><em>Seu time foca em vender.</em></h2>
+      <p class="prose prose--center" data-reveal>
+        Menos tarefas manuais. Mais oportunidades trabalhadas. Mais produtividade para os
+        vendedores. Mais controle para o gestor.
+        <strong>E mais vendas para sua empresa.</strong>
+      </p>
+      <div class="final__cta" data-reveal>
+        <button class="btn btn--primary btn--lg" data-open-modal>
+          <span>Quero ver o Torque funcionando →</span>
+        </button>
+        <p>Sem compromisso. Se o Torque não fizer sentido para sua operação, a gente te fala.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 09 · RODAPÉ ============ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+      <img src="assets/TORQUE_Logo_Claro_Horizontal.png" alt="Torque" width="140" height="22" class="footer__logo" />
+      <p class="footer__legal">© 2026 Torque · Milennials Digital · São José, SC</p>
+      <p class="footer__disclaimer">
+        Este site não é parte do Facebook, Google ou YouTube, nem é endossado por eles de
+        nenhuma forma. FACEBOOK e META são marcas da Meta Platforms Inc. GOOGLE e YOUTUBE
+        são marcas da Google Inc.
+      </p>
+      <p class="footer__links">
+        <a href="#">Política de Privacidade</a> · <a href="#">Termos de Uso</a>
+      </p>
+    </div>
+  </footer>
+
+  <!-- ============ 10 · MODAL DE FORMULÁRIO ============ -->
+  <div class="modal" id="leadModal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+    <div class="modal__backdrop" data-close-modal></div>
+    <div class="modal__card">
+      <button class="modal__close" type="button" data-close-modal aria-label="Fechar">✕</button>
+
+      <p class="eyebrow"><span class="eyebrow__hex" aria-hidden="true"></span>Demonstração gratuita</p>
+      <h2 class="modal__title" id="modalTitle">Falta pouco. Preencha para agendar sua demonstração.</h2>
+
+      <form class="form" id="demoForm" novalidate>
+
+        <div class="form__progress">
+          <div class="form__progress-top">
+            <span class="form__progress-label" id="stepLabel">Etapa 1 de 3 · Sobre você</span>
+            <span class="form__progress-count" id="stepCount">1/3</span>
+          </div>
+          <div class="form__progress-bar"><span id="stepBar" style="width:33.33%"></span></div>
+        </div>
+
+        <!-- ETAPA 1 -->
+        <div class="form__step is-active" data-step="0">
+          <div class="form__row form__row--2">
+            <div class="form__field">
+              <label for="f-nome">Nome *</label>
+              <input type="text" id="f-nome" name="nome" autocomplete="name" required placeholder="Seu nome" />
+            </div>
+            <div class="form__field">
+              <label for="f-whats">WhatsApp *</label>
+              <div class="form__phone">
+                <span class="form__ddi">+55</span>
+                <input type="tel" id="f-whats" name="whatsapp" autocomplete="tel-national" inputmode="tel" required placeholder="(00) 00000-0000" />
+              </div>
+            </div>
+          </div>
+          <div class="form__row form__row--2">
+            <div class="form__field">
+              <label for="f-email">E-mail *</label>
+              <input type="email" id="f-email" name="email" autocomplete="email" required placeholder="voce@empresa.com.br" />
+            </div>
+            <div class="form__field">
+              <label for="f-empresa">Empresa *</label>
+              <input type="text" id="f-empresa" name="empresa" autocomplete="organization" required placeholder="Nome da empresa" />
+            </div>
+          </div>
+          <div class="form__nav">
+            <button type="button" class="btn btn--primary btn--lg btn--full" data-next><span>Continuar</span></button>
+          </div>
+        </div>
+
+        <!-- ETAPA 2 -->
+        <div class="form__step" data-step="1">
+          <div class="form__field">
+            <label for="f-segmento">Segmento *</label>
+            <select id="f-segmento" name="segmento" required>
+              <option value="" disabled selected>Selecione o segmento</option>
+              <option>Alumínio</option>
+              <option>Agro</option>
+              <option>Metalúrgico</option>
+              <option>Plásticos e Embalagens</option>
+              <option>Farmacêutica e Cosmética</option>
+              <option>Móveis planejados e Marcenaria em escala</option>
+              <option>Alimentos e Bebidas</option>
+              <option>Distribuidora</option>
+              <option>Serviços B2B</option>
+              <option>Outro</option>
+            </select>
+          </div>
+          <fieldset class="form__field">
+            <legend>Quantas pessoas trabalham no seu comercial? *</legend>
+            <div class="chips" role="radiogroup">
+              <label class="chip"><input type="radio" name="pessoas" value="1 a 2" required /><span>1 a 2</span></label>
+              <label class="chip"><input type="radio" name="pessoas" value="3 a 5" /><span>3 a 5</span></label>
+              <label class="chip"><input type="radio" name="pessoas" value="6 a 10" /><span>6 a 10</span></label>
+              <label class="chip"><input type="radio" name="pessoas" value="11 a 20" /><span>11 a 20</span></label>
+              <label class="chip"><input type="radio" name="pessoas" value="Mais de 20" /><span>Mais de 20</span></label>
+            </div>
+          </fieldset>
+          <div class="form__nav form__nav--split">
+            <button type="button" class="form__back" data-prev>← Voltar</button>
+            <button type="button" class="btn btn--primary btn--lg" data-next><span>Continuar</span></button>
+          </div>
+        </div>
+
+        <!-- ETAPA 3 -->
+        <div class="form__step" data-step="2">
+          <div class="form__field">
+            <label for="f-desafio">Qual é o principal desafio do seu comercial hoje? *</label>
+            <select id="f-desafio" name="desafio" required>
+              <option value="" disabled selected>Selecione uma opção</option>
+              <option>Acompanhar os vendedores</option>
+              <option>Fazer mais contatos com os leads</option>
+              <option>Aumentar a produtividade do time</option>
+              <option>Organizar o funil comercial</option>
+              <option>Melhorar follow-up</option>
+              <option>Ter métricas confiáveis</option>
+              <option>Aumentar conversão</option>
+              <option>Outro</option>
+            </select>
+          </div>
+          <div class="form__field">
+            <label for="f-faturamento">Faturamento mensal <span class="form__optional">Opcional</span></label>
+            <select id="f-faturamento" name="faturamento">
+              <option value="" selected>Prefiro não informar</option>
+              <option>Até R$ 50 mil</option>
+              <option>R$ 50 a 200 mil</option>
+              <option>R$ 200 a 500 mil</option>
+              <option>R$ 500 mil a 1 milhão</option>
+              <option>Acima de R$ 1 milhão</option>
+            </select>
+          </div>
+          <div class="form__nav form__nav--split">
+            <button type="button" class="form__back" data-prev>← Voltar</button>
+            <button type="submit" class="btn btn--primary btn--lg"><span>Quero ver o Torque funcionando</span></button>
+          </div>
+        </div>
+
+        <p class="form__note">Demonstração ao vivo · 30 minutos · Sem compromisso</p>
+        <p class="form__success" id="formSuccess" hidden>✓ Dados recebidos. Agora escolhe o melhor horário para a demonstração.</p>
+          <p class="form__error" id="formError" hidden>Não conseguimos enviar agora. Tenta de novo em alguns segundos — se persistir, fala com a gente pelo WhatsApp.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ AGENDAMENTO CAL.COM (após o formulário) ============ -->
+  <div class="calmodal" id="calModal" role="dialog" aria-modal="true" aria-labelledby="calTitle" hidden>
+    <div class="calmodal__backdrop" data-close-cal></div>
+    <div class="calmodal__card">
+      <button class="calmodal__close" type="button" data-close-cal aria-label="Fechar">✕</button>
+      <div class="calmodal__head">
+        <p class="eyebrow eyebrow--center"><span class="eyebrow__hex" aria-hidden="true"></span>Último passo</p>
+        <h2 class="calmodal__title" id="calTitle">Agora é só escolher o <em>melhor horário</em></h2>
+        <p class="calmodal__sub">Demonstração ao vivo de 30 minutos com <b id="calHost">nosso time</b>. Sem compromisso.</p>
+      </div>
+      <div class="calmodal__stage" id="calInline"></div>
+      <div class="calmodal__done" id="calDone" hidden>
+        <div class="calmodal__done-check" aria-hidden="true">✓</div>
+        <h3>Reunião marcada!</h3>
+        <p id="calDoneWhen">Reunião marcada.</p>
+        <p>Você vai receber a confirmação por e-mail com o link da reunião. Até lá!</p>
+        <button class="btn btn--primary btn--lg" type="button" data-close-cal><span>Fechar</span></button>
+      </div>
+      <p class="calmodal__fallback">A agenda não carregou? <a id="calFallback" href="#" target="_blank" rel="noopener">Abrir em uma nova aba →</a></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/ScrollTrigger.min.js" defer></script>
+  <script src="js/main.js?v=20260909" defer></script>
+</body>
+</html>

@@ -9,6 +9,13 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { resolveActiveWindow, formatTemporalAnchor, formatDateTimeInTz, formatDateInTz } from "../../_shared/copilot/time-context.ts";
 import { parseCustomInstructions } from "./utils.ts";
+import { getPipeEntry, resolvePipeline, isPipelineResolutionError } from "../../_shared/pipeline-adapter.ts";
+import {
+  funnelRefsFromRules,
+  isCampaignRule,
+  isFunnelRule,
+  ruleMatchesStage,
+} from "../../_shared/copilot/kanban-rules.ts";
 
 interface ConversationContextSummary {
   lastTopic?: string;
@@ -50,10 +57,23 @@ export function buildSentDocumentsSection(
   if (!sentDocuments || sentDocuments.length === 0) return "";
 
   const lines: string[] = [];
-  lines.push("## Documentos já enviados nesta conversa");
+  lines.push("## Documentos já entregues nesta conversa");
   lines.push("");
+  // A redação anterior mandava "confirme que já enviou" e proibia reenviar.
+  // Como a lista era montada de `status='completed'` — que incluía os envios
+  // que o dedup engoliu —, o modelo era instruído a INSISTIR com o lead que
+  // mandou um arquivo que nunca saiu, e ficava proibido de corrigir. Medido em
+  // prod 2026-09-01: de 20 leads que disseram "não chegou", em 12 o agente nem
+  // tentou de novo. A lista agora só traz o que foi de fato entregue, e a
+  // instrução deixa de forçar a insistência.
+  // 🚨 2026-09-03: "pedido do lead" é motivo suficiente, e precisa estar dito
+  // sem rodeio. A redação anterior abria com a proibição ("não mande de novo") e
+  // só depois liberava — o modelo parava na primeira metade e respondia com
+  // texto. O runtime não trava mais reenvio (o gate vitalício de
+  // `send-document.ts` virou telemetria), então a única coisa entre o pedido do
+  // lead e o arquivo é esta instrução.
   lines.push(
-    "Os seguintes documentos já foram enviados ao lead nesta conversa. Não reenvie os mesmos documentos. Se o lead perguntar novamente sobre o conteúdo, confirme que já enviou e ofereça esclarecer dúvidas.",
+    "Os arquivos abaixo já chegaram ao lead nesta conversa. **Se ele pedir qualquer um de novo, ou disser que não recebeu, CHAME `send_document` na hora** — pedir de novo já é motivo suficiente, e reenviar nunca é erro. Nunca responda com texto no lugar do arquivo, nunca afirme que já mandou e nunca peça para ele procurar no histórico. Fora isso, não repita arquivo que ninguém pediu.",
   );
   lines.push("");
   for (const doc of sentDocuments) {
@@ -239,10 +259,10 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
         "- disqualify_lead: quando o lead não se encaixa (sem necessidade, fora do perfil, sem orçamento, desistiu)",
       );
       sections.push(
-        "- advance_stage: quando o lead progrediu na jornada — especifique target_stage e target_pipe (whatsapp, confirmacao, propostas, upsell_base, upsell_gestao, campanha)",
+        "- advance_stage: quando o lead progrediu na jornada — especifique target_stage e target_pipe (os funis e etapas disponíveis desta organização estão listados na própria ferramenta advance_stage)",
       );
       sections.push(
-        "O lead pode estar em MÚLTIPLOS funis simultaneamente (WhatsApp + Carteira + Confirmação etc). Movimente no funil correto.",
+        "O lead pode estar em MÚLTIPLOS funis simultaneamente. Movimente no funil correto.",
       );
       sections.push(
         "Essencial: movimente o lead conforme a conversa evolui. Não deixe leads qualificados ou desqualificados sem usar a ferramenta.",
@@ -611,19 +631,33 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
     if (leadData.urgency) sections.push(`- Urgência: ${leadData.urgency}`);
     if (leadData.rating) sections.push(`- Rating/Score: ${leadData.rating}/10`);
     if (leadData.origin) sections.push(`- Origem: ${leadData.origin}`);
-    if (leadData.whatsapp_status) sections.push(`- Etapa no funil WhatsApp: ${leadData.whatsapp_status}`);
+    const funnelPositions = Array.isArray(leadData.funnel_positions)
+      ? leadData.funnel_positions as Array<{ pipeline_name?: string; pipeline_slug?: string; stage_key?: string }>
+      : [];
+    if (funnelPositions.length > 0) {
+      for (const position of funnelPositions) {
+        if (position.stage_key) {
+          sections.push(`- Etapa no funil ${position.pipeline_name || position.pipeline_slug}: ${position.stage_key}`);
+        }
+      }
+    } else {
+      // Compatibilidade para callers antigos que ainda não enviam funnel_positions.
+      if (leadData.whatsapp_status) sections.push(`- Etapa no funil WhatsApp: ${leadData.whatsapp_status}`);
+      if (leadData.confirmacao_status) sections.push(`- Etapa no funil Confirmação: ${leadData.confirmacao_status}`);
+      if (leadData.propostas_status) sections.push(`- Etapa no funil Propostas: ${leadData.propostas_status}`);
+    }
     if (leadData.confirmacao_status) {
-      let confirmacaoInfo = `- Etapa no funil Confirmação: ${leadData.confirmacao_status}`;
+      let confirmacaoInfo = "- Dados da reunião";
       if (leadData.confirmacao_meeting_date)
         confirmacaoInfo += ` (reunião: ${formatDateTimeInTz(leadData.confirmacao_meeting_date, agentTz)})`;
       if (leadData.confirmacao_is_confirmed) confirmacaoInfo += " [CONFIRMADO]";
-      sections.push(confirmacaoInfo);
+      if (leadData.confirmacao_meeting_date || leadData.confirmacao_is_confirmed) sections.push(confirmacaoInfo);
     }
     if (leadData.propostas_status) {
-      let propostasInfo = `- Etapa no funil Propostas: ${leadData.propostas_status}`;
+      let propostasInfo = "- Dados comerciais";
       if (leadData.propostas_sale_value) propostasInfo += ` (valor: R$${leadData.propostas_sale_value})`;
       if (leadData.propostas_product_type) propostasInfo += ` (produto: ${leadData.propostas_product_type})`;
-      sections.push(propostasInfo);
+      if (leadData.propostas_sale_value || leadData.propostas_product_type) sections.push(propostasInfo);
     }
     if (leadData.upsell_base_stage) sections.push(`- Etapa na Carteira Base: ${leadData.upsell_base_stage}`);
     if (leadData.upsell_gestao_stage) sections.push(`- Etapa na Carteira Gestão: ${leadData.upsell_gestao_stage}`);
@@ -757,46 +791,80 @@ export async function buildDynamicPrompt(params: BuildPromptParams): Promise<str
 
   // =====================================================
   // 4.1 REGRAS DA ETAPA ATUAL (Kanban)
+  //
+  // SCRUM-628: as regras deixam de casar contra a união hardcoded
+  // whatsapp/confirmacao/propostas/upsell — cada regra aponta um FUNIL (uuid ou
+  // slug, formato novo e legado — ver _shared/copilot/kanban-rules.ts) e a
+  // posição do lead vem da entry dele em `pipeline_entries` NAQUELE funil, o
+  // que cobre funil custom. Campanha segue como eixo próprio (nome da etapa da
+  // campanha, comportamento histórico); Carteira saiu (não é funil).
   // =====================================================
   const kanbanRules = capabilities?.copilot_agent_kanban_rules;
-  if (kanbanRules && Array.isArray(kanbanRules) && kanbanRules.length > 0) {
-    const pipeLabels: Record<string, string> = {
-      whatsapp: "WhatsApp",
-      confirmacao: "Confirmação",
-      propostas: "Propostas",
-      upsell_base: "Carteira Base",
-      upsell_gestao: "Carteira Gestão",
-      campanha: "Campanhas",
-    };
-    const currentStages: Array<{ pipe: string; stage: string }> = [];
-    if (leadData?.whatsapp_status?.trim())
-      currentStages.push({ pipe: "whatsapp", stage: leadData.whatsapp_status.trim() });
-    if (leadData?.confirmacao_status?.trim())
-      currentStages.push({ pipe: "confirmacao", stage: leadData.confirmacao_status.trim() });
-    if (leadData?.propostas_status?.trim())
-      currentStages.push({ pipe: "propostas", stage: leadData.propostas_status.trim() });
-    if (leadData?.upsell_base_stage?.trim())
-      currentStages.push({ pipe: "upsell_base", stage: leadData.upsell_base_stage.trim() });
-    if (leadData?.upsell_gestao_stage?.trim())
-      currentStages.push({ pipe: "upsell_gestao", stage: leadData.upsell_gestao_stage.trim() });
-    if (leadData?.campanha_stage?.trim())
-      currentStages.push({ pipe: "campanha", stage: leadData.campanha_stage.trim() });
+  if (kanbanRules && Array.isArray(kanbanRules) && kanbanRules.length > 0 && currentLeadId) {
+    const orgId: string | null =
+      (leadData?.organization_id as string) ??
+      (conversation?.organization_id as string) ??
+      (capabilities?.organization_id as string) ??
+      null;
 
-    const matchedRules: Array<{ rule: any; pipe: string; stage: string }> = [];
-    for (const cs of currentStages) {
-      const rule = kanbanRules.find(
-        (r: { pipe_type?: string; stage_name?: string }) =>
-          r?.pipe_type === cs.pipe && r?.stage_name?.toLowerCase() === cs.stage.toLowerCase(),
-      );
-      if (rule) matchedRules.push({ rule, pipe: cs.pipe, stage: cs.stage });
+    const matchedRules: Array<{ rule: any; pipeLabel: string; stageLabel: string }> = [];
+
+    // Eixo funil: resolve cada ref citada pelas regras (uuid, slug ou alias —
+    // refs diferentes podem apontar o MESMO funil, então agrupa-se por
+    // pipeline.id: uma leitura de entry por funil, sem seção duplicada).
+    if (orgId) {
+      const rulesByPipelineId = new Map<
+        string,
+        { pipeline: { id: string; slug: string; name: string }; rules: any[] }
+      >();
+      for (const ref of funnelRefsFromRules(kanbanRules)) {
+        try {
+          const pipeline = await resolvePipeline(supabase, orgId, ref);
+          const group = rulesByPipelineId.get(pipeline.id) ?? { pipeline, rules: [] };
+          for (const rule of kanbanRules) {
+            if (isFunnelRule(rule) && rule.pipe_type === ref) group.rules.push(rule);
+          }
+          rulesByPipelineId.set(pipeline.id, group);
+        } catch (e) {
+          if (isPipelineResolutionError(e)) {
+            // Regra apontando funil que a org não tem mais — regra fica muda,
+            // o prompt não pode quebrar por config órfã.
+            console.warn("[engine/build-prompt] kanban rule com funil não resolvível:", e.message);
+            continue;
+          }
+          throw e;
+        }
+      }
+
+      for (const { pipeline, rules } of rulesByPipelineId.values()) {
+        const entry = await getPipeEntry(supabase, currentLeadId, orgId, pipeline.id);
+        if (!entry) continue;
+        const entryStageId =
+          ((entry as unknown as { stage_id?: string | null }).stage_id ?? null);
+        for (const rule of rules) {
+          if (ruleMatchesStage(rule, { id: entryStageId, key: entry.stage_key })) {
+            matchedRules.push({ rule, pipeLabel: pipeline.name || pipeline.slug, stageLabel: entry.stage_key });
+          }
+        }
+      }
+    }
+
+    // Eixo campanha (outro eixo — matching histórico por nome da etapa).
+    const campanhaStage = leadData?.campanha_stage?.trim();
+    if (campanhaStage) {
+      for (const rule of kanbanRules) {
+        if (!isCampaignRule(rule)) continue;
+        if (rule.stage_name?.toLowerCase() === campanhaStage.toLowerCase()) {
+          matchedRules.push({ rule, pipeLabel: "Campanhas", stageLabel: campanhaStage });
+        }
+      }
     }
 
     if (matchedRules.length > 0) {
       sections.push("# REGRAS DA ETAPA ATUAL (Kanban)");
       sections.push("");
-      for (const { rule, pipe } of matchedRules) {
-        const pipeLabel = pipeLabels[pipe] || pipe;
-        sections.push(`Você está conversando com um lead na etapa "${rule.stage_name}" do funil ${pipeLabel}.`);
+      for (const { rule, pipeLabel, stageLabel } of matchedRules) {
+        sections.push(`Você está conversando com um lead na etapa "${stageLabel}" do funil ${pipeLabel}.`);
         sections.push("");
         if (rule.goal) sections.push(`**Objetivo desta etapa:** ${rule.goal}`);
         if (rule.behavior) sections.push(`**Comportamento esperado:** ${rule.behavior}`);

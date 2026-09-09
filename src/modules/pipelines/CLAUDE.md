@@ -9,7 +9,7 @@
 
 Funis de venda. Dois modelos coexistem:
 
-- **Pipes canônicos (legacy)**: `pipe_whatsapp` (qualificação), `pipe_confirmacao` (reunião), `pipe_propostas` (fechamento). Views sobre `pipeline_entries` (coluna `status` = `stage_key` slug). Hooks namespace `usePipe*`.
+- **Compatibilidade legacy**: `pipe_whatsapp`, `pipe_confirmacao` e `pipe_propostas` são views de leitura em retirada. Escrita frontend nelas é proibida desde SCRUM-673; use as funções compartilhadas de entrada.
 - **Pipelines customizados (modelo novo)**: `pipeline_entries` + `pipeline_stages` (coluna `stage_id` uuid). Hooks namespace `usePipeline*` / `useCustom*`.
 
 Stages dinâmicas em `pipeline_stages`. Lead pode estar em múltiplos pipes simultaneamente (invariante crítico).
@@ -73,7 +73,25 @@ Ver `./index.ts` para a superfície completa. Estável.
 - `usePipelineStages`, `useAllPipelineStages`, `stagesToColumns`, `useCreatePipelineStage`, `useUpdatePipelineStage`, `useDeletePipelineStage`, `DEFAULT_STAGES`
 
 ### Hooks — config + metrics + rules
-- Display config: `usePipelineDisplayConfig`, `useHiddenDefaultPipes`, `useTogglePipeVisibility`
+- Display config: `usePipelineDisplayConfig`, `useAvailableSystemPipes`, `useEnabledSystemPipeTypes`, `useEnableSystemPipe`, `useTogglePipeVisibility`, `SYSTEM_PIPE_CATALOG`
+- Exclusão de funil (qualquer espécie, por id — SCRUM-626/636): `usePipelineDeleteImpact`, `useDeletePipelineById` (`hooks/config/usePipelineDelete.ts`) + `DeletePipelineDialog` (impacto medido, bloqueio por cards invasores, substituto do funil padrão da org antes do delete)
+
+> 🚨 **`pipeline_display_config` é o REGISTRO de quais funis de sistema a org tem** (migration `20270902000000`).
+> Linha ausente = a org **não tem** aquele funil. Não há default e não há fallback: lista vazia é resposta legítima.
+>
+> Antes, quatro torneiras de auto-semeadura no caminho de LEITURA recriavam tudo, o que tornava a exclusão
+> impossível — apagar as linhas e recarregar a página trazia o funil de volta. As quatro estão fechadas:
+> `ensure_pipeline_display_config` (virou no-op), `create_default_pipelines` (consulta o registro),
+> `buildFallbackStages` (gateada por `lerTiposHabilitados`; só render-only em erro/sem-org) e
+> `ensureDefaultStagesInDb` (REMOVIDA — SCRUM-618: o seed é 100% server-side via
+> `enable_system_pipeline` → `create_default_pipeline_stages`, migration `20270906003000`;
+> funil habilitado sem etapa renderiza VAZIO, não fallback). Etapas da Carteira (resíduo
+> `upsell_*`, fora de `PipelineType` desde SCRUM-618) são lidas pelo módulo carteira via
+> `useCarteiraStages`.
+>
+> **Ao mexer aqui:** nunca reintroduza um default em memória para funil de sistema, e nunca semeie tipo que
+> não esteja no registro. `tests/unit/hooks-sprint2-pipeline-stages.test.ts` trava os dois sentidos.
+> Criar funil de sistema é ato explícito: RPC `enable_system_pipeline`.
 - Metrics: `usePipePropostasMetrics`, `usePipeConfirmacaoMetrics`, `usePipeWhatsappMetrics`, `computeConfirmacaoStats`
 - Dispatch: `usePipeDispatchRules`, `usePipeDispatchRuleSteps`, `useCreatePipeDispatchRule`, `useUpdatePipeDispatchRule`
 - Distribution: `usePipeDistributionRule`, `useSavePipeDistribution`
@@ -90,23 +108,26 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Components — kanban
 - `KanbanBoard`, `KanbanCard`, `KanbanFilterPanel`, `DraggableKanbanBoard`
-- `PipelineListView`, `PipeTableView`
+- `PipelineListView` (`PipeTableView` morreu no flip da 637 — sem consumidor)
 - `CreateOpportunityModal`, `ExportStageDialog`
 - `StageWorkflowsBadge`, `StageWorkflowsBadgeWrapper`
 - Helpers do filtro: `originLabels`, `ALL_ORIGIN_OPTIONS`, `countActiveFilters`
 
 ### Components — shared (configuração + dispatch)
 - `PipeSettingsDialog`, `ManagePipelineStagesContent`, `ManagePipelineStagesModal`
+- `FunnelIdentitySection` — identidade do funil (nome/ícone/cor, escreve em `pipelines` e sincroniza `display_name` do registro no sistema) + Zona de Perigo, na aba "Geral" dos DOIS diálogos de configurações (sistema e custom) desde SCRUM-636. Portão de exclusão: `pipeline.custom_delete`. A confirmação é o `DeletePipelineDialog` único (substituiu `DangerZoneSystemPipe`, demolido). Props `onSaved` e `mostrarZonaDePerigo` servem a hospedeiro fora da aba.
+- `FunnelIdentityDialog` — a MESMA seção num diálogo, sem Zona de Perigo. É por onde renomear/repintar chega fora de Configurações (menu do cartão no hub, rodapé do seletor de funil).
+- **"Geral" é a PRIMEIRA aba e a aba inicial** dos dois diálogos (identidade antes de mecânica; era a última em ambos). `defaultTab` explícito continua vencendo — a Carteira abre em "Importar". `upsell_*` não tem "Geral" (sem linha canônica em `pipelines`) e segue começando em "Etapas".
 - `PipeDispatchRulesSection`, `PipeDistributionSection`
-- `GhostLeadsBanner`
 
 ### Components — custom pipelines
-- `CustomPipelineKanban`, `CustomPipeLeadCard`, `CustomPipeSettingsDialog`
+- `CustomPipeSettingsDialog` (`CustomPipelineKanban` + `CustomPipeLeadCard` morreram na 637 — o board único é `FunilKanban` + `LeadCard`)
 - `CreatePipelineModal`, `AddLeadToPipeModal`, `ImportCustomPipelineContent`
 - Constantes: `PIPELINE_COLORS`, `PIPELINE_ICONS`
 
-### Components — funis (creators)
+### Components — funis (creators + ações)
 - `CreateFunilOuCampanhaModal`, `CreateTemporaryFunnelModal`
+- `FunnelActionsMenu` — kebab do cartão de funil: **Renomear** (abre `FunnelIdentityDialog`) e **Excluir** (abre `DeletePipelineDialog`). "Excluir" some sem `pipeline.custom_delete`. Usado em todo cartão do hub `/funis`, encerrados inclusive. Nenhuma lógica própria: só a porta.
 
 ### Components — legacy (confirmação standalone)
 - Cards/stats: `ConfirmacaoCard`, `ConfirmacaoStats`, `ConfirmacaoDetailModal`
@@ -139,7 +160,7 @@ Eventos (post slice 19): `lead.stage_changed`, `pipeline.entry.moved`. Slice 19 
 
 ## Áreas frágeis
 
-- **Dual model**: hooks `usePipe*` operam views legacy `pipe_*` (status=stage_key slug); hooks `usePipeline*` operam `pipeline_entries` (stage_id uuid). **Não unificar** — cleanup futuro fora do escopo slice 5.
+- **Views de compatibilidade**: hooks `usePipe*` ainda podem ler `pipe_*` durante a demolição. Toda escrita passa por `fn_entrada_{sistema,custom}_{criar,atualizar}`; funil/etapa custom passam por `fn_{funil,etapa}_custom_*`. Nunca adicione mutação via view.
 - **Realtime**: subscriptions em `pipeline_entries` via `useRealtimeSubscription`, **nunca** nas views `pipe_*` (regra CLAUDE.md raiz). `usePipelineEntries.ts` + `usePipelines.ts` usam o hook. Não mexer na assinatura sem testar multi-tab.
 - **Status field divergente**: pipe_* views = `status` (slug string). Custom pipes = `stage_id` (uuid). Code paths separados.
 - **Lead em múltiplos pipes simultaneamente** — invariante crítico. `useLeadAllPipelines` (módulo `leads`) consolida via RPC.
@@ -173,7 +194,7 @@ Out-of-scope (movem em outras slices):
 
 ## Dedup pendente (out-of-scope slice 5)
 
-- **Dual model unificação**: hooks `usePipe*` (views) vs `usePipeline*` (entries). Cleanup futuro depois de migrar consumidores 100% para `pipeline_entries`.
+- **Demolição dos espelhos**: migrar leitores `usePipe*` restantes para `pipelines`, `pipeline_stages` e `pipeline_entries`; as escritas já saíram na SCRUM-673.
 - **`statusColumns`** existe em 3 hooks com valores divergentes — manter por compat até refactor.
 
 ## Slice de migração

@@ -13,7 +13,7 @@ import type { ActionInput, ActionResult } from "./types.ts";
  *   - assigned_to?: string — UUID of team member
  */
 export async function scheduleMeeting(input: ActionInput): Promise<ActionResult> {
-  const { supabase, organizationId, leadId, params } = input;
+  const { supabase, organizationId, leadId, entryId, dealId, params } = input;
 
   if (!leadId) {
     return { success: false, error: "leadId é obrigatório para schedule_meeting" };
@@ -38,6 +38,10 @@ export async function scheduleMeeting(input: ActionInput): Promise<ActionResult>
 
   const { error } = await supabase.from("follow_ups").insert({
     lead_id: leadId,
+    // A reunião é DESTE negócio quando a execução declara um — decisão do CTO
+    // em 2026-08-25, mesma regra do checklist.
+    pipeline_entry_id: entryId ?? null,
+    deal_id: dealId ?? null,
     organization_id: organizationId,
     due_date: dueDate,
     title: "Reunião",

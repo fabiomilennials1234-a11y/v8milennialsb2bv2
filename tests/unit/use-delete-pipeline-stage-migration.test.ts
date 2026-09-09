@@ -1,10 +1,9 @@
 /**
- * Behaviour tests for useDeletePipelineStage migration guard + usePipelineStageLeadCounts.
+ * Behaviour tests for the transactional stage deletion RPC + lead counts.
  *
- * Root cause of "ghost stages": deleting a stage that still has leads left those
- * leads in a stage_key the Kanban no longer renders. The hook now migrates leads
- * to a chosen active stage BEFORE deactivating, and refuses to delete a non-empty
- * stage without a destination.
+ * The database owns validation, card migration, workflow deactivation and the
+ * stage soft-delete in one transaction. The hook only resolves legacy system
+ * pipeline identity and calls that public operation.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, waitFor } from "@testing-library/react";
@@ -12,9 +11,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
 
 // Per-test scenario knobs + recorded calls.
-const scenario: { entryCount: number; pipelineId: string | null } = {
+const scenario: {
+  entryCount: number;
+  pipelineId: string | null;
+  dispatchRuleCount: number;
+  dispatchRuleError: { message: string } | null;
+} = {
   entryCount: 0,
   pipelineId: "pipe-1",
+  dispatchRuleCount: 0,
+  dispatchRuleError: null,
 };
 const recorded: { table: string; op: string; payload?: unknown; filters: Record<string, unknown> }[] = [];
 
@@ -54,7 +60,12 @@ function makeChain(table: string) {
     if (op === "update") {
       result = { error: null };
     } else if (countMode) {
-      result = { count: scenario.entryCount, error: null };
+      // Counts are per-table: pipe_dispatch_rules feeds the interim delete
+      // guard (F0 funis-unificacao); pipeline_entries feeds the lead migration.
+      result =
+        table === "pipe_dispatch_rules"
+          ? { count: scenario.dispatchRuleCount, error: scenario.dispatchRuleError }
+          : { count: scenario.entryCount, error: null };
     } else {
       result = { data: [], error: null };
     }
@@ -64,13 +75,25 @@ function makeChain(table: string) {
 }
 
 const mockFrom = vi.fn((table: string) => makeChain(table));
+const mockRpc = vi.fn().mockResolvedValue({
+  data: {
+    stage_id: "s1",
+    pipeline_id: "pipe-1",
+    cards: 0,
+    automacoes: 0,
+    regras_disparo: 0,
+    cards_migrados: 0,
+    automacoes_desativadas: 0,
+  },
+  error: null,
+});
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: (...args: any[]) => mockFrom(args[0] as string),
     channel: vi.fn().mockReturnValue({ on: vi.fn().mockReturnThis(), subscribe: vi.fn() }),
     removeChannel: vi.fn(),
-    rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+    rpc: (...args: unknown[]) => mockRpc(...args),
   },
 }));
 vi.mock("@/modules/identity", () => ({
@@ -93,66 +116,108 @@ beforeEach(() => {
   recorded.length = 0;
   scenario.entryCount = 0;
   scenario.pipelineId = "pipe-1";
+  scenario.dispatchRuleCount = 0;
+  scenario.dispatchRuleError = null;
   mockFrom.mockClear();
+  mockRpc.mockClear();
+  mockRpc.mockResolvedValue({
+    data: {
+      stage_id: "s1",
+      pipeline_id: "pipe-1",
+      cards: 0,
+      automacoes: 0,
+      regras_disparo: 0,
+      cards_migrados: 0,
+      automacoes_desativadas: 0,
+    },
+    error: null,
+  });
 });
 
-describe("useDeletePipelineStage — migration guard", () => {
-  it("empty stage: deactivates without migrating", async () => {
-    scenario.entryCount = 0;
+describe("useDeletePipelineStage — transactional RPC", () => {
+  it("system funnel resolves its id and delegates the whole mutation to one RPC", async () => {
     const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
 
-    await result.current.mutateAsync({ id: "s1", pipeline_type: "whatsapp", stageKey: "novo" });
+    await result.current.mutateAsync({ id: "s1", pipeline_type: "whatsapp" });
 
-    const updates = recorded.filter((r) => r.op === "update");
-    // Only the pipeline_stages deactivation — no pipeline_entries migration.
-    expect(updates.some((r) => r.table === "pipeline_stages")).toBe(true);
-    expect(updates.some((r) => r.table === "pipeline_entries")).toBe(false);
+    expect(recorded.some((r) => r.table === "pipelines" && r.op === "maybeSingle")).toBe(true);
+    expect(mockRpc).toHaveBeenCalledWith("delete_pipeline_stage", {
+      p_stage_id: "s1",
+      p_destination_stage_id: null,
+    });
+    expect(recorded.some((r) => r.op === "update")).toBe(false);
   });
 
-  it("non-empty stage without destination: throws and does NOT deactivate", async () => {
-    scenario.entryCount = 7;
-    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
-
-    await expect(
-      result.current.mutateAsync({ id: "s1", pipeline_type: "whatsapp", stageKey: "novo" }),
-    ).rejects.toThrow(/7 lead/);
-
-    const updates = recorded.filter((r) => r.op === "update");
-    expect(updates.length).toBe(0); // nothing migrated, nothing deactivated
-  });
-
-  it("non-empty stage with destination: migrates leads then deactivates", async () => {
-    scenario.entryCount = 7;
+  it("custom funnel uses the explicit id and forwards the destination stage id", async () => {
     const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
 
     await result.current.mutateAsync({
-      id: "s1",
-      pipeline_type: "whatsapp",
-      stageKey: "novo",
-      migrateToStageKey: "novo_lead",
+      id: "s9",
+      pipelineId: "custom-pipe-42",
+      destinationStageId: "s10",
     });
 
-    const migrate = recorded.find((r) => r.op === "update" && r.table === "pipeline_entries");
-    expect(migrate).toBeTruthy();
-    expect((migrate!.payload as { stage_key: string }).stage_key).toBe("novo_lead");
-    expect(migrate!.filters.stage_key).toBe("novo"); // moved FROM the deleted stage
-    expect(migrate!.filters.pipeline_id).toBe("pipe-1");
-
-    expect(recorded.some((r) => r.op === "update" && r.table === "pipeline_stages")).toBe(true);
+    expect(recorded.some((r) => r.table === "pipelines")).toBe(false);
+    expect(mockRpc).toHaveBeenCalledWith("delete_pipeline_stage", {
+      p_stage_id: "s9",
+      p_destination_stage_id: "s10",
+    });
   });
 
-  it("destination equal to deleted stage: throws", async () => {
-    scenario.entryCount = 3;
+  it("surfaces the database rejection without client-side writes", async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "Etapa usada por 2 regras de disparo ativas" },
+    });
     const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
 
     await expect(
       result.current.mutateAsync({
         id: "s1",
-        pipeline_type: "whatsapp",
-        stageKey: "novo",
-        migrateToStageKey: "novo",
+        pipelineId: "pipe-1",
+        destinationStageId: "s2",
       }),
-    ).rejects.toThrow(/diferente/);
+    ).rejects.toThrow(/2 regra/);
+
+    expect(recorded.some((r) => r.op === "update")).toBe(false);
+  });
+
+  it("does not call the RPC when a legacy system funnel cannot be resolved", async () => {
+    scenario.pipelineId = null;
+    const { result } = renderHook(() => useDeletePipelineStage(), { wrapper: createWrapper() });
+
+    await expect(
+      result.current.mutateAsync({ id: "s1", pipeline_type: "whatsapp" }),
+    ).rejects.toThrow(/Funil da etapa não encontrado/);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("usePipelineStageLeadCounts — explicit pipelineId", () => {
+  it("counts by the given id without touching pipelines", async () => {
+    mockFrom.mockImplementation((table: string) => {
+      const chain: Record<string, any> = {};
+      ["select", "eq"].forEach((m) => (chain[m] = () => chain));
+      chain.maybeSingle = () => Promise.resolve({ data: null, error: null });
+      chain.then = (resolve: (v: unknown) => unknown) => {
+        recorded.push({ table, op: "select", filters: {} });
+        return Promise.resolve(
+          table === "pipeline_entries"
+            ? { data: [{ stage_key: "novo" }, { stage_key: "feito" }], error: null }
+            : { data: [], error: null },
+        ).then(resolve);
+      };
+      return chain;
+    });
+
+    const { result } = renderHook(
+      () => usePipelineStageLeadCounts(null, "custom-pipe-42"),
+      { wrapper: createWrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ novo: 1, feito: 1 });
+    expect(recorded.some((r) => r.table === "pipelines")).toBe(false);
   });
 });
 

@@ -242,6 +242,25 @@ function MetricWindowBase({
               )}
             </div>
 
+            {/* Cobertura do preenchimento (SCRUM-545 fatia 2).
+                Só as medidas de dinheiro do funil devolvem `cobertura`; nas
+                demais é `null` e nada é desenhado.
+
+                O aviso existe porque `deals.value` está preenchido em 0,88%
+                dos negócios em prod. Sem ele, "R$ 15.924,21" numa org com
+                4.093 negócios lê-se como o funil inteiro quando é o valor de
+                treze cards. Um número parcial sem aviso é pior que nenhum
+                número: o primeiro é usado para decidir. */}
+            {dados.cobertura !== null && dados.cobertura.parcial && (
+              <p
+                className="text-[10px] leading-tight text-amber-500/90"
+                title="Só negócios com valor lançado entram nesta conta"
+              >
+                Valor em {dados.cobertura.comValor.toLocaleString("pt-BR")} de{" "}
+                {dados.cobertura.total.toLocaleString("pt-BR")} negócios
+              </p>
+            )}
+
             {/* Termômetro da meta (SCRUM-389).
                 O motor já devolvia `target` desde 20260727140000 e ninguém lia:
                 número calculado e jogado fora a cada janela aberta. Só aparece

@@ -6,8 +6,9 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getTimeBasedVariables } from "../time-variables.ts";
 import { getPipeEntry } from "../pipeline-adapter.ts";
+import { getStageDoNegocio, entryIdDoContexto } from "../negocio-subject.ts";
 import { getWhatsAppProvider } from "../whatsapp-client.ts";
-import { personalizationName, isPlaceholderLeadName, tidyEmptyVarGaps } from "../lead-name.ts";
+import { personalizationName, personalizationFirstName, isPlaceholderLeadName, tidyEmptyVarGaps } from "../lead-name.ts";
 import { normalizeBrazilianPhone } from "../whatsapp-dispatch.ts";
 import type { ActionResult } from "./types.ts";
 import {
@@ -475,16 +476,22 @@ export async function resolveVariables(
   // e não escreve — a coluna CONGELA na última etapa de whatsapp. A mensagem sairia
   // com uma etapa que o negócio não ocupa mais, e ninguém veria campo vazio para
   // desconfiar.
-  const waEntry = await getPipeEntry(supabase, leadId, lead.organization_id as string, "whatsapp");
+  // Desde a fatia 3 do sujeito da automação: a etapa é a do negócio QUE
+  // DISPAROU, lida do `context`. O funil `whatsapp` era chumbado — ver
+  // `getStageDoNegocio`.
+  const estagioDoNegocio = await getStageDoNegocio(
+    supabase, leadId, lead.organization_id as string, entryIdDoContexto(executionContext),
+  );
 
   let result = template;
 
   const vars: Record<string, string> = {
     nome:       personalizationName(lead.name),
+    primeiro_nome: personalizationFirstName(lead.name),
     empresa:    lead.company || "",
     email:      lead.email || "",
     telefone:   lead.phone || "",
-    estagio:    waEntry?.stage_key || "",
+    estagio:    estagioDoNegocio,
     score:      String(lead.qualification_score ?? ""),
     rating:     String(lead.rating ?? ""),
     faturamento: String(lead.faturamento ?? ""),

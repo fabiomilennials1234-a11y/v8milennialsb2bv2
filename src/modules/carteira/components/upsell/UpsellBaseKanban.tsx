@@ -3,7 +3,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Settings, Plus, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { usePipelineStages, stagesToColumns, type PipelineStage } from "@/modules/pipelines";
+import { stagesToColumns, type PipelineStage } from "@/modules/pipelines";
+import { useCarteiraStages } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useUpsellClients, useUpdateUpsellClient } from "@/modules/carteira/hooks/useUpsellClients";
 import { useUpsellOrders } from "@/modules/carteira/hooks/useUpsellOrders";
 import { LeadCard, type LeadCardData } from "@/modules/leads";
@@ -13,7 +14,6 @@ import { UpsellStageRulesTab } from "./UpsellStageRulesTab";
 import { ImportUpsellClientsContent } from "./ImportUpsellClientsContent";
 import { useIdentity } from "@/modules/identity";
 import { useCreateAcaoDoDia } from "@/modules/engagement/hooks/useAcoesDoDia";
-import { useUpdateLead } from "@/modules/leads";
 import { toast } from "sonner";
 
 interface UpsellBaseKanbanProps {
@@ -32,12 +32,11 @@ function formatCurrency(value: number): string {
 }
 
 function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: UpsellBaseKanbanProps) {
-  const { data: stages = [] } = usePipelineStages("upsell_base");
+  const { data: stages = [] } = useCarteiraStages("upsell_base");
   const { data: clients = [] } = useUpsellClients();
   const { data: orders = [] } = useUpsellOrders();
   const updateClient = useUpdateUpsellClient();
   const createAcaoDoDia = useCreateAcaoDoDia();
-  const updateLead = useUpdateLead();
   const { isAdmin } = useIdentity();
   const navigate = useNavigate();
 
@@ -213,6 +212,7 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
                       lead={{
                         id: client.id,
                         name: client.name,
+                        erpCode: client.external_id,
                         company: client.company,
                         phone: client.phone,
                         value: vendasPorCliente[client.id] || 0,
@@ -227,10 +227,6 @@ function UpsellBaseKanbanInner({ searchQuery, filterPotencial, filterActive }: U
                       onClick={() => openDetail(client)}
                       onQuickAction={(title) => {
                         createAcaoDoDia.mutate({ title, lead_id: (client as any).lead_id || undefined });
-                      }}
-                      onCalorChange={(calor) => {
-                        if ((client as any).lead_id || (client as any).leadId)
-                          updateLead.mutate({ id: (client as any).lead_id || (client as any).leadId!, rating: calor });
                       }}
                     />
                   </motion.div>

@@ -47,15 +47,30 @@ vi.mock("https://esm.sh/@supabase/supabase-js@2", () => ({
 
 // ─── Mock pipeline-adapter: capture the written stage + control the resolver ──
 const mockUpsertPipeEntry = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+// `place_in_pipe` passou a usar a variante DETALHADA para saber se o card foi
+// mesmo criado — sem isso a resposta cravava `placed_in_pipe: true` mesmo
+// quando o funil não existe na org.
+const mockUpsertPipeEntryDetailed = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ status: "created", entryId: "entry-1" }),
+);
 const mockGetPipeEntry = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 const mockUpdatePipeEntryById = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 const mockResolveActiveStageKey = vi.hoisted(() => vi.fn());
+// SCRUM-624 (D6): o webhook resolve o funil ANTES de criar o lead. Aqui o
+// resolver é mockado como sucesso (funil whatsapp) — o 4xx de funil
+// inexistente tem suite própria (lead-webhook-funil-destino.test.ts).
+const mockResolvePipeline = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({ id: "pipe-wa", slug: "whatsapp", name: "Oportunidades", type: "system", is_active: true }),
+);
 
 vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
   upsertPipeEntry: mockUpsertPipeEntry,
+  upsertPipeEntryDetailed: mockUpsertPipeEntryDetailed,
   getPipeEntry: mockGetPipeEntry,
   updatePipeEntryById: mockUpdatePipeEntryById,
   resolveActiveStageKey: mockResolveActiveStageKey,
+  resolvePipeline: mockResolvePipeline,
+  isPipelineResolutionError: (e: unknown) => (e as { name?: string } | null)?.name === "PipelineResolutionError",
 }));
 
 const mockGetOrCreateLead = vi.hoisted(() => vi.fn());
@@ -117,9 +132,11 @@ beforeEach(() => {
   mockTable("leads", []);
   mockTable("pipe_whatsapp", []);
   // Active stages do NOT include "novo" — first active is "novo_lead".
+  // SCRUM-624: o webhook lê as etapas por pipeline_id (FK da W1), não mais por
+  // pipeline_type — as linhas carregam o id do funil mockado pelo resolver.
   mockTable("pipeline_stages", [
-    { organization_id: "org-1", pipeline_type: "whatsapp", stage_key: "novo_lead", name: "🆕 Novo Lead", is_active: true, position: 0 },
-    { organization_id: "org-1", pipeline_type: "whatsapp", stage_key: "pago", name: "✅ Pago", is_active: true, position: 3 },
+    { organization_id: "org-1", pipeline_id: "pipe-wa", pipeline_type: "whatsapp", stage_key: "novo_lead", name: "🆕 Novo Lead", is_active: true, position: 0 },
+    { organization_id: "org-1", pipeline_id: "pipe-wa", pipeline_type: "whatsapp", stage_key: "pago", name: "✅ Pago", is_active: true, position: 3 },
   ]);
   mockTable("tags", []);
   mockTable("lead_tags", []);
@@ -152,8 +169,8 @@ describe("lead-webhook — ghost-stage guard (place_in_pipe)", () => {
       "novo",
     );
     // Entry written at the remapped active stage, NOT the literal "novo".
-    expect(mockUpsertPipeEntry).toHaveBeenCalledTimes(1);
-    expect(mockUpsertPipeEntry.mock.calls[0][1]).toMatchObject({ stageKey: "novo_lead" });
+    expect(mockUpsertPipeEntryDetailed).toHaveBeenCalledTimes(1);
+    expect(mockUpsertPipeEntryDetailed.mock.calls[0][1]).toMatchObject({ stageKey: "novo_lead" });
   });
 
   it("keeps a valid active stage as-is (no remap)", async () => {
@@ -167,6 +184,52 @@ describe("lead-webhook — ghost-stage guard (place_in_pipe)", () => {
     expect(res.status).toBe(200);
     // Inline match succeeds → guard fallback never invoked.
     expect(mockResolveActiveStageKey).not.toHaveBeenCalled();
-    expect(mockUpsertPipeEntry.mock.calls[0][1]).toMatchObject({ stageKey: "pago" });
+    expect(mockUpsertPipeEntryDetailed.mock.calls[0][1]).toMatchObject({ stageKey: "pago" });
+  });
+
+  /**
+   * 🚨 A guarda do relato honesto.
+   *
+   * `placed_in_pipe` era `true` FIXO. Desde que o funil de sistema pode não
+   * existir na org (20270902000010), isso virou mentira: o n8n recebia 200
+   * dizendo que o lead entrou no funil sem card nenhum ter sido criado, e o
+   * cliente lia como "o lead sumiu".
+   *
+   * O LEAD continua sendo criado — é só o card que não existe. Por isso a
+   * resposta segue 200 e `lead_id` continua vindo.
+   */
+  // SCRUM-624: funil inexistente NA RESOLUÇÃO agora é 4xx antes do lead nascer
+  // (suite lead-webhook-funil-destino). Este caso passou a cobrir a CORRIDA:
+  // o funil resolveu, mas foi deletado antes do upsert → o lead já existe,
+  // então a resposta segue 200 com o relato honesto.
+  it("funil some entre resolução e upsert (corrida): 200 com placed_in_pipe FALSO e o motivo", async () => {
+    mockUpsertPipeEntryDetailed.mockResolvedValueOnce({ status: "no_pipeline" });
+
+    const res = await invoke({
+      source: "dna_api_lead",
+      update_existing_if_match: true,
+      fields: { phone: "11999", email: "e@x" },
+      place_in_pipe: { pipe: "whatsapp", stage: "pago" },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.success).toBe(true);
+    expect(body.lead_id).toBeTruthy();
+    expect(body.placed_in_pipe).toBe(false);
+    expect(body.place_in_pipe_error).toMatch(/não existe nesta organização/);
+  });
+
+  it("posicionamento bem-sucedido continua reportando placed_in_pipe verdadeiro", async () => {
+    const res = await invoke({
+      source: "dna_api_lead",
+      update_existing_if_match: true,
+      fields: { phone: "11999", email: "e@x" },
+      place_in_pipe: { pipe: "whatsapp", stage: "pago" },
+    });
+
+    const body = await res.json();
+    expect(body.placed_in_pipe).toBe(true);
+    expect(body.place_in_pipe_error).toBeUndefined();
   });
 });

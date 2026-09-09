@@ -10,7 +10,7 @@ interface StageWorkflow {
 }
 
 /**
- * Busca workflows vinculados a uma etapa específica de um pipe padrão.
+ * Busca workflows vinculados a uma etapa específica de um funil semeado.
  * Filtra por trigger_type = 'stage_changed' e verifica trigger_config.
  */
 export function useStageWorkflows(
@@ -23,6 +23,27 @@ export function useStageWorkflows(
     queryKey: ["stage-workflows", organizationId, pipeType, stageKey],
     queryFn: async (): Promise<StageWorkflow[]> => {
       if (!organizationId || !pipeType || !stageKey) return [];
+
+      // SCRUM-627: o editor grava `pipeline_id` (uuid) em vez do slug legado
+      // `pipe_type`. O badge do kanban tem que enxergar os dois formatos —
+      // resolve o funil da org com este slug uma vez e casa por qualquer um.
+      const { data: pipe } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("slug", pipeType)
+        .maybeSingle();
+      const pipelineId = (pipe as { id: string } | null)?.id ?? null;
+      const { data: stage } = pipelineId
+        ? await supabase
+            .from("pipeline_stages")
+            .select("id")
+            .eq("organization_id", organizationId)
+            .eq("pipeline_id", pipelineId)
+            .eq("stage_key", stageKey)
+            .maybeSingle()
+        : { data: null };
+      const stageId = (stage as { id?: string } | null)?.id;
 
       const { data, error } = await supabase
         .from("workflows")
@@ -38,17 +59,19 @@ export function useStageWorkflows(
         const cfg = w.trigger_config as TriggerConfigStageChanged;
         if (!cfg) return false;
 
-        // Match pipe_type
-        if (cfg.pipe_type !== pipeType) return false;
+        // Match por slug legado OU pipeline_id novo (SCRUM-627)
+        const casaFunil = cfg.pipe_type === pipeType ||
+          (!!pipelineId && cfg.pipeline_id === pipelineId);
+        if (!casaFunil) return false;
 
         // If workflow has specific stages array, check if this stage is included
         if (cfg.stages && cfg.stages.length > 0) {
-          return cfg.stages.includes(stageKey);
+          return cfg.stages.includes(stageKey) || (!!stageId && cfg.stages.includes(stageId));
         }
 
         // If workflow has to_stage, match it
         if (cfg.to_stage) {
-          return cfg.to_stage === stageKey;
+          return cfg.to_stage === stageKey || (!!stageId && cfg.to_stage === stageId);
         }
 
         // No stage filter = matches all stages in this pipe
@@ -65,7 +88,7 @@ export function useStageWorkflows(
 }
 
 /**
- * Busca workflows vinculados a uma etapa de um pipeline custom.
+ * Busca workflows vinculados a uma etapa de qualquer funil por pipeline_id.
  */
 export function useCustomPipeStageWorkflows(
   pipelineId: string | undefined,
@@ -77,6 +100,15 @@ export function useCustomPipeStageWorkflows(
     queryKey: ["stage-workflows-custom", organizationId, pipelineId, stageId],
     queryFn: async (): Promise<StageWorkflow[]> => {
       if (!organizationId || !pipelineId || !stageId) return [];
+
+      const { data: stage } = await supabase
+        .from("pipeline_stages")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("pipeline_id", pipelineId)
+        .eq("stage_key", stageId)
+        .maybeSingle();
+      const canonicalStageId = (stage as { id?: string } | null)?.id;
 
       const { data, error } = await supabase
         .from("workflows")
@@ -94,11 +126,13 @@ export function useCustomPipeStageWorkflows(
         if (cfg.pipeline_id !== pipelineId) return false;
 
         if (cfg.stages && cfg.stages.length > 0) {
-          return cfg.stages.includes(stageId);
+          return cfg.stages.includes(stageId)
+            || (!!canonicalStageId && cfg.stages.includes(canonicalStageId));
         }
 
         if (cfg.to_stage) {
-          return cfg.to_stage === stageId;
+          return cfg.to_stage === stageId
+            || (!!canonicalStageId && cfg.to_stage === canonicalStageId);
         }
 
         return true;
@@ -125,6 +159,26 @@ export function useStageWorkflowCounts(pipeType: string | undefined) {
     queryFn: async (): Promise<Record<string, { total: number; active: number }>> => {
       if (!organizationId || !pipeType) return {};
 
+      // SCRUM-627: mesmo caso do useStageWorkflows — configs novas trazem
+      // `pipeline_id`, as legadas trazem o slug.
+      const { data: pipe } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("organization_id", organizationId)
+        .eq("slug", pipeType)
+        .maybeSingle();
+      const pipelineId = (pipe as { id: string } | null)?.id ?? null;
+      const { data: stageRows } = pipelineId
+        ? await supabase
+            .from("pipeline_stages")
+            .select("id, stage_key")
+            .eq("organization_id", organizationId)
+            .eq("pipeline_id", pipelineId)
+        : { data: [] };
+      const keyById = new Map(
+        ((stageRows ?? []) as Array<{ id: string; stage_key: string }>).map((stage) => [stage.id, stage.stage_key]),
+      );
+
       const { data, error } = await supabase
         .from("workflows")
         .select("id, name, is_active, trigger_config")
@@ -138,7 +192,10 @@ export function useStageWorkflowCounts(pipeType: string | undefined) {
 
       for (const row of data as unknown as Workflow[]) {
         const cfg = row.trigger_config as TriggerConfigStageChanged;
-        if (!cfg || cfg.pipe_type !== pipeType) continue;
+        if (!cfg) continue;
+        const casaFunil = cfg.pipe_type === pipeType ||
+          (!!pipelineId && cfg.pipeline_id === pipelineId);
+        if (!casaFunil) continue;
 
         const stages = cfg.stages && cfg.stages.length > 0
           ? cfg.stages
@@ -147,7 +204,8 @@ export function useStageWorkflowCounts(pipeType: string | undefined) {
           : null;
 
         if (stages) {
-          for (const s of stages) {
+          for (const ref of stages) {
+            const s = keyById.get(ref) ?? ref;
             if (!counts[s]) counts[s] = { total: 0, active: 0 };
             counts[s].total++;
             if (row.is_active) counts[s].active++;
@@ -169,7 +227,7 @@ export function useStageWorkflowCounts(pipeType: string | undefined) {
 }
 
 /**
- * Same as above but for custom pipelines (uses pipeline_id instead of pipe_type).
+ * Mesmo cálculo por pipeline_id. Converte UUID novo para stage_key do kanban.
  */
 export function useCustomPipeWorkflowCounts(pipelineId: string | undefined) {
   const { organizationId, isReady } = useOrganization();
@@ -178,6 +236,15 @@ export function useCustomPipeWorkflowCounts(pipelineId: string | undefined) {
     queryKey: ["stage-workflow-counts-custom", organizationId, pipelineId],
     queryFn: async (): Promise<Record<string, { total: number; active: number }>> => {
       if (!organizationId || !pipelineId) return {};
+
+      const { data: stageRows } = await supabase
+        .from("pipeline_stages")
+        .select("id, stage_key")
+        .eq("organization_id", organizationId)
+        .eq("pipeline_id", pipelineId);
+      const keyById = new Map(
+        ((stageRows ?? []) as Array<{ id: string; stage_key: string }>).map((stage) => [stage.id, stage.stage_key]),
+      );
 
       const { data, error } = await supabase
         .from("workflows")
@@ -201,7 +268,8 @@ export function useCustomPipeWorkflowCounts(pipelineId: string | undefined) {
           : null;
 
         if (stages) {
-          for (const s of stages) {
+          for (const ref of stages) {
+            const s = keyById.get(ref) ?? ref;
             if (!counts[s]) counts[s] = { total: 0, active: 0 };
             counts[s].total++;
             if (row.is_active) counts[s].active++;

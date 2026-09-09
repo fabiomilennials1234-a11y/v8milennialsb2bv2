@@ -15,7 +15,6 @@ export interface UtmGroupedRow {
   converted: number;
   conversion_rate: number;
   revenue: number;
-  avg_rating: number;
 }
 
 export interface UtmLeadRow {
@@ -26,7 +25,6 @@ export interface UtmLeadRow {
   created_at: string;
   pipe_status: string;
   responsible: string;
-  rating: number;
 }
 
 export interface MetaInsightRow {
@@ -55,7 +53,6 @@ export interface UtmCombinedRow {
   cpl: number;
   cac: number;
   roas: number;
-  avgRating: number;
 }
 
 export interface UtmKpis {
@@ -201,7 +198,6 @@ export function useAnalyticsUtms(
           cpl: rpc.total_leads > 0 ? spend / rpc.total_leads : 0,
           cac: rpc.converted > 0 ? spend / rpc.converted : 0,
           roas: spend > 0 ? revenue / spend : 0,
-          avgRating: rpc.avg_rating,
         });
       }
 
@@ -224,7 +220,6 @@ export function useAnalyticsUtms(
             cpl: 0,
             cac: 0,
             roas: 0,
-            avgRating: 0,
           });
         }
       }

@@ -61,6 +61,14 @@ const AVAILABLE_SCOPES = [
   { value: "pipeline:read", label: "Funis (leitura)", description: "Listar funis e etapas" },
   { value: "metadata:read", label: "Catálogos (leitura)", description: "Tags e campos customizados" },
   { value: "webhook:read", label: "Webhooks", description: "Consumir webhooks de saída" },
+  // ADR-0030: Negócio é recurso próprio, com escopo próprio. `lead:write` NÃO
+  // concede `deal:write` — permissão de editar a pessoa não é permissão de abrir
+  // venda no funil dela. Sem estas duas entradas a tela não conseguia emitir
+  // chave capaz de usar as rotas de Negócio (#1767–#1772), que estão em produção.
+  { value: "deal:read", label: "Negócios (leitura)", description: "Listar e ler negócios" },
+  { value: "deal:write", label: "Negócios (escrita)", description: "Abrir, editar e mover negócios" },
+  { value: "team:read", label: "Equipe (leitura)", description: "Listar membros — resolve os IDs de responsável" },
+  { value: "metadata:write", label: "Catálogos (escrita)", description: "Criar campos personalizados pela API" },
 ];
 
 // ── Component ─────────────────────────────────────────────────
@@ -302,7 +310,25 @@ export function ApiKeysPanel() {
               </div>
 
               <div className="grid gap-2">
-                <Label>Escopos</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Escopos</Label>
+                  {/* Uma integração de CRM costuma precisar de quase tudo. Marcar
+                      dez caixas uma a uma, por cliente, é onde se esquece a que
+                      importa — e o esquecimento só aparece como 403 lá na frente. */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setScopes(
+                        scopes.length === AVAILABLE_SCOPES.length
+                          ? []
+                          : AVAILABLE_SCOPES.map((s) => s.value),
+                      )
+                    }
+                    className="text-xs font-medium text-primary hover:underline"
+                  >
+                    {scopes.length === AVAILABLE_SCOPES.length ? "Limpar todos" : "Selecionar todos"}
+                  </button>
+                </div>
                 <div className="space-y-2">
                   {AVAILABLE_SCOPES.map((scope) => (
                     <label

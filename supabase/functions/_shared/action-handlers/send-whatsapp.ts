@@ -19,8 +19,12 @@ import {
 import { enviarTemplateAprovado } from "./enviar-template.ts";
 import {
   decidirEnvioDoNoDeTexto,
+  escapeConfigurado,
   escapeDoNo,
   janelaPeloErroDoTransporte,
+  modoDoNo,
+  MOTIVO_LEGIVEL_SEM_TEMPLATE,
+  templateDoNo,
 } from "../decisao-de-envio.ts";
 
 export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
@@ -42,6 +46,50 @@ export async function sendWhatsApp(input: ActionInput): Promise<ActionResult> {
   // retrying an opaque Uazapi 500 three times over ~8 min.
   const recipientBlock = await recipientGate(supabase, wa.instance, phone, organizationId);
   if (recipientBlock) return recipientBlock;
+
+  // ─── MODO TEMPLATE — o nó manda a forma aprovada, e só ela ────────────────
+  //
+  // Sai ANTES da guarda de texto vazio de propósito. No modo template o painel
+  // esconde o campo de mensagem, então `messageTemplate` está vazio por
+  // construção: deixar a guarda rodar primeiro é exatamente o defeito que esta
+  // issue corrige.
+  //
+  // ⚠️ SEM A DECISÃO DE JANELA, e sem o dedup de conteúdo. A janela não se
+  // consulta porque template aprovado é o que a Meta aceita com ela fechada. O
+  // dedup por hash não se aplica porque o conteúdo só existe depois que a Meta
+  // renderiza o corpo — é a mesma escolha, pelo mesmo motivo, que o nó dedicado
+  // `send_whatsapp_template` já fazia; divergir aqui criaria dois
+  // comportamentos para o mesmo envio.
+  if (modoDoNo(params) === "template") {
+    const escolhido = escapeConfigurado(templateDoNo(params));
+    if (!escolhido) {
+      return { success: false, error: MOTIVO_LEGIVEL_SEM_TEMPLATE, retryable: false };
+    }
+
+    const envio = await enviarTemplateAprovado({
+      supabase,
+      leadId,
+      executionContext,
+      instance: wa.instance,
+      phone,
+      template: escolhido,
+      trackSource: "workflow-action-template",
+      trackId: params._executionId as string | undefined,
+    });
+
+    // Byte a byte o que o nó dedicado devolve: `retryable` ausente deixa o
+    // executor no default dele (retentar). Divergir aqui daria dois destinos
+    // diferentes para a mesma recusa da Meta.
+    if (!envio.ok) {
+      return { success: false, error: envio.erro, retryable: envio.retryable };
+    }
+
+    return {
+      success: true,
+      message: `Template "${envio.nome}" enviado`,
+      data: { motivo: "modo_template", template: envio.nome },
+    };
+  }
 
   const template = (params.messageTemplate as string) || "";
   const message = await resolveVariables(supabase, leadId, template, executionContext);

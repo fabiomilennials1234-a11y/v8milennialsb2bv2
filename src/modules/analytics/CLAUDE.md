@@ -111,7 +111,7 @@ Superfície nova. Comando vira **operação** (o que fazer agora), Estúdio vira
 | CRUD de métrica personalizada | `hooks/useMetricCustomDefinitions.ts` → `metric_custom_definitions` |
 | Estado do painel | `hooks/useMetricsStudio.ts` (cópia de trabalho; recebe `byId` do catálogo) |
 | Persistência do painel | `hooks/useMetricsStudioPanel.ts` → tabela `metrics_studio_panels`, 1 por (org, membro) |
-| Trava de rollout | `hooks/useMetricsStudioEnabled.ts` → `organizations.metrics_studio_enabled` |
+| Disponibilidade | Nativa para todas as orgs, incluindo novas e outbound; sem consulta a flag. `metrics.view` mantém controle de acesso por usuário (default true). |
 | Lista lateral | `components/metrics-studio/MetricsStudioSidebar.tsx` |
 | Compositor de métrica | `components/metrics-studio/MetricComposer.tsx` |
 | Canvas / janela | `components/metrics-studio/{MetricsCanvas,MetricWindow}.tsx` |
@@ -129,7 +129,7 @@ passou a distinguir, e as duas medidas leem a MESMA tabela:
 
 ⚠️ **`leads_na_etapa` MUDOU de conta.** Painel salvo apontando para ela cai 12%.
 É a correção, não o efeito colateral — e é grátis hoje porque o Estúdio inteiro
-está atrás de `metrics_studio_enabled`, que não está em prod.
+estava atrás de `metrics_studio_enabled` naquela etapa. O rollout foi encerrado; a tela agora é nativa.
 
 O StudioMetric `negocios_por_etapa` **manteve o id** (painel salvo continua
 abrindo) e passou a apontar para `negocios_na_etapa`. Ele já se chamava
@@ -165,7 +165,7 @@ compositor avisa em português quando o formato é `percent_1`.
 2. ✅ **A lista mostra só o que tem número real** (G1): 7 medidas + 3 razões. O inventário de 29 continua em `metrics-studio-catalog.ts` como mapa do roadmap, não como fonte da UI.
 3. ✅ **O corte é escolha do usuário** (G2) — o seletor da janela oferece só os cortes que aquela medida aceita, conferidos contra prod.
 4. ✅ **Cortes por pessoa reusam `performance.view`** (G6). Não foi preciso criar `metrics.view`.
-5. ✅ **Trava de liberação por org** (G5): `organizations.metrics_studio_enabled`, migration `20270811100000`. Falha para FECHADO — enquanto não estiver em prod, o Estúdio fica invisível para todos. Fecha três portas: rota, item da top bar e command palette.
+5. ✅ **Rollout encerrado (2026-09-08)**: Estúdio nativo; removidos hook e bloqueios por org da rota, lateral e command palette. Coluna legada não governa mais disponibilidade.
 7. ✅ **Modos Visualização e Edição** (SCRUM-308). Nasce em Visualização; canvas travado, sem alças nem controles, lista lateral recolhida.
 8. ✅ **Painel persistido no servidor** (SCRUM-309): `metrics_studio_panels`, um por (org, membro), migration `20270811110000`. NÃO reusa `dashboard_widgets` — ver o cabeçalho da migration para os quatro motivos medidos.
 6. 🟠 **15 das 29 do inventário seguem fora do motor** — é o SCRUM-311 que as porta.
@@ -260,3 +260,11 @@ Backend (próximas slices):
 - ADR receita mês canônica (no vault — buscar)
 - TV Dashboard feature: `Obsidian/.../06 — Features/Dashboard/TV Dashboard.md`
 - Slice de referência: slice 11 engagement (commit `10b7cf52`)
+
+### Disponibilidade nativa — 2026-09-08
+
+Removida trava por organização da página `/metricas`, lateral e command palette.
+Membros outbound também recebem entrada na lateral. Não depende de plano, seed
+ou configuração de org nova. Coluna legada permanece sem consumidor no front;
+nenhuma atualização em massa de organizações é necessária. `metrics.view`
+(default true), edição por admin e RLS continuam aplicados.

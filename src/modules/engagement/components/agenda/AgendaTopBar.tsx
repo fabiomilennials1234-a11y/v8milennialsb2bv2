@@ -29,12 +29,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu";
-import type { EventTypeKey } from "./agenda-helpers";
+import type { EventTypeKey, ViewType } from "./agenda-helpers";
 import { EVENT_TYPE_COLORS, EVENT_TYPE_LABELS } from "./agenda-helpers";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type ViewType = "day" | "week" | "month";
+// `ViewType` mudou de casa para `agenda-helpers` (a página consome o tipo sem
+// consumir esta barra). Re-exportado para não quebrar quem importava daqui.
+export type { ViewType };
 
 interface TypeToggle {
   key: EventTypeKey;

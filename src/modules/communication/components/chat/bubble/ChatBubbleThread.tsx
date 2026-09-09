@@ -17,6 +17,7 @@ import { useCanReplyOnInstanceByName } from "@/modules/communication/hooks/useWh
 import { ChatBubbleComposer } from "./ChatBubbleComposer";
 import { ChatBubblePermissionBanner } from "./ChatBubblePermissionBanner";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { zerarNaoLidas } from "@/modules/communication/hooks/chat/shared/cacheDeContatos";
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { resolveEffectiveLead } from "@/modules/communication/lib/resolveEffectiveLead";
 import { ChatComposerShell } from "@/modules/communication/components/chat/composer/ChatComposerShell";
@@ -73,19 +74,18 @@ export function ChatBubbleThread({
   useEffect(() => {
     if (phoneNumber && instanceId) {
       onMarkAsRead(phoneNumber, instanceId);
-      // Zera unread_count no cache de contacts da instância (reflete imediato)
+      // Zera unread_count no cache de contacts da instância (reflete imediato).
+      //
+      // ⚠️ A raiz casa por PREFIXO e guarda DUAS formas: o array da lista de uma
+      // caixa e o envelope `{ contatos, cheia }` da lista por conjunto — que é a
+      // que esta bolha renderiza desde a SCRUM-668. Chamar `.map` no valor cru
+      // derrubava a tela inteira ao abrir a thread (`.map is not a function` no
+      // ErrorBoundary, 04/09). Ver `shared/cacheDeContatos.ts`.
       const norm = normalizePhone(phoneNumber);
-      const queryKey = ["whatsapp_contacts"]; // partial match invalida todas
-      queryClient.setQueriesData(
-        { queryKey },
-        (
-          prev: Array<{ phone_number: string; unread_count: number }> | undefined,
-        ) => {
-          if (!prev) return prev;
-          return prev.map((c) =>
-            normalizePhone(c.phone_number) === norm ? { ...c, unread_count: 0 } : c,
-          );
-        },
+      zerarNaoLidas(
+        queryClient,
+        ["whatsapp_contacts"], // partial match alcança todas as variantes
+        (c) => normalizePhone(c.phone_number) === norm,
       );
     }
   }, [phoneNumber, instanceId, onMarkAsRead, queryClient]);

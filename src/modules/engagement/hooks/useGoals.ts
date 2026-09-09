@@ -174,34 +174,38 @@ export function useIndividualGoals(month?: number, year?: number) {
       // Progresso vinculado ao mês: dia 1 até último dia do mês (não pipeline inteiro)
       const [salesRes1, salesRes2, confRes1, confRes2] = await Promise.all([
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("sale_responsible_id, responsible_id, closer_id, sale_value")
+          .eq("funil_sistema", "propostas")
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("stage_key", "vendido")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
           .lte("metrics_period_at", endStr),
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("sale_responsible_id, responsible_id, closer_id, sale_value")
+          .eq("funil_sistema", "propostas")
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("stage_key", "vendido")
           .is("metrics_period_at", null)
           .gte("closed_at", startStr)
           .lte("closed_at", endStr),
         supabase
-          .from("pipe_confirmacao")
+          .from("negocio_projetado")
           .select("pre_sale_responsible_id, responsible_id, sdr_id, closer_id")
+          .eq("funil_sistema", "confirmacao")
           .eq("organization_id", organizationId)
-          .eq("status", "compareceu")
+          .eq("stage_key", "compareceu")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
           .lte("metrics_period_at", endStr),
         supabase
-          .from("pipe_confirmacao")
+          .from("negocio_projetado")
           .select("pre_sale_responsible_id, responsible_id, sdr_id, closer_id")
+          .eq("funil_sistema", "confirmacao")
           .eq("organization_id", organizationId)
-          .eq("status", "compareceu")
+          .eq("stage_key", "compareceu")
           .is("metrics_period_at", null)
           .gte("created_at", startStr)
           .lte("created_at", endStr),

@@ -27,7 +27,7 @@ import { ClientStore, ExistingClient } from "./upsert-client.ts";
 // partir do TEXTO do select, e `a + b` vira `string` genérico — o resultado
 // degrada para `GenericStringError` e nenhum campo fica acessível.
 const SELECT =
-  "id, cnpj, phone, email, company, name, external_source, external_id, external_ref, erp_company, erp_owner_name, erp_owner_external_id, erp_status, erp_segment, erp_registered_at, erp_city, erp_uf, erp_metadata";
+  "id, cnpj, phone, email, company, name, external_source, external_id, external_ref, erp_company, erp_owner_name, erp_owner_external_id, erp_status, erp_segment, erp_registered_at, erp_last_order_at, erp_city, erp_uf, erp_metadata, last_order_at";
 /** Teto por página da pré-carga — o PostgREST limita a resposta. */
 const PRELOAD_PAGE = 1000;
 

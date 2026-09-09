@@ -56,13 +56,15 @@ import {
 import {
   useMasterOrganizations,
   useMasterCreateOrganization,
-  useMasterUpdateOrganization,
+  useMasterSetOrgSuspension,
   useMasterDeleteOrganization,
+  type MasterOrganization,
   FUNNEL_TEMPLATES,
   type OrgType,
   type FunnelTemplateKey,
 } from "../hooks/useMasterOrganizations";
 import { BillingOverrideModal } from "../components/BillingOverrideModal";
+import { OrgSuspensionDialog } from "../components/OrgSuspensionDialog";
 import { useMasterAuth } from "../hooks/useMasterAuth";
 import { toast } from "sonner";
 
@@ -71,6 +73,8 @@ export default function MasterOrganizations() {
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [billingOverrideOpen, setBillingOverrideOpen] = useState(false);
+  const [suspensionOrg, setSuspensionOrg] = useState<MasterOrganization | null>(null);
+  const [suspensionMode, setSuspensionMode] = useState<"suspend" | "reactivate">("suspend");
   const [selectedOrg, setSelectedOrg] = useState<any>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -82,8 +86,8 @@ export default function MasterOrganizations() {
 
   const { data: organizations, isLoading } = useMasterOrganizations();
   const createOrg = useMasterCreateOrganization();
-  const updateOrg = useMasterUpdateOrganization();
   const deleteOrg = useMasterDeleteOrganization();
+  const setSuspension = useMasterSetOrgSuspension();
 
   // Outbounder só vê organizações outbound
   const baseOrgs = isOutbounder
@@ -112,23 +116,43 @@ export default function MasterOrganizations() {
     setCreateOpen(false);
   };
 
+  // Status e override são dois fatos, não um. Colapsar os dois num badge só
+  // escondia o caso que mais importa: org "suspensa" com override ligado, que
+  // continua com acesso liberado. Agora aparecem lado a lado.
   const getStatusBadge = (status: string, hasOverride: boolean) => {
-    if (hasOverride) {
-      return <Badge className="bg-purple-500">Override</Badge>;
-    }
-    switch (status) {
-      case "active":
-        return <Badge className="bg-success text-success-foreground">Ativo</Badge>;
-      case "trial":
-        return <Badge className="bg-blue-500">Trial</Badge>;
-      case "suspended":
-        return <Badge className="bg-warning text-warning-foreground">Suspenso</Badge>;
-      case "cancelled":
-      case "expired":
-        return <Badge variant="destructive">Cancelado</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
+    const bloqueada = ["suspended", "cancelled", "expired"].includes(status) && !hasOverride;
+
+    const statusBadge = (() => {
+      switch (status) {
+        case "active":
+          return <Badge className="bg-success text-success-foreground">Ativo</Badge>;
+        case "trial":
+          return <Badge className="bg-blue-500">Trial</Badge>;
+        case "suspended":
+          return <Badge className="bg-warning text-warning-foreground">Suspenso</Badge>;
+        case "cancelled":
+        case "expired":
+          return <Badge variant="destructive">Cancelado</Badge>;
+        default:
+          return <Badge variant="secondary">{status}</Badge>;
+      }
+    })();
+
+    return (
+      <div className="flex items-center gap-1.5">
+        {statusBadge}
+        {hasOverride && (
+          <Badge className="bg-purple-500" title="Plano liberado pelo Master — ignora o status da assinatura">
+            Override
+          </Badge>
+        )}
+        {bloqueada && (
+          <span className="text-[10px] uppercase tracking-wide text-destructive">
+            sem acesso
+          </span>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -266,10 +290,10 @@ export default function MasterOrganizations() {
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 onClick={() => {
-                                  updateOrg.mutate({
-                                    id: org.id,
-                                    subscription_status: org.subscription_status === "active" ? "suspended" : "active",
-                                  });
+                                  setSuspensionMode(
+                                    org.subscription_status === "active" ? "suspend" : "reactivate"
+                                  );
+                                  setSuspensionOrg(org);
                                 }}
                               >
                                 {org.subscription_status === "active" ? (
@@ -407,6 +431,28 @@ export default function MasterOrganizations() {
         open={billingOverrideOpen}
         onOpenChange={setBillingOverrideOpen}
         organization={selectedOrg}
+      />
+
+      <OrgSuspensionDialog
+        open={!!suspensionOrg}
+        onOpenChange={(open) => {
+          if (!open) setSuspensionOrg(null);
+        }}
+        org={suspensionOrg}
+        suspend={suspensionMode === "suspend"}
+        pending={setSuspension.isPending}
+        onConfirm={(reason) => {
+          if (!suspensionOrg) return;
+          setSuspension.mutate(
+            {
+              orgId: suspensionOrg.id,
+              suspend: suspensionMode === "suspend",
+              reason: reason || undefined,
+            },
+            // erro já vira toast no hook; o diálogo fica aberto para nova tentativa
+            { onSuccess: () => setSuspensionOrg(null) }
+          );
+        }}
       />
     </div>
   );

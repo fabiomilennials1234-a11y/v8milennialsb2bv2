@@ -1,6 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
+import {
+  pipelineEntityType,
+  type SavedViewEntityType,
+} from "@/types/saved-views";
 
 /**
  * O menu "Views" do funil — alternador de visão em cima, visualizações salvas
@@ -28,22 +32,33 @@ export interface FunnelViewOption<T extends string> {
   hint?: string;
 }
 
-interface FunnelViewsMenuProps<
+/**
+ * De onde vêm as views salvas deste menu (SCRUM-634). Exatamente um dos dois:
+ *
+ * - `pipelineId` — caminho canônico: qualquer funil, sistema ou custom. O menu
+ *   constrói o entity_type `pipeline:{uuid}` sozinho.
+ * - `entityType` — escape legado das 3 páginas pré-unificação, que ainda
+ *   passam o slug ("pipe_whatsapp"). Some junto com elas.
+ */
+type FunnelEntitySource =
+  | { pipelineId: string; entityType?: never }
+  | { pipelineId?: never; entityType: SavedViewEntityType };
+
+type FunnelViewsMenuProps<
   TView extends string,
   TFilters extends Record<string, unknown>,
-> {
+> = FunnelEntitySource & {
   viewMode: TView;
   onViewModeChange: (value: TView) => void;
   viewOptions: FunnelViewOption<TView>[];
 
   /** Repassados a `SavedViewsDropdown`. */
-  entityType: string;
   currentFilters: TFilters;
   defaultFilters: TFilters;
   onApplyFilters: (filters: TFilters) => void;
   activeViewId: string | null;
   onActiveViewChange: (viewId: string | null) => void;
-}
+};
 
 export function FunnelViewsMenu<
   TView extends string,
@@ -52,14 +67,22 @@ export function FunnelViewsMenu<
   viewMode,
   onViewModeChange,
   viewOptions,
+  pipelineId,
+  entityType,
   ...savedViewsProps
 }: FunnelViewsMenuProps<TView, TFilters>) {
   const activeOption =
     viewOptions.find((o) => o.value === viewMode) ?? viewOptions[0];
 
+  // O union garante exatamente um dos dois em compile-time; o `??` cobre o
+  // runtime sem `!`.
+  const resolvedEntityType: SavedViewEntityType =
+    pipelineId != null ? pipelineEntityType(pipelineId) : entityType;
+
   return (
     <SavedViewsDropdown
       {...savedViewsProps}
+      entityType={resolvedEntityType}
       triggerIcon={activeOption?.icon}
       header={({ close }) => (
         <div className="p-1" role="group" aria-label="Visão do funil">

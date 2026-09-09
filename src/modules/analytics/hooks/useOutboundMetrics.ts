@@ -73,36 +73,42 @@ export function useOutboundMetrics() {
       const taxaResposta = leadsRecebidos > 0 ? Math.round((respondidos / leadsRecebidos) * 100) : 0;
       const taxaRespostaPrev = leadsRecebidosPrev > 0 ? Math.round((respondidosPrev / leadsRecebidosPrev) * 100) : 0;
 
-      // 3. Reuniões agendadas (pipe_confirmacao entries this month)
+      // 3. Reuniões agendadas (entradas do funil de confirmação neste mês)
       const [reunioesNow, reunioesPrev] = await Promise.all([
-        supabase.from("pipe_confirmacao").select("id", { count: "exact", head: true })
+        supabase.from("negocio_projetado").select("id", { count: "exact", head: true })
+          .eq("funil_sistema", "confirmacao")
           .eq("organization_id", organizationId)
           .gte("created_at", curr.start).lte("created_at", curr.end),
-        supabase.from("pipe_confirmacao").select("id", { count: "exact", head: true })
+        supabase.from("negocio_projetado").select("id", { count: "exact", head: true })
+          .eq("funil_sistema", "confirmacao")
           .eq("organization_id", organizationId)
           .gte("created_at", prev.start).lte("created_at", prev.end),
       ]);
 
       // 4. Vendas fechadas — COALESCE(metrics_period_at, closed_at)
       const [vNowM, vNowC, vPrevM, vPrevC] = await Promise.all([
-        supabase.from("pipe_propostas").select("id", { count: "exact", head: true })
+        supabase.from("negocio_projetado").select("id", { count: "exact", head: true })
+          .eq("funil_sistema", "propostas")
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("stage_key", "vendido")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", curr.start).lte("metrics_period_at", curr.end),
-        supabase.from("pipe_propostas").select("id", { count: "exact", head: true })
+        supabase.from("negocio_projetado").select("id", { count: "exact", head: true })
+          .eq("funil_sistema", "propostas")
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("stage_key", "vendido")
           .is("metrics_period_at", null)
           .gte("closed_at", curr.start).lte("closed_at", curr.end),
-        supabase.from("pipe_propostas").select("id", { count: "exact", head: true })
+        supabase.from("negocio_projetado").select("id", { count: "exact", head: true })
+          .eq("funil_sistema", "propostas")
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("stage_key", "vendido")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", prev.start).lte("metrics_period_at", prev.end),
-        supabase.from("pipe_propostas").select("id", { count: "exact", head: true })
+        supabase.from("negocio_projetado").select("id", { count: "exact", head: true })
+          .eq("funil_sistema", "propostas")
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("stage_key", "vendido")
           .is("metrics_period_at", null)
           .gte("closed_at", prev.start).lte("closed_at", prev.end),
       ]);

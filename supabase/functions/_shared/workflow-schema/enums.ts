@@ -32,8 +32,12 @@ export const TRIGGER_TYPES = [
   "cron",
   "lead_replied",
   "lead_no_reply",
+  // Mortos, mantidos para paridade com a união do front — ver a nota lá.
   "meeting_confirmed",
   "meeting_not_confirmed",
+  // Comparecimento (20270907000040), disparados por `meeting_events`.
+  "meeting_held",
+  "meeting_no_show",
   "proposal_accepted",
   "proposal_lost",
   "followup_overdue",
@@ -47,6 +51,9 @@ export const TRIGGER_TYPES = [
   "campaign_completed",
   "field_changed",
   "scheduled_date",
+  "deal_created",
+  "deal_won",
+  "deal_lost",
 ] as const;
 
 export const ACTION_TYPES = [
@@ -81,6 +88,11 @@ export const ACTION_TYPES = [
   "resume_campaign_sequence",
   "create_calendar_event",
   "schedule_meeting",
+  "create_deal",
+  "win_deal",
+  "lose_deal",
+  "set_deal_value",
+  "set_deal_owner",
   "create_tinyerp_order",
   "create_tinyerp_upsell_order",
   "assign_responsible",

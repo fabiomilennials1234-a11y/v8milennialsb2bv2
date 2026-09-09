@@ -18,6 +18,7 @@ import { logRuntime } from "../_shared/logger.ts";
 import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { getCampaignResponsibleAssignment } from "../_shared/campaign-distribution.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
+import { upsertPipeEntryDetailed } from "../_shared/pipeline-adapter.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -668,18 +669,22 @@ async function processLeadgen(
 
     // Inserir no pipe
     if (config.assign_to_pipe) {
-      const pipeTable = `pipe_${config.assign_to_pipe}`;
+      const pipeRef = config.assign_to_pipe;
       const stage = config.assign_to_stage || "novo";
 
       try {
-        await supabase.from(pipeTable).insert({
-          organization_id: page.organization_id,
-          lead_id: newLead.id,
-          status: stage,
+        const result = await upsertPipeEntryDetailed(supabase, {
+          orgId: page.organization_id,
+          leadId: newLead.id,
+          slug: pipeRef,
+          stageKey: stage,
         });
-        console.log(`[meta-webhook] Lead ${newLead.id} added to ${pipeTable} stage ${stage}`);
+        if (result.status !== "created" && result.status !== "updated") {
+          throw new Error(`pipeline write failed: ${result.status}`);
+        }
+        console.log(`[meta-webhook] Lead ${newLead.id} added to ${pipeRef} stage ${stage}`);
       } catch (pipeErr) {
-        console.error(`[meta-webhook] Error adding to ${pipeTable}:`, pipeErr);
+        console.error(`[meta-webhook] Error adding to ${pipeRef}:`, pipeErr);
       }
     }
   }

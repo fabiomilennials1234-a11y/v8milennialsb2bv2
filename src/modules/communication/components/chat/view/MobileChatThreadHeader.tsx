@@ -1,6 +1,11 @@
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { VoiceCallButton } from "@/modules/communication/components/voice/VoiceCallButton";
+import {
+  legendaDoTelefone,
+  telefoneParaExibicao,
+} from "@/modules/communication/lib/identificadorOculto";
 
 export interface MobileChatThreadHeaderProps {
   contactName: string;
@@ -8,17 +13,21 @@ export interface MobileChatThreadHeaderProps {
   hasLead: boolean;
   leadId?: string;
   onBack: () => void;
-  onTapContact: () => void;
+  onTapContact?: () => void;
 }
 
 export function MobileChatThreadHeader({
   contactName,
   phoneNumber,
   hasLead,
+  leadId,
   onBack,
   onTapContact,
 }: MobileChatThreadHeaderProps) {
-  const displayName = contactName || phoneNumber;
+  // `contactName` já vem tratado (`nomeDaConversa`); a queda para o telefone é
+  // que precisava do mesmo cuidado — sem ela, o cabeçalho mobile se chamava
+  // `210028246085780`. Ver `lib/identificadorOculto.ts`.
+  const displayName = contactName || telefoneParaExibicao(phoneNumber) || "";
   const initial = (displayName.charAt(0) || "?").toUpperCase();
 
   return (
@@ -34,12 +43,12 @@ export function MobileChatThreadHeader({
       </Button>
 
       <div
-        role="button"
-        tabIndex={0}
+        role={onTapContact ? "button" : undefined}
+        tabIndex={onTapContact ? 0 : undefined}
         className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer rounded-lg -my-1 py-1 hover:bg-muted/50 transition-colors"
         onClick={onTapContact}
         onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") onTapContact();
+          if (e.key === "Enter" || e.key === " ") onTapContact?.();
         }}
       >
         <Avatar className="w-8 h-8 shrink-0">
@@ -51,11 +60,16 @@ export function MobileChatThreadHeader({
           <p className="text-sm font-semibold truncate">{displayName}</p>
           {!hasLead && (
             <p className="text-[11px] text-muted-foreground truncate">
-              {phoneNumber}
+              {legendaDoTelefone(phoneNumber)}
             </p>
           )}
         </div>
       </div>
+
+      {/* Ligar por WhatsApp (TorqueCalls) — a mesma regra do cabeçalho de
+          mesa: some sem número de voz ao alcance ou sem lead. Vive fora do
+          bloco clicável do contato, e ainda assim segura o clique. */}
+      <VoiceCallButton variant="icon" leadId={leadId} leadName={contactName} />
     </div>
   );
 }

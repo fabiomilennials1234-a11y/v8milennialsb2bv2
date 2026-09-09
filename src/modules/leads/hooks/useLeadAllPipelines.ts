@@ -2,12 +2,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember, isVirtualTeamMember } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
+import { nomeDoFunil, type SystemPipeDisplay } from "@/contracts/pipe";
+import { updateSystemPipelineEntry } from "@/integrations/supabase/pipeline-entry-rpc";
 
 // ─── Types ───────────────────────────────────────────────────
 
 export interface StandardPipelineStatus {
   type: "standard";
-  pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+  pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
   label: string;
   color: string;
   /** id do pipeline (tabela pipelines) — alvo do add. Null p/ upsell (legacy). */
@@ -32,18 +34,18 @@ export interface CustomPipelineStatus {
 
 export type PipelineStatus = StandardPipelineStatus | CustomPipelineStatus;
 
+/**
+ * SCRUM-637: `pipeType` de funil de sistema É o slug (`pipelines.slug`) — o
+ * sentinel legado "qualificacao" morreu junto com os mapas de tradução
+ * (SYSTEM_SLUG_TO_PIPE / SYSTEM_RAIL_REF / PIPE_TYPE_TO_DISPLAY, todos viraram
+ * identidade). Resta só o resíduo Carteira (D9): as etapas dela vivem em
+ * `pipeline_stages.pipeline_type = 'upsell_base'`, sem FK de funil.
+ */
 const PIPE_TYPE_MAP: Record<string, string> = {
-  qualificacao: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
   upsell: "upsell_base",
 };
 
-const SYSTEM_SLUG_TO_PIPE: Record<string, "qualificacao" | "confirmacao" | "propostas"> = {
-  whatsapp: "qualificacao",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-};
+const SYSTEM_SLUGS = ["whatsapp", "confirmacao", "propostas"] as const;
 
 // ─── Main hook: unified pipeline_entries query ────────
 
@@ -64,6 +66,7 @@ export function useLeadAllPipelines(leadId: string | null) {
         { data: allPipelines },
         { data: customStagesAll },
         { data: pipeUpsell },
+        { data: displayConfigs },
       ] = await Promise.all([
         // Ordem idêntica à de `readActivePipelineEntry`
         // (`pipelines/hooks/model/usePipelineEntries.ts`) e à de `readPipeEntries`
@@ -89,7 +92,7 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("organization_id", orgId)
           .eq("is_active", true),
         supabase
-          .from("custom_pipeline_stages")
+          .from("pipeline_stages")
           .select("id, pipeline_id, name, color, position, stage_key, stage_role")
           .eq("organization_id", orgId)
           .eq("is_active", true)
@@ -101,6 +104,12 @@ export function useLeadAllPipelines(leadId: string | null) {
           .eq("lead_id", leadId)
           .eq("organization_id", orgId)
           .maybeSingle(),
+        // O nome que a ORG usa (SCRUM-641): pipelines.name de funil de sistema
+        // é o seed congelado; a canônica é pipeline_display_config.
+        supabase
+          .from("pipeline_display_config")
+          .select("pipe_type, display_name, is_visible, position")
+          .eq("organization_id", orgId),
       ]);
 
       const entries = allEntries ?? [];
@@ -109,6 +118,10 @@ export function useLeadAllPipelines(leadId: string | null) {
       // Build stage lookup
       const stagesByDbType = new Map<string, { id: string; label: string; color: string; role: string | null }[]>();
       (dynamicStages || []).forEach((s) => {
+        // `pipeline_type` é anulável desde que a etapa ganhou FK ao funil
+        // (SCRUM-616): etapa de funil custom não tem tipo de sistema e é
+        // indexada por `pipeline_id` no mapa de baixo, não aqui.
+        if (!s.pipeline_type) return;
         const arr = stagesByDbType.get(s.pipeline_type) || [];
         arr.push({ id: s.stage_key, label: s.name, color: s.color || "#64748b", role: (s as { stage_role?: string | null }).stage_role ?? null });
         stagesByDbType.set(s.pipeline_type, arr);
@@ -162,21 +175,34 @@ export function useLeadAllPipelines(leadId: string | null) {
 
       // System pipelines — uma linha POR NEGÓCIO; sem negócio, uma linha vazia
       // (é ela que os consumidores leem como "dá pra abrir negócio aqui").
-      for (const [slug, pipeType] of Object.entries(SYSTEM_SLUG_TO_PIPE)) {
+      for (const slug of SYSTEM_SLUGS) {
         const pipeline = pipelineBySlug.get(slug);
-        const stages = getStages(pipeType);
-        const label = slug === "whatsapp" ? "Qualificação" : slug === "confirmacao" ? "Confirmação" : "Propostas";
-        const color = slug === "whatsapp" ? "#6366f1" : slug === "confirmacao" ? "#22c55e" : "#f59e0b";
+        // Sem linha em `pipelines`, a org NÃO tem o funil — nenhuma rail.
+        // Antes o slug entrava com rótulo de catálogo e virava uma oferta de
+        // funil inexistente; negócio antigo de funil arquivado já era
+        // invisível aqui (dealsOf é chaveado por pipeline.id) — nada some a
+        // mais com o `continue` (SCRUM-641).
+        if (!pipeline) continue;
+        const stages = getStages(slug);
+        // Nome como a ORG o vê: display_config manda; `pipelines.name` só é
+        // rótulo final para funil custom (nomeDoFunil, @/contracts/pipe).
+        const label = nomeDoFunil(
+          (displayConfigs ?? []) as SystemPipeDisplay[],
+          pipeline,
+        );
+        const color =
+          pipeline.color ??
+          (slug === "whatsapp" ? "#6366f1" : slug === "confirmacao" ? "#22c55e" : "#f59e0b");
         const base = {
           type: "standard" as const,
-          pipeType,
+          pipeType: slug,
           label,
           color,
-          pipelineDbId: pipeline?.id ?? null,
+          pipelineDbId: pipeline.id,
           stages,
         };
 
-        const deals = dealsOf(pipeline?.id);
+        const deals = dealsOf(pipeline.id);
         if (deals.length === 0) {
           results.push({ ...base, pipeId: null, currentStage: null, currentStageLabel: null });
           continue;
@@ -207,6 +233,10 @@ export function useLeadAllPipelines(leadId: string | null) {
       // Custom pipelines
       const stagesByPipeline = new Map<string, typeof customStagesAll>();
       (customStagesAll || []).forEach((s) => {
+        // `pipeline_stages.pipeline_id` é anulável; o espelho `custom_pipeline_stages`
+        // devolvia não-nulo porque nascia de um JOIN. Etapa sem funil não pertence a
+        // funil custom nenhum, então não entra no mapa.
+        if (!s.pipeline_id) return;
         const arr = stagesByPipeline.get(s.pipeline_id) || [];
         arr.push(s);
         stagesByPipeline.set(s.pipeline_id, arr);
@@ -276,7 +306,7 @@ export async function assertMemberInOrg(
 
 export interface AddLeadToStandardPipeVars {
   leadId: string;
-  pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+  pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
   stageId: string;
   /**
    * Dono do negócio (`team_members.id`). Ausente = quem está criando, que era
@@ -358,16 +388,12 @@ export function useAddLeadToStandardPipe() {
        * do apply em prod (regenerar a partir de branch efêmera corrompe o
        * arquivo — ver CLAUDE.md).
        */
-      const RPC_PIPE: Record<string, string> = {
-        qualificacao: "whatsapp",
-        confirmacao: "confirmacao",
-        propostas: "propostas",
-      };
-
-      if (RPC_PIPE[pipeType]) {
+      if (pipeType !== "upsell") {
         const { error } = await supabase.rpc("abrir_negocio" as never, {
           p_lead_id: leadId,
-          p_pipe: RPC_PIPE[pipeType],
+          // SCRUM-637: `pipeType` já É o slug que a RPC entende — o mapa
+          // RPC_PIPE virou identidade e morreu.
+          p_pipe: pipeType,
           p_stage: stageId,
           p_owner_id: memberId,
           p_value: pipeType === "propostas" ? saleValue ?? null : null,
@@ -411,6 +437,7 @@ export function useAddLeadToStandardPipe() {
 
 export function useMoveLeadInStandardPipe() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -419,21 +446,21 @@ export function useMoveLeadInStandardPipe() {
       newStageId,
     }: {
       pipeId: string;
-      pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+      pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
       newStageId: string;
     }) => {
-      const table =
-        pipeType === "qualificacao" ? "pipe_whatsapp"
-        : pipeType === "confirmacao" ? "pipe_confirmacao"
-        : pipeType === "propostas" ? "pipe_propostas"
-        : "upsell";
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      if (pipeType === "upsell") {
+        const { error } = await supabase
+          .from("upsell")
+          .update({ status: newStageId })
+          .eq("id", pipeId)
+          .eq("organization_id", teamMember.organization_id);
+        if (error) throw error;
+        return;
+      }
 
-      const { error } = await supabase
-        .from(table)
-        .update({ status: newStageId })
-        .eq("id", pipeId);
-
-      if (error) throw error;
+      await updateSystemPipelineEntry(pipeId, { stage_key: newStageId });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lead_all_pipelines"] });
@@ -449,6 +476,7 @@ export function useMoveLeadInStandardPipe() {
 
 export function useRemoveLeadFromStandardPipe() {
   const queryClient = useQueryClient();
+  const { data: teamMember } = useCurrentTeamMember();
 
   return useMutation({
     mutationFn: async ({
@@ -456,15 +484,12 @@ export function useRemoveLeadFromStandardPipe() {
       pipeType,
     }: {
       pipeId: string;
-      pipeType: "qualificacao" | "confirmacao" | "propostas" | "upsell";
+      pipeType: "whatsapp" | "confirmacao" | "propostas" | "upsell";
     }) => {
-      const table =
-        pipeType === "qualificacao" ? "pipe_whatsapp"
-        : pipeType === "confirmacao" ? "pipe_confirmacao"
-        : pipeType === "propostas" ? "pipe_propostas"
-        : "upsell";
-
-      const { error } = await supabase.from(table).delete().eq("id", pipeId);
+      if (!teamMember?.organization_id) throw new Error("Organização não encontrada");
+      const { error } = pipeType === "upsell"
+        ? await supabase.from("upsell").delete().eq("id", pipeId).eq("organization_id", teamMember.organization_id)
+        : await supabase.from("pipeline_entries").delete().eq("id", pipeId).eq("organization_id", teamMember.organization_id);
       if (error) throw error;
     },
     onSuccess: () => {

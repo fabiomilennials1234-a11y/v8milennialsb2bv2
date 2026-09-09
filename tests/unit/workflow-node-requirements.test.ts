@@ -10,7 +10,13 @@ import {
 /** Todo o código do executor, concatenado — onde as regras de verdade moram. */
 function fonteDoExecutor(): string {
   const raiz = join(__dirname, "../../supabase/functions/_shared");
-  const partes: string[] = [readFileSync(join(raiz, "workflow-action-handler.ts"), "utf8")];
+  const partes: string[] = [
+    readFileSync(join(raiz, "workflow-action-handler.ts"), "utf8"),
+    // A decisão do nó de mensagem (texto vs. template, e a janela de 24h) foi
+    // extraída para cá: o handler é adaptador dela. Sem este arquivo a âncora
+    // deixaria de ver os motivos que o executor realmente devolve.
+    readFileSync(join(raiz, "decisao-de-envio.ts"), "utf8"),
+  ];
   for (const pasta of ["action-handlers", "actions"]) {
     const dir = join(raiz, pasta);
     for (const f of readdirSync(dir)) {
@@ -19,7 +25,13 @@ function fonteDoExecutor(): string {
       }
     }
   }
-  return partes.join("\n");
+  // Junta os literais que o executor quebra em várias linhas
+  // (`"parte um " +\n  "parte dois"`). Sem isto a âncora dá VERMELHO FALSO para
+  // toda mensagem longa: a string existe, mas não como uma sequência contígua
+  // de bytes no arquivo. Une só o par aspas-mais-aspas — qualquer outra
+  // concatenação (com variável, com template literal) continua invisível aqui,
+  // e é isso que mantém a âncora exigindo a frase escrita por extenso.
+  return partes.join("\n").replace(/"\s*\+\s*\n\s*"/g, "");
 }
 
 describe("regra não pode divergir do executor", () => {
@@ -86,6 +98,17 @@ describe("detecção de nó incompleto", () => {
     expect(findNodeConfigIssues([no("move_stage")])[0].missing).toBe("etapa de destino");
   });
 
+  it("ações de funil exigem destino explícito e aceitam campos legados", () => {
+    expect(findNodeConfigIssues([no("move_stage", { targetStage: "novo" })]).map((i) => i.missing)).toEqual(["funil de destino"]);
+    expect(findNodeConfigIssues([no("move_stage", { pipeType: "whatsapp", targetStage: "novo" })])).toHaveLength(0);
+
+    expect(findNodeConfigIssues([no("duplicate_to_pipe")]).map((i) => i.missing)).toEqual(["funil de destino", "etapa inicial"]);
+    expect(findNodeConfigIssues([no("duplicate_to_pipe", { targetPipeType: "propostas", targetPipeStage: "enviada" })])).toHaveLength(0);
+
+    expect(findNodeConfigIssues([no("remove_from_pipe")])[0].missing).toBe("funil");
+    expect(findNodeConfigIssues([no("mark_as_lost", { pipelineId: "funil-1" })])).toHaveLength(0);
+  });
+
   it("notify_team_member usa notifyMemberId, não memberId", () => {
     // Controle: a chave errada NÃO satisfaz a regra.
     expect(findNodeConfigIssues([no("notify_team_member", { memberId: "x" })])).toHaveLength(1);
@@ -122,11 +145,11 @@ describe("detecção de nó incompleto", () => {
 
   it("aponta todos os nós ruins, não só o primeiro", () => {
     const r = findNodeConfigIssues([no("add_tag", {}, "a"), no("move_stage", {}, "b")]);
-    expect(r.map((i) => i.nodeId).sort()).toEqual(["a", "b"]);
+    expect(r.map((i) => i.nodeId).sort()).toEqual(["a", "b", "b"]);
   });
 });
 
-import { findStageIssues, PIPES_COM_ETAPA_VALIDADA } from "../../src/contracts/workflows/node-requirements";
+import { findStageIssues } from "../../src/contracts/workflows/node-requirements";
 
 describe("etapa que apodreceu", () => {
   const etapas = { whatsapp: ["novo", "abordado", "respondeu"], propostas: ["enviada"] };
@@ -135,14 +158,14 @@ describe("etapa que apodreceu", () => {
   });
 
   it("aponta etapa que não existe mais", () => {
-    const r = findStageIssues([moveStage({ targetStage: "nutricao" })], etapas);
+    const r = findStageIssues([moveStage({ targetStage: "nutricao", pipeType: "whatsapp" })], etapas);
     expect(r).toHaveLength(1);
     expect(r[0].missing).toContain("nutricao");
   });
 
   it("etapa válida passa, e a comparação ignora caixa e espaço", () => {
-    expect(findStageIssues([moveStage({ targetStage: "abordado" })], etapas)).toHaveLength(0);
-    expect(findStageIssues([moveStage({ targetStage: "  ABORDADO " })], etapas)).toHaveLength(0);
+    expect(findStageIssues([moveStage({ targetStage: "abordado", pipeType: "whatsapp" })], etapas)).toHaveLength(0);
+    expect(findStageIssues([moveStage({ targetStage: "  ABORDADO ", pipeType: "whatsapp" })], etapas)).toHaveLength(0);
   });
 
   it("funil sem etapas cadastradas não acusa — espelha o executor", () => {
@@ -151,19 +174,41 @@ describe("etapa que apodreceu", () => {
   });
 
   it("funil que o executor não valida também não é cobrado aqui", () => {
+    // SCRUM-627: sem lista fixa — "não validado" agora é "ref sem chave no
+    // mapa" (campanha, upsell_*, funil apagado). Permissividade em paridade.
     const r = findStageIssues([moveStage({ targetStage: "seja_o_que_for", pipeType: "campanha" })], etapas);
     expect(r).toHaveLength(0);
-    expect(PIPES_COM_ETAPA_VALIDADA).not.toContain("campanha");
+  });
+
+  it("SCRUM-627: valida funil CUSTOM pelo pipelineId — etapa podre acusa", () => {
+    const mapa = { ...etapas, "6f0a4e6e-0000-4000-8000-000000000001": ["triagem", "fechado"] };
+    const noCustom = moveStage({ targetStage: "sumida", pipelineId: "6f0a4e6e-0000-4000-8000-000000000001" });
+    const r = findStageIssues([noCustom], mapa);
+    expect(r).toHaveLength(1);
+    expect(r[0].missing).toContain("sumida");
+    // etapa válida no mesmo funil custom passa
+    expect(findStageIssues([moveStage({ targetStage: "triagem", pipelineId: "6f0a4e6e-0000-4000-8000-000000000001" })], mapa)).toHaveLength(0);
+  });
+
+  it("SCRUM-627: pipeType legado com uuid custom continua resolvendo pelo mapa", () => {
+    const mapa = { "6f0a4e6e-0000-4000-8000-000000000001": ["triagem"] };
+    const r = findStageIssues([moveStage({ targetStage: "podre", pipeType: "6f0a4e6e-0000-4000-8000-000000000001" })], mapa);
+    expect(r).toHaveLength(1);
+  });
+
+  it("SCRUM-627: targetStage em UUID (id de etapa) não acusa — o executor resolve por id", () => {
+    const r = findStageIssues([moveStage({ targetStage: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", pipeType: "whatsapp" })], etapas);
+    expect(r).toHaveLength(0);
   });
 
   it("campo vazio é da outra regra, não desta", () => {
-    expect(findStageIssues([moveStage({ targetStage: "" })], etapas)).toHaveLength(0);
-    expect(findNodeConfigIssues([moveStage({ targetStage: "" })])).toHaveLength(1);
+    expect(findStageIssues([moveStage({ targetStage: "", pipeType: "whatsapp" })], etapas)).toHaveLength(0);
+    expect(findNodeConfigIssues([moveStage({ targetStage: "", pipeType: "whatsapp" })])).toHaveLength(1);
   });
 
   it("respeita o funil declarado no nó", () => {
     // 'enviada' vale em propostas, não em whatsapp
     expect(findStageIssues([moveStage({ targetStage: "enviada", pipeType: "propostas" })], etapas)).toHaveLength(0);
-    expect(findStageIssues([moveStage({ targetStage: "enviada" })], etapas)).toHaveLength(1);
+    expect(findStageIssues([moveStage({ targetStage: "enviada", pipeType: "whatsapp" })], etapas)).toHaveLength(1);
   });
 });

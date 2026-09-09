@@ -32,7 +32,22 @@ vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({ useOrganiz
 vi.mock("@/modules/identity/org-team/hooks/useTeamMembers", () => ({ useCurrentTeamMember: () => ({ data: { id: "tm1", organization_id: "org-test", user_id: "u1", role: "admin" } }), isVirtualTeamMember: () => false, useTeamMembers: () => ({ data: [] }) }));
 vi.mock("@/modules/identity/master/hooks/useMasterAuth", () => ({ useMasterAuth: () => ({ isMaster: false }) }));
 vi.mock("@/shared/realtime/useRealtimeSubscription", () => ({ useRealtimeSubscription: vi.fn() }));
-vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", () => ({ usePipelineStages: () => ({ data: [] }), DEFAULT_STAGES: {} }));
+// Dublê por SPREAD do módulo real, não por lista à mão.
+//
+// O barrel `@/modules/pipelines` faz `export *` destes módulos, e uma fábrica
+// parcial derruba a COLETA do arquivo de teste inteiro assim que alguém no
+// grafo passa a tocar o barrel — foi o que aconteceu quando `CreateMeetingDialog`
+// entrou no barrel de engagement (`No "useAllPipelineStageOptions" export is
+// defined on the ... mock`).
+//
+// Listar os exports à mão só adia o problema para o próximo que alguém criar.
+// `importOriginal` é seguro aqui porque `@/integrations/supabase/client` já
+// está dublado acima: o módulo real só declara hooks.
+vi.mock("@/modules/pipelines/hooks/model/usePipelineStages", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  usePipelineStages: () => ({ data: [] }),
+  DEFAULT_STAGES: {},
+}));
 vi.mock("@/modules/leads/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.fn() }));
 vi.mock("@/modules/copilot/hooks/useCopilotPromptBuilder", () => ({ generatePrompt: vi.fn(), saveCopilotSystemPrompt: vi.fn(), regenerateAndSavePrompt: vi.fn(), computePromptHash: vi.fn() }));
 vi.mock("@/modules/copilot/hooks/useAgentFollowupRules", () => ({ followupRuleToDB: vi.fn((r: any) => r) }));

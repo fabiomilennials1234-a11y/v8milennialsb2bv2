@@ -19,6 +19,7 @@ import {
 } from "@/modules/carteira/components/client/ProductCombobox";
 
 import { useAdicionarItemDoNegocio } from "./useItensDoNegocio";
+import type { DealCardItem } from "./types";
 
 /**
  * "Adicionar produto" — lançar um item em `deal_items`.
@@ -76,6 +77,7 @@ export function AdicionarProdutoDialog({
   aoFechar,
   dealId,
   entryId,
+  itensAtuais = [],
 }: {
   aberto: boolean;
   aoFechar: () => void;
@@ -83,6 +85,14 @@ export function AdicionarProdutoDialog({
   dealId: string;
   /** `pipeline_entries.id` — a chave que o painel usa para recarregar. */
   entryId: string | null;
+  /**
+   * O que já está lançado. Serve para uma coisa só: **avisar antes** quando o
+   * produto escolhido já está no negócio, porque nesse caso a regra é
+   * CONSOLIDAR — a quantidade soma na linha existente em vez de criar uma
+   * segunda. Sem o aviso, quem lança 3 num negócio que já tinha 2 vê 5 aparecer
+   * e não entende de onde veio.
+   */
+  itensAtuais?: DealCardItem[];
 }) {
   const [escolhido, setEscolhido] = useState<ProductSelection | null>(null);
   const [quantidade, setQuantidade] = useState("1");
@@ -102,8 +112,45 @@ export function AdicionarProdutoDialog({
     setDesconto("0");
   }, [aberto]);
 
+  /**
+   * A linha que este produto vai ENGROSSAR, quando já existir.
+   *
+   * Catálogo casa por `product_id`; avulso casa por nome normalizado, que é a
+   * única identidade que ele tem. É a mesma regra que a RPC aplica no banco —
+   * repetida aqui só para poder AVISAR, nunca para decidir: duas abas lançando
+   * ao mesmo tempo passariam pelas duas checagens de tela e criariam as duas
+   * linhas assim mesmo. Quem decide é o `FOR UPDATE` lá dentro.
+   */
+  const jaLancado = escolhido
+    ? (itensAtuais.find((i) =>
+        escolhido.product_id
+          ? i.produtoId === escolhido.product_id
+          : i.produtoId === null &&
+            i.nome.trim().toLowerCase() === escolhido.product_name.trim().toLowerCase(),
+      ) ?? null)
+    : null;
+
   const escolher = (p: ProductSelection) => {
     setEscolhido(p);
+
+    // Se o produto já está no negócio, o padrão passa a ser o preço e o
+    // desconto DAQUELA linha — não o `ticket` do catálogo. Assim quem só quer
+    // somar quantidade confirma sem mexer em preço nenhum, e quem quer
+    // corrigir o preço no mesmo gesto tem o valor atual na frente para
+    // comparar.
+    const existente = itensAtuais.find((i) =>
+      p.product_id
+        ? i.produtoId === p.product_id
+        : i.produtoId === null &&
+          i.nome.trim().toLowerCase() === p.product_name.trim().toLowerCase(),
+    );
+
+    if (existente) {
+      setPreco(maskCurrencyInput(String(Math.round(existente.precoUnitario * 100))));
+      setDesconto(String(existente.descontoPercent));
+      return;
+    }
+
     // Produto de catálogo chega com `ticket`; avulso chega com 0 e o campo fica
     // para quem está lançando. Nos dois casos o preço continua editável — o
     // ticket é o padrão da org, não o preço desta venda.
@@ -114,6 +161,10 @@ export function AdicionarProdutoDialog({
   const unit = parseCurrencyInput(preco);
   const desc = Math.min(100, Math.max(0, Number(desconto.replace(",", ".")) || 0));
   const totalLinha = qtd * unit * (1 - desc / 100);
+  /** Consolidando, a linha final leva a quantidade SOMADA. */
+  const totalResultante = jaLancado
+    ? (jaLancado.quantidade + qtd) * unit * (1 - desc / 100)
+    : totalLinha;
 
   const podeAdicionar = !!escolhido && qtd > 0 && !adicionar.isPending;
 
@@ -128,7 +179,11 @@ export function AdicionarProdutoDialog({
         precoUnitario: unit,
         descontoPercent: desc,
       });
-      toast.success(`"${escolhido.product_name}" lançado no negócio.`);
+      toast.success(
+        jaLancado
+          ? `"${escolhido.product_name}" agora está com ${jaLancado.quantidade + qtd} no negócio.`
+          : `"${escolhido.product_name}" lançado no negócio.`,
+      );
       aoFechar();
     } catch {
       // O toast de erro é do `onError` da mutation — que traz a mensagem do
@@ -138,7 +193,42 @@ export function AdicionarProdutoDialog({
 
   return (
     <Dialog open={aberto} onOpenChange={(v) => !v && aoFechar()}>
-      <DialogContent className="max-w-[460px]">
+      {/*
+        `z-[60]` nos DOIS — conteúdo e overlay — pelo mesmo motivo que a
+        confirmação de excluir o negócio já sobe: no celular o painel do Negócio
+        é um `Sheet`, e `SheetContent` é `z-[51]`. Este diálogo é IRMÃO dele no
+        `body`, então com o `z-50` do primitivo ele nasce ATRÁS da folha —
+        invisível. E não é só o desenho que quebra: o Radix põe a camada de
+        baixo em `pointer-events: none`, então o toque atravessa a folha e cai
+        num diálogo que ninguém está vendo. Medido em 390×844: o diálogo existia
+        no DOM, recebia o clique, e a tela mostrava só a folha.
+
+        `grid-cols-1` é o ENQUADRAMENTO. O `DialogContent` é `grid` sem
+        `grid-template-columns`, então a coluna é implícita e `auto` — e o
+        mínimo de uma track `auto` é a maior min-content dos itens, sem teto: o
+        `max-w-[460px]` segura a CAIXA do painel, nunca a track. Com um nome de
+        produto longo o `truncate` do span vira `white-space: nowrap`, cuja
+        min-content é a linha inteira, e a coluna é desenhada nessa largura
+        dentro do painel estreito — campos, total e rodapé saem pela borda e
+        pintam sobre a página, e a descrição do header para de quebrar linha.
+        Medido em 1440×900: track de mais de 1000px num content-box de 410px,
+        com o conteúdo passando ~1000px da borda direita. O valor exato varia
+        com o comprimento do nome — a track ACOMPANHA o texto linearmente.
+
+        `grid-cols-1` é `repeat(1, minmax(0,1fr))`, e o que ele troca é a MIN
+        track sizing function, de `auto` para `0`. Isso desliga o *automatic
+        minimum size* do item (CSS Grid §6.6, que só vale para item cruzando
+        track de mínimo `auto`), então o `min-width:auto` dos filhos vira 0 e a
+        track deixa de perseguir a min-content de quem está dentro.
+        ⚠️ **Não é o `min-w-0` do span que passa a valer** — medido: tirar o
+        `min-w-0` mantendo `grid-cols-1` não muda nada (track segue 410px, nome
+        segue truncando). Aquele `min-w-0` já valia antes; só nunca precisava
+        encolher, porque tinha a track inteira de espaço.
+
+        Com nome curto é no-op, medido número por número: uma track `auto` que
+        já cabe e uma `1fr` dão os mesmos 410px.
+      */}
+      <DialogContent className="z-[60] max-w-[460px] grid-cols-1" overlayClassName="z-[60]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-[15px]">
             <Package className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -154,7 +244,10 @@ export function AdicionarProdutoDialog({
           {escolhido ? (
             <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/40 px-3 py-2">
               <Package className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <span className="min-w-0 flex-1 truncate text-[13px]">
+              {/* O `title` é a contrapartida do truncate: agora que o nome
+                  longo é cortado em vez de esticar o diálogo, o resto dele
+                  precisa continuar alcançável em algum lugar. */}
+              <span className="min-w-0 flex-1 truncate text-[13px]" title={escolhido.product_name}>
                 {escolhido.product_name}
               </span>
               {!escolhido.product_id && (
@@ -173,9 +266,31 @@ export function AdicionarProdutoDialog({
               </button>
             </div>
           ) : (
-            <div className="flex">
-              <ProductCombobox onAdd={escolher} />
+            <div className="flex flex-col gap-2">
+              <div className="flex">
+                <ProductCombobox onAdd={escolher} />
+              </div>
+              {/*
+                O botão "Adicionar" nasce desabilitado e não dizia por quê.
+                Digitar o nome na busca não é escolher: enquanto ninguém clica
+                num item da lista (ou confirma o avulso), o diálogo não tem
+                produto, e o clique no botão de baixo não faz nada — que é
+                exatamente como um botão quebrado se parece.
+              */}
+              <p className="text-[11.5px] text-muted-foreground/70">
+                Escolha um produto da lista para liberar a quantidade, o preço e
+                o botão de lançar. Digitar na busca ainda não escolhe.
+              </p>
             </div>
+          )}
+
+          {jaLancado && (
+            <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-[12px] text-amber-200/90">
+              Este produto já está neste negócio ({jaLancado.quantidade} ×{" "}
+              {formatBRL(jaLancado.precoUnitario, 2)}). A quantidade vai{" "}
+              <strong className="font-semibold">somar</strong> na linha que já
+              existe — o negócio não fica com o produto duplicado.
+            </p>
           )}
 
           {escolhido && (
@@ -213,9 +328,16 @@ export function AdicionarProdutoDialog({
               </div>
 
               <div className="flex items-baseline justify-between border-t border-border/50 pt-3">
-                <span className="text-[13px] text-muted-foreground">Total desta linha</span>
+                <span className="text-[13px] text-muted-foreground">
+                  {/* Consolidando, a prévia mostra o RESULTADO, não a parcela.
+                      Mostrar só o que está sendo somado faria o número do
+                      diálogo não bater com o que aparece na tabela depois. */}
+                  {jaLancado
+                    ? `Como a linha vai ficar (${jaLancado.quantidade + qtd} un.)`
+                    : "Total desta linha"}
+                </span>
                 <span className="text-[17px] font-semibold tabular-nums tracking-[-0.02em]">
-                  {totalLinha > 0 ? formatBRL(totalLinha, 2) : "—"}
+                  {totalResultante > 0 ? formatBRL(totalResultante, 2) : "—"}
                 </span>
               </div>
             </>

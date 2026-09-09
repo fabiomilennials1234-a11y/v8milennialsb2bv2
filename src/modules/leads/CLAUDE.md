@@ -1,5 +1,13 @@
 # Module — leads
 
+## Vendas históricas
+
+`RegisterHistoricalSalesDialog` na aba Negócios registra valor/data em lote pela
+RPC `registrar_vendas_historicas`. Cria negócio ganho sem posição em funil e
+pedido/evento de receita vinculados. `useLeadsDeals` inclui também esses negócios
+sem `pipeline_entries`; `historicalSale` os distingue dos cards. Detalhes:
+`docs/historical-sales.md`.
+
 **Status:** 🟢 Active (slice 4 + cleanup longtail slice 16 — 2026-05-28)
 **BC:** leads
 **Entidade primária:** Lead
@@ -7,7 +15,7 @@
 
 ## Escopo
 
-Lead = pessoa/empresa no sistema. Campos: nome, empresa, telefone, email, origem, rating(1-5 manual), qualification_score(0-100 auto), tags, responsáveis (SDR/Closer/Responsible).
+Lead = pessoa/empresa no sistema. Campos: nome, empresa, telefone, email, origem, qualification_score(0-100 auto), qualification_tier/pre_qualification_tier, tags, responsáveis (SDR/Closer/Responsible). `leads.rating` continua na tabela e na API pública, mas SAIU da interface em 2026-09-03 (o "calor").
 
 Inclui:
 - CRUD de lead
@@ -32,6 +40,8 @@ Ver `./index.ts` para a superfície completa. Estável.
 
 ### Hooks
 - CRUD: `useLeads`, `useLeadsCount`, `useCreateLead`, `useUpdateLead`, `useDeleteLead`, `useDeleteAllLeadsInPipe`, `useDeleteAllLeads`
+- Recorte por funil: `useLeadsPorFunil({ pipelineId, search })` — "os leads DESTE funil", busca **server-side** (reusa `applyLeadListFilters`, a mesma semântica da lista), paginado em `LEADS_POR_FUNIL_PAGE_SIZE` (25) com `temMais`. Raiz da consulta em `leads` com `pipeline_entries!inner` — não o contrário: dedup de graça (um lead pode ter N entries no mesmo funil desde `20270730000050`), RLS na ordem certa, e um único filtro cobre funil de sistema e custom. Consumido pela Agenda (`LeadPorFunilPicker`).
+  ⚠️ **Não use `useLeads()` sem argumento como fonte de um seletor** — devolve a primeira página de 50 e filtra em memória. Foi exatamente esse o bug do seletor de lead da Agenda.
 - Origens: `useLeadOrigins` — fonte única (dinâmica) de lista/label/cor via tabela registry `lead_origins`. Retorna `{ origins, labelOf, colorOf, isLoading }`. Built-ins globais (org_id NULL) + custom da org (Slice B). Fallback local `BUILTIN_LEAD_ORIGINS` (13). Substitui a antiga `src/lib/lead/lead-origins.ts` (deletada) e os maps hardcoded de label do LeadModal/LeadCreateForm/LeadSource.
 - AI: `useLeadAiStatus`, `useToggleLeadAI`, `usePhoneAiStatus`, `useToggleConversationAI`
 - Cross-pipe placement: `useLeadAllPipelines`, `useAddLeadToStandardPipe`, `useMoveLeadInStandardPipe`, `useRemoveLeadFromStandardPipe`
@@ -41,6 +51,8 @@ Ver `./index.ts` para a superfície completa. Estável.
 - WhatsApp write-instance: `useLeadWriteInstance`
 - Timeline (consolidado): `useLeadTimeline`, `useLeadTimelineCompact`, `useLeadHistory`, `useCreateLeadHistory`, `useFieldChangelog`, `FIELD_LABELS`, `getFieldLabel`, `formatFieldValue`
 - Métricas batch: `useBatchedLeadMetrics`
+- Recompra: `useLeadsReorderCycle` + `calcularCicloDeRecompra` (`lib/reorder-cycle`) — média de dias entre compras, **unindo as DATAS** de `sale_events` (venda do funil, líquida de estorno) e dos `upsell_orders` aprovados. Não reusa `salesMetrics.cycleDays` nem `upsell_clients.reorder_cycle_days`: os dois são médias já agregadas sobre METADE do histórico cada, e unir médias não devolve a média da união. Compras no mesmo dia colapsam (a mesma venda pode existir nas duas fontes). Alimenta o anel da coluna "Recompra" na lista e o verde da linha na época de recomprar (7 dias antes, e segue aceso depois de vencer).
+  ⚠️ **Medido em prod 2026-09-04:** a gaveta Cliente tem 5.442 leads, todos da Café Jurerê, e **nenhum** com venda ou pedido — `classificacao='cliente'` significa "cadastrado no ERP com situação ativa", não "comprou". Quem tem histórico real está fora dela (Basic4u: 185 leads com pedido, 133 com dois ou mais). Por isso a coluna vale em todas as abas, não só na de Cliente.
 - Action log: `useLogLeadAction`, `logLeadActionDirect`
 - Import/export/duplicates/trash/novo: `useImportLeads`, `useExportLeads`, `useDuplicateLeads`, `useMergeLeads`, `useTrashLeads`, `useRestoreLead`, `useRestoreLeadsBulk`, `usePurgeLead`, `useNewLeads`
 - Lead-form helpers (subpasta `hooks/lead/`): `useLeadCampaignsAttach`, `useLeadCreateHandler`, `useLeadForm`, `useLeadPipeHandlers`, `useLeadTagsAttached`, `useAddLeadTag`, `useRemoveLeadTag`
@@ -50,7 +62,8 @@ Ver `./index.ts` para a superfície completa. Estável.
 - Lead detail modal: `LeadDetailDialog` (+ V1/V2 explícitos), `LeadDetailSheet` (alias), `LeadPanelProvider`, `useLeadSheet`, `LeadDetailMobileTabs`
 - Card/modal/score: `LeadCard`, `LeadModal`, `LeadScoreBadge`, `TimelineItem`
 - Form internals consumidos cross-module: `LeadDetailContent`, `LeadCustomFields`, `AddCustomFieldPopover`, `LeadTabHistory`
-- Modais standalone: `CustomFieldsManager`, `ExportLeadsContent`, `ImportLeadsFunnelContent`
+- Modais standalone: `CustomFieldsManager`, `ExportLeadsContent`, `ImportLeadsFunnelContent`, `ImportLeadsContent`/`ImportLeadsModal`
+  - **Dois importadores, e a diferença é o destino.** `ImportLeadsFunnelContent` põe o lead num funil (pede etapa, escreve `pipeline_entries`); `ImportLeadsModal` — o botão Importar da tela de Leads — cria **só a pessoa**, sem negócio, via `importLeadsOnly` → edge `import-leads` com `destination: "leads"`. Mesmo parser, mesmo modelo de planilha, mesmo mapeamento de coluna. Colunas de funil (Etapa, Valor, Produto) são lidas e ignoradas no caminho sem funil.
 - Bulk (slice 16): `BulkActionBar` (`components/bulk-actions/`)
 
 ### Pages (deep-import only)
@@ -70,7 +83,7 @@ Pages NÃO são exportadas via `index.ts` — `App.tsx` faz deep-import para pre
 - Timeline: `TimelineSource`, `TimelinePeriod`, `TimelineFilters`, `TimelineEvent`, `TimelineMetrics`, `TimelinePage`, `LeadHistory`, `LeadHistoryInsert`, `FieldChange`
 - Métricas: `LeadMetrics`
 - Action log: `LeadActionType`, `LeadActionTier`
-- Import: `FilePreviewResult`, `ColumnMappingOption`, `EdgeFunctionReport`, `FunnelDestination`, `ImportLeadsToCustomPipelineOptions`, `ImportLeadsToFunnelOptions`, `ImportFunnelResult`
+- Import: `FilePreviewResult`, `ColumnMappingOption`, `EdgeFunctionReport`, `FunnelDestination`, `ImportLeadsToCustomPipelineOptions`, `ImportLeadsToFunnelOptions`, `ImportLeadsOnlyOptions`, `ImportFunnelResult`
 - Export: `ExportStageFilter`, `ExportLeadsOptions`, `UseExportLeadsResult`
 - Duplicates/trash/novo: `DuplicateGroup`, `TrashLead`, `NewLeadsBucket`, `NewLeadsSource`, `NewLeadsData`
 - Tags attached: `AttachedLeadTag`
@@ -182,3 +195,11 @@ com só 7, + maps locais). Slice A criou a tabela registry `lead_origins` e o ho
 - Auditoria duplicatas: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/06 — Features/modularizacao/auditoria-duplicatas.md`
 - SPEC modularização: `.specs/features/modularizacao/SPEC.md`
 - Slices roadmap: `Obsidian/Segundo Cerebro/Claude Code — Torque CRM/10 — Remodelagem/04-execucao/slices.md`
+
+### Lei da Relação — 2026-09-08
+
+Ganho atual ou venda histórica líquida prevalece: Cliente mesmo com perdas.
+Somente negócios perdidos, sem nenhum aberto ou ganho: Perdido. Demais: Lead.
+Pedido de ERP isolado não classifica na Lei da Relação. A Lei do ERP mantém
+classificacao e Indefinido. Filtro/contagem/exportação usam relacao_negocios(leads)
+no banco; migration deve preceder o frontend. Ver .specs/fixes/lei-relacao-ganho-perdido.md.

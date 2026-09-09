@@ -4,6 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 /** Valores de exemplo para cada variável — usados na prévia em tempo real. */
 const PREVIEW_EXAMPLES: Record<string, string> = {
   "{{nome}}":               "João Silva",
+  "{{primeiro_nome}}":      "João",
   "{{empresa}}":            "Tech Corp",
   "{{email}}":              "joao@techcorp.com",
   "{{telefone}}":           "(11) 99999-9999",
@@ -14,7 +15,7 @@ const PREVIEW_EXAMPLES: Record<string, string> = {
   "{{origem}}":             "Site",
   "{{urgencia}}":           "Alta",
   "{{observacoes}}":        "Interessado no plano premium",
-  "{{estagio}}":            "Qualificação",
+  "{{estagio}}":            "Novo lead",
   "{{data_reuniao}}":       "15/03/2026",
   "{{valor_proposta}}":     "R$ 2.500",
   "{{responsavel}}":        "Maria Santos",

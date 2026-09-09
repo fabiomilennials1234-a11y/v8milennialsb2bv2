@@ -34,10 +34,9 @@ import { join } from "node:path";
  * vier perguntar por que a lista não cresceu. Um glob esconderia a pergunta.
  */
 const PORTAS = [
-  { rotulo: "funil WhatsApp (Oportunidades)", arquivo: "src/modules/pipelines/pages/PipeWhatsapp.tsx" },
-  { rotulo: "funil Confirmação (Agendamentos)", arquivo: "src/modules/pipelines/pages/PipeConfirmacao.tsx" },
-  { rotulo: "funil Propostas (fechamento)", arquivo: "src/modules/pipelines/pages/PipePropostas.tsx" },
-  { rotulo: "funil customizado", arquivo: "src/modules/pipelines/pages/CustomPipeline.tsx" },
+  // SCRUM-637 (flip): as 3 páginas de sistema morreram — /pipe-* redireciona
+  // pra rota única, e a porta de TODO funil é a página unificada.
+  { rotulo: "página unificada /funil/:slug", arquivo: "src/modules/pipelines/pages/Funil.tsx" },
   { rotulo: "aba de Leads", arquivo: "src/modules/leads/pages/Leads.tsx" },
 ];
 

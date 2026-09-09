@@ -1,5 +1,15 @@
-import { useState, useEffect, lazy, Suspense, type CSSProperties, type ReactNode } from "react";
-import { useSearchParams } from "react-router-dom";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  lazy,
+  Suspense,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { usePipelineDisplayConfig } from "@/modules/pipelines";
+import { NOME_DE_FABRICA } from "@/contracts/pipe";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
 import { useThemeTransition } from "@/contexts/ThemeTransitionContext";
@@ -9,29 +19,17 @@ import {
   Plus,
   Edit2,
   Trash2,
-  Palette,
   Shield,
-  Bell,
   Database,
   Globe,
   MoreHorizontal,
-  MessageSquare,
-  Calendar,
-  Webhook,
-  HelpCircle,
-  Plug,
-  Code,
-  Timer,
-  Key,
-  FlaskConical,
-  ClipboardList,
-  Award,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PreferenciasDeAviso } from "@/modules/platform/components/notifications/PreferenciasDeAviso";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
@@ -57,10 +55,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useTags, useCreateTag, useUpdateTag, useDeleteTag, Tag as TagType } from "@/modules/leads/hooks/useTags";
+import { useFunisDaOrg } from "@/modules/pipelines";
 import { useIdentity } from "@/modules/identity";
 import { useOrganizationSettings } from "@/modules/identity";
 import { useOrganization } from "@/modules/identity";
+import {
+  DEFAULT_SETTINGS_TAB,
+  SETTINGS_BASE_PATH,
+  SETTINGS_OTHERS_PATH,
+  SETTINGS_OTHERS_SLUG,
+  isPrimarySettingsTab,
+  resolveSettingsTab,
+  settingsTabPath,
+  visibleOtherSettingsTabs,
+  visibleSettingsTabs,
+} from "@/modules/platform/lib/settings-tabs";
 import { toast } from "sonner";
 
 // Lazy imports — cada tab carrega só quando ativada.
@@ -336,63 +347,14 @@ function TagsSettings() {
   );
 }
 
-function NotificationSettings() {
-  return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium">Notificações</h3>
-        <p className="text-sm text-muted-foreground">
-          Configure quando e como receber notificações
-        </p>
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label>Novas reuniões agendadas</Label>
-            <p className="text-sm text-muted-foreground">
-              Receba uma notificação quando um lead agendar uma reunião
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label>Vendas fechadas</Label>
-            <p className="text-sm text-muted-foreground">
-              Receba uma notificação quando uma venda for fechada
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label>Lembrete de reuniões</Label>
-            <p className="text-sm text-muted-foreground">
-              Receba lembretes 1 hora antes das reuniões
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-
-        <div className="flex items-center justify-between p-4 border rounded-lg">
-          <div className="space-y-0.5">
-            <Label>Metas atingidas</Label>
-            <p className="text-sm text-muted-foreground">
-              Receba uma notificação quando atingir uma meta
-            </p>
-          </div>
-          <Switch defaultChecked />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ConfirmacaoOverdueSettings() {
   const { settings, isAdmin, updateSettings, isUpdating } = useOrganizationSettings();
+  // Nome do funil de reuniões como a ORG o vê (SCRUM-641).
+  const { data: displayConfigs } = usePipelineDisplayConfig();
+  const nomeConfirmacao = (() => {
+    const c = displayConfigs?.find((x) => x.pipe_type === "confirmacao");
+    return c ? c.display_name || NOME_DE_FABRICA.confirmacao : "Funil removido";
+  })();
   const [localDays, setLocalDays] = useState(settings.confirmacao_overdue_days);
   const [saved, setSaved] = useState(false);
 
@@ -416,7 +378,7 @@ function ConfirmacaoOverdueSettings() {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-medium">Pipe de Confirmação</h3>
+        <h3 className="text-lg font-medium">Funil {nomeConfirmacao}</h3>
         <p className="text-sm text-muted-foreground">
           Quando um lead deve aparecer como &quot;Atrasada&quot; (dias sem interação)
         </p>
@@ -445,7 +407,71 @@ function ConfirmacaoOverdueSettings() {
         )}
       </div>
       <p className="text-xs text-muted-foreground">
-        Leads que não tiverem nenhuma atualização (status, data, notas) há esse número de dias aparecem como &quot;Atrasadas&quot; no pipe. Itens em Remarcar com atividade recente não entram.
+        Leads que não tiverem nenhuma atualização (status, data, notas) há esse número de dias aparecem como &quot;Atrasadas&quot; no funil. Itens em Remarcar com atividade recente não entram.
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Funil padrão da org (SCRUM-624, ADR-0034 D4) — o fallback único das portas de
+ * entrada sem destino declarado (ex.: lead-webhook sem `place_in_pipe`).
+ * "Sem funil padrão" é estado válido: o lead entra na lista de Leads sem card.
+ * A deleção do funil apontado é recusada pelo banco (trigger) até o admin
+ * escolher um substituto aqui.
+ */
+function DefaultPipelineSettings() {
+  const { settings, isAdmin, updateSettings, isUpdating, isLoading: settingsLoading } = useOrganizationSettings();
+  // Nome que a ORG usa — ver `useFunisDaOrg`.
+  const { data: pipelines = [], isLoading: pipelinesLoading } = useFunisDaOrg();
+
+  const NONE = "__none__";
+  const current = settings.default_pipeline_id ?? NONE;
+  const loading = settingsLoading || pipelinesLoading;
+
+  const handleChange = async (value: string) => {
+    const next = value === NONE ? null : value;
+    if (next === settings.default_pipeline_id) return;
+    try {
+      await updateSettings({ default_pipeline_id: next });
+      toast.success(next ? "Funil padrão atualizado!" : "Funil padrão removido");
+    } catch {
+      toast.error("Erro ao salvar o funil padrão");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-medium">Funil padrão</h3>
+        <p className="text-sm text-muted-foreground">
+          Onde entra um lead que chega por integração sem funil de destino declarado
+        </p>
+      </div>
+      <div className="grid gap-2 max-w-sm">
+        <Label htmlFor="default-pipeline">Funil de entrada</Label>
+        <Select
+          value={loading ? undefined : current}
+          onValueChange={handleChange}
+          disabled={!isAdmin || isUpdating || loading}
+        >
+          <SelectTrigger id="default-pipeline">
+            <SelectValue placeholder={loading ? "Carregando…" : "Escolha um funil"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={NONE}>Sem funil padrão</SelectItem>
+            {pipelines.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.label}
+                {p.is_active === false ? " (inativo)" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Leads de webhooks e integrações que não declaram destino caem na primeira etapa ativa
+        deste funil. Sem funil padrão, o lead é criado apenas na lista de Leads, sem card.
       </p>
     </div>
   );
@@ -580,6 +606,10 @@ function GeneralSettings() {
       </div>
 
       <div className="pt-6 border-t border-border">
+        <DefaultPipelineSettings />
+      </div>
+
+      <div className="pt-6 border-t border-border">
         <ConfirmacaoOverdueSettings />
       </div>
 
@@ -632,30 +662,51 @@ function PillTab({ value, label, icon }: { value: string; label: string; icon: R
   );
 }
 
-const TAB_VALUES = new Set([
-  "tags",
-  "notifications",
-  "whatsapp",
-  "integracoes",
-  "webhooks",
-  "api",
-  "sla",
-  "api-keys",
-  "sandbox",
-  "checklists",
-  "general",
-  "ajuda",
-]);
-
 export default function Configuracoes() {
   const { orgType } = useOrganization();
   const { isAdmin } = useIdentity();
+  const { tab: tabParam } = useParams<{ tab?: string }>();
   const [searchParams] = useSearchParams();
-  const requestedTab = searchParams.get("tab");
-  const initialTab =
-    requestedTab && (TAB_VALUES.has(requestedTab) || (requestedTab === "marcos" && orgType === "outbound"))
-      ? requestedTab
-      : "tags";
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const isOutboundOrg = orgType === "outbound";
+  const tabs = useMemo(
+    () => visibleSettingsTabs({ isAdmin, isOutboundOrg }),
+    [isAdmin, isOutboundOrg],
+  );
+
+  // A URL manda. `:tab` é a rota das três primárias; `?tab=` identifica as de
+  // "Outros" e continua servindo os links antigos (onboarding, banner do chat).
+  // Aba pedida mas invisível para este usuário (Marcos fora de outbound, Ajuda
+  // sem admin) cai no padrão da rota em que ele está.
+  const isOthersRoute = tabParam === SETTINGS_OTHERS_SLUG;
+  const requested = resolveSettingsTab(tabParam) ?? resolveSettingsTab(searchParams.get("tab"));
+  const fallbackTab = isOthersRoute
+    ? (visibleOtherSettingsTabs({ isAdmin, isOutboundOrg })[0] ?? DEFAULT_SETTINGS_TAB)
+    : DEFAULT_SETTINGS_TAB;
+  const activeTab =
+    requested && tabs.some((t) => t.value === requested.value) ? requested : fallbackTab;
+
+  // Normaliza para o endereço canônico da aba ativa. Os demais parâmetros de
+  // query sobrevivem de propósito: o retorno do OAuth do Google cai aqui com
+  // `?google=connected&email=…`, e descartá-los engoliria o toast de conexão.
+  useEffect(() => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (isPrimarySettingsTab(activeTab)) nextParams.delete("tab");
+    else nextParams.set("tab", activeTab.value);
+
+    const basePath = isPrimarySettingsTab(activeTab)
+      ? `${SETTINGS_BASE_PATH}/${activeTab.slug}`
+      : SETTINGS_OTHERS_PATH;
+    const query = nextParams.toString();
+    const canonical = query ? `${basePath}?${query}` : basePath;
+
+    if (`${location.pathname}${location.search}` !== canonical) {
+      navigate(canonical, { replace: true });
+    }
+  }, [activeTab, location.pathname, location.search, navigate, searchParams]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -673,29 +724,28 @@ export default function Configuracoes() {
         </p>
       </div>
 
-      <Tabs defaultValue={initialTab} className="w-full">
+      {/* Trocar de aba navega: a aba É a rota. As pílulas saem do mesmo
+          registro que alimenta o Pitstop — dois inventários divergiriam.
+          Leitura da ajuda mora no painel de suporte (o "?" do Cmd+K); aqui fica
+          só a autoria, e `HelpAdminPanel` não se protege sozinho — quem gateava
+          era o `HelpCenter`, que saiu daqui. */}
+      <Tabs
+        value={activeTab.value}
+        onValueChange={(value) => {
+          const next = tabs.find((t) => t.value === value);
+          if (next) navigate(settingsTabPath(next));
+        }}
+        className="w-full"
+      >
         <TabsList className="flex flex-nowrap items-center gap-3 h-auto border-b-0 bg-transparent p-0 py-2 w-full max-w-5xl [overflow-x:clip]">
-          <PillTab value="tags" label="Tags" icon={<Tag className="w-4 h-4" />} />
-          <PillTab value="notifications" label="Notificações" icon={<Bell className="w-4 h-4" />} />
-          <PillTab value="whatsapp" label="WhatsApp" icon={<MessageSquare className="w-4 h-4" />} />
-          <PillTab value="integracoes" label="Integrações" icon={<Plug className="w-4 h-4" />} />
-          <PillTab value="webhooks" label="Webhooks" icon={<Webhook className="w-4 h-4" />} />
-          <PillTab value="api" label="API & Chaves" icon={<Code className="w-4 h-4" />} />
-          <PillTab value="sla" label="SLA" icon={<Timer className="w-4 h-4" />} />
-          <PillTab value="api-keys" label="API Keys" icon={<Key className="w-4 h-4" />} />
-          <PillTab value="sandbox" label="Sandbox" icon={<FlaskConical className="w-4 h-4" />} />
-          <PillTab value="checklists" label="Checklists" icon={<ClipboardList className="w-4 h-4" />} />
-          <PillTab value="general" label="Geral" icon={<Settings className="w-4 h-4" />} />
-          {orgType === "outbound" && (
-            <PillTab value="marcos" label="Marcos" icon={<Award className="w-4 h-4" />} />
-          )}
-          {/* Leitura mora no painel de suporte (o "?" do Cmd+K). Aqui fica só a
-              autoria — dois lugares para buscar ajuda e nenhum seria o óbvio.
-              `HelpAdminPanel` nao se protege sozinho: quem gateava era o
-              `HelpCenter`, que saiu daqui. */}
-          {isAdmin && (
-            <PillTab value="ajuda" label="Central de Ajuda" icon={<HelpCircle className="w-4 h-4" />} />
-          )}
+          {tabs.map((tab) => (
+            <PillTab
+              key={tab.value}
+              value={tab.value}
+              label={tab.label}
+              icon={<tab.icon className="w-4 h-4" />}
+            />
+          ))}
         </TabsList>
 
         <div className="mt-6">
@@ -710,7 +760,7 @@ export default function Configuracoes() {
           <TabsContent value="notifications">
             <Card className="glass-card">
               <CardContent className="pt-6">
-                <NotificationSettings />
+                <PreferenciasDeAviso />
               </CardContent>
             </Card>
           </TabsContent>

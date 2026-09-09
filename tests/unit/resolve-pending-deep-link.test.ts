@@ -14,16 +14,38 @@ import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendi
 
 describe("resolvePendingDeepLink", () => {
   it("contato fora da janela de contatos → abre a conversa pelo telefone mesmo assim", () => {
+    // Sem contato na lista não há `instance_id` para compor a chave: a caixa
+    // aberta é a única resposta possível para "por qual número isto abre?".
     const result = resolvePendingDeepLink({
       pendingPhone: "+55 48 99988-7766",
       contacts: [
-        { phone_number: "5511987654321" },
-        { phone_number: "5521912345678" },
+        { phone_number: "5511987654321", instance_id: "cx-1" },
+        { phone_number: "5521912345678", instance_id: "cx-1" },
       ],
+      contactsLoading: false,
+      caixaSelecionada: "cx-1",
+    });
+
+    expect(result).toEqual({
+      action: "select",
+      contactKey: "whatsapp:cx-1:48999887766",
+    });
+  });
+
+  it("sem contato E sem caixa aberta → a chave nasce sem caixa, e continua parseável", () => {
+    // Acontece no primeiro render de um `?phone=` que chega antes das caixas.
+    // `whatsapp::5511…` seria uma chave de dois segmentos disfarçada, e o parser
+    // devolveria o interlocutor errado — daí o `sem-caixa` explícito.
+    const result = resolvePendingDeepLink({
+      pendingPhone: "48999887766",
+      contacts: [],
       contactsLoading: false,
     });
 
-    expect(result).toEqual({ action: "select", contactKey: "48999887766" });
+    expect(result).toEqual({
+      action: "select",
+      contactKey: "whatsapp:sem-caixa:48999887766",
+    });
   });
 
   it("contato na lista → usa o phone_number canônico do contato, não o normalizado", () => {
@@ -33,13 +55,20 @@ describe("resolvePendingDeepLink", () => {
     const result = resolvePendingDeepLink({
       pendingPhone: "48999887766",
       contacts: [
-        { phone_number: "5511987654321" },
-        { phone_number: "5548999887766" },
+        { phone_number: "5511987654321", instance_id: "cx-1" },
+        { phone_number: "5548999887766", instance_id: "cx-2" },
       ],
       contactsLoading: false,
+      caixaSelecionada: "cx-1",
     });
 
-    expect(result).toEqual({ action: "select", contactKey: "5548999887766" });
+    // A caixa sai do CONTATO (`cx-2`), não da caixa aberta: com duas caixas
+    // marcadas, a conversa daquele telefone pode estar na outra — e a chave
+    // precisa apontar para a linha que existe na lista.
+    expect(result).toEqual({
+      action: "select",
+      contactKey: "whatsapp:cx-2:5548999887766",
+    });
   });
 
   it("contatos ainda carregando → espera, não cai no fallback", () => {

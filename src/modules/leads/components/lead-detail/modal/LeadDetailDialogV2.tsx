@@ -131,6 +131,9 @@ function LeadDetailContent({ onClose, isMobile }: { onClose: () => void; isMobil
     id: lead.id,
     organization_id: lead.organization_id ?? "",
     name: lead.name,
+    // Só o cabeçalho recebe o código; `lead.name` segue limpo para os
+    // `leadName` de mensagem/agendamento logo abaixo.
+    erp_code: leadAny.erp_code ?? null,
     company: lead.company,
     phone: lead.phone,
     avatar_url: leadAny.avatar_url ?? null,

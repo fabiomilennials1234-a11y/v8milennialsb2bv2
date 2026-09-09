@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import type { PipelineType } from "../model/usePipelineStages";
 
 // --- Types ---
 
@@ -13,13 +12,26 @@ export type SdrAssignmentMode = "specific" | "round_robin";
 export interface PipeDispatchRule {
   id: string;
   organization_id: string;
-  pipe_type: PipelineType;
+  /** Eco do slug do funil (SCRUM-629) — a chave real é pipeline_id. */
+  pipe_type: string;
+  /** Funil dono da regra (qualquer tipo). Preenchido por trigger no banco. */
+  pipeline_id: string | null;
   trigger_type: PipeDispatchRuleTriggerType;
   pipeline_stage_id: string | null;
   whatsapp_instance_id: string | null;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Chave de escopo das regras de disparo (SCRUM-629/W3): por funil (id) quando
+ * o chamador o conhece — obrigatório para funil custom; por pipe_type nos
+ * call sites de sistema (o trigger do banco resolve o pipeline_id).
+ */
+export interface DispatchRulesScope {
+  pipeType: string;
+  pipelineId?: string | null;
 }
 
 export interface PipeDispatchRuleStep {
@@ -41,19 +53,23 @@ export interface PipeDispatchRuleStep {
 
 // --- Hooks ---
 
-export function usePipeDispatchRules(pipeType: PipelineType) {
+export function usePipeDispatchRules(pipeType: string, pipelineId?: string | null) {
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["pipe_dispatch_rules", organizationId, pipeType],
+    queryKey: ["pipe_dispatch_rules", organizationId, pipelineId ?? pipeType],
     queryFn: async () => {
       if (!organizationId) return [];
-      const { data, error } = await supabase
+      // pipeline_id ainda não está no types.ts gerado (coluna da
+      // 20270908008000) — cast pontual até o regen pós-apply.
+      let query = (supabase as any)
         .from("pipe_dispatch_rules")
         .select("*")
-        .eq("organization_id", organizationId)
-        .eq("pipe_type", pipeType)
-        .order("created_at", { ascending: true });
+        .eq("organization_id", organizationId);
+      query = pipelineId
+        ? query.eq("pipeline_id", pipelineId)
+        : query.eq("pipe_type", pipeType);
+      const { data, error } = await query.order("created_at", { ascending: true });
       if (error) throw error;
       return (data ?? []) as PipeDispatchRule[];
     },
@@ -87,18 +103,22 @@ export function useCreatePipeDispatchRule() {
 
   return useMutation({
     mutationFn: async (payload: {
-      pipe_type: PipelineType;
+      pipe_type: string;
+      /** SCRUM-629: obrigatório para funil custom; opcional para sistema (trigger resolve). */
+      pipeline_id?: string | null;
       trigger_type: PipeDispatchRuleTriggerType;
       pipeline_stage_id?: string | null;
       whatsapp_instance_id?: string | null;
       is_active?: boolean;
     }) => {
       if (!organizationId) throw new Error("Organização não disponível");
-      const { data, error } = await supabase
+      // pipeline_id fora do types.ts gerado (20270908008000) — cast até o regen.
+      const { data, error } = await (supabase as any)
         .from("pipe_dispatch_rules")
         .insert({
           organization_id: organizationId,
           pipe_type: payload.pipe_type,
+          pipeline_id: payload.pipeline_id ?? null,
           trigger_type: payload.trigger_type,
           pipeline_stage_id: payload.trigger_type === "lead_moved_to_stage" ? payload.pipeline_stage_id ?? null : null,
           whatsapp_instance_id: payload.whatsapp_instance_id ?? null,
@@ -110,7 +130,7 @@ export function useCreatePipeDispatchRule() {
       return data as PipeDispatchRule;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rules", organizationId, variables.pipe_type] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rules", organizationId, variables.pipeline_id ?? variables.pipe_type] });
     },
   });
 }
@@ -122,14 +142,15 @@ export function useUpdatePipeDispatchRule() {
   return useMutation({
     mutationFn: async ({
       id,
-      pipe_type,
       trigger_type,
       pipeline_stage_id,
       whatsapp_instance_id,
       is_active,
     }: {
       id: string;
-      pipe_type: PipelineType;
+      pipe_type: string;
+      /** Só para invalidar a queryKey certa — a coluna não muda no update. */
+      pipeline_id?: string | null;
       trigger_type?: PipeDispatchRuleTriggerType;
       pipeline_stage_id?: string | null;
       whatsapp_instance_id?: string | null;
@@ -150,7 +171,7 @@ export function useUpdatePipeDispatchRule() {
       return data as PipeDispatchRule;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rules", organizationId, variables.pipe_type] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rules", organizationId, variables.pipeline_id ?? variables.pipe_type] });
     },
   });
 }
@@ -160,12 +181,12 @@ export function useDeletePipeDispatchRule() {
   const { organizationId } = useOrganization();
 
   return useMutation({
-    mutationFn: async ({ id, pipe_type }: { id: string; pipe_type: PipelineType }) => {
+    mutationFn: async ({ id }: { id: string; pipe_type: string; pipeline_id?: string | null }) => {
       const { error } = await supabase.from("pipe_dispatch_rules").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rules", organizationId, variables.pipe_type] });
+      queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rules", organizationId, variables.pipeline_id ?? variables.pipe_type] });
       queryClient.invalidateQueries({ queryKey: ["pipe_dispatch_rule_steps"] });
     },
   });

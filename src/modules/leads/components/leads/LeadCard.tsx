@@ -14,20 +14,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { ScheduleMessageModal } from "@/modules/communication/components/chat/ScheduleMessageModal";
+import { CreateMeetingDialog } from "@/modules/engagement";
 import { formatPhoneForWhatsApp } from "@/modules/communication/lib/whatsapp";
 import { AbrirConversaButton } from "@/modules/communication/components/chat/AbrirConversaButton";
 import { AbrirConversaMenuItem } from "@/modules/communication/components/chat/AbrirConversaMenuItem";
 import { formatDistanceToNow, isToday, isTomorrow, isPast, differenceInDays, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { DraggableItem } from "@/contracts/pipe";
+import type { DraggableItem, StageRole } from "@/contracts/pipe";
 import type { QualificationTier } from "../lead-detail/modal/types";
 import { LeadCardAvatar } from "./card/LeadCardAvatar";
 import { LeadCardLabels } from "./card/LeadCardLabels";
 import { LeadCardMetrics } from "./card/LeadCardMetrics";
-import { LeadCardCalor } from "./card/LeadCardCalor";
 import { LeadCardCompact } from "./card/LeadCardCompact";
+import { LeadEtiquetasPopover } from "../etiquetas/LeadEtiquetasPopover";
 import { formatFaturamento } from "@/lib/format/faturamento";
 import { usePipeOpsOptional } from "../../pipe-ops";
+import { useDealSheetOpcional } from "../deal-detail/deal-sheet-context";
 import { AddToFunilMenuItem, AddToFunilDialog } from "./AddToFunilDialog";
 
 // ─── Origin Colors (unified across all funnels) ──────────
@@ -94,19 +96,55 @@ export type LeadCardVariant =
 const VARIANT_CONFIG: Record<LeadCardVariant, {
   showContact: boolean; showValue: boolean; showDate: boolean;
   showProducts: boolean; showMeetLink: boolean; showNotes: boolean;
+  /**
+   * A linha de data aparece VAZIA (o convite azul "Sem data") quando não há
+   * compromisso. Separada de `showDate` no S6: o funil custom passou a
+   * DESENHAR a data que existe, mas ele é o único board que serve funil de
+   * qualquer assunto — carimbar "Sem data" em card de funil que nunca terá
+   * reunião pioraria a tela em vez de melhorá-la. Nos funis de sistema o
+   * convite continua sendo o comportamento (é ali que a data é esperada).
+   */
+  showDateEmpty: boolean;
+  /**
+   * Se a data vira também o BADGE de urgência ("Atrasado", "Hoje", "D-2",
+   * "12 dias") na faixa de badges do card.
+   *
+   * Separada de `showDate` no S6, e a separação é o ponto. `dateIndicator`
+   * saía de `config.showDate ? getDateIndicator(parsedDate) : null` — um
+   * ternário só para duas decisões diferentes. Ligar `showDate` na variante
+   * `custom` para que a reunião da Agenda aparecesse no card ligava, DE
+   * CARONA, o badge vermelho "Atrasado" em todo card de todo funil custom de
+   * toda organização — inclusive as que não pediram nada e cuja data no
+   * `metadata` nunca foi um compromisso.
+   *
+   * A regra que fica: a LINHA de data aparece porque EXISTE data; o BADGE é
+   * uma afirmação a mais — "isto está atrasado, corra" — e quem a faz é a
+   * variante, explicitamente. As cinco variantes que já tinham `showDate`
+   * ligada continuam com o badge exatamente como estava; `custom` recebe a
+   * linha sem o badge.
+   */
+  showDateBadge: boolean;
 }> = {
   // `showDate`/`showProducts` ligados em 21/08: a anatomia do DataCrazy dá
   // LINHA PRÓPRIA a produto e data, e com os dois desligados o card do funil
   // principal — que é onde o cliente olha — perdia metade do desenho novo.
   // Campo vazio não some: vira o link azul "Sem produto"/"Sem data", que é o
   // convite a preencher do próprio print.
-  whatsapp:        { showContact: true,  showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false },
-  confirmacao:     { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: true,  showNotes: false },
-  propostas:       { showContact: false, showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false },
-  followup:        { showContact: false, showValue: false, showDate: true,  showProducts: false, showMeetLink: false, showNotes: true  },
-  custom:          { showContact: true,  showValue: false, showDate: false, showProducts: false, showMeetLink: false, showNotes: true  },
-  upsell_client:   { showContact: true,  showValue: true,  showDate: false, showProducts: false, showMeetLink: false, showNotes: false },
-  upsell_campanha: { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: false, showNotes: false },
+  whatsapp:        { showContact: true,  showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false, showDateEmpty: true,  showDateBadge: true  },
+  confirmacao:     { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: true,  showNotes: false, showDateEmpty: true,  showDateBadge: true  },
+  propostas:       { showContact: false, showValue: true,  showDate: true,  showProducts: true,  showMeetLink: false, showNotes: false, showDateEmpty: true,  showDateBadge: true  },
+  followup:        { showContact: false, showValue: false, showDate: true,  showProducts: false, showMeetLink: false, showNotes: true,  showDateEmpty: true,  showDateBadge: true  },
+  // `custom` liga `showDate` no S6 (espelho da Agenda): a reunião marcada na
+  // Agenda chega ao card pelo metadata, e a data tem de aparecer porque ELA
+  // EXISTE — não porque a etapa se chama "agendado" nem porque a org tem a
+  // flag do funil mergeado. `showDateEmpty: false` é a metade obrigatória da
+  // troca: sem ela, todo card de todo funil custom ganharia "Sem data".
+  custom:          { showContact: true,  showValue: false, showDate: true,  showProducts: false, showMeetLink: false, showNotes: true,  showDateEmpty: false, showDateBadge: false },
+  // `showDateBadge: false` porque `showDate` já era `false`: a carteira nunca
+  // mostrou data nem badge, e a separação não pode ser desculpa para ligar
+  // nada. Onde a variante não tinha badge, ela continua sem.
+  upsell_client:   { showContact: true,  showValue: true,  showDate: false, showProducts: false, showMeetLink: false, showNotes: false, showDateEmpty: true,  showDateBadge: false },
+  upsell_campanha: { showContact: false, showValue: true,  showDate: true,  showProducts: false, showMeetLink: false, showNotes: false, showDateEmpty: true,  showDateBadge: true  },
 };
 
 // ─── Types ───────────────────────────────────────────────
@@ -114,10 +152,19 @@ const VARIANT_CONFIG: Record<LeadCardVariant, {
 export interface LeadCardData extends DraggableItem {
   id: string;
   name: string;
+  /**
+   * Código do cliente no ERP, exibido como prefixo do nome: "1234 - João".
+   *
+   * 🔴 Campo PRÓPRIO em vez de nome já composto, por dois motivos: o `name` é
+   * editável por duplo clique e salva o que estiver nele (com o código junto,
+   * o vendedor gravaria "1234 - João" em `leads.name` e isso vazaria em
+   * `{{nome}}` de disparo), e a inicial do avatar sai do nome — prefixado, todo
+   * cliente do ERP viraria um avatar "1".
+   */
+  erpCode?: string | null;
   company?: string | null;
   email?: string | null;
   phone?: string | null;
-  rating?: number;
   origin?: string;
   urgency?: string | null;
   tags?: Array<{ name: string; color: string }>;
@@ -133,7 +180,6 @@ export interface LeadCardData extends DraggableItem {
   dateLabel?: string | null;
   meetLink?: string | null;
   // Propostas-specific
-  calor?: number;
   products?: Array<{ name: string; type?: string; value: number }>;
   contractDuration?: number;
   // Notes
@@ -163,6 +209,19 @@ export interface LeadCardData extends DraggableItem {
   saleResponsible?:    { name: string | null; avatar_url?: string | null } | null;
   /** Stage atual da entry (slug). Usado p/ confirmação de reunião no funil mergeado. */
   stageKey?: string | null;
+  /**
+   * Papel semântico da etapa (ADR-0017 §1), resolvido no CLIENTE a partir das
+   * etapas que o board já carrega. É o que substitui a lista de slugs
+   * chumbados: `reuniao_marcada` de uma org e `agendado` de outra são a mesma
+   * coisa para o produto, e só `stage_role` sabe disso.
+   */
+  stageRole?: StageRole | null;
+  /**
+   * Funil a que a entry pertence. Semeia o `CreateMeetingDialog` aberto pelo
+   * card — sem ele o vendedor reescolhe no picker o funil de onde acabou de
+   * sair, e é o par (funil, lead) que resolve o negócio da reunião (S6).
+   */
+  pipelineId?: string | null;
   /** Data da reunião (ISO) — funil mergeado Oportunidades. */
   meetingDate?: string | null;
   /** Status de confirmação da reunião — funil mergeado (ADR-0004). */
@@ -177,6 +236,16 @@ export interface LeadCardProps {
   showContact?: boolean;
   showValue?: boolean;
   showDate?: boolean;
+  /** Override do convite "Sem data" (ver `VARIANT_CONFIG.showDateEmpty`). */
+  showDateEmpty?: boolean;
+  /**
+   * Override do badge de urgência (ver `VARIANT_CONFIG.showDateBadge`).
+   *
+   * Existe pelo mesmo motivo do irmão acima: uma superfície que QUEIRA o
+   * badge num funil custom pede aqui, explicitamente, em vez de a decisão
+   * chegar de carona junto com a linha de data.
+   */
+  showDateBadge?: boolean;
   showProducts?: boolean;
   showMeetLink?: boolean;
   showNotes?: boolean;
@@ -184,7 +253,6 @@ export interface LeadCardProps {
   onSelect?: (e: React.MouseEvent) => void;
   onClick?: () => void;
   onRemove?: () => void;
-  onCalorChange?: (calor: number) => void;
   onQuickAction?: (title: string) => void;
   onInlineEdit?: (field: string, value: string) => void;
   /**
@@ -305,14 +373,17 @@ function formatCurrency(value: number): string {
 
 export const LeadCard = memo(function LeadCard({
   lead, variant, selected, onSelect, onClick, onRemove,
-  onCalorChange, onQuickAction, onInlineEdit, extraActions,
+  onQuickAction, onInlineEdit, extraActions,
   density = "comfortable", ...overrides
 }: LeadCardProps) {
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [reuniaoOpen, setReuniaoOpen] = useState(false);
   const [addFunilOpen, setAddFunilOpen] = useState(false);
   // Resiliente: `null` quando o card monta fora de um PipeOpsProvider — nesse
   // caso o item "Adicionar a funil" e o dialog simplesmente não aparecem.
   const pipeOps = usePipeOpsOptional();
+  // `null` fora dos funis — ver `abrirChecklists` abaixo.
+  const dealSheet = useDealSheetOpcional();
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const editRef = useRef<HTMLInputElement>(null);
@@ -348,7 +419,14 @@ export const LeadCard = memo(function LeadCard({
   const urgency = lead.urgency ? URGENCY_COLORS[lead.urgency] : null;
   const hasPhone = !!formatPhoneForWhatsApp(lead.phone ?? undefined);
   const parsedDate = lead.date ? (lead.date instanceof Date ? lead.date : new Date(lead.date)) : null;
-  const dateIndicator = config.showDate ? getDateIndicator(parsedDate) : null;
+  /**
+   * O badge de urgência. Governado por `showDateBadge`, e NÃO por `showDate`:
+   * são duas afirmações diferentes sobre a mesma data — "existe compromisso"
+   * e "este compromisso está atrasado". Ler as duas do mesmo booleano foi o
+   * que fez a variante `custom`, ao ganhar a linha de data do S6, ganhar
+   * junto um "Atrasado" vermelho em todo card de todo funil custom.
+   */
+  const dateIndicator = config.showDateBadge ? getDateIndicator(parsedDate) : null;
 
   const hasContactData =
     (config.showContact && (lead.phone || lead.email)) ||
@@ -398,6 +476,23 @@ export const LeadCard = memo(function LeadCard({
     </span>
   );
   const abrirFicha = (e: React.MouseEvent) => { e.stopPropagation(); onClick?.(); };
+
+  /**
+   * "Checklists" abre o card do negócio JÁ na aba de checklists.
+   *
+   * Antes chamava `abrirFicha` e nada mais — o painel abria na primeira aba, que
+   * nem sequer tinha checklist nenhum. Item que promete um assunto e entrega
+   * outro é o que faz o menu inteiro perder a confiança.
+   *
+   * `onClick` continua sendo quem ABRE: cada superfície sabe quais ids passar
+   * (a entrada do funil, o lead). Aqui só se diz o assunto, depois — a ordem
+   * importa, porque abrir zera o pedido.
+   */
+  const abrirChecklists = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onClick?.();
+    dealSheet?.pedirAba("checklists");
+  };
   const telefoneNu = (lead.phone ?? "").replace(/\D/g, "");
 
   const itensDoMenuAdicionar = (
@@ -444,7 +539,7 @@ export const LeadCard = memo(function LeadCard({
       </DropdownMenuItem>
       {/* Checklists não leva selo: o slot da direita é do CONTADOR, como no
           protótipo (app.js:546). Verde quando tudo está feito. */}
-      <DropdownMenuItem onClick={abrirFicha}>
+      <DropdownMenuItem onClick={abrirChecklists}>
         <CheckSquare className="w-4 h-4 mr-2" /> Checklists
         {(lead.metrics?.checklistsTotal ?? 0) > 0 && (
           <span
@@ -459,9 +554,26 @@ export const LeadCard = memo(function LeadCard({
           </span>
         )}
       </DropdownMenuItem>
-      <DropdownMenuItem onClick={abrirFicha}>
-        <CalendarDays className="w-4 h-4 mr-2" /> Reunião {selo}
-      </DropdownMenuItem>
+      {/* "Reunião" ABRE o diálogo de marcar, em vez de levar à ficha.
+          Marcar reunião é a porta canônica da métrica (a agenda é a fonte),
+          então o caminho tem de ser um clique — e não "abre a ficha, acha a
+          aba, marca lá".
+
+          Cai para a ficha quando não há `leadId`: `lead.id` aqui é o id da
+          ENTRADA no funil, e `meetings.lead_id` é FK de `leads`. Marcar com o
+          id errado gravaria reunião para um lead que não existe — o mesmo
+          motivo pelo qual `LeadEtiquetasPopover` já se esconde sem `leadId`. */}
+      {lead.leadId ? (
+        <DropdownMenuItem
+          onClick={(e) => { e.stopPropagation(); setReuniaoOpen(true); }}
+        >
+          <CalendarDays className="w-4 h-4 mr-2" /> Reunião
+        </DropdownMenuItem>
+      ) : (
+        <DropdownMenuItem onClick={abrirFicha}>
+          <CalendarDays className="w-4 h-4 mr-2" /> Reunião {selo}
+        </DropdownMenuItem>
+      )}
       <DropdownMenuItem onClick={abrirFicha}>
         <Wallet className="w-4 h-4 mr-2" /> Orçamento {selo}
       </DropdownMenuItem>
@@ -511,6 +623,19 @@ export const LeadCard = memo(function LeadCard({
           leadId={lead.leadId || ""}
           leadName={lead.name}
           phoneNumber={lead.phone || ""}
+        />
+      )}
+
+      {reuniaoOpen && lead.leadId && (
+        <CreateMeetingDialog
+          open={reuniaoOpen}
+          onOpenChange={setReuniaoOpen}
+          initialLeadId={lead.leadId}
+          initialLeadName={lead.name}
+          /* Semeia o funil de ONDE o card está (S6): é o par (funil, lead) que
+             resolve o negócio da reunião, e o vendedor não deve reescolher no
+             picker o funil de que ele acabou de sair. */
+          initialPipelineId={lead.pipelineId ?? null}
         />
       )}
       {pipeOps && addFunilOpen && (
@@ -577,15 +702,6 @@ export const LeadCard = memo(function LeadCard({
           !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "confirmado" && "ring-1 ring-green-500/50",
           !selected && lead.stageKey === "agendado" && lead.confirmationStatus === "pre_confirmado" && "ring-1 ring-amber-500/50",
         )}
-        style={{
-          '--card-accent': lead.calor != null && lead.calor >= 8
-            ? 'hsl(0 80% 55%)'
-            : lead.calor != null && lead.calor >= 4
-            ? 'hsl(38 92% 50%)'
-            : lead.calor != null && lead.calor > 0
-            ? 'hsl(210 80% 55%)'
-            : undefined,
-        } as React.CSSProperties}
         onClick={onClick}
       >
         {/* ── Color stripes (Trello-style) ── */}
@@ -605,7 +721,7 @@ export const LeadCard = memo(function LeadCard({
             </button>
           )}
 
-          {/* ── Header: Avatar + Name + Calor + Kebab ──
+          {/* ── Header: Avatar + Name + Kebab ──
                Anatomia do DataCrazy: à esquerda o "símbolo do cara" (a
                inicial, 32px); a QUALIFICAÇÃO sai daqui e vai para o canto
                superior direito, menor (22px) — é o lugar onde o concorrente
@@ -647,7 +763,11 @@ export const LeadCard = memo(function LeadCard({
                     onInlineEdit && "cursor-text",
                   )}
                   onDoubleClick={(e) => startEdit("name", lead.name, e)}
+                  title={lead.erpCode ? `${lead.erpCode} - ${lead.name}` : lead.name}
                 >
+                  {lead.erpCode && (
+                    <span className="font-normal text-muted-foreground">{lead.erpCode} - </span>
+                  )}
                   {lead.name}
                 </h4>
               )}
@@ -687,9 +807,6 @@ export const LeadCard = memo(function LeadCard({
                 name={lead.name}
                 size={22}
               />
-              {lead.rating != null && lead.rating > 0 && (
-                <LeadCardCalor calor={lead.rating} onChange={onCalorChange} />
-              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                   <button className="p-0.5 rounded hover:bg-muted text-muted-foreground">
@@ -854,8 +971,25 @@ export const LeadCard = memo(function LeadCard({
 
           {/* ── Etiquetas, ABAIXO do negócio ──
                Saíram do topo do card (onde eram riscos de 1,5px sem rótulo) e
-               vieram para cá, com o nome legível, como no card do DataCrazy. */}
-          <LeadCardLabels tags={lead.tags} />
+               vieram para cá, com o nome legível, como no card do DataCrazy.
+
+               A porta para MEXER nelas fica ao lado, e não dentro do menu: o
+               menu "Etiquetas" leva à ficha, e trocar uma etiqueta era abrir a
+               ficha para cada lead. Sem `leadId` o botão não aparece — `id`
+               aqui é o da ENTRADA no funil, e pendurar etiqueta nele escreveria
+               num lead que não existe. */}
+          {lead.leadId ? (
+            <div className="flex flex-wrap items-center gap-1">
+              <LeadCardLabels tags={lead.tags} />
+              <LeadEtiquetasPopover
+                leadId={lead.leadId}
+                quantidade={lead.tags?.length ?? 0}
+                rotulo={lead.tags?.length ? undefined : "etiqueta"}
+              />
+            </div>
+          ) : (
+            <LeadCardLabels tags={lead.tags} />
+          )}
 
           {/* ── Footer: Inline metrics (Trello-style) ── */}
           <div className="flex items-center justify-between pt-2 mt-auto border-t border-border/40">
@@ -885,6 +1019,19 @@ export const LeadCard = memo(function LeadCard({
           leadId={lead.leadId || ""}
           leadName={lead.name}
           phoneNumber={lead.phone || ""}
+        />
+      )}
+
+      {reuniaoOpen && lead.leadId && (
+        <CreateMeetingDialog
+          open={reuniaoOpen}
+          onOpenChange={setReuniaoOpen}
+          initialLeadId={lead.leadId}
+          initialLeadName={lead.name}
+          /* Semeia o funil de ONDE o card está (S6): é o par (funil, lead) que
+             resolve o negócio da reunião, e o vendedor não deve reescolher no
+             picker o funil de que ele acabou de sair. */
+          initialPipelineId={lead.pipelineId ?? null}
         />
       )}
 

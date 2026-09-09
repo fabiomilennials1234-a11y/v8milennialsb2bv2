@@ -3,10 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { format, isToday, isTomorrow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CalendarClock, MapPin, Video } from "lucide-react";
-import { useAgendaEvents, type AgendaEvent } from "@/modules/engagement";
+import { cn } from "@/lib/utils";
+import { diasAte } from "@/modules/analytics/lib/comando-proximos-passos";
+import {
+  useComandoAgenda,
+  type ComandoAgendaEvent,
+} from "@/modules/analytics/hooks/useComandoAgenda";
 import { ComandoCard } from "./ComandoCard";
+import { DonoDaLinha } from "./DonoDaLinha";
 
-const MOSTRAR = 6;
+/** Os próximos cinco compromissos — pedido do CTO em 2026-09-04. */
+const MOSTRAR = 5;
 /** Janela de "próximas". Curta o bastante para ser fila, longa para não vazar. */
 const DIAS_A_FRENTE = 14;
 
@@ -39,36 +46,51 @@ function rotuloDoDia(inicio: Date): string {
   return format(inicio, "EEE, dd MMM", { locale: ptBR });
 }
 
+
 /**
  * Bloco 2 — o que já está marcado.
  *
- * Reusa `useAgendaEvents`, que é a MESMA fonte da tela /agenda (RPC
- * `get_agenda_events`, UNION de meetings + follow_ups + scheduled_user_messages
- * + pipe_confirmacao). Não existe segunda consulta aqui: se a agenda mudar de
- * fonte, este bloco acompanha sozinho.
+ * Lê `useComandoAgenda`, que COMPÕE sobre a mesma `get_agenda_events` da tela
+ * /agenda (UNION de meetings + follow_ups + scheduled_user_messages +
+ * pipe_confirmacao + meeting_events) e só acrescenta o recorte por usuário.
+ * Se a agenda ganhar uma sexta fonte, este bloco acompanha sozinho.
+ *
+ * ⚠️ NÃO usa `useAgendaEvents` direto de propósito: aquele hook serve a tela
+ * /agenda, que deve continuar mostrando a operação inteira. Aqui o vendedor vê
+ * só os compromissos dele (mais os que não são de ninguém — 61% das reuniões
+ * de confirmação estão nesse caso, medido no PROD). Quem recorta é a RPC.
  */
 export function CardProximasAgendas() {
   const navigate = useNavigate();
 
-  // A janela é derivada uma vez; recriar `new Date()` a cada render trocaria a
-  // queryKey em todo ciclo e a query nunca sairia de `fetching`.
+  // A janela é derivada uma vez POR DIA. Recriar `new Date()` a cada render
+  // trocaria a queryKey em todo ciclo e a query nunca sairia de `fetching`;
+  // memoizar com `[]`, como estava, congelava a janela no momento em que a aba
+  // foi aberta — quem deixa o Comando aberto durante a virada do dia
+  // continuava lendo "Hoje" sobre ontem, e nem refetch corrigia, porque os ISO
+  // congelados também iam na chave.
+  const diaCorrente = new Date().toDateString();
   const [inicio, fim] = useMemo(() => {
     const agora = new Date();
     const limite = new Date(agora);
     limite.setDate(limite.getDate() + DIAS_A_FRENTE);
     return [agora, limite];
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a data é a dependência real; `diaCorrente` é a forma estável dela
+  }, [diaCorrente]);
 
-  const { data, isLoading, isError, refetch } = useAgendaEvents(inicio, fim);
+  const { data, isLoading, isError, isAdmin, refetch } = useComandoAgenda(
+    inicio,
+    fim,
+  );
 
   const eventos = useMemo(() => {
     const agora = inicio.getTime();
     return (data ?? [])
-      .filter((e: AgendaEvent) => !STATUS_ENCERRADO.has((e.status ?? "").toLowerCase()))
+      .filter((e: ComandoAgendaEvent) => !STATUS_ENCERRADO.has((e.status ?? "").toLowerCase()))
       // A janela da RPC é assimétrica por fonte: `meetings` usa OVERLAP, então
       // devolve reunião que começou antes de agora e ainda não acabou. Numa
       // lista de "próximas" isso confunde — o corte é explícito aqui.
-      .filter((e: AgendaEvent) => new Date(e.start_at).getTime() >= agora)
+      .filter((e: ComandoAgendaEvent) => new Date(e.start_at).getTime() >= agora)
       .sort(
         (a, b) => new Date(a.start_at).getTime() - new Date(b.start_at).getTime(),
       );
@@ -82,12 +104,17 @@ export function CardProximasAgendas() {
       icon={CalendarClock}
       title="Próximas agendas"
       count={eventos.length}
+      scopeHint={isAdmin ? "Equipe" : undefined}
       action={{ label: "Ver agenda", to: "/agenda" }}
       isLoading={isLoading}
       isError={isError}
       isEmpty={visiveis.length === 0}
       emptyTitle="Nada marcado"
-      emptyHint={`Sem compromisso nos próximos ${DIAS_A_FRENTE} dias. Marque pela agenda ou movendo um lead para a etapa de reunião.`}
+      emptyHint={
+        isAdmin
+          ? `Sem compromisso do time nos próximos ${DIAS_A_FRENTE} dias. Marque pela agenda ou movendo um lead para a etapa de reunião.`
+          : `Você não tem compromisso nos próximos ${DIAS_A_FRENTE} dias. Marque pela agenda ou movendo um lead para a etapa de reunião.`
+      }
       onRetry={() => void refetch()}
       footer={
         restantes > 0 ? (
@@ -133,12 +160,39 @@ export function CardProximasAgendas() {
                       {e.lead_company ? ` · ${e.lead_company}` : ""}
                     </span>
                   ) : null}
+                  {/* Só o admin: para o vendedor a agenda inteira já é dele. */}
+                  {isAdmin && (
+                    <DonoDaLinha
+                      nome={e.owner_name}
+                      className="mt-0.5"
+                      semDonoLabel="Sem responsável"
+                    />
+                  )}
                 </span>
 
                 <span className="hidden shrink-0 items-center gap-1.5 text-muted-foreground/50 sm:flex">
                   {e.meet_link && <Video className="h-3 w-3" />}
                   {e.location && <MapPin className="h-3 w-3" />}
                 </span>
+
+                {/* Contagem regressiva à direita: a coluna da esquerda diz QUANDO
+                    é, esta diz QUANTO FALTA. São leituras diferentes — "qui, 11
+                    set" não responde "isso é longe?" sem uma conta de cabeça. */}
+                {(() => {
+                  const { texto, hoje } = diasAte(inicioEvento, inicio);
+                  return (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums",
+                        hoje
+                          ? "bg-primary/15 text-primary"
+                          : "bg-muted text-muted-foreground/70",
+                      )}
+                    >
+                      {texto}
+                    </span>
+                  );
+                })()}
               </button>
             </li>
           );

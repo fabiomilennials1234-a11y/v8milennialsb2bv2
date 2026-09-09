@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import { usePipelineStages, type PipelineStage } from "@/modules/pipelines";
+import { type PipelineStage } from "@/modules/pipelines";
+import { useCarteiraStages } from "@/modules/carteira/hooks/useCarteiraStages";
 import { useUpsellClients } from "./useUpsellClients";
 import { useUpsellOrders } from "./useUpsellOrders";
 import { useUpsellGestaoRules } from "./useUpsellGestaoRules";
@@ -23,7 +24,7 @@ import { useQueryClient } from "@tanstack/react-query";
  */
 export function useAutoMoveUpsellClients() {
   const { organizationId } = useOrganization();
-  const { data: baseStages } = usePipelineStages("upsell_base");
+  const { data: baseStages } = useCarteiraStages("upsell_base");
   const { data: clients } = useUpsellClients();
   const { data: orders } = useUpsellOrders();
   const { data: gestaoRules } = useUpsellGestaoRules();

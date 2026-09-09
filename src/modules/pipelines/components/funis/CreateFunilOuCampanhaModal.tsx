@@ -37,8 +37,9 @@ import {
   type FunnelTemplateType,
 } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 import {
-  useHiddenDefaultPipes,
-  useTogglePipeVisibility,
+  useAvailableSystemPipes,
+  useEnableSystemPipe,
+  type SystemPipeType,
 } from "@/modules/pipelines/hooks/config/usePipelineDisplayConfig";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -118,7 +119,7 @@ interface Props {
 export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
   const createPipeline = useCreateCustomPipeline();
-  const hiddenPipes = useHiddenDefaultPipes();
+  const hiddenPipes = useAvailableSystemPipes();
 
   // Step
   const [step, setStep] = useState<"templates" | "config">("templates");
@@ -200,7 +201,7 @@ export function CreateFunilOuCampanhaModal({ open, onOpenChange }: Props) {
 
       toast.success(`Funil "${pipeline.name}" criado com sucesso`);
       handleClose();
-      navigate(`/pipe/custom/${pipeline.slug}`);
+      navigate(`/funil/${pipeline.slug}`);
     } catch (error: any) {
       toast.error(error.message || "Erro ao criar funil");
     }
@@ -516,12 +517,12 @@ function ActivateHiddenFunnelDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
-  const hiddenPipes = useHiddenDefaultPipes();
-  const toggleVisibility = useTogglePipeVisibility();
+  const hiddenPipes = useAvailableSystemPipes();
+  const enablePipe = useEnableSystemPipe();
 
   const handleActivate = async (pipeType: string, displayName: string) => {
     try {
-      await toggleVisibility.mutateAsync({ pipeType, visible: true });
+      await enablePipe.mutateAsync(pipeType as SystemPipeType);
       toast.success(`"${displayName}" ativado com sucesso`);
       onOpenChange(false);
     } catch {
@@ -552,18 +553,15 @@ function ActivateHiddenFunnelDialog({
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{pipe.display_name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    Funil estrutural
-                  </p>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
                   className="flex-shrink-0 border-green-500/50 text-green-600 hover:bg-green-500/10 hover:text-green-600"
                   onClick={() => handleActivate(pipe.pipe_type, pipe.display_name)}
-                  disabled={toggleVisibility.isPending}
+                  disabled={enablePipe.isPending}
                 >
-                  {toggleVisibility.isPending ? (
+                  {enablePipe.isPending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
                     <>

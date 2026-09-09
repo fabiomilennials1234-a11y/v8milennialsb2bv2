@@ -1,9 +1,21 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useOrganization } from "@/modules/identity";
-import type { SavedView, SavedViewInsert, SavedViewUpdate } from "@/types/saved-views";
+import type {
+  SavedView,
+  SavedViewEntityType,
+  SavedViewInsert,
+  SavedViewUpdate,
+} from "@/types/saved-views";
 
-export function useSavedViews(entityType: string) {
+/**
+ * Views salvas de uma entidade. Pra funil, o entityType canônico é
+ * `pipeline:{uuid}` — construa com `pipelineEntityType(pipelineId)` de
+ * `@/types/saved-views`. Slug legado ("pipe_whatsapp") segue aceito só como
+ * fallback de leitura pós-migração 20270909001000: devolve as views órfãs
+ * que ela não pôde resolver, ou lista vazia.
+ */
+export function useSavedViews(entityType: SavedViewEntityType) {
   const { organizationId } = useOrganization();
 
   return useQuery({
@@ -57,7 +69,7 @@ export function useUpdateSavedView() {
       id,
       entityType,
       ...updates
-    }: SavedViewUpdate & { id: string; entityType: string }) => {
+    }: SavedViewUpdate & { id: string; entityType: SavedViewEntityType }) => {
       const { data, error } = await supabase
         .from("saved_views" as any)
         .update(updates as any)
@@ -80,13 +92,9 @@ export function useDeleteSavedView() {
   const { organizationId } = useOrganization();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      entityType,
-    }: {
-      id: string;
-      entityType: string;
-    }) => {
+    // `entityType` não entra no delete — existe no shape só pro onSuccess
+    // invalidar a queryKey certa via `variables`.
+    mutationFn: async ({ id }: { id: string; entityType: SavedViewEntityType }) => {
       const { error } = await supabase
         .from("saved_views" as any)
         .delete()

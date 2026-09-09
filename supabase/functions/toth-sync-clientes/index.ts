@@ -46,6 +46,7 @@ import { cachedClientStore } from "../_shared/erp/sync/cached-client-store.ts";
 import { deferredEnrichStore } from "../_shared/erp/sync/deferred-enrich-store.ts";
 import { bulkCreateClients } from "../_shared/erp/sync/bulk-create-clients.ts";
 import { upsertCanonicalClient, type ErpSyncMode } from "../_shared/erp/sync/upsert-client.ts";
+import { loadOwnerMap } from "../_shared/erp/sync/owner-map.ts";
 import type { CanonicalClient } from "../_shared/erp/types.ts";
 import { normalizePhoneForSearch } from "../_shared/lead-service.ts";
 import {
@@ -169,7 +170,7 @@ Deno.serve(
       // Literal única: o supabase-js infere as colunas a partir do TEXTO do
       // select. Concatenar com `+` produz `string` genérico e o retorno degrada
       // para `GenericStringError`, quebrando o acesso a todo campo.
-      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras, clientes_empresa, clientes_incluir_sem_empresa")
+      .select("id, erp_sync_mode, clientes_cursor, status, clientes_dias_compras, clientes_marcas, clientes_somente_com_compra, clientes_empresa, clientes_incluir_sem_empresa")
       .eq("organization_id", organizationId)
       .maybeSingle();
 
@@ -198,6 +199,22 @@ Deno.serve(
       supabaseClientStore(admin, TOTH_PROVIDER_ID),
     );
 
+    /**
+     * De-para de representante, carregado uma vez.
+     *
+     * 🔴 **Mapa vazio não escreve nada.** 216 representantes distintos no ERP da
+     * Café Jurerê contra 8 team members na org, com nomes ambíguos, grafias
+     * divergentes e seis "representantes" que são canais e não pessoas — não há
+     * correspondência a descobrir, há decisão humana a registrar. Enquanto
+     * `erp_owner_map` estiver vazia, `responsible_id` não é tocado em cliente
+     * nenhum, e a sincronização se comporta exatamente como antes.
+     *
+     * O cuidado é deliberado: dono de lead é o que a regra de visibilidade do
+     * Torque lê. Atribuir 11 mil donos por engano não dá erro — dá gente que
+     * deixou de enxergar a própria carteira.
+     */
+    const ownerMap = await loadOwnerMap(admin, organizationId, TOTH_PROVIDER_ID);
+
     // Enriquecimento vai para uma fila e é escrito em paralelo no fim.
     //
     // Enquanto os enriquecimentos eram poucos, escrever um a um no laço não
@@ -225,12 +242,25 @@ Deno.serve(
 
     // A janela de "cliente ativo" vem da CONEXÃO, não do corpo: é decisão de
     // negócio da organização e precisa valer igual no botão e no cron. Sem ela,
-    // a carga traz a base inteira — 12.605 registros na Café Jurerê, quase todos
+    // a carga traz a base inteira — 12.632 registros na Café Jurerê, quase todos
     // histórico, o que enche a carteira de nome sem relevância comercial.
     const diasCompras = conn.clientes_dias_compras as number | null;
     if (typeof diasCompras === "number" && diasCompras > 0) {
       filtros.diasCompras = String(diasCompras);
     }
+
+    /**
+     * 🔑 `marcas` é a chave que LIGA a janela de dias.
+     *
+     * Medido contra o ERP real em 25/08: `diasCompras=60` sozinho devolve 12.633
+     * linhas — a base inteira. Acompanhado de `marcas=1,2,3,4,5,6`, devolve 550.
+     * A janela nunca esteve quebrada; faltava dizer de quais marcas.
+     *
+     * O ganho não é só de recorte: a resposta cai de 21 MB para menos de 1 MB, e
+     * é a mesma leitura que antes gastava um minuto de CPU do worker.
+     */
+    const marcas = (conn.clientes_marcas as string | null)?.trim();
+    if (marcas) filtros.marcas = marcas;
 
     // Override pontual, para diagnóstico. Allowlist estrita: parâmetro inventado
     // já provocou HTTP 500 uma vez.
@@ -265,6 +295,12 @@ Deno.serve(
         ? body.incluir_sem_empresa
         : conn.clientes_incluir_sem_empresa === true;
 
+    /** Só quem tem data de último pedido faturado. Ver o uso, no laço. */
+    const somenteComCompra =
+      typeof body.somente_com_compra === "boolean"
+        ? body.somente_com_compra
+        : conn.clientes_somente_com_compra === true;
+
     const maxEnrich =
       typeof body.max_enrich === "number" && body.max_enrich > 0
         ? Math.floor(body.max_enrich)
@@ -274,6 +310,12 @@ Deno.serve(
     const stats = { pages: 0, rows: 0, created: 0, enriched: 0, skipped: 0, failed: 0 };
     /** Quantos o filtro de empresa deixou de fora, e de quem eram. */
     const foraDoFiltro = { total: 0, sem_empresa: 0, por_empresa: {} as Record<string, number> };
+    /**
+     * Clientes sem `dataEmissaoUltimoPedidoFaturado`. Contados mesmo quando
+     * entram: é o número que revela quanto da carteira nunca faturou, e ele
+     * muda a leitura de qualquer média de recência.
+     */
+    const semUltimaCompra = { recebidos: 0, descartados: 0 };
     const mappingErrors: string[] = [];
     const previews: PreviewedClient[] = [];
     const mappedClients: CanonicalClient[] = [];
@@ -354,6 +396,22 @@ Deno.serve(
             continue;
           }
 
+          /**
+           * Recorte estrito: só quem já faturou alguma coisa.
+           *
+           * Desligado por padrão, e é decisão de negócio ligar. Dentro da janela
+           * do ERP existe quem pediu e ainda não faturou — 131 dos 550 na
+           * medição de 25/08 —, e esses são carteira legítima. Quem liga isto
+           * está dizendo "carteira é quem já comprou", que é uma definição
+           * defensável, não a padrão.
+           */
+          if (somenteComCompra && !canonical.lastOrderAt) {
+            semUltimaCompra.descartados++;
+            filteredInThisPage++;
+            continue;
+          }
+          if (!canonical.lastOrderAt) semUltimaCompra.recebidos++;
+
           if (seenIds.has(canonical.externalId)) continue;
           seenIds.add(canonical.externalId);
           newInThisPage++;
@@ -404,6 +462,7 @@ Deno.serve(
                 source: TOTH_PROVIDER_ID,
                 client: canonical,
                 syncMode,
+                ownerMap,
               });
               if (result.action === "enriched") {
                 stats.enriched++;
@@ -516,6 +575,13 @@ Deno.serve(
           escreveu: false,
           modo: syncMode,
           janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+          marcas: filtros.marcas ?? null,
+          // A janela só vale acompanhada de marcas — sem elas o ERP devolve a
+          // base inteira. Dizer isso aqui evita que alguém leia "janela: 60" e
+          // conclua que o recorte aconteceu.
+          janela_inerte: !!filtros.diasCompras && !filtros.marcas,
+          somente_com_compra: somenteComCompra,
+          sem_ultima_compra: semUltimaCompra,
           empresa: empresaFiltro,
           incluir_sem_empresa: incluirSemEmpresa,
           fora_do_filtro_de_empresa: foraDoFiltro,
@@ -570,12 +636,81 @@ Deno.serve(
         clients: toCreate,
         usedPhones,
         normalizePhone: normalizePhoneForSearch,
+        ownerMap,
       });
       stats.created = bulk.created;
       stats.failed += bulk.failed;
       for (const e of bulk.errors) {
         if (mappingErrors.length < 3) mappingErrors.push(e);
       }
+    }
+
+    /**
+     * Desce o dono do cliente para o lead ligado.
+     *
+     * Só faz sentido rodar se houver mapa: sem ele nenhum `responsible_id` foi
+     * escrito, e a chamada seria uma varredura em 12 mil linhas para não mudar
+     * nada. A função em si já é idempotente e só escreve o que difere.
+     */
+    let leadsComDonoNovo = 0;
+    if (ownerMap.size > 0) {
+      const { data: propagados, error: propErr } = await admin.rpc(
+        "propagate_erp_owner_to_leads",
+        { p_organization_id: organizationId },
+      );
+      if (propErr) {
+        // Não derruba a sincronização: os clientes já estão gravados, e o dono
+        // do lead é derivado — a próxima volta desce de novo.
+        if (mappingErrors.length < 3) {
+          mappingErrors.push(`propagate_erp_owner_to_leads: ${propErr.message}`);
+        }
+      } else {
+        leadsComDonoNovo = typeof propagados === "number" ? propagados : 0;
+      }
+    }
+
+    /**
+     * Aplica a lei de classificação Lead · Cliente · Indefinido.
+     *
+     * Roda em TODA sincronização, não uma vez — foi o pedido explícito. A
+     * função é idempotente (só escreve o que difere) e respeita
+     * `classificacao_manual`, então quem foi movido à mão pelos três pontos não
+     * volta atrás na madrugada seguinte.
+     *
+     * Chamada sem condição de nossa parte: quem decide se roda é a própria
+     * função, lendo `classificar_leads_por_situacao` e `clientes_situacoes` da
+     * conexão. Duplicar esse gate aqui criaria duas verdades sobre quando a lei
+     * vale — e a do TypeScript envelheceria primeiro.
+     */
+    let classificacao = { cliente: 0, indefinido: 0, lead: 0, restantes: 0, lotes: 0 };
+    // Até 12 lotes de 2.000 = 24 mil leads por execução, folgado para a maior
+    // org conhecida (12.686). O teto existe para que um bug de convergência
+    // vire execução longa, e não laço infinito.
+    for (let i = 0; i < 12; i++) {
+      const { data: classData, error: classErr } = await admin.rpc(
+        "apply_erp_lead_classification",
+        { p_organization_id: organizationId, p_limit: 2000 },
+      );
+      if (classErr) {
+        // Não derruba: os clientes já estão gravados e a gaveta é derivada — a
+        // próxima volta reclassifica de onde parou.
+        if (mappingErrors.length < 3) {
+          mappingErrors.push(`apply_erp_lead_classification: ${classErr.message}`);
+        }
+        break;
+      }
+      const linha = (Array.isArray(classData) ? classData[0] : null) as
+        | Record<string, unknown>
+        | null;
+      if (!linha) break;
+      classificacao = {
+        cliente: classificacao.cliente + Number(linha.virou_cliente ?? 0),
+        indefinido: classificacao.indefinido + Number(linha.virou_indefinido ?? 0),
+        lead: classificacao.lead + Number(linha.virou_lead ?? 0),
+        restantes: Number(linha.restantes ?? 0),
+        lotes: i + 1,
+      };
+      if (classificacao.restantes === 0) break;
     }
 
     await admin
@@ -599,6 +734,12 @@ Deno.serve(
         mapping_errors: mappingErrors.length,
         empresa: empresaFiltro,
         fora_do_filtro: foraDoFiltro.total,
+        marcas: filtros.marcas ?? null,
+        janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+        sem_ultima_compra: semUltimaCompra,
+        representantes_mapeados: ownerMap.size,
+        leads_com_dono_novo: leadsComDonoNovo,
+        classificacao,
       },
     });
 
@@ -607,12 +748,19 @@ Deno.serve(
         success: true,
         stop_reason: stopReason,
         stats,
+        // Zero nos três com a lei ligada é sinal de que `clientes_situacoes`
+        // ainda está NULL — a lei não roda sem o conjunto confirmado.
+        classificacao,
         // Bateu o teto por execução: falta gente. A próxima execução atravessa
         // de graça o que já está igual e continua daqui. Dizer isso evita ler
         // um número parcial como se fosse o total.
         incompleto: stopReason === "max_enrich",
         empresa: empresaFiltro,
         fora_do_filtro_de_empresa: foraDoFiltro,
+        marcas: filtros.marcas ?? null,
+        janela_dias_compras: filtros.diasCompras ? Number(filtros.diasCompras) : null,
+        janela_inerte: !!filtros.diasCompras && !filtros.marcas,
+        sem_ultima_compra: semUltimaCompra,
         mapping_errors: mappingErrors,
       },
       cors,

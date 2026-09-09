@@ -54,6 +54,8 @@ vi.mock("@/shared/hooks/useLogLeadAction", () => ({ useLogLeadAction: () => vi.f
 // O modal de novo negócio lista os donos possíveis — vem do identity, que exige
 // AuthProvider. Aqui só interessa que o modal renderize.
 vi.mock("@/modules/identity", () => ({
+  useIdentity: () => ({ userId: "user-1" }),
+  useOrganization: () => ({ organizationId: "org-1", timezone: "America/Sao_Paulo" }),
   useResponsibleMembers: () => [{ id: "tm-1", name: "Ana" }],
   useCurrentTeamMember: () => ({ data: { id: "tm-1", organization_id: "org-1" } }),
   isVirtualTeamMember: (id: string) => String(id).startsWith("master-virtual-"),
@@ -138,7 +140,7 @@ describe("CrossPipePanel — rails", () => {
       data: [
         {
           type: "standard",
-          pipeType: "qualificacao",
+          pipeType: "whatsapp",
           label: "Qualificação",
           color: "#6366f1",
           pipeId: "entry-q",
@@ -284,7 +286,7 @@ describe("CrossPipePanel — collapsible rails", () => {
   const threeActivePipes = [
     {
       type: "standard",
-      pipeType: "qualificacao",
+      pipeType: "whatsapp",
       label: "Qualificação",
       color: "#6366f1",
       pipeId: "entry-q",

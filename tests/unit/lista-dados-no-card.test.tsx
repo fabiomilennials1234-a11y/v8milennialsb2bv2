@@ -122,13 +122,17 @@ describe("Lista de Leads — o cluster Dados NÃO volta para a linha (ADR-0024 �
     expect(screen.queryByText(/^dados$/i)).toBeNull();
   });
 
-  it("o cabeçalho declara as dez colunas que sobraram, e nessa ordem", () => {
+  it("o cabeçalho declara as onze colunas que sobraram, e nessa ordem", () => {
     const { container } = render(<LeadListHeader />);
 
     const celulas = Array.from(container.firstElementChild!.children).map((c) =>
       (c.textContent ?? "").trim(),
     );
 
+    // "Recompra" entrou com o anel de tempo médio de recompra (#1994,
+    // `438e538d`), que acrescentou a coluna e não atualizou esta lista. Passou
+    // despercebido porque `main` está com `Lint & Build` vermelho e o job de
+    // Unit Tests fica `skipped` atrás dele — só rodou de novo aqui.
     expect(celulas).toEqual([
       "",
       "Nome",
@@ -137,6 +141,7 @@ describe("Lista de Leads — o cluster Dados NÃO volta para a linha (ADR-0024 �
       "Relação",
       "Situação",
       "Negócios",
+      "Recompra",
       "Dono da conta",
       "Data de criação",
       "",

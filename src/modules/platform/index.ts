@@ -67,7 +67,6 @@ export * from "./lib/logger";
 export * from "./lib/optimistic-lock";
 export * from "./lib/rate-limit";
 export * from "./lib/onboarding-suggestions";
-export * from "./lib/pipeline-config-from-quiz";
 export * from "./lib/tv-config-from-quiz";
 
 // ────────────────────────────────────────────────────────────────────────
@@ -89,6 +88,24 @@ export { OnboardingQuestion } from "./components/onboarding/OnboardingQuestion";
 
 // Components — Notifications + System alerts
 export { AlertsDropdown } from "./components/notifications/AlertsDropdown";
+export { useAvisos } from "./hooks/useAvisos";
+export { usePreferenciasDeAviso } from "./hooks/usePreferenciasDeAviso";
+export { usePresenca } from "./hooks/usePresenca";
+export { PADROES, entregaDoTipo, resolverPreferencias } from "./lib/preferencias-de-aviso";
+export { JANELA_DE_REPIQUE_MS, decidirEntrega, timbreDoTipo } from "./lib/decisao-de-entrega";
+export type { ContextoDeEntrega, Entrega, Timbre } from "./lib/decisao-de-entrega";
+export { MotorDeSom, motorDeSom } from "./lib/motor-de-som";
+export { conversaAberta, definirConversaAberta } from "./lib/conversa-aberta";
+export { TETO_DE_CARTOES, VIDA_PADRAO_MS, dispensar, empilhar, expirar } from "./lib/pilha-de-cartoes";
+export type { Cartao } from "./lib/pilha-de-cartoes";
+export { assinarCartoes, dispensarCartao, estadoDosCartoes, mostrarCartao, varrerCartoesVencidos } from "./lib/cartoes-store";
+export { PilhaDeCartoes } from "./components/notifications/PilhaDeCartoes";
+export type { PreferenciasDeAviso as PreferenciasDeAvisoValores, EntregaDoTipo } from "./lib/preferencias-de-aviso";
+export { PreferenciasDeAviso } from "./components/notifications/PreferenciasDeAviso";
+export { aplicarEventoDeAviso, contarNaoLidos, instanteDoAviso } from "./lib/aviso-stream";
+export { FAMILIAS, agruparPorTempo, contarPorFamilia, familiaDoAviso, filtrarPorFamilia } from "./lib/aviso-agrupamento";
+export type { Familia, GrupoDeAvisos } from "./lib/aviso-agrupamento";
+export type { Aviso, EventoDeAviso } from "./lib/aviso-stream";
 export { AlertsBanner } from "./components/system-alerts/AlertsBanner";
 
 // Components — Feature Lock / Feature Route

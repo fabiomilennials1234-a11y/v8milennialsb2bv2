@@ -82,8 +82,15 @@ function aggregateSoldByItem(rows: SoldRow[]): { sold: number; mrr: number; proj
  * Métricas do pipe de Propostas.
  * range === null → totais históricos ("Geral").
  * range !== null → filtra por intervalo (mês, semana ou custom).
+ *
+ * `options.enabled` (SCRUM-633): gate real de query — `useFunilMetrics` chama
+ * os 3 hooks legados incondicionalmente (regra de hooks) e liga só o do slug
+ * resolvido. Mesmo padrão de `useAllFunnelsLeadIds`.
  */
-export function usePipePropostasMetrics(range: DateRange | null) {
+export function usePipePropostasMetrics(
+  range: DateRange | null,
+  options: { enabled?: boolean } = {},
+) {
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
@@ -94,24 +101,26 @@ export function usePipePropostasMetrics(range: DateRange | null) {
       }
 
       const activeStatuses = ["marcar_compromisso", "compromisso_marcado", "proposta_enviada", "esfriou", "futuro"];
-      const soldSelect = `id, status, sale_value, product_type, contract_duration, items:pipe_proposta_items(sale_value, product:products(type))`;
+      const soldSelect = `id, stage_key, sale_value, product_type, contract_duration, items:pipe_proposta_items(sale_value, product:products(type))`;
 
       if (!range) {
         // "Geral" — sem filtro temporal
         const { data: allData, error: allError } = await supabase
-          .from("pipe_propostas")
-          .select("status, sale_value, product_type")
-          .eq("organization_id", organizationId);
+          .from("negocio_projetado")
+          .select("stage_key, sale_value, product_type")
+          .eq("organization_id", organizationId)
+          .eq("funil_sistema", "propostas");
         if (allError) throw allError;
 
         const { data: soldDataWithItems, error: soldError } = await supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select(soldSelect)
           .eq("organization_id", organizationId)
-          .eq("status", "vendido");
+          .eq("funil_sistema", "propostas")
+          .eq("stage_key", "vendido");
         if (soldError) throw soldError;
 
-        const inProgressData = (allData || []).filter((r) => activeStatuses.includes(r.status));
+        const inProgressData = (allData || []).filter((r) => activeStatuses.includes(r.stage_key));
         const soldRows = (soldDataWithItems || []) as SoldRow[];
         const { sold, mrr, projeto } = aggregateSoldByItem(soldRows);
         // Taxa de conversão = vendidos / total no pipe (vendidos + perdidos + em progresso).
@@ -134,36 +143,40 @@ export function usePipePropostasMetrics(range: DateRange | null) {
       const { startStr, endStr } = range;
       const [propQ1, propQ2, propQ3, activeQ] = await Promise.all([
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select(soldSelect)
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("funil_sistema", "propostas")
+          .eq("stage_key", "vendido")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
           .lte("metrics_period_at", endStr),
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select(soldSelect)
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("funil_sistema", "propostas")
+          .eq("stage_key", "vendido")
           .is("metrics_period_at", null)
           .not("closed_at", "is", null)
           .gte("closed_at", startStr)
           .lte("closed_at", endStr),
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select(soldSelect)
           .eq("organization_id", organizationId)
-          .eq("status", "vendido")
+          .eq("funil_sistema", "propostas")
+          .eq("stage_key", "vendido")
           .is("metrics_period_at", null)
           .is("closed_at", null)
           .gte("updated_at", startStr)
           .lte("updated_at", endStr),
         supabase
-          .from("pipe_propostas")
-          .select("sale_value, status")
+          .from("negocio_projetado")
+          .select("sale_value, stage_key")
           .eq("organization_id", organizationId)
-          .in("status", activeStatuses),
+          .eq("funil_sistema", "propostas")
+          .in("stage_key", activeStatuses),
       ]);
 
       const soldData = [...(propQ1.data || []), ...(propQ2.data || []), ...(propQ3.data || [])] as SoldRow[];
@@ -173,41 +186,46 @@ export function usePipePropostasMetrics(range: DateRange | null) {
       // Denominador correto para evitar taxa inflada quando não marcam "perdido".
       const [enteredQ1, enteredQ2, lostQ1, lostQ2, lostQ3] = await Promise.all([
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("id")
           .eq("organization_id", organizationId)
+          .eq("funil_sistema", "propostas")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
           .lte("metrics_period_at", endStr),
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("id")
           .eq("organization_id", organizationId)
+          .eq("funil_sistema", "propostas")
           .is("metrics_period_at", null)
           .gte("created_at", startStr)
           .lte("created_at", endStr),
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("id")
           .eq("organization_id", organizationId)
-          .eq("status", "perdido")
+          .eq("funil_sistema", "propostas")
+          .eq("stage_key", "perdido")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
           .lte("metrics_period_at", endStr),
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("id")
           .eq("organization_id", organizationId)
-          .eq("status", "perdido")
+          .eq("funil_sistema", "propostas")
+          .eq("stage_key", "perdido")
           .is("metrics_period_at", null)
           .not("closed_at", "is", null)
           .gte("closed_at", startStr)
           .lte("closed_at", endStr),
         supabase
-          .from("pipe_propostas")
+          .from("negocio_projetado")
           .select("id")
           .eq("organization_id", organizationId)
-          .eq("status", "perdido")
+          .eq("funil_sistema", "propostas")
+          .eq("stage_key", "perdido")
           .is("metrics_period_at", null)
           .is("closed_at", null)
           .gte("updated_at", startStr)
@@ -230,7 +248,7 @@ export function usePipePropostasMetrics(range: DateRange | null) {
         conversionRate,
       };
     },
-    enabled: isReady && !!organizationId,
+    enabled: isReady && !!organizationId && (options.enabled ?? true),
     staleTime: 60000,
   });
 }
@@ -240,7 +258,10 @@ export function usePipePropostasMetrics(range: DateRange | null) {
  * range === null → totais históricos ("Geral").
  * range !== null → filtra por intervalo.
  */
-export function usePipeConfirmacaoMetrics(range: DateRange | null) {
+export function usePipeConfirmacaoMetrics(
+  range: DateRange | null,
+  options: { enabled?: boolean } = {},
+) {
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
@@ -265,10 +286,13 @@ export function usePipeConfirmacaoMetrics(range: DateRange | null) {
         new Date(r.updated_at) <= overdueLimit;
 
       if (!range) {
+        // `status:stage_key` — apelido mantém a chave `status` que
+        // `computeConfirmacaoStats` e `isOverdue` já consomem.
         const { data, error } = await supabase
-          .from("pipe_confirmacao")
-          .select("status, meeting_date, updated_at")
-          .eq("organization_id", organizationId);
+          .from("negocio_projetado")
+          .select("status:stage_key, meeting_date, updated_at")
+          .eq("organization_id", organizationId)
+          .eq("funil_sistema", "confirmacao");
         if (error) throw error;
         const list = data || [];
         return computeConfirmacaoStats(list, isOverdue);
@@ -277,16 +301,18 @@ export function usePipeConfirmacaoMetrics(range: DateRange | null) {
       const { startStr, endStr } = range;
       const [conf1, conf2] = await Promise.all([
         supabase
-          .from("pipe_confirmacao")
-          .select("status, meeting_date, updated_at")
+          .from("negocio_projetado")
+          .select("status:stage_key, meeting_date, updated_at")
           .eq("organization_id", organizationId)
+          .eq("funil_sistema", "confirmacao")
           .not("metrics_period_at", "is", null)
           .gte("metrics_period_at", startStr)
           .lte("metrics_period_at", endStr),
         supabase
-          .from("pipe_confirmacao")
-          .select("status, meeting_date, updated_at")
+          .from("negocio_projetado")
+          .select("status:stage_key, meeting_date, updated_at")
           .eq("organization_id", organizationId)
+          .eq("funil_sistema", "confirmacao")
           .is("metrics_period_at", null)
           .gte("created_at", startStr)
           .lte("created_at", endStr),
@@ -295,7 +321,7 @@ export function usePipeConfirmacaoMetrics(range: DateRange | null) {
       const list = [...(conf1.data || []), ...(conf2.data || [])];
       return computeConfirmacaoStats(list, isOverdue);
     },
-    enabled: isReady && !!organizationId,
+    enabled: isReady && !!organizationId && (options.enabled ?? true),
     staleTime: 60000,
   });
 }
@@ -354,7 +380,10 @@ export function computeConfirmacaoStats(
  * range === null → totais do pipe ("Geral").
  * range !== null → filtra por created_at no intervalo.
  */
-export function usePipeWhatsappMetrics(range: DateRange | null) {
+export function usePipeWhatsappMetrics(
+  range: DateRange | null,
+  options: { enabled?: boolean } = {},
+) {
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
@@ -365,9 +394,10 @@ export function usePipeWhatsappMetrics(range: DateRange | null) {
       }
 
       let query = supabase
-        .from("pipe_whatsapp")
-        .select("status")
-        .eq("organization_id", organizationId);
+        .from("negocio_projetado")
+        .select("stage_key")
+        .eq("organization_id", organizationId)
+        .eq("funil_sistema", "whatsapp");
 
       if (range) {
         query = query.gte("created_at", range.startStr).lte("created_at", range.endStr);
@@ -379,13 +409,13 @@ export function usePipeWhatsappMetrics(range: DateRange | null) {
 
       return {
         total: list.length,
-        abordado: list.filter((r) => r.status === "abordado").length,
-        respondeu: list.filter((r) => r.status === "respondeu").length,
-        scheduled: list.filter((r) => r.status === "agendado").length,
-        pending: list.filter((r) => r.status === "novo").length,
+        abordado: list.filter((r) => r.stage_key === "abordado").length,
+        respondeu: list.filter((r) => r.stage_key === "respondeu").length,
+        scheduled: list.filter((r) => r.stage_key === "agendado").length,
+        pending: list.filter((r) => r.stage_key === "novo").length,
       };
     },
-    enabled: isReady && !!organizationId,
+    enabled: isReady && !!organizationId && (options.enabled ?? true),
     staleTime: 60000,
   });
 }

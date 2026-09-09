@@ -548,7 +548,7 @@ function buildDynamicContext(
   if (context) {
     sections.push("# CONTEXTO ATUAL");
     sections.push("");
-    sections.push(`**Pipeline:** ${context.currentPipe}`);
+    sections.push(`**Funil:** ${context.currentPipe}`);
     sections.push(`**Etapa:** ${context.currentStage}`);
 
     if (context.leadName) {
@@ -576,11 +576,15 @@ function buildDynamicContext(
 
     sections.push("");
 
-    // Regras específicas do Kanban para a etapa atual
+    // Regras específicas do Kanban para a etapa atual — aceita os dois formatos
+    // vivos (SCRUM-628): legado (slug + stage_key) e novo (uuid do funil + uuid
+    // da etapa, casado via currentPipelineId/currentStageId do contexto).
     const currentRule = kanbanRules?.find(
       (rule) =>
-        rule.pipe_type === context.currentPipe &&
-        rule.stage_name === context.currentStage
+        (rule.pipe_type === context.currentPipe ||
+          (!!context.currentPipelineId && rule.pipe_type === context.currentPipelineId)) &&
+        (rule.stage_name === context.currentStage ||
+          (!!context.currentStageId && rule.stage_name === context.currentStageId))
     );
 
     if (currentRule) {

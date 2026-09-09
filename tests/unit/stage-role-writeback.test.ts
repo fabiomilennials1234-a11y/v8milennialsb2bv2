@@ -1,11 +1,9 @@
 // @vitest-environment node
 /**
  * Stage Role write-back payload — pure seam of the classifier edge function
- * (U4, #991, ADR-0017 §1). The edge function reads ungoverned stages from BOTH
- * `pipeline_stages` and `custom_pipeline_stages` and writes the plan back to the
- * SAME table the row came from. The payload is table-AGNOSTIC (U1 mirrored the
- * suggestion columns onto custom_pipeline_stages), so a single builder serves
- * both. This test pins the money invariant on the WRITE side: won/lost never
+ * (U4, #991, ADR-0017 §1). The edge function reads system and custom stages
+ * from `pipeline_stages`; the report still separates both families. This test
+ * pins the money invariant on the WRITE side: won/lost never
  * touch `stage_role` — only `suggested_stage_role` (human confirmation pending).
  */
 
@@ -18,10 +16,10 @@ const { buildStageRoleUpdate, STAGE_SOURCE_TABLES } = await import(
 const NOW = "2026-07-08T00:00:00.000Z";
 
 describe("STAGE_SOURCE_TABLES", () => {
-  it("lists both stage tables the classifier governs", () => {
+  it("lists both stage families the classifier reports", () => {
     expect(STAGE_SOURCE_TABLES).toEqual([
-      "pipeline_stages",
-      "custom_pipeline_stages",
+      "system",
+      "custom",
     ]);
   });
 });

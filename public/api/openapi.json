@@ -3,7 +3,7 @@
   "info": {
     "title": "Torque CRM — Public REST API",
     "version": "1.0.0",
-    "description": "API REST pública do Torque CRM. Auth via API Key escopada (tq_live_*).\n\n## Negócio, na interface, é `deal` na API\n\nA interface diz **Negócio**. O contrato diz `deal`. É a mesma coisa.\n\n⚠️ **Se você está vindo do Kommo, atenção ao vocabulário.** Lá, \"lead\" É o negócio — o card que anda no funil. Aqui não: seguimos o modelo do Pipedrive.\n\n- **Lead** = a pessoa ou empresa. Identidade durável. **Nunca ocupa uma etapa.**\n- **Negócio** (`deal`) = uma tentativa de venda para aquele Lead. É o que ocupa etapa e anda pelo funil.\n\nUm Lead pode ter vários Negócios ao longo dos anos, **inclusive dois abertos ao mesmo tempo no mesmo funil** — é assim que recompra se representa.\n\nModelar por analogia com o Kommo leva a errar tudo.\n\n## Criar uma venda: três chamadas\n\nA criação é estrita, no estilo Pipedrive — `POST /deals` exige um Lead que já existe.\n\n```\n1) GET  /api/v1/leads/search?phone=11999990000\n   → 200 { data: [] }                       a pessoa não existe\n\n2) POST /api/v1/leads\n   { \"name\": \"João\", \"phone\": \"11999990000\" }\n   → 201 { \"id\": \"...\" }                    criada\n   → 409 lead_already_exists                JÁ EXISTIA — e o corpo traz\n                                            details.lead_id, use esse\n\n3) POST /api/v1/deals\n   { \"lead_id\": \"...\", \"pipeline\": \"whatsapp\", \"stage\": \"novo\" }\n   → 201 { \"id\": \"...\", \"source\": \"api\" }\n```\n\nO passo 2 **nunca cria uma segunda pessoa** com o mesmo telefone. Se já existe, recusa e devolve quem está lá — siga para o passo 3 com aquele `lead_id`.\n\nEnvie `Idempotency-Key` nas criações: a mesma chave devolve o mesmo recurso em vez de criar outro, o que torna retentativa segura.\n\n## Convenções\n\nListas: `{ data, next_cursor, has_more }` — pagine devolvendo `next_cursor` em `?cursor=`.\nErros: `{ error: { code, message, details? } }`.\nLimite estourado: 429 com `Retry-After`."
+    "description": "API REST pública do Torque CRM. Auth via API Key escopada (tq_live_*).\n\n## Negócio, na interface, é `deal` na API\n\nA interface diz **Negócio**. O contrato diz `deal`. É a mesma coisa.\n\n⚠️ **Se você está vindo do Kommo, atenção ao vocabulário.** Lá, \"lead\" É o negócio — o card que anda no funil. Aqui não: seguimos o modelo do Pipedrive.\n\n- **Lead** = a pessoa ou empresa. Identidade durável. **Nunca ocupa uma etapa.**\n- **Negócio** (`deal`) = uma tentativa de venda para aquele Lead. É o que ocupa etapa e anda pelo funil.\n\nUm Lead pode ter vários Negócios ao longo dos anos, **inclusive dois abertos ao mesmo tempo no mesmo funil** — é assim que recompra se representa.\n\nModelar por analogia com o Kommo leva a errar tudo.\n\n## Criar uma venda: três chamadas\n\nA criação é estrita, no estilo Pipedrive — `POST /deals` exige um Lead que já existe.\n\n```\n1) GET  /api/v1/leads/search?phone=11999990000\n   → 200 { data: [] }                       a pessoa não existe\n\n2) POST /api/v1/leads\n   { \"name\": \"João\", \"phone\": \"11999990000\" }\n   → 201 { \"id\": \"...\" }                    criada\n   → 409 lead_already_exists                JÁ EXISTIA — e o corpo traz\n                                            details.lead_id, use esse\n\n3) POST /api/v1/deals\n   { \"lead_id\": \"...\", \"pipeline\": \"vendas\", \"stage\": \"novo\" }\n   → 201 { \"id\": \"...\", \"source\": \"api\" }\n```\n\nO passo 2 **nunca cria uma segunda pessoa** com o mesmo telefone. Se já existe, recusa e devolve quem está lá — siga para o passo 3 com aquele `lead_id`.\n\nEnvie `Idempotency-Key` nas criações: a mesma chave devolve o mesmo recurso em vez de criar outro, o que torna retentativa segura.\n\n## Convenções\n\nListas: `{ data, next_cursor, has_more }` — pagine devolvendo `next_cursor` em `?cursor=`.\nErros: `{ error: { code, message, details? } }`.\nLimite estourado: 429 com `Retry-After`."
   },
   "servers": [
     {
@@ -273,7 +273,7 @@
                       "closer_id": null,
                       "sold": false,
                       "sale_value": null,
-                      "rating": 4,
+                      "rating": null,
                       "qualification_score": 80,
                       "created_at": "2026-06-14T14:30:22Z"
                     }
@@ -418,7 +418,7 @@
       "get": {
         "operationId": "api-get-lead",
         "summary": "Lead 360",
-        "description": "Retorna um lead completo: tier, tags, custom fields (valores), responsáveis e posições em todos os pipes (com vendido/valor). 404 se não existir na org. Escopo: lead:read.",
+        "description": "Retorna um lead completo: tier, tags, campos personalizados, responsáveis e posições em todos os funis. O campo `pipes` permanece no contrato somente para compatibilidade; novas integrações devem usar `/leads/{id}/deals`. 404 se não existir na organização. Escopo: lead:read.",
         "tags": [
           "REST API v1"
         ],
@@ -451,7 +451,7 @@
                   "phone": "+5511…",
                   "origin": "outro",
                   "tier": "ouro",
-                  "rating": 4,
+                  "rating": null,
                   "qualification_score": 80,
                   "responsible_id": "bf98…",
                   "sdr_id": null,
@@ -474,9 +474,9 @@
                   ],
                   "pipes": [
                     {
-                      "pipeline": "whatsapp",
-                      "pipeline_name": "WhatsApp",
-                      "type": "system",
+                      "pipeline": "vendas",
+                      "pipeline_name": "Funil de Vendas",
+                      "type": "custom",
                       "stage_key": "novo",
                       "sold": false,
                       "sale_value": null,
@@ -537,7 +537,7 @@
                   "id": "f21072f1-…",
                   "name": "Acme Renomeado",
                   "tier": "ouro",
-                  "rating": 5
+                  "rating": null
                 }
               }
             }
@@ -563,7 +563,86 @@
               "example": {
                 "name": "Acme Renomeado",
                 "tier": "ouro",
-                "rating": 5
+                "rating": null
+              },
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Nome do contato."
+                  },
+                  "company": {
+                    "type": "string",
+                    "description": "Empresa."
+                  },
+                  "email": {
+                    "type": "string",
+                    "description": "E-mail."
+                  },
+                  "phone": {
+                    "type": "string",
+                    "description": "Telefone."
+                  },
+                  "notes": {
+                    "type": "string",
+                    "description": "Observações."
+                  },
+                  "segment": {
+                    "type": "string",
+                    "description": "Segmento — coluna própria de leads, lida pelas telas."
+                  },
+                  "faturamento": {
+                    "type": "string",
+                    "description": "Faturamento declarado — coluna própria de leads."
+                  },
+                  "utm_source": {
+                    "type": "string",
+                    "description": "UTM source."
+                  },
+                  "utm_medium": {
+                    "type": "string",
+                    "description": "UTM medium."
+                  },
+                  "utm_campaign": {
+                    "type": "string",
+                    "description": "UTM campaign."
+                  },
+                  "utm_content": {
+                    "type": "string",
+                    "description": "UTM content."
+                  },
+                  "utm_term": {
+                    "type": "string",
+                    "description": "UTM term."
+                  },
+                  "rating": {
+                    "type": "number",
+                    "deprecated": true,
+                    "nullable": true,
+                    "description": "DEPRECADO. A nota manual do lead foi aposentada (SCRUM-647). O campo continua sendo ACEITO no corpo e passa a ser IGNORADO — nenhum PATCH falha por causa dele. Na leitura, vem sempre null, e a chave sai do payload em 2026-11-03. Para priorizar lead, use qualification_score."
+                  },
+                  "qualification_score": {
+                    "type": "number",
+                    "description": "Score de 0 a 100."
+                  },
+                  "tier": {
+                    "type": "string",
+                    "description": "diamante, ouro, prata, bronze ou desqualificado."
+                  },
+                  "responsible_id": {
+                    "type": "string",
+                    "description": "UUID do responsável."
+                  },
+                  "sale_responsible_id": {
+                    "type": "string",
+                    "description": "UUID de vendas."
+                  },
+                  "pre_sale_responsible_id": {
+                    "type": "string",
+                    "description": "UUID da pré-venda."
+                  }
+                }
               }
             }
           }
@@ -656,7 +735,7 @@
       "get": {
         "operationId": "api-list-pipelines",
         "summary": "Listar funis",
-        "description": "Catálogo de funis com etapas. Funis system trazem etapas; funis custom vêm com stages vazio no v1. Escopo: pipeline:read.\n\nCatálogo sem paginação (next_cursor sempre null).",
+        "description": "Catálogo único de funis da organização. Todos seguem o mesmo contrato e vêm com `stages` completo; cada etapa traz `id` e `stage_key`. O campo `type` informa somente a origem histórica e não deve controlar comportamento. Escopo: pipeline:read.\n\nCatálogo sem paginação (next_cursor sempre null).",
         "tags": [
           "REST API v1"
         ],
@@ -665,7 +744,26 @@
             "ApiKeyAuth": []
           }
         ],
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "pipeline",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Devolve só um funil. Aceita id (uuid) ou slug de qualquer funil da organização. Funil inexistente devolve lista vazia."
+          },
+          {
+            "name": "only_active_stages",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Com `true`, cada funil traz apenas as etapas ativas — as mesmas que o cliente vê no kanban. Sem o parâmetro, vêm todas, inclusive as desativadas. Etapa desativada é aceita pela API, mas um Negócio aberto nela não aparece na tela."
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -675,12 +773,12 @@
                   "data": [
                     {
                       "id": "p1",
-                      "name": "WhatsApp",
-                      "slug": "whatsapp",
-                      "type": "system",
-                      "color": "#25D366",
-                      "icon": "message-circle",
-                      "display_order": 1,
+                      "name": "Funil de Vendas",
+                      "slug": "vendas",
+                      "type": "custom",
+                      "color": "#f59e0b",
+                      "icon": "trending-up",
+                      "display_order": 3,
                       "is_active": true,
                       "stages": [
                         {
@@ -816,13 +914,171 @@
             }
           }
         }
+      },
+      "post": {
+        "operationId": "api-create-custom-field",
+        "summary": "Criar campo personalizado",
+        "description": "Cadastra um campo personalizado de Lead. Idempotente por nome, ignorando maiúsculas: pedir um campo que já existe devolve o existente com `created: false`, em vez de criar uma segunda grafia.\n\n`field_type` aceita `text`, `number`, `date`, `select` e `boolean`; `select` exige `field_options` com ao menos uma opção.\n\n`201` quando cria, `200` quando já existia. Campo personalizado é do Lead — Negócio não tem campos personalizados.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "field_name"
+                ],
+                "properties": {
+                  "field_name": {
+                    "type": "string"
+                  },
+                  "field_type": {
+                    "type": "string",
+                    "enum": [
+                      "text",
+                      "number",
+                      "date",
+                      "select",
+                      "boolean"
+                    ]
+                  },
+                  "field_options": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "is_required": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replay da mesma Idempotency-Key"
+          },
+          "201": {
+            "description": "Criado. Pode trazer `warning.code = lead_has_open_deal_in_pipeline`"
+          },
+          "404": {
+            "description": "lead_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "invalid_request ou o código devolvido pelo banco (ex.: invalid_field_type)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/team-members": {
+      "get": {
+        "operationId": "api-list-team-members",
+        "summary": "Listar membros da equipe",
+        "description": "Catálogo de membros da organização, para resolver os IDs usados nos campos de responsável (`owner_id` do Negócio; `responsible_id`, `sale_responsible_id` e `pre_sale_responsible_id` do Lead). Não expõe telefone nem dados de remuneração.\n\nUma lista só serve pré-venda e vendas: o Torque não marca no membro quem é o quê — isso é decidido por Lead, e a mesma pessoa pode ser pré-venda num e vendas em outro. `job_title` é texto livre e serve como dica, não como filtro.\n\nInclui inativos (`is_active: false`): seletor quer os ativos, mas quem sincroniza histórico precisa resolver o nome de quem já saiu.",
+        "tags": [
+          "REST API v1"
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "example": {
+                  "data": [
+                    {
+                      "id": "t1",
+                      "name": "VIP",
+                      "color": "#F5C518"
+                    }
+                  ],
+                  "next_cursor": null,
+                  "has_more": false
+                }
+              }
+            }
+          },
+          "4XX": {
+            "description": "Erro",
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": {
+                    "code": "string",
+                    "message": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/leads/{id}/stage": {
       "post": {
         "operationId": "api-move-stage",
-        "summary": "Mover etapa",
-        "description": "⚠️ **DEPRECIADA.** Move um *Lead* para uma etapa — e no modelo atual um Lead nunca tem etapa; quem ocupa etapa é o Negócio. Use `POST /api/v1/deals/{id}/move`. Mantida viva para não quebrar integrações existentes.\n\nMove o lead para uma etapa de um funil. Dispara as mesmas automações da UI (workflows, meeting_events, auto-Orçamentos ao compareceu). Escopo: lead:write.\n\n400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).\n\nmeeting_date não é suportado no v1.",
+        "summary": "Mover lead (legado)",
+        "description": "⚠️ **DEPRECIADA.** Move um *Lead* para uma etapa — e no modelo atual um Lead nunca tem etapa; quem ocupa etapa é o Negócio. Use `POST /api/v1/deals/{id}/move`. Mantida viva para não quebrar integrações existentes.\n\nRota legada mantida para integrações existentes. Novas integrações devem mover o Negócio, que é a entidade posicionada no funil. Escopo: lead:write.\n\n400 missing_stage sem stage. 404 se o lead não for da org. 422 stage_move_failed para etapa inválida (a mensagem lista as válidas).\n\nmeeting_date não é suportado no v1.",
         "tags": [
           "REST API v1"
         ],
@@ -849,8 +1105,8 @@
               "application/json": {
                 "example": {
                   "moved": true,
-                  "target_stage": "compareceu",
-                  "target_pipe": "confirmacao"
+                  "target_stage": "proposta_enviada",
+                  "target_pipe": "vendas"
                 }
               }
             }
@@ -874,8 +1130,8 @@
           "content": {
             "application/json": {
               "example": {
-                "pipe": "confirmacao",
-                "stage": "compareceu"
+                "pipe": "vendas",
+                "stage": "proposta_enviada"
               }
             }
           }
@@ -1040,6 +1296,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "create_missing",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            },
+            "description": "Com `true`, cria como texto o campo que ainda não existe em vez de recusar com 422. Sem o parâmetro, campo desconhecido continua sendo recusado."
           }
         ],
         "responses": {
@@ -1171,7 +1436,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Slug do funil"
+            "description": "Id (uuid) ou slug de qualquer funil da organização"
           },
           {
             "name": "stage",
@@ -1292,7 +1557,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "description": "Abre um Negócio para um Lead **que já existe**. Não aceita Lead embutido — crie a pessoa antes com `POST /leads`. A Procedência é gravada como `api`. Abrir um segundo Negócio no mesmo funil **funciona** (é recompra) e a resposta traz `warning`. Escopo: deal:write.",
+        "description": "Abre um Negócio para um Lead **que já existe**. Não aceita Lead embutido — crie a pessoa antes com `POST /leads`. A Procedência é gravada como `api`. `pipeline` aceita o id (uuid) ou o slug de **qualquer** funil da organização, de sistema ou personalizado; em funil personalizado, `stage` aceita o `stage_key` ou o `id` da etapa (os dois vêm no catálogo `GET /pipelines`). Abrir um segundo Negócio no mesmo funil **funciona** (é recompra) e a resposta traz `warning`. Escopo: deal:write.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -1320,10 +1585,12 @@
                     "format": "uuid"
                   },
                   "pipeline": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Id (uuid) ou slug de qualquer funil da organização."
                   },
                   "stage": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Etapa de destino: stage_key; em funil personalizado, o id (uuid) da etapa também é aceito."
                   },
                   "title": {
                     "type": "string"
@@ -1352,6 +1619,32 @@
           },
           "404": {
             "description": "lead_not_found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "pipeline_inactive — o funil de destino está inativo",
             "content": {
               "application/json": {
                 "schema": {
@@ -1605,7 +1898,7 @@
             "ApiKeyAuth": []
           }
         ],
-        "description": "Move o Negócio de etapa ou de funil. **Mover é mover, não copiar**: nenhum card novo nasce e nada fica para trás. Destino em funil customizado é recusado — o card mudaria de identidade e perderia o histórico. Escopo: deal:write.",
+        "description": "Move o Negócio de etapa ou de funil. **Mover é mover, não copiar**: nenhum card novo nasce e nada fica para trás — o mesmo card muda de posição, com histórico preservado, seja o destino um funil de sistema ou personalizado. `pipeline` aceita o id (uuid) ou o slug de qualquer funil da organização; em funil personalizado, `stage` aceita o `stage_key` ou o `id` da etapa. Funil inexistente é 404 `pipeline_not_found`; funil inativo é 409 `pipeline_inactive`. Escopo: deal:write.",
         "parameters": [
           {
             "name": "id",
@@ -1629,10 +1922,12 @@
                 ],
                 "properties": {
                   "pipeline": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Id (uuid) ou slug de qualquer funil da organização."
                   },
                   "stage": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "Etapa de destino: stage_key; em funil personalizado, o id (uuid) da etapa também é aceito."
                   },
                   "owner_id": {
                     "type": "string",
@@ -1655,7 +1950,33 @@
             }
           },
           "404": {
-            "description": "deal_not_found — inclui Negócio sem posição",
+            "description": "deal_not_found (inclui Negócio sem posição) ou pipeline_not_found (funil inexistente)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "details": {
+                          "type": "object"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "pipeline_inactive — o funil de destino está inativo",
             "content": {
               "application/json": {
                 "schema": {
@@ -1681,7 +2002,7 @@
             }
           },
           "422": {
-            "description": "missing_pipeline, missing_stage, custom_pipeline_not_supported, invalid_pipeline_or_stage",
+            "description": "missing_pipeline, missing_stage, invalid_pipeline_or_stage",
             "content": {
               "application/json": {
                 "schema": {

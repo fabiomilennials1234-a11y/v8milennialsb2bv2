@@ -8,12 +8,13 @@
  * Orçamentos ao mesmo tempo. A função de banco `mover_negocio` troca o funil na
  * MESMA linha; nenhum card novo nasce.
  *
- * ── FUNIL CUSTOMIZADO COMO DESTINO É RECUSADO ─────────────────────────────
- * E é decisão, não limitação por preguiça. Card de funil customizado vive em
- * outra tabela, espelhada por chave primária, e a sincronia nunca reescreve o
- * funil. Atravessar essa fronteira obrigaria apagar e recriar: o Negócio
- * sobreviveria, mas o card perderia o id e levaria o histórico junto. A função
- * recusa em vez de fingir que resolve.
+ * ── QUALQUER FUNIL É DESTINO VÁLIDO (SCRUM-625) ───────────────────────────
+ * `pipeline` aceita o id (uuid) ou o slug de qualquer funil da org — sistema ou
+ * personalizado. A recusa antiga de funil custom morreu com a inversão do silo
+ * (SCRUM-621): o card vive em `pipeline_entries` seja qual for o funil, então
+ * mover é o mesmo UPDATE na mesma linha e nenhum histórico se perde. Funil que
+ * não existe é 404 e funil inativo é 409 — os MESMOS códigos que o lead-webhook
+ * dá para o mesmo erro (SCRUM-624), porque o integrador é o mesmo.
  *
  * ── POR QUE ESTA ROTA E NÃO O PATCH ───────────────────────────────────────
  * Mover tem regra; editar não. Aceitar `stage` no PATCH daria um segundo
@@ -55,16 +56,18 @@ function traduzErro(err: unknown): { status: number; code: string; message: stri
   const e = err as { code?: string; message?: string };
   const msg = e?.message ?? "";
 
-  if (e?.code === "P0002" || /não encontrado|nao encontrado/i.test(msg)) {
-    return { status: 404, code: "deal_not_found", message: "Negócio não encontrado nesta organização" };
+  // As mensagens do resolvedor têm prioridade sobre o SQLSTATE: 22023 tanto
+  // carrega "funil não existe" (endereço errado → 404, como no lead-webhook)
+  // quanto "etapa inválida" (corpo errado → 422). O prefixo da mensagem — Funil,
+  // Negócio, Etapa — é o discriminador estável.
+  if (/^funil .*não existe/i.test(msg)) {
+    return { status: 404, code: "pipeline_not_found", message: msg || "Funil não existe nesta organização" };
   }
-  if (/customizado|custom/i.test(msg)) {
-    return {
-      status: 422,
-      code: "custom_pipeline_not_supported",
-      message:
-        "Mover para funil customizado não é suportado: o card mudaria de identidade e perderia o histórico",
-    };
+  if (e?.code === "55000" || /^funil .*está inativo/i.test(msg)) {
+    return { status: 409, code: "pipeline_inactive", message: msg || "Funil está inativo nesta organização" };
+  }
+  if (e?.code === "P0002" || /não encontrado|nao encontrado|não tem posição/i.test(msg)) {
+    return { status: 404, code: "deal_not_found", message: "Negócio não encontrado nesta organização" };
   }
   if (e?.code === "22023" || e?.code === "23514") {
     return { status: 422, code: "invalid_pipeline_or_stage", message: msg || "Funil ou etapa inválidos" };

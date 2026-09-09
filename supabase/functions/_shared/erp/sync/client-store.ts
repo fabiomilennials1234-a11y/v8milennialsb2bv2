@@ -12,7 +12,7 @@ import { ClientStore, ExistingClient } from "./upsert-client.ts";
 // como alterada.
 // Literal única, sem concatenar — ver a nota em cached-client-store.ts.
 const SELECT =
-  "id, cnpj, phone, email, company, name, external_source, external_id, external_ref, erp_company, erp_owner_name, erp_owner_external_id, erp_status, erp_segment, erp_registered_at, erp_city, erp_uf, erp_metadata";
+  "id, cnpj, phone, email, company, name, external_source, external_id, external_ref, erp_company, erp_owner_name, erp_owner_external_id, erp_status, erp_segment, erp_registered_at, erp_last_order_at, erp_city, erp_uf, erp_metadata, last_order_at";
 
 export function supabaseClientStore(admin: SupabaseClient, source: string): ClientStore {
   return {

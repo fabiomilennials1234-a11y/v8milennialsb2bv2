@@ -54,6 +54,30 @@ export async function verifyWhatsAppConnected(supabase: SupabaseClient, orgId: s
   return !!data;
 }
 
+function slugify(name: string, sep: string): string {
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, sep)
+    .replace(new RegExp(`^\\${sep}+|\\${sep}+$`, "g"), "");
+}
+
+/**
+ * Aplica os templates de funil na org — lista LIVRE (SCRUM-641).
+ *
+ * O template só carrega `custom_pipelines`: cada um vira funil comum nas
+ * tabelas-base `pipelines` + `pipeline_stages` (modelo único pós-W3),
+ * espelhando o fluxo de criação do front (`useCreateCustomPipeline`):
+ * slug/stage_key canônicos, org nas etapas, rollback do funil se as etapas
+ * falharem.
+ *
+ * `default_pipelines_config` (os 3 toggles fixos do trio legado) é IGNORADO
+ * desde o SCRUM-641 — org nova já nasce com o "Funil de Vendas" semeado como
+ * funil padrão pelo trigger `trg_seed_default_funnel` (20270918000000), e o
+ * trio deixou de ser oferecível. O log abaixo denuncia template antigo que
+ * ainda carregue a chave.
+ */
 export async function applyPipelineTemplates(
   supabase: SupabaseClient,
   orgId: string,
@@ -62,26 +86,29 @@ export async function applyPipelineTemplates(
   const created: any[] = [];
 
   for (const tpl of templates) {
-    if (tpl.default_pipelines_config) {
-      const { error } = await supabase
-        .from("pipeline_display_config")
-        .upsert({
-          organization_id: orgId,
-          config: tpl.default_pipelines_config,
-        }, { onConflict: "organization_id" });
-
-      if (!error) {
-        created.push({ type: "default_config", name: tpl.name, config: tpl.default_pipelines_config });
-      }
+    // SCRUM-641: o bloco `default_pipelines_config` → `enable_system_pipeline`
+    // MORREU. Org nova já nasce com o "Funil de Vendas" semeado como padrão
+    // (trigger trg_seed_default_funnel, 20270918000000); template master não
+    // oferece mais o trio legado como toggle fixo — o que o template carrega
+    // é a lista LIVRE de `custom_pipelines` abaixo. As chaves
+    // `default_pipelines_config` dos 3 templates de prod (medido 2026-09-03)
+    // ficam inertes de propósito.
+    if (tpl.default_pipelines_config && Object.keys(tpl.default_pipelines_config).length > 0) {
+      console.log(
+        "[onboarding-engine] default_pipelines_config ignorado (SCRUM-641, funil único de fábrica):",
+        tpl.name,
+      );
     }
 
     const customs = tpl.custom_pipelines ?? [];
     for (const cp of customs) {
       const { data: pipeline, error: pipeErr } = await supabase
-        .from("custom_pipelines")
+        .from("pipelines")
         .insert({
           organization_id: orgId,
           name: cp.name,
+          slug: slugify(cp.name ?? "", "-"),
+          type: "custom",
           icon: cp.icon ?? null,
           color: cp.color ?? null,
           is_active: true,
@@ -89,19 +116,31 @@ export async function applyPipelineTemplates(
         .select("id, name")
         .single();
 
-      if (pipeErr || !pipeline) continue;
+      if (pipeErr || !pipeline) {
+        console.error("[onboarding-engine] criação de funil custom falhou:", cp.name, pipeErr?.message);
+        continue;
+      }
 
       const stages = (cp.stages ?? []).map((s: any, idx: number) => ({
+        organization_id: orgId,
         pipeline_id: pipeline.id,
+        stage_key: slugify(s.name ?? "", "_"),
         name: s.name,
         color: s.color ?? null,
         position: s.position ?? idx,
+        is_active: true,
         is_final_positive: s.is_final_positive ?? false,
         is_final_negative: s.is_final_negative ?? false,
       }));
 
       if (stages.length > 0) {
-        await supabase.from("custom_pipeline_stages").insert(stages);
+        const { error: stagesError } = await supabase.from("pipeline_stages").insert(stages);
+        if (stagesError) {
+          // Mesmo contrato do front: funil sem etapa não fica pela metade.
+          console.error("[onboarding-engine] etapas do funil custom falharam:", cp.name, stagesError.message);
+          await supabase.from("pipelines").delete().eq("id", pipeline.id);
+          continue;
+        }
       }
 
       created.push({ type: "custom_pipeline", id: pipeline.id, name: pipeline.name, stages: cp.stages });

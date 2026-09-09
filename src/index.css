@@ -655,7 +655,8 @@
     @apply relative bg-card rounded-lg p-4 shadow-sm border border-border cursor-grab active:cursor-grabbing transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 min-w-0 overflow-hidden;
   }
 
-  /* Calor/priority accent — set via inline style: --card-accent */
+  /* Faixa de acento do card. O `--card-accent` inline saiu com o calor
+     (2026-09-03); hoje só o fallback de borda pinta a faixa. */
   .kanban-card::before {
     content: '';
     position: absolute;

@@ -115,6 +115,19 @@ INSERT INTO public.pipeline_entries (id, organization_id, pipeline_id, lead_id, 
   ('3913e177-0000-4000-8000-0000000000b1', '39130000-0000-4000-8000-00000000000b', '39139191-0000-4000-8000-00000000000b', '3913ead1-0000-4000-8000-0000000000b1', 'novo',     '2027-08-05T12:00:00Z', NULL)
 ON CONFLICT (id) DO NOTHING;
 
+-- Replica fixtures must populate the canonical FK used by stage buckets.
+INSERT INTO public.pipeline_stages (organization_id, pipeline_id, stage_key, name, position)
+SELECT p.organization_id, p.id, s.stage_key, s.name, s.position
+FROM public.pipelines p
+CROSS JOIN (VALUES ('novo', 'Novo', 0), ('proposta', 'Proposta', 1)) s(stage_key, name, position)
+WHERE p.id IN ('39139191-0000-4000-8000-00000000000a', '39139191-0000-4000-8000-00000000000b');
+
+UPDATE public.pipeline_entries e SET stage_id = s.id
+FROM public.pipeline_stages s
+WHERE e.organization_id IN ('39130000-0000-4000-8000-00000000000a', '39130000-0000-4000-8000-00000000000b')
+  AND s.organization_id = e.organization_id AND s.pipeline_id = e.pipeline_id
+  AND s.stage_key = e.stage_key;
+
 -- Uma venda em agosto, para a conversão por negócio: 1 ÷ 4 = 25,00%.
 INSERT INTO public.sale_events (id, organization_id, lead_id, pipeline_id, stage_key,
                                 event_type, sold_at, sale_value, currency, revenue_stream, source) VALUES
@@ -250,7 +263,7 @@ SELECT is(
          '{"kind":"leaf","id":"negocios_na_etapa"}'::jsonb, 'etapa',
          NULL, NULL, NULL, NULL,
          '{"pipeline_id":"39139191-0000-4000-8000-00000000000a"}'::jsonb) -> 'series') s
-    WHERE s->>'key' = 'novo'),
+    WHERE s->>'key' = '39139191-0000-4000-8000-00000000000a:novo'),
   2::numeric,
   'SE1: por etapa, "novo" tem 2 NEGÓCIOS (um de cada lead)');
 
@@ -261,7 +274,7 @@ SELECT is(
          '{"kind":"leaf","id":"negocios_na_etapa"}'::jsonb, 'etapa',
          NULL, NULL, NULL, NULL,
          '{"pipeline_id":"39139191-0000-4000-8000-00000000000a"}'::jsonb) -> 'series') s
-    WHERE s->>'key' = 'proposta'),
+    WHERE s->>'key' = '39139191-0000-4000-8000-00000000000a:proposta'),
   1::numeric,
   'SE2: por etapa, "proposta" tem 1 negócio aberto — o fechado saiu');
 

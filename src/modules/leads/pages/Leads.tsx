@@ -11,8 +11,10 @@ import {
   X,
   Edit2,
   FileDown,
+  FileUp,
   History,
   CircleDashed,
+  Tag,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -35,6 +37,7 @@ import { deriveLeadStandings } from "../lib/lead-relacao-situacao";
 import { useLeadsStats } from "../hooks/useLeadsStats";
 import { useLeadsSalesMetrics } from "../hooks/useLeadsSalesMetrics";
 import { useLeadsDeals } from "../hooks/useLeadsDeals";
+import { useLeadsReorderCycle } from "../hooks/useLeadsReorderCycle";
 import {
   Select,
   SelectContent,
@@ -46,6 +49,12 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -58,9 +67,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useLeads, useLeadsCount, useCreateLead, useUpdateLead, useDeleteLead, LEADS_PAGE_SIZE, type Lead } from "../hooks/useLeads";
-import { LeadMobileCard, StarRating, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
+import { LeadMobileCard, type LeadMobileCardLead } from "../components/leads/LeadMobileCard";
 import { LeadMobileSortBar } from "../components/leads/LeadMobileSortBar";
 import { ExportLeadsModal } from "../components/leads/ExportLeadsModal";
+import { ImportLeadsModal } from "../components/leads/ImportLeadsModal";
 import { ImportHistoryPanel } from "../components/leads/ImportHistoryPanel";
 import { QUALIFICATION_TIER_CONFIG } from "../components/lead-detail/modal/qualification-config";
 import { QUALIFICATION_TIERS } from "../components/lead-detail/modal/types";
@@ -86,10 +96,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useBulkSelection } from "@/shared/hooks/useBulkSelection";
 import { BulkActionBar } from "@/modules/leads/components/bulk-actions/BulkActionBar";
 import { SavedViewsDropdown } from "@/modules/platform/components/saved-views/SavedViewsDropdown";
+import { SegmentedControl } from "@/components/ui/segmented-control";
+import {
+  CLASSIFICACAO_TODAS,
+  leadClassificacaoOptions,
+  LEAD_CLASSIFICACOES,
+  LEAD_CLASSIFICACAO_CONFIG,
+  type LeadClassificacao,
+} from "../lib/lead-classificacao";
+import { useLeadClassificacao } from "../hooks/useLeadClassificacao";
+import { useOrgUsaLeiDoErp } from "../hooks/useOrgUsaLeiDoErp";
 import { useSearchParams } from "react-router-dom";
 import { useTeamMembers, useCurrentTeamMember, useResponsibleMembers } from "@/modules/identity";
 import { usePipeOps } from "../pipe-ops";
-import { getPipelineTypeName } from "@/contracts/pipe";
+import { destinosDeSistema } from "@/contracts/pipe";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
@@ -123,7 +143,6 @@ interface LeadFormData {
   email: string;
   phone: string;
   origin: string;
-  rating: number;
   segment: string;
   faturamento: string;
   urgency: string;
@@ -140,7 +159,6 @@ const initialFormData: LeadFormData = {
   email: "",
   phone: "",
   origin: "outro",
-  rating: 5,
   segment: "",
   faturamento: "",
   urgency: "",
@@ -158,15 +176,19 @@ const initialFormData: LeadFormData = {
 type LeadsFilterState = {
   searchQuery: string;
   filterOrigin: string;
-  filterRating: string;
   filterQualification: string;
+  /** Dono da conta: id de `team_member`, `"all"` ou `"none"` (sem dono). */
+  filterResponsible: string;
+  /** Gaveta: `"lead" | "cliente" | "perdido" | "indefinido"` ou `"all"`. */
+  filterClassificacao?: string;
 };
 
 const DEFAULT_LEADS_FILTERS: LeadsFilterState = {
   searchQuery: "",
   filterOrigin: "all",
-  filterRating: "all",
   filterQualification: "all",
+  filterResponsible: "all",
+  filterClassificacao: CLASSIFICACAO_TODAS,
 };
 
 /**
@@ -204,8 +226,20 @@ function LeadsInner() {
     DEFAULT_LEADS_FILTERS
   );
 
-  const { searchQuery, filterOrigin, filterRating } = filterState;
+  const { searchQuery, filterOrigin } = filterState;
   const filterQualification = filterState.filterQualification ?? "all";
+  // Visão salva gravada antes deste filtro existir não traz a chave — o `??`
+  // é o que impede o Select de virar não-controlado no meio do uso.
+  const filterResponsible = filterState.filterResponsible ?? "all";
+  // Visão salva gravada antes desta gaveta existir não traz a chave — sem o
+  // `??` o Select vira não-controlado no meio do uso.
+  const filterClassificacao = filterState.filterClassificacao ?? CLASSIFICACAO_TODAS;
+  const setFilterClassificacao = (v: string) =>
+    setFilterState((f) => ({ ...f, filterClassificacao: v }));
+  // De onde vem a verdade sobre "é cliente?" nesta org: cadastro no ERP, para
+  // quem tem a integração, ou a lei da Relação para todo o resto.
+  const { usaLeiDoErp } = useOrgUsaLeiDoErp();
+  const { mutate: mudarClassificacao } = useLeadClassificacao();
 
   const setSearchQuery = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, searchQuery: v })),
@@ -215,12 +249,12 @@ function LeadsInner() {
     (v: string) => setFilterState((f) => ({ ...f, filterOrigin: v })),
     [setFilterState]
   );
-  const setFilterRating = useCallback(
-    (v: string) => setFilterState((f) => ({ ...f, filterRating: v })),
-    [setFilterState]
-  );
   const setFilterQualification = useCallback(
     (v: string) => setFilterState((f) => ({ ...f, filterQualification: v })),
+    [setFilterState]
+  );
+  const setFilterResponsible = useCallback(
+    (v: string) => setFilterState((f) => ({ ...f, filterResponsible: v })),
     [setFilterState]
   );
 
@@ -232,8 +266,10 @@ function LeadsInner() {
   }, [setSearchParams]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isImportHistoryOpen, setIsImportHistoryOpen] = useState(false);
   const { allowed: canExport } = useCanDo("export_leads");
+  const { allowed: canImport } = useCanDo("import_leads");
   const { allowed: canCreateLead } = useCanDo("create_lead");
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [formData, setFormData] = useState<LeadFormData>(initialFormData);
@@ -300,9 +336,9 @@ function LeadsInner() {
     }, { replace: true });
   }, [setSearchParams]);
 
-  const filterParams = { page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, sort };
+  const filterParams = { page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible, sort };
   const { data: leads = [], isLoading } = useLeads(filterParams);
-  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo, filterAssignment });
+  const { data: totalLeads } = useLeadsCount({ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf: ufFilter, createdFrom, createdTo, filterAssignment, filterResponsible });
   const { data: teamMembers = [] } = useTeamMembers();
   const totalPages = Math.ceil((totalLeads ?? 0) / LEADS_PAGE_SIZE);
   const { data: currentTeamMember, isLoading: isLoadingTeamMember, isFetching: isFetchingTeamMember } = useCurrentTeamMember();
@@ -323,6 +359,13 @@ function LeadsInner() {
   const { data: salesMetrics } = useLeadsSalesMetrics(allLeadIds);
   // Coluna "Negócios" — card de funil é o negócio (D1). Ver `useLeadsDeals`.
   const { data: leadDeals } = useLeadsDeals(allLeadIds);
+  /**
+   * Coluna "Recompra" — média de dias entre compras, unindo as DATAS de
+   * `sale_events` e dos pedidos aprovados da carteira. Consulta própria porque
+   * `salesMetrics.cycleDays` e `carteiraMetrics.reorderCycleDays` são médias já
+   * agregadas, cada uma sobre metade do histórico. Ver `useLeadsReorderCycle`.
+   */
+  const { data: reorderCycles } = useLeadsReorderCycle(allLeadIds);
 
   /**
    * Cluster "Dados" — a regra de precedência mora em `lib/data-metrics.ts`.
@@ -351,11 +394,13 @@ function LeadsInner() {
   const standings = useMemo(
     () =>
       deriveLeadStandings(allLeadIds, {
+        usaLeiDoErp,
+        relacoes: Object.fromEntries(leads.map((lead) => [lead.id, lead.relacao_negocios])),
         deals: leadDeals,
         vendas: salesMetrics,
         carteira: carteiraMetrics,
       }),
-    [allLeadIds, leadDeals, salesMetrics, carteiraMetrics],
+    [allLeadIds, leadDeals, salesMetrics, carteiraMetrics, usaLeiDoErp, leads],
   );
   const { isMobile } = useViewport();
 
@@ -368,10 +413,12 @@ function LeadsInner() {
     useCreatePipeWhatsapp,
     useCreatePipeConfirmacao,
     useCreatePipeProposta,
+    useSystemPipes,
   } = usePipeOps();
   const [selectedPipe, setSelectedPipe] = useState("");
   const [selectedStage, setSelectedStage] = useState("");
   const { data: customPipelines = [] } = useCustomPipelines();
+  const { data: systemPipes } = useSystemPipes();
   const customPipelineId = selectedPipe.startsWith("custom:") ? selectedPipe.slice(7) : undefined;
   const { data: customStages = [] } = useCustomPipelineStages(customPipelineId);
   const { stagesByPipe } = useAllPipelineStageOptions();
@@ -380,15 +427,17 @@ function LeadsInner() {
   const createPipeProposta = useCreatePipeProposta();
   const addLeadToCustomPipe = useAddLeadToCustomPipe();
 
+  // Funis de sistema REAIS da org, com o nome que ELA usa (SCRUM-608/641):
+  // org sem o funil (linha de display ausente) ou com ele oculto não recebe a
+  // opção — oferecer criaria negócio num funil que ela não tem, sem erro.
   const pipeOptions = useMemo(() => {
-    const standard = [
-      { value: "std:whatsapp", label: getPipelineTypeName("whatsapp") },
-      { value: "std:confirmacao", label: getPipelineTypeName("confirmacao") },
-      { value: "std:propostas", label: getPipelineTypeName("propostas") },
-    ];
+    const standard = destinosDeSistema(systemPipes).map(d => ({
+      value: `std:${d.pipeType}`,
+      label: d.label,
+    }));
     const custom = customPipelines.map(p => ({ value: `custom:${p.id}`, label: p.name }));
     return [...standard, ...custom];
-  }, [customPipelines]);
+  }, [systemPipes, customPipelines]);
 
   const stageOptions = useMemo(() => {
     if (selectedPipe.startsWith("std:")) {
@@ -412,7 +461,7 @@ function LeadsInner() {
   // página 5 da nova, e ficar nela devolve um pedaço arbitrário da lista.
   useEffect(() => {
     setPage(0);
-  }, [searchQuery, filterOrigin, filterRating, filterQualification, createdFrom, createdTo, sort.key, sort.direction]);
+  }, [searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterResponsible, createdFrom, createdTo, sort.key, sort.direction]);
 
   /**
    * ADR-0024 decisão 2 — os quatro cards contam a ORGANIZAÇÃO.
@@ -427,13 +476,12 @@ function LeadsInner() {
    * org, que é o que o resto do produto usa.
    */
   const { data: orgStats } = useLeadsStats({
-    searchQuery, filterOrigin, filterRating, filterQualification,
+    searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterResponsible,
     filterUf: ufFilter, createdFrom, createdTo,
   });
 
   const stats = useMemo(() => ({
     total: totalLeads ?? leads.length,
-    highRating: orgStats?.highRating ?? 0,
     thisMonth: orgStats?.thisMonth ?? 0,
     withSDR: orgStats?.withOwner ?? 0,
   }), [totalLeads, leads.length, orgStats]);
@@ -447,7 +495,6 @@ function LeadsInner() {
         email: lead.email || "",
         phone: lead.phone || "",
         origin: lead.origin || "outro",
-        rating: lead.rating || 5,
         segment: lead.segment || "",
         faturamento: lead.faturamento,
         urgency: lead.urgency || "",
@@ -577,6 +624,10 @@ function LeadsInner() {
         <Button variant="ghost" size="icon" onClick={() => setIsImportHistoryOpen(true)} title="Histórico de importações">
           <History className="w-4 h-4" />
         </Button>
+        <Button variant="outline" onClick={() => setIsImportModalOpen(true)} disabled={!canImport} className="gap-2">
+          <FileUp className="w-4 h-4" />
+          Importar
+        </Button>
         <Button variant="outline" onClick={() => setIsExportModalOpen(true)} disabled={!canExport} className="gap-2">
           <FileDown className="w-4 h-4" />
           Exportar
@@ -588,7 +639,7 @@ function LeadsInner() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -596,15 +647,6 @@ function LeadsInner() {
         >
           <p className="stat-card-label">Total de Leads</p>
           <p className="text-xl font-bold">{stats.total}</p>
-        </motion.div>
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="stat-card"
-        >
-          <p className="stat-card-label">Alta Qualidade (7+)</p>
-          <p className="text-xl font-bold text-chart-5">{stats.highRating}</p>
         </motion.div>
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -648,17 +690,6 @@ function LeadsInner() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterRating} onValueChange={setFilterRating}>
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Rating" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos Ratings</SelectItem>
-            <SelectItem value="high">Alta (7-10)</SelectItem>
-            <SelectItem value="medium">Média (4-6)</SelectItem>
-            <SelectItem value="low">Baixa (0-3)</SelectItem>
-          </SelectContent>
-        </Select>
         <Select value={filterQualification} onValueChange={setFilterQualification}>
           <SelectTrigger className="w-[170px]">
             <SelectValue placeholder="Qualificação" />
@@ -685,6 +716,51 @@ function LeadsInner() {
             </SelectItem>
           </SelectContent>
         </Select>
+        {/* Dono da conta — casa exatamente o que a coluna homônima da lista
+            mostra (`sale ?? pre_sale ?? responsible`, ver lead-list-filters). */}
+        <Select value={filterResponsible} onValueChange={setFilterResponsible}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Dono da conta" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os donos</SelectItem>
+            <SelectItem value="none">
+              <span className="flex items-center gap-2">
+                <UserX className="w-3.5 h-3.5 text-muted-foreground" />
+                Sem dono
+              </span>
+            </SelectItem>
+            {responsibleMembers.map((m) => (
+              <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* Gaveta do lead — segmented, não Select, e empurrada para a borda
+            direita pelo `ml-auto`.
+
+            Segmented porque são três opções fixas e saber QUAIS são as outras
+            faz parte da decisão: um Select esconderia "Indefinido" atrás de um
+            clique, e é justamente a gaveta que o usuário não sabe que existe.
+            O `ml-auto` separa "o que recorta a busca" (esquerda) de "em que
+            lista eu estou" (direita). */}
+        {/* A DIVISÃO LEAD × CLIENTE — este seletor, e só ele.
+
+            A fonte da verdade muda por organização; o controle, não:
+              • org COM integração de ERP → a gaveta `leads.classificacao`,
+                onde `indefinido` faz sentido;
+              • org SEM integração → a lei da RELAÇÃO: ganho prevalece; somente
+                perdas = Perdido; demais = Lead.
+
+            `Indefinido` só aparece no primeiro caso: numa org sem ERP a gaveta
+            não existe, e oferecer um filtro que sempre devolve lista vazia é
+            pior do que não oferecer. */}
+        <SegmentedControl
+          label="Classificação dos leads"
+          className="sm:ml-auto"
+          value={filterClassificacao}
+          onValueChange={setFilterClassificacao}
+          options={leadClassificacaoOptions(usaLeiDoErp)}
+        />
         <SavedViewsDropdown
           entityType="leads"
           currentFilters={filterState}
@@ -769,6 +845,7 @@ function LeadsInner() {
                   key={lead.id}
                   lead={lead as LeadMobileCardLead}
                   standing={standings[lead.id]}
+                  ciclo={reorderCycles?.[lead.id]}
                   selecionado={bulk.isSelected(lead.id)}
                   onOpen={() => openLead(lead.id)}
                   originLabel={originLabels[lead.origin ?? "outro"] || lead.origin || "outro"}
@@ -810,6 +887,7 @@ function LeadsInner() {
                     metrics={dataMetrics[lead.id]}
                     deals={leadDeals?.[lead.id]}
                     standing={standings[lead.id]}
+                    ciclo={reorderCycles?.[lead.id]}
                     selected={bulk.isSelected(lead.id)}
                     onToggleSelect={() => bulk.toggle(lead.id)}
                     onOpen={() => openLead(lead.id)}
@@ -828,6 +906,44 @@ function LeadsInner() {
                             <Edit2 className="w-4 h-4 mr-2" />
                             Editar
                           </DropdownMenuItem>
+                          {/* Gaveta do lead. Radio e não itens soltos porque as
+                              três são mutuamente exclusivas — o usuário precisa
+                              ver em qual está antes de mover.
+
+                              Mover aqui marca `classificacao_manual`, e a lei do
+                              ERP deixa de tocar neste lead: é o que impede a
+                              escolha de sumir na sincronização das 06:00. */}
+                          {usaLeiDoErp && <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <Tag className="w-4 h-4 mr-2" />
+                              Classificação
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                              <DropdownMenuRadioGroup
+                                // Mesma razão do cast em `useLeadClassificacao`:
+                                // a coluna existe em prod, o `types.ts`
+                                // commitado é que está atrasado. Regenerar
+                                // expõe 15 erros de outras frentes.
+                                value={
+                                  (lead as { classificacao?: string })
+                                    .classificacao ?? "lead"
+                                }
+                                onValueChange={(v) =>
+                                  mudarClassificacao({
+                                    leadId: lead.id,
+                                    classificacao: v as LeadClassificacao,
+                                  })
+                                }
+                              >
+                                {LEAD_CLASSIFICACOES.map((c) => (
+                                  <DropdownMenuRadioItem key={c} value={c}>
+                                    {LEAD_CLASSIFICACAO_CONFIG[c].label}
+                                  </DropdownMenuRadioItem>
+                                ))}
+                              </DropdownMenuRadioGroup>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>}
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={() => {
                               setLeadToDelete(lead);
@@ -877,10 +993,12 @@ function LeadsInner() {
         )}
       </div>
 
+      <ImportLeadsModal open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
+
       <ExportLeadsModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        listFilters={{ searchQuery, filterOrigin, filterRating, filterQualification, filterUf: ufFilter, createdFrom, createdTo }}
+        listFilters={{ searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterResponsible, filterUf: ufFilter, createdFrom, createdTo }}
       />
 
       <Dialog open={isImportHistoryOpen} onOpenChange={setIsImportHistoryOpen}>
@@ -944,32 +1062,21 @@ function LeadsInner() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="origin">Origem</Label>
-                <Select
-                  value={formData.origin}
-                  onValueChange={(v) => setFormData({ ...formData, origin: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(originLabels).map(([key, label]) => (
-                      <SelectItem key={key} value={key}>{label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label>Rating (0-10)</Label>
-                <div className="py-2">
-                  <StarRating
-                    rating={formData.rating}
-                    onRate={(r) => setFormData({ ...formData, rating: r })}
-                  />
-                </div>
-              </div>
+            <div className="grid gap-2">
+              <Label htmlFor="origin">Origem</Label>
+              <Select
+                value={formData.origin}
+                onValueChange={(v) => setFormData({ ...formData, origin: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(originLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {/* FUNIL — only visible when creating a new lead */}

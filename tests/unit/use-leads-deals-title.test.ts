@@ -38,6 +38,8 @@ vi.mock("@/integrations/supabase/client", () => {
     builder.in = self;
     builder.order = self;
     builder.limit = self;
+    builder.is = self;
+    builder.not = self;
     // O hook faz `await` direto no builder — `then` é o que resolve.
     builder.then = (resolve: (v: unknown) => unknown) =>
       Promise.resolve({ data: rows[table] ?? [], error: null }).then(resolve);
@@ -69,15 +71,24 @@ function seed(opts: { dealId?: string | null; dealTitle?: string }) {
   ];
   rows.pipelines = [{ id: "pipe-1", slug: "whatsapp", name: "Qualificação", color: "#fff", type: "system" }];
   rows.pipeline_stages = [
-    { pipeline_type: "whatsapp", stage_key: "novo", name: "Novo Lead", stage_role: null },
+    { id: "pipe-1-novo", pipeline_id: "pipe-1", stage_key: "novo", name: "Novo Lead", stage_role: null },
   ];
-  rows.custom_pipeline_stages = [];
+  rows.pipeline_stages = [];
   rows.deals = opts.dealId && opts.dealTitle
     ? [{ id: opts.dealId, title: opts.dealTitle }]
     : [];
 }
 
 describe("useLeadsDeals — título do negócio", () => {
+  it("lista venda histórica ganha mesmo sem posição em funil", async () => {
+    rows.pipeline_entries = [];
+    rows.deals = [{ id: "historical-1", source_lead_id: "lead-1", title: "Venda histórica", value: 250, closed_at: "2025-01-01T15:00:00Z" }];
+    const { result } = renderHook(() => useLeadsDeals(["lead-1"]), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.["lead-1"]).toEqual([expect.objectContaining({
+      id: "historical-1", historicalSale: true, outcome: "won", value: 250, pipelineSlug: "",
+    })]);
+  });
   beforeEach(() => {
     for (const k of Object.keys(rows)) delete rows[k];
     consultadas.length = 0;
@@ -104,7 +115,7 @@ describe("useLeadsDeals — título do negócio", () => {
     expect(result.current.data!["lead-1"][0].title).toBe("Qualificação");
   });
 
-  it("não consulta `deals` quando nenhum card tem deal_id", async () => {
+  it("consulta apenas vendas históricas quando nenhum card tem deal_id", async () => {
     // Estado de prod hoje: 38.156 entries, todas com deal_id NULL. A consulta
     // extra não pode custar uma ida ao banco por página de leads até o backfill.
     seed({ dealId: null });
@@ -112,7 +123,7 @@ describe("useLeadsDeals — título do negócio", () => {
     const { result } = renderHook(() => useLeadsDeals(["lead-1"]), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.data?.["lead-1"]).toBeTruthy());
 
-    expect(consultadas).not.toContain("deals");
+    expect(consultadas.filter(table => table === "deals")).toHaveLength(1);
   });
 
   it("consulta `deals` quando existe deal_id", async () => {

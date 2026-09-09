@@ -420,11 +420,33 @@ describe("onRecipientsSent — releaseBlastPlanLot", () => {
   });
 });
 
-describe("parsePostSendTarget — fail-closed shape validation", () => {
+describe("parsePostSendTarget — fail-closed shape validation + normalization", () => {
   const CUSTOM_ID = "3f2b8c1a-1111-4222-8333-444455556666";
   const STAGE_ID = "9a8b7c6d-1111-4222-8333-444455556666";
 
-  it("accepts a valid system target", () => {
+  it("normalizes the CANONICAL shape (pipelineId + stageId) — Fatia B", () => {
+    const out = parsePostSendTarget({
+      pipelineId: CUSTOM_ID,
+      stageId: STAGE_ID,
+      label: "Reativação · Dia 2",
+    });
+    expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.target).toEqual({
+        pipelineRef: CUSTOM_ID,
+        stageRef: STAGE_ID,
+        label: "Reativação · Dia 2",
+      });
+    }
+  });
+
+  it("normalizes the canonical shape with a legacy stageKey ref", () => {
+    const out = parsePostSendTarget({ pipelineId: CUSTOM_ID, stageKey: "novo_lead", label: "x" });
+    expect(out.ok).toBe(true);
+    if (out.ok) expect(out.target.stageRef).toBe("novo_lead");
+  });
+
+  it("accepts the LEGACY system shape forever — normalizes slug + stage_key refs", () => {
     const out = parsePostSendTarget({
       funnelKind: "system",
       pipelineType: "propostas",
@@ -434,15 +456,14 @@ describe("parsePostSendTarget — fail-closed shape validation", () => {
     expect(out.ok).toBe(true);
     if (out.ok) {
       expect(out.target).toEqual({
-        funnelKind: "system",
-        pipelineType: "propostas",
-        stageKey: "enviada",
+        pipelineRef: "propostas",
+        stageRef: "enviada",
         label: "Orçamentos · Enviada",
       });
     }
   });
 
-  it("accepts a valid custom target (uuid pipeline + uuid stage)", () => {
+  it("accepts the LEGACY custom shape forever (uuid pipeline + uuid stage)", () => {
     const out = parsePostSendTarget({
       funnelKind: "custom",
       pipelineId: CUSTOM_ID,
@@ -450,6 +471,13 @@ describe("parsePostSendTarget — fail-closed shape validation", () => {
       label: "Reativação · Dia 2",
     });
     expect(out.ok).toBe(true);
+    if (out.ok) {
+      expect(out.target).toEqual({
+        pipelineRef: CUSTOM_ID,
+        stageRef: STAGE_ID,
+        label: "Reativação · Dia 2",
+      });
+    }
   });
 
   it("rejects non-objects, missing stage, bad funnel kind", () => {
@@ -458,14 +486,15 @@ describe("parsePostSendTarget — fail-closed shape validation", () => {
     expect(parsePostSendTarget([]).ok).toBe(false);
     expect(parsePostSendTarget({ funnelKind: "system", pipelineType: "whatsapp", stageKey: "" }).ok).toBe(false);
     expect(parsePostSendTarget({ funnelKind: "wat", stageKey: "x" }).ok).toBe(false);
+    expect(parsePostSendTarget({ pipelineId: CUSTOM_ID }).ok).toBe(false);
   });
 
-  it("rejects a system target with an unknown pipeline_type", () => {
+  it("rejects a legacy system target with an unknown pipeline_type", () => {
     const out = parsePostSendTarget({ funnelKind: "system", pipelineType: "vendas", stageKey: "x" });
     expect(out).toEqual({ ok: false, error: "post_send_target_invalid_pipeline_type" });
   });
 
-  it("rejects a custom target with non-uuid ids", () => {
+  it("rejects a legacy custom target with non-uuid ids", () => {
     expect(
       parsePostSendTarget({ funnelKind: "custom", pipelineId: "not-a-uuid", stageKey: STAGE_ID }).ok,
     ).toBe(false);

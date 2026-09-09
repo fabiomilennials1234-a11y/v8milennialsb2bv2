@@ -108,9 +108,10 @@ Deno.serve(
       // de feature_locked — sem log, porque o 403 retorna antes de logRuntime.
       // Derivar do recurso também impede que o cliente escolha a org.
       const { data: proposta, error: propostaError } = await supabaseAdmin
-        .from("pipe_propostas")
+        .from("negocio_projetado")
         .select("organization_id")
         .eq("id", pipe_proposta_id)
+        .eq("funil_sistema", "propostas")
         .maybeSingle();
 
       if (propostaError) {

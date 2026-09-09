@@ -1,15 +1,15 @@
 ---
 type: feature
-title: Automações — Trigger "Lead Respondeu" (filtro por funil)
+title: Automações — Trigger "Lead Respondeu" (funil, etapa e número)
 status: active
 created: 2026-08-11
-updated: 2026-08-12
+updated: 2026-09-03
 tags: [workflows, triggers, pipelines, copilot]
 related: []
 owner: gabriel
 ---
 
-# Automações — Trigger "Lead Respondeu" (filtro por funil)
+# Automações — Trigger "Lead Respondeu" (funil, etapa e número)
 
 ## TL;DR
 
@@ -72,6 +72,70 @@ O painel tem `channel`, `pipeline_ids` e `contains_text`, e o matcher os avalia 
 
 `contains_text` é case-insensitive e faz `includes` (substring), não palavra inteira. Coberto por `funil e contains_text se somam (E, não OU)` e `funil e canal se somam`.
 
+### Filtro por etapa (2026-09-03)
+
+`trigger_config.stage_ids`: lista de `pipeline_stages.id`. Semântica **OR**, vazio = qualquer etapa. Some junto com os outros filtros (E).
+
+Chave é o **uuid**, não o `stage_key`: o apelido de etapa se repete entre funis, o uuid não.
+
+> [!important] Etapa é do Negócio, e o filtro é PURO
+> Sob o [[ADR-0023]] quem ocupa etapa é o **Negócio**, não o Lead — e um Lead pode ter vários. Medido em PROD: 36.899 leads têm 1 card, mas **5.187 (12%) têm 2 ou mais**, e 5.165 destes em mais de um funil.
+>
+> A decisão foi filtro **puro**: basta o lead ter **algum** card numa das etapas marcadas, e o resultado é **uma** execução por resposta, não uma por card. A execução **não** carrega o `deal_id` que casou, e os nós que movem card seguem resolvendo o card como sempre resolveram.
+>
+> O custo assumido: se a automação move etapa, ela não sabe qual card mover quando há dois elegíveis. Alternativa rejeitada — amarrar a execução ao Negócio — dobraria o custo de dedup, e na variante que dispara por Negócio faria o lead receber duas automações por uma resposta.
+
+`stage_id` nulo chega ao matcher **como nulo**, em vez de ser filtrado da lista: é o que distingue "card sem etapa" (não casa nada) de "leitura falhou" (fail-closed).
+
+### Filtro por número de origem (2026-09-03)
+
+`trigger_config.source_type` + `source_ids`: de qual das **nossas** caixas a resposta precisa ter chegado. Existe para a org com dois números falando com o mesmo lead — só o número escolhido conta.
+
+Não é o mesmo que `channel`: aquele distingue WhatsApp de Meta, este distingue **um número nosso do outro**. Medido: 152 Instances em 62 orgs, e **19 orgs têm 2+ números** (7 com 2, 8 com 3, 2 com 4, 1 com 6, 1 com 57).
+
+`source_type` já nasce como discriminador para o dia em que Instagram e WhatsApp oficial entrarem; hoje só o ramo `whatsapp_instance` é avaliado.
+
+> [!warning] A Instance viaja por DUAS portas, e cobrir uma só falha em silêncio
+> Quem conhece a Instance é o `whatsapp-webhook`; quem dispara o gatilho é o `agent-message`. O payload entre os dois não carregava o campo — a identidade do número se perdia uma camada antes de onde o filtro precisa dela.
+>
+> E são **duas** portas de entrada do `agent-message`: o `fetch` direto e a **fila do Copilot** (`copilot_message_queue`, ligada por org via `COPILOT_QUEUE_ENABLED_ORGS`). Cobrir só a primeira faria o filtro funcionar para umas orgs e falhar em silêncio para as outras.
+>
+> A fila não tinha seam testável para o payload, então a montagem virou módulo próprio: `_shared/copilot-batch-payload.ts`. Ela usa a Instance da mensagem **mais recente** do batch — o batch é agrupado por telefone+org e pode misturar Instances; a última é a que o lead acabou de usar.
+
+**Fail-closed** quando o evento não diz de onde veio. Sem isso, "só o número do Closer" viraria "qualquer número" em silêncio — que é o que acontecia no caminho do `notificame-webhook`, corrigido junto (ver abaixo).
+
+### Modos de resposta e freio (2026-09-03)
+
+`reply_mode` responde à pergunta que o gatilho nunca tinha respondido: **o que conta como "responder"**.
+
+| Modo | Dispara quando | Campo extra |
+|---|---|---|
+| `any` (padrão) | qualquer mensagem do lead | — |
+| `after_outbound` | só se enviamos algo antes, dentro da janela | `reply_window_hours` |
+| `first_of_thread` | só na primeira mensagem depois do silêncio | `new_thread_after_hours` |
+
+> [!important] A evidência viaja congelada, e isso não é detalhe
+> `hours_since_outbound` e `hours_since_previous_inbound` vão para o context como **horas decorridas**, nunca como timestamp. O matcher roda de novo no executor, minutos depois — comparar contra "agora" faria a revalidação reprovar exatamente o que o disparo aprovou, e a automação nasceria e morreria sozinha. É a mesma armadilha que quase matou o filtro de funil, por outro caminho.
+>
+> A leitura do inbound pega **duas** linhas e usa a segunda: a mensagem que acabou de chegar já está persistida quando o gatilho roda, então a primeira é ela mesma. Sem isso, `first_of_thread` compararia a mensagem com ela própria e nunca disparava.
+>
+> Leitura que falha grava os campos **ausentes**, não `null`: ausência reprova por fail-closed, enquanto `null` afirma "não houve mensagem anterior" e destravaria `first_of_thread` por engano.
+
+`cooldown_minutes` (padrão **60**) é o freio, e **não trouxe mecanismo novo**: a chave de dedup já é `${trigger}:${hash}:${balde}` e o índice único parcial `(workflow_id, lead_id, trigger_dedup_key)` já garante que só o primeiro insert do balde vence. Cooldown é esse balde com outro tamanho, agora por workflow.
+
+> [!note] Efeito de borda, assumido
+> Balde é fatia de tempo, não janela deslizante: 10h59 e 11h01 caem em baldes diferentes e as duas passam. Teto de uma execução extra, só na virada. Cooldown exato exigiria consultar a última execução a cada mensagem recebida — recusado.
+
+Um teste trava que os **outros** gatilhos não mudaram de janela: `stage_changed` segue com 300s por causa do incidente de re-disparo de 2026-07-03 (Motor 100).
+
+### Canal oficial disparava sem contexto
+
+O `notificame-webhook` chamava `fireTrigger` **sem `context`**. Como o matcher só compara quando o contexto traz o campo, um workflow restrito a "canal WhatsApp" disparava também com resposta de Instagram — filtro que passa sempre é filtro que não existe, e o filtro por número cairia no mesmo buraco.
+
+A regra mora em `_shared/notificame-reacoes.ts` (`contextoDoGatilho`), junto das outras decisões perigosas do evento, e não no handler: ali ela é exercitada sem banco nem rede. Instagram e Facebook viram `channel: "meta"`, que é como o seletor da tela os chama.
+
+Sem `instance_id` ali, de propósito: o canal oficial não tem Instance de WhatsApp, e fingir que tem seria mentir para o filtro. A ausência reprova por fail-closed quem filtra por número — resposta certa, não lacuna.
+
 ### Ponto de disparo (mudou)
 
 O `fireTrigger` saiu do passo 1.7 e virou o passo **0.97** de `agent-message` — antes dos dois gates de Copilot (0.95 early e 1.6), do gate de audiência (1.0) e do de IA-desligada (1.5).
@@ -110,17 +174,19 @@ Como a base instalada era zero, nenhuma dessas mudanças regride cliente algum.
   - **Skip de execução in-flight** — sem prazo nenhum: enquanto houver execução `running`/`processing`/`waiting_response`/`paused` daquele workflow para aquele lead, não há re-disparo. Hoje são 711 execuções in-flight, mediana de 20h a 2 dias.
 
   Ao testar na mão, "esperar 60s" resolve só o primeiro caso. Se não disparar, olhe a execução in-flight antes de suspeitar do filtro.
-- **Granularidade é o funil, não a etapa.** `custom_pipe_entries.stage_id` é uuid e `pipeline_entries.stage_key` é text — filtrar por etapa uniformemente exigiria resolver essa divergência.
+- ~~**Granularidade é o funil, não a etapa.**~~ **Fechado em 2026-09-03.** A divergência que travava isso deixou de existir: `pipeline_entries` ganhou `stage_id` uuid, preenchido em **48.130 das 48.171** entradas. As 41 restantes não casam filtro nenhum, por fail-closed.
 - **Funil desativado** continua com entries, então um filtro salvo segue valendo. A UI mostra o funil marcado com `(desativado)` em vez de escondê-lo.
 
 ## Onde está
 
-- Matcher + lookup: `supabase/functions/_shared/workflow-trigger.ts` (`matchesTriggerConfig` case `lead_replied`, `loadLeadPipelineIds`, `hasActiveWorkflowsForTrigger`)
+- Matcher + lookups: `supabase/functions/_shared/workflow-trigger.ts` (`matchesTriggerConfig` case `lead_replied`, `loadLeadPosition`, `loadReplyEvidence`, `hasActiveWorkflowsForTrigger`)
+- Payload da fila do Copilot: `supabase/functions/_shared/copilot-batch-payload.ts`
+- Contexto do canal oficial: `supabase/functions/_shared/notificame-reacoes.ts` (`contextoDoGatilho`)
 - Disparo: `supabase/functions/agent-message/index.ts` passo 0.97
 - UI: `src/modules/workflows/components/sidebar-panels/TriggerPanel.tsx` (`LeadRepliedConfig`)
 - Tipo: `src/types/workflow.ts` (`TriggerConfigLeadReplied`)
 - Export/import: `src/lib/workflowPortability.ts` (`pipeline_ids` neutralizado entre orgs)
-- Testes: `tests/unit/workflow-trigger-shared.test.ts`
+- Testes: `tests/unit/workflow-trigger-shared.test.ts`, `tests/unit/lead-replied-config.test.tsx`, `tests/unit/notificame-reacoes.test.ts`, `tests/unit/copilot-batch-processor.test.ts`, `tests/unit/webhook-trigger-reactions.test.ts`
 
 Sem migration: `workflows.trigger_config` é jsonb sem CHECK, e o campo é aditivo.
 
@@ -133,6 +199,11 @@ Sem migration: `workflows.trigger_config` é jsonb sem CHECK, e o campo é aditi
 >
 > ```
 > supabase functions deploy agent-message --project-ref jsjsmuncfkbsbzqzqhfq
+> supabase functions deploy whatsapp-webhook --project-ref jsjsmuncfkbsbzqzqhfq
+> supabase functions deploy copilot-batch-processor --project-ref jsjsmuncfkbsbzqzqhfq
+> supabase functions deploy notificame-webhook --project-ref jsjsmuncfkbsbzqzqhfq
 > ```
+>
+> São quatro agora, não uma. O `whatsapp-webhook` e o `copilot-batch-processor` carregam a Instance; sem eles o filtro por número reprova tudo (fail-closed) em vez de disparar para todos — degrada fechado, mas degrada.
 >
 > De worktree **limpa** — o deploy empacota o working tree.

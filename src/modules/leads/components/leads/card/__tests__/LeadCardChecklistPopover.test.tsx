@@ -24,10 +24,18 @@ const checklistItems = vi.fn((..._args: unknown[]) => ({
   ],
 }));
 
+const applyMutate = vi.fn();
+
+const templates = vi.fn(() => ({
+  data: [{ id: "tpl-1", title: "Onboarding do cliente", total_items: 4 }],
+}));
+
 vi.mock("@/modules/engagement", () => ({
   useLeadChecklists: (...args: unknown[]) => leadChecklists(...args),
   useChecklistItems: (...args: unknown[]) => checklistItems(...args),
   useToggleChecklistItem: () => ({ mutate: toggleMutate }),
+  useChecklistTemplates: () => templates(),
+  useApplyChecklistTemplate: () => ({ mutate: applyMutate, isPending: false }),
 }));
 
 function renderWithClient(ui: React.ReactElement) {
@@ -39,6 +47,15 @@ beforeEach(() => {
   toggleMutate.mockClear();
   leadChecklists.mockClear();
   checklistItems.mockClear();
+  applyMutate.mockClear();
+  leadChecklists.mockImplementation(() => ({
+    data: [
+      { id: "cl-1", title: "Qualificação", total_items: 2, completed_items: 1 },
+    ],
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }));
 });
 
 describe("LeadCardChecklistPopover", () => {
@@ -100,6 +117,39 @@ describe("LeadCardChecklistPopover", () => {
   });
 });
 
+describe("LeadCardChecklistPopover — aplicar checklist da operação", () => {
+  it("oferece os templates da org quando o lead não tem nenhum checklist", () => {
+    leadChecklists.mockImplementation(() => ({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }));
+    renderWithClient(
+      <LeadCardChecklistPopover leadId="lead-1" completed={0} total={0} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Checklists:/ }));
+
+    // A lista abre sozinha: sem checklist, aplicar é a única coisa a fazer.
+    fireEvent.click(screen.getByText("Onboarding do cliente"));
+    expect(applyMutate).toHaveBeenCalledWith(
+      { templateId: "tpl-1", leadId: "lead-1" },
+      expect.anything(),
+    );
+  });
+
+  it("com checklist já aplicado, a lista de templates fica atrás de um clique", () => {
+    renderWithClient(
+      <LeadCardChecklistPopover leadId="lead-1" completed={1} total={2} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Checklists: 1 de 2/ }));
+    expect(screen.queryByText("Onboarding do cliente")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Aplicar checklist do sistema"));
+    expect(screen.getByText("Onboarding do cliente")).toBeInTheDocument();
+  });
+});
+
 describe("LeadCardMetrics checklist badge gating", () => {
   it("renders the interactive popover trigger when leadId + total>0", () => {
     renderWithClient(
@@ -119,7 +169,7 @@ describe("LeadCardMetrics checklist badge gating", () => {
       <LeadCardMetrics leadId="lead-1" checklistsCompleted={0} checklistsTotal={0} />,
     );
     expect(
-      screen.getByRole("button", { name: "Checklists: 0 de 0 itens concluídos" }),
+      screen.getByRole("button", { name: "Checklists: nenhum aplicado neste lead" }),
     ).toBeInTheDocument();
     expect(screen.getByText("0/0")).toBeInTheDocument();
   });

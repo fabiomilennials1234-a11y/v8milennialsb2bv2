@@ -1,0 +1,37 @@
+name: Historical sales transaction
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/historical-sales.yml'
+      - 'supabase/migrations/*registrar_vendas_historicas.sql'
+      - 'tests/fixtures/historical-sales-schema.sql'
+      - 'tests/integration/historical-sales.sql'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/historical-sales.yml'
+      - 'supabase/migrations/*registrar_vendas_historicas.sql'
+      - 'tests/fixtures/historical-sales-schema.sql'
+      - 'tests/integration/historical-sales.sql'
+permissions:
+  contents: read
+jobs:
+  historical-sales:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify atomic sales and permissions in isolated PostgreSQL
+        run: |
+          docker run -d --name historical-sales-test -e POSTGRES_HOST_AUTH_METHOD=trust postgres:16-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec historical-sales-test pg_isready -U postgres; then break; fi
+            sleep 1
+          done
+          docker cp tests/fixtures/historical-sales-schema.sql historical-sales-test:/tmp/fixture.sql
+          docker cp supabase/migrations/20271018000002_registrar_vendas_historicas.sql historical-sales-test:/tmp/migration.sql
+          docker cp tests/integration/historical-sales.sql historical-sales-test:/tmp/test.sql
+          docker exec historical-sales-test psql -U postgres -v ON_ERROR_STOP=1 -f /tmp/fixture.sql -f /tmp/migration.sql -f /tmp/test.sql
+      - name: Remove isolated database
+        if: always()
+        run: docker rm -f -v historical-sales-test || true

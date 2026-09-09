@@ -39,31 +39,6 @@ export function TorqueLogo({
 /** @deprecated Use TorqueLogo instead */
 export const V8Logo = TorqueLogo;
 
-// Fuel quality badges for lead rating
-export function FuelQualityBadge({ rating }: { rating: number }) {
-  const getFuelLabel = (rating: number) => {
-    if (rating >= 5) return { label: "V8", color: "bg-success text-success-foreground", icon: "🏎️" };
-    if (rating >= 4) return { label: "V6", color: "bg-primary text-primary-foreground", icon: "🚗" };
-    if (rating >= 3) return { label: "2.0", color: "bg-chart-2 text-white", icon: "⛽" };
-    if (rating >= 2) return { label: "1.6", color: "bg-warning text-warning-foreground", icon: "⛽" };
-    return { label: "1.0", color: "bg-muted text-muted-foreground", icon: "⛽" };
-  };
-
-  const fuel = getFuelLabel(rating);
-
-  return (
-    <motion.span 
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold ${fuel.color}`}
-      initial={{ scale: 0.8 }}
-      animate={{ scale: 1 }}
-      whileHover={{ scale: 1.05 }}
-    >
-      <span>{fuel.icon}</span>
-      <span>{fuel.label}</span>
-    </motion.span>
-  );
-}
-
 // Racing-themed page header
 export function V8PageHeader({ 
   title, 

@@ -55,7 +55,12 @@ export function OnbStepWhatsApp() {
         if (result?.status === "connected") {
           clearInterval(pollRef.current!);
           handleAdvance();
+          return;
         }
+        // Follow the provider's QR rotation (~20s) instead of showing the code
+        // minted at create time until it dies. Null-guarded: a mid-rotation read
+        // without a code must not blank the one on screen.
+        if (result?.qrcode) setQrCode(result.qrcode);
       } catch {
         // ignore transient poll errors
       }

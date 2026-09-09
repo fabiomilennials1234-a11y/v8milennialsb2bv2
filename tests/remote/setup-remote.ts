@@ -79,7 +79,9 @@ export async function cleanupTestData(): Promise<void> {
     'pipe_whatsapp',
     'pipe_confirmacao',
     'pipe_propostas',
-    'custom_pipe_entries',
+    // SCRUM-621: custom_pipe_entries virou view; a fonte única é
+    // pipeline_entries (cobre custom e o que as pipe_* acima não pegarem).
+    'pipeline_entries',
     'workflow_execution_steps',
     'workflow_executions',
     'workflows',

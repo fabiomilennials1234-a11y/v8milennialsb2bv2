@@ -40,7 +40,8 @@ export function useSetMeetingDate() {
       if (writeErr) throw writeErr;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["pipeline-page", "whatsapp"] });
+      qc.invalidateQueries({ queryKey: ["pipeline-page"] });
+      qc.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
     },
   });
 }

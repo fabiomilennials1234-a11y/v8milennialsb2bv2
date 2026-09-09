@@ -46,7 +46,19 @@ export function useApplyChecklistTemplate() {
   const { organizationId, teamMemberId } = useOrganization();
 
   return useMutation({
-    mutationFn: async ({ templateId, leadId }: { templateId: string; leadId: string }) => {
+    mutationFn: async ({ templateId, leadId, entryId }: {
+      templateId: string;
+      leadId: string;
+      /**
+       * O Negócio que recebe o checklist (`pipeline_entries.id`).
+       *
+       * Ausente = aplica na PESSOA, que é o que a ficha do lead faz. Presente =
+       * aplica naquele negócio só, e a idempotência muda de chave junto — sem
+       * isso, aplicar o mesmo template no segundo negócio do lead devolveria o
+       * checklist do primeiro e o segundo sairia sem nada.
+       */
+      entryId?: string | null;
+    }) => {
       if (!organizationId) throw new Error("Organização não disponível");
 
       const { data: template, error: tErr } = await supabase
@@ -62,13 +74,14 @@ export function useApplyChecklistTemplate() {
       // Antes deste guard, o apply manual inseria sem source_template_id e furava
       // o índice parcial único uniq_checklists_lead_source — gerando checklists
       // duplicados do mesmo template no lead (ADR-0016).
-      const { data: existing } = await supabase
+      const escopo = supabase
         .from("checklists")
         .select("*")
         .eq("organization_id", organizationId)
-        .eq("lead_id", leadId)
-        .eq("source_template_id", templateId)
-        .maybeSingle();
+        .eq("source_template_id", templateId);
+      const { data: existing } = entryId
+        ? await escopo.eq("pipeline_entry_id", entryId).maybeSingle()
+        : await escopo.eq("lead_id", leadId).is("pipeline_entry_id", null).maybeSingle();
 
       if (existing) return existing;
 
@@ -88,10 +101,14 @@ export function useApplyChecklistTemplate() {
           title: template.title,
           description: template.description,
           lead_id: leadId,
+          // O negócio dono. Nulo = da pessoa. Ver a migration
+          // `20270827000020_checklist_do_negocio.sql`.
+          pipeline_entry_id: entryId ?? null,
           // Marca a origem → habilita dedup via índice parcial único
-          // (lead_id, source_template_id) e deixa o checklist auditável.
+          // (negócio, template) ou (lead, template) entre os sem negócio, e
+          // deixa o checklist auditável.
           source_template_id: templateId,
-        })
+        } as never)
         .select()
         .single();
 

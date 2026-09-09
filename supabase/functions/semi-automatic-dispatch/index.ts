@@ -19,6 +19,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { logRuntime } from "../_shared/logger.ts";
 import { getTimeBasedVariables } from '../_shared/time-variables.ts';
+import { personalizationFirstName } from "../_shared/lead-name.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -310,6 +311,7 @@ async function processBatch(
         const timeVars = getTimeBasedVariables();
         const messageContent = replaceVariables(template.content || "", {
           nome: lead.name || "você",
+          primeiro_nome: personalizationFirstName(lead.name) || "você",
           empresa: lead.company || "",
           email: lead.email || "",
           telefone: lead.phone || "",
@@ -331,6 +333,7 @@ async function processBatch(
       const timeVarsForLog = getTimeBasedVariables();
       const messageContent = isAudioTemplate ? "[Áudio]" : replaceVariables(template.content || "", {
         nome: lead.name || "você",
+        primeiro_nome: personalizationFirstName(lead.name) || "você",
         empresa: lead.company || "",
         email: lead.email || "",
         telefone: lead.phone || "",

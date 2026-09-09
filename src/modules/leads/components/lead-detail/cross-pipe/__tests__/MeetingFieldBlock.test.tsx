@@ -88,6 +88,17 @@ vi.mock("../../../leads/funnel-contexts/modals/CompareceuModal", () => ({
 // useCreatePipeProposta + RescheduleModal vêm do PipeOpsPort (context).
 // RescheduleModal arrasta hooks de GoogleCalendar — stub via slot do port.
 const pipeOpsPort = {
+  // SCRUM-641: o CTA é batizado pelo nome que a ORG usa (useSystemPipes →
+  // display_config). O teste declara os funis da org em vez de herdar o trio.
+  useSystemPipes: () =>
+    ({
+      data: [
+        { pipe_type: "confirmacao", display_name: "Agendamentos", is_visible: true, position: 2 },
+        { pipe_type: "propostas", display_name: "Orçamentos", is_visible: true, position: 3 },
+      ],
+      isLoading: false,
+      isPending: false,
+    }) as never,
   useCreatePipeConfirmacao: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
   useUpdatePipeConfirmacao: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
   useCreatePipeProposta: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined), isPending: false }) as never,
@@ -117,7 +128,7 @@ describe("MeetingFieldBlock", () => {
       );
       expect(screen.getByText(/sem reunião marcada/i)).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: /adicionar à confirmação/i }),
+        screen.getByRole("button", { name: /adicionar a agendamentos/i }),
       ).toBeInTheDocument();
     });
   });
@@ -367,7 +378,7 @@ describe("MeetingFieldBlock — comparecimento MOVE o negócio para Orçamentos"
     // num funil que não existe.
     expect(updateAsync).not.toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
-    expect(vi.mocked(toast.error).mock.calls[0][0]).toMatch(/orçamentos/i);
+    expect(vi.mocked(toast.error).mock.calls[0][0]).toMatch(/funil de destino não encontrado/i);
   });
 
   it("card de Confirmação sem id não é movido — id nulo viraria 'negócio não encontrado'", async () => {

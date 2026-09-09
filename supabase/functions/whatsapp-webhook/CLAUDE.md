@@ -35,7 +35,9 @@ Ver [`05 — How-to/debug-whatsapp`](../../../Obsidian/Segundo%20Cerebro/Claude%
    - hash do número →
    - DLQ + return 200
 4. Idempotência via `external_message_id` único
-5. INSERT em `channel_messages` + `whatsapp_messages_received_via`
+5. INSERT em `whatsapp_messages` + `whatsapp_messages_received_via`
+   (o inbound da Uazapi NÃO vai para `channel_messages` — essa é da Meta e do
+   quick-blast. Quem quiser reagir a mensagem recebida escuta `whatsapp_messages`.)
 6. Realtime notifica frontend
 7. Dispara workflow/copilot triggers (assíncrono)
 8. Return 200 sempre (mesmo em erro de processing — DLQ pega)
@@ -61,7 +63,8 @@ Ver [`05 — How-to/debug-whatsapp`](../../../Obsidian/Segundo%20Cerebro/Claude%
 - `whatsapp_instance_secrets` — tokens (RLS deny-all)
 - `whatsapp_webhook_dlq` — DLQ
 - `whatsapp_messages_received_via` — tracking origem
-- `channel_messages` — destino final msgs
+- `whatsapp_messages` — destino final das msgs da Uazapi
+- `notifications` — Aviso de conversa, emitido por trigger em `whatsapp_messages` (#1885)
 
 ## Testes obrigatórios
 

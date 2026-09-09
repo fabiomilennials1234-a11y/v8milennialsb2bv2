@@ -9,42 +9,43 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   GitBranch,
-  Target,
   Plus,
   Loader2,
-  MessageSquare,
-  Calendar,
   Kanban,
-  TrendingUp,
-  Clock,
-  Trophy,
   ArrowRight,
   ChevronDown,
 } from "lucide-react";
 import { CreateFunilOuCampanhaModal } from "@/modules/pipelines/components/funis/CreateFunilOuCampanhaModal";
+import { FunnelActionsMenu } from "@/modules/pipelines/components/funis/FunnelActionsMenu";
+import { usePipelines, type Pipeline } from "@/modules/pipelines/hooks/model/usePipelines";
+import { funisDeSistemaNavegaveis } from "@/contracts/pipe/nome-do-funil";
+import { funilIcon } from "../lib/funil-icons";
+// Mesmo path map compat do seletor da faixa (morre no flip do redirect).
+import { FUNNEL_FALLBACK_COLOR } from "../lib/funnel-nav";
+import type { LucideIcon } from "lucide-react";
 
-// ── Maps for structural funnels ──────────────────────────────
-
-const PIPE_ICON_MAP: Record<string, React.ElementType> = {
-  whatsapp: MessageSquare,
-  confirmacao: Calendar,
-  propostas: Kanban,
-  upsell: TrendingUp,
-};
-
-const PIPE_PATH_MAP: Record<string, string> = {
-  whatsapp: "/pipe-whatsapp",
-  confirmacao: "/pipe-confirmacao",
-  propostas: "/pipe-propostas",
-  upsell: "/upsell",
-};
-
-const PIPE_COLOR_MAP: Record<string, string> = {
-  whatsapp: "#3b82f6",
-  confirmacao: "#8b5cf6",
-  propostas: "#f97316",
-  upsell: "#ec4899",
-};
+/**
+ * Um funil na lista — com a cor e o ícone QUE O USUÁRIO ESCOLHEU.
+ *
+ * Cor/ícone vêm de `pipelines` (registro único, SCRUM-637): funil de sistema
+ * persiste personalização como qualquer outro, e o hub reflete. Nome de
+ * sistema continua vindo do display_config (rename legado prevalece).
+ */
+interface FunilCard {
+  key: string;
+  name: string;
+  path: string;
+  color: string;
+  icon: LucideIcon;
+  /** Linha de apoio: prazo, meta, estado. Vazia quando não há o que dizer. */
+  meta?: string;
+  /**
+   * Linha canônica em `pipelines` — o que o menu de ações precisa para
+   * renomear/excluir. Ausente só enquanto o registro não chegou: sem ela o
+   * cartão continua listando e navegando, apenas sem menu.
+   */
+  pipeline?: Pipeline;
+}
 
 // ── Component ────────────────────────────────────────────────
 
@@ -55,6 +56,11 @@ export default function FunisHub() {
   const { data: displayConfigs = [], isLoading: configLoading } = usePipelineDisplayConfig();
   const { data: permanentFunnels = [], isLoading: permanentLoading } = usePermanentCustomFunnels();
   const { data: temporaryFunnels = [], isLoading: temporaryLoading } = useTemporaryFunnels();
+  const { data: pipelines = [] } = usePipelines();
+
+  // Registro único → cor/ícone reais de qualquer funil.
+  const pipeBySlug = new Map(pipelines.map((p) => [p.slug, p] as const));
+  const pipeById = new Map(pipelines.map((p) => [p.id, p] as const));
   const [createOpen, setCreateOpen] = useState(false);
   const [showEnded, setShowEnded] = useState(false);
 
@@ -64,14 +70,63 @@ export default function FunisHub() {
 
   const isLoading = configLoading || permanentLoading || temporaryLoading;
 
-  // Structural funnels — only visible ones; Agendamentos some quando o merge está ON (ADR-0004)
-  const visibleStructural = displayConfigs.filter(
-    (c) => c.is_visible && !(c.pipe_type === "confirmacao" && hasFeature("merged_opportunity_funnel")),
-  );
+  // Funis de sistema navegáveis — regra ÚNICA em contracts. O hub era o único
+  // dos três consumidores que não filtrava a Carteira, e por isso listava um
+  // card "Carteira" apontando para `/funil/upsell`, rota sem funil por trás.
+  const visibleStructural = funisDeSistemaNavegaveis(displayConfigs, {
+    mergeDeOportunidadesAtivo: hasFeature("merged_opportunity_funnel"),
+  });
 
-  // Temporary funnels — active vs ended
+  // Encerrado não é categoria, é ESTADO — por isso segue recolhido no fim.
   const activeTemporary = temporaryFunnels.filter((f) => f.status !== "ended");
   const endedTemporary = temporaryFunnels.filter((f) => f.status === "ended");
+
+  const allFunnels: FunilCard[] = [
+    ...visibleStructural.map((c) => {
+      const row = pipeBySlug.get(c.pipe_type);
+      return {
+        key: `sys:${c.pipe_type}`,
+        name: c.display_name,
+        path: `/funil/${c.pipe_type}`,
+        color: row?.color ?? FUNNEL_FALLBACK_COLOR,
+        icon: funilIcon(row?.icon),
+        pipeline: row,
+      };
+    }),
+    ...permanentFunnels.map((pipe) => ({
+      key: pipe.id,
+      name: pipe.name,
+      path: `/funil/${pipe.slug}`,
+      color: pipeById.get(pipe.id)?.color ?? pipe.color ?? FUNNEL_FALLBACK_COLOR,
+      icon: funilIcon(pipeById.get(pipe.id)?.icon),
+      pipeline: pipeById.get(pipe.id),
+    })),
+    ...activeTemporary.map((pipe) => {
+      const daysLeft = pipe.ends_at
+        ? Math.max(
+            0,
+            Math.ceil((new Date(pipe.ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+          )
+        : null;
+      // Só o que é fato do funil. "Ativo" não entra: é o estado de todos os
+      // outros da lista também, e dizê-lo só aqui recriaria a distinção.
+      const partes = [
+        daysLeft !== null ? `${daysLeft}d restantes` : null,
+        pipe.team_goal != null ? `Meta: ${pipe.team_goal}` : null,
+        pipe.status === "paused" ? "Pausado" : null,
+        pipe.status === "draft" ? "Rascunho" : null,
+      ].filter(Boolean);
+      return {
+        key: pipe.id,
+        name: pipe.name,
+        path: `/funil/${pipe.slug}`,
+        color: pipeById.get(pipe.id)?.color ?? pipe.color ?? FUNNEL_FALLBACK_COLOR,
+        icon: funilIcon(pipeById.get(pipe.id)?.icon),
+        meta: partes.length > 0 ? partes.join(" · ") : undefined,
+        pipeline: pipeById.get(pipe.id),
+      };
+    }),
+  ];
 
   if (isLoading) {
     return (
@@ -97,166 +152,48 @@ export default function FunisHub() {
         </Button>
       </div>
 
-      {/* ── Funis Estruturais ───────────────────────────────── */}
-      {visibleStructural.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-foreground/60 uppercase tracking-wider mb-3">
-            Funis Estruturais
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {visibleStructural.map((config) => {
-              const Icon = PIPE_ICON_MAP[config.pipe_type] || Kanban;
-              const path = PIPE_PATH_MAP[config.pipe_type];
-              const color = PIPE_COLOR_MAP[config.pipe_type] || "#64748b";
-
-              return (
-                <button
-                  key={config.pipe_type}
-                  onClick={() => navigate(path)}
-                  className="group flex items-center gap-3 p-4 rounded-xl border border-border/50 hover:border-border bg-card hover:bg-muted/30 transition-all text-left"
-                >
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                    style={{ background: color + "15" }}
-                  >
-                    <Icon className="w-5 h-5" style={{ color }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate">{config.display_name}</p>
-                    <p className="text-xs text-muted-foreground">Funil permanente</p>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ── Funis Customizados ──────────────────────────────── */}
-      {permanentFunnels.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-foreground/60 uppercase tracking-wider mb-3">
-            Funis Customizados
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {permanentFunnels.map((pipe) => (
+      {/* ── Os funis ─────────────────────────────────────────
+          Uma lista só. Havia três seções tituladas — "Funis Estruturais",
+          "Funis Customizados", "Funis com Prazo — Ativos" — cada uma com
+          ícone, cor, grid e legenda próprios. Não são espécies diferentes:
+          são todos funis. O que sobra abaixo do nome é FATO do funil (prazo,
+          meta, pausado), nunca a categoria a que ele pertencia. */}
+      {allFunnels.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {allFunnels.map((funil) => (
+            /* O cartão deixou de ser um <button> só: agora ele hospeda o menu
+               de ações, e botão dentro de botão é HTML inválido (o menu nem
+               abriria). A área de navegação continua sendo um botão — só que
+               agora ela é o miolo do cartão, e o menu é irmão dela. */
+            <div
+              key={funil.key}
+              className="group flex items-center rounded-xl border border-border/50 hover:border-border bg-card hover:bg-muted/30 transition-all"
+            >
               <button
-                key={pipe.id}
-                onClick={() => navigate(`/pipe/custom/${pipe.slug}`)}
-                className="group flex items-center gap-3 p-4 rounded-xl border border-border/50 hover:border-border bg-card hover:bg-muted/30 transition-all text-left"
+                onClick={() => navigate(funil.path)}
+                className="flex flex-1 min-w-0 items-center gap-3 p-4 text-left"
               >
                 <div
                   className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: pipe.color + "15" }}
+                  style={{ background: funil.color + "15" }}
                 >
-                  <GitBranch className="w-5 h-5" style={{ color: pipe.color }} />
+                  <funil.icon className="w-5 h-5" style={{ color: funil.color }} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold truncate">{pipe.name}</p>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-blue-500/10 text-blue-500 flex-shrink-0">
-                      Permanente
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Funil customizado</p>
+                  <p className="text-sm font-semibold truncate">{funil.name}</p>
+                  {funil.meta && (
+                    <p className="text-xs text-muted-foreground truncate">{funil.meta}</p>
+                  )}
                 </div>
                 <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── Funis com Prazo — Ativos ──────────────────────── */}
-      {activeTemporary.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold text-foreground/60 uppercase tracking-wider mb-3">
-            Funis com Prazo — Ativos
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {activeTemporary.map((pipe) => {
-              const daysLeft = pipe.ends_at
-                ? Math.max(
-                    0,
-                    Math.ceil(
-                      (new Date(pipe.ends_at).getTime() - Date.now()) /
-                        (1000 * 60 * 60 * 24)
-                    )
-                  )
-                : null;
-
-              return (
-                <button
-                  key={pipe.id}
-                  onClick={() => navigate(`/pipe/custom/${pipe.slug}`)}
-                  className="group p-4 rounded-xl border border-border/50 hover:border-primary/30 bg-card hover:bg-primary/5 transition-all text-left"
-                >
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Target className="w-4 h-4 text-primary" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold truncate">{pipe.name}</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                          <span
-                            className={cn(
-                              "text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md",
-                              pipe.status === "active"
-                                ? "bg-green-500/10 text-green-500"
-                                : pipe.status === "paused"
-                                ? "bg-yellow-500/10 text-yellow-500"
-                                : "bg-muted text-muted-foreground"
-                            )}
-                          >
-                            {pipe.status === "active"
-                              ? "Ativo"
-                              : pipe.status === "paused"
-                              ? "Pausado"
-                              : "Draft"}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Progress info */}
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    {daysLeft !== null && (
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        <span>{daysLeft}d restantes</span>
-                      </div>
-                    )}
-                    {pipe.team_goal != null && (
-                      <div className="flex items-center gap-1">
-                        <Trophy className="w-3 h-3" />
-                        <span>Meta: {pipe.team_goal}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Progress bar (goal-based) */}
-                  {pipe.team_goal != null && pipe.team_goal > 0 && (
-                    <div className="mt-3">
-                      <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
-                        {/*
-                          Without querying entries we cannot show achieved count,
-                          so we render the bar track as a placeholder.
-                          If achieved data becomes available, fill width accordingly.
-                        */}
-                        <div
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: "0%" }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+              {funil.pipeline && (
+                <div className="pr-3 pl-1">
+                  <FunnelActionsMenu pipeline={funil.pipeline} displayName={funil.name} />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -279,32 +216,50 @@ export default function FunisHub() {
           {showEnded && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3 opacity-60">
               {endedTemporary.map((pipe) => (
-                <button
+                /* Encerrado é estado, não espécie: o funil segue sendo funil e
+                   ganha o mesmo menu — é justamente aqui que "excluir" costuma
+                   ser o que a pessoa quer. */
+                <div
                   key={pipe.id}
-                  onClick={() => navigate(`/pipe/custom/${pipe.slug}`)}
-                  className="p-4 rounded-xl border border-border/50 bg-card text-left"
+                  className="group flex items-start rounded-xl border border-border/50 bg-card"
                 >
-                  <div className="flex items-center gap-2">
-                    <Target className="w-4 h-4 text-muted-foreground" />
-                    <p className="text-sm font-medium truncate">{pipe.name}</p>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">Encerrado</p>
-                </button>
+                  <button
+                    onClick={() => navigate(`/funil/${pipe.slug}`)}
+                    className="flex-1 min-w-0 p-4 text-left"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Kanban className="w-4 h-4 text-muted-foreground" />
+                      <p className="text-sm font-medium truncate">{pipe.name}</p>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Encerrado</p>
+                  </button>
+                  {pipeById.get(pipe.id) && (
+                    <div className="pr-3 pt-4 pl-1">
+                      <FunnelActionsMenu
+                        pipeline={pipeById.get(pipe.id)!}
+                        displayName={pipe.name}
+                      />
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
         </div>
       )}
 
-      {/* ── Empty state ─────────────────────────────────────── */}
-      {permanentFunnels.length === 0 && temporaryFunnels.length === 0 && (
+      {/* ── Estado vazio ─────────────────────────────────────
+          Antes aparecia mesmo COM funis na tela ("seus funis estruturais estão
+          prontos, crie os customizados"). Sem as duas espécies, a frase não
+          fazia mais sentido — e o vazio só é vazio quando não há funil algum. */}
+      {allFunnels.length === 0 && endedTemporary.length === 0 && (
         <div className="text-center py-12 bg-muted/20 rounded-xl border border-border/30">
           <GitBranch className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <h3 className="text-base font-semibold mb-1">
-            Seus funis estruturais estao prontos
+            Nenhum funil por aqui ainda
           </h3>
           <p className="text-sm text-muted-foreground mb-4 max-w-sm mx-auto">
-            Crie funis customizados para organizar sua operação
+            Crie um funil para organizar sua operação
           </p>
           <Button
             onClick={() => setCreateOpen(true)}

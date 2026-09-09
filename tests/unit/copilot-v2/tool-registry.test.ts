@@ -27,6 +27,13 @@ describe('tool-registry — front↔back alignment', () => {
     }
   });
 
+  it('exige o funil por UUID/slug ao listar etapas e mover negócio', () => {
+    for (const name of ['list_pipeline_stages', 'move_lead_stage']) {
+      const schema = TOOL_SCHEMAS.find((item) => item.name === name)!;
+      expect((schema.parameters as { required?: string[] }).required).toContain('pipe');
+    }
+  });
+
   it('no registered tool is unknown to the capability-gate', () => {
     const allCapsOn: Record<string, boolean> = {};
     for (const t of TOOL_REGISTRY) if (t.capability) allCapsOn[t.capability] = true;

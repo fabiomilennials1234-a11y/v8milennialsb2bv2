@@ -33,7 +33,7 @@ válido quando salvou. Gate de ativação não pega. Sai na aba Configuração d
 
 Automações via DAG (Directed Acyclic Graph). Workflows reagem a eventos do produto e executam steps em sequência/paralelo.
 
-Triggers: `lead_created`, `stage_changed`, `tag_added`, `cron`, `manual`.
+Triggers: `lead_created`, `stage_changed`, `tag_added`, `cron`, `manual`, `deal_created`.
 
 Node types (15, união `WorkflowNodeType` em `@/types/workflow`): `trigger`, `action`, `condition`, `delay`, `copilot`, `end`, `wait_response`, `split_ab`, `webhook_call`, `goto`, `wait_business_window`, `assign_responsible`, `code_json`, `code_javascript`, `code_https`.
 
@@ -43,7 +43,7 @@ Node types (15, união `WorkflowNodeType` em `@/types/workflow`): `trigger`, `ac
 
 **`code_https`** — a requisição HTTP inteira é escrita como **UM JSON** no campo de código (`method`, `url`, `headers`, `body`, `timeoutMs`), com `{{variaveis}}` em qualquer valor. Runtime: resolve variáveis com `jsonEscape` → `JSON.parse` → valida a forma → dispara → grava a resposta em `context[outputVariable]`. A `url` **precisa começar com `https://`** — `http://` é recusado com mensagem explícita (é o que dá nome ao nó) e depois disso ainda passa por `validateExternalUrl` de `_shared/url-validator.ts`. Defaults: `method` `"GET"`, `timeoutMs` 15000 com teto de 30000. Um nó novo já nasce com um JSON de exemplo no campo — é o que ensina o formato, já que não há doc na tela.
 
-🚨 **`code_javascript` NÃO executa nesta fase.** O executor grava o step como `skipped` e segue o fluxo (fail-open deliberado — um nó não executável nunca mata um workflow de produção). Motivo: não há sandbox — `new Function` + shadowing de globais escapa por 4 vetores medidos e exfiltra o `SUPABASE_SERVICE_ROLE_KEY`, e a Web Worker API não existe no runtime da Supabase. A execução isolada (QuickJS em WASM, numa edge function dedicada) é a fase 2. Enquanto isso o item fica **oculto na toolbar** atrás da flag `workflow_code_js` (`CODE_JS_NODE_FLAG`) — **não ligar para nenhum cliente**.
+🚨 **`code_javascript` NÃO executa nesta fase.** O executor grava o step como `skipped` e segue o fluxo (fail-open deliberado — um nó não executável nunca mata um workflow de produção). Motivo: não há sandbox — `new Function` + shadowing de globais escapa por 4 vetores medidos e exfiltra o `SUPABASE_SERVICE_ROLE_KEY`, e a Web Worker API não existe no runtime da Supabase. A execução isolada (QuickJS em WASM, numa edge function dedicada) é a fase 2. Enquanto isso o item fica **sempre oculto na toolbar**. Definitions antigas continuam renderizando para não corromper dados, mas ninguém cria um node inerte pela UI.
 
 🚨 **O passo do `code_https` não pode vazar segredo.** `workflow_execution_steps` é legível por **qualquer membro da org**, então o `input_data` do passo NUNCA carrega `headers` (levam `Authorization`), nem o `code`, nem a query string da `url` (pode levar token). Grava só `{ method, url_host, url_path, has_body, output_variable, bytes }`; o `output_data` fica em `{ status, bytes, preview }`, com o preview cortado em 500 chars.
 
@@ -79,7 +79,7 @@ Inclui:
 
 ### Components
 
-Internals (não re-exportados — usados apenas via Pages do próprio módulo): WorkflowCanvas, WorkflowSidebar, WorkflowToolbar, WorkflowAnalytics, WorkflowImportDialog, WorkflowTemplates, EnrollmentCriteria, ReenrollmentConfig, SplitAbAnalytics, TemplateTextarea, VariableInserter, CodeField + subpastas `action-configs/`, `edges/`, `nodes/`, `sidebar-panels/`.
+Internals (não re-exportados — usados apenas via Pages do próprio módulo): WorkflowCanvas, WorkflowSidebar, WorkflowToolbar, WorkflowAnalytics, WorkflowImportDialog, WorkflowTemplates, ReenrollmentConfig, SplitAbAnalytics, TemplateTextarea, VariableInserter, CodeField + subpastas `action-configs/`, `edges/`, `nodes/`, `sidebar-panels/`.
 
 `CodeField` (textarea `font-mono` com inserção no cursor + drop de chips `{{…}}`) é compartilhado pelos 3 painéis de código. **Não há editor com realce de sintaxe** — o repo não tem Monaco/CodeMirror e trazer um para um sidebar de 360 px é desproporcional.
 
@@ -112,6 +112,7 @@ Tipos de domínio (`Workflow`, `WorkflowExecution`, `WorkflowExecutionStep`, `Wo
 
 - **Stage_changed fan-out** — consumido via event-bus `lead.stage_changed` (slice 19 + fase 3 event-bus dev). Handler `_shared/events/handlers/lead-stage-changed.ts` chama `fireTrigger` no executor.
 - **Dedup obrigatório** — mesma trigger não dispara workflow 2x (memória `workflow-trigger-dedup.ts`).
+- **`deal_created` ↔ `create_deal`** — laço em potencial. Cortado por `metadata.workflow_execution_id` (vira parent execution → chain_depth) + `dealSkipIfOpenExists`. Feature doc: `06 — Features/automacoes/negocio-criado.md`.
 - **`actions/` vs `action-handlers/`** — split ambíguo em `_shared/`. Slice 16 audita + consolida.
 - **wait_response** + **wait_business_window** — workflow pausado por tempo indefinido. Cron retoma.
 

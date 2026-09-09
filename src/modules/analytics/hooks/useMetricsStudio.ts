@@ -26,9 +26,26 @@ interface StudioState {
   windows: StudioWindow[];
   nextZ: number;
   seq: number;
+  /**
+   * DE QUAL ORG estas janelas vieram — `undefined` = ainda não hidratou.
+   *
+   * 🚨 MORA NO ESTADO, não num `useRef`, e a diferença é a causa do incidente.
+   * Com a marca num ref, o efeito de gravação lia "já hidratei" NO MESMO COMMIT
+   * em que a hidratação chamou `setState` — e `windows` ainda era o `[]`
+   * inicial, porque o re-render não aconteceu. Resultado: **toda montagem do
+   * Estúdio agendava um `save([])`**, que só não chegava ao banco porque o
+   * `save` seguinte (já com o layout real) reiniciava o debounce de 800 ms.
+   * Bastava a org trocar nessa fresta para o `[]` ser descarregado — foi assim
+   * que o painel da org Milennials foi zerado em 26/08/2026.
+   *
+   * No estado, marca e janelas andam juntas: não existe commit em que uma
+   * valha e a outra não.
+   */
+  org: string | null | undefined;
+  panelId?: string | null;
 }
 
-const EMPTY: StudioState = { windows: [], nextZ: 1, seq: 0 };
+const EMPTY: StudioState = { windows: [], nextZ: 1, seq: 0, org: undefined };
 
 /**
  * Desenhos que fazem sentido para um corte. G3 tirou a vela — o motor não tem
@@ -107,9 +124,11 @@ function acomodar(
 }
 
 export interface MetricsStudioApi {
+  persistence: ReturnType<typeof useMetricsStudioPanel>;
   windows: StudioWindow[];
   openMetricIds: Set<string>;
   addMetric: (metric: EngineMetric, bounds: Bounds) => void;
+  addFixed: (id: string, size: { w: number; h: number }, bounds: Bounds) => void;
   removeWindow: (id: string) => void;
   moveWindow: (id: string, x: number, y: number) => void;
   resizeWindow: (id: string, w: number, h: number) => void;
@@ -125,45 +144,81 @@ export interface MetricsStudioApi {
  * chegam do banco. Resolver janela por mapa de import deixaria toda janela
  * personalizada órfã depois de recarregar a página.
  */
-export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudioApi {
+export function useMetricsStudio(
+  byId: Map<string, EngineMetric>,
+  /**
+   * Aba ativa. `null` enquanto a lista de abas não resolveu — e aí o hook fica
+   * inerte de propósito: hidratar com `[]` faria o efeito de gravação enxergar
+   * "mudou de conteúdo para vazio" e agendar um `save([])`, apagando a aba.
+   */
+  panelId: string | null,
+): MetricsStudioApi {
   // SCRUM-309: o painel vive no servidor. O estado local é a cópia de
   // trabalho — arrastar produz dezenas de mudanças por segundo e nenhuma delas
   // deve virar requisição.
-  const persistencia = useMetricsStudioPanel();
+  const persistencia = useMetricsStudioPanel(panelId);
   const [state, setState] = useState<StudioState>(EMPTY);
 
-  // Hidrata uma vez, quando o painel chega do servidor. `nextZ` e `seq` são
-  // derivados do layout salvo para que janela nova continue nascendo por cima
-  // e o id não colida com o que já existe.
-  const hidratado = useRef(false);
   // Guarda a referência do último layout que veio do servidor ou foi mandado
   // para ele. Serve para o efeito de gravação saber o que NÃO precisa salvar.
   const ultimoSincronizado = useRef<StudioWindow[] | null>(null);
 
+  /**
+   * Hidrata o painel DA ORG ATUAL — e reidrata quando a org muda.
+   *
+   * 🚨 `useOrgSwitcher` troca de organização com `invalidateQueries()` e **não
+   * recarrega a página**. Enquanto isto era "hidrata uma vez e pronto", o
+   * painel da org nova era buscado do banco e NUNCA aplicado: a tela seguia
+   * mostrando as janelas da org anterior, e a primeira mexida gravava aquele
+   * layout na org errada.
+   *
+   * `nextZ` e `seq` saem do layout salvo para que janela nova continue nascendo
+   * por cima e o id não colida com o que já existe.
+   */
+  const orgAtual = persistencia.organizationId;
   useEffect(() => {
-    if (hidratado.current || persistencia.isLoading || persistencia.layout === null) return;
-    hidratado.current = true;
+    if (state.org === orgAtual && state.panelId === panelId) return;
+
+    // Trocou de org: a cópia de trabalho da anterior não vale mais. Zerar ANTES
+    // de o painel novo chegar é deliberado — deixar as janelas da org velha na
+    // tela convida o usuário a editar o painel errado, que é exatamente o
+    // acidente que este hook passou a impedir.
+    if (state.org !== undefined) {
+      ultimoSincronizado.current = null;
+      setState(EMPTY);
+      return;
+    }
+
+    if (!orgAtual || !panelId || persistencia.isLoading || persistencia.layout === null) return;
+
     const windows = persistencia.layout;
     ultimoSincronizado.current = windows;
     setState({
       windows,
       nextZ: windows.reduce((max, w) => Math.max(max, w.z), 0) + 1,
       seq: windows.length,
+      org: orgAtual,
+      panelId,
     });
-  }, [persistencia.isLoading, persistencia.layout]);
+  }, [orgAtual, panelId, persistencia.isLoading, persistencia.layout, state.org, state.panelId]);
 
-  const windows = state.windows ?? EMPTY.windows;
+  const windows = state.org === orgAtual && state.panelId === panelId ? state.windows : EMPTY.windows;
 
   // A gravação é EFEITO, não parte do updater. Chamar `save()` de dentro de um
   // updater de estado seria efeito colateral em função que o StrictMode executa
   // duas vezes — o mesmo defeito já corrigido no arrasto da janela.
   const { save } = persistencia;
   useEffect(() => {
-    if (!hidratado.current) return;
+    // 🚨 A GUARDA QUE FALTAVA: só grava janelas que foram hidratadas DESTA org.
+    // `state.org` vem do ESTADO, então esta condição só é verdadeira num commit
+    // em que `windows` já é o layout hidratado — nunca no commit da hidratação,
+    // quando `windows` ainda era o `[]` inicial. Era ali que nascia o `save([])`
+    // fantasma de toda montagem.
+    if (!panelId || state.org === undefined || state.org !== orgAtual || state.panelId !== panelId) return;
     if (windows === ultimoSincronizado.current) return; // hidratação, não mudança
     ultimoSincronizado.current = windows;
     save(windows);
-  }, [windows, save]);
+  }, [windows, save, orgAtual, panelId, state.org, state.panelId]);
 
   const mutar = useCallback((fn: (prev: StudioState) => StudioState) => setState(fn), []);
 
@@ -174,8 +229,11 @@ export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudio
         const chart = graficosPara(metric, corte)[0];
         const { w, h } = initialSize(chart);
         const { x, y } = placeNext(prev.windows, w, h, bounds);
-        const seq = prev.seq + 1;
+        let seq = prev.seq + 1;
+        // Após reload, o tamanho do layout não é o maior sufixo já usado.
+        while (prev.windows.some((win) => win.id === `${metric.id}-${seq}`)) seq++;
         return {
+          ...prev,
           windows: [
             ...prev.windows,
             { id: `${metric.id}-${seq}`, metricId: metric.id, corte, x, y, w, h, chart, z: prev.nextZ },
@@ -192,6 +250,17 @@ export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudio
     (id: string) => mutar((prev) => ({ ...prev, windows: prev.windows.filter((w) => w.id !== id) })),
     [mutar],
   );
+
+  const addFixed = useCallback((id: string, size: { w: number; h: number }, bounds: Bounds) => {
+    mutar((prev) => {
+      const position = placeNext(prev.windows, size.w, size.h, bounds);
+      let seq = prev.seq + 1;
+      while (prev.windows.some((win) => win.id === `${id}-${seq}`)) seq++;
+      return { ...prev, seq, nextZ: prev.nextZ + 1, windows: [...prev.windows, {
+        id: `${id}-${seq}`, fixo: id, metricId: "", corte: "total", chart: "number", z: prev.nextZ, ...size, ...position,
+      }] };
+    });
+  }, [mutar]);
 
   const moveWindow = useCallback(
     (id: string, x: number, y: number) =>
@@ -267,7 +336,10 @@ export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudio
     [mutar],
   );
 
-  const clear = useCallback(() => mutar(() => EMPTY), [mutar]);
+  // Preserva `org`: esvaziar o painel é uma MUDANÇA que precisa ser gravada.
+  // Cair para `EMPTY` cru zeraria a marca de hidratação e a guarda de gravação
+  // engoliria o "Limpar" em silêncio — o painel voltaria no próximo refresh.
+  const clear = useCallback(() => mutar((prev) => ({ ...EMPTY, org: prev.org, panelId: prev.panelId })), [mutar]);
 
   const openMetricIds = useMemo(
     () => new Set(windows.filter((w) => byId.has(w.metricId)).map((w) => w.metricId)),
@@ -275,9 +347,11 @@ export function useMetricsStudio(byId: Map<string, EngineMetric>): MetricsStudio
   );
 
   return {
+    persistence: persistencia,
     windows,
     openMetricIds,
     addMetric,
+    addFixed,
     removeWindow,
     moveWindow,
     resizeWindow,

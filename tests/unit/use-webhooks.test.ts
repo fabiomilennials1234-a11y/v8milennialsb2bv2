@@ -11,7 +11,7 @@ vi.mock("@/modules/identity/org-team/hooks/useOrganization", () => ({
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-import { useWebhooks } from "@/modules/platform/hooks/useWebhooks";
+import { useWebhooks, WEBHOOK_EVENTS } from "@/modules/platform/hooks/useWebhooks";
 
 function mockWebhookQuery(data: unknown[]) {
   mockFrom.mockReturnValue({
@@ -40,5 +40,23 @@ describe("useWebhooks", () => {
     const { result } = renderHook(() => useWebhooks(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toHaveLength(0);
+  });
+});
+
+describe("WEBHOOK_EVENTS (catálogo — SCRUM-630)", () => {
+  const values = WEBHOOK_EVENTS.map((e) => e.value);
+
+  it("não oferece os 6 eventos mortos de pipe_* (enqueuers órfãos desde a Wave 1)", () => {
+    expect(values.filter((v) => v.startsWith("pipe_"))).toEqual([]);
+  });
+
+  it("oferece negocio.stage_changed com label PT", () => {
+    const ev = WEBHOOK_EVENTS.find((e) => e.value === "negocio.stage_changed");
+    expect(ev).toBeDefined();
+    expect(ev?.label).toBe("Negócio mudou de etapa (qualquer funil)");
+  });
+
+  it("não tem valores duplicados", () => {
+    expect(new Set(values).size).toBe(values.length);
   });
 });

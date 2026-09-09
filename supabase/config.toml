@@ -101,6 +101,11 @@ verify_jwt = false
 [functions.oraculo-comercial]
 verify_jwt = false
 
+# oraculo-turno: o JWT é validado dentro (requireAuth), porque o Escopo — quem
+# alcança o quê — é derivado dele e não do corpo da requisição (ADR-0032 §4).
+[functions.oraculo-turno]
+verify_jwt = false
+
 [functions.calculate-lead-score]
 verify_jwt = false
 
@@ -213,6 +218,14 @@ verify_jwt = false
 
 # toth-sync-cobrancas: consulta por CNPJ; exige toth-sync-clientes antes.
 [functions.toth-sync-cobrancas]
+verify_jwt = false
+
+# toth-sync-pedidos: fala com o serviço Flow (:3000/flow/crm), que é OUTRO
+# servidor do mesmo ERP — não o /toth/services das outras duas. Paginado
+# (page/hasNext) e com janela de datas obrigatória; resolve o cliente por CNPJ,
+# então exige toth-sync-clientes antes. Enquanto a porta 3000 não estiver
+# publicada para fora, devolve `servico_mudo: true` — publicação, não credencial.
+[functions.toth-sync-pedidos]
 verify_jwt = false
 
 [functions.tinyerp-proxy]
@@ -402,6 +415,10 @@ verify_jwt = false
 [functions.history-sync-worker]
 verify_jwt = false
 
+# send-push: chamado por pg_cron via pg_net; auth via x-cron-secret (#1893)
+[functions.send-push]
+verify_jwt = false
+
 # infra-watchdog: chamado por pg_cron via pg_net; auth via x-cron-secret
 [functions.infra-watchdog]
 verify_jwt = false
@@ -428,6 +445,12 @@ verify_jwt = false
 
 # blast-plan-release: releaser diário de lotes (pg_cron via pg_net); auth x-cron-secret.
 [functions.blast-plan-release]
+verify_jwt = false
+
+# process-blast-recipients: worker da fila do Disparo pelo Canal Oficial (#1722,
+# ADR-0028). Cron-only (pg_cron via pg_net, 1/min); auth x-cron-secret validado no
+# handler. Não existe caminho de usuário para cá.
+[functions.process-blast-recipients]
 verify_jwt = false
 
 # blast-plan-control: pause/resume/cancel de Blast Plan (ADR-0003 / #707). JWT validado

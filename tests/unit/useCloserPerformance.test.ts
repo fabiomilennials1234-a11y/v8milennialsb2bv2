@@ -16,34 +16,44 @@ const mockClosers = [
 
 const mockPropostas = [
   // cl1: 2 propostas in range, 1 venda 10k
-  { id: "p1", status: "vendido", metrics_period_at: inRangeDate, created_at: inRangeDate, closed_at: inRangeDate, sale_value: 10000, sale_responsible_id: "cl1" },
-  { id: "p2", status: "proposta_enviada", metrics_period_at: inRangeDate, created_at: inRangeDate, sale_value: 0, sale_responsible_id: "cl1" },
+  { id: "p1", stage_key: "vendido", metrics_period_at: inRangeDate, created_at: inRangeDate, closed_at: inRangeDate, sale_value: 10000, sale_responsible_id: "cl1" },
+  { id: "p2", stage_key: "proposta_enviada", metrics_period_at: inRangeDate, created_at: inRangeDate, sale_value: 0, sale_responsible_id: "cl1" },
   // cl2: 1 proposta, 1 venda 30k
-  { id: "p3", status: "vendido", metrics_period_at: inRangeDate, created_at: inRangeDate, closed_at: inRangeDate, sale_value: 30000, sale_responsible_id: "cl2" },
+  { id: "p3", stage_key: "vendido", metrics_period_at: inRangeDate, created_at: inRangeDate, closed_at: inRangeDate, sale_value: 30000, sale_responsible_id: "cl2" },
   // fora do range
-  { id: "p4", status: "vendido", metrics_period_at: outRangeDate, created_at: outRangeDate, closed_at: outRangeDate, sale_value: 50000, sale_responsible_id: "cl1" },
+  { id: "p4", stage_key: "vendido", metrics_period_at: outRangeDate, created_at: outRangeDate, closed_at: outRangeDate, sale_value: 50000, sale_responsible_id: "cl1" },
   // legacy: closer_id sem sale_responsible_id
-  { id: "p5", status: "proposta_enviada", metrics_period_at: inRangeDate, created_at: inRangeDate, closer_id: "cl2" },
+  { id: "p5", stage_key: "proposta_enviada", metrics_period_at: inRangeDate, created_at: inRangeDate, closer_id: "cl2" },
 ];
 
 const mockConfirmacoes = [
-  { id: "c1", status: "compareceu", meeting_date: inRangeDate, sale_responsible_id: "cl1" },
-  { id: "c2", status: "compareceu", meeting_date: inRangeDate, sale_responsible_id: "cl2" },
-  { id: "c3", status: "compareceu", meeting_date: inRangeDate, sale_responsible_id: "cl2" },
-  { id: "c4", status: "remarcar", meeting_date: inRangeDate, sale_responsible_id: "cl1" }, // não compareceu
-  { id: "c5", status: "compareceu", meeting_date: outRangeDate, sale_responsible_id: "cl1" }, // fora
+  { id: "c1", stage_key: "compareceu", meeting_date: inRangeDate, sale_responsible_id: "cl1" },
+  { id: "c2", stage_key: "compareceu", meeting_date: inRangeDate, sale_responsible_id: "cl2" },
+  { id: "c3", stage_key: "compareceu", meeting_date: inRangeDate, sale_responsible_id: "cl2" },
+  { id: "c4", stage_key: "remarcar", meeting_date: inRangeDate, sale_responsible_id: "cl1" }, // não compareceu
+  { id: "c5", stage_key: "compareceu", meeting_date: outRangeDate, sale_responsible_id: "cl1" }, // fora
 ];
 
-// Perf hooks agora leem as views direto via supabase. Mock retorna dados por tabela.
+// As perf hooks leem a projeção canônica `negocio_projetado`, que serve os dois
+// funis. O recorte deixou de ser o nome da tabela e passou a ser o filtro
+// `funil_sistema`, então o dublê escolhe o conjunto por ele.
+//
+// A cadeia espelha a real, sem folga: `.select().eq("funil_sistema", …)
+// .eq("organization_id", …)`. Só o SEGUNDO `eq` resolve — um hook que esquecesse
+// o escopo de org devolveria um objeto, não dados, e o teste quebraria.
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
-    from: (table: string) => ({
+    from: (_table: string) => ({
       select: () => ({
-        eq: () =>
-          Promise.resolve({
-            data: table === "pipe_propostas" ? mockPropostas : mockConfirmacoes,
-            error: null,
-          }),
+        eq: (coluna: string, valor: string) => {
+          const dados = valor === "propostas" ? mockPropostas : mockConfirmacoes;
+          if (coluna !== "funil_sistema") {
+            throw new Error(`dublê esperava .eq("funil_sistema", …) primeiro, veio "${coluna}"`);
+          }
+          return {
+            eq: () => Promise.resolve({ data: dados, error: null }),
+          };
+        },
       }),
     }),
   },

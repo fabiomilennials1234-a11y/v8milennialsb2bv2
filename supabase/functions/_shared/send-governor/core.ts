@@ -135,8 +135,19 @@ export function providerHasSessionWindow(
 export function sessionWindowApplies(
   provider: string | null | undefined,
   category: SendCategory,
+  isApprovedTemplate?: boolean,
 ): boolean {
   if (category !== "automation" && category !== "mass") return false;
+  // ⚠️ TEMPLATE APROVADO É A SAÍDA DA JANELA, NÃO A INFRAÇÃO. Barrá-lo aqui
+  // fechava um ciclo: o escape de janela (#1689) é acionado por
+  // `outside_24h_window` e responde mandando template — que batia neste mesmo
+  // bloqueio. Medido em produção em 27/08, retentando uma execução real.
+  //
+  // A isenção é de UMA regra, não do governor: o template segue passando pela
+  // quarentena (P3, que vem antes) e pelo cap diário (P1/P2, que vem depois).
+  // Ele custa dinheiro e conta para a reputação do número — o que ele não pode
+  // é ser recusado por estar fora de uma janela que só ele reabre.
+  if (isApprovedTemplate) return false;
   return providerHasSessionWindow(provider);
 }
 
@@ -275,7 +286,7 @@ export function evaluateSend(
   //    instância) → NÃO bloqueia. Fail-open é a diretriz do governor inteira, e
   //    aqui ela tem custo baixo: a Meta recusa o envio de qualquer jeito, então
   //    o pior caso do fail-open é o comportamento que já existe hoje.
-  if (sessionWindowApplies(state.instanceProvider, ctx.category)) {
+  if (sessionWindowApplies(state.instanceProvider, ctx.category, ctx.isApprovedTemplate)) {
     if (
       state.windowResolved &&
       !isSessionWindowOpen(state.lastInboundIso, state.nowIso)

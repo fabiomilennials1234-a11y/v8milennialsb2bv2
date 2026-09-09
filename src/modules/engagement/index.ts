@@ -9,7 +9,7 @@
  *
  * Domínios cobertos:
  * - Activities & Activity Log (call/email/meeting/note/task/whatsapp_msg/system)
- * - Agenda & Meetings (unified calendar de 4 fontes)
+ * - Agenda & Meetings (unified calendar de 5 fontes)
  * - Follow-ups (manual + automation rules)
  * - Call Logs (ligações manuais ou via API telefonia)
  * - Checklists & Templates (itens repetitivos do vendedor)
@@ -119,3 +119,23 @@ export * from "./hooks/useSDRPerformance";
 // ────────────────────────────────────────────────────────────────────────
 
 export * from "./hooks/useCommissions";
+
+// ────────────────────────────────────────────────────────────────────────
+// Components — Agenda
+// ────────────────────────────────────────────────────────────────────────
+
+/**
+ * `CreateMeetingDialog` sai do módulo porque marcar reunião deixou de ser
+ * exclusividade da Agenda: o card do funil abre o MESMO diálogo, com o lead já
+ * escolhido. Duplicar o formulário faria as duas cópias divergirem na primeira
+ * correção — foi assim que o seletor de lead antigo ficou preso a 50 leads.
+ *
+ * Export NOMEADO, não `export *`: o barrel é dublado em teste
+ * (`vi.mock("@/modules/engagement")`) e `export *` de um componente arrasta
+ * junto tipos e constantes internas que a fábrica do dublê teria de repetir.
+ *
+ * ⚠️ Sai a fronteira PREGUIÇOSA, não o diálogo real. Exportar o real daqui
+ * colava `@/modules/pipelines` e `@/modules/leads` no grafo estático de todo
+ * consumidor deste barrel — ver o cabeçalho de `CreateMeetingDialogLazy`.
+ */
+export { CreateMeetingDialog } from "./components/agenda/CreateMeetingDialogLazy";

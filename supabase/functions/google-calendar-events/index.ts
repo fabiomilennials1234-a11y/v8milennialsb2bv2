@@ -27,6 +27,7 @@ import {
 import { logRuntime } from "../_shared/logger.ts";
 import { withErrorBoundary } from '../_shared/error-boundary.ts';
 import { getPipeEntry, upsertPipeEntry, updatePipeEntryById } from "../_shared/pipeline-adapter.ts";
+import { resolveMeetingDestination } from "../_shared/pipeline-destination.ts";
 
 const SUPABASE_URL              = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -51,7 +52,7 @@ interface CreateEventPayload {
   calendar_owner_id?: string;   // user_id do dono do calendário (para criar no calendário de outro)
   color_id?: string;            // Google Calendar colorId ("1"–"11", vazio = padrão)
   with_meet?: boolean;          // Gerar link do Google Meet (default: true)
-  pipe_slug?: string;           // Pipe destino do meet_link (default "confirmacao"; merge ADR-0004 usa "whatsapp")
+  pipe_slug?: string;           // Funil destino do meet_link: id (uuid) ou slug de QUALQUER funil da org (default "confirmacao"; merge ADR-0004 usa "whatsapp")
   pipe_stage_key?: string;      // Stage destino caso a entry não exista (default "reuniao_marcada"; merge usa "agendado")
 }
 
@@ -140,7 +141,10 @@ async function saveMeetLinkToPipe(
   if (!meetLink) return;
   // If we have leadId + orgId, use the pipeline adapter (preferred path)
   if (leadId && orgId) {
-    const existing = await getPipeEntry(supabase, leadId, orgId, pipeSlug as "whatsapp" | "confirmacao" | "propostas");
+    // SCRUM-624: o cast para a união de 3 literais morreu (ADR-0034 D1) — o
+    // adapter resolve id (uuid) ou slug de QUALQUER funil da org. `pipe_slug`
+    // já era a config de destino desta porta; agora aceita funil custom.
+    const existing = await getPipeEntry(supabase, leadId, orgId, pipeSlug);
     if (existing) {
       // Only update metadata, preserve current stage
       await updatePipeEntryById(supabase, existing.id, {
@@ -150,7 +154,7 @@ async function saveMeetLinkToPipe(
       await upsertPipeEntry(supabase, {
         leadId,
         orgId,
-        slug: pipeSlug as "whatsapp" | "confirmacao" | "propostas",
+        slug: pipeSlug,
         stageKey: pipeStageKey,
         metadata: { meet_link: meetLink },
       });
@@ -404,17 +408,33 @@ Deno.serve(withErrorBoundary('google-calendar-events', async (req) => {
           .eq("id", createdEvent.id);
       }
 
-      // Salva meet_link no pipeline_entries (confirmacao)
+      // Salva meet_link no pipeline_entries.
+      // SCRUM-641: `pipe_slug` explícito no payload é a config da porta e vale
+      // como veio. SEM config, o preferido segue 'confirmacao'/'reuniao_marcada'
+      // (org antiga: idêntico); org sem esse funil → funil PADRÃO ancorado pela
+      // etapa de papel meeting_booked; sem funil padrão → sem card (log no helper).
       if (meetLink && (payload.pipe_confirmacao_id || payload.lead_id)) {
-        await saveMeetLinkToPipe(
-          supabase,
-          payload.pipe_confirmacao_id ?? "",
-          meetLink,
-          payload.lead_id,
-          orgId,
-          payload.pipe_slug ?? "confirmacao",
-          payload.pipe_stage_key ?? "reuniao_marcada",
-        );
+        let destRef = payload.pipe_slug ?? null;
+        let destStage = payload.pipe_stage_key ?? "reuniao_marcada";
+        if (!destRef && orgId) {
+          const dest = await resolveMeetingDestination(supabase, orgId, {
+            ref: "confirmacao",
+            stageKey: payload.pipe_stage_key ?? "reuniao_marcada",
+          });
+          destRef = dest?.ref ?? null;
+          destStage = dest?.stageKey ?? destStage;
+        }
+        if (destRef || payload.pipe_confirmacao_id) {
+          await saveMeetLinkToPipe(
+            supabase,
+            payload.pipe_confirmacao_id ?? "",
+            meetLink,
+            destRef ? payload.lead_id : undefined,
+            orgId,
+            destRef ?? "confirmacao",
+            destStage,
+          );
+        }
       }
 
       await logCalendarOp(supabase, {

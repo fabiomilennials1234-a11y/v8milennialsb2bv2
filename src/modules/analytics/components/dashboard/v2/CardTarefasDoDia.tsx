@@ -7,10 +7,12 @@ import {
   useUncompleteAcaoDoDia,
   useDeleteAcaoDoDia,
 } from "@/modules/engagement";
-import { useOrganization } from "@/modules/identity";
+import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { classificarTarefas } from "@/modules/analytics/lib/tarefas-do-dia";
+import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
 import { cn } from "@/lib/utils";
 import { ComandoCard } from "./ComandoCard";
+import { DonoDaLinha } from "./DonoDaLinha";
 
 /**
  * Bloco 3 — o que EU preciso fazer hoje.
@@ -33,7 +35,12 @@ import { ComandoCard } from "./ComandoCard";
 
 export function CardTarefasDoDia() {
   const { timezone } = useOrganization();
-  const { data, isLoading, isError, refetch } = useAcoesDoDia();
+  const { isAdmin, meuUserId } = useComandoScope();
+  // Admin pede a lista do time; todo o resto pede a própria. Quem GARANTE isso
+  // é o RLS (`20270825000030`): pedir "tudo" sem ser admin devolve só as suas.
+  const { data, isLoading, isError, refetch } = useAcoesDoDia(
+    isAdmin ? "tudo" : "meu",
+  );
   const criar = useCreateAcaoDoDia();
   const concluir = useCompleteAcaoDoDia();
   const desfazer = useUncompleteAcaoDoDia();
@@ -46,6 +53,36 @@ export function CardTarefasDoDia() {
     () => classificarTarefas(data, timezone),
     [data, timezone],
   );
+
+  // `acoes_do_dia.user_id` é `auth.users.id` — a única coluna de pessoa da
+  // tabela, e ela NÃO aponta para `team_members`. Não há FK, então o PostgREST
+  // não consegue fazer embed do nome; a ponte é `team_members.user_id`, e é
+  // resolvida aqui. (Um embed novo também reabriria o `PGRST201` que deixou
+  // este hook 100% quebrado até 21/08 — melhor não tentar.)
+  const { data: membros } = useTeamMembers();
+  const nomePorUserId = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const m of membros ?? []) {
+      if (m.user_id && m.name) mapa.set(m.user_id, m.name);
+    }
+    return mapa;
+  }, [membros]);
+
+  /**
+   * 🔴 Ver ≠ mexer.
+   *
+   * A migration `20270825000030` deu ao admin só a policy de SELECT: as de
+   * UPDATE e DELETE continuam `auth.uid() = user_id`. Isso é de propósito — o
+   * pedido é de VISIBILIDADE ("visão geral da produtividade e das pendências"),
+   * e dar ao admin o poder de concluir a tarefa alheia seria escalada que
+   * ninguém pediu.
+   *
+   * Mas isso obriga a UI a acompanhar: sem esta checagem, o admin clicaria em
+   * "concluir" numa tarefa de outro, o RLS recusaria a linha em SILÊNCIO
+   * (0 linhas afetadas, sem erro) e o hook ainda assim toastaria "Tarefa
+   * concluída!". O botão precisa não existir, e não apenas não funcionar.
+   */
+  const souDono = (userId: string) => !!meuUserId && userId === meuUserId;
 
   const adicionar = (e: FormEvent) => {
     e.preventDefault();
@@ -63,6 +100,7 @@ export function CardTarefasDoDia() {
       title="Tarefas do dia"
       count={pendentes.length}
       tone={atrasadasCount > 0 ? "urgent" : "default"}
+      scopeHint={isAdmin ? "Equipe" : undefined}
       isLoading={isLoading}
       isError={isError}
       onRetry={() => void refetch()}
@@ -105,7 +143,9 @@ export function CardTarefasDoDia() {
 
       {pendentes.length === 0 && concluidasHoje.length === 0 && (
         <p className="px-4 pb-3 text-[11px] text-muted-foreground/60">
-          Nenhuma tarefa. Escreva acima e aperte Enter.
+          {isAdmin
+            ? "Ninguém do time tem tarefa aberta. Escreva acima para criar a sua."
+            : "Nenhuma tarefa. Escreva acima e aperte Enter."}
         </p>
       )}
 
@@ -115,15 +155,23 @@ export function CardTarefasDoDia() {
             key={tarefa.id}
             className="group flex items-center gap-2.5 px-4 py-2 transition-colors hover:bg-muted/40"
           >
-            <button
-              type="button"
-              onClick={() => concluir.mutate(tarefa.id)}
-              disabled={concluir.isPending}
-              aria-label={`Concluir ${tarefa.title}`}
-              className="shrink-0 text-muted-foreground/40 transition-colors hover:text-primary disabled:opacity-50"
-            >
-              <Circle className="h-4 w-4" />
-            </button>
+            {souDono(tarefa.user_id) ? (
+              <button
+                type="button"
+                onClick={() => concluir.mutate(tarefa.id)}
+                disabled={concluir.isPending}
+                aria-label={`Concluir ${tarefa.title}`}
+                className="shrink-0 text-muted-foreground/40 transition-colors hover:text-primary disabled:opacity-50"
+              >
+                <Circle className="h-4 w-4" />
+              </button>
+            ) : (
+              // Tarefa de outra pessoa: o admin acompanha, não executa.
+              <Circle
+                className="h-4 w-4 shrink-0 text-muted-foreground/20"
+                aria-hidden
+              />
+            )}
 
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px]">{tarefa.title}</span>
@@ -131,6 +179,14 @@ export function CardTarefasDoDia() {
                 <span className="block truncate text-[11px] text-muted-foreground/60">
                   {tarefa.description}
                 </span>
+              )}
+              {/* Só o admin: a lista do vendedor é inteira dele. */}
+              {isAdmin && (
+                <DonoDaLinha
+                  nome={nomePorUserId.get(tarefa.user_id)}
+                  className="mt-0.5"
+                  semDonoLabel="Fora do time"
+                />
               )}
             </span>
 
@@ -140,14 +196,16 @@ export function CardTarefasDoDia() {
               </span>
             )}
 
-            <button
-              type="button"
-              onClick={() => remover.mutate(tarefa.id)}
-              aria-label={`Remover ${tarefa.title}`}
-              className="shrink-0 text-muted-foreground/30 opacity-0 transition-all hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            {souDono(tarefa.user_id) && (
+              <button
+                type="button"
+                onClick={() => remover.mutate(tarefa.id)}
+                aria-label={`Remover ${tarefa.title}`}
+                className="shrink-0 text-muted-foreground/30 opacity-0 transition-all hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </li>
         ))}
 
@@ -157,22 +215,37 @@ export function CardTarefasDoDia() {
               key={tarefa.id}
               className="flex items-center gap-2.5 px-4 py-2 transition-colors hover:bg-muted/40"
             >
-              <button
-                type="button"
-                onClick={() => desfazer.mutate(tarefa.id)}
-                disabled={desfazer.isPending}
-                aria-label={`Reabrir ${tarefa.title}`}
-                className="shrink-0 text-primary/70 transition-colors hover:text-primary disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-              </button>
-              <span
-                className={cn(
-                  "min-w-0 flex-1 truncate text-[13px] text-muted-foreground/50",
-                  "line-through",
+              {souDono(tarefa.user_id) ? (
+                <button
+                  type="button"
+                  onClick={() => desfazer.mutate(tarefa.id)}
+                  disabled={desfazer.isPending}
+                  aria-label={`Reabrir ${tarefa.title}`}
+                  className="shrink-0 text-primary/70 transition-colors hover:text-primary disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                </button>
+              ) : (
+                <CheckCircle2
+                  className="h-4 w-4 shrink-0 text-primary/25"
+                  aria-hidden
+                />
+              )}
+              <span className="min-w-0 flex-1">
+                <span
+                  className={cn(
+                    "block truncate text-[13px] text-muted-foreground/50",
+                    "line-through",
+                  )}
+                >
+                  {tarefa.title}
+                </span>
+                {isAdmin && (
+                  <DonoDaLinha
+                    nome={nomePorUserId.get(tarefa.user_id)}
+                    semDonoLabel="Fora do time"
+                  />
                 )}
-              >
-                {tarefa.title}
               </span>
               <Check className="h-3 w-3 shrink-0 text-muted-foreground/30" />
             </li>

@@ -1,12 +1,12 @@
 /**
  * LeadProfileBuilder — enriched lead data for copilot prompt injection.
  *
- * Loads: lead basics + custom fields + upsell + confirmacao + propostas + campaign.
+ * Loads: lead basics + custom fields + upsell + every active funnel + campaign.
  * Derives: closedDeals, activeProposals, isExistingClient.
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { getPipeEntry } from "../pipeline-adapter.ts";
+import { getCurrentFunnelEntriesByLeads } from "../pipeline-adapter.ts";
 
 export class LeadProfileBuilder {
   constructor(private supabase: SupabaseClient) {}
@@ -30,7 +30,7 @@ export class LeadProfileBuilder {
 
       const orgId = (lead as Record<string, unknown>).organization_id as string;
 
-      const [customFieldsRes, upsellRes, whatsappEntry, confirmacaoEntry, propostasEntry, campanhaRes] = await Promise.all([
+      const [customFieldsRes, upsellRes, funnelEntries, campanhaRes] = await Promise.all([
         this.supabase
           .from("lead_custom_field_values")
           .select(`value, field:lead_custom_fields(id, field_name, field_type)`)
@@ -40,9 +40,7 @@ export class LeadProfileBuilder {
           .select("tipo_cliente_tempo, gestao_stage, potencial, is_active")
           .eq("lead_id", leadId)
           .maybeSingle(),
-        getPipeEntry(this.supabase, leadId, orgId, "whatsapp"),
-        getPipeEntry(this.supabase, leadId, orgId, "confirmacao"),
-        getPipeEntry(this.supabase, leadId, orgId, "propostas"),
+        getCurrentFunnelEntriesByLeads(this.supabase, [leadId], orgId),
         this.supabase
           .from("campanha_leads")
           .select("stage_id, campanha_id, campanha_stages(name)")
@@ -62,6 +60,10 @@ export class LeadProfileBuilder {
       }
 
       const upsellData = upsellRes.data as { tipo_cliente_tempo?: string; gestao_stage?: string; potencial?: string; is_active?: boolean } | null;
+      const entriesBySlug = new Map(funnelEntries.map((entry) => [entry.pipeline_slug, entry]));
+      const whatsappEntry = entriesBySlug.get("whatsapp");
+      const confirmacaoEntry = entriesBySlug.get("confirmacao");
+      const propostasEntry = entriesBySlug.get("propostas");
       const confMeta = (confirmacaoEntry?.metadata ?? {}) as Record<string, unknown>;
       const propMeta = (propostasEntry?.metadata ?? {}) as Record<string, unknown>;
       const campanhaData = campanhaRes.data as { campanha_id?: string; campanha_stages?: { name?: string } } | null;
@@ -85,6 +87,13 @@ export class LeadProfileBuilder {
       return {
         ...(lead as Record<string, unknown>),
         customFields,
+        funnel_positions: funnelEntries.map((entry) => ({
+          pipeline_id: entry.pipeline_id,
+          pipeline_slug: entry.pipeline_slug,
+          pipeline_name: entry.pipeline_name,
+          stage_id: entry.stage_id ?? null,
+          stage_key: entry.stage_key,
+        })),
         upsell_base_stage: upsellData?.tipo_cliente_tempo ?? null,
         upsell_gestao_stage: upsellData?.gestao_stage ?? null,
         upsell_potencial: upsellData?.potencial ?? null,

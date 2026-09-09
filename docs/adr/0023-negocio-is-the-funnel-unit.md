@@ -84,3 +84,104 @@ Frontend tolerance and the n8n nodes ship **before** the schema. If the database
 **Correction of record**
 
 ADR-0005 described `handle_proposta_vendida` (`pipe_propostas.status = 'vendido'` → `INSERT upsell_clients`) as *"the only working entry"* into Carteira. Measured in production and on a QA branch: that function exists with **zero triggers attached and zero callers**. All 739 Carteira rows came from ERP sync. Winning a Negócio does not create a Carteira Client today; making it do so is a new feature with its own cost, not a repair.
+
+---
+
+## Amendment 1 — Outcome is a fact about the Negócio, not a position in the funnel (2026-08-28)
+
+**Status:** accepted · **Supersedes:** the inference, not the decisions.
+
+### What changes
+
+`deals` gains `outcome` (`open|won|lost`), `outcome_at` and `outcome_source`
+(migration `20270904000000`). Winning or losing a Negócio is an update to that
+column. The card **does not move**, and a Negócio can be won or lost **from any
+stage**.
+
+`sale_events` gets exactly one writer, `_registrar_desfecho_no_caderno`, reached
+by the `deals.outcome` transition. Moving a card into a stage whose `stage_role`
+is `won`/`lost` no longer writes the ledger directly — it sets `outcome`, and
+the transition writes. Two callers, one writer.
+
+### Why this is not a reversal of decisions 4 and 5
+
+Decision 5 rejected **`deals.pipeline_id` and `deals.stage_id`**, because two
+columns would answer *"where is this Negócio"* — the same question the card
+already answers. It states, in the same breath, that `pipeline_entries` carries
+the position and **`deals` carries identity and money**.
+
+Outcome is neither position nor a second answer to it. After this amendment:
+
+| Question | Single answer |
+|---|---|
+| Where is this Negócio? | `pipeline_entries.stage_key` |
+| Was it won or lost? | `deals.outcome` |
+
+The "two truths" failure mode decision 5 was written to prevent is two answers
+to *one* question. These are two questions.
+
+What this amendment **does** overturn is an inference drawn from decisions 4 and
+5 and written into `_shared/action-handlers/deal-operations.ts`: *"Ganhar e
+perder são movimentos, não campos. Encerrar é chegar na etapa terminal do
+funil."* That inference was sound while outcome was **derived** from the stage.
+It stops being sound the moment outcome is a fact of its own.
+
+### What forced it
+
+Measured in production, 2026-08-28:
+
+| | |
+|---|---|
+| Active funnels | 396 |
+| **Without a `won` stage** | **283 (71%)** |
+| Without a `lost` stage | 171 (43%) |
+
+The `win_deal` / `lose_deal` workflow actions were implemented as "move the card
+to the terminal stage" and therefore **failed on 71% of funnels**, telling the
+user *"this funnel has no win stage"* — asking them to remodel their funnel to
+fit the tool. ADR-0023 (composable metrics) §6 recorded this same stock as
+"79 funis custom sem `won`, em 37 orgs". It grew.
+
+The product requirement (CTO, 2026-08-28) is full funnel customisation: any
+stage layout, with win/loss assigned by workflow on stage movement. Under the
+derived model that is unrepresentable.
+
+### Why `deals.won` was not reused
+
+| `won` | rows |
+|---|---|
+| `true` | 304 |
+| `false` | **34.662** |
+| `null` | 147 |
+
+`false` is the column default, not an assertion of loss, and is indistinguishable
+from "not yet decided" in 34.662 open Negócios. A boolean cannot carry three
+states. `won` survives as a **mirror** maintained by trigger — eight frontend
+files read it — but it is a consequence, never the source.
+
+### Obligations this amendment creates
+
+1. **One writer, enforced.** A guard in the migration fails the apply if
+   `fn_capture_sale_event` ever contains `INSERT INTO public.sale_events` again.
+   Two writers means one workflow plus one stage move emits two `sale` rows, and
+   the ledger is append-only (ADR-0017 §4) — the duplicate cannot be deleted.
+2. **The mirror must hold.** A guard fails the apply if any row has
+   `won IS DISTINCT FROM (outcome = 'won')`.
+3. **Backfill never invents loss.** `won = false` alone stays `open`; only
+   `closed_at IS NOT NULL AND won IS NOT TRUE` becomes `lost` (1.234 rows).
+4. **Anything reading "open Negócio" must read `outcome`, not stage.** A won
+   Negócio now stays in a non-terminal stage. `_metric_leaf_valor_em_aberto` was
+   corrected in the same migration; it excluded only by terminal stage and would
+   have counted won Negócios as money still sitting in the funnel.
+
+### What is not covered
+
+Cards with no `deals` row — **12.598 of 47.270 (26,6%)** — have nowhere to hold
+an outcome. The workflow action materialises the row (CTO decision, 2026-08-28);
+the **stage path does not**, and keeps writing the ledger directly as it always
+did. Making a stage move materialise Negócios would be unrequested mass writing
+across 107 organizations.
+
+Manual win/loss from any stage in the UI is **not** part of this amendment. The
+card's buttons still move to the terminal stage, so for the 283 funnels without
+one, the workflow action is currently the only path.

@@ -41,7 +41,7 @@ vi.mock("../../supabase/functions/_shared/copilot/cancellation.ts", () => ({
   logCopilotCancellation: vi.fn(),
 }));
 
-import { checkDocumentAlreadySent, executeSendDocument } from "../../supabase/functions/_shared/actions/send-document.ts";
+import { checkDocumentAlreadySent, executeSendDocument, resolveDocumentIdByName, resolveDocumentIdByNearMiss } from "../../supabase/functions/_shared/actions/send-document.ts";
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                             */
@@ -109,6 +109,72 @@ describe("checkDocumentAlreadySent", () => {
       "conv-aaa",
       "doc-111",
     );
+    expect(result).toBe(true);
+  });
+
+  // ── O ciclo que se auto-alimentava ──────────────────────────────────────
+  // A supressão devolvia `success:true`, o worker gravava `status='completed'`,
+  // e ESTE gate lê exatamente as linhas `completed` da conversa. A supressão
+  // virava a prova que suprimia a próxima tentativa — para sempre. Medido em
+  // prod 2026-09-01: 353 de 769 envios `completed` eram repetição; numa amostra
+  // de 30, só 3 tinham mensagem de mídia correspondente.
+
+  it("NÃO bloqueia quando a ação anterior foi suprimida (não entregou)", async () => {
+    const supabase = buildSupabaseMock({
+      data: [
+        {
+          id: "action-1",
+          payload: {
+            document_id: "doc-111",
+            suppressed_at: "2026-09-01T14:06:01.000Z",
+            suppressed_reason: "duplicate_document",
+          },
+        },
+      ],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
+    expect(result).toBe(false);
+  });
+
+  it("bloqueia quando a ação anterior foi ENTREGUE de fato", async () => {
+    const supabase = buildSupabaseMock({
+      data: [
+        {
+          id: "action-1",
+          payload: {
+            document_id: "doc-111",
+            file_name: "Banho de Verniz - PRODUTO 1.png",
+            delivered_at: "2026-09-01T14:04:08.000Z",
+          },
+        },
+      ],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
+    expect(result).toBe(true);
+  });
+
+  it("uma entrega real prevalece sobre supressões anteriores do mesmo doc", async () => {
+    const supabase = buildSupabaseMock({
+      data: [
+        { id: "a1", payload: { document_id: "doc-111", suppressed_at: "2026-09-01T14:03:52Z" } },
+        { id: "a2", payload: { document_id: "doc-111", delivered_at: "2026-09-01T14:04:08Z" } },
+      ],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
+    expect(result).toBe(true);
+  });
+
+  it("linha ANTIGA (sem carimbo) segue bloqueando — conservador por desenho", async () => {
+    // Sem carimbo não dá pra saber se entregou. Assumir "não entregou" faria a
+    // IA reenviar material que o lead já recebeu antes do conserto.
+    const supabase = buildSupabaseMock({
+      data: [{ id: "action-legado", payload: { document_id: "doc-111" } }],
+      error: null,
+    });
+    const result = await checkDocumentAlreadySent(supabase as any, "conv-aaa", "doc-111");
     expect(result).toBe(true);
   });
 
@@ -284,10 +350,57 @@ describe("checkDocumentAlreadySent", () => {
   });
 });
 
-describe("executeSendDocument — UUID validation", () => {
-  it("rejects non-UUID document_id with error", async () => {
+describe("resolveDocumentIdByName", () => {
+  // O modelo escolhe o arquivo pelo NOME na descrição da tool e às vezes devolve
+  // esse nome no campo do id. Antes deste resolvedor o envio morria em silêncio.
+  it("resolve o nome do arquivo para o UUID do documento", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      copilot_agent_documents: { data: [{ id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }], error: null },
+    });
+    const id = await resolveDocumentIdByName(
+      supabase as any,
+      "org-111",
+      "Thermo Selagem - PRODUTO 1.jpg",
+    );
+    expect(id).toBe("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
+  });
+
+  it("devolve null quando nenhum arquivo casa", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      copilot_agent_documents: { data: [], error: null },
+    });
+    const id = await resolveDocumentIdByName(supabase as any, "org-111", "arquivo inexistente.jpg");
+    expect(id).toBeNull();
+  });
+
+  it("devolve null para nome vazio (não varre a tabela)", async () => {
+    const supabase = buildSupabaseMockMultiTable({
+      copilot_agent_documents: { data: [{ id: "qualquer" }], error: null },
+    });
+    expect(await resolveDocumentIdByName(supabase as any, "org-111", "   ")).toBeNull();
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("escapa curinga de ILIKE no nome do arquivo", async () => {
+    const captured: string[] = [];
+    const builder: any = {
+      select: vi.fn(() => builder),
+      eq: vi.fn(() => builder),
+      limit: vi.fn(() => builder),
+      ilike: vi.fn((_col: string, pattern: string) => { captured.push(pattern); return builder; }),
+      then: (resolve: any) => resolve({ data: [], error: null }),
+    };
+    const supabase = { from: vi.fn(() => builder) };
+    await resolveDocumentIdByName(supabase as any, "org-111", "100%_puro.jpg");
+    expect(captured[0]).toBe("100\\%\\_puro.jpg");
+  });
+});
+
+describe("executeSendDocument — resolução do document_id", () => {
+  it("falha com 'not found' quando o nome não casa com nenhum documento", async () => {
     const supabase = buildSupabaseMockMultiTable({
       pending_ai_actions: { data: [], error: null },
+      copilot_agent_documents: { data: [], error: null },
     });
     const result = await executeSendDocument(
       supabase as any,
@@ -297,7 +410,7 @@ describe("executeSendDocument — UUID validation", () => {
       "conv-aaa",
     );
     expect(result.success).toBe(false);
-    expect(result.error).toContain("document_id");
+    expect(result.error).toContain("not found");
   });
 
   it("accepts valid UUID document_id (fails downstream, not on validation)", async () => {
@@ -317,5 +430,43 @@ describe("executeSendDocument — UUID validation", () => {
     expect(result.success).toBe(false);
     expect(result.error).not.toContain("invalid");
     expect(result.error).toContain("not found");
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* UUID quase-certo — o modelo trocou um dígito                        */
+/* ------------------------------------------------------------------ */
+
+describe("resolveDocumentIdByNearMiss", () => {
+  // Caso real, Forever Bella 02/09/2026: o modelo pediu `…-3e3a-…` duas vezes;
+  // o arquivo é `…-3f3a-…`. Duas ações morreram em dead_letter depois de 3
+  // retries — retry nunca conserta um dígito errado.
+  const REAL = "c3213b6b-3f3a-4629-83d4-f4fdb68eb0be";
+  const TYPO = "c3213b6b-3e3a-4629-83d4-f4fdb68eb0be";
+
+  const withDocs = (ids: string[]) =>
+    buildSupabaseMockMultiTable({
+      copilot_agent_documents: { data: ids.map((id) => ({ id })), error: null },
+    });
+
+  it("resgata o documento quando exatamente UM está a um caractere de distância", async () => {
+    const supabase = withDocs([REAL, "0afa30d8-9e9a-4981-95d8-eda2bc9208ba"]);
+    expect(await resolveDocumentIdByNearMiss(supabase as any, "org-111", TYPO)).toBe(REAL);
+  });
+
+  it("devolve null com DOIS candidatos a um caractere — mandar o arquivo errado é pior", async () => {
+    const ambiguous = "c3213b6b-3a3a-4629-83d4-f4fdb68eb0be";
+    const supabase = withDocs([REAL, ambiguous]);
+    expect(await resolveDocumentIdByNearMiss(supabase as any, "org-111", TYPO)).toBeNull();
+  });
+
+  it("não resgata quando a distância é maior que um caractere", async () => {
+    const supabase = withDocs(["c3213b6b-3f3a-4629-83d4-f4fdb68eb0ff"]);
+    expect(await resolveDocumentIdByNearMiss(supabase as any, "org-111", TYPO)).toBeNull();
+  });
+
+  it("devolve null quando a org não tem documento nenhum", async () => {
+    const supabase = withDocs([]);
+    expect(await resolveDocumentIdByNearMiss(supabase as any, "org-111", TYPO)).toBeNull();
   });
 });

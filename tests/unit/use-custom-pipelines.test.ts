@@ -96,6 +96,7 @@ import {
   useEndTemporaryFunnel,
   useUpdateCustomPipeline,
   useDeleteCustomPipeline,
+  useCustomPipelineDeleteImpact,
   useCreateCustomPipelineStage,
   useUpdateCustomPipelineStage,
   useDeleteCustomPipelineStage,
@@ -152,6 +153,36 @@ const PIPELINE: CustomPipeline = {
   objective_stage_key: null,
   template_type: null,
   lead_source_config: null,
+};
+
+const PIPELINE_ROW = {
+  id: "p1",
+  organization_id: "org-t",
+  name: "Pipeline Test",
+  slug: "pipeline-test",
+  description: null,
+  icon: "kanban",
+  color: "#3b82f6",
+  display_order: 3,
+  is_active: true,
+  created_by: "p1",
+  created_at: "2025-01-01T00:00:00Z",
+  updated_at: "2025-01-01T00:00:00Z",
+  type: "custom",
+  stage_dispatch_enabled: false,
+  stage_dispatch_enabled_at: null,
+  config: {
+    lifecycle_type: "permanent",
+    status: "active",
+    team_goal: 12,
+    individual_goal: 3,
+    bonus_value: 250,
+    bonus_description: "Meta mensal",
+    objective_pipe_type: "propostas",
+    objective_stage_key: "vendido",
+    template_type: "indicacao",
+    lead_source_config: { source: "referral" },
+  },
 };
 
 const STAGE: CustomPipelineStage = {
@@ -218,52 +249,75 @@ describe("useCustomPipelines — Types", () => {
 // Query hooks
 // ---------------------------------------------------------------------------
 describe("useCustomPipelines (query)", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([PIPELINE])); });
+  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([PIPELINE_ROW])); });
 
   it("fetches pipelines for the org", async () => {
     const { result } = renderHook(() => useCustomPipelines(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
+    expect(result.current.data).toEqual([{
+      ...PIPELINE,
+      team_goal: 12,
+      individual_goal: 3,
+      bonus_value: 250,
+      bonus_description: "Meta mensal",
+      objective_pipe_type: "propostas",
+      objective_stage_key: "vendido",
+      template_type: "indicacao",
+      lead_source_config: { source: "referral" },
+    }]);
   });
 });
 
 describe("usePermanentCustomFunnels", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([PIPELINE])); });
+  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([PIPELINE_ROW])); });
 
   it("fetches permanent funnels", async () => {
     const { result } = renderHook(() => usePermanentCustomFunnels(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 });
 
 describe("useTemporaryFunnels", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([{ ...PIPELINE, lifecycle_type: "temporary" }])); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFrom.mockReturnValue(createChainMock([{
+      ...PIPELINE_ROW,
+      config: { ...PIPELINE_ROW.config, lifecycle_type: "temporary" },
+    }]));
+  });
 
   it("fetches temporary funnels", async () => {
     const { result } = renderHook(() => useTemporaryFunnels(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 });
 
 describe("useActiveTemporaryFunnels", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([{ ...PIPELINE, lifecycle_type: "temporary", status: "active" }])); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFrom.mockReturnValue(createChainMock([{
+      ...PIPELINE_ROW,
+      config: { ...PIPELINE_ROW.config, lifecycle_type: "temporary", status: "active" },
+    }]));
+  });
 
   it("fetches active temporary funnels", async () => {
     const { result } = renderHook(() => useActiveTemporaryFunnels(), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 });
 
 describe("useCustomPipeline", () => {
-  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([PIPELINE])); });
+  beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([PIPELINE_ROW])); });
 
   it("fetches a pipeline by slug", async () => {
     const { result } = renderHook(() => useCustomPipeline("pipeline-test"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 
   it("is disabled when slug is undefined", () => {
@@ -278,7 +332,7 @@ describe("useCustomPipelineStages", () => {
   it("fetches stages for a pipeline", async () => {
     const { result } = renderHook(() => useCustomPipelineStages("p1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipeline_stages");
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
   });
 
   it("is disabled when pipelineId is undefined", () => {
@@ -293,7 +347,7 @@ describe("useCustomPipeEntries", () => {
   it("fetches entries for a pipeline", async () => {
     const { result } = renderHook(() => useCustomPipeEntries("p1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipe_entries");
+    expect(mockFrom).toHaveBeenCalledWith("negocio_projetado");
   });
 
   it("is disabled when pipelineId is undefined", () => {
@@ -312,7 +366,7 @@ describe("useCustomPipeStageCounts", () => {
     } as any);
     const { result } = renderHook(() => useCustomPipeStageCounts("p1"), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(supabase.rpc).toHaveBeenCalledWith("get_custom_pipeline_stage_counts", {
+    expect(supabase.rpc).toHaveBeenCalledWith("get_pipeline_stage_counts_by_id", {
       p_pipeline_id: "p1",
       p_org_id: "org-t",
       p_search: null,
@@ -324,7 +378,7 @@ describe("useCustomPipeStageCounts", () => {
     vi.mocked(supabase.rpc).mockResolvedValueOnce({ data: [], error: null } as any);
     const { result } = renderHook(() => useCustomPipeStageCounts("p1", "  ana  "), { wrapper: createWrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(supabase.rpc).toHaveBeenCalledWith("get_custom_pipeline_stage_counts", {
+    expect(supabase.rpc).toHaveBeenCalledWith("get_pipeline_stage_counts_by_id", {
       p_pipeline_id: "p1",
       p_org_id: "org-t",
       p_search: "ana",
@@ -348,7 +402,7 @@ describe("useCreateCustomPipeline", () => {
     await act(async () => {
       try { await result.current.mutateAsync({ name: "My Funnel" }); } catch { /* swallow */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 
   it("creates a temporary pipeline with template stages", async () => {
@@ -362,7 +416,7 @@ describe("useCreateCustomPipeline", () => {
         });
       } catch { /* swallow */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 
   it("creates a pipeline with custom stages", async () => {
@@ -378,7 +432,7 @@ describe("useCreateCustomPipeline", () => {
         });
       } catch { /* swallow */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 });
 
@@ -390,7 +444,7 @@ describe("useActivateTemporaryFunnel", () => {
     await act(async () => {
       try { await result.current.mutateAsync("p1"); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 });
 
@@ -402,7 +456,7 @@ describe("usePauseTemporaryFunnel", () => {
     await act(async () => {
       try { await result.current.mutateAsync("p1"); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 });
 
@@ -414,7 +468,7 @@ describe("useEndTemporaryFunnel", () => {
     await act(async () => {
       try { await result.current.mutateAsync("p1"); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 });
 
@@ -426,7 +480,7 @@ describe("useUpdateCustomPipeline", () => {
     await act(async () => {
       try { await result.current.mutateAsync({ id: "p1", name: "Updated Name" }); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 
   it("updates a pipeline without renaming", async () => {
@@ -434,19 +488,75 @@ describe("useUpdateCustomPipeline", () => {
     await act(async () => {
       try { await result.current.mutateAsync({ id: "p1", description: "Desc" }); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+    expect(mockFrom).toHaveBeenCalledWith("pipelines");
   });
 });
 
 describe("useDeleteCustomPipeline", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([])); });
 
-  it("soft-deletes a pipeline", async () => {
+  it("HARD delete: chama a RPC transacional, não um UPDATE de is_active", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: { cards: 3, leads: 2, etapas: 4, eventos_etapa: 9, automacoes_desativadas: 1 },
+      error: null,
+    } as any);
+
+    const { result } = renderHook(() => useDeleteCustomPipeline(), { wrapper: createWrapper() });
+    let retorno: any;
+    await act(async () => {
+      retorno = await result.current.mutateAsync("p1");
+    });
+
+    expect(supabase.rpc).toHaveBeenCalledWith("delete_pipeline", {
+      p_pipeline_id: "p1",
+    });
+    // O guard que importa: voltar para `.from("custom_pipelines").update(...)`
+    // faria esta linha passar de novo — por isso ela é uma asserção negativa.
+    expect(mockFrom).not.toHaveBeenCalledWith("custom_pipelines");
+    // A contagem medida no banco volta para a tela (toast + diálogo).
+    expect(retorno.cards).toBe(3);
+    expect(retorno.automacoes_desativadas).toBe(1);
+  });
+
+  it("propaga o erro da RPC — negação de permissão não pode virar sucesso silencioso", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: null,
+      error: { message: "sem permissão sobre este funil", code: "42501" },
+    } as any);
+
     const { result } = renderHook(() => useDeleteCustomPipeline(), { wrapper: createWrapper() });
     await act(async () => {
-      try { await result.current.mutateAsync("p1"); } catch { /* */ }
+      await expect(result.current.mutateAsync("p1")).rejects.toBeDefined();
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipelines");
+  });
+});
+
+describe("useCustomPipelineDeleteImpact", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("busca a prévia do estrago quando o diálogo abre", async () => {
+    vi.mocked(supabase.rpc).mockResolvedValueOnce({
+      data: { cards: 5, leads: 4, etapas: 3, eventos_etapa: 11, automacoes: 2 },
+      error: null,
+    } as any);
+
+    const { result } = renderHook(() => useCustomPipelineDeleteImpact("p1", true), {
+      wrapper: createWrapper(),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(supabase.rpc).toHaveBeenCalledWith("pipeline_delete_impact", {
+      p_pipeline_id: "p1",
+    });
+    expect(result.current.data?.eventos_etapa).toBe(11);
+  });
+
+  it("não busca nada com o diálogo fechado", () => {
+    const { result } = renderHook(() => useCustomPipelineDeleteImpact("p1", false), {
+      wrapper: createWrapper(),
+    });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(supabase.rpc).not.toHaveBeenCalled();
   });
 });
 
@@ -465,7 +575,7 @@ describe("useCreateCustomPipelineStage", () => {
         });
       } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipeline_stages");
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
   });
 });
 
@@ -479,7 +589,7 @@ describe("useUpdateCustomPipelineStage", () => {
         await result.current.mutateAsync({ id: "s1", pipeline_id: "p1", name: "Renamed" });
       } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipeline_stages");
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_stages");
   });
 });
 
@@ -491,14 +601,17 @@ describe("useDeleteCustomPipelineStage", () => {
     await act(async () => {
       try { await result.current.mutateAsync({ id: "s1", pipeline_id: "p1" }); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipeline_stages");
+    expect(supabase.rpc).toHaveBeenCalledWith("fn_etapa_custom_atualizar", {
+      p_id: "s1",
+      p_patch: { is_active: false },
+    });
   });
 });
 
 describe("useReorderCustomPipelineStages", () => {
   beforeEach(() => { vi.clearAllMocks(); mockFrom.mockReturnValue(createChainMock([])); });
 
-  it("reorders stages", async () => {
+  it("reorders stages via RPC de statement único (SCRUM-616)", async () => {
     const { result } = renderHook(() => useReorderCustomPipelineStages(), { wrapper: createWrapper() });
     await act(async () => {
       try {
@@ -511,7 +624,11 @@ describe("useReorderCustomPipelineStages", () => {
         });
       } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipeline_stages");
+    // UNIQUE (pipeline_id, position): a permutação vai numa RPC única, ids na
+    // ordem final (position asc), nunca em UPDATEs por linha.
+    expect(supabase.rpc).toHaveBeenCalledWith("reorder_pipeline_stages", {
+      p_stage_ids: ["s2", "s1"],
+    });
   });
 });
 
@@ -538,7 +655,8 @@ describe("useAddLeadToCustomPipe", () => {
         });
       } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipe_entries");
+    expect(supabase.rpc).toHaveBeenCalledWith("fn_entrada_custom_criar", expect.any(Object));
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_entries");
   });
 });
 
@@ -563,7 +681,8 @@ describe("useMoveLeadInCustomPipe", () => {
         });
       } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipe_entries");
+    expect(supabase.rpc).toHaveBeenCalledWith("fn_entrada_custom_atualizar", expect.any(Object));
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_entries");
   });
 });
 
@@ -575,7 +694,7 @@ describe("useRemoveLeadFromCustomPipe", () => {
     await act(async () => {
       try { await result.current.mutateAsync({ entry_id: "e1", pipeline_id: "p1" }); } catch { /* */ }
     });
-    expect(mockFrom).toHaveBeenCalledWith("custom_pipe_entries");
+    expect(mockFrom).toHaveBeenCalledWith("pipeline_entries");
   });
 });
 

@@ -1,14 +1,22 @@
-import { useEffect, useState } from "react";
-import { CalendarCheck, Check, Trophy, X } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { CalendarCheck, CalendarDays, Check, Loader2, MoreHorizontal, Trash2, Trophy, X } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { LeadCardDeals } from "../lead-card/LeadCardDeals";
 import { DealCardActivities } from "./DealCardActivities";
+import { DealCardComments } from "./DealCardComments";
 import { DealCardStages } from "./DealCardStages";
 import { DealCardTimeline } from "./DealCardTimeline";
 import { DealCardMoney } from "./DealCardMoney";
 import { contaDoNegocio } from "./conta-do-negocio";
-import type { DealCardData } from "./types";
+import { situacaoDaReuniao, type SituacaoDaReuniao } from "./reuniao-do-negocio";
+import type { DealCardAba, DealCardComentario, DealCardData, ItemEditado } from "./types";
 
 /**
  * O Card do Negócio — a coluna DIREITA do painel, no formato do print DataCrazy.
@@ -41,7 +49,7 @@ import type { DealCardData } from "./types";
  * do dobro da mediana da etapa na própria org.
  */
 
-type Aba = "negocio" | "atividades" | "negocios";
+type Aba = DealCardAba;
 type SubAba = "pipeline" | "jornada";
 type AbaDinheiro = "produtos" | "anotacao";
 
@@ -102,7 +110,12 @@ function Abas<T extends string>({
   onTrocar,
   compacta,
 }: {
-  itens: { chave: T; rotulo: string; contagem?: number }[];
+  /**
+   * `contagem` é número; `contagemTexto` existe para a aba cuja medida é uma
+   * FRAÇÃO — "3/7 feito" diz o que "7" sozinho não diz, e é a pergunta que se
+   * faz de checklist.
+   */
+  itens: { chave: T; rotulo: string; contagem?: number; contagemTexto?: string }[];
   ativa: T;
   onTrocar: (chave: T) => void;
   compacta?: boolean;
@@ -124,9 +137,9 @@ function Abas<T extends string>({
             )}
           >
             {i.rotulo}
-            {i.contagem !== undefined && (
+            {(i.contagemTexto ?? i.contagem) !== undefined && (
               <span className="ml-1.5 text-[11px] tabular-nums text-muted-foreground/60">
-                {i.contagem}
+                {i.contagemTexto ?? i.contagem}
               </span>
             )}
             {acesa && (
@@ -172,26 +185,212 @@ function AcaoPrimaria({
   );
 }
 
+/** Como cada situação da reunião pinta a linha. Chaves de `situacaoDaReuniao`. */
+const TOM_DA_REUNIAO: Record<SituacaoDaReuniao["tom"], { selo: string; texto: string }> = {
+  ok: { selo: "border-success/30 bg-success/10 text-success", texto: "text-success" },
+  ruim: {
+    selo: "border-destructive/35 bg-destructive/[0.08] text-destructive",
+    texto: "text-destructive",
+  },
+  alerta: {
+    selo: "border-warning/40 bg-warning/[0.10] text-warning-strong",
+    texto: "text-warning-strong",
+  },
+  neutro: { selo: "border-border bg-muted text-muted-foreground", texto: "text-muted-foreground" },
+};
+
+/**
+ * A linha da reunião.
+ *
+ * ── O QUE ELA PASSOU A DIZER, E POR QUÊ ───────────────────────────────────
+ * Ela mostrava data e "confirmada / sem confirmação", e mais nada. Faltavam as
+ * duas informações que decidem o que fazer com a reunião:
+ *
+ *   1. **já aconteceu?** Reunião passada sem desfecho é a pendência mais cara
+ *      do funil — é dela que sai o no-show que ninguém registrou. Ela é a única
+ *      situação que ACENDE aqui, porque é a única que pede ação;
+ *   2. **quem sabe dela é a Agenda?** Uma data digitada no card do funil e uma
+ *      reunião com linha em `meetings` se pareciam byte a byte, e só a segunda
+ *      tem botão de compareceu / não compareceu do outro lado. O selo "Agenda"
+ *      é o que diz onde ir mexer.
+ *
+ * O selo NÃO é link. A rota `/agenda` hoje não lê parâmetro de reunião
+ * (verificado): mandar para lá sem foco seria prometer um destino que a outra
+ * tela não cumpre. `reuniao.meetingId` já viaja até aqui para o dia em que ela
+ * ler.
+ */
+function LinhaDaReuniao({ reuniao }: { reuniao: NonNullable<DealCardData["reuniao"]> }) {
+  const situacao = situacaoDaReuniao(reuniao);
+  const tom = TOM_DA_REUNIAO[situacao.tom];
+  const quando = new Date(reuniao.data);
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 rounded-lg border border-border bg-card px-3 py-2.5">
+      <span
+        className={cn(
+          "flex size-7 shrink-0 items-center justify-center rounded-md border",
+          tom.selo,
+        )}
+        aria-hidden="true"
+      >
+        <CalendarCheck className="size-3.5" />
+      </span>
+      <span
+        className={cn(
+          "text-[13px] font-medium tabular-nums",
+          // Reunião que já passou não some nem apaga — ela recua, para a
+          // próxima linha do card não competir com um compromisso vencido.
+          situacao.passou && "text-muted-foreground",
+        )}
+      >
+        {Number.isNaN(quando.getTime())
+          ? "—"
+          : quando.toLocaleString("pt-BR", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+      </span>
+      <span className={cn("text-[12px]", tom.texto)}>{situacao.rotulo}</span>
+      {situacao.daAgenda && (
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-md border border-border/70 bg-muted/60 px-1.5 py-0.5 text-[10.5px] uppercase tracking-[0.06em] text-muted-foreground">
+          <CalendarDays className="size-3" aria-hidden="true" />
+          Agenda
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function DealCard({
   negocio,
   onSaveNote,
   onMoverEtapa,
+  onDefinirDesfecho,
+  decidindo,
   onOpenDeal,
   onNewDeal,
   onAdicionarProduto,
+  onEditarItem,
+  onRemoverItem,
   movendo,
+  comentarios = [],
+  onComentar,
+  onEditarComentario,
+  onApagarComentario,
+  comentando,
+  abaInicial,
+  resumoChecklists,
+  painelChecklists,
+  onExcluir,
+  excluindo,
+  etiquetas,
+  acaoLigar,
 }: {
   negocio: DealCardData;
   onSaveNote?: (texto: string) => void;
-  /** Move o negócio. Ganhar e perder são movimentos para etapa terminal. */
+  /** Move o negócio entre etapas. NÃO decide desfecho — ver `onDefinirDesfecho`. */
   onMoverEtapa?: (chave: string) => void;
+  /**
+   * Marca o negócio como ganho ou perdido, na etapa em que ele estiver
+   * (ADR-0023 Emenda 1). Quem escreve é o `DealCardPanel`: este arquivo está no
+   * grafo de `/preview.html` e não pode alcançar o banco (inv:H5-17).
+   */
+  onDefinirDesfecho?: (desfecho: "won" | "lost") => void;
+  /** Desfecho em voo — trava os dois botões para não emitir venda duplicada. */
+  decidindo?: boolean;
   /** Abre OUTRO negócio do mesmo lead, na aba "Negócios". */
   onOpenDeal?: (entryId: string) => void;
   onNewDeal?: () => void;
   onAdicionarProduto?: () => void;
+  /**
+   * Editar e remover item chegam por callback pela mesma razão que
+   * `onAdicionarProduto`: este arquivo está no grafo de `/preview.html` e não
+   * pode alcançar o banco (inv:H5-17). Quem escreve é o `DealCardPanel`.
+   */
+  onEditarItem?: (edicao: ItemEditado) => Promise<void>;
+  onRemoverItem?: (itemId: string) => Promise<void>;
   movendo?: string | null;
+  /**
+   * ── Comentários entram por FORA de `negocio` ──────────────────────────
+   * Eles não vêm de `useDealCardData`: têm consulta e chave de cache própria
+   * (`["lead-comments", leadId]`), que é o que faz comentar/editar/apagar
+   * refletir na hora sem refazer o painel inteiro. Enfiá-los em `DealCardData`
+   * casaria as duas invalidações e um comentário passaria a custar uma
+   * releitura de etapas, mediana e produtos.
+   */
+  comentarios?: DealCardComentario[];
+  onComentar?: (texto: string) => void | Promise<void>;
+  onEditarComentario?: (id: string, texto: string) => void | Promise<void>;
+  onApagarComentario?: (id: string) => void | Promise<void>;
+  comentando?: boolean;
+  /**
+   * A aba pedida por quem abriu o painel. Sem isto, "Checklists" no menu do
+   * card abria na primeira aba e o item parecia não fazer nada.
+   */
+  abaInicial?: DealCardAba | null;
+  /**
+   * Contagem de checklists só para o SELO da aba. O conteúdo busca por conta
+   * própria — este número vem do painel, que já roda a query para o selo
+   * aparecer sem exigir que a aba seja aberta primeiro.
+   */
+  resumoChecklists?: { feitos: number; total: number } | null;
+  /**
+   * ── Checklists entram por SLOT, não por import ─────────────────────────
+   * O conteúdo da aba fala com banco (`@/modules/engagement` → supabase +
+   * react-query). Importá-lo daqui poria esse caminho no grafo de quem monta
+   * o `DealCard` — inclusive `/preview.html`, a tela de desenho que só é
+   * segura porque NÃO tem de onde ler (`inv:H5-17`,
+   * `preview-cards-sem-banco.test.ts`). Quem tem a dependência é o
+   * `DealCardPanel`; aqui só se escolhe onde pendurar.
+   *
+   * Sem o slot a aba não existe — é a mesma regra das outras três do print:
+   * aba que abre num "nada aqui" ensina a não clicar em nenhuma.
+   */
+  painelChecklists?: ReactNode;
+  /**
+   * ── Excluir o negócio ──────────────────────────────────────────────────
+   * Só ABRE a confirmação; quem confirma e quem apaga é o `DealCardPanel`.
+   *
+   * O diálogo mora lá porque o estado dele e o acesso a banco moram lá — este
+   * arquivo é desenho. (Não porque aninhar quebraria o Radix: isso foi medido
+   * em 27/08/2026 e **não** reproduz. Ver o bloco em `DealCardPanel`.)
+   *
+   * Ausente quando a pessoa não tem `pipeline.delete_cards`. Aqui o item SOME
+   * em vez de cair num selo (o padrão do menu do card no kanban): o menu do
+   * cabeçalho tem um item só, e um menu que abre para mostrar uma ação
+   * indisponível é pior que menu nenhum.
+   */
+  onExcluir?: () => void;
+  excluindo?: boolean;
+  /**
+   * A faixa de etiquetas — SÓ quando a coluna da pessoa não está na tela.
+   *
+   * Etiqueta é do LEAD (a única junção no schema é `lead_tags`), e por isso o
+   * lugar dela é a coluna da esquerda: `deal-card.test.tsx` proíbe o card do
+   * Negócio de reestampar quem é a pessoa, justamente para a tela não dizer a
+   * mesma coisa duas vezes a 40cm de distância.
+   *
+   * No celular, porém, não há coluna: `DealCardPanel` monta `conteudo(false)` e
+   * o negócio ocupa tudo. Sem este slot, etiquetar seria impossível no telefone
+   * — a mesma ausência que este trabalho veio consertar. Quem decide é o painel,
+   * que é quem sabe se a coluna existe; aqui só se escolhe onde pendurar.
+   */
+  etiquetas?: ReactNode;
+  /**
+   * O botão de LIGAR para a pessoa do negócio, montado pronto pelo painel
+   * (`VoiceCallButton`, variante ícone). Slot, e não import, pela mesma razão
+   * de `painelChecklists`: este arquivo é alcançável a partir de
+   * `src/preview/main.tsx`, e o provider de voz lê react-query e Supabase.
+   * Não reestampa a pessoa — é um ato sobre ela, não uma identidade.
+   */
+  acaoLigar?: ReactNode;
 }) {
-  const [aba, setAba] = useState<Aba>("negocio");
+  const abaPedida: Aba =
+    abaInicial === "checklists" && !painelChecklists ? "negocio" : abaInicial ?? "negocio";
+  const [aba, setAba] = useState<Aba>(abaPedida);
   const [subAba, setSubAba] = useState<SubAba>("pipeline");
   const [abaDinheiro, setAbaDinheiro] = useState<AbaDinheiro>("produtos");
   const [nota, setNota] = useState(negocio.nota);
@@ -210,14 +409,16 @@ export function DealCard({
    * usar sumia da tela. Acontecia em 100% das gravações.
    */
   useEffect(() => {
-    setAba("negocio");
+    setAba(abaPedida);
     setSubAba("pipeline");
     setAbaDinheiro("produtos");
+    // `abaInicial` FORA da lista de propósito: ele é o pedido de QUEM ABRIU, e
+    // reagir a ele arrastaria a pessoa de volta para a aba pedida no meio da
+    // navegação — o provider zera o pedido só na próxima abertura.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [negocio.id]);
 
   const aberto = negocio.estado === "aberto";
-  const etapaGanha = negocio.etapas.find((e) => e.papel === "ganho");
-  const etapaPerdida = negocio.etapas.find((e) => e.papel === "perdido");
   const estagnado =
     aberto &&
     negocio.diasNaEtapa !== null &&
@@ -262,30 +463,85 @@ export function DealCard({
             </span>
             {negocio.dono ? <span>{negocio.dono}</span> : <span className="opacity-70">sem dono</span>}
           </div>
+          {etiquetas && <div className="mt-2">{etiquetas}</div>}
         </div>
 
-        {/* Ganhar e perder são MOVIMENTOS para a etapa terminal do funil (ADR-0023
-            §5). Somem quando o funil não tem etapa terminal: 83 funis custom em
-            prod estão nesse caso, e botão que não tem para onde ir mente. */}
-        {aberto && (etapaGanha || etapaPerdida) && (
+        {/* Ganhar e perder são fatos do NEGÓCIO (ADR-0023 Emenda 1), não posições.
+            O card NÃO se move: o desfecho pode ser dado em qualquer etapa.
+
+            O bloco anterior condicionava os dois botões a `etapaGanha`/
+            `etapaPerdida` e argumentava que "botão que não tem para onde ir
+            mente". O argumento estava certo e a conclusão envelheceu: medido em
+            2026-08-28, 283 dos 396 funis ativos (71%) não têm etapa `won` — em
+            quase três quartos dos funis o vendedor não tinha botão nenhum para
+            dizer que vendeu. Agora não há para onde ir, e é por isso que o botão
+            aparece sempre.
+
+            O `pr-8` da direita é o vão do "X" do `DialogContent` (`right-4
+            top-4`), e ele abriga também o `⋯`. O cluster não depende do estado
+            do negócio: excluir um negócio JÁ ganho ou perdido é o caso mais
+            comum de faxina de funil. */}
+        {(aberto || onExcluir || acaoLigar) && (
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 pr-8">
-            {etapaGanha && (
+            {/* Ligar vem antes do desfecho: é o ato mais frequente sobre um
+                negócio aberto, e o único que não o encerra. */}
+            {acaoLigar}
+            {aberto && (
               <AcaoPrimaria
                 icone={Check}
                 rotulo="Ganhou"
                 tom="ganho"
-                desabilitado={!!movendo}
-                onClick={() => onMoverEtapa?.(etapaGanha.chave)}
+                desabilitado={!!movendo || !!decidindo}
+                onClick={() => onDefinirDesfecho?.("won")}
               />
             )}
-            {etapaPerdida && (
+            {aberto && (
               <AcaoPrimaria
                 icone={X}
                 rotulo="Perdeu"
                 tom="perda"
-                desabilitado={!!movendo}
-                onClick={() => onMoverEtapa?.(etapaPerdida.chave)}
+                desabilitado={!!movendo || !!decidindo}
+                onClick={() => onDefinirDesfecho?.("lost")}
               />
+            )}
+            {onExcluir && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    disabled={excluindo}
+                    aria-label="Mais opções do negócio"
+                    data-testid="deal-card-kebab"
+                    className={cn(
+                      "inline-flex size-8 shrink-0 items-center justify-center rounded-md",
+                      "text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      "disabled:pointer-events-none disabled:opacity-50",
+                    )}
+                  >
+                    {excluindo ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <MoreHorizontal className="size-4" />
+                    )}
+                  </button>
+                </DropdownMenuTrigger>
+                {/* `z-[60]` pelo mesmo motivo da confirmação (ver o bloco no
+                    `DealCardPanel`): no celular o painel é um `Sheet`, que é
+                    `z-[51]`, e o `DropdownMenuContent` padrão é `z-50` — o
+                    menu abriria DENTRO da área da folha e ficaria coberto por
+                    ela. O gatilho responderia ao toque e nada apareceria. */}
+                <DropdownMenuContent align="end" className="z-[60]">
+                  <DropdownMenuItem
+                    onClick={onExcluir}
+                    className="text-destructive focus:text-destructive"
+                    data-testid="deal-card-excluir"
+                  >
+                    <Trash2 className="mr-2 size-3.5" />
+                    Excluir negócio
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
           </div>
         )}
@@ -293,9 +549,11 @@ export function DealCard({
 
       {/* ── Barra de abas do print ────────────────────────────────────────
           O print tem seis: Histórico · Atividades · Negócios · Arquivos ·
-          Atendimentos · Informações do Negócio. Entram as TRÊS que têm fonte de
-          dado ligada. As outras três ficam de fora em vez de entrar vazias —
-          aba que abre num "nada aqui" ensina a não clicar em nenhuma:
+          Atendimentos · Informações do Negócio. Entram as que têm fonte de dado
+          ligada — as três do print, mais Checklists, que não está no print e
+          tem tabela própria (`checklists`/`checklist_items`) mais o número que
+          o card do funil já mostra. As outras ficam de fora em vez de entrar
+          vazias — aba que abre num "nada aqui" ensina a não clicar em nenhuma:
             · Arquivos    — não existe anexo de negócio no schema. As três
                             tabelas de arquivo do produto prendem em ticket,
                             produto e agente; nenhuma tem `deal_id`.
@@ -315,6 +573,19 @@ export function DealCard({
               rotulo: "Atividades",
               contagem: negocio.atividades.length,
             },
+            /* Checklists é aba, não bloco: é a única coisa aqui que a pessoa
+               MARCA — e o número no selo é o mesmo que o card do funil anuncia
+               como "N atividades em aberto". Até aqui o card prometia esse
+               número e o painel não tinha onde cumpri-lo. */
+            ...(painelChecklists
+              ? [{
+                  chave: "checklists" as const,
+                  rotulo: "Checklists",
+                  contagemTexto: resumoChecklists && resumoChecklists.total > 0
+                    ? `${resumoChecklists.feitos}/${resumoChecklists.total}`
+                    : undefined,
+                }]
+              : []),
             { chave: "negocios" as const, rotulo: "Negócios", contagem: negocio.outrosNegocios.length },
           ]}
         />
@@ -323,6 +594,8 @@ export function DealCard({
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
         {aba === "atividades" ? (
           <DealCardActivities atividades={negocio.atividades} />
+        ) : aba === "checklists" ? (
+          painelChecklists
         ) : aba === "negocios" ? (
           <LeadCardDeals
             negocios={negocio.outrosNegocios}
@@ -387,7 +660,7 @@ export function DealCard({
                 ativa={subAba}
                 onTrocar={setSubAba}
                 itens={[
-                  { chave: "pipeline" as const, rotulo: "Pipeline Completa" },
+                  { chave: "pipeline" as const, rotulo: "Funil completo" },
                   {
                     chave: "jornada" as const,
                     rotulo: "Jornada do Negócio",
@@ -411,33 +684,7 @@ export function DealCard({
 
             {/* Reunião — fora das abas porque é a única coisa aqui com HORA
                 marcada; enterrar num painel é como se perde reunião. */}
-            {negocio.reuniao && (
-              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5">
-                <span
-                  className={cn(
-                    "flex size-7 shrink-0 items-center justify-center rounded-md border",
-                    negocio.reuniao.confirmada
-                      ? "border-success/30 bg-success/10 text-success"
-                      : "border-border bg-muted text-muted-foreground",
-                  )}
-                  aria-hidden="true"
-                >
-                  <CalendarCheck className="size-3.5" />
-                </span>
-                <span className="text-[13px] font-medium tabular-nums">
-                  {new Date(negocio.reuniao.data).toLocaleString("pt-BR", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
-                <span className="text-[12px] text-muted-foreground">
-                  {negocio.reuniao.confirmada ? "confirmada" : "sem confirmação"}
-                </span>
-              </div>
-            )}
+            {negocio.reuniao && <LinhaDaReuniao reuniao={negocio.reuniao} />}
 
             {/* Desfecho — só quando o negócio já morreu. */}
             {!aberto && negocio.desfecho && (
@@ -499,6 +746,8 @@ export function DealCard({
                   valorDoNegocio={negocio.valorDoNegocio}
                   valorDoFunil={negocio.valor}
                   onAdicionarProduto={onAdicionarProduto}
+                  onEditarItem={onEditarItem}
+                  onRemoverItem={onRemoverItem}
                 />
               ) : (
                 <textarea
@@ -515,6 +764,27 @@ export function DealCard({
                   )}
                 />
               )}
+            </div>
+
+            {/* Comentários — bloco FIXO no pé da aba, não uma quarta sub-aba.
+                A escolha é do dono do produto (24/08) e tem precedente medido:
+                `leads.notes` está preenchido em 74,9% dos leads e `lead_comments`
+                em 4,4%, e a diferença mais provável entre os dois nunca foi
+                preferência por texto solto — é que a nota estava na cara e o
+                comentário atrás de uma aba. Repetir a aba aqui seria repetir o
+                experimento sabendo o resultado.
+
+                Ele fica DEPOIS do dinheiro de propósito: quem abre o negócio
+                abre para decidir, e o que decide (tempo, valor, etapa, produto)
+                tem de vir antes da conversa sobre a decisão. */}
+            <div className="border-t border-border pt-5">
+              <DealCardComments
+                comentarios={comentarios}
+                onComentar={onComentar}
+                onEditar={onEditarComentario}
+                onApagar={onApagarComentario}
+                enviando={comentando}
+              />
             </div>
           </div>
         )}

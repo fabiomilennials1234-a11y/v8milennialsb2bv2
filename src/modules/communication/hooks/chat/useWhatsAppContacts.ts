@@ -1,3 +1,4 @@
+import { enrichSavedContactNames } from "./shared/savedContactNames";
 /**
  * useWhatsAppContacts — lista de contatos/conversas do WhatsApp de uma instância.
  * Extraído de src/hooks/useWhatsAppChat.ts (C12).
@@ -9,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCurrentTeamMember } from "@/modules/identity";
 import { chatQueryKeys } from "./shared/queryKeys";
+import { enriquecerContatos } from "./shared/enriquecerContatos";
 import type { ChatContact, ChatContactTag } from "./types";
 import {
   UNFILTERED_PAGE_LIMIT,
@@ -69,35 +71,37 @@ export function useWhatsAppContacts(
 
   const filterArgs = serverFilter?.args ?? null;
   const pageLimit = serverFilter?.limit ?? UNFILTERED_PAGE_LIMIT;
+  /**
+   * A org tem a aba de grupos. Sai do próprio `serverFilter` (quem decide é a
+   * flag, lida no shell) e não de um parâmetro novo do hook: assim os outros
+   * consumidores da RPC — bolha do kanban, command palette — continuam sem
+   * saber que grupo existe, que é o comportamento de hoje.
+   */
+  const incluirGrupos = filterArgs?.p_include_groups === true;
 
   return useQuery({
     queryKey: chatQueryKeys.contacts(organizationId, instanceId, serverFilter?.cacheKey),
     queryFn: async () => {
       if (!organizationId || !instanceId) return [];
 
-      // Falha de enriquecimento NÃO derruba a lista: a lista é o payload, nome e
-      // etiqueta são acessórios e degradam. Mas degradar em silêncio foi o que
-      // escondeu o incidente — agora deixa rastro no console.
-      const soft = <T,>(p: Promise<T[]>, label: string): Promise<T[]> =>
-        p.catch((e) => {
+      /**
+       * Etiqueta é a única coisa enriquecida por fora que o filtro do inbox
+       * AVALIA (`matchesTags`). Com a dimensão em uso, a falha do fetch precisa
+       * SUBIR — ver `enriquecerContatos`.
+       */
+      const tagsAreFilterCritical = filterArgs?.p_tags != null;
+
+      // Os dois degradadores continuam AQUI porque o escape hatch
+      // (`v3_server_contacts='0'`) monta a lista à mão e enriquece por outro
+      // caminho. O caminho servidor usa os de `enriquecerContatos`, que aplicam
+      // exatamente a mesma regra.
+      const soft = <T,>(pr: Promise<T[]>, label: string): Promise<T[]> =>
+        pr.catch((e) => {
           console.error(`[inbox] enriquecimento "${label}" falhou`, e);
           return [] as T[];
         });
-
-      /**
-       * Etiqueta é a única coisa enriquecida AQUI que o filtro do inbox avalia
-       * (`matchesTags`). Com filtro de etiqueta ativo, degradar pra `[]` não é
-       * degradar: é reencenar o incidente por outra porta — o predicado reprova
-       * a página inteira e a tela mostra "Total: 0" como se fosse resposta.
-       *
-       * Então a política inverte quando a dimensão está em uso: a falha SOBE, a
-       * query vai a `isError`, e o gate (`inboxFilterGate`) acende o aviso em vez
-       * do empty state. Sem filtro de etiqueta, a lista vale mais que os chips e
-       * o comportamento é o de sempre.
-       */
-      const tagsAreFilterCritical = filterArgs?.p_tags != null;
-      const softTags = <T,>(p: Promise<T[]>, label: string): Promise<T[]> =>
-        tagsAreFilterCritical ? p : soft(p, label);
+      const softTags = <T,>(pr: Promise<T[]>, label: string): Promise<T[]> =>
+        tagsAreFilterCritical ? pr : soft(pr, label);
 
       // ── V3: lista server-side via RPC (DEFAULT ON; escape hatch localStorage '0') ──
       // get_whatsapp_conversation_list lê da tabela-resumo whatsapp_conversation_summary
@@ -110,15 +114,45 @@ export function useWhatsAppContacts(
         localStorage.getItem("v3_server_contacts") !== "0";
 
       if (useServerList) {
-        const { data: rows, error: rpcError } = await supabase.rpc(
+        const baseArgs = {
+          p_org: organizationId,
+          p_instance: instanceId,
+          p_limit: pageLimit,
+          ...(filterArgs ?? {}),
+        };
+
+        let { data: rows, error: rpcError } = await supabase.rpc(
           "get_whatsapp_conversation_list",
-          {
-            p_org: organizationId,
-            p_instance: instanceId,
-            p_limit: pageLimit,
-            ...(filterArgs ?? {}),
-          } as any
+          baseArgs as any
         );
+
+        /**
+         * QUEDA PARA A ASSINATURA ANTIGA — só para `p_include_groups`.
+         *
+         * O argumento só existe depois da migration
+         * `20270916000000_conversation_list_grupos_por_org`, e apply em prod é
+         * botão do humano. Se o front chegar primeiro, o PostgREST não acha a
+         * função (`PGRST202`) e o inbox INTEIRO da org flagada fica vazio — por
+         * causa de uma aba. Aqui ele perde a aba e mantém a lista.
+         *
+         * O retry é estreito de propósito: só quando o argumento foi mandado e
+         * só nesse código. Qualquer outro erro sobe, como antes.
+         */
+        if (
+          rpcError &&
+          (rpcError as { code?: string }).code === "PGRST202" &&
+          incluirGrupos
+        ) {
+          console.warn(
+            "[inbox] `p_include_groups` não existe nesta base — migration " +
+              "20270916000000 ainda não aplicada. Lista segue sem grupo.",
+          );
+          const { p_include_groups: _descartado, ...semGrupos } = baseArgs as Record<string, unknown>;
+          ({ data: rows, error: rpcError } = await supabase.rpc(
+            "get_whatsapp_conversation_list",
+            semGrupos as any
+          ));
+        }
         if (rpcError) throw rpcError;
 
         // unread: server-side (read_state) por padrão; localStorage coarse no escape hatch.
@@ -135,6 +169,10 @@ export function useWhatsAppContacts(
                 : 0);
           return {
             channel: "whatsapp",
+            // A caixa de origem. No caminho de UMA caixa é o argumento que a
+            // query recebeu; a lista multi-caixa (W2) troca isto pela coluna
+            // `instance_id` que a RPC `_multi` devolve por linha.
+            instance_id: instanceId,
             phone_number: r.phone_number,
             unread_count: unread,
             push_name: r.push_name,
@@ -156,73 +194,11 @@ export function useWhatsAppContacts(
           } as ChatContact;
         });
 
-        // Enriquecimento (lead names + tags) — em LOTES. Com filtro ativo a página
-        // vai a 1000 conversas e um `.in()` com 1000 uuids passa de 39 KB de URL:
-        // o gateway responde 400. Antes o código lia só `.data`, sem checar `error`,
-        // então esse 400 apagava nome e etiqueta de todas as conversas em silêncio.
-        const leadIds = [...new Set(contacts.map((c) => c.lead_id).filter((id): id is string => !!id))];
-        const convIds = [
-          ...new Set(contacts.map((c) => c.conversation_id).filter((id): id is string => !!id)),
-        ];
-
-        const [leadNameRows, leadTagRows, convTagRows] = await Promise.all([
-          soft(
-            selectInChunks<{ id: string; name: string | null }>(
-              leadIds,
-              (chunk) => supabase.from("leads").select("id, name").in("id", chunk),
-              IN_CHUNK_SIZE,
-            ),
-            "leads",
-          ),
-          softTags(
-            selectInChunks<any>(
-              leadIds,
-              (chunk) =>
-                supabase
-                  .from("lead_tags")
-                  .select("lead_id, tags!inner(id, name, color)")
-                  .in("lead_id", chunk),
-              IN_CHUNK_SIZE_FANOUT,
-            ),
-            "lead_tags",
-          ),
-          softTags(
-            selectInChunks<any>(
-              convIds,
-              (chunk) =>
-                supabase
-                  .from("whatsapp_conversation_tags")
-                  .select("conversation_id, tags!inner(id, name, color)")
-                  .in("conversation_id", chunk),
-              IN_CHUNK_SIZE_FANOUT,
-            ),
-            "conversation_tags",
-          ),
-        ]);
-
-        const leadNameMap = new Map<string, string>();
-        for (const row of leadNameRows) if (row.name) leadNameMap.set(row.id, row.name);
-        const leadTagsMap = new Map<string, ChatContactTag[]>();
-        for (const row of leadTagRows as any[]) {
-          const tag = (row as { tags: ChatContactTag }).tags;
-          leadTagsMap.set(row.lead_id, [...(leadTagsMap.get(row.lead_id) || []), tag]);
-        }
-        const convTagsMap = new Map<string, ChatContactTag[]>();
-        for (const row of convTagRows as any[]) {
-          const tag = (row as { tags: ChatContactTag }).tags;
-          convTagsMap.set(row.conversation_id, [...(convTagsMap.get(row.conversation_id) || []), tag]);
-        }
-
-        for (const c of contacts) {
-          if (c.lead_id) c.lead_name = leadNameMap.get(c.lead_id) ?? null;
-          const tagIds = new Set<string>();
-          const merged: ChatContactTag[] = [];
-          for (const t of (c.lead_id ? leadTagsMap.get(c.lead_id) : undefined) || [])
-            if (!tagIds.has(t.id)) { tagIds.add(t.id); merged.push(t); }
-          for (const t of (c.conversation_id ? convTagsMap.get(c.conversation_id) : undefined) || [])
-            if (!tagIds.has(t.id)) { tagIds.add(t.id); merged.push(t); }
-          c.tags = merged;
-        }
+        // Enriquecimento (nome do lead + etiquetas). Mora em módulo próprio
+        // porque a lista por CONJUNTO de caixas (caixa unificada) precisa do
+        // mesmo tratamento — inclusive da regra de que a falha SOBE quando o
+        // filtro recorta por etiqueta.
+        await enriquecerContatos(contacts, { tagsCriticas: tagsAreFilterCritical, organizationId });
 
         return contacts;
       }
@@ -240,18 +216,22 @@ export function useWhatsAppContacts(
       const instanceIds = await resolveChipInstanceIds(organizationId, instanceId);
 
       // Query 1: mensagens recentes (limitadas) + metadados de conversas em paralelo
+      //
+      // O recorte de grupo continua sendo no servidor, e não depois do
+      // .limit(8000): grupo é 40% das mensagens, então baixá-lo para descartar no
+      // navegador gastava 40% do payload e ainda empurrava conversa individual
+      // para fora da janela (#1632). A org com a aba paga esse preço de propósito
+      // — sem as linhas de grupo aqui, a aba dela nasceria vazia neste caminho.
+      const mensagensQuery = supabase
+        .from("whatsapp_messages")
+        .select("phone_number, push_name, content, timestamp, direction, lead_id, sent_source, is_group")
+        .eq("organization_id", organizationId)
+        .in("instance_id", [...instanceIds])
+        .is("deleted_at", null);
+      if (!incluirGrupos) mensagensQuery.eq("is_group", false);
+
       const [{ data: msgData, error: msgError }, { data: convMeta }] = await Promise.all([
-        supabase
-          .from("whatsapp_messages")
-          .select("phone_number, push_name, content, timestamp, direction, lead_id, sent_source, is_group")
-          .eq("organization_id", organizationId)
-          .in("instance_id", [...instanceIds])
-          .is("deleted_at", null)
-          // Grupo sai do produto (#1632). O recorte é no servidor, não depois
-          // do .limit(8000): grupo é 40% das mensagens, então baixá-lo para
-          // descartar no navegador gastava 40% do payload e ainda empurrava
-          // conversa individual para fora da janela.
-          .eq("is_group", false)
+        mensagensQuery
           .order("timestamp", { ascending: false })
           .limit(8000),
         // `whatsapp_conversations` fica na instância viva de propósito: a FK dela
@@ -286,6 +266,7 @@ export function useWhatsAppContacts(
         if (!existing) {
           contactsMap.set(key, {
             channel: "whatsapp",
+            instance_id: instanceId,
             phone_number: msg.phone_number,
             push_name: msg.direction === "incoming" ? msg.push_name : null,
             last_message: msg.content,
@@ -487,6 +468,7 @@ export function useWhatsAppContacts(
         results.push(contact);
       }
 
+      await enrichSavedContactNames(results, organizationId, instanceId);
       return results;
     },
     enabled: !!organizationId && !!instanceId,

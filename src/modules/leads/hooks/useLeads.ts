@@ -10,6 +10,7 @@ import { useIdentity } from "@/modules/identity";
 import { OptimisticLockConflictError, isPostgrestNoRows } from "@/modules/platform/lib/optimistic-lock";
 import { applyLeadListFilters } from "../lib/lead-list-filters";
 import { applyLeadListSort, DEFAULT_LEAD_SORT, type LeadListSort } from "../lib/lead-list-sort";
+import type { LeadRelacao } from "../lib/lead-relacao-situacao";
 
 export type Lead = Tables<"leads">;
 export type LeadInsert = TablesInsert<"leads">;
@@ -21,8 +22,11 @@ export interface LeadsFilterParams {
   page?: number;
   searchQuery?: string;
   filterOrigin?: string;
-  filterRating?: string;
   filterQualification?: string;
+  /** Gaveta: lead | cliente | perdido | indefinido, ou "all". Recorta no BANCO. */
+  filterClassificacao?: string;
+  /** A org classifica por ERP? Decide a FONTE do recorte Lead x Cliente. */
+  usaLeiDoErp?: boolean;
   filterUf?: string;
   /** Instante ISO (inclusive) — limite inferior de `created_at`. */
   createdFrom?: string;
@@ -39,6 +43,12 @@ export interface LeadsFilterParams {
   sort?: LeadListSort;
   /** `"unassigned"` recorta leads sem responsável nas quatro colunas. */
   filterAssignment?: "all" | "unassigned";
+  /**
+   * Dono da conta: id de `team_member`, `"all"` (sem filtro) ou `"none"` (sem
+   * dono). Semântica — e a razão de não ser o mesmo que `filterAssignment` —
+   * em `../lib/lead-list-filters`.
+   */
+  filterResponsible?: string;
 }
 
 /**
@@ -65,17 +75,20 @@ function applyLeadsFilters(
  * Retorna até LEADS_PAGE_SIZE leads por página.
  */
 export function useLeads(params: LeadsFilterParams = {}) {
-  const { page = 0, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, sort = DEFAULT_LEAD_SORT } = params;
+  const { page = 0, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort = DEFAULT_LEAD_SORT } = params;
   const { organizationId, isReady } = useOrganization();
 
   useRealtimeSubscription("leads", ["leads"]);
+  useRealtimeSubscription("deals", ["leads", "leads-count", "leads-stats"]);
+  useRealtimeSubscription("pipeline_entries", ["leads", "leads-count", "leads-stats"]);
+  useRealtimeSubscription("sale_events", ["leads", "leads-count", "leads-stats"]);
 
   return useQuery({
     // Ordem e recorte entram na chave junto com filtros e pagina. Sem sort.*,
     // o cache devolve a pagina da ordem antiga; sem filterAssignment, mistura
     // "todos" com "sem responsavel". Espalhados (e nao como objeto) para a
     // chave continuar legivel no devtools.
-    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment, sort.key, sort.direction],
+    queryKey: ["leads", organizationId, page, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible, sort.key, sort.direction],
     queryFn: async () => {
       if (!organizationId) {
         console.warn("[useLeads] No organization_id available - returning empty array");
@@ -99,7 +112,7 @@ export function useLeads(params: LeadsFilterParams = {}) {
           )
         `);
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
 
       // Sempre com desempate por `id` — ver `lib/lead-list-sort`. Sem ele a
       // paginação por OFFSET repete linha entre páginas dentro de um empate,
@@ -107,7 +120,20 @@ export function useLeads(params: LeadsFilterParams = {}) {
       const { data, error } = await applyLeadListSort(query, sort).range(from, to);
 
       if (error) throw error;
-      return data;
+      // Campo calculado ainda não está nos tipos gerados. Consulta estreita
+      // tipada separadamente conserva os tipos dos joins da lista.
+      const relacoes = new Map<string, LeadRelacao>();
+      if (!usaLeiDoErp && data.length > 0) {
+        const { data: rows, error: relationError } = await supabase
+          .from("leads")
+          .select("id, relacao_negocios")
+          .eq("organization_id", organizationId)
+          .in("id", data.map((lead) => lead.id))
+          .returns<Array<{ id: string; relacao_negocios: LeadRelacao }>>();
+        if (relationError) throw relationError;
+        for (const row of rows ?? []) relacoes.set(row.id, row.relacao_negocios);
+      }
+      return data.map((lead) => ({ ...lead, relacao_negocios: relacoes.get(lead.id) }));
     },
     enabled: isReady,
     staleTime: 5 * 60 * 1000, // 5 minutos
@@ -118,11 +144,11 @@ export function useLeads(params: LeadsFilterParams = {}) {
  * Hook para contar total de leads (para paginação) — COM OS MESMOS FILTROS
  */
 export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
-  const { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment } = filters;
+  const { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible } = filters;
   const { organizationId, isReady } = useOrganization();
 
   return useQuery({
-    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment],
+    queryKey: ["leads-count", organizationId, searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible],
     queryFn: async () => {
       if (!organizationId) return 0;
 
@@ -130,7 +156,7 @@ export function useLeadsCount(filters: Omit<LeadsFilterParams, "page"> = {}) {
         .from("leads")
         .select("*", { count: "exact", head: true });
 
-      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterRating, filterQualification, filterUf, createdFrom, createdTo, filterAssignment });
+      query = applyLeadsFilters(query, organizationId, { searchQuery, filterOrigin, filterQualification, filterClassificacao, usaLeiDoErp, filterUf, createdFrom, createdTo, filterAssignment, filterResponsible });
 
       const { count, error } = await query;
       if (error) throw error;
@@ -257,7 +283,6 @@ export function useUpdateLead() {
       }
 
       // SECURITY: Remove organization_id from updates to prevent tampering
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { organization_id: _, ...safeUpdates } = updates as LeadUpdate & { organization_id?: string };
 
       // Optimistic lock (#307): when caller passes the original
@@ -282,47 +307,9 @@ export function useUpdateLead() {
         throw error;
       }
 
-      // Sync responsible_id to all pipe tables that contain this lead
-      if (safeUpdates.responsible_id !== undefined) {
-        const responsibleUpdate = { responsible_id: safeUpdates.responsible_id || null };
-        await supabase.from("pipe_whatsapp").update(responsibleUpdate).eq("lead_id", id);
-        await supabase.from("pipe_confirmacao").update(responsibleUpdate).eq("lead_id", id);
-        await supabase.from("pipe_propostas").update(responsibleUpdate).eq("lead_id", id);
-      }
-
-      // Sync pre_sale_responsible_id / sale_responsible_id to all pipe tables
-      if (safeUpdates.pre_sale_responsible_id !== undefined || safeUpdates.sale_responsible_id !== undefined) {
-        const pipeUpdate: Record<string, unknown> = {};
-        if (safeUpdates.pre_sale_responsible_id !== undefined) {
-          pipeUpdate.pre_sale_responsible_id = safeUpdates.pre_sale_responsible_id || null;
-        }
-        if (safeUpdates.sale_responsible_id !== undefined) {
-          pipeUpdate.sale_responsible_id = safeUpdates.sale_responsible_id || null;
-        }
-        if (Object.keys(pipeUpdate).length > 0) {
-          await supabase.from("pipe_whatsapp").update(pipeUpdate).eq("lead_id", id);
-          await supabase.from("pipe_confirmacao").update(pipeUpdate).eq("lead_id", id);
-          await supabase.from("pipe_propostas").update(pipeUpdate).eq("lead_id", id);
-        }
-      }
-
-      // Sync compromisso_date → pipe_confirmacao.meeting_date (espelho inverso).
-      // Best-effort: pode não existir entrada em pipe_confirmacao para esse lead — nesse
-      // caso UPDATE afeta 0 linhas sem erro. Nunca usar upsert/insert aqui (Security: D5).
-      // Payload literal — nunca spread; nunca tocar em status neste caminho.
-      if (safeUpdates.compromisso_date !== undefined) {
-        const { error: syncErr } = await supabase
-          .from("pipe_confirmacao")
-          .update({ meeting_date: safeUpdates.compromisso_date })
-          .eq("lead_id", id)
-          .eq("organization_id", organizationId);
-        if (syncErr) {
-          console.warn(
-            "[useUpdateLead] failed to sync compromisso_date → pipe_confirmacao.meeting_date",
-            syncErr,
-          );
-        }
-      }
+      // Responsáveis e compromisso são projetados nas entries por triggers de
+      // `leads`, na mesma transação deste UPDATE. O cliente não faz segunda
+      // escrita: evita sucesso parcial e elimina as views do caminho.
 
       return data;
     },
@@ -341,8 +328,8 @@ export function useUpdateLead() {
        *   gravação falhou.
        * - `["pipeline-page"]` é a RPC `get_pipeline_page` de que os boards
        *   vivem (`usePaginatedPipeline`). Sem ela o card atrás do painel fica
-       *   com o valor velho até um F5 — e o mesmo vale para a edição inline e
-       *   o "calor" nos três boards, que chamam este hook direto.
+       *   com o valor velho até um F5 — e o mesmo vale para a edição inline
+       *   nos três boards, que chama este hook direto.
        *
        * Strings literais de propósito: importar as chaves de `modules/pipelines`
        * reabriria o ciclo leads↔pipelines que o dependency-cruiser barra.
@@ -416,7 +403,7 @@ const FETCH_PAGE_SIZE = 1000;
 /**
  * Fetch all lead ids for the organization, including:
  * - leads.organization_id = org (base de leads)
- * - lead_id present in pipe_whatsapp / pipe_confirmacao / pipe_propostas for this org (todos que estão no funil/etapa)
+ * - lead_id presente nos três funis de sistema da organização
  * Uses pagination so no row limit (e.g. 30/1000) cuts the list.
  * SECURITY: Only returns ids for the given organization_id.
  */
@@ -424,23 +411,6 @@ async function fetchAllLeadIdsForOrganization(
   organizationId: string
 ): Promise<string[]> {
   const idSet = new Set<string>();
-
-  const fetchPage = async (table: string, orderBy: string, selectCol: string): Promise<void> => {
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from(table)
-        .select(selectCol)
-        .eq("organization_id", organizationId)
-        .order(orderBy, { ascending: true })
-        .range(offset, offset + FETCH_PAGE_SIZE - 1);
-      if (error) throw error;
-      const list = (data ?? []).map((r: Record<string, string>) => r[selectCol]).filter(Boolean);
-      list.forEach((id) => idSet.add(id));
-      if (list.length < FETCH_PAGE_SIZE) break;
-      offset += FETCH_PAGE_SIZE;
-    }
-  };
 
   const fetchLeadsPage = async (): Promise<void> => {
     let offset = 0;
@@ -459,23 +429,32 @@ async function fetchAllLeadIdsForOrganization(
     }
   };
 
-  await Promise.all([
-    fetchLeadsPage(),
-    fetchPage("pipe_whatsapp", "lead_id", "lead_id"),
-    fetchPage("pipe_confirmacao", "lead_id", "lead_id"),
-    fetchPage("pipe_propostas", "lead_id", "lead_id"),
-  ]);
+  const fetchSystemPipelineLeads = async (): Promise<void> => {
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from("negocio_projetado")
+        .select("lead_id")
+        .eq("organization_id", organizationId)
+        .in("funil_sistema", ["whatsapp", "confirmacao", "propostas"])
+        .order("lead_id", { ascending: true })
+        .range(offset, offset + FETCH_PAGE_SIZE - 1);
+      if (error) throw error;
+      const list = (data ?? [])
+        .map((row: { lead_id: string | null }) => row.lead_id)
+        .filter((id): id is string => !!id);
+      list.forEach((id) => idSet.add(id));
+      if ((data ?? []).length < FETCH_PAGE_SIZE) break;
+      offset += FETCH_PAGE_SIZE;
+    }
+  };
+
+  await Promise.all([fetchLeadsPage(), fetchSystemPipelineLeads()]);
 
   return Array.from(idSet);
 }
 
-const PIPE_TABLES = {
-  whatsapp: "pipe_whatsapp",
-  propostas: "pipe_propostas",
-  confirmacao: "pipe_confirmacao",
-} as const;
-
-export type PipeTypeForDelete = keyof typeof PIPE_TABLES;
+export type PipeTypeForDelete = "whatsapp" | "propostas" | "confirmacao";
 
 /**
  * Fetch all lead_ids that are in a given pipe for the organization.
@@ -487,16 +466,16 @@ async function fetchAllLeadIdsInPipe(
   pipeType: PipeTypeForDelete,
   stageId?: string
 ): Promise<string[]> {
-  const table = PIPE_TABLES[pipeType];
   const idSet = new Set<string>();
   let offset = 0;
   while (true) {
     let query = supabase
-      .from(table)
+      .from("negocio_projetado")
       .select("lead_id")
-      .eq("organization_id", organizationId);
+      .eq("organization_id", organizationId)
+      .eq("funil_sistema", pipeType);
     if (stageId) {
-      query = query.eq("status", stageId);
+      query = query.eq("stage_key", stageId);
     }
     const { data, error } = await query
       .order("lead_id", { ascending: true })

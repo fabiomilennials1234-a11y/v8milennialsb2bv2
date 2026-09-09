@@ -6,13 +6,15 @@ import { usePipelineId, flattenMetadata, type PipelineType } from "./usePipeline
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import type { PipelineStage } from "./usePipelineStages";
 
-const PAGE_SIZE = 20;
-const SEARCH_DEBOUNCE_MS = 300;
+// Exportados p/ o hook irmão `usePaginatedFunil` (SCRUM-632): mesma cadência de
+// página/debounce/slots nos dois boards até a W6 fundir os hooks.
+export const PAGE_SIZE = 20;
+export const SEARCH_DEBOUNCE_MS = 300;
 // Fixed-slots cap: always call this many useStageSlot hooks, enable only the
 // active ones (see loop below). Boards with more active stages than this hide
 // the overflow columns' cards entirely. Raised 20→40 because orgs like Basic4u
 // run 25+ active stages (leads in stages 21-25 were invisible on the board).
-const MAX_STAGES = 40;
+export const MAX_STAGES = 40;
 
 /**
  * Filters applied to a paginated board. `search`, `responsibleId` and `tagIds`
@@ -20,7 +22,7 @@ const MAX_STAGES = 40;
  * filter surface added so the column-count badge and the paginated cards stay
  * consistent (the count used to ignore client-only filters → e.g. Perdido kept
  * showing 21 after filtering origin=site to 10). Each board maps its own UI
- * (origin single/multi, priority/calor bands, time buckets, period, overdue)
+ * (origin single/multi, time buckets, period, overdue)
  * into these generic params; the RPCs (get_pipeline_page /
  * get_pipeline_stage_counts) apply them as plain SQL predicates. A null/empty
  * value means "filter disabled".
@@ -31,12 +33,6 @@ export interface PaginatedFilters {
   tagIds?: string[];
   /** leads.origin ∈ origins (empty/undefined = no filter) */
   origins?: string[];
-  /** COALESCE(leads.rating, 0) bounds — priority bands map here */
-  ratingMin?: number | null;
-  ratingMax?: number | null;
-  /** COALESCE(metadata.calor, 5) bounds — calor bands map here */
-  calorMin?: number | null;
-  calorMax?: number | null;
   /** leads.urgency = urgency */
   urgency?: string | null;
   /** metadata.product_type = productType */
@@ -106,22 +102,37 @@ export function sharedRpcParams(
   search: string,
   filters: PaginatedFilters
 ) {
+  return {
+    p_pipeline_slug: slug,
+    ...sharedRpcFilterParams(orgId, search, filters),
+  };
+}
+
+/**
+ * O bloco de filtros SEM o seletor de funil (slug/id).
+ *
+ * Extraído de `sharedRpcParams` na SCRUM-632: a página unificada (`/funil/:slug`)
+ * fala com as MESMAS RPCs mas endereça o funil por `p_pipeline_id` (caminho
+ * canônico da SCRUM-626), não por slug. O mapeamento filtro→parâmetro fica num
+ * lugar só — duplicá-lo divergiria badge e cards entre as duas famílias de
+ * board na primeira mudança de filtro.
+ */
+export function sharedRpcFilterParams(
+  orgId: string,
+  search: string,
+  filters: PaginatedFilters
+) {
   const stalled = {
     min: orNull(filters.stalledMinDays),
     max: orNull(filters.stalledMaxDays),
   };
   return {
-    p_pipeline_slug: slug,
     p_org_id: orgId,
     p_search: search || null,
     p_responsible_id:
       filters.responsibleId === "all" ? null : filters.responsibleId || null,
     p_tag_ids: nonEmpty(filters.tagIds),
     p_origins: nonEmpty(filters.origins),
-    p_rating_min: orNull(filters.ratingMin),
-    p_rating_max: orNull(filters.ratingMax),
-    p_calor_min: orNull(filters.calorMin),
-    p_calor_max: orNull(filters.calorMax),
     p_urgency: filters.urgency && filters.urgency !== "all" ? filters.urgency : null,
     p_product_type:
       filters.productType && filters.productType !== "all" ? filters.productType : null,
@@ -243,10 +254,6 @@ export function usePaginatedPipeline(
       filters.responsibleId,
       filters.tagIds,
       filters.origins,
-      filters.ratingMin,
-      filters.ratingMax,
-      filters.calorMin,
-      filters.calorMax,
       filters.urgency,
       filters.productType,
       filters.meetingAfter,
@@ -266,7 +273,7 @@ export function usePaginatedPipeline(
   );
 
   // Stable cache key for the whole filter set (drives refetch of counts + pages
-  // whenever ANY dimension changes — origin, calor band, time bucket, etc.).
+  // whenever ANY dimension changes — origin, time bucket, etc.).
   const filtersKey = useMemo(() => JSON.stringify(sharedParams), [sharedParams]);
 
   const countsQuery = useQuery({

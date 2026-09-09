@@ -2,6 +2,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Plus, Trash2 } from "lucide-react";
 import {
   Select,
@@ -13,8 +14,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TRIGGER_CATEGORIES } from "@/types/workflow";
+import { useTeamMembers } from "@/modules/identity";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import type { TriggerNodeData, WorkflowTriggerType, ScheduledDispatchItem } from "@/types/workflow";
-import { usePipelineStages, type PipelineType, usePipelines, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
+import {
+  useFunisDaOrg,
+  useEtapasDoFunil,
+  useAllPipelineStages,
+} from "@/modules/pipelines";
+import { useWhatsAppInstances } from "@/modules/communication";
 import { useCampanhas, useCampanhaStages } from "@/modules/campaigns/hooks/useCampanhas";
 import { useLeadOrigins } from "@/modules/leads";
 import { CampaignSelectorField } from "./CampaignSelectorField";
@@ -26,6 +34,11 @@ interface TriggerPanelProps {
 
 export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
   const cfg = (data.config || {}) as Record<string, unknown>;
+  const { hasFeature } = useOrgFeatures();
+  // Categoria Negócios só aparece para org com o módulo ligado (feature `deals`).
+  const triggerCategories = TRIGGER_CATEGORIES.filter(
+    (c) => c.label !== "Negócios" || hasFeature("deals"),
+  );
 
   const updateConfig = (updates: Record<string, unknown>) => {
     onUpdate({ config: { ...cfg, ...updates } as any });
@@ -54,7 +67,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             <SelectValue placeholder="Selecione o trigger" />
           </SelectTrigger>
           <SelectContent>
-            {TRIGGER_CATEGORIES.map((cat) => (
+            {triggerCategories.map((cat) => (
               <SelectGroup key={cat.label}>
                 <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
                   {cat.label}
@@ -63,7 +76,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                   <SelectItem key={t} value={t}>
                     {/* We import TRIGGER_LABELS inline to avoid circular deps */}
                     {t === "lead_created" ? "Lead Criado" :
-                     t === "stage_changed" ? "Mudança de Estágio" :
+                     t === "stage_changed" ? "Mudança de Etapa" :
                      t === "tag_added" ? "Tag Adicionada" :
                      t === "score_reached" ? "Score Atingido" :
                      t === "cron" ? "Agendamento (Cron)" :
@@ -71,6 +84,8 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "lead_no_reply" ? "Lead Não Respondeu" :
                      t === "meeting_confirmed" ? "Reunião Confirmada" :
                      t === "meeting_not_confirmed" ? "Reunião Não Confirmada" :
+                     t === "meeting_held" ? "Compareceu à Reunião" :
+                     t === "meeting_no_show" ? "Não Compareceu à Reunião" :
                      t === "proposal_accepted" ? "Proposta Aceita" :
                      t === "proposal_lost" ? "Proposta Perdida" :
                      t === "followup_overdue" ? "Follow-up Vencido" :
@@ -84,6 +99,9 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
                      t === "campaign_completed" ? "Lead Concluiu a Campanha" :
                      t === "field_changed" ? "Campo do Lead Alterado" :
                      t === "scheduled_date" ? "Antes de uma data" :
+                     t === "deal_created" ? "Negócio Criado" :
+                     t === "deal_won" ? "Negócio Ganho" :
+                     t === "deal_lost" ? "Negócio Perdido" :
                      t}
                   </SelectItem>
                 ))}
@@ -188,41 +206,19 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
         </>
       )}
 
-      {/* ── meeting_confirmed ── */}
-      {data.triggerType === "meeting_confirmed" && (
-        <div className="space-y-2">
-          <Label>Pipe (opcional)</Label>
-          <Select
-            value={(cfg.pipe_type as string) || "__any__"}
-            onValueChange={(v) => updateConfig({ pipe_type: v === "__any__" ? "" : v })}
-          >
-            <SelectTrigger><SelectValue placeholder="Qualquer pipe" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__any__">Qualquer</SelectItem>
-              <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      )}
-
-      {/* ── meeting_not_confirmed ── */}
-      {data.triggerType === "meeting_not_confirmed" && (
-        <div className="space-y-2">
-          <Label>Horas antes da reunião</Label>
-          <Input
-            type="number"
-            min={1}
-            value={(cfg.hours_before as number) ?? ""}
-            onChange={(e) => updateConfig({ hours_before: Number(e.target.value) })}
-            placeholder="Ex: 24"
-          />
+      {/* Compatibilidade visual para definitions antigas. Estes dois tipos
+          nunca tiveram uma fonte de evento válida e já saíram do catálogo. */}
+      {["meeting_confirmed", "meeting_not_confirmed"].includes(data.triggerType) && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs">
+          Este gatilho foi descontinuado porque não executava. Escolha
+          “Compareceu à Reunião” ou “Não Compareceu à Reunião”.
         </div>
       )}
 
       {/* ── proposal_accepted / proposal_lost ── */}
       {(data.triggerType === "proposal_accepted" || data.triggerType === "proposal_lost") && (
         <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-          Dispara quando uma proposta muda para "{data.triggerType === "proposal_accepted" ? "vendido" : "perdido"}" no pipe de propostas.
+          Dispara quando uma proposta muda para "{data.triggerType === "proposal_accepted" ? "vendido" : "perdido"}" no funil de Propostas.
         </div>
       )}
 
@@ -269,7 +265,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="any">Qualquer</SelectItem>
-              <SelectItem value="sdr">Responsável (Qualificação)</SelectItem>
+              <SelectItem value="sdr">Pré-venda (SDR)</SelectItem>
               <SelectItem value="sale">Vendedor</SelectItem>
             </SelectContent>
           </Select>
@@ -317,7 +313,7 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
             {data.triggerType === "lead_removed_from_campaign" && "Dispara quando um lead é removido da campanha."}
             {data.triggerType === "campaign_lead_replied" && "Dispara quando o lead responde uma mensagem da campanha."}
             {data.triggerType === "campaign_lead_no_reply" && "Dispara quando o timeout de espera de resposta expira sem resposta."}
-            {data.triggerType === "campaign_completed" && "Dispara quando o lead chega no último estágio da campanha."}
+            {data.triggerType === "campaign_completed" && "Dispara quando o lead chega na última etapa da campanha."}
           </p>
         </>
       )}
@@ -356,7 +352,243 @@ export function TriggerPanel({ data, onUpdate }: TriggerPanelProps) {
           </div>
         </>
       )}
+      {/* ── deal_won / deal_lost ──
+          Sem configuração: são derivados de `stage_changed` pelo PAPEL da etapa
+          de destino (ADR-0023 §4/§5). Filtrar por funil aqui seria oferecer um
+          controle que o servidor não lê. */}
+      {(data.triggerType === "deal_won" || data.triggerType === "deal_lost") && (
+        <p className="rounded-lg border border-dashed border-border px-3 py-2 text-[12px] text-muted-foreground">
+          Dispara quando um negócio chega à etapa de{" "}
+          {data.triggerType === "deal_won" ? "ganho" : "perda"} de qualquer funil.
+          O negócio segue para os nós seguintes — as ações de funil agem sobre ele.
+        </p>
+      )}
+
+      {/* ── deal_created ── */}
+      {data.triggerType === "deal_created" && (
+        <DealCreatedConfig cfg={cfg} updateConfig={updateConfig} />
+      )}
     </div>
+  );
+}
+
+// ── Sub-componente para deal_created (Negócios) ──
+
+function DealCreatedConfig({
+  cfg,
+  updateConfig,
+}: {
+  cfg: Record<string, unknown>;
+  updateConfig: (updates: Record<string, unknown>) => void;
+}) {
+  const { data: members = [] } = useTeamMembers();
+  const { data: pipelines } = useFunisDaOrg();
+  const { data: allStages } = useAllPipelineStages();
+  const activeMembers = members.filter((m) => m.is_active);
+  const requireLead = cfg.require_lead !== false;
+  const pipelineConfigIsValid =
+    !Object.prototype.hasOwnProperty.call(cfg, "pipeline_ids") ||
+    (Array.isArray(cfg.pipeline_ids) &&
+      cfg.pipeline_ids.every((id) => typeof id === "string" && id.trim() !== ""));
+  const selectedPipelineIds = pipelineConfigIsValid && Array.isArray(cfg.pipeline_ids)
+    ? (cfg.pipeline_ids as string[])
+    : [];
+  const stageConfigIsValid =
+    !Object.prototype.hasOwnProperty.call(cfg, "stage_ids") ||
+    (Array.isArray(cfg.stage_ids) &&
+      cfg.stage_ids.every((id) => typeof id === "string" && id.trim() !== ""));
+  const selectedStageIds = stageConfigIsValid && Array.isArray(cfg.stage_ids)
+    ? (cfg.stage_ids as string[])
+    : [];
+  const visiblePipelines = (pipelines || []).filter(
+    (pipeline) => pipeline.is_active || selectedPipelineIds.includes(pipeline.id),
+  );
+
+  const togglePipeline = (pipelineId: string, checked: boolean) => {
+    const nextPipelineIds = checked
+      ? [...selectedPipelineIds, pipelineId]
+      : selectedPipelineIds.filter((id) => id !== pipelineId);
+    const nextStageIds = selectedStageIds.filter((stageId) =>
+      (allStages || []).some(
+        (stage) => stage.id === stageId && stage.pipeline_id != null && nextPipelineIds.includes(stage.pipeline_id),
+      ),
+    );
+    updateConfig({
+      pipeline_ids: nextPipelineIds,
+      stage_ids: nextStageIds,
+    });
+  };
+
+  const toggleStage = (stageId: string, checked: boolean) => {
+    updateConfig({
+      stage_ids: checked
+        ? [...selectedStageIds, stageId]
+        : selectedStageIds.filter((id) => id !== stageId),
+    });
+  };
+
+  return (
+    <>
+      <div className="flex items-center justify-between rounded-md border border-border/60 p-3">
+        <div className="space-y-0.5 pr-3">
+          <Label className="text-sm">Só negócios com lead</Label>
+          <p className="text-xs text-muted-foreground">
+            Negócio sem lead vinculado não tem quem receber mensagem, tag ou etapa.
+          </p>
+        </div>
+        <Switch
+          checked={requireLead}
+          onCheckedChange={(v) => updateConfig({ require_lead: v })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Procedência do negócio</Label>
+        <Select
+          value={(cfg.source as string) || "any"}
+          onValueChange={(v) => updateConfig({ source: v })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Qualquer procedência</SelectItem>
+            <SelectItem value="human">Criado por pessoa</SelectItem>
+            <SelectItem value="workflow">Criado por automação</SelectItem>
+            <SelectItem value="api">Criado pela API</SelectItem>
+            <SelectItem value="import">Importação</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Valor mínimo (R$)</Label>
+        <Input
+          type="number"
+          min={0}
+          step={0.01}
+          value={(cfg.min_value as number) ?? ""}
+          onChange={(e) =>
+            updateConfig({ min_value: e.target.value === "" ? undefined : Number(e.target.value) })
+          }
+          placeholder="Vazio = qualquer valor"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Responsável do negócio</Label>
+        <Select
+          value={(cfg.filter_owner_id as string) || "__any__"}
+          onValueChange={(v) =>
+            updateConfig({ filter_owner_id: v === "__any__" ? "" : v })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__any__">Qualquer responsável</SelectItem>
+            {activeMembers.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Funis de nascimento (opcional)</Label>
+        {!pipelineConfigIsValid && (
+          <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            Configuração de funis inválida. Revise a seleção antes de ativar.
+          </p>
+        )}
+        {visiblePipelines.length > 0 ? (
+          <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-border/60 p-2">
+            {visiblePipelines.map((pipeline) => (
+              <label
+                key={pipeline.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
+              >
+                <Checkbox
+                  checked={selectedPipelineIds.includes(pipeline.id)}
+                  onCheckedChange={(checked) => togglePipeline(pipeline.id, checked === true)}
+                />
+                {pipeline.label}
+                {!pipeline.is_active && (
+                  <span className="text-xs text-muted-foreground">(desativado)</span>
+                )}
+              </label>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Nenhum funil encontrado.</p>
+        )}
+        {selectedPipelineIds.length === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Nenhum funil marcado = qualquer funil
+          </p>
+        )}
+      </div>
+
+      {selectedPipelineIds.length > 0 && (
+        <div className="space-y-2">
+          <Label>Etapas de nascimento (opcional)</Label>
+          {!stageConfigIsValid && (
+            <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              Configuração de etapas inválida. Revise a seleção antes de ativar.
+            </p>
+          )}
+          <div className="max-h-60 space-y-3 overflow-y-auto rounded-md border border-border/60 p-2">
+            {visiblePipelines
+              .filter((pipeline) => selectedPipelineIds.includes(pipeline.id))
+              .map((pipeline) => {
+                const stages = (allStages || []).filter(
+                  (stage) =>
+                    stage.pipeline_id === pipeline.id &&
+                    (stage.is_active || selectedStageIds.includes(stage.id)),
+                );
+                return (
+                  <div key={pipeline.id} className="space-y-1">
+                    <p className="px-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Etapas em {pipeline.label}
+                    </p>
+                    {stages.length > 0 ? stages.map((stage) => (
+                      <label
+                        key={stage.id}
+                        className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted/50"
+                      >
+                        <Checkbox
+                          checked={selectedStageIds.includes(stage.id)}
+                          onCheckedChange={(checked) => toggleStage(stage.id, checked === true)}
+                        />
+                        {stage.name}
+                        {!stage.is_active && (
+                          <span className="text-xs text-muted-foreground">(desativada)</span>
+                        )}
+                      </label>
+                    )) : (
+                      <p className="px-1 text-xs text-muted-foreground">Nenhuma etapa ativa.</p>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+          <p className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
+            {selectedPipelineIds.length} {selectedPipelineIds.length === 1 ? "funil" : "funis"} ·{" "}
+            {selectedStageIds.length === 0
+              ? "qualquer etapa"
+              : `${selectedStageIds.length} ${selectedStageIds.length === 1 ? "etapa específica" : "etapas específicas"}`}
+          </p>
+        </div>
+      )}
+
+      <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
+        Dispara quando o negócio entra no funil e recebe sua primeira etapa.
+        O lead do workflow é o lead vinculado ao negócio.
+      </div>
+    </>
   );
 }
 
@@ -375,9 +607,16 @@ function LeadRepliedConfig({
   cfg: Record<string, unknown>;
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
-  const { data: pipelines } = usePipelines();
+  // `useFunisDaOrg` e não `usePipelines`: o funil aparece com o nome que a ORG
+  // usa, não com o seed do banco (#1992). O resto do painel já faz assim.
+  const { data: pipelines } = useFunisDaOrg();
+  const { data: todasAsEtapas } = useAllPipelineStages();
+  const { data: instancias } = useWhatsAppInstances();
 
   const selectedIds = Array.isArray(cfg.pipeline_ids) ? (cfg.pipeline_ids as string[]) : [];
+  const etapasMarcadas = Array.isArray(cfg.stage_ids) ? (cfg.stage_ids as string[]) : [];
+  const origensMarcadas = Array.isArray(cfg.source_ids) ? (cfg.source_ids as string[]) : [];
+  const modo = (cfg.reply_mode as string) || "any";
 
   // Funil desativado some da lista, mas se ele ainda estiver salvo no filtro
   // precisa continuar visível — senão o usuário vê "0 funis" numa automação
@@ -385,19 +624,51 @@ function LeadRepliedConfig({
   const visiblePipelines = (pipelines || []).filter(
     (p) => p.is_active || selectedIds.includes(p.id),
   );
-  const systemPipelines = visiblePipelines.filter((p) => p.type === "system");
-  const customPipelines = visiblePipelines.filter((p) => p.type === "custom");
+  // Etapas visíveis são só as dos funis marcados: etapa é um recorte DENTRO do
+  // funil, e mostrar as 4.759 etapas da base inteira não seria uma escolha, era
+  // uma lista telefônica.
+  const etapasDosFunisMarcados = (todasAsEtapas || []).filter(
+    (e) => e.pipeline_id != null && selectedIds.includes(e.pipeline_id),
+  );
 
   const togglePipeline = (pipelineId: string, checked: boolean) => {
     const next = checked
       ? [...selectedIds, pipelineId]
       : selectedIds.filter((id) => id !== pipelineId);
-    updateConfig({ pipeline_ids: next });
+
+    // Desmarcar o funil leva junto as etapas dele. Sem isso o filtro ficaria
+    // restrito a uma etapa que sumiu da tela — invisível e indesmarcável.
+    const etapasQueSobrevivem = etapasMarcadas.filter((etapaId) =>
+      (todasAsEtapas || []).some(
+        (e) => e.id === etapaId && e.pipeline_id != null && next.includes(e.pipeline_id),
+      ),
+    );
+
+    updateConfig({ pipeline_ids: next, stage_ids: etapasQueSobrevivem });
   };
 
-  const renderGroup = (label: string, items: typeof visiblePipelines) => (
+  const toggleEtapa = (etapaId: string, checked: boolean) => {
+    updateConfig({
+      stage_ids: checked
+        ? [...etapasMarcadas, etapaId]
+        : etapasMarcadas.filter((id) => id !== etapaId),
+    });
+  };
+
+  const toggleOrigem = (instanceId: string, checked: boolean) => {
+    updateConfig({
+      source_type: "whatsapp_instance",
+      source_ids: checked
+        ? [...origensMarcadas, instanceId]
+        : origensMarcadas.filter((id) => id !== instanceId),
+    });
+  };
+
+  // Lista única: os funis eram separados em "Funis Padrão" e "Funis Custom"
+  // por `p.type`. Quem marca um filtro de gatilho escolhe UM funil pelo nome —
+  // a espécie dele nunca entrou nessa decisão.
+  const renderPipelines = (items: typeof visiblePipelines) => (
     <div className="space-y-1">
-      <p className="text-xs font-semibold text-muted-foreground uppercase">{label}</p>
       {items.map((p) => (
         <label
           key={p.id}
@@ -407,7 +678,7 @@ function LeadRepliedConfig({
             checked={selectedIds.includes(p.id)}
             onCheckedChange={(checked) => togglePipeline(p.id, checked === true)}
           />
-          {p.name}
+          {p.label}
           {!p.is_active && (
             <span className="text-xs text-muted-foreground">(desativado)</span>
           )}
@@ -418,6 +689,89 @@ function LeadRepliedConfig({
 
   return (
     <>
+      <div className="space-y-2">
+        <Label>Quando contar como resposta</Label>
+        <Select value={modo} onValueChange={(v) => updateConfig({ reply_mode: v })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="any">Qualquer mensagem do lead</SelectItem>
+            <SelectItem value="after_outbound">Só se respondeu algo que enviamos</SelectItem>
+            <SelectItem value="first_of_thread">Só a primeira da conversa</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {modo === "after_outbound" && (
+        <div className="space-y-2">
+          <Label htmlFor="reply-window">Dentro de (horas)</Label>
+          <Input
+            id="reply-window"
+            type="number"
+            min={1}
+            value={(cfg.reply_window_hours as number) ?? 48}
+            onChange={(e) => updateConfig({ reply_window_hours: Number(e.target.value) })}
+          />
+          <p className="text-xs text-muted-foreground">
+            Depois desse prazo, a mensagem do lead conta como conversa nova, não
+            como resposta.
+          </p>
+        </div>
+      )}
+
+      {modo === "first_of_thread" && (
+        <div className="space-y-2">
+          <Label htmlFor="new-thread">Conversa nova após (horas de silêncio)</Label>
+          <Input
+            id="new-thread"
+            type="number"
+            min={1}
+            value={(cfg.new_thread_after_hours as number) ?? 24}
+            onChange={(e) => updateConfig({ new_thread_after_hours: Number(e.target.value) })}
+          />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label htmlFor="cooldown">Não repetir por (minutos)</Label>
+        <Input
+          id="cooldown"
+          type="number"
+          min={1}
+          value={(cfg.cooldown_minutes as number) ?? 60}
+          onChange={(e) => updateConfig({ cooldown_minutes: Number(e.target.value) })}
+        />
+        <p className="text-xs text-muted-foreground">
+          Freio contra rajada: três mensagens seguidas do lead não viram três
+          automações.
+        </p>
+      </div>
+
+      {/* A escolha de número só existe para quem TEM escolha: 43 das 62 orgs
+          com chip têm um número só. */}
+      {(instancias || []).length > 1 && (
+        <div className="space-y-2">
+          <Label>De onde</Label>
+          <p className="text-xs text-muted-foreground">
+            Dispara só quando a resposta chegar em um dos números marcados.
+            Nenhum marcado = qualquer número.
+          </p>
+          <div className="space-y-1 max-h-40 overflow-y-auto rounded-md border p-3">
+            {(instancias || []).map((i: { id: string; instance_name?: string | null }) => (
+              <label
+                key={i.id}
+                className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+              >
+                <Checkbox
+                  checked={origensMarcadas.includes(i.id)}
+                  onCheckedChange={(checked) => toggleOrigem(i.id, checked === true)}
+                />
+                {i.instance_name || i.id}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
         <Label>Canal</Label>
         <Select
@@ -441,8 +795,7 @@ function LeadRepliedConfig({
         </p>
         {visiblePipelines.length > 0 ? (
           <div className="space-y-3 max-h-48 overflow-y-auto rounded-md border p-3">
-            {systemPipelines.length > 0 && renderGroup("Funis Padrão", systemPipelines)}
-            {customPipelines.length > 0 && renderGroup("Funis Custom", customPipelines)}
+            {renderPipelines(visiblePipelines)}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">Nenhum funil encontrado.</p>
@@ -453,6 +806,32 @@ function LeadRepliedConfig({
           </p>
         )}
       </div>
+
+      {/* Etapa é recorte dentro do funil — sem funil marcado, não há o que
+          recortar, e a lista não aparece. */}
+      {selectedIds.length > 0 && etapasDosFunisMarcados.length > 0 && (
+        <div className="space-y-2">
+          <Label>Etapas (opcional)</Label>
+          <p className="text-xs text-muted-foreground">
+            Dispara só quando o lead tiver card em uma das etapas marcadas.
+            Nenhuma marcada = qualquer etapa do funil.
+          </p>
+          <div className="space-y-1 max-h-48 overflow-y-auto rounded-md border p-3">
+            {etapasDosFunisMarcados.map((e: { id: string; name: string }) => (
+              <label
+                key={e.id}
+                className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+              >
+                <Checkbox
+                  checked={etapasMarcadas.includes(e.id)}
+                  onCheckedChange={(checked) => toggleEtapa(e.id, checked === true)}
+                />
+                {e.name}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="space-y-2">
         <Label>Contém texto (opcional)</Label>
@@ -469,7 +848,7 @@ function LeadRepliedConfig({
   );
 }
 
-// ── Sub-componente para lead_created com suporte a funis custom ──
+// ── Sub-componente para lead_created ──
 
 function LeadCreatedConfig({
   cfg,
@@ -478,7 +857,7 @@ function LeadCreatedConfig({
   cfg: Record<string, unknown>;
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
-  const { data: customPipelines } = useCustomPipelines();
+  const { data: pipelines = [] } = useFunisDaOrg();
   const { origins: leadOrigins } = useLeadOrigins();
 
   // Catálogo dinâmico de origens (built-ins globais + custom da org, via lead_origins).
@@ -493,15 +872,22 @@ function LeadCreatedConfig({
   const filterPipe = (cfg.filter_pipe as string) || "";
   const filterPipelineId = (cfg.filter_pipeline_id as string) || "";
 
-  const currentPipeValue = filterPipelineId || filterPipe || "__any__";
+  const legacySlug = filterPipe.replace(/^pipe_/, "");
+  const resolvedLegacyId = pipelines.find(
+    (pipeline) => pipeline.id === filterPipe || pipeline.slug === legacySlug,
+  )?.id;
+  const currentPipeValue = filterPipelineId || resolvedLegacyId || "__any__";
+  const visiblePipelines = pipelines.filter(
+    (pipeline) => pipeline.is_active || pipeline.id === currentPipeValue,
+  );
 
   const handlePipeChange = (value: string) => {
     if (value === "__any__") {
       updateConfig({ filter_pipe: "", filter_pipeline_id: "" });
-    } else if (customPipelines?.some((p) => p.id === value)) {
-      updateConfig({ filter_pipe: "", filter_pipeline_id: value });
     } else {
-      updateConfig({ filter_pipe: value, filter_pipeline_id: "" });
+      // Escrita canônica para qualquer funil. `filter_pipe` fica só na leitura
+      // de definições antigas e é removido na primeira alteração.
+      updateConfig({ filter_pipe: "", filter_pipeline_id: value });
     }
   };
 
@@ -523,40 +909,31 @@ function LeadCreatedConfig({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>Filtrar por pipe (opcional)</Label>
+        <Label>Filtrar por funil (opcional)</Label>
         <Select
           value={currentPipeValue}
           onValueChange={handlePipeChange}
         >
-          <SelectTrigger><SelectValue placeholder="Qualquer pipe" /></SelectTrigger>
+          <SelectTrigger><SelectValue placeholder="Qualquer funil" /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="__any__">Qualquer pipe</SelectItem>
+            <SelectItem value="__any__">Qualquer funil</SelectItem>
             <SelectGroup>
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                Pipes Padrão
+                Funis
               </SelectLabel>
-              <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-              <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-              <SelectItem value="pipe_propostas">Propostas</SelectItem>
+              {visiblePipelines.map((pipeline) => (
+                <SelectItem key={pipeline.id} value={pipeline.id}>
+                  {pipeline.label}
+                  {!pipeline.is_active ? " (desativado)" : ""}
+                </SelectItem>
+              ))}
             </SelectGroup>
-            {customPipelines && customPipelines.length > 0 && (
-              <SelectGroup>
-                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                  Funis Custom
-                </SelectLabel>
-                {customPipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            )}
           </SelectContent>
         </Select>
       </div>
-      {filterPipelineId && (
+      {currentPipeValue !== "__any__" && (
         <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-          Dispara quando um lead é adicionado a este funil custom.
+          Dispara quando um lead é adicionado a este funil.
         </div>
       )}
     </>
@@ -565,14 +942,14 @@ function LeadCreatedConfig({
 
 // ── Sub-componente para stage_changed com carregamento dinâmico de etapas ──
 
-const STANDARD_PIPES: { value: string; label: string }[] = [
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "propostas", label: "Propostas" },
-  { value: "upsell_base", label: "Carteira Base" },
-  { value: "upsell_gestao", label: "Carteira Gestão" },
-];
-
+// SCRUM-627: o seletor opera por FUNIL REAL — a lista de `pipelines` da org
+// (sistema + custom, um grupo só), gravando sempre `pipeline_id`. O par
+// redundante pipe_type/pipeline_id colapsou: `pipe_type` sobrevive só como
+// LEITURA legada (config antiga com slug resolve para o funil da org com
+// aquele slug), e o fallback silencioso "whatsapp" morreu — sem funil
+// escolhido, nenhuma etapa é carregada.
+// (SCRUM-618: upsell_* fora — Carteira não é funil, o board dela não escreve
+// em pipeline_entries.)
 function StageChangedConfig({
   cfg,
   updateConfig,
@@ -580,99 +957,72 @@ function StageChangedConfig({
   cfg: Record<string, unknown>;
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
-  const pipeType = (cfg.pipe_type as string) || "";
-  const pipelineId = (cfg.pipeline_id as string) || "";
   const campanhaId = (cfg.campanha_id as string) || "";
   const selectedStages = (cfg.stages as string[]) || [];
-  const isCustom = !!pipelineId;
   const isCampaign = !!campanhaId;
 
-  // Load custom pipelines and campaigns
-  const { data: customPipelines } = useCustomPipelines();
+  const { data: pipelines } = useFunisDaOrg();
   const { data: campanhas } = useCampanhas();
 
-  // Load stages for selected pipe/campaign
-  const isStandardPipe = STANDARD_PIPES.some((p) => p.value === pipeType);
-  const { data: standardStages } = usePipelineStages(
-    isStandardPipe ? (pipeType as PipelineType) : "whatsapp"
-  );
-  const { data: customStages } = useCustomPipelineStages(
-    isCustom ? pipelineId : undefined
-  );
+  const legacySlug = ((cfg.pipe_type as string) || "").replace(/^pipe_/, "");
+  const pipelineId =
+    ((cfg.pipeline_id as string) || "") ||
+    (legacySlug ? pipelines?.find((p) => p.slug === legacySlug)?.id ?? "" : "");
+
+  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+
+  const { etapas } = useEtapasDoFunil(!isCampaign && pipelineId ? pipelineId : null);
   const { data: campanhaStages } = useCampanhaStages(
     isCampaign ? campanhaId : undefined
   );
 
   const stages = isCampaign
-    ? (campanhaStages || []).map((s) => ({ key: s.id, name: s.name }))
-    : isCustom
-    ? (customStages || []).map((s) => ({ key: s.stage_key || s.id, name: s.name }))
-    : isStandardPipe
-    ? (standardStages || []).map((s) => ({
-        key: "stage_key" in s ? s.stage_key : s.id,
-        name: s.name,
-      }))
-    : [];
+    ? (campanhaStages || []).map((s) => ({ id: s.id, legacyKey: s.id, name: s.name }))
+    : etapas.map((e) => ({ id: e.id, legacyKey: e.stageKey, name: e.label }));
 
   const handlePipeChange = (value: string) => {
-    const isCustomPipe = customPipelines?.some((p) => p.id === value);
     const isCampanhaPipe = campanhas?.some((c) => c.id === value);
     if (isCampanhaPipe) {
       updateConfig({ pipe_type: "", pipeline_id: "", campanha_id: value, stages: [], from_stage: "", to_stage: "" });
-    } else if (isCustomPipe) {
-      updateConfig({ pipe_type: "", pipeline_id: value, campanha_id: "", stages: [], from_stage: "", to_stage: "" });
     } else {
-      updateConfig({ pipe_type: value, pipeline_id: "", campanha_id: "", stages: [], from_stage: "", to_stage: "" });
+      // Sempre pipeline_id — funil de sistema incluso. `pipe_type` zera para a
+      // config legada não continuar mandando um slug que pode divergir.
+      updateConfig({ pipe_type: "", pipeline_id: value, campanha_id: "", stages: [], from_stage: "", to_stage: "" });
     }
   };
 
-  const handleStageToggle = (stageKey: string, checked: boolean) => {
-    const current = [...selectedStages];
+  const handleStageToggle = (stageId: string, legacyKey: string, checked: boolean) => {
+    const current = selectedStages.filter((ref) => ref !== stageId && ref !== legacyKey);
     if (checked) {
-      current.push(stageKey);
-    } else {
-      const idx = current.indexOf(stageKey);
-      if (idx >= 0) current.splice(idx, 1);
+      current.push(stageId);
     }
     updateConfig({ stages: current });
   };
 
-  const currentPipeValue = isCampaign ? campanhaId : isCustom ? pipelineId : pipeType || "__none__";
+  const currentPipeValue = isCampaign ? campanhaId : pipelineId || "__none__";
 
   return (
     <>
       <div className="space-y-2">
-        <Label>Pipeline</Label>
+        <Label>Funil</Label>
         <Select
           value={currentPipeValue}
           onValueChange={handlePipeChange}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Selecione o pipe" />
+            <SelectValue placeholder="Selecione o funil" />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                Pipes Padrão
+                Funis
               </SelectLabel>
-              {STANDARD_PIPES.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
+              {funis.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
                   {p.label}
                 </SelectItem>
               ))}
             </SelectGroup>
-            {customPipelines && customPipelines.length > 0 && (
-              <SelectGroup>
-                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                  Pipes Custom
-                </SelectLabel>
-                {customPipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            )}
             {campanhas && campanhas.length > 0 && (
               <SelectGroup>
                 <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
@@ -693,18 +1043,18 @@ function StageChangedConfig({
         <div className="space-y-2">
           <Label>Etapas (selecione uma ou mais)</Label>
           <p className="text-xs text-muted-foreground">
-            Se nenhuma for selecionada, dispara em qualquer etapa deste pipe.
+            Se nenhuma for selecionada, dispara em qualquer etapa deste funil.
           </p>
           <div className="space-y-2 max-h-48 overflow-y-auto rounded-md border p-3">
             {stages.map((s) => (
               <label
-                key={s.key}
+                key={s.id}
                 className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
               >
                 <Checkbox
-                  checked={selectedStages.includes(s.key)}
+                  checked={selectedStages.includes(s.id) || selectedStages.includes(s.legacyKey)}
                   onCheckedChange={(checked) =>
-                    handleStageToggle(s.key, checked === true)
+                    handleStageToggle(s.id, s.legacyKey, checked === true)
                   }
                 />
                 {s.name}
@@ -720,7 +1070,7 @@ function StageChangedConfig({
       )}
 
       <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-        Este workflow será disparado quando um lead entrar nas etapas selecionadas deste pipe.
+        Esta automação dispara quando um negócio entrar nas etapas selecionadas deste funil.
       </div>
     </>
   );
@@ -729,12 +1079,9 @@ function StageChangedConfig({
 // ── Sub-componente para scheduled_date ("Antes de uma data") ──
 // Alvo = data da reunião marcada de cada lead. Audiência = 1 pipe + etapa(s) + lista de disparos.
 
-const SCHEDULED_PIPES: { value: string; label: string }[] = [
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "propostas", label: "Propostas" },
-];
-
+// SCRUM-627: mesmo colapso do StageChangedConfig — seletor por funil real
+// (`pipelines` da org), gravando `pipeline_id`; `pipe_type` é só leitura
+// legada e o fallback silencioso ("confirmacao" aqui) morreu.
 function ScheduledDateConfig({
   cfg,
   updateConfig,
@@ -742,41 +1089,29 @@ function ScheduledDateConfig({
   cfg: Record<string, unknown>;
   updateConfig: (updates: Record<string, unknown>) => void;
 }) {
-  const pipeType = (cfg.pipe_type as string) || "";
-  const pipelineId = (cfg.pipeline_id as string) || "";
   const selectedStages = (cfg.stages as string[]) || [];
   const dispatches = (cfg.dispatches as ScheduledDispatchItem[]) || [];
-  const isCustom = !!pipelineId;
 
-  const { data: customPipelines } = useCustomPipelines();
+  const { data: pipelines } = useFunisDaOrg();
 
-  const isStandardPipe = SCHEDULED_PIPES.some((p) => p.value === pipeType);
-  const { data: standardStages } = usePipelineStages(
-    isStandardPipe ? (pipeType as PipelineType) : "confirmacao"
-  );
-  const { data: customStages } = useCustomPipelineStages(isCustom ? pipelineId : undefined);
+  const legacySlug = ((cfg.pipe_type as string) || "").replace(/^pipe_/, "");
+  const pipelineId =
+    ((cfg.pipeline_id as string) || "") ||
+    (legacySlug ? pipelines?.find((p) => p.slug === legacySlug)?.id ?? "" : "");
 
-  const stages = isCustom
-    ? (customStages || []).map((s) => ({ key: s.stage_key || s.id, name: s.name }))
-    : isStandardPipe
-    ? (standardStages || []).map((s) => ({ key: "stage_key" in s ? s.stage_key : s.id, name: s.name }))
-    : [];
+  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+
+  const { etapas } = useEtapasDoFunil(pipelineId || null);
+  const stages = etapas.map((e) => ({ id: e.id, legacyKey: e.stageKey, name: e.label }));
 
   const handlePipeChange = (value: string) => {
-    if (customPipelines?.some((p) => p.id === value)) {
-      updateConfig({ pipe_type: "", pipeline_id: value, stages: [] });
-    } else {
-      updateConfig({ pipe_type: value, pipeline_id: "", stages: [] });
-    }
+    updateConfig({ pipe_type: "", pipeline_id: value, stages: [] });
   };
 
-  const handleStageToggle = (stageKey: string, checked: boolean) => {
-    const current = [...selectedStages];
+  const handleStageToggle = (stageId: string, legacyKey: string, checked: boolean) => {
+    const current = selectedStages.filter((ref) => ref !== stageId && ref !== legacyKey);
     if (checked) {
-      current.push(stageKey);
-    } else {
-      const idx = current.indexOf(stageKey);
-      if (idx >= 0) current.splice(idx, 1);
+      current.push(stageId);
     }
     updateConfig({ stages: current });
   };
@@ -798,39 +1133,27 @@ function ScheduledDateConfig({
     updateConfig({ dispatches: dispatches.filter((_, i) => i !== index) });
   };
 
-  const currentPipeValue = isCustom ? pipelineId : pipeType || "__none__";
+  const currentPipeValue = pipelineId || "__none__";
 
   return (
     <>
       <div className="space-y-2">
-        <Label>Pipeline</Label>
+        <Label>Funil</Label>
         <Select value={currentPipeValue} onValueChange={handlePipeChange}>
           <SelectTrigger>
-            <SelectValue placeholder="Selecione o pipe" />
+            <SelectValue placeholder="Selecione o funil" />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                Pipes Padrão
+                Funis
               </SelectLabel>
-              {SCHEDULED_PIPES.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
+              {funis.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
                   {p.label}
                 </SelectItem>
               ))}
             </SelectGroup>
-            {customPipelines && customPipelines.length > 0 && (
-              <SelectGroup>
-                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                  Pipes Custom
-                </SelectLabel>
-                {customPipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            )}
           </SelectContent>
         </Select>
       </div>
@@ -844,12 +1167,12 @@ function ScheduledDateConfig({
           <div className="space-y-2 max-h-48 overflow-y-auto rounded-md border p-3">
             {stages.map((s) => (
               <label
-                key={s.key}
+                key={s.id}
                 className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
               >
                 <Checkbox
-                  checked={selectedStages.includes(s.key)}
-                  onCheckedChange={(checked) => handleStageToggle(s.key, checked === true)}
+                  checked={selectedStages.includes(s.id) || selectedStages.includes(s.legacyKey)}
+                  onCheckedChange={(checked) => handleStageToggle(s.id, s.legacyKey, checked === true)}
                 />
                 {s.name}
               </label>

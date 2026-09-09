@@ -31,11 +31,20 @@ const { pipeEntries } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
-  getPipeEntry: vi.fn(
-    async (_sb: unknown, _leadId: string, _orgId: string, slug: string) => pipeEntries[slug] ?? null,
+  getCurrentFunnelEntriesByLeads: vi.fn(async () =>
+    Object.entries(pipeEntries).map(([slug, entry]) => ({
+      ...(entry as Record<string, unknown>),
+      pipeline_id: `pipeline-${slug}`,
+      pipeline_slug: slug,
+      pipeline_name: slug,
+    })),
   ),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
-  resolvePipelineId: vi.fn().mockResolvedValue(null),
+  // SCRUM-623: o contrato novo LANÇA em funil não resolvido — null saiu do tipo.
+  resolvePipelineId: vi.fn(async () => {
+    throw new Error("pipeline_not_found (mock — contrato SCRUM-623 lança, não devolve null)");
+  }),
+  tryResolvePipelineId: vi.fn().mockResolvedValue(null),
 }));
 
 import { AgentRouter } from "../../../supabase/functions/_shared/copilot/agent-router.ts";
@@ -114,6 +123,18 @@ describe("AgentRouter", () => {
 
     expect(result).not.toBeNull();
     expect(result!.id).toBe("agent-stage");
+  });
+
+  it("routes by stage de funil criado pela organização", async () => {
+    pipeEntries["vendas-industria"] = { id: "entry-custom", stage_key: "negociando" };
+    const sb = buildSupabase({
+      lead: { origin: null, segment: null },
+      stageAgent: { ...AGENT_STAGE, routing_stages: ["negociando"] },
+    });
+
+    const result = await new AgentRouter(sb, "org-1").route("lead-custom");
+
+    expect(result?.id).toBe("agent-stage");
   });
 
   it("ignora a coluna legada leads.pipe_whatsapp ao rotear (ADR-0023 §10)", async () => {

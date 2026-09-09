@@ -235,7 +235,11 @@ function GestorTicketList({
                 >
                   <StatusDot status={t.status} className="mt-1.5 self-start" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium leading-snug text-foreground">
+                    {/* Assunto quebra em linhas em vez de cortar — vai ate 200 chars e a folha e estreita. */}
+                    <p
+                      className="break-words text-sm font-medium leading-snug text-foreground"
+                      title={t.title}
+                    >
                       {t.title}
                     </p>
                     <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">

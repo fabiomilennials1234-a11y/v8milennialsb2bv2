@@ -25,6 +25,18 @@ Pós-venda. Cliente que já comprou vira "cliente da carteira" do vendedor. Dom�
 - Comissões do vendedor → `engagement` (não migrado nesta slice)
 - TV Dashboard / `useCloserPerformance` → cross-domain (`engagement`/`analytics`) — mantido fora
 
+## Entrada/saída de automação (deals)
+
+`deals` tem porta de entrada e de saída no motor de workflows (`workflows` BC):
+node `create_deal` (cria o negócio vinculado ao lead) e trigger `deal_created`
+(PG trigger `trg_workflow_deal_created` em `deals`). Guard de laço via
+`deals.metadata.workflow_execution_id`. Feature doc:
+`06 — Features/automacoes/negocio-criado.md`.
+
+**Atenção ao schema real**: prod NÃO tem `deals.pipeline_id` nem `deals.stage_id`,
+embora `src/integrations/supabase/types.ts` os declare — por isso a tela de
+Negócios empilha tudo em "Sem estágio". Node e trigger seguem o schema de prod.
+
 ## Estrutura
 
 ```
@@ -32,7 +44,7 @@ src/modules/carteira/
 ├── components/
 │   ├── client/         # ex-src/components/carteira/ (25 files — CarteiraClient*, ClienteX*, OrderApprovalCard, NewOrderModal, HealthSparkline, RevenueChart, AnalyticsKPICards, ...)
 │   ├── upsell/         # ex-src/components/upsell/ (13 files — UpsellBaseKanban, UpsellGestaoKanban, ClientDetailModal, CreateCampanhaModal, ImportUpsellClientsContent, ...)
-│   ├── proposal/       # ex-src/components/proposals/ (11 files — TinyErpConfirmOrderDialog, TinyErpOrderStatus, CalorSlider, ProductCombobox, ...)
+│   ├── proposal/       # ex-src/components/proposals/ (11 files — TinyErpConfirmOrderDialog, TinyErpOrderStatus, ProductCombobox, ...)
 │   ├── deal/           # ex-src/components/deals/ (5 files — CreateDealDialog, DealDetailDrawer, DealItemsTable, DealKanbanCard, DealKPICards)
 │   └── product/        # ex-src/components/products/ (4 files — CreateProductModal, EditProductModal, ProductImportModal, ProductMaterialsSection)
 ├── hooks/              # 24 hooks (ver lista abaixo)

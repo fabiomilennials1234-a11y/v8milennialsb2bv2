@@ -1,3 +1,4 @@
+import { nonBlankName } from "./whatsapp-contact-name.ts";
 // deno-lint-ignore-file no-explicit-any
 
 /**
@@ -134,6 +135,7 @@ const circuitState = new Map<string, CircuitState>();
 // ---------------------------------------------------------------------------
 
 export class UazapiClient {
+  private readonly savedContactNames = new Map<string, string | undefined>();
   private readonly baseUrl: string;
   private readonly token?: string;
   private readonly adminToken?: string;
@@ -598,9 +600,13 @@ export class UazapiClient {
         : Array.isArray(result?.chats)
           ? result.chats
           : [];
+    for (const c of raw) {
+      const jid = c.wa_chatid ?? c.jid ?? c.chatId ?? c.wa_id ?? c.phone ?? c.id;
+      if (jid) this.savedContactNames.set(jid, nonBlankName(c.wa_contactName));
+    }
     return raw.map((c: any) => ({
       id: c.wa_chatid ?? c.jid ?? c.chatId ?? c.wa_id ?? c.phone ?? c.id ?? "",
-      name: c.wa_contactName ?? c.wa_name ?? c.name ?? c.pushName ?? c.notify ?? undefined,
+      name: nonBlankName(c.wa_contactName, c.wa_name, c.name, c.pushName, c.notify),
       isGroup: c.wa_isGroup === true || String(c.wa_chatid ?? c.jid ?? c.id ?? "").endsWith("@g.us"),
       lastMessageTimestamp: c.wa_lastMsgTimestamp ?? c.lastMessageTimestamp ?? c.t ?? undefined,
     }));
@@ -626,9 +632,27 @@ export class UazapiClient {
         : Array.isArray(result?.messages)
           ? result.messages
           : [];
+    // Targeted lookup also covers single-chat imports and resumed jobs. Cache is
+    // per provider instance/token; a seller's address book never crosses accounts.
+    if (!this.savedContactNames.has(input.number)) {
+      try {
+        const found = await this.request<any>("POST", "/chat/find", {
+          operator: "AND", filter: [{ field: "wa_chatid", operator: "eq", value: input.number }],
+          limit: 1, offset: 0,
+        });
+        const rows = Array.isArray(found) ? found : found?.data ?? found?.chats ?? [];
+        const contact = Array.isArray(rows) ? rows.find((c: any) =>
+          (c.wa_chatid ?? c.jid ?? c.chatId ?? c.wa_id ?? c.phone ?? c.id) === input.number) : undefined;
+        this.savedContactNames.set(input.number, nonBlankName(contact?.wa_contactName));
+      } catch {
+        // Contact lookup is optional: importing messages must remain possible.
+        this.savedContactNames.set(input.number, undefined);
+      }
+    }
+    const savedName = this.savedContactNames.get(input.number);
     const offset = (Number(input.cursor) || 0) + messages.length;
     return {
-      messages,
+      messages: savedName ? messages.map(m => ({ ...(m as Record<string, unknown>), wa_contactName: savedName })) : messages,
       nextCursor: messages.length >= (input.limit ?? 100) ? String(offset) : undefined,
     };
   }

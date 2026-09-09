@@ -19,6 +19,7 @@ import { checkAudienceGate } from "./audience-gate.ts";
 import { decideBlockedInboundAction } from "./gate-decision.ts";
 import { resolveMediaContent } from "../_shared/audio-transcription.ts";
 import { assertPlanFeature, PlanFeatureDeniedError } from "../_shared/plan-gate.ts";
+import { isOrgBlocked } from "../_shared/org-status.ts";
 
 /**
  * Webhook receptor de mensagens de leads
@@ -57,7 +58,7 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
   try {
     // Parse webhook de Twilio ou formato genérico
     const body = await req.json();
-    const { from, channel, organization_id, push_name, incoming_message_type } = body; // from = phone number ou user_id
+    const { from, channel, organization_id, push_name, incoming_message_type, instance_id } = body; // from = phone number ou user_id
 
     // A. Batch mode: message_ids array → load + concat from channel_messages
     const isBatchMode = body.batch_mode === true && Array.isArray(body.message_ids) && body.message_ids.length > 0;
@@ -114,6 +115,28 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
       return new Response(
         JSON.stringify({ error: "Invalid phone number in 'from' field", code: "INVALID_PHONE" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+    // 0.8. GATE DE ASSINATURA — org suspensa/cancelada/expirada sem override.
+    // Antes de QUALQUER side-effect (lock, lead, conversa) e antes do plan gate:
+    // o turno do Copilot é o gasto de IA mais caro do produto, e roda como
+    // service_role, fora do alcance da RLS. Sem isto, org suspensa seguia
+    // pensando e respondendo.
+    // 200 skipped (não 4xx) pelo mesmo motivo do plan gate: o chamador é hop
+    // interno e um 4xx viraria tempestade de retry/DLQ.
+    if (await isOrgBlocked(supabase, organization_id)) {
+      console.log('[agent-message] Assinatura bloqueada — turno descartado:', { organization_id });
+      await logRuntime({
+        organizationId: organization_id,
+        module: "billing",
+        action: "copilot_turno_bloqueado_assinatura",
+        status: "skipped",
+        payloadSnapshot: { channel },
+      }).catch(() => {});
+      return new Response(
+        JSON.stringify({ skipped: true, reason: "subscription_blocked", organization_id }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
       );
     }
 
@@ -268,7 +291,11 @@ Deno.serve(withErrorBoundary('agent-message', async (req) => {
           organizationId: organization_id,
           triggerType: "lead_replied",
           leadId: repliedLead.id,
-          context: { trigger: "lead_replied", channel, message },
+          // `instance_id` é o insumo do filtro por número de origem. Chega do
+          // whatsapp-webhook (e do copilot-batch-processor); quando ausente, o
+          // matcher reprova por fail-closed qualquer workflow que filtre por
+          // número — nunca dispara achando que é "qualquer número".
+          context: { trigger: "lead_replied", channel, message, instance_id },
           source: "copilot",
         }).catch((err) => {
           console.warn('[agent-message] fireTrigger lead_replied falhou:', err?.message ?? err);

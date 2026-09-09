@@ -36,8 +36,96 @@ interface FireTriggerParams {
   organizationId: string;
   triggerType: string;
   leadId: string;
+  /**
+   * O Negócio que disparou — `pipeline_entries.id`.
+   *
+   * Opcional porque a maioria dos gatilhos é da PESSOA (`lead_created`,
+   * `tag_added`) e ali não há negócio a declarar. Quem vem do funil manda: os
+   * dois gatilhos de etapa passaram a pôr `pipeline_entry_id` dentro do
+   * `context`, e é de lá que este campo é lido quando o chamador não o passa
+   * explicitamente — a borda HTTP (`mode: fire_trigger`) só repassa o context.
+   */
+  entryId?: string | null;
+  dealId?: string | null;
   context?: Record<string, unknown>;
   source?: string;
+}
+
+/**
+ * O papel da etapa de destino: `won`, `lost` ou outra coisa.
+ *
+ * É daqui que saem os gatilhos "Negócio ganho" e "Negócio perdido". Eles NÃO
+ * leem `deals.won`: medido em prod (2026-08-25), 34.662 dos 34.980 negócios têm
+ * `won = false` porque o backfill carimbou assim tudo que não estava ganho — a
+ * coluna responde "não foi ganho", não "foi perdido". Quem sabe a verdade é a
+ * POSIÇÃO (ADR-0023 §5), e ganhar/perder é chegar na etapa terminal
+ * (ADR-0023 §4, §5). É o mesmo critério que o card do Negócio usa para desenhar
+ * os botões "Ganhou" e "Perdeu".
+ */
+async function resolveStageRole(
+  supabase: SupabaseClient,
+  organizationId: string,
+  ctx: Record<string, unknown>,
+): Promise<string | null> {
+  // Caminho canônico (SCRUM-627): o contexto unificado carrega o UUID da etapa
+  // (`pipeline_stages.id` — tabela ÚNICA pós-20270906001000, cobre sistema e
+  // custom). Resolve direto, sem depender de slug nem de qual funil é.
+  const stageId = asUuidOrNull(ctx.stage_id);
+  if (stageId) {
+    const { data } = await supabase
+      .from("pipeline_stages")
+      .select("stage_role, organization_id")
+      .eq("id", stageId)
+      .eq("organization_id", organizationId)
+      .maybeSingle();
+    if (data && data.organization_id === organizationId) {
+      return (data.stage_role as string) ?? null;
+    }
+  }
+
+  const toStage = typeof ctx.to_stage === "string" ? ctx.to_stage : null;
+  if (!toStage) return null;
+
+  const pipelineId = typeof ctx.pipeline_id === "string" ? ctx.pipeline_id : null;
+  if (pipelineId) {
+    const { data } = await supabase
+      .from("pipeline_stages")
+      .select("stage_role")
+      .eq("organization_id", organizationId)
+      .eq("pipeline_id", pipelineId)
+      .eq("stage_key", toStage)
+      .eq("is_active", true)
+      .maybeSingle();
+    return (data?.stage_role as string) ?? null;
+  }
+
+  // Compatibilidade de contexto anterior ao pipeline_id obrigatório.
+  const pipeType = typeof ctx.pipe_type === "string" ? ctx.pipe_type : null;
+  if (pipeType) {
+    const { data } = await supabase
+      .from("pipeline_stages")
+      .select("stage_role")
+      .eq("organization_id", organizationId)
+      .eq("pipeline_type", pipeType)
+      .eq("stage_key", toStage)
+      .eq("is_active", true)
+      .maybeSingle();
+    return (data?.stage_role as string) ?? null;
+  }
+
+  return null;
+}
+
+/**
+ * `context` é jsonb livre — nada valida a forma na escrita, e o gatilho de banco
+ * pode mandar `null` num `jsonb_build_object`. Só string não-vazia vira id; o
+ * resto vira `null` em vez de viajar como `"null"` até um `.eq()` que não casa
+ * com nada.
+ */
+function asUuidOrNull(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const v = value.trim();
+  return v && v !== "null" ? v : null;
 }
 
 /**
@@ -56,9 +144,120 @@ export function normalizePipelineIds(value: unknown): string[] {
   return [...seen];
 }
 
-/** Um workflow de `lead_replied` só precisa do lookup de funis se filtrar por eles. */
-function usesPipelineFilter(triggerConfig: Record<string, unknown> | null | undefined): boolean {
-  return normalizePipelineIds((triggerConfig || {}).pipeline_ids).length > 0;
+type StrictIdFilter = { valid: boolean; ids: string[] };
+
+/**
+ * Filtro novo de posição: ausência/lista vazia desliga o filtro; qualquer forma
+ * presente que não seja uma lista integral de strings não vazias falha fechada.
+ */
+function parseStrictIdFilter(config: Record<string, unknown>, key: string): StrictIdFilter {
+  if (!Object.prototype.hasOwnProperty.call(config, key)) return { valid: true, ids: [] };
+  const raw = config[key];
+  if (!Array.isArray(raw)) return { valid: false, ids: [] };
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const value of raw) {
+    if (typeof value !== "string" || value.trim() === "") return { valid: false, ids: [] };
+    const id = value.trim();
+    if (!seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
+  }
+  return { valid: true, ids };
+}
+
+/**
+ * Um workflow de `lead_replied` só precisa do lookup de posição se filtrar por
+ * funil OU por etapa. As duas listas vêm da MESMA leitura de
+ * `pipeline_entries`, então uma guarda só decide se a query acontece.
+ */
+function usesLeadPositionFilter(triggerConfig: Record<string, unknown> | null | undefined): boolean {
+  const cfg = triggerConfig || {};
+  return (
+    normalizePipelineIds(cfg.pipeline_ids).length > 0 ||
+    normalizePipelineIds(cfg.stage_ids).length > 0
+  );
+}
+
+/**
+ * Cooldown padrão do `lead_replied`, em minutos. Existe porque o modo padrão
+ * (`any`) reage a QUALQUER mensagem: sem freio, a rajada normal do WhatsApp
+ * ("oi" + "tudo bem?" + "?") dispararia a automação três vezes em 40 segundos.
+ */
+const COOLDOWN_PADRAO_MINUTOS = 60;
+
+/** Modos que exigem evidência de tempo; `any` não paga query nenhuma. */
+function usesReplyModeEvidence(triggerConfig: Record<string, unknown> | null | undefined): boolean {
+  const modo = (triggerConfig || {}).reply_mode;
+  return modo === "after_outbound" || modo === "first_of_thread";
+}
+
+/**
+ * Horas decorridas desde a última mensagem NOSSA para o lead, e desde a
+ * mensagem ANTERIOR dele.
+ *
+ * Devolve horas, não timestamps, de propósito: `matchesTriggerConfig` roda de
+ * novo no executor, e comparar contra "agora" faria a revalidação reprovar o
+ * que o disparo aprovou.
+ *
+ * `null` em qualquer campo significa "não houve" — nunca "falhou". Falha de
+ * leitura devolve `null` no objeto inteiro, que o matcher trata como
+ * fail-closed.
+ *
+ * A leitura do inbound pega DUAS linhas e usa a segunda: a mensagem que
+ * acabou de chegar já está persistida quando o gatilho roda, então a primeira
+ * linha é ela mesma. Sem isso, `first_of_thread` compararia a mensagem com ela
+ * própria e nunca disparava.
+ *
+ * Índice que cobre as duas consultas (verificado em PROD com EXPLAIN):
+ * `idx_whatsapp_msgs_org_lead (organization_id, lead_id, timestamp DESC)`.
+ */
+async function loadReplyEvidence(
+  supabase: SupabaseClient,
+  organizationId: string,
+  leadId: string,
+): Promise<{ hoursSinceOutbound: number | null; hoursSincePreviousInbound: number | null } | null> {
+  const horasDesde = (iso: unknown): number | null => {
+    if (typeof iso !== "string") return null;
+    const t = Date.parse(iso);
+    if (Number.isNaN(t)) return null;
+    return (Date.now() - t) / 3_600_000;
+  };
+
+  const [saida, entrada] = await Promise.all([
+    supabase
+      .from("whatsapp_messages")
+      .select("timestamp")
+      .eq("organization_id", organizationId)
+      .eq("lead_id", leadId)
+      .eq("direction", "outgoing")
+      .order("timestamp", { ascending: false })
+      .limit(1),
+    supabase
+      .from("whatsapp_messages")
+      .select("timestamp")
+      .eq("organization_id", organizationId)
+      .eq("lead_id", leadId)
+      .eq("direction", "incoming")
+      .order("timestamp", { ascending: false })
+      .limit(2),
+  ]);
+
+  if (saida.error || entrada.error) {
+    console.warn(
+      "[workflow-trigger] Falha ao ler a evidência do modo de resposta:",
+      saida.error?.message ?? entrada.error?.message,
+    );
+    return null;
+  }
+
+  const linhasEntrada = (entrada.data ?? []) as { timestamp: string }[];
+  return {
+    hoursSinceOutbound: horasDesde(((saida.data ?? []) as { timestamp: string }[])[0]?.timestamp),
+    hoursSincePreviousInbound: horasDesde(linhasEntrada[1]?.timestamp),
+  };
 }
 
 /**
@@ -77,22 +276,29 @@ function usesPipelineFilter(triggerConfig: Record<string, unknown> | null | unde
  * fail-closed. O filtro por `organization_id` é explícito e obrigatório: quem
  * chama é service_role, que BYPASSA a RLS de `pipeline_entries`.
  */
-async function loadLeadPipelineIds(
+async function loadLeadPosition(
   supabase: SupabaseClient,
   organizationId: string,
   leadId: string,
-): Promise<string[] | null> {
+): Promise<{ pipelines: string[]; stages: (string | null)[] } | null> {
   const { data, error } = await supabase
     .from("pipeline_entries")
-    .select("pipeline_id")
+    .select("pipeline_id, stage_id")
     .eq("organization_id", organizationId)
     .eq("lead_id", leadId);
 
   if (error) {
-    console.warn("[workflow-trigger] Falha ao ler funis do lead:", error.message);
+    console.warn("[workflow-trigger] Falha ao ler a posição do lead:", error.message);
     return null;
   }
-  return (data ?? []).map((row: { pipeline_id: string }) => String(row.pipeline_id));
+  const rows = (data ?? []) as { pipeline_id: string; stage_id: string | null }[];
+  return {
+    pipelines: rows.map((row) => String(row.pipeline_id)),
+    // `stage_id` nulo entra na lista como nulo, em vez de ser filtrado: o
+    // matcher precisa distinguir "card sem etapa" (não casa nada) de "leitura
+    // falhou" (fail-closed). Medido em PROD: 41 das 48.171 entradas.
+    stages: rows.map((row) => (row.stage_id == null ? null : String(row.stage_id))),
+  };
 }
 
 /**
@@ -130,6 +336,53 @@ export async function hasActiveWorkflowsForTrigger(
  */
 export async function fireTrigger(params: FireTriggerParams): Promise<number> {
   const { supabase, organizationId, triggerType, leadId, context, source } = params;
+
+  /**
+   * ── O SUJEITO ────────────────────────────────────────────────────────────
+   * Parâmetro explícito primeiro; `context` como fonte secundária porque a
+   * borda HTTP (`process-workflow-executions`, `mode: fire_trigger`) recebe o
+   * corpo montado pelo gatilho de banco e só repassa `context` adiante. Sem
+   * essa segunda leitura o sujeito morreria exatamente no caminho que hoje
+   * produz 85 dos 130 workflows ativos.
+   */
+  const ctxObj = (context ?? {}) as Record<string, unknown>;
+  const entryId = params.entryId ?? asUuidOrNull(ctxObj.pipeline_entry_id);
+  const dealId = params.dealId ?? asUuidOrNull(ctxObj.deal_id);
+
+  /**
+   * ── Gatilhos derivados: "Negócio ganho" e "Negócio perdido" ─────────────
+   * Ganhar e perder são MOVIMENTOS para a etapa terminal (ADR-0023 §4/§5), e
+   * por isso o fato já chega aqui como `stage_changed`. Um gatilho próprio em
+   * `deals.won` leria uma coluna que o backfill deixou mentindo (34.662 linhas
+   * com `won = false` que ninguém perdeu) e ainda seria cego aos 26% de cards
+   * sem linha em `deals`.
+   *
+   * Roda ANTES do corpo, e não no fim: o corpo tem quatro saídas antecipadas
+   * (nenhum workflow, nenhum casou, todos deduplicados, insert falhou) e em
+   * três delas o negócio foi ganho do mesmo jeito. Derivar no fim faria
+   * "Negócio ganho" depender de existir um workflow de `stage_changed` — que é
+   * exatamente o vínculo que este gatilho existe para não ter.
+   *
+   * Sem recursão: só `stage_changed` deriva, e o derivado nunca é `stage_changed`.
+   */
+  if (triggerType === "stage_changed") {
+    try {
+      const role = await resolveStageRole(supabase, organizationId, ctxObj);
+      const derivado = role === "won" ? "deal_won" : role === "lost" ? "deal_lost" : null;
+      if (derivado) {
+        await fireTrigger({
+          ...params,
+          triggerType: derivado,
+          entryId,
+          dealId,
+          context: { ...ctxObj, trigger: derivado, stage_role: role },
+        });
+      }
+    } catch (err) {
+      // Derivado que falha não pode derrubar o `stage_changed` que o originou.
+      console.warn("[workflow-trigger] falha ao derivar deal_won/deal_lost:", err);
+    }
+  }
 
   try {
     // `selectFields` é uma UNIÃO de dois literais, e o parser de tipos do
@@ -173,10 +426,33 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     // não vem no evento — os outros só leem campos que o próprio evento traz,
     // e para eles a revalidação sempre foi idempotente.
     let matchContext: Record<string, unknown> = context || {};
-    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesPipelineFilter(w.trigger_config))) {
+    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesLeadPositionFilter(w.trigger_config))) {
+      const posicao = await loadLeadPosition(supabase, organizationId, leadId);
       matchContext = {
         ...matchContext,
-        lead_pipeline_ids: await loadLeadPipelineIds(supabase, organizationId, leadId),
+        // `null` (leitura falhou) chega ao matcher como `null` nos dois campos
+        // — é o que dispara o fail-closed dos dois filtros.
+        lead_pipeline_ids: posicao?.pipelines ?? null,
+        lead_stage_ids: posicao?.stages ?? null,
+      };
+    }
+
+    // Evidência dos modos `after_outbound` / `first_of_thread`. Query separada
+    // da posição porque a maioria dos workflows usa o modo `any` e não deve
+    // pagar por ela.
+    if (triggerType === "lead_replied" && leadId && workflows.some((w) => usesReplyModeEvidence(w.trigger_config))) {
+      const evidencia = await loadReplyEvidence(supabase, organizationId, leadId);
+      matchContext = {
+        ...matchContext,
+        // Leitura falhou → campos AUSENTES, e o matcher reprova por não achar
+        // número. Gravar `null` diria "não houve mensagem anterior", que é
+        // afirmação diferente e destravaria `first_of_thread` por engano.
+        ...(evidencia
+          ? {
+              hours_since_outbound: evidencia.hoursSinceOutbound,
+              hours_since_previous_inbound: evidencia.hoursSincePreviousInbound,
+            }
+          : {}),
       };
     }
 
@@ -198,12 +474,30 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
 
     // ── Dedup / Auto-cancel ──
     const matchingIds = matching.map((w: { id: string }) => w.id);
-    const { data: activeExecs } = await supabase
+    /**
+     * ── O SKIP PASSOU A SER POR NEGÓCIO, NÃO POR PESSOA ────────────────────
+     * Era `.eq("lead_id", leadId)` e mais nada. Sob o modelo novo (ADR-0023 §2:
+     * "um Lead pode ter vários Negócios, inclusive dois abertos no mesmo
+     * funil"), isso proibia o modelo na prática: dois Negócios do mesmo Lead
+     * entrando na mesma etapa, e o SEGUNDO era descartado como duplicata —
+     * sem erro, sem log, sem nada na tela.
+     *
+     * Quando o gatilho declara o Negócio, o escopo do skip é o Negócio. Quando
+     * não declara (gatilho da pessoa: `lead_created`, `tag_added`), continua
+     * sendo a pessoa — que ali é o sujeito certo.
+     *
+     * Custo assumido na transição: uma execução em voo criada ANTES desta
+     * fatia tem `pipeline_entry_id` nulo e não bloqueia mais o mesmo card. O
+     * teto é uma redisparada por workflow, na janela de 300s, uma única vez.
+     */
+    let activeQuery = supabase
       .from("workflow_executions")
       .select("id, workflow_id")
       .eq("lead_id", leadId)
       .in("workflow_id", matchingIds)
       .in("status", ["running", "processing", "waiting_response", "paused"]);
+    if (entryId) activeQuery = activeQuery.eq("pipeline_entry_id", entryId);
+    const { data: activeExecs } = await activeQuery;
 
     // ── Dedup: SKIP workflows that already have an in-flight execution for this
     // lead. Applies to ALL trigger types, including stage_changed.
@@ -223,7 +517,7 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     const deduped = matching.filter((w: { id: string }) => !activeWorkflowIds.has(w.id));
 
     if (deduped.length === 0) {
-      console.log(`[workflow-trigger] All ${matching.length} workflows already active for lead ${leadId}, skipping (no re-dispatch)`);
+      console.log(`[workflow-trigger] All ${matching.length} workflows already active for ${entryId ? `negócio ${entryId}` : `lead ${leadId}`}, skipping (no re-dispatch)`);
       return 0;
     }
 
@@ -238,13 +532,31 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     // stage_changed uses a 300s window (re-dispatching the same lead within 5min is
     // never intended); other triggers use 60s. leadId-less triggers get a null key
     // (never deduped) — distinct NULLs, so they always insert.
-    const dedupWindowSeconds = triggerType === "stage_changed" ? 300 : 60;
+    // `lead_replied` tem janela POR WORKFLOW: é o cooldown que o usuário
+    // configura na tela ("não repetir por N minutos"). Os outros gatilhos
+    // seguem com a janela fixa de sempre.
+    //
+    // Efeito de borda assumido e documentado na spec: balde é fatia de tempo,
+    // não janela deslizante — 10h59 e 11h01 caem em baldes diferentes e as duas
+    // passam. Teto de uma execução extra, só na virada. Cooldown exato exigiria
+    // uma consulta à última execução a cada mensagem recebida.
+    const janelaDoWorkflow = (config: Record<string, unknown> | null | undefined): number => {
+      if (triggerType === "stage_changed") return 300;
+      if (triggerType !== "lead_replied") return 60;
+      const minutos = Number((config || {}).cooldown_minutes);
+      if (!Number.isFinite(minutos) || minutos <= 0) return COOLDOWN_PADRAO_MINUTOS * 60;
+      return Math.round(minutos * 60);
+    };
     const now = new Date();
     const executions = await Promise.all(
-      deduped.map(async (w: { id: string }) => ({
+      deduped.map(async (w: TriggerWorkflowRow) => ({
         workflow_id: w.id,
         organization_id: organizationId,
         lead_id: leadId,
+        // Fatia 1: gravado e ainda não lido por ninguém. O executor passa
+        // adiante a partir da fatia 3.
+        pipeline_entry_id: entryId,
+        deal_id: dealId,
         status: "running",
         // `matchContext` (e não `context`): carrega os funis do lead, que o
         // executor precisa reler para revalidar o matcher. Quando o trigger não
@@ -254,10 +566,18 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
           ? await computeTriggerDedupKey({
               // `context`, NÃO `matchContext`: a chave de dedup precisa ser
               // estável, e os funis do lead mudam com o tempo.
+              //
+              // O negócio entra na chave EXPLICITAMENTE, e não só por vir
+              // dentro do context: o índice único é
+              // `(workflow_id, lead_id, trigger_dedup_key)` — sem o id do
+              // negócio na chave, dois cards do mesmo lead na mesma etapa
+              // colidem no índice e o segundo é descartado pelo
+              // `ignoreDuplicates`. Id de entrada não muda, então a chave
+              // continua estável.
               triggerType,
-              payload: context || {},
+              payload: entryId ? { ...ctxObj, pipeline_entry_id: entryId } : ctxObj,
               now,
-              windowSeconds: dedupWindowSeconds,
+              windowSeconds: janelaDoWorkflow(w.trigger_config),
             })
           : null,
       })),
@@ -279,6 +599,7 @@ export async function fireTrigger(params: FireTriggerParams): Promise<number> {
     }
 
     console.log(`[workflow-trigger] Fired ${deduped.length} workflows for ${triggerType} (dedup-keyed)`);
+
     return deduped.length;
   } catch (err) {
     console.warn("[workflow-trigger] Error:", err);
@@ -296,16 +617,83 @@ export function matchesTriggerConfig(
 ): boolean {
   switch (triggerType) {
     case "stage_changed": {
-      if (config.pipe_type && context.pipe_type && config.pipe_type !== context.pipe_type) return false;
-      if (config.pipeline_id && context.pipeline_id && config.pipeline_id !== context.pipeline_id) return false;
+      // ── Filtro por funil (SCRUM-627) ──
+      // Formatos VIVOS de config em prod (medido 2026-09-02, 82 ativos):
+      //   · pipe_type slug sem prefixo ("whatsapp"/"propostas"), pipeline_id
+      //     vazio — 67 ativos (funil de sistema, formato legado);
+      //   · pipeline_id uuid, pipe_type vazio — 15 ativos (funil custom);
+      //   · nenhum dos dois — "qualquer funil".
+      // O contexto UNIFICADO dos gatilhos de banco (20270908006000) manda
+      // `pipeline_id` SEMPRE e `pipe_type` como eco legado (slug, só quando o
+      // funil é de sistema — some na W6). O casamento é por pipeline_id OU
+      // pelo slug legado.
+      const cfgPipelineId = asUuidOrNull(config.pipeline_id);
+      const cfgPipeType = typeof config.pipe_type === "string" && config.pipe_type.trim() ? config.pipe_type.trim() : null;
+      const ctxPipelineId = asUuidOrNull(context.pipeline_id);
+      const ctxPipeType = typeof context.pipe_type === "string" && context.pipe_type.trim() ? context.pipe_type.trim() : null;
+
+      if (cfgPipelineId && (!ctxPipelineId || cfgPipelineId !== ctxPipelineId)) return false;
+      if (cfgPipeType) {
+        if (ctxPipeType) {
+          if (cfgPipeType !== ctxPipeType) return false;
+        } else {
+          // Config legada de funil de SISTEMA vs. move num funil que não ecoa
+          // slug (custom). Antes isto passava em silêncio — o filtro
+          // simplesmente não era aplicado e o workflow disparava para o funil
+          // errado. Fail-closed: não é o funil configurado.
+          return false;
+        }
+      }
+
       if (config.campanha_id && context.campanha_id && config.campanha_id !== context.campanha_id) return false;
-      if (config.from_stage && context.from_stage && config.from_stage !== context.from_stage) return false;
+
+      // ── Modo de resposta ──
+      // O que conta como "responder". Padrão `any`: qualquer inbound do lead.
+      //
+      // A evidência chega PRONTA no context, em horas decorridas, e nunca como
+      // timestamp cru. Motivo: `matchesTriggerConfig` roda de novo no
+      // `process-workflow-executions`, minutos ou horas depois. Comparar
+      // "agora" contra um timestamp faria a revalidação reprovar exatamente o
+      // que o disparo aprovou — a automação nasceria e morreria sozinha.
+      // Número congelado no disparo revalida igual para sempre.
+      const replyMode = typeof config.reply_mode === "string" ? config.reply_mode : "any";
+
+      if (replyMode === "after_outbound") {
+        const desde = context.hours_since_outbound;
+        // `null` = nunca enviamos nada para este lead (ou não neste número).
+        // Isso não é resposta, é o lead iniciando conversa.
+        if (typeof desde !== "number") return false;
+        const janela = Number(config.reply_window_hours);
+        if (Number.isFinite(janela) && janela > 0 && desde > janela) return false;
+      }
+
+      if (replyMode === "first_of_thread") {
+        const desde = context.hours_since_previous_inbound;
+        // `null` = primeira mensagem que esta pessoa manda. É, por definição, a
+        // primeira da conversa.
+        if (desde !== null) {
+          if (typeof desde !== "number") return false;
+          const silencio = Number(config.new_thread_after_hours);
+          if (Number.isFinite(silencio) && silencio > 0 && desde < silencio) return false;
+        }
+      }
+
+      // ── Filtro por etapa ──
+      // Configs vivas guardam stage_key em `stages`/`from_stage`/`to_stage`;
+      // o editor novo pode gravar stage ID (uuid de `pipeline_stages`). O
+      // contexto unificado manda os dois lados (`stage_key`+`stage_id`,
+      // `from_stage`+`from_stage_id`) — aceitar id OU key cobre os dois.
+      const ctxStageId = asUuidOrNull(context.stage_id);
+      const ctxFromStageId = asUuidOrNull(context.from_stage_id);
+      if (config.from_stage
+          && config.from_stage !== context.from_stage
+          && config.from_stage !== ctxFromStageId) return false;
       const stages = config.stages as string[] | undefined;
       const toStage = context.to_stage as string;
-      if (stages && stages.length > 0 && toStage) {
-        if (!stages.includes(toStage)) return false;
-      } else if (config.to_stage && toStage) {
-        if (config.to_stage !== toStage) return false;
+      if (stages && stages.length > 0) {
+        if ((!toStage || !stages.includes(toStage)) && !(ctxStageId && stages.includes(ctxStageId))) return false;
+      } else if (config.to_stage) {
+        if (config.to_stage !== toStage && config.to_stage !== ctxStageId) return false;
       }
       return true;
     }
@@ -319,15 +707,23 @@ export function matchesTriggerConfig(
         const got = context.origin == null ? "" : String(context.origin).toLowerCase().trim();
         if (!got || got !== want) return false;
       }
-      // filter_pipe: e.g. "pipe_whatsapp", "pipe_confirmacao", "pipe_propostas"
-      const ctxPipe = (context.pipe ?? context.pipe_type) as string | undefined;
-      if (config.filter_pipe && ctxPipe && config.filter_pipe !== ctxPipe) return false;
-      // Custom pipeline filtering
-      if (config.filter_pipeline_id && context.pipeline_id) {
-        if (config.filter_pipeline_id !== context.pipeline_id) return false;
-      } else if (!config.filter_pipeline_id && context.pipeline_id) {
-        // Fired from custom pipeline entry — skip workflows without pipeline filter to avoid duplicates
+      // Escrita nova: UUID de pipelines para qualquer funil. Filtro ativo sem
+      // contexto é inavaliável e falha fechado.
+      if (config.filter_pipeline_id) {
+        if (!context.pipeline_id || config.filter_pipeline_id !== context.pipeline_id) return false;
+      } else if (!config.filter_pipe && context.pipeline_id) {
+        // INSERT da posição também dispara este evento. O workflow genérico já
+        // nasceu no INSERT do lead; pular aqui evita execução duplicada.
         return false;
+      }
+
+      // Leitura legada: os três funis semeados eram salvos como pipe_whatsapp
+      // etc.; alguns produtores mandam o prefixo, outros só o slug.
+      if (!config.filter_pipeline_id && config.filter_pipe) {
+        const normalize = (value: unknown) => String(value ?? "").trim().toLowerCase().replace(/^pipe_/, "");
+        const want = normalize(config.filter_pipe);
+        const got = normalize(context.pipe ?? context.pipe_type);
+        if (!got || got !== want) return false;
       }
       return true;
     }
@@ -375,6 +771,75 @@ export function matchesTriggerConfig(
         if (!isInAnyWanted) return false;
       }
 
+      // ── Modo de resposta ──
+      // O que conta como "responder". Padrão `any`: qualquer inbound do lead.
+      //
+      // A evidência chega PRONTA no context, em horas decorridas, e nunca como
+      // timestamp cru. Motivo: `matchesTriggerConfig` roda de novo no
+      // `process-workflow-executions`, minutos ou horas depois. Comparar
+      // "agora" contra um timestamp faria a revalidação reprovar exatamente o
+      // que o disparo aprovou — a automação nasceria e morreria sozinha.
+      // Número congelado no disparo revalida igual para sempre.
+      const replyMode = typeof config.reply_mode === "string" ? config.reply_mode : "any";
+
+      if (replyMode === "after_outbound") {
+        const desde = context.hours_since_outbound;
+        // `null` = nunca enviamos nada para este lead (ou não neste número).
+        // Isso não é resposta, é o lead iniciando conversa.
+        if (typeof desde !== "number") return false;
+        const janela = Number(config.reply_window_hours);
+        if (Number.isFinite(janela) && janela > 0 && desde > janela) return false;
+      }
+
+      if (replyMode === "first_of_thread") {
+        const desde = context.hours_since_previous_inbound;
+        // `null` = primeira mensagem que esta pessoa manda. É, por definição, a
+        // primeira da conversa.
+        if (desde !== null) {
+          if (typeof desde !== "number") return false;
+          const silencio = Number(config.new_thread_after_hours);
+          if (Number.isFinite(silencio) && silencio > 0 && desde < silencio) return false;
+        }
+      }
+
+      // ── Filtro por etapa ──
+      // Chave é `pipeline_entries.stage_id` (uuid), não `stage_key` (texto com
+      // escopo por funil): o uuid é inequívoco entre funis, e o mesmo apelido
+      // de etapa se repete em funis diferentes. Medido em PROD 2026-09-03:
+      // `stage_id` preenchido em 48.130 das 48.171 entradas — as 41 restantes
+      // não casam filtro nenhum, por fail-closed.
+      //
+      // Filtro PURO (ADR-0023 + spec): basta o lead ter ALGUM card numa das
+      // etapas marcadas. A execução não se amarra ao Negócio que casou, e um
+      // lead com dois cards elegíveis gera UMA execução, não duas.
+      const wantedStages = normalizePipelineIds(config.stage_ids);
+      if (wantedStages.length > 0) {
+        const leadStages = context.lead_stage_ids;
+        // Fail-closed, mesmo motivo do funil: sem saber onde o lead está, o
+        // filtro é inavaliável e disparar levaria a automação a lead de fora.
+        if (!Array.isArray(leadStages)) return false;
+        if (!leadStages.some((id) => wantedStages.includes(String(id)))) return false;
+      }
+
+      // ── Filtro por instância de origem ──
+      // Existe para o caso de duas Instances falando com o MESMO lead: só a
+      // resposta que chega no número escolhido conta. `channel` não resolve —
+      // ele distingue WhatsApp de Meta, não um número nosso do outro.
+      //
+      // `normalizePipelineIds` é reusada por ser normalização de lista de
+      // strings, não algo específico de funil: mesmo jsonb não-validado, mesmo
+      // descarte de não-string e de vazio.
+      const wantedSources = normalizePipelineIds(config.source_ids);
+      if (wantedSources.length > 0) {
+        // Fail-closed, pelo mesmo motivo do funil: sem saber por onde a
+        // mensagem entrou, o filtro é inavaliável, e disparar transformaria
+        // "só o número do Closer" em "qualquer número" em silêncio. É o que
+        // aconteceria hoje no `notificame-webhook`, que dispara sem contexto.
+        const origem = context.instance_id;
+        if (typeof origem !== "string" || !origem) return false;
+        if (!wantedSources.includes(origem)) return false;
+      }
+
       if (config.contains_text && context.message) {
         return String(context.message).toLowerCase().includes(String(config.contains_text).toLowerCase());
       }
@@ -396,6 +861,16 @@ export function matchesTriggerConfig(
       return true;
     }
 
+    case "meeting_held":
+    case "meeting_no_show": {
+      // Sem filtro de config, igual ao `ELSE RETURN TRUE` de
+      // `matches_workflow_trigger_config` no banco. Os dois lados precisam
+      // concordar: o gatilho é disparado por trigger SQL
+      // (`trg_workflow_meeting_outcome`), e um matcher mais restrito aqui faria
+      // o mesmo desfecho executar no banco e ser descartado no executor.
+      return true;
+    }
+
     case "proposal_accepted":
     case "proposal_lost": {
       return true;
@@ -407,6 +882,42 @@ export function matchesTriggerConfig(
 
     case "webhook_received": {
       if (config.webhook_key && context.webhook_key && config.webhook_key !== context.webhook_key) return false;
+      return true;
+    }
+
+    case "deal_created": {
+      // Fail-closed: por padrão só negócio vinculado a lead — os nós downstream
+      // (mensagem, tag, stage) todos precisam de lead.
+      const requireLead = config.require_lead !== false;
+      if (requireLead && !context.lead_id) return false;
+
+      const source = (config.source as string) || "any";
+      if (source !== "any" && source !== context.deal_source) return false;
+
+      const pipelines = parseStrictIdFilter(config, "pipeline_ids");
+      if (!pipelines.valid) return false;
+      if (pipelines.ids.length > 0) {
+        const pipelineId = asUuidOrNull(context.pipeline_id);
+        if (!pipelineId || !pipelines.ids.includes(pipelineId)) return false;
+      }
+
+      const stages = parseStrictIdFilter(config, "stage_ids");
+      if (!stages.valid) return false;
+      if (stages.ids.length > 0) {
+        // Etapa sem funil selecionado é uma config incoerente: a interface só
+        // oferece etapas dentro dos funis marcados e o matcher falha fechado.
+        if (pipelines.ids.length === 0) return false;
+        const stageId = asUuidOrNull(context.stage_id);
+        if (!stageId || !stages.ids.includes(stageId)) return false;
+      }
+
+      if (config.filter_owner_id && config.filter_owner_id !== context.owner_id) return false;
+
+      if (config.min_value != null) {
+        const min = Number(config.min_value) || 0;
+        if ((Number(context.deal_value) || 0) < min) return false;
+      }
+
       return true;
     }
 
@@ -596,6 +1107,8 @@ export interface LeadMeeting {
   lead_id: string;
   pipeline_id: string;
   stage_key: string;
+  /** UUID canônico; ausente só em linhas/configs anteriores à migração. */
+  stage_id?: string | null;
   meeting_date: string; // ISO timestamptz
   origin?: string | null;
 }
@@ -733,7 +1246,9 @@ export function planScheduledDateDispatches(
       // ── Audiência ──
       if (lm.organization_id !== wf.organization_id) continue;
       if (lm.pipeline_id !== wf.pipeline_id) continue;
-      if (stages.length > 0 && !stages.includes(lm.stage_key)) continue;
+      if (stages.length > 0
+          && !stages.includes(lm.stage_key)
+          && !(lm.stage_id && stages.includes(lm.stage_id))) continue;
       if (wf.filter_origin) {
         // Slug normalizado (lowercase/trim) — mesma regra do lead_created em matchesTriggerConfig.
         const want = String(wf.filter_origin).toLowerCase().trim();
@@ -827,7 +1342,7 @@ export async function processScheduledDateTriggers(supabase: SupabaseClient): Pr
   const pipelineIds = [...new Set(resolved.map((w) => w.pipeline_id))];
   const { data: entries } = await supabase
     .from("pipeline_entries")
-    .select("organization_id, lead_id, pipeline_id, stage_key, metadata")
+    .select("organization_id, lead_id, pipeline_id, stage_id, stage_key, metadata")
     .in("pipeline_id", pipelineIds)
     .limit(2000);
 
@@ -840,6 +1355,7 @@ export async function processScheduledDateTriggers(supabase: SupabaseClient): Pr
         organization_id: e.organization_id as string,
         lead_id: e.lead_id as string,
         pipeline_id: e.pipeline_id as string,
+        stage_id: (e.stage_id as string | null) ?? null,
         stage_key: e.stage_key as string,
         meeting_date: meetingDate,
         origin: null,

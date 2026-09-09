@@ -1,4 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
+import {
+  createCustomPipelineEntry,
+  updateCustomPipelineEntry,
+} from "@/integrations/supabase/pipeline-entry-rpc";
 
 /**
  * Teto de linhas lidas por `(pipeline_id, lead_id)` — espelha
@@ -24,17 +28,23 @@ const CUSTOM_PIPE_ENTRY_READ_CAP = 50;
  * kanban, Copilot e esta transição automática precisam concordar sobre QUAL
  * negócio é o corrente, senão a UI mostra um e a automação move outro.
  *
- * "Aberto" aqui vem do papel da etapa, não de `closed_at`: `custom_pipe_entries`
- * não tem essa coluna. `stage_role IN ('won','lost')` é o mesmo predicado que
+ * "Aberto" aqui vem do papel projetado da etapa. `stage_role IN ('won','lost')`
+ * é o mesmo predicado que
  * `bulk_add_to_custom_pipe` usa no banco (migration `20270730000050`) e, como lá,
  * hoje é defensivo — nenhum funil custom em prod tem etapa won/lost.
  */
-async function readActiveCustomPipeEntry(pipelineId: string, leadId: string) {
+async function readActiveCustomPipeEntry(
+  pipelineId: string,
+  leadId: string,
+  organizationId: string,
+) {
   const { data, error } = await supabase
-    .from("custom_pipe_entries")
-    .select("id, stage:custom_pipeline_stages(stage_role)")
+    .from("negocio_projetado")
+    .select("id, stage_role")
+    .eq("organization_id", organizationId)
     .eq("lead_id", leadId)
     .eq("pipeline_id", pipelineId)
+    .eq("pipeline_type", "custom")
     .order("stage_changed_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false })
     .order("id", { ascending: false })
@@ -46,12 +56,12 @@ async function readActiveCustomPipeEntry(pipelineId: string, leadId: string) {
   if (rows.length > 1) {
     // Sinal explícito de "existem N" — o que `.maybeSingle()` apagava.
     console.warn(
-      `[custom_pipe_entries] ${rows.length} entries para pipeline=${pipelineId} lead=${leadId}; movendo a primeira ABERTA, ou a mais recente se todas estiverem fechadas.`,
+      `[negocio_projetado] ${rows.length} entries para pipeline=${pipelineId} lead=${leadId}; movendo a primeira ABERTA, ou a mais recente se todas estiverem fechadas.`,
     );
   }
 
   const isClosed = (row: (typeof rows)[number]) =>
-    row.stage?.stage_role === "won" || row.stage?.stage_role === "lost";
+    row.stage_role === "won" || row.stage_role === "lost";
 
   return rows.find((row) => !isClosed(row)) ?? rows[0] ?? null;
 }
@@ -65,9 +75,8 @@ async function readActiveCustomPipeEntry(pipelineId: string, leadId: string) {
  * negócio nesse funil, cria. Espelha o branch custom→custom de
  * `useMoveLeadInCustomPipe`.
  *
- * Segurança: `organizationId` vem do contexto de auth do chamador. RLS em
- * `custom_pipe_entries` (organization_id = get_user_organization_id()) é o gate
- * final — insert/update cross-org falha no Postgres.
+ * Segurança: `organizationId` vem do contexto de auth do chamador. As funções
+ * compartilhadas escrevem em `pipeline_entries`; a RLS da base é o gate final.
  */
 export async function upsertLeadIntoCustomPipe(params: {
   leadId: string;
@@ -83,21 +92,25 @@ export async function upsertLeadIntoCustomPipe(params: {
   // pelo M1, cada falha transitória de leitura criaria um negócio duplicado —
   // permanente e visível no kanban do cliente. Transição automática que falhou é
   // recuperável: o usuário refaz o movimento.
-  const existingEntry = await readActiveCustomPipeEntry(targetPipelineId, leadId);
+  const existingEntry = await readActiveCustomPipeEntry(
+    targetPipelineId,
+    leadId,
+    organizationId,
+  );
 
   if (existingEntry) {
-    await supabase
-      .from("custom_pipe_entries")
-      .update({ stage_id: targetStageId, stage_changed_at: now })
-      .eq("id", existingEntry.id);
-  } else {
-    await supabase.from("custom_pipe_entries").insert({
-      lead_id: leadId,
-      organization_id: organizationId,
-      pipeline_id: targetPipelineId,
+    await updateCustomPipelineEntry(existingEntry.id, {
       stage_id: targetStageId,
-      entered_at: now,
       stage_changed_at: now,
+    });
+  } else {
+    await createCustomPipelineEntry({
+      leadId,
+      organizationId,
+      pipelineId: targetPipelineId,
+      stageId: targetStageId,
+      enteredAt: now,
+      stageChangedAt: now,
     });
   }
 }

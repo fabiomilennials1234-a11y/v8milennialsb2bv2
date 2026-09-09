@@ -67,6 +67,24 @@ Deno.test("serializeLeadRow — maps tier_efetivo→tier, drops internal columns
   assertEquals(out.tags, [{ id: "t1", name: "vip", color: "#fff" }]);
 });
 
+// SCRUM-647, Etapa 2 — janela de depreciação de `rating`.
+//
+// Duas asserções, e as duas importam por motivos opostos:
+//   * a chave AINDA EXISTE → cliente gerado da openapi.json não quebra durante
+//     a janela;
+//   * o valor é SEMPRE null → a API não devolve nota, mesmo que a RPC ainda
+//     mande uma (durante o deploy escalonado ela manda: a migration vem depois).
+// Sem a segunda, o campo continuaria vivo por inércia e a Etapa 2 ficaria pela
+// metade sem ninguém perceber.
+Deno.test("serializeLeadRow — rating está depreciado: chave presente, valor sempre null", () => {
+  const out = serializeLeadRow(row("l1", "2026-06-14T10:00:00Z"));
+  assertEquals("rating" in out, true);
+  assertEquals(out.rating, null);
+  // ...inclusive quando a linha da RPC ainda traz nota (deploy escalonado).
+  const comNota = serializeLeadRow(row("l2", "2026-06-14T10:00:00Z", { rating: 9 }));
+  assertEquals(comNota.rating, null);
+});
+
 Deno.test("serializeLeadRow — null tags default to empty array", () => {
   const out = serializeLeadRow(row("l1", "2026-06-14T10:00:00Z", { tags: null }));
   assertEquals(out.tags, []);

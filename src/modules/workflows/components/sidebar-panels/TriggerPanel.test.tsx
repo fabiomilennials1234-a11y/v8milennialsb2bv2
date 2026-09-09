@@ -14,12 +14,32 @@ import { render, screen, fireEvent } from "@testing-library/react";
 
 const mockPipelines = vi.fn();
 
+const mockStages = vi.fn(() => ({ data: [] as unknown[] }));
+const mockEtapas = vi.fn((_pipelineId?: string) => ({ etapas: [] as unknown[], isLoading: false }));
+const mockInstances = vi.fn(() => ({ data: [] as unknown[] }));
+
 vi.mock("@/modules/pipelines", () => ({
+  // O painel lê por `useFunisDaOrg`, que devolve o funil com `label` — o nome
+  // que a ORG usa. `usePipelines` fica mockado porque outros módulos
+  // importados no topo ainda o consomem.
+  useFunisDaOrg: () => mockPipelines(),
   usePipelines: () => mockPipelines(),
+  useAllPipelineStages: () => mockStages(),
   useCustomPipelines: () => ({ data: [] }),
   useCustomPipelineStages: () => ({ data: [] }),
   usePipelineStages: () => ({ data: [] }),
+  usePipelineDisplayConfig: () => ({ data: [] }),
+  useEtapasDoFunil: (pipelineId?: string) => mockEtapas(pipelineId),
   getPipelineTypeName: (t: string) => t,
+}));
+
+vi.mock("@/modules/communication", () => ({
+  useWhatsAppInstances: () => mockInstances(),
+}));
+
+vi.mock("@/modules/identity", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/modules/identity")>()),
+  useTeamMembers: () => ({ data: [] }),
 }));
 
 vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({
@@ -28,11 +48,19 @@ vi.mock("@/modules/campaigns/hooks/useCampanhas", () => ({
 }));
 
 vi.mock("@/modules/leads", () => ({
-  useLeadOrigins: () => ({ data: [] }),
+  useLeadOrigins: () => ({ origins: [], labelOf: (v: string) => v, colorOf: () => "#000", isLoading: false }),
 }));
 
 vi.mock("./CampaignSelectorField", () => ({
   CampaignSelectorField: () => null,
+}));
+
+// A categoria "Negócios" do picker é gateada pela feature `deals` da org
+// (o painel chama `useOrgFeatures`). Ligada por padrão; um teste abaixo desliga.
+const mockHasFeature = vi.fn((key: string) => key === "deals");
+
+vi.mock("@/contexts/OrgFeaturesContext", () => ({
+  useOrgFeatures: () => ({ hasFeature: mockHasFeature }),
 }));
 
 import { TriggerPanel } from "./TriggerPanel";
@@ -45,24 +73,63 @@ const PROPOSTAS = "22222222-2222-2222-2222-222222222222";
 const BLACK_FRIDAY = "33333333-3333-3333-3333-333333333333";
 const ARQUIVADO = "44444444-4444-4444-4444-444444444444";
 
+// `name` é o SEED congelado de `create_default_pipelines()`; `label` é como a
+// org chama o funil (display_config). São diferentes de propósito nos dois de
+// sistema: é isso que prova que a tela mostra o nome da org, e não o do seed.
 const PIPELINES = [
-  { id: QUALIFICACAO, name: "Qualificação", type: "system", is_active: true },
-  { id: PROPOSTAS, name: "Propostas", type: "system", is_active: true },
-  { id: BLACK_FRIDAY, name: "Black Friday", type: "custom", is_active: true },
-  { id: ARQUIVADO, name: "Funil Antigo", type: "custom", is_active: false },
+  { id: QUALIFICACAO, slug: "whatsapp", name: "Qualificação", label: "Oportunidades", type: "system", is_active: true },
+  { id: PROPOSTAS, slug: "propostas", name: "Propostas", label: "Orçamentos", type: "system", is_active: true },
+  { id: BLACK_FRIDAY, slug: "black-friday", name: "Black Friday", label: "Black Friday", type: "custom", is_active: true },
+  { id: ARQUIVADO, slug: "antigo", name: "Funil Antigo", label: "Funil Antigo", type: "custom", is_active: false },
 ];
 
-function renderPanel(config: Record<string, unknown> = {}) {
+const ETAPA_ENVIADA = "55555555-5555-5555-5555-555555555555";
+const ETAPA_NEGOCIACAO = "66666666-6666-6666-6666-666666666666";
+const ETAPA_DE_OUTRO_FUNIL = "77777777-7777-7777-7777-777777777777";
+
+const ETAPAS = [
+  { id: ETAPA_ENVIADA, stage_key: "enviada", name: "Proposta Enviada", pipeline_id: PROPOSTAS, is_active: true },
+  { id: ETAPA_NEGOCIACAO, stage_key: "negociacao", name: "Em Negociação", pipeline_id: PROPOSTAS, is_active: true },
+  { id: ETAPA_DE_OUTRO_FUNIL, stage_key: "sondagem", name: "Sondagem", pipeline_id: QUALIFICACAO, is_active: true },
+];
+
+function configureEtapas() {
+  mockEtapas.mockImplementation((pipelineId?: string) => ({
+    etapas: ETAPAS
+      .filter((stage) => stage.pipeline_id === pipelineId)
+      .map((stage, position) => ({
+        id: stage.id,
+        stageKey: stage.stage_key,
+        label: stage.name,
+        position,
+      })),
+    isLoading: false,
+  }));
+}
+
+const DOIS_NUMEROS = [
+  { id: "inst-closer", instance_name: "Comercial" },
+  { id: "inst-sdr", instance_name: "Suporte" },
+];
+
+function renderPanel(
+  config: Record<string, unknown> = {},
+  triggerType: TriggerNodeData["triggerType"] = "lead_replied",
+) {
   const onUpdate = vi.fn();
   const data = {
     type: "trigger",
-    triggerType: "lead_replied",
+    triggerType,
     label: "Trigger",
     config,
   } as unknown as TriggerNodeData;
 
   render(<TriggerPanel data={data} onUpdate={onUpdate} />);
   return { onUpdate };
+}
+
+function renderDealCreatedPanel(config: Record<string, unknown> = {}) {
+  return renderPanel(config, "deal_created");
 }
 
 /** O config resultante da última chamada de onUpdate. */
@@ -84,6 +151,10 @@ describe("TriggerPanel — lead_replied", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    configureEtapas();
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
   });
 
   it("mostra os três campos do trigger", () => {
@@ -93,12 +164,16 @@ describe("TriggerPanel — lead_replied", () => {
     expect(screen.getByText("Contém texto (opcional)")).toBeInTheDocument();
   });
 
-  it("agrupa funis padrão e custom", () => {
+  it("lista todos os funis juntos, sem separar por espécie", () => {
     renderPanel();
-    expect(screen.getByText("Funis Padrão")).toBeInTheDocument();
-    expect(screen.getByText("Funis Custom")).toBeInTheDocument();
-    expect(screen.getByText("Qualificação")).toBeInTheDocument();
+    // Um funil da org e um criado pelo usuário, lado a lado…
+    expect(screen.getByText("Oportunidades")).toBeInTheDocument();
+    // O seed NÃO aparece — era ele que a tela mostrava antes.
+    expect(screen.queryByText("Qualificação")).not.toBeInTheDocument();
     expect(screen.getByText("Black Friday")).toBeInTheDocument();
+    // …e nenhum cabeçalho dizendo a qual grupo cada um pertence.
+    expect(screen.queryByText("Funis Padrão")).not.toBeInTheDocument();
+    expect(screen.queryByText("Funis Custom")).not.toBeInTheDocument();
   });
 
   it("marcar um funil grava o uuid em pipeline_ids", () => {
@@ -109,19 +184,19 @@ describe("TriggerPanel — lead_replied", () => {
 
   it("marcar um segundo funil acumula (semântica OR)", () => {
     const { onUpdate } = renderPanel({ pipeline_ids: [QUALIFICACAO] });
-    fireEvent.click(checkboxFor("Propostas"));
+    fireEvent.click(checkboxFor("Orçamentos"));
     expect(lastConfig(onUpdate).pipeline_ids).toEqual([QUALIFICACAO, PROPOSTAS]);
   });
 
   it("desmarcar remove só aquele funil", () => {
     const { onUpdate } = renderPanel({ pipeline_ids: [QUALIFICACAO, PROPOSTAS] });
-    fireEvent.click(checkboxFor("Qualificação"));
+    fireEvent.click(checkboxFor("Oportunidades"));
     expect(lastConfig(onUpdate).pipeline_ids).toEqual([PROPOSTAS]);
   });
 
   it("preserva os outros campos do config ao mexer nos funis", () => {
     const { onUpdate } = renderPanel({ channel: "whatsapp", contains_text: "sim" });
-    fireEvent.click(checkboxFor("Propostas"));
+    fireEvent.click(checkboxFor("Orçamentos"));
     const cfg = lastConfig(onUpdate);
     expect(cfg.channel).toBe("whatsapp");
     expect(cfg.contains_text).toBe("sim");
@@ -166,5 +241,306 @@ describe("TriggerPanel — lead_replied", () => {
     const cfg = lastConfig(onUpdate);
     expect(cfg.contains_text).toBe("orçamento");
     expect(cfg.pipeline_ids).toEqual([QUALIFICACAO]);
+  });
+  // ── Gate da categoria "Negócios" (feature `deals` da org) ──────────────
+  // O painel filtra TRIGGER_CATEGORIES por `hasFeature("deals")`. Abrir o
+  // Select do Radix em jsdom exige os dublês de ponteiro abaixo — jsdom não
+  // implementa Pointer Events nem scrollIntoView, e o Radix chama os dois.
+
+  function openTriggerTypeSelect() {
+    const proto = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+    proto.hasPointerCapture = () => false;
+    proto.setPointerCapture = () => {};
+    proto.releasePointerCapture = () => {};
+    proto.scrollIntoView = () => {};
+    const combobox = screen
+      .getByText("Tipo de Trigger")
+      .parentElement!.querySelector("[role='combobox']")!;
+    // Radix abre pelo teclado sem depender de Pointer Events, que jsdom não tem.
+    fireEvent.keyDown(combobox, { key: "Enter" });
+  }
+
+  it("org com a feature deals vê a categoria Negócios no picker", () => {
+    renderPanel();
+    openTriggerTypeSelect();
+    expect(screen.getByText("Negócios")).toBeInTheDocument();
+  });
+
+  it("org sem a feature deals não vê a categoria Negócios no picker", () => {
+    mockHasFeature.mockImplementation(() => false);
+    renderPanel();
+    openTriggerTypeSelect();
+    expect(screen.queryByText("Negócios")).not.toBeInTheDocument();
+  });
+});
+
+describe("TriggerPanel — deal_created — funis de nascimento", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    configureEtapas();
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+  });
+
+  it("config vazia comunica qualquer funil", () => {
+    renderDealCreatedPanel();
+    expect(screen.getByText("Funis de nascimento (opcional)")).toBeInTheDocument();
+    expect(screen.getByText("Nenhum funil marcado = qualquer funil")).toBeInTheDocument();
+  });
+
+  it("grava vários funis com OR", () => {
+    const { onUpdate } = renderDealCreatedPanel({ pipeline_ids: [QUALIFICACAO] });
+    fireEvent.click(checkboxFor("Orçamentos"));
+    expect(lastConfig(onUpdate).pipeline_ids).toEqual([QUALIFICACAO, PROPOSTAS]);
+  });
+
+  it("mantém funil inativo salvo visível e removível", () => {
+    const { onUpdate } = renderDealCreatedPanel({ pipeline_ids: [ARQUIVADO] });
+    expect(screen.getByText("Funil Antigo")).toBeInTheDocument();
+    expect(screen.getByText("(desativado)")).toBeInTheDocument();
+    fireEvent.click(checkboxFor("Funil Antigo"));
+    expect(lastConfig(onUpdate).pipeline_ids).toEqual([]);
+  });
+
+  it("só mostra etapas depois de selecionar funil e agrupa pelo nome exibido", () => {
+    const first = renderDealCreatedPanel();
+    expect(screen.queryByText("Etapas de nascimento (opcional)")).not.toBeInTheDocument();
+    first.onUpdate.mockClear();
+
+    renderDealCreatedPanel({ pipeline_ids: [PROPOSTAS] });
+    expect(screen.getByText("Etapas de nascimento (opcional)")).toBeInTheDocument();
+    expect(screen.getByText("Etapas em Orçamentos")).toBeInTheDocument();
+    expect(screen.getByText("Proposta Enviada")).toBeInTheDocument();
+    expect(screen.queryByText("Sondagem")).not.toBeInTheDocument();
+  });
+
+  it("grava várias etapas e resume filtro específico", () => {
+    const { onUpdate } = renderDealCreatedPanel({
+      pipeline_ids: [PROPOSTAS, QUALIFICACAO],
+      stage_ids: [ETAPA_ENVIADA],
+    });
+    fireEvent.click(checkboxFor("Sondagem"));
+    expect(lastConfig(onUpdate).stage_ids).toEqual([ETAPA_ENVIADA, ETAPA_DE_OUTRO_FUNIL]);
+    expect(screen.getByText("2 funis · 1 etapa específica")).toBeInTheDocument();
+  });
+
+  it("sem etapas resume qualquer etapa dos funis selecionados", () => {
+    renderDealCreatedPanel({ pipeline_ids: [PROPOSTAS, QUALIFICACAO] });
+    expect(screen.getByText("2 funis · qualquer etapa")).toBeInTheDocument();
+  });
+
+  it("desmarcar funil remove só as etapas dele", () => {
+    const { onUpdate } = renderDealCreatedPanel({
+      pipeline_ids: [PROPOSTAS, QUALIFICACAO],
+      stage_ids: [ETAPA_ENVIADA, ETAPA_DE_OUTRO_FUNIL],
+    });
+    fireEvent.click(checkboxFor("Oportunidades"));
+    const config = lastConfig(onUpdate);
+    expect(config.pipeline_ids).toEqual([PROPOSTAS]);
+    expect(config.stage_ids).toEqual([ETAPA_ENVIADA]);
+  });
+});
+
+// ── Etapa, número de origem, modo e freio (2026-09-03) ───
+//
+// O que estes testes travam é a DIVULGAÇÃO PROGRESSIVA: nada aparece antes de
+// fazer sentido. Não é enfeite — 43 das 62 orgs com chip têm um número só, e
+// oferecer a elas uma escolha entre números que não existem é pior que não
+// oferecer nada.
+
+describe("TriggerPanel — lead_replied — etapa", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    configureEtapas();
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+  });
+
+  it("não mostra etapas antes de um funil marcado", () => {
+    renderPanel();
+    expect(screen.queryByText("Etapas (opcional)")).not.toBeInTheDocument();
+    expect(screen.queryByText("Proposta Enviada")).not.toBeInTheDocument();
+  });
+
+  it("mostra só as etapas dos funis marcados", () => {
+    renderPanel({ pipeline_ids: [PROPOSTAS] });
+    expect(screen.getByText("Proposta Enviada")).toBeInTheDocument();
+    expect(screen.getByText("Em Negociação")).toBeInTheDocument();
+    expect(screen.queryByText("Sondagem")).not.toBeInTheDocument();
+  });
+
+  it("marcar uma etapa grava o uuid em stage_ids", () => {
+    const { onUpdate } = renderPanel({ pipeline_ids: [PROPOSTAS] });
+    fireEvent.click(checkboxFor("Proposta Enviada"));
+    expect(lastConfig(onUpdate).stage_ids).toEqual([ETAPA_ENVIADA]);
+  });
+
+  it("marcar uma segunda etapa acumula (semântica OR)", () => {
+    const { onUpdate } = renderPanel({
+      pipeline_ids: [PROPOSTAS],
+      stage_ids: [ETAPA_ENVIADA],
+    });
+    fireEvent.click(checkboxFor("Em Negociação"));
+    expect(lastConfig(onUpdate).stage_ids).toEqual([ETAPA_ENVIADA, ETAPA_NEGOCIACAO]);
+  });
+
+  // Sem isto o filtro ficaria restrito a uma etapa que sumiu da tela:
+  // invisível e indesmarcável.
+  it("desmarcar o funil leva junto as etapas dele", () => {
+    const { onUpdate } = renderPanel({
+      pipeline_ids: [PROPOSTAS],
+      stage_ids: [ETAPA_ENVIADA, ETAPA_NEGOCIACAO],
+    });
+    // A tela mostra o `label` — o nome que a ORG usa (#1992) —, não o `name`
+    // do seed. Clicar por "Propostas" achava nada desde que o painel passou a
+    // ler `useFunisDaOrg`.
+    fireEvent.click(checkboxFor("Orçamentos"));
+    const cfg = lastConfig(onUpdate);
+    expect(cfg.pipeline_ids).toEqual([]);
+    expect(cfg.stage_ids).toEqual([]);
+  });
+
+  it("desmarcar um funil preserva as etapas do outro que segue marcado", () => {
+    const { onUpdate } = renderPanel({
+      pipeline_ids: [PROPOSTAS, QUALIFICACAO],
+      stage_ids: [ETAPA_ENVIADA, ETAPA_DE_OUTRO_FUNIL],
+    });
+    fireEvent.click(checkboxFor("Oportunidades"));
+    const cfg = lastConfig(onUpdate);
+    expect(cfg.pipeline_ids).toEqual([PROPOSTAS]);
+    expect(cfg.stage_ids).toEqual([ETAPA_ENVIADA]);
+  });
+});
+
+describe("TriggerPanel — lead_replied — número de origem", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+  });
+
+  it("não oferece escolha de número quando a org tem um só", () => {
+    mockInstances.mockReturnValue({ data: [DOIS_NUMEROS[0]] });
+    renderPanel();
+    expect(screen.queryByText("De onde")).not.toBeInTheDocument();
+  });
+
+  it("não oferece escolha quando a org não tem número nenhum", () => {
+    mockInstances.mockReturnValue({ data: [] });
+    renderPanel();
+    expect(screen.queryByText("De onde")).not.toBeInTheDocument();
+  });
+
+  it("oferece a escolha quando há dois números", () => {
+    mockInstances.mockReturnValue({ data: DOIS_NUMEROS });
+    renderPanel();
+    expect(screen.getByText("De onde")).toBeInTheDocument();
+    expect(screen.getByText("Comercial")).toBeInTheDocument();
+    expect(screen.getByText("Suporte")).toBeInTheDocument();
+  });
+
+  it("marcar um número grava o id e declara o tipo de origem", () => {
+    mockInstances.mockReturnValue({ data: DOIS_NUMEROS });
+    const { onUpdate } = renderPanel();
+    fireEvent.click(checkboxFor("Comercial"));
+    const cfg = lastConfig(onUpdate);
+    expect(cfg.source_ids).toEqual(["inst-closer"]);
+    expect(cfg.source_type).toBe("whatsapp_instance");
+  });
+});
+
+describe("TriggerPanel — lead_replied — modo e freio", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+  });
+
+  it("a janela só existe no modo que a usa", () => {
+    renderPanel({ reply_mode: "any" });
+    expect(screen.queryByLabelText(/dentro de/i)).not.toBeInTheDocument();
+  });
+
+  it("after_outbound pede a janela, com 48h preenchidas", () => {
+    renderPanel({ reply_mode: "after_outbound" });
+    expect(screen.getByLabelText(/dentro de/i)).toHaveValue(48);
+    expect(screen.queryByLabelText(/conversa nova após/i)).not.toBeInTheDocument();
+  });
+
+  it("first_of_thread pede o silêncio, com 24h preenchidas", () => {
+    renderPanel({ reply_mode: "first_of_thread" });
+    expect(screen.getByLabelText(/conversa nova após/i)).toHaveValue(24);
+    expect(screen.queryByLabelText(/dentro de/i)).not.toBeInTheDocument();
+  });
+
+  it("o freio está sempre visível, com 60 minutos como padrão", () => {
+    renderPanel();
+    expect(screen.getByLabelText(/não repetir por/i)).toHaveValue(60);
+  });
+
+  it("o freio respeita o valor já salvo", () => {
+    renderPanel({ cooldown_minutes: 5 });
+    expect(screen.getByLabelText(/não repetir por/i)).toHaveValue(5);
+  });
+});
+
+describe("TriggerPanel — referências canônicas de funil", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPipelines.mockReturnValue({ data: PIPELINES });
+    mockStages.mockReturnValue({ data: ETAPAS });
+    mockInstances.mockReturnValue({ data: [] });
+    mockHasFeature.mockImplementation((key: string) => key === "deals");
+    configureEtapas();
+  });
+
+  function openSelect(label: string) {
+    const proto = window.HTMLElement.prototype as unknown as Record<string, unknown>;
+    proto.hasPointerCapture = () => false;
+    proto.setPointerCapture = () => {};
+    proto.releasePointerCapture = () => {};
+    proto.scrollIntoView = () => {};
+    const combobox = screen.getByText(label).parentElement?.querySelector("[role='combobox']");
+    if (!combobox) throw new Error(`Select não encontrado: ${label}`);
+    fireEvent.keyDown(combobox, { key: "Enter" });
+  }
+
+  it("Lead criado lê filtro legado e grava UUID para funil seed ou criado", () => {
+    const legacy = renderPanel({ filter_pipe: "pipe_whatsapp" }, "lead_created");
+    expect(screen.getByText("Oportunidades")).toBeInTheDocument();
+    legacy.onUpdate.mockClear();
+
+    openSelect("Filtrar por funil (opcional)");
+    fireEvent.click(screen.getByText("Black Friday"));
+    expect(lastConfig(legacy.onUpdate)).toMatchObject({
+      filter_pipe: "",
+      filter_pipeline_id: BLACK_FRIDAY,
+    });
+  });
+
+  it("Mudança de etapa grava UUID da etapa e mantém stage_key legado legível", () => {
+    const { onUpdate } = renderPanel(
+      { pipeline_id: PROPOSTAS, stages: ["enviada"] },
+      "stage_changed",
+    );
+    expect(checkboxFor("Proposta Enviada")).toHaveAttribute("data-state", "checked");
+    fireEvent.click(checkboxFor("Em Negociação"));
+    expect(lastConfig(onUpdate).stages).toEqual(["enviada", ETAPA_NEGOCIACAO]);
+  });
+
+  it("Antes de uma data grava UUID da etapa", () => {
+    const { onUpdate } = renderPanel(
+      { pipeline_id: PROPOSTAS, stages: [], dispatches: [] },
+      "scheduled_date",
+    );
+    fireEvent.click(checkboxFor("Proposta Enviada"));
+    expect(lastConfig(onUpdate).stages).toEqual([ETAPA_ENVIADA]);
   });
 });

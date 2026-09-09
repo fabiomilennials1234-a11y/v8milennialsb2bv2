@@ -391,21 +391,29 @@ function TicketRow({
           )}
         </TableCell>
         <TableCell>
-          <div className="flex items-center gap-2">
+          {/*
+            O assunto vai ate 200 caracteres e antes era cortado com reticencias:
+            quem tria a fila lia meia frase. Agora quebra em linhas (o teto de
+            380px preserva a largura da coluna) e o `title` repete o texto no
+            hover, para quando a linha ainda assim ficar apertada.
+          */}
+          <div className="flex items-start gap-2">
             {unread > 0 && (
               <span
-                className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
+                className="mt-0.5 inline-flex h-4 min-w-4 shrink-0 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-primary-foreground"
                 title={`${unread} resposta${unread > 1 ? "s" : ""} não lida${unread > 1 ? "s" : ""} do cliente`}
                 aria-label={`${unread} resposta não lida do cliente`}
               >
                 {unread}
               </span>
             )}
-            <p className="max-w-[380px] truncate text-sm font-medium">{ticket.title}</p>
+            <p className="max-w-[380px] break-words text-sm font-medium" title={ticket.title}>
+              {ticket.title}
+            </p>
             {ticket.author_gestor_id && (
               <Badge
                 variant="outline"
-                className="shrink-0 border-violet-500/30 bg-violet-500/10 text-[10px] font-medium text-violet-400"
+                className="mt-0.5 shrink-0 border-violet-500/30 bg-violet-500/10 text-[10px] font-medium text-violet-400"
               >
                 Gestor
               </Badge>

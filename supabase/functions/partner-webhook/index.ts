@@ -50,6 +50,12 @@ Deno.serve(withErrorBoundary('partner-webhook', async (req) => {
 
   // --- Validate API key ---
   const auth = await validateApiKey(supabase, req);
+  if (auth.subscriptionBlocked) {
+    return new Response(JSON.stringify({ error: auth.error }), {
+      status: 402,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
   if (!auth.valid) {
     return new Response(JSON.stringify({ error: auth.error }), {
       status: 401,
@@ -154,6 +160,13 @@ Deno.serve(withErrorBoundary('partner-webhook', async (req) => {
     (t) => typeof t === "string" && t.trim().toLowerCase().startsWith("sys:"),
   );
 
+  // SCRUM-624 (D6): `body.pipe` é a config de destino desta porta e passa
+  // ADIANTE como veio — id (uuid) ou slug de QUALQUER funil da org, aliases
+  // legados inclusos. Quem resolve (e erra 4xx em funil inexistente, ANTES de
+  // criar o lead) é o lead-webhook via pipeline-adapter; o 4xx dele repassa ao
+  // caller pelo proxy de status abaixo. Os defaults "whatsapp"/"novo" são o
+  // comportamento histórico desta porta: slug de funil semeado + etapa
+  // remapeada pelo ghost-stage guard do lead-webhook se "novo" estiver inativa.
   if ((body.pipe || body.stage) && !hasPlatformTag) {
     leadPayload.place_in_pipe = {
       pipe: body.pipe ?? "whatsapp",

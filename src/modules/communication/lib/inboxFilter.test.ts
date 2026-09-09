@@ -16,6 +16,7 @@ function contact(over: Partial<ChatContact> = {}): ChatContact {
   seq += 1;
   return {
     channel: "whatsapp",
+    instance_id: `inst-${seq}`,
     phone_number: `5548999${String(seq).padStart(6, "0")}`,
     push_name: `Contato ${seq}`,
     last_message: "oi",
@@ -51,7 +52,7 @@ const names = (cs: ChatContact[]) => cs.map((c) => c.lead_name);
 // ─── Escopo básico ──────────────────────────────────────────────────────────
 
 describe("applyInboxFilters — escopo", () => {
-  it("remove grupos sempre, mesmo sem filtro", () => {
+  it("remove grupos por padrão (org sem a aba nunca passa tab)", () => {
     const cs = [contact({ lead_name: "individual" }), contact({ is_group: true, lead_name: "grupo" })];
     const out = applyInboxFilters(cs, state(), ctx());
     expect(names(out)).toEqual(["individual"]);
@@ -83,6 +84,28 @@ describe("applyInboxFilters — escopo", () => {
     ];
     expect(names(applyInboxFilters(cs, state(), ctx(), { tab: "active" }))).toEqual(["viva"]);
     expect(names(applyInboxFilters(cs, state(), ctx(), { tab: "archived" }))).toEqual(["morta"]);
+  });
+
+  it("tab grupos: só grupo, e nenhuma das outras duas abas o mostra", () => {
+    const cs = [
+      contact({ lead_name: "individual" }),
+      contact({ is_group: true, lead_name: "grupo" }),
+    ];
+    expect(names(applyInboxFilters(cs, state(), ctx(), { tab: "grupos" }))).toEqual(["grupo"]);
+    expect(names(applyInboxFilters(cs, state(), ctx(), { tab: "active" }))).toEqual(["individual"]);
+    expect(names(applyInboxFilters(cs, state(), ctx(), { tab: "archived" }))).toEqual([]);
+  });
+
+  it("tab grupos esconde grupo arquivado", () => {
+    // "Grupos" é escopo de conversa VIVA, como "Ativas". Arquivada sai de lá e
+    // continua alcançável pela aba de arquivadas — que, por sua vez, não mostra
+    // grupo nenhum (o escopo dela é o de #1632).
+    const cs = [
+      contact({ is_group: true, lead_name: "grupo vivo" }),
+      contact({ is_group: true, lead_name: "grupo morto", archived_at: "2026-09-01T00:00:00Z" }),
+    ];
+    expect(names(applyInboxFilters(cs, state(), ctx(), { tab: "grupos" }))).toEqual(["grupo vivo"]);
+    expect(names(applyInboxFilters(cs, state(), ctx(), { tab: "archived" }))).toEqual([]);
   });
 
   it("busca casa por nome e por telefone, case-insensitive", () => {

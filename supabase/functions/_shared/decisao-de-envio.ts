@@ -192,3 +192,79 @@ export function escapeDoNo(
     headerMediaUrl: params.escapeTemplateHeaderMediaUrl as string | undefined,
   };
 }
+
+// ─── O MODO DO NÓ — texto livre ou template aprovado ────────────────────────
+//
+// O nó de mensagem manda TEXTO ou manda TEMPLATE, e quem escolhe é o operador,
+// no seletor "Modo de mensagem" do painel. Antes desta issue o executor NÃO
+// lia esse seletor: escolher "Template Meta" gravava um `templateId` que nenhum
+// handler lia e ESCONDIA o campo de texto, então o nó caía na guarda de texto
+// vazio e falhava com "Empty message template" — sem nunca tentar enviar nada.
+// Medido em produção: 1 nó, 1 org, 7 execuções mortas.
+//
+// ⚠️ ESTE É UM SEGUNDO EIXO, e não uma extensão do escape de janela. O escape
+// responde "a janela fechou, e agora?" — é reação a uma falha de transporte. O
+// modo responde "o que este nó manda?" — é declaração do operador, decidida
+// ANTES de qualquer tentativa. Fundi-los faria um template declarado depender
+// de a janela estar fechada, que é o oposto do que o operador pediu.
+//
+// Consequência da ordem: no modo template a janela nunca é consultada, porque
+// template aprovado é justamente a mensagem que a Meta aceita com a janela
+// fechada. Um `escapeTemplate*` gravado num nó em modo template é ignorado — o
+// painel o esconde, e reagir a ele aqui ressuscitaria configuração invisível.
+
+/** O que o nó manda. Dois valores, porque o envio tem duas formas e não três. */
+export type ModoDoNo = "texto" | "template";
+
+/**
+ * O modo declarado no nó.
+ *
+ * `templateMode` é a chave viva. `useTemplate` é a legada e continua sendo lida
+ * porque o PAINEL a lê para derivar o modo (`templateMode || (useTemplate ?
+ * "meta_template" : "free")`): se o executor não espelhasse essa derivação, um
+ * nó antigo apareceria em modo template na tela e sairia como texto no envio —
+ * divergência silenciosa entre o que se configura e o que acontece.
+ *
+ * Qualquer outro valor é texto. Allowlist, e não denylist: um modo novo no
+ * painel nasce mandando texto (o comportamento de 396 nós ativos) em vez de
+ * cair num ramo de template que ele não sabe preencher.
+ */
+export function modoDoNo(params: Record<string, unknown>): ModoDoNo {
+  const declarado = typeof params.templateMode === "string"
+    ? params.templateMode
+    : (params.useTemplate === true ? "meta_template" : "free");
+  return declarado === "meta_template" ? "template" : "texto";
+}
+
+/**
+ * O template declarado no nó, lido dos campos do modo template.
+ *
+ * Gêmeo de `escapeDoNo`, e os dois existem porque um nó de texto com escape
+ * carrega OS DOIS conjuntos ao mesmo tempo — `templateName` (o que ele manda) e
+ * `escapeTemplateName` (o que ele manda quando a janela fecha). Um leitor só,
+ * parametrizado, economizaria seis linhas e tornaria possível ler o conjunto
+ * errado sem que nada ficasse vermelho.
+ */
+export function templateDoNo(
+  params: Record<string, unknown>,
+): EscapeDeTemplate {
+  return {
+    name: params.templateName as string | undefined,
+    language: params.templateLanguage as string | undefined,
+    components: params.templateComponents as unknown[] | undefined,
+    variables: params.templateVariables as Record<string, string> | undefined,
+    headerMediaUrl: params.templateHeaderMediaUrl as string | undefined,
+  };
+}
+
+/**
+ * A mensagem que o operador lê quando o nó está em modo template e nenhum
+ * template foi escolhido.
+ *
+ * Substitui "Empty message template", que era literalmente verdade e
+ * completamente inútil: o campo de texto estava escondido pelo próprio painel,
+ * então "preencha a mensagem" apontava para algo que não existia na tela.
+ */
+export const MOTIVO_LEGIVEL_SEM_TEMPLATE =
+  "Modo Template Meta selecionado, mas nenhum template aprovado foi escolhido " +
+  "neste nó. Abra o nó e escolha o template — ou volte o modo para Escrever.";

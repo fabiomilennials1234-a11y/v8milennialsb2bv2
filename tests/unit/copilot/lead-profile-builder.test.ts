@@ -22,19 +22,24 @@ vi.mock("../../../supabase/functions/_shared/logger.ts", () => ({
   logRuntime: vi.fn(async () => {}),
   redactSecrets: (v: unknown) => v,
 }));
-// Entries por slug de funil. Mock posicional (`mockResolvedValueOnce` em sequência)
-// não serve mais: ADR-0023 §10 acrescentou a leitura do funil WhatsApp ao mesmo
-// `Promise.all`, e qualquer nova leitura embaralharia a ordem de novo.
+// Posições correntes em todos os funis ativos, já enriquecidas pelo adapter.
 const { pipeEntries } = vi.hoisted(() => ({
   pipeEntries: {} as Record<string, unknown>,
 }));
 
 vi.mock("../../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
-  getPipeEntry: vi.fn(
-    async (_sb: unknown, _leadId: string, _orgId: string, slug: string) => pipeEntries[slug] ?? null,
-  ),
+  getCurrentFunnelEntriesByLeads: vi.fn(async () => Object.entries(pipeEntries).map(([slug, entry]) => ({
+    ...(entry as Record<string, unknown>),
+    pipeline_id: (entry as Record<string, unknown>).pipeline_id ?? `pipe-${slug}`,
+    pipeline_slug: slug,
+    pipeline_name: (entry as Record<string, unknown>).pipeline_name ?? slug,
+  }))),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
-  resolvePipelineId: vi.fn().mockResolvedValue(null),
+  // SCRUM-623: o contrato novo LANÇA em funil não resolvido — null saiu do tipo.
+  resolvePipelineId: vi.fn(async () => {
+    throw new Error("pipeline_not_found (mock — contrato SCRUM-623 lança, não devolve null)");
+  }),
+  tryResolvePipelineId: vi.fn().mockResolvedValue(null),
 }));
 
 import { LeadProfileBuilder } from "../../../supabase/functions/_shared/copilot/lead-profile-builder.ts";
@@ -114,6 +119,27 @@ describe("LeadProfileBuilder", () => {
     const profile = await new LeadProfileBuilder(sb).build("lead-1");
 
     expect(profile!.whatsapp_status).toBeNull();
+  });
+
+  it("expõe posições de funis criados pela organização", async () => {
+    pipeEntries["vendas-industria"] = {
+      id: "entry-custom",
+      pipeline_id: "pipe-custom",
+      pipeline_name: "Vendas Indústria",
+      stage_id: "stage-negociando",
+      stage_key: "negociando",
+      metadata: {},
+    };
+
+    const profile = await new LeadProfileBuilder(buildSupabase()).build("lead-1");
+
+    expect(profile!.funnel_positions).toContainEqual({
+      pipeline_id: "pipe-custom",
+      pipeline_slug: "vendas-industria",
+      pipeline_name: "Vendas Indústria",
+      stage_id: "stage-negociando",
+      stage_key: "negociando",
+    });
   });
 
   it("builds enriched profile with basic lead data", async () => {

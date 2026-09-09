@@ -22,6 +22,7 @@ function fakeSupabase(tables: Record<string, { single?: any; list?: any[] }>): a
       const builder: any = {
         select: () => builder,
         eq: () => builder,
+        order: () => builder,
         limit: () => builder,
         maybeSingle: () => Promise.resolve({ data: row.single ?? null }),
         then: (resolve: (v: { data: unknown[] }) => unknown) =>

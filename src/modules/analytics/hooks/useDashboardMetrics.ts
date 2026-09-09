@@ -30,6 +30,18 @@ interface DashboardMetrics {
   vendaTotal: number;
   vendaMRR: number;
   vendaProjeto: number;
+  /**
+   * A receita que MRR e Projeto não explicam — venda registrada sem item de
+   * produto que a classifique.
+   *
+   * Existe como campo e não como conta feita na tela porque o número é grande e
+   * ninguém deveria descobri-lo subtraindo: medido em 6 meses, 280 de 428
+   * vendas não têm item, e são R$ 335 mil. Antes disso, quem olhasse as três
+   * caixas via o dinheiro evaporar entre elas.
+   *
+   * Invariante: `vendaMRR + vendaProjeto + vendaSemClassificacao === vendaTotal`.
+   */
+  vendaSemClassificacao: number;
   ticketMedio: number;
   ticketMedioMRR: number;
   ticketMedioProjeto: number;
@@ -57,7 +69,7 @@ interface DashboardMetrics {
 const EMPTY_DASHBOARD_METRICS: DashboardMetrics = {
   totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0,
   noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
-  vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
+  vendaProjeto: 0, vendaSemClassificacao: 0, ticketMedio: 0, ticketMedioMRR: 0,
   ticketMedioProjeto: 0, novosClientes: 0,
   propostasEnviadas: 0, tempoMedioResposta: 0,
   vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
@@ -293,7 +305,7 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
         return {
           totalLeads: 0, reunioesMarcadas: 0, reunioesComparecidas: 0,
           noShow: 0, taxaNoShow: 0, vendaTotal: 0, vendaMRR: 0,
-          vendaProjeto: 0, ticketMedio: 0, ticketMedioMRR: 0,
+          vendaProjeto: 0, vendaSemClassificacao: 0, ticketMedio: 0, ticketMedioMRR: 0,
           ticketMedioProjeto: 0, novosClientes: 0,
           propostasEnviadas: 0, tempoMedioResposta: 0,
           vendaPrimeiroPedido: 0, vendaBaseAtiva: 0, taxaConversao: 0, dailySales: [],
@@ -332,6 +344,7 @@ export function useDashboardMetrics(month?: number, year?: number, filterMemberI
         vendaTotal: d?.vendaTotal ?? 0,
         vendaMRR: d?.vendaMRR ?? 0,
         vendaProjeto: d?.vendaProjeto ?? 0,
+        vendaSemClassificacao: d?.vendaSemClassificacao ?? 0,
         ticketMedio: d?.ticketMedio ?? 0,
         ticketMedioMRR: d?.ticketMedioMRR ?? 0,
         ticketMedioProjeto: d?.ticketMedioProjeto ?? 0,
@@ -389,8 +402,9 @@ export function useConversionRates(month?: number, year?: number) {
 
       // Propostas: TODOS os leads no pipe (sem filtro de período) para taxa de conversão correta
       const { data: propostasData } = await supabase
-        .from("pipe_propostas")
-        .select("sale_responsible_id, responsible_id, closer_id, status")
+        .from("negocio_projetado")
+        .select("sale_responsible_id, responsible_id, closer_id, stage_key")
+        .eq("funil_sistema", "propostas")
         .eq("organization_id", organizationId);
 
       const meetingsRates: ConversionRate[] = computeMeetingRates(
@@ -403,7 +417,7 @@ export function useConversionRates(month?: number, year?: number) {
       const salesRates: ConversionRate[] = salesMembers.map((member) => {
         const total = (propostasData || []).filter((p) => ((p as any).sale_responsible_id || p.responsible_id || p.closer_id) === member.id).length;
         const vendidas = (propostasData || []).filter(
-          (p) => ((p as any).sale_responsible_id || p.responsible_id || p.closer_id) === member.id && p.status === "vendido"
+          (p) => ((p as any).sale_responsible_id || p.responsible_id || p.closer_id) === member.id && p.stage_key === "vendido"
         ).length;
         return {
           id: member.id,

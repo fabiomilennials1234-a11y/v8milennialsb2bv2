@@ -1,3 +1,5 @@
+import { queueConversationReadChange } from "../../lib/conversationReadQueue";
+import { ChatReplyProvider } from "./ReplyContext";
 /**
  * ChatShellWithContext — consumer real do ChatShell 3-col.
  *
@@ -6,7 +8,7 @@
  *
  * Wires hooks reais → ChatShell:
  *   - useWhatsAppInstancesForUser   → seletor de instância (lista slot header)
- *   - useWhatsAppContacts           → ConversationList no slot `list`
+ *   - useConversasUnificadas        → ConversationList no slot `list`
  *   - useWhatsAppMessages           → ChatView no slot `view`
  *   - useWhatsAppMessagesRealtime   → patches incrementais sem refetch
  *   - ContextPanel                  → slot `context` (leadId + phoneNumber)
@@ -28,6 +30,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, WifiOff, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { normalizePhone } from "@/lib/normalizePhone";
+import { definirConversaAberta, useFeatureFlag } from "@/modules/platform";
+import { nomeDaConversa } from "@/modules/communication/lib/nomeDaConversa";
 import { useResolveChatDeepLink } from "@/modules/communication/hooks/chat/useResolveChatDeepLink";
 import { computeNeedsDeepLinkResolve } from "@/modules/communication/lib/computeNeedsDeepLinkResolve";
 import { resolvePendingDeepLink } from "@/modules/communication/lib/resolvePendingDeepLink";
@@ -42,10 +46,14 @@ import { ChatShell } from "@/modules/communication/components/chat/layout/ChatSh
 import { MobileChatLayout } from "@/modules/communication/components/chat/layout/MobileChatLayout";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { ConversationList } from "@/modules/communication/components/chat/list/ConversationList";
+import { NewConversationDialog } from "./NewConversationDialog";
+import { hasEstablishedOutgoing, newConversationUnavailableReason, prepareNewConversation } from "../../lib/newConversation";
 import { ChatHeader } from "@/modules/communication/components/chat/view/ChatHeader";
+import { AvisoDaAutomacao } from "@/modules/communication/components/chat/view/AvisoDaAutomacao";
 import { MobileChatThreadHeader } from "@/modules/communication/components/chat/view/MobileChatThreadHeader";
 import { MessageList } from "@/modules/communication/components/chat/view/MessageList";
 import { ChatComposer } from "@/modules/communication/components/chat/composer/ChatComposer";
+import { ScheduledMessagesBanner } from "@/modules/communication/components/chat/ScheduledMessagesBanner";
 import { MobileComposerContextual } from "@/modules/communication/components/chat/composer/MobileComposerContextual";
 import { ContextPanel } from "@/modules/communication/components/chat/context-panel/ContextPanel";
 import { LeadContactModal } from "@/modules/communication/components/chat/LeadContactModal";
@@ -53,16 +61,16 @@ import { ImagePreviewModal } from "@/modules/communication/components/chat/media
 import { SocialChatView } from "@/modules/communication/components/chat/social/SocialChatView";
 import { SocialContextPanel } from "@/modules/communication/components/chat/social/SocialContextPanel";
 import { useInboxBoxes } from "@/modules/communication/hooks/chat/useInboxBoxes";
-import { useWhatsAppContacts } from "@/modules/communication/hooks/chat/useWhatsAppContacts";
-import { useSocialContacts } from "@/modules/communication/hooks/chat/useSocialContacts";
-import { useOfficialWhatsAppContacts } from "@/modules/communication/hooks/chat/useOfficialWhatsAppContacts";
+import { useConversasUnificadas } from "@/modules/communication/hooks/chat/useConversasUnificadas";
+import { useCaixasSelecionadas } from "@/modules/communication/hooks/chat/useCaixasSelecionadas";
+import { useNaoLidasPorCaixa } from "@/modules/communication/hooks/chat/useNaoLidasPorCaixa";
 import { useSendSocialMessage } from "@/modules/communication/hooks/chat/useSendSocialMessage";
 import { useNotificameWhatsAppSend } from "@/modules/communication/hooks/chat/useNotificameWhatsAppSend";
 import {
   directSender,
   officialWhatsAppSender,
 } from "@/modules/communication/hooks/chat/social-sender";
-import { boxUsesChannelMessages } from "@/modules/communication/hooks/chat/inbox-box-source";
+import { regimeDaConversaAberta } from "@/modules/communication/lib/regimeDaConversaAberta";
 import {
   chaveDeConversaOficial,
   contatoDeConversaNova,
@@ -75,6 +83,7 @@ import { invalidateChipInstanceIds } from "@/modules/communication/lib/chipInsta
 import { useAutoReadReceipt } from "@/modules/communication/hooks/chat/useAutoReadReceipt";
 import { useWhatsAppMessagesRealtime } from "@/modules/communication/hooks/chat/useWhatsAppRealtime";
 import { chatQueryKeys } from "@/modules/communication/hooks/chat/shared/queryKeys";
+import { zerarNaoLidas } from "@/modules/communication/hooks/chat/shared/cacheDeContatos";
 import { useFailedMessages, useRetryMessage } from "@/modules/communication/hooks/chat/useWhatsAppSend";
 import { useConversationCalls } from "@/modules/communication/hooks/chat/useConversationCalls";
 import { useChatDensity } from "@/modules/communication/hooks/chat/useChatDensity";
@@ -89,6 +98,7 @@ import { useLeadInboxMeta } from "@/modules/communication/hooks/chat/useLeadInbo
 import { useInboxFunnelOptions } from "@/modules/communication/hooks/chat/useInboxFunnelOptions";
 import { useInboxFilterState } from "@/modules/communication/hooks/chat/useInboxFilterState";
 import { toServerFilter } from "@/modules/communication/lib/inboxFilterServer";
+import { DEFAULT_INBOX_FILTER } from "@/modules/communication/lib/inboxFilter";
 import { inboxFilterGate } from "@/modules/communication/lib/inboxEnrichment";
 import {
   useArchiveConversation,
@@ -101,6 +111,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { usePreferredInstance } from "@/modules/communication/hooks/usePreferredInstance";
 import { useLeadByPhone } from "@/modules/communication/hooks/useWhatsAppLeadIntegration";
 import { resolveEffectiveLead } from "@/modules/communication/lib/resolveEffectiveLead";
+import {
+  buildWhatsAppConversationKey,
+  caixaDaChave,
+  contactKey,
+  interlocutorDaChave,
+  isSocialContact,
+  isWhatsAppContact,
+} from "@/modules/communication/hooks/chat/types";
 import type {
   ChatContact,
   FailedMessage,
@@ -110,7 +128,12 @@ import type { DensityMode } from "@/modules/communication/hooks/chat/useChatDens
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
-type ConversationTab = "active" | "archived";
+/**
+ * `"grupos"` só é alcançável na org com a flag `chat_abas_de_grupos` — a aba não
+ * é renderizada sem ela, e o estado nasce sempre em `"active"` (não é
+ * persistido). Ver `lib/inboxFilter.ts`.
+ */
+type ConversationTab = "active" | "archived" | "grupos";
 
 /**
  * Monta a subscription de Realtime dos canais sociais SÓ enquanto a caixa
@@ -129,6 +152,7 @@ function SocialRealtimeMount() {
 // ─── ChatView — coluna central (header + messages + composer) ────────────────
 
 interface ChatViewProps {
+  onConversationEstablished?: () => void;
   selectedContact: ChatContact | null;
   selectedPhone: string | null;
   instanceId: string | null;
@@ -136,13 +160,14 @@ interface ChatViewProps {
   organizationId: string | null;
   mountTime: number;
   onBack: () => void;
-  onOpenLeadModal: () => void;
+  onOpenLeadModal?: () => void;
   density: DensityMode;
   onDensityChange: (d: DensityMode) => void;
   isMobile: boolean;
 }
 
 function ChatView({
+  onConversationEstablished,
   selectedContact,
   selectedPhone,
   instanceId,
@@ -172,6 +197,27 @@ function ChatView({
   const { leadId: effectiveLeadId, leadName: effectiveLeadName } =
     resolveEffectiveLead(selectedContact, leadByPhone);
 
+  /**
+   * `chat_nome_do_whatsapp` — a org escolhe quem nomeia a conversa no topo: o
+   * perfil do interlocutor (`push_name`) ou o nome curado no CRM.
+   *
+   * Lido AQUI, junto dos outros hooks, e não perto do uso: abaixo há o early
+   * return de "Selecione uma conversa", e hook depois de return condicional
+   * muda a ordem entre renders.
+   *
+   * Fail-closed enquanto carrega — a org flagada pinta a primeira frame com o
+   * nome do CRM e troca quando a flag chega. Trocar o texto de um nome é melhor
+   * que segurar a thread inteira num skeleton esperando a flag.
+   */
+  const { enabled: nomeDoWhatsappPrimeiro } = useFeatureFlag("chat_nome_do_whatsapp");
+
+  // O sino não anuncia a conversa que já está sendo lida (#1891). Publicar
+  // daqui é o único ponto que sabe qual lead está aberto.
+  useEffect(() => {
+    definirConversaAberta(effectiveLeadId ?? null);
+    return () => definirConversaAberta(null);
+  }, [effectiveLeadId]);
+
   const {
     data: messages = [],
     isLoading: messagesLoading,
@@ -179,6 +225,12 @@ function ChatView({
     isFetching: messagesFetching,
     refetch: refetchMessages,
   } = useWhatsAppMessages(phoneNumber, instanceId);
+
+  useEffect(() => {
+    if (hasEstablishedOutgoing(messages)) {
+      onConversationEstablished?.();
+    }
+  }, [messages, onConversationEstablished]);
 
   // Tique azul para o contato. Complementa `markConversationRead` (que só zera o
   // badge interno do CRM e nunca falou com o WhatsApp).
@@ -243,8 +295,18 @@ function ChatView({
     );
   }
 
-  const contactName =
-    effectiveLeadName ?? selectedContact?.push_name ?? phoneNumber ?? "";
+  // A LISTA (`contactLabel`) já resolve `push_name → lead_name → telefone`. Aqui
+  // era o inverso, e por isso a mesma conversa aparecia com dois nomes: o topo
+  // com o do CRM, a linha com o do WhatsApp. A flag alinha as duas telas.
+  const contactName = nomeDaConversa(
+    {
+      pushName: selectedContact?.push_name ?? null,
+      nomeDoLead: effectiveLeadName,
+      savedContactName: selectedContact?.saved_contact_name,
+      telefone: phoneNumber ?? null,
+    },
+    { nomeDoWhatsappPrimeiro },
+  );
 
   // A lista já afirmou que existe mensagem com este contato. Se a thread volta
   // vazia mesmo assim, "Comece a conversa" seria uma afirmação falsa — ver
@@ -261,6 +323,7 @@ function ChatView({
   const conversationKey = `${instanceId}:${phoneNumber}`;
 
   return (
+    <ChatReplyProvider key={conversationKey} messages={messages}>
     <div className="flex flex-col h-full min-h-0 min-w-0">
       {/* C1 — Banner WAITING_HUMAN */}
       {isWaitingHuman && (
@@ -324,6 +387,12 @@ function ChatView({
         />
       )}
 
+      {/* Entre o cabeçalho e a thread, e não dentro do composer: a pessoa
+          precisa saber que a automação fala por outro número ANTES de ler a
+          conversa e decidir responder, não no instante em que já está
+          digitando. Só aparece na divergência. */}
+      <AvisoDaAutomacao telefone={phoneNumber} caixaAberta={instanceId} />
+
       <div className="flex-1 min-h-0 min-w-0 overflow-hidden flex flex-col">
         {threadState === "loading" ? (
           <div className="flex items-center justify-center h-full">
@@ -363,6 +432,22 @@ function ChatView({
           />
         )}
       </div>
+
+      {/* O que já está agendado para ESTA conversa, logo acima de onde se
+          escreve. Sem isto, a mensagem agendada só existia na Agenda e no card
+          do lead: quem abria a conversa não tinha como saber que havia um envio
+          a caminho, e mandava a mesma coisa de novo na mão.
+
+          Depende de lead: a fila é indexada por `lead_id`, então conversa de
+          número sem lead vinculado não tem o que listar. */}
+      {effectiveLeadId && (
+        <ScheduledMessagesBanner
+          leadId={effectiveLeadId}
+          leadName={contactName}
+          phoneNumber={phoneNumber ?? ""}
+          instanceId={instanceId ?? undefined}
+        />
+      )}
 
       {isMobile ? (
         <MobileComposerContextual
@@ -406,6 +491,7 @@ function ChatView({
         onClose={() => setPreviewUrl(null)}
       />
     </div>
+    </ChatReplyProvider>
   );
 }
 
@@ -423,54 +509,6 @@ export function ChatShellWithContext() {
   // Números de WhatsApp ∪ canais sociais. Org sem canal social recebe exatamente
   // a lista de antes — nenhum gate de feature precisa ser plumbado até aqui.
   const { boxes, instances, isLoading: boxesLoading } = useInboxBoxes();
-
-  const [selectedBoxId, setSelectedBoxIdRaw] = useState<string | null>(null);
-
-  const { preferredInstanceId, setPreferredInstance } = usePreferredInstance(instances);
-
-  const setSelectedBoxId = useCallback((id: string | null) => {
-    setSelectedBoxIdRaw(id);
-    // `team_members.preferred_whatsapp_instance_id` tem FK para
-    // `whatsapp_instances`: gravar ali o id de um canal social violaria a
-    // restrição e derrubaria a preferência de número que já funciona.
-    if (id && instances.some((i) => i.id === id)) setPreferredInstance(id);
-  }, [setPreferredInstance, instances]);
-
-  const selectedBox = useMemo(
-    () => boxes.find((b) => b.id === selectedBoxId) ?? null,
-    [boxes, selectedBoxId],
-  );
-  /**
-   * A caixa aberta lê `channel_messages`? O discriminador decide pelo PROVIDER, e
-   * não pelo `kind`: o canal oficial é `kind: "whatsapp"` (mora em
-   * `whatsapp_instances`) e mesmo assim recebe em `channel_messages`. Ausência de
-   * provider significa o comportamento antigo — são ~30 orgs com instâncias
-   * gravadas antes da coluna existir.
-   */
-  const isSocialBox = selectedBox ? boxUsesChannelMessages(selectedBox) : false;
-  /** Dentro dessas, qual é a do canal oficial (a que envia por outra rota). */
-  const isOfficialBox = isSocialBox && selectedBox?.kind === "whatsapp";
-
-  /**
-   * O id da caixa, desdobrado por canal. Os dois hooks de lista recebem `null`
-   * quando não é a vez deles e já têm `enabled: !!id` — é isso que garante que a
-   * RPC `get_whatsapp_conversation_list` NUNCA seja chamada com o uuid de um
-   * canal social (ela levantaria 22023/42501) e vice-versa.
-   */
-  const selectedInstanceId = isSocialBox ? null : selectedBoxId;
-  /**
-   * Três eixos, e não dois, desde a caixa oficial:
-   *   `selectedInstanceId`      → WhatsApp por QR, lê `whatsapp_messages`
-   *   `selectedChannelId`       → Instagram, lê `channel_messages` por canal
-   *   `selectedOfficialInstance`→ canal oficial, lê `channel_messages` por instância
-   *
-   * Cada hook recebe `null` quando não é a vez dele e já tem `enabled: !!id` — é
-   * isso que garante que nenhuma das três RPCs seja chamada com o uuid do eixo
-   * errado (as duas de lista levantam 42501 nesse caso, por desenho).
-   */
-  const selectedChannelId =
-    selectedBox?.kind === "instagram" ? selectedBoxId : null;
-  const selectedOfficialInstanceId = isOfficialBox ? selectedBoxId : null;
 
   // ── Deep-link (?phone=&instance=&box=&lead=) ────────────────────────────────
   // Lê params uma vez no mount; estado pendente impede que o auto-select de
@@ -517,10 +555,89 @@ export function ChatShellWithContext() {
   );
   const hasDeepLinkPhone = !!deepLink.phone;
 
+  const [boxDeepLinkProcessed, setBoxDeepLinkProcessed] = useState(false);
+  const [deepLinkProcessed, setDeepLinkProcessed] = useState(false);
+  const [pendingDeepLinkPhone, setPendingDeepLinkPhone] = useState<string | null>(null);
+
+  const { preferredInstanceId, setPreferredInstance } = usePreferredInstance(instances);
+
+  /**
+   * O CONJUNTO de caixas marcadas. Era um id só até a caixa unificada.
+   *
+   * Fica suspenso enquanto um deep-link ainda tem palavra: o padrão escolheria
+   * uma caixa no primeiro render, a lista dela dispararia a RPC, e a chegada do
+   * link trocaria a caixa — e é a troca de caixa que fecha a conversa aberta
+   * logo abaixo. O link apagaria a conversa que ele mesmo abriu.
+   */
+  const {
+    marcadas,
+    caixasMarcadas,
+    alternar: alternarCaixa,
+    marcarSomente,
+    marcarTodas,
+  } = useCaixasSelecionadas({
+    caixas: boxes,
+    caixaPreferida: preferredInstanceId,
+    userId: user?.id ?? null,
+    suspenso:
+      (hasDeepLinkPhone && !deepLinkProcessed) ||
+      (!!deepLink.box && !boxDeepLinkProcessed) ||
+      leadPlanPending,
+  });
+
+  /**
+   * "Ir para esta caixa" — o que todo deep-link quer dizer.
+   *
+   * Marca SOMENTE ela, e não acrescenta ao conjunto: um link que somasse caixas
+   * deixaria a lista crescendo a cada visita vinda do funil, sem ninguém ter
+   * pedido a caixa unificada.
+   */
+  const setSelectedBoxId = useCallback(
+    (id: string | null) => {
+      if (!id) return;
+      marcarSomente(id);
+      // `team_members.preferred_whatsapp_instance_id` tem FK para
+      // `whatsapp_instances`: gravar ali o id de um canal social violaria a
+      // restrição e derrubaria a preferência de número que já funciona.
+      if (instances.some((i) => i.id === id)) setPreferredInstance(id);
+    },
+    [marcarSomente, setPreferredInstance, instances],
+  );
+
+  /**
+   * A conversa aberta, por CHAVE — `whatsapp:<caixa>:<telefone>` ou a chave da
+   * caixa social. Declarada aqui em cima, e não junto da lista, porque é dela
+   * que sai a caixa de referência da tela inteira.
+   */
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [newConversationOpen, setNewConversationOpen] = useState(false);
+  const [draftConversationKey, setDraftConversationKey] = useState<string | null>(null);
+  const handleConversationEstablished = useCallback(() => setDraftConversationKey(null), []);
+
+  /**
+   * De qual caixa sai a resposta — a decisão D6, num lugar só e testável.
+   *
+   * A caixa da CONVERSA ABERTA deixou de ser a mesma coisa que "a caixa
+   * selecionada": a tela mostra várias e a thread pertence à linha em que a
+   * pessoa clicou. Daqui saem os três eixos que o composer, o read-state, o
+   * fetch da thread e o painel de contexto consomem.
+   */
+  const {
+    caixa: selectedBox,
+    ehSocial: isSocialBox,
+    ehOficial: isOfficialBox,
+    instanciaDeChip: selectedInstanceId,
+    canalDeInstagram: selectedChannelId,
+    instanciaOficial: selectedOfficialInstanceId,
+  } = useMemo(
+    () => regimeDaConversaAberta({ chave: selectedKey, caixas: boxes, marcadas: caixasMarcadas }),
+    [selectedKey, boxes, caixasMarcadas],
+  );
+
+
   // `?box=` sozinho: escolhe a caixa e sai da frente. Só aceita id que esteja na
   // lista permitida — a lista já é recortada por org e por membro, então isto é
   // a mesma defesa cross-tenant que o `?instance=` sempre teve.
-  const [boxDeepLinkProcessed, setBoxDeepLinkProcessed] = useState(false);
   useEffect(() => {
     if (boxDeepLinkProcessed) return;
     if (!deepLink.box) { setBoxDeepLinkProcessed(true); return; }
@@ -531,8 +648,6 @@ export function ChatShellWithContext() {
     setBoxDeepLinkProcessed(true);
   }, [deepLink.box, boxDeepLinkProcessed, boxes, setSelectedBoxId]);
 
-  const [deepLinkProcessed, setDeepLinkProcessed] = useState(false);
-  const [pendingDeepLinkPhone, setPendingDeepLinkPhone] = useState<string | null>(null);
 
   // Caminho rápido: instance veio na URL e está na lista permitida → seleciona.
   // Caso contrário, ignoramos (defesa cross-tenant + restrição de membro).
@@ -608,8 +723,14 @@ export function ChatShellWithContext() {
         const chave = chaveDeConversaOficial(escolhida.id, deepLink.phone);
         if (chave) setSelectedKey(chave);
       } else {
+        // A chave carrega a CAIXA desde a caixa unificada. Guardar o telefone
+        // solto aqui — como era até a W2 — deixava a conversa sem caixa: o
+        // parser não acha o interlocutor, o telefone chega `null` no composer e
+        // a thread do lead sem mensagens abre vazia para sempre.
         const normalized = normalizePhone(deepLink.phone);
-        if (normalized) setSelectedKey(normalized);
+        if (normalized) {
+          setSelectedKey(buildWhatsAppConversationKey(escolhida.id, normalized));
+        }
       }
     }
     setDeepLinkProcessed(true);
@@ -634,42 +755,14 @@ export function ChatShellWithContext() {
     setSearchParams({}, { replace: true });
   }, [hasDeepLinkPhone, deepLinkProcessed, boxDeepLinkProcessed, searchParams, setSearchParams]);
 
-  // Auto-select: preferência do banco → primeiro número conectado → primeira
-  // caixa da lista. A preferência e o "conectado" continuam sendo conceitos de
-  // WhatsApp; a caixa social só entra como último recurso — que é exatamente o
-  // caso de uma org que ainda não tem número nenhum. Não dispara se deep-link
-  // pendente.
-  useEffect(() => {
-    if (selectedBoxId) return;
-    if (!boxes.length) return;
-    if (hasDeepLinkPhone && !deepLinkProcessed) return;
-    if (deepLink.box && !boxDeepLinkProcessed) return;
-    // Lead cujo telefone ainda está sendo buscado: escolher a caixa agora faria
-    // a seleção pular quando o telefone chegasse.
-    if (leadPlanPending) return;
+  // O auto-select morreu aqui e nasceu em `useCaixasSelecionadas`.
+  //
+  // A ordem de queda é a MESMA (preferência do banco → número conectado →
+  // qualquer número → caixa social), e continua sem disparar com deep-link
+  // pendente — o que mudou é que agora ela também precisa saber o que estava
+  // GRAVADO da última visita, e um efeito não é lugar para isso: ele roda depois
+  // do primeiro render, e nesse render a lista já teria buscado a caixa errada.
 
-    const preferredIsValid = preferredInstanceId
-      ? instances.some((i) => i.id === preferredInstanceId)
-      : false;
-
-    if (preferredIsValid) {
-      setSelectedBoxIdRaw(preferredInstanceId);
-      return;
-    }
-
-    const connected = instances.find((i) => i.status === "connected");
-    setSelectedBoxIdRaw(connected?.id ?? instances[0]?.id ?? boxes[0].id);
-  }, [
-    boxes,
-    instances,
-    selectedBoxId,
-    hasDeepLinkPhone,
-    deepLinkProcessed,
-    deepLink.box,
-    boxDeepLinkProcessed,
-    preferredInstanceId,
-    leadPlanPending,
-  ]);
 
   // ── Filtro do inbox ─────────────────────────────────────────────────────────
   // Declarado antes dos contatos porque as dimensões vão junto na busca: a RPC
@@ -678,48 +771,96 @@ export function ChatShellWithContext() {
   const { filter, patch, toggleMulti, clearFilter } = useInboxFilterState();
   const { isMobile } = useViewport();
 
-  // Mobile tem header próprio (all/unread/groups + vendedor) e ignora o resto do
+  /**
+   * `chat_abas_de_grupos` — a org decide se a lista tem a aba de grupos. Lida
+   * AQUI, e não na lista, porque a decisão tem duas pontas que precisam
+   * concordar: o que a RPC traz (`p_include_groups`) e o que a UI oferece. Se só
+   * a UI soubesse, a aba existiria sobre uma página sem uma linha de grupo.
+   *
+   * Fail-closed enquanto carrega: a primeira frame não tem a aba e a lista não
+   * pede grupo. Quando a flag chega, a `queryKey` muda (a `cacheKey` carrega o
+   * argumento) e a lista refaz a busca — uma vez, no load.
+   */
+  const { enabled: abasDeGrupos } = useFeatureFlag("chat_abas_de_grupos");
+
+  // Mobile tem header próprio (all/unread/grupos + vendedor) e ignora o resto do
   // estado persistido — empurrar essas dimensões pro servidor sumiria com
   // conversa que a UI mobile deveria mostrar. Lá o recorte fica só no cliente.
+  //
+  // A exceção é o grupo, porque não é recorte e sim universo: o mobile precisa
+  // mandar `p_include_groups` ou o chip "Grupos" filtraria uma página que nunca
+  // teve grupo. Vai sozinho, sobre o filtro default — nenhuma outra dimensão
+  // atravessa.
   const serverFilter = useMemo(
-    () => (isMobile ? undefined : toServerFilter(filter, teamMember?.id ?? null)),
-    [isMobile, filter, teamMember?.id],
+    () =>
+      isMobile
+        ? abasDeGrupos
+          ? toServerFilter(DEFAULT_INBOX_FILTER, null, { incluirGrupos: true })
+          : undefined
+        : toServerFilter(filter, teamMember?.id ?? null, { incluirGrupos: abasDeGrupos }),
+    [isMobile, filter, teamMember?.id, abasDeGrupos],
   );
 
   // ── Contatos ────────────────────────────────────────────────────────────────
-  // Os dois hooks de lista são MUTUAMENTE EXCLUSIVOS por `enabled`: cada um
-  // recebe `null` quando a caixa aberta não é a dele. Com isso a RPC de WhatsApp
-  // (14 filtros, tabela-resumo, chip ids) não é tocada por esta fatia — o
-  // caminho de WhatsApp segue byte a byte o de antes.
   //
-  // `isError` importa porque a etiqueta é enriquecida DENTRO desta query: com
-  // filtro de etiqueta ativo o hook deixa a falha subir em vez de devolver
-  // `tags: []` (que o filtro trataria como verdade). Ver `useWhatsAppContacts`.
-  const {
-    data: contacts = [],
-    isLoading: whatsappContactsLoading,
-    isError: contactsError,
-  } = useWhatsAppContacts(selectedInstanceId, serverFilter);
-
-  // ── As duas listas de `channel_messages`, SEMPRE montadas ──────────────────
+  // UMA fonte para as caixas de WhatsApp (Chip ∪ canal oficial), misturada pelo
+  // motor `unificarCaixas`. O limite é global e a ordenação é por recência sobre
+  // o conjunto — ver `useConversasUnificadas`. Com uma caixa marcada, o hook faz
+  // exatamente uma chamada, à RPC do tipo daquela caixa.
   //
-  // Os dois hooks são chamados incondicionalmente e um deles recebe `null`.
-  // Montar só o "da vez" mudaria a quantidade de hooks entre renders ao trocar
-  // de caixa — o erro que derrubou a primeira tentativa desta fatia.
-  const {
-    data: directContacts = [],
-    isLoading: directContactsLoading,
-  } = useSocialContacts(selectedChannelId);
+  // O Instagram continua no caminho de antes, e por isso `useSocialContacts` é
+  // chamado SEMPRE (com `null` quando não é a vez dele): montar só o "da vez"
+  // mudaria a quantidade de hooks entre renders — o erro que derrubou a primeira
+  // tentativa da fatia da caixa social.
+  // TODAS as caixas marcadas, inclusive as de Instagram: desde a W5 a RPC
+  // social aplica o recorte por responsável, e o canal deixou de precisar abrir
+  // sozinho.
+  const unificada = useConversasUnificadas(caixasMarcadas, serverFilter);
 
-  const {
-    data: officialContacts = [],
-    isLoading: officialContactsLoading,
-  } = useOfficialWhatsAppContacts(selectedOfficialInstanceId);
+  /** A lista inteira, na ORDEM do motor. É ela que a tela renderiza. */
+  const contatosUnificados = useMemo(
+    () => unificada.linhas.map((l) => l.contato),
+    [unificada.linhas],
+  );
 
-  const socialContacts = isOfficialBox ? officialContacts : directContacts;
-  const socialContactsLoading = isOfficialBox
-    ? officialContactsLoading
-    : directContactsLoading;
+  /**
+   * A metade de WhatsApp. O engine de filtro, os contadores e o enriquecimento
+   * de funil falam `ChatContact` — estreitar aqui, uma vez, mantém esse caminho
+   * inteiro sem um único `as`.
+   */
+  const contacts = useMemo(
+    () => contatosUnificados.filter(isWhatsAppContact),
+    [contatosUnificados],
+  );
+  const contactsError = unificada.isError;
+
+  /** As linhas do canal oficial, de onde sai a conversa aberta nessa caixa. */
+  const officialContacts = useMemo(
+    () => contatosUnificados.filter(isSocialContact),
+    [contatosUnificados],
+  );
+
+  // Tudo que lê `channel_messages` — canal oficial e Instagram — vem da mesma
+  // lista unificada. É daqui que sai a conversa aberta de qualquer um dos dois.
+  const socialContacts = officialContacts;
+
+  /**
+   * Caixa de origem e fio, por chave de conversa. A lista consome por
+   * `contactKey`, que é a mesma identidade que o motor usou para montar o mapa.
+   */
+  const metaPorLinha = useMemo(
+    () =>
+      new Map(
+        unificada.linhas.map((l) => [l.chave, { caixa: l.caixa, tambemEm: l.tambemEm }]),
+      ),
+    [unificada.linhas],
+  );
+
+  /**
+   * Não lidas por caixa, para o seletor apontar ONDE está o que a lista não
+   * mostra. Recebe as caixas que a pessoa pode LER — não as marcadas (D8).
+   */
+  const { porCaixa: naoLidasPorCaixa } = useNaoLidasPorCaixa(boxes);
 
   // ── As duas rotas de envio, também SEMPRE montadas ─────────────────────────
   //
@@ -736,33 +877,38 @@ export function ChatShellWithContext() {
     [isOfficialBox, officialMutation, directMutation],
   );
 
-  const contactsLoading = isSocialBox ? socialContactsLoading : whatsappContactsLoading;
+  const contactsLoading = unificada.isLoading;
 
   // ── Conversa selecionada ────────────────────────────────────────────────────
-  // A identidade é `contactKey`: telefone no WhatsApp, `conversation_key` no
-  // canal social. Um estado só, porque só existe uma conversa aberta por vez —
-  // dois estados paralelos divergiriam na primeira troca de caixa.
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-
-  // Trocar de caixa fecha a conversa: a chave da caixa anterior não existe na
-  // nova, e mantê-la deixaria o painel central preso no vazio.
   //
-  // ⚠️ Só limpa numa troca ENTRE DUAS caixas. O primeiro `null → caixa` também é
-  // uma mudança de `selectedBoxId`, e limpar ali apagaria a conversa que o
-  // deep-link acabou de escolher: o caminho "lead sem mensagens" seta caixa e
-  // chave no MESMO efeito, e este rodaria depois, zerando a chave.
-  const prevBoxIdRef = useRef<string | null>(selectedBoxId);
+  // DESMARCAR a caixa da conversa aberta fecha a conversa: a linha dela saiu da
+  // lista, e manter o painel central preso numa conversa que a lateral não
+  // mostra mais se lê como tela travada.
+  //
+  // A regra é sobre a caixa DA CHAVE, e não sobre "mudou a seleção": no modo
+  // unificado marcar uma segunda caixa NÃO pode fechar o que está aberto — era
+  // isso que a versão de uma caixa só fazia, e ali fazia sentido porque a chave
+  // antiga deixava de existir.
+  //
+  // ⚠️ O guarda de conjunto vazio é o que impede o deep-link de apagar a
+  // conversa que ele mesmo acabou de abrir: enquanto ele decide, a seleção fica
+  // suspensa e `marcadas` é `[]`.
+  const marcadasKey = marcadas.join(",");
   useEffect(() => {
-    const prev = prevBoxIdRef.current;
-    prevBoxIdRef.current = selectedBoxId;
-    if (prev && selectedBoxId && prev !== selectedBoxId) setSelectedKey(null);
-  }, [selectedBoxId]);
+    if (!selectedKey || marcadas.length === 0) return;
+    const caixa = caixaDaChave(selectedKey);
+    if (caixa && !marcadas.includes(caixa)) setSelectedKey(null);
+    // `marcadasKey` no lugar do array: `marcadas` é recriado a cada render e
+    // dispararia o efeito sem mudança nenhuma de conteúdo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marcadasKey, selectedKey]);
 
-  // Reset selection when master user switches shadow org
+  // Master trocando de org em shadow: fecha a conversa aberta. A SELEÇÃO de
+  // caixas não precisa ser zerada aqui — `useCaixasSelecionadas` sanea contra as
+  // caixas permitidas, e as da org anterior simplesmente não estão nelas.
   const prevOrgIdRef = useRef(organizationId);
   useEffect(() => {
     if (prevOrgIdRef.current && organizationId && prevOrgIdRef.current !== organizationId) {
-      setSelectedBoxIdRaw(null);
       setSelectedKey(null);
     }
     prevOrgIdRef.current = organizationId;
@@ -780,15 +926,43 @@ export function ChatShellWithContext() {
       pendingPhone: pendingDeepLinkPhone,
       contacts,
       contactsLoading,
+      caixaSelecionada: selectedInstanceId,
     });
     if (outcome.action === "wait") return;
     if (outcome.action === "select") setSelectedKey(outcome.contactKey);
     setPendingDeepLinkPhone(null);
-  }, [contacts, contactsLoading, pendingDeepLinkPhone]);
+  }, [contacts, contactsLoading, pendingDeepLinkPhone, selectedInstanceId]);
 
   const selectedContact = useMemo(
-    () => contacts.find((c) => c.phone_number === selectedKey) ?? null,
+    () => contacts.find((c) => contactKey(c) === selectedKey) ?? null,
     [contacts, selectedKey],
+  );
+
+  const handleStartConversation = (phone: string) => {
+    // Use only the currently selected, authorized QR inbox. Unified inboxes
+    // without a selection must not silently send from somebody else's number.
+    const conversation = prepareNewConversation(phone, selectedBox, contacts);
+    if (!conversation) return;
+    setDraftConversationKey(conversation.isNew ? conversation.key : null);
+    setSelectedKey(conversation.key);
+    setSearchQuery("");
+    clearFilter();
+    setActiveTab("active");
+  };
+
+  /**
+   * O TELEFONE da conversa aberta, extraído da chave.
+   *
+   * `selectedKey` era o telefone cru até a caixa unificada; agora é
+   * `whatsapp:<caixa>:<telefone>`, e tudo que precisa falar com o número —
+   * composer, painel de contexto, read-state, fetch da thread — consome este
+   * valor. Sai da CHAVE, e não de `selectedContact`, porque a conversa aberta
+   * por deep-link pode não ter linha na lista (conversa antiga, fora da janela
+   * de contatos) e ainda assim precisa carregar.
+   */
+  const telefoneSelecionado = useMemo(
+    () => (isSocialBox ? null : interlocutorDaChave(selectedKey)),
+    [isSocialBox, selectedKey],
   );
 
   /**
@@ -800,12 +974,12 @@ export function ChatShellWithContext() {
    * sempre, com `null`, para a ordem dos hooks não mudar entre renders.
    */
   const telefoneDeConversaNova = useMemo(() => {
-    if (!isOfficialBox || !selectedKey || !selectedBoxId) return null;
-    const prefixo = `whatsapp_oficial:${selectedBoxId}:`;
+    if (!isOfficialBox || !selectedKey || !selectedOfficialInstanceId) return null;
+    const prefixo = `whatsapp_oficial:${selectedOfficialInstanceId}:`;
     if (!selectedKey.startsWith(prefixo)) return null;
     const jaExiste = socialContacts.some((c) => c.conversation_key === selectedKey);
     return jaExiste ? null : selectedKey.slice(prefixo.length) || null;
-  }, [isOfficialBox, selectedKey, selectedBoxId, socialContacts]);
+  }, [isOfficialBox, selectedKey, selectedOfficialInstanceId, socialContacts]);
 
   // Mesma queryKey do painel de contexto ⇒ o TanStack dedupa, sem rede extra.
   const { data: leadDeConversaNova } = useLeadByPhone(telefoneDeConversaNova);
@@ -824,24 +998,10 @@ export function ChatShellWithContext() {
     // WhatsApp.
     return contatoDeConversaNova(
       selectedKey,
-      selectedBoxId,
+      selectedOfficialInstanceId,
       leadDeConversaNova?.name ?? null,
     );
-  }, [socialContacts, selectedKey, isOfficialBox, selectedBoxId, leadDeConversaNova]);
-
-  /**
-   * A lista da caixa social, com a conversa NOVA no topo quando ela existe só na
-   * tela. Sem isto o chat abriria a conversa e a lista lateral não a mostraria —
-   * o vendedor veria o composer aberto e nenhuma linha selecionada, que se lê
-   * como tela quebrada.
-   */
-  const socialContactsComNova = useMemo(() => {
-    if (!selectedSocialContact) return socialContacts;
-    const jaEstaNaLista = socialContacts.some(
-      (c) => c.conversation_key === selectedSocialContact.conversation_key,
-    );
-    return jaEstaNaLista ? socialContacts : [selectedSocialContact, ...socialContacts];
-  }, [socialContacts, selectedSocialContact]);
+  }, [socialContacts, selectedKey, isOfficialBox, selectedOfficialInstanceId, leadDeConversaNova]);
 
   const handleSelectContact = useCallback((key: string) => {
     setSelectedKey(key);
@@ -857,23 +1017,48 @@ export function ChatShellWithContext() {
   // a RPC conta as incoming dos últimos 7 dias pra sempre → conversa nunca sai de
   // "não lida". Espelha o padrão que o chat-bubble flutuante já usa
   // (ChatBubbleContext.markReadServer). Otimista no cache + RPC fire-and-forget.
+  const handleMarkUnread = useCallback(async (phone: string, instanceId?: string | null) => {
+    const norm = normalizePhone(phone);
+    if (!instanceId || !norm) return;
+    // Close first so opening again is the explicit acknowledgement of this reminder.
+    if (telefoneSelecionado === phone && selectedInstanceId === instanceId) setSelectedKey(null);
+    const { error } = await queueConversationReadChange(`${instanceId}:${norm}`, () => supabase.rpc("mark_conversation_unread" as never, {
+      p_instance_id: instanceId, p_normalized_phone: norm,
+    } as never)).catch(() => ({ error: new Error("Falha de conexão") }));
+    if (error) { toast.error("Não foi possível marcar como não lido"); return; }
+    await queryClient.invalidateQueries({ queryKey: ["whatsapp_contacts"] });
+    await queryClient.invalidateQueries({ predicate: query => query.queryKey.some(key => typeof key === "string" && /unread|nao.lidas/.test(key)) });
+    toast.success("Conversa marcada como não lida");
+  }, [telefoneSelecionado, selectedInstanceId, queryClient]);
+
   const markConversationRead = useCallback(
     (phone: string, instanceId: string) => {
       const norm = normalizePhone(phone);
       if (!norm) return;
-      // Prefixo: zera o badge em todas as variantes filtradas (issue #1277).
-      queryClient.setQueriesData<ChatContact[]>(
-        { queryKey: chatQueryKeys.contactsPrefix(organizationId, instanceId) },
-        (old) =>
-          old?.map((c) =>
-            c.phone_number === phone ? { ...c, unread_count: 0 } : c,
-          ) ?? old,
+      // A RAIZ, e não a chave de UMA caixa: desde a W2 a lista do /chat vive em
+      // `contactsMulti` (terceiro segmento `multi:<ids>`), e mirar a chave de
+      // uma caixa deixava de acertar qualquer coisa — o badge só sumia no
+      // refetch seguinte.
+      //
+      // ⚠️ Mirar a raiz traz as DUAS formas que ela guarda: o array da lista de
+      // uma caixa e o envelope `{ contatos, cheia }` da lista por conjunto.
+      // Chamar `.map` direto no que vem daqui foi o que derrubou a tela inteira
+      // em 04/09 (`Te.map is not a function` no ErrorBoundary, ao abrir
+      // qualquer conversa). Quem sabe das duas formas é `zerarNaoLidas`.
+      zerarNaoLidas(
+        queryClient,
+        ["whatsapp_contacts", organizationId],
+        // A CAIXA entra na comparação: zerar só pelo telefone apagaria também a
+        // não-lida da linha do mesmo contato na outra caixa, que é outra
+        // conversa e ninguém leu.
+        (c) =>
+          c.phone_number === phone &&
+          (c.instance_id == null || c.instance_id === instanceId),
       );
-      void supabase
-        .rpc("mark_conversation_read", {
+      void queueConversationReadChange(`${instanceId}:${norm}`, () => supabase.rpc("mark_conversation_read", {
           p_instance_id: instanceId,
           p_normalized_phone: norm,
-        })
+        }))
         .then(undefined, () => {
           /* tabela/perm indisponível — sem-op, backstop cobre no próximo refetch */
         });
@@ -882,9 +1067,9 @@ export function ChatShellWithContext() {
   );
 
   useEffect(() => {
-    if (!selectedKey || !selectedInstanceId) return;
-    markConversationRead(selectedKey, selectedInstanceId);
-  }, [selectedKey, selectedInstanceId, markConversationRead]);
+    if (!telefoneSelecionado || !selectedInstanceId) return;
+    markConversationRead(telefoneSelecionado, selectedInstanceId);
+  }, [telefoneSelecionado, selectedInstanceId, markConversationRead]);
 
   /**
    * Read-state do canal social.
@@ -895,10 +1080,13 @@ export function ChatShellWithContext() {
    * a RLS de `conversation_read_state` já autoriza a `authenticated`
    * (`user_id = auth.uid()` + org do usuário), e a chave gravada é EXATAMENTE a
    * que a RPC social lê para calcular `unread_count`. Se as duas divergirem, o
-   * badge nunca zera — foi assim que o unread de WhatsApp quebrou
-   * (`useConversationReadState` grava `whatsapp:unknown:<phone>`, que a RPC de
-   * WhatsApp nunca casa; defeito pré-existente, issue separada, NÃO consertado
-   * aqui porque mexeria no comportamento de ~30 orgs em produção).
+   * badge nunca zera.
+   *
+   * O caminho que gravava `whatsapp:unknown:<phone>` (o antigo
+   * `useConversationReadState`) foi REMOVIDO na W3: ele não tinha consumidor
+   * nenhum e produzia uma chave que a RPC de WhatsApp nunca casa. No modo
+   * unificado sempre há caixa — a da linha aberta —, então não há mais motivo
+   * para existir uma chave sem ela.
    */
   const markSocialConversationRead = useCallback(
     (conversationKey: string, channelId: string, externalUserId: string) => {
@@ -942,7 +1130,7 @@ export function ChatShellWithContext() {
   // argumentos: ele continua montado (o canal é por org, não por conversa) mas
   // não tem alvo de cache para tocar. O canal social é montado à parte, e só
   // enquanto a caixa social está aberta — ver `SocialRealtimeMount`.
-  useWhatsAppMessagesRealtime(isSocialBox ? null : selectedKey, selectedInstanceId);
+  useWhatsAppMessagesRealtime(telefoneSelecionado, selectedInstanceId);
 
   // ── Waiting human — leads com state WAITING_HUMAN em conversations ──────────
   // Este Set é a fonte do chip "Pediu atendente". Descartar o `error` (como fazia
@@ -981,6 +1169,12 @@ export function ChatShellWithContext() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState<ConversationTab>("active");
 
+  // Flag desligada com a aba aberta (rollback, ou troca de org na mesma sessão):
+  // a aba some do topo e a lista ficaria presa num escopo sem botão de saída.
+  useEffect(() => {
+    if (!abasDeGrupos && activeTab === "grupos") setActiveTab("active");
+  }, [abasDeGrupos, activeTab]);
+
   // ── Filtro por vendedor ─────────────────────────────────────────────────────
   // Conversa não tem vendedor próprio: deriva do responsável do lead
   // (leads.responsible_id). "all" = todos; "mine" = do usuário; "unassigned" =
@@ -1007,14 +1201,34 @@ export function ChatShellWithContext() {
   // ── Enrichment do inbox: funis (+ etapa) e qualificação por lead ─────────────
   const { map: inboxMeta, status: metaStatus } = useLeadInboxMeta(leadIds, organizationId);
   const funnelOptions = useInboxFunnelOptions();
+  // Enriquece SOBRE a lista unificada, e não sobre a metade de WhatsApp: é a
+  // ordem do motor que a tela renderiza, e reconstruí-la a partir de duas
+  // metades enriquecidas seria uma segunda implementação da regra de recência.
+  // Funil e qualificação são conceitos de lead — a linha do canal oficial passa
+  // intacta.
   const enrichedContacts = useMemo(
     () =>
-      contacts.map((c) => {
+      contatosUnificados.map((c) => {
+        if (!isWhatsAppContact(c)) return c;
         const m = c.lead_id ? inboxMeta.get(c.lead_id) : undefined;
         return m ? { ...c, funnels: m.funnels, qualification_tier: m.qualificationTier } : c;
       }),
-    [contacts, inboxMeta],
+    [contatosUnificados, inboxMeta],
   );
+
+  /**
+   * A lista que vai para a tela, com a CONVERSA NOVA no topo quando ela existe
+   * só aqui (o lead chamado a partir do funil, que ainda não trocou mensagem
+   * nenhuma). Sem isto o chat abriria a conversa e a lateral não a mostraria —
+   * composer aberto, nenhuma linha selecionada, que se lê como tela quebrada.
+   */
+  const contatosParaLista = useMemo(() => {
+    if (!selectedSocialContact) return enrichedContacts;
+    const jaEsta = enrichedContacts.some(
+      (c) => contactKey(c) === selectedSocialContact.conversation_key,
+    );
+    return jaEsta ? enrichedContacts : [selectedSocialContact, ...enrichedContacts];
+  }, [selectedSocialContact, enrichedContacts]);
 
   // O engine do filtro não sabe distinguir "esse lead não está em funil nenhum"
   // de "o enriquecimento não chegou" — nos dois casos `funnels` é []. O gate faz
@@ -1052,10 +1266,11 @@ export function ChatShellWithContext() {
     void queryClient.invalidateQueries({ queryKey: ["lead-inbox-meta"] });
     void queryClient.invalidateQueries({ queryKey: ["lead-responsible-map"] });
     void queryClient.invalidateQueries({ queryKey: ["waiting-human-leads"] });
+    // Raiz: alcança a lista por conjunto (`multi:<ids>`) e as de uma caixa.
     void queryClient.invalidateQueries({
-      queryKey: chatQueryKeys.contactsPrefix(organizationId, selectedInstanceId),
+      queryKey: ["whatsapp_contacts", organizationId],
     });
-  }, [queryClient, organizationId, selectedInstanceId]);
+  }, [queryClient, organizationId]);
 
   // ── Archive / Delete / Tags ─────────────────────────────────────────────────
   const archiveConversation = useArchiveConversation();
@@ -1064,12 +1279,29 @@ export function ChatShellWithContext() {
   const addTag = useAddConversationTag();
   const removeTag = useRemoveConversationTag();
 
+  /**
+   * A caixa em que a AÇÃO acontece.
+   *
+   * `whatsapp_conversations` é chaveada por (instância, telefone). No modo
+   * unificado a linha clicada pode ser de uma caixa que não é a da conversa
+   * aberta — sem a origem da linha, arquivar a conversa da Técnica arquivaria a
+   * homônima do Comercial, e o vendedor veria a linha errada sumir.
+   *
+   * A queda para a caixa aberta cobre quem chama sem informar (o mobile e
+   * qualquer consumidor antigo da lista).
+   */
+  const caixaDaAcao = useCallback(
+    (daLinha?: string | null) => daLinha ?? selectedInstanceId,
+    [selectedInstanceId],
+  );
+
   const handleArchive = useCallback(
-    (phone: string) => {
-      if (!selectedInstanceId) return;
-      archiveConversation.mutate({ instanceId: selectedInstanceId, phoneNumber: phone });
+    (phone: string, instanceId?: string | null) => {
+      const caixa = caixaDaAcao(instanceId);
+      if (!caixa) return;
+      archiveConversation.mutate({ instanceId: caixa, phoneNumber: phone });
     },
-    [selectedInstanceId, archiveConversation],
+    [caixaDaAcao, archiveConversation],
   );
 
   const handleUnarchive = useCallback(
@@ -1080,23 +1312,25 @@ export function ChatShellWithContext() {
   );
 
   const handleDelete = useCallback(
-    (phone: string) => {
-      if (!selectedInstanceId || !organizationId) return;
+    (phone: string, instanceId?: string | null) => {
+      const caixa = caixaDaAcao(instanceId);
+      if (!caixa || !organizationId) return;
       deleteConversation.mutate({
-        instanceId: selectedInstanceId,
+        instanceId: caixa,
         phoneNumber: phone,
         organizationId,
       });
     },
-    [selectedInstanceId, organizationId, deleteConversation],
+    [caixaDaAcao, organizationId, deleteConversation],
   );
 
   const handleAddTag = useCallback(
-    (phone: string, tagId: string) => {
-      if (!selectedInstanceId) return;
-      addTag.mutate({ instanceId: selectedInstanceId, phoneNumber: phone, tagId });
+    (phone: string, tagId: string, instanceId?: string | null) => {
+      const caixa = caixaDaAcao(instanceId);
+      if (!caixa) return;
+      addTag.mutate({ instanceId: caixa, phoneNumber: phone, tagId });
     },
-    [selectedInstanceId, addTag],
+    [caixaDaAcao, addTag],
   );
 
   const handleRemoveTag = useCallback(
@@ -1146,19 +1380,28 @@ export function ChatShellWithContext() {
       <ShellComponent
         list={
           <ConversationList
-            contacts={isSocialBox ? socialContactsComNova : enrichedContacts}
+            onNewConversation={() => setNewConversationOpen(true)}
+            contacts={contatosParaLista}
             selectedKey={selectedKey}
             onSelectContact={handleSelectContact}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             isLoading={contactsLoading}
             boxes={boxes}
-            selectedBoxId={selectedBoxId}
-            onSelectBox={setSelectedBoxId}
+            marcadas={marcadas}
+            onAlternarCaixa={alternarCaixa}
+            onSomenteCaixa={setSelectedBoxId}
+            onTodasAsCaixas={marcarTodas}
+            naoLidasPorCaixa={naoLidasPorCaixa}
+            metaPorLinha={metaPorLinha}
             waitingHumanCount={waitingHumanCount}
             waitingHumanLeadIds={waitingHumanLeadIds}
             activeTab={activeTab}
             onTabChange={setActiveTab}
+            // A lista NÃO relê a flag: quem manda `p_include_groups` na busca é
+            // este componente, e as duas pontas têm que ser a mesma leitura.
+            abasDeGrupos={abasDeGrupos}
+            onMarkUnread={handleMarkUnread}
             onArchive={handleArchive}
             onUnarchive={handleUnarchive}
             onDelete={handleDelete}
@@ -1205,14 +1448,15 @@ export function ChatShellWithContext() {
             />
           ) : (
             <ChatView
+              onConversationEstablished={draftConversationKey === selectedKey ? handleConversationEstablished : undefined}
               selectedContact={selectedContact}
-              selectedPhone={selectedKey}
+              selectedPhone={telefoneSelecionado}
               instanceId={selectedInstanceId}
               instanceName={selectedBox?.name ?? ""}
               organizationId={organizationId}
               mountTime={mountTimeRef.current}
               onBack={handleBack}
-              onOpenLeadModal={handleOpenLeadModal}
+              onOpenLeadModal={draftConversationKey === selectedKey ? undefined : handleOpenLeadModal}
               density={density}
               onDensityChange={setDensity}
               isMobile={isMobile}
@@ -1220,7 +1464,7 @@ export function ChatShellWithContext() {
           )
         }
         context={
-          selectedKey ? (
+          selectedKey && draftConversationKey !== selectedKey ? (
             // Duas colunas de contexto, e não uma com ramos: a de WhatsApp
             // resolve o lead pelo TELEFONE e é o caminho quente de 30 orgs; a
             // social resolve pelo vínculo em `lead_social_identities` e, quando
@@ -1248,7 +1492,7 @@ export function ChatShellWithContext() {
             ) : (
               <ContextPanel
                 leadId={selectedContact?.lead_id ?? undefined}
-                phoneNumber={selectedKey}
+                phoneNumber={telefoneSelecionado ?? undefined}
                 pushName={selectedContact?.push_name ?? null}
               />
             )
@@ -1260,14 +1504,24 @@ export function ChatShellWithContext() {
         densityCssVars={cssVars}
       />
 
+      {newConversationOpen && (
+        <NewConversationDialog
+          open={newConversationOpen}
+          onOpenChange={setNewConversationOpen}
+          instanceName={selectedBox?.name}
+          unavailableReason={newConversationUnavailableReason(selectedBox)}
+          onStart={handleStartConversation}
+        />
+      )}
+
       {/* Recebe `phoneNumber` e monta a ficha do lead a partir dele — um
           contato de Instagram não tem telefone, então o modal não existe lá. */}
-      {selectedContact && !isSocialBox && (
+      {telefoneSelecionado && !isSocialBox && draftConversationKey !== selectedKey && (
         <LeadContactModal
           isOpen={leadModalOpen}
           onClose={handleCloseLeadModal}
-          phoneNumber={selectedContact.phone_number}
-          pushName={selectedContact.push_name ?? undefined}
+          phoneNumber={telefoneSelecionado}
+          pushName={selectedContact?.push_name ?? undefined}
         />
       )}
 

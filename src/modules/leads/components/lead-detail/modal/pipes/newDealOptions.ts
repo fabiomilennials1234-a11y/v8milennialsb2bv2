@@ -24,21 +24,23 @@ import type { NewDealOption } from "./NewDealDialog";
  * possíveis desse clique — nada aqui cria nada.
  */
 
+/**
+ * SCRUM-641: o mapa curto do trio morreu — `p.label` já chega resolvido pelo
+ * `useLeadAllPipelines` com o nome que a ORG usa (`nomeDoFunil`). Sobra só a
+ * Carteira, que não é funil (D9/ADR-0034) e não tem linha de display.
+ */
 export const SYSTEM_PIPE_SHORT_LABEL: Record<string, string> = {
-  qualificacao: "Qualificação",
-  confirmacao: "Confirmação",
-  propostas: "Propostas",
   upsell: "Carteira",
 };
 
 const SYSTEM_PIPE_TYPES = new Set<StandardPipelineStatus["pipeType"]>([
-  "qualificacao",
+  "whatsapp",
   "confirmacao",
   "propostas",
 ]);
 
 export function isSystemPipe(p: PipelineStatus): p is StandardPipelineStatus & {
-  pipeType: "qualificacao" | "confirmacao" | "propostas";
+  pipeType: "whatsapp" | "confirmacao" | "propostas";
 } {
   return p.type === "standard" && SYSTEM_PIPE_TYPES.has(p.pipeType);
 }
@@ -90,7 +92,7 @@ export function buildNewDealOptions(
   for (const p of inactiveSystem) {
     out.push({
       key: `sys:${p.pipeType}`,
-      label: SYSTEM_PIPE_SHORT_LABEL[p.pipeType] ?? p.label,
+      label: p.label,
       color: p.color,
       stages: p.stages.map((s) => ({ id: s.id, label: s.label })),
       supportsValue: p.pipeType === "propostas",

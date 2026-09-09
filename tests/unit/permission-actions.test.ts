@@ -19,8 +19,8 @@ import {
 } from '../../src/shared/permission-actions';
 
 describe('permission-actions — ACTION_TO_FEATURE', () => {
-  it('has exactly 17 actions', () => {
-    expect(Object.keys(ACTION_TO_FEATURE)).toHaveLength(17);
+  it('has exactly 18 actions', () => {
+    expect(Object.keys(ACTION_TO_FEATURE)).toHaveLength(18);
   });
 
   it('maps every AppAction to a feature key', () => {
@@ -31,6 +31,7 @@ describe('permission-actions — ACTION_TO_FEATURE', () => {
       'edit_workflow', 'create_workflow', 'send_message',
       'manage_team', 'manage_copilot',
       'reassign_lead', 'remove_lead_from_pipe',
+      'view_org_metrics',
     ];
 
     for (const action of actions) {

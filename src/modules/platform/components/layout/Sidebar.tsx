@@ -9,7 +9,7 @@
  * se decide forma: recolhida ou não, expandida ou não, tooltip ou rótulo.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { ChevronLeft, ChevronRight, HelpCircle, Settings } from "lucide-react";
 
@@ -33,6 +33,22 @@ import { PitstopPanel } from "./PitstopPanel";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarUserMenu } from "./SidebarUserMenu";
 
+/**
+ * O painel da Agenda entra por caminho fundo, e NÃO pelo barril de
+ * `engagement` — como já fazem `QuickBlastProgressPanel` e `SessionDeadBanner`
+ * em `MainLayout`. Exportá-lo no barril fecha um ciclo dinâmico
+ * (`engagement/index` → `AgendaPanel` → `AgendaAtividades` → `leads` →
+ * `engagement/index`) e o `dep-cruise-ratchet` reprova com 7 violações
+ * `no-circular-dynamic` — seis delas em arquivos que esta branch nem toca, o
+ * que torna a causa difícil de enxergar depois. `lazy` mantém a Agenda fora do
+ * chunk do layout.
+ */
+const AgendaPanel = lazy(() =>
+  import("@/modules/engagement/components/agenda/AgendaPanel").then((m) => ({
+    default: m.AgendaPanel,
+  })),
+);
+
 /** Dia de hoje dentro do ícone da Agenda — mesmo gesto do calendário nativo. */
 function AgendaDateChip() {
   const now = new Date();
@@ -52,6 +68,9 @@ export function Sidebar() {
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pitstopOpen, setPitstopOpen] = useState(false);
+  const [agendaOpen, setAgendaOpen] = useState(false);
+  // Fica `true` no primeiro clique e nunca volta — ver o bloco de montagem.
+  const [agendaJaAberta, setAgendaJaAberta] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState<FeatureKey | null>(null);
 
   // Entrar numa rota do Pitstop abre o painel — vindo do teclado, de um link
@@ -60,9 +79,20 @@ export function Sidebar() {
     if (model.isPitstopRoute) setPitstopOpen(true);
   }, [model.isPitstopRoute]);
 
-  const toggleExpand = useCallback((label: string) => {
-    setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
-  }, []);
+  const toggleExpand = useCallback(
+    (label: string) => {
+      // Recolhida não há onde desenhar o submenu (`isOpen` exige `!collapsed`).
+      // Um grupo que não navega precisa abrir a lateral primeiro, senão o
+      // clique não produz nada visível — botão morto.
+      if (collapsed) {
+        toggleCollapsed();
+        setExpanded((prev) => ({ ...prev, [label]: true }));
+        return;
+      }
+      setExpanded((prev) => ({ ...prev, [label]: !prev[label] }));
+    },
+    [collapsed, toggleCollapsed],
+  );
 
   const openUpgrade = useCallback(
     (path: string) => {
@@ -76,11 +106,17 @@ export function Sidebar() {
 
   return (
     <>
+      {/* `text-sidebar-foreground` no <aside> não é decoração. A lateral é ESCURA
+          nos DOIS temas (`--sidebar-background` = 36 20% 18% no claro), mas quem
+          não declarava cor própria herdava `--foreground` — que no tema claro é
+          30 18% 16%, praticamente o mesmo tom do fundo: 1.10:1, invisível. Era o
+          que apagava o nome da org. Ancorar a cor aqui conserta a herança de todo
+          descendente, não só a do seletor. */}
       <aside
         data-testid="sidebar"
         aria-label="Navegação principal"
         style={{ width }}
-        className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
+        className="relative z-30 flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none"
       >
         <div className="flex flex-col gap-3 px-3 pb-2 pt-4">
           {/* O botão de recolher mora aqui dentro, e não flutuando na borda:
@@ -138,7 +174,7 @@ export function Sidebar() {
                       {item.children?.map((child) => {
                         const childLocked = model.isLocked(child.path);
                         return (
-                          <div key={child.path} className={cn(child.startsGroup && "mt-1 border-t border-sidebar-border/60 pt-1")}>
+                          <div key={child.path}>
                             <SidebarNavItem
                               item={child}
                               active={model.isActive(child.path)}
@@ -159,26 +195,35 @@ export function Sidebar() {
         </ScrollArea>
 
         <div className="flex flex-col gap-0.5 border-t border-sidebar-border p-2.5">
+          {/* A Agenda não navega: abre painel por cima da tela atual, deixando
+              a página de baixo à mostra. Por isso o "ativo" vem do estado do
+              painel, e não da rota — que continua existindo para o celular e
+              para link direto. O botão, o chip de data e a posição no rodapé
+              são exatamente os mesmos. */}
           {model.agenda && (
             <SidebarNavItem
               item={model.agenda}
-              active={model.isActive(model.agenda.path)}
+              active={agendaOpen || model.isActive(model.agenda.path)}
               collapsed={collapsed}
               leading={<AgendaDateChip />}
+              onActivate={() => {
+                setAgendaJaAberta(true);
+                setAgendaOpen((v) => !v);
+              }}
+              activateExpanded={agendaOpen}
             />
           )}
 
-          {/* O AlertsDropdown traz botão e padding próprios; sem neutralizar,
-              o sino desalinha dos outros ícones do rodapé. */}
+          {/* A palavra "Notificações" era um <span> inerte ao lado do sino:
+              clicar nela não fazia nada, e é onde a mão vai primeiro. Agora o
+              rótulo faz parte do próprio gatilho. */}
           <div
             className={cn(
-              "flex items-center gap-3 rounded-lg py-2 text-sm text-sidebar-foreground/70",
-              "[&_button]:h-auto [&_button]:w-auto [&_button]:p-0 [&_button]:hover:bg-transparent",
-              collapsed ? "justify-center" : "px-2.5",
+              "flex items-center rounded-lg text-sm text-sidebar-foreground/70",
+              collapsed && "justify-center",
             )}
           >
-            <AlertsDropdown />
-            {!collapsed && <span className="flex-1 truncate">Notificações</span>}
+            <AlertsDropdown rotulo={collapsed ? undefined : "Notificações"} />
           </div>
 
           {/* Master, Gestor e "Ativos agora" — só para quem é master. Vieram do
@@ -232,6 +277,25 @@ export function Sidebar() {
         groups={model.pitstopGroups}
         isActive={model.isActive}
       />
+
+      {/* Monta na PRIMEIRA abertura e não desmonta mais. As duas metades
+          importam: antes do primeiro clique o `lazy` nem pede o chunk; depois
+          dele, o painel precisa continuar montado para o `AnimatePresence`
+          dele conseguir animar a SAÍDA — desmontar junto com o `open` arranca
+          a camada da tela sem transição.
+          `sidebarWidth` mantém a lateral fora do capturador de clique: com a
+          Agenda aberta ainda dá para ir para outra tela num clique só.
+          Sem `fallback`: o painel fechado não desenha nada, e ele já tem o
+          próprio Suspense para o conteúdo. */}
+      {agendaJaAberta && (
+        <Suspense fallback={null}>
+          <AgendaPanel
+            open={agendaOpen}
+            onClose={() => setAgendaOpen(false)}
+            sidebarWidth={width}
+          />
+        </Suspense>
+      )}
 
       {upgradeFeature && (
         <UpgradeModal

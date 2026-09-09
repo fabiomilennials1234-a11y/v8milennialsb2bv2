@@ -142,9 +142,13 @@ export function ScheduleMessageModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
+          {/* O mesmo formulário serve para criar e para editar. O título dizia
+              "Agendar mensagem" nos dois casos, então quem abria a edição a
+              partir da Agenda ou do chat lia um convite a criar um agendamento
+              novo — e o botão embaixo já dizia "Salvar". */}
           <DialogTitle className="flex items-center gap-2">
             <Clock className="w-5 h-5 text-primary" />
-            Agendar mensagem
+            {editingId ? "Editar agendamento" : "Agendar mensagem"}
           </DialogTitle>
           <p className="text-sm text-muted-foreground">
             Para {leadName}

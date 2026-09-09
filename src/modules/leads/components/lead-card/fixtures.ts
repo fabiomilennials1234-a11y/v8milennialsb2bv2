@@ -63,6 +63,13 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: 6,
       etapaIndice: 3,
       etapaTotal: 6,
+      // Um negócio COM produto e outros sem — é assim na base, e a bancada de
+      // desenho precisa mostrar os dois estados na mesma tela.
+      produtos: [
+        { nome: "Implante Unitário", quantidade: 2, precoUnitario: 4200, total: 7560, avulso: false },
+        { nome: "Enxerto ósseo", quantidade: 1, precoUnitario: 1800, total: 1800, avulso: false },
+        { nome: "Taxa de laboratório", quantidade: 1, precoUnitario: 340, total: 340, avulso: true },
+      ],
     },
     {
       id: "d2",
@@ -76,6 +83,7 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: 1,
       etapaIndice: 1,
       etapaTotal: 5,
+      produtos: [],
     },
     {
       id: "d3",
@@ -89,6 +97,7 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: null,
       etapaIndice: 5,
       etapaTotal: 6,
+      produtos: [],
     },
     {
       id: "d4",
@@ -102,6 +111,7 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: null,
       etapaIndice: 5,
       etapaTotal: 6,
+      produtos: [],
     },
     {
       id: "d5",
@@ -115,6 +125,7 @@ export const LEAD_EXEMPLO: LeadCardData = {
       diasEmAberto: null,
       etapaIndice: 4,
       etapaTotal: 5,
+      produtos: [],
     },
   ],
 
@@ -136,6 +147,12 @@ export const LEAD_EXEMPLO: LeadCardData = {
         { chave: "documento", rotulo: "CNPJ", valor: null, tipo: "documento", vazio: "Informe o CNPJ" },
         { chave: "site", rotulo: "Site", valor: null, tipo: "url", vazio: "www.exemplo.com.br" },
         { chave: "nascimento", rotulo: "Data de fundação", valor: null, tipo: "data", vazio: "dd/mm/aaaa" },
+        // Campos da organização JÁ RESPONDIDOS. Sobem para o Perfil porque é o
+        // que o formulário trouxe sobre esta empresa — ver o bloco de decisão
+        // em `useLeadCardData`.
+        { chave: "c1", rotulo: "Marca própria", valor: "Sim", personalizado: true },
+        { chave: "c2", rotulo: "Comprador", valor: "Ellen (compras)", personalizado: true },
+        { chave: "c4", rotulo: "Prazo de pagamento", valor: "28 dias", personalizado: true },
       ],
     },
     {
@@ -157,12 +174,10 @@ export const LEAD_EXEMPLO: LeadCardData = {
       ],
     },
     {
-      titulo: "Campos da organização",
+      titulo: "Campos a preencher",
       campos: [
-        { chave: "c1", rotulo: "Marca própria", valor: "Sim", personalizado: true },
-        { chave: "c2", rotulo: "Comprador", valor: "Ellen (compras)", personalizado: true },
         { chave: "c3", rotulo: "Transportadora", valor: null, personalizado: true, vazio: "Não informado" },
-        { chave: "c4", rotulo: "Prazo de pagamento", valor: "28 dias", personalizado: true },
+        { chave: "c5", rotulo: "Volume por pedido", valor: null, personalizado: true, vazio: "Não informado" },
       ],
     },
   ],
@@ -184,11 +199,25 @@ export const LEAD_EXEMPLO: LeadCardData = {
       quando: "2026-08-04T12:10:00.000Z",
     },
     {
+      // Comentário de verdade: o corpo vem em `comentario`, não em `texto`.
+      // O exemplo é longo e tem quebra de linha de propósito — é o formato real
+      // (411 dos 2.909 de prod passam de 200 caracteres) e é o que expõe na
+      // visualização se o bloco truncar ou colapsar a quebra.
       id: "h3",
       tipo: "comentario",
-      texto: "Pediu amostra da linha nova antes de fechar. Enviar até sexta.",
+      texto: "Comentário",
       autor: "Luiza Andrade",
       quando: "2026-08-03T18:02:00.000Z",
+      comentario: {
+        id: "c1",
+        corpo:
+          "Pediu amostra da linha nova antes de fechar. Enviar até sexta.\n" +
+          "Falou que o preço da concorrência veio 8% abaixo, mas que prefere " +
+          "continuar com a gente pelo prazo de entrega. Quem assina é o sócio.",
+        editadoEm: null,
+        podeEditar: true,
+        podeApagar: true,
+      },
     },
     {
       id: "h4",
@@ -282,6 +311,7 @@ export const LEAD_EXEMPLO_MAGRO: LeadCardData = {
       diasEmAberto: 2,
       etapaIndice: 1,
       etapaTotal: 5,
+      produtos: [],
     },
   ],
 

@@ -1,4 +1,4 @@
-import type { DealCardData } from "./types";
+import type { DealCardComentario, DealCardData } from "./types";
 
 /**
  * Exemplos do Card do Negócio — só para a rota de visualização.
@@ -11,6 +11,51 @@ import type { DealCardData } from "./types";
  *   - o negócio SEM VALOR é 98,9% deles — `sale_value` existe em 1,1%;
  *   - o negócio com UMA movimentação só é 91% deles (média 1,16).
  */
+
+/**
+ * Comentários da bancada de desenho.
+ *
+ * Os três casos que o bloco precisa aguentar e que só aparecem juntos em base
+ * de verdade: um comentário deste negócio, um do LEAD (sem vínculo, herdado de
+ * antes de a coluna existir — 100% dos 2.885 de prod são assim) e um escrito em
+ * OUTRO negócio da mesma pessoa, que é o único que ganha selo.
+ */
+export const COMENTARIOS_EXEMPLO: DealCardComentario[] = [
+  {
+    id: "c1",
+    corpo:
+      "Comprador pediu para refazer a proposta com prazo de 30 dias em vez de 15. Disse que aprova ainda esta semana se o prazo entrar.",
+    autor: "Luiza Andrade",
+    autorAvatar: null,
+    criadoEm: "2026-08-22T17:32:00.000Z",
+    editadoEm: null,
+    deOutroNegocio: null,
+    podeEditar: true,
+    podeApagar: true,
+  },
+  {
+    id: "c2",
+    corpo: "Falar depois das 15h — antes disso ele está na fábrica e não atende.",
+    autor: "Marcos Teixeira",
+    autorAvatar: null,
+    criadoEm: "2026-08-19T12:05:00.000Z",
+    editadoEm: "2026-08-19T12:11:00.000Z",
+    deOutroNegocio: null,
+    podeEditar: false,
+    podeApagar: false,
+  },
+  {
+    id: "c3",
+    corpo: "Já comprou a linha básica em janeiro e ficou satisfeito. Vale puxar o histórico na conversa.",
+    autor: "Marcos Teixeira",
+    autorAvatar: null,
+    criadoEm: "2026-06-04T14:20:00.000Z",
+    editadoEm: null,
+    deOutroNegocio: "Primeira compra",
+    podeEditar: false,
+    podeApagar: false,
+  },
+];
 
 const ETAPAS_ORCAMENTOS = [
   { chave: "orcamento", chaveEntry: "orcamento", nome: "Orçamento", papel: "aberto" as const },
@@ -45,7 +90,7 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
   },
   funil: "Orçamentos",
   funilCor: "#a855f7",
-  pipeTable: "pipe_propostas",
+  funilEhSystem: true,
   etapas: ETAPAS_ORCAMENTOS,
   etapaAtual: "proposta_enviada",
   dono: "Luiza Andrade",
@@ -55,7 +100,16 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
   valor: 12400,
   moeda: "BRL",
   produto: "Linha Performance 5kg",
-  reuniao: { data: "2026-06-18T14:00:00.000Z", confirmada: true, link: null },
+  // Reunião marcada pela AGENDA (tem `meetingId`) e ainda sem desfecho, já
+  // passada: é o estado que o card precisa saber acender, e é o mais comum na
+  // base — reunião acontece e ninguém volta para marcar o que foi.
+  reuniao: {
+    data: "2026-06-18T14:00:00.000Z",
+    confirmada: true,
+    link: null,
+    status: "scheduled",
+    meetingId: "mt-1",
+  },
   desfecho: null,
   movimentacoes: [
     {
@@ -92,7 +146,46 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
   previsaoFechamento: "2026-09-15",
   fechadoEm: null,
   criadoEm: "2026-04-30T09:02:00.000Z",
-  itens: [],
+  /**
+   * A bancada de desenho nunca tinha renderizado uma linha de produto: as três
+   * fixtures nasceram com `itens: []`, então a tabela, o cabeçalho de colunas,
+   * o selo "avulso", o desconto por linha e os rodapés eram desenho no escuro.
+   *
+   * Os três casos que importam estão aqui de propósito: catálogo com desconto,
+   * catálogo sem desconto e **avulso** (`produtoId: null`).
+   */
+  itens: [
+    {
+      id: "i1",
+      nome: "Implante Unitário",
+      quantidade: 2,
+      precoUnitario: 4200,
+      total: 7560,
+      produtoId: "p1",
+      descontoPercent: 10,
+      ordem: 0,
+    },
+    {
+      id: "i2",
+      nome: "Enxerto ósseo",
+      quantidade: 1,
+      precoUnitario: 1800,
+      total: 1800,
+      produtoId: "p2",
+      descontoPercent: 0,
+      ordem: 1,
+    },
+    {
+      id: "i3",
+      nome: "Taxa de laboratório",
+      quantidade: 1,
+      precoUnitario: 340,
+      total: 340,
+      produtoId: null,
+      descontoPercent: 0,
+      ordem: 2,
+    },
+  ],
   atividades: [
     {
       id: "a1",
@@ -128,6 +221,7 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
       diasEmAberto: 96,
       etapaIndice: 1,
       etapaTotal: 3,
+      produtos: [],
     },
     {
       id: "e0",
@@ -141,6 +235,7 @@ export const NEGOCIO_ESTAGNADO: DealCardData = {
       diasEmAberto: 240,
       etapaIndice: null,
       etapaTotal: 4,
+      produtos: [],
     },
   ],
 };
@@ -171,7 +266,7 @@ export const NEGOCIO_MAGRO: DealCardData = {
   },
   funil: "Qualificação",
   funilCor: "#22c55e",
-  pipeTable: "pipe_whatsapp",
+  funilEhSystem: true,
   etapas: [
     { chave: "novo", chaveEntry: "novo", nome: "Novo lead", papel: "aberto" },
     { chave: "abordado", chaveEntry: "abordado", nome: "Abordado", papel: "aberto" },
@@ -220,6 +315,7 @@ export const NEGOCIO_MAGRO: DealCardData = {
       diasEmAberto: 2,
       etapaIndice: 1,
       etapaTotal: 4,
+      produtos: [],
     },
   ],
 };
@@ -247,7 +343,7 @@ export const NEGOCIO_GANHO: DealCardData = {
   },
   funil: "Orçamentos",
   funilCor: "#a855f7",
-  pipeTable: "pipe_propostas",
+  funilEhSystem: true,
   etapas: ETAPAS_ORCAMENTOS,
   etapaAtual: "vendido",
   dono: "Luiza Andrade",
@@ -257,7 +353,14 @@ export const NEGOCIO_GANHO: DealCardData = {
   valor: 19500,
   moeda: "BRL",
   produto: "Linha Performance 5kg",
-  reuniao: { data: "2026-05-06T15:30:00.000Z", confirmada: true, link: null },
+  // O outro extremo: reunião da Agenda com desfecho marcado.
+  reuniao: {
+    data: "2026-05-06T15:30:00.000Z",
+    confirmada: true,
+    link: null,
+    status: "completed",
+    meetingId: "mt-2",
+  },
   desfecho: { quando: "2026-05-19T16:48:00.000Z", valorVenda: 19500, motivo: null },
   movimentacoes: [
     {

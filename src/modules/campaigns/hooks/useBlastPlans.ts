@@ -12,6 +12,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { TemplateEscolhido } from "@/shared/disparo/template-escolhido";
 import { useCurrentTeamMember } from "@/modules/identity";
 
 export type BlastPlanStatus = "active" | "paused" | "completed" | "cancelled";
@@ -45,13 +46,10 @@ export interface BlastPlanLotBreakdown {
  * blast-plan-create against the caller's org.
  */
 export interface BlastPostSendTarget {
-  funnelKind: "system" | "custom";
-  /** System pipe when funnelKind === "system". */
-  pipelineType?: "whatsapp" | "confirmacao" | "propostas";
-  /** Custom pipeline id when funnelKind === "custom". */
-  pipelineId?: string;
-  /** system: stage_key slug; custom: custom_pipeline_stages.id uuid. */
-  stageKey: string;
+  /** Funil de destino — `pipelines.id` (QUALQUER funil da org, Fatia B). */
+  pipelineId: string;
+  /** Etapa de destino — `pipeline_stages.id` (uuid canônico). */
+  stageId: string;
   /** Human label, e.g. "Oportunidades · Em negociação" (panel display). */
   label: string;
 }
@@ -68,7 +66,14 @@ export interface CreateBlastPlanInput {
   /** Per-leva send window (ADR-0015 / #909). Default server-side: Mon–Sat 08–20. */
   window?: { days?: number[]; from_minutes?: number; to_minutes?: number };
   lead_ids: string[];
+  /** O texto que a pessoa recebe. No Canal Oficial, o corpo do Template. */
   message: string;
+  /**
+   * O Template aprovado, quando o Disparo é pelo Canal Oficial (#1722).
+   * Ausente em Disparo de Chip. O servidor recusa plano oficial sem ele, e
+   * recusa regime misto — a tela barra antes, mas a garantia é do servidor.
+   */
+  template?: TemplateEscolhido | null;
   delay_min_ms?: number;
   delay_max_ms?: number;
   image_url?: string;

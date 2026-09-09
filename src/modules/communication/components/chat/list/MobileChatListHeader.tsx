@@ -9,6 +9,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Search, X, ChevronDown, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { ChannelBadge, type ChannelType } from "../ChannelBadge";
 import {
   Select,
@@ -19,9 +20,14 @@ import {
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type MobileChatFilter = "all" | "unread";
+/**
+ * `"grupos"` só é alcançável na org com a flag `chat_abas_de_grupos` — sem ela o
+ * chip não é renderizado. É o par mobile da aba "Grupos" do desktop.
+ */
+export type MobileChatFilter = "all" | "unread" | "grupos";
 
 export interface MobileChatListHeaderProps {
+  onNewConversation?: () => void;
   instanceName: string;
   instanceConnected?: boolean;
   /** Canal da caixa aberta. Decide o selo do pill; default mantém o de antes. */
@@ -40,6 +46,10 @@ export interface MobileChatListHeaderProps {
   activeFilter: MobileChatFilter;
   onFilterChange: (filter: MobileChatFilter) => void;
   unreadCount: number;
+  /** Org com a flag `chat_abas_de_grupos`: acrescenta o chip "Grupos". */
+  mostrarGrupos?: boolean;
+  /** Nº de conversas de grupo — só rende quando `mostrarGrupos`. */
+  gruposCount?: number;
   // ─── Filtro por vendedor ────────────────────────────────────────────────────
   /** Valor atual: "all" | "mine" | "unassigned" | <teamMemberId>. */
   vendorFilter: string;
@@ -61,6 +71,7 @@ interface ChipDef {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function MobileChatListHeader({
+  onNewConversation,
   instanceName,
   instanceConnected = false,
   channel = "whatsapp",
@@ -71,6 +82,8 @@ export function MobileChatListHeader({
   activeFilter,
   onFilterChange,
   unreadCount,
+  mostrarGrupos = false,
+  gruposCount = 0,
   vendorFilter,
   onVendorFilterChange,
   vendorOptions,
@@ -96,6 +109,9 @@ export function MobileChatListHeader({
   const chips: ChipDef[] = [
     { key: "all", label: "Todas" },
     { key: "unread", label: "Não lidas", count: unreadCount },
+    // Sem a flag o chip nem entra na fileira: a lista da org não tem grupo, e um
+    // chip que sempre leva a "nenhuma conversa" ensina a desconfiar do resto.
+    ...(mostrarGrupos ? ([{ key: "grupos", label: "Grupos", count: gruposCount }] as ChipDef[]) : []),
   ];
 
   // Label curta pro chip de vendedor (o valor completo fica no dropdown).
@@ -230,6 +246,11 @@ export function MobileChatListHeader({
             </button>
           );
         })}
+        {onNewConversation && (
+          <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-full" onClick={onNewConversation}>
+            Nova Conversa
+          </Button>
+        )}
       </div>
       )}
     </div>

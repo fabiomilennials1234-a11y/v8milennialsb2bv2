@@ -15,11 +15,13 @@
  * Uso:
  *   node scripts/vault-lint.mjs                          # default vault path
  *   node scripts/vault-lint.mjs --path <vault-root>
+ *   node scripts/vault-lint.mjs --changed-from <git-ref> # only changed docs
  *   node scripts/vault-lint.mjs --fail-on-warn           # warns fail too
  */
 
 import fs from "node:fs";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 const VAULT_ROOT_DEFAULT = "Obsidian/Segundo Cerebro/Claude Code — Torque CRM";
 
@@ -56,6 +58,14 @@ const vaultRoot =
     ? args[args.indexOf("--path") + 1]
     : VAULT_ROOT_DEFAULT;
 const failOnWarn = args.includes("--fail-on-warn");
+const changedFrom = args.includes("--changed-from")
+  ? args[args.indexOf("--changed-from") + 1]
+  : null;
+
+if (args.includes("--changed-from") && !changedFrom) {
+  console.error("vault-lint: --changed-from requires a git ref");
+  process.exit(2);
+}
 
 // ===== walk =====
 function walk(dir, files = []) {
@@ -126,13 +136,37 @@ if (!fs.existsSync(vaultRoot)) {
   process.exit(2);
 }
 
-const files = walk(vaultRoot);
+const allFiles = walk(vaultRoot);
+let files = allFiles;
+
+if (changedFrom) {
+  let changedPaths;
+  try {
+    changedPaths = execFileSync(
+      "git",
+      ["diff", "--name-only", "-z", "--diff-filter=ACMR", `${changedFrom}...HEAD`, "--", vaultRoot],
+      { encoding: "utf8" },
+    );
+  } catch (error) {
+    console.error(`vault-lint: unable to compare against ${changedFrom}`);
+    if (error.stderr) console.error(error.stderr.trim());
+    process.exit(2);
+  }
+
+  const changedSet = new Set(
+    changedPaths
+      .split("\0")
+      .filter(Boolean)
+      .map((file) => path.resolve(file)),
+  );
+  files = allFiles.filter((file) => changedSet.has(path.resolve(file)));
+}
 const errors = [];
 const warnings = [];
 
 // Build set of all filenames (without extension) for wikilink resolution
 const filenamesByBase = new Map();
-for (const f of files) {
+for (const f of allFiles) {
   const base = path.basename(f, ".md");
   if (!filenamesByBase.has(base)) filenamesByBase.set(base, []);
   filenamesByBase.get(base).push(f);

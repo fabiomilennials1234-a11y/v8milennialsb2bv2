@@ -4,6 +4,7 @@ import { ChartNoAxesCombined } from "lucide-react";
 import { useAcoesDoDia } from "@/modules/engagement";
 import { useOrganization } from "@/modules/identity";
 import { classificarTarefas } from "@/modules/analytics/lib/tarefas-do-dia";
+import { useComandoScope } from "@/modules/analytics/hooks/useComandoScope";
 import { useConversasAguardando } from "@/modules/analytics/hooks/useConversasAguardando";
 import { CardConversasAguardando } from "./CardConversasAguardando";
 import { CardProximasAgendas } from "./CardProximasAgendas";
@@ -39,12 +40,18 @@ import { CardMetas } from "./CardMetas";
  */
 export function TabProximosPassos() {
   const { timezone } = useOrganization();
+  const { isAdmin } = useComandoScope();
 
   // Os dois hooks abaixo rodam TAMBÉM dentro dos cards. Não há fetch dobrado:
   // as queryKeys são idênticas e o TanStack Query serve do mesmo cache. É o que
   // permite o resumo do topo sem furar o encapsulamento dos blocos.
-  const { total: aguardando, isLoading: convLoading } = useConversasAguardando(10);
-  const { data: tarefas } = useAcoesDoDia();
+  //
+  // ⚠️ Por isso o escopo precisa ser calculado IGUAL aqui e no card: as
+  // queryKeys de ambos carregam o escopo, e pedir escopo diferente do card não
+  // reaproveitaria o cache — dispararia uma segunda consulta e o número do topo
+  // passaria a discordar da lista logo abaixo dele.
+  const { total: aguardando, isLoading: convLoading, isError: convError, chipsComErro } = useConversasAguardando(10);
+  const { data: tarefas, isLoading: taskLoading, isError: taskError } = useAcoesDoDia(isAdmin ? "tudo" : "meu");
 
   const { pendentes, atrasadasCount } = useMemo(
     () => classificarTarefas(tarefas, timezone),
@@ -52,6 +59,8 @@ export function TabProximosPassos() {
   );
 
   const resumo = useMemo(() => {
+    if (convError || taskError || chipsComErro > 0) return "Alguns dados não carregaram. Confira os avisos nos cards abaixo.";
+    if (convLoading || taskLoading) return "Conferindo o dia…";
     const partes: string[] = [];
     if (aguardando > 0) {
       partes.push(
@@ -69,17 +78,20 @@ export function TabProximosPassos() {
       );
     }
     if (partes.length === 0) {
-      return convLoading ? "Conferindo o dia…" : "Nada esperando você agora.";
+      if (convLoading) return "Conferindo o dia…";
+      return isAdmin
+        ? "Nada esperando o time agora."
+        : "Nada esperando você agora.";
     }
     return partes.join(" · ");
-  }, [aguardando, pendentes.length, atrasadasCount, convLoading]);
+  }, [aguardando, pendentes.length, atrasadasCount, convLoading, taskLoading, convError, taskError, chipsComErro, isAdmin]);
 
   return (
     <div className="space-y-5 pt-5">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-[22px] font-extrabold leading-tight tracking-[-0.03em]">
-            Sua central de trabalho
+            {isAdmin ? "Central de trabalho da equipe" : "Sua central de trabalho"}
           </h2>
           <p className="text-[12px] text-muted-foreground/70">{resumo}</p>
         </div>

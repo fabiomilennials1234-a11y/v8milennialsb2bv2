@@ -1826,6 +1826,9 @@ Deno.serve(withErrorBoundary(FUNCTION_NAME, async (req: Request) => {
             triggerType: "lead_replied",
             leadId: lead.id,
             source: "webhook",
+            // Sem isto o filtro de canal do gatilho passava sempre: o matcher
+            // só compara quando o contexto traz o campo.
+            context: reacoes.contextoDoGatilho ?? undefined,
           });
         }
       } catch (err) {

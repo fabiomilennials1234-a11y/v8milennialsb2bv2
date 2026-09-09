@@ -130,4 +130,5 @@ SELECT is(
   0::bigint,
   '(BACKFILL) toda linha com rastro da virada está marcada como backfill');
 
+SELECT * FROM finish();
 ROLLBACK;

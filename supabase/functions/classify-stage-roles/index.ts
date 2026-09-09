@@ -2,23 +2,20 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
 /**
  * Stage Role Classifier (#991 + U4, ADR-0017 §1 — padrão ADR-0006).
  *
- * Sugere `stage_role` para etapas ungovernadas de DOIS cadernos de etapa:
- * SISTEMA `pipeline_stages` (chave fora do mapa de sistema do #990) E CUSTOM
- * `custom_pipeline_stages` (as 22 orgs de funil custom, U4). Predicado idêntico
- * nos dois: role 'open', sem sugestão pendente e nunca revisadas. O plano é
- * escrito de volta na MESMA tabela de onde a linha veio (U1 espelhou as colunas
- * de sugestão em custom_pipeline_stages — payload table-agnostic). Duas passadas:
+ * Sugere `stage_role` para etapas ungovernadas de sistema e custom na fonte
+ * única `pipeline_stages`. O tipo do funil vem do join com `pipelines`.
+ * Predicado idêntico: role 'open', sem sugestão pendente e nunca revisadas.
+ * Duas passadas:
  *
  *   1. Determinística — mapa de sinônimos pt-BR pelo NOME + flags
  *      is_final_positive/negative como sinal fraco (fallback). Nomes óbvios
  *      ("Fechado", "Recomprou", "Reunião marcada") resolvem aqui, sem IA.
  *   2. IA (opcional, resíduo) — LLM classifica os nomes não-óbvios num dos
- *      5 roles, temperature 0, mesma mecânica do classify-followup-stages.
+ *      papéis de reunião, temperature 0, mesma mecânica do classify-followup-stages.
  *
- * Aplicação (ADR-0017 §1 — won/lost = dinheiro = confirmação humana):
+ * Aplicação: resultado financeiro pertence ao negócio, nunca à etapa.
  *   · meeting_booked / meeting_held → AUTO-APLICA (update stage_role direto)
- *   · won / lost → grava `suggested_stage_role` (fila da tela master
- *     /master/stage-roles). NUNCA aplica.
+ *   · won / lost → ignorados inclusive no determinístico; não entram na fila.
  *
  * Backfill das ~30 orgs: body {"all_orgs": true} — uma passada. On-demand:
  * {"organization_id": "..."}. {"dry_run": true} devolve o plano sem escrever;
@@ -33,7 +30,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
 import {
-  planStageRoleSuggestions,
+  planAssignableStageRoles,
   type StagePlanItem,
   type StageToClassify,
   type SuggestableStageRole,
@@ -51,8 +48,6 @@ const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 const SUGGESTABLE_ROLES: SuggestableStageRole[] = [
   "meeting_booked",
   "meeting_held",
-  "won",
-  "lost",
 ];
 
 interface StageRow {
@@ -64,13 +59,11 @@ interface StageRow {
   position: number;
   is_final_positive: boolean | null;
   is_final_negative: boolean | null;
-  /** Caderno de origem — decide para onde o plano volta a ser escrito. */
+  /** Família lógica exibida no relatório. */
   source_table: StageSourceTable;
 }
 
-/** Custom stages não têm coluna pipeline_type; nunca são de sistema. Este
- * sentinela garante isSystemStageKey()=false (não existe funil de sistema
- * "custom"), então toda etapa custom é classificada — nenhuma é pulada. */
+/** Etapas custom não usam o vocabulário fixo dos funis de sistema. */
 const CUSTOM_PIPELINE_TYPE_SENTINEL = "custom";
 
 function buildPrompt(stages: StageRow[]): string {
@@ -82,11 +75,9 @@ function buildPrompt(stages: StageRow[]): string {
   return [
     "Você classifica etapas de funil de vendas B2B (CRM, pt-BR) em papéis semânticos para métricas.",
     "Para CADA etapa, escolha UM papel pelo NOME:",
-    "- won: venda fechada/ganha (terminal positivo, gera receita)",
-    "- lost: oportunidade perdida/desistiu/sem interesse (terminal negativo)",
     "- meeting_booked: reunião/call/visita marcada ou aguardando confirmação",
     "- meeting_held: reunião/call/visita realizada, lead compareceu",
-    "- open: qualquer outra coisa (etapa intermediária, nutrição, negociação em curso)",
+    "- open: qualquer outra coisa, inclusive venda ganha ou perdida; o desfecho pertence ao negócio, não à etapa",
     "As flags [final positivo/negativo] são sinal fraco — o NOME decide. Na dúvida, use open.",
     "",
     "Etapas:",
@@ -171,53 +162,44 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-  // Candidatas (predicado IDÊNTICO nas duas tabelas): ativas, sem role
+  // Candidatas na fonte única: ativas, sem role
   // definido, sem sugestão pendente e nunca revisadas (reviewed_at é o marcador
   // anti-re-sugestão de etapa dispensada). Em pipeline_stages, etapas de
   // sistema entram no fetch mas saem no plano (isSystemStageKey) — role delas é
-  // governado pelo mapa SQL do #990, nunca pelo classifier. Etapas custom nunca
-  // são de sistema (tabela distinta, sem mapa determinístico).
+  // governado pelo mapa SQL do #990, nunca pelo classifier. Etapas custom usam
+  // o sentinela abaixo e nunca casam com esse mapa.
 
-  // SISTEMA — pipeline_stages (carrega pipeline_type real).
-  let systemQuery = supabase
+  let stageQuery = supabase
     .from("pipeline_stages")
     .select(
-      "id, organization_id, pipeline_type, stage_key, name, position, is_final_positive, is_final_negative",
+      "id, organization_id, pipeline_type, stage_key, name, position, is_final_positive, is_final_negative, pipeline:pipelines(type)",
     )
     .eq("is_active", true)
     .eq("stage_role", "open")
     .is("suggested_stage_role", null)
     .is("stage_role_reviewed_at", null);
-  if (!allOrgs) systemQuery = systemQuery.eq("organization_id", organizationId!);
+  if (!allOrgs) stageQuery = stageQuery.eq("organization_id", organizationId!);
 
-  // CUSTOM — custom_pipeline_stages (sem coluna pipeline_type; U1 espelhou role
-  // + colunas de sugestão). U4: é o que traz as 22 orgs de funil custom.
-  let customQuery = supabase
-    .from("custom_pipeline_stages")
-    .select(
-      "id, organization_id, stage_key, name, position, is_final_positive, is_final_negative",
-    )
-    .eq("is_active", true)
-    .eq("stage_role", "open")
-    .is("suggested_stage_role", null)
-    .is("stage_role_reviewed_at", null);
-  if (!allOrgs) customQuery = customQuery.eq("organization_id", organizationId!);
+  const stageRes = await stageQuery;
+  if (stageRes.error) return json({ error: stageRes.error.message }, 500);
 
-  const [systemRes, customRes] = await Promise.all([systemQuery, customQuery]);
-  if (systemRes.error) return json({ error: systemRes.error.message }, 500);
-  if (customRes.error) return json({ error: customRes.error.message }, 500);
-
-  const stageRows: StageRow[] = [
-    ...((systemRes.data ?? []) as Omit<StageRow, "source_table">[]).map((r) => ({
-      ...r,
-      source_table: "pipeline_stages" as StageSourceTable,
-    })),
-    ...((customRes.data ?? []) as Omit<StageRow, "source_table" | "pipeline_type">[]).map((r) => ({
-      ...r,
-      pipeline_type: CUSTOM_PIPELINE_TYPE_SENTINEL,
-      source_table: "custom_pipeline_stages" as StageSourceTable,
-    })),
-  ];
+  type CanonicalStageRow = Omit<StageRow, "source_table"> & {
+    pipeline: { type: string } | { type: string }[] | null;
+  };
+  const stageRows: StageRow[] = ((stageRes.data ?? []) as CanonicalStageRow[]).map((row) => {
+    // PostgREST usa objeto para many-to-one; cliente sem schema pode inferir
+    // array. Normalizamos ambas as formas, sem cast que esconda o contrato.
+    const pipeline = Array.isArray(row.pipeline) ? row.pipeline[0] : row.pipeline;
+    const custom = pipeline?.type === "custom";
+    const { pipeline: _pipeline, ...stage } = row;
+    return {
+      ...stage,
+      pipeline_type: custom ? CUSTOM_PIPELINE_TYPE_SENTINEL : stage.pipeline_type,
+      // Campo mantido no relatório por compatibilidade; persistência usa sempre
+      // pipeline_stages.
+      source_table: custom ? "custom" : "system",
+    };
+  });
 
   const byOrg = new Map<string, StageRow[]>();
   for (const row of stageRows) {
@@ -232,8 +214,8 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
   let totalAutoApplied = 0;
   let totalQueued = 0;
   const totalsByTable: Record<StageSourceTable, TableCounts> = {
-    pipeline_stages: emptyTableCounts(),
-    custom_pipeline_stages: emptyTableCounts(),
+    system: emptyTableCounts(),
+    custom: emptyTableCounts(),
   };
 
   for (const [orgId, orgRows] of byOrg) {
@@ -247,7 +229,7 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
     }));
 
     // Passada 1 — determinística (nome + flag).
-    let plan = planStageRoleSuggestions(stages);
+    let plan = planAssignableStageRoles(stages);
 
     // Passada 2 — IA só pro resíduo não-óbvio.
     if (plan.unresolved.length > 0 && openRouter) {
@@ -264,7 +246,7 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
           raw,
           new Set(residueRows.map((r) => r.id)),
         );
-        plan = planStageRoleSuggestions(stages, aiClassification);
+        plan = planAssignableStageRoles(stages, aiClassification);
       } catch (err) {
         // IA indisponível não bloqueia a passada determinística.
         console.error(`classify-stage-roles: AI pass failed for org ${orgId}:`, err);
@@ -273,8 +255,8 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
 
     const rowById = new Map(orgRows.map((r) => [r.id, r]));
     const byTable: Record<StageSourceTable, TableCounts> = {
-      pipeline_stages: emptyTableCounts(),
-      custom_pipeline_stages: emptyTableCounts(),
+      system: emptyTableCounts(),
+      custom: emptyTableCounts(),
     };
     for (const r of orgRows) byTable[r.source_table].examined++;
 
@@ -290,24 +272,25 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
         ...i,
         stage_key: rowById.get(i.id)?.stage_key ?? "",
         name: rowById.get(i.id)?.name ?? "",
-        source_table: rowById.get(i.id)?.source_table ?? "pipeline_stages",
+        source_table: rowById.get(i.id)?.source_table ?? "system",
       })),
     };
 
     for (const item of plan.items) {
       // Invariante ADR-0017 §1: won/lost jamais auto-aplicam. A decisão vem de
       // decideStageRoleAction (testada em unit); buildStageRoleUpdate reflete-a
-      // 1:1 (won/lost → suggested_stage_role; meeting_* → stage_role). Payload
-      // idêntico nas duas tabelas (U1). O write volta pra tabela de origem.
+      // 1:1 (won/lost → suggested_stage_role; meeting_* → stage_role). O
+      // relatório separa sistema/custom; a escrita volta à fonte canônica.
       const row = rowById.get(item.id);
-      const table: StageSourceTable = row?.source_table ?? "pipeline_stages";
+      const table: StageSourceTable = row?.source_table ?? "system";
       const update = buildStageRoleUpdate(item, nowIso);
 
       if (!dryRun) {
         const { error: updateError } = await supabase
-          .from(table)
+          .from("pipeline_stages")
           .update(update)
           .eq("id", item.id)
+          .eq("organization_id", orgId)
           .eq("stage_role", "open"); // guarda: não sobrescreve role definido no meio-tempo
         if (updateError) {
           console.error(`classify-stage-roles: update failed for stage ${item.id} (${table}):`, updateError.message);
@@ -326,7 +309,7 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
 
     totalAutoApplied += orgResult.auto_applied;
     totalQueued += orgResult.queued_review;
-    for (const t of ["pipeline_stages", "custom_pipeline_stages"] as StageSourceTable[]) {
+    for (const t of ["system", "custom"] as StageSourceTable[]) {
       totalsByTable[t].examined += byTable[t].examined;
       totalsByTable[t].auto_applied += byTable[t].auto_applied;
       totalsByTable[t].queued_review += byTable[t].queued_review;

@@ -4,7 +4,7 @@
  * - Selecionar formulario especifico da pagina
  * - Vincular a campanha
  * - Adicionar tags automaticas
- * - Enviar para pipe/estagio
+ * - Enviar para funil/etapa
  * - Notificar time
  */
 
@@ -15,6 +15,7 @@ import { useOrganization } from "@/modules/identity";
 import { useMetaConnectionStatus, MetaPage } from "@/modules/communication/hooks/useMetaConnection";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { useAllPipelineStages, useFunisDaOrg } from "@/modules/pipelines";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,11 +93,6 @@ const LEAD_FIELD_OPTIONS = [
   { value: "utm_term", label: "UTM Term" },
 ];
 
-const PIPE_OPTIONS = [
-  { value: "whatsapp", label: "Pipe de Qualificação" },
-  { value: "confirmacao", label: "Pipe Confirmação" },
-  { value: "propostas", label: "Pipe de Propostas" },
-];
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -400,7 +396,6 @@ function PageLeadgenCard({
   config,
   campaigns,
   tags: availableTags,
-  pipeStages,
   onSave,
   isSaving,
 }: {
@@ -408,7 +403,6 @@ function PageLeadgenCard({
   config: LeadgenConfig;
   campaigns: Array<{ id: string; name: string }>;
   tags: Array<{ id: string; name: string; color: string }>;
-  pipeStages: Record<string, Array<{ stage_key: string; name: string }>>;
   onSave: (config: Partial<LeadgenConfig> & { meta_page_id: string }) => void;
   isSaving: boolean;
 }) {
@@ -423,8 +417,22 @@ function PageLeadgenCard({
   const tosNotAccepted = formsResult?.tos_not_accepted === true;
   const tosAcceptUrl = formsResult?.tos_accept_url;
 
-  const selectedPipeStages = config.assign_to_pipe
-    ? pipeStages[config.assign_to_pipe] || []
+  const { data: funnels = [] } = useFunisDaOrg();
+  const { data: allStages = [] } = useAllPipelineStages();
+  const legacySlug = config.assign_to_pipe?.replace(/^pipe_/, "") ?? "";
+  const selectedFunnel = funnels.find(
+    (funnel) => funnel.id === config.assign_to_pipe || funnel.slug === legacySlug,
+  );
+  const selectedFunnelValue = selectedFunnel?.id ?? config.assign_to_pipe ?? "none";
+  const visibleFunnels = funnels.filter(
+    (funnel) => funnel.is_active || funnel.id === selectedFunnel?.id,
+  );
+  const selectedFunnelStages = selectedFunnel
+    ? allStages.filter(
+        (stage) =>
+          stage.pipeline_id === selectedFunnel.id &&
+          (stage.is_active || stage.stage_key === config.assign_to_stage),
+      )
     : [];
 
   return (
@@ -593,13 +601,13 @@ function PageLeadgenCard({
             </div>
           </div>
 
-          {/* Enviar para Pipe */}
+          {/* Enviar para funil */}
           <div className="flex items-center gap-3">
             <Kanban className="w-4 h-4 text-muted-foreground shrink-0" />
             <div className="flex-1 space-y-2">
-              <Label className="text-xs">Enviar para pipe</Label>
+              <Label className="text-xs">Enviar para funil</Label>
               <Select
-                value={config.assign_to_pipe || "none"}
+                value={selectedFunnelValue}
                 onValueChange={(val) =>
                   onSave({
                     ...config,
@@ -613,14 +621,14 @@ function PageLeadgenCard({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhum</SelectItem>
-                  {PIPE_OPTIONS.map((p) => (
-                    <SelectItem key={p.value} value={p.value}>
-                      {p.label}
+                  {visibleFunnels.map((funnel) => (
+                    <SelectItem key={funnel.id} value={funnel.id}>
+                      {funnel.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {config.assign_to_pipe && selectedPipeStages.length > 0 && (
+              {selectedFunnel && selectedFunnelStages.length > 0 && (
                 <Select
                   value={config.assign_to_stage || "default"}
                   onValueChange={(val) =>
@@ -631,11 +639,11 @@ function PageLeadgenCard({
                   }
                 >
                   <SelectTrigger className="h-8 text-xs">
-                    <SelectValue placeholder="Estagio inicial" />
+                    <SelectValue placeholder="Etapa inicial" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="default">Estagio padrao</SelectItem>
-                    {selectedPipeStages.map((s) => (
+                    <SelectItem value="default">Etapa padrão</SelectItem>
+                    {selectedFunnelStages.map((s) => (
                       <SelectItem key={s.stage_key} value={s.stage_key}>
                         {s.name}
                       </SelectItem>
@@ -738,32 +746,6 @@ export function MetaLeadgenConfig() {
     enabled: !!orgId,
   });
 
-  // Buscar estagios dos pipes
-  const { data: pipeStages = {} } = useQuery({
-    queryKey: ["pipeline_stages_for_leadgen", orgId],
-    queryFn: async () => {
-      if (!orgId) return {};
-      const { data, error } = await supabase
-        .from("pipeline_stages")
-        .select("pipeline_type, stage_key, name, position")
-        .eq("organization_id", orgId)
-        .eq("is_active", true)
-        .order("position");
-      if (error) throw error;
-
-      const grouped: Record<string, Array<{ stage_key: string; name: string }>> = {};
-      for (const stage of data || []) {
-        if (!grouped[stage.pipeline_type]) grouped[stage.pipeline_type] = [];
-        grouped[stage.pipeline_type].push({
-          stage_key: stage.stage_key,
-          name: stage.name,
-        });
-      }
-      return grouped;
-    },
-    enabled: !!orgId,
-  });
-
   // Upsert config
   const upsertConfig = useMutation({
     mutationFn: async (config: Partial<LeadgenConfig> & { meta_page_id: string }) => {
@@ -818,7 +800,7 @@ export function MetaLeadgenConfig() {
         </h4>
         <p className="text-xs text-muted-foreground mt-1">
           Configure o que acontece automaticamente quando um lead chega de um
-          formulario de anuncio. Selecione o formulario, tags, campanha e pipe.
+          formulario de anuncio. Selecione o formulário, tags, campanha e funil.
         </p>
       </div>
 
@@ -844,7 +826,6 @@ export function MetaLeadgenConfig() {
             config={pageConfig}
             campaigns={campaigns}
             tags={availableTags}
-            pipeStages={pipeStages}
             onSave={(c) => upsertConfig.mutate(c)}
             isSaving={upsertConfig.isPending}
           />

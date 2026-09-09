@@ -4,14 +4,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { GitBranch, ArrowDown, Loader2 } from "lucide-react";
 import { useFunnelConversion } from "@/modules/analytics/hooks/useAnalytics";
 import { useAnalyticsFilters } from "@/modules/analytics/hooks/useAnalyticsFilters";
+import { useAnalyticsPipelineOptions } from "@/modules/analytics/hooks/useAnalyticsPipelineOptions";
 import { AT } from "./analytics-tokens";
 import { AnalyticsEmptyState } from "./AnalyticsEmptyState";
-
-const PIPELINE_OPTIONS = [
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "propostas", label: "Propostas" },
-];
 
 const FUNNEL_COLORS = [
   "bg-indigo-500",
@@ -23,9 +18,13 @@ const FUNNEL_COLORS = [
 ];
 
 export function FunnelConversion() {
-  const [pipeline, setPipeline] = useState("whatsapp");
+  // SCRUM-631: lista os funis reais da org (custom incluído); valor = pipeline_id.
+  // Default: o funil padrão da org (SCRUM-624), senão o primeiro da lista.
+  const { options, orgDefault } = useAnalyticsPipelineOptions();
+  const [pipeline, setPipeline] = useState<string | null>(null);
+  const selectedPipeline = pipeline ?? orgDefault;
   const { startStr, endStr } = useAnalyticsFilters();
-  const { data: stages, isLoading } = useFunnelConversion(pipeline, startStr, endStr);
+  const { data: stages, isLoading } = useFunnelConversion(selectedPipeline, startStr, endStr);
 
   const maxValue = stages && stages.length > 0 ? Math.max(...stages.map((s) => s.total_entered)) : 0;
 
@@ -37,14 +36,14 @@ export function FunnelConversion() {
             <GitBranch className="h-4 w-4" />
             Conversão por Etapa
           </CardTitle>
-          <Select value={pipeline} onValueChange={setPipeline}>
+          <Select value={selectedPipeline ?? undefined} onValueChange={setPipeline}>
             <SelectTrigger className="w-[160px] h-8 text-xs">
-              <SelectValue />
+              <SelectValue placeholder="Funil" />
             </SelectTrigger>
             <SelectContent>
-              {PIPELINE_OPTIONS.map((opt) => (
-                <SelectItem key={opt.value} value={opt.value}>
-                  {opt.label}
+              {options.map((opt) => (
+                <SelectItem key={opt.id} value={opt.id}>
+                  {opt.name}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -163,3 +163,15 @@ export {
 } from "./components/BehaviorWindowsEditor";
 
 export { CopilotPlayground } from "./components/playground/CopilotPlayground";
+
+// ────────────────────────────────────────────────────────────────────────
+// Oráculo Comercial (SCRUM-594) — domínio próprio, não um tipo de agente
+// Copilot (ADR-0032 §1). A página não é re-exportada: App.tsx faz deep-import
+// via React.lazy, como as demais.
+// ────────────────────────────────────────────────────────────────────────
+export { useOraculoTurno, type OraculoMensagem } from "./hooks/useOraculoTurno";
+export {
+  useOraculoConversas,
+  useOraculoTurnos,
+  type OraculoConversaResumo,
+} from "./hooks/useOraculoConversas";

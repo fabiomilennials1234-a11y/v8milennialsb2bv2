@@ -17,6 +17,7 @@ import { sleepJitter } from "../_shared/anti-ban-jitter.ts";
 const JITTER_BUDGET_MS = 90_000;
 import { getActiveGestorForOrg, gestorRuntimeActor } from "../_shared/gestor-auth.ts";
 import { logRuntime } from "../_shared/logger.ts";
+import { personalizationFirstName } from "../_shared/lead-name.ts";
 
 interface BulkMessageRequest {
   organization_id: string;
@@ -49,7 +50,7 @@ function formatBRL(value: number): string {
 
 function resolveVariables(template: string, client: ClientData): string {
   const timeVars = getTimeBasedVariables();
-  const firstName = (client.name ?? client.lead?.name ?? "").split(" ")[0];
+  const firstName = personalizationFirstName(client.name ?? client.lead?.name);
 
   const vars: Record<string, string> = {
     nome: client.name ?? client.lead?.name ?? "",

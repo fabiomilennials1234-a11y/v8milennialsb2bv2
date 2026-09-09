@@ -881,37 +881,51 @@ describe("useScheduledMessages", () => {
     });
   });
 
+  // 🚨 As três mutations abaixo passaram a depender do que o `.select("id")`
+  // devolve, e não só de `error: null`. O `.eq("status","scheduled")` delas é um
+  // compare-and-swap contra o worker do cron: `data: []` significa "a linha já
+  // saiu do estado agendado", e isso agora é ERRO — antes virava sucesso
+  // silencioso e a UI dizia "cancelado" para uma mensagem que ia sair.
+  //
+  // Por isso o fixture precisa conter a linha afetada: `createChainMock([])`
+  // aqui descreveria uma corrida PERDIDA, não um cancelamento bem-sucedido. A
+  // guarda em si está coberta em `tests/unit/agendamento-janela-de-edicao.test.ts`.
+  const LINHA_AFETADA = [{ id: "sm-1" }];
+
   describe("useCancelScheduledMessage", () => {
     it("cancels a scheduled message", async () => {
-      mockFrom.mockReturnValue(createChainMock([]));
+      mockFrom.mockReturnValue(createChainMock(LINHA_AFETADA));
       const { result } = renderHook(() => useCancelScheduledMessage(), {
         wrapper: createWrapper(),
       });
       await act(async () => {
         await result.current.mutateAsync("sm-1");
       });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
     });
   });
 
   describe("useUpdateScheduledMessage", () => {
     it("updates message content", async () => {
-      mockFrom.mockReturnValue(createChainMock([]));
+      mockFrom.mockReturnValue(createChainMock(LINHA_AFETADA));
       const { result } = renderHook(() => useUpdateScheduledMessage(), {
         wrapper: createWrapper(),
       });
       await act(async () => {
         await result.current.mutateAsync({ id: "sm-1", messageContent: "Updated" });
       });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
     });
 
     it("updates scheduled time", async () => {
-      mockFrom.mockReturnValue(createChainMock([]));
+      mockFrom.mockReturnValue(createChainMock(LINHA_AFETADA));
       const { result } = renderHook(() => useUpdateScheduledMessage(), {
         wrapper: createWrapper(),
       });
       await act(async () => {
         await result.current.mutateAsync({ id: "sm-1", scheduledAt: new Date("2026-05-01T12:00:00") });
       });
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
     });
   });
 

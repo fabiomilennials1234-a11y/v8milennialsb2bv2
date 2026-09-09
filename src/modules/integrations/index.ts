@@ -33,6 +33,7 @@ export {
   useDisconnectToth,
   useSyncTothClientes,
   useSyncTothCobrancas,
+  useSyncTothPedidos,
   useSimulateTothClientes,
   useUpdateTothActiveWindow,
   useUpdateTothEmpresa,
@@ -47,6 +48,7 @@ export {
 export {
   readTothEndpoint,
   canSubmitTothConnection,
+  isFlowPartValid,
   type TothEndpointReading,
   type TothEndpointVerdict,
 } from "./lib/toth-endpoint";

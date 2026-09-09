@@ -50,7 +50,11 @@ vi.mock("../../supabase/functions/_shared/pipeline-adapter.ts", () => ({
     async (_sb: unknown, _leadId: string, _orgId: string, slug: string) => pipeEntries[slug] ?? null,
   ),
   getPipeEntriesByLeads: vi.fn().mockResolvedValue([]),
-  resolvePipelineId: vi.fn().mockResolvedValue(null),
+  // SCRUM-623: o contrato novo LANÇA em funil não resolvido — null saiu do tipo.
+  resolvePipelineId: vi.fn(async () => {
+    throw new Error("pipeline_not_found (mock — contrato SCRUM-623 lança, não devolve null)");
+  }),
+  tryResolvePipelineId: vi.fn().mockResolvedValue(null),
   upsertPipeEntry: vi.fn().mockResolvedValue({ status: "updated" }),
 }));
 
@@ -103,11 +107,27 @@ beforeEach(() => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Roda `update_lead_field` com o template pedido e devolve o valor resolvido. */
+/**
+ * SCRUM-627: o fallback de `getStageDoNegocio` lê `pipeline_entries` direto
+ * (negócio corrente — ADR-0031), não mais `getPipeEntry(whatsapp)`. As seeds
+ * de `pipeEntries` viram linhas da tabela canônica.
+ */
+function entryRows() {
+  return Object.entries(pipeEntries).map(([slug, e]) => ({
+    lead_id: "lead-1",
+    organization_id: "org-1",
+    pipeline_id: `pipe-${slug}`,
+    closed_at: null,
+    ...(e as Record<string, unknown>),
+  }));
+}
+
 async function resolverPorAcao(template: string, lead: Record<string, unknown>) {
   const { sb, mockTable } = createMockSupabase();
   mockTable("leads", [lead]);
   mockTable("team_members", []);
   mockTable("organizations", [{ id: "org-1", name: "Milennials" }]);
+  mockTable("pipeline_entries", entryRows());
 
   await executeWorkflowAction({
     supabase: sb,
@@ -148,6 +168,36 @@ describe("workflow-action-handler :: {{estagio}} vem do negócio", () => {
     expect(await resolverPorAcao("{{nome}} / {{empresa}} / {{estagio}}", LEAD))
       .toBe("Bar do Zé / Bar do Zé Ltda / abordado");
   });
+
+  it("SCRUM-627: {{estagio}} resolve em funil CUSTOM sem card de Oportunidades", async () => {
+    // O caso que o fallback antigo (whatsapp chumbado) respondia vazio: o único
+    // negócio do lead vive num funil custom.
+    pipeEntries["custom-orcamentos"] = { id: "ec1", stage_key: "triagem", closed_at: null };
+
+    expect(await resolverPorAcao("[{{estagio}}]", LEAD)).toBe("[triagem]");
+  });
+
+  it("SCRUM-627: a entry do CONTEXTO vence o fallback — é a etapa do negócio que disparou", async () => {
+    pipeEntries.whatsapp = { id: "e-aberto", stage_key: "agendado", closed_at: null };
+    pipeEntries["custom-orcamentos"] = { id: "e-custom", stage_key: "triagem", closed_at: null };
+
+    const { sb, mockTable } = createMockSupabase();
+    mockTable("leads", [LEAD]);
+    mockTable("team_members", []);
+    mockTable("organizations", [{ id: "org-1", name: "Milennials" }]);
+    mockTable("pipeline_entries", entryRows());
+
+    await executeWorkflowAction({
+      supabase: sb,
+      organizationId: "org-1",
+      leadId: "lead-1",
+      nodeData: { actionType: "update_lead_field", fieldName: "notes", fieldValue: "[{{estagio}}]" },
+      executionContext: { pipeline_entry_id: "e-custom" },
+    });
+
+    expect(updateLeadFieldSpy).toHaveBeenCalled();
+    expect(updateLeadFieldSpy.mock.calls[0][0].params.fieldValue).toBe("[triagem]");
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,6 +216,7 @@ async function resolverPorWebhook(template: string, lead: Record<string, unknown
   mockTable("leads", [lead]);
   mockTable("team_members", []);
   mockTable("organizations", [{ id: "org-1", name: "Milennials" }]);
+  mockTable("pipeline_entries", entryRows());
 
   try {
     await executeWorkflow({

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtimeSubscription } from "@/shared/realtime/useRealtimeSubscription";
 import { useOrganization } from "@/modules/identity";
+import { limitesDoDia } from "@/shared/time/dia-da-org";
 export interface FollowUp {
   id: string;
   lead_id: string;
@@ -15,6 +16,22 @@ export interface FollowUp {
   priority: "low" | "normal" | "high" | "urgent";
   source_pipe: "whatsapp" | "confirmacao" | "propostas" | null;
   source_pipe_id: string | null;
+  /**
+   * O Negócio dono da tarefa — `pipeline_entries.id`.
+   *
+   * **Nulo = tarefa da PESSOA**, vale para todos os negócios dela (decisão do
+   * CTO em 2026-08-25, mesma regra do checklist — ADR-0031).
+   *
+   * Não é o mesmo que `source_pipe_id`, que era a meia-ponte antiga: texto do
+   * funil + uuid sem FK, preenchido em 373 das 1.185 linhas e apontando para
+   * card inexistente em 63 delas. `pipeline_entry_id` é a coluna canônica, com
+   * FK; a antiga fica até ser aposentada em fatia própria.
+   *
+   * Declarado à mão: `integrations/supabase/types.ts` é gerado e ainda não foi
+   * regenerado — regerar a partir de branch efêmera corrompe o arquivo.
+   */
+  pipeline_entry_id?: string | null;
+  deal_id?: string | null;
   is_automated: boolean;
   created_at: string;
   updated_at: string;
@@ -60,11 +77,15 @@ export function useFollowUps(filters?: {
   showArchived?: boolean;
   dateFilter?: "today" | "overdue" | "upcoming" | "all";
 }) {
-  const { organizationId, isReady } = useOrganization();
+  const { organizationId, isReady, timezone } = useOrganization();
   useRealtimeSubscription("follow_ups", ["follow_ups"]);
 
   return useQuery({
-    queryKey: ["follow_ups", filters, organizationId],
+    // `timezone` entra na chave: a fronteira do dia abaixo depende dele, e ele
+    // chega null nos primeiros renders. Sem isto, o resultado calculado com o
+    // fallback UTC ficaria cacheado e a lista não se corrigiria quando a org
+    // resolvesse.
+    queryKey: ["follow_ups", filters, organizationId, timezone],
     queryFn: async () => {
       if (!organizationId) return [];
       let query = supabase
@@ -89,19 +110,20 @@ export function useFollowUps(filters?: {
         query = query.is("completed_at", null);
       }
 
-      const now = new Date();
-      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      // O corte é o da ORG, não o do browser. `new Date(y, m, d)` — que estava
+      // aqui — usa o fuso da máquina de quem abriu a tela: dois vendedores da
+      // mesma organização, em fusos diferentes, viam listas de "atrasados"
+      // diferentes. Mesma regra que a aba Comando já aplicava às tarefas do dia.
+      const { inicioDeHoje, inicioDeAmanha } = limitesDoDia(timezone);
 
       if (filters?.dateFilter === "today") {
         query = query
-          .gte("due_date", today.toISOString())
-          .lt("due_date", tomorrow.toISOString());
+          .gte("due_date", inicioDeHoje)
+          .lt("due_date", inicioDeAmanha);
       } else if (filters?.dateFilter === "overdue") {
-        query = query.lt("due_date", today.toISOString());
+        query = query.lt("due_date", inicioDeHoje);
       } else if (filters?.dateFilter === "upcoming") {
-        query = query.gte("due_date", tomorrow.toISOString());
+        query = query.gte("due_date", inicioDeAmanha);
       }
 
       const { data, error } = await query;
@@ -159,13 +181,17 @@ export function useCreateFollowUp() {
       priority?: "low" | "normal" | "high" | "urgent";
       source_pipe?: "whatsapp" | "confirmacao" | "propostas";
       source_pipe_id?: string;
+      /** O Negócio dono da tarefa. Ausente = tarefa da pessoa. */
+      pipeline_entry_id?: string | null;
       is_automated?: boolean;
     }) => {
       if (!organizationId) throw new Error("Organização não disponível");
       const secured = { ...followUp, organization_id: organizationId };
       const { data, error } = await supabase
         .from("follow_ups")
-        .insert(secured)
+        // `as never`: `pipeline_entry_id` existe desde a migration
+        // `20270828000030` e ainda não está nos tipos gerados.
+        .insert(secured as never)
         .select()
         .single();
 

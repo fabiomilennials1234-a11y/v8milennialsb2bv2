@@ -38,6 +38,33 @@ export function personalizationName(name: string | null | undefined): string {
 }
 
 /**
+ * Primeiro nome seguro para copy voltada ao cliente — `{primeiro_nome}` /
+ * `{{primeiro_nome}}`.
+ *
+ * Encadeia personalizationName(): nome-placeholder ("WhatsApp 2952") vira "",
+ * nunca "WhatsApp". Fora isso, o primeiro token do nome:
+ *
+ *   "Lucia Pinheiro Da Silva" -> "Lucia"
+ *   "LUCIA PINHEIRO"          -> "Lucia"   (caixa alta chega de Meta Ads/planilha;
+ *                                           normalizar evita "Olá LUCIA!")
+ *   "WhatsApp 2952"           -> ""
+ *
+ * Pareie com tidyEmptyVarGaps() quando o valor puder sair vazio.
+ */
+export function personalizationFirstName(name: string | null | undefined): string {
+  const token = personalizationName(name).trim().split(/\s+/)[0] ?? "";
+  if (!token) return "";
+
+  const upper = token.toLocaleUpperCase("pt-BR");
+  const lower = token.toLocaleLowerCase("pt-BR");
+  // Só normaliza token inteiramente em caixa alta e que tenha letras.
+  if (token.length > 1 && token === upper && upper !== lower) {
+    return lower.charAt(0).toLocaleUpperCase("pt-BR") + lower.slice(1);
+  }
+  return token;
+}
+
+/**
  * Collapse the whitespace/punctuation gap left when an empty personalization
  * variable is removed from a resolved template:
  *   "Boa tarde , tudo bem?"     -> "Boa tarde, tudo bem?"

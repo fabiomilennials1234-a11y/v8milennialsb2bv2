@@ -19,6 +19,13 @@ import { useQuickBlast } from "@/modules/leads/hooks/useQuickBlast";
 import { useOrgFeaturesOptional } from "@/contexts/OrgFeaturesContext";
 import { UpgradeModal } from "@/shared/components/UpgradeModal";
 import { blastErrorMessage } from "@/modules/leads/lib/blast-error-messages";
+import {
+  instancesToNumbers,
+  isBlastableInstance,
+  regimeDaInstancia,
+  rotuloDaInstancia,
+  type InstanceLike,
+} from "@/shared/disparo/disparo-numbers";
 
 interface QuickBlastDialogProps {
   open: boolean;
@@ -27,7 +34,14 @@ interface QuickBlastDialogProps {
   onDone?: () => void;
 }
 
-const CONNECTED = new Set(["open", "connected"]);
+/**
+ * Os números vêm do módulo ÚNICO do Disparo (#1722), não de um filtro local.
+ *
+ * Esta tela e o wizard discordavam: o wizard filtrava por provedor e aqui não
+ * havia filtro nenhum, então o número oficial aparecia, o vendedor escolhia e a
+ * tela devolvia `notificame does not support senderAdvanced` (ADR-0028 §6).
+ * Duas telas, uma decisão — e o regime de cada número fica visível.
+ */
 
 // Variables resolved per recipient by the server. Lead vars work on any board;
 // carteira vars resolve only for Upsell/Carteira leads (empty otherwise).
@@ -88,11 +102,28 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
   const [uploading, setUploading] = useState(false);
   const [scheduledFor, setScheduledFor] = useState<string>(""); // datetime-local
 
-  const connectedInstances = useMemo(
-    () => instances.filter((i: any) => CONNECTED.has(i.status)),
+  const numerosDoDisparo = useMemo(
+    () => instancesToNumbers((instances ?? []) as InstanceLike[], Date.now()),
     [instances],
   );
-  const selectable = connectedInstances.length > 0 ? connectedInstances : instances;
+
+  /**
+   * Fallback preservado de propósito: sem nenhuma linha conectada, a tela
+   * continua oferecendo as desconectadas rotuladas "(desconectada)" — era o
+   * comportamento de hoje e tirá-lo deixaria a Organization sem porta nenhuma.
+   * O que mudou é que agora só entram números que ALGUM regime dispara.
+   */
+  const selectable = useMemo(() => {
+    if (numerosDoDisparo.length > 0) return numerosDoDisparo;
+    return ((instances ?? []) as InstanceLike[])
+      .filter((i) => isBlastableInstance(i))
+      .map((i, idx) => ({
+        id: i.id,
+        label: rotuloDaInstancia(i, idx),
+        regime: regimeDaInstancia(i)!,
+        desconectada: true,
+      }));
+  }, [numerosDoDisparo, instances]);
 
   const canFire =
     message.trim().length > 0 &&
@@ -252,10 +283,11 @@ function QuickBlastDialogInner({ open, onOpenChange, leadIds, onDone }: QuickBla
                 <SelectValue placeholder="Selecione a instância de envio" />
               </SelectTrigger>
               <SelectContent>
-                {selectable.map((i: any) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {i.instance_name ?? i.name ?? i.id}
-                    {CONNECTED.has(i.status) ? "" : " (desconectada)"}
+                {selectable.map((n: any) => (
+                  <SelectItem key={n.id} value={n.id}>
+                    {n.label}
+                    {n.regime === "oficial" ? " · Canal Oficial" : ""}
+                    {n.desconectada ? " (desconectada)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

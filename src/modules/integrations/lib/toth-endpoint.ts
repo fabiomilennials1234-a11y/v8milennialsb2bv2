@@ -106,9 +106,46 @@ export function canSubmitTothConnection(params: {
   user: string;
   password: string;
   acceptedInsecure: boolean;
+  /** Serviço de pedidos (Flow) — opcional, mas tudo ou nada. */
+  flowEndpoint?: string;
+  flowClientId?: string;
+  flowClientSecret?: string;
 }): boolean {
   const reading = readTothEndpoint(params.endpoint);
   if (reading.verdict === "vazio" || reading.verdict === "invalido") return false;
-  if (reading.insecure && !params.acceptedInsecure) return false;
-  return params.user.trim().length > 0 && params.password.length > 0;
+  if (params.user.trim().length === 0 || params.password.length === 0) return false;
+  if (!isFlowPartValid(params)) return false;
+
+  // O aceite cobre os DOIS endereços. Sem esta linha, apontar o principal para
+  // https e o de pedidos para http passaria sem ninguém consentir com tráfego
+  // em claro — a checkbox nem apareceria, e a credencial iria em texto puro.
+  const flowReading = readTothEndpoint(params.flowEndpoint ?? "");
+  if ((reading.insecure || flowReading.insecure) && !params.acceptedInsecure) return false;
+  return true;
+}
+
+/**
+ * O trio do serviço de pedidos está em estado enviável?
+ *
+ * "Vazio" é válido — a maioria das orgs não tem esse serviço. O que não pode
+ * passar é meio preenchido: o servidor recusa, e sem esta checagem o usuário só
+ * descobre depois de clicar, com uma mensagem que ele já poderia ter evitado.
+ *
+ * O aceite de tráfego sem TLS **não** é cobrado de novo aqui: é a mesma
+ * máquina e a mesma decisão de risco do endereço principal. Dois aceites para
+ * o mesmo fato seriam duas chances de divergir.
+ */
+export function isFlowPartValid(params: {
+  flowEndpoint?: string;
+  flowClientId?: string;
+  flowClientSecret?: string;
+}): boolean {
+  const endpoint = (params.flowEndpoint ?? "").trim();
+  const id = (params.flowClientId ?? "").trim();
+  const secret = params.flowClientSecret ?? "";
+  const preenchidos = [endpoint, id, secret].filter((v) => v.length > 0).length;
+
+  if (preenchidos === 0) return true;
+  if (preenchidos < 3) return false;
+  return readTothEndpoint(endpoint).verdict !== "invalido";
 }

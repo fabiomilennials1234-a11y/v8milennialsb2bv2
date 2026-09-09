@@ -16,10 +16,10 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { CalendarOff, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarOff, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 import type { UnifiedEvent } from "./agenda-helpers";
-import { SOURCE_LABELS, getMonthGrid } from "./agenda-helpers";
+import { SOURCE_LABELS, getMonthGrid, outcomeOf } from "./agenda-helpers";
 
 interface DayAgendaViewProps {
   /** Currently selected day (also drives which month the mini-calendar shows). */
@@ -30,6 +30,11 @@ interface DayAgendaViewProps {
   onSelectDate: (day: Date) => void;
   /** Open the detail popover for an event. */
   onEventClick: (e: React.MouseEvent, event: UnifiedEvent) => void;
+  /**
+   * Prefixa o subtítulo com o responsável. Ligado para quem enxerga a agenda
+   * da equipe inteira — sem isso a lista vira uma pilha anônima de horários.
+   */
+  showOwner?: boolean;
 }
 
 // Single-letter weekday headers (Sun→Sat), matching the compact mini-calendar.
@@ -45,11 +50,16 @@ const ORANGE = "#ed9326";
 const PANEL_CLASS = "bg-foreground/[0.02] border border-border/50";
 
 /** Build a per-event subtitle from the richest detail available. */
-function eventSubtitle(event: UnifiedEvent): string {
-  if (event.location) return event.location;
-  const lead = [event.leadCompany, event.leadName].filter(Boolean).join(" · ");
-  if (lead) return lead;
-  return SOURCE_LABELS[event.source] ?? event.source;
+function eventSubtitle(event: UnifiedEvent, showOwner: boolean): string {
+  const detalhe = (() => {
+    if (event.location) return event.location;
+    const lead = [event.leadCompany, event.leadName].filter(Boolean).join(" · ");
+    if (lead) return lead;
+    return SOURCE_LABELS[event.source] ?? event.source;
+  })();
+
+  if (showOwner && event.creatorName) return `${event.creatorName} · ${detalhe}`;
+  return detalhe;
 }
 
 export function DayAgendaView({
@@ -57,6 +67,7 @@ export function DayAgendaView({
   events,
   onSelectDate,
   onEventClick,
+  showOwner = false,
 }: DayAgendaViewProps) {
   const monthDays = useMemo(() => getMonthGrid(date), [date]);
 
@@ -203,11 +214,29 @@ export function DayAgendaView({
                       borderColor: event.color,
                     }}
                   >
-                    <div className="truncate text-[11px] font-medium text-foreground">
-                      {event.title}
+                    <div className="flex items-center gap-1.5">
+                      {/* Mesmo sinal da grade do mês: ícone + rótulo lido por
+                          leitor de tela, nunca só a cor. */}
+                      {outcomeOf(event) === "compareceu" && (
+                        <Check
+                          className="h-3 w-3 shrink-0 text-emerald-700 dark:text-emerald-300"
+                          strokeWidth={3}
+                          aria-label="Compareceu"
+                        />
+                      )}
+                      {outcomeOf(event) === "nao_compareceu" && (
+                        <X
+                          className="h-3 w-3 shrink-0 text-red-700 dark:text-red-300"
+                          strokeWidth={3}
+                          aria-label="Não compareceu"
+                        />
+                      )}
+                      <div className="min-w-0 truncate text-[11px] font-medium text-foreground">
+                        {event.title}
+                      </div>
                     </div>
                     <div className="truncate text-[10px] text-muted-foreground">
-                      {eventSubtitle(event)}
+                      {eventSubtitle(event, showOwner)}
                     </div>
                   </button>
                 </motion.div>

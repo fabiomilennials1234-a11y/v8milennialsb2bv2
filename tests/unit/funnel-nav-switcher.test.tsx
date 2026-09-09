@@ -42,9 +42,35 @@ vi.mock("@/modules/pipelines/hooks/custom/useCustomPipelines", () => ({
   useTemporaryFunnels: () => ({ data: temporaryRef.value, isLoading: temporaryRef.loading }),
 }));
 
+// Registro único `pipelines` — de onde saem cor/ícone reais (SCRUM-637).
+const pipelinesRef: { value: unknown[] } = { value: [] };
+vi.mock("@/modules/pipelines/hooks/model/usePipelines", () => ({
+  usePipelines: () => ({ data: pipelinesRef.value, isLoading: false }),
+}));
+
 // ── Dependências do FunnelSwitcher ──────────────────────────────────────────
 const navigate = vi.fn();
 vi.mock("react-router-dom", () => ({ useNavigate: () => navigate }));
+
+// ── Diálogo de identidade: o seletor é só a PORTA ───────────────────────────
+// O miolo (FunnelIdentitySection + useUpdatePipelineIdentity) já é coberto no
+// hub e nas abas "Geral"; aqui interessa qual funil chega nele.
+vi.mock("@/modules/pipelines/components/shared/FunnelIdentityDialog", () => ({
+  FunnelIdentityDialog: ({
+    open,
+    pipeline,
+    displayName,
+  }: {
+    open: boolean;
+    pipeline: { id: string };
+    displayName?: string;
+  }) =>
+    open ? (
+      <div data-testid="identity-dialog" data-pipeline={pipeline.id}>
+        {displayName}
+      </div>
+    ) : null,
+}));
 
 // ── SavedViewsDropdown: só o suficiente para exercitar o header ─────────────
 const closeSpy = vi.fn();
@@ -82,6 +108,7 @@ beforeEach(() => {
   permanentRef.loading = false;
   temporaryRef.value = [];
   temporaryRef.loading = false;
+  pipelinesRef.value = [];
 });
 
 describe("useFunnelOptions — o que entra na navegação", () => {
@@ -93,8 +120,21 @@ describe("useFunnelOptions — o que entra na navegação", () => {
       "sys:confirmacao",
       "sys:propostas",
     ]);
-    expect(result.current.options[0].path).toBe("/pipe-whatsapp");
+    expect(result.current.options[0].path).toBe("/funil/whatsapp");
     expect(result.current.options[0].group).toBe("estrutural");
+  });
+
+  it("a cor vem do registro `pipelines` — funil de sistema personalizado reflete (SCRUM-637)", () => {
+    pipelinesRef.value = [
+      { id: "p1", slug: "whatsapp", color: "#ff0000", icon: "target", is_active: true },
+    ];
+
+    const { result } = renderHook(() => useFunnelOptions());
+
+    expect(result.current.options[0].color).toBe("#ff0000");
+    // Sem linha no registro (org ainda carregando), cai no fallback neutro —
+    // nunca mais na tabela hardcoded por espécie.
+    expect(result.current.options[1].color).toBe("#64748b");
   });
 
   it("mantém a Carteira FORA — upsell é faceta do lead, não funil (D6)", () => {
@@ -141,7 +181,8 @@ describe("useFunnelOptions — o que entra na navegação", () => {
 
     const custom = result.current.options.filter((o) => o.group === "custom");
     expect(custom).toHaveLength(1);
-    expect(custom[0]).toMatchObject({ key: "custom:c2", path: "/pipe/custom/parcerias" });
+    // SCRUM-632: custom navega pela rota única.
+    expect(custom[0]).toMatchObject({ key: "custom:c2", path: "/funil/parcerias" });
   });
 
   it("marca como encerrado o funil com prazo vencido", () => {
@@ -184,7 +225,7 @@ describe("FunnelSwitcher — escolher troca, abrir não", () => {
     abrir();
     fireEvent.click(screen.getByTestId("funnel-switcher-option-sys:propostas"));
 
-    expect(navigate).toHaveBeenCalledWith("/pipe-propostas");
+    expect(navigate).toHaveBeenCalledWith("/funil/propostas");
   });
 
   it("escolher o funil já aberto não navega", () => {
@@ -309,5 +350,55 @@ describe("FunnelViewsMenu — o único caminho de volta do Analytics", () => {
     montar("inexistente" as unknown as "kanban");
 
     expect(screen.getByTestId("icone-da-visao")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Renomear a partir do NOME do funil (o cabeçalho do quadro).
+ *
+ * A decisão do protótipo fica de pé: clicar no nome abre a lista, escolher é
+ * que troca. O que entrou é o rodapé da lista — a identidade do funil aberto
+ * deixou de morar só na última aba de Configurações.
+ */
+describe("FunnelSwitcher — renomear o funil aberto", () => {
+  const abrir = () => fireEvent.click(screen.getByTestId("funnel-switcher"));
+
+  it("oferece renomear o funil ABERTO, nomeado como o usuário o vê", () => {
+    pipelinesRef.value = [
+      { id: "p1", slug: "whatsapp", type: "system", name: "Qualificação", icon: "target", color: "#f00" },
+    ];
+    render(<FunnelSwitcher currentKey="sys:whatsapp" fallbackLabel="Qualificação" />);
+
+    abrir();
+
+    // O rótulo é o display_name do registro, não o `pipelines.name` cru.
+    expect(screen.getByTestId("funnel-switcher-rename")).toHaveTextContent(
+      'Renomear "Qualificação"',
+    );
+  });
+
+  it("abre o diálogo de identidade do funil aberto, sem navegar", () => {
+    pipelinesRef.value = [
+      { id: "p3", slug: "propostas", type: "system", name: "Propostas", icon: "target", color: "#f00" },
+    ];
+    render(<FunnelSwitcher currentKey="sys:propostas" fallbackLabel="Orçamentos" />);
+
+    abrir();
+    fireEvent.click(screen.getByTestId("funnel-switcher-rename"));
+
+    const dialogo = screen.getByTestId("identity-dialog");
+    expect(dialogo).toHaveAttribute("data-pipeline", "p3");
+    // Nome exibido = display_name do registro, não o canônico "Propostas".
+    expect(dialogo).toHaveTextContent("Orçamentos");
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it("sem linha canônica em `pipelines` não há o que renomear — nada é oferecido", () => {
+    pipelinesRef.value = [];
+    render(<FunnelSwitcher currentKey="sys:whatsapp" fallbackLabel="Qualificação" />);
+
+    abrir();
+
+    expect(screen.queryByTestId("funnel-switcher-rename")).toBeNull();
   });
 });

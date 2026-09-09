@@ -207,7 +207,7 @@ export const DEFAULT_ACTIVATION_TRIGGERS: ActivationTriggers = {
 export const DEFAULT_OUTBOUND_CONFIG: OutboundConfig = {
   delayMinutes: 5,
   firstMessageTemplate: "",
-  availableVariables: ["nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
+  availableVariables: ["nome", "primeiro_nome", "empresa", "email", "telefone", "origem", "interesse", "segmento", "campanha"],
   maxRetries: 3,
   retryIntervalMinutes: 30,
   audioEnabled: false,
@@ -313,14 +313,10 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
         key: "pipe",
         label: "Pipe",
         type: "select",
-        options: [
-          { value: "whatsapp", label: "Pipe WhatsApp" },
-          { value: "confirmacao", label: "Pipe Confirmação" },
-          { value: "propostas", label: "Pipe Propostas" },
-          { value: "upsell_base", label: "Carteira Base" },
-          { value: "upsell_gestao", label: "Carteira Gestão" },
-          { value: "campanha", label: "Campanhas" },
-        ],
+        // SCRUM-641: sem catálogo de labels aqui — o PlaygroundTools resolve
+        // as opções do param "pipe" com os funis REAIS da org
+        // (usePipeTypeOptions), com o nome que ela usa.
+        options: [],
       },
       { key: "stages", label: "Etapas disponiveis", type: "text", placeholder: "Ex: novo, abordado, respondeu" },
     ],
@@ -353,7 +349,7 @@ export const PLAYGROUND_TOOLS: PlaygroundToolDef[] = [
     icon: "Database",
     defaultInstruction: "Sempre que o lead mencionar informacoes relevantes (empresa, cargo, segmento, numero de funcionarios, orcamento, ferramenta atual, etc.), preencha o campo correspondente imediatamente. Extraia dados naturalmente da conversa — nao pergunte 'posso salvar isso?'. Se nao existir campo dedicado para a informacao, registre em notas.",
     parameters: [
-      { key: "standardFields", label: "Campos padrao a preencher", type: "text", placeholder: "Ex: empresa, segmento, urgencia, faturamento, rating" },
+      { key: "standardFields", label: "Campos padrao a preencher", type: "text", placeholder: "Ex: empresa, segmento, urgencia, faturamento" },
       { key: "customFields", label: "Campos custom a preencher", type: "text", placeholder: "Ex: Orcamento, Ferramenta Atual, Qtd Funcionarios" },
     ],
   },

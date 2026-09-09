@@ -27,7 +27,7 @@
  */
 import { buildRecipients, type BlastLead, type BlastRecipient } from "./recipients.ts";
 import { resolveBlastMessage } from "./message-resolver.ts";
-import { personalizationName } from "../lead-name.ts";
+import { personalizationName, personalizationFirstName } from "../lead-name.ts";
 import {
   refineBlastAudience,
   type BlastActivitySource,
@@ -69,6 +69,8 @@ export interface PlanRow {
   created_by?: string;
   status: string;
   source?: Record<string, unknown> | null;
+  /** Funil de origem do público (coluna canônica da Fatia B); NULL = sem funil único. */
+  pipeline_id?: string | null;
   message: string;
   refinements: Record<string, unknown> | null;
   image_url: string | null;
@@ -88,6 +90,13 @@ export interface PlanRow {
    *  its message is sent. NULL/absent = no move. Consumed by the edge fns to
    *  inject `onRecipientsSent`; the core treats it as opaque data. */
   post_send_target?: Record<string, unknown> | null;
+  /**
+   * O Template aprovado, quando o Disparo é pelo Canal Oficial (#1722).
+   * NULL em plano de Chip, que manda texto livre em `message`. Congelado: a
+   * Meta pode pausar ou reclassificar o Template a qualquer momento, e um
+   * Disparo em curso não muda de conteúdo no meio (ADR-0029).
+   */
+  template?: Record<string, unknown> | null;
   /** The instance row, needed by the releaser to dispatch. Persisted as a column
    *  in production via the FK + a read; carried inline here for the store seam. */
   instance?: { id: string; organization_id: string; provider?: string };
@@ -109,6 +118,25 @@ export interface BlastPlanStore {
 }
 
 // ── Shared deps + dispatch ───────────────────────────────────────────────────
+
+/**
+ * O Canal Oficial NÃO passa pelo `deps.dispatch` (#1722).
+ *
+ * O motor do Chip é o `/sender/*` do fornecedor: despachar já É enviar, e por
+ * isso o lote é marcado `sent` na mesma passada. O canal oficial não tem esse
+ * endpoint — quem envia é `process-blast-recipients`, uma linha por vez. Marcar
+ * `sent` aqui faria as linhas nascerem enviadas sem ninguém ter enviado: o
+ * worker nunca as reivindicaria (ele só olha `pending`) e o Disparo pareceria
+ * concluído com zero mensagens entregues.
+ *
+ * O que continua igual nos dois regimes: o lote é LIBERADO (`lots_released`
+ * avança, e é isso que `claim_blast_recipients` enxerga) e os ledgers de
+ * orçamento são incrementados — o Orçamento Diário conta pessoas planejadas
+ * para hoje, e isso não depende de quem carrega a mensagem.
+ */
+function ehCanalOficial(instance: { provider?: string } | null | undefined): boolean {
+  return (instance?.provider ?? "") === "notificame";
+}
 
 export type DispatchFn = (
   instance: { id: string; organization_id: string; provider?: string },
@@ -201,6 +229,12 @@ export interface CreateBlastPlanParams {
   /** The RESOLVED audience (org-scoped by the caller). Frozen here. */
   leads: BlastLead[];
   message: string;
+  /**
+   * O Template aprovado do Canal Oficial (#1722). Ausente em Disparo de Chip.
+   * Quando presente, `message` carrega o CORPO renderizado do Template — é o
+   * texto que a pessoa recebe, e é o que a Revisão e o histórico mostram.
+   */
+  template?: Record<string, unknown> | null;
   refinements: BlastRefinementOptions;
   imageUrl?: string;
   delayMinMs?: number;
@@ -210,6 +244,9 @@ export interface CreateBlastPlanParams {
   releaseTime?: string;
   /** Descriptor of how the audience was resolved (for the record only). */
   source?: Record<string, unknown> | null;
+  /** Funil de origem do público (Fatia B — canônico, uuid JÁ validado na org
+   *  pelo edge fn). NULL = público sem funil único (planilha, todos os funis). */
+  pipelineId?: string | null;
   /** Post-send destination (already validated fail-closed by the edge fn).
    *  Persisted on the plan so the releaser can rebuild the move hook. */
   postSendTarget?: Record<string, unknown> | null;
@@ -290,7 +327,9 @@ export async function createBlastPlan(
     created_by: params.userId,
     status: "active",
     source: params.source ?? null,
+    pipeline_id: params.pipelineId ?? null,
     message: params.message,
+    template: params.template ?? null,
     refinements: (params.refinements as Record<string, unknown>) ?? null,
     image_url: params.imageUrl ?? null,
     delay_min_ms: params.delayMinMs ?? null,
@@ -359,19 +398,21 @@ export async function createBlastPlan(
   let lotsReleased = 0;
   if (slice.toSend > 0) {
     const toSendRows = lot0.slice(0, slice.toSend);
-    const recipients = buildPlanRecipients(toSendRows, params.message, params.imageUrl);
-    await deps.dispatch(singleInstance, {
-      recipients,
-      delayMin: params.delayMinMs,
-      delayMax: params.delayMaxMs,
-      triggeredByUserId: params.userId,
-      triggeredVia: "ui",
-      trackSource: "blast-plan",
-      planId,
-      lotIndex: 0,
-    });
-    await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
-    await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
+    if (!ehCanalOficial(singleInstance)) {
+      const recipients = buildPlanRecipients(toSendRows, params.message, params.imageUrl);
+      await deps.dispatch(singleInstance, {
+        recipients,
+        delayMin: params.delayMinMs,
+        delayMax: params.delayMaxMs,
+        triggeredByUserId: params.userId,
+        triggeredVia: "ui",
+        trackSource: "blast-plan",
+        planId,
+        lotIndex: 0,
+      });
+      await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
+      await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
+    }
     await deps.usageSource.increment(params.orgId, todayDate, slice.toSend);
     if (deps.instanceUsageSource) {
       await deps.instanceUsageSource.increment(singleInstance.id, todayDate, slice.toSend);
@@ -444,7 +485,9 @@ async function createMultiNumberBlastPlan(
     created_by: params.userId,
     status: "active",
     source: params.source ?? null,
+    pipeline_id: params.pipelineId ?? null,
     message: params.message,
+    template: params.template ?? null,
     refinements: (params.refinements as Record<string, unknown>) ?? null,
     image_url: params.imageUrl ?? null,
     delay_min_ms: params.delayMinMs ?? null,
@@ -501,19 +544,21 @@ async function createMultiNumberBlastPlan(
     deferredRows.push(...rows.slice(allowed));
 
     if (toSendRows.length > 0) {
-      const recipients = buildPlanRecipients(toSendRows, params.message, params.imageUrl);
-      await deps.dispatch(n.instance, {
-        recipients,
-        delayMin: params.delayMinMs,
-        delayMax: params.delayMaxMs,
-        triggeredByUserId: params.userId,
-        triggeredVia: "ui",
-        trackSource: "blast-plan",
-        planId,
-        lotIndex: 0,
-      });
-      await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
-      await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
+      if (!ehCanalOficial(n.instance)) {
+        const recipients = buildPlanRecipients(toSendRows, params.message, params.imageUrl);
+        await deps.dispatch(n.instance, {
+          recipients,
+          delayMin: params.delayMinMs,
+          delayMax: params.delayMaxMs,
+          triggeredByUserId: params.userId,
+          triggeredVia: "ui",
+          trackSource: "blast-plan",
+          planId,
+          lotIndex: 0,
+        });
+        await deps.store.markRecipients(planId, toSendRows.map((r) => r.lead_id), "sent", null);
+        await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
+      }
       if (deps.instanceUsageSource) {
         await deps.instanceUsageSource.increment(n.instance.id, todayDate, toSendRows.length);
       }
@@ -730,10 +775,12 @@ export async function releaseBlastPlanLot(
       const toSendRows = rows.slice(0, allowed);
       deferredRows.push(...rows.slice(allowed));
       if (toSendRows.length > 0) {
-        const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
-        await deps.dispatch(inst, { recipients, ...dispatchOpts });
-        await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
-        await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
+        if (!ehCanalOficial(inst)) {
+          const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
+          await deps.dispatch(inst, { recipients, ...dispatchOpts });
+          await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
+          await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
+        }
         await deps.instanceUsageSource!.increment(instanceId, todayDate, toSendRows.length);
         sent += toSendRows.length;
       }
@@ -770,10 +817,12 @@ export async function releaseBlastPlanLot(
     });
     if (slice.toSend > 0) {
       const toSendRows = kept.slice(0, slice.toSend);
-      const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
-      await deps.dispatch(instance, { recipients, ...dispatchOpts });
-      await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
-      await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
+      if (!ehCanalOficial(instance)) {
+        const recipients = buildPlanRecipients(toSendRows, plan.message, plan.image_url ?? undefined);
+        await deps.dispatch(instance, { recipients, ...dispatchOpts });
+        await deps.store.markRecipients(params.planId, toSendRows.map((r) => r.lead_id), "sent", null);
+        await notifyRecipientsSent(deps, toSendRows.map((r) => r.lead_id));
+      }
       await deps.usageSource.increment(orgId, todayDate, slice.toSend);
       if (deps.instanceUsageSource) {
         await deps.instanceUsageSource.increment(instance.id, todayDate, slice.toSend);
@@ -835,7 +884,7 @@ function snapshotVars(lead: BlastLead): Record<string, unknown> {
   const safeName = personalizationName(lead.name);
   return {
     nome: safeName,
-    primeiro_nome: safeName.trim().split(/\s+/)[0] ?? "",
+    primeiro_nome: personalizationFirstName(lead.name),
     empresa: lead.company ?? "",
   };
 }

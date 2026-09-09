@@ -19,14 +19,15 @@ import {
   type PipePropostasStatus,
   propostasStatusColumns as statusColumns,
 } from "@/contracts/pipe";
-import type { Tables } from "@/integrations/supabase/types";
+import type { ProjectedPropostaPipe } from "@/integrations/supabase/projected-pipe-types";
 import { usePipeOps } from "../../../pipe-ops";
+import { useNomeDoPipeDeSistema } from "../../../hooks/useNomeDoPipeDeSistema";
 import { useActiveProducts } from "@/modules/carteira/hooks/useProducts";
 import { useTinyErpStatus } from "@/modules/carteira/hooks/useTinyErp";
 import { useCadastroExternoEnabled } from "@/modules/marketing/hooks/useCadastroExterno";
 import { useLogLeadAction } from "@/shared/hooks/useLogLeadAction";
 
-type PipeProposta = Tables<"pipe_propostas">;
+type PipeProposta = ProjectedPropostaPipe;
 import { ProductCombobox } from "@/modules/carteira/components/proposal/ProductCombobox";
 import { TinyErpConfirmOrderDialog } from "@/modules/carteira/components/proposal/TinyErpConfirmOrderDialog";
 import { CadastroExternoConfirmDialog } from "@/modules/carteira/components/proposal/CadastroExternoConfirmDialog";
@@ -86,6 +87,9 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
     usePipePropostaItems,
     useLossReasons,
   } = usePipeOps();
+  // Nome como a ORG o vê (SCRUM-641) — nada de "Propostas" cravado.
+  const nomeDoPipe = useNomeDoPipeDeSistema();
+  const nomePropostas = nomeDoPipe("propostas");
   const createPipe = useCreatePipeProposta();
   const updateProposta = useUpdatePipeProposta();
   const createItem = useCreatePipePropostaItem();
@@ -155,12 +159,12 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
         logAction({
           leadId,
           action: "pipe_added",
-          description: 'Lead adicionado ao pipe "Propostas"',
+          description: `Lead adicionado ao funil "${nomePropostas}"`,
         });
-        toast.success("Lead adicionado à Propostas");
+        toast.success(`Lead adicionado a ${nomePropostas}`);
         onSuccess?.();
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : "Erro ao adicionar à Propostas";
+        const msg = err instanceof Error ? err.message : `Erro ao adicionar a ${nomePropostas}`;
         toast.error(msg);
       }
     };
@@ -181,7 +185,7 @@ export const BudgetFieldBlock = memo(function BudgetFieldBlock({
           ) : (
             <Plus className="w-3.5 h-3.5" />
           )}
-          Adicionar à Propostas
+          Adicionar a {nomePropostas}
         </Button>
       </div>
     );

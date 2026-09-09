@@ -14,23 +14,11 @@
  * multi-device suffix), or `undefined` when nothing usable is present.
  */
 
-/** Strip a WhatsApp JID / raw value down to a bare phone-number string. */
-export function jidToPhone(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  // Group JIDs (@g.us) are never an account owner.
-  if (value.includes("@g.us")) return undefined;
-  // LinkedID (@lid) handles are NOT phone numbers — Uazapi V2 sometimes emits
-  // them in identity fields. Treat as non-phone, matching the convention in
-  // whatsapp-webhook/index.ts (resolvedJid @lid handling).
-  if (value.includes("@lid")) return undefined;
-  // Drop everything from the first "@" (s.whatsapp.net / c.us) and any
-  // ":NN" multi-device suffix that precedes it.
-  const local = value.split("@")[0].split(":")[0];
-  const digits = local.replace(/\D/g, "");
-  // E.164-ish sanity: WhatsApp numbers are 10–15 digits (country + DDD + line).
-  if (digits.length < 10 || digits.length > 15) return undefined;
-  return digits;
-}
+// `jidToPhone` mora em `whatsapp-jid.ts` desde que o backfill de histórico
+// precisou da mesma regra (grupo e LID não são telefone). Re-exportado aqui
+// para não quebrar quem já importava deste módulo.
+export { jidToPhone } from "./whatsapp-jid.ts";
+import { jidToPhone } from "./whatsapp-jid.ts";
 
 // Keys, in priority order, observed (or plausible) to carry the connected
 // account's own number across Uazapi endpoints/versions.

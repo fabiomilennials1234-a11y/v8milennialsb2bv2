@@ -1,5 +1,5 @@
 import type { AcaoDoDia } from "@/modules/engagement";
-import { zonedDayStart } from "@/modules/analytics/lib/zoned-day";
+import { zonedDayStart } from "@/shared/time/zoned-day";
 
 /**
  * A regra de "atrasada" da central de trabalho, isolada e PURA.

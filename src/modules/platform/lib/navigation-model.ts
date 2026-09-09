@@ -12,13 +12,6 @@
 import {
   Bot,
   ChartNoAxesCombined,
-  Briefcase,
-  Gift,
-  Heart,
-  ShoppingBag,
-  Star,
-  Target,
-  UserCheck,
   CalendarDays,
   Copy,
   DollarSign,
@@ -27,20 +20,28 @@ import {
   Fuel,
   Gauge,
   GitBranch,
-  Kanban,
   ListChecks,
-  MessageSquare,
+  MoreHorizontal,
   Package,
   Send,
   Settings,
   Trash2,
-  TrendingUp,
   Trophy,
   Tv,
   Workflow,
   Wrench,
   Zap,
 } from "lucide-react";
+
+import {
+  SETTINGS_OTHERS_LABEL,
+  SETTINGS_OTHERS_PATH,
+  SETTINGS_TAB_PATHS,
+  settingsTabPath,
+  visibleOtherSettingsTabs,
+  visiblePrimarySettingsTabs,
+  type SettingsTabVisibility,
+} from "./settings-tabs";
 
 export interface NavNode {
   label: string;
@@ -49,41 +50,32 @@ export interface NavNode {
   /** Item só aparece para master. */
   masterOnly?: boolean;
   /** Gate de runtime resolvido pelo hook (ex.: páginas Meta conectadas). */
-  gate?: "meta_pages_connected" | "metrics_studio_enabled";
-  /** Cor própria do item — só funis customizados usam. */
+  gate?: "meta_pages_connected";
+  /** Cor própria do item. Nenhum item usa hoje — funil não tem mais classe. */
   color?: string;
-  /** Abre um grupo novo dentro da lista de filhos (funis customizados). */
-  startsGroup?: boolean;
+  /**
+   * Pai que é só rótulo de grupo: o clique expande e NÃO navega.
+   *
+   * Funis tem tela-índice (`/funis`), então navega e expande no mesmo clique.
+   * Turbo não tem: `/turbo` é um `<Navigate>` nu em `App.tsx`, fora do
+   * `LayoutWrapper`. Navegar pra lá desmontava a árvore do layout inteira e o
+   * `useState` da lateral voltava a `{}` — o submenu fechava no mesmo frame em
+   * que abria, e o item "Copilot" era inalcançável no desktop.
+   */
+  expandOnly?: boolean;
   children?: NavNode[];
 }
 
-/** Ícone por tipo de pipe — usado ao montar os filhos dinâmicos de Funis. */
-export const PIPE_ICON_MAP: Record<string, React.ElementType> = {
-  whatsapp: MessageSquare,
-  confirmacao: CalendarDays,
-  propostas: Kanban,
-  upsell: TrendingUp,
-};
+// `FUNIL_ICON` (ícone fixo para todo funil) morreu na SCRUM-637: a lateral
+// resolve por `funilIcon(pipelines.icon)` — a identidade que o USUÁRIO deu ao
+// funil, igual para os de fábrica e os criados por ele.
 
-/** Ícones que um funil customizado pode escolher. */
-export const CUSTOM_PIPE_ICON_MAP: Record<string, React.ElementType> = {
-  kanban: Kanban,
-  target: Target,
-  users: UserCheck,
-  "shopping-bag": ShoppingBag,
-  heart: Heart,
-  briefcase: Briefcase,
-  star: Star,
-  zap: Zap,
-  gift: Gift,
-};
-
-export const PIPE_PATH_MAP: Record<string, string> = {
-  whatsapp: "/pipe-whatsapp",
-  confirmacao: "/pipe-confirmacao",
-  propostas: "/pipe-propostas",
-  upsell: "/upsell",
-};
+/**
+ * SCRUM-637 (flip): o `PIPE_PATH_MAP` morreu — TODO funil navega pela rota
+ * única `/funil/:slug`. Só a Carteira mantém rota própria (não é funil de
+ * negócio — D6/ADR-0034).
+ */
+export const CARTEIRA_PATH = "/upsell";
 
 /** Filhos de Turbo. Os de Funis são dinâmicos (vêm de `usePipelineDisplayConfig`). */
 export const TURBO_CHILDREN: NavNode[] = [
@@ -105,11 +97,24 @@ export const TURBO_CHILDREN: NavNode[] = [
  */
 export const SIDEBAR_PRIMARY: NavNode[] = [
   { label: "Comando", icon: Gauge, path: "/dashboard" },
+  // Métricas sai do Pitstop e vira porta de primeiro nível, entre Comando e
+  // Chat (decisão CTO 2026-08-24). O Pitstop é "consulta semanal, não diária" —
+  // e o Estúdio deixou de ser isso no momento em que passou a ser a tela onde
+  // se monta o painel de trabalho.
+  //
+  // O `gate` viaja junto e continua valendo: `primary` passa por `filterByGate`
+  // em `useNavigationModel`, exatamente como o Pitstop passava. Org fora do
+  // rollout não vê o item — o clique cairia em tela de "ainda não liberado".
+  {
+    label: "Métricas",
+    icon: ChartNoAxesCombined,
+    path: "/metricas",
+  },
   { label: "Chat", icon: Zap, path: "/chat-whatsapp" },
   { label: "Disparos", icon: Send, path: "/disparos" },
   { label: "Funis", icon: GitBranch, path: "/funis", children: [] },
   { label: "Leads", icon: Fuel, path: "/leads" },
-  { label: "Turbo", icon: Zap, path: "/turbo", children: TURBO_CHILDREN },
+  { label: "Turbo", icon: Zap, path: "/turbo", children: TURBO_CHILDREN, expandOnly: true },
 ];
 
 /** Agenda mora no rodapé, no lugar que o calendário ocupa em produtos comparáveis. */
@@ -134,8 +139,9 @@ export interface PitstopGroup {
 
 /**
  * Conteúdo do Pitstop. Os grupos "Gestão" e "Rotas" são o antigo menu "Mais";
- * "Administração" são os itens que exigiam admin. As abas de configuração
- * continuam vivendo dentro de `/configuracoes` e são linkadas por `?tab=`.
+ * "Administração" são os itens que exigiam admin. O grupo "Configurações" é
+ * montado à parte (`buildSettingsGroup`) porque depende de admin e do tipo da
+ * org, que só o hook conhece.
  */
 export const PITSTOP_GROUPS: PitstopGroup[] = [
   {
@@ -143,14 +149,9 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
     title: "Gestão",
     hint: "Consulta semanal, não diária",
     items: [
-      // Métricas guarda o gate de rollout por org: sem a flag o item não
-      // aparece, porque o clique cairia na tela de "ainda não liberado".
-      {
-        label: "Métricas",
-        icon: ChartNoAxesCombined,
-        path: "/metricas",
-        gate: "metrics_studio_enabled",
-      },
+      // Métricas NÃO mora mais aqui — subiu para `SIDEBAR_PRIMARY`, entre
+      // Comando e Chat (decisão CTO 2026-08-24). Não devolva o item para cá
+      // sem tirá-lo de lá: duplicado, ele aparece nos dois lugares.
       { label: "Ranking", icon: Trophy, path: "/performance" },
       { label: "Comissões", icon: DollarSign, path: "/comissoes" },
       { label: "Revisão", icon: Wrench, path: "/follow-ups" },
@@ -179,13 +180,48 @@ export const PITSTOP_GROUPS: PitstopGroup[] = [
   },
 ];
 
-/** Prefixos que ativam o item Funis. */
+export const SETTINGS_GROUP_ID = "configuracoes";
+
+/**
+ * Grupo "Configurações" do Pitstop — Tags, Notificações e WhatsApp com rota
+ * própria, e "Outros" para todo o resto.
+ *
+ * É a correção do buraco que fechava a tela: no desktop o gatilho do Pitstop só
+ * abre o painel (não navega), então sem estes itens `/configuracoes` não tinha
+ * nenhum caminho de UI — só URL digitada na mão. O corte em três é deliberado:
+ * o painel é lateral e estreito, e listar as treze abas aqui trocaria um menu
+ * inacessível por um menu ilegível.
+ */
+export function buildSettingsGroup(visibility: SettingsTabVisibility): PitstopGroup {
+  const items: NavNode[] = visiblePrimarySettingsTabs(visibility).map((tab) => ({
+    label: tab.label,
+    icon: tab.icon,
+    path: settingsTabPath(tab),
+  }));
+
+  // "Outros" só entra se sobrou alguma coisa para ele guardar.
+  if (visibleOtherSettingsTabs(visibility).length > 0) {
+    items.push({ label: SETTINGS_OTHERS_LABEL, icon: MoreHorizontal, path: SETTINGS_OTHERS_PATH });
+  }
+
+  return {
+    id: SETTINGS_GROUP_ID,
+    title: "Configurações",
+    hint: "Ajustes da operação",
+    items,
+  };
+}
+
+/**
+ * Prefixos que ativam o item Funis.
+ *
+ * `/funil` é o prefixo canônico da rota única (SCRUM-632); os demais são
+ * compat do expand-contract — `/pipe-*` cai na SCRUM-637 e `/pipe/custom`
+ * hoje é só redirect. NÃO cresce além disso.
+ */
 export const FUNIS_PATHS = [
-  "/pipe-whatsapp",
-  "/pipe-confirmacao",
-  "/pipe-propostas",
+  "/funil",
   "/funis",
-  "/pipe/custom",
 ] as const;
 
 export const TURBO_PATHS = ["/copilot", "/automacoes"] as const;
@@ -196,11 +232,12 @@ export const TURBO_PATHS = ["/copilot", "/automacoes"] as const;
  */
 export const OUTBOUND_MEMBER_ALLOWED_PATHS = [
   "/dashboard",
+  "/metricas",
   "/chat",
   "/chat-whatsapp",
-  "/pipe-whatsapp",
-  "/pipe-confirmacao",
-  "/pipe-propostas",
+  // SCRUM-637: os pipes de sistema vivem em `/funil/:slug` — entrada por
+  // PREFIXO (ver `isOutboundAllowed`), cobrindo qualquer funil visível.
+  "/funil",
   "/funis",
   "/follow-ups",
 ] as const;
@@ -214,9 +251,9 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/marketing": "marketing.view",
   "/chat": "whatsapp.view",
   "/chat-whatsapp": "whatsapp.view",
-  "/pipe-whatsapp": "pipeline.view",
-  "/pipe-confirmacao": "pipeline.view",
-  "/pipe-propostas": "pipeline.view",
+  // SCRUM-637: `/funil` cobre `/funil/:slug` por prefixo (ver makeCanViewRoute)
+  // — mesma permissão que os /pipe-* levavam, agora pra QUALQUER funil.
+  "/funil": "pipeline.view",
   "/upsell": "upsell.view",
   "/agenda": "agenda.view",
   "/follow-ups": "followups.view",
@@ -225,6 +262,9 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/templates": "message_templates.view",
   "/duplicatas": "leads.view",
   "/lixeira": "leads.view",
+  // SCRUM-430. A chave existe no catálogo desde a migration 20270828000000 —
+  // sem ela no banco, esta linha esconde Métricas de todo membro não-admin.
+  "/metricas": "metrics.view",
   "/performance": "performance.view",
   "/comissoes": "commissions.view",
   "/copilot": "copilot.view",
@@ -233,6 +273,9 @@ export const NAV_VIEW_PERMISSIONS: Record<string, string> = {
   "/produtos": "products.view",
   "/negocios": "deals.view",
   "/configuracoes": "settings.view",
+  // Cada aba virou rota; todas herdam o mesmo gate da tela que as hospeda —
+  // senão o Pitstop mostraria itens que a rota depois recusa.
+  ...Object.fromEntries(SETTINGS_TAB_PATHS.map((path) => [path, "settings.view"])),
 };
 
 /** Largura da lateral, em px. Mesma medida validada no estudo. */

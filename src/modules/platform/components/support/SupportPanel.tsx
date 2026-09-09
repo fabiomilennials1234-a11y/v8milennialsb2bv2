@@ -201,7 +201,13 @@ function TicketRow({
           <StatusDot status={ticket.status} className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 border-2 border-card" />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium leading-snug text-foreground">{ticket.title}</p>
+          {/* Assunto quebra em linhas em vez de cortar — o painel e estreito e o titulo vai ate 200 chars. */}
+          <p
+            className="break-words text-sm font-medium leading-snug text-foreground"
+            title={ticket.title}
+          >
+            {ticket.title}
+          </p>
           <p className="mt-0.5 truncate text-xs text-muted-foreground">
             {STATUS_LABELS[ticket.status]}
             <span aria-hidden> · </span>

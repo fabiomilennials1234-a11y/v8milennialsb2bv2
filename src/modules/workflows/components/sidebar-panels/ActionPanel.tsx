@@ -21,12 +21,15 @@ import { cn } from "@/lib/utils";
 import { getActionCategories, ACTION_LABELS, UNIFIED_MESSAGE_NODE_FLAG } from "@/types/workflow";
 import type { ActionNodeData, WorkflowActionType, MessageType } from "@/types/workflow";
 import {
+  CAMPOS_DO_NO_DE_TEMPLATE,
   EscapeDeJanelaConfig,
   MenuNodeConfig,
   PixButtonNodeConfig,
   TemplateNodeConfig,
 } from "@/modules/workflows/components/action-configs";
+import { modoDeMensagemDoNo } from "@/contracts/workflows/modo-de-mensagem";
 import { useFeatureFlag } from "@/modules/platform";
+import { useOrgFeatures } from "@/contexts/OrgFeaturesContext";
 import { InstanceRoutingSelector } from "./InstanceRoutingSelector";
 import { isInstanceRoutedAction } from "@/modules/workflows/lib/instance-routing";
 import { useOrganization } from "@/modules/identity";
@@ -41,13 +44,53 @@ import {
   type TemplateTextareaHandle,
 } from "@/modules/workflows/components/TemplateTextarea";
 import type { CampaignTemplate } from "@/modules/campaigns/hooks/useCampaignTemplates";
-import { usePipelineStages, type PipelineType, useCustomPipelines, useCustomPipelineStages } from "@/modules/pipelines";
+import { useFunisDaOrg, useEtapasDoFunil } from "@/modules/pipelines";
 import { useTags } from "@/modules/leads/hooks/useTags";
 import { CampaignSelectorField } from "./CampaignSelectorField";
 import { CampaignStageSelectorField } from "./CampaignStageSelectorField";
 import { CampaignTemplateSelectorField } from "./CampaignTemplateSelectorField";
 import { useChecklistTemplates } from "@/modules/engagement/hooks/useChecklistTemplates";
 import { useChecklistItems } from "@/modules/engagement/hooks/useChecklists";
+
+/**
+ * Dono do Negócio — escreve nos DOIS lugares (`deals.owner_id` e
+ * `pipeline_entries.assigned_to`), por isso o rótulo fala de negócio e não de
+ * lead: trocar o dono aqui não mexe no responsável da PESSOA.
+ */
+function SetDealOwnerConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { data: members = [] } = useTeamMembers();
+  const activeMembers = members.filter((m) => m.is_active);
+
+  return (
+    <div className="space-y-2">
+      <Label>Novo dono do negócio</Label>
+      <Select
+        value={data.dealOwnerId || ""}
+        onValueChange={(v) => onUpdate({ dealOwnerId: v })}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Selecione um membro" />
+        </SelectTrigger>
+        <SelectContent>
+          {activeMembers.map((m) => (
+            <SelectItem key={m.id} value={m.id}>
+              {m.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <p className="text-[11px] text-muted-foreground">
+        Muda o dono do NEGÓCIO — o responsável pela pessoa continua como está.
+      </p>
+    </div>
+  );
+}
 
 function AssignResponsibleConfig({
   data,
@@ -104,6 +147,152 @@ function AssignResponsibleConfig({
           </Select>
         </div>
       )}
+    </>
+  );
+}
+
+function CreateDealConfig({
+  data,
+  onUpdate,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+}) {
+  const { data: members = [] } = useTeamMembers();
+  const activeMembers = members.filter((m) => m.is_active);
+  const valueMode = data.dealValueMode || "fixed";
+  const ownerMode = data.dealOwnerMode || "lead_responsible";
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Título do negócio</Label>
+        <Input
+          value={data.dealTitleTemplate ?? "Negócio — {{nome}}"}
+          onChange={(e) => onUpdate({ dealTitleTemplate: e.target.value })}
+          placeholder="Negócio — {{nome}}"
+        />
+        <p className="text-xs text-muted-foreground">
+          Aceita variáveis do lead: {"{{nome}}"}, {"{{empresa}}"}.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label>Valor</Label>
+        <Select
+          value={valueMode}
+          onValueChange={(v) => onUpdate({ dealValueMode: v as "fixed" | "proposal" })}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fixed">Valor fixo</SelectItem>
+            <SelectItem value="proposal">Valor da proposta do lead</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {valueMode === "fixed" && (
+        <div className="space-y-2">
+          <Label>Valor (R$)</Label>
+          <Input
+            type="number"
+            min={0}
+            step={0.01}
+            value={data.dealValue ?? ""}
+            onChange={(e) => onUpdate({ dealValue: Number(e.target.value) })}
+            placeholder="0,00"
+          />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label>Probabilidade (%)</Label>
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          value={data.dealProbability ?? 50}
+          onChange={(e) => onUpdate({ dealProbability: Number(e.target.value) })}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Responsável do negócio</Label>
+        <Select
+          value={ownerMode}
+          onValueChange={(v) =>
+            onUpdate({ dealOwnerMode: v as "lead_responsible" | "specific" })
+          }
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="lead_responsible">Responsável do lead</SelectItem>
+            <SelectItem value="specific">Membro específico</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {ownerMode === "specific" && (
+        <div className="space-y-2">
+          <Label>Membro</Label>
+          <Select
+            value={data.dealOwnerId || ""}
+            onValueChange={(v) => {
+              const member = activeMembers.find((m) => m.id === v);
+              onUpdate({ dealOwnerId: v, dealOwnerName: member?.name || "" });
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione o membro" />
+            </SelectTrigger>
+            <SelectContent>
+              {activeMembers.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}{m.role ? ` (${m.role})` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <Label>Previsão de fechamento (dias)</Label>
+        <Input
+          type="number"
+          min={0}
+          value={data.dealExpectedCloseDays ?? ""}
+          onChange={(e) => onUpdate({ dealExpectedCloseDays: Number(e.target.value) })}
+          placeholder="Ex: 30 (vazio = sem previsão)"
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label>Observações (opcional)</Label>
+        <Textarea
+          value={data.dealNotes || ""}
+          onChange={(e) => onUpdate({ dealNotes: e.target.value })}
+          placeholder="Contexto do negócio. Aceita variáveis."
+          rows={2}
+        />
+      </div>
+
+      <div className="flex items-center justify-between rounded-md border border-border/60 p-3">
+        <div className="space-y-0.5 pr-3">
+          <Label className="text-sm">Não duplicar negócio aberto</Label>
+          <p className="text-xs text-muted-foreground">
+            Se o lead já tem um negócio em aberto, o nó não cria outro.
+          </p>
+        </div>
+        <Switch
+          checked={data.dealSkipIfOpenExists !== false}
+          onCheckedChange={(v) => onUpdate({ dealSkipIfOpenExists: v })}
+        />
+      </div>
     </>
   );
 }
@@ -363,12 +552,93 @@ interface ActionPanelProps {
   onUpdate: (updates: Partial<ActionNodeData>) => void;
 }
 
+function FunnelLegacyActionFields({
+  data,
+  onUpdate,
+  mode,
+}: {
+  data: ActionNodeData;
+  onUpdate: (updates: Partial<ActionNodeData>) => void;
+  mode: "duplicate" | "remove" | "lost";
+}) {
+  const { data: pipelines = [], isLoading: pipelinesLoading } = useFunisDaOrg();
+  const legacyRef = mode === "duplicate" ? data.targetPipeType : data.pipeType;
+  const normalizedLegacy = (legacyRef || "").replace(/^pipe_/, "");
+  const pipelineId = data.pipelineId || pipelines.find(
+    (pipeline) => pipeline.id === legacyRef || pipeline.slug === normalizedLegacy,
+  )?.id || "";
+  const visiblePipelines = pipelines.filter(
+    (pipeline) => pipeline.is_active || pipeline.id === pipelineId,
+  );
+  const { etapas, isLoading: stagesLoading } = useEtapasDoFunil(
+    mode === "duplicate" ? pipelineId || null : null,
+  );
+  const legacyStageRef = data.targetStage || data.targetPipeStage || "";
+  const selectedStageId = etapas.find(
+    (stage) => stage.id === legacyStageRef || stage.stageKey === legacyStageRef,
+  )?.id || "";
+
+  return (
+    <>
+      <div className="space-y-2">
+        <Label>Funil</Label>
+        <Select
+          value={pipelineId}
+          onValueChange={(value) => onUpdate({
+            pipelineId: value,
+            pipeType: "",
+            targetPipeType: "",
+            ...(mode === "duplicate" ? { targetStage: "", targetPipeStage: "" } : {}),
+          })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder={pipelinesLoading ? "Carregando funis..." : "Selecione o funil"} />
+          </SelectTrigger>
+          <SelectContent>
+            {visiblePipelines.map((pipeline) => (
+              <SelectItem key={pipeline.id} value={pipeline.id}>
+                {pipeline.label}{!pipeline.is_active ? " (desativado)" : ""}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {mode === "duplicate" && (
+        <div className="space-y-2">
+          <Label>Etapa inicial</Label>
+          <Select
+            value={selectedStageId}
+            disabled={!pipelineId || stagesLoading}
+            onValueChange={(value) => onUpdate({ targetStage: value, targetPipeStage: "" })}
+          >
+            <SelectTrigger>
+              <SelectValue
+                placeholder={stagesLoading ? "Carregando etapas..." : "Selecione a etapa"}
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {etapas.map((stage) => (
+                <SelectItem key={stage.id} value={stage.id}>{stage.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
   const at = data.actionType;
   // Node unificado gateado por org (ADR-0012). Fail-closed: enquanto carrega ou
   // se a org não tem a flag, o picker mostra os envios legados, como antes.
   const { enabled: unifiedEnabled } = useFeatureFlag(UNIFIED_MESSAGE_NODE_FLAG);
-  const actionCategories = getActionCategories(unifiedEnabled);
+  const { hasFeature } = useOrgFeatures();
+  // Categoria Negócios só aparece para org com o módulo ligado (feature `deals`).
+  const actionCategories = getActionCategories(unifiedEnabled).filter(
+    (c) => c.label !== "Negócios" || hasFeature("deals"),
+  );
 
   return (
     <div className="space-y-4">
@@ -659,73 +929,18 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* Duplicate to Pipe */}
       {at === "duplicate_to_pipe" && (
-        <>
-          <div className="space-y-2">
-            <Label>Pipe destino</Label>
-            <Select
-              value={data.targetPipeType || ""}
-              onValueChange={(v) => onUpdate({ targetPipeType: v })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-                <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-                <SelectItem value="pipe_propostas">Propostas</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Estágio inicial</Label>
-            <Input
-              value={data.targetPipeStage || ""}
-              onChange={(e) => onUpdate({ targetPipeStage: e.target.value })}
-              placeholder="Ex: novo"
-            />
-          </div>
-        </>
+        <FunnelLegacyActionFields data={data} onUpdate={onUpdate} mode="duplicate" />
       )}
 
       {/* Remove from Pipe */}
       {at === "remove_from_pipe" && (
-        <div className="space-y-2">
-          <Label>Pipe</Label>
-          <Select
-            value={data.pipeType || ""}
-            onValueChange={(v) => onUpdate({ pipeType: v })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-              <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-              <SelectItem value="pipe_propostas">Propostas</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        <FunnelLegacyActionFields data={data} onUpdate={onUpdate} mode="remove" />
       )}
 
       {/* Mark as Lost */}
       {at === "mark_as_lost" && (
         <>
-          <div className="space-y-2">
-            <Label>Pipe</Label>
-            <Select
-              value={data.pipeType || ""}
-              onValueChange={(v) => onUpdate({ pipeType: v })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pipe_whatsapp">Qualificação</SelectItem>
-                <SelectItem value="pipe_confirmacao">Confirmação</SelectItem>
-                <SelectItem value="pipe_propostas">Propostas</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <FunnelLegacyActionFields data={data} onUpdate={onUpdate} mode="lost" />
           <div className="space-y-2">
             <Label>Motivo da perda (opcional)</Label>
             <Input
@@ -861,8 +1076,8 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {at === "schedule_meeting" && (
         <div className="p-3 rounded-lg bg-muted text-xs text-muted-foreground">
-          Cria uma entrada no Pipe Confirmação com status "reunião marcada" para
-          o lead.
+          Solicita o agendamento de uma reunião para este lead e mantém o
+          vínculo com o negócio que iniciou a automação.
         </div>
       )}
 
@@ -878,7 +1093,12 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
       {/* ═══════ EQUIPE ═══════ */}
 
-      {(at === "assign_responsible" || at === "assign_sdr" || at === "assign_closer" || at === "assign_sale_responsible") && (
+      {/* `assign_sale_responsible` saiu da lista: o tipo nunca existiu em
+          `WorkflowActionType`, então a comparação era morta — TS2367 mascarado
+          no baseline pelo TEXTO do erro, que carrega a união inteira e mudou de
+          nome quando as ações de Negócio entraram. Tirar o ramo morto é o
+          conserto; regenerar o baseline só teria escondido de novo. */}
+      {(at === "assign_responsible" || at === "assign_sdr" || at === "assign_closer") && (
         <AssignResponsibleConfig data={data} onUpdate={onUpdate} />
       )}
 
@@ -921,6 +1141,60 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
           </div>
         </>
       )}
+
+      {/* ═══════ NEGÓCIOS ═══════ */}
+
+      {at === "create_deal" && <CreateDealConfig data={data} onUpdate={onUpdate} />}
+
+      {/* Ganhar e perder não têm configuração de destino, e agora por um motivo
+          diferente: NÃO EXISTE destino. O desfecho é campo do negócio
+          (`deals.outcome`, ADR-0023 Emenda 1) e o card não se move.
+
+          O texto anterior dizia "move o negócio para a etapa de ganho do funil
+          dele" — era verdade e deixou de ser. Descrever o comportamento velho
+          numa tela de configuração é pior que não descrever nada: o usuário
+          monta o workflow esperando o card mudar de coluna. */}
+      {(at === "win_deal" || at === "lose_deal") && (
+        <p className="rounded-lg border border-dashed border-border px-3 py-2 text-[12px] text-muted-foreground">
+          {at === "win_deal"
+            ? "Marca o negócio como ganho, na etapa em que ele estiver."
+            : "Marca o negócio como perdido, na etapa em que ele estiver."}
+          {" "}O card não muda de coluna. Exige um gatilho de funil — é dele que
+          vem qual negócio encerrar.
+        </p>
+      )}
+
+      {at === "lose_deal" && (
+        <div className="space-y-2">
+          <Label>Motivo da perda (opcional)</Label>
+          <Input
+            value={data.lossReason || ""}
+            onChange={(e) => onUpdate({ lossReason: e.target.value })}
+            placeholder="Preço, prazo, comprou do concorrente…"
+          />
+        </div>
+      )}
+
+      {at === "set_deal_value" && (
+        <div className="space-y-2">
+          <Label>Valor (R$)</Label>
+          <Input
+            type="number"
+            min={0}
+            value={data.dealValue ?? ""}
+            // `Number(...)` e não a string crua: `dealValue` é numérico no
+            // contrato do nó, e um campo de dinheiro guardado como texto é como
+            // "1.500" chega ao banco valendo 1,5.
+            onChange={(e) => onUpdate({ dealValue: e.target.value === "" ? undefined : Number(e.target.value) })}
+            placeholder="0"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Grava em <code>deals.value</code>. Negócio sem registro em Negócios não aceita valor.
+          </p>
+        </div>
+      )}
+
+      {at === "set_deal_owner" && <SetDealOwnerConfig data={data} onUpdate={onUpdate} />}
 
       {/* ═══════ FOLLOW-UP ═══════ */}
 
@@ -1027,14 +1301,12 @@ export function ActionPanel({ data, onUpdate }: ActionPanelProps) {
 
 // ── Move Stage (com seletor dinâmico de etapas) ───────────────────────────────
 
-const PIPE_OPTIONS: { value: PipelineType; label: string }[] = [
-  { value: "whatsapp", label: "Qualificação" },
-  { value: "confirmacao", label: "Confirmação" },
-  { value: "propostas", label: "Propostas" },
-  { value: "upsell_base", label: "Upsell (Tempo)" },
-  { value: "upsell_gestao", label: "Upsell (Gestão)" },
-];
-
+// SCRUM-627: o seletor opera por FUNIL REAL — a lista de `pipelines` da org,
+// um grupo só (sistema + custom), gravando sempre `pipelineId` (uuid). O
+// fallback silencioso "whatsapp" morreu: nó sem funil escolhido não carrega
+// etapa nenhuma. `pipeType` sobrevive só como LEITURA legada (slug de sistema
+// OU uuid custom dos nós salvos) e é zerado na primeira troca.
+// (SCRUM-618: upsell_* fora — Carteira não é funil.)
 function MoveStageFields({
   data,
   onUpdate,
@@ -1042,86 +1314,71 @@ function MoveStageFields({
   data: ActionNodeData;
   onUpdate: (updates: Partial<ActionNodeData>) => void;
 }) {
-  const pipeType = (data.pipeType as string) || "whatsapp";
-  const isCustomPipe = !PIPE_OPTIONS.some((p) => p.value === pipeType);
+  // `useFunisDaOrg`: o rótulo tem que ser o nome que a org usa, não o seed.
+  const { data: pipelines, isLoading: pipelinesLoading } = useFunisDaOrg();
 
-  // Standard pipeline stages
-  const { data: standardStages, isLoading: standardLoading } = usePipelineStages(
-    isCustomPipe ? "whatsapp" : (pipeType as PipelineType)
-  );
-  // Custom pipelines list
-  const { data: customPipelines } = useCustomPipelines();
-  // Custom pipeline stages
-  const { data: customStages, isLoading: customLoading } = useCustomPipelineStages(
-    isCustomPipe ? pipeType : undefined
-  );
+  const legacyRef = (data.pipeType as string) || "";
+  const normalizedLegacyRef = legacyRef.replace(/^pipe_/, "");
+  const pipelineId =
+    ((data.pipelineId as string) || "") ||
+    (legacyRef
+      ? pipelines?.find((p) => p.id === legacyRef || p.slug === normalizedLegacyRef)?.id ?? ""
+      : "");
 
-  const stagesLoading = isCustomPipe ? customLoading : standardLoading;
-  const activeStages = isCustomPipe
-    ? (customStages || []).filter((s) => s.is_active).map((s) => ({
-        key: s.id,
-        name: s.name,
-        color: s.color || "#888",
-      }))
-    : (standardStages || []).filter((s) => s.is_active).map((s) => ({
-        key: s.stage_key,
-        name: s.name,
-        color: s.color || "#888",
-      }));
+  const funis = (pipelines ?? []).filter((p) => p.is_active !== false);
+
+  const { etapas, isLoading: stagesLoading } = useEtapasDoFunil(pipelineId || null);
+  const activeStages = etapas.map((e) => ({
+    id: e.id,
+    legacyKey: e.stageKey,
+    name: e.label,
+    color: "#888",
+  }));
+  const selectedStageId = activeStages.find(
+    (stage) => stage.id === data.targetStage || stage.legacyKey === data.targetStage,
+  )?.id || "";
 
   const handlePipeChange = (value: string) => {
-    onUpdate({ pipeType: value, targetStage: "" });
+    onUpdate({ pipelineId: value, pipeType: "", targetStage: "" });
   };
 
   return (
     <>
       <div className="space-y-2">
-        <Label>Tipo de Pipe</Label>
-        <Select value={pipeType} onValueChange={handlePipeChange}>
+        <Label>Funil</Label>
+        <Select value={pipelineId} onValueChange={handlePipeChange}>
           <SelectTrigger>
-            <SelectValue placeholder="Selecione" />
+            <SelectValue placeholder={pipelinesLoading ? "Carregando funis..." : "Selecione o funil"} />
           </SelectTrigger>
           <SelectContent>
             <SelectGroup>
               <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                Pipes Padrão
+                Funis
               </SelectLabel>
-              {PIPE_OPTIONS.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
+              {funis.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
                   {p.label}
                 </SelectItem>
               ))}
             </SelectGroup>
-            {customPipelines && customPipelines.length > 0 && (
-              <SelectGroup>
-                <SelectLabel className="text-xs font-semibold text-muted-foreground uppercase">
-                  Pipes Custom
-                </SelectLabel>
-                {customPipelines.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            )}
           </SelectContent>
         </Select>
       </div>
       <div className="space-y-2">
-        <Label>Estágio destino</Label>
+        <Label>Etapa de destino</Label>
         {stagesLoading ? (
-          <p className="text-xs text-muted-foreground">Carregando estágios...</p>
+          <p className="text-xs text-muted-foreground">Carregando etapas...</p>
         ) : (
           <Select
-            value={data.targetStage || ""}
+            value={selectedStageId}
             onValueChange={(v) => onUpdate({ targetStage: v })}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Selecione o estágio" />
+              <SelectValue placeholder="Selecione a etapa" />
             </SelectTrigger>
             <SelectContent>
               {activeStages.map((s) => (
-                <SelectItem key={s.key} value={s.key}>
+                <SelectItem key={s.id} value={s.id}>
                   <span className="flex items-center gap-2">
                     <span
                       className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
@@ -1301,10 +1558,10 @@ function WhatsAppTextPanel({
 }) {
   const taRef = useRef<TemplateTextareaHandle>(null);
 
-  // Backward compat: derive templateMode from legacy useTemplate flag
-  const templateMode =
-    (data.templateMode as string) ||
-    (data.useTemplate ? "meta_template" : "free");
+  // A derivação mora em `@/contracts/workflows/modo-de-mensagem`, junto com a
+  // do validador — e presa à do executor por teste gêmeo. Antes havia uma cópia
+  // aqui, e o executor não tinha nenhuma: era ele quem ignorava o modo.
+  const templateMode = modoDeMensagemDoNo(data as unknown as Record<string, unknown>);
 
   const { data: templates, isLoading: templatesLoading, isError: templatesError } =
     useCampaignTemplatesByType("text");
@@ -1362,19 +1619,23 @@ function WhatsAppTextPanel({
         </div>
       </div>
 
-      {/* Template Meta mode */}
+      {/*
+        Modo Template Meta — o MESMO painel do escape de janela, apontado para o
+        outro conjunto de campos (`CAMPOS_DO_NO_DE_TEMPLATE`).
+
+        O que havia aqui era um campo de texto livre "ID do Template Meta", que
+        gravava `templateId` e não era lido por handler nenhum: o nó falhava com
+        "Empty message template" porque este mesmo bloco escondia o campo de
+        mensagem. Reusar o painel — em vez de reconstruir um seletor — é o que
+        dá de graça a listagem dos aprovados, o mapa de variáveis por posição, a
+        mídia do cabeçalho e a prévia, tudo já testado.
+      */}
       {templateMode === "meta_template" && (
-        <div className="space-y-2">
-          <Label>ID do Template Meta</Label>
-          <Input
-            value={data.templateId || ""}
-            onChange={(e) => onUpdate({ templateId: e.target.value })}
-            placeholder="ID do template aprovado pela Meta"
-          />
-          <p className="text-xs text-muted-foreground">
-            Templates aprovados pela Meta para envio em massa.
-          </p>
-        </div>
+        <TemplateNodeConfig
+          data={data}
+          onUpdate={onUpdate}
+          campos={CAMPOS_DO_NO_DE_TEMPLATE}
+        />
       )}
 
       {/* Gerar com IA mode (ADR-0012) — prompt gera em variável, node envia */}
@@ -1477,8 +1738,16 @@ function WhatsAppTextPanel({
         </div>
       )}
 
-      {/* Escape de janela — só aparece quando o nó nomeia o canal oficial (#1689) */}
-      <EscapeDeJanelaConfig data={data} onUpdate={onUpdate} />
+      {/*
+        Escape de janela — só aparece quando o nó nomeia o canal oficial (#1689),
+        e só no modo TEXTO. No modo template o nó já manda a forma aprovada, que
+        é justamente o que a Meta aceita com a janela fechada: oferecer um
+        "template para quando a janela fechar" ali seria pedir ao operador que
+        configurasse duas vezes a mesma coisa, e o executor ignora o segundo.
+      */}
+      {templateMode !== "meta_template" && (
+        <EscapeDeJanelaConfig data={data} onUpdate={onUpdate} />
+      )}
     </>
   );
 }

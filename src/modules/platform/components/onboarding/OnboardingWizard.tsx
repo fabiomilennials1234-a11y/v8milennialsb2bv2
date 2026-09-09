@@ -4,9 +4,8 @@ import { useAuth } from "@/modules/identity";
 import { useOnboarding, type OnboardingAnswers } from "@/modules/platform/hooks/useOnboarding";
 import { useOrganization } from "@/modules/identity";
 import { generateSuggestions, type SuggestedPipeline, type SuggestedAutomation } from "@/modules/platform/lib/onboarding-suggestions";
-import { generatePipelineDisplayConfig, applyPipelineDisplayConfig } from "@/modules/platform/lib/pipeline-config-from-quiz";
+import { useCreateCustomPipeline } from "@/modules/pipelines";
 import { track } from "@/lib/analytics";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { StepPerfilOperacao } from "./steps/StepPerfilOperacao";
 import { StepEstruturaComercial } from "./steps/StepEstruturaComercial";
@@ -57,6 +56,7 @@ export function OnboardingWizard() {
   const { user } = useAuth();
   const { organizationId } = useOrganization();
   const { onboarding, saveStepAnswers, complete, skip, markApplied, isSaving } = useOnboarding();
+  const createCustomPipeline = useCreateCustomPipeline();
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
@@ -66,7 +66,10 @@ export function OnboardingWizard() {
   const [isApplying, setIsApplying] = useState(false);
 
   const currentStepKey = STEP_KEYS[currentStep];
-  const stepAnswers = (localAnswers as Record<string, Record<string, unknown>>)[currentStepKey] ?? {};
+  const stepAnswers = useMemo(
+    () => (localAnswers as Record<string, Record<string, unknown>>)[currentStepKey] ?? {},
+    [localAnswers, currentStepKey],
+  );
 
   const updateStepAnswer = useCallback((key: string, value: unknown) => {
     setLocalAnswers((prev) => ({
@@ -100,31 +103,34 @@ export function OnboardingWizard() {
     if (!organizationId) return;
     setIsApplying(true);
     try {
+      // SCRUM-635: funil custom nasce pelo FLUXO DE CRIAÇÃO NORMAL
+      // (useCreateCustomPipeline — slug/stage_key canônicos, rollback se as
+      // etapas falharem), não mais por INSERT manual em custom_pipeline_stages.
       for (const pipe of pipelines) {
-        const slug = pipe.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-        const { data: created, error: pipeErr } = await supabase
-          .from("custom_pipelines")
-          .insert({ organization_id: organizationId, name: pipe.name, slug, icon: pipe.icon, color: pipe.color, position: 0, is_active: true })
-          .select("id")
-          .single();
-        if (pipeErr) { console.error("Pipeline create error:", pipeErr); continue; }
-        const stageRows = pipe.stages.map((s, i) => ({
-          organization_id: organizationId,
-          pipeline_id: created.id,
-          name: s.name,
-          stage_key: s.name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-"),
-          color: s.color,
-          position: i,
-          is_active: true,
-          is_final_positive: s.is_final_positive,
-          is_final_negative: s.is_final_negative,
-        }));
-        await supabase.from("custom_pipeline_stages").insert(stageRows);
+        try {
+          await createCustomPipeline.mutateAsync({
+            name: pipe.name,
+            icon: pipe.icon,
+            color: pipe.color,
+            custom_stages: pipe.stages.map((s) => ({
+              name: s.name,
+              color: s.color,
+              is_final_positive: s.is_final_positive,
+              is_final_negative: s.is_final_negative,
+            })),
+          });
+        } catch (pipeErr) {
+          console.error("Pipeline create error:", pipeErr);
+          continue;
+        }
       }
-      const pipelineConfig = generatePipelineDisplayConfig(localAnswers);
-      await applyPipelineDisplayConfig(supabase, organizationId, pipelineConfig);
+      // SCRUM-641: o quiz NÃO semeia mais os funis de sistema legados. A org
+      // já nasce com o "Funil de Vendas" (trigger trg_seed_default_funnel,
+      // 20270918000000) como funil padrão; o que o quiz agrega são os funis
+      // CUSTOM sugeridos acima — criados pelo fluxo normal. O rename do funil
+      // padrão fica ao alcance do usuário como em qualquer funil.
       await markApplied();
-      toast.success("Pipelines configurados!");
+      toast.success("Funis configurados!");
       setCurrentStep(4); // advance to Equipe
     } catch (err) {
       console.error("Apply config error:", err);

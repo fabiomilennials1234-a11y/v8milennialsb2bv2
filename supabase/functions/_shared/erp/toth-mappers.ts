@@ -17,7 +17,13 @@
  *     A mesma API usa os dois formatos.
  */
 
-import { CanonicalClient, CanonicalTitulo, TituloStatus } from "./types.ts";
+import {
+  CanonicalClient,
+  CanonicalOrder,
+  CanonicalOrderItem,
+  CanonicalTitulo,
+  TituloStatus,
+} from "./types.ts";
 
 /**
  * Normaliza chave para comparação: minúscula, sem acento, sem separador.
@@ -297,6 +303,20 @@ const NAME_FIELDS = ["razaoSocial", "nomeFantasia", "nome"];
 const COMPANY_FIELDS = ["nomeFantasia", "razaoSocial"];
 /** E-mail escalar de topo — usado só quando a lista `emails[]` não resolve. */
 const EMAIL_FALLBACK_FIELDS = ["emailNfe", "email"];
+/**
+ * Último pedido faturado. O fornecedor acrescentou o campo em 24/08/2026 a
+ * pedido nosso; os outros nomes são recuo defensivo, porque o mesmo dado já
+ * apareceu com nomes diferentes em outras telas do Toth.
+ *
+ * Medido em 25/08: preenchido em 5.091 dos 12.632 clientes (40%), sempre em
+ * `aaaa-mm-dd`, com anos de 2012 a 2026. Quem não tem é quem nunca faturou.
+ */
+const LAST_ORDER_FIELDS = [
+  "dataEmissaoUltimoPedidoFaturado",
+  "dataUltimoPedidoFaturado",
+  "dataEmissaoUltimoPedido",
+  "dataUltimoPedido",
+];
 
 /** Envelopes prováveis. A resposta real de `/clientes` é um array cru na raiz. */
 const LIST_ENVELOPES = [
@@ -577,6 +597,7 @@ export function mapTothClienteToCanonical(
     erpStatus: asString(pickField(row, ["situacaoParceiro"])),
     segment: asString(pickField(row, ["descricaoTipoMercado", "tipoMercado"])),
     registeredAt: parseTothDate(pickField(row, ["dataCadastro"])),
+    lastOrderAt: parseTothDate(pickField(row, LAST_ORDER_FIELDS)),
     city: asString(pickField(row, ["cidade"])),
     uf: sanitizeUf(pickField(row, ["UF", "uf", "estado"])),
     metadata: buildMetadata(row, atendimento),
@@ -684,4 +705,151 @@ export function mapTothCobrancaToCanonical(
     // Preenchido assim que o fornecedor acrescentar a data do último pagamento.
     pagoEm: parseTothDate(pickField(row, TITULO_PAGAMENTO_FIELDS)),
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pedidos de venda
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 🟠 O endpoint ainda não existe. Em 25/08 `/pedidos` responde **404** no ERP da
+ * Café Jurerê — o fornecedor diz que está pronto do lado dele e aguarda a GON
+ * Informática mudar um redirecionamento.
+ *
+ * O que existe é o **retorno real que ele mandou em 25/08**, e é nele que este
+ * mapeador está fixado. Não é suposição: é o formato que o serviço dele produz.
+ * Ainda assim, a ordem ao ligar é `toth-probe` primeiro — a lição de
+ * `numeroInscricao` e do saldo é que payload conferido vale mais que payload
+ * combinado.
+ *
+ * Duas diferenças de forma em relação a `/clientes`, que valem registro:
+ *  - os nomes vêm em **caixa baixa colada** (`numeropedido`, `dataemissao`),
+ *    enquanto `/clientes` usa camelCase. Isto aqui não se importa porque
+ *    `pickField` normaliza a chave — mas quem for ler o JSON cru se importa.
+ *  - a resposta é **paginada de verdade** (`{data, page, hasNext}`), a primeira
+ *    do Toth a ser. `/clientes` devolve tudo de uma vez.
+ */
+const PEDIDO_ID_FIELDS = ["numeroPedido", "numeroPedidoVenda", "idPedido", "codigoPedido"];
+const PEDIDO_DATE_FIELDS = ["dataEmissao", "dataPedido", "dataEmissaoPedido"];
+const PEDIDO_CNPJ_FIELDS = ["numeroInscricao", "cnpj", "cpf", "cnpjCpf"];
+const PEDIDO_CLIENT_ID_FIELDS = ["codigoCliente", "codCliente", "idCliente"];
+const PEDIDO_TOTAL_FIELDS = [
+  "valorTotalLiquido",
+  "valorTotal",
+  "valorLiquido",
+  "totalPedido",
+];
+const PEDIDO_STATUS_FIELDS = ["statusPedido", "situacaoPedido", "status"];
+const PEDIDO_ITEMS_FIELDS = ["itens", "items", "produtos"];
+
+const ITEM_ID_FIELDS = ["codigoProduto", "idProduto", "codProduto"];
+const ITEM_DESC_FIELDS = ["descricaoProduto", "nomeProduto", "descricao"];
+const ITEM_QTD_FIELDS = ["qtdPedido", "quantidade", "qtd"];
+const ITEM_UNIT_FIELDS = ["valorUnitario", "precoUnitario", "valorUnit"];
+const ITEM_TOTAL_FIELDS = ["valorTotal", "totalItem", "valorTotalItem"];
+
+/**
+ * `dataemissao` vem como `2026-07-29T00:00:00.000Z` — ISO com hora, não a data
+ * seca do cadastro. `parseTothDate` já corta no dia, que é a granularidade em
+ * que o pedido é lido em toda a Carteira.
+ */
+export function mapTothPedidoToCanonical(row: Record<string, unknown>): CanonicalOrder {
+  const externalId = asString(pickField(row, PEDIDO_ID_FIELDS));
+  if (!externalId) {
+    throw new TothMappingError(
+      `Pedido do Toth sem número. Campos recebidos: ${Object.keys(row).join(", ")}`,
+    );
+  }
+
+  const items = mapTothPedidoItens(pickField(row, PEDIDO_ITEMS_FIELDS));
+  const totalDoErp = asNumber(pickField(row, PEDIDO_TOTAL_FIELDS));
+  const somaDosItens = items.reduce((acc, i) => acc + i.totalValue, 0);
+
+  /**
+   * O total do ERP manda; a soma dos itens é o recuo.
+   *
+   * Nos dez pedidos da amostra os dois batem ao centavo, mas quem conhece
+   * desconto de cabeçalho e frete sabe que isso não é garantido. Preferir o
+   * campo do ERP mantém a receita do CRM igual à do financeiro dele, que é a
+   * conta que alguém vai conferir.
+   */
+  const saleValue = totalDoErp ?? somaDosItens;
+
+  const dataEmissao = parseTothDate(pickField(row, PEDIDO_DATE_FIELDS));
+
+  return {
+    externalId,
+    externalRef: null,
+    // 🔴 `/pedidos` identifica o cliente pelo DOCUMENTO, não pelo código: o
+    // recuo por CNPJ em `upsertCanonicalOrder` não é luxo, é o único caminho.
+    clientExternalId: asString(pickField(row, PEDIDO_CLIENT_ID_FIELDS)),
+    clientCnpj: sanitizeDocument(pickField(row, PEDIDO_CNPJ_FIELDS)),
+    saleValue,
+    productName: describePedidoItems(items, externalId),
+    // Meio-dia em vez de meia-noite: `sold_at` é timestamptz e a Carteira lê em
+    // horário de Brasília — `T00:00:00Z` mostraria o pedido no dia anterior.
+    soldAt: dataEmissao ? `${dataEmissao}T12:00:00.000Z` : null,
+    etapa: null,
+    erpStatus: asString(pickField(row, PEDIDO_STATUS_FIELDS)),
+    items,
+  };
+}
+
+export function mapTothPedidoItens(raw: unknown): CanonicalOrderItem[] {
+  if (!Array.isArray(raw)) return [];
+  const items: CanonicalOrderItem[] = [];
+
+  for (const entry of raw) {
+    if (!isRecord(entry)) continue;
+    const quantity = asNumber(pickField(entry, ITEM_QTD_FIELDS)) ?? 0;
+    const unitValue = asNumber(pickField(entry, ITEM_UNIT_FIELDS)) ?? 0;
+    const total = asNumber(pickField(entry, ITEM_TOTAL_FIELDS));
+    items.push({
+      productExternalId: asString(pickField(entry, ITEM_ID_FIELDS)),
+      // O cadastro de produto do Toth traz espaço à direita ("... 100G ") —
+      // mesmo vício do cadastro de cliente.
+      description: (asString(pickField(entry, ITEM_DESC_FIELDS)) ?? "").trim(),
+      quantity,
+      unitValue,
+      // Multiplicação com 2 casas: `6 * 19.9` em ponto flutuante dá
+      // 119.39999999999999, e esse valor viraria o total da linha no banco.
+      totalValue: total ?? Math.round(quantity * unitValue * 100) / 100,
+    });
+  }
+  return items;
+}
+
+/**
+ * Rótulo do pedido para `upsell_orders.product_name`, que é NOT NULL e é o que
+ * a Carteira mostra na lista.
+ *
+ * Um pedido de café tem vários itens e a coluna comporta um nome. Mostrar o
+ * primeiro produto e quantos mais existem é mais honesto que escolher um item
+ * como se fosse o pedido — e mais útil que "Pedido 19400", que não diz nada a
+ * quem está olhando a lista.
+ */
+export function describePedidoItems(items: CanonicalOrderItem[], externalId: string): string {
+  const nomes = items.map((i) => i.description).filter((d) => d.length > 0);
+  if (nomes.length === 0) return `Pedido ${externalId}`;
+  if (nomes.length === 1) return nomes[0];
+  return `${nomes[0]} +${nomes.length - 1}`;
+}
+
+/**
+ * A resposta tem mais páginas?
+ *
+ * `null` quando o ERP não diz — e "não disse" é diferente de "não tem". O
+ * chamador trata os dois casos, mas precisa distingui-los: parar por ausência
+ * de sinal é o que faz uma carga trazer só a primeira página em silêncio.
+ */
+export function extractHasNext(payload: unknown): boolean | null {
+  if (!isRecord(payload)) return null;
+  const value = pickField(payload, ["hasNext", "temProxima", "hasMore", "proximaPagina"]);
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    const v = value.trim().toLowerCase();
+    if (v === "true" || v === "sim") return true;
+    if (v === "false" || v === "nao" || v === "não") return false;
+  }
+  return null;
 }

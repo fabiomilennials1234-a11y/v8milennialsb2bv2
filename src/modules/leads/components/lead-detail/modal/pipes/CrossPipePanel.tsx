@@ -17,8 +17,9 @@ import { BudgetFieldBlock } from "../../cross-pipe/BudgetFieldBlock";
 import { ActionPill, type ActionPillType } from "./ActionPill";
 import { ActionPanel } from "./ActionPanel";
 import { NewDealDialog } from "./NewDealDialog";
+import { RegisterHistoricalSalesDialog } from "./RegisterHistoricalSalesDialog";
+import { formatBRL } from "@/lib/format";
 import {
-  SYSTEM_PIPE_SHORT_LABEL,
   isCustomPipe,
   isSystemPipe,
 } from "./newDealOptions";
@@ -56,11 +57,6 @@ import {
  * `propostas`, custom pipe ids) are migrated transparently on first read.
  */
 
-const SYSTEM_RAIL_REF: Record<string, "whatsapp" | "confirmacao" | "propostas"> = {
-  qualificacao: "whatsapp",
-  confirmacao: "confirmacao",
-  propostas: "propostas",
-};
 
 type ExpandedAction = "meeting" | "budget" | null;
 
@@ -100,7 +96,7 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   const removeStandardMutation = useRemoveLeadFromStandardPipe();
   const removeCustomMutation = useRemoveLeadFromCustomPipe();
   const logAction = useLogLeadAction();
-  const { canAddToPipe, canRemoveFromPipe, canMoveMeeting } = useLeadActionGates(leadId);
+  const { canAddToPipe, canRemoveFromPipe, canMoveMeeting, canEditField } = useLeadActionGates(leadId);
   const move = useCrossPipeMove(leadId);
 
   // ─── Partition pipes ────────────────────────────────────────────────
@@ -125,9 +121,9 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   const hasConfirmacao = activeSystem.some((p) => p.pipeType === "confirmacao");
   const hasPropostas = activeSystem.some((p) => p.pipeType === "propostas");
 
-  // Funil mergeado (ADR-0004): a reunião vive na entry whatsapp (qualificacao)
+  // Funil mergeado (ADR-0004): a reunião vive na entry whatsapp
   // num stage de reunião. Habilita o editor de data dentro do modal.
-  const whatsappEntry = activeSystem.find((p) => p.pipeType === "qualificacao") as StandardPipelineStatus | undefined;
+  const whatsappEntry = activeSystem.find((p) => p.pipeType === "whatsapp") as StandardPipelineStatus | undefined;
   const mergedMeeting =
     hasFeature("merged_opportunity_funnel") &&
     !!whatsappEntry?.pipeId &&
@@ -191,8 +187,8 @@ export const CrossPipePanel = memo(function CrossPipePanel({
     const list: StageRailPipe[] = activeSystem.map((p) => ({
       kind: "system" as const,
       recordId: p.pipeId!,
-      pipeRef: SYSTEM_RAIL_REF[p.pipeType],
-      shortLabel: SYSTEM_PIPE_SHORT_LABEL[p.pipeType] ?? p.label,
+      pipeRef: p.pipeType,
+      shortLabel: p.label,
       color: p.color,
       stages: p.stages.map((s) => ({ key: s.id, label: s.label })),
       currentKey: p.currentStage,
@@ -333,7 +329,8 @@ export const CrossPipePanel = memo(function CrossPipePanel({
   // O lead existe, ninguém abriu negócio ainda. Depois do D1 este é o estado
   // normal de entrada — o ingest cria lead e para por aí —, então o vazio
   // precisa oferecer a ação, não só informar a ausência.
-  if (rails.length === 0) {
+  const historicalSales = (dealsByLead?.[leadId] ?? []).filter(deal => deal.historicalSale);
+  if (rails.length === 0 && historicalSales.length === 0) {
     return (
       <div
         className="rounded-xl border border-dashed border-border/40 bg-muted/10 p-6 text-center"
@@ -344,7 +341,8 @@ export const CrossPipePanel = memo(function CrossPipePanel({
         <p className="mt-0.5 text-[11.5px] text-muted-foreground/70">
           O lead está na base. Abrir um negócio é o que o coloca num funil.
         </p>
-        <div className="mt-3 flex justify-center">
+        <div className="mt-3 flex flex-wrap justify-center gap-2">
+          <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} disabled={!canEditField.allowed} />
           <NewDealDialog
             options={dealOptions}
             isCreating={isCreating}
@@ -370,15 +368,24 @@ export const CrossPipePanel = memo(function CrossPipePanel({
         <h3 className="flex items-baseline gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
           Negócios
           <span className="text-[11px] tabular-nums text-muted-foreground/60">
-            {rails.length}
+            {rails.length + historicalSales.length}
           </span>
         </h3>
+        <div className="flex flex-wrap justify-end gap-2">
+        <RegisterHistoricalSalesDialog key={leadId} leadId={leadId} disabled={!canEditField.allowed} />
         <NewDealDialog
           options={dealOptions}
           isCreating={isCreating}
           onCreate={handleCreateDeal}
         />
+        </div>
       </div>
+
+      {historicalSales.length > 0 && <ul aria-label="Vendas históricas" className="flex flex-col gap-2">
+        {historicalSales.map(sale => <li key={sale.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">
+          <span>{sale.title}</span><span className="font-medium text-success">Ganho · {formatBRL(sale.value)}</span>
+        </li>)}
+      </ul>}
 
       {/* Zone A — StageRails (single-expand, collapsed chips for others) */}
       {rails.length > 0 && (

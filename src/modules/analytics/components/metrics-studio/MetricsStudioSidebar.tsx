@@ -8,6 +8,8 @@ import {
 } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import type { MetricCustomDefinition } from "@/modules/analytics/hooks/useMetricCustomDefinitions";
 import { PREFIXO_CUSTOM, ehMetricaPersonalizada } from "@/modules/analytics/hooks/useStudioCatalog";
+import { FIXED_CARDS } from "@/modules/analytics/lib/metrics-studio-fixed-cards";
+import { Button } from "@/components/ui/button";
 
 interface MetricsStudioSidebarProps {
   metrics: EngineMetric[];
@@ -17,6 +19,7 @@ interface MetricsStudioSidebarProps {
   /** Só admin compõe: definição de métrica muda o número que a org inteira lê. */
   podeCompor: boolean;
   onAdd: (metric: EngineMetric) => void;
+  onAddFixed: (id: string, size: { w: number; h: number }) => void;
   onCriar: () => void;
   onEditar: (def: MetricCustomDefinition) => void;
   onRemover: (def: MetricCustomDefinition) => void;
@@ -37,7 +40,7 @@ const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCa
  */
 export function MetricsStudioSidebar({
   metrics, personalizadas, openMetricIds, podeVerPorPessoa, podeCompor,
-  onAdd, onCriar, onEditar, onRemover,
+  onAdd, onAddFixed, onCriar, onEditar, onRemover,
 }: MetricsStudioSidebarProps) {
   const [query, setQuery] = useState("");
 
@@ -58,7 +61,7 @@ export function MetricsStudioSidebar({
   const total = fabrica.length + custom.length;
 
   return (
-    <aside className="flex h-full w-[300px] shrink-0 flex-col border-r border-border/70 bg-background/60">
+    <aside className="flex h-56 w-full shrink-0 flex-col border-r border-border/70 bg-background/60 sm:h-full sm:w-[300px]">
       <div className="space-y-2.5 border-b border-border/70 px-4 py-3">
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
@@ -188,6 +191,14 @@ export function MetricsStudioSidebar({
       <div className={cn("border-t border-border/70 px-4 py-2 text-[10px] text-muted-foreground/60")}>
         {total} de {metrics.length} métricas
       </div>
+      <details className="max-h-[45%] overflow-auto border-t p-3" open={query.length > 0}>
+        <summary className="cursor-pointer py-2 text-sm font-medium">Cards dos dashboards</summary>
+        <ul className="flex flex-col gap-1">
+          {Object.entries(FIXED_CARDS).filter(([, card]) => (!card.requiresPerformance || podeVerPorPessoa) && fold(card.label).includes(fold(query))).map(([id, card]) => (
+            <li key={id}><Button variant="ghost" className="h-auto min-h-11 w-full justify-start whitespace-normal text-left" onClick={() => onAddFixed(id, card.tamanhoPadrao)}><Plus className="mr-2 size-4 shrink-0" />{card.label}</Button></li>
+          ))}
+        </ul>
+      </details>
     </aside>
   );
 }

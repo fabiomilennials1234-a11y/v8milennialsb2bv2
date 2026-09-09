@@ -20,6 +20,8 @@
  * A config do nó mora PLANA em `node.data` — o executor faz `params: {...ctx.nodeData}`.
  */
 
+import { ehModoTemplateMeta } from "./modo-de-mensagem";
+
 export type NodeConfig = Record<string, unknown>;
 
 export interface NodeRequirement {
@@ -41,12 +43,33 @@ export function isFilled(value: unknown): boolean {
   return true;
 }
 
+/**
+ * A MESMA string que o executor devolve — copiada, e não importada, porque
+ * `supabase/functions/` é Deno e não resolve o alias `@/`. O teste âncora
+ * (`workflow-node-requirements.test.ts`) lê o fonte do executor e falha se ela
+ * deixar de existir lá, que é o que impede a cópia de virar ficção.
+ */
+const MOTIVO_LEGIVEL_SEM_TEMPLATE =
+  "Modo Template Meta selecionado, mas nenhum template aprovado foi escolhido " +
+  "neste nó. Abra o nó e escolha o template — ou volte o modo para Escrever.";
+
 const midiaDoTipo = (tipo: string) => (c: NodeConfig) =>
   (c.messageType as string | undefined) === tipo;
 
 export const NODE_REQUIREMENTS: Record<string, NodeRequirement[]> = {
   move_stage: [
     { anyOf: ["targetStage"], label: "etapa de destino", executorError: "No target stage configured" },
+    { anyOf: ["pipelineId", "pipeType"], label: "funil de destino", executorError: "No target funnel configured" },
+  ],
+  duplicate_to_pipe: [
+    { anyOf: ["pipelineId", "targetPipeType"], label: "funil de destino", executorError: "No target funnel configured" },
+    { anyOf: ["targetStage", "targetPipeStage"], label: "etapa inicial", executorError: "No target stage configured" },
+  ],
+  remove_from_pipe: [
+    { anyOf: ["pipelineId", "pipeType"], label: "funil", executorError: "No funnel configured" },
+  ],
+  mark_as_lost: [
+    { anyOf: ["pipelineId", "pipeType"], label: "funil", executorError: "No funnel configured" },
   ],
   add_tag: [
     { anyOf: ["tagId", "tagName"], label: "tag", executorError: "No tag configured (provide tagId or tagName)" },
@@ -65,6 +88,22 @@ export const NODE_REQUIREMENTS: Record<string, NodeRequirement[]> = {
   ],
   send_whatsapp_template: [
     { anyOf: ["templateName"], label: "template", executorError: "No template configured" },
+  ],
+
+  // O nó de MENSAGEM em modo Template Meta. A regra é condicional porque o mesmo
+  // actionType manda texto na esmagadora maioria dos nós (396 ativos medidos em
+  // produção): exigir `templateName` sempre reprovaria todos eles.
+  //
+  // O caso que ela pega é exatamente o que quebrou na Chique — modo template
+  // escolhido, nenhum template selecionado, e o painel escondendo o campo de
+  // texto. Antes disso o editor deixava ativar, e o nó só falhava no envio.
+  send_whatsapp: [
+    {
+      anyOf: ["templateName"],
+      label: "template aprovado",
+      when: ehModoTemplateMeta,
+      executorError: MOTIVO_LEGIVEL_SEM_TEMPLATE,
+    },
   ],
   send_campaign_message: [
     { anyOf: ["campaignId"], label: "campanha", executorError: "No campaign configured" },
@@ -175,19 +214,25 @@ export function findNodeConfigIssues(nodes: WorkflowNodeLike[]): NodeConfigIssue
 // em 8+ workflows por essa causa.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Funis cujo destino o executor confere contra `pipeline_stages`.
- * Espelha `move-stage.ts`: os demais (upsell_base, upsell_gestao, campanha) são
- * explicitamente pulados lá, e cobrar aqui seria falso positivo.
- */
-export const PIPES_COM_ETAPA_VALIDADA = ["whatsapp", "confirmacao", "propostas"] as const;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Nós que apontam para etapa inexistente.
  *
- * `stageKeysByPipe` vem de `pipeline_stages` (ativas) da org. Pipe sem nenhuma
- * etapa cadastrada NÃO acusa — é exatamente o que o executor faz
- * (`if (validKeys.length > 0 && ...)`), e divergir aqui geraria alarme falso.
+ * SCRUM-627: a validação é POR FUNIL REAL — morreu a lista fixa
+ * `PIPES_COM_ETAPA_VALIDADA` (que só cobria os 3 funis de sistema e deixava
+ * etapa podre de funil custom invisível). `stageKeysByPipe` vem da RPC
+ * `master_workflow_config_scan`, que chaveia as etapas ativas por TRÊS refs do
+ * mesmo funil: `pipelines.slug` (nó legado de sistema), `pipeline_id` (nó
+ * novo, qualquer funil) e `pipeline_type` fantasma. O nó é procurado pela
+ * própria ref — `pipelineId` novo ou `pipeType` legado (slug OU uuid custom).
+ * Nó sem funil é inválido e já aparece em `findNodeConfigIssues`.
+ *
+ * Permissividade em paridade com o executor (`move-stage.ts`):
+ *   · ref sem chave no mapa (funil sem etapa cadastrada, upsell_*, campanha,
+ *     funil apagado) NÃO acusa;
+ *   · targetStage em UUID (`pipeline_stages.id`) NÃO acusa — o mapa carrega
+ *     keys, e reprovar um id válido por não ser key seria alarme falso.
  */
 export function findStageIssues(
   nodes: WorkflowNodeLike[],
@@ -202,13 +247,15 @@ export function findStageIssues(
     const alvo = config.targetStage;
     if (!isFilled(alvo)) continue; // campo vazio é a outra regra, não esta
 
-    const pipe = (config.pipeType as string) || "whatsapp";
-    if (!(PIPES_COM_ETAPA_VALIDADA as readonly string[]).includes(pipe)) continue;
+    const normalizado = String(alvo).trim().toLowerCase();
+    if (UUID_RE.test(normalizado)) continue; // id de etapa — o executor resolve por id
+
+    const pipe = (config.pipelineId as string) || (config.pipeType as string);
+    if (!pipe) continue;
 
     const validas = stageKeysByPipe[pipe] ?? [];
     if (validas.length === 0) continue;
 
-    const normalizado = String(alvo).trim().toLowerCase();
     if (validas.some((k) => k.trim().toLowerCase() === normalizado)) continue;
 
     issues.push({

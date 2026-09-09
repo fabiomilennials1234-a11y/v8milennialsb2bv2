@@ -37,7 +37,10 @@ export function useRescheduleMeeting() {
         .eq("id", entryId);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["pipeline-page", "whatsapp"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pipeline-page"] });
+      qc.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
+    },
   });
 }
 
@@ -63,6 +66,9 @@ export function useMarkLost() {
         .eq("id", entryId);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["pipeline-page", "whatsapp"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["pipeline-page"] });
+      qc.invalidateQueries({ queryKey: ["pipeline-stage-counts"] });
+    },
   });
 }

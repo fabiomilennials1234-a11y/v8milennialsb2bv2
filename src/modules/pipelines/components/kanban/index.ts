@@ -25,6 +25,5 @@ export type {
 } from "./KanbanFilterPanel";
 export { PipelineListView } from "./PipelineListView";
 export type { PipelineListViewProps } from "./PipelineListView";
-export { PipeTableView } from "./PipeTableView";
 export { StageWorkflowsBadge } from "./StageWorkflowsBadge";
 export { StageWorkflowsBadgeWrapper } from "./StageWorkflowsBadgeWrapper";

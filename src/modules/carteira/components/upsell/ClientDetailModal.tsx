@@ -31,6 +31,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { erpLabel } from "@/shared/format/erp-code";
 
 interface ClientDetailModalProps {
   open: boolean;
@@ -169,7 +170,7 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
             <div className="p-1.5 rounded-lg bg-primary/10">
               <User className="w-4 h-4 text-primary" />
             </div>
-            {client.name}
+            {erpLabel(client)}
             {!client.is_active && (
               <Badge className="text-[10px] border-0 bg-destructive/10 text-destructive">Inativo</Badge>
             )}
@@ -345,7 +346,7 @@ export function ClientDetailModal({ open, onOpenChange, clientId, onQuickSale }:
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir permanentemente o cliente "{client.name}"?
+              Tem certeza que deseja excluir permanentemente o cliente "{erpLabel(client)}"?
               Todos os pedidos e dados associados serão removidos. Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>

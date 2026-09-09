@@ -47,10 +47,29 @@ export function useLeadComments(leadId: string | null | undefined) {
   });
 }
 
+/**
+ * A coluna `pipeline_entry_id` ainda não chegou ao banco.
+ *
+ * `42703` é o `undefined_column` do Postgres; `PGRST204` é o "could not find
+ * the column in the schema cache" do PostgREST, que é o que chega de verdade
+ * quando o front está à frente da migration. O par existe porque **merge em
+ * `main` publica o front sozinho e a migration é manual** (CLAUDE.md raiz):
+ * na janela entre os dois, mandar a coluna faria o comentário não salvar — que
+ * é exatamente o defeito que esta tela veio consertar.
+ */
+const COLUNA_AINDA_NAO_EXISTE = new Set(["42703", "PGRST204"]);
+
 export function useCreateLeadComment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { leadId: string; organizationId: string; body: string; mentions?: string[] }) => {
+    mutationFn: async (input: {
+      leadId: string;
+      organizationId: string;
+      body: string;
+      mentions?: string[];
+      /** `pipeline_entries.id` do negócio aberto. Ausente = comentário do lead. */
+      pipelineEntryId?: string | null;
+    }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Sem usuário autenticado");
 
@@ -61,17 +80,28 @@ export function useCreateLeadComment() {
         .eq("organization_id", input.organizationId)
         .maybeSingle();
 
-      const { data, error } = await (fromLeadComments() as any)
-        .insert({
-          lead_id: input.leadId,
-          organization_id: input.organizationId,
-          author_user_id: user.id,
-          author_team_member_id: member?.id ?? null,
-          body: input.body.trim(),
-          mentions: input.mentions && input.mentions.length > 0 ? input.mentions : [],
-        })
-        .select("*")
-        .single();
+      const semVinculo = {
+        lead_id: input.leadId,
+        organization_id: input.organizationId,
+        author_user_id: user.id,
+        author_team_member_id: member?.id ?? null,
+        body: input.body.trim(),
+        mentions: input.mentions && input.mentions.length > 0 ? input.mentions : [],
+      };
+      const comVinculo = input.pipelineEntryId
+        ? { ...semVinculo, pipeline_entry_id: input.pipelineEntryId }
+        : semVinculo;
+
+      const gravar = (linha: Record<string, unknown>) =>
+        (fromLeadComments() as any).insert(linha).select("*").single();
+
+      let { data, error } = await gravar(comVinculo);
+
+      // Degrada para comentário do lead em vez de perder o texto da pessoa.
+      if (error && comVinculo !== semVinculo && COLUNA_AINDA_NAO_EXISTE.has(String(error.code))) {
+        ({ data, error } = await gravar(semVinculo));
+      }
+
       if (error) throw error;
       return data as LeadComment;
     },

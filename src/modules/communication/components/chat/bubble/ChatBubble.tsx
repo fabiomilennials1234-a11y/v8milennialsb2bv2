@@ -3,7 +3,7 @@
  *
  * Responsável por:
  *   - Pathname guard (auto-hide em /chat e /chat-whatsapp/*; só renderiza nas
- *     Pipe pages canônicas: /pipe-whatsapp, /pipe-confirmacao, /pipe-propostas,
+ *     Pipe pages canônicas: /funil/:slug (rota única pós-SCRUM-637),
  *     /follow-ups e /pipe/custom/:slug)
  *   - Feature flag check (chatBubble)
  *   - Lazy-load do painel via React.lazy — chunk só desce no primeiro open
@@ -26,10 +26,10 @@ const HIDE_ROUTES = ["/chat", "/chat-whatsapp"];
 // Match real routes do projeto (ver src/App.tsx). Usar prefixos exatos pra
 // evitar falso-positivo (ex: /pipeline-x acidentalmente bater em /pipe).
 const PIPE_PATH_PATTERNS: RegExp[] = [
-  /^\/pipe-whatsapp(\/|$)/,
-  /^\/pipe-confirmacao(\/|$)/,
-  /^\/pipe-propostas(\/|$)/,
-  /^\/pipe\/custom\//,
+  // SCRUM-637 (flip): TODO funil (sistema e custom) vive em /funil/:slug —
+  // a bolha agora também aparece nos boards custom, que /pipe/custom nunca
+  // cobria depois do redirect da 632.
+  /^\/funil(\/|$)/,
   /^\/follow-ups(\/|$)/,
 ];
 

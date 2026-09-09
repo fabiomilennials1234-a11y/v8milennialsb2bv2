@@ -30,8 +30,8 @@ function hasActiveListFilters(f?: ExportListFilters): boolean {
   return (
     (f.searchQuery?.trim()?.length ?? 0) > 0 ||
     (!!f.filterOrigin && f.filterOrigin !== "all") ||
-    (!!f.filterRating && f.filterRating !== "all") ||
     (!!f.filterQualification && f.filterQualification !== "all") ||
+    (!!f.filterResponsible && f.filterResponsible !== "all") ||
     !!f.filterUf ||
     !!f.createdFrom ||
     !!f.createdTo
@@ -114,7 +114,7 @@ export function ExportLeadsContent({ onDone, listFilters }: ExportLeadsContentPr
       )}
       <p className="text-xs text-muted-foreground">
         O arquivo inclui todos os dados: lead (nome, empresa, contato, prioridade, origem, UTMs, datas),
-        etapa e datas de cada pipe (WhatsApp, Confirmação, Propostas), valores, responsáveis e notas.
+        etapa e datas de cada funil da organização, valores, responsáveis e notas.
       </p>
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="outline" onClick={() => onDone?.()} disabled={isExporting}>

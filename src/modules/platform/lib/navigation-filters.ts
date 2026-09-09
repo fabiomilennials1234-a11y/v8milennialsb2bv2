@@ -9,10 +9,11 @@
 import type { NavNode } from "./navigation-model";
 import { NAV_VIEW_PERMISSIONS, OUTBOUND_MEMBER_ALLOWED_PATHS } from "./navigation-model";
 
-type Allowed = (typeof OUTBOUND_MEMBER_ALLOWED_PATHS)[number];
-
 const isOutboundAllowed = (path: string): boolean =>
-  (OUTBOUND_MEMBER_ALLOWED_PATHS as readonly string[]).includes(path as Allowed);
+  (OUTBOUND_MEMBER_ALLOWED_PATHS as readonly string[]).some(
+    // Prefixo cobre a rota única `/funil/:slug` (SCRUM-637) sem enumerar slugs.
+    (allowed) => path === allowed || path.startsWith(`${allowed}/`),
+  );
 
 /**
  * Membro de org outbound enxerga só o recorte permitido. Um pai entra se ele
@@ -34,13 +35,11 @@ export function filterByMaster(items: NavNode[], isMaster: boolean): NavNode[] {
 
 export interface RuntimeGates {
   metaPagesConnected: boolean;
-  metricsStudioEnabled: boolean;
 }
 
 export function filterByGate(items: NavNode[], gates: RuntimeGates): NavNode[] {
   return items.filter((item) => {
     if (item.gate === "meta_pages_connected") return gates.metaPagesConnected;
-    if (item.gate === "metrics_studio_enabled") return gates.metricsStudioEnabled;
     return true;
   });
 }
@@ -88,7 +87,11 @@ export interface ViewPermissionInput {
 export function makeCanViewRoute({ isMaster, isAdmin, featurePerms }: ViewPermissionInput) {
   return (path: string): boolean => {
     if (isMaster || isAdmin) return true;
-    const permKey = NAV_VIEW_PERMISSIONS[path];
+    const permKey =
+      NAV_VIEW_PERMISSIONS[path] ??
+      // Rota única de funil (SCRUM-637): qualquer `/funil/...` herda a
+      // permissão do prefixo — igual ao guard de rota do App.tsx.
+      (path.startsWith("/funil/") ? NAV_VIEW_PERMISSIONS["/funil"] : undefined);
     if (!permKey) return true;
     return featurePerms?.[permKey] !== false;
   };

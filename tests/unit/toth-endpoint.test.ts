@@ -10,6 +10,7 @@ import { describe, it, expect } from "vitest";
 import {
   readTothEndpoint,
   canSubmitTothConnection,
+  isFlowPartValid,
 } from "../../src/modules/integrations/lib/toth-endpoint";
 
 describe("readTothEndpoint", () => {
@@ -94,5 +95,86 @@ describe("canSubmitTothConnection", () => {
 
   it("endereço vazio nunca envia", () => {
     expect(canSubmitTothConnection({ ...base, endpoint: "" })).toBe(false);
+  });
+});
+
+/**
+ * Serviço de pedidos (Flow) — o trio opcional que vive na mesma tela.
+ *
+ * Duas regras que só existem por causa dele: preenchimento é tudo-ou-nada, e o
+ * aceite de tráfego sem TLS cobre os DOIS endereços. A segunda é a que tem
+ * consequência de segurança — sem ela, um principal em https com um serviço de
+ * pedidos em http passaria sem ninguém consentir com credencial em texto claro,
+ * porque a caixa de aceite nem apareceria.
+ */
+describe("canSubmitTothConnection — serviço de pedidos", () => {
+  const base = {
+    endpoint: "https://erp.exemplo.com.br/toth",
+    user: "integracao",
+    password: "s3nh4",
+    acceptedInsecure: false,
+  };
+
+  it("os três em branco é o estado normal e envia", () => {
+    expect(canSubmitTothConnection(base)).toBe(true);
+  });
+
+  it("bloqueia preenchimento pela metade", () => {
+    expect(
+      canSubmitTothConnection({ ...base, flowEndpoint: "https://erp.exemplo.com.br/flow/crm" }),
+    ).toBe(false);
+    expect(canSubmitTothConnection({ ...base, flowClientId: "usuario" })).toBe(false);
+    expect(
+      canSubmitTothConnection({
+        ...base,
+        flowEndpoint: "https://erp.exemplo.com.br/flow/crm",
+        flowClientId: "usuario",
+      }),
+    ).toBe(false);
+  });
+
+  it("libera com o trio completo", () => {
+    expect(
+      canSubmitTothConnection({
+        ...base,
+        flowEndpoint: "https://erp.exemplo.com.br/flow/crm",
+        flowClientId: "usuario",
+        flowClientSecret: "senha",
+      }),
+    ).toBe(true);
+  });
+
+  it("🔒 endereço de pedidos em http exige o mesmo aceite, mesmo com principal em https", () => {
+    const comFlowHttp = {
+      ...base,
+      flowEndpoint: "http://erp.exemplo.com.br:3000/flow/crm",
+      flowClientId: "usuario",
+      flowClientSecret: "senha",
+    };
+    expect(canSubmitTothConnection(comFlowHttp)).toBe(false);
+    expect(canSubmitTothConnection({ ...comFlowHttp, acceptedInsecure: true })).toBe(true);
+  });
+
+  it("endereço de pedidos inválido bloqueia", () => {
+    expect(
+      canSubmitTothConnection({
+        ...base,
+        flowEndpoint: "http://localhost:3000/flow/crm",
+        flowClientId: "usuario",
+        flowClientSecret: "senha",
+        acceptedInsecure: true,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("isFlowPartValid", () => {
+  it("vazio é válido — a maioria das orgs não tem o serviço", () => {
+    expect(isFlowPartValid({})).toBe(true);
+    expect(isFlowPartValid({ flowEndpoint: "", flowClientId: "", flowClientSecret: "" })).toBe(true);
+  });
+
+  it("espaço em branco não conta como preenchido", () => {
+    expect(isFlowPartValid({ flowEndpoint: "   ", flowClientId: "  " })).toBe(true);
   });
 });

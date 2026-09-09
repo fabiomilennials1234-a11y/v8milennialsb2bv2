@@ -5,7 +5,6 @@
  * Reexportado pela API pública (`../../index.ts`) com os mesmos nomes.
  */
 export { AutoCreateLeadToggle } from "./AutoCreateLeadToggle";
-export { GhostLeadsBanner } from "./GhostLeadsBanner";
 export {
   ManagePipelineStagesContent,
   ManagePipelineStagesModal,
@@ -13,3 +12,6 @@ export {
 export { PipeDispatchRulesSection } from "./PipeDispatchRulesSection";
 export { PipeDistributionSection } from "./PipeDistributionSection";
 export { PipeSettingsDialog } from "./PipeSettingsDialog";
+export { DeletePipelineDialog } from "./DeletePipelineDialog";
+export { FunnelIdentitySection } from "./FunnelIdentitySection";
+export { FunnelIdentityDialog } from "./FunnelIdentityDialog";

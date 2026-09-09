@@ -2,9 +2,9 @@
  * useCloserPerformance(range)
  *
  * Por closer no range:
- * - reunioesRealizadas: pipe_confirmacao status=compareceu, meeting_date no range, atrib. closer
- * - propostas: pipe_propostas com metrics_period_at ?? created_at no range
- * - vendas: pipe_propostas status=vendido, closed_at no range (ADR 2026-04-24)
+ * - reunioesRealizadas: negocio_projetado[confirmacao] stage_key=compareceu, meeting_date no range, atrib. closer
+ * - propostas: negocio_projetado[propostas] com metrics_period_at ?? created_at no range
+ * - vendas: negocio_projetado[propostas] stage_key=vendido, closed_at no range (ADR 2026-04-24)
  * - vendasValor: Σ sale_value (sem × contract_duration)
  * - ticketMedio: vendasValor / vendas
  * - conversao: vendas / propostas * 100
@@ -20,8 +20,8 @@ import { useOrganization, useTeamMembers } from "@/modules/identity";
 import { useAvatarMap } from "@/modules/identity/hooks/useAvatarMap";
 import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
 
-// Leitura direta das views `pipe_propostas` / `pipe_confirmacao` (data layer),
-// scoped por organization_id, em vez de importar os hooks de valor do módulo
+// Leitura direta da projeção canônica `negocio_projetado` (data layer), recortada
+// por `funil_sistema`, scoped por organization_id, em vez de importar os hooks de valor do módulo
 // pipelines. Quebra a aresta engagement→pipelines que fechava o
 // ciclo leads→engagement→pipelines→leads. Tipos vêm de core (Tables<...>).
 // Sem realtime (regra: nunca subscription em views pipe_*). A atualização ao vivo
@@ -29,16 +29,16 @@ import { inRange, type TVPeriodRange } from "@/lib/tv-periods";
 // após uma venda até o remount, pois não há realtime/invalidation e
 // refetchOnWindowFocus é global false (kiosk TV nunca dispara focus).
 //
-// ESCOPO = ORG-WIDE (decisão CTO 2026-06-02, finding ENG-USAB-1). As views são
-// filtradas apenas por organization_id — performance é métrica de equipe/gestão
+// ESCOPO = ORG-WIDE (decisão CTO 2026-06-02, finding ENG-USAB-1). A projeção é
+// filtrada apenas por organization_id (+ funil_sistema) — performance é métrica de equipe/gestão
 // (TV kiosk + página Performance), então todos os membros veem os números da org
 // inteira. Diferente da fonte antiga (usePipelineEntries) que filtrava por leads
 // visíveis ao caller como efeito colateral do embed `lead:leads(...)`. Não
-// reintroduzir filtro por lead-visibility aqui: org-wide é intencional. As views
-// expõem só ids/sale_value/status (sem PII de lead).
+// reintroduzir filtro por lead-visibility aqui: org-wide é intencional. A projeção
+// expõe só ids/sale_value/stage_key (sem PII de lead).
 
-type PipePropostaRow = Tables<"pipe_propostas">;
-type PipeConfirmacaoRow = Tables<"pipe_confirmacao">;
+type PipePropostaRow = Tables<"negocio_projetado">;
+type PipeConfirmacaoRow = Tables<"negocio_projetado">;
 
 const PERF_STALE_TIME = 60 * 1000;
 // Polling p/ manter os dashboards de performance vivos (TV kiosk + páginas de perf)
@@ -54,10 +54,11 @@ export function usePerfPipePropostas() {
     queryFn: async () => {
       if (!organizationId) return [] as PipePropostaRow[];
       const { data, error } = await supabase
-        .from("pipe_propostas")
+        .from("negocio_projetado")
         .select(
-          "status, metrics_period_at, created_at, closed_at, sale_value, sale_responsible_id, closer_id"
+          "stage_key, metrics_period_at, created_at, closed_at, sale_value, sale_responsible_id, closer_id"
         )
+        .eq("funil_sistema", "propostas")
         .eq("organization_id", organizationId);
       if (error) throw error;
       return (data ?? []) as PipePropostaRow[];
@@ -75,10 +76,11 @@ export function usePerfPipeConfirmacao() {
     queryFn: async () => {
       if (!organizationId) return [] as PipeConfirmacaoRow[];
       const { data, error } = await supabase
-        .from("pipe_confirmacao")
+        .from("negocio_projetado")
         .select(
-          "status, meeting_date, metrics_period_at, created_at, sale_responsible_id, closer_id, pre_sale_responsible_id, sdr_id"
+          "stage_key, meeting_date, metrics_period_at, created_at, sale_responsible_id, closer_id, pre_sale_responsible_id, sdr_id"
         )
+        .eq("funil_sistema", "confirmacao")
         .eq("organization_id", organizationId);
       if (error) throw error;
       return (data ?? []) as PipeConfirmacaoRow[];
@@ -134,13 +136,13 @@ export function useCloserPerformance(range: TVPeriodRange): CloserPerformanceDat
     });
 
     const vendasNoRange = (propostas as any[]).filter((p) => {
-      if (p.status !== "vendido") return false;
+      if (p.stage_key !== "vendido") return false;
       const at = p.closed_at ?? p.metrics_period_at;
       return inRange(at, range);
     });
 
     const reunioesRealizadasNoRange = (confirmacoes as any[]).filter(
-      (c) => c.status === "compareceu" && inRange(c.meeting_date, range)
+      (c) => c.stage_key === "compareceu" && inRange(c.meeting_date, range)
     );
 
     const byCloser: CloserPerformanceRow[] = closers.map((closer: any) => {

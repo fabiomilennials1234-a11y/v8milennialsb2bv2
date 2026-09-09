@@ -15,7 +15,7 @@ const QUESTIONS: QuestionConfig[] = [
   {
     key: "perfil.sells",
     title: "O que você vende?",
-    subtitle: "Isso nos ajuda a configurar seus pipelines",
+    subtitle: "Isso nos ajuda a configurar seus funis",
     options: [
       { value: "produto", label: "Produto", description: "Venda de produtos físicos ou digitais" },
       { value: "servico", label: "Serviço", description: "Prestação de serviços ou consultoria" },
@@ -38,7 +38,7 @@ const QUESTIONS: QuestionConfig[] = [
   {
     key: "estrutura",
     title: "Como é seu time comercial?",
-    subtitle: "Isso define quais pipelines e permissões ativar",
+    subtitle: "Isso define quais funis e permissões ativar",
     options: [
       { value: "solo", label: "Eu sozinho", description: "Operação solo, sem time" },
       { value: "team_no_sdr", label: "Time sem SDR", description: "Vendedores fazem prospecção e fechamento" },

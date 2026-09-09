@@ -134,13 +134,13 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
     });
   });
 
-  describe('pipe_whatsapp', () => {
-    it('Org A admin sees exactly 1 pipe_whatsapp', async () => {
-      await expectRowCount(adminA, 'pipe_whatsapp', 1);
+  describe('pipeline_entries', () => {
+    it('Org A admin sees exactly 1 pipeline_entries', async () => {
+      await expectRowCount(adminA, 'pipeline_entries', 1);
     });
 
-    it('Org B admin sees exactly 1 pipe_whatsapp', async () => {
-      await expectRowCount(adminB, 'pipe_whatsapp', 1);
+    it('Org B admin sees exactly 1 pipeline_entries', async () => {
+      await expectRowCount(adminB, 'pipeline_entries', 1);
     });
   });
 
@@ -172,7 +172,10 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
 
   describe('master sees all orgs combined', () => {
     it('master sees all organizations (2)', async () => {
-      await expectRowCount(master, 'organizations', 2);
+      const { data, error } = await master.from('organizations').select('id')
+        .in('id', [TEST_ORG_ID, TEST_ORG_B_ID]);
+      expect(error).toBeNull();
+      expect(new Set((data ?? []).map(row => row.id))).toEqual(new Set([TEST_ORG_ID, TEST_ORG_B_ID]));
     });
 
     it('master vê o seed das DUAS orgs (a contagem exata não é estável)', async () => {
@@ -193,8 +196,8 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
       expect(orgs.has('00000000-0000-0000-0000-000000000002')).toBe(true);
     });
 
-    it('master sees all pipe_whatsapp (2 = 1 + 1)', async () => {
-      await expectRowCount(master, 'pipe_whatsapp', 2);
+    it('master sees all pipeline_entries (2 = 1 + 1)', async () => {
+      await expectRowCount(master, 'pipeline_entries', 2);
     });
 
     it('master sees all team_members (7 = 5 + 2)', async () => {
@@ -219,8 +222,8 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
     'copilot_agents',
     'products',
     'product_variants',
-    'custom_pipelines',
-    'custom_pipeline_stages',
+    'pipelines',
+    'pipeline_stages',
     'goals',
     'awards',
     'competitions',
@@ -290,7 +293,7 @@ describe.skipIf(shouldSkip)('RLS: Cross-tenant org isolation', () => {
       'organizations',
       'leads',
       'tags',
-      'pipe_whatsapp',
+      'pipeline_entries',
       'team_members',
     ];
 

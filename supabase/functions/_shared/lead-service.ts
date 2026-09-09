@@ -262,10 +262,9 @@ export async function getOrCreateLead(
   // gravava "novo" antes disso e podia deixar a coluna divergente da entry até a
   // primeira movimentação.
   //
-  // Com `deal_manual_only` ON não há entry, o gatilho não roda e a coluna fica
-  // NULL — que é a verdade: o lead entrou na base e não tem Negócio.
-  // Para que isso valha, a migration 20270806000010 tira o
-  // `DEFAULT 'novo'` da coluna; sem ela o default mentiria no lugar deste código.
+  // A migration 20270806000010 tira o `DEFAULT 'novo'` da coluna: lead que ainda
+  // não entrou em funil fica com a coluna NULL, e não com um "novo" inventado
+  // pelo default.
 
   // Add sdr_id and responsible_id if provided
   if (sdrId) {

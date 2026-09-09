@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { startOfUTCDay, endOfUTCDay } from "@/modules/analytics/lib/utc-day";
+import { startOfUTCDay, endOfUTCDay } from "@/shared/time/utc-day";
 
 /**
  * Fronteiras de dia em UTC a partir dos componentes locais da data — base de

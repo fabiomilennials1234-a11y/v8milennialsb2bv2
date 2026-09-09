@@ -5,10 +5,13 @@ import { LeadAvatar } from "./LeadAvatar";
 import { useLeadAge } from "../../hooks/useLeadAge";
 import { toast } from "sonner";
 import type { QualificationTier } from "../types";
+import { erpLabel } from "@/shared/format/erp-code";
 
 interface LeadIdentityBlockProps {
   lead: {
     name?: string | null;
+    /** Código do cliente no ERP — prefixa o título, nunca a inicial do avatar. */
+    erp_code?: string | null;
     company?: string | null;
     phone?: string | null;
     avatar_url?: string | null;
@@ -54,7 +57,10 @@ export const LeadIdentityBlock = memo(function LeadIdentityBlock({ lead }: LeadI
         qualTier={lead.qualification_tier ?? null}
       />
       <div className="min-w-0 flex flex-col gap-1">
-        <h2 className="text-xl font-semibold tracking-tight truncate" title={lead.name ?? ""}>
+        <h2 className="text-xl font-semibold tracking-tight truncate" title={erpLabel(lead)}>
+          {lead.erp_code && (
+            <span className="font-normal text-muted-foreground">{lead.erp_code} - </span>
+          )}
           {lead.name || "Sem nome"}
         </h2>
         {lead.company && (
