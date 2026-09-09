@@ -35,6 +35,7 @@ it("sends to the original Business landline without inserting a ninth digit", as
   await result.current.mutateAsync({ phoneNumber: "555134073827", message: "quotation", instanceName: "sales", instanceId: "instance" });
   expect(invoke).toHaveBeenCalledTimes(1);
   expect(invoke.mock.calls[0][1].body.payload.number).toBe("555134073827");
+  expect(invoke.mock.calls[0][1].body.payload).not.toHaveProperty("lead_id");
   unmount();
   client.clear();
 });
