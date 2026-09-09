@@ -171,3 +171,12 @@ Edge functions:
 - Meta chat: `Obsidian/.../02 — Arquitetura/Modulos/atendimento-meta.md`
 - Sub-CLAUDE.md raiz: `supabase/functions/whatsapp-webhook/CLAUDE.md` (para slice 15)
 - Histórico da migração: `Obsidian/.../10 — Remodelagem/04-execucao/slices.md`
+
+### Nome na importação WhatsApp — 2026-09-09
+
+O worker prioriza wa_contactName (agenda do vendedor na instância conectada)
+no histórico novo. A lista de chats alimenta cache por cliente Uazapi; importação
+individual e retomada consultam o chat pelo JID. Nome vazio recua ao perfil apenas
+para mensagens recebidas. Falha de consulta de contato não bloqueia mensagens.
+Não altera leads.name nem regrava mensagens existentes (ignoreDuplicates).
+Webhooks ao vivo continuam com sua resolução de nomes atual.
