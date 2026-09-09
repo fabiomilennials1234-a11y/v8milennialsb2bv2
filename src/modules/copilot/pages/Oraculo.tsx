@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useOraculoTurno } from "../hooks/useOraculoTurno";
 import { useOraculoConversas, useOraculoTurnos } from "../hooks/useOraculoConversas";
+import { OraculoPropostaCard } from "../components/oraculo/OraculoPropostaCard";
 
 const SUGESTOES = [
   "Onde eu estou perdendo mais dinheiro?",
@@ -142,6 +143,15 @@ function ConversaDaOrganizacao({ userId, organizationId }: { userId: string; org
                       Consultei: {m.procedencia.join(", ")}
                     </p>
                   )}
+                  {m.propostas?.map((proposta) => (
+                    <OraculoPropostaCard
+                      key={proposta.id}
+                      proposta={proposta}
+                      onConfirmar={oraculo.executarProposta}
+                      ocupada={oraculo.executandoPropostaId === proposta.id}
+                      desabilitada={oraculo.executandoPropostaId !== null}
+                    />
+                  ))}
                 </div>
               </div>
             ))}

@@ -17,6 +17,7 @@ import { perdasTool } from "./tools/perdas.ts";
 import { leadsTool } from "./tools/leads.ts";
 import { conversasTool } from "./tools/conversas.ts";
 import { conversaDetalheTool } from "./tools/conversa-detalhe.ts";
+import { proporAcaoTool } from "./tools/propor-acao.ts";
 
 export interface ToolSchema {
   type: string;
@@ -53,6 +54,38 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
   {
     type: "function",
     function: {
+      name: "propor_acao",
+      description:
+        "Cria uma proposta confirmável, sem alterar o CRM. A contagem é previsão. Critério é reavaliado no clique. Ações: mover etapa, criar follow-up, atribuir responsável ou adicionar tag.",
+      parameters: {
+        type: "object",
+        required: ["acao", "criterio"],
+        properties: {
+          acao: {
+            type: "string",
+            enum: ["mover_etapa", "criar_follow_up", "atribuir_responsavel", "adicionar_tag"],
+          },
+          criterio: { type: "string", enum: ["leads_parados", "leads_sem_contato"] },
+          dias: {
+            type: "integer",
+            description: "Idade mínima do card parado. Padrão 14; máximo 365.",
+          },
+          pipeline: {
+            type: "string",
+            description: "Nome ou slug do funil, obrigatório para mover etapa.",
+          },
+          etapa_destino: { type: "string", description: "Nome ou chave da etapa destino." },
+          titulo: { type: "string", description: "Título do follow-up." },
+          prazo_dias: { type: "integer", description: "Prazo do follow-up em dias." },
+          responsavel: { type: "string", description: "Nome exato da pessoa responsável." },
+          tag: { type: "string", description: "Nome exato da tag existente." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "conversas",
       description:
         "Visão agregada das conversas comerciais no período: cobertura dos resumos, sentimento, temperatura, objeções e conversas recentes. Cada item traz lead_id e instance_id para abrir o detalhe dentro do mesmo escopo.",
@@ -74,7 +107,10 @@ export const TOOL_SCHEMAS: ToolSchema[] = [
         properties: {
           lead_id: { type: "string", format: "uuid" },
           instance_id: { type: "string", format: "uuid" },
-          limite: { type: "integer", description: "Mensagens mais recentes (padrão 100, máximo 200)." },
+          limite: {
+            type: "integer",
+            description: "Mensagens mais recentes (padrão 100, máximo 200).",
+          },
         },
       },
     },
@@ -148,11 +184,19 @@ export interface FerramentaDoLaco {
 /** Os executores, na mesma ordem em que o catálogo os anuncia. */
 export function criarFerramentas(db: ToolDb): FerramentaDoLaco[] {
   const deps = { db };
-  return [metricasTool, funilTool, rankingTool, perdasTool, leadsTool, conversasTool, conversaDetalheTool].map(
+  return [
+    metricasTool,
+    funilTool,
+    rankingTool,
+    perdasTool,
+    leadsTool,
+    conversasTool,
+    conversaDetalheTool,
+    proporAcaoTool,
+  ].map(
     (t) => ({
       name: t.name,
-      execute: (args: Record<string, unknown>, scope: OracleScope) =>
-        t.execute(args, scope, deps),
+      execute: (args: Record<string, unknown>, scope: OracleScope) => t.execute(args, scope, deps),
     }),
   );
 }

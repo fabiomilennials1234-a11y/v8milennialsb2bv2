@@ -9,6 +9,7 @@
 
 import type { OracleScope } from "./scope.ts";
 import type { Turn } from "./memory.ts";
+import { type ActionProposal, isActionProposal } from "./tools/propor-acao.ts";
 
 export interface ToolCall {
   name: string;
@@ -69,6 +70,8 @@ export interface TurnResult {
   rejectedToolCalls: string[];
   /** True quando o turno parou no teto em vez de o modelo ter concluído. */
   hitToolCeiling: boolean;
+  /** Propostas puras renderizadas como controle; executar exige outro HTTP. */
+  proposals: ActionProposal[];
   /**
    * O que o Oráculo custou neste turno. Sem isto ninguém percebe o produto
    * morrer — foi assim que 81 perguntas em cinco meses passaram despercebidas.
@@ -93,6 +96,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
   const toolsUsed: string[] = [];
   const rejectedToolCalls: string[] = [];
   const toolResults: Array<{ name: string; result: unknown }> = [];
+  const proposals: ActionProposal[] = [];
 
   const startedAt = now();
   let model = "";
@@ -105,6 +109,7 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
     toolsUsed,
     rejectedToolCalls,
     hitToolCeiling,
+    proposals,
     telemetry: {
       model,
       inputTokens,
@@ -116,13 +121,22 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
 
   for (;;) {
     const finalAnswer = attempts >= ceiling;
-    const reply = await args.llm.complete({ messages: args.messages, toolResults, finalAnswer, summary: args.summary });
+    const reply = await args.llm.complete({
+      messages: args.messages,
+      toolResults,
+      finalAnswer,
+      summary: args.summary,
+    });
     model = reply.model;
     inputTokens += reply.inputTokens;
     outputTokens += reply.outputTokens;
 
     if (finalAnswer) {
-      return finish(reply.text?.trim() || "Atingi o limite de consultas deste turno. Refine a pergunta para continuar.", true);
+      return finish(
+        reply.text?.trim() ||
+          "Atingi o limite de consultas deste turno. Refine a pergunta para continuar.",
+        true,
+      );
     }
 
     if (!reply.toolCalls?.length) {
@@ -137,12 +151,17 @@ export async function runTurn(args: RunTurnArgs): Promise<TurnResult> {
         rejectedToolCalls.push(call.name);
         toolResults.push({
           name: call.name,
-          result: { error: "ferramenta_inexistente", detail: "O Oráculo não escreve — proponha uma ação." },
+          result: {
+            error: "ferramenta_inexistente",
+            detail: "O Oráculo não escreve — proponha uma ação.",
+          },
         });
         continue;
       }
       toolsUsed.push(call.name);
-      toolResults.push({ name: call.name, result: await tool.execute(call.arguments, args.scope) });
+      const result = await tool.execute(call.arguments, args.scope);
+      if (isActionProposal(result)) proposals.push(result);
+      toolResults.push({ name: call.name, result });
     }
   }
 }

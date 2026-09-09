@@ -10,12 +10,34 @@ import { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+export interface OraculoResultadoAcao {
+  status: "sucesso" | "aviso";
+  previstos?: number;
+  qualificaveis_no_clique?: number;
+  alterados: number;
+  ja_tratados?: number;
+  codigo?: string;
+}
+
+export interface OraculoProposta {
+  kind?: "oraculo_action_proposal";
+  id: string;
+  acao: "mover_etapa" | "criar_follow_up" | "atribuir_responsavel" | "adicionar_tag";
+  criterio: { tipo: "leads_parados" | "leads_sem_contato"; dias: number };
+  parametros: Record<string, unknown>;
+  previsao: number;
+  status: "pending" | "executed" | "expired";
+  resultado?: OraculoResultadoAcao;
+  erro?: string;
+}
+
 export interface OraculoMensagem {
   id: string;
   role: "user" | "assistant";
   content: string;
   /** Ferramentas que o servidor consultou para redigir esta resposta. */
   procedencia?: string[];
+  propostas?: OraculoProposta[];
   criadaEm: Date;
 }
 
@@ -25,6 +47,7 @@ interface RespostaTurno {
   procedencia: string[];
   teto_de_ferramentas_atingido?: boolean;
   restantes_hoje: number;
+  propostas?: OraculoProposta[];
 }
 
 /**
@@ -39,6 +62,13 @@ function atingiuLimite(e: unknown): boolean {
 
   const mensagem = e instanceof Error ? e.message : String((e as { message?: string })?.message ?? "");
   return mensagem.includes("limite_diario");
+}
+
+function mensagemErroAcao(e: unknown): string {
+  const status = (e as { context?: { status?: number } })?.context?.status;
+  if (status === 403) return "Você não tem permissão para confirmar esta ação agora.";
+  if (status === 409) return "A proposta mudou ou não está mais disponível. Atualize a conversa.";
+  return "Não consegui executar esta ação agora. Tente de novo em instantes.";
 }
 
 export function useOraculoTurno(organizationId: string | null, conversaInicial?: string) {
@@ -71,6 +101,7 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
           role: "assistant",
           content: data.resposta,
           procedencia: data.procedencia,
+          propostas: data.propostas,
           criadaEm: new Date(),
         },
       ]);
@@ -92,6 +123,42 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
           ? "Você atingiu o limite de perguntas de hoje. O contador zera amanhã."
           : "Não consegui responder agora. Tente de novo em instantes.",
       );
+    },
+  });
+
+  const actionMutation = useMutation({
+    mutationFn: async (proposalId: string) => {
+      if (!organizationId) throw new Error("organizacao_ausente");
+      const { data, error } = await supabase.functions.invoke<OraculoResultadoAcao>("oraculo-action", {
+        body: { proposta_id: proposalId, organization_id: organizationId },
+      });
+      if (error) throw error;
+      if (!data) throw new Error("resultado_vazio");
+      return { proposalId, result: data };
+    },
+    onSuccess: ({ proposalId, result }) => {
+      setMensagens((current) => current.map((message) => ({
+        ...message,
+        propostas: message.propostas?.map((proposal) => proposal.id === proposalId
+          ? {
+              ...proposal,
+              status: result.codigo === "proposta_expirada" || result.codigo === "destino_indisponivel"
+                ? "expired"
+                : "executed",
+              resultado: result,
+              erro: undefined,
+            }
+          : proposal),
+      })));
+      void queryClient.invalidateQueries({ queryKey: ["oraculo_turns"] });
+    },
+    onError: (error, proposalId) => {
+      setMensagens((current) => current.map((message) => ({
+        ...message,
+        propostas: message.propostas?.map((proposal) => proposal.id === proposalId
+          ? { ...proposal, erro: mensagemErroAcao(error) }
+          : proposal),
+      })));
     },
   });
 
@@ -125,13 +192,20 @@ export function useOraculoTurno(organizationId: string | null, conversaInicial?:
     setErro(null);
   }, []);
 
+  const executarProposta = useCallback((proposalId: string) => {
+    if (actionMutation.isPending) return;
+    actionMutation.mutate(proposalId);
+  }, [actionMutation]);
+
   return {
     mensagens,
     conversaId,
     restantesHoje,
     erro,
     pensando: mutation.isPending,
+    executandoPropostaId: actionMutation.isPending ? actionMutation.variables : null,
     perguntar,
+    executarProposta,
     abrirConversa,
   };
 }

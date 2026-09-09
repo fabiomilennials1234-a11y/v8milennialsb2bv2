@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useOrganization } from "@/modules/identity";
 import { useOraculoTurno } from "../../hooks/useOraculoTurno";
+import { OraculoPropostaCard } from "./OraculoPropostaCard";
 
 const SUGESTOES = [
   "Onde eu estou perdendo mais dinheiro?",
@@ -78,6 +79,15 @@ export function OraculoConversa() {
                     Consultei: {m.procedencia.join(", ")}
                   </p>
                 )}
+                {m.propostas?.map((proposta) => (
+                  <OraculoPropostaCard
+                    key={proposta.id}
+                    proposta={proposta}
+                    onConfirmar={oraculo.executarProposta}
+                    ocupada={oraculo.executandoPropostaId === proposta.id}
+                    desabilitada={oraculo.executandoPropostaId !== null}
+                  />
+                ))}
               </div>
             </div>
           ))}

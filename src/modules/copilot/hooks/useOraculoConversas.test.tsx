@@ -28,6 +28,28 @@ it('histórico consulta somente dono e organização ativa; troca de org refaz l
   for (const url of requests.slice(2)) expect(url.searchParams.get('organization_id')).toBe('eq.org-b');
 });
 
+it('reabertura recupera proposta persistida e resultado da confirmação', async () => {
+  vi.stubGlobal('fetch', async () => Response.json([{
+    id: 'turn-1', role: 'assistant', content: 'Sugestão', tools_used: ['propor_acao'],
+    created_at: new Date().toISOString(),
+    oraculo_action_proposals: [{
+      id: 'proposal-1', action_type: 'adicionar_tag',
+      criterion: { tipo: 'leads_parados', dias: 14 },
+      parameters: { tag_name: 'Prioridade' }, preview_count: 5,
+      status: 'executed', execution_result: { status: 'sucesso', alterados: 3, ja_tratados: 2 },
+    }],
+  }]));
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  const { result } = renderHook(() => useOraculoTurnos('conversation', 'owner', 'org-a'), { wrapper });
+
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  expect(result.current.data?.[0].propostas?.[0]).toMatchObject({
+    id: 'proposal-1', status: 'executed', previsao: 5,
+    resultado: { alterados: 3, ja_tratados: 2 },
+  });
+});
+
 it('turno confirmado atualiza histórico mesmo com cache fresco', async () => {
   let persisted = false;
   vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -7,10 +7,10 @@
  * ele alcança.
  */
 
-import { resolveScope, type OracleActor, type OraclePermissions } from "./scope.ts";
+import { type OracleActor, type OraclePermissions, resolveScope } from "./scope.ts";
 import { buildTurnContext, type Turn } from "./memory.ts";
 import { checkQuota } from "./quota.ts";
-import { runTurn, type Llm, type OracleTool, type TurnResult } from "./loop.ts";
+import { type Llm, type OracleTool, runTurn, type TurnResult } from "./loop.ts";
 
 /** Últimos turnos que vão na íntegra ao modelo. */
 export const KEEP_LAST_TURNS = 8;
@@ -84,9 +84,14 @@ export async function handleTurn(
   let summaryTokens = { input: 0, output: 0 };
   if (contexto.evicted.length > 0) {
     const compacted = await deps.llm.complete({
-      messages: contexto.evicted, summary, toolResults: [], purpose: "summary",
+      messages: contexto.evicted,
+      summary,
+      toolResults: [],
+      purpose: "summary",
     });
-    if (!compacted.text?.trim()) throw new Error("Não foi possível atualizar a memória do Oráculo.");
+    if (!compacted.text?.trim()) {
+      throw new Error("Não foi possível atualizar a memória do Oráculo.");
+    }
     summary = compacted.text.trim();
     summaryTokens = { input: compacted.inputTokens, output: compacted.outputTokens };
   }
@@ -111,5 +116,6 @@ export async function handleTurn(
     procedencia: resultado.toolsUsed,
     teto_de_ferramentas_atingido: resultado.hitToolCeiling,
     restantes_hoje: quota.remaining - 1,
+    propostas: resultado.proposals.map((proposal) => ({ ...proposal, status: "pending" })),
   });
 }

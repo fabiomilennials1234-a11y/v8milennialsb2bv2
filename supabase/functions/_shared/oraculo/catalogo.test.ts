@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.0";
-import { TOOL_SCHEMAS, criarFerramentas } from "./catalogo.ts";
+import { criarFerramentas, TOOL_SCHEMAS } from "./catalogo.ts";
 import type { ToolDb } from "./tools/metricas.ts";
 
 const dbFalso: ToolDb = {
@@ -17,7 +17,7 @@ Deno.test("catálogo — todo nome anunciado ao modelo tem executor, e vice-vers
   assertEquals(anunciadas, executaveis);
 });
 
-Deno.test("catálogo — as sete ferramentas da Onda 2 estão no ar", () => {
+Deno.test("catálogo — leitura e proposta estão no ar", () => {
   const nomes = TOOL_SCHEMAS.map((s) => s.function.name).sort();
   assertEquals(nomes, [
     "conversa_detalhe",
@@ -26,6 +26,7 @@ Deno.test("catálogo — as sete ferramentas da Onda 2 estão no ar", () => {
     "leads",
     "metricas",
     "perdas",
+    "propor_acao",
     "ranking",
   ]);
 });
