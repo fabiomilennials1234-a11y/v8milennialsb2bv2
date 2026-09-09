@@ -15,11 +15,12 @@ beforeAll(async () => {
   supabase = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
   // create org
-  const { data: org } = await supabase
+  const { data: org, error: orgError } = await supabase
     .from('organizations')
-    .insert({ name: 'meta-trigger-test-org' })
+    .insert({ name: 'meta-trigger-test-org', slug: `meta-trigger-${crypto.randomUUID()}` })
     .select('id')
     .single();
+  expect(orgError).toBeNull();
   orgId = org!.id;
 
   // create meta_connection + meta_page
@@ -213,11 +214,12 @@ describe('meta_conversations trigger', () => {
     // Same external_user_id namespace, different org + meta_page. The trigger
     // keys on (organization_id, meta_page_id, channel, external_user_id), so
     // org B must get its own conversation row and org A must remain untouched.
-    const { data: orgB } = await supabase
+    const { data: orgB, error: orgBError } = await supabase
       .from('organizations')
-      .insert({ name: `iso-test-orgB-${Date.now()}` })
+      .insert({ name: `iso-test-orgB-${Date.now()}`, slug: `iso-test-orgb-${crypto.randomUUID()}` })
       .select('id')
       .single();
+    expect(orgBError).toBeNull();
     const { data: connB } = await supabase
       .from('meta_connections')
       .insert({

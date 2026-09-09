@@ -114,9 +114,9 @@ describe.skipIf(shouldSkip)('Master First-Class — RLS Bypass 7 Tables (#415)',
     expect(error).toBeNull();
   });
 
-  it('master can read custom_pipe_entries', async () => {
+  it('master can read canonical pipeline entries', async () => {
     const { error } = await master
-      .from('custom_pipe_entries')
+      .from('pipeline_entries')
       .select('id')
       .limit(1);
     expect(error).toBeNull();

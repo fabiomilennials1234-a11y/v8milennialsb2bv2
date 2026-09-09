@@ -46,17 +46,19 @@ beforeAll(async () => {
   admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 
   // Orgs
-  const { data: org } = await admin
+  const { data: org, error: orgError } = await admin
     .from('organizations')
-    .insert({ name: `rpc-org-${Date.now()}` })
+    .insert({ name: `rpc-org-${Date.now()}`, slug: `rpc-org-${crypto.randomUUID()}` })
     .select('id')
     .single();
+  expect(orgError).toBeNull();
   orgId = org!.id;
-  const { data: other } = await admin
+  const { data: other, error: otherOrgError } = await admin
     .from('organizations')
-    .insert({ name: `rpc-other-org-${Date.now()}` })
+    .insert({ name: `rpc-other-org-${Date.now()}`, slug: `rpc-other-org-${crypto.randomUUID()}` })
     .select('id')
     .single();
+  expect(otherOrgError).toBeNull();
   otherOrgId = other!.id;
 
   // Meta connection + page for org A

@@ -8,11 +8,11 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { supabase, TEST_ORG_ID, TEST_ADMIN_ID, TEST_SDR_ID } from './setup';
+import { supabase, TEST_ORG_ID, TEST_ADMIN_ID, TEST_MEMBER_1_ID, TEST_TM_MEMBER_1_ID } from './setup';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
-const TEST_MEMBER_ID = TEST_SDR_ID;
+const TEST_MEMBER_ID = TEST_MEMBER_1_ID;
 
 describe.skipIf(shouldSkip)('Permission Engine — integration', () => {
   beforeAll(async () => {
@@ -39,7 +39,7 @@ describe.skipIf(shouldSkip)('Permission Engine — integration', () => {
     expect(data?.role).toBe('admin');
   });
 
-  it('member team member exists in test data (migrated from sdr)', async () => {
+  it('member team member exists in the current member fixture', async () => {
     const { data } = await supabase
       .from('team_members')
       .select('role')
@@ -70,7 +70,7 @@ describe.skipIf(shouldSkip)('Permission Engine — integration', () => {
   });
 
   it('member_feature_permissions supports overrides', async () => {
-    const memberTeamMemberId = '00000000-0000-0000-0000-000000000130';
+    const memberTeamMemberId = TEST_TM_MEMBER_1_ID;
 
     await supabase.from('member_feature_permissions').upsert({
       team_member_id: memberTeamMemberId,
@@ -147,7 +147,7 @@ describe.skipIf(shouldSkip)('Permission Engine — integration', () => {
   });
 
   it('member_feature_permissions override enabled=true grants access', async () => {
-    const memberTeamMemberId = '00000000-0000-0000-0000-000000000130';
+    const memberTeamMemberId = TEST_TM_MEMBER_1_ID;
 
     await supabase.from('member_feature_permissions').upsert({
       team_member_id: memberTeamMemberId,

@@ -1,27 +1,7 @@
 /**
- * Integration tests — Auto-assign lead default pipe
- *
- * Migration: 20260522120000_auto_assign_lead_default_pipe.sql
- *
- * Trigger `trg_auto_assign_lead_default_pipe` (AFTER INSERT, DEFERRABLE
- * INITIALLY DEFERRED) garante que todo lead novo termine com pelo menos uma
- * entry em pipeline_entries. Se nenhum caller inseriu manualmente até o COMMIT,
- * a função `fn_auto_assign_lead_default_pipe()` cria entry em whatsapp/novo.
- *
- * Cenários cobertos:
- *   1. INSERT lead direto, sem nada mais        → trigger cria whatsapp/novo
- *   2. INSERT lead + manual pipeline_entries em mesma tx → trigger não duplica
- *   3. INSERT lead + manual custom_pipe_entries em mesma tx → trigger nem toca
- *   4. INSERT lead em org sem pipeline whatsapp → no-op silencioso
- *   5. INSERT lead em org sem stage 'novo' ativo → no-op silencioso
- *
- * Os cenários 2 e 3 exigem MESMA transação para validar DEFERRED — usamos
- * cliente `pg` direto. Os demais usam supabase-js (REST, separate txs).
- *
- * Requer:
- *   1. `supabase start` rodando (Postgres em localhost:54322)
- *   2. Migration `20260522120000_auto_assign_lead_default_pipe.sql` aplicada
- *      (via `supabase db reset` ou `supabase db push`)
+ * Lead creation does not implicitly open a deal (current canonical contract).
+ * Explicit system/custom entries survive commit without an extra default card.
+ * Uses real PostgreSQL transactions to observe deferred effects after COMMIT.
  */
 
 import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
@@ -71,7 +51,7 @@ async function ensureWhatsappPipelineWithoutNovoStage(orgId: string) {
   await pg.query(
     `DELETE FROM public.pipeline_stages
       WHERE organization_id = $1
-        AND pipeline_type = 'whatsapp'
+        AND pipeline_id IN (SELECT id FROM public.pipelines WHERE organization_id = $1 AND slug = 'whatsapp')
         AND stage_key = 'novo'`,
     [orgId],
   );
@@ -79,11 +59,10 @@ async function ensureWhatsappPipelineWithoutNovoStage(orgId: string) {
 
 async function cleanupLead(leadId: string) {
   await pg.query(`DELETE FROM public.pipeline_entries WHERE lead_id = $1`, [leadId]);
-  await pg.query(`DELETE FROM public.custom_pipe_entries WHERE lead_id = $1`, [leadId]);
   await pg.query(`DELETE FROM public.leads WHERE id = $1`, [leadId]);
 }
 
-describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED', () => {
+describe.skipIf(shouldSkip)('Lead creation — no implicit deal after commit', () => {
   const createdLeadIds: string[] = [];
 
   beforeAll(async () => {
@@ -96,6 +75,9 @@ describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED'
     for (const id of createdLeadIds) {
       await cleanupLead(id);
     }
+    await pg.query(`UPDATE public.organizations SET default_pipeline_id = NULL WHERE id IN ($1, $2)`, [SCRATCH_ORG_NO_PIPELINE, SCRATCH_ORG_NO_STAGE]);
+    await pg.query(`DELETE FROM public.pipeline_stages WHERE organization_id IN ($1, $2)`, [SCRATCH_ORG_NO_PIPELINE, SCRATCH_ORG_NO_STAGE]);
+    await pg.query(`DELETE FROM public.followup_reclassify_queue WHERE organization_id IN ($1, $2)`, [SCRATCH_ORG_NO_PIPELINE, SCRATCH_ORG_NO_STAGE]);
     await pg.query(`DELETE FROM public.pipelines WHERE organization_id IN ($1, $2)`, [
       SCRATCH_ORG_NO_PIPELINE,
       SCRATCH_ORG_NO_STAGE,
@@ -114,7 +96,7 @@ describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED'
     }
   });
 
-  it('cenário 1: INSERT lead sem nada mais → trigger cria entry whatsapp/novo', async () => {
+  it('cenário 1: INSERT lead sem negócio explícito não cria card', async () => {
     // org-A do seed tem pipeline whatsapp + stage 'novo' ativo.
     const { data: lead, error } = await supabase
       .from('leads')
@@ -138,13 +120,10 @@ describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED'
       [lead!.id],
     );
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0].stage_key).toBe('novo');
-    expect(rows[0].slug).toBe('whatsapp');
-    expect(rows[0].type).toBe('system');
+    expect(rows).toHaveLength(0);
   });
 
-  it('cenário 2: INSERT lead + INSERT pipeline_entries(abordado) na MESMA tx → única entry, sem duplicação', async () => {
+  it('cenário 2: INSERT lead + INSERT pipeline_entries(novo) na MESMA tx → única entry, sem duplicação', async () => {
     const leadId = '00000000-0000-0000-0000-00000aa00002';
     createdLeadIds.push(leadId);
 
@@ -168,7 +147,7 @@ describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED'
       await pg.query(
         `INSERT INTO public.pipeline_entries (
            organization_id, pipeline_id, lead_id, stage_key, entered_at, stage_changed_at
-         ) VALUES ($1, $2, $3, 'abordado', NOW(), NOW())`,
+         ) VALUES ($1, $2, $3, 'novo', NOW(), NOW())`,
         [TEST_ORG_ID, pipelineId, leadId],
       );
 
@@ -183,33 +162,29 @@ describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED'
       [leadId],
     );
 
-    // Trigger DEFERRED rodou no COMMIT, viu EXISTS pipeline_entries(lead_id),
-    // retornou. Nenhum duplicado.
+    // Commit does not add any implicit card beside the explicit entry.
     expect(rows).toHaveLength(1);
-    expect(rows[0].stage_key).toBe('abordado');
+    expect(rows[0].stage_key).toBe('novo');
   });
 
-  it('cenário 3: INSERT lead + INSERT custom_pipe_entries na MESMA tx → trigger nem toca pipeline_entries', async () => {
+  it('cenário 3: lead e negócio custom explícito na mesma tx não criam card de sistema', async () => {
     const leadId = '00000000-0000-0000-0000-00000aa00003';
     createdLeadIds.push(leadId);
 
-    // Cria custom pipeline + stage para a org de teste.
+    // Create a canonical custom pipeline and stage for this fixture.
     const customPipelineId = '00000000-0000-0000-0000-00000cc00003';
     const customStageId    = '00000000-0000-0000-0000-00000cc00103';
 
     await pg.query(
-      // O unico indice unico de (organization_id, slug) em custom_pipelines e
-      // PARCIAL (`WHERE is_active = true`). ON CONFLICT sem o mesmo predicado
-      // nao encontra arbitro e morre com 42P10.
-      `INSERT INTO public.custom_pipelines (id, organization_id, name, slug, is_active)
-       VALUES ($1, $2, 'CustomPipe', 'custom-auto-assign-c3', true)
-       ON CONFLICT (organization_id, slug) WHERE is_active = true
+      `INSERT INTO public.pipelines (id, organization_id, name, slug, type, is_active)
+       VALUES ($1, $2, 'CustomPipe', 'custom-auto-assign-c3', 'custom', true)
+       ON CONFLICT (organization_id, slug)
        DO UPDATE SET is_active = true`,
       [customPipelineId, TEST_ORG_ID],
     );
     await pg.query(
-      `INSERT INTO public.custom_pipeline_stages (id, organization_id, pipeline_id, stage_key, name, is_active)
-       VALUES ($1, $2, $3, 'inicio', 'Início', true)
+      `INSERT INTO public.pipeline_stages (id, organization_id, pipeline_id, stage_key, name, position, is_active)
+       VALUES ($1, $2, $3, 'inicio', 'Início', 0, true)
        ON CONFLICT DO NOTHING`,
       [customStageId, TEST_ORG_ID, customPipelineId],
     );
@@ -223,9 +198,9 @@ describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED'
       );
 
       await pg.query(
-        `INSERT INTO public.custom_pipe_entries (
-           organization_id, pipeline_id, lead_id, stage_id, entered_at, stage_changed_at
-         ) VALUES ($1, $2, $3, $4, NOW(), NOW())`,
+        `INSERT INTO public.pipeline_entries (
+           organization_id, pipeline_id, lead_id, stage_id, stage_key, entered_at, stage_changed_at
+         ) VALUES ($1, $2, $3, $4, 'inicio', NOW(), NOW())`,
         [TEST_ORG_ID, customPipelineId, leadId, customStageId],
       );
 
@@ -236,19 +211,19 @@ describe.skipIf(shouldSkip)('Auto-assign lead default pipe — trigger DEFERRED'
     }
 
     const pipelineRows = await pg.query(
-      `SELECT id FROM public.pipeline_entries WHERE lead_id = $1`,
+      `SELECT pipeline_id FROM public.pipeline_entries WHERE lead_id = $1`,
       [leadId],
     );
-    expect(pipelineRows.rows).toHaveLength(0);
+    expect(pipelineRows.rows).toEqual([{ pipeline_id: customPipelineId }]);
 
     const customRows = await pg.query(
-      `SELECT stage_id FROM public.custom_pipe_entries WHERE lead_id = $1`,
+      `SELECT stage_id FROM public.pipeline_entries WHERE lead_id = $1`,
       [leadId],
     );
     expect(customRows.rows).toHaveLength(1);
 
     // Cleanup custom pipeline.
-    await pg.query(`DELETE FROM public.custom_pipelines WHERE id = $1`, [customPipelineId]);
+    await pg.query(`DELETE FROM public.pipelines WHERE id = $1`, [customPipelineId]);
   });
 
   it('cenário 4: org sem pipeline whatsapp system → lead criado, sem entry, sem erro', async () => {
