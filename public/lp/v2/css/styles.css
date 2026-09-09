@@ -713,3 +713,24 @@ body.calmodal-open { overflow: hidden; }
 
 /* Enquanto o modal do Cal.com está aberto, pausa as animações da página (CPU para o iframe) */
 body.calmodal-open .pm, body.calmodal-open .pm *, body.calmodal-open [data-reveal] { animation-play-state: paused !important; }
+
+/* ===== Copy 2026-09: CTA no hero, vendedor × gestor, agende e veja como ===== */
+.hero__cta-inline { display: flex; flex-direction: column; align-items: center; gap: 10px; margin: 26px 0 6px; }
+
+.duo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.duo__card {
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  padding: clamp(26px, 3.4vw, 42px);
+}
+.duo__title { margin: 14px 0 12px; font-size: clamp(1.35rem, 2.4vw, 1.8rem); }
+.duo__list { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 10px; }
+.duo__list li { display: flex; gap: 12px; align-items: baseline; color: var(--cream-soft, #cfcabb); }
+.duo__list li span { color: var(--orange); font-weight: 800; flex: none; }
+.duo__mid { margin-top: 16px; }
+.duo__punch { margin-top: 18px; font-weight: 700; color: var(--cream); }
+
+.agende__cta { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-top: clamp(30px, 4vw, 44px); }
+
+@media (max-width: 820px) { .duo { grid-template-columns: 1fr; } }
