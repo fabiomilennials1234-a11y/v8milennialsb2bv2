@@ -141,7 +141,7 @@ async function insertTestInstance(orgId: string, instanceId: string) {
       organization_id: orgId,
       instance_name: `test-instance-${instanceId.slice(-4)}`,
       provider: "evolution",
-      status: "open",
+      status: "connected",
     });
   if (error) throw new Error(`WhatsApp instance setup failed: ${error.message}`);
 }
