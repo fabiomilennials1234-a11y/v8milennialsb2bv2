@@ -9,6 +9,7 @@
 import { useRef, useState, useEffect } from "react";
 import { Search, X, ChevronDown, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { ChannelBadge, type ChannelType } from "../ChannelBadge";
 import {
   Select,
@@ -26,6 +27,7 @@ import {
 export type MobileChatFilter = "all" | "unread" | "grupos";
 
 export interface MobileChatListHeaderProps {
+  onNewConversation?: () => void;
   instanceName: string;
   instanceConnected?: boolean;
   /** Canal da caixa aberta. Decide o selo do pill; default mantém o de antes. */
@@ -69,6 +71,7 @@ interface ChipDef {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function MobileChatListHeader({
+  onNewConversation,
   instanceName,
   instanceConnected = false,
   channel = "whatsapp",
@@ -243,6 +246,11 @@ export function MobileChatListHeader({
             </button>
           );
         })}
+        {onNewConversation && (
+          <Button type="button" variant="outline" size="sm" className="shrink-0 rounded-full" onClick={onNewConversation}>
+            Nova Conversa
+          </Button>
+        )}
       </div>
       )}
     </div>

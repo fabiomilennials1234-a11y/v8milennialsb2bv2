@@ -46,6 +46,8 @@ import { ChatShell } from "@/modules/communication/components/chat/layout/ChatSh
 import { MobileChatLayout } from "@/modules/communication/components/chat/layout/MobileChatLayout";
 import { useViewport } from "@/shared/hooks/use-viewport";
 import { ConversationList } from "@/modules/communication/components/chat/list/ConversationList";
+import { NewConversationDialog } from "./NewConversationDialog";
+import { hasEstablishedOutgoing, newConversationUnavailableReason, prepareNewConversation } from "../../lib/newConversation";
 import { ChatHeader } from "@/modules/communication/components/chat/view/ChatHeader";
 import { AvisoDaAutomacao } from "@/modules/communication/components/chat/view/AvisoDaAutomacao";
 import { MobileChatThreadHeader } from "@/modules/communication/components/chat/view/MobileChatThreadHeader";
@@ -150,6 +152,7 @@ function SocialRealtimeMount() {
 // ─── ChatView — coluna central (header + messages + composer) ────────────────
 
 interface ChatViewProps {
+  onConversationEstablished?: () => void;
   selectedContact: ChatContact | null;
   selectedPhone: string | null;
   instanceId: string | null;
@@ -157,13 +160,14 @@ interface ChatViewProps {
   organizationId: string | null;
   mountTime: number;
   onBack: () => void;
-  onOpenLeadModal: () => void;
+  onOpenLeadModal?: () => void;
   density: DensityMode;
   onDensityChange: (d: DensityMode) => void;
   isMobile: boolean;
 }
 
 function ChatView({
+  onConversationEstablished,
   selectedContact,
   selectedPhone,
   instanceId,
@@ -221,6 +225,12 @@ function ChatView({
     isFetching: messagesFetching,
     refetch: refetchMessages,
   } = useWhatsAppMessages(phoneNumber, instanceId);
+
+  useEffect(() => {
+    if (hasEstablishedOutgoing(messages)) {
+      onConversationEstablished?.();
+    }
+  }, [messages, onConversationEstablished]);
 
   // Tique azul para o contato. Complementa `markConversationRead` (que só zera o
   // badge interno do CRM e nunca falou com o WhatsApp).
@@ -600,6 +610,9 @@ export function ChatShellWithContext() {
    * que sai a caixa de referência da tela inteira.
    */
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [newConversationOpen, setNewConversationOpen] = useState(false);
+  const [draftConversationKey, setDraftConversationKey] = useState<string | null>(null);
+  const handleConversationEstablished = useCallback(() => setDraftConversationKey(null), []);
 
   /**
    * De qual caixa sai a resposta — a decisão D6, num lugar só e testável.
@@ -924,6 +937,18 @@ export function ChatShellWithContext() {
     () => contacts.find((c) => contactKey(c) === selectedKey) ?? null,
     [contacts, selectedKey],
   );
+
+  const handleStartConversation = (phone: string) => {
+    // Use only the currently selected, authorized QR inbox. Unified inboxes
+    // without a selection must not silently send from somebody else's number.
+    const conversation = prepareNewConversation(phone, selectedBox, contacts);
+    if (!conversation) return;
+    setDraftConversationKey(conversation.isNew ? conversation.key : null);
+    setSelectedKey(conversation.key);
+    setSearchQuery("");
+    clearFilter();
+    setActiveTab("active");
+  };
 
   /**
    * O TELEFONE da conversa aberta, extraído da chave.
@@ -1355,6 +1380,7 @@ export function ChatShellWithContext() {
       <ShellComponent
         list={
           <ConversationList
+            onNewConversation={() => setNewConversationOpen(true)}
             contacts={contatosParaLista}
             selectedKey={selectedKey}
             onSelectContact={handleSelectContact}
@@ -1422,6 +1448,7 @@ export function ChatShellWithContext() {
             />
           ) : (
             <ChatView
+              onConversationEstablished={draftConversationKey === selectedKey ? handleConversationEstablished : undefined}
               selectedContact={selectedContact}
               selectedPhone={telefoneSelecionado}
               instanceId={selectedInstanceId}
@@ -1429,7 +1456,7 @@ export function ChatShellWithContext() {
               organizationId={organizationId}
               mountTime={mountTimeRef.current}
               onBack={handleBack}
-              onOpenLeadModal={handleOpenLeadModal}
+              onOpenLeadModal={draftConversationKey === selectedKey ? undefined : handleOpenLeadModal}
               density={density}
               onDensityChange={setDensity}
               isMobile={isMobile}
@@ -1437,7 +1464,7 @@ export function ChatShellWithContext() {
           )
         }
         context={
-          selectedKey ? (
+          selectedKey && draftConversationKey !== selectedKey ? (
             // Duas colunas de contexto, e não uma com ramos: a de WhatsApp
             // resolve o lead pelo TELEFONE e é o caminho quente de 30 orgs; a
             // social resolve pelo vínculo em `lead_social_identities` e, quando
@@ -1477,14 +1504,24 @@ export function ChatShellWithContext() {
         densityCssVars={cssVars}
       />
 
+      {newConversationOpen && (
+        <NewConversationDialog
+          open={newConversationOpen}
+          onOpenChange={setNewConversationOpen}
+          instanceName={selectedBox?.name}
+          unavailableReason={newConversationUnavailableReason(selectedBox)}
+          onStart={handleStartConversation}
+        />
+      )}
+
       {/* Recebe `phoneNumber` e monta a ficha do lead a partir dele — um
           contato de Instagram não tem telefone, então o modal não existe lá. */}
-      {selectedContact && !isSocialBox && (
+      {telefoneSelecionado && !isSocialBox && draftConversationKey !== selectedKey && (
         <LeadContactModal
           isOpen={leadModalOpen}
           onClose={handleCloseLeadModal}
-          phoneNumber={selectedContact.phone_number}
-          pushName={selectedContact.push_name ?? undefined}
+          phoneNumber={telefoneSelecionado}
+          pushName={selectedContact?.push_name ?? undefined}
         />
       )}
 

@@ -66,7 +66,7 @@ export interface ChatHeaderProps {
   szChatSession: SzChatSession | null;
   organizationId: string | null;
   onBack: () => void;
-  onOpenLeadModal: () => void;
+  onOpenLeadModal?: () => void;
   onToggleAi: (checked: boolean) => void;
   onTransferToSzChatTeam: (teamName: string, teamId: string) => void;
   toggleAiPending: boolean;
@@ -214,12 +214,12 @@ export function ChatHeader({
 
       {/* Área clicável do contato */}
       <div
-        role="button"
-        tabIndex={0}
+        role={onOpenLeadModal ? "button" : undefined}
+        tabIndex={onOpenLeadModal ? 0 : undefined}
         className="flex items-center gap-3 flex-1 min-w-[11rem] cursor-pointer hover:bg-muted/50 -m-2 p-2 rounded-lg transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLeadModal(); }}
-        onPointerDown={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
-        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenLeadModal(); } }}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); onOpenLeadModal?.(); }}
+        onPointerDown={(e) => { e.stopPropagation(); onOpenLeadModal?.(); }}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenLeadModal?.(); } }}
       >
         <div className="relative shrink-0">
           <div
@@ -265,12 +265,12 @@ export function ChatHeader({
         <VoiceCallButton leadId={leadId} leadName={contactName} />
 
         {/* Botão ver / criar lead */}
-        <Button
+        {onOpenLeadModal && <Button
           type="button"
           variant={hasLead ? "ghost" : "outline"}
           size="sm"
           className={cn("shrink-0 gap-0", !hasLead && "border-primary text-primary hover:bg-primary/10")}
-          onClick={(e) => { e.stopPropagation(); onOpenLeadModal(); }}
+          onClick={(e) => { e.stopPropagation(); onOpenLeadModal?.(); }}
           onPointerDown={(e) => e.stopPropagation()}
           title={hasLead ? "Ver dados do lead e funis" : "Criar lead para este contato"}
           aria-label={hasLead ? "Ver lead" : "Criar lead"}
@@ -286,7 +286,7 @@ export function ChatHeader({
               <span className="hidden lg:inline">Criar Lead</span>
             </>
           )}
-        </Button>
+        </Button>}
 
         {/* Sync history per-chat */}
         {instanceId && chatJid && (

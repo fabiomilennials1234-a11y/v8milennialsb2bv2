@@ -75,6 +75,7 @@ const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION ===
 const PROXY_URL =
   process.env.PROXY_URL ?? 'http://127.0.0.1:54321/functions/v1/whatsapp-api-proxy';
 const INSTANCE_ID = '00000000-0000-0000-0000-0000000000f1';
+const ORG_B_INSTANCE_ID = '00000000-0000-0000-0000-0000000000f3';
 /**
  * O bloco do proxy é um `describe` IRMÃO, não aninhado — o afterAll do de cima
  * já apagou INSTANCE_ID quando ele começa. Instância própria, ciclo próprio.
@@ -166,7 +167,7 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
     await service
       .from('organizations')
       .update({ limit_overrides: { max_whatsapp_instances: 5, max_copilot_agents: 5 } })
-      .eq('id', TEST_ORG_ID);
+      .in('id', [TEST_ORG_ID, TEST_ORG_B_ID]);
 
     const { error: instErr } = await service.from('whatsapp_instances').upsert({
       id: INSTANCE_ID,
@@ -175,6 +176,21 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       status: 'connected',
     });
     if (instErr) throw new Error(`Falha ao semear a instância: ${instErr.message}`);
+
+    // O responsável do lead também precisa de uma instância permitida.
+    // Uma mensagem sem instance_id deve ficar oculta para membros.
+    const { error: orgBInstErr } = await service.from('whatsapp_instances').upsert({
+      id: ORG_B_INSTANCE_ID,
+      organization_id: TEST_ORG_B_ID,
+      instance_name: 'isolation-fixture-org-b',
+      status: 'connected',
+    });
+    if (orgBInstErr) throw new Error(`Falha ao semear a instância B: ${orgBInstErr.message}`);
+    const { error: orgBAccessErr } = await service.from('whatsapp_instance_allowed_members').upsert({
+      whatsapp_instance_id: ORG_B_INSTANCE_ID,
+      team_member_id: TEST_TM_MEMBER_B_ID,
+    });
+    if (orgBAccessErr) throw new Error(`Falha ao vincular o membro B: ${orgBAccessErr.message}`);
 
     // Member B passa a ser responsável do lead OrgB-1, sem nenhum override de
     // permissão — é o controle do caso "membro sem override".
@@ -196,6 +212,7 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
       })),
       {
         organization_id: TEST_ORG_B_ID,
+        instance_id: ORG_B_INSTANCE_ID,
         message_id: `${MSG_PREFIX}b-${PHONE_ORGB_1}`,
         remote_jid: `${PHONE_ORGB_1}@s.whatsapp.net`,
         phone_number: `+55${PHONE_ORGB_1}`,
@@ -248,8 +265,8 @@ describe.skipIf(shouldSkip)('Chat: isolamento por responsável', () => {
     await service.from('conversation_messages').delete().like('content', `${MSG_PREFIX}%`);
     await service.from('conversations').delete().eq('agent_id', AGENT_ID);
     await service.from('copilot_agents').delete().eq('id', AGENT_ID);
-    await service.from('whatsapp_instances').delete().eq('id', INSTANCE_ID);
-    await service.from('organizations').update({ limit_overrides: {} }).eq('id', TEST_ORG_ID);
+    await service.from('whatsapp_instances').delete().in('id', [INSTANCE_ID, ORG_B_INSTANCE_ID]);
+    await service.from('organizations').update({ limit_overrides: {} }).in('id', [TEST_ORG_ID, TEST_ORG_B_ID]);
     await service
       .from('leads')
       .update({ pre_sale_responsible_id: null })

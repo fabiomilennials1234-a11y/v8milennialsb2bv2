@@ -95,6 +95,11 @@ const linhaDoNome = () => nome().parentElement!;
 const blocoDoContato = () => nome().closest('[role="button"]')!;
 
 describe("ChatHeader — o contato é o último a perder espaço", () => {
+  it("does not offer lead creation before the first successful send", () => {
+    montar({ hasLead: false, onOpenLeadModal: undefined });
+    expect(screen.queryByRole("button", { name: "Criar lead" })).not.toBeInTheDocument();
+    expect(nome().closest('[role="button"]')).toBeNull();
+  });
   it("com dois números de voz, nome e telefone continuam no DOM", () => {
     montar();
     expect(screen.getByTestId("ligar")).toBeInTheDocument();
