@@ -33,6 +33,10 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
       : condition.unit === 'hours' ? condition.value === 1 ? 'hora' : 'horas' : condition.value === 1 ? 'dia' : 'dias';
     return `Negócio do gatilho · Tempo na etapa ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value} ${unit}`;
   }
+  if (condition.field === 'business.last_won_date') return condition.operator === 'is_empty'
+    ? 'Última venda ganha · Data está vazia' : condition.operator === 'is_not_empty'
+      ? 'Última venda ganha · Data está preenchida'
+      : `Última venda ganha · Data ${GUIDED_DATE_OPERATORS[condition.operator]} ${isGuidedCalendarDate(condition.value) ? condition.value.split('-').reverse().join('/') : '…'}`;
   if (condition.field === 'lead.custom' && condition.fieldType === 'select') {
     const label = condition.fieldLabel || 'Campo personalizado';
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido`

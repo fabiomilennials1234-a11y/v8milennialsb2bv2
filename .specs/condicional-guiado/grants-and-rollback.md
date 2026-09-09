@@ -290,3 +290,9 @@ Adds three explicit scopes: `business.exists.lifecycle`, `business.exists.stage`
 Publication rejects malformed query groups, malformed typed children, unavailable stage pairs and missing scopes before a version is inserted. Rollback removes both readers and its publication trigger, then restores migration 43's scope vocabulary. It retains pipelines, entries, deals, grants, drafts, versions and execution pins. Roll back 44 before 43–39; reapply after 43. Preview endpoints only; worker and production remain unchanged.
 
 The 45-migration transactional rollback/reapply rehearsal passed. Effective privileges after recovery: personal reader anon=false/authenticated=true/service=false; organization reader anon=false/authenticated=false/service=true; publication trigger callable by no API role.
+
+## Migration 45 — latest currently-won sale date
+
+Adds explicit scope `business.last_won_date`. Personal reads are authenticated-only under caller RLS. Organization reads are service-only and require the current workflow grant while locking workflow, grant, lead, entries and deals. Both return at most one currently-won deal by canonical `outcome_at`, converted with the organization's IANA timezone.
+
+Rollback removes both readers and publication trigger, then restores migration 44 scope vocabulary. Deals, sale ledger, payments, classification, grants, versions and pins remain untouched. Roll back 45 before 44; reapply after 44. The 46-migration rehearsal verifies removal, history preservation and ACL restoration.

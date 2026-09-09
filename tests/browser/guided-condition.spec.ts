@@ -1448,6 +1448,7 @@ async function selectInformation(page: Page, field: string) {
     'business.trigger.value': 'Valor',
     'business.trigger.stage_elapsed': 'Tempo na etapa',
     'business.exists': 'Existe negócio',
+    'business.last_won_date': 'Data da última venda ganha',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
@@ -1599,6 +1600,34 @@ test('configura existência usando ciclo visível e mantém todos os filtros no 
   });
   await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Existe negócio · Ganho · Todas');
+});
+
+test('configura a última venda que permanece ganha por data e mostra o negócio encontrado', async ({ page }) => {
+  const dealId = 'abcd0000-0000-4000-8000-000000000071';
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'business.last_won_date');
+  await expect(page.getByRole('combobox', { name: 'Informação', exact: true })).toContainText('Negócios · Data da última venda ganha');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('on_or_after');
+  await page.getByLabel('Valor da comparação', { exact: true }).fill('2026-08-20');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Última venda ganha · Data é a partir de 20/08/2026');
+  await expect(page.getByText('Data da última venda ganha de todos os leads desta organização')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await expect(page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true })).toHaveCount(0);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ condition: {
+      field: 'business.last_won_date', operator: 'on_or_after', value: '2026-08-20',
+    } });
+    expect(route.request().postDataJSON()).not.toHaveProperty('entryId');
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true,
+      actual: '2026-08-21', reference: { id: dealId, name: 'Contrato anual' } }] } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Contrato anual');
+  await expect(page.getByRole('status')).toContainText('21/08/2026');
+  await page.getByLabel('Comparação', { exact: true }).selectOption('is_empty');
+  await expect(page.getByLabel('Valor da comparação', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Última venda ganha · Data está vazia');
 });
 
 test('busca informação sem acento e cancela sem perder comparação', async ({ page }) => {

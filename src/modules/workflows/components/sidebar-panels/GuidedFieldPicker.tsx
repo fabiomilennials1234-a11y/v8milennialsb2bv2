@@ -10,7 +10,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 
 const fields = { ...GUIDED_SCALAR_FIELDS, ...GUIDED_RESPONSIBLE_FIELDS, 'lead.tags': { label: 'Tags' }, 'lead.origin': { label: 'Origem' },
   'business.trigger.stage': { label: 'Etapa' }, 'business.trigger.value': { label: 'Valor' },
-  'business.trigger.stage_elapsed': { label: 'Tempo na etapa' } };
+  'business.trigger.stage_elapsed': { label: 'Tempo na etapa' },
+  'business.last_won_date': { label: 'Data da última venda ganha' } };
 type Field = Exclude<GuidedRuleDraft['field'], 'lead.custom'>;
 export type GuidedFieldSelection = Field | 'business.exists';
 // This catalogue contains only capabilities supported by the guided evaluator.
@@ -36,6 +37,7 @@ const vocabulary = {
   'business.trigger.stage': ['negocio', 'card', 'funil', 'etapa atual'],
   'business.trigger.value': ['negocio', 'valor', 'receita', 'ticket', 'financeiro'],
   'business.trigger.stage_elapsed': ['negocio', 'tempo', 'duracao', 'permanencia', 'etapa atual'],
+  'business.last_won_date': ['negocio', 'venda', 'ganha', 'ultima venda', 'data de fechamento'],
 } satisfies Record<Field, string[]>;
 const entries = Object.entries(vocabulary) as [Field, string[]][];
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -64,7 +66,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
     <PopoverTrigger asChild>
       <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open}
         aria-haspopup="dialog" className="w-full justify-between font-normal">
-        <span className="truncate">{value === 'business.exists' ? 'Negócios' : value.startsWith('business.trigger.') ? 'Negócio do gatilho' : 'Lead'} · {name}</span>
+        <span className="truncate">{value === 'business.exists' || value === 'business.last_won_date' ? 'Negócios' : value.startsWith('business.trigger.') ? 'Negócio do gatilho' : 'Lead'} · {name}</span>
         <ChevronsUpDown aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
     </PopoverTrigger>
@@ -80,7 +82,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
           {options.isError && <div className="p-3"><p role="alert" className="text-sm text-destructive">Não foi possível carregar campos personalizados.</p>
             <Button type="button" variant="ghost" onClick={() => void options.refetch()}>Tentar carregar campos novamente</Button></div>}
           <CommandGroup heading="Lead">
-            {entries.filter(([field]) => !field.startsWith('business.trigger.')).map(([field, aliases]) => <CommandItem key={field} value={field}
+            {entries.filter(([field]) => field.startsWith('lead.')).map(([field, aliases]) => <CommandItem key={field} value={field}
               keywords={['Lead', fields[field].label, ...aliases]} onSelect={() => {
                 if (field !== value) onChange(field);
                 setOpen(false); setSearch('');
@@ -100,6 +102,14 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
             </CommandItem>)}
           </CommandGroup>
           <CommandGroup heading="Negócios">
+            {entries.filter(([field]) => field.startsWith('business.') && !field.startsWith('business.trigger.')).map(([field, aliases]) => <CommandItem key={field} value={field}
+              keywords={['Negócios', fields[field].label, ...aliases]} onSelect={() => {
+                if (field !== value) onChange(field);
+                setOpen(false); setSearch('');
+              }}>
+              <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${field === value ? 'opacity-100' : 'opacity-0'}`} />
+              <span>{fields[field].label}</span>
+            </CommandItem>)}
             <CommandItem value="business.exists" keywords={['Negócios', 'Existe negócio', 'qualquer negócio', 'oportunidade', 'deal']}
               onSelect={() => { if (value !== 'business.exists') onChange('business.exists'); setOpen(false); setSearch(''); }}>
               <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${value === 'business.exists' ? 'opacity-100' : 'opacity-0'}`} />

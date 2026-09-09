@@ -659,3 +659,11 @@ Goal: complete all 21 approved tickets with TDD, real integration, UI checks and
 - Publication validates query/child shape, typed operators, stage references and scopes. Pinned shared-executor routing and current grant revocation are real-tested. Editor exposes `Existe negócio`, visible lifecycle and same-business combination selectors, typed child controls and a summary carrying lifecycle.
 - Expired preview was replaced by persistent preview `saonafmpiaupgnosqvax`; repository schema replay applied 362/363 migrations. The sole unrelated empty-fixture failure is `20270925000000_aposenta_calor_e_rating.sql`. Migration 44 and endpoints exist only on preview; worker and production remain untouched.
 - Final checkpoint evidence: 74 real integration tests, 109 Chromium journeys and 108 evaluator/API/publication/executor unit tests passed. TypeScript ratchet reports zero introduced errors; Deno, focused ESLint and whitespace checks pass. The 45-migration rollback/reapply rehearsal preserved approval/version/answer history and restored exact ACL boundaries.
+
+## 2026-09-09 — ticket 10 latest sale that remains won
+
+- `business.last_won_date` reads only deals whose canonical current outcome is `won`, ordered by `outcome_at`. The day uses the organization's IANA timezone. Generic creation/update timestamps, payments and customer classification are never read or changed.
+- Reopening removes eligibility and reveals the previous currently-won sale. Re-winning creates a new current `outcome_at`; no unavailable pre-reopen win is reconstructed. Null or future canonical timestamps fail closed.
+- Personal tests use an authenticated invoker reader. Automatic runs use a service-only reader guarded by the exact scope. Publication validates nested rules and scope; pinned execution and current revocation are real-tested.
+- Editor groups the field under “Negócios”, offers calendar operators/date input, needs no trigger-business selector and reports sale name plus local day. Preview endpoints only; worker and production unchanged.
+- Final checkpoint evidence: 75 real integration tests, 110 Chromium journeys, 119 evaluator/API/publication/executor unit tests, zero introduced TypeScript errors, Deno and focused lint clean, and 46-migration rollback/reapply passed.

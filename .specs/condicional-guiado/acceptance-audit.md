@@ -104,3 +104,9 @@ Ticket 08 implementation slices are present. It remains uncertified until the co
 The guided contract now represents `Existe negócio` separately from the exact trigger business. Lifecycle is visible and defaults to Em aberto. Every child filter runs against one candidate, including multiple entries in the same funnel; a real test proves stage from one and value from another returns No. The server reader queries the complete current entry set without Kanban pagination.
 
 Real preview coverage includes open/won/all lifecycle, absence, personal RLS, direct-role ACL, foreign context, partial/full grant, revocation, malformed publication, unavailable stage reference, immutable version pin and HTTP evaluation. Stage/funnel data remains hidden from value-only readers. Browser coverage verifies selector-first construction, lifecycle summary, typed stage/value filters, no trigger-business requirement and exact request shape. Ticket stays uncertified until the final 21-ticket acceptance run.
+
+## Ticket 10 — latest sale that remains won checkpoint
+
+Canonical source is `deals.outcome = 'won'` with `deals.outcome_at`; lead association uses the complete server-side `pipeline_entries` set. Reopening reveals the preceding current winner; no eligible sale is empty. Re-win uses the new canonical decision time. Missing/future time fails explicitly rather than selecting an older row.
+
+Real preview coverage includes ordering, reopen, re-win, absence, São Paulo UTC-boundary conversion, malformed source, tenant isolation, personal/organizational ACL, grant/revocation, publication validation, pinned execution and deployed personal HTTP. Browser covers discovery, date controls, summary, approval copy, request without trigger entry and returned deal identity/day. No classification or payment row changes. Ticket stays open for final cross-ticket certification.

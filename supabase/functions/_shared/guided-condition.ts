@@ -46,8 +46,9 @@ export type GuidedBusinessExistenceChild = ({ version: 1; id: string; field: 'bu
   pipelineId: string; stageId: string } | ({ version: 1; id: string; field: 'business.value' } & GuidedNumberComparison));
 export type GuidedBusinessExistence = { version: 1; id: string; kind: 'business_exists'; lifecycle: 'open' | 'won' | 'lost' | 'all';
   match: 'all' | 'any'; children: GuidedBusinessExistenceChild[] };
+export type GuidedLastWonDateRule = { version: 1; id: string; field: 'business.last_won_date' } & GuidedDateComparison;
 
-export type GuidedRule = GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -100,6 +101,8 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
     if (rule.field === 'business.trigger.stage_elapsed') return isGuidedNumberOperator(rule.operator)
       && typeof rule.value === 'number' && Number.isFinite(rule.value) && rule.value >= 0
       && (rule.unit === 'minutes' || rule.unit === 'hours' || rule.unit === 'days');
+    if (rule.field === 'business.last_won_date') return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
+      || (isGuidedDateOperator(rule.operator) && isGuidedCalendarDate(rule.value));
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
@@ -217,6 +220,7 @@ export async function evaluateGuidedCondition(
   const usesOriginReader = Boolean(request.authorization && leadRequestedFields.includes('lead.origin'));
   const usesTagReader = Boolean(request.authorization && tagIds.size);
   const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
+  const usesLastWonDate = requestedFields.includes('business.last_won_date');
   const hasOnlyBusinessData = leadRequestedFields.length === 0;
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? hasOnlyBusinessData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
@@ -338,6 +342,29 @@ export async function evaluateGuidedCondition(
       return { status: 'error' as const, code: 'source_unavailable' as const };
     }
     businessCandidates = response.data as BusinessCandidate[];
+  }
+  type LastWon = { deal_id: string; title: string; won_at: string; won_date: string };
+  let lastWon: LastWon | null = null;
+  if (usesLastWonDate) {
+    const response = await caller.rpc(request.authorization?.kind === 'organization'
+      ? 'read_guided_condition_last_won' : 'test_guided_condition_last_won', {
+      ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+      p_organization_id: request.organizationId, p_lead_id: request.leadId,
+    });
+    if (response.error) {
+      const code = response.error.code === 'PT404' ? 'context_unavailable' as const
+        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
+        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+      return { status: 'error' as const, code };
+    }
+    if (!Array.isArray(response.data) || response.data.length > 1) return { status: 'error' as const, code: 'source_unavailable' as const };
+    if (response.data.length) {
+      const candidate = response.data[0];
+      if (!candidate || typeof candidate.deal_id !== 'string' || typeof candidate.title !== 'string'
+        || typeof candidate.won_at !== 'string' || !Number.isFinite(Date.parse(candidate.won_at))
+        || !isGuidedCalendarDate(candidate.won_date)) return { status: 'error' as const, code: 'source_unavailable' as const };
+      lastWon = candidate as LastWon;
+    }
   }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
   if (customIds.size) {
@@ -632,6 +659,22 @@ export async function evaluateGuidedCondition(
       }
       rules.push({ id: condition.id, status: 'evaluated', matched, actual: seconds / unitSeconds,
         context: { entryId: businessStageData!.entry.id, pipeline: businessStageData!.pipeline } });
+      return matched;
+    }
+    if (condition.field === 'business.last_won_date') {
+      const actual = lastWon?.won_date ?? null;
+      const empty = actual === null;
+      let matched = condition.operator === 'is_empty' ? empty : condition.operator === 'is_not_empty' ? !empty : false;
+      if (!empty && condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty') {
+        if (condition.operator === 'equals') matched = actual === condition.value;
+        else if (condition.operator === 'not_equals') matched = actual !== condition.value;
+        else if (condition.operator === 'before') matched = actual < condition.value;
+        else if (condition.operator === 'on_or_before') matched = actual <= condition.value;
+        else if (condition.operator === 'after') matched = actual > condition.value;
+        else matched = actual >= condition.value;
+      }
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual,
+        ...(lastWon ? { reference: { id: lastWon.deal_id, name: lastWon.title } } : {}) });
       return matched;
     }
     const customField = condition.field === 'lead.custom' ? customFields.get(condition.fieldId.toLowerCase())! : undefined;

@@ -25,6 +25,7 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
     : condition.field === 'business.trigger.value' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty'
       && (condition.value === '' || !Number.isFinite(condition.value))
     : condition.field === 'business.trigger.stage_elapsed' ? condition.value === '' || !Number.isFinite(condition.value) || condition.value < 0
+    : condition.field === 'business.last_won_date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : condition.field === 'lead.custom' && !condition.fieldId ? true
     : condition.field === 'lead.custom' && condition.fieldType === 'date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
@@ -44,6 +45,7 @@ const selectClass = 'h-10 w-full rounded-md border border-input bg-background px
 function defaultRule(id: string, field: Exclude<GuidedFieldSelection, 'business.exists'>): GuidedRuleDraft {
   if (field === 'business.trigger.stage') return { version: 1, id, field, operator: 'equals', pipelineId: '', stageId: '' };
   if (field === 'business.trigger.stage_elapsed') return { version: 1, id, field, operator: 'greater_than_or_equal', value: '', unit: 'hours' };
+  if (field === 'business.last_won_date') return { version: 1, id, field, operator: 'equals', value: '' };
   if (field === 'business.trigger.value' || isGuidedNumberField(field)) return { version: 1, id, field, operator: 'equals', value: '' };
   if (isGuidedResponsibleField(field)) return { version: 1, id, field, operator: 'equals', memberId: '' };
   if (field === 'lead.origin') return { version: 1, id, field, operator: 'equals', originId: '' };
@@ -198,7 +200,7 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
           }
           if (fieldType === 'date') {
             const base = { version: 1 as const, id: condition.id, field: 'lead.custom' as const, fieldId, fieldType, fieldLabel };
-            const compatible = condition.field === 'lead.custom' && condition.fieldType === 'date';
+            const compatible = condition.field === 'business.last_won_date' || (condition.field === 'lead.custom' && condition.fieldType === 'date');
             setFieldReset(!compatible);
             if (compatible && condition.operator === 'is_empty') onChange({ ...base, operator: 'is_empty' });
             else if (compatible && condition.operator === 'is_not_empty') onChange({ ...base, operator: 'is_not_empty' });
@@ -263,6 +265,14 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
             && 'value' in condition) onChange({ ...base, operator: condition.operator, value: condition.value });
           else onChange({ ...base, operator: 'equals', value: '' });
         }
+        else if (field === 'business.last_won_date') {
+          const base = { version: 1 as const, id: condition.id, field };
+          const compatible = condition.field === 'business.last_won_date' || (condition.field === 'lead.custom' && condition.fieldType === 'date');
+          if (compatible && condition.operator === 'is_empty') onChange({ ...base, operator: 'is_empty' });
+          else if (compatible && condition.operator === 'is_not_empty') onChange({ ...base, operator: 'is_not_empty' });
+          else if (compatible && isGuidedDateOperator(condition.operator) && 'value' in condition) onChange({ ...base, operator: condition.operator, value: condition.value });
+          else onChange({ ...base, operator: 'equals', value: '' });
+        }
         else if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
           ? { ...condition, field } : { version: 1, id: condition.id, field, operator: 'equals', memberId: '' });
         else if (field === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
@@ -274,7 +284,7 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
               ? { ...base, operator: condition.operator } : { ...base, operator: condition.operator, value: condition.value });
           } else onChange({ ...base, operator: 'equals', value: '' });
         }
-        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
+        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
           ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
           : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
@@ -286,6 +296,20 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         <option value="equals">é</option><option value="not_equals">não é</option>
       </select>
       <GuidedBusinessStagePicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
+    </> : condition.field === 'business.last_won_date' ? <>
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
+        const operator = event.target.value;
+        if (operator === 'is_empty' || operator === 'is_not_empty') onChange({ version: 1, id: condition.id, field: condition.field, operator });
+        else if (isGuidedDateOperator(operator)) onChange({ version: 1, id: condition.id, field: condition.field, operator,
+          value: 'value' in condition ? condition.value : '' });
+      }}>{Object.entries(GUIDED_DATE_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazia</option><option value="is_not_empty">está preenchida</option></select>
+      {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <div className="space-y-2">
+        <Label htmlFor={`guided-value-${condition.id}`}>Valor da comparação</Label>
+        <Input id={`guided-value-${condition.id}`} type="date" min="0001-01-01" max="9999-12-31" value={condition.value} aria-invalid={missingValue}
+          onChange={event => onChange({ ...condition, value: event.target.value })} />
+        {missingValue && <p className="text-xs text-destructive">Escolha uma data válida ou “está vazia”.</p>}
+      </div>}
     </> : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {

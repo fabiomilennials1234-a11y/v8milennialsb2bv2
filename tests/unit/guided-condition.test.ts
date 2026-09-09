@@ -452,6 +452,57 @@ it('returns No for a complete business-existence query with no candidate', async
 });
 
 it.each([
+  ['equals', '2026-08-20', true],
+  ['not_equals', '2026-08-19', true],
+  ['before', '2026-08-21', true],
+  ['on_or_before', '2026-08-20', true],
+  ['after', '2026-08-19', true],
+  ['on_or_after', '2026-08-20', true],
+] as const)('compares the latest currently-won sale date with %s', async (operator, value, matched) => {
+  const dealId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_last_won')
+      ? [{ deal_id: dealId, title: 'Contrato anual', won_at: '2026-08-20T15:00:00Z', won_date: '2026-08-20' }]
+      : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1',
+    condition: { version: 1, id: 'last-won', field: 'business.last_won_date', operator, value },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'last-won', status: 'evaluated', matched,
+    actual: '2026-08-20', reference: { id: dealId, name: 'Contrato anual' } }] });
+});
+
+it.each([
+  ['is_empty', true],
+  ['is_not_empty', false],
+] as const)('represents absence of a currently-won sale with %s', async (operator, matched) => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(String(input).includes('/rpc/test_guided_condition_last_won') ? '[]'
+      : JSON.stringify({ id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1',
+    condition: { version: 1, id: 'last-won', field: 'business.last_won_date', operator },
+  })).toEqual({ status: 'evaluated', matched, rules: [{ id: 'last-won', status: 'evaluated', matched, actual: null }] });
+});
+
+it.each([
+  [{ deal_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', title: 'Venda', won_at: 'invalid', won_date: '2026-08-20' }],
+  [{ deal_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', title: 'Venda', won_at: '2026-08-20T15:00:00Z', won_date: '2026-02-30' }],
+  [{ deal_id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', title: 'Venda', won_at: '2026-08-20T15:00:00Z', won_date: '2026-08-20' },
+   { deal_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', title: 'Outra', won_at: '2026-08-19T15:00:00Z', won_date: '2026-08-19' }],
+])('fails closed for malformed last-won source data', async rows => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(JSON.stringify(String(input).includes('/rpc/test_guided_condition_last_won')
+      ? rows : { id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1',
+    condition: { version: 1, id: 'last-won', field: 'business.last_won_date', operator: 'equals', value: '2026-08-20' },
+  })).toEqual({ status: 'error', code: 'source_unavailable' });
+});
+
+it.each([
   { operator: 'equals', value: 125, unit: 'minutes', matched: true },
   { operator: 'not_equals', value: 2, unit: 'hours', matched: true },
   { operator: 'greater_than', value: 2, unit: 'hours', matched: true },

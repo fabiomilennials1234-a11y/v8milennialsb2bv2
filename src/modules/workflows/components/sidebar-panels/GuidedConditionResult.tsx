@@ -1,7 +1,7 @@
 import type { GuidedConditionDraft } from '@/types/workflow';
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 
-export type GuidedResultEntry = { id: string; status?: string; matched?: boolean; reference?: { id: string; name: string };
+export type GuidedResultEntry = { id: string; status?: string; matched?: boolean; actual?: unknown; reference?: { id: string; name: string };
   context?: { entryId?: string; pipeline?: { id: string; name: string } } };
 
 export function GuidedConditionResult({ condition, rules, groups }: {
@@ -40,7 +40,9 @@ export function GuidedConditionResult({ condition, rules, groups }: {
             ? { ...current, stageLabel: entry.reference.name,
               pipelineLabel: entry.context?.pipeline?.id.toLowerCase() === current.pipelineId.toLowerCase()
                 ? entry.context.pipeline.name : current.pipelineLabel } : current;
-    return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}</p>;
+    const lastWonDetail = current.field === 'business.last_won_date' && entry?.status === 'evaluated'
+      ? ` · ${entry.reference?.name ?? 'Nenhuma venda ganha'} · ${typeof entry.actual === 'string' ? entry.actual.split('-').reverse().join('/') : 'Vazio'}` : '';
+    return <p className="break-words">Condição {path} · {summarizeGuidedCondition(explained)}: {outcome}{lastWonDetail}</p>;
   }
   return render(condition, '');
 }

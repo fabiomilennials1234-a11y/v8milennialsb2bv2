@@ -681,6 +681,124 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     }
   }, 60000);
 
+  it('selects the latest sale that remains won by its canonical outcome date', async () => {
+    const pipelineId = crypto.randomUUID(), stageId = crypto.randomUUID();
+    const olderDeal = crypto.randomUUID(), newerDeal = crypto.randomUUID(), olderEntry = crypto.randomUUID(), newerEntry = crypto.randomUUID();
+    const workflowId = crypto.randomUUID(), executionId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false, storageKey: `last-won-${pipelineId}` },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const rule = { version: 1, id: 'last-won', field: 'business.last_won_date', operator: 'equals', value: '2026-08-20' };
+    const originalTimezone = (await service.from('organizations').select('timezone').eq('id', orgA).single()).data!.timezone;
+    await service.from('pipelines').insert({ id: pipelineId, organization_id: orgA, name: 'Histórico', slug: `last-won-${pipelineId}`, type: 'custom' }).throwOnError();
+    try {
+      await service.from('pipeline_stages').insert({ id: stageId, organization_id: orgA, pipeline_id: pipelineId,
+        stage_key: 'won', name: 'Ganho', position: 0 }).throwOnError();
+      await service.from('deals').insert([
+        { id: olderDeal, organization_id: orgA, source_lead_id: leadA,
+          title: 'Venda anterior', value: 1000, source: 'api', outcome: 'won', outcome_at: '2026-08-10T15:00:00Z', closed_at: '2026-08-10T15:00:00Z' },
+        { id: newerDeal, organization_id: orgA, source_lead_id: leadA,
+          title: 'Venda mais recente', value: 2000, source: 'api', outcome: 'won', outcome_at: '2026-08-20T15:00:00Z', closed_at: '2026-08-20T15:00:00Z' },
+      ]).throwOnError();
+      await service.from('pipeline_entries').insert([
+        { id: olderEntry, organization_id: orgA, lead_id: leadA, deal_id: olderDeal, pipeline_id: pipelineId, stage_id: stageId, stage_key: 'won' },
+        { id: newerEntry, organization_id: orgA, lead_id: leadA, deal_id: newerDeal, pipeline_id: pipelineId, stage_id: stageId, stage_key: 'won' },
+      ]).throwOnError();
+      const evaluate = (condition: unknown) => evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition });
+      const leadBeforeRead = await service.from('leads').select('classificacao, classificacao_manual').eq('id', leadA).single();
+      const ledgerBeforeRead = await service.from('sale_events').select('id', { count: 'exact', head: true }).in('deal_id', [olderDeal, newerDeal]);
+      expect(await evaluate(rule)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: '2026-08-20', reference: { id: newerDeal, name: 'Venda mais recente' } }] });
+      expect((await service.from('leads').select('classificacao, classificacao_manual').eq('id', leadA).single()).data).toEqual(leadBeforeRead.data);
+      expect((await service.from('sale_events').select('id', { count: 'exact', head: true }).in('deal_id', [olderDeal, newerDeal])).count).toBe(ledgerBeforeRead.count);
+      await service.from('deals').update({ outcome: 'open', outcome_source: 'api' }).eq('id', newerDeal).throwOnError();
+      expect(await evaluate({ ...rule, value: '2026-08-10' })).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: '2026-08-10', reference: { id: olderDeal, name: 'Venda anterior' } }] });
+      await service.from('deals').update({ outcome: 'won', outcome_source: 'api', outcome_at: new Date().toISOString() }).eq('id', newerDeal).throwOnError();
+      expect(await evaluate({ ...rule, operator: 'after', value: '2026-08-20' })).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ reference: { id: newerDeal, name: 'Venda mais recente' } }] });
+      await service.from('deals').update({ outcome: 'open', outcome_source: 'api' }).in('id', [olderDeal, newerDeal]).throwOnError();
+      expect(await evaluate({ version: 1, id: 'last-won', field: 'business.last_won_date', operator: 'is_empty' }))
+        .toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: null }] });
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadB, condition: rule }))
+        .toEqual({ status: 'error', code: 'context_unavailable' });
+      const directArgs = { p_organization_id: orgA, p_lead_id: leadA };
+      expect((await service.rpc('test_guided_condition_last_won', directArgs)).error?.code).toBe('42501');
+      const anonymous = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false, autoRefreshToken: false, storageKey: `last-won-anon-${pipelineId}` },
+      });
+      expect((await anonymous.rpc('test_guided_condition_last_won', directArgs)).error?.code).toBe('42501');
+
+      await service.from('deals').update({ outcome: 'won', outcome_source: 'api' }).eq('id', newerDeal).throwOnError();
+      await service.from('deals').update({ outcome_at: null }).eq('id', newerDeal).throwOnError();
+      expect(await evaluate(rule)).toEqual({ status: 'error', code: 'source_unavailable' });
+      await service.from('deals').update({ outcome_at: '2099-01-01T00:00:00Z' }).eq('id', newerDeal).throwOnError();
+      expect(await evaluate(rule)).toEqual({ status: 'error', code: 'source_unavailable' });
+      await service.from('organizations').update({ timezone: 'America/Sao_Paulo' }).eq('id', orgA).throwOnError();
+      await service.from('deals').update({ outcome_at: '2026-08-20T01:00:00Z', closed_at: '2026-08-20T01:00:00Z' }).eq('id', newerDeal).throwOnError();
+      const localRule = { ...rule, value: '2026-08-19' };
+      expect(await evaluate(localRule)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: '2026-08-19', reference: { id: newerDeal, name: 'Venda mais recente' } }] });
+      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/test-guided-condition`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}`, apikey: process.env.SUPABASE_ANON_KEY!, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ organizationId: orgA, leadId: leadA, condition: localRule }), signal: AbortSignal.timeout(15000),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: '2026-08-19', reference: { id: newerDeal, name: 'Venda mais recente' } }] });
+
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'lead_created', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: localRule } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+        { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' }] };
+      const settings = { name: 'Última venda que permanece ganha' };
+      await caller.rpc('create_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_organization_id: orgA, p_definition: definition, p_settings: settings }).throwOnError();
+      const automatic = { organizationId: orgA, leadId: leadA, condition: localRule,
+        authorization: { kind: 'organization' as const, workflowId } };
+      expect(await evaluateGuidedCondition(service, automatic)).toEqual({ status: 'error', code: 'access_denied' });
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId,
+        p_fields: ['business.last_won_date'], p_expected_revision: 0 }).throwOnError();
+      expect(await evaluateGuidedCondition(service, automatic)).toMatchObject({ status: 'evaluated', matched: true,
+        rules: [{ actual: '2026-08-19', reference: { id: newerDeal, name: 'Venda mais recente' } }] });
+      const publication = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+        p_expected_revision: 1, p_definition: definition, p_settings: settings, p_required_fields: ['business.last_won_date'] };
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication,
+        p_required_fields: [] })).error?.code).toBe('42501');
+      const invalidDefinition = { ...definition, nodes: definition.nodes.map(node => node.id === 'c' ? { ...node,
+        data: { guidedCondition: { ...localRule, value: '2026-02-30' } } } : node) };
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_expected_revision: 1, p_definition: invalidDefinition, p_settings: settings }).throwOnError();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication,
+        p_expected_revision: 2, p_definition: invalidDefinition })).error?.code).toBe('22023');
+      await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_expected_revision: 2, p_definition: definition, p_settings: settings }).throwOnError();
+      const finalized = await service.rpc('finalize_guided_workflow_publication', { ...publication, p_expected_revision: 3 });
+      expect(finalized.error).toBeNull();
+      await service.from('workflow_executions').insert({ id: executionId, workflow_id: workflowId, organization_id: orgA,
+        lead_id: leadA, status: 'waiting', next_run_at: '2099-01-01T00:00:00Z' }).throwOnError();
+      expect(await executeWorkflow({ supabase: service, executionId, workflowId, organizationId: orgA, leadId: leadA,
+        guidedVersionId: finalized.data.version_id, definition: { nodes: [], edges: [] }, loopLimit: 20, context: {} }))
+        .toMatchObject({ success: true, status: 'completed' });
+      expect((await service.from('workflow_execution_steps').select('node_id').eq('execution_id', executionId)).data?.map(step => step.node_id)).toContain('yes');
+      await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: [], p_expected_revision: 1 }).throwOnError();
+      expect(await evaluateGuidedCondition(service, automatic)).toEqual({ status: 'error', code: 'access_denied' });
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId).throwOnError();
+      await service.from('organizations').update({ timezone: originalTimezone }).eq('id', orgA).throwOnError();
+      await service.from('pipeline_entries').delete().in('id', [olderEntry, newerEntry]).throwOnError();
+      // Won deals are referenced by the append-only sale ledger. Retire the
+      // disposable rows through the product's canonical soft-delete path.
+      await service.from('deals').update({ deleted_at: new Date().toISOString() }).in('id', [olderDeal, newerDeal]).throwOnError();
+      await service.from('pipeline_stages').delete().eq('id', stageId).throwOnError();
+      await service.from('followup_reclassify_queue').delete().eq('organization_id', orgA).throwOnError();
+      await service.from('pipelines').delete().eq('id', pipelineId).throwOnError();
+    }
+  }, 60000);
+
   it.each(['test_guided_condition_custom_fields', 'test_guided_condition_custom_options'] as const)('%s bounds direct personal requests before reading definitions', async rpc => {
     const fieldId = crypto.randomUUID();
     const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
