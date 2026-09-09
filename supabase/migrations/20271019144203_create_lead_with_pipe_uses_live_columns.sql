@@ -69,6 +69,8 @@ BEGIN
       p_lead_id         => v_lead_id,
       p_stage_key       => COALESCE(p_pipe_status, 'novo'),
       p_assigned_to     => COALESCE(p_pipe_responsible_id, p_sdr_id), -- metric-lint-allow: compatibility assignment from the existing webhook contract.
+      p_pre_sale_responsible_id => p_sdr_id,
+      p_sale_responsible_id     => p_closer_id,
       p_metadata        => jsonb_build_object(
         'responsible_id', p_pipe_responsible_id,
         'sdr_id',         p_sdr_id,
@@ -82,6 +84,8 @@ BEGIN
       p_lead_id         => v_lead_id,
       p_stage_key       => COALESCE(p_pipe_status, 'reuniao_marcada'),
       p_assigned_to     => COALESCE(p_pipe_responsible_id, p_sdr_id, p_closer_id), -- metric-lint-allow: compatibility assignment from the existing webhook contract.
+      p_pre_sale_responsible_id => p_sdr_id,
+      p_sale_responsible_id     => p_closer_id,
       p_metadata        => jsonb_build_object(
         'meeting_date',      COALESCE(p_pipe_meeting_date, p_meeting_date),
         'is_confirmed',      false,

@@ -133,7 +133,13 @@ Deno.serve(withErrorBoundary('webhook-confirmacao', async (req) => {
         orgId: organization_id,
         slug: "whatsapp",
         stageKey: "agendado",
-        metadata: { meeting_date: meeting_date || null, confirmation_status: "pendente", is_confirmed: false },
+        metadata: {
+          meeting_date: meeting_date || null,
+          confirmation_status: "pendente",
+          is_confirmed: false,
+          pre_sale_responsible_id: sdr_id || null,
+          sale_responsible_id: closer_id || null,
+        },
         assignedTo: closer_id || sdr_id || null,
       });
     }
