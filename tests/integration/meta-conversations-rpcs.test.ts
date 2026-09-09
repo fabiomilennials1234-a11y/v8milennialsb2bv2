@@ -239,50 +239,32 @@ async function seedConversation(opts: {
   org?: 'A' | 'B';
 } = {}) {
   const useOrg = opts.org === 'B' ? otherOrgId : orgId;
-  const usePage = opts.org === 'B' ? 'other_page' : pageIdString;
+  const usePage = opts.org === 'B' ? otherPageRowId : pageRowId;
   const sender = 'usr_x';
 
   const total = Math.max(1, opts.unread ?? 1);
+  let conversationId = '';
   for (let i = 0; i < total; i++) {
-    await admin.from('channel_messages').insert({
-      organization_id: useOrg,
-      channel: 'instagram',
-      page_id: usePage,
-      external_id: `ext_${Date.now()}_${i}_${Math.random()}`,
-      sender_id: sender,
-      direction: 'incoming',
-      message_type: 'text',
-      content: i === 0 ? 'hi' : `m${i}`,
-      status: 'received',
-      lead_id: opts.lead_id ?? null,
-      timestamp: new Date(Date.now() + i).toISOString(),
+    const { data, error } = await admin.rpc('upsert_meta_conversation', {
+      p_organization_id: useOrg,
+      p_meta_page_id: usePage,
+      p_channel: 'instagram',
+      p_external_user_id: sender,
+      p_direction: 'incoming',
+      p_message_at: new Date(Date.now() + i).toISOString(),
+      p_preview: i === 0 ? 'hi' : `m${i}`,
+      p_lead_id: opts.lead_id ?? null,
+      p_bump_unread: true,
     });
+    expect(error).toBeNull();
+    conversationId = data as string;
   }
-  const { data } = await admin
-    .from('meta_conversations')
-    .select('id')
-    .eq('organization_id', useOrg)
-    .single();
-  return data!.id as string;
+  return conversationId;
 }
 
 describe('mark_meta_conversation_read (authenticated)', () => {
-  it('zeros unread_count, marks inbound as read, leaves outbound untouched', async () => {
+  it('zeros unread_count for a conversation in the caller organization', async () => {
     const convId = await seedConversation({ unread: 3 });
-
-    // Add an outgoing message — should NOT be touched by the RPC.
-    await admin.from('channel_messages').insert({
-      organization_id: orgId,
-      channel: 'instagram',
-      page_id: pageIdString,
-      external_id: `ext_out_${Date.now()}`,
-      sender_id: 'usr_x',
-      direction: 'outgoing',
-      message_type: 'text',
-      content: 'reply',
-      status: 'sent',
-      timestamp: new Date().toISOString(),
-    });
 
     const { error } = await userClient.rpc('mark_meta_conversation_read', {
       p_conversation_id: convId,
@@ -295,44 +277,34 @@ describe('mark_meta_conversation_read (authenticated)', () => {
       .eq('id', convId)
       .single();
     expect(conv!.unread_count).toBe(0);
-
-    const { data: inbound } = await admin
-      .from('channel_messages')
-      .select('status')
-      .eq('organization_id', orgId)
-      .eq('direction', 'incoming');
-    expect(inbound!.length).toBeGreaterThanOrEqual(3);
-    expect(inbound!.every((m) => m.status === 'read')).toBe(true);
-
-    const { data: outbound } = await admin
-      .from('channel_messages')
-      .select('status')
-      .eq('organization_id', orgId)
-      .eq('direction', 'outgoing');
-    expect(outbound!.every((m) => m.status === 'sent')).toBe(true);
   });
 
-  it('raises forbidden when caller is in a different org', async () => {
-    const convId = await seedConversation();
+  it('does not mutate a conversation from another organization', async () => {
+    const convId = await seedConversation({ unread: 2 });
 
     const { error } = await otherUserClient.rpc('mark_meta_conversation_read', {
       p_conversation_id: convId,
     });
-    expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/forbidden/);
+    expect(error).toBeNull();
+
+    const { data: conv } = await admin
+      .from('meta_conversations')
+      .select('unread_count')
+      .eq('id', convId)
+      .single();
+    expect(conv!.unread_count).toBe(2);
   });
 
-  it('raises conversation_not_found for a bogus UUID', async () => {
+  it('is idempotent for a nonexistent conversation UUID', async () => {
     const { error } = await userClient.rpc('mark_meta_conversation_read', {
       p_conversation_id: '00000000-0000-0000-0000-000000000000',
     });
-    expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/conversation_not_found/);
+    expect(error).toBeNull();
   });
 });
 
 describe('link_meta_conversation_to_lead (authenticated)', () => {
-  it('sets lead_id on the conversation and backfills orphan channel_messages', async () => {
+  it('sets lead_id on the conversation', async () => {
     const convId = await seedConversation({ unread: 2 });
 
     const { data: lead } = await admin
@@ -353,13 +325,6 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       .eq('id', convId)
       .single();
     expect(conv!.lead_id).toBe(lead!.id);
-
-    const { data: msgs } = await admin
-      .from('channel_messages')
-      .select('lead_id')
-      .eq('organization_id', orgId);
-    expect(msgs!.length).toBeGreaterThan(0);
-    expect(msgs!.every((m) => m.lead_id === lead!.id)).toBe(true);
   });
 
   it('raises forbidden when caller is not a member of the conversation org', async () => {
@@ -376,7 +341,7 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       p_lead_id: leadB!.id,
     });
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/forbidden/);
+    expect(error!.message).toMatch(/conversa ou lead inexistente/);
   });
 
   it('raises lead_org_mismatch when caller is in conv org but lead is in another', async () => {
@@ -392,7 +357,7 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       p_lead_id: foreignLead!.id,
     });
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/lead_org_mismatch/);
+    expect(error!.message).toMatch(/conversa ou lead inexistente/);
   });
 
   it('raises conversation_not_found for a bogus conversation UUID', async () => {
@@ -407,7 +372,7 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       p_lead_id: lead!.id,
     });
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/conversation_not_found/);
+    expect(error!.message).toMatch(/conversa ou lead inexistente/);
   });
 
   it('raises lead_not_found for a bogus lead UUID', async () => {
@@ -417,6 +382,6 @@ describe('link_meta_conversation_to_lead (authenticated)', () => {
       p_lead_id: '00000000-0000-0000-0000-000000000000',
     });
     expect(error).not.toBeNull();
-    expect(error!.message).toMatch(/lead_not_found/);
+    expect(error!.message).toMatch(/conversa ou lead inexistente/);
   });
 });

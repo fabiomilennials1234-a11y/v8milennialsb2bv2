@@ -76,34 +76,34 @@ afterAll(async () => {
   if (orgId) await deleteFixtureOrganization(supabase, orgId);
 });
 
-async function insertMsg(opts: Partial<{
+async function upsertConversation(opts: Partial<{
   direction: string;
   channel: string;
   content: string | null;
-  message_type: string;
   sender_id: string;
   lead_id: string | null;
   timestamp: string;
+  organization_id: string;
+  meta_page_id: string;
 }>) {
   const ts = opts.timestamp ?? new Date().toISOString();
-  return supabase.from('channel_messages').insert({
-    organization_id: orgId,
-    channel: opts.channel ?? 'instagram',
-    page_id: pageIdString,
-    external_id: `ext_${Math.random()}`,
-    sender_id: opts.sender_id ?? 'user_abc',
-    direction: opts.direction ?? 'incoming',
-    message_type: opts.message_type ?? 'text',
-    content: opts.content === undefined ? 'hello' : opts.content,
-    status: opts.direction === 'outgoing' ? 'sent' : 'received',
-    lead_id: opts.lead_id ?? null,
-    timestamp: ts,
+  return supabase.rpc('upsert_meta_conversation', {
+    p_organization_id: opts.organization_id ?? orgId,
+    p_meta_page_id: opts.meta_page_id ?? pageRowId,
+    p_channel: opts.channel ?? 'instagram',
+    p_external_user_id: opts.sender_id ?? 'user_abc',
+    p_direction: opts.direction ?? 'incoming',
+    p_message_at: ts,
+    p_preview: opts.content === undefined ? 'hello' : opts.content,
+    p_lead_id: opts.lead_id ?? null,
+    p_bump_unread: opts.direction !== 'outgoing',
   });
 }
 
-describe('meta_conversations trigger', () => {
+describe('upsert_meta_conversation RPC', () => {
   it('creates a conversation on first inbound message', async () => {
-    await insertMsg({ direction: 'incoming', content: 'hi' });
+    const { error } = await upsertConversation({ direction: 'incoming', content: 'hi' });
+    expect(error).toBeNull();
 
     const { data } = await supabase
       .from('meta_conversations')
@@ -113,7 +113,6 @@ describe('meta_conversations trigger', () => {
     expect(data).toHaveLength(1);
     expect(data![0].unread_count).toBe(1);
     expect(data![0].last_message_preview).toBe('hi');
-    expect(data![0].last_message_direction).toBe('incoming');
     expect(data![0].last_inbound_at).not.toBeNull();
     expect(data![0].external_user_id).toBe('user_abc');
     expect(data![0].channel).toBe('instagram');
@@ -121,8 +120,8 @@ describe('meta_conversations trigger', () => {
   });
 
   it('increments unread on second inbound', async () => {
-    await insertMsg({ direction: 'incoming', content: 'one' });
-    await insertMsg({ direction: 'incoming', content: 'two' });
+    expect((await upsertConversation({ direction: 'incoming', content: 'one' })).error).toBeNull();
+    expect((await upsertConversation({ direction: 'incoming', content: 'two' })).error).toBeNull();
 
     const { data } = await supabase
       .from('meta_conversations')
@@ -135,23 +134,24 @@ describe('meta_conversations trigger', () => {
   });
 
   it('does not increment unread on outgoing', async () => {
-    await insertMsg({ direction: 'incoming', content: 'in' });
-    await insertMsg({ direction: 'outgoing', content: 'out' });
+    expect((await upsertConversation({ direction: 'incoming', content: 'in' })).error).toBeNull();
+    expect((await upsertConversation({ direction: 'outgoing', content: 'out' })).error).toBeNull();
 
     const { data } = await supabase
       .from('meta_conversations')
-      .select('unread_count, last_message_direction, last_inbound_at')
+      .select('unread_count, last_message_preview, last_inbound_at')
       .eq('organization_id', orgId)
       .single();
 
     expect(data!.unread_count).toBe(1);
-    expect(data!.last_message_direction).toBe('outgoing');
+    expect(data!.last_message_preview).toBe('out');
     // last_inbound_at must remain set
     expect(data!.last_inbound_at).not.toBeNull();
   });
 
-  it('uses [type] preview when content is null (media)', async () => {
-    await insertMsg({ direction: 'incoming', content: null, message_type: 'image' });
+  it('accepts the media preview supplied by the webhook', async () => {
+    const { error } = await upsertConversation({ direction: 'incoming', content: '[image]' });
+    expect(error).toBeNull();
 
     const { data } = await supabase
       .from('meta_conversations')
@@ -169,8 +169,8 @@ describe('meta_conversations trigger', () => {
       .select('id')
       .single();
 
-    await insertMsg({ direction: 'incoming', lead_id: lead!.id });
-    await insertMsg({ direction: 'incoming', lead_id: null });
+    expect((await upsertConversation({ direction: 'incoming', lead_id: lead!.id })).error).toBeNull();
+    expect((await upsertConversation({ direction: 'incoming', lead_id: null })).error).toBeNull();
 
     const { data } = await supabase
       .from('meta_conversations')
@@ -181,19 +181,12 @@ describe('meta_conversations trigger', () => {
     expect(data!.lead_id).toBe(lead!.id);
   });
 
-  it('skips when page is unknown', async () => {
-    await supabase.from('channel_messages').insert({
-      organization_id: orgId,
-      channel: 'instagram',
-      page_id: 'UNKNOWN_PAGE',
-      external_id: 'ext_x',
+  it('rejects an unknown page', async () => {
+    const { error } = await upsertConversation({
+      meta_page_id: '00000000-0000-0000-0000-000000000000',
       sender_id: 'user_y',
-      direction: 'incoming',
-      message_type: 'text',
-      content: 'orphan',
-      status: 'received',
-      timestamp: new Date().toISOString(),
     });
+    expect(error).not.toBeNull();
 
     const { data } = await supabase
       .from('meta_conversations')
@@ -204,7 +197,8 @@ describe('meta_conversations trigger', () => {
   });
 
   it('skips non-meta channels', async () => {
-    await insertMsg({ channel: 'whatsapp', direction: 'incoming' });
+    const { error } = await upsertConversation({ channel: 'whatsapp', direction: 'incoming' });
+    expect(error).not.toBeNull();
 
     const { data } = await supabase
       .from('meta_conversations')
@@ -257,21 +251,17 @@ describe('meta_conversations trigger', () => {
 
     try {
       // Inbound for org A (uses the suite-default page + sender 'user_abc').
-      await insertMsg({ direction: 'incoming', content: 'orgA msg' });
+      expect((await upsertConversation({ direction: 'incoming', content: 'orgA msg' })).error).toBeNull();
 
       // Inbound for org B with the same sender_id but different org + page.
-      await supabase.from('channel_messages').insert({
+      const resultB = await upsertConversation({
         organization_id: orgB!.id,
-        channel: 'instagram',
-        page_id: 'iso_page_B',
-        external_id: `extB_${Date.now()}`,
+        meta_page_id: pageB!.id,
         sender_id: 'user_abc',
         direction: 'incoming',
-        message_type: 'text',
         content: 'orgB msg',
-        status: 'received',
-        timestamp: new Date().toISOString(),
       });
+      expect(resultB.error).toBeNull();
 
       const { data: convsA } = await supabase
         .from('meta_conversations')
