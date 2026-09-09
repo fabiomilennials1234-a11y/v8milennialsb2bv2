@@ -38,3 +38,12 @@ Run `34362959348`: Lint & Build, Edge Functions, CodeQL, vault e secret scan apr
 Integração: 474 passaram, 34 falharam e 102 foram pulados. Comparação com job `102456019954` do PR #2040 (run `34348032335`, já incorporado à main): conjunto de 42 entradas FAIL (inclui hooks de setup/teardown) é idêntico; nenhum nome novo de falha. Totais também idênticos: 18 arquivos falhando, 28 passando e 7 pulados. Há contratos antigos pipe_*, fixtures sem slug/seats, expectativas antigas de master e isolamento, além de efeito entre fixtures. Não alteramos permissões nem suprimimos esses testes para liberar o Oráculo.
 
 Build local passou; frontend Oráculo 10/10, HTTP Oráculo 19/19, etapas/fixtures 22/22. Deno local com --frozen expôs alias @2 divergente do lock da main; teste normal com lock temporário externo passou 19/19 no SDK atual, sem alteração de dependências no repo. Unitários gerais e E2E ainda em execução ao registrar; E2E do PR #2040 também falhou e levou 50m46s. PR permanece rascunho e produção intacta.
+
+
+### Correção das suítes de integração — 2026-09-09
+
+Testes WhatsApp/Confirmação/Propostas passaram a exercitar pipeline_entries/stage_key, preparando explicitamente etapas de fixture ausentes. Testes de múltiplos negócios agora afirmam dois IDs distintos para o mesmo lead, em vez de aceitar silenciosamente duplicata. Cleanup verifica erros. Testes RLS consultam sem filtro organizacional e verificam presença dos negócios do seed e organização de todas as linhas visíveis. Fixture de claims provisiona sua terceira organização e limpa workflows mesmo quando assertions falham. ESLint e revisões estáticas passaram; resultado real da rodada atual ainda pendente.
+
+Integração roda em paralelo a quality, como RLS já rodava; todos permanecem gates independentes. Não foram pulados testes nem alteradas permissões do produto.
+
+Main af8d7dc7 adicionou migration de nomes WhatsApp com versão 20271019000000 durante a rodada. Incorporada main e renumeradas migrations Oráculo para **20271019144200** e **20271019144201**. Conteúdos comparados byte a byte: idênticos. Versões anteriores existiram apenas em QA destruído e CI descartável; nenhuma aplicada em produção. Guarda de versões passou sem colisões.
