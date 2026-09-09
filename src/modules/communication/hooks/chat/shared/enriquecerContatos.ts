@@ -1,3 +1,4 @@
+import { enrichSavedContactNames } from "./savedContactNames";
 /**
  * `enriquecerContatos` — nome do lead e etiquetas por cima das linhas que a RPC
  * de lista devolveu.
@@ -60,6 +61,7 @@ export interface OpcoesDeEnriquecimento {
    * fetch de etiquetas sobe em vez de virar lista vazia.
    */
   tagsCriticas: boolean;
+  organizationId?: string;
 }
 
 /**
@@ -71,9 +73,10 @@ export interface OpcoesDeEnriquecimento {
  */
 export async function enriquecerContatos(
   contatos: ChatContact[],
-  { tagsCriticas }: OpcoesDeEnriquecimento,
+  { tagsCriticas, organizationId }: OpcoesDeEnriquecimento,
 ): Promise<ChatContact[]> {
   if (contatos.length === 0) return contatos;
+  if (organizationId) await enrichSavedContactNames(contatos, organizationId);
 
   // Falha de enriquecimento NÃO derruba a lista. Mas degradar em SILÊNCIO foi o
   // que escondeu o incidente — agora deixa rastro no console.

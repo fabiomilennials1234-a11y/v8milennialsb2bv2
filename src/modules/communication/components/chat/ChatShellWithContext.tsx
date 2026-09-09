@@ -290,6 +290,7 @@ function ChatView({
     {
       pushName: selectedContact?.push_name ?? null,
       nomeDoLead: effectiveLeadName,
+      savedContactName: selectedContact?.saved_contact_name,
       telefone: phoneNumber ?? null,
     },
     { nomeDoWhatsappPrimeiro },

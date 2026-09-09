@@ -180,3 +180,13 @@ individual e retomada consultam o chat pelo JID. Nome vazio recua ao perfil apen
 para mensagens recebidas. Falha de consulta de contato não bloqueia mensagens.
 Não altera leads.name nem regrava mensagens existentes (ignoreDuplicates).
 Webhooks ao vivo continuam com sua resolução de nomes atual.
+
+### Nome salvo na lista e no cabeçalho — 2026-09-09
+
+Lista e cabeçalho WhatsApp priorizam saved_contact_name, lido por organização,
+instância e telefone no resumo. O nome do CRM, templates e painel lateral
+mantêm suas regras. A coluna é independente de last_push_name: mensagens ao
+vivo com nome de perfil não sobrescrevem a agenda. O trigger captura
+raw_payload.wa_contactName em novas importações, após criar o resumo.
+Sem nome de agenda disponível, preservam-se as quedas anteriores.
+Enriquecimento atende lista individual, unificada e caminho legado.
