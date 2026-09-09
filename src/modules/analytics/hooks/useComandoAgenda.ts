@@ -144,6 +144,8 @@ export function useComandoAgenda(
       inicio.toISOString(),
       fim.toISOString(),
       escopo,
+      meuTeamMemberId,
+      meuUserId,
     ],
     queryFn: () =>
       buscar(
@@ -177,7 +179,7 @@ export function useComandoAgenda(
         e.creator_name ??
         null,
     })),
-    isLoading: query.isLoading,
+    isLoading: !orgReady || !isReady || query.isLoading,
     isError: query.isError,
     isDegraded: query.data?.degraded === true,
     isAdmin,

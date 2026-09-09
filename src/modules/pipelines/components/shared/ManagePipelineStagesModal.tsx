@@ -41,7 +41,7 @@ import {
   type TransitionTarget,
 } from "@/modules/pipelines/components/shared/TransitionSelector";
 import { classifyStageRole } from "@/modules/pipelines/lib/stage-role-classifier";
-import { STAGE_ROLES, STAGE_ROLE_META } from "@/modules/pipelines/lib/stage-role";
+import { STAGE_ROLES_ATRIBUIVEIS, STAGE_ROLE_META, papelAtribuivel } from "@/modules/pipelines/lib/stage-role";
 import type { StageRole } from "@/contracts/pipe";
 import {
   Plus,
@@ -139,9 +139,8 @@ const STAGE_COLORS = [
 /**
  * Dropdown do papel semântico da etapa (stage_role, ADR-0017 §1).
  *
- * won/lost selecionáveis manualmente — escolha explícita do admin conta como
- * confirmação humana. A sugestão do classifier (#991) só PRÉ-PREENCHE; quem
- * decide é sempre quem salva.
+ * Ganho/perda são desfechos do negócio, não opções de etapa.
+ * Valores históricos permanecem legíveis sem poder ser atribuídos de novo.
  */
 function StageRoleSelect({
   value,
@@ -172,7 +171,12 @@ function StageRoleSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {STAGE_ROLES.map((role) => (
+          {!STAGE_ROLES_ATRIBUIVEIS.includes(value) && (
+            <SelectItem value={value} disabled>
+              {STAGE_ROLE_META[value].label} — legado; definido pelo negócio
+            </SelectItem>
+          )}
+          {STAGE_ROLES_ATRIBUIVEIS.map((role) => (
             <SelectItem key={role} value={role}>
               <div className="flex items-center gap-2.5 py-0.5">
                 <span
@@ -578,7 +582,7 @@ export function ManagePipelineStagesContent({
   });
   const newStageRole: StageRole = newStageRoleTouched
     ? newStageRoleManual
-    : newStageRoleSuggestion?.role ?? "open";
+    : papelAtribuivel(newStageRoleSuggestion?.role);
 
   // Etapa marcada para remoção + quantos cards ela ainda tem.
   const stageToDelete = localStages.find((s) => s.id === deleteStageId) ?? null;

@@ -44,11 +44,16 @@ import {
   CampeoesProdutoCard,
   RankingVendedoresCard,
 } from "@/modules/analytics/components/metrics-studio/fixed-card-adapters";
+import {
+  MetaMensalCard, IndicadoresCard, ReceitaAcumuladaCard, FunilCard, BriefingCard, OperacaoCard,
+  AtividadeEquipeCard, JornadaCard, MetasEquipeCard, MetasIndividuaisCard, PerdasCard, RealEsperadoCard, SaudeCard, MapaCard,
+} from "@/modules/analytics/components/metrics-studio/dashboard-card-adapters";
 
 export type { FixedCardContext, FixedCardEntry };
 
 export const FIXED_CARDS: Record<string, FixedCardEntry> = {
   "ranking-vendedores": {
+    requiresPerformance: true,
     label: "Pódio de vendedores",
     descricao: "Ranking do time no período",
     tamanhoPadrao: { w: 480, h: 360 },
@@ -60,6 +65,20 @@ export const FIXED_CARDS: Record<string, FixedCardEntry> = {
     tamanhoPadrao: { w: 480, h: 320 },
     render: CampeoesProdutoCard,
   },
+  "meta-mensal": { label: "Meta do mês", descricao: "Meta e realizado do mês corrente", tamanhoPadrao: { w: 320, h: 488 }, render: MetaMensalCard },
+  "indicadores-operacao": { label: "Indicadores da operação", descricao: "Período selecionado; follow-ups atrasados agora", tamanhoPadrao: { w: 984, h: 280 }, render: IndicadoresCard },
+  "receita-acumulada": { label: "Receita acumulada", descricao: "Comparação com o período anterior", tamanhoPadrao: { w: 648, h: 488 }, render: ReceitaAcumuladaCard },
+  "funil-conversao": { label: "Funil de conversão", descricao: "Da entrada do lead à venda no período", tamanhoPadrao: { w: 320, h: 400 }, render: FunilCard },
+  "briefing-oraculo": { label: "Oráculo", descricao: "Leitura da operação e conversa com a IA", tamanhoPadrao: { w: 320, h: 400 }, render: BriefingCard },
+  "operacao-ao-vivo": { label: "Operação ao vivo", descricao: "Atividades recentes, independentemente do período", tamanhoPadrao: { w: 312, h: 400 }, render: OperacaoCard },
+  "atividade-equipe": { label: "Atividade da equipe", descricao: "Atividade no período selecionado", tamanhoPadrao: { w: 640, h: 400 }, render: AtividadeEquipeCard, requiresPerformance: true },
+  "jornada-lead": { label: "Jornada do lead", descricao: "Caminho dos leads no período", tamanhoPadrao: { w: 328, h: 400 }, render: JornadaCard },
+  "metas-equipe": { label: "Metas da equipe", descricao: "Meta e realizado do mês corrente", tamanhoPadrao: { w: 640, h: 400 }, render: MetasEquipeCard, requiresPerformance: true },
+  "metas-individuais": { label: "Metas individuais", descricao: "Metas por pessoa no mês corrente", tamanhoPadrao: { w: 328, h: 400 }, render: MetasIndividuaisCard, requiresPerformance: true },
+  "motivos-perda": { label: "Ganhos e perdas", descricao: "Desfechos dos negócios no período", tamanhoPadrao: { w: 328, h: 400 }, render: PerdasCard },
+  "real-esperado": { label: "Realizado versus esperado", descricao: "Evolução em relação à meta do mês corrente", tamanhoPadrao: { w: 640, h: 400 }, render: RealEsperadoCard, requiresPerformance: true },
+  "saude-funil": { label: "Saúde do funil", descricao: "Coortes, gargalos e conversões no período", tamanhoPadrao: { w: 984, h: 980 }, render: SaudeCard },
+  "mapa-clientes": { label: "Mapa de clientes", descricao: "Distribuição geográfica da base completa — sem filtro de período", tamanhoPadrao: { w: 984, h: 720 }, render: MapaCard },
 };
 
 export type FixedCardId = keyof typeof FIXED_CARDS;

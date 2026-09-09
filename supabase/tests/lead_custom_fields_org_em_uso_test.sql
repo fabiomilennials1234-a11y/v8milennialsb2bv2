@@ -31,7 +31,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(16);
+SELECT plan(17);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -282,8 +282,22 @@ SET LOCAL role authenticated;
 SELECT is(
   (SELECT count(*)::int FROM public.lead_custom_field_values
     WHERE lead_id = '9a9a0910-1ead-0000-0000-00000000000c'),
+  0,
+  '(f) a policy antiga com subquery continua sujeita à RLS de leads');
+
+-- A real negative control must bypass that subquery; otherwise it cannot
+-- expose a hidden lead and falsely claims to reproduce a leak. Fixture only.
+SET LOCAL role postgres;
+ALTER POLICY lead_custom_field_values_select_organization ON public.lead_custom_field_values
+  USING (lead_id = '9a9a0910-1ead-0000-0000-00000000000c'::uuid
+    AND '9a9a0910-cccc-0000-0000-000000000910'::uuid IN
+      (SELECT public.get_my_organization_ids()));
+SET LOCAL role authenticated;
+SELECT is(
+  (SELECT count(*)::int FROM public.lead_custom_field_values
+    WHERE lead_id = '9a9a0910-1ead-0000-0000-00000000000c'),
   1,
-  '(f) PLANTED: a policy larga vazava a resposta para quem não vê o lead');
+  '(f) PLANTED: liberar a resposta sem consultar leads realmente vaza o valor');
 
 SET LOCAL role postgres;
 DROP POLICY lead_custom_field_values_select_organization ON public.lead_custom_field_values;

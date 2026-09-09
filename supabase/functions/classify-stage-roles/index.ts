@@ -11,12 +11,11 @@ import { withErrorBoundary } from "../_shared/error-boundary.ts";
  *      is_final_positive/negative como sinal fraco (fallback). Nomes óbvios
  *      ("Fechado", "Recomprou", "Reunião marcada") resolvem aqui, sem IA.
  *   2. IA (opcional, resíduo) — LLM classifica os nomes não-óbvios num dos
- *      5 roles, temperature 0, mesma mecânica do classify-followup-stages.
+ *      papéis de reunião, temperature 0, mesma mecânica do classify-followup-stages.
  *
- * Aplicação (ADR-0017 §1 — won/lost = dinheiro = confirmação humana):
+ * Aplicação: resultado financeiro pertence ao negócio, nunca à etapa.
  *   · meeting_booked / meeting_held → AUTO-APLICA (update stage_role direto)
- *   · won / lost → grava `suggested_stage_role` (fila da tela master
- *     /master/stage-roles). NUNCA aplica.
+ *   · won / lost → ignorados inclusive no determinístico; não entram na fila.
  *
  * Backfill das ~30 orgs: body {"all_orgs": true} — uma passada. On-demand:
  * {"organization_id": "..."}. {"dry_run": true} devolve o plano sem escrever;
@@ -31,7 +30,7 @@ import { withSecurityHeaders } from "../_shared/security-headers.ts";
 import { timingSafeCompare } from "../_shared/auth.ts";
 import { OpenRouterClient } from "../agent-message/openrouter-client.ts";
 import {
-  planStageRoleSuggestions,
+  planAssignableStageRoles,
   type StagePlanItem,
   type StageToClassify,
   type SuggestableStageRole,
@@ -49,8 +48,6 @@ const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? "";
 const SUGGESTABLE_ROLES: SuggestableStageRole[] = [
   "meeting_booked",
   "meeting_held",
-  "won",
-  "lost",
 ];
 
 interface StageRow {
@@ -78,11 +75,9 @@ function buildPrompt(stages: StageRow[]): string {
   return [
     "Você classifica etapas de funil de vendas B2B (CRM, pt-BR) em papéis semânticos para métricas.",
     "Para CADA etapa, escolha UM papel pelo NOME:",
-    "- won: venda fechada/ganha (terminal positivo, gera receita)",
-    "- lost: oportunidade perdida/desistiu/sem interesse (terminal negativo)",
     "- meeting_booked: reunião/call/visita marcada ou aguardando confirmação",
     "- meeting_held: reunião/call/visita realizada, lead compareceu",
-    "- open: qualquer outra coisa (etapa intermediária, nutrição, negociação em curso)",
+    "- open: qualquer outra coisa, inclusive venda ganha ou perdida; o desfecho pertence ao negócio, não à etapa",
     "As flags [final positivo/negativo] são sinal fraco — o NOME decide. Na dúvida, use open.",
     "",
     "Etapas:",
@@ -189,10 +184,13 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
   if (stageRes.error) return json({ error: stageRes.error.message }, 500);
 
   type CanonicalStageRow = Omit<StageRow, "source_table"> & {
-    pipeline: { type: string } | null;
+    pipeline: { type: string } | { type: string }[] | null;
   };
   const stageRows: StageRow[] = ((stageRes.data ?? []) as CanonicalStageRow[]).map((row) => {
-    const custom = row.pipeline?.type === "custom";
+    // PostgREST usa objeto para many-to-one; cliente sem schema pode inferir
+    // array. Normalizamos ambas as formas, sem cast que esconda o contrato.
+    const pipeline = Array.isArray(row.pipeline) ? row.pipeline[0] : row.pipeline;
+    const custom = pipeline?.type === "custom";
     const { pipeline: _pipeline, ...stage } = row;
     return {
       ...stage,
@@ -231,7 +229,7 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
     }));
 
     // Passada 1 — determinística (nome + flag).
-    let plan = planStageRoleSuggestions(stages);
+    let plan = planAssignableStageRoles(stages);
 
     // Passada 2 — IA só pro resíduo não-óbvio.
     if (plan.unresolved.length > 0 && openRouter) {
@@ -248,7 +246,7 @@ Deno.serve(withErrorBoundary("classify-stage-roles", async (req) => {
           raw,
           new Set(residueRows.map((r) => r.id)),
         );
-        plan = planStageRoleSuggestions(stages, aiClassification);
+        plan = planAssignableStageRoles(stages, aiClassification);
       } catch (err) {
         // IA indisponível não bloqueia a passada determinística.
         console.error(`classify-stage-roles: AI pass failed for org ${orgId}:`, err);

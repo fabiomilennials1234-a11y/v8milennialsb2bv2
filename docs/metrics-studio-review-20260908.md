@@ -1,0 +1,162 @@
+# Revisão do PR #2040 — 2026-09-08
+
+## Parecer: merge e produção bloqueados
+
+Autorização do CTO para revisar, testar e mergear recebida nesta sessão.
+Nenhuma escrita em produção, deploy ou merge foi realizado nesta revisão.
+
+## Correções revisadas e verificadas
+
+- Releitura atrasada podia substituir o layout local: regressão reproduzida
+  antes da correção e aprovada depois, com cancelamento de leitura e proteção
+  do rascunho durante debounce, escrita e retry.
+- IDs de cards podiam se repetir após excluir e reabrir o painel: regressão
+  reproduzida e corrigida sem alterar IDs existentes.
+- Menu de abas disponível a administradores fora do modo de edição;
+  exclusão exige confirmação. Card de métrica indisponível permanece visível.
+- 282 testes focados passaram antes da última correção de IDs; os 15 testes
+  dos hooks passaram novamente após essa correção. Seis testes do preparador
+  de fixtures CI passaram. Não equivale a aprovação da suíte completa.
+- CI do commit a24582ab: lint/build/tipos e testes Deno aprovados.
+
+## Bloqueios reproduzidos
+
+Execução: https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/actions/runs/34263706492
+
+1. RLS, integração e E2E não chegam aos testes: o bootstrap para em
+   `20271008000000_leitores_saem_dos_espelhos.sql`, preflight da função
+   `get_analytics_utm_metrics(uuid,date,date,uuid,text,text,text,text)`.
+   Hash esperado `d428c3fd36eed8f61f53c40348921f6b`, encontrado
+   `7d90c3bb0605f2ac3eaeb98d7eb58345`.
+   A migration anterior `20270925000000_aposenta_calor_e_rating.sql` altera
+   essa função e remove rating. Consulta READ ONLY do ledger de produção
+   confirma que essa retirada NÃO foi aplicada, enquanto as migrations
+   `20271008000000` e `20271015000000` já foram. `leads.rating` ainda existe
+   em produção e as funções UTM/próximas ações ainda o referenciam.
+   Reconciliar essa cadeia exige revisão própria; não editar migrations
+   aplicadas, desativar hashes nem restaurar corpos incompatíveis para obter
+   CI verde. Nunca aplicar todo o backlog via db push.
+2. A suíte unitária completa confirma seis falhas em
+   `tests/unit/recriar-etapa-excluida.test.ts`, ramo custom. Reprodução local:
+   `supabase.rpc is not a function` em `custom-pipeline-rpc.ts:26`.
+   O mock de escrita direta não acompanha a chamada RPC atual. Não foram
+   desativados testes nem relaxado o baseline.
+
+O primeiro bloqueio de bootstrap (backup histórico exigia linhas em banco
+vazio) foi resolvido com dados exclusivamente sintéticos no checkout do CI.
+A execução acima passou por esse ponto sem modificar a migration original.
+
+## Preservação de dados: preparado, ainda não validado em banco
+
+O workflow contém ensaio com organizações sintéticas, backup privado,
+semeadura repetida para testar idempotência, restauração exata de um painel
+e testes positivos/negativos de permissões. O bootstrap bloqueado impede sua
+execução. Os scripts de backup e seed não estão liberados para produção até
+esse ensaio passar. Procedimento: `docs/metrics-studio-rollout.md`.
+
+O incidente específico de desaparecimento em produção ainda não teve sua
+causa comprovada; faltam organização, horário e evidência de rede. As duas
+regressões corrigidas são causas possíveis reproduzidas no código, não prova
+de que explicam todos os relatos de produção.
+
+Nenhuma nova branch Supabase foi criada. A branch de outra tarefa,
+`codex-condicional-20260907`, continua vinculada ao PR aberto #2038 e não foi
+excluída sem comprovação de desuso.
+
+## Continuação autorizada pelo CTO
+
+- A proposta de rating foi movida integralmente (rename 100%) para
+  `supabase/proposals/`, com plano de retomada documentado. Isto reconcilia
+  o bootstrap com a ausência comprovada desse apply em produção; não simula
+  sua aplicação no ledger nem muda os leitores já aplicados. O ensaio antigo
+  aponta para o novo local e continua pendente de revalidação.
+- Mock de `recriar-etapa-excluida` atualizado para a RPC efetivamente usada,
+  mantendo estado e verificação de unicidade. Os 14 testes passaram.
+- Nova rodada local: 287 testes aprovados em 31 arquivos, incluindo analytics,
+  etapas e proteção do limite entre propostas e migrations.
+- Rollback DDL de templates agora preserva TODAS as abas, inclusive templates
+  intocados; ensaio executável de rollback/reapply adicionado ao CI.
+- CI e rollout ainda aguardam validação; esta seção não libera o merge.
+
+## Resultado do ensaio SQL — commit 9841adf0
+
+Execução: https://github.com/fabiomilennials1234-a11y/v8milennialsb2bv2/actions/runs/34266909890
+Job RLS: `102198448642`. Em 2026-09-08 19:07:27 UTC passaram:
+
+- Cadeia completa de migrations e seed de testes. O seed usa a RPC canônica
+  de entrada e cria etapas reais; `ON CONFLICT` escolhe a chave não diferível.
+- Backup privado, restauração exata do painel sintético e rollback/reapply
+  executados. Todas as linhas anteriores preservadas pelo seed.
+- ACL das funções privadas; RLS member/admin/master; isolamento cross-org;
+  exclusão sem recriação e templates de organização nova.
+
+Depois, a suíte geral pgTAP executou 97 arquivos / 1959 asserções e falhou.
+Os arquivos abaixo não foram alterados neste PR (diff contra origin/main
+vazio para `supabase/tests/`). Não se presume que todas as falhas sejam apenas
+fixtures: devem ser diagnosticadas antes de alterar contratos ou proteções.
+
+Principais grupos encontrados:
+
+- `stage_role_test`, `stage_role_money_guard`, `get_funnel_flow`: contrato
+  legado de ganho/perda por etapa e função `system_stage_role` demolida.
+- `custom_pipeline_stages_stage_role`, `funnel_stream_by_customer_moment`,
+  `metric_conversao_etapas`, `metric_coorte_canonica`: fixtures usam views
+  removidas (`custom_pipelines`/`custom_pipeline_stages`).
+- `export_lead_data_authz`: erro de resolução de `leads`; investigar contrato
+  e search_path, sem afrouxar autorização.
+- `auto_seed_card_morto`, `tv_s2_stage_label_scope`: conflito com constraint
+  diferível nas fixtures.
+- `metric_negocio_semantica`, `metric_custom_tree`: divergências de leitura
+  por etapa e contagem de policies.
+- `disparo_resolvers_org_scope`: RPC removida e expectativas antigas de
+  isolamento/master. `lead_custom_fields_org_em_uso` e
+  `org_plural_em_todas_as_policies`: controles negativos plantados não se
+  comportam como esperado.
+- Várias suítes emitem TAP sem plano final; `voip_can_see_call_dono_canonico`
+  declara 11 asserções, mas executa 12.
+
+Isso expõe um trabalho de atualização/diagnóstico das suítes legadas além
+do bootstrap e dos seis mocks originalmente autorizados. Nenhum teste foi
+ignorado, baseline ampliado, proteção afrouxada ou migration aplicada editada.
+O merge continua bloqueado. As suítes unitária completa, integração e E2E
+não estão aprovadas nesta rodada. Produção não recebeu qualquer escrita.
+
+Publicação também requer superfície operacional: a descoberta de browsers
+nesta sessão retornou inventário vazio; não há acesso ao EasyPanel confirmado.
+
+## Continuação — suítes canônicas e controles de acesso
+
+O CTO autorizou a continuação do diagnóstico das suítes legadas. No commit
+`53a05d33`, execução `34269782402`, job `102208146009`, a suíte bloqueante SQL
+passou: **97 arquivos / 2074 asserções** em 2026-09-08 19:37:21 UTC. Backup,
+restauração exata, rollback/reapply, preservação e isolamento passaram novamente.
+As duas suítes de features futuras já separadas pelo runner continuam pendentes;
+não foram promovidas, removidas nem adicionadas novas exceções.
+
+Correções comprovadas nesta rodada:
+
+- Exportação de lead: nova migration corrige `search_path` que representava
+  `public, extensions` como um único schema. Corpo, autorização e ACL intactos;
+  testes de exportação autorizada e recusada passaram. Ainda não aplicada em prod.
+- Fixtures canônicas substituem espelhos removidos. Métricas leem desfecho do
+  negócio; baldes por etapa usam chave composta por funil e etapa.
+- Testes de guardas usam sessão authenticator, não sessão postgres com SET ROLE.
+  O runner CI isolado conecta como supabase_admin para permitir essa simulação.
+  Nenhum privilégio de aplicação ou política de produção foi ampliado.
+- Planos TAP e finish() corrigidos, incluindo VoIP. Controles negativos de
+  políticas agora isolam a condição que realmente pretendem demonstrar.
+
+**Ainda sem merge:** integração HTTP e E2E continuam pendentes. A execução
+anterior da integração teve 57 testes falhando em 22 arquivos; há referências
+a RPCs/views removidas e outras causas ainda não reconciliadas. Atualização
+das fixtures HTTP está em curso, mantendo as asserções de isolamento.
+
+O check Unit Tests verde não equivale à suíte inteira verde: usa ratchet.
+Na execução `34267423677`, a cobertura informativa registrou 9907 aprovados,
+106 falhos e 155 ignorados; nenhuma baseline foi ampliada nesta tarefa.
+
+Correção do registro de publicação: `CLAUDE.md` documenta webhook EasyPanel
+separado do workflow GHCR. Não se pode concluir deploy manual pela ausência
+dele no workflow. A leitura atual dos hooks foi recusada por falta de
+`admin:repo_hook`; versão servida deve ser verificada após o merge.
+Nenhuma escrita no banco de produção e nenhuma nova branch Supabase nesta rodada.

@@ -84,7 +84,7 @@ ON CONFLICT (id) DO NOTHING;
 -- ⚠ `stage_role` é NOT NULL com default 'open'. O comentário de
 -- `metric_stage_role` fala em "NULL = nenhum governa", mas esse NULL vem de a
 -- LINHA não existir, não da coluna. Passar NULL aqui estoura 23502.
-INSERT INTO public.custom_pipeline_stages
+INSERT INTO public.pipeline_stages
   (id, organization_id, pipeline_id, stage_key, name, position, is_active, stage_role) VALUES
   ('31605747-0000-4000-8000-000000000001', '31600000-0000-4000-8000-00000000000a',
    '31609191-0000-4000-8000-00000000000a', 'proposta', 'Proposta', 1, true, 'open'),
@@ -140,6 +140,13 @@ INSERT INTO public.pipeline_stage_events
   ('31600e40-0000-4000-8000-0000000000b1', '31600000-0000-4000-8000-00000000000b', '3160ead1-0000-4000-8000-0000000000b1', '31609191-0000-4000-8000-00000000000b', '3160e177-0000-4000-8000-0000000000b1', 'novo',     'proposta', '2027-08-05T12:00:00Z', 'trigger'),
   ('31600e40-0000-4000-8000-0000000000b2', '31600000-0000-4000-8000-00000000000b', '3160ead1-0000-4000-8000-0000000000b1', '31609191-0000-4000-8000-00000000000b', '3160e177-0000-4000-8000-0000000000b1', 'proposta', 'vendido',  '2027-08-20T12:00:00Z', 'trigger')
 ON CONFLICT (id) DO NOTHING;
+
+-- The maturation reader uses deals.outcome, not terminal-looking stage names.
+INSERT INTO public.deals (id, organization_id, source_lead_id, title, source, outcome)
+VALUES ('3160dea1-0000-4000-8000-000000000003', '31600000-0000-4000-8000-00000000000a',
+        '3160ead1-0000-4000-8000-000000000003', 'E3 perdido', 'api', 'lost');
+UPDATE public.pipeline_entries SET deal_id = '3160dea1-0000-4000-8000-000000000003'
+WHERE id = '3160e177-0000-4000-8000-000000000003';
 
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',

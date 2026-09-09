@@ -21,7 +21,7 @@
 set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MIGRATION="$RAIZ/supabase/migrations/20270925000000_aposenta_calor_e_rating.sql"
+MIGRATION="$RAIZ/supabase/proposals/20270925000000_aposenta_calor_e_rating.sql"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 

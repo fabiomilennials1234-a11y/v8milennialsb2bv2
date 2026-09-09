@@ -24,3 +24,8 @@ Run `34275901570` confirmou seis falhas de `recriar-etapa-excluida.test.ts`: moc
 Bootstrap dos três jobs de banco agora prepara projeto temporário `torque_ci`, somente no runner GitHub, aplica migrations anteriores a 20270925, insere um lead e uma entrada sintéticos com rating/calor e aplica todas as restantes. SQL das migrations preservado; backup vazio continua sendo erro. Seed automático desabilitado; E2E faz seed explícito com ON_ERROR_STOP. Cleanup executa mesmo quando o replay falha.
 
 Revisões Standards e Spec sem achados novos. ESLint do teste e sintaxe shell passaram; script recusou execução fora de GitHub Actions. Execução real do novo bootstrap ainda pendente. O conflito entre aposentadoria de rating e funções posteriores de 20271008 permanece aberto: essas funções também reintroduzem referências ao campo removido. Não é seguro resolver isso alterando hashes ou simulando aplicação no ledger. CI completo não está verde.
+
+
+### Main atualizada elimina necessidade do bootstrap intermediário
+
+Após fetch em 2026-09-09, main `e432883a` já incorporava `90a6702f`: aposentadoria de rating era proposta não implantada e foi movida para `supabase/proposals/`. Preservado esse tratamento já revisado na main. Removidos os scripts intermediários de fixture/bootstrap deste PR; workflow volta ao replay normal com os novos checks da main. Mantidos SDK real no teste de etapas e ON_ERROR_STOP no seed E2E. Merge incorpora também fixtures canônicas e correções SQL da main. Novo CI precisa comprovar cadeia completa; registro anterior descreve estado antes desse merge.

@@ -129,4 +129,5 @@ SELECT lives_ok(
       WHERE id = 'deadbeef-0000-4000-8000-0000000000b6' $$,
   '(ROBUSTEZ) posição órfã (sem Negócio) move sem erro — 11.655 delas existem em prod');
 
+SELECT * FROM finish();
 ROLLBACK;

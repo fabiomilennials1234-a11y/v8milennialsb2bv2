@@ -375,4 +375,5 @@ SELECT is(
   '(EXCLUÍDO) posição de Negócio na lixeira não dispara workflow'
 );
 
+SELECT * FROM finish();
 ROLLBACK;

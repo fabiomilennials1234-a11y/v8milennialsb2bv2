@@ -104,7 +104,19 @@ SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 -- (b) Seed de sistema pelo BACKEND: cria propostas/vendido = won. Se o gate
 -- bloqueasse o path privilegiado, isto explodiria (org nova jamais teria won).
-SELECT create_default_pipeline_stages('99090090-0000-0000-0000-000000000904');
+-- Historical money roles remain guarded; current default stages no longer
+-- infer a financial outcome from a name. Seed this legacy state explicitly.
+INSERT INTO public.pipelines (organization_id, name, slug, type)
+VALUES ('99090090-0000-0000-0000-000000000904', 'WhatsApp', 'whatsapp', 'system'),
+       ('99090090-0000-0000-0000-000000000904', 'Propostas', 'propostas', 'system');
+INSERT INTO public.pipeline_stages
+  (organization_id, pipeline_id, pipeline_type, stage_key, name, position, stage_role)
+SELECT p.organization_id, p.id, p.slug, s.stage_key, s.stage_key, s.position, s.stage_role::public.stage_role
+FROM public.pipelines p
+JOIN (VALUES ('whatsapp', 'novo', 0, 'open'), ('whatsapp', 'abordado', 1, 'open'),
+             ('propostas', 'vendido', 0, 'won')) s(slug, stage_key, position, stage_role)
+  ON s.slug = p.slug
+WHERE p.organization_id = '99090090-0000-0000-0000-000000000904';
 
 SELECT is(
   (SELECT stage_role::text FROM public.pipeline_stages
@@ -115,6 +127,9 @@ SELECT is(
 -- ---------------------------------------------------------------------------
 -- (c/d/e) MEMBRO
 -- ---------------------------------------------------------------------------
+-- SET ROLE alone leaves session_user=postgres, activating the operator bypass.
+-- Model the PostgREST connection as well as its JWT role for the negative cases.
+SET LOCAL SESSION AUTHORIZATION authenticator;
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   '{"sub":"99090090-bbbb-1111-0000-000000000904","role":"authenticated"}', true);
@@ -171,7 +186,6 @@ SELECT lives_ok(
 -- ---------------------------------------------------------------------------
 -- (f) ADMIN da org
 -- ---------------------------------------------------------------------------
-SET LOCAL role postgres;
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   '{"sub":"99090090-aaaa-1111-0000-000000000904","role":"authenticated"}', true);
@@ -192,7 +206,6 @@ SELECT lives_ok(
 -- ---------------------------------------------------------------------------
 -- (g) MASTER (sem team_member na org)
 -- ---------------------------------------------------------------------------
-SET LOCAL role postgres;
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   '{"sub":"99090090-cccc-1111-0000-000000000904","role":"authenticated"}', true);
@@ -207,8 +220,8 @@ SELECT lives_ok(
 -- ---------------------------------------------------------------------------
 -- (h) service_role (backend/classifier/seed)
 -- ---------------------------------------------------------------------------
-SET LOCAL role postgres;
 SET LOCAL role service_role;
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 SELECT lives_ok(
   $$ INSERT INTO public.pipeline_stages
@@ -217,6 +230,7 @@ SELECT lives_ok(
              'guard_service_won', 'Backend definiu won', '#888', 86, 'won') $$,
   '(h) service_role PODE INSERT stage_role=won (path do classifier/seed)');
 
+RESET SESSION AUTHORIZATION;
 SET LOCAL role postgres;
 
 SELECT * FROM finish();

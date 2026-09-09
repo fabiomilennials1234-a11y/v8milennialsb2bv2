@@ -50,8 +50,8 @@ export function TabProximosPassos() {
   // queryKeys de ambos carregam o escopo, e pedir escopo diferente do card não
   // reaproveitaria o cache — dispararia uma segunda consulta e o número do topo
   // passaria a discordar da lista logo abaixo dele.
-  const { total: aguardando, isLoading: convLoading } = useConversasAguardando(10);
-  const { data: tarefas } = useAcoesDoDia(isAdmin ? "tudo" : "meu");
+  const { total: aguardando, isLoading: convLoading, isError: convError, chipsComErro } = useConversasAguardando(10);
+  const { data: tarefas, isLoading: taskLoading, isError: taskError } = useAcoesDoDia(isAdmin ? "tudo" : "meu");
 
   const { pendentes, atrasadasCount } = useMemo(
     () => classificarTarefas(tarefas, timezone),
@@ -59,6 +59,8 @@ export function TabProximosPassos() {
   );
 
   const resumo = useMemo(() => {
+    if (convError || taskError || chipsComErro > 0) return "Alguns dados não carregaram. Confira os avisos nos cards abaixo.";
+    if (convLoading || taskLoading) return "Conferindo o dia…";
     const partes: string[] = [];
     if (aguardando > 0) {
       partes.push(
@@ -82,7 +84,7 @@ export function TabProximosPassos() {
         : "Nada esperando você agora.";
     }
     return partes.join(" · ");
-  }, [aguardando, pendentes.length, atrasadasCount, convLoading, isAdmin]);
+  }, [aguardando, pendentes.length, atrasadasCount, convLoading, taskLoading, convError, taskError, chipsComErro, isAdmin]);
 
   return (
     <div className="space-y-5 pt-5">

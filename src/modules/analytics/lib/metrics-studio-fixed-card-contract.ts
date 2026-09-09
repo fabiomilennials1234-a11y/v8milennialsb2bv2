@@ -21,11 +21,18 @@
  */
 
 import type { ComponentType } from "react";
+import type { PeriodRange } from "@/modules/analytics/hooks/useCommandMetrics";
+import type { StudioPeriod } from "./metrics-studio-period";
 
 /** O que TODO card sob medida recebe. Deliberadamente pequeno. */
 export interface FixedCardContext {
   /** Intervalo global do painel — o mesmo que alimenta as janelas de métrica. */
-  range: { start: Date; end: Date };
+  range: PeriodRange;
+  /** Metas são mensais, mas compartilham o mesmo relógio e fuso do painel. */
+  monthlyRange: PeriodRange;
+  period: StudioPeriod;
+  month: number;
+  year: number;
 }
 
 export interface FixedCardEntry {
@@ -35,5 +42,6 @@ export interface FixedCardEntry {
   descricao: string;
   /** Tamanho com que o card nasce ao ser solto no canvas. */
   tamanhoPadrao: { w: number; h: number };
+  requiresPerformance?: boolean;
   render: ComponentType<FixedCardContext>;
 }

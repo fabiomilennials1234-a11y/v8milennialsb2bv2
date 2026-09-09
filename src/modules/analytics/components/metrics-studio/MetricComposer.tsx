@@ -19,6 +19,8 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { useMetricMeasure } from "@/modules/analytics/hooks/useMetricMeasure";
+import { useStudioClock } from "@/modules/analytics/hooks/useStudioClock";
+import { useOrganization } from "@/modules/identity";
 import type { MetricCustomDefinition, MetricCustomDraft } from "@/modules/analytics/hooks/useMetricCustomDefinitions";
 import {
   ENGINE_METRICS,
@@ -149,7 +151,9 @@ export function MetricComposer({
   const formatoEfetivo: MetricFormatId | null =
     formato && formatosOk.includes(formato) ? formato : (formatosOk[0] ?? null);
 
-  const atual = periodoAtual(period, undefined, range);
+  const { timezone } = useOrganization();
+  const now = useStudioClock();
+  const atual = periodoAtual(period, now, range, timezone ?? "UTC");
   const previa = useMetricMeasure({
     measureRef: unidade && formatoEfetivo ? { kind: "tree", tree: arvore, format_id: formatoEfetivo } : null,
     recorte: "total",

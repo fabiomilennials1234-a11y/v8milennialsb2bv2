@@ -59,6 +59,24 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
     painel.save = vi.fn();
   });
 
+  it("trocar de aba na mesma organização hidrata só o novo painel, sem gravar o anterior nele", () => {
+    painel.organizationId = "org-A";
+    painel.layout = [janela("a-1")];
+    const { result, rerender } = renderHook(({ id }) => useMetricsStudio(CATALOGO_VAZIO, id), { initialProps: { id: "aba-a" } });
+    painel.layout = null;
+    painel.isLoading = true;
+    rerender({ id: "aba-b" });
+    expect(result.current.windows).toEqual([]);
+    expect(painel.save).not.toHaveBeenCalled();
+    painel.layout = [janela("b-1")];
+    painel.isLoading = false;
+    rerender({ id: "aba-b" });
+    expect(result.current.windows.map((w) => w.id)).toEqual(["b-1"]);
+    expect(painel.save).not.toHaveBeenCalled();
+    act(() => result.current.moveWindow("b-1", 24, 24));
+    expect(painel.save.mock.calls[0][0]).toEqual([expect.objectContaining({ id: "b-1", x: 24 })]);
+  });
+
   it("não grava nada enquanto a organização não resolveu", () => {
     // `layout` vale `[]` (não `null`) quando o contexto ainda não resolveu — é
     // por isso que "layout vazio" nunca pode, sozinho, autorizar gravação.
@@ -69,6 +87,16 @@ describe("useMetricsStudio — a cópia de trabalho pertence a UMA organização
 
     expect(result.current.windows).toEqual([]);
     expect(painel.save).not.toHaveBeenCalled();
+  });
+
+  it("reabrir após remover cards não reutiliza o id de um card restante", () => {
+    painel.organizationId = "org-A";
+    painel.layout = [{ ...janela("ranking-vendedores-2"), fixo: "ranking-vendedores" }];
+    const { result } = renderHook(() => useMetricsStudio(CATALOGO_VAZIO, PAINEL_ID));
+    act(() => result.current.addFixed("ranking-vendedores", { w: 320, h: 200 }, { width: 1400, height: 800 }));
+    expect(result.current.windows).toHaveLength(2);
+    expect(new Set(result.current.windows.map((win) => win.id)).size).toBe(2);
+    expect(result.current.windows[0].id).toBe("ranking-vendedores-2");
   });
 
   it("hidrata com o painel da org e só grava depois de o usuário mexer", () => {
