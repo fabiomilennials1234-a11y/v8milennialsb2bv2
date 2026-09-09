@@ -4,7 +4,7 @@
  * THREE lead_id resolvers (system funnels, custom funnels, carteira):
  *
  *   1. get_filtered_lead_ids       (system funnels, extended 8-arg)
- *   2. get_custom_filtered_lead_ids (custom funnels)
+ *   2. get_pipeline_lead_ids (custom funnels)
  *   3. get_carteira_lead_ids        (post-sale portfolio)
  *
  * Each resolver applies the SHARED CONDITION SET on the LEADS table:
@@ -14,7 +14,7 @@
  * already proves search/responsible/tags/stage + org isolation on the SYSTEM
  * resolver):
  *   - A qualification_tier filter NARROWS the system resolver.
- *   - get_custom_filtered_lead_ids resolves a custom pipeline + a tier filter
+ *   - get_pipeline_lead_ids resolves a custom pipeline + a tier filter
  *     narrows, AND ORG ISOLATION (org B sees nothing of org A).
  *   - get_carteira_lead_ids resolves active carteira clients + a segment +
  *     tier filter narrows, AND ORG ISOLATION (org B sees nothing of org A).
@@ -228,9 +228,9 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
   });
 
   // ── 2. CUSTOM resolver — tier narrows + org isolation ───────────────────
-  describe('get_custom_filtered_lead_ids', () => {
+  describe('get_pipeline_lead_ids', () => {
     it('resolves the whole custom pipeline (no condition)', async () => {
-      const { data, error } = await adminA.rpc('get_custom_filtered_lead_ids', {
+      const { data, error } = await adminA.rpc('get_pipeline_lead_ids', {
         p_pipeline_id: CUSTOM_PIPELINE_A_ID,
         p_stage_id: null,
         p_search: null,
@@ -247,7 +247,7 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
     });
 
     it('qualification_tier=[diamante] narrows to Alpha', async () => {
-      const { data, error } = await adminA.rpc('get_custom_filtered_lead_ids', {
+      const { data, error } = await adminA.rpc('get_pipeline_lead_ids', {
         p_pipeline_id: CUSTOM_PIPELINE_A_ID,
         p_stage_id: null,
         p_search: null,
@@ -264,7 +264,7 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
     it('ORG ISOLATION — org B caller gets nothing for org A custom pipeline', async () => {
       // Org B passes org A's custom pipeline id; tenancy is server-derived, so
       // it must resolve to zero rows.
-      const { data, error } = await adminB.rpc('get_custom_filtered_lead_ids', {
+      const { data, error } = await adminB.rpc('get_pipeline_lead_ids', {
         p_pipeline_id: CUSTOM_PIPELINE_A_ID,
         p_stage_id: null,
         p_search: null,
@@ -278,7 +278,7 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
       expect((data as string[]) ?? []).toEqual([]);
 
       // And org B sees only its own pipeline's lead.
-      const { data: ownData } = await adminB.rpc('get_custom_filtered_lead_ids', {
+      const { data: ownData } = await adminB.rpc('get_pipeline_lead_ids', {
         p_pipeline_id: CUSTOM_PIPELINE_B_ID,
         p_stage_id: null,
         p_search: null,
@@ -424,8 +424,8 @@ describe.skipIf(shouldSkip)('Disparo P1 audience conditions (3 resolvers)', () =
       semVazamentoDeA(ids);
     });
 
-    it('get_custom_filtered_lead_ids — org B pedida devolve só a lead de B', async () => {
-      const { data, error } = await master.rpc('get_custom_filtered_lead_ids', {
+    it('get_pipeline_lead_ids — org B pedida devolve só a lead de B', async () => {
+      const { data, error } = await master.rpc('get_pipeline_lead_ids', {
         p_pipeline_id: CUSTOM_PIPELINE_B_ID,
         p_stage_id: null,
         p_search: null,

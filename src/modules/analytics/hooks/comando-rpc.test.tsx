@@ -101,4 +101,12 @@ describe("Comando RPC transport", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result.current.isDegraded).toBe(false);
   });
+  it("keeps waiting-queue server errors visible", async () => {
+    fetchMock.mockImplementation(async () => json({ code: "42501", message: "Forbidden" }, 403));
+    const { result } = renderHook(() => useConversasAguardando(), { wrapper });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.semChips).toBe(false);
+    expect(result.current.isDegraded).toBe(false);
+  });
+
 });

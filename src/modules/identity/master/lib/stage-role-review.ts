@@ -99,6 +99,10 @@ export function buildReviewUpdate(params: {
   nowIso?: string;
 }): ReviewUpdatePayload {
   const { action, suggestedRole, correctedRole, reviewerId } = params;
+  const aplicado = action === "approve" ? suggestedRole : action === "correct" ? correctedRole : null;
+  if (aplicado === "won" || aplicado === "lost") {
+    throw new Error("Ganho e perda são definidos no negócio, não na etapa");
+  }
   const nowIso = params.nowIso ?? new Date().toISOString();
 
   const base: ReviewUpdatePayload = {

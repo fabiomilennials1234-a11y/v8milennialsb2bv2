@@ -175,4 +175,5 @@ SELECT is(
   1::bigint,
   '(TENANT) a busca da org B acha só o dela — mesmo telefone, inquilino diferente');
 
+SELECT * FROM finish();
 ROLLBACK;

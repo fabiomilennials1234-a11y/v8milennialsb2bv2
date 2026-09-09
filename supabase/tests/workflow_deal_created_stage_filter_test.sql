@@ -63,4 +63,5 @@ SELECT is(
   '(FAIL-CLOSED) matcher SQL recusa contexto sem stage_id'
 );
 
+SELECT * FROM finish();
 ROLLBACK;

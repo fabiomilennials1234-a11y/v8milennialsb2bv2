@@ -107,6 +107,9 @@ SELECT is(
 
 -- PLANTED FAILURE — a policy antiga, singular.
 SET LOCAL role postgres;
+-- This permissive SELECT also grants visibility. Isolate the historical
+-- policy under test; restore BOTH policies below (outer transaction rolls back).
+DROP POLICY tags_select_own_org ON public.tags;
 DROP POLICY IF EXISTS tags_select_organization ON public.tags;
 CREATE POLICY tags_select_organization ON public.tags
   FOR SELECT TO public
@@ -128,7 +131,10 @@ SELECT is(
 SET LOCAL role postgres;
 DROP POLICY IF EXISTS tags_select_organization ON public.tags;
 CREATE POLICY tags_select_organization ON public.tags
-  FOR SELECT TO public
+  FOR SELECT TO authenticated
+  USING (organization_id IN (SELECT public.get_my_organization_ids()));
+CREATE POLICY tags_select_own_org ON public.tags
+  FOR SELECT TO authenticated
   USING (organization_id IN (SELECT public.get_my_organization_ids()));
 
 SET LOCAL role authenticated;

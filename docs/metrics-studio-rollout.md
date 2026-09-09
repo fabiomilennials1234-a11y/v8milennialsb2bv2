@@ -1,0 +1,124 @@
+# Estúdio — rollout sem substituir painéis existentes
+
+Estado em 2026-09-08: preparado para revisão, **não executado em produção**.
+Ensaio SQL aprovado em CI no commit `9841adf0` (preservação, backup/restauração,
+rollback/reapply e RLS). A suíte geral continua bloqueada por testes legados;
+ver `docs/metrics-studio-review-20260908.md` para evidência e limites.
+PR de trabalho: #2040. Produção exige autorização explícita do CTO na sessão,
+review e CI verde. A proposta não aplicada de aposentadoria de rating foi
+preservada em `supabase/proposals/`, fora da cadeia automática; ver README
+nesse diretório e a revisão de 2026-09-08. Nenhuma migration aplicada foi
+alterada para contornar o preflight.
+
+## Contrato de preservação
+
+- `metrics_studio_panels.id`, organização, nome, ordem, autoria, timestamps e
+  `layout` dos painéis existentes ficam intactos. Inclui abas vazias, repetidas
+  e métricas personalizadas: não são lixo nem autorização para deduplicar.
+- Templates são novas linhas, adicionadas depois das existentes. Não aplicar
+  templates com UPDATE, não recriar abas existentes, não renumerar o legado.
+- `template_key` indica origem, nunca autorização para restaurar/sobrescrever.
+- O frontend não cria abas automaticamente ao ler uma lista vazia ou com erro.
+  Apagar a última aba deve continuar resultando em nenhuma aba após recarregar.
+- O modo demonstração e seus dados fictícios não entram em produção.
+
+## Antes de autorizar
+
+1. Identificar organização e horário do sumiço relatado, versão efetivamente
+   servida e requisição de salvamento. A reprodução local de uma corrida não
+   comprova sozinha a causa do incidente real.
+2. Inventariar por org os IDs, nomes, ordens, `template_key`, número de cards e
+   hash do JSON completo. Conferir também `metric_custom_definitions`: os
+   layouts contêm referências a essas definições.
+3. Executar `scripts/backup-metrics-studio-before-rollout.sql`: cópias integrais
+   de ambas as tabelas no schema privado `backup`, com RLS e sem grants para
+   anon/authenticated/service_role. O script recusa sobrescrever snapshot
+   anterior; registrar recibo, horário e responsável. Mantém configurações de
+   clientes no domínio de backup do banco, sem exportar dados para um laptop.
+   Ensaiar antes com `.specs/project/studio-preview-restore-proof.sql` e fixtures
+   sintéticas, além do rollback/reapply DDL em
+   `.specs/project/studio-preview-ddl-rollback-proof.sql`.
+   Retenção: não remover os snapshots antes de aprovação do CTO.
+4. Ensaiar schema + seed + frontend com organizações sintéticas: painel autoral
+   preenchido, vazio, nomes repetidos, múltiplas abas e métricas personalizadas.
+   Verificar RLS admin positivo, member negativo e isolamento entre duas orgs.
+   Validar erro de save/retry, leitura atrasada, troca rápida de abas/org,
+   refresh, ausência de catálogo e exclusão cancelada/confirmada/última aba.
+5. Usar `supabase-preview-lifecycle.mjs` com cleanup no `finally`; excluir a
+   branch efêmera imediatamente após o ensaio e confirmar sua ausência. Não
+   criar outra sem conferir a propriedade/uso das existentes. Nenhuma branch
+   nova foi necessária para os testes de frontend deste ajuste.
+
+## Ordem de publicação
+
+1. Conferir no ledger de produção que `20271001000000` (abas) já foi aplicada;
+   não reaplicá-la. Conferir compatibilidade do bundle servido: escrita por
+   `id`, nunca pelo antigo UNIQUE de `organization_id`.
+2. Após autorização, aplicar somente a migration DDL revisada
+   `20271017113742_dashboards_viram_templates.sql`, sem `db push` indiscriminado.
+   Conferir privilégios das duas funções privadas e trigger de nova org.
+3. Com backup fresco e janela breve sem edição, executar **uma única vez**
+   `scripts/seed-metrics-studio-templates.sql`. A transação bloqueia escritores,
+   captura todas as linhas anteriores e aborta se qualquer campo de uma delas
+   mudar/desaparecer. Timeouts curtos impedem lock indefinido. A captura TEMP é
+   apenas a asserção transacional, não substitui o backup privado durável.
+4. Conferir hashes/contagens anteriores e posteriores. Deve haver zero IDs
+   antigos ausentes e zero linhas antigas diferentes; somente novos templates.
+   Se o seed já concluiu, NÃO repetir para "corrigir" abas ausentes: uma aba pode
+   ter sido excluída intencionalmente depois do rollout.
+  5. Mergear o PR revisado e conferir a versão efetivamente servida. O workflow
+    Build Image publica no GHCR; segundo `CLAUDE.md`, um webhook separado do
+    GitHub aciona o EasyPanel automaticamente. Não inferir deploy manual apenas
+    pelo workflow. A consulta aos hooks nesta sessão foi recusada por falta de
+    `admin:repo_hook`; verificar o deploy antes de decidir por redeploy manual.
+    Validar primeiro com CTO na org canário:
+   painel legado, templates, criar/editar/recarregar e excluir apenas aba de QA.
+   Não testar destrutivamente no painel de um cliente.
+6. Monitorar erros de leitura/gravação e relatos nas primeiras 24h. A versão nova
+   mostra falhas de save e mantém a edição para retry; não aceitar sucesso apenas
+   porque o indicador "Salvando" desapareceu.
+
+## Rollback e recuperação
+
+- Preferir roll-forward. Não voltar ao bundle que grava por `organization_id`
+  ou que ignora falhas de persistência.
+- Reverter frontend somente para versão compatível com múltiplas abas; manter
+  os dados. Não derrubar a tabela nem restaurar o dump inteiro sobre produção.
+- O rollback SQL pareado retira apenas trigger/funções de semeadura; preserva
+  todas as abas. Mesmo templates sem alteração podem estar em uso.
+- Recuperação de layout é por ID + organização, comparando estado atual com
+  snapshot e confirmando com o CTO. Restaurar só os IDs afetados para não apagar
+  edições válidas posteriores ao backup. Preservar cópia do estado pré-reparo.
+
+## Diagnóstico registrado
+
+Leitura READ ONLY de produção em 2026-09-08: 32 abas em 19 orgs, 20 vazias.
+Vazio não demonstra perda. Há abas homônimas; nenhuma foi removida/renomeada.
+O único trigger encontrado na tabela atualiza `updated_at`; não há histórico
+de versões de layout nessa tabela. Não é possível reconstruir o conteúdo
+anterior só com a linha atual.
+
+Reproduzido no hook real: uma releitura iniciada antes da edição retorna tarde,
+substitui o cache por layout antigo e, ao voltar à aba, o canvas perde cards.
+Correção: cancelar leituras anteriores ao salvar e preservar o rascunho nas
+releituras durante debounce, escrita ou retry. Teste falhou antes e passou depois.
+Catálogo ausente também ocultava cards salvos: agora mantém o espaço e explica
+indisponibilidade, sem excluir o layout. A causa do incidente específico de
+produção ainda depende da identificação da org/horário e evidência de rede.
+
+Limite ainda existente: edições simultâneas do mesmo painel por dois admins
+seguem last-write-wins. Controle de versão otimista + histórico de layouts é
+recomendado como próxima proteção, com migration própria, revisão e ensaio de
+RLS; não foi incluído silenciosamente nesta publicação.
+
+## Publicação autorizada — 2026-09-09
+
+CTO solicitou merge da PR #2040 nesta sessão. Backup privado capturado em
+2026-09-09 11:52:55 UTC: 34 painéis e 2 definições. Aplicadas somente as
+migrations 20271017113742 e 20271018120000, com registro no ledger.
+Seed executado uma vez: 34 painéis anteriores preservados, 470 ao final.
+Comparação integral com backup: zero IDs ausentes e zero linhas alteradas.
+Café Jurerê mantém suas duas abas anteriores e recebeu os quatro templates.
+Função classify-stage-roles publicada. Frontend segue no merge desta revisão.
+O pedido atual autoriza a publicação apesar das falhas herdadas de integração
+HTTP/E2E descritas na revisão; não houve alteração de baseline nem de gates.

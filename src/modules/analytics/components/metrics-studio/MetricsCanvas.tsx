@@ -1,6 +1,7 @@
 import { forwardRef } from "react";
 import { LayoutGrid } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { ChartKind } from "@/modules/analytics/lib/metrics-studio-catalog";
 import type { EngineMetric, MetricRecorte } from "@/modules/analytics/lib/metrics-studio-engine-map";
 import type { StudioPeriod, StudioRange } from "@/modules/analytics/lib/metrics-studio-period";
@@ -8,8 +9,11 @@ import type { StudioWindow } from "@/modules/analytics/hooks/useMetricsStudio";
 import { MetricWindow } from "./MetricWindow";
 import { FixedWindow } from "./FixedWindow";
 import { isFixedWindow } from "@/modules/analytics/lib/metrics-studio-window";
+import type { FixedCardContext } from "@/modules/analytics/lib/metrics-studio-fixed-card-contract";
+import { projectStudioWindows } from "@/modules/analytics/lib/metrics-studio-projection";
 
 interface MetricsCanvasProps {
+  fillWidth?: boolean;
   windows: StudioWindow[];
   /**
    * Resolvedor de `metricId` → métrica. Vem do catálogo do Estúdio, que junta
@@ -27,10 +31,13 @@ interface MetricsCanvasProps {
    * e usaria o fuso do browser contra o `organizations.timezone` do servidor.
    * Dois cards lado a lado mostrariam períodos diferentes, sem erro nenhum.
    *
-   * Por isso vem PRONTO de cima, do mesmo `computePeriodRange` que o Comando já
-   * usa para alimentar exatamente estes componentes.
+   * Por isso vem PRONTO de cima, de `studioInterval`, alinhado ao calendário
+   * da org e aos presets do motor (trimestre até hoje).
    */
-  intervalo: { start: Date; end: Date };
+  intervalo: FixedCardContext["range"];
+  monthlyRange: FixedCardContext["range"];
+  month: number;
+  year: number;
   period: StudioPeriod;
   range?: StudioRange | null;
   podeVerPorPessoa: boolean;
@@ -58,14 +65,15 @@ interface MetricsCanvasProps {
  * a malha orienta, não prende.
  */
 export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(function MetricsCanvas(
-  { windows, byId, intervalo, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove },
+  { windows, byId, intervalo, monthlyRange, month, year, period, range, podeVerPorPessoa, editavel, podeEditar, onEditar, selectedId, size, onSelect, onMove, onResize, onChart, onCorte, onRemove, fillWidth },
   ref,
 ) {
   const empty = windows.length === 0;
+  const displayed = editavel ? windows : projectStudioWindows(windows, size.width, fillWidth);
 
   // O painel é uma região da página, não o viewport: quando as janelas passam
   // da dobra, o canvas cresce e rola em vez de empilhar em cascata.
-  const contentHeight = windows.reduce((acc, w) => Math.max(acc, w.y + w.h + 24), 0);
+  const contentHeight = displayed.reduce((acc, w) => Math.max(acc, w.y + w.h + 24), 0);
 
   return (
     <div className="h-full w-full overflow-auto">
@@ -112,11 +120,7 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
         </div>
       )}
 
-      {windows.map((win) => {
-        // Janela cuja métrica sumiu do catálogo (personalizada apagada por um
-        // admin, por exemplo) simplesmente não desenha. Não é erro: é uma
-        // definição que deixou de existir, e o painel do usuário não some por
-        // causa disso.
+      {displayed.map((win) => {
         // Card sob medida resolve pelo registry e IGNORA `metricId` — precisa
         // vir antes da busca no catálogo, que não o encontraria.
         if (isFixedWindow(win)) {
@@ -124,7 +128,8 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
             <FixedWindow
               key={win.id}
               win={win}
-              range={intervalo}
+              context={{ range: intervalo, monthlyRange, month, year, period }}
+              podeVerPorPessoa={podeVerPorPessoa}
               editavel={editavel}
               selected={selectedId === win.id}
               canvas={size}
@@ -137,7 +142,14 @@ export const MetricsCanvas = forwardRef<HTMLDivElement, MetricsCanvasProps>(func
         }
 
         const metric = byId.get(win.metricId);
-        if (!metric) return null;
+        if (!metric) return (
+          <div key={win.id} role="group" aria-label="Métrica indisponível"
+            className="absolute overflow-auto p-3" style={{ left: win.x, top: win.y, width: win.w, height: win.h, zIndex: win.z }}>
+            <Alert><AlertTitle>Métrica indisponível</AlertTitle><AlertDescription>
+              O card continua salvo. O catálogo pode estar carregando ou esta métrica não está mais disponível.
+            </AlertDescription></Alert>
+          </div>
+        );
         return (
           <MetricWindow
             key={win.id}

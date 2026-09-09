@@ -144,4 +144,5 @@ SELECT is(
   'propostas',
   '(TENANT) e a posição não mudou depois das recusas');
 
+SELECT * FROM finish();
 ROLLBACK;

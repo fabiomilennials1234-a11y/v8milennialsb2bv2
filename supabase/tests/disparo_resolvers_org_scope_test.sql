@@ -1,3 +1,5 @@
+-- Canonical resolver replaces the retired custom wrapper. Legacy wrappers
+-- must forward org scope; the canonical callee must retain scope AND master auth.
 -- ============================================================================
 -- Resolvers de público do Disparo — ESCOPO e PRIVILÉGIO (SCRUM-429)
 -- ============================================================================
@@ -45,7 +47,7 @@ FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace
 WHERE n.nspname = 'public'
   AND p.proname IN (
-    'get_stage_lead_ids', 'get_filtered_lead_ids', 'get_custom_filtered_lead_ids',
+    'get_stage_lead_ids', 'get_filtered_lead_ids', 'get_pipeline_lead_ids',
     'get_carteira_lead_ids', 'get_all_funnels_lead_ids'
   );
 
@@ -60,7 +62,7 @@ SELECT is(
   (SELECT count(*)::int
      FROM pg_proc p
      JOIN pg_namespace n ON n.oid = p.pronamespace
-     CROSS JOIN LATERAL regexp_matches(p.prosrc, 'p_organization_id IS NULL OR', 'g') AS m
+     CROSS JOIN LATERAL regexp_matches(p.prosrc, 'p_organization_id[[:space:]]*=>[[:space:]]*p_organization_id', 'g') AS m
     WHERE n.nspname = 'public' AND p.proname = 'get_stage_lead_ids'),
   1, 'get_stage_lead_ids escopa por p_organization_id (SCRUM-429)');
 
@@ -68,7 +70,7 @@ SELECT is(
   (SELECT count(*)::int
      FROM pg_proc p
      JOIN pg_namespace n ON n.oid = p.pronamespace
-     CROSS JOIN LATERAL regexp_matches(p.prosrc, 'p_organization_id IS NULL OR', 'g') AS m
+     CROSS JOIN LATERAL regexp_matches(p.prosrc, 'p_organization_id[[:space:]]*=>[[:space:]]*p_organization_id', 'g') AS m
     WHERE n.nspname = 'public' AND p.proname = 'get_filtered_lead_ids'),
   1, 'get_filtered_lead_ids escopa por p_organization_id (SCRUM-429)');
 
@@ -77,8 +79,8 @@ SELECT is(
      FROM pg_proc p
      JOIN pg_namespace n ON n.oid = p.pronamespace
      CROSS JOIN LATERAL regexp_matches(p.prosrc, 'p_organization_id IS NULL OR', 'g') AS m
-    WHERE n.nspname = 'public' AND p.proname = 'get_custom_filtered_lead_ids'),
-  1, 'get_custom_filtered_lead_ids escopa por p_organization_id (SCRUM-429)');
+    WHERE n.nspname = 'public' AND p.proname = 'get_pipeline_lead_ids'),
+  1, 'get_pipeline_lead_ids escopa por p_organization_id (SCRUM-429)');
 
 SELECT is(
   (SELECT count(*)::int
@@ -106,13 +108,13 @@ SELECT is(
 -- neste estágio" (o bug original de archive/20261228000000).
 -- ---------------------------------------------------------------------------
 SELECT ok(
-  (SELECT p.prosrc LIKE '%is_master_user()%'
+  (SELECT p.prosrc LIKE '%public.get_pipeline_lead_ids(%'
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'get_stage_lead_ids'),
   'get_stage_lead_ids preserva o ramo master (master-ghost não regride)');
 
 SELECT ok(
-  (SELECT p.prosrc LIKE '%is_master_user()%'
+  (SELECT p.prosrc LIKE '%public.get_pipeline_lead_ids(%'
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public' AND p.proname = 'get_filtered_lead_ids'),
   'get_filtered_lead_ids preserva o ramo master');
@@ -120,8 +122,8 @@ SELECT ok(
 SELECT ok(
   (SELECT p.prosrc LIKE '%is_master_user()%'
      FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public' AND p.proname = 'get_custom_filtered_lead_ids'),
-  'get_custom_filtered_lead_ids preserva o ramo master');
+    WHERE n.nspname = 'public' AND p.proname = 'get_pipeline_lead_ids'),
+  'get_pipeline_lead_ids preserva o ramo master');
 
 SELECT ok(
   (SELECT p.prosrc LIKE '%is_master_user()%'
@@ -146,7 +148,7 @@ SELECT is(
   (SELECT count(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
       AND p.proname IN ('get_stage_lead_ids', 'get_filtered_lead_ids',
-                        'get_custom_filtered_lead_ids', 'get_carteira_lead_ids',
+                        'get_pipeline_lead_ids', 'get_carteira_lead_ids',
                         'get_all_funnels_lead_ids')
       AND p.prosecdef),
   0, 'nenhum resolver de público é SECURITY DEFINER (a RLS de leads é o backstop)');
@@ -155,7 +157,7 @@ SELECT is(
   (SELECT count(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
       AND p.proname IN ('get_stage_lead_ids', 'get_filtered_lead_ids',
-                        'get_custom_filtered_lead_ids', 'get_carteira_lead_ids',
+                        'get_pipeline_lead_ids', 'get_carteira_lead_ids',
                         'get_all_funnels_lead_ids')
       AND NOT EXISTS (
             SELECT 1 FROM unnest(COALESCE(p.proconfig, ARRAY[]::text[])) AS cfg
@@ -166,7 +168,7 @@ SELECT is(
   (SELECT count(*)::int FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
     WHERE n.nspname = 'public'
       AND p.proname IN ('get_stage_lead_ids', 'get_filtered_lead_ids',
-                        'get_custom_filtered_lead_ids', 'get_carteira_lead_ids',
+                        'get_pipeline_lead_ids', 'get_carteira_lead_ids',
                         'get_all_funnels_lead_ids')),
   5, 'os 5 resolvers existem em UMA assinatura cada — nenhum overload órfão');
 
@@ -196,8 +198,8 @@ SELECT ok(has_function_privilege('authenticated',
   'authenticated executa get_filtered_lead_ids');
 
 SELECT ok(has_function_privilege('authenticated',
-  'public.get_custom_filtered_lead_ids(uuid,uuid,text,uuid,uuid[],text[],text[],text[],uuid)', 'EXECUTE'),
-  'authenticated executa get_custom_filtered_lead_ids');
+  'public.get_pipeline_lead_ids(uuid,text,uuid,text,text,uuid,uuid[],text[],text[],text[],uuid)', 'EXECUTE'),
+  'authenticated executa get_pipeline_lead_ids');
 
 SELECT ok(has_function_privilege('authenticated',
   'public.get_carteira_lead_ids(text[],text,uuid[],text[],text[],text[],uuid)', 'EXECUTE'),

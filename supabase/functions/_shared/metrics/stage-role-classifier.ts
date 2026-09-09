@@ -312,3 +312,12 @@ export function planStageRoleSuggestions(
 
   return { items, unresolved, skippedSystem };
 }
+
+/** Plano de ESCRITA atual: desfechos financeiros nunca voltam à fila de etapas. */
+export function planAssignableStageRoles(
+  stages: readonly StageToClassify[],
+  aiClassification: Record<string, SuggestableStageRole | null> = {},
+): StageRolePlan {
+  const plan = planStageRoleSuggestions(stages, aiClassification);
+  return { ...plan, items: plan.items.filter((item) => item.role === "meeting_booked" || item.role === "meeting_held") };
+}

@@ -19,6 +19,19 @@ const db = vi.hoisted(() => ({ rows: [] as Row[], readError: false }));
 // inactive rows. Enforce the real UNIQUE(pipeline_id, stage_key/position).
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
+    rpc: async (name: string, args: { p_input: Partial<Row> }) => {
+      if (name !== "fn_etapa_custom_criar") throw new Error(`Unexpected RPC: ${name}`);
+      const row: Row = {
+        id: `s${db.rows.length}`, organization_id: "org1", pipeline_id: "p1",
+        pipeline_type: null, name: "", stage_key: "", position: 0, is_active: true,
+        ...args.p_input,
+      };
+      const conflict = db.rows.some(r => r.pipeline_id === row.pipeline_id &&
+        (r.stage_key === row.stage_key || r.position === row.position));
+      if (conflict) return { data: null, error: { code: "23505", message: 'duplicate key violates "pipeline_stages_pipeline_id_stage_key_key"' } };
+      db.rows.push(row);
+      return { data: row.id, error: null };
+    },
     from: () => {
       const filters: Array<[string, unknown]> = [];
       let payload: Partial<Row> | undefined;
@@ -36,6 +49,10 @@ vi.mock("@/integrations/supabase/client", () => ({
         insert: (value: Partial<Row>) => { payload = value; return chain; },
         then: (resolve: (value: ReturnType<typeof result>) => unknown) => Promise.resolve(result()).then(resolve),
         single: async () => {
+          if (!payload) {
+            const response = result();
+            return { data: response.data?.[0] ?? null, error: response.error };
+          }
           const row: Row = {
             id: `s${db.rows.length}`, organization_id: "org1", pipeline_id: "p1",
             pipeline_type: null, name: "", stage_key: "", position: 0, is_active: true, ...payload,

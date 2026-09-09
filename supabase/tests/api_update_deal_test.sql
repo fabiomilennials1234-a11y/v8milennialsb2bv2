@@ -154,4 +154,5 @@ SELECT is(
   1::bigint,
   '(TENANT) a lista da org B traz só o dela, com o mesmo lead_id apontado');
 
+SELECT * FROM finish();
 ROLLBACK;

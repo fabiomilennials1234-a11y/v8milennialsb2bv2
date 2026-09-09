@@ -17,6 +17,13 @@ export const STAGE_ROLES: readonly StageRole[] = [
   "lost",
 ] as const;
 
+/** Papéis históricos continuam legíveis; ganho/perda pertencem ao negócio. */
+export const STAGE_ROLES_ATRIBUIVEIS: readonly StageRole[] = ["open", "meeting_booked", "meeting_held"];
+
+export function papelAtribuivel(role: StageRole | null | undefined): StageRole {
+  return role && STAGE_ROLES_ATRIBUIVEIS.includes(role) ? role : "open";
+}
+
 export interface StageRoleMeta {
   label: string;
   /** Descrição curta exibida no dropdown do modal de etapa. */

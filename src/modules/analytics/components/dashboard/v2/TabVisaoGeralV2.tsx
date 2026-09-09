@@ -18,12 +18,15 @@ import { RevenueAccumulatedChart } from "./RevenueAccumulatedChart";
 import { TrapezoidFunnel } from "./TrapezoidFunnel";
 import { OraculoBriefing } from "./OraculoBriefing";
 import { LiveOpsFeed } from "./LiveOpsFeed";
+import { Button } from "@/components/ui/button";
 
 interface TabVisaoGeralV2Props {
+  section?: "meta" | "kpis" | "receita" | "funil" | "oraculo" | "feed";
   period: CommandPeriod;
   month: number;
   year: number;
   range: PeriodRange;
+  monthlyRange?: PeriodRange;
   isAdmin: boolean;
   onAskOraculo: () => void;
 }
@@ -52,10 +55,10 @@ function deltaBadge(current: number, previous: number, invert = false): KpiDelta
 }
 
 /** Dias úteis (seg–sex) restantes no mês, incluindo hoje. */
-function businessDaysLeft(month: number, year: number): number {
+function businessDaysLeft(month: number, year: number, referenceDay?: number): number {
   const now = new Date();
   const isCurrent = month === now.getMonth() + 1 && year === now.getFullYear();
-  const startDay = isCurrent ? now.getDate() : 1;
+  const startDay = referenceDay ?? (isCurrent ? now.getDate() : 1);
   const totalDays = new Date(year, month, 0).getDate();
   let count = 0;
   for (let d = startDay; d <= totalDays; d++) {
@@ -65,9 +68,10 @@ function businessDaysLeft(month: number, year: number): number {
   return Math.max(count, 1);
 }
 
-function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo }: TabVisaoGeralV2Props) {
+function TabVisaoGeralV2Base({ period, month, year, range, monthlyRange, isAdmin, onAskOraculo, section }: TabVisaoGeralV2Props) {
+  const show = (id: TabVisaoGeralV2Props["section"]) => !section || section === id;
   // KPIs respeitam o filtro automático (membro vê o seu, admin vê total)
-  const { data: metrics, isLoading } = useCommandMetrics({ start: range.start, end: range.end });
+  const { data: metrics, isLoading, isError, refetch } = useCommandMetrics({ start: range.start, end: range.end });
   // Funil é sempre total da org
   const { data: totalMetrics } = useCommandMetrics({ start: range.start, end: range.end }, null);
   // Override Milennials: reuniões marcadas do funil seguem a coorte correta da
@@ -79,9 +83,11 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
   const { data: prevMetrics } = useCommandMetrics({ start: range.prevStart, end: range.prevEnd });
 
   // Gauge é sempre mensal — meta de faturamento é do mês, independente do range selecionado
-  const monthRange = useMemo(() => computePeriodRange("month", month, year), [month, year]);
-  const { data: gaugeMetrics } = useCommandMetrics({ start: monthRange.start, end: monthRange.end }, null);
-  const { data: teamGoals } = useTeamGoals(month, year);
+  const monthRange = useMemo(() => monthlyRange ?? computePeriodRange("month", month, year), [monthlyRange, month, year]);
+  const gaugeQuery = useCommandMetrics({ start: monthRange.start, end: monthRange.end }, null);
+  const goalsQuery = useTeamGoals(month, year);
+  const { data: gaugeMetrics } = gaugeQuery;
+  const { data: teamGoals } = goalsQuery;
 
   const { data: overdueFollowUps } = useFollowUps({ dateFilter: "overdue", showCompleted: false });
   const overdueCount = overdueFollowUps?.length ?? 0;
@@ -107,7 +113,7 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
     const expectedPercent = (monthRange.dayOfPeriod / monthRange.daysTotal) * 100;
     const diffPp = Math.round(currentPercent - expectedPercent);
     const remaining = Math.max(target - realized, 0);
-    const perBusinessDay = remaining / businessDaysLeft(month, year);
+    const perBusinessDay = remaining / businessDaysLeft(month, year, monthlyRange?.dayOfPeriod);
     return {
       currentPercent,
       expectedPercent,
@@ -118,10 +124,12 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
       target,
       perBusinessDay,
     };
-  }, [gaugeMetrics?.vendaTotal, faturamentoGoal?.target_value, monthRange, month, year]);
+  }, [gaugeMetrics?.vendaTotal, faturamentoGoal?.target_value, monthRange, monthlyRange, month, year]);
 
 
-  if (isLoading) {
+  const monthlyQueries = show("meta") ? [gaugeQuery, goalsQuery] : [];
+  if (isError || monthlyQueries.some((query) => query.isError)) return <div role="alert" className="p-4 text-sm">Não foi possível carregar os indicadores.<Button variant="link" onClick={() => { void refetch(); monthlyQueries.forEach((query) => void query.refetch()); }}>Tentar novamente</Button></div>;
+  if (isLoading || monthlyQueries.some((query) => query.isLoading)) {
     return (
       <div className="mt-3.5 grid grid-cols-2 gap-3.5 md:grid-cols-12">
         <Skeleton className="col-span-2 h-[200px] rounded-2xl md:col-span-4 md:row-span-3 md:h-[460px]" />
@@ -149,8 +157,9 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
       : null;
 
   return (
-    <div className="mt-3.5 grid grid-cols-2 gap-3.5 md:grid-cols-12">
+    <div className={!section || section === "kpis" ? "grid grid-cols-2 gap-3.5 md:grid-cols-12" : "h-full [&>*]:h-full"}>
       {/* Velocímetro da meta */}
+      {show("meta") && (
       <div
         className="cmd-cell cmd-rise col-span-2 flex flex-col p-5 md:col-span-4 md:row-span-3"
         style={{
@@ -193,7 +202,9 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
         </div>
       </div>
 
+      )}
       {/* KPIs compactos */}
+      {show("kpis") && <>
       <div className="col-span-1 md:col-span-2">
         <KpiCardCompact
           label="Leads" value={m?.totalLeads ?? 0} format="int"
@@ -263,7 +274,9 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
         />
       </div>
 
+      </>}
       {/* Receita acumulada */}
+      {show("receita") && (
       <div className="col-span-2 md:col-span-8">
         <RevenueAccumulatedChart
           daily={m?.dailySales ?? []}
@@ -279,7 +292,9 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
         />
       </div>
 
+      )}
       {/* Funil + Oráculo + Feed */}
+      {show("funil") && (
       <div className="col-span-2 md:col-span-4">
         <TrapezoidFunnel
           stages={[
@@ -292,12 +307,9 @@ function TabVisaoGeralV2Base({ period, month, year, range, isAdmin, onAskOraculo
           prevLabel={range.prevLabel.replace("em ", "vs ")}
         />
       </div>
-      <div className="col-span-2 md:col-span-4">
-        <OraculoBriefing onAsk={onAskOraculo} />
-      </div>
-      <div className="col-span-2 md:col-span-4">
-        <LiveOpsFeed />
-      </div>
+      )}
+      {show("oraculo") && <div className="col-span-2 md:col-span-4"><OraculoBriefing onAsk={onAskOraculo} /></div>}
+      {show("feed") && <div className="col-span-2 md:col-span-4"><LiveOpsFeed /></div>}
     </div>
   );
 }

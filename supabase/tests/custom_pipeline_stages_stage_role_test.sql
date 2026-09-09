@@ -1,9 +1,9 @@
 -- supabase/tests/custom_pipeline_stages_stage_role_test.sql
 --
 -- U1 (ADR-0017 §1 / #990 extension) — STAGE_ROLE GOVERNANCE reaches CUSTOM
--- pipelines. custom_pipeline_stages gains stage_role (+ suggestion columns +
+-- pipelines. pipeline_stages gains stage_role (+ suggestion columns +
 -- money guard); metric_stage_role() resolves custom stages via the real join
--- keys (custom_pipeline_stages.pipeline_id + stage_key), so custom-funnel
+-- keys (pipeline_stages.pipeline_id + stage_key), so custom-funnel
 -- sales finally emit sale_events. Mirrors pipeline_stages governance (#990/#991)
 -- and the won/lost money guard (FIX-4).
 --
@@ -38,7 +38,7 @@ INSERT INTO public.master_users (user_id, is_active)
 VALUES ('a1000000-cccc-1111-0000-000000000001', true);
 
 INSERT INTO public.leads (id, organization_id, name, sale_responsible_id)
-VALUES ('a1000000-1ead-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'Lead U1', 'a1000000-aaaa-1111-0000-000000000001');
+VALUES ('a1000000-1ead-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'Lead U1', 'a1000000-aaaa-2222-0000-000000000001');
 
 SET LOCAL session_replication_role = origin;  -- triggers ON (sync + capture + system map)
 
@@ -65,26 +65,26 @@ SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 -- SYSTEM pipeline (propostas): pipeline_stages governa via system_stage_role.
 INSERT INTO public.pipelines (id, organization_id, name, slug, type)
 VALUES ('a1000000-5451-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'Propostas', 'propostas', 'system');
-INSERT INTO public.pipeline_stages (organization_id, pipeline_type, stage_key, name, position) VALUES
-  ('a1000000-0000-0000-0000-000000000001', 'propostas', 'proposta_enviada', 'Proposta enviada', 1),
-  ('a1000000-0000-0000-0000-000000000001', 'propostas', 'vendido', 'Vendido', 2);  -- → won via system map
+INSERT INTO public.pipeline_stages (organization_id, pipeline_type, stage_key, name, position, stage_role) VALUES
+  ('a1000000-0000-0000-0000-000000000001', 'propostas', 'proposta_enviada', 'Proposta enviada', 1, 'open'),
+  ('a1000000-0000-0000-0000-000000000001', 'propostas', 'vendido', 'Vendido', 2, 'won'); -- explicit historical role
 
 -- CUSTOM pipeline: insert fires sync_custom_pipeline_to_pipelines → pipelines(type=custom).
-INSERT INTO public.custom_pipelines (id, organization_id, name, slug, position)
-VALUES ('a1000000-c057-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'Funil Custom', 'funil-custom', 0);
+INSERT INTO public.pipelines (id, organization_id, name, slug, display_order, type)
+VALUES ('a1000000-c057-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001', 'Funil Custom', 'funil-custom', 0, 'custom');
 
 -- CUSTOM stages: 'novo' stays open (default); 'fechado' governed won (seed privileged).
-INSERT INTO public.custom_pipeline_stages (id, organization_id, pipeline_id, stage_key, name, position) VALUES
+INSERT INTO public.pipeline_stages (id, organization_id, pipeline_id, stage_key, name, position) VALUES
   ('a1000000-c5a6-0000-0000-00000000000e', 'a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001', 'novo', 'Novo', 0);
-INSERT INTO public.custom_pipeline_stages (id, organization_id, pipeline_id, stage_key, name, position, stage_role) VALUES
+INSERT INTO public.pipeline_stages (id, organization_id, pipeline_id, stage_key, name, position, stage_role) VALUES
   ('a1000000-c5a6-0000-0000-00000000000f', 'a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001', 'fechado', 'Fechado', 1, 'won');
 
 -- ---------------------------------------------------------------------------
--- (1) Tracer — custom_pipeline_stages carries stage_role NOT NULL DEFAULT 'open'
+-- (1) Tracer — pipeline_stages carries stage_role NOT NULL DEFAULT 'open'
 -- ---------------------------------------------------------------------------
 SELECT col_default_is(
-  'public', 'custom_pipeline_stages', 'stage_role', 'open',
-  '(1) custom_pipeline_stages.stage_role default is open');
+  'public', 'pipeline_stages', 'stage_role', 'open',
+  '(1) pipeline_stages.stage_role default is open');
 
 -- ---------------------------------------------------------------------------
 -- (2) metric_stage_role resolves a CUSTOM stage via the real join keys
@@ -137,10 +137,10 @@ SELECT ok(
 -- ---------------------------------------------------------------------------
 -- (5) END-TO-END: lead entering a custom OPEN stage emits NO sale; moving into
 --     a custom WON stage emits exactly one sale_event (event_type='sale') via
---     custom_pipe_entries → pipeline_entries → pipeline_stage_events → sale_events.
+--     pipeline_entries → pipeline_entries → pipeline_stage_events → sale_events.
 -- ---------------------------------------------------------------------------
 -- Entry into the open stage 'novo' (fires sync → entry → stage_event → capture).
-INSERT INTO public.custom_pipe_entries (id, organization_id, pipeline_id, lead_id, stage_id)
+INSERT INTO public.pipeline_entries (id, organization_id, pipeline_id, lead_id, stage_id)
 VALUES ('a1000000-e457-0000-0000-000000000001', 'a1000000-0000-0000-0000-000000000001',
         'a1000000-c057-0000-0000-000000000001', 'a1000000-1ead-0000-0000-000000000001',
         'a1000000-c5a6-0000-0000-00000000000e');   -- 'novo' (open)
@@ -152,8 +152,8 @@ SELECT is(
   '(5) entering a custom OPEN stage emits no sale_event');
 
 -- Move to the won stage 'fechado' (sync UPDATE → entry stage_key → stage_event → capture).
-UPDATE public.custom_pipe_entries
-  SET stage_id = 'a1000000-c5a6-0000-0000-00000000000f'   -- 'fechado' (won)
+UPDATE public.pipeline_entries
+  SET stage_id = 'a1000000-c5a6-0000-0000-00000000000f', stage_key = 'fechado'
   WHERE id = 'a1000000-e457-0000-0000-000000000001';
 
 SELECT is(
@@ -165,28 +165,30 @@ SELECT is(
   '(5) moving a lead into a custom WON stage emits one sale_event (event_type=sale)');
 
 -- ---------------------------------------------------------------------------
--- (6) MONEY GUARD on custom_pipeline_stages — won/lost is money (ADR-0017 §1).
+-- (6) MONEY GUARD on pipeline_stages — won/lost is money (ADR-0017 §1).
 --     Non-admin member blocked (P0001); open/meeting_* free; admin/master/
 --     service_role allowed. RLS lets a member write the row; the trigger gates
 --     the money role (RLS can't distinguish admin from member on this column).
 -- ---------------------------------------------------------------------------
--- Structure: guard + trigger exist, trigger fires on custom_pipeline_stages.
+-- Structure: guard + trigger exist, trigger fires on pipeline_stages.
 SELECT ok(
   EXISTS (
     SELECT 1 FROM pg_trigger
-    WHERE tgname = 'trg_custom_pipeline_stages_won_lost_guard'
-      AND tgrelid = 'public.custom_pipeline_stages'::regclass
+    WHERE tgname = 'trg_pipeline_stages_won_lost_guard'
+      AND tgrelid = 'public.pipeline_stages'::regclass
       AND NOT tgisinternal
   ),
-  '(6) guard trigger trg_custom_pipeline_stages_won_lost_guard on custom_pipeline_stages');
+  '(6) guard trigger trg_pipeline_stages_won_lost_guard on pipeline_stages');
 
 -- ── MEMBRO (não-admin) ──────────────────────────────────────────────────────
+-- Emulate PostgREST; SET ROLE alone keeps the postgres session bypass.
+SET LOCAL SESSION AUTHORIZATION authenticator;
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   '{"sub":"a1000000-bbbb-1111-0000-000000000001","role":"authenticated"}', true);
 
 SELECT throws_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position, stage_role)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'guard_member_won', 'Membro tentou won', 90, 'won') $$,
@@ -194,7 +196,7 @@ SELECT throws_ok(
   '(6) membro NÃO pode INSERT stage_role=won em custom');
 
 SELECT throws_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position, stage_role)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'guard_member_lost', 'Membro tentou lost', 91, 'lost') $$,
@@ -202,75 +204,74 @@ SELECT throws_ok(
   '(6) membro NÃO pode INSERT stage_role=lost em custom');
 
 SELECT throws_ok(
-  $$ UPDATE public.custom_pipeline_stages SET stage_role = 'won'
+  $$ UPDATE public.pipeline_stages SET stage_role = 'won'
      WHERE id = 'a1000000-c5a6-0000-0000-00000000000e' $$,   -- 'novo' open→won
   'P0001', NULL,
   '(6) membro NÃO pode UPDATE open→won em custom');
 
 SELECT lives_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'guard_member_open', 'Membro etapa open', 92) $$,
   '(6) membro PODE INSERT etapa open (não-dinheiro) em custom');
 
 SELECT lives_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position, stage_role)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'guard_member_meet', 'Membro etapa reunião', 93, 'meeting_held') $$,
   '(6) membro PODE INSERT meeting_held (não-dinheiro) em custom');
 
 -- ── ADMIN da org ────────────────────────────────────────────────────────────
-SET LOCAL role postgres;
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   '{"sub":"a1000000-aaaa-1111-0000-000000000001","role":"authenticated"}', true);
 
 SELECT lives_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position, stage_role)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'guard_admin_won', 'Admin definiu won', 94, 'won') $$,
   '(6) admin da org PODE INSERT stage_role=won em custom');
 
 -- ── MASTER (sem team_member na org) ─────────────────────────────────────────
-SET LOCAL role postgres;
 SET LOCAL role authenticated;
 SELECT set_config('request.jwt.claims',
   '{"sub":"a1000000-cccc-1111-0000-000000000001","role":"authenticated"}', true);
 
 SELECT lives_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position, stage_role)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'guard_master_won', 'Master definiu won', 95, 'won') $$,
   '(6) master (sem team_member) PODE INSERT stage_role=won em custom');
 
 -- ── service_role (backend/classifier/seed) ──────────────────────────────────
-SET LOCAL role postgres;
 SET LOCAL role service_role;
+SELECT set_config('request.jwt.claims', '{"role":"service_role"}', true);
 
 SELECT lives_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position, stage_role)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'guard_service_won', 'Backend definiu won', 96, 'won') $$,
   '(6) service_role PODE INSERT stage_role=won em custom (path classifier/seed)');
 
+RESET SESSION AUTHORIZATION;
 SET LOCAL role postgres;
 
 -- ---------------------------------------------------------------------------
 -- (7) SUGGESTION columns mirror pipeline_stages (#991): same columns + same
 --     CHECKs (suggested_role ≠ 'open'; source ∈ deterministic|ai|flag).
 -- ---------------------------------------------------------------------------
-SELECT has_column('public', 'custom_pipeline_stages', 'suggested_stage_role',
-  '(7) custom_pipeline_stages.suggested_stage_role exists');
-SELECT has_column('public', 'custom_pipeline_stages', 'stage_role_suggestion_source',
-  '(7) custom_pipeline_stages.stage_role_suggestion_source exists');
+SELECT has_column('public', 'pipeline_stages', 'suggested_stage_role',
+  '(7) pipeline_stages.suggested_stage_role exists');
+SELECT has_column('public', 'pipeline_stages', 'stage_role_suggestion_source',
+  '(7) pipeline_stages.stage_role_suggestion_source exists');
 
 SELECT throws_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position, suggested_stage_role)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'sug_open', 'Sugestão open', 97, 'open') $$,
@@ -278,7 +279,7 @@ SELECT throws_ok(
   '(7) suggested_stage_role = open viola o CHECK not_open');
 
 SELECT throws_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position, stage_role_suggestion_source)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',
              'sug_badsrc', 'Fonte inválida', 98, 'telepatia') $$,
@@ -286,7 +287,7 @@ SELECT throws_ok(
   '(7) stage_role_suggestion_source fora de {deterministic,ai,flag} viola o CHECK');
 
 SELECT lives_ok(
-  $$ INSERT INTO public.custom_pipeline_stages
+  $$ INSERT INTO public.pipeline_stages
        (organization_id, pipeline_id, stage_key, name, position,
         suggested_stage_role, stage_role_suggestion_source, stage_role_suggested_at)
      VALUES ('a1000000-0000-0000-0000-000000000001', 'a1000000-c057-0000-0000-000000000001',

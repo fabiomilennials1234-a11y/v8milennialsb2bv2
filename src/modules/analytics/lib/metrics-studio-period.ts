@@ -20,6 +20,13 @@
  */
 
 import type { MetricPeriod } from "@/modules/analytics/hooks/useMetricMeasure";
+import { zonedDateParts } from "@/shared/time/zoned-day";
+
+/** Data-calendário da org; este Date é um recipiente, não um instante para enviar ao banco. */
+export function referenciaNaOrg(now: Date, timezone: string): Date {
+  const { y, m, d } = zonedDateParts(now, timezone);
+  return new Date(y, m - 1, d);
+}
 
 export type StudioPeriod = "today" | "week" | "month" | "quarter" | "custom";
 
@@ -109,7 +116,9 @@ export function periodoAtual(
   studio: StudioPeriod,
   hoje = new Date(),
   range?: StudioRange | null,
+  timezone?: string,
 ): EnginePeriod {
+  if (timezone) hoje = referenciaNaOrg(hoje, timezone);
   switch (studio) {
     case "today":
       return { period: "day", ref: iso(hoje), start: null, end: null };
@@ -145,7 +154,9 @@ export function periodoAnterior(
   studio: StudioPeriod,
   hoje = new Date(),
   range?: StudioRange | null,
+  timezone?: string,
 ): EnginePeriod {
+  if (timezone) hoje = referenciaNaOrg(hoje, timezone);
   switch (studio) {
     case "today": {
       const ontem = new Date(hoje);
