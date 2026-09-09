@@ -282,3 +282,11 @@ Rollback removes the combined readers and value publication trigger, then restor
 Adds `business.trigger.stage_elapsed` as its own explicit scope. The existing combined readers now calculate elapsed seconds with PostgreSQL `statement_timestamp()` against the exact entry's `stage_changed_at`; they never use `updated_at`, `created_at` or another card. Null or future clocks are returned as unusable source data and the evaluator fails explicitly. Minutes, hours and days remain presentation/comparison units over the same elapsed-second measurement.
 
 Rollback restores migration 42's exact stage/value readers, value publication trigger and scope vocabulary while retaining entries, timestamps, grants, versions and pins. Roll back 43 before 42–39; reapply after 42. The 44-migration rehearsal verifies elapsed scope removal, trigger removal, preserved history and restored no-direct-call trigger ACL. Preview endpoints only; worker and production remain unchanged.
+
+## Migration 44 — existence of one matching business
+
+Adds three explicit scopes: `business.exists.lifecycle`, `business.exists.stage` and `business.exists.value`. The personal reader is authenticated-only and SECURITY INVOKER; the organization reader is service-only and requires the current organization grant. Both query the complete lead-owned entry set on the server. Stage/funnel columns and financial value are individually projected only when their scopes are present.
+
+Publication rejects malformed query groups, malformed typed children, unavailable stage pairs and missing scopes before a version is inserted. Rollback removes both readers and its publication trigger, then restores migration 43's scope vocabulary. It retains pipelines, entries, deals, grants, drafts, versions and execution pins. Roll back 44 before 43–39; reapply after 43. Preview endpoints only; worker and production remain unchanged.
+
+The 45-migration transactional rollback/reapply rehearsal passed. Effective privileges after recovery: personal reader anon=false/authenticated=true/service=false; organization reader anon=false/authenticated=false/service=true; publication trigger callable by no API role.

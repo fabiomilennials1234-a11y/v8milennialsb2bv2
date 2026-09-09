@@ -42,6 +42,10 @@ export type GuidedTriggerBusinessValueRule = { version: 1; id: string; field: 'b
 export type GuidedElapsedUnit = 'minutes' | 'hours' | 'days';
 export type GuidedTriggerBusinessStageElapsedRule = { version: 1; id: string; field: 'business.trigger.stage_elapsed';
   operator: Exclude<GuidedNumberComparison['operator'], 'is_empty' | 'is_not_empty'>; value: number; unit: GuidedElapsedUnit };
+export type GuidedBusinessExistenceChild = ({ version: 1; id: string; field: 'business.stage'; operator: 'equals' | 'not_equals';
+  pipelineId: string; stageId: string } | ({ version: 1; id: string; field: 'business.value' } & GuidedNumberComparison));
+export type GuidedBusinessExistence = { version: 1; id: string; kind: 'business_exists'; lifecycle: 'open' | 'won' | 'lost' | 'all';
+  match: 'all' | 'any'; children: GuidedBusinessExistenceChild[] };
 
 export type GuidedRule = GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
@@ -55,7 +59,7 @@ export interface GuidedConditionRequest {
   authorization?: { kind: 'organization'; workflowId: string };
 }
 
-export type GuidedCondition = GuidedRule | {
+export type GuidedCondition = GuidedRule | GuidedBusinessExistence | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedCondition[];
 };
 
@@ -66,6 +70,22 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
     const rule = value as Record<string, unknown>;
     if (rule.version !== 1 || typeof rule.id !== 'string' || !rule.id || ids.has(rule.id)) return false;
     ids.add(rule.id);
+    if (rule.kind === 'business_exists') {
+      if ((rule.lifecycle !== 'open' && rule.lifecycle !== 'won' && rule.lifecycle !== 'lost' && rule.lifecycle !== 'all')
+        || (rule.match !== 'all' && rule.match !== 'any') || !Array.isArray(rule.children)
+        || rule.children.length === 0 || rule.children.length > 256) return false;
+      return rule.children.every(child => {
+        if (!child || typeof child !== 'object' || Array.isArray(child)) return false;
+        const candidate = child as Record<string, unknown>;
+        if (candidate.version !== 1 || typeof candidate.id !== 'string' || !candidate.id || ids.has(candidate.id)) return false;
+        ids.add(candidate.id);
+        if (candidate.field === 'business.stage') return (candidate.operator === 'equals' || candidate.operator === 'not_equals')
+          && typeof candidate.pipelineId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate.pipelineId)
+          && typeof candidate.stageId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(candidate.stageId);
+        return candidate.field === 'business.value' && (candidate.operator === 'is_empty' || candidate.operator === 'is_not_empty'
+          || (isGuidedNumberOperator(candidate.operator) && typeof candidate.value === 'number' && Number.isFinite(candidate.value)));
+      });
+    }
     if (rule.kind === 'group') {
       return groupDepth < 3 && (rule.match === 'all' || rule.match === 'any')
         && Array.isArray(rule.children) && rule.children.length > 0
@@ -109,6 +129,7 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
 }
 
 export function guidedConditionFields(condition: GuidedCondition): string[] {
+  if ('kind' in condition && condition.kind === 'business_exists') return ['business.exists.lifecycle', ...new Set(condition.children.map(child => child.field === 'business.stage' ? 'business.exists.stage' : 'business.exists.value'))];
   return 'children' in condition ? [...new Set(condition.children.flatMap(guidedConditionFields))] : [condition.field === 'lead.custom' ? `lead.custom:${condition.fieldId.toLowerCase()}` : condition.field];
 }
 
@@ -154,8 +175,19 @@ export async function evaluateGuidedCondition(
   const originIds = new Set<string>();
   const tagIds = new Set<string>();
   const businessStageReferences = new Map<string, { pipelineId: string; stageId: string }>();
+  const businessExistenceStageReferences = new Map<string, { pipelineId: string; stageId: string }>();
+  const businessExistenceQueries: GuidedBusinessExistence[] = [];
   function collect(current: GuidedCondition): void {
-    if ('children' in current) current.children.forEach(collect);
+    if ('kind' in current && current.kind === 'business_exists') {
+      businessExistenceQueries.push(current);
+      current.children.forEach(child => {
+        if (child.field === 'business.stage') businessExistenceStageReferences.set(
+          `${child.pipelineId.toLowerCase()}:${child.stageId.toLowerCase()}`,
+          { pipelineId: child.pipelineId.toLowerCase(), stageId: child.stageId.toLowerCase() },
+        );
+      });
+    }
+    else if ('children' in current) current.children.forEach(collect);
     else if (current.field === 'lead.custom') {
       const id = current.fieldId.toLowerCase();
       customIds.add(id);
@@ -177,31 +209,32 @@ export async function evaluateGuidedCondition(
     );
   }
   collect(request.condition);
+  const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.'));
   const usesCustomReader = Boolean(request.authorization && customIds.size);
-  const fields = requestedFields.filter(isGuidedScalarField);
+  const fields = leadRequestedFields.filter(isGuidedScalarField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
   const usesResponsibleReader = Boolean(request.authorization && responsibleFields.length);
-  const usesOriginReader = Boolean(request.authorization && requestedFields.includes('lead.origin'));
+  const usesOriginReader = Boolean(request.authorization && leadRequestedFields.includes('lead.origin'));
   const usesTagReader = Boolean(request.authorization && tagIds.size);
   const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
-  const usesOnlyTriggerBusiness = requestedFields.every(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
+  const hasOnlyBusinessData = leadRequestedFields.length === 0;
   const { data, error, status } = request.authorization?.kind === 'organization'
-    ? usesOnlyTriggerBusiness ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
+    ? hasOnlyBusinessData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
     : usesCustomReader ? await caller.rpc('read_guided_condition_custom_data', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
-      p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds], p_member_ids: [...memberIds],
+      p_lead_id: request.leadId, p_fields: leadRequestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds], p_member_ids: [...memberIds],
     }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
     : usesResponsibleReader ? await caller.rpc('read_guided_condition_data', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
-      p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds], p_member_ids: [...memberIds],
+      p_lead_id: request.leadId, p_fields: leadRequestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds], p_member_ids: [...memberIds],
     }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
     : usesOriginReader ? await caller.rpc('read_guided_condition_data', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
-      p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds],
+      p_lead_id: request.leadId, p_fields: leadRequestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds],
     }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
     : usesTagReader ? await caller.rpc('read_guided_condition_data', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
-      p_lead_id: request.leadId, p_fields: requestedFields, p_tag_ids: [...tagIds],
+      p_lead_id: request.leadId, p_fields: leadRequestedFields, p_tag_ids: [...tagIds],
     }).returns<Array<{ id: string; organization_id: string; field_values: Record<string, unknown> }>>().maybeSingle()
     : usesFieldReader ? await caller.rpc('read_guided_condition_lead_fields', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
@@ -275,6 +308,36 @@ export async function evaluateGuidedCondition(
       && (candidate.entry.stage_elapsed_seconds === null || candidate.entry.stage_elapsed_seconds < 0)) {
       return { status: 'error' as const, code: 'source_unavailable' as const };
     }
+  }
+  type BusinessCandidate = { id: string; pipeline_id: string | null; pipeline_name: string | null; stage_id: string | null;
+    value: number | null; outcome: 'open' | 'won' | 'lost' };
+  let businessCandidates: BusinessCandidate[] = [];
+  if (businessExistenceQueries.length) {
+    const existenceFields = requestedFields.filter(field => field.startsWith('business.exists.'));
+    const response = await caller.rpc(request.authorization?.kind === 'organization'
+      ? 'read_guided_condition_business_candidates' : 'test_guided_condition_business_candidates', {
+      ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+      p_organization_id: request.organizationId, p_lead_id: request.leadId, p_fields: existenceFields,
+      p_stage_references: [...businessExistenceStageReferences.values()],
+    });
+    if (response.error) {
+      const code = response.error.code === 'PT422' ? 'reference_unavailable' as const
+        : response.error.code === 'PT404' ? 'context_unavailable' as const
+        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
+        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+      return { status: 'error' as const, code };
+    }
+    if (!Array.isArray(response.data) || response.data.some(candidate => !candidate || typeof candidate.id !== 'string'
+      || (candidate.pipeline_id !== null && typeof candidate.pipeline_id !== 'string')
+      || (candidate.pipeline_name !== null && typeof candidate.pipeline_name !== 'string')
+      || (candidate.stage_id !== null && typeof candidate.stage_id !== 'string')
+      || (existenceFields.includes('business.exists.stage')
+        && (typeof candidate.pipeline_id !== 'string' || typeof candidate.pipeline_name !== 'string' || typeof candidate.stage_id !== 'string'))
+      || (candidate.value !== null && (typeof candidate.value !== 'number' || !Number.isFinite(candidate.value)))
+      || (candidate.outcome !== 'open' && candidate.outcome !== 'won' && candidate.outcome !== 'lost'))) {
+      return { status: 'error' as const, code: 'source_unavailable' as const };
+    }
+    businessCandidates = response.data as BusinessCandidate[];
   }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
   if (customIds.size) {
@@ -438,18 +501,51 @@ export async function evaluateGuidedCondition(
     return value !== null && (typeof value !== 'number' || !Number.isFinite(value));
   })) return { status: 'error' as const, code: 'source_unavailable' as const };
   type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string };
-    context?: { entryId: string; pipeline: { id: string; name: string } } }
+    context?: { entryId: string; pipeline?: { id: string; name: string } } }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
   const rules: RuleResult[] = [];
   const groups: GroupResult[] = [];
   function skip(condition: GuidedCondition): void {
-    if ('children' in condition) {
+    if ('kind' in condition && condition.kind === 'business_exists') rules.push({ id: condition.id, status: 'not_evaluated' });
+    else if ('children' in condition) {
       groups.push({ id: condition.id, status: 'not_evaluated' });
       condition.children.forEach(skip);
     } else rules.push({ id: condition.id, status: 'not_evaluated' });
   }
   function evaluate(condition: GuidedCondition): boolean {
+    if ('kind' in condition && condition.kind === 'business_exists') {
+      const candidates = condition.lifecycle === 'all' ? businessCandidates
+        : businessCandidates.filter(candidate => candidate.outcome === condition.lifecycle);
+      const matchesChild = (candidate: BusinessCandidate, child: GuidedBusinessExistenceChild) => {
+        if (child.field === 'business.stage') {
+          const same = candidate.pipeline_id?.toLowerCase() === child.pipelineId.toLowerCase()
+            && candidate.stage_id?.toLowerCase() === child.stageId.toLowerCase();
+          return child.operator === 'equals' ? same : !same;
+        }
+        const actual = candidate.value;
+        const empty = actual === null;
+        if (child.operator === 'is_empty') return empty;
+        if (child.operator === 'is_not_empty') return !empty;
+        if (empty) return false;
+        switch (child.operator) {
+          case 'equals': return actual === child.value;
+          case 'not_equals': return actual !== child.value;
+          case 'greater_than': return actual > child.value;
+          case 'greater_than_or_equal': return actual >= child.value;
+          case 'less_than': return actual < child.value;
+          case 'less_than_or_equal': return actual <= child.value;
+        }
+      };
+      const matching = candidates.find(candidate => condition.match === 'all'
+        ? condition.children.every(child => matchesChild(candidate, child))
+        : condition.children.some(child => matchesChild(candidate, child)));
+      const matched = Boolean(matching);
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual: matching?.id ?? null,
+        ...(matching ? { context: { entryId: matching.id, ...(matching.pipeline_id && matching.pipeline_name
+          ? { pipeline: { id: matching.pipeline_id, name: matching.pipeline_name } } : {}) } } : {}) });
+      return matched;
+    }
     if ('children' in condition) {
       const group: Extract<GroupResult, { status: 'evaluated' }> = { id: condition.id, status: 'evaluated', matched: condition.match === 'all' };
       groups.push(group);

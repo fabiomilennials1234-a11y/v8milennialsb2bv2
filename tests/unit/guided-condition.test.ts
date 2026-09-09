@@ -407,6 +407,50 @@ it('reads stage and value for one trigger entry through one atomic business RPC'
   expect(businessReads).toBe(1);
 });
 
+it('requires one candidate to satisfy every business-existence filter', async () => {
+  const pipelineId = 'dddddddd-dddd-dddd-dddd-dddddddddddd';
+  const stageId = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  let reads = 0;
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async (input, init) => {
+      if (!String(input).includes('/rpc/test_guided_condition_business_candidates')) return new Response(JSON.stringify({
+        id: 'lead-1', organization_id: 'org-1',
+      }), { headers: { 'Content-Type': 'application/json' } });
+      reads++;
+      expect(JSON.parse(String(init?.body))).toEqual({ p_organization_id: 'org-1', p_lead_id: 'lead-1',
+        p_fields: ['business.exists.lifecycle', 'business.exists.stage', 'business.exists.value'],
+        p_stage_references: [{ pipelineId, stageId }] });
+      return new Response(JSON.stringify([
+        { id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', pipeline_id: pipelineId, pipeline_name: 'Comercial', stage_id: stageId, value: 100, outcome: 'open' },
+        { id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', pipeline_id: pipelineId, pipeline_name: 'Comercial', stage_id: crypto.randomUUID(), value: 5000, outcome: 'open' },
+      ]), { headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+    version: 1, id: 'exists', kind: 'business_exists', lifecycle: 'open', match: 'all', children: [
+      { version: 1, id: 'stage', field: 'business.stage', operator: 'equals', pipelineId, stageId },
+      { version: 1, id: 'value', field: 'business.value', operator: 'greater_than', value: 1000 },
+    ],
+  } })).toEqual({ status: 'evaluated', matched: false,
+    rules: [{ id: 'exists', status: 'evaluated', matched: false, actual: null }] });
+  expect(reads).toBe(1);
+});
+
+it('returns No for a complete business-existence query with no candidate', async () => {
+  const database = createClient('https://db.example.test', 'test-anon-key', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async input => new Response(String(input).includes('/rpc/test_guided_condition_business_candidates') ? '[]'
+      : JSON.stringify({ id: 'lead-1', organization_id: 'org-1' }), { headers: { 'Content-Type': 'application/json' } }) },
+  });
+  expect(await evaluateGuidedCondition(database, { organizationId: 'org-1', leadId: 'lead-1', condition: {
+    version: 1, id: 'exists', kind: 'business_exists', lifecycle: 'all', match: 'all', children: [
+      { version: 1, id: 'value', field: 'business.value', operator: 'is_empty' },
+    ],
+  } })).toEqual({ status: 'evaluated', matched: false,
+    rules: [{ id: 'exists', status: 'evaluated', matched: false, actual: null }] });
+});
+
 it.each([
   { operator: 'equals', value: 125, unit: 'minutes', matched: true },
   { operator: 'not_equals', value: 2, unit: 'hours', matched: true },

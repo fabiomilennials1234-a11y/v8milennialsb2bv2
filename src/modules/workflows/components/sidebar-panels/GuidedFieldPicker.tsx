@@ -12,6 +12,7 @@ const fields = { ...GUIDED_SCALAR_FIELDS, ...GUIDED_RESPONSIBLE_FIELDS, 'lead.ta
   'business.trigger.stage': { label: 'Etapa' }, 'business.trigger.value': { label: 'Valor' },
   'business.trigger.stage_elapsed': { label: 'Tempo na etapa' } };
 type Field = Exclude<GuidedRuleDraft['field'], 'lead.custom'>;
+export type GuidedFieldSelection = Field | 'business.exists';
 // This catalogue contains only capabilities supported by the guided evaluator.
 // The ordered record also makes new field types require an explicit discovery entry.
 const vocabulary = {
@@ -40,7 +41,7 @@ const entries = Object.entries(vocabulary) as [Field, string[]][];
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
 
 export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId, custom, onCustomSelect }: {
-  id: string; value: GuidedRuleDraft['field']; onChange: (field: Field) => void;
+  id: string; value: GuidedRuleDraft['field'] | 'business.exists'; onChange: (field: GuidedFieldSelection) => void;
   actorId: string; organizationId: string;
   custom?: Extract<GuidedRuleDraft, { field: 'lead.custom' }>;
   onCustomSelect: (fieldId: string, fieldLabel: string, fieldType: 'text' | 'number' | 'boolean' | 'date' | 'select') => void;
@@ -51,7 +52,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
   const { options, selected } = useCustomFieldCatalogue(actorId, organizationId, term, open, custom?.fieldId);
   const searching = term !== search.trim() || options.isPending;
   const unavailable = custom && selected.isSuccess && (!selected.data || selected.data.field_type !== custom.fieldType);
-  const name = value !== 'lead.custom' ? fields[value].label : selected.isError ? 'Campo não verificado'
+  const name = value === 'business.exists' ? 'Existe negócio' : value !== 'lead.custom' ? fields[value].label : selected.isError ? 'Campo não verificado'
     : selected.isPending ? 'Consultando campo…'
     : unavailable ? 'Campo indisponível' : selected.data?.field_name || 'Campo personalizado';
   useEffect(() => {
@@ -63,7 +64,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
     <PopoverTrigger asChild>
       <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open}
         aria-haspopup="dialog" className="w-full justify-between font-normal">
-        <span className="truncate">{value.startsWith('business.trigger.') ? 'Negócio do gatilho' : 'Lead'} · {name}</span>
+        <span className="truncate">{value === 'business.exists' ? 'Negócios' : value.startsWith('business.trigger.') ? 'Negócio do gatilho' : 'Lead'} · {name}</span>
         <ChevronsUpDown aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
     </PopoverTrigger>
@@ -97,6 +98,13 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
               <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${field === value ? 'opacity-100' : 'opacity-0'}`} />
               <span>{fields[field].label}</span>
             </CommandItem>)}
+          </CommandGroup>
+          <CommandGroup heading="Negócios">
+            <CommandItem value="business.exists" keywords={['Negócios', 'Existe negócio', 'qualquer negócio', 'oportunidade', 'deal']}
+              onSelect={() => { if (value !== 'business.exists') onChange('business.exists'); setOpen(false); setSearch(''); }}>
+              <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${value === 'business.exists' ? 'opacity-100' : 'opacity-0'}`} />
+              <span>Existe negócio</span>
+            </CommandItem>
           </CommandGroup>
           {!searching && !options.isError && <CommandGroup heading="Lead · Campos personalizados">
             {options.data?.filter(field => (field.field_type === 'text' || field.field_type === 'number' || field.field_type === 'boolean' || field.field_type === 'date' || field.field_type === 'select') && !(unavailable && field.id === custom?.fieldId)).map(field =>

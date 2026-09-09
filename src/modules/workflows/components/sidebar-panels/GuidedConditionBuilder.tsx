@@ -1,10 +1,10 @@
 import { GuidedCustomOptionPicker } from './GuidedCustomOptionPicker';
 import { GUIDED_DATE_OPERATORS, isGuidedCalendarDate, isGuidedDateOperator } from '@/contracts/workflows/guided-dates';
-import { GuidedFieldPicker } from './GuidedFieldPicker';
+import { GuidedFieldPicker, type GuidedFieldSelection } from './GuidedFieldPicker';
 import { isGuidedResponsibleField, GUIDED_SCALAR_FIELDS, GUIDED_NUMBER_OPERATORS, isGuidedNumberField, isGuidedNumberOperator, GUIDED_TEXT_OPERATORS, isGuidedTextField, isGuidedTextOperator } from '@/contracts/workflows/guided-fields';
 import { summarizeGuidedCondition } from '../../lib/guided-condition-summary';
 import { useLayoutEffect, useRef, useState } from 'react';
-import type { GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
+import type { GuidedBusinessExistenceChildDraft, GuidedBusinessExistenceDraft, GuidedConditionDraft, GuidedRuleDraft } from '@/types/workflow';
 import { GuidedLeadValuePicker } from './GuidedLeadValuePicker';
 import { GuidedUtmPicker } from './GuidedUtmPicker';
 import { isUtmValueField } from '../../hooks/useOrgUtmValues';
@@ -17,6 +17,9 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 
 export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolean {
+  if ('kind' in condition && condition.kind === 'business_exists') return !condition.children.length || condition.children.some(child =>
+    child.field === 'business.stage' ? !child.pipelineId || !child.stageId
+      : child.operator !== 'is_empty' && child.operator !== 'is_not_empty' && (child.value === '' || !Number.isFinite(child.value)));
   return 'children' in condition ? !condition.children.length || condition.children.some(isIncompleteGuidedDraft)
     : condition.field === 'business.trigger.stage' ? !condition.pipelineId || !condition.stageId
     : condition.field === 'business.trigger.value' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty'
@@ -30,11 +33,104 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
 }
 const newRule = (): GuidedRuleDraft => ({ version: 1, id: crypto.randomUUID(), field: 'lead.name', operator: 'equals', value: '' });
 function duplicateCondition(condition: GuidedConditionDraft): GuidedConditionDraft {
-  return 'children' in condition
+  return 'kind' in condition && condition.kind === 'business_exists'
+    ? { ...condition, id: crypto.randomUUID(), children: condition.children.map(child => ({ ...child, id: crypto.randomUUID() })) }
+    : 'children' in condition
     ? { ...condition, id: crypto.randomUUID(), children: condition.children.map(duplicateCondition) }
     : { ...condition, id: crypto.randomUUID() };
 }
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+
+function defaultRule(id: string, field: Exclude<GuidedFieldSelection, 'business.exists'>): GuidedRuleDraft {
+  if (field === 'business.trigger.stage') return { version: 1, id, field, operator: 'equals', pipelineId: '', stageId: '' };
+  if (field === 'business.trigger.stage_elapsed') return { version: 1, id, field, operator: 'greater_than_or_equal', value: '', unit: 'hours' };
+  if (field === 'business.trigger.value' || isGuidedNumberField(field)) return { version: 1, id, field, operator: 'equals', value: '' };
+  if (isGuidedResponsibleField(field)) return { version: 1, id, field, operator: 'equals', memberId: '' };
+  if (field === 'lead.origin') return { version: 1, id, field, operator: 'equals', originId: '' };
+  if (field === 'lead.tags') return { version: 1, id, field, operator: 'has_tag', tagId: '' };
+  return { version: 1, id, field, operator: 'equals', value: '' };
+}
+
+function defaultCustomRule(id: string, fieldId: string, fieldLabel: string, fieldType: 'text' | 'number' | 'boolean' | 'date' | 'select'): GuidedRuleDraft {
+  if (fieldType === 'number') return { version: 1, id, field: 'lead.custom', fieldId, fieldLabel, fieldType, operator: 'equals', value: '' };
+  if (fieldType === 'boolean') return { version: 1, id, field: 'lead.custom', fieldId, fieldLabel, fieldType, operator: 'equals', value: '' };
+  if (fieldType === 'date') return { version: 1, id, field: 'lead.custom', fieldId, fieldLabel, fieldType, operator: 'equals', value: '' };
+  if (fieldType === 'select') return { version: 1, id, field: 'lead.custom', fieldId, fieldLabel, fieldType, operator: 'equals', value: '' };
+  return { version: 1, id, field: 'lead.custom', fieldId, fieldLabel, fieldType, operator: 'equals', value: '' };
+}
+
+function GuidedBusinessExistenceBuilder({ condition, onChange, actorId, organizationId }: {
+  condition: GuidedBusinessExistenceDraft; onChange: (condition: GuidedConditionDraft) => void; actorId: string; organizationId: string;
+}) {
+  const updateChild = (id: string, replacement: GuidedBusinessExistenceChildDraft) => onChange({ ...condition,
+    children: condition.children.map(child => child.id === id ? replacement : child) });
+  return <fieldset className="space-y-4 rounded-xl border border-border p-3">
+    <legend className="px-1 text-sm font-medium">Existe negócio</legend>
+    <div className="space-y-2"><Label htmlFor={`guided-field-${condition.id}`}>Informação</Label>
+      <GuidedFieldPicker id={`guided-field-${condition.id}`} value="business.exists" actorId={actorId} organizationId={organizationId}
+        onChange={field => field !== 'business.exists' && onChange(defaultRule(condition.id, field))}
+        onCustomSelect={(fieldId, fieldLabel, fieldType) => onChange(defaultCustomRule(condition.id, fieldId, fieldLabel, fieldType))} />
+    </div>
+    <div className="space-y-2"><Label htmlFor={`guided-lifecycle-${condition.id}`}>Ciclo do negócio</Label>
+      <select id={`guided-lifecycle-${condition.id}`} className={selectClass} value={condition.lifecycle}
+        onChange={event => onChange({ ...condition, lifecycle: event.target.value as GuidedBusinessExistenceDraft['lifecycle'] })}>
+        <option value="open">Em aberto</option><option value="won">Ganho</option><option value="lost">Perdido</option><option value="all">Todos</option>
+      </select>
+      <p className="text-xs text-muted-foreground">Escolha quais negócios entram na busca.</p>
+    </div>
+    <div className="space-y-2"><Label htmlFor={`guided-exists-match-${condition.id}`}>Combinação no mesmo negócio</Label>
+      <select id={`guided-exists-match-${condition.id}`} className={selectClass} value={condition.match}
+        onChange={event => onChange({ ...condition, match: event.target.value === 'any' ? 'any' : 'all' })}>
+        <option value="all">Todos os filtros (E)</option><option value="any">Qualquer filtro (OU)</option>
+      </select>
+      <p className="text-xs text-muted-foreground">Os filtros são avaliados juntos em cada negócio. Dados de negócios diferentes nunca são combinados.</p>
+    </div>
+    {condition.children.map((child, index) => <div key={child.id} className="space-y-3 border-l-2 border-border pl-3">
+      <div className="flex items-center justify-between gap-2"><p className="text-xs text-muted-foreground">Filtro {index + 1}</p>
+        {condition.children.length > 1 && <Button type="button" variant="ghost" onClick={() => onChange({ ...condition,
+          children: condition.children.filter(item => item.id !== child.id) })}>Excluir filtro</Button>}
+      </div>
+      <div className="space-y-2"><Label htmlFor={`guided-business-field-${child.id}`}>Informação do negócio {index + 1}</Label>
+        <select id={`guided-business-field-${child.id}`} className={selectClass} value={child.field} onChange={event => updateChild(child.id,
+          event.target.value === 'business.value' ? { version: 1, id: child.id, field: 'business.value', operator: 'equals', value: '' }
+            : { version: 1, id: child.id, field: 'business.stage', operator: 'equals', pipelineId: '', stageId: '' })}>
+          <option value="business.stage">Etapa</option><option value="business.value">Valor</option>
+        </select>
+      </div>
+      {child.field === 'business.stage' ? <>
+        <Label htmlFor={`guided-business-operator-${child.id}`}>Comparação do negócio {index + 1}</Label>
+        <select id={`guided-business-operator-${child.id}`} className={selectClass} value={child.operator}
+          onChange={event => updateChild(child.id, { ...child, operator: event.target.value === 'not_equals' ? 'not_equals' : 'equals' })}>
+          <option value="equals">é</option><option value="not_equals">não é</option>
+        </select>
+        <GuidedBusinessStagePicker actorId={actorId} organizationId={organizationId} condition={child} onChange={replacement => updateChild(child.id, replacement)} />
+      </> : <>
+        <Label htmlFor={`guided-business-operator-${child.id}`}>Comparação do negócio {index + 1}</Label>
+        <select id={`guided-business-operator-${child.id}`} className={selectClass} value={child.operator} onChange={event => {
+          const operator = event.target.value;
+          if (operator === 'is_empty' || operator === 'is_not_empty') updateChild(child.id, { version: 1, id: child.id, field: 'business.value', operator });
+          else if (isGuidedNumberOperator(operator)) updateChild(child.id, { version: 1, id: child.id, field: 'business.value', operator,
+            value: 'value' in child ? child.value : '' });
+        }}>
+          {Object.entries(GUIDED_NUMBER_OPERATORS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          <option value="is_empty">está vazio</option><option value="is_not_empty">está preenchido</option>
+        </select>
+        {child.operator !== 'is_empty' && child.operator !== 'is_not_empty' && <div className="space-y-2">
+          <Label htmlFor={`guided-business-value-${child.id}`}>Valor do negócio {index + 1}</Label>
+          <Input id={`guided-business-value-${child.id}`} type="number" step="any" value={child.value}
+            onChange={event => updateChild(child.id, { ...child, value: event.target.value === '' ? '' : event.target.valueAsNumber })} />
+        </div>}
+      </>}
+    </div>)}
+    <Button type="button" variant="outline" disabled={condition.children.length >= 256} onClick={() => {
+      const id = crypto.randomUUID();
+      const child: GuidedBusinessExistenceChildDraft = condition.children.some(item => item.field === 'business.stage')
+        ? { version: 1, id, field: 'business.value', operator: 'equals', value: '' }
+        : { version: 1, id, field: 'business.stage', operator: 'equals', pipelineId: '', stageId: '' };
+      onChange({ ...condition, children: [...condition.children, child] });
+    }}>Adicionar filtro do negócio</Button>
+  </fieldset>;
+}
 
 export function GuidedConditionBuilder({ condition, onChange, actorId, organizationId, groupDepth = 0 }: {
   actorId: string; organizationId: string; condition: GuidedConditionDraft; groupDepth?: number; onChange: (condition: GuidedConditionDraft) => void;
@@ -49,6 +145,9 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
     }
   });
   const focusValue = (id: string) => { pendingFocus.current = `guided-value-${id}`; };
+  if ('kind' in condition && condition.kind === 'business_exists') {
+    return <GuidedBusinessExistenceBuilder actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />;
+  }
   if ('children' in condition) {
     return <fieldset className="space-y-4 rounded-xl border border-border p-3">
       <legend className="px-1 text-sm font-medium">Grupo de condições</legend>
@@ -136,6 +235,12 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
           } else onChange({ ...base, operator: 'equals', value: '' });
 
         }} onChange={field => {
+        if (field === 'business.exists') {
+          onChange({ version: 1, id: condition.id, kind: 'business_exists', lifecycle: 'open', match: 'all', children: [
+            { version: 1, id: crypto.randomUUID(), field: 'business.stage', operator: 'equals', pipelineId: '', stageId: '' },
+          ] });
+          return;
+        }
         setFieldReset(condition.field !== field && !(((isGuidedTextField(condition.field) || (condition.field === 'lead.custom' && condition.fieldType === 'text')) && isGuidedTextField(field)) || (isGuidedResponsibleField(condition.field) && isGuidedResponsibleField(field))));
         if (field === 'business.trigger.stage') onChange(condition.field === field ? condition
           : { version: 1, id: condition.id, field, operator: 'equals', pipelineId: '', stageId: '' });

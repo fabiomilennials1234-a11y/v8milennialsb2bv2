@@ -98,3 +98,9 @@ Editor exposes Valor under “Negócio do gatilho”, typed numeric comparisons,
 Personal HTTP, organization grant/revocation, immutable publication and pinned execution are covered. Editor requires an exact trigger business, exposes numeric operators and readable unit-aware summaries, and omits empty/filled because an unreliable clock is an operational error.
 
 Ticket 08 implementation slices are present. It remains uncertified until the complete 21-ticket acceptance run. Ticket 09 existence semantics remain separate.
+
+## Ticket 09 — existence on one business checkpoint
+
+The guided contract now represents `Existe negócio` separately from the exact trigger business. Lifecycle is visible and defaults to Em aberto. Every child filter runs against one candidate, including multiple entries in the same funnel; a real test proves stage from one and value from another returns No. The server reader queries the complete current entry set without Kanban pagination.
+
+Real preview coverage includes open/won/all lifecycle, absence, personal RLS, direct-role ACL, foreign context, partial/full grant, revocation, malformed publication, unavailable stage reference, immutable version pin and HTTP evaluation. Stage/funnel data remains hidden from value-only readers. Browser coverage verifies selector-first construction, lifecycle summary, typed stage/value filters, no trigger-business requirement and exact request shape. Ticket stays uncertified until the final 21-ticket acceptance run.

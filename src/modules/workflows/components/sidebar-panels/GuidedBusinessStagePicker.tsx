@@ -2,15 +2,17 @@ import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Label } from '@/components/ui/label';
-import type { GuidedTriggerBusinessStageRuleDraft } from '@/types/workflow';
+import type { GuidedBusinessExistenceChildDraft, GuidedTriggerBusinessStageRuleDraft } from '@/types/workflow';
 
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-export function GuidedBusinessStagePicker({ actorId, organizationId, condition, onChange }: {
+type GuidedBusinessStageDraft = GuidedTriggerBusinessStageRuleDraft | Extract<GuidedBusinessExistenceChildDraft, { field: 'business.stage' }>;
+
+export function GuidedBusinessStagePicker<T extends GuidedBusinessStageDraft>({ actorId, organizationId, condition, onChange }: {
   actorId: string;
   organizationId: string;
-  condition: GuidedTriggerBusinessStageRuleDraft;
-  onChange: (condition: GuidedTriggerBusinessStageRuleDraft) => void;
+  condition: T;
+  onChange: (condition: T) => void;
 }) {
   const pipelines = useQuery({
     queryKey: ['guided-business-pipelines', actorId, organizationId],

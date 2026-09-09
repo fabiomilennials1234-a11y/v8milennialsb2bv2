@@ -1447,6 +1447,7 @@ async function selectInformation(page: Page, field: string) {
     'business.trigger.stage': 'Etapa',
     'business.trigger.value': 'Valor',
     'business.trigger.stage_elapsed': 'Tempo na etapa',
+    'business.exists': 'Existe negócio',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
@@ -1559,6 +1560,45 @@ test('configura tempo corrido na etapa com unidade explícita e negócio exato',
   await page.getByLabel('Tempo', { exact: true }).fill('-1');
   await expect(page.getByRole('button', { name: 'Testar condição', exact: true })).toBeDisabled();
   await expect(page.getByText('Informe um tempo igual ou maior que zero.')).toBeVisible();
+});
+
+test('configura existência usando ciclo visível e mantém todos os filtros no mesmo negócio', async ({ page }) => {
+  const pipelineId = 'abcd0000-0000-4000-8000-000000000061';
+  const stageId = 'abcd0000-0000-4000-8000-000000000062';
+  const entryId = 'abcd0000-0000-4000-8000-000000000063';
+  await page.route('**/rest/v1/pipeline_display_config?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/pipelines?*', route => route.fulfill({ json: [{ id: pipelineId, name: 'Comercial' }] }));
+  await page.route('**/rest/v1/pipeline_stages?*', route => route.fulfill({ json: [{ id: stageId, pipeline_id: pipelineId, name: 'Proposta' }] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'business.exists');
+  await expect(page.getByRole('combobox', { name: 'Informação', exact: true })).toContainText('Negócios · Existe negócio');
+  await expect(page.getByLabel('Ciclo do negócio', { exact: true })).toHaveValue('open');
+  await expect(page.getByRole('option', { name: 'Em aberto', exact: true })).toHaveCount(1);
+  await page.getByRole('combobox', { name: 'Funil', exact: true }).selectOption(pipelineId);
+  await page.getByRole('combobox', { name: 'Etapa', exact: true }).selectOption(stageId);
+  await page.getByRole('button', { name: 'Adicionar filtro do negócio', exact: true }).click();
+  await page.getByLabel('Informação do negócio 2', { exact: true }).selectOption('business.value');
+  await page.getByLabel('Comparação do negócio 2', { exact: true }).selectOption('greater_than');
+  await page.getByLabel('Valor do negócio 2', { exact: true }).fill('1000');
+  await page.getByLabel('Ciclo do negócio', { exact: true }).selectOption('won');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Existe negócio · Ganho · Todas');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Comercial · Proposta');
+  await expect(page.getByText('Ciclo, etapa e valor dos negócios de todos os leads desta organização')).toBeVisible();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await expect(page.getByRole('combobox', { name: 'Negócio do gatilho', exact: true })).toHaveCount(0);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ condition: {
+      version: 1, id: 'rule-1', kind: 'business_exists', lifecycle: 'won', match: 'all', children: [
+        { field: 'business.stage', operator: 'equals', pipelineId, stageId },
+        { field: 'business.value', operator: 'greater_than', value: 1000 },
+      ],
+    } });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true,
+      actual: entryId, context: { entryId, pipeline: { id: pipelineId, name: 'Comercial' } } }] } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Existe negócio · Ganho · Todas');
 });
 
 test('busca informação sem acento e cancela sem perder comparação', async ({ page }) => {

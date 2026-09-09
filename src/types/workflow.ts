@@ -675,9 +675,15 @@ export type GuidedTriggerBusinessValueRuleDraft = { version: 1; id: string; fiel
   & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' });
 export type GuidedTriggerBusinessStageElapsedRuleDraft = { version: 1; id: string; field: 'business.trigger.stage_elapsed';
   operator: GuidedNumberOperator; value: number | ''; unit: 'minutes' | 'hours' | 'days' };
+export type GuidedBusinessExistenceChildDraft =
+  | { version: 1; id: string; field: 'business.stage'; operator: 'equals' | 'not_equals'; pipelineId: string; stageId: string; pipelineLabel?: string; stageLabel?: string }
+  | ({ version: 1; id: string; field: 'business.value' }
+    & ({ operator: GuidedNumberOperator; value: number | '' } | { operator: 'is_empty' } | { operator: 'is_not_empty' }));
+export type GuidedBusinessExistenceDraft = { version: 1; id: string; kind: 'business_exists';
+  lifecycle: 'open' | 'won' | 'lost' | 'all'; match: 'all' | 'any'; children: GuidedBusinessExistenceChildDraft[] };
 export type GuidedRuleDraft = GuidedTriggerBusinessStageElapsedRuleDraft | GuidedTriggerBusinessValueRuleDraft | GuidedTriggerBusinessStageRuleDraft | GuidedCustomSelectRuleDraft | GuidedCustomDateRuleDraft | GuidedCustomBooleanRuleDraft | GuidedCustomNumberRuleDraft | GuidedCustomTextRuleDraft | GuidedResponsibleRuleDraft | GuidedOriginRuleDraft | GuidedScalarRuleDraft | GuidedTagRuleDraft | GuidedNumberRuleDraft;
 
-export type GuidedConditionDraft = GuidedRuleDraft | {
+export type GuidedConditionDraft = GuidedRuleDraft | GuidedBusinessExistenceDraft | {
   version: 1; id: string; kind: 'group'; match: 'all' | 'any'; children: GuidedConditionDraft[];
 };
 

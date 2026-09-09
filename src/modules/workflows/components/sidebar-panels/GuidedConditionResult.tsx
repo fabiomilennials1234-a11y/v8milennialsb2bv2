@@ -12,6 +12,9 @@ export function GuidedConditionResult({ condition, rules, groups }: {
     const entry = entries.get(current.id);
     const outcome = entry?.status === 'not_evaluated' ? 'Não avaliada'
       : typeof entry?.matched === 'boolean' ? entry.matched ? 'Sim' : 'Não' : 'Resultado indisponível';
+    if ('kind' in current && current.kind === 'business_exists') {
+      return <p className="break-words">Condição {path || 'principal'} · {summarizeGuidedCondition(current)}: {outcome}</p>;
+    }
     if ('children' in current) {
       const label = path ? `Grupo ${path}` : 'Grupo principal';
       return <div role="group" aria-label={label} className="space-y-2 border-l-2 border-border pl-3">

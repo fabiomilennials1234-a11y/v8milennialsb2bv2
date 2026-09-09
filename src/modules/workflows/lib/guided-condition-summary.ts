@@ -1,8 +1,19 @@
 import { GUIDED_DATE_OPERATORS, isGuidedCalendarDate } from '@/contracts/workflows/guided-dates';
 import { GUIDED_RESPONSIBLE_FIELDS, GUIDED_SCALAR_FIELDS, GUIDED_TEXT_OPERATORS, GUIDED_NUMBER_OPERATORS } from '@/contracts/workflows/guided-fields';
-import type { GuidedConditionDraft } from '@/types/workflow';
+import type { GuidedBusinessExistenceChildDraft, GuidedConditionDraft } from '@/types/workflow';
+
+function summarizeBusinessFilter(condition: GuidedBusinessExistenceChildDraft): string {
+  if (condition.field === 'business.stage') return `Etapa ${condition.operator === 'equals' ? 'é' : 'não é'} “${condition.pipelineLabel && condition.stageLabel
+    ? `${condition.pipelineLabel} · ${condition.stageLabel}` : 'Selecione funil e etapa'}”`;
+  return condition.operator === 'is_empty' ? 'Valor está vazio' : condition.operator === 'is_not_empty' ? 'Valor está preenchido'
+    : `Valor ${GUIDED_NUMBER_OPERATORS[condition.operator]} ${condition.value === '' ? '…' : condition.value}`;
+}
 
 export function summarizeGuidedCondition(condition: GuidedConditionDraft): string {
+  if ('kind' in condition && condition.kind === 'business_exists') {
+    const lifecycle = { open: 'Em aberto', won: 'Ganho', lost: 'Perdido', all: 'Todos' }[condition.lifecycle];
+    return `Existe negócio · ${lifecycle} · ${condition.match === 'all' ? 'Todas' : 'Qualquer'}: (${condition.children.map(summarizeBusinessFilter).join(condition.match === 'all' ? ' E ' : ' OU ')})`;
+  }
   if ('children' in condition) return `${condition.match === 'all' ? 'Todas' : 'Qualquer'}: (${condition.children.map(summarizeGuidedCondition).join(condition.match === 'all' ? ' E ' : ' OU ')})`;
   if (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') return condition.operator === 'is_empty'
     ? `${GUIDED_RESPONSIBLE_FIELDS[condition.field].label} está vazio`
@@ -46,5 +57,7 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
 }
 
 export function getGuidedConditionFields(condition: GuidedConditionDraft): string[] {
+  if ('kind' in condition && condition.kind === 'business_exists') return ['business.exists.lifecycle',
+    ...new Set(condition.children.map(child => child.field === 'business.stage' ? 'business.exists.stage' : 'business.exists.value'))];
   return 'children' in condition ? [...new Set(condition.children.flatMap(getGuidedConditionFields))] : [condition.field === 'lead.custom' ? `lead.custom:${condition.fieldId.toLowerCase()}` : condition.field];
 }

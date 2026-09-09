@@ -128,6 +128,9 @@ const businessValueRollback = readFileSync(`supabase/migrations/rollback/${busin
 const businessElapsedMigration = '20271017000043_guided_trigger_business_stage_elapsed.sql';
 const businessElapsedForward = readFileSync(`supabase/migrations/${businessElapsedMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const businessElapsedRollback = readFileSync(`supabase/migrations/rollback/${businessElapsedMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessExistenceMigration = '20271017000044_guided_business_existence.sql';
+const businessExistenceForward = readFileSync(`supabase/migrations/${businessExistenceMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const businessExistenceRollback = readFileSync(`supabase/migrations/rollback/${businessExistenceMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -159,6 +162,17 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${businessExistenceRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_business_candidates(uuid,uuid,text[],jsonb)') IS NOT NULL
+    OR to_regprocedure('public.read_guided_condition_business_candidates(uuid,uuid,uuid,text[],jsonb)') IS NOT NULL
+    OR to_regprocedure('public.validate_guided_business_existence_version()') IS NOT NULL THEN
+    RAISE EXCEPTION 'business-existence rollback left callable objects';
+  END IF;
+  IF public.valid_guided_data_scopes(ARRAY['business.exists.lifecycle']) THEN
+    RAISE EXCEPTION 'business-existence scope survived rollback';
+  END IF;
+END $$;
 ${businessElapsedRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.validate_guided_trigger_business_stage_elapsed_version()') IS NOT NULL THEN
@@ -391,6 +405,23 @@ ${businessAuthorizationForward}
 ${businessVolatilityForward}
 ${businessValueForward}
 ${businessElapsedForward}
+${businessExistenceForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_business_candidates(uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_business_candidates(uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_business_candidates(uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.read_guided_condition_business_candidates(uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.read_guided_condition_business_candidates(uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.read_guided_condition_business_candidates(uuid,uuid,uuid,text[],jsonb)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.validate_guided_business_existence_version()', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.validate_guided_business_existence_version()', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.validate_guided_business_existence_version()', 'EXECUTE') THEN
+    RAISE EXCEPTION 'business-existence reapply privileges invalid';
+  END IF;
+  IF NOT public.valid_guided_data_scopes(ARRAY['business.exists.lifecycle','business.exists.stage','business.exists.value']) THEN
+    RAISE EXCEPTION 'business-existence scopes not restored';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_trigger_business_stage(uuid,uuid,uuid,jsonb)', 'EXECUTE')
