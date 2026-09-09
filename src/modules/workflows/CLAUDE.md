@@ -49,6 +49,12 @@ Node types (15, união `WorkflowNodeType` em `@/types/workflow`): `trigger`, `ac
 
 Track: `workflow_executions` + `workflow_execution_steps`.
 
+### Condição por mensagem do gatilho
+
+`message.trigger.text` avalia uma linha persistida identificada, nunca o texto livre de `workflow_executions.context`. A regra escolhe a conversa do gatilho ou fixa `storage + boxId + provider`; o participante sempre é o lead da execução. Runtime exige o localizador `context.message_context` com o UUID da linha, caixa, provider e participante. Outra caixa, provider ou chip não substitui a identidade.
+
+O avaliador consome somente `condition_text` ou uma transcrição já persistida com provider e instante. Mídia sem fonte textual é erro `message_text_unavailable`; registro removido é `context_unavailable`. O texto legado em `context.message` permanece porque o gatilho antigo `contains_text` ainda depende dele.
+
 Inclui:
 - Editor visual (xyflow/react)
 - Execução assíncrona (worker `process-workflow-executions`)

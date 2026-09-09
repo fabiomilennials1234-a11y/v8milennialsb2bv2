@@ -130,6 +130,8 @@ export interface NormalizedMessage {
   direction: string;
   message_type: string;
   content: string | null;
+  condition_text: string | null;
+  condition_text_source: "text" | "caption" | "interactive" | "synthetic" | null;
   media_url: string | null;
   push_name: string | null;
   status: string;
@@ -140,6 +142,7 @@ export interface NormalizedMessage {
 }
 
 export interface PersistedMessage {
+  row_id: string;
   organization_id: string;
   instance_id: string;
   message_id: string;
@@ -149,6 +152,7 @@ export interface PersistedMessage {
   message_type: string;
   push_name: string | null;
   media_url: string | null;
+  provider: string;
 }
 
 const COPILOT_MEDIA_TYPES = new Set(["audio", "ptt", "image", "video", "document"]);
@@ -193,6 +197,7 @@ type ResolvedInstance = {
    * `buildMessageIdCandidates`.
    */
   phone_number: string | null;
+  provider?: string | null;
 };
 
 async function resolveInstance(
@@ -209,7 +214,7 @@ async function resolveInstance(
 
   const { data: inst } = await supabase
     .from("whatsapp_instances")
-    .select("id, organization_id, instance_name, phone_number")
+    .select("id, organization_id, instance_name, phone_number, provider")
     .eq("id", data.instance_id)
     .maybeSingle();
 
@@ -233,7 +238,7 @@ async function resolveInstanceByToken(
 
   const { data: inst } = await supabase
     .from("whatsapp_instances")
-    .select("id, organization_id, instance_name, phone_number")
+    .select("id, organization_id, instance_name, phone_number, provider")
     .eq("id", data.instance_id)
     .maybeSingle();
 
@@ -478,15 +483,22 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
   // so downstream (agent-message) sees the choice as if it were a plain text
   // reply. Uazapi manda essa resposta como type:"text" + text:"" com a escolha
   // em content.selectedDisplayText / buttonOrListid — ver extractInteractiveSelection.
-  let content = data.text ?? data.caption ?? data.body ?? data.content?.text ?? null;
+  const directText = data.text ?? data.body ?? data.content?.text ?? null;
+  const caption = data.caption ?? null;
+  const ownDirectText = typeof directText === "string" && directText.trim() ? directText : null;
+  const ownCaption = typeof caption === "string" && caption.trim() ? caption : null;
+  let content = directText ?? caption;
+  let conditionText = ownDirectText ?? ownCaption;
+  let conditionTextSource: NormalizedMessage["condition_text_source"] = ownDirectText !== null
+    ? "text" : ownCaption !== null ? "caption" : null;
   if (!content || (typeof content === "string" && !content.trim())) {
     const selection = extractInteractiveSelection(data);
-    if (selection) content = selection;
+    if (selection) { content = selection; conditionText = selection; conditionTextSource = "interactive"; }
   }
   if (messageType === "location" && !content) {
     const lat = data.degreesLatitude ?? data.latitude ?? data.content?.degreesLatitude;
     const lng = data.degreesLongitude ?? data.longitude ?? data.content?.degreesLongitude;
-    if (lat != null && lng != null) content = `📍 ${lat}, ${lng}`;
+    if (lat != null && lng != null) { content = `📍 ${lat}, ${lng}`; conditionText = content; conditionTextSource = "synthetic"; }
   }
   if (messageType === "contact" && !content) {
     const vcard = data.displayName ?? data.vcard ?? data.content?.displayName ?? data.content?.vcard;
@@ -496,6 +508,8 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     } else {
       content = "👤 Contato compartilhado";
     }
+    conditionText = content;
+    conditionTextSource = "synthetic";
   }
 
   // Reply/quoted context: fold the quoted message into content so the copilot
@@ -541,6 +555,8 @@ function normalizeMessage(data: any, instance: ResolvedInstance) {
     direction,
     message_type: messageType,
     content,
+    condition_text: conditionText,
+    condition_text_source: conditionTextSource,
     media_url: mediaUrl,
     push_name: data.pushName ?? data.senderName ?? null,
     status: direction === "incoming" ? "received" : "sent",
@@ -702,6 +718,13 @@ export async function triggerReactions(
     // campo a identidade do número se perde no caminho e o filtro "só o número
     // do Closer" vira "qualquer número", em silêncio.
     instance_id: persisted.instance_id,
+    message_context: {
+      storage: "whatsapp_messages",
+      messageId: persisted.row_id,
+      boxId: persisted.instance_id,
+      provider: persisted.provider,
+      participantId: persisted.phone_number,
+    },
   };
 
   // A entrega da resposta da IA (fetch agent-message → enviar chunks) roda DEPOIS
@@ -968,6 +991,10 @@ export async function persistMessage(
     }
     return null;
   }
+  const { data: stored } = await supabase.from("whatsapp_messages").select("id")
+    .eq("organization_id", normalized.organization_id).eq("message_id", normalized.message_id!)
+    .eq("instance_id", normalized.instance_id).maybeSingle();
+  if (!stored?.id) return null;
 
   // Best-effort: download encrypted WhatsApp CDN media and persist to Storage.
   // Ver shouldPersistMedia — grupo não desce mídia.
@@ -998,6 +1025,7 @@ export async function persistMessage(
   }
 
   return {
+    row_id: stored.id,
     organization_id: normalized.organization_id,
     instance_id: normalized.instance_id,
     message_id: normalized.message_id!,
@@ -1007,6 +1035,7 @@ export async function persistMessage(
     message_type: normalized.message_type,
     push_name: normalized.push_name,
     media_url: normalized.media_url,
+    provider: instance.provider?.trim() || "uazapi",
   };
 }
 

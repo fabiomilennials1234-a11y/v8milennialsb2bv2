@@ -3,7 +3,7 @@ import { handleGuidedWorkflowPublication } from '../../supabase/functions/_share
 
 afterEach(() => vi.unstubAllGlobals());
 
-it.each(['end', 'configured_audio', 'fixed_delay', 'random_delay', 'grouped'])('publishes only the persisted revision through the service-only finalizer: %s', async (successPath) => {
+it.each(['end', 'configured_audio', 'fixed_delay', 'random_delay', 'grouped', 'trigger_message'])('publishes only the persisted revision through the service-only finalizer: %s', async (successPath) => {
   const env: Record<string, string> = { SUPABASE_URL: 'https://db.test', SUPABASE_ANON_KEY: 'anon-test', SUPABASE_SERVICE_ROLE_KEY: 'service-test' };
   vi.stubGlobal('Deno', { env: { get: (key: string) => env[key] } });
   const definition = { nodes: [
@@ -13,6 +13,8 @@ it.each(['end', 'configured_audio', 'fixed_delay', 'random_delay', 'grouped'])('
         { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' },
         { version: 1, id: 'empty', field: 'lead.name', operator: 'is_empty' },
       ] }
+      : successPath === 'trigger_message'
+      ? { version: 1, id: 'r', field: 'message.trigger.text', conversation: { kind: 'trigger' }, operator: 'contains', value: 'orçamento' }
       : { version: 1, id: 'r', field: 'lead.name', operator: 'equals', value: 'José' } } },
     { id: 'y', type: successPath === 'configured_audio' ? 'action' : successPath.endsWith('_delay') ? 'delay' : 'end',
       data: successPath === 'configured_audio' ? { actionType: 'send_whatsapp_audio', audioUrl: 'https://media.example.test/audio.ogg' }
@@ -28,7 +30,8 @@ it.each(['end', 'configured_audio', 'fixed_delay', 'random_delay', 'grouped'])('
       finalizations++;
       expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer service-test');
       expect(JSON.parse(String(init?.body))).toEqual({ p_workflow_id: 'workflow-1', p_organization_id: 'org-1',
-        p_actor_id: 'user-1', p_expected_revision: 3, p_definition: definition, p_settings: { name: 'Persisted' }, p_required_fields: ['lead.name'] });
+        p_actor_id: 'user-1', p_expected_revision: 3, p_definition: definition, p_settings: { name: 'Persisted' },
+        p_required_fields: [successPath === 'trigger_message' ? 'message.trigger.text' : 'lead.name'] });
       return new Response(JSON.stringify({ version_id: 'version-1', version_number: 1 }), { headers: { 'Content-Type': 'application/json' } });
     }
     const resources: Record<string, unknown> = {

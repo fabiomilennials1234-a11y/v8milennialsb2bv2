@@ -146,7 +146,7 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
     const messageIds = (claimedRows as { message_id: string }[]).map((r) => r.message_id);
     const { data: msgs } = await supabase
       .from("whatsapp_messages")
-      .select("content, timestamp, instance_id")
+      .select("id, content, timestamp, instance_id, normalized_phone")
       .in("id", messageIds)
       .order("timestamp", { ascending: true });
 
@@ -183,6 +183,13 @@ Deno.serve(withErrorBoundary('copilot-batch-processor', async (req: Request): Pr
           // é a que o lead acabou de usar, que é a resposta certa para
           // "de qual número ele respondeu".
           instanceId: instanciaDoBatch(msgs),
+          messageContext: await (async () => {
+            const latest = (msgs ?? []).at(-1) as { id?: string; instance_id?: string | null; normalized_phone?: string | null } | undefined;
+            if (!latest?.id || !latest.instance_id || !latest.normalized_phone) return null;
+            const { data: box } = await supabase.from("whatsapp_instances").select("provider").eq("id", latest.instance_id).maybeSingle();
+            return { storage: "whatsapp_messages" as const, messageId: latest.id, boxId: latest.instance_id,
+              provider: (box as { provider?: string | null } | null)?.provider?.trim() || "uazapi", participantId: latest.normalized_phone };
+          })(),
         })),
       });
       if (!resp.ok) {

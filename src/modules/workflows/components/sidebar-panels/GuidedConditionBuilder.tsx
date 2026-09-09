@@ -12,6 +12,7 @@ import { GuidedResponsiblePicker } from './GuidedResponsiblePicker';
 import { GuidedOriginPicker } from './GuidedOriginPicker';
 import { GuidedTagPicker } from './GuidedTagPicker';
 import { GuidedBusinessStagePicker } from './GuidedBusinessStagePicker';
+import { GuidedConversationPicker } from './GuidedConversationPicker';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -26,6 +27,8 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
       && (condition.value === '' || !Number.isFinite(condition.value))
     : condition.field === 'business.trigger.stage_elapsed' ? condition.value === '' || !Number.isFinite(condition.value) || condition.value < 0
     : condition.field === 'business.last_won_date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
+    : condition.field === 'message.trigger.text' ? (condition.conversation.kind === 'explicit' && (!condition.conversation.boxId || !condition.conversation.provider))
+      || (condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.value)
     : condition.field === 'lead.custom' && !condition.fieldId ? true
     : condition.field === 'lead.custom' && condition.fieldType === 'date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
@@ -46,6 +49,7 @@ function defaultRule(id: string, field: Exclude<GuidedFieldSelection, 'business.
   if (field === 'business.trigger.stage') return { version: 1, id, field, operator: 'equals', pipelineId: '', stageId: '' };
   if (field === 'business.trigger.stage_elapsed') return { version: 1, id, field, operator: 'greater_than_or_equal', value: '', unit: 'hours' };
   if (field === 'business.last_won_date') return { version: 1, id, field, operator: 'equals', value: '' };
+  if (field === 'message.trigger.text') return { version: 1, id, field, conversation: { kind: 'trigger' }, operator: 'contains', value: '' };
   if (field === 'business.trigger.value' || isGuidedNumberField(field)) return { version: 1, id, field, operator: 'equals', value: '' };
   if (isGuidedResponsibleField(field)) return { version: 1, id, field, operator: 'equals', memberId: '' };
   if (field === 'lead.origin') return { version: 1, id, field, operator: 'equals', originId: '' };
@@ -273,6 +277,8 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
           else if (compatible && isGuidedDateOperator(condition.operator) && 'value' in condition) onChange({ ...base, operator: condition.operator, value: condition.value });
           else onChange({ ...base, operator: 'equals', value: '' });
         }
+        else if (field === 'message.trigger.text') onChange(condition.field === field ? condition
+          : { version: 1, id: condition.id, field, conversation: { kind: 'trigger' }, operator: 'contains', value: '' });
         else if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
           ? { ...condition, field } : { version: 1, id: condition.id, field, operator: 'equals', memberId: '' });
         else if (field === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
@@ -289,7 +295,21 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
           : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
     {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
-    {condition.field === 'business.trigger.stage' ? <>
+    {condition.field === 'message.trigger.text' ? <>
+      <GuidedConversationPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {
+        const operator = event.target.value;
+        if (operator === 'is_empty') onChange({ ...condition, operator: 'is_empty' });
+        else if (operator === 'is_not_empty') onChange({ ...condition, operator: 'is_not_empty' });
+        else if (isGuidedTextOperator(operator)) onChange({ ...condition, operator, value: 'value' in condition ? condition.value : '' });
+      }}>{Object.entries(GUIDED_TEXT_OPERATORS).map(([value,label]) => <option key={value} value={value}>{label}</option>)}<option value="is_empty">está vazio</option><option value="is_not_empty">está preenchido</option></select>
+      {condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && <div className="space-y-2">
+        <Label htmlFor={`guided-value-${condition.id}`}>Texto esperado</Label>
+        <Input id={`guided-value-${condition.id}`} value={condition.value} aria-invalid={missingValue} onChange={event => onChange({ ...condition, value: event.target.value })} placeholder="Ex.: quero orçamento" />
+        <p className="text-xs text-muted-foreground">Maiúsculas e acentos não alteram a comparação. A mensagem original permanece intacta.</p>
+      </div>}
+    </> : condition.field === 'business.trigger.stage' ? <>
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator}
         onChange={event => onChange({ ...condition, operator: event.target.value === 'not_equals' ? 'not_equals' : 'equals' })}>

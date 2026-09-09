@@ -37,6 +37,13 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
     ? 'Última venda ganha · Data está vazia' : condition.operator === 'is_not_empty'
       ? 'Última venda ganha · Data está preenchida'
       : `Última venda ganha · Data ${GUIDED_DATE_OPERATORS[condition.operator]} ${isGuidedCalendarDate(condition.value) ? condition.value.split('-').reverse().join('/') : '…'}`;
+  if (condition.field === 'message.trigger.text') {
+    const conversation = condition.conversation.kind === 'trigger' ? 'Conversa do gatilho'
+      : `Caixa ${condition.conversation.boxLabel || 'não selecionada'} · ${condition.conversation.provider || 'provider não definido'}`;
+    return condition.operator === 'is_empty' ? `${conversation} · Texto está vazio`
+      : condition.operator === 'is_not_empty' ? `${conversation} · Texto está preenchido`
+      : `${conversation} · Texto ${GUIDED_TEXT_OPERATORS[condition.operator]} “${condition.value}”`;
+  }
   if (condition.field === 'lead.custom' && condition.fieldType === 'select') {
     const label = condition.fieldLabel || 'Campo personalizado';
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido`

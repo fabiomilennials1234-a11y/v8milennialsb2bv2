@@ -11,7 +11,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 const fields = { ...GUIDED_SCALAR_FIELDS, ...GUIDED_RESPONSIBLE_FIELDS, 'lead.tags': { label: 'Tags' }, 'lead.origin': { label: 'Origem' },
   'business.trigger.stage': { label: 'Etapa' }, 'business.trigger.value': { label: 'Valor' },
   'business.trigger.stage_elapsed': { label: 'Tempo na etapa' },
-  'business.last_won_date': { label: 'Data da última venda ganha' } };
+  'business.last_won_date': { label: 'Data da última venda ganha' },
+  'message.trigger.text': { label: 'Texto da mensagem do gatilho' } };
 type Field = Exclude<GuidedRuleDraft['field'], 'lead.custom'>;
 export type GuidedFieldSelection = Field | 'business.exists';
 // This catalogue contains only capabilities supported by the guided evaluator.
@@ -38,6 +39,7 @@ const vocabulary = {
   'business.trigger.value': ['negocio', 'valor', 'receita', 'ticket', 'financeiro'],
   'business.trigger.stage_elapsed': ['negocio', 'tempo', 'duracao', 'permanencia', 'etapa atual'],
   'business.last_won_date': ['negocio', 'venda', 'ganha', 'ultima venda', 'data de fechamento'],
+  'message.trigger.text': ['mensagem', 'conversa', 'texto', 'legenda', 'transcricao'],
 } satisfies Record<Field, string[]>;
 const entries = Object.entries(vocabulary) as [Field, string[]][];
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
@@ -66,7 +68,7 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
     <PopoverTrigger asChild>
       <Button id={id} type="button" variant="outline" role="combobox" aria-expanded={open}
         aria-haspopup="dialog" className="w-full justify-between font-normal">
-        <span className="truncate">{value === 'business.exists' || value === 'business.last_won_date' ? 'Negócios' : value.startsWith('business.trigger.') ? 'Negócio do gatilho' : 'Lead'} · {name}</span>
+        <span className="truncate">{value === 'business.exists' || value === 'business.last_won_date' ? 'Negócios' : value.startsWith('business.trigger.') ? 'Negócio do gatilho' : value.startsWith('message.') ? 'Conversa' : 'Lead'} · {name}</span>
         <ChevronsUpDown aria-hidden="true" className="ml-2 h-4 w-4 shrink-0 opacity-50" />
       </Button>
     </PopoverTrigger>
@@ -115,6 +117,13 @@ export function GuidedFieldPicker({ id, value, onChange, actorId, organizationId
               <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${value === 'business.exists' ? 'opacity-100' : 'opacity-0'}`} />
               <span>Existe negócio</span>
             </CommandItem>
+          </CommandGroup>
+          <CommandGroup heading="Conversa">
+            {entries.filter(([field]) => field.startsWith('message.')).map(([field, aliases]) => <CommandItem key={field} value={field}
+              keywords={['Conversa', fields[field].label, ...aliases]} onSelect={() => { if (field !== value) onChange(field); setOpen(false); setSearch(''); }}>
+              <Check aria-hidden="true" className={`mr-2 h-4 w-4 shrink-0 ${field === value ? 'opacity-100' : 'opacity-0'}`} />
+              <span>{fields[field].label}</span>
+            </CommandItem>)}
           </CommandGroup>
           {!searching && !options.isError && <CommandGroup heading="Lead · Campos personalizados">
             {options.data?.filter(field => (field.field_type === 'text' || field.field_type === 'number' || field.field_type === 'boolean' || field.field_type === 'date' || field.field_type === 'select') && !(unavailable && field.id === custom?.fieldId)).map(field =>

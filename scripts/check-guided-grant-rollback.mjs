@@ -134,6 +134,12 @@ const businessExistenceRollback = readFileSync(`supabase/migrations/rollback/${b
 const lastWonMigration = '20271017000045_guided_last_won_date.sql';
 const lastWonForward = readFileSync(`supabase/migrations/${lastWonMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const lastWonRollback = readFileSync(`supabase/migrations/rollback/${lastWonMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const triggerMessageMigration = '20271017000046_guided_trigger_message_text.sql';
+const triggerMessageForward = readFileSync(`supabase/migrations/${triggerMessageMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const triggerMessageRollback = readFileSync(`supabase/migrations/rollback/${triggerMessageMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const messageCandidatesMigration = '20271017000047_guided_message_test_candidates.sql';
+const messageCandidatesForward = readFileSync(`supabase/migrations/${messageCandidatesMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const messageCandidatesRollback = readFileSync(`supabase/migrations/rollback/${messageCandidatesMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -165,6 +171,24 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${messageCandidatesRollback}
+${triggerMessageRollback}
+DO $$ BEGIN
+  IF to_regprocedure('public.test_guided_condition_message_candidates(uuid,uuid,text,uuid,text)') IS NOT NULL
+    OR to_regprocedure('public.test_guided_condition_trigger_message(uuid,uuid,jsonb)') IS NOT NULL
+    OR to_regprocedure('public.read_guided_condition_trigger_message(uuid,uuid,uuid,jsonb)') IS NOT NULL
+    OR to_regprocedure('public.validate_guided_trigger_message_version()') IS NOT NULL THEN
+    RAISE EXCEPTION 'trigger-message rollback left callable objects';
+  END IF;
+  IF public.valid_guided_data_scopes(ARRAY['message.trigger.text']) THEN
+    RAISE EXCEPTION 'trigger-message scope survived rollback';
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public'
+    AND table_name IN ('whatsapp_messages','channel_messages')
+    AND column_name IN ('condition_text','condition_text_source','transcription_text','transcription_provider','transcription_created_at')) THEN
+    RAISE EXCEPTION 'trigger-message rollback left provenance columns';
+  END IF;
+END $$;
 ${lastWonRollback}
 DO $$ BEGIN
   IF to_regprocedure('public.test_guided_condition_last_won(uuid,uuid)') IS NOT NULL
@@ -421,6 +445,28 @@ ${businessValueForward}
 ${businessElapsedForward}
 ${businessExistenceForward}
 ${lastWonForward}
+${triggerMessageForward}
+${messageCandidatesForward}
+DO $$ BEGIN
+  IF has_function_privilege('anon', 'public.test_guided_condition_trigger_message(uuid,uuid,jsonb)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_trigger_message(uuid,uuid,jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_trigger_message(uuid,uuid,jsonb)', 'EXECUTE')
+    OR has_function_privilege('anon', 'public.test_guided_condition_message_candidates(uuid,uuid,text,uuid,text)', 'EXECUTE')
+    OR has_function_privilege('service_role', 'public.test_guided_condition_message_candidates(uuid,uuid,text,uuid,text)', 'EXECUTE')
+    OR NOT has_function_privilege('authenticated', 'public.test_guided_condition_message_candidates(uuid,uuid,text,uuid,text)', 'EXECUTE')
+    OR has_function_privilege('authenticated', 'public.read_guided_condition_trigger_message(uuid,uuid,uuid,jsonb)', 'EXECUTE')
+    OR NOT has_function_privilege('service_role', 'public.read_guided_condition_trigger_message(uuid,uuid,uuid,jsonb)', 'EXECUTE') THEN
+    RAISE EXCEPTION 'trigger-message reapply privileges invalid';
+  END IF;
+  IF NOT public.valid_guided_data_scopes(ARRAY['message.trigger.text']) THEN
+    RAISE EXCEPTION 'trigger-message scope not restored';
+  END IF;
+  IF (SELECT count(*) FROM information_schema.columns WHERE table_schema='public'
+    AND table_name IN ('whatsapp_messages','channel_messages')
+    AND column_name IN ('condition_text','condition_text_source','transcription_text','transcription_provider','transcription_created_at')) <> 10 THEN
+    RAISE EXCEPTION 'trigger-message provenance columns not restored';
+  END IF;
+END $$;
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_last_won(uuid,uuid)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_last_won(uuid,uuid)', 'EXECUTE')

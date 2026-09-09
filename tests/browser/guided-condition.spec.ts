@@ -1449,11 +1449,84 @@ async function selectInformation(page: Page, field: string) {
     'business.trigger.stage_elapsed': 'Tempo na etapa',
     'business.exists': 'Existe negócio',
     'business.last_won_date': 'Data da última venda ganha',
+    'message.trigger.text': 'Texto da mensagem do gatilho',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
   await page.getByRole('option', { name: labels[field], exact: true }).click();
 }
+
+test('fixa caixa e mensagem do gatilho e explica a proveniência do texto', async ({ page }) => {
+  const boxA = 'abcd0000-0000-4000-8000-000000000081';
+  const boxB = 'abcd0000-0000-4000-8000-000000000082';
+  const messageId = 'abcd0000-0000-4000-8000-000000000083';
+  const candidateRequests: Record<string, unknown>[] = [];
+  await page.route('**/rest/v1/whatsapp_instances?*', route => route.fulfill({ json: [
+    { id: boxA, instance_name: 'Comercial', provider: 'uazapi' },
+    { id: boxB, instance_name: 'Suporte', provider: 'evolution' },
+  ] }));
+  await page.route('**/rest/v1/messaging_channels?*', route => route.fulfill({ json: [] }));
+  await page.route('**/rest/v1/rpc/test_guided_condition_message_candidates', route => {
+    const request = route.request().postDataJSON();
+    candidateRequests.push(request);
+    return route.fulfill({ json: request.p_box_id === boxA ? [{
+      message_id: messageId, storage: 'whatsapp_messages', box_id: boxA, provider: 'uazapi',
+      participant_id: '5511999990000', text_preview: 'Quero orçamento', text_source: 'caption',
+      message_type: 'image', message_at: '2026-09-07T12:00:00Z',
+    }] : [] });
+  });
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'message.trigger.text');
+  const configuration = page.getByRole('complementary', { name: 'Configurar Condição' });
+  await expect(configuration.getByLabel('Conversa', { exact: true })).toHaveValue('trigger');
+  await configuration.getByLabel('Conversa', { exact: true }).selectOption('explicit');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  expect(candidateRequests).toEqual([]);
+  await page.getByLabel('Caixa de entrada', { exact: true }).selectOption(`whatsapp_messages:${boxA}:uazapi`);
+  await page.getByLabel('Texto esperado', { exact: true }).fill('orcamento');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Comercial · uazapi');
+  await page.getByRole('combobox', { name: 'Mensagem que simula o gatilho' }).selectOption(messageId);
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      condition: { field: 'message.trigger.text', operator: 'contains', value: 'orcamento', conversation: {
+        kind: 'explicit', storage: 'whatsapp_messages', boxId: boxA, provider: 'uazapi', boxLabel: 'Comercial',
+      } },
+      messageContext: { storage: 'whatsapp_messages', messageId, boxId: boxA, provider: 'uazapi', participantId: '5511999990000' },
+    });
+    return route.fulfill({ json: { status: 'evaluated', matched: true, rules: [{ id: 'rule-1', status: 'evaluated', matched: true,
+      actual: 'Quero orçamento', reference: { messageId, textSource: 'caption', textProvider: 'uazapi', textCreatedAt: '2026-09-07T12:00:00Z',
+        provider: 'uazapi', boxId: boxA, participantId: '5511999990000' } }] } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Fonte: legenda · uazapi');
+
+  await page.getByLabel('Caixa de entrada', { exact: true }).selectOption(`whatsapp_messages:${boxB}:evolution`);
+  await expect(page.getByRole('combobox', { name: 'Mensagem que simula o gatilho' })).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Testar condição', exact: true })).toBeDisabled();
+  await expect.poll(() => candidateRequests.at(-1)).toMatchObject({ p_box_id: boxB, p_provider: 'evolution', p_storage: 'whatsapp_messages' });
+});
+
+test('distingue mídia sem texto persistido durante o teste pessoal', async ({ page }) => {
+  const boxId = 'abcd0000-0000-4000-8000-000000000091';
+  const messageId = 'abcd0000-0000-4000-8000-000000000092';
+  await page.route('**/rest/v1/rpc/test_guided_condition_message_candidates', route => route.fulfill({ json: [{
+    message_id: messageId, storage: 'whatsapp_messages', box_id: boxId, provider: 'uazapi', participant_id: '5511999990000',
+    text_preview: null, text_source: null, message_type: 'audio', message_at: '2026-09-07T12:00:00Z',
+  }] }));
+  await openGuidedEditor(page, {
+    version: 1, id: 'rule-1', field: 'message.trigger.text', conversation: { kind: 'trigger' }, operator: 'is_empty',
+  });
+  await page.getByText('Nome informado', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.getByRole('combobox', { name: 'Mensagem que simula o gatilho' }).selectOption(messageId);
+  await page.route('**/functions/v1/test-guided-condition', route => route.fulfill({
+    status: 422, json: { status: 'error', code: 'message_text_unavailable' },
+  }));
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Teste da condição' }).getByRole('alert'))
+    .toContainText('Esta mídia não possui legenda nem transcrição persistida. A condição não gerou conteúdo novo.');
+});
 
 test('configura etapa com funil filtrado e testa o negócio exato do gatilho', async ({ page }) => {
   const pipelineId = 'abcd0000-0000-4000-8000-000000000031';

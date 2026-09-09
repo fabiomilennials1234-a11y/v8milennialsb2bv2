@@ -121,6 +121,7 @@ e `AiEmailWriter` já aceita `dealId`. Para religar: construir a function, regis
 🔴 **Área frágil declarada em CLAUDE.md raiz.**
 
 - Provider-agnostic via adapter (`_shared/whatsapp-client.ts` + `whatsapp-providers/`) — **continua em `_shared/` até slice 16**
+- Mensagens novas persistem `condition_text` com `condition_text_source` (`text`, `caption`, `interactive`, `synthetic`). Esse campo contém só o conteúdo próprio da mensagem. `content` pode incorporar resposta citada para contexto do Copilot e não serve como fonte de condição. Transcrição só vale com `transcription_text`, `transcription_provider` e `transcription_created_at` completos; webhooks não transcrevem sob demanda. Linhas antigas ficam sem backfill quando a proveniência não pode ser provada.
 - Features Uazapi-only: sendMenu, sendPixButton, react/edit/pin/deleteForAll/markRead, historySync, `/sender/*`
 - Kill-switch: `organizations.whatsapp_provider_override`
 - Janela 24h Meta: composer disable se `now - last_inbound_at > 24h`

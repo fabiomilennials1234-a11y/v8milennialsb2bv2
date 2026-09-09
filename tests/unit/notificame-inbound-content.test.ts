@@ -254,12 +254,16 @@ describe("a linha gravada carrega o metadata", () => {
       contact: { externalId: "554884334050", name: null, avatarUrl: null, handle: null },
       contactExternalId: "554884334050",
       content: conteudo,
+      conditionText: conteudo.content,
+      conditionTextSource: "interactive",
       metadata: conteudo.metadata,
       timestampIso: "2026-08-19T22:27:33.000Z",
       rawPayload: CLIQUE_DE_BOTAO,
     });
 
     expect(row.content).toBe("Sim");
+    expect(row.condition_text).toBe("Sim");
+    expect(row.condition_text_source).toBe("interactive");
     expect(row.metadata).toEqual(conteudo.metadata);
   });
 

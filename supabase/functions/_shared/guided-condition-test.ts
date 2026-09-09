@@ -16,6 +16,7 @@ export async function handleGuidedConditionTest(req: Request): Promise<Response>
     const body = await req.json().catch(() => null);
     if (!body || typeof body.organizationId !== 'string' || !body.organizationId
       || typeof body.leadId !== 'string' || !body.leadId
+      || (body.messageContext !== undefined && body.messageContext !== null && typeof body.messageContext !== 'object')
       || (body.entryId !== undefined && body.entryId !== null && (typeof body.entryId !== 'string'
         || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.entryId)))) {
       return reply({ status: 'error', code: 'invalid_configuration' }, 400);
@@ -27,7 +28,8 @@ export async function handleGuidedConditionTest(req: Request): Promise<Response>
       global: { headers: { Authorization: authorization } },
     });
     const result = await evaluateGuidedCondition(caller, {
-      organizationId: identity.organizationId, leadId: body.leadId, entryId: body.entryId ?? null, condition: body.condition,
+      organizationId: identity.organizationId, leadId: body.leadId, entryId: body.entryId ?? null,
+      messageContext: body.messageContext ?? null, condition: body.condition,
     });
     return reply(result, result.status === 'evaluated' ? 200 : result.code === 'access_denied' ? 403 : 422);
   } catch (error) {

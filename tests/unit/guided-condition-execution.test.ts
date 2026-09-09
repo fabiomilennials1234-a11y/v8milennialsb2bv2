@@ -122,3 +122,37 @@ it.each(['José', 'Mariana', 'denied'])('evaluates current authorized data and u
   expect(result).toMatchObject(currentName === 'denied' ? { success: false, status: 'failed', error: 'access_denied' } : { success: true, status: 'completed' });
   expect(completedNodes).toEqual(currentName === 'denied' ? ['t', 'c'] : ['t', 'c', currentName === 'José' ? 'yes' : 'no']);
 });
+
+it('evaluates the exact persisted trigger-message locator from the execution snapshot', async () => {
+  const locator = { storage: 'whatsapp_messages', messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi', participantId: '5511999990000' };
+  const completedNodes: string[] = [];
+  const database = createClient('https://db.example.test', 'test-service-key', {
+    auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/rest/v1/workflow_execution_steps') completedNodes.push(JSON.parse(String(init?.body)).node_id);
+      if (init?.method === 'GET' && path === '/rest/v1/workflow_executions') return new Response(JSON.stringify({ guided_version_id: 'version-1' }), { headers: { 'Content-Type': 'application/json' } });
+      if (path === '/rest/v1/workflow_guided_versions') return new Response(JSON.stringify({ settings: {}, definition: {
+        nodes: [{ id: 't', type: 'trigger', data: {} }, { id: 'c', type: 'condition', data: { guidedCondition: {
+          version: 1, id: 'message', field: 'message.trigger.text', conversation: { kind: 'trigger' }, operator: 'contains', value: 'orcamento',
+        } } }, { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} }],
+        edges: [{ id: 'tc', source: 't', target: 'c' }, { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' },
+          { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' }],
+      } }), { headers: { 'Content-Type': 'application/json' } });
+      if (path === '/rest/v1/rpc/read_guided_condition_trigger_message') {
+        expect(JSON.parse(String(init?.body))).toEqual({ p_workflow_id: 'workflow-1', p_organization_id: 'org-1',
+          p_lead_id: 'lead-1', p_locator: locator });
+        return new Response(JSON.stringify({ message_id: locator.messageId, text: 'Quero orçamento', text_source: 'caption',
+          text_provider: 'uazapi', text_created_at: '2026-09-07T12:00:00Z',
+          provider: locator.provider, box_id: locator.boxId, participant_id: locator.participantId }), { headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response('[]', { headers: { 'Content-Type': 'application/json' } });
+    } },
+  });
+  const result = await executeWorkflow({ supabase: database, executionId: 'execution-1', workflowId: 'workflow-1',
+    organizationId: 'org-1', leadId: 'lead-1', guidedVersionId: 'version-1', loopLimit: 20,
+    context: { message_context: locator }, definition: { nodes: [], edges: [] },
+  });
+  expect(result).toMatchObject({ success: true, status: 'completed' });
+  expect(completedNodes).toEqual(['t', 'c', 'yes']);
+});

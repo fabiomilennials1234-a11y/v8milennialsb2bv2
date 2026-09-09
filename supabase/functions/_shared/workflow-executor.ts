@@ -9,7 +9,7 @@
  */
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { evaluateGuidedCondition, isGuidedCondition } from './guided-condition.ts';
+import { evaluateGuidedCondition, isGuidedCondition, type GuidedConditionRequest } from './guided-condition.ts';
 import { evaluateCondition, getLeadTags } from "./workflow-condition-evaluator.ts";
 import { executeWorkflowAction, resolveVariables, type ActionResult } from "./workflow-action-handler.ts";
 import {
@@ -416,6 +416,7 @@ export async function executeWorkflow(params: ExecuteWorkflowParams): Promise<Ex
           if (params.guidedVersionId) {
             const evaluated = await evaluateGuidedCondition(supabase, {
               organizationId, leadId, entryId: params.entryId ?? null, condition: node.data.guidedCondition,
+              messageContext: context.message_context as GuidedConditionRequest['messageContext'],
               authorization: { kind: 'organization', workflowId },
             });
             if (evaluated.status === 'error') {

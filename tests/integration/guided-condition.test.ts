@@ -2666,4 +2666,91 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     if (deleted.error) failures.push(deleted.error);
     if (failures.length) throw new AggregateError(failures, 'Responsible-only evaluation or cleanup failed');
   }, 60000);
+
+  it('pins trigger-message identity, provenance and access to one WhatsApp box', async () => {
+    const boxA = crypto.randomUUID(), boxB = crypto.randomUUID(), messageA = crypto.randomUUID(), messageB = crypto.randomUUID();
+    const media = crypto.randomUUID(), transcript = crypto.randomUUID(), workflowId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const db: SupabaseClient = service;
+    await db.from('org_quotas').upsert({ organization_id: orgA, resource_key: 'max_whatsapp_instances', plan_base: 2 },
+      { onConflict: 'organization_id,resource_key' }).throwOnError();
+    await db.from('whatsapp_instances').insert([
+      { id: boxA, organization_id: orgA, instance_name: 'Comercial', phone_number: '551130000001', provider: 'uazapi' },
+      { id: boxB, organization_id: orgA, instance_name: 'Suporte', phone_number: '551130000002', provider: 'evolution' },
+    ]).throwOnError();
+    expect((await db.from('whatsapp_messages').insert({ id: crypto.randomUUID(), organization_id: orgA, instance_id: boxA,
+      message_id: `guided-invalid-${crypto.randomUUID()}`, remote_jid: '5511999990000@s.whatsapp.net', phone_number: '5511999990000',
+      normalized_phone: '5511999990000', direction: 'incoming', message_type: 'text', content: 'sem fonte', condition_text: 'sem fonte' })).error?.code).toBe('23514');
+    await db.from('whatsapp_messages').insert([
+      { id: messageA, organization_id: orgA, instance_id: boxA, message_id: `guided-${messageA}`, remote_jid: '5511999990000@s.whatsapp.net', phone_number: '5511999990000', normalized_phone: '5511999990000', direction: 'incoming', message_type: 'image', content: 'legenda apresentada', condition_text: 'Quero orçamento', condition_text_source: 'caption' },
+      { id: messageB, organization_id: orgA, instance_id: boxB, message_id: `guided-${messageB}`, remote_jid: '5511999990000@s.whatsapp.net', phone_number: '5511999990000', normalized_phone: '5511999990000', direction: 'incoming', message_type: 'text', content: 'texto de outra caixa', condition_text: 'texto de outra caixa', condition_text_source: 'text' },
+      { id: media, organization_id: orgA, instance_id: boxA, message_id: `guided-${media}`, remote_jid: '5511999990000@s.whatsapp.net', phone_number: '5511999990000', normalized_phone: '5511999990000', direction: 'incoming', message_type: 'audio', content: null, condition_text: null, condition_text_source: null },
+      { id: transcript, organization_id: orgA, instance_id: boxA, message_id: `guided-${transcript}`, remote_jid: '5511999990000@s.whatsapp.net', phone_number: '5511999990000', normalized_phone: '5511999990000', direction: 'incoming', message_type: 'audio', content: null,
+        transcription_text: 'Preciso do preço', transcription_provider: 'deepgram', transcription_created_at: '2026-09-07T12:34:56Z' },
+    ]).throwOnError();
+    await db.from('workflows').insert({ id: workflowId, organization_id: orgA, name: 'Trigger message grant', trigger_type: 'lead_replied' }).throwOnError();
+    try {
+      const condition = { version: 1, id: 'message', field: 'message.trigger.text', conversation: {
+        kind: 'explicit', storage: 'whatsapp_messages', boxId: boxA, provider: 'uazapi',
+      }, operator: 'contains', value: 'orcamento' };
+      const locator = { storage: 'whatsapp_messages' as const, messageId: messageA, boxId: boxA, provider: 'uazapi', participantId: '5511999990000' };
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, messageContext: locator, condition })).toMatchObject({
+        status: 'evaluated', matched: true, rules: [{ actual: 'Quero orçamento', reference: { messageId: messageA, textSource: 'caption',
+          textProvider: 'uazapi', textCreatedAt: expect.any(String), boxId: boxA, provider: 'uazapi' } }],
+      });
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, messageContext: { ...locator, messageId: messageB, boxId: boxB, provider: 'evolution' }, condition }))
+        .toEqual({ status: 'error', code: 'context_unavailable' });
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, messageContext: { ...locator, messageId: media }, condition: { ...condition, operator: 'is_empty' } }))
+        .toEqual({ status: 'error', code: 'message_text_unavailable' });
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA,
+        messageContext: { ...locator, messageId: transcript }, condition: { ...condition, value: 'preco' } })).toMatchObject({
+        status: 'evaluated', matched: true, rules: [{ actual: 'Preciso do preço', reference: {
+          messageId: transcript, textSource: 'transcription', textProvider: 'deepgram', textCreatedAt: '2026-09-07T12:34:56+00:00',
+        } }],
+      });
+      await db.from('whatsapp_messages').update({ deleted_at: new Date().toISOString() }).eq('id', messageA).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, messageContext: locator, condition }))
+        .toEqual({ status: 'error', code: 'context_unavailable' });
+      await db.from('whatsapp_messages').update({ deleted_at: null }).eq('id', messageA).throwOnError();
+      const candidates = await caller.rpc('test_guided_condition_message_candidates', {
+        p_organization_id: orgA, p_lead_id: leadA, p_storage: 'whatsapp_messages', p_box_id: boxA, p_provider: 'uazapi',
+      });
+      expect(candidates.error).toBeNull();
+      expect(candidates.data).toEqual(expect.arrayContaining([expect.objectContaining({ message_id: messageA, box_id: boxA, provider: 'uazapi', text_source: 'caption' })]));
+      expect(candidates.data).not.toEqual(expect.arrayContaining([expect.objectContaining({ message_id: messageB })]));
+      expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA, messageContext: locator,
+        authorization: { kind: 'organization', workflowId }, condition })).toEqual({ status: 'error', code: 'access_denied' });
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['message.trigger.text'], p_expected_revision: 0 })).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA, messageContext: locator,
+        authorization: { kind: 'organization', workflowId }, condition })).toMatchObject({ status: 'evaluated', matched: true });
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'lead_replied', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: condition } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [
+        { id: 'tc', source: 't', target: 'c' },
+        { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+        { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' },
+      ] };
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_definition: definition, p_settings: { name: 'Trigger message grant' }, p_expected_revision: 0 })).error).toBeNull();
+      const publication = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId,
+        p_expected_revision: 1, p_definition: definition, p_settings: { name: 'Trigger message grant' },
+        p_required_fields: ['message.trigger.text'] };
+      expect((await service.rpc('finalize_guided_workflow_publication', publication)).error).toBeNull();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication, p_required_fields: [] })).error?.code).toBe('42501');
+      const malformed = structuredClone(definition);
+      (malformed.nodes[1].data.guidedCondition as { conversation: { provider: string } }).conversation.provider = '';
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_definition: malformed, p_settings: { name: 'Trigger message grant' }, p_expected_revision: 1 })).error).toBeNull();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication,
+        p_expected_revision: 2, p_definition: malformed })).error?.code).toBe('22023');
+    } finally {
+      await db.from('workflows').delete().eq('id', workflowId);
+      await db.from('whatsapp_messages').delete().in('id', [messageA, messageB, media, transcript]);
+      await db.from('whatsapp_instances').delete().in('id', [boxA, boxB]);
+    }
+  }, 60000);
 });

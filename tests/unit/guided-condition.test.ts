@@ -14,6 +14,58 @@ function databaseLead(name: string | null) {
 }
 
 describe('guided condition — public evaluation', () => {
+  it('evaluates only the identified trigger message and explains its persisted textual source', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => {
+        const url = new URL(String(input));
+        if (url.pathname === '/rest/v1/leads') return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', name: null }), { headers: { 'Content-Type': 'application/json' } });
+        expect(url.pathname).toBe('/rest/v1/rpc/test_guided_condition_trigger_message');
+        return new Response(JSON.stringify({ message_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', text: 'Olá, quero orçamento', text_source: 'caption',
+          text_provider: 'uazapi', text_created_at: '2026-09-07T12:00:00Z', provider: 'uazapi', box_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', participant_id: '5511999990000' }),
+          { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    expect(await evaluateGuidedCondition(caller, {
+      organizationId: 'org-1', leadId: 'lead-1',
+      messageContext: { storage: 'whatsapp_messages', messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi', participantId: '5511999990000' },
+      condition: { version: 1, id: 'message', field: 'message.trigger.text', conversation: { kind: 'trigger' }, operator: 'contains', value: 'orcamento' },
+    })).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'message', status: 'evaluated', matched: true, actual: 'Olá, quero orçamento', reference: {
+      messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', textSource: 'caption', textProvider: 'uazapi', textCreatedAt: '2026-09-07T12:00:00Z',
+      provider: 'uazapi', boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', participantId: '5511999990000',
+    } }] });
+  });
+
+  it('distinguishes persisted media without text from a removed trigger message', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => new Response(JSON.stringify(new URL(String(input)).pathname === '/rest/v1/leads'
+        ? { id: 'lead-1', organization_id: 'org-1', name: null }
+        : { message_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', text: null, text_source: null, text_state: 'media_without_text', provider: 'uazapi', box_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', participant_id: '5511999990000' }), { headers: { 'Content-Type': 'application/json' } }) },
+    });
+    expect(await evaluateGuidedCondition(caller, {
+      organizationId: 'org-1', leadId: 'lead-1',
+      messageContext: { storage: 'whatsapp_messages', messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi', participantId: '5511999990000' },
+      condition: { version: 1, id: 'message', field: 'message.trigger.text', conversation: { kind: 'trigger' }, operator: 'is_empty' },
+    })).toEqual({ status: 'error', code: 'message_text_unavailable' });
+  });
+  it('rejects malformed explicit message identities before any database read', async () => {
+    let reads = 0;
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async () => {
+        reads++;
+        return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1',
+      messageContext: { storage: 'whatsapp_messages', messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi', participantId: '5511999990000' },
+      condition: { version: 1, id: 'message', field: 'message.trigger.text', conversation: {
+        kind: 'explicit', storage: 'whatsapp_messages', boxId: '------------------------------------', provider: '   ',
+      }, operator: 'is_empty' },
+    })).toEqual({ status: 'error', code: 'invalid_configuration' });
+    expect(reads).toBe(0);
+  });
   it('rejects a condition exceeding the explicit data-scope budget before reading', async () => {
     const children = Array.from({ length: 257 }, (_, index) => ({
       version: 1, id: `custom-${index}`, field: 'lead.custom', fieldId: crypto.randomUUID(), fieldType: 'text', operator: 'is_empty',

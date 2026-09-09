@@ -3,7 +3,7 @@ import { GuidedConditionResult, type GuidedResultEntry } from './GuidedCondition
 import { GuidedConditionBuilder, isIncompleteGuidedDraft } from './GuidedConditionBuilder';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { FunctionsHttpError } from '@supabase/supabase-js';
+import { FunctionsHttpError, type SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,16 @@ import { useDebounce } from '@/shared/hooks/useDebounce';
 import type { GuidedConditionDraft } from '@/types/workflow';
 import { getGuidedConditionFields } from '../../lib/guided-condition-summary';
 
+const database: SupabaseClient = supabase;
+type MessageRule = Extract<import('@/types/workflow').GuidedRuleDraft, { field: 'message.trigger.text' }>;
+type MessageCandidate = { message_id: string; storage: 'whatsapp_messages' | 'channel_messages'; box_id: string;
+  provider: string; participant_id: string; text_preview: string | null; text_source: string | null; message_type: string; message_at: string };
+function firstMessageRule(condition: GuidedConditionDraft): MessageRule | null {
+  if ('kind' in condition && condition.kind === 'business_exists') return null;
+  if ('children' in condition) return condition.children.map(firstMessageRule).find(Boolean) ?? null;
+  return !('kind' in condition) && condition.field === 'message.trigger.text' ? condition : null;
+}
+
 export function GuidedConditionPanel({ actorId, organizationId, condition, onChange }: {
   actorId: string;
   organizationId: string;
@@ -21,6 +31,7 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
 }) {
   const [leadId, setLeadId] = useState('');
   const [entryId, setEntryId] = useState('');
+  const [messageId, setMessageId] = useState('');
   const [search, setSearch] = useState('');
   const searchTerm = useDebounce(search.trim(), 250);
   const [result, setResult] = useState<{ fingerprint: string; matched: boolean; actual: unknown; rules: GuidedResultEntry[]; groups: GuidedResultEntry[] } | null>(null);
@@ -28,7 +39,10 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
   const [error, setError] = useState('');
   const missingValue = isIncompleteGuidedDraft(condition);
   const requiresTriggerBusiness = getGuidedConditionFields(condition).some(field => field.startsWith('business.trigger.'));
-  const fingerprint = JSON.stringify({ actorId, organizationId, leadId, entryId, condition });
+  const messageRule = firstMessageRule(condition);
+  const messageConversationReady = !messageRule || messageRule.conversation.kind === 'trigger'
+    || Boolean(messageRule.conversation.boxId && messageRule.conversation.provider);
+  const fingerprint = JSON.stringify({ actorId, organizationId, leadId, entryId, messageId, condition });
   const leads = useQuery({
     queryKey: ['guided-condition-leads', actorId, organizationId, searchTerm],
     enabled: Boolean(actorId && organizationId),
@@ -64,15 +78,33 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
         label: `${pipelineNames.get(entry.pipeline_id) ?? 'Funil indisponível'} · ${entry.stage_id ? stageNames.get(entry.stage_id) ?? 'Etapa indisponível' : 'Sem etapa'}` }));
     },
   });
+  const messages = useQuery({
+    queryKey: ['guided-condition-messages', actorId, organizationId, leadId, messageRule?.conversation],
+    enabled: Boolean(actorId && organizationId && leadId && messageRule && messageConversationReady),
+    queryFn: async (): Promise<MessageCandidate[]> => {
+      const explicit = messageRule!.conversation.kind === 'explicit' ? messageRule!.conversation : null;
+      const response = await database.rpc('test_guided_condition_message_candidates', {
+        p_organization_id: organizationId, p_lead_id: leadId, p_storage: explicit?.storage ?? null,
+        p_box_id: explicit?.boxId || null, p_provider: explicit?.provider || null,
+      });
+      if (response.error) throw response.error;
+      return response.data as unknown as MessageCandidate[];
+    },
+  });
   useEffect(() => { setEntryId(''); }, [actorId, organizationId, leadId, requiresTriggerBusiness]);
+  useEffect(() => { setMessageId(''); }, [actorId, organizationId, leadId, messageRule?.conversation]);
   async function test() {
-    if (missingValue || !leadId || (requiresTriggerBusiness && !entryId) || pending) return;
+    if (missingValue || !leadId || (requiresTriggerBusiness && !entryId) || (messageRule && !messageId) || pending) return;
     setPending(true);
     setResult(null);
     setError('');
     try {
+      const message = messages.data?.find(candidate => candidate.message_id === messageId);
       const { data, error } = await supabase.functions.invoke('test-guided-condition', {
-        body: { organizationId, leadId, ...(requiresTriggerBusiness ? { entryId } : {}), condition },
+        body: { organizationId, leadId, ...(requiresTriggerBusiness ? { entryId } : {}), ...(message ? { messageContext: {
+          storage: message.storage, messageId: message.message_id, boxId: message.box_id,
+          provider: message.provider, participantId: message.participant_id,
+        } } : {}), condition },
       });
       if (error || data?.status !== 'evaluated') {
         const failure = error instanceof FunctionsHttpError ? await error.context.json().catch(() => null) : data;
@@ -80,6 +112,8 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
           ? 'Você não tem acesso aos dados necessários para este teste.'
           : failure?.code === 'reference_unavailable'
           ? 'Uma referência foi removida ou não está acessível. Revise as escolhas da condição.'
+          : failure?.code === 'message_text_unavailable'
+          ? 'Esta mídia não possui legenda nem transcrição persistida. A condição não gerou conteúdo novo.'
           : 'Não foi possível avaliar esta condição. Verifique seu acesso e tente novamente.');
       } else {
         setResult({ fingerprint, matched: data.matched, actual: data.rules[0]?.actual, rules: data.rules, groups: data.groups ?? [] });
@@ -116,9 +150,19 @@ export function GuidedConditionPanel({ actorId, organizationId, condition, onCha
         {businesses.isError && <p role="alert" className="text-sm text-destructive">Não foi possível carregar os negócios deste lead.</p>}
         {businesses.isSuccess && businesses.data.length === 0 && <p className="text-sm text-muted-foreground">Este lead não possui negócio disponível.</p>}
       </>}
-      <Button type="button" disabled={!leadId || (requiresTriggerBusiness && !entryId) || pending || missingValue} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
+      {messageRule && <>
+        <Label htmlFor="guided-test-message">Mensagem que simula o gatilho</Label>
+        <select id="guided-test-message" className={selectClass} value={messageId} disabled={!leadId || messages.isPending || messages.isError}
+          onChange={event => setMessageId(event.target.value)}>
+          <option value="">{messages.isPending && leadId ? 'Carregando mensagens acessíveis…' : 'Selecione uma mensagem'}</option>
+          {messages.data?.map(message => <option key={message.message_id} value={message.message_id}>{new Date(message.message_at).toLocaleString('pt-BR')} · {message.text_preview || `[${message.message_type} sem texto]`} · {message.provider}</option>)}
+        </select>
+        {messages.isError && <p role="alert" className="text-sm text-destructive">Não foi possível carregar mensagens desta conversa.</p>}
+        {messages.isSuccess && messages.data.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma mensagem acessível nesta conversa.</p>}
+      </>}
+      <Button type="button" disabled={!leadId || (requiresTriggerBusiness && !entryId) || Boolean(messageRule && !messageId) || pending || missingValue} onClick={test}>{pending ? 'Avaliando…' : 'Testar condição'}</Button>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{('children' in condition || condition.field === 'lead.custom' || condition.field === 'lead.origin' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date') ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : condition.field === 'lead.tags' ? <p>{result.rules[0]?.reference?.name ?? 'Tag'}: {result.actual === true ? 'atribuída' : result.actual === false ? 'não atribuída' : 'Resultado indisponível'}</p> : <p>{GUIDED_SCALAR_FIELDS[condition.field].actualLabel}: {result.actual == null ? 'Vazio' : String(result.actual)}</p>}</div>}
+      {result?.fingerprint === fingerprint && <div role="status" className="rounded-lg border border-border p-3 text-sm"><strong>{result.matched ? 'Sim' : 'Não'}</strong>{('children' in condition || condition.field === 'lead.custom' || condition.field === 'lead.origin' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.trigger.text') ? <GuidedConditionResult condition={condition} rules={result.rules} groups={result.groups} /> : condition.field === 'lead.tags' ? <p>{result.rules[0]?.reference && 'name' in result.rules[0].reference ? result.rules[0].reference.name : 'Tag'}: {result.actual === true ? 'atribuída' : result.actual === false ? 'não atribuída' : 'Resultado indisponível'}</p> : <p>{GUIDED_SCALAR_FIELDS[condition.field].actualLabel}: {result.actual == null ? 'Vazio' : String(result.actual)}</p>}</div>}
     </section>
   </div>;
 }

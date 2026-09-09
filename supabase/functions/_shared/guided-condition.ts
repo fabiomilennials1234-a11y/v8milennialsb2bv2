@@ -2,6 +2,8 @@ import { isGuidedCalendarDate, isGuidedDateOperator, type GuidedDateComparison }
 import { GUIDED_RESPONSIBLE_FIELDS, isGuidedResponsibleField, type GuidedResponsibleField, GUIDED_SCALAR_FIELDS, isGuidedScalarField, isGuidedNumberField, isGuidedNumberOperator, type GuidedNumberField, type GuidedNumberComparison, isGuidedTextField, isGuidedTextOperator, type GuidedTextComparison, type GuidedTextField } from '../../../src/contracts/workflows/guided-fields.ts';
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+const GUIDED_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export type GuidedScalarRule = {
   version: 1;
   id: string;
@@ -47,8 +49,11 @@ export type GuidedBusinessExistenceChild = ({ version: 1; id: string; field: 'bu
 export type GuidedBusinessExistence = { version: 1; id: string; kind: 'business_exists'; lifecycle: 'open' | 'won' | 'lost' | 'all';
   match: 'all' | 'any'; children: GuidedBusinessExistenceChild[] };
 export type GuidedLastWonDateRule = { version: 1; id: string; field: 'business.last_won_date' } & GuidedDateComparison;
+export type GuidedTriggerMessageTextRule = { version: 1; id: string; field: 'message.trigger.text';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages';
+    boxId: string; provider: string } } & GuidedTextComparison;
 
-export type GuidedRule = GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -56,6 +61,8 @@ export interface GuidedConditionRequest {
   organizationId: string;
   leadId: string;
   entryId?: string | null;
+  messageContext?: { storage: 'whatsapp_messages' | 'channel_messages'; messageId: string; boxId: string;
+    provider: string; participantId: string } | null;
   condition: unknown;
   authorization?: { kind: 'organization'; workflowId: string };
 }
@@ -103,6 +110,15 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
       && (rule.unit === 'minutes' || rule.unit === 'hours' || rule.unit === 'days');
     if (rule.field === 'business.last_won_date') return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || (isGuidedDateOperator(rule.operator) && isGuidedCalendarDate(rule.value));
+    if (rule.field === 'message.trigger.text') {
+      const conversation = rule.conversation as Record<string, unknown> | undefined;
+      const validConversation = conversation?.kind === 'trigger' || (conversation?.kind === 'explicit'
+        && (conversation.storage === 'whatsapp_messages' || conversation.storage === 'channel_messages')
+        && typeof conversation.boxId === 'string' && GUIDED_UUID.test(conversation.boxId)
+        && typeof conversation.provider === 'string' && conversation.provider.trim().length > 0);
+      return validConversation && (rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
+        || (isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
+    }
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rule.memberId));
@@ -212,7 +228,7 @@ export async function evaluateGuidedCondition(
     );
   }
   collect(request.condition);
-  const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.'));
+  const leadRequestedFields = requestedFields.filter(field => !field.startsWith('business.') && !field.startsWith('message.'));
   const usesCustomReader = Boolean(request.authorization && customIds.size);
   const fields = leadRequestedFields.filter(isGuidedScalarField);
   const usesFieldReader = fields.some(field => field !== 'lead.name');
@@ -221,9 +237,10 @@ export async function evaluateGuidedCondition(
   const usesTagReader = Boolean(request.authorization && tagIds.size);
   const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
   const usesLastWonDate = requestedFields.includes('business.last_won_date');
-  const hasOnlyBusinessData = leadRequestedFields.length === 0;
+  const usesTriggerMessage = requestedFields.includes('message.trigger.text');
+  const hasNoLeadData = leadRequestedFields.length === 0;
   const { data, error, status } = request.authorization?.kind === 'organization'
-    ? hasOnlyBusinessData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
+    ? hasNoLeadData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
     : usesCustomReader ? await caller.rpc('read_guided_condition_custom_data', {
       p_workflow_id: request.authorization.workflowId, p_organization_id: request.organizationId,
       p_lead_id: request.leadId, p_fields: leadRequestedFields, p_tag_ids: [...tagIds], p_origin_ids: [...originIds], p_member_ids: [...memberIds],
@@ -365,6 +382,56 @@ export async function evaluateGuidedCondition(
         || !isGuidedCalendarDate(candidate.won_date)) return { status: 'error' as const, code: 'source_unavailable' as const };
       lastWon = candidate as LastWon;
     }
+  }
+  type TriggerMessage = { message_id: string; text: string | null; text_source: string | null; text_state?: string;
+    text_provider: string | null; text_created_at: string | null; provider: string; box_id: string; participant_id: string };
+  let triggerMessage: TriggerMessage | null = null;
+  if (usesTriggerMessage) {
+    if (!request.messageContext) return { status: 'error' as const, code: 'context_unavailable' as const };
+    const locator = request.messageContext;
+    if ((locator.storage !== 'whatsapp_messages' && locator.storage !== 'channel_messages')
+      || typeof locator.messageId !== 'string' || !GUIDED_UUID.test(locator.messageId)
+      || typeof locator.boxId !== 'string' || !GUIDED_UUID.test(locator.boxId)
+      || typeof locator.provider !== 'string' || !locator.provider.trim()
+      || typeof locator.participantId !== 'string' || !locator.participantId.trim()) {
+      return { status: 'error' as const, code: 'context_unavailable' as const };
+    }
+    const messageRules: GuidedTriggerMessageTextRule[] = [];
+    const collectMessageRules = (current: GuidedCondition): void => {
+      if ('kind' in current && current.kind === 'business_exists') return;
+      if ('children' in current) current.children.forEach(collectMessageRules);
+      else if (!('kind' in current) && current.field === 'message.trigger.text') messageRules.push(current);
+    };
+    collectMessageRules(request.condition);
+    if (messageRules.some(rule => rule.conversation.kind === 'explicit' && (
+      rule.conversation.storage !== locator.storage || rule.conversation.boxId.toLowerCase() !== locator.boxId.toLowerCase()
+      || rule.conversation.provider.toLowerCase() !== locator.provider.toLowerCase()))) {
+      return { status: 'error' as const, code: 'context_unavailable' as const };
+    }
+    const response = await caller.rpc(request.authorization?.kind === 'organization'
+      ? 'read_guided_condition_trigger_message' : 'test_guided_condition_trigger_message', {
+      ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+      p_organization_id: request.organizationId, p_lead_id: request.leadId, p_locator: locator,
+    });
+    if (response.error) {
+      const code = response.error.code === 'PT404' ? 'context_unavailable' as const
+        : response.error.code === 'PT422' ? 'reference_unavailable' as const
+        : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
+        : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+      return { status: 'error' as const, code };
+    }
+    const candidate = response.data as TriggerMessage | null;
+    if (!candidate) return { status: 'error' as const, code: 'context_unavailable' as const };
+    if (candidate.text_state === 'media_without_text') return { status: 'error' as const, code: 'message_text_unavailable' as const };
+    if (typeof candidate.message_id !== 'string' || (candidate.text !== null && typeof candidate.text !== 'string')
+      || (candidate.text_source !== null && typeof candidate.text_source !== 'string') || typeof candidate.provider !== 'string'
+      || (candidate.text_provider !== null && typeof candidate.text_provider !== 'string')
+      || (candidate.text_created_at !== null && (typeof candidate.text_created_at !== 'string' || !Number.isFinite(Date.parse(candidate.text_created_at))))
+      || (candidate.text !== null && (!candidate.text_source || !candidate.text_provider || !candidate.text_created_at))
+      || typeof candidate.box_id !== 'string' || typeof candidate.participant_id !== 'string') {
+      return { status: 'error' as const, code: 'source_unavailable' as const };
+    }
+    triggerMessage = candidate;
   }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
   if (customIds.size) {
@@ -527,7 +594,9 @@ export async function evaluateGuidedCondition(
     const value = record[GUIDED_SCALAR_FIELDS[field].column];
     return value !== null && (typeof value !== 'number' || !Number.isFinite(value));
   })) return { status: 'error' as const, code: 'source_unavailable' as const };
-  type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string };
+  type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string } | {
+    messageId: string; textSource: string | null; textProvider: string | null; textCreatedAt: string | null;
+    provider: string; boxId: string; participantId: string };
     context?: { entryId: string; pipeline?: { id: string; name: string } } }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
@@ -675,6 +744,25 @@ export async function evaluateGuidedCondition(
       }
       rules.push({ id: condition.id, status: 'evaluated', matched, actual,
         ...(lastWon ? { reference: { id: lastWon.deal_id, name: lastWon.title } } : {}) });
+      return matched;
+    }
+    if (condition.field === 'message.trigger.text') {
+      const actual = triggerMessage!.text;
+      const empty = actual === null || actual === '';
+      let matched = condition.operator === 'is_empty' ? empty : condition.operator === 'is_not_empty' ? !empty : false;
+      if (!empty && condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty') {
+        const left = normalize(actual!); const right = normalize(condition.value);
+        if (condition.operator === 'equals') matched = left === right;
+        else if (condition.operator === 'not_equals') matched = left !== right;
+        else if (condition.operator === 'contains') matched = left.includes(right);
+        else if (condition.operator === 'not_contains') matched = !left.includes(right);
+        else if (condition.operator === 'starts_with') matched = left.startsWith(right);
+        else matched = left.endsWith(right);
+      }
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual,
+        reference: { messageId: triggerMessage!.message_id, textSource: triggerMessage!.text_source,
+          textProvider: triggerMessage!.text_provider, textCreatedAt: triggerMessage!.text_created_at,
+          provider: triggerMessage!.provider, boxId: triggerMessage!.box_id, participantId: triggerMessage!.participant_id } });
       return matched;
     }
     const customField = condition.field === 'lead.custom' ? customFields.get(condition.fieldId.toLowerCase())! : undefined;
