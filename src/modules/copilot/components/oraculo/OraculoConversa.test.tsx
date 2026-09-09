@@ -18,6 +18,10 @@ const estado = {
   conversaId: null as string | null,
 };
 
+vi.mock("@/modules/identity", () => ({
+  useOrganization: () => ({ organizationId: "org-a" }),
+}));
+
 vi.mock("../../hooks/useOraculoTurno", () => ({
   useOraculoTurno: () => ({
     ...estado,

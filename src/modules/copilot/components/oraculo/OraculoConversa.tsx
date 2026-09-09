@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { useOrganization } from "@/modules/identity";
 import { useOraculoTurno } from "../../hooks/useOraculoTurno";
 
 const SUGESTOES = [
@@ -23,7 +24,8 @@ const SUGESTOES = [
 
 export function OraculoConversa() {
   const [rascunho, setRascunho] = useState("");
-  const oraculo = useOraculoTurno();
+  const { organizationId } = useOrganization();
+  const oraculo = useOraculoTurno(organizationId);
 
   const enviar = () => {
     const texto = rascunho.trim();
