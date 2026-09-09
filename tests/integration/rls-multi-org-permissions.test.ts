@@ -61,22 +61,25 @@ describe.skipIf(shouldSkip)('RLS Fase 2: permissions multi-org deterministic', (
     orgAAgentId = '00000000-0000-0000-0000-00000000a001';
     orgBAgentId = '00000000-0000-0000-0000-00000000a002';
 
-    await service.from('copilot_agents').upsert([
+    const { error: agentError } = await service.from('copilot_agents').upsert([
       {
         id: orgAAgentId,
         organization_id: TEST_ORG_ID,
+        created_by: TEST_MEMBER_1_ID,
         name: 'Agent orgA',
-        agent_type: 'qualificador',
+        main_objective: 'Qualificar leads da organização A',
         is_active: true,
       },
       {
         id: orgBAgentId,
         organization_id: TEST_ORG_B_ID,
+        created_by: TEST_MEMBER_B_ID,
         name: 'Agent orgB',
-        agent_type: 'qualificador',
+        main_objective: 'Qualificar leads da organização B',
         is_active: true,
       },
     ]);
+    if (agentError) throw new Error(`Falha ao criar agentes RLS: ${agentError.message}`);
   });
 
   afterAll(async () => {
@@ -215,8 +218,9 @@ describe.skipIf(shouldSkip)('RLS Fase 2: permissions multi-org deterministic', (
       await expectInsertDenied(orgAAdmin, 'copilot_agents', {
         id: '00000000-0000-0000-0000-00000000a999',
         organization_id: TEST_ORG_B_ID,
+        created_by: TEST_MEMBER_1_ID,
         name: 'cross-org attempt',
-        agent_type: 'qualificador',
+        main_objective: 'Tentativa cross-org',
         is_active: true,
       });
     });
