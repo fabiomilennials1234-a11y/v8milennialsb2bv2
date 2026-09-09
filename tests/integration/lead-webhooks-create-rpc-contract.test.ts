@@ -5,7 +5,6 @@
  * resolves RPC overloads by the complete named-argument set, so one stale
  * argument makes the whole webhook return 500 before a lead is inserted.
  */
-import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { supabase } from './setup';
 
@@ -17,6 +16,7 @@ const API_KEY_ID = 'aacc0000-0000-0000-0000-000000000002';
 const SDR_ID = 'aacc0000-0000-4000-8000-000000000003';
 const CLOSER_ID = 'aacc0000-0000-4000-8000-000000000004';
 const RAW_API_KEY = 'tq_live_webhook_contract_20260909';
+const API_KEY_SHA256 = '9463122dd58cde7314ec2bd473978806f8b204a2265f89d0e99a2a50d10e9c05';
 const EMAILS = ['webhook-new-contract@milennials.test', 'webhook-confirm-contract@milennials.test'];
 
 async function expectOk<T>(label: string, promise: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T | null> {
@@ -77,7 +77,7 @@ describe.skipIf(shouldSkip)('lead webhooks → create_lead_with_pipe contract', 
         organization_id: ORG_ID,
         name: 'Webhook contract test',
         key_prefix: RAW_API_KEY.slice(0, 12),
-        key_hash: createHash('sha256').update(RAW_API_KEY).digest('hex'),
+        key_hash: API_KEY_SHA256,
         scopes: ['lead:write'],
       }),
     );
