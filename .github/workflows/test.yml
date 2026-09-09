@@ -154,7 +154,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pin the CLI: resolving latest hit GitHub rate limits before tests.
+          version: 2.117.0
       - run: supabase start
       - uses: actions/setup-node@v4
         with:
@@ -175,7 +176,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pin the CLI: resolving latest hit GitHub rate limits before tests.
+          version: 2.117.0
       # Boots local Postgres and applies supabase/migrations/* — the clean
       # schema the invariant suite asserts against.
       - run: supabase start
@@ -214,7 +216,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pin the CLI: resolving latest hit GitHub rate limits before tests.
+          version: 2.117.0
       - run: supabase start
       - name: Seed test database
         run: PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/seed.sql

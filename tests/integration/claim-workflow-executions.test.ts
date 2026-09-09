@@ -59,7 +59,6 @@ async function insertExecution(
     .single();
   expect(error).toBeNull();
   createdExecIds.push(data!.id as string);
-  expect(error).toBeNull();
   return data!.id as string;
 }
 
@@ -114,7 +113,6 @@ describe.skipIf(shouldSkip)('claim_workflow_executions — consolidated RPC', ()
       per_org_cap: 5,
     } as never);
     expect(error).toBeNull();
-
     const rows = (data ?? []) as Array<{ organization_id: string }>;
     const byOrg = rows.reduce<Record<string, number>>((acc, r) => {
       acc[r.organization_id] = (acc[r.organization_id] ?? 0) + 1;
@@ -135,9 +133,10 @@ describe.skipIf(shouldSkip)('claim_workflow_executions — consolidated RPC', ()
     const expiredAt = new Date(Date.now() - 60_000).toISOString();
     const execId = await insertExecution(TEST_ORG_ID, testWorkflowId, 'waiting_response', expiredAt);
 
-    const { data } = await supabase.rpc('claim_workflow_executions' as never, {
+    const { data, error } = await supabase.rpc('claim_workflow_executions' as never, {
       batch_size: 50,
     } as never);
+    expect(error).toBeNull();
     const rows = (data ?? []) as Array<{ id: string; status: string; context: Record<string, unknown> }>;
     const claimed = rows.find((r) => r.id === execId);
 
@@ -150,12 +149,18 @@ describe.skipIf(shouldSkip)('claim_workflow_executions — consolidated RPC', ()
     const futureAt = new Date(Date.now() + 3_600_000).toISOString();
     const execId = await insertExecution(TEST_ORG_ID, testWorkflowId, 'waiting_response', futureAt);
 
-    const { data } = await supabase.rpc('claim_workflow_executions' as never, {
+    const { data, error } = await supabase.rpc('claim_workflow_executions' as never, {
       batch_size: 50,
     } as never);
+    expect(error).toBeNull();
     const rows = (data ?? []) as Array<{ id: string }>;
     const claimed = rows.find((r) => r.id === execId);
     expect(claimed).toBeUndefined();
+    const persisted = await supabase.from('workflow_executions').select('status, next_run_at')
+      .eq('organization_id', TEST_ORG_ID).eq('id', execId).single();
+    expect(persisted.error).toBeNull();
+    expect(persisted.data?.status).toBe('waiting_response');
+    expect(Date.parse(persisted.data!.next_run_at)).toBe(Date.parse(futureAt));
   });
 
   it('concurrent claims do not double-claim the same row', async () => {
@@ -168,13 +173,15 @@ describe.skipIf(shouldSkip)('claim_workflow_executions — consolidated RPC', ()
       supabase.rpc('claim_workflow_executions' as never, { batch_size: 5 } as never),
     ]);
 
+    expect(resA.error).toBeNull();
+    expect(resB.error).toBeNull();
     const rowsA = ((resA.data ?? []) as Array<{ id: string }>);
     const rowsB = ((resB.data ?? []) as Array<{ id: string }>);
 
     const countInA = rowsA.filter((r) => r.id === execId).length;
     const countInB = rowsB.filter((r) => r.id === execId).length;
 
-    // The row must appear in AT MOST one of the two responses
-    expect(countInA + countInB).toBeLessThanOrEqual(1);
+    // Exactly one successful claimant: zero would conceal a broken RPC.
+    expect(countInA + countInB).toBe(1);
   });
 });
