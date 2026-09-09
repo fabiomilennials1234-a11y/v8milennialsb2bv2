@@ -291,6 +291,12 @@ Publication rejects malformed query groups, malformed typed children, unavailabl
 
 The 45-migration transactional rollback/reapply rehearsal passed. Effective privileges after recovery: personal reader anon=false/authenticated=true/service=false; organization reader anon=false/authenticated=false/service=true; publication trigger callable by no API role.
 
+## Migration 48 — conversation history coverage
+
+Adds `conversation_history_coverage` and scope `message.period.exists`. Evidence is conversation-specific and stores a bounded interval plus `complete`, `in_progress` or `gapped`; only complete coverage can prove absence. Personal evaluation is authenticated-only under RLS. Organization evaluation is service-only and requires the exact current workflow grant.
+
+Rollback removes the table, readers and publication trigger, then the rehearsal replays migration 47 and migration 48. Workflow drafts, grants, versions, execution pins and message rows remain intact. The 49-migration transactional rollback/reapply rehearsal passed. Preview only; worker and production remain undeployed.
+
 ## Migration 45 — latest currently-won sale date
 
 Adds explicit scope `business.last_won_date`. Personal reads are authenticated-only under caller RLS. Organization reads are service-only and require the current workflow grant while locking workflow, grant, lead, entries and deals. Both return at most one currently-won deal by canonical `outcome_at`, converted with the organization's IANA timezone.

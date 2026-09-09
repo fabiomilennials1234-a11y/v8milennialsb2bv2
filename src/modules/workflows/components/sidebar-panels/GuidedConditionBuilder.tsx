@@ -29,6 +29,9 @@ export function isIncompleteGuidedDraft(condition: GuidedConditionDraft): boolea
     : condition.field === 'business.last_won_date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : condition.field === 'message.trigger.text' ? (condition.conversation.kind === 'explicit' && (!condition.conversation.boxId || !condition.conversation.provider))
       || (condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.value)
+    : condition.field === 'message.period.exists' ? (condition.conversation.kind === 'explicit' && (!condition.conversation.boxId || !condition.conversation.provider))
+      || !condition.from || !condition.to || !Number.isFinite(Date.parse(condition.from)) || !Number.isFinite(Date.parse(condition.to))
+      || Date.parse(condition.from) >= Date.parse(condition.to) || Date.parse(condition.to) - Date.parse(condition.from) > 366 * 86_400_000
     : condition.field === 'lead.custom' && !condition.fieldId ? true
     : condition.field === 'lead.custom' && condition.fieldType === 'date' ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !isGuidedCalendarDate(condition.value)
     : (condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id') ? condition.operator !== 'is_empty' && condition.operator !== 'is_not_empty' && !condition.memberId
@@ -44,12 +47,18 @@ function duplicateCondition(condition: GuidedConditionDraft): GuidedConditionDra
     : { ...condition, id: crypto.randomUUID() };
 }
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+function localDateTimeValue(value: string): string {
+  if (!value || !Number.isFinite(Date.parse(value))) return '';
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
 
 function defaultRule(id: string, field: Exclude<GuidedFieldSelection, 'business.exists'>): GuidedRuleDraft {
   if (field === 'business.trigger.stage') return { version: 1, id, field, operator: 'equals', pipelineId: '', stageId: '' };
   if (field === 'business.trigger.stage_elapsed') return { version: 1, id, field, operator: 'greater_than_or_equal', value: '', unit: 'hours' };
   if (field === 'business.last_won_date') return { version: 1, id, field, operator: 'equals', value: '' };
   if (field === 'message.trigger.text') return { version: 1, id, field, conversation: { kind: 'trigger' }, operator: 'contains', value: '' };
+  if (field === 'message.period.exists') return { version: 1, id, field, conversation: { kind: 'trigger' }, operator: 'exists', from: '', to: '' };
   if (field === 'business.trigger.value' || isGuidedNumberField(field)) return { version: 1, id, field, operator: 'equals', value: '' };
   if (isGuidedResponsibleField(field)) return { version: 1, id, field, operator: 'equals', memberId: '' };
   if (field === 'lead.origin') return { version: 1, id, field, operator: 'equals', originId: '' };
@@ -279,6 +288,8 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
         }
         else if (field === 'message.trigger.text') onChange(condition.field === field ? condition
           : { version: 1, id: condition.id, field, conversation: { kind: 'trigger' }, operator: 'contains', value: '' });
+        else if (field === 'message.period.exists') onChange(condition.field === field ? condition
+          : { version: 1, id: condition.id, field, conversation: { kind: 'trigger' }, operator: 'exists', from: '', to: '' });
         else if (isGuidedResponsibleField(field)) onChange((condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id')
           ? { ...condition, field } : { version: 1, id: condition.id, field, operator: 'equals', memberId: '' });
         else if (field === 'lead.origin') onChange({ version: 1, id: condition.id, field: 'lead.origin', operator: 'equals', originId: '' });
@@ -290,12 +301,27 @@ export function GuidedConditionBuilder({ condition, onChange, actorId, organizat
               ? { ...base, operator: condition.operator } : { ...base, operator: condition.operator, value: condition.value });
           } else onChange({ ...base, operator: 'equals', value: '' });
         }
-        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
+        else if (isGuidedTextField(field)) onChange(condition.field === 'business.trigger.stage' || condition.field === 'business.trigger.value' || condition.field === 'business.trigger.stage_elapsed' || condition.field === 'business.last_won_date' || condition.field === 'message.period.exists' || condition.field === 'lead.pre_sale_responsible_id' || condition.field === 'lead.sale_responsible_id' || condition.field === 'lead.origin' || condition.field === 'lead.tags' || condition.field === 'lead.qualification_score' || (condition.field === 'lead.custom' && condition.fieldType !== 'text')
           ? { version: 1, id: condition.id, field, operator: 'equals', value: '' }
           : { version: 1, id: condition.id, field, ...(condition.operator === 'is_empty' || condition.operator === 'is_not_empty' ? { operator: condition.operator } : { operator: condition.operator, value: condition.value }) });
       }} /></div>
     {fieldReset && missingValue && <p className="text-xs text-muted-foreground" aria-live="polite">A informação mudou. Defina uma nova comparação.</p>}
-    {condition.field === 'message.trigger.text' ? <>
+    {condition.field === 'message.period.exists' ? <>
+      <GuidedConversationPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
+      <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
+      <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator}
+        onChange={event => onChange({ ...condition, operator: event.target.value === 'not_exists' ? 'not_exists' : 'exists' })}>
+        <option value="exists">existe mensagem recebida</option><option value="not_exists">não existe mensagem recebida</option>
+      </select>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-2"><Label htmlFor={`guided-from-${condition.id}`}>De</Label><Input id={`guided-from-${condition.id}`} type="datetime-local"
+          value={localDateTimeValue(condition.from)} onChange={event => onChange({ ...condition, from: event.target.value ? new Date(event.target.value).toISOString() : '' })} /></div>
+        <div className="space-y-2"><Label htmlFor={`guided-to-${condition.id}`}>Até</Label><Input id={`guided-to-${condition.id}`} type="datetime-local"
+          value={localDateTimeValue(condition.to)} onChange={event => onChange({ ...condition, to: event.target.value ? new Date(event.target.value).toISOString() : '' })} /></div>
+      </div>
+      <p className="text-xs text-muted-foreground">Inclui o início e exclui o instante final. Ausência só é concluída quando o histórico cobre todo o período.</p>
+      {missingValue && <p className="text-xs text-destructive">Informe um período válido de até 366 dias.</p>}
+    </> : condition.field === 'message.trigger.text' ? <>
       <GuidedConversationPicker actorId={actorId} organizationId={organizationId} condition={condition} onChange={onChange} />
       <Label htmlFor={`guided-operator-${condition.id}`}>Comparação</Label>
       <select id={`guided-operator-${condition.id}`} className={selectClass} value={condition.operator} onChange={event => {

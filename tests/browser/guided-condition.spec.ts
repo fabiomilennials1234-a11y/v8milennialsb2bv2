@@ -1450,11 +1450,38 @@ async function selectInformation(page: Page, field: string) {
     'business.exists': 'Existe negócio',
     'business.last_won_date': 'Data da última venda ganha',
     'message.trigger.text': 'Texto da mensagem do gatilho',
+    'message.period.exists': 'Mensagem recebida no período',
   };
   if (!labels[field]) throw new Error(`Missing test label for ${field}`);
   await page.getByRole('combobox', { name: 'Informação', exact: true }).click();
   await page.getByRole('option', { name: labels[field], exact: true }).click();
 }
+
+test('explica histórico insuficiente na busca de mensagem por período', async ({ page }) => {
+  const boxId = 'abcd0000-0000-4000-8000-000000000098';
+  await page.route('**/rest/v1/whatsapp_instances?*', route => route.fulfill({ json: [
+    { id: boxId, instance_name: 'Comercial', provider: 'uazapi' },
+  ] }));
+  await page.route('**/rest/v1/messaging_channels?*', route => route.fulfill({ json: [] }));
+  await openGuidedEditor(page, 'JOSE');
+  await page.getByText('Nome informado', { exact: true }).click();
+  await selectInformation(page, 'message.period.exists');
+  const configuration = page.getByRole('complementary', { name: 'Configurar Condição' });
+  await configuration.getByLabel('Conversa', { exact: true }).selectOption('explicit');
+  await configuration.getByLabel('Caixa de entrada', { exact: true }).selectOption(`whatsapp_messages:${boxId}:uazapi`);
+  await configuration.getByLabel('Comparação', { exact: true }).selectOption('not_exists');
+  await configuration.getByLabel('De', { exact: true }).fill('2026-09-01T00:00');
+  await configuration.getByLabel('Até', { exact: true }).fill('2026-09-08T00:00');
+  await page.getByRole('combobox', { name: 'Lead para testar' }).selectOption('lead-1');
+  await page.route('**/functions/v1/test-guided-condition', route => {
+    expect(route.request().postDataJSON()).toMatchObject({ condition: { field: 'message.period.exists', operator: 'not_exists',
+      conversation: { kind: 'explicit', storage: 'whatsapp_messages', boxId, provider: 'uazapi' } } });
+    return route.fulfill({ status: 422, json: { status: 'error', code: 'history_insufficient' } });
+  });
+  await page.getByRole('button', { name: 'Testar condição', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Teste da condição' }).getByRole('alert')).toContainText('Histórico insuficiente');
+  await expect(page.locator('.react-flow__node-condition')).toContainText('Não existe mensagem recebida');
+});
 
 test('fixa caixa e mensagem do gatilho e explica a proveniência do texto', async ({ page }) => {
   const boxA = 'abcd0000-0000-4000-8000-000000000081';

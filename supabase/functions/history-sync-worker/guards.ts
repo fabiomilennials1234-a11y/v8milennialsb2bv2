@@ -102,3 +102,9 @@ export function reachedGlobalCap(
   if (!Number.isFinite(cap) || cap <= 0) return false;
   return totalFetched >= cap;
 }
+
+export function classifyConversationCoverage(input: {
+  naturalEnd: boolean; dataLoss: boolean; hitExisting?: boolean; capped?: boolean;
+}): 'complete' | 'gapped' {
+  return input.naturalEnd && !input.dataLoss && !input.hitExisting && !input.capped ? 'complete' : 'gapped';
+}

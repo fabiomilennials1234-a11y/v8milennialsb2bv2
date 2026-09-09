@@ -140,6 +140,9 @@ const triggerMessageRollback = readFileSync(`supabase/migrations/rollback/${trig
 const messageCandidatesMigration = '20271017000047_guided_message_test_candidates.sql';
 const messageCandidatesForward = readFileSync(`supabase/migrations/${messageCandidatesMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const messageCandidatesRollback = readFileSync(`supabase/migrations/rollback/${messageCandidatesMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const messageCoverageMigration = '20271017000048_guided_message_history_coverage.sql';
+const messageCoverageForward = readFileSync(`supabase/migrations/${messageCoverageMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
+const messageCoverageRollback = readFileSync(`supabase/migrations/rollback/${messageCoverageMigration}`, 'utf8').replace(/^(BEGIN|COMMIT);\s*$/gm, '');
 const query = `BEGIN;
 CREATE TEMP TABLE guided_rollback_fixture ON COMMIT DROP AS
   SELECT gen_random_uuid() AS org_id, gen_random_uuid() AS workflow_id, gen_random_uuid() AS custom_field_id, gen_random_uuid() AS custom_lead_id,
@@ -171,6 +174,7 @@ INSERT INTO public.workflow_guided_publications(workflow_id, organization_id, ve
   SELECT v.workflow_id, v.organization_id, v.id FROM public.workflow_guided_versions v JOIN guided_rollback_fixture f USING(workflow_id);
 INSERT INTO public.workflow_executions(workflow_id, organization_id, status, next_run_at)
   SELECT workflow_id, org_id, 'waiting', '2099-01-01'::timestamptz FROM guided_rollback_fixture;
+${messageCoverageRollback}
 ${messageCandidatesRollback}
 ${triggerMessageRollback}
 DO $$ BEGIN
@@ -447,6 +451,7 @@ ${businessExistenceForward}
 ${lastWonForward}
 ${triggerMessageForward}
 ${messageCandidatesForward}
+${messageCoverageForward}
 DO $$ BEGIN
   IF has_function_privilege('anon', 'public.test_guided_condition_trigger_message(uuid,uuid,jsonb)', 'EXECUTE')
     OR has_function_privilege('service_role', 'public.test_guided_condition_trigger_message(uuid,uuid,jsonb)', 'EXECUTE')

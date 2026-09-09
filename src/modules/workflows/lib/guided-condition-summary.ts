@@ -44,6 +44,13 @@ export function summarizeGuidedCondition(condition: GuidedConditionDraft): strin
       : condition.operator === 'is_not_empty' ? `${conversation} · Texto está preenchido`
       : `${conversation} · Texto ${GUIDED_TEXT_OPERATORS[condition.operator]} “${condition.value}”`;
   }
+  if (condition.field === 'message.period.exists') {
+    const conversation = condition.conversation.kind === 'trigger' ? 'Conversa do gatilho'
+      : `Caixa ${condition.conversation.boxLabel || 'não selecionada'} · ${condition.conversation.provider || 'provider não definido'}`;
+    const from = condition.from ? new Date(condition.from).toLocaleString('pt-BR') : '…';
+    const to = condition.to ? new Date(condition.to).toLocaleString('pt-BR') : '…';
+    return `${conversation} · ${condition.operator === 'exists' ? 'Existe' : 'Não existe'} mensagem recebida · ${from} até ${to}`;
+  }
   if (condition.field === 'lead.custom' && condition.fieldType === 'select') {
     const label = condition.fieldLabel || 'Campo personalizado';
     return condition.operator === 'is_empty' ? `${label} está vazio` : condition.operator === 'is_not_empty' ? `${label} está preenchido`

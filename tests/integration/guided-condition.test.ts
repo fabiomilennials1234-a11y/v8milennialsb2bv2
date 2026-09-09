@@ -2667,6 +2667,73 @@ describe.skipIf(!process.env.GUIDED_PREVIEW_REF)('guided condition — real Auth
     if (failures.length) throw new AggregateError(failures, 'Responsible-only evaluation or cleanup failed');
   }, 60000);
 
+  it('proves message-period absence only from complete conversation coverage', async () => {
+    const box = crypto.randomUUID(), message = crypto.randomUUID(), workflowId = crypto.randomUUID();
+    const caller = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!, {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    await service.from('org_quotas').upsert({ organization_id: orgA, resource_key: 'max_whatsapp_instances', plan_base: 2 }, { onConflict: 'organization_id,resource_key' }).throwOnError();
+    await service.from('whatsapp_instances').insert({ id: box, organization_id: orgA, instance_name: 'Cobertura', phone_number: '551130000099', provider: 'uazapi' }).throwOnError();
+    await service.from('workflows').insert({ id: workflowId, organization_id: orgA, name: 'Period coverage grant', trigger_type: 'lead_replied' }).throwOnError();
+    const base = { version: 1, id: 'period', field: 'message.period.exists', conversation: {
+      kind: 'explicit', storage: 'whatsapp_messages', boxId: box, provider: 'uazapi',
+    }, from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' } as const;
+    try {
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: { ...base, operator: 'not_exists' } }))
+        .toEqual({ status: 'error', code: 'history_insufficient' });
+      await service.from('conversation_history_coverage').insert({ organization_id: orgA, storage: 'whatsapp_messages', box_id: box,
+        provider: 'uazapi', participant_id: '5511999990000', covered_from: base.from, covered_to: base.to,
+        state: 'in_progress', gap_reason: 'worker_running' }).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: { ...base, operator: 'not_exists' } }))
+        .toEqual({ status: 'error', code: 'history_sync_in_progress' });
+      await service.from('conversation_history_coverage').insert({ organization_id: orgA, storage: 'whatsapp_messages', box_id: box,
+        provider: 'uazapi', participant_id: '5511999990000', covered_from: base.from, covered_to: base.to, state: 'complete' }).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: { ...base, operator: 'not_exists' } }))
+        .toMatchObject({ status: 'evaluated', matched: true, rules: [{ actual: false }] });
+      expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA, condition: { ...base, operator: 'not_exists' },
+        authorization: { kind: 'organization', workflowId } })).toEqual({ status: 'error', code: 'access_denied' });
+      expect((await caller.rpc('set_workflow_data_grant', { p_workflow_id: workflowId, p_fields: ['message.period.exists'], p_expected_revision: 0 })).error).toBeNull();
+      expect(await evaluateGuidedCondition(service, { organizationId: orgA, leadId: leadA, condition: { ...base, operator: 'not_exists' },
+        authorization: { kind: 'organization', workflowId } })).toMatchObject({ status: 'evaluated', matched: true });
+      const publishedCondition = { ...base, operator: 'not_exists' as const };
+      const definition = { nodes: [
+        { id: 't', type: 'trigger', data: { triggerType: 'lead_replied', config: {} } },
+        { id: 'c', type: 'condition', data: { guidedCondition: publishedCondition } },
+        { id: 'yes', type: 'end', data: {} }, { id: 'no', type: 'end', data: {} },
+      ], edges: [
+        { id: 'tc', source: 't', target: 'c' }, { id: 'cy', source: 'c', target: 'yes', sourceHandle: 'yes' },
+        { id: 'cn', source: 'c', target: 'no', sourceHandle: 'no' },
+      ] };
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_definition: definition, p_settings: { name: 'Period coverage grant' }, p_expected_revision: 0 })).error).toBeNull();
+      const publication = { p_workflow_id: workflowId, p_organization_id: orgA, p_actor_id: userId, p_expected_revision: 1,
+        p_definition: definition, p_settings: { name: 'Period coverage grant' }, p_required_fields: ['message.period.exists'] };
+      expect((await service.rpc('finalize_guided_workflow_publication', publication)).error).toBeNull();
+      const malformed = structuredClone(definition);
+      (malformed.nodes[1].data.guidedCondition as { to: string }).to = base.from;
+      expect((await caller.rpc('save_guided_workflow_draft_with_settings', { p_workflow_id: workflowId,
+        p_definition: malformed, p_settings: { name: 'Period coverage grant' }, p_expected_revision: 1 })).error).toBeNull();
+      expect((await service.rpc('finalize_guided_workflow_publication', { ...publication, p_expected_revision: 2, p_definition: malformed })).error?.code).toBe('22023');
+      await service.from('whatsapp_messages').insert({ id: message, organization_id: orgA, instance_id: box,
+        message_id: `guided-period-${message}`, remote_jid: '5511999990000@s.whatsapp.net', phone_number: '5511999990000',
+        normalized_phone: '5511999990000', direction: 'incoming', message_type: 'text', content: 'late arrival',
+        timestamp: '2026-09-01T00:00:00Z' }).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: { ...base, operator: 'exists' } }))
+        .toMatchObject({ status: 'evaluated', matched: true, rules: [{ reference: { messageId: message } }] });
+      await service.from('whatsapp_messages').update({ timestamp: base.to }).eq('id', message).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: { ...base, operator: 'exists' } }))
+        .toMatchObject({ status: 'evaluated', matched: false });
+      await service.from('conversation_history_coverage').insert({ organization_id: orgA, storage: 'whatsapp_messages', box_id: box,
+        provider: 'uazapi', participant_id: '5511999990000', covered_from: base.from, covered_to: base.to,
+        state: 'in_progress', gap_reason: 'new_sync_running' }).throwOnError();
+      expect(await evaluateGuidedCondition(caller, { organizationId: orgA, leadId: leadA, condition: { ...base, operator: 'not_exists' } }))
+        .toEqual({ status: 'error', code: 'history_sync_in_progress' });
+    } finally {
+      await service.from('workflows').delete().eq('id', workflowId);
+      await service.from('whatsapp_instances').delete().eq('id', box);
+    }
+  }, 60000);
+
   it('pins trigger-message identity, provenance and access to one WhatsApp box', async () => {
     const boxA = crypto.randomUUID(), boxB = crypto.randomUUID(), messageA = crypto.randomUUID(), messageB = crypto.randomUUID();
     const media = crypto.randomUUID(), transcript = crypto.randomUUID(), workflowId = crypto.randomUUID();

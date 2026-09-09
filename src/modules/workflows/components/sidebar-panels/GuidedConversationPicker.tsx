@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import type { GuidedTriggerMessageTextRuleDraft } from '@/types/workflow';
+import type { GuidedMessagePeriodRuleDraft, GuidedTriggerMessageTextRuleDraft } from '@/types/workflow';
 import { Label } from '@/components/ui/label';
 
 const selectClass = 'h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-type Rule = GuidedTriggerMessageTextRuleDraft;
+type Rule = GuidedTriggerMessageTextRuleDraft | GuidedMessagePeriodRuleDraft;
 type Box = { storage: 'whatsapp_messages' | 'channel_messages'; id: string; provider: string; label: string };
 
 export function GuidedConversationPicker({ actorId, organizationId, condition, onChange }: {

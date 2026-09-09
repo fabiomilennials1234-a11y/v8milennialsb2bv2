@@ -14,6 +14,67 @@ function databaseLead(name: string | null) {
 }
 
 describe('guided condition — public evaluation', () => {
+  it('proves period message existence from one matching persisted message without requiring complete history', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => {
+        const url = new URL(String(input));
+        if (url.pathname === '/rest/v1/leads') return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', name: null }), { headers: { 'Content-Type': 'application/json' } });
+        expect(url.pathname).toBe('/rest/v1/rpc/test_guided_condition_message_period');
+        return new Response(JSON.stringify({ matched_message_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', matched_at: '2026-09-07T12:00:00Z', coverage_status: 'gapped' }), { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    expect(await evaluateGuidedCondition(caller, {
+      organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'period', field: 'message.period.exists', conversation: { kind: 'explicit', storage: 'whatsapp_messages', boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, operator: 'exists', from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' },
+    })).toEqual({ status: 'evaluated', matched: true, rules: [{ id: 'period', status: 'evaluated', matched: true, actual: true, reference: { messageId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', messageAt: '2026-09-07T12:00:00Z' } }] });
+  });
+
+  it('refuses to infer period absence while history synchronization is incomplete', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => new Response(JSON.stringify(new URL(String(input)).pathname === '/rest/v1/leads'
+        ? { id: 'lead-1', organization_id: 'org-1', name: null }
+        : { matched_message_id: null, matched_at: null, coverage_status: 'in_progress' }), { headers: { 'Content-Type': 'application/json' } }) },
+    });
+    expect(await evaluateGuidedCondition(caller, {
+      organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'period', field: 'message.period.exists', conversation: { kind: 'explicit', storage: 'whatsapp_messages', boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, operator: 'not_exists', from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' },
+    })).toEqual({ status: 'error', code: 'history_sync_in_progress' });
+  });
+
+  it('returns history_insufficient when a relevant gap could change period absence', async () => {
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { fetch: async input => new Response(JSON.stringify(new URL(String(input)).pathname === '/rest/v1/leads'
+        ? { id: 'lead-1', organization_id: 'org-1', name: null }
+        : { matched_message_id: null, matched_at: null, coverage_status: 'gapped' }), { headers: { 'Content-Type': 'application/json' } }) },
+    });
+    expect(await evaluateGuidedCondition(caller, {
+      organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'period', field: 'message.period.exists', conversation: { kind: 'explicit', storage: 'whatsapp_messages', boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, operator: 'exists', from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' },
+    })).toEqual({ status: 'error', code: 'history_insufficient' });
+  });
+
+  it('bounds message-period reads instead of issuing an unlimited history query set', async () => {
+    let periodReads = 0;
+    const caller = createClient('https://db.example.test', 'test-anon-key', {
+      auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: async input => {
+        const url = new URL(String(input));
+        if (url.pathname.includes('message_period')) periodReads++;
+        return new Response(JSON.stringify({ id: 'lead-1', organization_id: 'org-1', name: null }), { headers: { 'Content-Type': 'application/json' } });
+      } },
+    });
+    const children = Array.from({ length: 21 }, (_, index) => ({ version: 1 as const, id: `period-${index}`,
+      field: 'message.period.exists' as const, conversation: { kind: 'explicit' as const, storage: 'whatsapp_messages' as const,
+        boxId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', provider: 'uazapi' }, operator: 'exists' as const,
+      from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' }));
+    expect(await evaluateGuidedCondition(caller, { organizationId: 'org-1', leadId: 'lead-1',
+      condition: { version: 1, id: 'group', kind: 'group', match: 'all', children } }))
+      .toEqual({ status: 'error', code: 'invalid_configuration' });
+    expect(periodReads).toBe(0);
+  });
+
   it('evaluates only the identified trigger message and explains its persisted textual source', async () => {
     const caller = createClient('https://db.example.test', 'test-anon-key', {
       auth: { persistSession: false, autoRefreshToken: false },

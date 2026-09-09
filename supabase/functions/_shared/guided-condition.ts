@@ -52,8 +52,11 @@ export type GuidedLastWonDateRule = { version: 1; id: string; field: 'business.l
 export type GuidedTriggerMessageTextRule = { version: 1; id: string; field: 'message.trigger.text';
   conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages';
     boxId: string; provider: string } } & GuidedTextComparison;
+export type GuidedMessagePeriodRule = { version: 1; id: string; field: 'message.period.exists';
+  conversation: { kind: 'trigger' } | { kind: 'explicit'; storage: 'whatsapp_messages' | 'channel_messages'; boxId: string; provider: string };
+  operator: 'exists' | 'not_exists'; from: string; to: string };
 
-export type GuidedRule = GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
+export type GuidedRule = GuidedMessagePeriodRule | GuidedTriggerMessageTextRule | GuidedLastWonDateRule | GuidedTriggerBusinessStageElapsedRule | GuidedTriggerBusinessValueRule | GuidedTriggerBusinessStageRule | GuidedCustomSelectRule | GuidedCustomDateRule | GuidedCustomBooleanRule | GuidedCustomNumberRule | GuidedCustomTextRule | GuidedResponsibleRule | GuidedOriginRule | GuidedScalarRule | ({ version: 1; id: string; field: GuidedNumberField } & GuidedNumberComparison) | {
   version: 1; id: string; field: 'lead.tags'; operator: 'has_tag' | 'not_has_tag'; tagId: string;
 };
 
@@ -118,6 +121,17 @@ export function isGuidedCondition(value: unknown): value is GuidedCondition {
         && typeof conversation.provider === 'string' && conversation.provider.trim().length > 0);
       return validConversation && (rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
         || (isGuidedTextOperator(rule.operator) && typeof rule.value === 'string' && rule.value.length > 0));
+    }
+    if (rule.field === 'message.period.exists') {
+      const conversation = rule.conversation as Record<string, unknown> | undefined;
+      const validConversation = conversation?.kind === 'trigger' || (conversation?.kind === 'explicit'
+        && (conversation.storage === 'whatsapp_messages' || conversation.storage === 'channel_messages')
+        && typeof conversation.boxId === 'string' && GUIDED_UUID.test(conversation.boxId)
+        && typeof conversation.provider === 'string' && conversation.provider.trim().length > 0);
+      const from = typeof rule.from === 'string' ? Date.parse(rule.from) : Number.NaN;
+      const to = typeof rule.to === 'string' ? Date.parse(rule.to) : Number.NaN;
+      return validConversation && (rule.operator === 'exists' || rule.operator === 'not_exists')
+        && Number.isFinite(from) && Number.isFinite(to) && from < to && to - from <= 366 * 86_400_000;
     }
     if (isGuidedResponsibleField(rule.field)) return rule.operator === 'is_empty' || rule.operator === 'is_not_empty'
       || ((rule.operator === 'equals' || rule.operator === 'not_equals') && typeof rule.memberId === 'string'
@@ -238,6 +252,7 @@ export async function evaluateGuidedCondition(
   const businessFields = requestedFields.filter(field => field === 'business.trigger.stage' || field === 'business.trigger.value' || field === 'business.trigger.stage_elapsed');
   const usesLastWonDate = requestedFields.includes('business.last_won_date');
   const usesTriggerMessage = requestedFields.includes('message.trigger.text');
+  const usesMessagePeriod = requestedFields.includes('message.period.exists');
   const hasNoLeadData = leadRequestedFields.length === 0;
   const { data, error, status } = request.authorization?.kind === 'organization'
     ? hasNoLeadData ? { data: { id: request.leadId, organization_id: request.organizationId, name: null }, error: null, status: 200 }
@@ -433,6 +448,44 @@ export async function evaluateGuidedCondition(
     }
     triggerMessage = candidate;
   }
+  type MessagePeriodData = { matched_message_id: string | null; matched_at: string | null;
+    coverage_status: 'complete' | 'in_progress' | 'gapped' };
+  const messagePeriods = new Map<string, MessagePeriodData>();
+  if (usesMessagePeriod) {
+    const periodRules: GuidedMessagePeriodRule[] = [];
+    const collectPeriodRules = (current: GuidedCondition): void => {
+      if ('kind' in current && current.kind === 'business_exists') return;
+      if ('children' in current) current.children.forEach(collectPeriodRules);
+      else if (!('kind' in current) && current.field === 'message.period.exists') periodRules.push(current);
+    };
+    collectPeriodRules(request.condition);
+    if (periodRules.length > 20) return { status: 'error' as const, code: 'invalid_configuration' as const };
+    for (const rule of periodRules) {
+      const conversation = rule.conversation.kind === 'trigger' ? request.messageContext : rule.conversation;
+      if (!conversation) return { status: 'error' as const, code: 'context_unavailable' as const };
+      const response = await caller.rpc(request.authorization?.kind === 'organization'
+        ? 'read_guided_condition_message_period' : 'test_guided_condition_message_period', {
+        ...(request.authorization?.kind === 'organization' ? { p_workflow_id: request.authorization.workflowId } : {}),
+        p_organization_id: request.organizationId, p_lead_id: request.leadId,
+        p_conversation: conversation, p_from: rule.from, p_to: rule.to,
+      });
+      if (response.error) {
+        const code = response.error.code === 'PT404' ? 'context_unavailable' as const
+          : response.error.code === '42501' || response.status === 401 || response.status === 403 ? 'access_denied' as const
+          : response.status >= 500 || response.status === 0 || response.status === 429 ? 'temporarily_unavailable' as const : 'source_unavailable' as const;
+        return { status: 'error' as const, code };
+      }
+      const candidate = response.data as MessagePeriodData | null;
+      if (!candidate || !['complete', 'in_progress', 'gapped'].includes(candidate.coverage_status)
+        || (candidate.matched_message_id !== null && (typeof candidate.matched_message_id !== 'string' || !GUIDED_UUID.test(candidate.matched_message_id)))
+        || (candidate.matched_at !== null && (typeof candidate.matched_at !== 'string' || !Number.isFinite(Date.parse(candidate.matched_at))))) {
+        return { status: 'error' as const, code: 'source_unavailable' as const };
+      }
+      if (!candidate.matched_message_id && candidate.coverage_status !== 'complete') return { status: 'error' as const,
+        code: candidate.coverage_status === 'in_progress' ? 'history_sync_in_progress' as const : 'history_insufficient' as const };
+      messagePeriods.set(rule.id, candidate);
+    }
+  }
   const customFields = new Map<string, { id: string; name: string; value: string | number | boolean | null }>();
   if (customIds.size) {
     const response = usesCustomReader ? {
@@ -596,7 +649,7 @@ export async function evaluateGuidedCondition(
   })) return { status: 'error' as const, code: 'source_unavailable' as const };
   type RuleResult = { id: string; status: 'evaluated'; matched: boolean; actual: unknown; reference?: { id: string; name: string } | {
     messageId: string; textSource: string | null; textProvider: string | null; textCreatedAt: string | null;
-    provider: string; boxId: string; participantId: string };
+    provider: string; boxId: string; participantId: string } | { messageId: string; messageAt: string | null };
     context?: { entryId: string; pipeline?: { id: string; name: string } } }
     | { id: string; status: 'not_evaluated' };
   type GroupResult = { id: string; status: 'evaluated'; matched: boolean } | { id: string; status: 'not_evaluated' };
@@ -763,6 +816,14 @@ export async function evaluateGuidedCondition(
         reference: { messageId: triggerMessage!.message_id, textSource: triggerMessage!.text_source,
           textProvider: triggerMessage!.text_provider, textCreatedAt: triggerMessage!.text_created_at,
           provider: triggerMessage!.provider, boxId: triggerMessage!.box_id, participantId: triggerMessage!.participant_id } });
+      return matched;
+    }
+    if (condition.field === 'message.period.exists') {
+      const period = messagePeriods.get(condition.id)!;
+      const exists = Boolean(period.matched_message_id);
+      const matched = condition.operator === 'exists' ? exists : !exists;
+      rules.push({ id: condition.id, status: 'evaluated', matched, actual: exists,
+        ...(period.matched_message_id ? { reference: { messageId: period.matched_message_id, messageAt: period.matched_at } } : {}) });
       return matched;
     }
     const customField = condition.field === 'lead.custom' ? customFields.get(condition.fieldId.toLowerCase())! : undefined;

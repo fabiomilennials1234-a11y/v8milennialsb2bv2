@@ -12,7 +12,8 @@ const fields = { ...GUIDED_SCALAR_FIELDS, ...GUIDED_RESPONSIBLE_FIELDS, 'lead.ta
   'business.trigger.stage': { label: 'Etapa' }, 'business.trigger.value': { label: 'Valor' },
   'business.trigger.stage_elapsed': { label: 'Tempo na etapa' },
   'business.last_won_date': { label: 'Data da última venda ganha' },
-  'message.trigger.text': { label: 'Texto da mensagem do gatilho' } };
+  'message.trigger.text': { label: 'Texto da mensagem do gatilho' },
+  'message.period.exists': { label: 'Mensagem recebida no período' } };
 type Field = Exclude<GuidedRuleDraft['field'], 'lead.custom'>;
 export type GuidedFieldSelection = Field | 'business.exists';
 // This catalogue contains only capabilities supported by the guided evaluator.
@@ -40,6 +41,7 @@ const vocabulary = {
   'business.trigger.stage_elapsed': ['negocio', 'tempo', 'duracao', 'permanencia', 'etapa atual'],
   'business.last_won_date': ['negocio', 'venda', 'ganha', 'ultima venda', 'data de fechamento'],
   'message.trigger.text': ['mensagem', 'conversa', 'texto', 'legenda', 'transcricao'],
+  'message.period.exists': ['mensagem', 'conversa', 'historico', 'periodo', 'recebida'],
 } satisfies Record<Field, string[]>;
 const entries = Object.entries(vocabulary) as [Field, string[]][];
 const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
