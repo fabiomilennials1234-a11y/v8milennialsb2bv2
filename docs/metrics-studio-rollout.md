@@ -110,3 +110,15 @@ Limite ainda existente: edições simultâneas do mesmo painel por dois admins
 seguem last-write-wins. Controle de versão otimista + histórico de layouts é
 recomendado como próxima proteção, com migration própria, revisão e ensaio de
 RLS; não foi incluído silenciosamente nesta publicação.
+
+## Publicação autorizada — 2026-09-09
+
+CTO solicitou merge da PR #2040 nesta sessão. Backup privado capturado em
+2026-09-09 11:52:55 UTC: 34 painéis e 2 definições. Aplicadas somente as
+migrations 20271017113742 e 20271018120000, com registro no ledger.
+Seed executado uma vez: 34 painéis anteriores preservados, 470 ao final.
+Comparação integral com backup: zero IDs ausentes e zero linhas alteradas.
+Café Jurerê mantém suas duas abas anteriores e recebeu os quatro templates.
+Função classify-stage-roles publicada. Frontend segue no merge desta revisão.
+O pedido atual autoriza a publicação apesar das falhas herdadas de integração
+HTTP/E2E descritas na revisão; não houve alteração de baseline nem de gates.
