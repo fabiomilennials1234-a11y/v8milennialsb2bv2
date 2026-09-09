@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -15,42 +15,40 @@ type Row = {
 };
 const db = vi.hoisted(() => ({ rows: [] as Row[], readError: false }));
 
-// Stateful PostgREST seam: both write surfaces share pipeline_stages, including
-// inactive rows. Enforce the real UNIQUE(pipeline_id, stage_key/position).
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    from: () => {
-      const filters: Array<[string, unknown]> = [];
-      let payload: Partial<Row> | undefined;
-      let limit = Infinity;
-      const result = () => {
-        if (db.readError) return { data: null, error: { message: "read failed" } };
-        const rows = db.rows.filter(row => filters.every(([key, value]) => row[key as keyof Row] === value));
-        return { data: [...rows].sort((a, b) => b.position - a.position).slice(0, limit), error: null };
+// Exercise the real Supabase SDK over an external HTTP fixture. Both the RPC
+// and direct insert enforce UNIQUE(pipeline_id, stage_key/position).
+function installPostgrestFixture() {
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const response = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
+      status, headers: { "Content-Type": "application/json" },
+    });
+    const rpc = url.pathname === "/rest/v1/rpc/fn_etapa_custom_criar";
+    if (!rpc && url.pathname !== "/rest/v1/pipeline_stages") {
+      throw new Error(`Unexpected PostgREST request: ${request.method} ${url.pathname}`);
+    }
+    if (request.method === "POST") {
+      const body = await request.json();
+      const row: Row = {
+        id: `s${db.rows.length}`, organization_id: "org1", pipeline_id: "p1",
+        pipeline_type: null, name: "", stage_key: "", position: 0, is_active: true,
+        ...(rpc ? body.p_input : body),
       };
-      const chain = {
-        select: () => chain,
-        eq: (key: string, value: unknown) => { filters.push([key, value]); return chain; },
-        order: () => chain,
-        limit: (n: number) => { limit = n; return chain; },
-        insert: (value: Partial<Row>) => { payload = value; return chain; },
-        then: (resolve: (value: ReturnType<typeof result>) => unknown) => Promise.resolve(result()).then(resolve),
-        single: async () => {
-          const row: Row = {
-            id: `s${db.rows.length}`, organization_id: "org1", pipeline_id: "p1",
-            pipeline_type: null, name: "", stage_key: "", position: 0, is_active: true, ...payload,
-          };
-          const conflict = db.rows.find(r => r.pipeline_id === row.pipeline_id &&
-            (r.stage_key === row.stage_key || r.position === row.position));
-          if (conflict) return { data: null, error: { code: "23505", message: 'duplicate key violates "pipeline_stages_pipeline_id_stage_key_key"' } };
-          db.rows.push(row);
-          return { data: row, error: null };
-        },
-      };
-      return chain;
-    },
-  },
-}));
+      const conflict = db.rows.find(r => r.pipeline_id === row.pipeline_id &&
+        (r.stage_key === row.stage_key || r.position === row.position));
+      if (conflict) return response({ code: "23505", message: 'duplicate key violates "pipeline_stages_pipeline_id_stage_key_key"' }, 409);
+      db.rows.push(row);
+      return response(rpc ? row.id : row, 201);
+    }
+    if (db.readError) return response({ message: "read failed" }, 500);
+    const rows = db.rows.filter(row => [...url.searchParams].every(([key, value]) =>
+      !value.startsWith("eq.") || String(row[key as keyof Row]) === value.slice(3)));
+    const data = [...rows].sort((a, b) => b.position - a.position)
+      .slice(0, Number(url.searchParams.get("limit") ?? Infinity));
+    return response(request.headers.get("Accept")?.includes("vnd.pgrst.object") ? data[0] : data);
+  }));
+}
 vi.mock("@/modules/identity", () => ({
   useCurrentTeamMember: () => ({ data: { organization_id: "org1" } }),
   useCanDo: () => true,
@@ -62,7 +60,8 @@ vi.mock("@/modules/pipelines/lib/stageTransition", () => ({ upsertLeadIntoCustom
 import { useCreatePipelineStage } from "@/modules/pipelines/hooks/model/usePipelineStages";
 import { useCreateCustomPipelineStage } from "@/modules/pipelines/hooks/custom/useCustomPipelines";
 
-beforeEach(() => { db.rows = []; db.readError = false; });
+beforeEach(() => { db.rows = []; db.readError = false; installPostgrestFixture(); });
+afterEach(() => { vi.unstubAllGlobals(); });
 
 describe.each(["system", "custom"])("recriar etapa %s", kind => {
   function setup() {

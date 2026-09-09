@@ -149,3 +149,12 @@ Para repetir: preparar branch descartável, aplicar migrations e implantar oracu
 ## CI restante
 
 Após renumeração, Lint & Build, CodeQL, secret scan e Edge Function Tests passaram. Vault: frontmatter corrigido; índice MOC regenerado. Integration, RLS e E2E gerais falham antes dos testes no mesmo bootstrap: `20270925000000_aposenta_calor_e_rating.sql`, `BACKUP rating incompleto: 0 copiadas vs 0 na origem`. Não enfraquecemos essa guarda nem marcamos esses jobs como verdes. Resolver bootstrap geral/replay antes do merge. Unit geral ainda estava em execução ao registrar este resultado.
+
+
+## Continuação do CI — 2026-09-09
+
+Run `34275901570` confirmou seis falhas de `recriar-etapa-excluida.test.ts`: mock do SDK não implementava a RPC atual (`supabase.rpc is not a function`). Substituído por fixture HTTP externa, usando SDK real; mesmos 14 casos passaram, contra 6 falhas/8 passes antes. Nenhuma baseline alterada.
+
+Bootstrap dos três jobs de banco agora prepara projeto temporário `torque_ci`, somente no runner GitHub, aplica migrations anteriores a 20270925, insere um lead e uma entrada sintéticos com rating/calor e aplica todas as restantes. SQL das migrations preservado; backup vazio continua sendo erro. Seed automático desabilitado; E2E faz seed explícito com ON_ERROR_STOP. Cleanup executa mesmo quando o replay falha.
+
+Revisões Standards e Spec sem achados novos. ESLint do teste e sintaxe shell passaram; script recusou execução fora de GitHub Actions. Execução real do novo bootstrap ainda pendente. O conflito entre aposentadoria de rating e funções posteriores de 20271008 permanece aberto: essas funções também reintroduzem referências ao campo removido. Não é seguro resolver isso alterando hashes ou simulando aplicação no ledger. CI completo não está verde.

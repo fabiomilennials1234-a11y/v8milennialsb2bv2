@@ -154,7 +154,8 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - run: supabase start
+      - name: Bootstrap disposable database with legacy backup fixture
+        run: bash scripts/ci/start-test-database.sh
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -165,6 +166,13 @@ jobs:
           SUPABASE_URL: http://localhost:54321
           SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
 
+      - name: Stop disposable database
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/torque-ci-db/supabase/config.toml" ]; then
+            supabase stop --no-backup --workdir "$RUNNER_TEMP/torque-ci-db"
+          fi
+
   rls-invariants:
     name: RLS Invariants (pgTAP)
     runs-on: ubuntu-latest
@@ -174,9 +182,10 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      # Boots local Postgres and applies supabase/migrations/* — the clean
-      # schema the invariant suite asserts against.
-      - run: supabase start
+      # Replays every migration unchanged, with synthetic legacy data before
+      # the retirement migration checks its backup. A replay failure blocks tests.
+      - name: Bootstrap disposable database with legacy backup fixture
+        run: bash scripts/ci/start-test-database.sh
       - name: Install pgTAP TAP harness (pg_prove)
         run: |
           sudo apt-get update
@@ -187,6 +196,13 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
 
+      - name: Stop disposable database
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/torque-ci-db/supabase/config.toml" ]; then
+            supabase stop --no-backup --workdir "$RUNNER_TEMP/torque-ci-db"
+          fi
+
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
@@ -196,9 +212,10 @@ jobs:
       - uses: supabase/setup-cli@v1
         with:
           version: latest
-      - run: supabase start
+      - name: Bootstrap disposable database with legacy backup fixture
+        run: bash scripts/ci/start-test-database.sh
       - name: Seed test database
-        run: PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres -f supabase/seed.sql
+        run: PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f supabase/seed.sql
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -229,6 +246,13 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+      - name: Stop disposable database
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/torque-ci-db/supabase/config.toml" ]; then
+            supabase stop --no-backup --workdir "$RUNNER_TEMP/torque-ci-db"
+          fi
 
   edge-function-tests:
     name: Edge Function Tests (Deno)
