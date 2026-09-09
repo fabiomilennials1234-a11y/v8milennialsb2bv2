@@ -6,6 +6,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import {
+  Mail,
   MoreVertical,
   Tag,
   Archive,
@@ -97,6 +98,7 @@ interface ContactContextMenuProps {
    * conversa aberta. Sem ela, arquivar a linha da Técnica arquivaria a conversa
    * homônima do Comercial.
    */
+  onMarkUnread?: (phone: string, instanceId?: string | null) => void;
   onArchive: (phone: string, instanceId?: string | null) => void;
   onUnarchive: (conversationId: string) => void;
   onDelete: (phone: string, instanceId?: string | null) => void;
@@ -109,6 +111,7 @@ function ContactContextMenu({
   activeTab,
   isAdmin,
   allTags,
+  onMarkUnread,
   onArchive,
   onUnarchive,
   onDelete,
@@ -132,6 +135,7 @@ function ContactContextMenu({
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48" onClick={(e) => e.stopPropagation()}>
+          {onMarkUnread && contact.instance_id && <DropdownMenuItem onClick={() => onMarkUnread(contact.phone_number, contact.instance_id)}><Mail className="w-4 h-4 mr-2" />Marcar como não lido</DropdownMenuItem>}
           <DropdownMenuSub>
             <DropdownMenuSubTrigger>
               <Tag className="w-4 h-4 mr-2" />
@@ -249,6 +253,7 @@ export interface ConversationListItemProps {
   instanceId: string | null;
   organizationId: string | null;
   allTags: { id: string; name: string; color: string }[];
+  onMarkUnread?: (phone: string, instanceId?: string | null) => void;
   onArchive: (phone: string, instanceId?: string | null) => void;
   onUnarchive: (conversationId: string) => void;
   onDelete: (phone: string, instanceId?: string | null) => void;
@@ -285,6 +290,7 @@ export function ConversationListItem({
   instanceId,
   organizationId,
   allTags,
+  onMarkUnread,
   onArchive,
   onUnarchive,
   onDelete,
@@ -362,7 +368,8 @@ export function ConversationListItem({
                   instanceId={instanceId}
                   organizationId={organizationId}
                   allTags={allTags}
-                  onArchive={onArchive}
+                  onMarkUnread={onMarkUnread}
+                    onArchive={onArchive}
                   onUnarchive={onUnarchive}
                   onDelete={onDelete}
                   onAddTag={onAddTag}

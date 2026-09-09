@@ -77,7 +77,7 @@ import type { WhatsAppMessage } from "@/modules/communication/hooks/chat/types";
 
 /** Colunas devolvidas pra o chat. Mantém em sync hook + prefetch. */
 export const WHATSAPP_MESSAGE_COLUMNS =
-  "id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source, is_group";
+  "id, organization_id, instance_id, message_id, remote_jid, phone_number, direction, message_type, content, media_url, media_expired, push_name, status, lead_id, timestamp, created_at, sent_by_ai, sent_source, is_group, reply_context";
 
 /**
  * Tamanho da janela da thread, ancorada na mensagem mais recente.
@@ -129,5 +129,6 @@ export async function fetchConversationMessages(
   if (error) throw error;
   // O resto da UI (auto-scroll, divisor de não-lidas, merge com ligações)
   // assume ordem ascendente — desfaz o DESC que só serviu pra ancorar a janela.
-  return ((data ?? []) as WhatsAppMessage[]).reverse();
+  // reply_context is added by 20271019000001; generated schema types are refreshed separately.
+  return ((data ?? []) as unknown as WhatsAppMessage[]).reverse();
 }

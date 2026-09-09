@@ -1,3 +1,4 @@
+import { useChatReply } from "./useChatReply";
 /**
  * useSendWhatsAppMessage + useSendWhatsAppMedia + useFailedMessages + useRetryMessage
  * Extraídos de src/hooks/useWhatsAppChat.ts (C12).
@@ -15,7 +16,7 @@ import {
   whatsAppSendErrorMessage,
 } from "@/modules/communication/lib/edgeFunctionError";
 import { sendWithBoundedRecovery, MAX_SEND_RETRIES, type SendResponse } from "./shared/send-recovery";
-import type { WhatsAppMessage, FailedMessage } from "./types";
+import type { WhatsAppMessage, FailedMessage, ReplyContext } from "./types";
 import { makeOptimisticId, promoteOptimisticMessage } from "./shared/optimistic-messages";
 
 /**
@@ -75,6 +76,7 @@ function recoveryContext(queryClient: QueryClient, org: string, phone: string, i
         .eq("phone_number", normalizedPhone).eq("direction", "outgoing")
         .in("status", ["sent", "delivered", "read", "played"])
         .gte("timestamp", since);
+      q = original?.reply_context ? q.eq("reply_context->>messageId", original.reply_context.messageId) : q.is("reply_context", null);
       if (mediaUrl) q = q.eq("media_url", mediaUrl);
       else q = q.eq("content", content ?? "");
       const { data, error } = await q.order("timestamp", { ascending: false }).limit(1);
@@ -199,6 +201,7 @@ async function uploadMediaToStorage(
  * Hook para enviar mensagem de texto via WhatsApp
  */
 export function useSendWhatsAppMessage() {
+  const reply = useChatReply();
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
 
@@ -211,6 +214,7 @@ export function useSendWhatsAppMessage() {
       instanceId,
       leadId,
       _sendId,
+      replyContext,
     }: {
       phoneNumber: string;
       message: string;
@@ -218,6 +222,7 @@ export function useSendWhatsAppMessage() {
       instanceId?: string | null;
       leadId?: string | null;
       _sendId?: string;
+      replyContext?: ReplyContext;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
@@ -231,6 +236,7 @@ export function useSendWhatsAppMessage() {
       let data: Record<string, unknown>;
       let error: unknown;
 
+      if (isSzChat && replyContext) throw new Error("Respostas citadas não estão disponíveis nesta conexão");
       if (isSzChat) {
         const result = await invokeWithTimeout("sz-chat-send", {
           action: "send_message",
@@ -253,6 +259,7 @@ export function useSendWhatsAppMessage() {
           payload: {
             number: formattedNumber,
             text: message,
+            ...(replyContext ? { replyid: replyContext.messageId } : {}),
             ...(leadId ? { lead_id: leadId } : {}),
           },
         }, SEND_TIMEOUT_MS, recoveryContext(queryClient, teamMember.organization_id, phoneNumber, instanceId, _sendId, message));
@@ -281,6 +288,7 @@ export function useSendWhatsAppMessage() {
         direction: "outgoing",
         message_type: "text",
         content: message,
+        ...(replyContext ? { reply_context: replyContext } : {}),
         status: "sent",
         timestamp,
       }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })
@@ -289,6 +297,8 @@ export function useSendWhatsAppMessage() {
       return { ...data, _localMessage: { phoneNumber, message, instanceId, messageId, timestamp } };
     },
     onMutate: async (variables) => {
+      // Manual retries already carry their original context (including no quote).
+      if (!variables._sendId) variables.replyContext ??= reply?.target ?? undefined;
       const orgId = teamMember?.organization_id;
       const phone = variables.phoneNumber;
       const instId = variables.instanceId;
@@ -319,6 +329,7 @@ export function useSendWhatsAppMessage() {
         created_at: new Date().toISOString(),
         sent_by_ai: false,
         sent_source: "manual",
+        reply_context: variables.replyContext,
       };
 
       queryClient.setQueryData<WhatsAppMessage[]>(
@@ -337,13 +348,14 @@ export function useSendWhatsAppMessage() {
       }
       const failedKey = ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId];
       queryClient.setQueryData<FailedMessage[]>(failedKey, (prev = []) => [
-        ...prev.filter((m) => m.id !== context?.optimisticId && (m.mediaType || m.message !== variables.message)),
+        ...prev.filter((m) => m.id !== context?.optimisticId && (m.mediaType || m.message !== variables.message || m.replyContext?.messageId !== variables.replyContext?.messageId)),
         {
           id: context?.optimisticId ?? variables._sendId ?? makeOptimisticId(),
           retry_attempt: err instanceof Error && "retryAttempts" in err ? MAX_SEND_RETRIES : 0,
           phoneNumber: variables.phoneNumber,
           instanceId: variables.instanceId ?? null,
           instanceName: variables.instanceName,
+          replyContext: variables.replyContext,
           message: variables.message,
           mediaUrl: null,
           mediaType: null,
@@ -356,10 +368,11 @@ export function useSendWhatsAppMessage() {
       ]);
     },
     onSuccess: (data, variables, context) => {
+      if (variables.replyContext) reply?.clear(variables.replyContext.messageId);
       // O operador pode reenviar pelo composer, sem clicar na bolha de retry.
       queryClient.setQueryData<FailedMessage[]>(
         ["whatsapp_failed_messages", teamMember?.organization_id, variables.phoneNumber, variables.instanceId],
-        (prev = []) => prev.filter((m) => m.mediaType || m.message !== variables.message),
+        (prev = []) => prev.filter((m) => m.mediaType || m.message !== variables.message || m.replyContext?.messageId !== variables.replyContext?.messageId),
       );
       // Carimba o id real do provider na bolha otimista assim que ele chega.
       // A partir daí o dedupe por message_id do realtime reconhece a linha do
@@ -391,6 +404,7 @@ export function useSendWhatsAppMessage() {
  * Hook para enviar mídia (imagem, áudio) via WhatsApp
  */
 export function useSendWhatsAppMedia() {
+  const reply = useChatReply();
   const queryClient = useQueryClient();
   const { data: teamMember } = useCurrentTeamMember();
 
@@ -407,6 +421,7 @@ export function useSendWhatsAppMedia() {
       mimetype,
       leadId,
       _sendId,
+      replyContext,
     }: {
       phoneNumber: string;
       instanceName: string;
@@ -418,6 +433,7 @@ export function useSendWhatsAppMedia() {
       mimetype?: string;
       leadId?: string | null;
       _sendId?: string;
+      replyContext?: ReplyContext;
     }) => {
       if (!teamMember?.organization_id || !teamMember?.id) {
         throw new Error("Usuário não vinculado à equipe");
@@ -441,6 +457,7 @@ export function useSendWhatsAppMedia() {
       let data: Record<string, unknown>;
       let error: unknown;
 
+      if (isSzChat && replyContext) throw new Error("Respostas citadas não estão disponíveis nesta conexão");
       if (isSzChat) {
         const result = await invokeWithTimeout("sz-chat-send", {
           action: "send_message",
@@ -473,6 +490,7 @@ export function useSendWhatsAppMedia() {
                 caption: caption || "",
               };
         if (leadId) proxyPayload.lead_id = leadId;
+        if (replyContext) proxyPayload.replyid = replyContext.messageId;
 
         const result = await invokeWithTimeout(
           "whatsapp-api-proxy",
@@ -519,9 +537,10 @@ export function useSendWhatsAppMedia() {
         message_type: mediaType,
         content: caption || null,
         media_url: mediaUrl,
+        ...(replyContext ? { reply_context: replyContext } : {}),
         status: "sent",
         timestamp: new Date().toISOString(),
-      }, { onConflict: "message_id,instance_id", ignoreDuplicates: false })
+      }, { onConflict: "message_id,instance_id", ignoreDuplicates: true })
         .then(({ error: e }) => { if (e) console.warn("[send] media upsert fallback failed:", e.message); });
 
       // `_localMessage` carrega o id real do provider até o onSuccess, que o usa
@@ -529,6 +548,8 @@ export function useSendWhatsAppMedia() {
       return { ...(data as Record<string, unknown>), _localMessage: { messageId } };
     },
     onMutate: async (variables) => {
+      // Manual retries already carry their original context (including no quote).
+      if (!variables._sendId) variables.replyContext ??= reply?.target ?? undefined;
       const orgId = teamMember?.organization_id;
       const phone = variables.phoneNumber;
       const instId = variables.instanceId;
@@ -559,6 +580,7 @@ export function useSendWhatsAppMedia() {
         created_at: new Date().toISOString(),
         sent_by_ai: false,
         sent_source: "manual",
+        reply_context: variables.replyContext,
       };
 
       queryClient.setQueryData<WhatsAppMessage[]>(
@@ -569,6 +591,7 @@ export function useSendWhatsAppMedia() {
       return { previousMessages, optimisticId, timestamp: optimisticMsg.timestamp };
     },
     onSuccess: (data, variables, context) => {
+      if (variables.replyContext) reply?.clear(variables.replyContext.messageId);
       // Mesma promoção do envio de texto — ver comentário lá.
       const realMessageId = readProviderMessageId(data);
       if (context?.optimisticId) {
@@ -596,6 +619,7 @@ export function useSendWhatsAppMedia() {
           phoneNumber: variables.phoneNumber,
           instanceId: variables.instanceId ?? null,
           instanceName: variables.instanceName,
+          replyContext: variables.replyContext,
           message: variables.caption ?? null,
           mediaUrl: variables.media,
           mediaType: variables.mediaType,
@@ -646,6 +670,7 @@ export function useRetryMessage() {
     if (failed.mediaType && failed.mediaUrl) {
       await sendMedia.mutateAsync({
         _sendId: failed.id,
+        replyContext: failed.replyContext,
         phoneNumber: failed.phoneNumber,
         instanceName: failed.instanceName,
         instanceId: failed.instanceId,
@@ -656,6 +681,7 @@ export function useRetryMessage() {
     } else if (failed.message) {
       await sendMessage.mutateAsync({
         _sendId: failed.id,
+        replyContext: failed.replyContext,
         phoneNumber: failed.phoneNumber,
         message: failed.message,
         instanceName: failed.instanceName,
