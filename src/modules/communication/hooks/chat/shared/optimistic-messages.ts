@@ -59,6 +59,8 @@ function matchesOptimistic(candidate: WhatsAppMessage, incoming: WhatsAppMessage
       !(textTypes.includes(candidate.message_type) && textTypes.includes(incoming.message_type))) return false;
   if (normalizeContent(candidate.content) !== normalizeContent(incoming.content)) return false;
 
+  if (candidate.reply_context?.messageId !== incoming.reply_context?.messageId) return false;
+
   const candidateAt = new Date(candidate.timestamp).getTime();
   const incomingAt = new Date(incoming.timestamp).getTime();
   if (Number.isNaN(candidateAt) || Number.isNaN(incomingAt)) return false;
@@ -143,6 +145,7 @@ export function unconfirmedFailures(failures: FailedMessage[], messages: WhatsAp
   return failures.filter(f => {
     const receipt = receipts.find(m => !consumed.has(m.id) &&
       normalizeContent(m.content) === normalizeContent(f.message) &&
+      m.reply_context?.messageId === f.replyContext?.messageId &&
       (!f.mediaType || (!!f.mediaUrl && m.media_url === f.mediaUrl)) &&
       new Date(m.timestamp).getTime() >= new Date(f.timestamp).getTime() - 1000 &&
       new Date(m.timestamp).getTime() - new Date(f.timestamp).getTime() <= OPTIMISTIC_MATCH_WINDOW_MS);

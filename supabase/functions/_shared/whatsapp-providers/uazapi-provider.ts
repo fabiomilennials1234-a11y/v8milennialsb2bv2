@@ -290,6 +290,7 @@ export class UazapiProvider implements WhatsAppProvider {
   async sendMedia(opts: SendMediaOptions): Promise<SendResult> {
     const resp = await this.client.sendMedia({
       number: opts.number,
+      replyid: opts.replyid,
       type: opts.type as any,
       file: opts.file,
       filename: opts.filename,
