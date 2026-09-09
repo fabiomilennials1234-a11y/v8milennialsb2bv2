@@ -42,6 +42,7 @@ async function cleanupOrganization() {
   await expectOk('cleanup leads', supabase.from('leads').delete().eq('organization_id', ORG_ID));
   await expectOk('cleanup API keys', supabase.from('api_keys').delete().eq('organization_id', ORG_ID));
   await expectOk('cleanup team members', supabase.from('team_members').delete().eq('organization_id', ORG_ID));
+  await expectOk('cleanup quotas', supabase.from('org_quotas').delete().eq('organization_id', ORG_ID));
   await expectOk(
     'clear default pipeline',
     supabase.from('organizations').update({ default_pipeline_id: null }).eq('id', ORG_ID),
@@ -79,6 +80,20 @@ describe.skipIf(shouldSkip)('lead webhooks → create_lead_with_pipe contract', 
         key_hash: createHash('sha256').update(RAW_API_KEY).digest('hex'),
         scopes: ['lead:write'],
       }),
+    );
+
+    await expectOk(
+      'configure member seats',
+      supabase.from('org_quotas').upsert(
+        {
+          organization_id: ORG_ID,
+          resource_key: 'max_users',
+          plan_base: 2,
+          purchased_addons: 0,
+          admin_adjustment: 0,
+        },
+        { onConflict: 'organization_id,resource_key' },
+      ),
     );
 
     await expectOk(
