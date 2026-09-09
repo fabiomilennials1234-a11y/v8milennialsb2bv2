@@ -55,8 +55,8 @@ BEGIN
   END);
 
   -- Honor a requested stage only while it is active. Otherwise choose the
-  -- first active stage deterministically. A pipeline with no active stage is
-  -- not writable because any resulting card would be invisible.
+  -- first active stage deterministically. Keep a SHARE lock through INSERT so
+  -- a concurrent stage deactivation cannot make the new card invisible.
   SELECT ps.id, ps.stage_key
     INTO v_stage_id, v_stage_key
     FROM public.pipeline_stages ps
@@ -65,7 +65,8 @@ BEGIN
      AND ps.stage_key = v_stage_key
      AND ps.is_active = true
    ORDER BY ps.position NULLS LAST, ps.id
-   LIMIT 1;
+   LIMIT 1
+   FOR SHARE OF ps;
 
   IF v_stage_id IS NULL THEN
     SELECT ps.id, ps.stage_key
@@ -75,7 +76,8 @@ BEGIN
        AND ps.pipeline_id = v_pipeline_id
        AND ps.is_active = true
      ORDER BY ps.position NULLS LAST, ps.id
-     LIMIT 1;
+     LIMIT 1
+     FOR SHARE OF ps;
   END IF;
 
   IF v_stage_id IS NULL THEN
