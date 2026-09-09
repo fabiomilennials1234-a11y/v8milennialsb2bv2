@@ -118,6 +118,7 @@ interface ConversationListProps {
   onAddTag: (phone: string, tagId: string, instanceId?: string | null) => void;
   onRemoveTag: (conversationId: string, tagId: string) => void;
   onOpenInstances?: () => void;
+  onNewConversation?: () => void;
   /** Modo de densidade para altura estimada dos itens. */
   density?: DensityMode;
   // ─── Filtro (modelo Linear) ─────────────────────────────────────────────────
@@ -171,6 +172,7 @@ export function ConversationList({
   onAddTag,
   onRemoveTag,
   onOpenInstances,
+  onNewConversation,
   density = "comfortable",
   filter,
   patch,
@@ -387,6 +389,7 @@ export function ConversationList({
       {/* ─── Header: mobile vs desktop ─────────────────────────────────────── */}
       {isMobile ? (
         <MobileChatListHeader
+          onNewConversation={onNewConversation ? () => { setMobileFilter("all"); onNewConversation(); } : undefined}
           instanceName={selectedBox?.name ?? "WhatsApp"}
           instanceConnected={selectedBox?.status === "connected"}
           channel={selectedBox?.kind ?? "whatsapp"}
@@ -453,6 +456,7 @@ export function ConversationList({
             Um chip que não recorta nada é pior que chip nenhum. */}
         {!isSocialBox && (
           <InboxFilterBar
+            onNewConversation={onNewConversation}
             filter={filter}
             patch={patch}
             toggleMulti={toggleMulti}

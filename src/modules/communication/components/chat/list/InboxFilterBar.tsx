@@ -24,6 +24,7 @@ import {
   Headset,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -65,6 +66,7 @@ const DIM_META: { key: DimKey; label: string; icon: React.ComponentType<{ classN
 // ─── Props ───────────────────────────────────────────────────────────────────
 
 interface InboxFilterBarProps {
+  onNewConversation?: () => void;
   filter: InboxFilterState;
   patch: (partial: Partial<InboxFilterState>) => void;
   toggleMulti: (key: "funnels" | "stages" | "tags" | "tiers", value: string) => void;
@@ -320,7 +322,7 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
   return (
     <div className="mt-2 flex flex-col gap-2">
       {/* Linha: toggle rápido + adicionar filtro */}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => patch({ unread: !filter.unread })}
@@ -344,6 +346,12 @@ export function InboxFilterBar(props: InboxFilterBarProps) {
             </span>
           )}
         </button>
+
+        {props.onNewConversation && (
+          <Button type="button" variant="outline" size="sm" className="h-8 rounded-full px-3" onClick={props.onNewConversation}>
+            Nova Conversa
+          </Button>
+        )}
 
         <Popover open={menuOpen} onOpenChange={setMenuOpen}>
           <PopoverTrigger asChild>
