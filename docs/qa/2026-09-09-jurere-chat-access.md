@@ -23,6 +23,7 @@ Admins da organização e masters mantêm acesso completo, incluindo histórico 
 - 30 testes Vitest passaram; os dois novos testes de falha de permissão falharam antes da correção.
 - 66 asserções SQL passaram em PGlite 0.5.8 (Postgres real em WASM), incluindo reprodução vermelha com as definições consultadas em produção, membros, admins, master, inativo, administrador de outra org, histórico e service_role.
 - ESLint dos arquivos TypeScript alterados passou.
+- Verificação completa de versões passou, sem duplicações ou colisões com origin/main. Typecheck geral interrompido após mais de três minutos sem resultado; não considerado aprovado.
 - Sem QA de navegador ou aplicação em produção. O projeto antigo de desenvolvimento está em modo somente leitura; nenhum recurso remoto foi criado. O ensaio usa schema isolado e dados fictícios.
 - Advisor de produção consultado como baseline; avisos existentes sobre funções SECURITY DEFINER e search_path não são validação pós-deploy. Referência: [Supabase Database Linter](https://supabase.com/docs/guides/database/database-linter).
 
