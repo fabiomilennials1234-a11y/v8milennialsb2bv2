@@ -27,7 +27,7 @@ Deno.test("HTTP — conversa_detalhe devolve a conversa ao responsável e vazio 
       : services.completion(JSON.stringify(body.messages).includes(SEGREDO) ? SEGREDO : "[]");
 
     const member = services.tables.team_members.find((row) => row.organization_id === ORG_A)!;
-    Object.assign(member, { id: OWNER_TM, role: "membro" });
+    Object.assign(member, { id: OWNER_TM, role: "member" });
     const owner = await post({ organization_id: ORG_A, pergunta: "Mostre a conversa." });
     assertEquals(owner.status, 200);
     assertEquals((await owner.json()).resposta, SEGREDO);
@@ -37,7 +37,7 @@ Deno.test("HTTP — conversa_detalhe devolve a conversa ao responsável e vazio 
       id: "40000000-0000-4000-8000-000000000099",
       user_id: services.currentUser,
       organization_id: ORG_A,
-      role: "membro",
+      role: "member",
       is_active: true,
     });
     services.modelRequests.length = 0;
