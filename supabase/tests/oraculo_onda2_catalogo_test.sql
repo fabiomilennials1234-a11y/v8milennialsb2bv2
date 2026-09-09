@@ -66,6 +66,34 @@ SELECT ok(has_function_privilege('service_role', 'public.oraculo_perdas(uuid,uui
 SELECT ok(has_function_privilege('service_role', 'public.oraculo_leads(uuid,uuid,text,integer,integer)', 'EXECUTE'),
   '(CONTRATO) service_role executa oraculo_leads');
 
+-- ── Fixtures: catálogo unificado + tempo do evento do card ───────────────
+SET LOCAL role postgres;
+SET LOCAL session_replication_role = replica;
+
+INSERT INTO public.organizations (id, name, slug) VALUES
+  ('0aca0000-0000-4000-8000-000000000009', 'Org Catálogo Oráculo', 'org-catalogo-oraculo-t');
+INSERT INTO public.leads (id, organization_id, name, updated_at) VALUES
+  ('0aca0000-0000-4000-8000-000000000010', '0aca0000-0000-4000-8000-000000000009',
+   'Lead com card parado', now());
+INSERT INTO public.pipelines (id, organization_id, name, slug, type) VALUES
+  ('0aca0000-0000-4000-8000-000000000011', '0aca0000-0000-4000-8000-000000000009',
+   'Funil unificado', 'funil-unificado-t', 'custom');
+INSERT INTO public.pipeline_stages
+  (id, organization_id, pipeline_id, stage_key, name, position, stage_role)
+VALUES
+  ('0aca0000-0000-4000-8000-000000000012', '0aca0000-0000-4000-8000-000000000009',
+   '0aca0000-0000-4000-8000-000000000011', 'diagnostico', 'Diagnóstico canônico', 0, 'open');
+INSERT INTO public.pipeline_entries
+  (id, organization_id, pipeline_id, lead_id, stage_id, stage_key,
+   entered_at, stage_changed_at, created_at, updated_at)
+VALUES
+  ('0aca0000-0000-4000-8000-000000000013', '0aca0000-0000-4000-8000-000000000009',
+   '0aca0000-0000-4000-8000-000000000011', '0aca0000-0000-4000-8000-000000000010',
+   '0aca0000-0000-4000-8000-000000000012', 'diagnostico',
+   now() - interval '30 days', now() - interval '30 days', now() - interval '30 days', now());
+
+SET LOCAL session_replication_role = origin;
+
 -- ── 4. Os tetos valem DENTRO da função ────────────────────────────────────
 -- A ferramenta em Deno já limita, mas quem tiver a credencial de service_role
 -- fala direto com a RPC. O teto na borda de fora não é teto.
@@ -81,6 +109,17 @@ SELECT is(
   (public.oraculo_leads('0aca0000-0000-4000-8000-000000000009'::uuid, NULL, 'parados', 9999, 5000) ->> 'dias')::int,
   365,
   '(TETO) leads limita os dias a 365');
+
+SELECT is(
+  public.oraculo_funil('0aca0000-0000-4000-8000-000000000009'::uuid, NULL, 365)
+    -> 'etapas' -> 0 ->> 'etapa',
+  'Diagnóstico canônico',
+  '(CATÁLOGO) funil resolve etapa pelo pipeline_stages unificado');
+SELECT is(
+  (public.oraculo_leads('0aca0000-0000-4000-8000-000000000009'::uuid, NULL, 'parados', 14, 20)
+    ->> 'total')::int,
+  1,
+  '(EVENTO) card parado usa mudança da etapa, mesmo com ficha da lead editada hoje');
 
 -- ── 5. `perdas` não finge ter motivo ──────────────────────────────────────
 SELECT is(

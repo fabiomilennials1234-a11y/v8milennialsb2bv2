@@ -184,7 +184,7 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
     // Também buscar mensagens do WhatsApp como fallback ou complemento
     let whatsappQuery = supabase
       .from('whatsapp_messages')
-      .select('direction, content, created_at')
+      .select('direction, content, timestamp')
       .eq('organization_id', lead.organization_id)
       .eq('lead_id', lead_id);
     if (resolvedInstanceId) whatsappQuery = whatsappQuery.eq('instance_id', resolvedInstanceId);
@@ -194,7 +194,7 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
       const formattedWhatsapp = whatsappMessages.map(m => ({
         role: m.direction === 'incoming' ? 'user' : 'assistant',
         content: m.content || '',
-        created_at: m.created_at,
+        created_at: m.timestamp,
       }));
 
       // Se não tinha mensagens de conversation_messages, usar as do WhatsApp
@@ -215,6 +215,12 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
 
     console.log('[summarize-conversation] Found messages:', messages.length);
 
+    const sourceLastMessageAt = messages.reduce<string | null>((latest, message) => {
+      if (!message.created_at || Number.isNaN(Date.parse(message.created_at))) return latest;
+      if (!latest || Date.parse(message.created_at) > Date.parse(latest)) return message.created_at;
+      return latest;
+    }, null);
+
     // 3. Verificar se já existe um resumo recente (menos de 1 hora)
     if (!force_regenerate) {
       let summaryQuery = supabase
@@ -229,11 +235,18 @@ Deno.serve(withErrorBoundary('summarize-conversation', async (req) => {
         .limit(1).maybeSingle();
 
       if (existingSummary) {
+        const coversLatestMessage = sourceLastMessageAt
+          && existingSummary.source_last_message_at
+          && Date.parse(existingSummary.source_last_message_at) >= Date.parse(sourceLastMessageAt);
         const summaryAge = Date.now() - new Date(existingSummary.created_at).getTime();
         const oneHour = 60 * 60 * 1000;
 
-        // Se o resumo tem menos de 1 hora e o número de mensagens não mudou muito, retornar existente
-        if (summaryAge < oneHour && existingSummary.message_count >= messages.length - 2) {
+        // Watermark prova que todas as mensagens atuais já foram incorporadas.
+        // O fallback preserva cache de resumos legados até o primeiro backfill.
+        if (coversLatestMessage
+          || (!existingSummary.source_last_message_at
+            && summaryAge < oneHour
+            && existingSummary.message_count >= messages.length - 2)) {
           console.log('[summarize-conversation] Returning cached summary');
           return new Response(JSON.stringify(existingSummary), {
             headers: { ...corsHeaders, "Content-Type": "application/json" }
@@ -350,6 +363,7 @@ IMPORTANTE: Retorne APENAS o JSON, nada mais.`;
         next_action: summaryData.next_action,
         coaching_tips: summaryData.coaching_tips || [],
         message_count: summaryData.message_count,
+        source_last_message_at: sourceLastMessageAt,
         updated_at: new Date().toISOString(),
       }, {
         onConflict: 'organization_id,lead_id,instance_id',

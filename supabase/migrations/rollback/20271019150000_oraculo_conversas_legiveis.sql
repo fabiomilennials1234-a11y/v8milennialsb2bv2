@@ -14,7 +14,7 @@ DROP FUNCTION IF EXISTS public.oraculo_conversa_detalhe(uuid,uuid,uuid,uuid,inte
 DROP FUNCTION IF EXISTS public.oraculo_conversas(uuid,uuid,integer,integer);
 DROP FUNCTION IF EXISTS public.oraculo_chat_scope_allows(uuid,uuid,uuid,uuid);
 DROP TABLE IF EXISTS public.conversation_summary_jobs;
-DROP INDEX IF EXISTS public.idx_conversation_summaries_instance_updated;
+DROP INDEX IF EXISTS public.idx_conversation_summaries_instance_source;
 DROP INDEX IF EXISTS public.idx_conversation_summaries_org_lead_instance;
 DELETE FROM public.conversation_summaries
 WHERE id IN (
@@ -27,3 +27,4 @@ WHERE id IN (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_summaries_lead_unique
   ON public.conversation_summaries (lead_id);
 ALTER TABLE public.conversation_summaries DROP COLUMN IF EXISTS instance_id;
+ALTER TABLE public.conversation_summaries DROP COLUMN IF EXISTS source_last_message_at;

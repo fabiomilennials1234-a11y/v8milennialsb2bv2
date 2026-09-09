@@ -4,6 +4,8 @@ SELECT no_plan();
 
 SELECT has_function('public', 'oraculo_conversas', ARRAY['uuid','uuid','integer','integer']);
 SELECT has_function('public', 'oraculo_conversa_detalhe', ARRAY['uuid','uuid','uuid','uuid','integer']);
+SELECT has_column('public', 'conversation_summaries', 'source_last_message_at',
+  '(FRESCOR) resumo guarda watermark da última mensagem incorporada');
 SELECT ok(NOT has_function_privilege('authenticated',
   'public.oraculo_conversa_detalhe(uuid,uuid,uuid,uuid,integer)', 'EXECUTE'),
   '(SEGURANÇA) cliente não escolhe org/responsável ao chamar detalhe');
@@ -47,7 +49,8 @@ VALUES
    'oraculo-msg-1', '5511999999999@s.whatsapp.net', '5511999999999', '5511999999999',
    'incoming', 'Preço reservado: R$ 713.250', '0acb0000-0000-4000-8000-0000000000c1', now() - interval '2 hours');
 INSERT INTO public.conversation_summaries
-  (organization_id, lead_id, instance_id, summary, sentiment, lead_temperature, objections, message_count, updated_at)
+  (organization_id, lead_id, instance_id, summary, sentiment, lead_temperature, objections,
+   message_count, source_last_message_at)
 VALUES
   ('0acb0000-0000-4000-8000-000000000001', '0acb0000-0000-4000-8000-0000000000c1',
    '0acb0000-0000-4000-8000-0000000000d1', 'Negociação reservada', 'positive', 'hot',

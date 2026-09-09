@@ -13,16 +13,10 @@
 -- ── 1. funil ──────────────────────────────────────────────────────────────
 -- Conversão etapa a etapa, para localizar onde trava.
 --
--- O NOME E A ORDEM DA ETAPA VÊM DE DOIS CATÁLOGOS, e o elo não é óbvio:
---   · pipeline custom  → `custom_pipeline_stages` por (pipeline_id, stage_key);
---   · pipeline sistema → `pipeline_stages` por (organization_id, pipeline_type,
---     stage_key), onde `pipeline_type` casa com `pipelines.SLUG`.
---
--- Medido em produção: `pipelines.type` vale 'system'/'custom' e NÃO casa com
--- `pipeline_stages.pipeline_type` (whatsapp/propostas/confirmacao) — o join
--- pelo `type` devolve ZERO linhas. Pelo slug, a cobertura das 45.587 entradas
--- abertas vai de 36% para 99,88%. Quem usar o join óbvio constrói um funil que
--- enxerga um terço da operação e não avisa.
+-- O NOME E A ORDEM DA ETAPA VÊM DO CATÁLOGO CANÔNICO `pipeline_stages`.
+-- Desde SCRUM-616, etapas de sistema e custom usam a mesma identidade
+-- `(pipeline_id, stage_key)`. A view legada `custom_pipeline_stages` foi
+-- removida por SCRUM-653 e não pode voltar a ser dependência de leitura.
 CREATE OR REPLACE FUNCTION public.oraculo_funil(
   p_organization_id uuid,
   p_team_member_id  uuid,
@@ -43,18 +37,15 @@ AS $$
       pe.stage_key,
       p.name  AS pipeline_nome,
       p.slug  AS pipeline_slug,
-      coalesce(cps.name, ps.name)                     AS etapa_nome,
-      coalesce(cps.position, ps.position)             AS etapa_ordem,
-      coalesce(cps.is_final_positive, ps.is_final_positive, false) AS ganha,
-      coalesce(cps.is_final_negative, ps.is_final_negative, false) AS perdida
+      ps.name                                         AS etapa_nome,
+      ps.position                                     AS etapa_ordem,
+      coalesce(ps.is_final_positive, false)            AS ganha,
+      coalesce(ps.is_final_negative, false)            AS perdida
     FROM public.pipeline_entries pe
     JOIN public.pipelines p ON p.id = pe.pipeline_id
-    LEFT JOIN public.custom_pipeline_stages cps
-      ON cps.pipeline_id = pe.pipeline_id AND cps.stage_key = pe.stage_key
     LEFT JOIN public.pipeline_stages ps
-      ON ps.organization_id = pe.organization_id
-     AND ps.pipeline_type   = p.slug
-     AND ps.stage_key       = pe.stage_key
+      ON ps.pipeline_id = pe.pipeline_id
+     AND ps.stage_key   = pe.stage_key
     CROSS JOIN periodo pr
     WHERE pe.organization_id = p_organization_id
       AND pe.closed_at IS NULL
@@ -99,7 +90,7 @@ AS $$
 $$;
 
 COMMENT ON FUNCTION public.oraculo_funil(uuid, uuid, integer) IS
-  'Ferramenta `funil` do Oráculo. Etapa vem de dois catálogos: custom_pipeline_stages por pipeline_id, e pipeline_stages por pipelines.SLUG (não por pipelines.type, que é system/custom e casa zero). EXECUTE exclusivo de service_role.';
+  'Ferramenta `funil` do Oráculo. Etapa vem do catálogo canônico pipeline_stages por (pipeline_id, stage_key). EXECUTE exclusivo de service_role.';
 
 REVOKE ALL ON FUNCTION public.oraculo_funil(uuid, uuid, integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.oraculo_funil(uuid, uuid, integer) FROM anon;
@@ -288,9 +279,20 @@ AS $$
       greatest(1, least(coalesce(p_dias, 14), 365))  AS dias,
       greatest(1, least(coalesce(p_limite, 20), 50)) AS limite
   ),
+  negocios_abertos AS (
+    SELECT pe.lead_id,
+           max(coalesce(pe.stage_changed_at, pe.entered_at, pe.created_at)) AS parado_desde
+    FROM public.pipeline_entries pe
+    WHERE pe.organization_id = p_organization_id
+      AND pe.closed_at IS NULL
+    GROUP BY pe.lead_id
+  ),
   candidatos AS (
-    SELECT l.id, l.name, l.company, l.updated_at
-    FROM public.leads l, corte c
+    SELECT l.id, l.name, l.company,
+           coalesce(na.parado_desde, l.created_at) AS parado_desde
+    FROM public.leads l
+    LEFT JOIN negocios_abertos na ON na.lead_id = l.id
+    CROSS JOIN corte c
     WHERE l.organization_id = p_organization_id
       AND l.deleted_at IS NULL
       AND coalesce(l.is_shadow, false) = false
@@ -302,9 +304,7 @@ AS $$
       )
       AND (
         (c.recorte = 'parados'
-          AND l.updated_at < now() - make_interval(days => c.dias)
-          AND EXISTS (SELECT 1 FROM public.pipeline_entries pe
-                      WHERE pe.lead_id = l.id AND pe.closed_at IS NULL))
+          AND na.parado_desde < now() - make_interval(days => c.dias))
         OR
         -- "Sem contato" = nunca saiu da etapa em que entrou. É o sinal mais
         -- barato e o único que não depende de varrer 2,68M de mensagens.
@@ -324,10 +324,10 @@ AS $$
         SELECT jsonb_build_object(
           'nome',           name,
           'empresa',        company,
-          'parado_desde',   updated_at
+          'parado_desde',   parado_desde
         ) AS x
         FROM candidatos
-        ORDER BY updated_at ASC
+        ORDER BY parado_desde ASC
         LIMIT (SELECT limite FROM corte)
       ) x
     )

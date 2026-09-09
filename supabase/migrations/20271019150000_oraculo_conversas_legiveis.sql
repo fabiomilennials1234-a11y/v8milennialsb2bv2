@@ -2,17 +2,20 @@
 -- Toda função recebe org por parâmetro e, portanto, é exclusiva de service_role.
 
 ALTER TABLE public.conversation_summaries
-  ADD COLUMN IF NOT EXISTS instance_id uuid;
+  ADD COLUMN IF NOT EXISTS instance_id uuid,
+  ADD COLUMN IF NOT EXISTS source_last_message_at timestamptz;
 
 DROP INDEX IF EXISTS public.idx_conversation_summaries_lead_unique;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_conversation_summaries_org_lead_instance
   ON public.conversation_summaries (organization_id, lead_id, instance_id)
   NULLS NOT DISTINCT;
-CREATE INDEX IF NOT EXISTS idx_conversation_summaries_instance_updated
-  ON public.conversation_summaries (organization_id, instance_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_conversation_summaries_instance_source
+  ON public.conversation_summaries (organization_id, instance_id, source_last_message_at DESC);
 
 COMMENT ON COLUMN public.conversation_summaries.instance_id IS
   'Caixa WhatsApp cuja conversa foi resumida. NULL identifica resumo legado/agregado, visível no Oráculo apenas em escopo de organização.';
+COMMENT ON COLUMN public.conversation_summaries.source_last_message_at IS
+  'Watermark do evento mais recente incorporado ao resumo. Controla atualização sem usar updated_at mutável como tempo de negócio.';
 
 -- Resumo legado pode misturar caixas. Member só lê resumo ligado a caixa que
 -- alcança e a lead que atende; admin/master preserva acesso da organização.
@@ -236,7 +239,7 @@ BEGIN
   WHERE w.lead_id IS NOT NULL
     AND NOT w.is_group
     AND w.last_message_time < now() - interval '1 hour'
-    AND (s.id IS NULL OR s.updated_at < w.last_message_time)
+    AND (s.id IS NULL OR s.source_last_message_at IS NULL OR s.source_last_message_at < w.last_message_time)
   ON CONFLICT (organization_id, lead_id, instance_id) DO UPDATE
     SET last_message_at = EXCLUDED.last_message_at,
         status = 'pending', attempts = 0, next_attempt_at = now(),
