@@ -13,6 +13,7 @@
 
 import { describe, it, expect, afterEach, beforeAll, afterAll } from 'vitest';
 import { supabase, TEST_ORG_ID, TEST_ORG_B_ID } from './setup';
+import { createWorkflowOrg, deleteWorkflowOrg } from './workflow-org-fixture';
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
@@ -64,10 +65,7 @@ async function insertExecution(
 
 describe.skipIf(shouldSkip)('claim_workflow_executions — consolidated RPC', () => {
   beforeAll(async () => {
-    const { error } = await supabase.from('organizations').insert({
-      id: TEST_ORG_C_ID, name: 'Claim fairness fixture', slug: `claim-fairness-${TEST_ORG_C_ID}`,
-    });
-    expect(error).toBeNull();
+    await createWorkflowOrg(TEST_ORG_C_ID);
     testWorkflowId = await ensureWorkflow(TEST_ORG_ID);
   });
 
@@ -84,8 +82,7 @@ describe.skipIf(shouldSkip)('claim_workflow_executions — consolidated RPC', ()
       const { error } = await supabase.from('workflows').delete().in('id', createdWorkflowIds);
       expect(error).toBeNull();
     }
-    const { error } = await supabase.from('organizations').delete().eq('id', TEST_ORG_C_ID);
-    expect(error).toBeNull();
+    await deleteWorkflowOrg(TEST_ORG_C_ID);
   });
 
   it('single overload exists (no duplication)', async () => {

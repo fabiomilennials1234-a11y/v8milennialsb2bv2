@@ -11,7 +11,10 @@
  */
 
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
-import { supabase, TEST_ORG_ID } from './setup';
+import { supabase } from './setup';
+import { createWorkflowOrg, deleteWorkflowOrg } from './workflow-org-fixture';
+
+const TEST_ORG_ID = crypto.randomUUID();
 
 const shouldSkip = !process.env.SUPABASE_URL && process.env.SKIP_INTEGRATION === 'true';
 
@@ -20,7 +23,8 @@ const createdExecIds: string[] = [];
 
 describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () => {
   beforeAll(async () => {
-    const { data } = await supabase
+    await createWorkflowOrg(TEST_ORG_ID);
+    const { data, error } = await supabase
       .from('workflows')
       .insert({
         organization_id: TEST_ORG_ID,
@@ -32,16 +36,20 @@ describe.skipIf(shouldSkip)('fire_workflow_trigger — chain_depth guard', () =>
       })
       .select('id')
       .single();
+    expect(error).toBeNull();
     testWorkflowId = data!.id as string;
   });
 
   afterAll(async () => {
     if (createdExecIds.length > 0) {
-      await supabase.from('workflow_executions').delete().in('id', createdExecIds);
+      const { error } = await supabase.from('workflow_executions').delete().in('id', createdExecIds);
+      expect(error).toBeNull();
     }
     if (testWorkflowId) {
-      await supabase.from('workflows').delete().eq('id', testWorkflowId);
+      const { error } = await supabase.from('workflows').delete().eq('id', testWorkflowId);
+      expect(error).toBeNull();
     }
+    await deleteWorkflowOrg(TEST_ORG_ID);
   });
 
   it('fires with chain_depth=1 when no parent given (PG trigger path)', async () => {
